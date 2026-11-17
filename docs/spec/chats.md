@@ -364,6 +364,13 @@ Every call is drawn the same way, as the first rule below says, and each kind fi
 
   ![A read of an image, opened](screens/tool-read-image.png)
 
+- **A look at an image, as Codex has, is drawn as a read of it,** `Read 1 image` with the file's name, opening to the image, since what the agent did is read it. *Unconfirmed.*
+- **Making an image says `Make an image` and what it was asked for, as faint prose cut off where the line ends.** Opened, all of what it was asked for, then the image, as a read's is drawn. What it was asked for is what came back with the image, as the model rewrote it, or else what the call asked: Codex says it only once the image is made, so until then the line says only `Make an image`. One that failed says what's known of why, such as Codex's limit on making images. *Unconfirmed.*
+
+  **Codex's look at a screenshot, and an image it made, opened to what it was asked for and the image.** *Unconfirmed.*
+
+  ![A look at a screenshot drawn as a read, and an image Codex made, opened](screens/tool-made-image.png)
+
 - **A command its agent says does nothing but read one file is drawn as reading it,** `Read` with the file's name in a chip, and opens to what it printed, since that's the file, or the part of it the command read. Its agent didn't number the lines, so they show as they came. One that reads several files stays a command, since what it printed can't be told apart by file. Codex's and Antigravity's adapters read the command itself, Codex's rather than taking Codex's own reading of it, which can leave out what else it does. They say a command only reads where it's one program that does nothing but print one file it names, such as `cat a.rs` or `sed -n '1,40p' a.rs`, alone or piped into `sed -n` printing a range of lines. So `cd src && cat a.rs`, `cat a.rs | head` and `cat *.rs` draw as commands. What's asked of it is still whether to run the command, so a request to run it shows the command. One that went on in the background draws as a command too, since only a command's row says so. *Unconfirmed.*
 - **A patch of several files says `Edit 2 files`, how many lines it added and removed, and the files' names.** Opened, each file's path, then its change as a diff, a file it added all added, and one it deleted saying `Deleted`. A patch of one file draws as an edit or a write of it does, or says `Delete` or `Move`. The diff's line numbers are the file's own, from what came back. Before then, it's the patch's own lines, without numbers. A patch that failed says only `Error` under it, since what came back is the files it would have changed, not what went wrong. *Unconfirmed.*
 

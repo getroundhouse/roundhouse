@@ -8,7 +8,7 @@ use protocol::event::{Asking, CallKind, EventBody};
 use protocol::fixtures::{self, ApprovalRequest, approval_request};
 use serde_json::{Value, json};
 
-use super::{Looks, Only, Recorded, Search, ToolCall, asked_about, count, typed};
+use super::{Looks, Only, ReadFile, Recorded, Search, ToolCall, asked_about, count, typed};
 
 /// A call recorded with the kind its adapter said, or with none, as one from before adapters said.
 fn recorded<'a>(kind: Option<&'a CallKind>, name: &'a str, input: &'a Value) -> Recorded<'a> {
@@ -257,12 +257,15 @@ fn a_typed_search_or_call_of_the_web_is_read_as_its_kind_and_named_in_words() {
     assert_eq!(said(&web), ("Search the web".into(), "signals".into()));
 }
 
-/// Each typed call of a file is read as the kind a client draws, and named in words. Looking at an image and making
-/// one are named, though no agent records them typed yet, so they're drawn as any typed call.
+/// Each typed call of a file is read as the kind a client draws, and named in words. A look at an image is a read of
+/// it, and making one is a kind of its own, which says what it was asked for, unless that's not been said yet, as
+/// Codex says it only once the image is made.
 #[test]
 fn a_typed_call_of_a_file_is_read_as_its_kind_and_named_in_words() {
-    let looked_at = Call::ViewImage(ViewImage { path: "shot.png".into() });
-    let made = Call::GenerateImage(GenerateImage { prompt: "A signal at caution".into(), from: Vec::new() });
+    let looked_at = Call::ViewImage(ViewImage { path: "/tmp/shot.png".into() });
+    let made =
+        Call::GenerateImage(GenerateImage { prompt: "A signal at caution\nin the rain".into(), from: Vec::new() });
+    let making = Call::GenerateImage(GenerateImage { prompt: String::new(), from: Vec::new() });
     let notebook = Call::NotebookEdit(NotebookEdit {
         path: "plots.ipynb".into(),
         cell: None,
@@ -279,12 +282,14 @@ fn a_typed_call_of_a_file_is_read_as_its_kind_and_named_in_words() {
 
     assert!(matches!(read(&notebook), ToolCall::NotebookEdit(_)));
     assert!(matches!(read(&patch), ToolCall::Patch(_)));
-    assert!(matches!(read(&looked_at), ToolCall::Typed(_)));
+    assert!(matches!(read(&looked_at), ToolCall::Read(ReadFile { path: "/tmp/shot.png" })));
+    assert!(matches!(read(&made), ToolCall::MakeImage(_)));
     let said = |call| (typed::title(call), Recorded::Typed(call).summary().unwrap_or_default());
     assert_eq!(said(&notebook), ("Add a cell".into(), "plots.ipynb".into()));
     assert_eq!(said(&patch), ("Edit".into(), "src/a.rs, src/b.rs".into()));
-    assert_eq!(typed::title(&looked_at), "View an image");
-    assert_eq!(typed::title(&made), "Make an image");
+    assert_eq!(said(&looked_at), ("View an image".into(), "/tmp/shot.png".into()));
+    assert_eq!(said(&made), ("Make an image".into(), "A signal at caution".into()));
+    assert_eq!(Recorded::Typed(&making).summary(), None, "nothing said yet");
 }
 
 /// What a typed search found reads as text, as the CLI prints it: its matches as ripgrep prints them, its files one to
@@ -303,4 +308,17 @@ fn what_a_typed_search_found_reads_as_text() {
     assert_eq!(typed::output(&pages), "Railway signal (https://example.org/signal)\n\nA signal shows stop.");
     let words = CallOutput::WebResults { results: Vec::new(), summary: Some("Nothing matched.".into()) };
     assert_eq!(typed::output(&words), "Nothing matched.", "no pages, then what was made of none");
+}
+
+/// An image reads as what it was made from, as the CLI prints it beside the image, and one the agent only looked at
+/// reads as nothing.
+#[test]
+fn an_image_reads_as_what_it_was_made_from() {
+    let image = |prompt: Option<&str>| CallOutput::Image {
+        image: protocol::fixtures::image("made"),
+        prompt: prompt.map(Into::into),
+    };
+
+    assert_eq!(typed::output(&image(Some("A signal at caution"))), "A signal at caution");
+    assert_eq!(typed::output(&image(None)), "");
 }

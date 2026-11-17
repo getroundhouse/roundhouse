@@ -79,6 +79,22 @@ pub(crate) fn setting(on: bool) -> Vec<u8> {
     encode(&image)
 }
 
+/// A railway signal at caution, flat, on a plain ground, as an agent might make one for a project's README: a post, and
+/// a head of three lamps with the middle one lit amber.
+pub(crate) fn signal_at_caution() -> Vec<u8> {
+    const GROUND: Rgba<u8> = Rgba([0x23, 0x2b, 0x33, 0xff]);
+    const HEAD: Rgba<u8> = Rgba([0x0e, 0x0d, 0x0c, 0xff]);
+    const AMBER: Rgba<u8> = Rgba([0xf0, 0xa8, 0x30, 0xff]);
+    let mut image = RgbaImage::from_pixel(240, 240, GROUND);
+    fill(&mut image, (112, 150), (16, 70), FAINT);
+    fill(&mut image, (84, 210), (72, 10), FAINT);
+    fill(&mut image, (90, 30), (60, 124), HEAD);
+    for (lamp, color) in [EDGE, AMBER, EDGE].into_iter().enumerate() {
+        fill(&mut image, (104, 42 + 38 * u32::try_from(lamp).unwrap()), (32, 28), color);
+    }
+    encode(&image)
+}
+
 fn fill(image: &mut RgbaImage, (x, y): (u32, u32), (width, height): (u32, u32), color: Rgba<u8>) {
     for py in y..(y + height).min(image.height()) {
         for px in x..(x + width).min(image.width()) {

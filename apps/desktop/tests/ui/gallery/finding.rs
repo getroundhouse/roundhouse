@@ -7,7 +7,7 @@ use gpui_kit::PlatformTextSystem;
 use protocol::event::{EventBody, ExitReason, FailureKind, NoticeLevel, RequestFailure, TurnOutcome};
 use protocol::model::SessionStatus;
 
-use super::worlds::chat_world;
+use super::worlds::{codex_images, sidebar};
 use super::{capture, file_chats, subagent_chats, tool_chats, typed_chats};
 use client_core::fake_hub::World;
 
@@ -41,6 +41,8 @@ fn what_each_kind_of_call_draws_is_what_finding_counts() {
 
 /// A chat with every kind of call the transcript draws in it, for finding in.
 fn every_kind_of_call() -> World {
+    let mut world = World::default();
+    let (looked_at, made) = codex_images(&mut world);
     let chats = [
         tool_chats::commands(),
         tool_chats::any_tool(),
@@ -57,9 +59,12 @@ fn every_kind_of_call() -> World {
         typed_chats::searched(),
         typed_chats::mcp_tools(),
         typed_chats::later(),
+        typed_chats::images(looked_at, made),
         what_went_wrong(),
     ];
-    chat_world(SessionStatus::Idle, chats.concat())
+    let focus = sidebar(&mut world);
+    world.chat(&focus, SessionStatus::Idle, chats.concat());
+    world
 }
 
 /// A notice, a request that failed, a turn that failed, and the agent stopping unexpectedly, each saying what went

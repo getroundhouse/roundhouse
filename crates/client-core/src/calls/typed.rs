@@ -21,6 +21,9 @@ pub(super) fn read(call: &Call) -> ToolCall<'_> {
             only: only(command),
         }),
         Call::Read(file) => ToolCall::Read(ReadFile { path: &file.path }),
+        // A look at an image is a read of it, which draws it.
+        Call::ViewImage(view) => ToolCall::Read(ReadFile { path: &view.path }),
+        Call::GenerateImage(made) => ToolCall::MakeImage(made),
         Call::Write(file) => ToolCall::Write(WriteFile { path: &file.path, content: &file.content }),
         Call::Edit(file) => ToolCall::Edit(EditFile {
             path: &file.path,
@@ -44,9 +47,7 @@ pub(super) fn read(call: &Call) -> ToolCall<'_> {
         Call::Other { tool, input } => ToolCall::Other(Other::typed(None, tool, input)),
         Call::Advisor => ToolCall::Advisor,
         // Drawn as any typed call until each is drawn as its kind.
-        Call::ViewImage(_)
-        | Call::GenerateImage(_)
-        | Call::WriteInput(_)
+        Call::WriteInput(_)
         | Call::FindInPage(_)
         | Call::Todos(_)
         | Call::Skill(_)
@@ -120,8 +121,6 @@ pub(super) fn summary(call: &Call) -> Option<String> {
         Call::WriteInput(input) => Some(input.text.as_str()),
         Call::FindInPage(find) => Some(find.pattern.as_str()),
         Call::Todos(list) => return Some(count(list.items.len(), "todo", "todos")),
-        Call::ViewImage(view) => Some(view.path.as_str()),
-        Call::GenerateImage(made) => Some(made.prompt.as_str()),
         Call::Skill(skill) => Some(skill.name.as_str()),
         Call::Lsp(lsp) => return Some(plain::lsp_place(lsp)),
         Call::Sleep(sleep) => return Some(plain::how_long(*sleep)),
@@ -140,6 +139,8 @@ pub(super) fn summary(call: &Call) -> Option<String> {
         | Call::FindFiles(_)
         | Call::Fetch(_)
         | Call::WebSearch(_)
+        | Call::ViewImage(_)
+        | Call::GenerateImage(_)
         | Call::Subagent(_)
         | Call::MessageSubagent(_)
         | Call::WaitForSubagents(_)
@@ -268,7 +269,9 @@ pub fn output(output: &CallOutput) -> String {
             }
             texts.join("\n")
         }
-        CallOutput::Image { .. } | CallOutput::Encrypted | CallOutput::Backgrounded { .. } => String::new(),
+        // An image says what it was made from, if it's one the agent made.
+        CallOutput::Image { prompt, .. } => prompt.clone().unwrap_or_default(),
+        CallOutput::Encrypted | CallOutput::Backgrounded { .. } => String::new(),
         CallOutput::Document { pages } => pages.map_or_else(|| "Document".into(), |n| format!("{n} pages")),
         CallOutput::Unknown => "Unknown tool output".into(),
         CallOutput::Found(found) => found_text(found),

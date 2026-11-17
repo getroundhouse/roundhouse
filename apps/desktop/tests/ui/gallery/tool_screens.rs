@@ -11,7 +11,7 @@ use super::image_chats::{AFTER_DRAWN, pointed, pointed_among_words, pointed_on_l
 use super::screens::FOCUS;
 use super::steps::{Screen, Step, Target};
 use super::typed_chats;
-use super::worlds::{chat_world, read_image, steered_thinking, thinking_streaming};
+use super::worlds::{chat_world, made_image, read_image, steered_thinking, thinking_streaming};
 use super::{chats, file_chats, question_chats, tool_chats};
 
 pub(crate) const TOOL_SCREENS: &[Screen] = &[
@@ -120,6 +120,13 @@ pub(crate) const TOOL_SCREENS: &[Screen] = &[
         world: Some(read_image),
         frame: CHAT,
         steps: &[Step::Select(FOCUS), Step::Open("Read 1 image")],
+    },
+    Screen {
+        name: "tool-made-image",
+        spec: "chats.md",
+        world: Some(made_image),
+        frame: CHAT,
+        steps: &[Step::Select(FOCUS), Step::Open("Make an image")],
     },
     Screen {
         name: "tool-search",
