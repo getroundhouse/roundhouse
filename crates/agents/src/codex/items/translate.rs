@@ -1,10 +1,10 @@
 use protocol::attachment::NewAttachment;
 use protocol::capability::calls::{
     Call, CallOutput,
-    call::{Command, Runs},
+    call::{Command, Runs, Sleep},
     output::{CommandOutput, Ended, McpContent},
 };
-use protocol::event::{ContentBlock, Denied, EventBody};
+use protocol::event::{CompactedBy, CompactionOutcome, ContentBlock, Denied, EventBody};
 use protocol::model::ToolUseId;
 use protocol::tail::{BlockKind, DeltaChange, StreamDelta};
 use serde_json::Value;
@@ -66,16 +66,21 @@ impl Reader<'_> {
             }
             Item::ImageView { id, path } => self.looked(id, path, completed, raw).await,
             Item::ImageGeneration(made) => self.made(made, completed, raw).await,
-            Item::Unknown => {
-                self.shared
-                    .event(
-                        EventBody::AgentOther {
-                            kind: value["type"].as_str().unwrap_or("item").into(),
-                            subagent: self.scope.parent.clone(),
-                        },
-                        Some(raw),
-                    )
-                    .await;
+            Item::Sleep { id, duration_ms } => {
+                // It says nothing as it ends but that it has waited.
+                let output = CallOutput::Words { text: String::new() };
+                self.tool(id, Call::Sleep(Sleep { duration_ms }), output, Status::Completed, completed, raw).await;
+            }
+            Item::WebSearch(searched) => self.searched(searched, completed, raw).await,
+            // A subagent's says nothing of the agent's own context, so it's kept as it is, as Claude's adapter keeps
+            // a subagent's.
+            Item::ContextCompaction { started_at_ms, completed_at_ms } if self.scope.parent.is_none() => {
+                let took_ms = completed_at_ms.zip(started_at_ms).map(|(ended, began)| ended.saturating_sub(began));
+                self.shared.event(compaction(completed, took_ms), Some(raw)).await;
+            }
+            Item::ContextCompaction { .. } | Item::Unknown => {
+                let kind = value["type"].as_str().unwrap_or("item").into();
+                self.shared.event(EventBody::AgentOther { kind, subagent: self.scope.parent.clone() }, Some(raw)).await;
             }
         }
         Ok(())
@@ -185,6 +190,25 @@ impl Reader<'_> {
         }
     }
 
+    /// A web search, whose start is held, since it says nothing of what it searches for. Once it completes, its call is
+    /// recorded with the line that started it, then what it found.
+    async fn searched(&self, search: super::web::Searched, completed: bool, raw: String) {
+        let id: ToolUseId = search.id.clone().into();
+        let started = {
+            let mut state = self.shared.state.lock();
+            let held = &mut state.work(self.scope.parent.as_ref()).searches;
+            if !completed {
+                held.insert(id, raw);
+                return;
+            }
+            held.remove(&id)
+        };
+        // A search whose start this process didn't read, as when the adapter started again mid-search, has its call
+        // recorded with the line that completed it.
+        self.started(id.clone(), search.call(), started.unwrap_or_else(|| raw.clone())).await;
+        self.settled(id, search.output(), Vec::new(), Status::Completed, raw).await;
+    }
+
     /// A call Codex started, or, once it's `completed`, what came back from it.
     async fn tool(&self, id: String, call: Call, output: CallOutput, status: Status, completed: bool, raw: String) {
         if completed {
@@ -242,6 +266,22 @@ impl Reader<'_> {
         };
         self.shared.emit(AgentOutput::Event { body, raw: Some(raw), attachments: images }).await;
     }
+}
+
+/// Codex compacting the agent's context as it fills, or, once it has, how long that took. It says nothing of the
+/// tokens before or after, or the summary.
+fn compaction(completed: bool, took_ms: Option<u64>) -> EventBody {
+    if !completed {
+        return EventBody::AgentCompacting { written_chars: None };
+    }
+    let outcome = CompactionOutcome::Compacted {
+        by: CompactedBy::Agent,
+        before_tokens: None,
+        after_tokens: None,
+        took_ms,
+        summary: None,
+    };
+    EventBody::AgentCompacted { asked: None, keeping: None, outcome }
 }
 
 pub(super) fn mcp_result(result: &Value) -> CallOutput {

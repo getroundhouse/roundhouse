@@ -41,6 +41,20 @@ pub(super) enum Item {
         path: String,
     },
     ImageGeneration(super::images::Made),
+    /// A wait the agent chose, which Codex says it started, then completed once it has waited.
+    Sleep {
+        id: String,
+        #[serde(rename = "durationMs")]
+        duration_ms: u64,
+    },
+    WebSearch(super::web::Searched),
+    /// Codex compacting the thread's context by itself, as it fills, since the adapter can't ask it to.
+    ContextCompaction {
+        #[serde(rename = "startedAtMs")]
+        started_at_ms: Option<u64>,
+        #[serde(rename = "completedAtMs")]
+        completed_at_ms: Option<u64>,
+    },
     #[serde(other)]
     Unknown,
 }

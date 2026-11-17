@@ -1,4 +1,4 @@
-//! What Codex says for the person to read: its warnings, and an MCP server that didn't start.
+//! What Codex says for the person to read: its warnings, its errors, and an MCP server that didn't start.
 
 use protocol::event::{EventBody, NoticeLevel};
 use serde_json::Value;
@@ -13,6 +13,12 @@ pub(super) async fn warning(shared: &Shared, params: &Value, scope: &Scope, raw:
         None => EventBody::AgentOther { kind: "warning".into(), subagent: scope.parent.clone() },
     };
     shared.event(body, Some(raw)).await;
+}
+
+/// `error`: a request of Codex's that failed, as it says.
+pub(super) async fn error(shared: &Shared, params: &Value, scope: &Scope, raw: String) {
+    let message = params["error"]["message"].as_str().unwrap_or("Codex's request failed");
+    shared.event(notice(NoticeLevel::Error, message.into(), scope), Some(raw)).await;
 }
 
 /// `mcpServer/startupStatus/updated`: an MCP server starting, ready, stopped or failed. Only its failing is the
