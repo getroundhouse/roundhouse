@@ -12,14 +12,21 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use parking_lot::Mutex;
-use protocol::model::{InstanceId, ProviderName, Workspace};
+use protocol::capability::{Control, turns};
+use protocol::client::ApiError;
+use protocol::event::EventBody;
+use protocol::model::{
+    AgentKind, InstanceId, ProviderName, Seq, Session, SessionId, SessionSettingsChange, Workspace, WorkspaceId,
+};
 use protocol::worker::{
-    AgentStarted, AttachmentWritten, NamesGitHasReply, SetupDone, WorkerRequest, WorkerResponse, WorkspaceReady,
+    AgentStarted, AttachmentWritten, NamesGitHasReply, SetupDone, TitleFor, TitleReply, WorkerRequest, WorkerResponse,
+    WorkspaceReady,
 };
 use providers::{Capabilities, Instance, Provider, ProviderError, Size, WorkerBinary, WorkerCommand};
 
 use super::Hub;
-use super::tests::{claimed, hub_provided_by};
+use super::tests::{claimed, flushed, hub_provided_by};
+use crate::session::Item;
 use crate::worker_link::WorkerLink;
 
 /// A hub as [`hub_in`](super::tests::hub_in) makes one, which gives each workspace it makes a stand-in for its worker,
@@ -70,7 +77,7 @@ fn answer(request: WorkerRequest) -> WorkerResponse {
         return WorkerResponse::AttachmentWritten(AttachmentWritten { path });
     }
     if let WorkerRequest::AgentStart(spec) = request {
-        let capabilities = Some(Box::new(claimed()));
+        let capabilities = Some(Box::new(claims()));
         return WorkerResponse::AgentStarted(AgentStarted {
             pid: 7,
             run: spec.run,
@@ -152,4 +159,74 @@ impl Provider for WithWorkers {
     async fn make_base_image(&self, _: &InstanceId) -> Result<(), ProviderError> {
         Err(ProviderError::Unsupported("make base images"))
     }
+}
+
+/// A workspace made from the repository `r`, whose worktree its worker's stand-in makes, and a chat of Claude's in it,
+/// which nothing has been sent.
+pub(super) async fn a_chat(hub: &Arc<Hub>) -> (Workspace, Session) {
+    let workspace = hub.workspace_create("r".into(), None, None, None).await.expect("a stand-in makes the worktree");
+    let unchanged = SessionSettingsChange::default();
+    let chat = hub.session_create(workspace.id.clone(), AgentKind::Claude, unchanged, None).await.expect("a new chat");
+    (workspace, chat)
+}
+
+impl Asked {
+    /// Where each prompt a stand-in was asked to give the agent of `session` is recorded, in the order it was asked.
+    pub(super) fn prompts_given(&self, session: &SessionId) -> Vec<Seq> {
+        self.requests(|request| {
+            let WorkerRequest::AgentControl(asked) = request else { return None };
+            let Control::Prompt { seq, .. } = asked.control else { return None };
+            (asked.session_id == *session).then_some(seq)
+        })
+    }
+}
+
+/// What the agent of the chat `session` says, as its worker passes it on: each of `said`, as the run its stand-in last
+/// started for the chat, once the chat has taken them all in. A stand-in's agent says nothing by itself, so a test says
+/// for it what an agent would, such as that it took a prompt, and that its turn has ended.
+pub(super) async fn the_agent_says(
+    hub: &Arc<Hub>,
+    asked: &Asked,
+    session: &SessionId,
+    said: impl IntoIterator<Item = EventBody>,
+) {
+    let launched = |request: &WorkerRequest| {
+        let WorkerRequest::AgentStart(spec) = request else { return None };
+        (spec.session_id == *session).then_some(spec.run)
+    };
+    let run = asked.requests(launched).pop().expect("only an agent that was started says anything");
+    for body in said {
+        hub.route(session, Item::Event { run, body: Box::new(body), raw: None, attachments: Vec::new(), seq: None })
+            .await;
+    }
+    flushed(&hub.live_session(session).await.expect("a chat that's there")).await;
+}
+
+/// Has the worker of `workspace` be a stand-in that answers a call for a title as the worker does once it has asked its
+/// agent's CLI, with what `title` makes of the call: the title the model gave, tidied as the worker tidies it, or why
+/// there's none. It answers everything else as [`answer`] says, and keeps each request in `asked`, as the stand-in it
+/// replaces did, so a test sets it before anything is asked of the workspace's worker that it's about.
+pub(super) fn titling(
+    hub: &Hub,
+    workspace: &WorkspaceId,
+    asked: &Arc<Asked>,
+    title: impl Fn(&TitleFor) -> Result<String, ApiError> + Send + 'static,
+) {
+    let asked = asked.clone();
+    let link = WorkerLink::answering(move |request| {
+        asked.0.lock().push(request.clone());
+        if let WorkerRequest::TitleFor(call) = &request {
+            return Some(title(call).map(|title| WorkerResponse::Title(TitleReply { title })));
+        }
+        Some(Ok(answer(request)))
+    });
+    hub.workers.lock().insert(workspace.clone(), link);
+}
+
+/// What a stand-in's agent claims as it starts: what Claude claims as the hub's tests describe it, as [`claimed`] says,
+/// and cancelling a turn, as Claude's CLI claims it, so a test can stop a turn as the person does.
+fn claims() -> protocol::capability::Capabilities {
+    let mut claims = claimed();
+    claims.turns.cancel = Some(turns::Cancel { stops: turns::CancelStops::Nothing });
+    claims
 }
