@@ -118,7 +118,7 @@ fn pages(results: &Results, toggle: &Toggle, cx: &App) -> AnyElement {
 /// What it found, once it ran.
 fn results(answer: Option<&Answer>) -> Option<Results<'_>> {
     let answer = answer?;
-    Some(Results::of(answer.success()?, answer.output.as_deref()))
+    Some(Results::of(answer.success()?, &answer.output))
 }
 
 /// A page it found: its title, with its matches, then its site, faint and smaller, on the title's baseline. Clicking

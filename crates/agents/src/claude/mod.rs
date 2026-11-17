@@ -8,7 +8,6 @@ mod context;
 mod controls;
 mod description;
 mod effort;
-mod kinds;
 mod login;
 mod login_check;
 mod mode;
@@ -16,6 +15,7 @@ mod normalize;
 mod one_off;
 mod process;
 mod title;
+mod typed;
 mod usage;
 
 pub use account::account;

@@ -20,8 +20,6 @@ fn named(body: &EventBody) -> Vec<Vec<&str>> {
         .filter_map(|block| match block {
             ContentBlock::Text { images, .. } => Some(images.iter().map(|image| image.address.as_str()).collect()),
             ContentBlock::Thinking { .. }
-            | ContentBlock::ToolUse { .. }
-            | ContentBlock::ToolResult { .. }
             | ContentBlock::Image { .. }
             | ContentBlock::Call { .. }
             | ContentBlock::CallResult { .. }

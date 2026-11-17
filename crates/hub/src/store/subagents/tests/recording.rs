@@ -1,10 +1,11 @@
 use super::super::*;
 use crate::store::now_ms;
 use crate::store::tests::store_with_session;
+use protocol::capability::calls::call::Read;
+use protocol::capability::calls::{Call, CallOutput};
 use protocol::event::{ExitReason, TaskOutcome};
 use protocol::fixtures;
 use protocol::model::SubagentStatus::{Finished, Stopped, Working};
-use serde_json::json;
 
 pub(super) fn started(call: &str) -> EventBody {
     EventBody::SubagentStarted {
@@ -21,8 +22,14 @@ pub(super) fn ended(call: &str, outcome: TaskOutcome, report: Option<&str>) -> E
     EventBody::SubagentEnded { subagent: call.into(), outcome, report: report.map(Into::into), context_tokens: None }
 }
 
-pub(super) fn tool_use(id: &str) -> ContentBlock {
-    fixtures::tool_use(id, "Read", json!({"file_path": id}))
+/// Reading the file named `id`.
+pub(super) fn read(id: &str) -> Call {
+    Call::Read(Read { path: id.into(), lines: None, pages: None })
+}
+
+/// The call [`read`] makes, as the block it comes in.
+pub(super) fn reading(id: &str) -> ContentBlock {
+    fixtures::typed_call(id, read(id))
 }
 
 /// A message from the agent, or from the subagent `from` started.
@@ -69,20 +76,20 @@ fn a_subagents_record_starts_with_what_it_was_asked_counts_its_calls_and_ends_wi
     let (start, changed) = record(&store, &started("agent"));
     assert_eq!(changed, ["agent"]);
     let first = subagent(&store, "agent");
-    assert_eq!((first.status, first.started_at_ms, first.calls, &first.latest_call), (Working, start.ts_ms, 0, &None));
+    assert_eq!((first.status, first.started_at_ms, first.calls, &first.lately), (Working, start.ts_ms, 0, &None));
     assert_eq!((first.kind.as_deref(), first.prompt.as_deref()), (Some("Explore"), Some("Find where the tests live.")));
 
-    assert_eq!(record(&store, &message(None, vec![tool_use("own")])).1, Vec::<String>::new(), "the agent's own");
-    assert_eq!(record(&store, &message(Some("other"), vec![tool_use("x")])).1, Vec::<String>::new(), "no record");
+    assert_eq!(record(&store, &message(None, vec![reading("own")])).1, Vec::<String>::new(), "the agent's own");
+    assert_eq!(record(&store, &message(Some("other"), vec![reading("x")])).1, Vec::<String>::new(), "no record");
     let text = vec![ContentBlock::Thinking { text: "x".into() }];
     assert_eq!(record(&store, &message(Some("agent"), text)).1, Vec::<String>::new(), "nothing it shows");
     let blocks =
-        vec![tool_use("read-1"), ContentBlock::Text { text: "x".into(), images: Vec::new() }, tool_use("read-2")];
+        vec![reading("read-1"), ContentBlock::Text { text: "x".into(), images: Vec::new() }, reading("read-2")];
     assert_eq!(record(&store, &message(Some("agent"), blocks)).1, ["agent"]);
     let working = subagent(&store, "agent");
     assert_eq!(working.calls, 2);
-    assert_eq!(working.latest_call.as_ref().map(|call| call.id.as_str()), Some("read-2"), "the newest");
-    assert_eq!(working.latest_call.unwrap().input, json!({"file_path": "read-2"}));
+    assert_eq!(lately(&store, "agent"), (None, vec![("read-1".into(), None), ("read-2".into(), None)]));
+    assert_eq!(working.lately.as_ref().unwrap().calls[1].call, read("read-2"), "as it was made");
     assert!(working.rev > first.rev, "a client only takes a newer copy");
     assert_eq!(record(&store, &started("agent")).1, Vec::<String>::new(), "it's working already");
     assert_eq!(subagent(&store, "agent").rev, working.rev);
@@ -110,7 +117,7 @@ fn a_subagent_that_starts_again_after_it_ended_works_again_under_the_call_that_f
         EventBody::SubagentStarted { call: call.into(), subagent, kind, description, prompt, in_background }
     };
     record(&store, &start("toolu_agent", false));
-    record(&store, &message(Some("task-1"), vec![tool_use("read")]));
+    record(&store, &message(Some("task-1"), vec![reading("read")]));
     record(&store, &ended("task-1", TaskOutcome::Finished, Some("They're in tests/.")));
     let finished = subagent(&store, "task-1");
     // So it starts again later than it ended, as it would after any time finished.
@@ -148,8 +155,8 @@ fn a_subagent_named_by_its_agent_is_kept_by_that_name_and_found_by_its_call_too(
     }
 
     assert_eq!(record(&store, &start).1, ["thread-1"]);
-    assert_eq!(record(&store, &message(Some("thread-1"), vec![tool_use("read")])).1, ["thread-1"]);
-    assert_eq!(record(&store, &message(Some("toolu_9"), vec![tool_use("x")])).1, Vec::<String>::new(), "by its call");
+    assert_eq!(record(&store, &message(Some("thread-1"), vec![reading("read")])).1, ["thread-1"]);
+    assert_eq!(record(&store, &message(Some("toolu_9"), vec![reading("x")])).1, Vec::<String>::new(), "by its call");
     record(&store, &ended("thread-1", TaskOutcome::Finished, Some("Done.")));
 
     let kept = subagent(&store, "thread-1");
@@ -179,7 +186,7 @@ fn a_subagents_record_names_the_model_of_its_newest_reply_and_changes_only_when_
     assert_eq!(record(&store, &reply(None, "claude-opus-5-5", thinking())).1, unchanged, "the agent's own");
     assert_eq!(subagent(&store, "agent"), on_haiku, "it keeps its revision, so it isn't sent again");
 
-    let (_, changed) = record(&store, &reply(Some("agent"), "claude-sonnet-5-5", vec![tool_use("read")]));
+    let (_, changed) = record(&store, &reply(Some("agent"), "claude-sonnet-5-5", vec![reading("read")]));
     assert_eq!(changed, ["agent"], "once");
     let on_sonnet = subagent(&store, "agent");
     assert_eq!((on_sonnet.model.map(String::from).as_deref(), on_sonnet.calls), (Some("claude-sonnet-5-5"), 1));
@@ -227,16 +234,22 @@ fn said(text: &str) -> ContentBlock {
     ContentBlock::Text { text: text.into(), images: Vec::new() }
 }
 
-/// What came back for the call `id`, to the agent, or to the subagent `to` started.
+/// What came back for the call `id`, as words, to the agent, or to the subagent `to` started.
 pub(super) fn answer(to: Option<&str>, id: &str, text: &str) -> EventBody {
-    let result = fixtures::tool_result(id, text, false);
+    let result = fixtures::typed_result(id, CallOutput::Words { text: text.into() }, false);
     EventBody::AgentUser { subagent: to.map(Into::into), blocks: vec![result] }
 }
 
-/// What the subagent has said since its newest call, and each of its calls kept, with what came back for it.
-pub(super) fn recent(store: &Store, call: &str) -> (Option<String>, Vec<(String, Option<String>)>) {
-    let work = subagent(store, call).recent;
-    let calls = work.calls.into_iter().map(|made| (made.call.id.to_string(), made.result.map(|r| r.text))).collect();
+/// What the subagent has said since its newest call, and each of its calls kept, with the words that came back for
+/// it.
+pub(super) fn lately(store: &Store, call: &str) -> (Option<String>, Vec<(String, Option<String>)>) {
+    let work = subagent(store, call).lately.unwrap_or_default();
+    let words = |output: CallOutput| {
+        let CallOutput::Words { text } = &output else { panic!("{output:?}") };
+        text.clone()
+    };
+    let calls =
+        work.calls.into_iter().map(|made| (made.id.to_string(), made.result.map(|r| words(r.output)))).collect();
     (work.since.map(|said| said.text), calls)
 }
 
@@ -250,27 +263,25 @@ fn a_working_subagents_record_keeps_what_it_has_done_lately_and_lets_go_of_it_wh
     let prompt = EventBody::AgentUser { subagent: Some("agent".into()), blocks: vec![said("Find it.")] };
     assert_eq!(record(&store, &prompt).1, Vec::<String>::new(), "what it was asked isn't what it wrote");
 
-    assert_eq!(record(&store, &message(Some("agent"), vec![said("I'll read it."), tool_use("read")])).1, ["agent"]);
+    assert_eq!(record(&store, &message(Some("agent"), vec![said("I'll read it."), reading("read")])).1, ["agent"]);
     assert_eq!(record(&store, &answer(Some("agent"), "read", "1→fn main() {}")).1, ["agent"], "what came back");
     assert_eq!(record(&store, &answer(None, "read", "the agent's own")).1, Vec::<String>::new());
     assert_eq!(record(&store, &message(Some("agent"), vec![said("It's there.")])).1, ["agent"], "what it said");
-    assert_eq!(record(&store, &message(Some("other"), vec![tool_use("grep")])).1, ["other"]);
+    assert_eq!(record(&store, &message(Some("other"), vec![reading("grep")])).1, ["other"]);
 
-    let made = subagent(&store, "agent");
-    assert_eq!(made.recent.calls[0].before.as_ref().map(|said| said.text.as_str()), Some("I'll read it."));
+    let made = subagent(&store, "agent").lately.unwrap();
+    assert_eq!(made.calls[0].before.as_ref().map(|said| said.text.as_str()), Some("I'll read it."));
     assert_eq!(
-        recent(&store, "agent"),
+        lately(&store, "agent"),
         (Some("It's there.".into()), vec![("read".into(), Some("1→fn main() {}".into()))])
     );
-    assert_eq!(made.latest_call.as_ref().map(|call| call.id.as_str()), Some("read"), "for a client from before");
 
     record(&store, &ended("agent", TaskOutcome::Finished, Some("Found it.")));
     let finished = subagent(&store, "agent");
-    assert_eq!(finished.recent, RecentWork::default(), "it's only shown while it works");
-    assert_eq!(finished.latest_call, made.latest_call);
+    assert_eq!((finished.lately, finished.calls), (None, 1), "it's only shown while it works");
     assert_eq!(record(&store, &message(Some("agent"), vec![said("Late.")])).1, Vec::<String>::new());
     record(&store, &exited());
-    assert_eq!(subagent(&store, "other").recent, RecentWork::default(), "nor once it's gone with its agent");
+    assert_eq!(subagent(&store, "other").lately, None, "nor once it's gone with its agent");
 }
 
 #[test]

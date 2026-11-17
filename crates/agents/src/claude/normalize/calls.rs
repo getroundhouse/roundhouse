@@ -2,9 +2,11 @@
 
 use std::collections::HashMap;
 
+use protocol::capability::calls::Call as Typed;
 use protocol::model::ToolUseId;
 use serde_json::Value;
 
+use super::super::typed;
 use super::{id_of, str_of, string_of};
 
 /// Every call that hasn't had its result, by the call's ID. A result closes its call whatever it says, so one that
@@ -16,14 +18,16 @@ pub(super) struct OpenCalls(HashMap<ToolUseId, Call>);
 #[derive(Debug)]
 struct Call {
     tool: String,
+    /// The call it makes, typed, which is what its result is read as.
+    typed: Typed,
     /// A subagent made it, so it can outlive the agent's own turn.
     by_a_subagent: bool,
 }
 
 impl OpenCalls {
-    /// Opens the calls this line makes, and closes those it answers. Returns the tool of each call it answers, by the
-    /// call, since once closed nothing else says what the call was for.
-    pub(super) fn note(&mut self, value: &Value) -> Vec<(ToolUseId, String)> {
+    /// Opens the calls this line makes, and closes those it answers. Returns each call it answers, typed, by its ID,
+    /// since once closed nothing else says what the call was for.
+    pub(super) fn note(&mut self, value: &Value) -> Vec<(ToolUseId, Typed)> {
         let mut answered = Vec::new();
         let by_a_subagent = str_of(value, "parent_tool_use_id").is_some();
         let blocks = value.get("message").and_then(|message| message.get("content")).and_then(Value::as_array);
@@ -31,7 +35,8 @@ impl OpenCalls {
             match str_of(block, "type") {
                 Some("tool_use" | "server_tool_use") => {
                     if let (Some(id), Some(tool)) = (id_of(block, "id"), string_of(block, "name")) {
-                        self.0.insert(id, Call { tool, by_a_subagent });
+                        let typed = typed::call(&tool, block.get("input").unwrap_or(&Value::Null));
+                        self.0.insert(id, Call { tool, typed, by_a_subagent });
                     }
                 }
                 // A tool the API runs itself answers with a kind of result of its own, such as the advisor's.
@@ -39,7 +44,7 @@ impl OpenCalls {
                     if let Some(id) = id_of::<ToolUseId>(block, "tool_use_id")
                         && let Some(call) = self.0.remove(&id)
                     {
-                        answered.push((id, call.tool));
+                        answered.push((id, call.typed));
                     }
                 }
                 _ => {}

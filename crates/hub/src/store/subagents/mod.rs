@@ -5,9 +5,9 @@ use super::Store;
 #[cfg(test)]
 use protocol::event::{ContentBlock, EventBody, SessionEvent};
 #[cfg(test)]
-use protocol::model::{RecentWork, Rev, Subagent, SubagentId, SubagentStatus};
+use protocol::model::{Rev, Subagent, SubagentId, SubagentStatus};
 
-mod recent;
+mod lately;
 
 #[cfg(test)]
 mod tests;

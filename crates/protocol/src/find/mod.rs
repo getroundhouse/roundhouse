@@ -8,7 +8,7 @@
 //! that way.
 
 #[cfg(test)]
-use crate::event::{ContentBlock, EventBody, FileChange};
+use crate::event::{ContentBlock, EventBody};
 #[cfg(test)]
 use serde_json::Value;
 #[cfg(test)]

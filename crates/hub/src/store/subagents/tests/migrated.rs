@@ -3,7 +3,6 @@
 
 use std::collections::HashMap;
 
-use protocol::fixtures;
 use protocol::model::SubagentStatus::{Failed, Finished, Stopped};
 use serde_json::{Value, json};
 
@@ -14,11 +13,23 @@ struct Line {
     ts: i64,
     body: EventBody,
     raw: Option<String>,
+    /// The body as the build wrote it, where that's in a form this one no longer writes.
+    written: Option<Value>,
 }
 
 /// An event the hub made, or the agent's that its line has no more to say about.
 fn at(ts: i64, body: EventBody) -> Line {
-    Line { ts, body, raw: None }
+    Line { ts, body, raw: None, written: None }
+}
+
+/// A message from the subagent `from` started, or from the agent, reading each file in `ids`, as Claude's adapter
+/// recorded its calls before it typed them.
+fn reads_from_before(ts: i64, from: Option<&str>, ids: &[&str]) -> Line {
+    let body = message(from, Vec::new());
+    let mut written = serde_json::to_value(&body).unwrap();
+    written["blocks"] =
+        ids.iter().map(|id| json!({"type":"tool_use","id":id,"name":"Read","input":{"file_path":id}})).collect();
+    Line { written: Some(written), ..at(ts, body) }
 }
 
 /// The CLI's word that a task started, as the agent's own event the build that recorded it made of it.
@@ -26,12 +37,12 @@ fn task_started(ts: i64, task: &str, task_type: &str, call: &Value) -> Line {
     let raw = json!({"type":"system","subtype":"task_started","task_id":task,"tool_use_id":call,"task_type":task_type,
         "subagent_type":"Explore","description":"Find the tests","prompt":"Find where the tests live.",
         "is_backgrounded":task == "t1"});
-    Line { ts, body: other("system/task_started"), raw: Some(raw.to_string()) }
+    Line { raw: Some(raw.to_string()), ..at(ts, other("system/task_started")) }
 }
 
 fn task_notification(ts: i64, task: &str, status: &str) -> Line {
     let raw = json!({"type":"system","subtype":"task_notification","task_id":task,"status":status,"summary":"Found."});
-    Line { ts, body: other("system/task_notification"), raw: Some(raw.to_string()) }
+    Line { raw: Some(raw.to_string()), ..at(ts, other("system/task_notification")) }
 }
 
 fn rows(lines: &[Line]) -> String {
@@ -41,7 +52,7 @@ fn rows(lines: &[Line]) -> String {
          VALUES ('s', 'w', 'claude', 's', 'idle', {}, 0, 0);",
         lines.len()
     );
-    let events = (1..).zip(lines).map(|(seq, Line { ts, body, raw })| {
+    let events = (1..).zip(lines).map(|(seq, Line { ts, body, raw, written })| {
         let subagent = body.subagent();
         let place = places.entry(subagent.cloned()).or_default();
         *place += 1;
@@ -51,7 +62,7 @@ fn rows(lines: &[Line]) -> String {
              VALUES ('s', {seq}, {ts}, '{}', {}, {place}, '{}', {});",
             body.kind(),
             quoted(subagent.map(SubagentId::as_str)),
-            serde_json::to_string(body).unwrap(),
+            written.as_ref().map_or_else(|| serde_json::to_string(body), serde_json::to_string).unwrap(),
             quoted(raw.as_deref()),
         )
     });
@@ -61,17 +72,16 @@ fn rows(lines: &[Line]) -> String {
 #[test]
 fn a_migrated_log_fills_in_each_subagents_record_as_the_hub_would_have_kept_it() {
     let dir = tempfile::tempdir().unwrap();
-    let grep = fixtures::tool_use("grep", "Grep", json!({"pattern": "test"}));
     let mut failed_start = task_started(14, "t2", "local_agent", &json!("failed"));
     failed_start.body = started("failed");
     let mut failed_end = task_notification(15, "t2", "failed");
     failed_end.body = ended("failed", TaskOutcome::Failed, None);
     let lines = [
-        at(9, message(Some("finished"), vec![tool_use("before")])),
+        reads_from_before(9, Some("finished"), &["before"]),
         task_started(10, "t1", "local_agent", &json!("finished")),
-        at(11, message(Some("finished"), vec![tool_use("read-1"), tool_use("read-2")])),
-        at(12, message(None, vec![tool_use("own")])),
-        at(12, message(Some("finished"), vec![grep])),
+        reads_from_before(11, Some("finished"), &["read-1", "read-2"]),
+        reads_from_before(12, None, &["own"]),
+        reads_from_before(12, Some("finished"), &["grep"]),
         task_notification(13, "t1", "completed"),
         // As the build that read the CLI's word on a subagent's task recorded it.
         failed_start,
@@ -92,27 +102,22 @@ fn a_migrated_log_fills_in_each_subagents_record_as_the_hub_would_have_kept_it()
     let (subagents, rev) = store.list_subagents(&"s".into()).unwrap();
     let kept: Vec<_> = subagents
         .iter()
-        .map(|s| {
-            let latest = s.latest_call.as_ref().map(|call| call.id.as_str());
-            (s.call.as_str(), s.status, s.started_at_ms, s.ended_at_ms, s.calls, latest, s.report.as_deref())
-        })
+        .map(|s| (s.call.as_str(), s.status, s.started_at_ms, s.ended_at_ms, s.calls, s.report.as_deref()))
         .collect();
     assert_eq!(
         kept,
         [
-            ("finished", Finished, 10, Some(13), 3, Some("grep"), Some("Found.")),
-            ("failed", Failed, 14, Some(15), 0, None, None),
-            ("exited", Stopped, 17, Some(18), 0, None, None),
+            ("finished", Finished, 10, Some(13), 3, Some("Found.")),
+            ("failed", Failed, 14, Some(15), 0, None),
+            ("exited", Stopped, 17, Some(18), 0, None),
             // It went with its agent by the session's last event.
-            ("never", Stopped, 20, Some(24), 0, None, None),
-            ("odd", SubagentStatus::Unknown, 23, Some(24), 0, None, None),
+            ("never", Stopped, 20, Some(24), 0, None),
+            ("odd", SubagentStatus::Unknown, 23, Some(24), 0, None),
         ]
     );
     let finished = &subagents[0];
     assert_eq!((finished.kind.as_deref(), finished.description.as_deref()), (Some("Explore"), Some("Find the tests")));
     assert_eq!((finished.prompt.as_deref(), finished.in_background), (Some("Find where the tests live."), true));
-    let grep = fixtures::call("grep", "Grep", json!({"pattern": "test"}));
-    assert_eq!(finished.latest_call.as_ref(), Some(&grep));
     assert!(!subagents[1].in_background);
     assert!(subagents.iter().all(|s| s.rev > Rev::default() && s.rev <= rev));
 
@@ -150,9 +155,9 @@ fn a_migrated_record_starts_with_nothing_done_lately() {
 
     let store = older::store_from_before(dir.path(), schema::BEFORE_RECENT_WORK, &rows);
 
-    assert_eq!(subagent(&store, "old").recent, RecentWork::default());
-    record(&store, &message(Some("old"), vec![tool_use("read")]));
-    assert_eq!(recent(&store, "old"), (None, vec![("read".into(), None)]));
+    assert_eq!(subagent(&store, "old").lately, None);
+    record(&store, &message(Some("old"), vec![reading("read")]));
+    assert_eq!(lately(&store, "old"), (None, vec![("read".into(), None)]));
 }
 
 /// A record from before takes its model from the newest of its replies in the log that names one, and one without
@@ -243,6 +248,6 @@ fn a_migrated_record_is_named_by_its_call() {
     let migrated = subagent(&store, "first");
     assert_eq!((migrated.id.as_ref().map(SubagentId::as_str), migrated.call.as_str()), (Some("first"), "first"));
     assert!(subagent(&store, "second").rev < migrated.rev, "no revision moved");
-    record(&store, &message(Some("first"), vec![tool_use("read")]));
+    record(&store, &message(Some("first"), vec![reading("read")]));
     assert_eq!(subagent(&store, "first").calls, 2);
 }

@@ -4,7 +4,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::CallKind;
+use crate::capability::calls::{Call, CallKind};
 
 /// What an approval asks. One this build doesn't know reads as `Unknown`, which a client asks about as it would a
 /// tool's use, by the request's tool and input.
@@ -13,12 +13,14 @@ use super::CallKind;
 pub enum Asking {
     /// Whether the agent may use a tool, as the request's tool and input say.
     ToolUse {
-        /// What kind of call that use is, as the agent's adapter read it. `None` in one recorded before adapters
-        /// said, which a client reads from the tool's name as Claude's were then. It's here rather than beside
-        /// `asking` on the request because only a tool's use needs it, since questions and a plan say their call's
-        /// kind by what they are, and because every event takes the room of the largest, and this is boxed already.
+        /// The call that use makes, typed, as the agent's adapter records it, which is also the call's own, as
+        /// recorded. `None` in one this build can't read, which a client asks about as a call of a kind it doesn't
+        /// know. It's here rather than beside `asking` on the request because only a tool's use needs it, since
+        /// questions and a plan say what they ask by what they are, and because every event takes the room of the
+        /// largest, and this is boxed already. A request recorded before adapters typed it said only its call's kind,
+        /// as `call`, which the hub's migration turned into this.
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        call: Option<CallKind>,
+        typed: Option<Call>,
     },
     /// Questions asked together, in the order they're to be answered. What's asked is an answer rather than a yes.
     Questions {
@@ -36,15 +38,15 @@ pub enum Asking {
 }
 
 impl Asking {
-    /// What kind of call it asks to make: the kind a tool's use says, and for questions and a plan, the kind they
-    /// are. One this build doesn't know is a call of a kind it doesn't know. `None` only for a tool's use recorded
-    /// before adapters said its kind.
-    pub fn call(&self) -> Option<&CallKind> {
+    /// What kind of call it asks to make: the kind of a tool's use, and for questions and a plan, the kind they are.
+    /// One this build doesn't know is a call of a kind it doesn't know, and so is a tool's use whose call it can't
+    /// read.
+    pub fn kind(&self) -> CallKind {
         match self {
-            Asking::ToolUse { call } => call.as_ref(),
-            Asking::Questions { .. } => Some(&CallKind::Questions),
-            Asking::Plan { .. } => Some(&CallKind::Plan),
-            Asking::Unknown => Some(&CallKind::Unknown),
+            Asking::ToolUse { typed } => typed.as_ref().map_or(CallKind::Unknown, Call::kind),
+            Asking::Questions { .. } => CallKind::Questions,
+            Asking::Plan { .. } => CallKind::Plan,
+            Asking::Unknown => CallKind::Unknown,
         }
     }
 }

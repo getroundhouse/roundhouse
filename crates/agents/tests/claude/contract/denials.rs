@@ -32,7 +32,7 @@ fn only_the_call_the_person_denied_says_so_and_not_those_a_stop_cancelled() {
     let results: Vec<(ToolUseId, Option<Denied>)> = blocks()
         .into_iter()
         .filter_map(|block| match block {
-            ContentBlock::ToolResult { tool_use_id, denied, .. } => Some((tool_use_id, denied)),
+            ContentBlock::CallResult { tool_use_id, denied, .. } => Some((tool_use_id, denied)),
             _ => None,
         })
         .collect();

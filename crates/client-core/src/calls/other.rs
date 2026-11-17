@@ -1,7 +1,6 @@
 //! A tool with no kind of its own, such as one from an MCP server. Its line is the agent's description of the call if
 //! it gave one, or the tool's name made readable, then the server it's from and the input that matters most.
 
-use protocol::event::CallKind;
 use serde_json::Value;
 
 use super::{description, first_line, main_input};
@@ -31,28 +30,10 @@ impl Other {
         self.tool.as_deref().unwrap_or(&self.title)
     }
 
-    /// A call of `kind`, to the tool the agent calls `name`. One whose kind says the tool, and the server it's from,
-    /// is named by those. Any other, such as a known kind given input it doesn't expect, is named as the agent names
-    /// it.
-    pub(super) fn read(kind: &CallKind, name: &str, input: &Value) -> Self {
-        let (server, tool) = match kind {
-            CallKind::Other { server, tool } if !tool.is_empty() => (server.clone(), readable(tool)),
-            CallKind::Other { .. }
-            | CallKind::Command
-            | CallKind::Read
-            | CallKind::Write
-            | CallKind::Edit
-            | CallKind::Search
-            | CallKind::FindFiles
-            | CallKind::Fetch
-            | CallKind::WebSearch
-            | CallKind::Subagent
-            | CallKind::Advisor
-            | CallKind::Questions
-            | CallKind::Plan
-            | CallKind::Unknown => (None, readable(name)),
-        };
-        Self::named(server, tool, input)
+    /// A call to the tool the agent calls `name`, named as the agent names it, as a request for approval this build
+    /// can't read is asked about.
+    pub(super) fn named_by(name: &str, input: &Value) -> Self {
+        Self::named(None, readable(name), input)
     }
 
     /// A call to `tool`, from the MCP server `server` if it's one's, as its agent typed it. A tool with no name, which
@@ -139,27 +120,21 @@ fn first_input(input: &Value) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use protocol::capability::calls::Call;
-    use protocol::event::CallKind;
     use serde_json::{Value, json};
 
     use super::{Other, readable};
     use crate::calls::{Recorded, ToolCall};
 
-    /// A call to `tool`, which its kind says is a tool with no kind of its own, and from no server.
-    fn read(tool: &str, input: &Value) -> Other {
-        Other::read(&CallKind::Other { server: None, tool: tool.to_string() }, tool, input)
+    /// A call to `tool`, a tool with no kind of its own, from no server.
+    fn read(tool: &str, input: Value) -> Other {
+        let call = Call::Other { tool: tool.to_string(), input };
+        let ToolCall::Other(other) = ToolCall::read(Recorded::Typed(&call)) else { panic!("read as another kind") };
+        other
     }
 
     #[test]
-    fn a_tool_from_an_mcp_server_says_which_server() {
-        let kind = CallKind::Other { server: Some("github".into()), tool: "create_issue".into() };
-        let other = Other::read(&kind, "mcp__github__create_issue", &json!({ "title": "Signals" }));
-
-        assert_eq!(other.title, "Create issue");
-        assert_eq!(other.server.as_deref(), Some("github"));
-        assert_eq!(other.detail.as_deref(), Some("title: \"Signals\""));
-        let other = read("list", &json!({ "labels": ["bug"] }));
-        assert_eq!(other.detail.as_deref(), Some("labels: [\"bug\"]"));
+    fn a_tool_s_input_that_matters_most_is_its_detail() {
+        assert_eq!(read("list", json!({ "labels": ["bug"] })).detail.as_deref(), Some("labels: [\"bug\"]"));
     }
 
     #[test]
@@ -173,7 +148,7 @@ mod tests {
 
     #[test]
     fn the_agent_s_description_comes_first_with_the_tool_after_it() {
-        let other = read("NotebookEdit", &json!({ "description": "Fix the plot", "notebook_path": "a.ipynb" }));
+        let other = read("NotebookEdit", json!({ "description": "Fix the plot", "notebook_path": "a.ipynb" }));
 
         assert_eq!(other.title, "Fix the plot");
         assert_eq!(other.tool.as_deref(), Some("Notebook edit"));
@@ -182,15 +157,14 @@ mod tests {
 
     #[test]
     fn the_usual_input_is_shown_on_its_own() {
-        let other = read("ToolSearch", &json!({ "max_results": 2, "query": "select:Read\nmore" }));
+        let other = read("ToolSearch", json!({ "max_results": 2, "query": "select:Read\nmore" }));
 
         assert_eq!(other.detail.as_deref(), Some("select:Read"));
-        assert_eq!(read("Ping", &json!({})).detail, None);
+        assert_eq!(read("Ping", json!({})).detail, None);
     }
 
-    /// A typed call to an MCP server's tool is read as one recorded before calls were typed is, by its name made
-    /// readable, with its server, and one to any other tool with none. One that names no tool is named as one of a
-    /// kind this build doesn't know.
+    /// A call to an MCP server's tool is read by its name made readable, with its server, and one to any other tool
+    /// with none. One that names no tool is named as one of a kind this build doesn't know.
     #[test]
     fn a_typed_tool_with_no_kind_of_its_own_is_read_as_any_other() {
         let read = |call: &Call| {
@@ -210,12 +184,13 @@ mod tests {
         assert_eq!(read(&Call::Other { tool: " ".into(), input: json!({}) }).title, "Unknown tool");
     }
 
-    /// As a command given no command is, or a call of a kind this build doesn't know.
+    /// A request for approval this build can't read is asked about by the tool it names, as the agent names it.
     #[test]
-    fn a_call_whose_kind_names_no_tool_is_named_as_the_agent_names_it() {
-        for kind in [CallKind::Command, CallKind::Unknown, CallKind::Other { server: None, tool: String::new() }] {
-            let other = Other::read(&kind, "run_script", &json!({ "script": "ls" }));
-            assert_eq!((other.title.as_str(), other.server), ("Run script", None), "{kind:?}");
-        }
+    fn a_request_this_build_cant_read_is_named_as_the_agent_names_its_tool() {
+        let input = json!({ "script": "ls" });
+        let ToolCall::Other(other) = ToolCall::read(Recorded::Named { name: "run_script", input: &input }) else {
+            panic!("read as another kind")
+        };
+        assert_eq!((other.title.as_str(), other.server), ("Run script", None));
     }
 }

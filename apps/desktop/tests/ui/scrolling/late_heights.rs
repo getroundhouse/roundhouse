@@ -1,12 +1,12 @@
 //! Scrolling through rows whose height comes late, such as a long text parsed on another thread, which moves
 //! nothing in the window when it does. Only what the hub recorded matters, so each chat is made up for a fake hub.
 
-use client_core::fake_hub::events::{text, thought, tool_result, tool_use};
+use client_core::fake_hub::events::{said, text, thought, typed_call};
 use gpui_kit::test::{ElementSnapshot, TestWindowExt as _};
 use gpui_kit::{AppContext as _, Entity, Pixels, ScrollDelta, TestAppContext, point, px};
+use protocol::capability::calls::Call;
 use protocol::event::{ApprovalOutcome, Asking, ContentBlock, EventBody, SessionEvent};
 use protocol::fixtures::{ApprovalRequest, approval_request};
-use serde_json::json;
 use transcript::{Place, Transcript};
 
 use super::{A_FRAME, just_over_4_kb, open_on_a_chat, turns, wait_for_the_list_to_settle};
@@ -63,7 +63,6 @@ fn scrolling_up_into_a_long_plan_moves_as_far_as_the_wheel_turns(cx: &mut TestAp
     // As the hub records a plan from Claude, approved.
     let request = ApprovalRequest {
         tool_use_id: Some("toolu-plan".into()),
-        input: json!({ "plan": plan, "planFilePath": "/tmp/plan.md" }),
         asking: Some(Asking::Plan { plan: plan.clone() }),
         ..approval_request("approval-plan", "ExitPlanMode")
     };
@@ -75,10 +74,10 @@ fn scrolling_up_into_a_long_plan_moves_as_far_as_the_wheel_turns(cx: &mut TestAp
         by_setting: false,
     };
     let planned = vec![
-        tool_use("msg-plan", "toolu-plan", "ExitPlanMode", json!({})),
+        typed_call("msg-plan", "toolu-plan", Call::Plan),
         request.into(),
         approved,
-        tool_result("toolu-plan", "User has approved your plan."),
+        said("toolu-plan", "User has approved your plan."),
     ];
     let (_fake, mut ui, _) = open_on_a_chat(
         cx,

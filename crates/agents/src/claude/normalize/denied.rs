@@ -1,20 +1,25 @@
 //! Which of a `user` line's results answer a tool's use the person denied, as the CLI says beside them in
 //! `tool_result_meta`, and what the person said. `docs/claude-cli.md` has what the CLI writes there.
 
-use protocol::event::{CallKind, ContentBlock, Denied, EventBody};
+use protocol::capability::calls::{Call, CallOutput};
+use protocol::event::{ContentBlock, Denied, EventBody};
+use protocol::model::ToolUseId;
 use serde_json::Value;
 
 use crate::claude::approvals::denied_in_its_own_words;
 
-/// Has each result in `body` to a tool's use the person denied say so, from `line`, the line it was read from. A result
-/// to questions or a plan isn't one, since what became of those is their approval's to say. The kinds of the calls the
-/// results answer have to be known already, as [`crate::claude::kinds::say`] says them.
-pub(super) fn say(body: &mut EventBody, line: &Value) {
+/// Has each result in `body` to a tool's use the person denied say so, from `line`, the line it was read from, while
+/// what came back is still in the CLI's words. A result to questions or a plan isn't one, since what became of those is
+/// their approval's to say. `answered` is each call the line answers, by its ID.
+pub(super) fn say(body: &mut EventBody, line: &Value, answered: &[(ToolUseId, Call)]) {
     let EventBody::AgentUser { blocks, .. } = body else { return };
     let Some(meta) = line.get("tool_result_meta").and_then(Value::as_array) else { return };
     for block in blocks {
-        let ContentBlock::ToolResult { tool_use_id, text, call, denied, .. } = block else { continue };
-        if matches!(call, Some(CallKind::Questions | CallKind::Plan)) {
+        let ContentBlock::CallResult { tool_use_id, output: CallOutput::Words { text }, denied, .. } = block else {
+            continue;
+        };
+        let call = answered.iter().find(|(id, _)| id == tool_use_id).map(|(_, call)| call);
+        if matches!(call, Some(Call::Questions | Call::Plan)) {
             continue;
         }
         let about = |entry: &&Value| entry.get("id").and_then(Value::as_str) == Some(tool_use_id.as_str());
@@ -38,27 +43,26 @@ fn rejected(entry: &Value, text: &str) -> Option<Denied> {
 
 #[cfg(test)]
 mod tests {
-    use protocol::event::{CallKind, ContentBlock, Denied, EventBody};
+    use protocol::capability::calls::{Call, CallOutput};
+    use protocol::event::{ContentBlock, Denied, EventBody};
     use serde_json::{Value, json};
 
     use super::say;
 
-    fn denied_by(meta: &Value, text: &str, call: Option<CallKind>) -> Option<Denied> {
-        let result = ContentBlock::ToolResult {
+    /// What the result of the call `c`, which made `call`, says the person denied, when the CLI says `meta` of it.
+    fn denied_by(meta: &Value, text: &str, call: Option<Call>) -> Option<Denied> {
+        let result = ContentBlock::CallResult {
             tool_use_id: "c".into(),
+            output: CallOutput::Words { text: text.into() },
             is_error: true,
-            text: text.into(),
-            images: Vec::new(),
-            change: None,
-            encrypted: false,
-            call,
-            exit_code: None,
             denied: None,
+            images: Vec::new(),
         };
         let mut body = EventBody::AgentUser { subagent: None, blocks: vec![result] };
-        say(&mut body, &json!({ "type": "user", "tool_result_meta": [meta] }));
+        let answered: Vec<_> = call.into_iter().map(|call| ("c".into(), call)).collect();
+        say(&mut body, &json!({ "type": "user", "tool_result_meta": [meta] }), &answered);
         let EventBody::AgentUser { blocks, .. } = body else { return None };
-        let [ContentBlock::ToolResult { denied, .. }] = blocks.as_slice() else { return None };
+        let [ContentBlock::CallResult { denied, .. }] = blocks.as_slice() else { return None };
         denied.clone()
     }
 
@@ -68,7 +72,7 @@ mod tests {
 
     #[test]
     fn a_call_the_person_rejected_is_denied_with_their_words_unless_they_said_none() {
-        let command = Some(CallKind::Command);
+        let command = Some(Call::Command(protocol::fixtures::typed_command("ls")));
         let rejected = decided("reject", "user_reject");
 
         let said = Denied { said: Some("Not that".into()) };
@@ -88,7 +92,7 @@ mod tests {
 
     #[test]
     fn what_was_allowed_cancelled_decided_by_anyone_else_another_call_or_questions_and_a_plan_arent() {
-        let command = Some(CallKind::Command);
+        let command = Some(Call::Command(protocol::fixtures::typed_command("ls")));
         let rejected = decided("reject", "user_reject");
 
         assert_eq!(denied_by(&decided("accept", "user_temporary"), "ok", command.clone()), None);
@@ -99,7 +103,7 @@ mod tests {
         let another =
             json!({ "id": "other", "permission_decision": { "decision": "reject", "source": "user_reject" } });
         assert_eq!(denied_by(&another, "Not that", command), None);
-        assert_eq!(denied_by(&rejected, "Skip these", Some(CallKind::Questions)), None);
-        assert_eq!(denied_by(&rejected, "Keep planning", Some(CallKind::Plan)), None);
+        assert_eq!(denied_by(&rejected, "Skip these", Some(Call::Questions)), None);
+        assert_eq!(denied_by(&rejected, "Keep planning", Some(Call::Plan)), None);
     }
 }

@@ -1,3 +1,5 @@
+use protocol::capability::calls::Call;
+use protocol::capability::calls::call::Read;
 use protocol::event::{ContentBlock, EventBody, Question, QuestionOption};
 use protocol::fixtures;
 use protocol::model::{Records, Repo, Rev, Seq};
@@ -33,12 +35,8 @@ fn sample_log() -> SessionLog {
         },
     ));
     for seq in 2..45 {
-        let block = ContentBlock::ToolUse {
-            id: format!("t{seq}").into(),
-            name: "Read".into(),
-            input: serde_json::json!({ "file_path": "crates/dictation/src/hints/words.rs" }),
-            call: None,
-        };
+        let read = Read { path: "crates/dictation/src/hints/words.rs".into(), lines: None, pages: None };
+        let block = ContentBlock::Call { id: format!("t{seq}").into(), call: Call::Read(read) };
         log.apply_event(fixtures::event(
             Seq::new(seq),
             EventBody::Assistant {

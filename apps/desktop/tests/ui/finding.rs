@@ -9,14 +9,15 @@ use std::time::Duration;
 
 use client_core::fake_hub::World;
 use client_core::fake_hub::events::{
-    finished_turn, subagent_ended, subagent_started, taken, text, tool_result, tool_use, user_prompt, within,
+    command, finished_turn, launched, printed, subagent, subagent_ended, subagent_started, taken, text, user_prompt,
+    within,
 };
 use gpui_kit::AppContext as _;
 use gpui_kit::test::ElementSnapshot;
 use gpui_kit::{ScrollDelta, TestAppContext, point, px};
+use protocol::capability::calls::call::Runs;
 use protocol::event::{EventBody, SessionEvent};
 use protocol::model::{Seq, SessionStatus, SettledAt};
-use serde_json::json;
 
 use crate::support::{FakeHub, Ui};
 
@@ -81,11 +82,10 @@ fn find(ui: &mut Ui<'_>, query: &str) {
 #[gpui_kit::test]
 fn cmd_f_finds_in_the_whole_chat_and_opens_what_a_match_is_in(cx: &mut TestAppContext) {
     let mut events = Vec::new();
-    let call = json!({"command": "echo a-needle-printed"});
     turn(
         &mut events,
         "Echo a needle.",
-        [tool_use("echo", "toolu-1", "Bash", call), tool_result("toolu-1", "a-needle-printed")],
+        [command("echo", "toolu-1", "echo a-needle-printed", None), printed("toolu-1", "a-needle-printed")],
     );
     // Far more events than the transcript loads to start with, so the call isn't among them.
     messages(&mut events, 700);
@@ -226,17 +226,16 @@ fn a_match_in_what_a_subagent_was_asked_opens_its_call_and_is_drawn_with_its_mar
     // The subagent is asked to "Look around.", which nothing else in the chat says with the full stop, and it works
     // in the background, as the CLI's do, so its call has lines of its own to open to.
     let asked = format!("{SUBAGENT_LINE}.");
-    let call = json!({"description": SUBAGENT_LINE, "subagent_type": "Explore", "prompt": asked});
     let mut events = Vec::new();
     turn(
         &mut events,
         "Send a subagent.",
         [
-            tool_use("send", "toolu-1", "Agent", call),
+            subagent("send", "toolu-1", "Explore", SUBAGENT_LINE, &asked, Runs::Background),
             subagent_started("toolu-1", "Explore", SUBAGENT_LINE, &asked),
-            tool_result("toolu-1", "Async agent launched successfully."),
-            within("toolu-1", tool_use("ls", "toolu-2", "Bash", json!({"command": "ls"}))),
-            within("toolu-1", tool_result("toolu-2", "README.md")),
+            launched("toolu-1"),
+            within("toolu-1", command("ls", "toolu-2", "ls", None)),
+            within("toolu-1", printed("toolu-2", "README.md")),
             subagent_ended("toolu-1", "There's a README here.", 1_000),
             text("done", "done"),
         ],

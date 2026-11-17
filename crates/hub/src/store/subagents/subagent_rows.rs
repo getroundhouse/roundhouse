@@ -1,12 +1,12 @@
 use super::super::{Store, StoreError, current_rev, from_text, json_at, lock, rev_of, text_of};
-use super::recent;
+use super::lately;
 use protocol::event::{ContentBlock, EventBody, SessionEvent};
-use protocol::model::{Call, Lately, ModelName, RecentWork, Rev, SessionId, Subagent, SubagentId, SubagentStatus};
+use protocol::model::{Lately, ModelName, Rev, SessionId, Subagent, SubagentId, SubagentStatus};
 use rusqlite::types::ValueRef;
 use rusqlite::{Connection, OptionalExtension, Row, params};
 
 const SUBAGENT_COLUMNS: &str = "session_id, call, kind, description, prompt, in_background, status, started_at_ms, \
-     ended_at_ms, calls, latest_call, report, rev, recent, model, context_tokens, id, lately";
+     ended_at_ms, calls, report, rev, model, context_tokens, id, lately";
 
 impl Store {
     /// The session's subagents, oldest first, read in one transaction with the revision they're as of.
@@ -62,7 +62,7 @@ const STARTED: &str = "INSERT INTO subagents
      ON CONFLICT DO NOTHING";
 
 // What it's done lately is only shown while it works. An end that counts no tokens leaves the count it had.
-const ENDED: &str = "UPDATE subagents SET status = ?, ended_at_ms = ?, report = ?, recent = NULL, lately = NULL,
+const ENDED: &str = "UPDATE subagents SET status = ?, ended_at_ms = ?, report = ?, lately = NULL,
          context_tokens = coalesce(?, context_tokens)
      WHERE session_id = ? AND id = ? AND status = ?";
 
@@ -98,7 +98,7 @@ pub(in super::super) fn note_subagents(tx: &Connection, event: &SessionEvent) ->
         }
         EventBody::AgentExited { .. } => {
             let mut statement = tx.prepare_cached(
-                "UPDATE subagents SET status = ?, ended_at_ms = ?, recent = NULL, lately = NULL
+                "UPDATE subagents SET status = ?, ended_at_ms = ?, lately = NULL
                  WHERE session_id = ? AND status = ?
                  RETURNING id",
             )?;
@@ -152,24 +152,17 @@ fn note_work(
 ) -> Result<Vec<SubagentId>, StoreError> {
     let session = event.session_id.as_str();
     let model = note_model(tx, session, subagent, &event.body)?;
-    let made: Vec<Call> = blocks.iter().filter_map(Call::of).collect();
-    // A typed call counts as one too. Only the older form is the record's newest call, which only a client from before
-    // `recent` reads.
-    let typed = blocks.iter().filter(|block| matches!(block, ContentBlock::Call { .. })).count();
-    let latest = made.last().map(serde_json::to_string).transpose()?;
+    let made = blocks.iter().filter(|block| matches!(block, ContentBlock::Call { .. })).count();
     let wrote = matches!(event.body, EventBody::Assistant { .. });
-    let (mut recent, mut lately) = working_on(tx, session, subagent)?.unzip();
-    let added = recent.as_mut().is_some_and(|work| recent::add(work, blocks, wrote));
-    let added_typed = lately.as_mut().is_some_and(|work| recent::add_typed(work, blocks, wrote));
-    if made.is_empty() && typed == 0 && !added && !added_typed {
+    let mut lately = working_on(tx, session, subagent)?;
+    let added = lately.as_mut().is_some_and(|work| lately::add(work, blocks, wrote));
+    if made == 0 && !added {
         return Ok(changed(model, subagent));
     }
-    let recent = recent.filter(|_| added).map(|work| serde_json::to_string(&work)).transpose()?;
-    let lately = lately.filter(|_| added_typed).map(|work| serde_json::to_string(&work)).transpose()?;
+    let lately = lately.filter(|_| added).map(|work| serde_json::to_string(&work)).transpose()?;
     let rows = tx.execute(
-        "UPDATE subagents SET calls = calls + ?, latest_call = coalesce(?, latest_call),
-             recent = coalesce(?, recent), lately = coalesce(?, lately) WHERE session_id = ? AND id = ?",
-        params![made.len() + typed, latest, recent, lately, session, subagent.as_str()],
+        "UPDATE subagents SET calls = calls + ?, lately = coalesce(?, lately) WHERE session_id = ? AND id = ?",
+        params![made, lately, session, subagent.as_str()],
     )?;
     Ok(changed(rows + model, subagent))
 }
@@ -184,49 +177,38 @@ fn note_model(tx: &Connection, session: &str, subagent: &SubagentId, body: &Even
     Ok(tx.prepare_cached(sql)?.execute(params![model.as_str(), session, subagent.as_str()])?)
 }
 
-/// What `subagent` has done lately, in both forms, if it's still working, since that's only kept while it works.
-fn working_on(
-    tx: &Connection,
-    session: &str,
-    subagent: &SubagentId,
-) -> Result<Option<(RecentWork, Lately)>, StoreError> {
+/// What `subagent` has done lately, if it's still working, since that's only kept while it works.
+fn working_on(tx: &Connection, session: &str, subagent: &SubagentId) -> Result<Option<Lately>, StoreError> {
     let working = text_of(&SubagentStatus::Working);
-    let sql = "SELECT recent, lately FROM subagents WHERE session_id = ? AND id = ? AND status = ?";
+    let sql = "SELECT lately FROM subagents WHERE session_id = ? AND id = ? AND status = ?";
     let work = tx
         .prepare_cached(sql)?
-        .query_row(params![session, subagent.as_str(), working], |row| {
-            Ok((json_at::<RecentWork>(row, 0)?, json_at::<Lately>(row, 1)?))
-        })
+        .query_row(params![session, subagent.as_str(), working], |row| json_at::<Lately>(row, 0))
         .optional()?;
     // Written only by this hub, as JSON. What it can't read is nothing it knows of.
-    Ok(work.map(|(recent, lately)| (recent.unwrap_or_default(), lately.unwrap_or_default())))
+    Ok(work.map(Option::unwrap_or_default))
 }
 
 fn subagent_from_row(row: &Row<'_>) -> rusqlite::Result<Subagent> {
     Ok(Subagent {
         session_id: row.get::<_, String>(0)?.into(),
-        id: Some(row.get::<_, String>(16)?.into()),
+        id: Some(row.get::<_, String>(14)?.into()),
         call: row.get::<_, String>(1)?.into(),
         kind: text_at(row, 2)?,
         description: text_at(row, 3)?,
         prompt: text_at(row, 4)?,
         in_background: row.get(5)?,
         // Written only by this hub, from a name that named a model. One that doesn't is none it knows of.
-        model: row.get::<_, Option<String>>(14)?.and_then(|model| ModelName::try_from(model).ok()),
+        model: row.get::<_, Option<String>>(12)?.and_then(|model| ModelName::try_from(model).ok()),
         status: from_text(row.get(6)?)?,
         started_at_ms: row.get(7)?,
         ended_at_ms: row.get(8)?,
-        context_tokens: row.get::<_, Option<i64>>(15)?.map(i64::cast_unsigned),
+        context_tokens: row.get::<_, Option<i64>>(13)?.map(i64::cast_unsigned),
         calls: row.get(9)?,
-        // Written only by this hub, as JSON. One it can't read is none it knows of.
-        latest_call: json_at(row, 10)?,
-        report: text_at(row, 11)?,
-        rev: rev_of(row, 12)?,
-        // As in `working_on`.
-        recent: json_at(row, 13)?.unwrap_or_default(),
-        // Once it's made a typed call. Until then, `recent` says what it's written as well, and one whose agent records
-        // its calls in the older form makes none, so its call is drawn from `recent`.
-        lately: json_at::<Lately>(row, 17)?.filter(|work| !work.calls.is_empty()),
+        report: text_at(row, 10)?,
+        rev: rev_of(row, 11)?,
+        // Written only by this hub, as JSON, as in `working_on`.
+        lately: json_at(row, 15)?,
     })
 }
 

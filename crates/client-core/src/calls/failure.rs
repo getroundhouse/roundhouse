@@ -1,13 +1,9 @@
 //! How a tool's result says it failed, for the line under its call: how a command ended, when it was one, and what
-//! went wrong. The agent's adapter says both, and a result that says what kind of call it answers holds what came back
-//! alone. One with no kind was recorded before adapters said, and has both in its text, as Claude wrote it then, which
-//! [`super::older`] reads.
+//! went wrong. The agent's adapter says both, and a result holds what came back alone.
 
 use protocol::capability::calls::CallOutput;
 use protocol::capability::calls::output::Ended;
 use protocol::event::ContentBlock;
-
-use super::older;
 
 /// What a failed result says went wrong.
 #[derive(Clone, Copy, Debug)]
@@ -35,12 +31,8 @@ impl<'a> Failure<'a> {
     /// What a failed result says went wrong, from its text and the form it was recorded in, as
     /// [`super::Returned::failure`] reads it, for a view that keeps a copy of both rather than the block.
     pub fn read(text: &'a str, form: ResultForm) -> Self {
-        let (ended, output) = match form.0 {
-            Form::Alone { ended, says: true } => (ended, text),
-            Form::Alone { ended, says: false } => (ended, ""),
-            Form::AsSent => (older::exit_code(text).map(Ending::Exited), older::output(text)),
-        };
-        Self { ended, message: super::first_line(output), output }
+        let output = if form.says { text } else { "" };
+        Self { ended: form.ended, message: super::first_line(output), output }
     }
 
     /// What its line says first, such as `Exit 2`, or `Timed out` for a command that didn't exit.
@@ -54,39 +46,22 @@ impl<'a> Failure<'a> {
     }
 }
 
-/// The form a result was recorded in, which says how its text is read. Only the result itself says, so no client
+/// What a result says of how it failed, which says how its text is read. Only the result itself says, so no client
 /// decides it: a client has one from [`super::Returned::form`].
 #[derive(Clone, Copy, Debug)]
-pub struct ResultForm(Form);
-
-#[derive(Clone, Copy, Debug)]
-enum Form {
-    /// Through an adapter that says: its text is what came back alone, and how a command ended is beside it. A typed
-    /// result `says` what went wrong when what came back is words, such as what a command printed. Any other, such as
-    /// the files a patch would have changed, doesn't say, so its line says only that it failed.
-    Alone { ended: Option<Ending>, says: bool },
-    /// Before adapters said, as Claude sent it, with how it failed in its text.
-    AsSent,
+pub struct ResultForm {
+    /// How the command ended, when it was one and its agent said.
+    ended: Option<Ending>,
+    /// Its text says what went wrong when it failed: what came back is words, such as what a command printed. Any
+    /// other, such as the files a patch would have changed, doesn't say, so its line says only that it failed.
+    says: bool,
 }
 
 impl ResultForm {
     /// The form of the result `block`, or `None` for any other block.
     pub(super) fn of(block: &ContentBlock) -> Option<Self> {
-        match block {
-            ContentBlock::CallResult { output, .. } => {
-                Some(Self(Form::Alone { ended: ending(output), says: says_what_went_wrong(output) }))
-            }
-            ContentBlock::ToolResult { call: Some(_), exit_code, .. } => {
-                Some(Self(Form::Alone { ended: exit_code.map(Ending::Exited), says: true }))
-            }
-            ContentBlock::ToolResult { call: None, .. } => Some(Self(Form::AsSent)),
-            ContentBlock::Text { .. }
-            | ContentBlock::Thinking { .. }
-            | ContentBlock::Call { .. }
-            | ContentBlock::ToolUse { .. }
-            | ContentBlock::Image { .. }
-            | ContentBlock::Unknown => None,
-        }
+        let ContentBlock::CallResult { output, .. } = block else { return None };
+        Some(Self { ended: ending(output), says: says_what_went_wrong(output) })
     }
 }
 
@@ -127,12 +102,10 @@ fn ending(output: &CallOutput) -> Option<Ending> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Ending, Failure, Form, ResultForm};
-
-    const AS_SENT: ResultForm = ResultForm(Form::AsSent);
+    use super::{Ending, Failure, ResultForm};
 
     fn alone(exit_code: Option<i32>) -> ResultForm {
-        ResultForm(Form::Alone { ended: exit_code.map(Ending::Exited), says: true })
+        ResultForm { ended: exit_code.map(Ending::Exited), says: true }
     }
 
     #[test]
@@ -162,17 +135,5 @@ mod tests {
         let failure = Failure::read(text, alone(Some(1)));
 
         assert_eq!((failure.label().as_str(), failure.output), ("Exit 1", text));
-    }
-
-    #[test]
-    fn a_result_from_before_adapters_said_is_read_from_its_text() {
-        let command = Failure::read("Exit code 2\nls: no such file", AS_SENT);
-        assert_eq!(
-            (command.label().as_str(), command.message, command.output),
-            ("Exit 2", "ls: no such file", "ls: no such file")
-        );
-
-        let refused = Failure::read("<tool_use_error>no such tool</tool_use_error>", AS_SENT);
-        assert_eq!((refused.label().as_str(), refused.output), ("Error", "no such tool"));
     }
 }

@@ -47,8 +47,8 @@
 //! running.
 //!
 //! "What each kind of agent can do" in `docs/architecture.md` has the plan that puts this in place of
-//! [`AgentFeature`], the efforts and modes in an [`AgentDescription`], [`CallKind`](crate::event::CallKind), the
-//! worker's requests of an agent, and what the methods of the `agents` crate's `AgentProcess` say of themselves.
+//! [`AgentFeature`], the efforts and modes in an [`AgentDescription`], the worker's requests of an agent, and what the
+//! methods of the `agents` crate's `AgentProcess` say of themselves.
 //!
 //! [`AgentFeature`]: crate::model::AgentFeature
 //! [`AgentDescription`]: crate::model::AgentDescription

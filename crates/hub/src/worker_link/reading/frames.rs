@@ -2,6 +2,7 @@ use super::super::WorkerLink;
 use crate::frames::FrameReader;
 use crate::hub::Hub;
 use crate::session::Item;
+use crate::untyped::Typing;
 use protocol::client::{ApiError, ErrorCode, Outcome, error_chain};
 use protocol::frame;
 use protocol::model::{InstanceId, RunId, SessionId, WorkspaceId};
@@ -49,6 +50,8 @@ pub(in super::super) async fn read_frames(
     reader: Box<dyn tokio::io::AsyncRead + Send + Unpin>,
 ) {
     let mut incoming = FrameReader::new(reader);
+    // A worker of a build from before Claude's adapter typed its calls still sends them untyped.
+    let mut untyped = Typing::default();
     loop {
         let bytes = match incoming.next().await {
             Ok(Some(bytes)) => bytes,
@@ -58,7 +61,7 @@ pub(in super::super) async fn read_frames(
                 break;
             }
         };
-        let parsed: WorkerFrame = match frame::decode(bytes) {
+        let parsed = match untyped.frame(bytes) {
             Ok(parsed) => parsed,
             Err(e) => {
                 // A reply from a newer worker, as after a rollback, ends its call rather than leaving it to wait until

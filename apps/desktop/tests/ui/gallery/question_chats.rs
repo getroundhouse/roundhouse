@@ -7,15 +7,15 @@
 use std::sync::Arc;
 
 use gpui_kit::PlatformTextSystem;
-use protocol::event::{ApprovalOutcome, EventBody};
+use protocol::capability::calls::Call;
+use protocol::event::{ApprovalOutcome, Asking, EventBody, Question, QuestionOption};
 use protocol::fixtures::{ApprovalRequest, approval_request};
 use protocol::model::{SessionStatus, ToolUseId};
-use serde_json::{Value, json};
 
 use super::capture;
 use super::chats::looked_around;
 use super::worlds::chat_world;
-use client_core::fake_hub::events::{replied, text, tool_result, tool_use};
+use client_core::fake_hub::events::{replied, said, text, typed_call};
 
 /// The line [`answered`] leaves for its second call, with two questions.
 pub(crate) const TWO_ASKED: &str = "Asked 2 questions";
@@ -23,29 +23,22 @@ pub(crate) const TWO_ASKED: &str = "Asked 2 questions";
 /// Waiting for an answer to a question with choices.
 pub(crate) fn question() -> Vec<EventBody> {
     let mut events = looked_around();
-    events.extend(asking("msg-3", "toolu-3", "approval-1", json!({ "questions": [pr_state()] })));
+    events.extend(asking("msg-3", "toolu-3", "approval-1", vec![pr_state()]));
     events
 }
 
 /// A question that asks only for words, without any offered choices.
 pub(crate) fn written_answer() -> Vec<EventBody> {
     let mut events = looked_around();
-    events.extend(asking(
-        "msg-3",
-        "toolu-3",
-        "approval-1",
-        json!({"questions": [{
-            "question": "How should the sidebar behave while the hub reconnects?",
-            "header": "Reconnecting", "options": [], "multiSelect": false,
-        }]}),
-    ));
+    let words = asked("How should the sidebar behave while the hub reconnects?", "Reconnecting", false, &[]);
+    events.extend(asking("msg-3", "toolu-3", "approval-1", vec![words]));
     events
 }
 
 /// Waiting for answers to three questions, the second of which takes several.
 pub(crate) fn questions() -> Vec<EventBody> {
     let mut events = looked_around();
-    events.extend(asking("msg-3", "toolu-3", "approval-1", json!({ "questions": [pr_state(), mark(), refresh()] })));
+    events.extend(asking("msg-3", "toolu-3", "approval-1", vec![pr_state(), mark(), refresh()]));
     events
 }
 
@@ -55,7 +48,7 @@ pub(crate) fn answered() -> Vec<EventBody> {
     let mut events = question();
     events.extend(answer("toolu-3", "approval-1", &[(PR_STATE, "In the hub")]));
     events.push(text("msg-4", TWO_MORE));
-    events.extend(asking("msg-5", "toolu-4", "approval-2", json!({ "questions": [mark(), refresh()] })));
+    events.extend(asking("msg-5", "toolu-4", "approval-2", vec![mark(), refresh()]));
     events.extend(answer("toolu-4", "approval-2", &[(MARK, MARKED)]));
     events.push(text("msg-6", REPLY));
     events.push(replied(REPLY, 64, 0.18));
@@ -75,48 +68,45 @@ const PR_STATE: &str = "Where should the PR state be fetched?";
 const MARK: &str = "Which states should the sidebar's mark show?";
 const REFRESH: &str = "How often should the hub ask GitHub again?";
 
-fn pr_state() -> Value {
-    json!({
-        "question": PR_STATE,
-        "header": "PR state",
-        "multiSelect": false,
-        "options": [
-            { "label": "In the hub", "description": "Asked once, and every client gets it from the feed" },
-            { "label": "In each client", "description": "Simpler, but every window asks GitHub on its own" },
-        ],
-    })
+fn pr_state() -> Question {
+    let options = [
+        ("In the hub", Some("Asked once, and every client gets it from the feed")),
+        ("In each client", Some("Simpler, but every window asks GitHub on its own")),
+    ];
+    asked(PR_STATE, "PR state", false, &options)
 }
 
-fn mark() -> Value {
-    json!({
-        "question": MARK,
-        "header": "Mark",
-        "multiSelect": true,
-        "options": [
-            { "label": "Open", "description": "Green, while it waits for review" },
-            { "label": "Merged", "description": "Purple, until the workspace is archived" },
-            { "label": "Closed", "description": "A muted red" },
-            { "label": "Draft", "description": "A grey of its own" },
-        ],
-    })
+fn mark() -> Question {
+    let options = [
+        ("Open", Some("Green, while it waits for review")),
+        ("Merged", Some("Purple, until the workspace is archived")),
+        ("Closed", Some("A muted red")),
+        ("Draft", Some("A grey of its own")),
+    ];
+    asked(MARK, "Mark", true, &options)
 }
 
-fn refresh() -> Value {
-    json!({
-        "question": REFRESH,
-        "header": "Refresh",
-        "multiSelect": false,
-        "options": [{ "label": "Every minute" }, { "label": "Every five minutes" }],
-    })
+fn refresh() -> Question {
+    asked(REFRESH, "Refresh", false, &[("Every minute", None), ("Every five minutes", None)])
 }
 
-/// The agent asking, with `input` as the question tool's input, in the message `message`.
-fn asking(message: &str, call: &str, approval: &str, input: Value) -> Vec<EventBody> {
+/// The question `text`, named `header`, offering `options`, each with what it means, if it says, of which several can
+/// be chosen if `multiple`.
+fn asked(text: &str, header: &str, multiple: bool, options: &[(&str, Option<&str>)]) -> Question {
+    let options = options
+        .iter()
+        .map(|(label, description)| QuestionOption { label: (*label).into(), description: description.map(Into::into) })
+        .collect();
+    Question { text: text.into(), header: Some(header.into()), options, multiple }
+}
+
+/// The agent asking `questions`, in the message `message`, as Claude's adapter asks them.
+fn asking(message: &str, call: &str, approval: &str, questions: Vec<Question>) -> Vec<EventBody> {
     vec![
-        tool_use(message, call, "AskUserQuestion", input.clone()),
+        typed_call(message, call, Call::Questions),
         ApprovalRequest {
             tool_use_id: Some(ToolUseId::from(call)),
-            input,
+            asking: Some(Asking::Questions { questions }),
             ..approval_request(approval, "AskUserQuestion")
         }
         .into(),
@@ -138,7 +128,7 @@ fn answer(call: &str, approval: &str, answers: &[(&str, &str)]) -> Vec<EventBody
         answers_by_position: None,
         by_setting: false,
     };
-    vec![closed, tool_result(call, &told)]
+    vec![closed, said(call, &told)]
 }
 
 /// Each question an opened call shows, and what was answered to it, is copied with the rest, in the order shown, each

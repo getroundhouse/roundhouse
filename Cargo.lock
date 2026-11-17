@@ -3916,6 +3916,7 @@ dependencies = [
  "hub",
  "jiff",
  "libc",
+ "memchr",
  "octocrab",
  "parking_lot",
  "private-files",

@@ -38,14 +38,7 @@ pub(super) fn draw(
 
 /// A call, its result or thinking, which read as lines of one list.
 fn is_a_line(block: &ContentBlock) -> bool {
-    matches!(
-        block,
-        ContentBlock::ToolUse { .. }
-            | ContentBlock::Call { .. }
-            | ContentBlock::ToolResult { .. }
-            | ContentBlock::CallResult { .. }
-            | ContentBlock::Thinking { .. }
-    )
+    matches!(block, ContentBlock::Call { .. } | ContentBlock::CallResult { .. } | ContentBlock::Thinking { .. })
 }
 
 /// Which row a block is drawn in: its event's own, as the `n`th of the event's blocks, or a call's, as a subagent's
@@ -83,15 +76,13 @@ pub(super) fn render_block(
         ContentBlock::Text { text, images } => written(&toggle, Part::Text, text, None, Some(images)),
         ContentBlock::Thinking { text } if text.is_empty() => return None,
         ContentBlock::Thinking { text } => thinking::draw(text, &toggle, cx),
-        ContentBlock::ToolUse { .. } | ContentBlock::Call { .. } => {
+        ContentBlock::Call { .. } => {
             // One that asks the person something is drawn from its approval, which has everything that was asked.
             let recorded = Recorded::of(block).filter(|call| !call.asks_the_person())?;
             tools::call(&toggle, recorded, drawing, cx)
         }
-        ContentBlock::ToolResult { .. } | ContentBlock::CallResult { .. } if drawing.with_call => return None,
-        ContentBlock::ToolResult { .. } | ContentBlock::CallResult { .. } => {
-            tools::result(&toggle, drawing.reply.result()?, cx)
-        }
+        ContentBlock::CallResult { .. } if drawing.with_call => return None,
+        ContentBlock::CallResult { .. } => tools::result(&toggle, drawing.reply.result()?, cx),
         ContentBlock::Image { .. } => {
             div().typeset(look::Type::Detail).text_color(look::colors(cx).text_muted).child("Image").into_any_element()
         }

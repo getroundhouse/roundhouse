@@ -88,8 +88,6 @@ pub(crate) fn rows_repeating_report(log: &SessionLog, m: &Model) -> Vec<usize> {
     let words = message.iter().flat_map(|(_, event)| blocks_of(&event.body)).filter_map(|block| match block {
         ContentBlock::Text { text, .. } => Some(text.split_whitespace()),
         ContentBlock::Thinking { .. }
-        | ContentBlock::ToolUse { .. }
-        | ContentBlock::ToolResult { .. }
         | ContentBlock::Image { .. }
         | ContentBlock::Call { .. }
         | ContentBlock::CallResult { .. }

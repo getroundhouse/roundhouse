@@ -4,6 +4,7 @@
 
 #![cfg(test)]
 
+use protocol::capability::calls::call::Runs;
 use protocol::capability::turns::OwnTurn;
 use protocol::event::{Again, EndedTask, EventBody, TaskKind, TaskOutcome};
 use protocol::model::{EndedWait, Seq, SessionStatus, WaitEnd, WaitEnded};
@@ -13,11 +14,11 @@ use super::failure_chats::{refused, stopped_short};
 use super::frame::CHAT;
 use super::screens::FOCUS;
 use super::steps::{Screen, Step};
-use super::subagent_chats::LAUNCHED;
 use super::worlds::chat_world;
 use client_core::fake_hub::events::user_prompt;
 use client_core::fake_hub::events::{
-    replied, subagent_ended, subagent_started, taken, task, text, tool_result, tool_use,
+    command, in_background, launched, mcp, mcp_said, printed, replied, subagent, subagent_ended, subagent_started,
+    taken, task, text,
 };
 use client_core::fake_hub::{NOW_MS, World};
 
@@ -95,9 +96,6 @@ fn refused_picking_up() -> Vec<EventBody> {
 /// A turn that left a review and the tests in the background, and was refused partway through, then a turn the agent
 /// started by itself as each ended, both refused the same way.
 fn refused_partway_then_twice() -> Vec<EventBody> {
-    let tests =
-        json!({ "command": "cargo test --workspace", "description": "Run the tests", "run_in_background": true });
-    let diff = json!({ "command": "gh pr diff 7 --name-only", "description": "List what #7 changes" });
     let mut events = vec![
         user_prompt("Have an agent review the depot's design, and run the tests while you look at what #7 changes."),
         taken(Seq::new(1)),
@@ -105,10 +103,10 @@ fn refused_partway_then_twice() -> Vec<EventBody> {
     ];
     events.extend(review("msg-1", "toolu-1"));
     events.extend([
-        tool_use("msg-1", "toolu-2", "Bash", tests),
-        tool_result("toolu-2", "Command running in background."),
-        tool_use("msg-2", "toolu-3", "Bash", diff),
-        tool_result("toolu-3", "crates/depot/src/signals.rs\ncrates/depot/src/routes.rs"),
+        in_background("msg-1", "toolu-2", "cargo test --workspace", "Run the tests"),
+        printed("toolu-2", "Command running in background."),
+        command("msg-2", "toolu-3", "gh pr diff 7 --name-only", Some("List what #7 changes")),
+        printed("toolu-3", "crates/depot/src/signals.rs\ncrates/depot/src/routes.rs"),
     ]);
     refuse(&mut events);
     events.push(subagent_ended("toolu-1", FOUND, 31_400));
@@ -132,8 +130,8 @@ fn refused_six_times() -> Vec<EventBody> {
         text("msg-1", "I'll start each of them in the background."),
     ];
     for (call, command, what_for) in commands {
-        let asked = json!({ "command": command, "description": what_for, "run_in_background": true });
-        events.extend([tool_use("msg-1", call, "Bash", asked), tool_result(call, "Command running in background.")]);
+        events
+            .extend([in_background("msg-1", call, command, what_for), printed(call, "Command running in background.")]);
     }
     events.extend(review("msg-1", "toolu-4"));
     events.extend(wait("msg-1", "toolu-5"));
@@ -155,13 +153,10 @@ fn refused_six_times() -> Vec<EventBody> {
 
 /// The call in message `message` that has a subagent review the depot in the background, and its start.
 fn review(message: &str, call: &str) -> [EventBody; 3] {
-    let asked = json!({
-        "description": REVIEW, "subagent_type": "general-purpose", "prompt": REVIEW_PROMPT, "run_in_background": true,
-    });
     [
-        tool_use(message, call, "Agent", asked),
+        subagent(message, call, "general-purpose", REVIEW, REVIEW_PROMPT, Runs::Background),
         subagent_started(call, "general-purpose", REVIEW, REVIEW_PROMPT),
-        tool_result(call, LAUNCHED),
+        launched(call),
     ]
 }
 
@@ -169,8 +164,8 @@ fn review(message: &str, call: &str) -> [EventBody; 3] {
 fn wait(message: &str, call: &str) -> [EventBody; 2] {
     let asked = json!({ "pull_requests": [7], "until": "required_checks" });
     [
-        tool_use(message, call, "mcp__roundhouse__wait_for_pull_requests", asked),
-        tool_result(call, "The task w1 was moved to the background."),
+        mcp(message, call, "roundhouse", "wait_for_pull_requests", asked),
+        mcp_said(call, "The task w1 was moved to the background.", false),
     ]
 }
 

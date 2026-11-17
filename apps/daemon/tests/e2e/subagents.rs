@@ -6,6 +6,7 @@ use std::time::Instant;
 
 use client_core::session_log::{By, Row, SessionLog};
 use client_core::{Client, OpenSession, RecordsFeed, Subscription, SubscriptionItem, View};
+use protocol::capability::calls::Call;
 use protocol::client::HubNotice;
 use protocol::event::{ContentBlock, EventBody, SessionEvent, TaskKind, TaskOutcome};
 use protocol::model::{ModelName, Place, SessionId, Subagent, SubagentId, SubagentStatus, ToolUseId};
@@ -19,7 +20,7 @@ fn subagent_call(client: &Client, session_id: &SessionId) -> ToolUseId {
     wait_until("the subagent's call", || {
         call = read_all(client, session_id).iter().find_map(|event| match &event.body {
             EventBody::Assistant { blocks, .. } => blocks.iter().find_map(|block| match block {
-                ContentBlock::ToolUse { id, name, .. } if name == "Agent" => Some(id.clone()),
+                ContentBlock::Call { id, call: Call::Subagent(_) } => Some(id.clone()),
                 _ => None,
             }),
             _ => None,
@@ -228,7 +229,6 @@ fn the_hub_keeps_a_record_of_each_subagent_and_says_on_the_feed_as_it_changes() 
     assert_eq!((&subagent.call, subagent.status, subagent.calls), (&call, SubagentStatus::Finished, 1));
     assert_eq!(subagent.id(), SubagentId::from(format!("task_{call}")), "named by the task it runs as");
     assert_eq!((subagent.prompt.as_deref(), subagent.in_background), (Some("Look around."), true));
-    assert_eq!(subagent.latest_call.as_ref().map(|call| call.name.as_str()), Some("Bash"));
     assert_eq!(subagent.report.as_deref(), Some("There's a README here."));
     assert_eq!(subagent.model.as_ref().map(ModelName::as_str), Some("fake-model"), "as its replies named it");
     assert_eq!(notices[0].model, None, "before it replied");
@@ -238,8 +238,10 @@ fn the_hub_keeps_a_record_of_each_subagent_and_says_on_the_feed_as_it_changes() 
     let heard: Vec<_> = notices
         .iter()
         .map(|subagent| {
-            let answered = subagent.recent.calls.last().is_some_and(|made| made.result.is_some());
-            (subagent.status, subagent.calls, answered, subagent.recent.since.is_some(), subagent.context_tokens)
+            let lately = subagent.lately.as_ref();
+            let answered = lately.and_then(|work| work.calls.last()).is_some_and(|made| made.result.is_some());
+            let since = lately.is_some_and(|work| work.since.is_some());
+            (subagent.status, subagent.calls, answered, since, subagent.context_tokens)
         })
         .collect();
     let (working, finished) = (SubagentStatus::Working, SubagentStatus::Finished);
@@ -253,6 +255,8 @@ fn the_hub_keeps_a_record_of_each_subagent_and_says_on_the_feed_as_it_changes() 
     ];
     let as_it = "as it started, made its call, heard back, was counted, said what it found, and ended";
     assert_eq!(heard, told, "{as_it}");
+    let made = notices.iter().rev().find_map(|subagent| subagent.lately.as_ref()?.calls.last());
+    assert!(matches!(made.map(|made| &made.call), Some(Call::Command(_))), "its newest call, typed: {made:?}");
     assert!(notices.windows(2).all(|pair| pair[0].rev < pair[1].rev));
     assert_eq!(notices.last(), Some(subagent), "the last it heard is what's listed");
     assert!(client.session_subagents(&"missing".into()).is_err());

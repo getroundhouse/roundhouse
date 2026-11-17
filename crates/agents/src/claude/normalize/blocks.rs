@@ -1,8 +1,10 @@
 //! What a message holds, read from the agent's own blocks.
 
+use protocol::capability::calls::CallOutput;
 use protocol::event::ContentBlock;
 use serde_json::Value;
 
+use super::super::typed;
 use super::{advisor, result_text, str_of, string_of};
 
 /// The blocks of a message, from its `content`, which is a string or a list of blocks.
@@ -19,23 +21,22 @@ fn block(value: &Value) -> ContentBlock {
         Some("text") => ContentBlock::Text { text: string_of(value, "text").unwrap_or_default(), images: Vec::new() },
         Some("thinking") => ContentBlock::Thinking { text: string_of(value, "thinking").unwrap_or_default() },
         // A tool the API runs itself, such as the advisor, is called the same way.
-        Some("tool_use" | "server_tool_use") => ContentBlock::ToolUse {
+        Some("tool_use" | "server_tool_use") => ContentBlock::Call {
             id: string_of(value, "id").unwrap_or_default().into(),
-            name: string_of(value, "name").unwrap_or_default(),
-            input: value.get("input").cloned().unwrap_or(Value::Null),
-            call: None,
+            call: typed::call(
+                &string_of(value, "name").unwrap_or_default(),
+                value.get("input").unwrap_or(&Value::Null),
+            ),
         },
-        Some("tool_result") => ContentBlock::ToolResult {
+        // What came back, in the CLI's words, which `typed::say` reads as what its call sends back once it knows the
+        // call.
+        Some("tool_result") => ContentBlock::CallResult {
             tool_use_id: string_of(value, "tool_use_id").unwrap_or_default().into(),
+            output: CallOutput::Words { text: result_text::read(value.get("content")) },
             is_error: value.get("is_error").and_then(Value::as_bool).unwrap_or(false),
-            text: result_text::read(value.get("content")),
+            denied: None,
             // Only a user line's results have images, and `images` takes them from it.
             images: Vec::new(),
-            change: None,
-            encrypted: false,
-            call: None,
-            exit_code: None,
-            denied: None,
         },
         Some("advisor_tool_result") => advisor::result(value),
         Some("image") => {

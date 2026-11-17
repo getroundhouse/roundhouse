@@ -27,7 +27,9 @@ fn results(events: &[SessionEvent]) -> Vec<(String, bool)> {
     blocks
         .flatten()
         .filter_map(|block| match block {
-            ContentBlock::ToolResult { text, is_error, .. } => Some((text.clone(), *is_error)),
+            ContentBlock::CallResult { output, is_error, .. } => {
+                Some((client_core::calls::typed::output(output), *is_error))
+            }
             _ => None,
         })
         .collect()

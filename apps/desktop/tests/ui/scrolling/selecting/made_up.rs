@@ -2,11 +2,10 @@
 //! worker or agent.
 
 use client_core::fake_hub::World;
-use client_core::fake_hub::events::{finished_turn, taken, text, tool_result, tool_use, user_prompt};
+use client_core::fake_hub::events::{command, finished_turn, printed, taken, text, user_prompt};
 use gpui_kit::{Bounds, Pixels, TestAppContext};
 use protocol::event::EventBody;
 use protocol::model::{Seq, SessionId, SessionStatus};
-use serde_json::json;
 
 use super::super::wait_for_the_list_to_settle;
 use super::bounds;
@@ -61,10 +60,10 @@ fn events(turns: Vec<Turn>) -> Vec<EventBody> {
             let message = format!("msg-{}", events.len());
             match said {
                 Said::Reply(reply) => events.push(text(&message, &reply)),
-                Said::Command(command, printed) => {
+                Said::Command(line, output) => {
                     let call = format!("toolu-{}", events.len());
-                    events.push(tool_use(&message, &call, "Bash", json!({ "command": command })));
-                    events.push(tool_result(&call, printed));
+                    events.push(command(&message, &call, line, None));
+                    events.push(printed(&call, output));
                 }
             }
         }

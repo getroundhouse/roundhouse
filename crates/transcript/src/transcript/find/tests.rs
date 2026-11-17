@@ -14,12 +14,11 @@ use protocol::event::{ContentBlock, EventBody, FileChange, Hunk, HunkLine, LineM
 use protocol::find::Needle;
 use protocol::model::{Place, Rev, Seq, Subagent, SubagentStatus};
 use protocol::prompt::Prompt;
-use serde_json::json;
 
 use super::count::{At, Counts};
 use super::stretch::{Known, counted_in};
 use super::{More, changed_to_count, count_held, first_match, held_to_count, says};
-use crate::fixtures::{calls_to, event, log, record, within};
+use crate::fixtures::{event, log, record, subagents, within};
 use crate::transcript::{Model, SubagentRecords};
 
 fn needle(query: &str) -> Needle {
@@ -32,12 +31,14 @@ fn agent_says(text: &str) -> EventBody {
 }
 
 fn runs(id: &str, command: &str) -> EventBody {
-    let blocks = vec![protocol::fixtures::tool_use(id, "Bash", json!({ "command": command }))];
+    let call = Call::Command(protocol::fixtures::typed_command(command));
+    let blocks = vec![protocol::fixtures::typed_call(id, call)];
     EventBody::Assistant { message_id: None, subagent: None, model: None, blocks, first_index: None }
 }
 
 fn printed(id: &str, text: &str) -> EventBody {
-    EventBody::AgentUser { subagent: None, blocks: vec![protocol::fixtures::tool_result(id, text, false)] }
+    let output = protocol::fixtures::command_output(text, Some(0), Ended::Exited);
+    EventBody::AgentUser { subagent: None, blocks: vec![protocol::fixtures::typed_result(id, output, false)] }
 }
 
 /// `body` at `place` among the agent's own events, with a `seq` far from it, as the agent's are once a subagent has
@@ -140,8 +141,7 @@ fn a_subagent_s_work_held_before_its_call_moves_into_the_call_once_it_loads() {
     assert_eq!(counts.of(299), 1);
 
     // Then the call's page, which draws it, far from where its page changed.
-    let both =
-        log(std::iter::once(event(Seq::new(1), calls_to("Agent", &["helper"]))).chain(filler(2..300)).chain([work()]));
+    let both = log(std::iter::once(event(Seq::new(1), subagents(&["helper"]))).chain(filler(2..300)).chain([work()]));
     follow(&both, &m, &needle, &mut candidates, &mut counts, 0..250);
 
     assert_eq!((counts.of(0), counts.of(299)), (1, 0), "in the call now, and not where it was");
@@ -151,7 +151,7 @@ fn a_subagent_s_work_held_before_its_call_moves_into_the_call_once_it_loads() {
 #[test]
 fn a_subagent_s_call_counts_the_report_its_record_has_as_it_draws_it() {
     let needle = needle("parser");
-    let call = || placed(1, calls_to("Agent", &["helper"]));
+    let call = || placed(1, subagents(&["helper"]));
 
     let known = Known { records: reported("helper", "The parser is fixed"), ..Known::default() };
     let read = counted_in(vec![call()], &[Position::of_row(0)], &needle, known);

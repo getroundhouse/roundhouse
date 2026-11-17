@@ -209,8 +209,14 @@ fn apart_report<'a>(answer: Option<&'a Answer>, subagent: &'a Subagent) -> Optio
     match &subagent.record {
         Some(record) if record.status == SubagentStatus::Working => None,
         Some(record) => record.report.as_deref(),
-        None => answer.and_then(Answer::success).filter(|text| !agent::only_launched(text)),
+        None => answer.and_then(Answer::success).filter(|text| says_something(text)),
     }
+}
+
+/// Whether what a subagent's call sent back says anything to report: not nothing, as one started in the background
+/// sends back.
+fn says_something(text: &str) -> bool {
+    !text.trim().is_empty()
 }
 
 /// Kept apart: the blocks the subagent tab starts and ends with, and between them, while it works, what it's done lately:
@@ -255,7 +261,7 @@ fn gathered_report<'a>(answer: Option<&'a Answer>, events: &[(SessionEvent, Arou
     let said = events
         .iter()
         .any(|(event, _)| blocks_of(&event.body).iter().any(|block| matches!(block, ContentBlock::Text { .. })));
-    answer.and_then(Answer::success).filter(|text| !said && !agent::only_launched(text))
+    answer.and_then(Answer::success).filter(|text| !said && says_something(text))
 }
 
 /// Gathered from the log: what it was asked, then what it did, under a rule like a thread.

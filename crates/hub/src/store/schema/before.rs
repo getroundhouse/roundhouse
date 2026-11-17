@@ -115,3 +115,6 @@ pub(crate) const BEFORE_GITHUB_SENT: usize = 66;
 /// How many migrations there were before the hub kept whether a push from each repository's checkout goes round the
 /// git credential.
 pub(crate) const BEFORE_PUSH_ROUTES: usize = 67;
+
+/// How many migrations there were before Claude's calls were typed.
+pub(crate) const BEFORE_TYPED_CALLS: usize = 69;

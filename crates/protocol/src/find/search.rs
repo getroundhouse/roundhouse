@@ -1,5 +1,5 @@
 use super::loose;
-use crate::event::{ContentBlock, EventBody, FileChange};
+use crate::event::{ContentBlock, EventBody};
 use crate::model::Place;
 use loose::{Loose, Written};
 use serde::{Deserialize, Serialize};
@@ -195,19 +195,11 @@ fn any_text(body: &EventBody, found: &mut impl FnMut(&str) -> bool) -> bool {
 fn any_text_in_block(block: &ContentBlock, found: &mut impl FnMut(&str) -> bool) -> bool {
     match block {
         ContentBlock::Text { text, .. } | ContentBlock::Thinking { text } => found(text),
-        ContentBlock::ToolUse { input, .. } => any_text_in_input(input, found),
         ContentBlock::Call { call, .. } => {
             serde_json::to_value(call).is_ok_and(|input| any_text_in_input(&input, found))
         }
         ContentBlock::CallResult { output, .. } => {
             serde_json::to_value(output).is_ok_and(|input| any_text_in_input(&input, found))
-        }
-        ContentBlock::ToolResult { text, change, .. } => {
-            let lines = match change {
-                Some(FileChange::Changed { hunks }) => hunks.iter().flat_map(|hunk| &hunk.lines).collect(),
-                Some(FileChange::Created | FileChange::Unknown) | None => Vec::new(),
-            };
-            found(text) || lines.iter().any(|line| found(&line.text))
         }
         ContentBlock::Image { .. } | ContentBlock::Unknown => false,
     }

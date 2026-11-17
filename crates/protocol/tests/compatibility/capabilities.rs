@@ -44,7 +44,7 @@ fn a_control_has_a_new_envelope_and_keeps_its_capability_requirements() {
 }
 
 #[test]
-fn current_calls_keep_typed_input_once_and_old_calls_stay_readable() {
+fn current_calls_keep_typed_input_once_and_old_calls_dont_fail_their_event() {
     let call: ContentBlock = serde_json::from_value(json!({"type":"call","id":"c","call":
         {"kind":"write","path":"a.txt","content":"only once"}}))
     .unwrap();
@@ -54,7 +54,7 @@ fn current_calls_keep_typed_input_once_and_old_calls_stay_readable() {
     assert_eq!(serde_json::from_str::<ContentBlock>(&sent).unwrap(), call);
     let old = json!({"type":"tool_use","id":"c","name":"Write","input":{"file_path":"a.txt","content":"old"}});
     let decoded: ContentBlock = serde_json::from_value(old).unwrap();
-    assert!(matches!(decoded, ContentBlock::ToolUse { .. }));
+    assert_eq!(decoded, ContentBlock::Unknown, "the hub typed an old one, so a client never needs to read it");
     let unknown: ContentBlock = serde_json::from_value(json!({"type":"future_block","input":Value::Null})).unwrap();
     assert_eq!(unknown, ContentBlock::Unknown);
 }

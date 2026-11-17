@@ -16,7 +16,7 @@ pub(crate) fn wait_for_tool(client: &Client, session_id: &SessionId) {
     wait_until("a tool to start", || {
         read_all(client, session_id).iter().any(|e| {
             matches!(&e.body, EventBody::Assistant { blocks, .. }
-                if blocks.iter().any(|b| matches!(b, ContentBlock::ToolUse { .. })))
+                if blocks.iter().any(|b| matches!(b, ContentBlock::Call { .. })))
         })
     });
 }

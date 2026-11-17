@@ -1,17 +1,26 @@
-//! What a subagent has done lately, with each call typed, as an adapter that types its calls records them: as
-//! [`super::add`] keeps it, but each call as it was made, and what came back as its output, with each text it holds cut
-//! short.
+//! What a subagent has done lately, from its events: each call as it was made, with the text it wrote just before it,
+//! and what came back as its output, with each text it holds cut short.
 
 use protocol::capability::calls::CallOutput;
 use protocol::capability::calls::output::{CommandOutput, FileOutcome, Found, FoundLine, Lines, McpContent, Paths};
 use protocol::event::ContentBlock;
-use protocol::model::{Lately, LatelyCall, LatelyResult};
+use protocol::model::{Lately, LatelyCall, LatelyResult, Said};
 use protocol::short_text::start_of;
 
-use super::activity::{CALLS_KEPT, RESULT_KEPT, wrote_text};
+/// How many of its newest calls are kept, which is as many as its call shows.
+pub(super) const CALLS_KEPT: usize = 3;
+/// How much of what it writes between calls is kept, in characters: a long paragraph, more than its call shows of it.
+pub(super) const TEXT_KEPT: usize = 1_000;
+/// How much of what came back for a call is kept, in characters: all of a short one, such as most commands' and small
+/// reads', which its call's line then counts, and the start of a long one, which says what went wrong if it failed. A
+/// whole file read can be hundreds of kilobytes, and would go to every client with each of the subagent's next few
+/// changes.
+pub(super) const RESULT_KEPT: usize = 2_000;
 
-/// Adds what one of its messages did, block by block, and says whether that changed anything, as [`super::add`] does
-/// for the older form.
+/// Adds what one of its messages did, block by block, and says whether that changed anything. `wrote` says the message
+/// is the subagent's own, so its text is what it wrote. Text in a `user` line was written to it, such as the prompt
+/// the CLI sends a subagent run in the foreground, which its call already shows, so only what came back is taken
+/// from one.
 pub(in super::super) fn add(work: &mut Lately, blocks: &[ContentBlock], wrote: bool) -> bool {
     let mut changed = false;
     for block in blocks {
@@ -40,8 +49,6 @@ pub(in super::super) fn add(work: &mut Lately, blocks: &[ContentBlock], wrote: b
             ContentBlock::Text { .. }
             | ContentBlock::Thinking { .. }
             | ContentBlock::Image { .. }
-            | ContentBlock::ToolUse { .. }
-            | ContentBlock::ToolResult { .. }
             | ContentBlock::Unknown => {}
         }
     }
@@ -135,4 +142,23 @@ impl Left {
         }
         true
     }
+}
+
+/// Adds `text`, which it wrote, to what it's written `since` its newest call, and says whether that changed it.
+fn wrote_text(since: &mut Option<Said>, text: &str) -> bool {
+    // Once what it's written since is cut short, more of it changes nothing, so it sends no notice.
+    if text.trim().is_empty() || since.as_ref().is_some_and(|since| since.cut) {
+        return false;
+    }
+    let joined = match since.take() {
+        Some(since) => said(&format!("{}\n\n{text}", since.text)),
+        None => said(text),
+    };
+    *since = Some(joined);
+    true
+}
+
+fn said(text: &str) -> Said {
+    let (text, cut) = start_of(text, TEXT_KEPT);
+    Said { text: text.to_owned(), cut }
 }

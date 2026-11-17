@@ -55,7 +55,7 @@ fn each_denied_calls_result_says_it_was_denied_with_what_the_person_said_and_no_
     });
     let marks: Vec<(bool, Option<Denied>)> = results
         .filter_map(|block| match block {
-            ContentBlock::ToolResult { is_error, denied, .. } => Some((*is_error, denied.clone())),
+            ContentBlock::CallResult { is_error, denied, .. } => Some((*is_error, denied.clone())),
             _ => None,
         })
         .collect();

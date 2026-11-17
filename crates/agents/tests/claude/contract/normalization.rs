@@ -1,9 +1,8 @@
 #![cfg(test)]
 
 use agents::claude::{Normalizer, Parsed};
-use protocol::event::{
-    AgentRunState, ApprovalOutcome, Asking, CallKind, ContentBlock, EventBody, FileChange, TurnOutcome,
-};
+use protocol::capability::calls::{Call, CallKind, CallOutput};
+use protocol::event::{AgentRunState, ApprovalOutcome, Asking, ContentBlock, EventBody, FileChange, TurnOutcome};
 use protocol::model::{ApprovalId, CacheRequest, CacheTtl, PermissionMode, Seq, ToolUseId};
 use protocol::tail::{BlockKind, Tail};
 use serde_json::Value;
@@ -93,7 +92,10 @@ fn approvals_carry_what_a_client_must_show_and_the_cli_must_get_back() {
         assert!(input["command"].as_str().is_some_and(|c| c.contains("echo")));
         assert!(description.is_some());
         assert!(suggestions.is_array());
-        assert_eq!(asking.as_deref(), Some(&Asking::ToolUse { call: Some(CallKind::Command) }));
+        let Some(Asking::ToolUse { typed: Some(Call::Command(command)) }) = asking.as_deref() else {
+            panic!("{asking:?} isn't the command it makes");
+        };
+        assert_eq!(&command.command, input["command"].as_str().unwrap());
     }
 }
 
@@ -177,7 +179,7 @@ fn a_question_comes_for_approval_with_its_options_and_takes_answers_back() {
     let answered = events.iter().any(|e| match e {
         EventBody::AgentUser { blocks, .. } => blocks
             .iter()
-            .any(|b| matches!(b, ContentBlock::ToolResult { text, .. } if text.contains("have been answered"))),
+            .any(|b| matches!(b, ContentBlock::CallResult { output: CallOutput::Words { text }, .. } if text.contains("have been answered"))),
         _ => false,
     });
     assert!(answered, "the capture answers with `updatedInput.answers`, and the CLI should accept that");
@@ -224,40 +226,36 @@ fn thinking_tools_and_results_all_normalize() {
     assert!(blocks.iter().any(|b| matches!(b, ContentBlock::Text { text, .. } if text.contains("DONE"))));
     assert!(blocks.iter().any(|b| matches!(
         b,
-        ContentBlock::ToolUse { name, input, id, .. } if name == "Bash" && input["command"].is_string() && id.as_str().starts_with("toolu_")
+        ContentBlock::Call { id, call: Call::Command(command) } if !command.command.is_empty() && id.as_str().starts_with("toolu_")
     )));
-    assert!(blocks.iter().any(|b| matches!(b, ContentBlock::ToolResult { is_error: false, .. })));
+    assert!(blocks.iter().any(|b| matches!(b, ContentBlock::CallResult { is_error: false, .. })));
     // A denial reaches the agent as a tool error carrying our message.
     assert!(blocks.iter().any(|b| matches!(
         b,
-        ContentBlock::ToolResult { is_error: true, text, .. } if text.contains("Not allowed")
+        ContentBlock::CallResult { is_error: true, output: CallOutput::Command(printed), .. } if printed.output.contains("Not allowed")
     )));
     assert!(!blocks.iter().any(|b| matches!(b, ContentBlock::Unknown)));
 }
 
-/// So a client reads each call by its kind, and needs none of the CLI's names for its tools.
+/// So a client reads each call by what it is, and needs none of the CLI's names for its tools or the shape of their
+/// inputs, and reads each result against the call it answers.
 #[test]
-fn every_call_says_what_kind_it_is_and_every_result_the_kind_of_the_call_it_answers() {
+fn every_call_is_typed_and_every_result_answers_one() {
     let mut kinds: HashMap<ToolUseId, CallKind> = HashMap::new();
     let mut answered = 0;
     for block in blocks() {
         match block {
-            ContentBlock::ToolUse { id, name, call, .. } => {
-                let kind = call.unwrap_or_else(|| panic!("{name} says no kind"));
-                assert_ne!(kind, CallKind::Unknown, "{name}");
-                assert_eq!(kind == CallKind::Command, name == "Bash", "{name}");
-                kinds.insert(id, kind);
+            ContentBlock::Call { id, call } => {
+                assert_ne!(call.kind(), CallKind::Unknown, "{call:?}");
+                kinds.insert(id, call.kind());
             }
-            ContentBlock::ToolResult { tool_use_id, call, .. } => {
-                let made = kinds.get(&tool_use_id).unwrap_or_else(|| panic!("{tool_use_id} answers no call"));
-                assert_eq!(call.as_ref(), Some(made), "the result of {tool_use_id}");
+            ContentBlock::CallResult { tool_use_id, .. } => {
+                assert!(kinds.contains_key(&tool_use_id), "{tool_use_id} answers no call");
                 answered += 1;
             }
             ContentBlock::Text { .. }
             | ContentBlock::Thinking { .. }
             | ContentBlock::Image { .. }
-            | ContentBlock::Call { .. }
-            | ContentBlock::CallResult { .. }
             | ContentBlock::Unknown => {}
         }
     }
@@ -277,9 +275,11 @@ fn a_write_s_result_says_it_made_the_file() {
         })
         .flatten()
         .filter_map(|b| match b {
-            ContentBlock::ToolResult { change, .. } => change,
+            ContentBlock::CallResult { output: CallOutput::Changed { files }, .. } => Some(files),
             _ => None,
         })
+        .flatten()
+        .filter_map(|file| file.change)
         .collect();
     assert_eq!(changes, [FileChange::Created]);
 }
@@ -314,15 +314,14 @@ fn deltas_rebuild_exactly_what_each_finished_block_says() {
                             assert_eq!(streamed.text, *text);
                             compared.1 += 1;
                         }
-                        ContentBlock::ToolUse { name, input, .. } => {
+                        ContentBlock::Call { call, .. } => {
                             assert_eq!(streamed.kind, BlockKind::ToolUse);
-                            assert_eq!(streamed.tool_name.as_deref(), Some(name.as_str()));
                             // The CLI fills this one in itself from the plan file, so nothing streams.
-                            if name == "ExitPlanMode" {
+                            if *call == Call::Plan {
                                 assert_eq!(streamed.text, "");
                             } else {
                                 let streamed_input: Value = serde_json::from_str(&streamed.text).unwrap();
-                                assert_eq!(&streamed_input, input);
+                                assert!(made_from(call, &streamed_input), "{call:?} from {streamed_input}");
                                 compared.2 += 1;
                             }
                         }
@@ -376,4 +375,17 @@ fn a_warm_cache_is_read_as_far_as_the_request_before_to_the_same_model_left_it()
     }
     let models: std::collections::HashSet<_> = requests.iter().map(|request| &request.model).collect();
     assert!(models.len() > 1 && followed > models.len(), "two models, each asked more than once: {requests:?}");
+}
+
+/// Whether `call` is the call `input` makes, as far as its kind says what it was given.
+fn made_from(call: &Call, input: &Value) -> bool {
+    match call {
+        Call::Command(command) => input["command"] == command.command.as_str(),
+        Call::Write(write) => input["file_path"] == write.path.as_str() && input["content"] == write.content.as_str(),
+        Call::Read(read) => input["file_path"] == read.path.as_str(),
+        Call::Subagent(start) => input["prompt"] == start.prompt.as_str(),
+        Call::Other { input: given, .. } | Call::Mcp { input: given, .. } => given == input,
+        Call::Questions => input["questions"].is_array(),
+        other => panic!("the capture makes no {other:?}"),
+    }
 }

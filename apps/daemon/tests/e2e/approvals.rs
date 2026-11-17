@@ -5,8 +5,10 @@
 use std::path::PathBuf;
 
 use client_core::ClientError;
+use client_core::calls::typed::output as said;
+use protocol::capability::calls::{CallKind, CallOutput};
 use protocol::client::ErrorCode;
-use protocol::event::{ApprovalDecision, ApprovalOutcome, Asking, CallKind, ContentBlock, Denied, EventBody};
+use protocol::event::{ApprovalDecision, ApprovalOutcome, Asking, ContentBlock, Denied, EventBody};
 use protocol::model::SessionStatus;
 
 use crate::support::{Stack, wait_for_approval, wait_for_status, wait_for_turn_end};
@@ -63,7 +65,7 @@ fn a_denied_tool_does_not_run_and_the_agent_hears_why_and_its_result_says_it_was
             _ => &[],
         });
         let result = |block: &ContentBlock| match block {
-            ContentBlock::ToolResult { text, is_error: true, denied, .. } => Some((text.clone(), denied.clone())),
+            ContentBlock::CallResult { output, is_error: true, denied, .. } => Some((said(output), denied.clone())),
             _ => None,
         };
         blocks.filter_map(result).collect()
@@ -122,7 +124,7 @@ fn a_failed_command_is_recorded_as_one_from_its_request_to_how_it_exited() {
     let asked: Vec<_> = events
         .iter()
         .filter_map(|event| match &event.body {
-            EventBody::ApprovalRequested { asking, .. } => Some(asking.as_deref().and_then(Asking::call).cloned()),
+            EventBody::ApprovalRequested { asking, .. } => Some(asking.as_deref().map(Asking::kind)),
             _ => None,
         })
         .collect();
@@ -133,13 +135,16 @@ fn a_failed_command_is_recorded_as_one_from_its_request_to_how_it_exited() {
             EventBody::Assistant { blocks, .. } | EventBody::AgentUser { blocks, .. } => blocks.as_slice(),
             _ => &[],
         })
-        .filter(|block| matches!(block, ContentBlock::ToolUse { .. } | ContentBlock::ToolResult { .. }))
+        .filter(|block| matches!(block, ContentBlock::Call { .. } | ContentBlock::CallResult { .. }))
         .collect();
-    let [ContentBlock::ToolUse { call: made, .. }, ContentBlock::ToolResult { call, exit_code, text, is_error, .. }] =
-        blocks.as_slice()
+    let [
+        ContentBlock::Call { call: made, .. },
+        ContentBlock::CallResult { output: CallOutput::Command(printed), is_error, .. },
+    ] = blocks.as_slice()
     else {
-        panic!("the call, then its result: {blocks:?}")
+        panic!("the call, then what it printed: {blocks:?}")
     };
-    assert_eq!((made, call), (&command, &command));
-    assert_eq!((*is_error, *exit_code, text.as_str()), (true, Some(3), "kinds\n"), "how it exited isn't in its text");
+    assert_eq!(Some(made.kind()), command);
+    let ended = (*is_error, printed.exit_code, printed.output.as_str());
+    assert_eq!(ended, (true, Some(3), "kinds\n"), "how it exited isn't in what it printed");
 }

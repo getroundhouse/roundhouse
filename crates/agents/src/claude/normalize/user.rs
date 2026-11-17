@@ -1,11 +1,12 @@
 //! A `user` line: what the agent's tool calls sent back, with any images among it, something written for the model, or
 //! what a command the CLI ran printed.
 
+use protocol::capability::calls::CallOutput;
 use protocol::event::{ContentBlock, EventBody};
 use protocol::model::SubagentId;
 use serde_json::Value;
 
-use super::{Parsed, blocks, file_change, images, said};
+use super::{Parsed, blocks, images, said};
 
 /// How the CLI's note of how much it shrank an image the agent read starts. It's written so the model can map a point on
 /// the image back, and says nothing the record doesn't, since the image is kept with the result it came in.
@@ -23,7 +24,7 @@ pub(super) fn line(value: &Value, from: Option<SubagentId>) -> Parsed {
     // Written for the model rather than the person, such as an image's size once the CLI has shrunk it. A compaction's
     // summary is one too, but `compaction` reads it first. A result is shown even so, or its call would never get one.
     let for_the_model = value.get("isSynthetic").and_then(Value::as_bool) == Some(true);
-    if for_the_model && !blocks.iter().any(|block| matches!(block, ContentBlock::ToolResult { .. })) {
+    if for_the_model && !blocks.iter().any(|block| matches!(block, ContentBlock::CallResult { .. })) {
         if let [ContentBlock::Text { text, .. }] = blocks.as_slice()
             && text.starts_with(SHRUNK_IMAGE)
         {
@@ -31,12 +32,10 @@ pub(super) fn line(value: &Value, from: Option<SubagentId>) -> Parsed {
         }
         return Parsed::Event(EventBody::AgentOther { kind: "user/synthetic".into(), subagent: from });
     }
-    // Claude says what an edit changed beside the line's one result, rather than in it.
-    if let [ContentBlock::ToolResult { change, text, .. }] = blocks.as_mut_slice() {
-        *change = file_change::read(value);
-        if printed_nothing(value, text) {
-            text.clear();
-        }
+    if let [ContentBlock::CallResult { output: CallOutput::Words { text }, .. }] = blocks.as_mut_slice()
+        && printed_nothing(value, text)
+    {
+        text.clear();
     }
     let taken = images::take(content, &mut blocks);
     let body = EventBody::AgentUser { subagent: from, blocks };

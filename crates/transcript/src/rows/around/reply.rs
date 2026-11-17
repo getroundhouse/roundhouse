@@ -51,9 +51,9 @@ pub(in crate::rows) struct Answer {
     pub(in crate::rows) is_error: bool,
     /// What it sent back, as text, which [`Answer::shown`] reads for showing.
     text: String,
-    /// What it sent back, typed, from an adapter that records it so, which a call's row draws by its kind. Boxed,
-    /// since it's larger than the rest of the answer, and every [`Reply`] takes the room of one with an answer.
-    pub(in crate::rows) output: Option<Box<CallOutput>>,
+    /// What it sent back, which a call's row draws by its kind. Boxed, since it's larger than the rest of the answer,
+    /// and every [`Reply`] takes the room of one with an answer.
+    pub(in crate::rows) output: Box<CallOutput>,
     /// What it changed in a file, when its agent said.
     pub(in crate::rows) change: Option<FileChange>,
     /// The images it sent back, such as a screenshot the agent read.
@@ -115,7 +115,7 @@ impl Answer {
     /// Whether its call goes on in the background, so what it sent back is only what it had by then, as
     /// [`calls::in_the_background`] says.
     pub(in crate::rows) fn in_the_background(&self) -> bool {
-        self.output.as_deref().is_some_and(calls::in_the_background)
+        calls::in_the_background(&self.output)
     }
 
     /// The parts of a file it changed, when its agent said which they were.
@@ -132,10 +132,10 @@ impl Answer {
             change: returned.change.cloned(),
             images: attachments::carried(m, returned.images.iter().copied()),
             encrypted: returned.encrypted,
-            output: returned.output.cloned().map(Box::new),
+            output: Box::new(returned.output.clone()),
             form: returned.form(),
             denied: returned.denied.cloned(),
-            text: returned.text.into_owned(),
+            text: returned.text,
         })
     }
 }
@@ -145,6 +145,6 @@ impl Answer {
 fn answer_in(event: &SessionEvent, id: &ToolUseId, m: &Model) -> Option<Answer> {
     let result = blocks_of(&event.body)
         .iter()
-        .find(|block| matches!(block, ContentBlock::ToolResult { tool_use_id, .. } | ContentBlock::CallResult { tool_use_id, .. } if tool_use_id == id))?;
+        .find(|block| matches!(block, ContentBlock::CallResult { tool_use_id, .. } if tool_use_id == id))?;
     Answer::of(result, m)
 }

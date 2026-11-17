@@ -1,5 +1,6 @@
 //! What the CLI's tools sent back, as the adapter records it, from the same captured output as `contract`.
 
+use protocol::capability::calls::{Call, CallOutput};
 use protocol::event::ContentBlock;
 use protocol::model::ToolUseId;
 
@@ -8,10 +9,12 @@ use super::contract::blocks;
 #[test]
 fn a_command_that_printed_nothing_has_an_empty_result() {
     // Each of the fixture's commands writes to a file, and the CLI says it printed nothing in a sentence of its own.
-    let worked: Vec<String> = results_of("Bash")
+    let worked: Vec<String> = results_of(|call| matches!(call, Call::Command(_)))
         .into_iter()
         .filter_map(|result| match result {
-            ContentBlock::ToolResult { is_error: false, text, .. } => Some(text),
+            ContentBlock::CallResult { is_error: false, output: CallOutput::Command(printed), .. } => {
+                Some(printed.output)
+            }
             _ => None,
         })
         .collect();
@@ -23,10 +26,10 @@ fn a_command_that_printed_nothing_has_an_empty_result() {
 /// The fixture's agent loads `ExitPlanMode` with `ToolSearch`, whose result has no text, only a reference to the tool.
 #[test]
 fn a_tool_search_s_result_names_the_tools_it_loaded() {
-    let found: Vec<String> = results_of("ToolSearch")
+    let found: Vec<String> = results_of(|call| matches!(call, Call::Other { tool, .. } if tool == "ToolSearch"))
         .into_iter()
         .filter_map(|result| match result {
-            ContentBlock::ToolResult { text, .. } => Some(text),
+            ContentBlock::CallResult { output: CallOutput::Words { text }, .. } => Some(text),
             _ => None,
         })
         .collect();
@@ -34,18 +37,18 @@ fn a_tool_search_s_result_names_the_tools_it_loaded() {
     assert_eq!(found, ["ExitPlanMode"]);
 }
 
-/// The result of each call to `tool` in the fixture.
-fn results_of(tool: &str) -> Vec<ContentBlock> {
+/// The result of each call in the fixture that `made` says is one.
+fn results_of(made: impl Fn(&Call) -> bool) -> Vec<ContentBlock> {
     let blocks = blocks();
     let calls: Vec<ToolUseId> = blocks
         .iter()
         .filter_map(|block| match block {
-            ContentBlock::ToolUse { id, name, .. } if name == tool => Some(id.clone()),
+            ContentBlock::Call { id, call } if made(call) => Some(id.clone()),
             _ => None,
         })
         .collect();
     blocks
         .into_iter()
-        .filter(|block| matches!(block, ContentBlock::ToolResult { tool_use_id, .. } if calls.contains(tool_use_id)))
+        .filter(|block| matches!(block, ContentBlock::CallResult { tool_use_id, .. } if calls.contains(tool_use_id)))
         .collect()
 }

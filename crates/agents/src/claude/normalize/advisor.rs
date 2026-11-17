@@ -2,6 +2,7 @@
 //! The API runs it rather than the CLI, so its call is a `server_tool_use`, and its result comes in a later
 //! `assistant` line of the same message rather than in a `user` line.
 
+use protocol::capability::calls::CallOutput;
 use protocol::event::ContentBlock;
 use serde_json::Value;
 
@@ -26,15 +27,11 @@ pub(super) fn result(value: &Value) -> ContentBlock {
         // taken to be encrypted.
         _ => (false, text.unwrap_or_default(), false),
     };
-    ContentBlock::ToolResult {
+    ContentBlock::CallResult {
         tool_use_id: string_of(value, "tool_use_id").unwrap_or_default().into(),
+        output: if encrypted { CallOutput::Encrypted } else { CallOutput::Words { text } },
         is_error,
-        text,
-        images: Vec::new(),
-        change: None,
-        encrypted,
-        call: None,
-        exit_code: None,
         denied: None,
+        images: Vec::new(),
     }
 }

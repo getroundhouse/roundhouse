@@ -28,6 +28,7 @@ mod session;
 pub mod store;
 mod terminate;
 mod timers;
+mod untyped;
 mod versions;
 mod worker_link;
 

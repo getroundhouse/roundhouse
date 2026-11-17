@@ -1,7 +1,4 @@
-//! What came back for a call, as every client reads it, from either form a result is recorded in: typed, as an adapter
-//! that types its calls records it, or as the agent's words, as one that doesn't records them.
-
-use std::borrow::Cow;
+//! What came back for a call, as every client reads it, from what its agent's adapter typed.
 
 use protocol::attachment::Attachment;
 use protocol::capability::calls::CallOutput;
@@ -16,11 +13,11 @@ pub struct Returned<'a> {
     pub is_error: bool,
     /// The person wouldn't let the tool be used, which isn't a failure, so it's said apart.
     pub denied: Option<&'a Denied>,
-    /// What came back, as text: as the agent was told it, or for a typed result, as [`typed::output`] reads it.
-    pub text: Cow<'a, str>,
-    /// What came back, typed, from an adapter that records it so, which a client draws by its kind.
-    pub output: Option<&'a CallOutput>,
-    /// What it changed in a file, when its agent said, as one file's change of a typed result does.
+    /// What came back, as text, as [`typed::output`] reads it.
+    pub text: String,
+    /// What came back, which a client draws by its kind.
+    pub output: &'a CallOutput,
+    /// What it changed in a file, when it changed one and its agent said how.
     pub change: Option<&'a FileChange>,
     /// The images that came back: what the call is about, such as a read of one, then any beside it.
     pub images: Vec<&'a Attachment>,
@@ -33,34 +30,17 @@ impl<'a> Returned<'a> {
     /// What the result `block` says came back, or `None` for any other block.
     pub fn of(block: &'a ContentBlock) -> Option<Self> {
         let form = ResultForm::of(block)?;
-        match block {
-            ContentBlock::CallResult { output, is_error, denied, images, .. } => Some(Self {
-                is_error: *is_error,
-                denied: denied.as_ref(),
-                text: Cow::Owned(typed::output(output)),
-                output: Some(output),
-                change: change_of(output),
-                images: images_of(output).chain(images).collect(),
-                encrypted: matches!(output, CallOutput::Encrypted),
-                form,
-            }),
-            ContentBlock::ToolResult { is_error, text, images, change, encrypted, denied, .. } => Some(Self {
-                is_error: *is_error,
-                denied: denied.as_ref(),
-                text: Cow::Borrowed(text),
-                output: None,
-                change: change.as_ref(),
-                images: images.iter().collect(),
-                encrypted: *encrypted,
-                form,
-            }),
-            ContentBlock::Text { .. }
-            | ContentBlock::Thinking { .. }
-            | ContentBlock::Call { .. }
-            | ContentBlock::ToolUse { .. }
-            | ContentBlock::Image { .. }
-            | ContentBlock::Unknown => None,
-        }
+        let ContentBlock::CallResult { output, is_error, denied, images, .. } = block else { return None };
+        Some(Self {
+            is_error: *is_error,
+            denied: denied.as_ref(),
+            text: typed::output(output),
+            output,
+            change: change_of(output),
+            images: images_of(output).chain(images).collect(),
+            encrypted: matches!(output, CallOutput::Encrypted),
+            form,
+        })
     }
 
     /// The form it was recorded in, which says how its text is read.
@@ -76,7 +56,7 @@ impl<'a> Returned<'a> {
 
     /// Whether the call goes on in the background, as [`in_the_background`] says.
     pub fn in_the_background(&self) -> bool {
-        self.output.is_some_and(in_the_background)
+        in_the_background(self.output)
     }
 }
 
@@ -124,28 +104,28 @@ fn change_of(output: &CallOutput) -> Option<&FileChange> {
 
 #[cfg(test)]
 mod tests {
+    use protocol::capability::calls::Call;
     use protocol::capability::calls::CallOutput;
     use protocol::capability::calls::output::{Ended, FileOutcome, McpContent};
-    use protocol::event::{CallKind, ContentBlock, FileChange};
+    use protocol::event::{ContentBlock, FileChange};
     use protocol::fixtures::{self, image};
 
     use super::Returned;
-    use crate::calls::Ending;
 
-    /// A result's form is whether it says what kind of call it answers, whatever that kind is.
+    fn words(text: &str) -> CallOutput {
+        CallOutput::Words { text: text.into() }
+    }
+
     #[test]
-    fn a_recorded_result_is_read_by_whether_it_says_its_kind() {
-        let before = fixtures::tool_result("c", "Exit code 2\nno such file", true);
-        let since = fixtures::of_kind(fixtures::command_failed("c", "no such file", 2), CallKind::Unknown);
+    fn only_a_result_is_one() {
         let failure = |block: &ContentBlock| {
             Returned::of(block).and_then(|returned| returned.failure().map(|f| (f.ended, f.output.to_string())))
         };
 
-        assert_eq!(failure(&before), Some((Some(Ending::Exited(2)), "no such file".into())));
-        assert_eq!(failure(&since), Some((Some(Ending::Exited(2)), "no such file".into())));
-        assert_eq!(failure(&fixtures::tool_result("c", "a.rs", false)), None, "it didn't fail");
-        assert_eq!(failure(&fixtures::tool_denied("c", "Not that", Some("Not that"))), None, "it was denied");
-        assert!(Returned::of(&fixtures::tool_use("c", "Bash", serde_json::json!({}))).is_none(), "not a result");
+        assert_eq!(failure(&fixtures::typed_result("c", words("a.rs"), false)), None, "it didn't fail");
+        assert_eq!(failure(&fixtures::typed_denied("c", "Not that", Some("Not that"))), None, "it was denied");
+        let call = fixtures::typed_call("c", Call::Command(fixtures::typed_command("ls")));
+        assert!(Returned::of(&call).is_none(), "not a result");
     }
 
     /// A typed command says how it ended beside what it printed, so its failure says that rather than reading its words.
@@ -208,35 +188,11 @@ mod tests {
     }
 
     #[test]
-    fn a_result_for_the_model_alone_is_encrypted_however_it_was_recorded() {
+    fn a_result_for_the_model_alone_is_encrypted() {
         let encrypted = |block: ContentBlock| Returned::of(&block).unwrap().encrypted;
-        let mut recorded = fixtures::tool_result("c", "", false);
-        if let ContentBlock::ToolResult { encrypted, .. } = &mut recorded {
-            *encrypted = true;
-        }
 
         assert!(encrypted(fixtures::typed_result("c", CallOutput::Encrypted, false)));
-        assert!(encrypted(recorded));
-        assert!(!encrypted(fixtures::typed_result("c", CallOutput::Words { text: "a".into() }, false)));
-        assert!(!encrypted(fixtures::tool_result("c", "a", false)));
-    }
-
-    /// A result recorded as the agent's words keeps its images, and what it changed, as its adapter said them.
-    #[test]
-    fn a_result_recorded_as_words_has_what_its_adapter_said() {
-        let mut block = fixtures::with_images(fixtures::tool_result("c", "a screenshot", false), vec![image("shot")]);
-        if let ContentBlock::ToolResult { change, .. } = &mut block {
-            *change = Some(FileChange::Created);
-        }
-
-        let returned = Returned::of(&block).unwrap();
-
-        let ids: Vec<&str> = returned.images.iter().map(|image| image.id.as_str()).collect();
-        assert_eq!(
-            (ids.as_slice(), returned.change, returned.text.as_ref()),
-            (["shot"].as_slice(), Some(&FileChange::Created), "a screenshot")
-        );
-        assert!(returned.output.is_none());
+        assert!(!encrypted(fixtures::typed_result("c", words("a"), false)));
     }
 
     /// A change is one file's, as a call that changed one says how.
@@ -264,6 +220,6 @@ mod tests {
         assert!(Returned::of(&backgrounded).unwrap().in_the_background());
         assert!(Returned::of(&any_other).unwrap().in_the_background());
         assert!(!Returned::of(&exited).unwrap().in_the_background());
-        assert!(!Returned::of(&fixtures::tool_result("c", "", false)).unwrap().in_the_background());
+        assert!(!Returned::of(&fixtures::typed_result("c", words(""), false)).unwrap().in_the_background());
     }
 }

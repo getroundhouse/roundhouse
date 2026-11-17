@@ -12,7 +12,7 @@ use super::str_of;
 const MAX_LINES: usize = 4000;
 
 /// The change in a line's `tool_use_result`, if it says what changed in a file.
-pub(super) fn read(line: &Value) -> Option<FileChange> {
+pub(in crate::claude) fn read(line: &Value) -> Option<FileChange> {
     let result = line.get("tool_use_result")?;
     let patch = result.get("structuredPatch")?.as_array()?;
     // A new file's patch is empty, since all of it is in the call.

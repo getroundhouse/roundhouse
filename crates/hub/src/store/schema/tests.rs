@@ -81,7 +81,7 @@ fn retrying_an_update_that_stops_part_way_keeps_the_copy_from_before_it() {
     let path = dir.path().join("hub.db");
     let backups = dir.path().join("backups");
     let _current = older_database(&path, &backups, MIGRATIONS.len());
-    let update = [MIGRATIONS, &["CREATE TABLE fifth (a)", "NOT SQL"]].concat();
+    let update = [MIGRATIONS, &[Migration::Sql("CREATE TABLE fifth (a)"), Migration::Sql("NOT SQL")]].concat();
 
     let attempts = Vec::from_fn(4, |_| migrate_through(&mut open_connection(&path).unwrap(), &backups, &update));
 
@@ -265,4 +265,45 @@ fn a_chat_on_an_account_from_before_sources_is_on_the_hubs_for_it_and_one_on_non
     let the_machines = AgentAccount { id: Some("machine".into()), logged_in: true, ..Default::default() };
     assert!(store.launched_under(&"none".into(), &the_machines).unwrap().ambient);
     assert!(chat("none").rev > none.rev, "only its source changed");
+}
+
+/// Rewrites every repo's name, as a migration in Rust can, where SQL couldn't say how.
+fn renaming(tx: &rusqlite::Transaction<'_>) -> Result<(), StoreError> {
+    let names: Vec<(String, String)> = tx
+        .prepare("SELECT id, name FROM repos")?
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
+        .collect::<Result<_, _>>()?;
+    for (id, name) in names {
+        tx.execute("UPDATE repos SET name = ?1 WHERE id = ?2", (name.to_uppercase(), id))?;
+    }
+    Ok(())
+}
+
+/// Fails once it has changed something, which its transaction takes back.
+fn failing(tx: &rusqlite::Transaction<'_>) -> Result<(), StoreError> {
+    renaming(tx)?;
+    Err(StoreError::NotFound { kind: "a repo", id: "r".into() })
+}
+
+/// A migration in Rust runs in its place among the others, and one that fails leaves what it changed undone, and the
+/// database at the one before it.
+#[test]
+fn a_migration_in_rust_runs_in_its_place_and_one_that_fails_changes_nothing() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("hub.db");
+    let backups = dir.path().join("backups");
+    let _current = older_database(&path, &backups, MIGRATIONS.len());
+    let name = |conn: &Connection| conn.query_row("SELECT name FROM repos", [], |row| row.get::<_, String>(0)).unwrap();
+
+    let failed = [MIGRATIONS, &[Migration::Rust(failing)]].concat();
+    let result = migrate_through(&mut open_connection(&path).unwrap(), &backups, &failed);
+    let after_failing =
+        (schema_version(&open_connection(&path).unwrap()).unwrap(), name(&open_connection(&path).unwrap()));
+    let update = [MIGRATIONS, &[Migration::Rust(renaming), Migration::Sql("CREATE TABLE after (a)")]].concat();
+    migrate_through(&mut open_connection(&path).unwrap(), &backups, &update).unwrap();
+
+    assert!(matches!(result, Err(StoreError::NotFound { .. })), "got {result:?}");
+    assert_eq!(after_failing, (MIGRATIONS.len(), "repo".to_string()), "nothing it changed is kept");
+    let conn = open_connection(&path).unwrap();
+    assert_eq!((schema_version(&conn).unwrap(), name(&conn)), (MIGRATIONS.len() + 2, "REPO".to_string()));
 }

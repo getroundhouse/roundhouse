@@ -4,7 +4,7 @@ use serde_json::Value;
 
 use crate::attachment::{Attachment, MediaType};
 use crate::capability::approvals::{Asks, Request};
-use crate::capability::calls::call::{Command, Runs};
+use crate::capability::calls::call::{Command, Runs, StartSubagent};
 use crate::capability::calls::output::{CommandOutput, Ended};
 use crate::capability::calls::{Call, CallOutput};
 use crate::event::{ContentBlock, Denied, EventBody};
@@ -25,6 +25,20 @@ pub fn typed_command(command: &str) -> Command {
         runs: Runs::Waits,
         parts: Vec::new(),
         unsandboxed: None,
+    }
+}
+
+/// Handing `prompt` to a subagent of the agent's default persona, which the agent didn't describe, waiting for it to
+/// end, for a test to set what it's about and wrap in [`Call::Subagent`].
+pub fn typed_subagent(prompt: &str) -> StartSubagent {
+    StartSubagent {
+        persona: None,
+        description: None,
+        prompt: prompt.into(),
+        model: None,
+        effort: None,
+        runs: Runs::Waits,
+        resumes: None,
     }
 }
 
@@ -72,19 +86,17 @@ pub fn image(id: &str) -> Attachment {
     Attachment { id: id.into(), name: format!("{id}.png"), media_type: MediaType::Png, size_bytes: 1 }
 }
 
-/// The result `block`, with `images` come back with it: beside what a typed result holds, or as all of a result recorded
-/// as the agent's words has.
+/// The result `block`, with `images` come back with it, beside what it holds.
 ///
 /// # Panics
 ///
 /// If `block` isn't a result, since only a result has images that came back.
 pub fn with_images(mut block: ContentBlock, images: Vec<Attachment>) -> ContentBlock {
     match &mut block {
-        ContentBlock::CallResult { images: kept, .. } | ContentBlock::ToolResult { images: kept, .. } => *kept = images,
+        ContentBlock::CallResult { images: kept, .. } => *kept = images,
         ContentBlock::Text { .. }
         | ContentBlock::Thinking { .. }
         | ContentBlock::Call { .. }
-        | ContentBlock::ToolUse { .. }
         | ContentBlock::Image { .. }
         | ContentBlock::Unknown => panic!("only a result has images that came back: {block:?}"),
     }

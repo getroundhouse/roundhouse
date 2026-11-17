@@ -1,4 +1,4 @@
-use super::super::kinds;
+use super::super::typed;
 use super::{
     blocks, calls, compaction, denied, limits, own_turns, pending, prompt, request, retrying, said, subagents,
     surrogates, tasks, turn_end, user,
@@ -111,8 +111,8 @@ impl Normalizer {
             self.list(body);
         }
         if let Parsed::Event(body) | Parsed::EventWithImages { body, .. } = &mut parsed {
-            kinds::say(body, &answered);
-            denied::say(body, &value);
+            denied::say(body, &value, &answered);
+            typed::say(body, &answered, &value);
         }
         if let Parsed::Event(EventBody::ApprovalRequested { asked_by, .. }) = &mut parsed {
             *asked_by = Subagents::asked_by(&value);

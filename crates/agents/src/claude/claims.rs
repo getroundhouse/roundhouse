@@ -8,6 +8,10 @@ pub(super) fn claims() -> Capabilities {
     claims.output.stream_text = Some(Claimed {});
     claims.output.thinking = Some(output::Thinking { default: output::ThinkingForm::Summary, others: Vec::new() });
     claims.output.stream_thinking = Some(Claimed {});
+    claims.calls.typed = Some(Claimed {});
+    // The CLI says what an edit or a write changed beside its result, with the file's own line numbers. It says how a
+    // command exited only when it failed, so it doesn't claim `exit_codes`.
+    claims.calls.file_changes = Some(Claimed {});
     claims.turns.cancel = Some(turns::Cancel { stops: turns::CancelStops::Nothing });
     claims.turns.tokens = Some(Claimed {});
     claims.turns.cost = Some(Claimed {});

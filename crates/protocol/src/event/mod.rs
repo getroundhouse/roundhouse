@@ -6,7 +6,6 @@
 
 pub use approval::{ApprovalDecision, ApprovalOutcome, secret_questions};
 pub use asking::{Asking, Question, QuestionAnswer, QuestionOption};
-pub use call::CallKind;
 pub use compaction::{CompactedBy, CompactionOutcome};
 pub use content::{ContentBlock, Denied, LinkedImage};
 pub use ending::{ExitReason, TaskOutcome, TurnOutcome};
@@ -17,7 +16,6 @@ pub use tokens::TokenUsage;
 
 mod approval;
 mod asking;
-mod call;
 mod claims;
 mod compaction;
 mod content;

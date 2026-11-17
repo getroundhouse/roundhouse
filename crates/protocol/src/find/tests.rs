@@ -3,7 +3,9 @@ use proptest::test_runner::{Config, RngSeed};
 use serde_json::json;
 
 use super::*;
-use crate::event::{Hunk, HunkLine, LineMark};
+use crate::capability::calls::output::FileOutcome;
+use crate::capability::calls::{Call, CallOutput};
+use crate::event::{FileChange, Hunk, HunkLine, LineMark};
 use crate::fixtures;
 use crate::model::Seq;
 
@@ -38,30 +40,34 @@ fn a_needle_is_something_to_look_for_and_not_too_much() {
     assert_eq!(Needle::new(&"é".repeat(Needle::MOST_CHARS + 1)), Err(NeedleError::TooLong), "counted in characters");
 }
 
+/// A call to a tool that has no kind of its own, which keeps its input as the agent gave it.
 fn call(input: Value) -> EventBody {
-    let block = fixtures::tool_use("t", "Bash", input);
+    let block = fixtures::typed_call("t", Call::Other { tool: "shell".into(), input });
     EventBody::Assistant { message_id: None, subagent: None, model: None, blocks: vec![block], first_index: None }
 }
 
-fn changed(text: &str, line: &str) -> EventBody {
+/// What came back for a change to the file at `path`, which added `line`.
+fn changed(path: &str, line: &str) -> EventBody {
     let hunk = Hunk { old_start: 1, new_start: 1, lines: vec![HunkLine { mark: LineMark::Added, text: line.into() }] };
-    let mut block = fixtures::tool_result("t", text, false);
-    if let ContentBlock::ToolResult { change, .. } = &mut block {
-        *change = Some(FileChange::Changed { hunks: vec![hunk] });
-    }
+    let file = FileOutcome {
+        path: path.into(),
+        change: Some(FileChange::Changed { hunks: vec![hunk] }),
+        moved_to: None,
+        diagnostics: Vec::new(),
+    };
+    let block = fixtures::typed_result("t", CallOutput::Changed { files: vec![file] }, false);
     EventBody::AgentUser { subagent: None, blocks: vec![block] }
 }
 
 #[test]
 fn an_event_holds_what_it_records_of_a_call_and_its_result() {
     let call = call(json!({ "command": "cargo test", "timeout": 600, "env": { "RUST_LOG": "debug" } }));
-    let result = changed("The file was updated", "fn slow_down()");
+    let result = changed("src/train.rs", "fn slow_down()");
 
     assert!(needle("CARGO").is_in_event(&call));
     assert!(needle("rust_log").is_in_event(&call), "a key, as the JSON shown has it");
     assert!(needle("\"timeout\": 600").is_in_event(&call), "and the JSON itself");
     assert!(needle("slow_down").is_in_event(&result), "a change's lines");
-    assert!(!needle("Bash").is_in_event(&call), "the tool's name is the app's to show");
     assert!(!needle("granted").is_in_event(&EventBody::PromptTaken { prompt: Seq::new(1) }));
 }
 
@@ -181,7 +187,7 @@ proptest! {
         let Ok(needle) = Needle::new(&query) else { return Ok(()) };
         let said = ContentBlock::Text { text: texts[0].clone(), images: Vec::new() };
         let input = json!({ "command": texts[1], "timeout": 600, "list": [texts[2]] });
-        let used = fixtures::tool_use("t", "Bash", input);
+        let used = fixtures::typed_call("t", Call::Other { tool: "shell".into(), input });
         let blocks = vec![said, used];
         let bodies = [
             EventBody::UserPrompt { client_msg_id: None, prompt: crate::prompt::Prompt::new(texts[3].clone()) },

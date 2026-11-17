@@ -62,11 +62,7 @@ mod tests {
     use protocol::event::{ApprovalOutcome, EventBody, Question, QuestionAnswer};
 
     use super::{AnswerTo, Seq, Settled};
-    use crate::fixtures::{closed, closed_by_position, event, log};
-
-    fn asked(id: &str) -> EventBody {
-        crate::fixtures::asked(id, "AskUserQuestion")
-    }
+    use crate::fixtures::{asked_a_question as asked, closed, closed_by_position, event, log};
 
     fn question(text: &str) -> Question {
         Question { text: text.into(), header: None, options: Vec::new(), multiple: false }

@@ -6,12 +6,11 @@
 #![cfg(test)]
 
 use client_core::fake_hub::World;
-use client_core::fake_hub::events::{finished_turn, taken, tool_result, tool_use, user_prompt};
+use client_core::fake_hub::events::{command, finished_turn, printed, taken, user_prompt};
 use desktop::lost_release::{self, Button};
 use gpui_kit::test::TestWindowExt as _;
 use gpui_kit::{AppContext as _, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, TestAppContext, point, px};
 use protocol::model::{Seq, SessionStatus};
-use serde_json::json;
 
 use crate::support::{FakeHub, Ui, open_on_the_world};
 use crate::tools::COMMAND_LINE;
@@ -25,8 +24,8 @@ fn in_a_workspace(cx: &mut TestAppContext) -> (FakeHub, Ui<'_>) {
     let events = vec![
         user_prompt("Print four lines"),
         taken(Seq::new(1)),
-        tool_use("msg-1", "toolu-1", "Bash", json!({ "command": r"printf 'one\n\nthree\nfour\n'" })),
-        tool_result("toolu-1", "one\n\nthree\nfour\n"),
+        command("msg-1", "toolu-1", r"printf 'one\n\nthree\nfour\n'", None),
+        printed("toolu-1", "one\n\nthree\nfour\n"),
         finished_turn(4, 0.01),
     ];
     world.chat(&workspace, SessionStatus::Idle, events);

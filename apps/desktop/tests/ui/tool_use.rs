@@ -3,13 +3,14 @@
 #![cfg(test)]
 
 use client_core::fake_hub::World;
-use client_core::fake_hub::events::{taken, tool_use, user_prompt};
+use client_core::fake_hub::events::{command, taken, user_prompt};
 use gpui_kit::test::TestWindowExt as _;
 use gpui_kit::{AppContext as _, ClipboardItem, TestAppContext, point, px};
-use protocol::event::{ApprovalOutcome, Asking, CallKind, EventBody};
-use protocol::fixtures::{ApprovalRequest, approval_request};
+use protocol::capability::calls::Call;
+use protocol::capability::calls::call::Command;
+use protocol::event::{ApprovalOutcome, Asking, EventBody};
+use protocol::fixtures::{ApprovalRequest, approval_request, typed_command};
 use protocol::model::{Seq, SessionStatus};
-use serde_json::json;
 
 use crate::support::{FakeHub, Stack, Ui, id};
 
@@ -91,13 +92,13 @@ fn subagents_that_ask_at_once_are_asked_in_turn_with_who_asks_and_how_many_wait(
 
     // Two subagents ask before either is answered. The first is asked, by what it's for, and the other waits.
     ui.ask(&format!("agents-ask:2:{REMOVAL}"));
-    ui.wait("who asks", |ui| ui.shows_label("question-header", "Bash · Check 1"));
+    ui.wait("who asks", |ui| ui.shows_label("question-header", "Command · Check 1"));
     ui.wait("the count of what waits", |ui| ui.shows_label("question-more-waiting", "1 more waiting"));
 
     // Denied, the next is asked, with nothing waiting behind it.
     ui.click(id("question-answer-1"));
     ui.click(id("question-send"));
-    ui.wait("the second to be asked", |ui| ui.shows_label("question-header", "Bash · Check 2"));
+    ui.wait("the second to be asked", |ui| ui.shows_label("question-header", "Command · Check 2"));
     assert!(!ui.has(id("question-more-waiting")));
     assert!(gone.exists(), "the first was denied");
 
@@ -130,19 +131,18 @@ fn the_command_asked_about_can_be_selected_and_copied_while_the_typing_row_has_f
 /// request asked in the composer's place. The hub goes with the test, so it's returned to be kept.
 fn asked_to_remove(cx: &mut TestAppContext) -> (FakeHub, Ui<'_>) {
     let says_its_for = "Run a command the test asked for";
-    let input = json!({ "command": REMOVAL, "description": says_its_for });
+    let removal = Command { description: Some(says_its_for.to_string()), ..typed_command(REMOVAL) };
     let request = ApprovalRequest {
         tool_use_id: Some("toolu-1".into()),
-        input: input.clone(),
         description: Some(says_its_for.to_string()),
-        asking: Some(Asking::ToolUse { call: Some(CallKind::Command) }),
+        asking: Some(Asking::ToolUse { typed: Some(Call::Command(removal)) }),
         reason: Some("Dangerous rm operation on statically-unresolvable target: command substitution output".into()),
         ..approval_request("approval-1", "Bash")
     };
     let events = vec![
         user_prompt(&format!("tool:{REMOVAL}")),
         taken(Seq::new(1)),
-        tool_use("msg-1", "toolu-1", "Bash", input),
+        command("msg-1", "toolu-1", REMOVAL, Some(says_its_for)),
         request.into(),
     ];
     let mut world = World::default();

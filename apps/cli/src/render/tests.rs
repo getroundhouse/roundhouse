@@ -1,12 +1,13 @@
 use client_core::calls::{Recorded, Returned};
-use protocol::capability::calls::CallOutput;
+use protocol::capability::calls::call::{Read, Search, Shows};
 use protocol::capability::calls::output::Ended;
+use protocol::capability::calls::{Call, CallOutput};
 use protocol::event::{
-    Again, AgentTask, CallKind, ContentBlock, Denied, EndedTask, FailureKind, RequestFailure, TaskKind, TaskOutcome,
+    Again, AgentTask, ContentBlock, Denied, EndedTask, FailureKind, RequestFailure, TaskKind, TaskOutcome,
 };
 use protocol::fixtures;
 use protocol::model::{EndedWait, Seq, WaitEnd, WaitEnded};
-use serde_json::{Value, json};
+use serde_json::json;
 
 use super::{Printer, called, came_back, denial, own_turn, request_failed, started};
 
@@ -27,24 +28,19 @@ fn a_list_of_background_tasks_said_again_with_a_kind_changed_prints_once() {
     assert_eq!(printer.newly_running(&listed[..1]).as_deref(), Some("running in the background: Do a"));
 }
 
+/// So the terminal reads a call as the app does: by its kind, and one of no kind a client knows by its tool's name.
 #[test]
 fn a_call_says_what_it_s_about_as_every_client_does() {
-    let said = |name: &str, input: Value| called(Recorded::of(&fixtures::tool_use("c", name, input)).unwrap());
+    let said = |call: Call| called(Recorded::of(&fixtures::typed_call("c", call)).unwrap());
+    let search = Search { pattern: "fn main".into(), path: Some("src".into()), files: None, shows: Shows::Lines };
+    let read = Read { path: "src/a.rs".into(), lines: None, pages: None };
+    let other = Call::Other { tool: "seek".into(), input: json!({ "path": "src", "pattern": "fn main" }) };
 
-    assert_eq!(said("Bash", json!({ "command": "\ncargo test\n--workspace" })), "Bash: cargo test");
-    assert_eq!(said("Read", json!({ "file_path": "src/a.rs" })), "Read: src/a.rs");
-    assert_eq!(said("mcp__github__list", json!({ "labels": ["bug"] })), "mcp__github__list: labels: [\"bug\"]");
-    assert_eq!(said("advisor", json!({})), "advisor", "it takes no input");
-}
-
-/// So the terminal reads a call as the app does: by the kind its adapter said, whatever the tool is called.
-#[test]
-fn a_call_is_said_by_the_kind_its_adapter_said_it_is() {
-    let before = fixtures::tool_use("c", "seek", json!({ "path": "src", "pattern": "fn main" }));
-    let since = fixtures::of_kind(before.clone(), CallKind::Search);
-
-    assert_eq!(called(Recorded::of(&before).unwrap()), "seek: src", "any tool, by the first of its usual inputs");
-    assert_eq!(called(Recorded::of(&since).unwrap()), "seek: fn main", "a search, by what it looks for");
+    assert_eq!(said(Call::Command(fixtures::typed_command("\ncargo test\n--workspace"))), "Command: cargo test");
+    assert_eq!(said(Call::Read(read)), "Read: src/a.rs");
+    assert_eq!(said(Call::Search(search)), "Search: fn main", "by what it looks for");
+    assert_eq!(said(other), "seek: src", "any tool, by the first of its usual inputs");
+    assert_eq!(said(Call::Advisor), "Ask the advisor", "it takes no input");
 }
 
 /// What's printed of the result `block`.
@@ -53,18 +49,14 @@ fn printed(block: &ContentBlock) -> Vec<String> {
 }
 
 #[test]
-fn a_failed_result_says_how_the_command_exited_however_it_was_recorded() {
-    let before = fixtures::tool_result("c", "Exit code 2\nls: x: No such file", true);
-    let since = fixtures::command_failed("c", "ls: x: No such file", 2);
-    let typed =
+fn a_failed_result_says_how_the_command_exited() {
+    let words = |text: &str| CallOutput::Words { text: text.into() };
+    let failed =
         fixtures::typed_result("c", fixtures::command_output("ls: x: No such file", Some(2), Ended::Exited), true);
 
-    for block in [&before, &since, &typed] {
-        assert_eq!(printed(block), ["tool error, exit 2: ls: x: No such file"], "{block:?}");
-    }
-    let refused = fixtures::tool_result("c", "<tool_use_error>no such tool</tool_use_error>", true);
-    assert_eq!(printed(&refused), ["tool error: no such tool"]);
-    assert_eq!(printed(&fixtures::tool_result("c", "a.rs", false)), ["tool result: a.rs"]);
+    assert_eq!(printed(&failed), ["tool error, exit 2: ls: x: No such file"]);
+    assert_eq!(printed(&fixtures::typed_result("c", words("no such tool"), true)), ["tool error: no such tool"]);
+    assert_eq!(printed(&fixtures::typed_result("c", words("a.rs"), false)), ["tool result: a.rs"]);
     let timed_out =
         fixtures::typed_result("c", fixtures::command_output("still building", None, Ended::TimedOut), true);
     assert_eq!(printed(&timed_out), ["tool error, timed out: still building"]);

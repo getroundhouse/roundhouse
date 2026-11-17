@@ -84,12 +84,10 @@ impl Closes {
         // Read from the blocks themselves, rather than through `Returned`, which would read every result nearby whole
         // to find the one that answers the call.
         let denied = |block: &ContentBlock| match block {
-            ContentBlock::ToolResult { tool_use_id, denied, .. }
-            | ContentBlock::CallResult { tool_use_id, denied, .. } => tool_use_id == call && denied.is_some(),
+            ContentBlock::CallResult { tool_use_id, denied, .. } => tool_use_id == call && denied.is_some(),
             ContentBlock::Text { .. }
             | ContentBlock::Thinking { .. }
             | ContentBlock::Call { .. }
-            | ContentBlock::ToolUse { .. }
             | ContentBlock::Image { .. }
             | ContentBlock::Unknown => false,
         };
@@ -225,20 +223,17 @@ impl BlockAround {
         let all = opening == Opening::All;
         let open = all || m.folds.is_open(&key, fold);
         // Drawn with its call when the call is close enough before it to have found it.
-        let with_call = matches!(block, ContentBlock::ToolResult { tool_use_id, .. } | ContentBlock::CallResult { tool_use_id, .. }
+        let with_call = matches!(block, ContentBlock::CallResult { tool_use_id, .. }
             if nearby::call_before(log, seq, tool_use_id, NEAR).is_some());
         let (reply, subagent, names) = match block {
-            ContentBlock::ToolUse { id, .. } | ContentBlock::Call { id, .. } => {
+            ContentBlock::Call { id, .. } => {
                 let recorded = Recorded::of(block);
                 let hands_off = recorded.is_some_and(|call| call.hands_off());
                 let subagent = hands_off.then(|| Subagent::read(log, m, seq, id, open, opening));
                 (Reply::to(log, m, seq, id), subagent, recorded.and_then(|call| Names::read(log, m, call)))
             }
-            ContentBlock::ToolResult { .. } | ContentBlock::CallResult { .. } if !with_call => {
-                (Reply::of(block, m), None, None)
-            }
-            ContentBlock::ToolResult { .. }
-            | ContentBlock::CallResult { .. }
+            ContentBlock::CallResult { .. } if !with_call => (Reply::of(block, m), None, None),
+            ContentBlock::CallResult { .. }
             | ContentBlock::Text { .. }
             | ContentBlock::Thinking { .. }
             | ContentBlock::Image { .. }
