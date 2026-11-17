@@ -1,7 +1,7 @@
 use super::super::{Worktrees, git, git_error, git_ok, off_thread, status};
 use super::forgotten::{forgotten, remove_forgotten};
 use crate::deleting::Deleter;
-use process::Environment;
+use process::{Environment, RunningProgram};
 use protocol::client::{ApiError, ErrorCode};
 use protocol::worker::RemoveWorkspace;
 use std::fs::{File, OpenOptions};
@@ -238,12 +238,18 @@ impl Deleting {
 
     /// Moves the worktree in, under a name nothing else there has. Fails if it can't go there, such as when the
     /// worktree is a disk of its own, or on Windows, while a process has a file in it open, or works in a folder in it.
-    /// The worktree is then left as it was, since deleting it where it is could stop part way, leaving half of it.
+    /// Names each process it finds running from a program in it, the likeliest to hold it, so whoever asked knows which
+    /// to stop. The worktree is then left as it was, since deleting it where it is could stop part way, leaving half of
+    /// it.
     pub(super) async fn move_in(&self, worktree: &Path) -> Result<PathBuf, ApiError> {
         let moved = self.dir.join(format!("{}-{}", file_name(worktree), stamp()));
-        rename(worktree, &moved).await.map(|()| moved).map_err(|e| {
-            git_error(format!("couldn't move {} aside to delete it, so it's left as it was: {e}", worktree.display()))
-        })
+        let Err(e) = rename(worktree, &moved).await else { return Ok(moved) };
+        let running = off_thread(worktree.to_path_buf(), |worktree| Ok(process::running_in(&worktree))).await;
+        Err(git_error(format!(
+            "couldn't move {} aside to delete it, so it's left as it was: {e}{}",
+            worktree.display(),
+            stop_first(&running.unwrap_or_default())
+        )))
     }
 
     /// Deletes everything waiting, including what an earlier archive left, such as one a shutdown cut short. What
@@ -270,6 +276,18 @@ impl Deleting {
             Err(e) => warn!("couldn't list worktrees moved aside to delete them: {e}"),
         }
     }
+}
+
+/// What a refusal says to stop before archiving again, which is nothing when no process runs from the worktree.
+fn stop_first(running: &[RunningProgram]) -> String {
+    if running.is_empty() {
+        return String::new();
+    }
+    let each: Vec<String> = running
+        .iter()
+        .map(|it| format!("{} (PID {})", it.program.file_name().unwrap_or(it.program.as_os_str()).display(), it.pid))
+        .collect();
+    format!(". Running from it, so perhaps holding it: {}. Stop them, and archive again", each.join(", "))
 }
 
 /// When it was moved aside, which keeps names apart.

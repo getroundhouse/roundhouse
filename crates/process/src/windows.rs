@@ -1,12 +1,15 @@
 //! What stands in for process groups and `ps` on Windows: a process's descendants, found from each process's parent,
 //! and its start time, both through the Win32 API. Also which of a process's handles its children get, and a console
-//! of its own for one started apart from this process.
+//! of its own for one started apart from this process, and the program each process runs from.
 //!
 //! A descendant whose own parent has exited isn't found, since nothing links it to the tree any more. A job object
 //! would hold it.
 
+use std::ffi::OsString;
+use std::os::windows::ffi::OsStringExt as _;
 use std::os::windows::io::{AsRawHandle as _, FromRawHandle as _, OwnedHandle};
 use std::os::windows::process::CommandExt as _;
+use std::path::PathBuf;
 use std::process::Command;
 
 use windows_sys::Win32::Foundation::{
@@ -18,10 +21,11 @@ use windows_sys::Win32::System::Diagnostics::ToolHelp::{
 };
 use windows_sys::Win32::System::Threading::{
     CREATE_NEW_PROCESS_GROUP, CREATE_NO_WINDOW, GetProcessTimes, OpenProcess, PROCESS_ACCESS_RIGHTS,
-    PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE, PROCESS_TERMINATE, TerminateProcess, WaitForSingleObject,
+    PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE, PROCESS_TERMINATE,
+    QueryFullProcessImageNameW, TerminateProcess, WaitForSingleObject,
 };
 
-use crate::Signal;
+use crate::{RunningProgram, Signal};
 
 /// The System Idle Process is 0 and System is 4, and both are the parent of much that isn't theirs to end.
 const LAST_SYSTEM_PID: u32 = 4;
@@ -76,6 +80,36 @@ impl Process {
             WaitForSingleObject(self.handle.as_raw_handle(), ENDING_WAIT_MS);
         }
     }
+
+    /// The program it runs from, as a path with a drive letter. `None` if Windows can't say.
+    fn program(&self) -> Option<PathBuf> {
+        let mut path = vec![0u16; LONGEST_PATH];
+        let mut length = u32::try_from(path.len()).ok()?;
+        // SAFETY: `handle` is open, with the right to query it. `path` has room for `length` characters, which the
+        // call writes no more than, and `length` outlives the call, which writes how many it wrote there.
+        let found = unsafe {
+            QueryFullProcessImageNameW(
+                self.handle.as_raw_handle(),
+                PROCESS_NAME_WIN32,
+                path.as_mut_ptr(),
+                &raw mut length,
+            )
+        };
+        if found == 0 {
+            return None;
+        }
+        path.truncate(usize::try_from(length).ok()?);
+        Some(PathBuf::from(OsString::from_wide(&path)))
+    }
+}
+
+/// The most characters a path can have on Windows, in UTF-16.
+const LONGEST_PATH: usize = 32_768;
+
+/// Every process this user may open, but the system's own, with the program it runs from.
+pub(crate) fn running_programs() -> Vec<RunningProgram> {
+    let running = parents().into_iter().map(|(pid, _)| pid).filter(|pid| *pid > LAST_SYSTEM_PID);
+    running.filter_map(|pid| Some(RunningProgram { pid, program: Process::open(pid, 0)?.program()? })).collect()
 }
 
 /// Only Ctrl-C and Ctrl-Break know about a group on Windows, and this keeps the console's Ctrl-C from it.

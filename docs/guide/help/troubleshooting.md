@@ -45,7 +45,7 @@ Fix the script in the repository's `.conductor/settings.toml`. Setup runs again 
 
 Archiving refuses when the worktree has uncommitted changes, commits on no branch, or submodules, so work isn't lost by accident. Commit or discard them, or say to go on when it asks.
 
-On Windows, it also refuses when it couldn't move the worktree aside, which happens while a program has a file in it open, or is working in one of its folders, such as a build you started there that's still running, or a terminal. Close that program, and archive again.
+On Windows, it also refuses when it couldn't move the worktree aside, which happens while a program has a file in it open, or is working in one of its folders, such as a build you started there that's still running, or a terminal. It names any program running from the worktree, which is the likeliest to be what holds it. Close that program, and archive again.
 
 If git has already forgotten the worktree, as when deleting it was stopped part way, archiving asks before it deletes what's left, since git can't say whether that holds work.
 
