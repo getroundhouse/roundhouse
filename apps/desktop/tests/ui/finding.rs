@@ -79,6 +79,20 @@ fn find(ui: &mut Ui<'_>, query: &str) {
     ui.cx.executor().advance_clock(PAUSE);
 }
 
+/// Waits for the match being shown to be drawn in view below the bar. The transcript scrolls toward it as it draws, a
+/// step a frame, and what draws the step after the first is the next frame, which the list asks for as it measures the
+/// rows of a page that has just loaded. A display brings that frame and a test has none, so the wait brings it, or a
+/// match that has to be scrolled to would wait for ever under the bar.
+#[track_caller]
+fn wait_for_the_match_in_view(ui: &mut Ui<'_>) {
+    let transcript = ui.transcript().unwrap();
+    ui.wait("the match to come into view below the bar", |ui| {
+        ui.bring_the_next_frame();
+        ui.frame();
+        ui.cx.read_entity(&transcript, |t, _| t.match_in_view()) == Some(true)
+    });
+}
+
 #[gpui_kit::test]
 fn cmd_f_finds_in_the_whole_chat_and_opens_what_a_match_is_in(cx: &mut TestAppContext) {
     let mut events = Vec::new();
@@ -108,23 +122,20 @@ fn cmd_f_finds_in_the_whole_chat_and_opens_what_a_match_is_in(cx: &mut TestAppCo
     ui.wait("every match to be counted", |ui| says(ui).as_deref() == Some("4 of 5"));
     ui.press("enter");
     assert_eq!(says(&ui).as_deref(), Some("5 of 5"));
-    ui.press("enter");
-    assert_eq!(says(&ui).as_deref(), Some("1 of 5"), "round to the first, in the first prompt");
-    assert_eq!(found_row(&ui), Some(first_row));
-    ui.wait("the first prompt to load", |ui| ui.cx.read_entity(&transcript, |t, _| t.event_at(first_row).is_some()));
-
-    ui.press("enter");
-    ui.wait("the call to load", |ui| ui.cx.read_entity(&transcript, |t, _| t.event_at(call_row).is_some()));
+    // Round past the first, in the first prompt, to the second, at once, so the second is gone to before the page that
+    // holds it is asked for. Its row is sent to the top, under the bar, and once it loads the list scrolls it down out
+    // from under it. Going on only once the first had loaded would find the second already in view below it, and
+    // nothing would have to scroll.
+    ui.press_at_once(&["enter", "enter"]);
     assert_eq!(says(&ui).as_deref(), Some("2 of 5"));
     assert_eq!(found_row(&ui), Some(call_row), "the command, in its call");
+    ui.wait("the call to load", |ui| ui.cx.read_entity(&transcript, |t, _| t.event_at(call_row).is_some()));
     ui.wait("the call to open", |ui| command_open(ui) == Some(true));
-    // Its row was sent to the top, under the bar, and the list scrolls it down out from under it.
-    ui.wait("the match to come into view below the bar", |ui| {
-        ui.cx.read_entity(&transcript, |t, _| t.match_in_view()) == Some(true)
-    });
+    wait_for_the_match_in_view(&mut ui);
 
     ui.press("secondary-shift-g");
     assert_eq!(says(&ui).as_deref(), Some("1 of 5"), "and back");
+    assert_eq!(found_row(&ui), Some(first_row), "to the first prompt");
 
     ui.press("escape");
     assert!(!ui.has("find-bar"), "Escape closes the bar");
@@ -162,9 +173,7 @@ fn a_match_in_a_reply_far_up_the_chat_is_brought_into_view_below_the_bar(cx: &mu
     };
     ui.wait("the reply to load", |ui| ui.cx.read_entity(&transcript, |t, _| t.event_at(row).is_some()));
     assert!(in_a_reply(&ui), "the second is in the reply");
-    ui.wait("the match to come into view below the bar", |ui| {
-        ui.cx.read_entity(&transcript, |t, _| t.match_in_view()) == Some(true)
-    });
+    wait_for_the_match_in_view(&mut ui);
 }
 
 /// As Windows and Linux apps have them, besides Ctrl-G and Ctrl-Shift-G.
