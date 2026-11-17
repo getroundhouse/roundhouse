@@ -106,7 +106,7 @@ fn held<T>(open: &OpenSession, of: impl Fn(&SessionEvent) -> T) -> Vec<Option<T>
     open.read(|log| {
         let row = |ix| match log.row(ix) {
             Row::Event(event) => Some(of(event)),
-            Row::Empty | Row::Unloaded => None,
+            Row::Unloaded => None,
         };
         Vec::from_fn(log.row_count(), row)
     })

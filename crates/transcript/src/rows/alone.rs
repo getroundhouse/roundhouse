@@ -115,11 +115,7 @@ pub(super) fn repeats_report(log: &SessionLog, m: &Model, row: usize) -> bool {
 fn last_message(log: &SessionLog) -> Vec<(usize, &SessionEvent)> {
     let mut message: Vec<(usize, &SessionEvent)> = Vec::new();
     for row in (0..log.row_count()).rev() {
-        let event = match log.row(row) {
-            Row::Empty if message.is_empty() => continue,
-            Row::Event(event) => event,
-            Row::Empty | Row::Unloaded => break,
-        };
+        let Row::Event(event) = log.row(row) else { break };
         let EventBody::Assistant { message_id, .. } = &event.body else {
             if message.is_empty() {
                 continue;

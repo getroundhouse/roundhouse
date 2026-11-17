@@ -17,7 +17,7 @@ impl SessionLog {
     }
 
     /// Protects the whole viewport and its buffer, including rows already fetched. Returns whether moving it let
-    /// go of event bodies, which the view must hear about even when no new page needs fetching.
+    /// go of events, which the view must hear about even when no new page needs fetching.
     pub(crate) fn focus_on(&mut self, rows: Range<usize>, unfetched: Option<usize>) -> bool {
         self.focus = rows;
         self.unfetched = unfetched;
@@ -57,13 +57,8 @@ impl SessionLog {
             && page_range(page).start <= self.received
             && !self.failed.contains(&page)
             && !self.in_flight.contains(&page);
-        let loaded = (self.pages.contains(&page) || self.empty_page(page)) && !self.stale.contains(&page);
+        let loaded = self.pages.contains(&page) && !self.stale.contains(&page);
         fetchable && !loaded
-    }
-
-    fn empty_page(&self, page: usize) -> bool {
-        let rows = page * PAGE_EVENTS..((page + 1) * PAGE_EVENTS).min(self.row_count());
-        self.empty.count(rows.clone()) == rows.len()
     }
 
     fn focus_pages(&self) -> Range<usize> {
@@ -88,10 +83,6 @@ impl SessionLog {
             settles.extend(SettledAt::of(&event));
             prompts.extend(matches!(event.body, EventBody::UserPrompt { .. }).then_some(event.seq));
             self.insert(event);
-        }
-        // Entirely empty pages need only the compact run, not a page entry for every 250 hidden notifications.
-        if self.empty_page(page) {
-            self.pages.remove(&page);
         }
         self.events_added += 1;
         self.evict();
@@ -126,10 +117,6 @@ impl SessionLog {
         if page_of(position) + 1 >= page_of(self.last) {
             self.pages.insert(page_of(position));
             self.insert(event);
-            let page = page_of(position);
-            if self.empty_page(page) {
-                self.pages.remove(&page);
-            }
             self.events_added += 1;
             self.evict();
         }

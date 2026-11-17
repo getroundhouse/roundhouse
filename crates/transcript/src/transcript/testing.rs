@@ -13,7 +13,7 @@ impl Transcript {
     pub fn event_at(&self, row: usize) -> Option<SessionEvent> {
         self.session.read(|log| match log.row(row) {
             Row::Event(event) => Some(event.clone()),
-            Row::Empty | Row::Unloaded => None,
+            Row::Unloaded => None,
         })
     }
 
@@ -39,7 +39,7 @@ impl Transcript {
             Row::Event(event) if matches!(event.body, EventBody::UserPrompt { .. }) => {
                 Some(log.prompt_state(event.seq))
             }
-            Row::Event(_) | Row::Empty | Row::Unloaded => None,
+            Row::Event(_) | Row::Unloaded => None,
         })
     }
 

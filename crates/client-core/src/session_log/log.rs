@@ -1,4 +1,4 @@
-use super::{approvals, empty::Empty, outline, pages, position, prompts};
+use super::{approvals, outline, pages, position, prompts};
 use pages::before_live;
 use position::Position;
 use prompts::Settled;
@@ -9,15 +9,13 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::ops::Range;
 use std::sync::Arc;
 
-/// Target for cached event bodies. The viewport and live tail stay loaded even when they need more: a window can
-/// span arbitrarily many log positions, since many events have no height. Empty runs hold no event bodies.
+/// Target for cached events. The viewport and live tail stay loaded even when they need more: a window can span
+/// arbitrarily many log positions, since many events have no height.
 pub const MAX_LOADED_EVENTS: usize = 2000;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Row<'a> {
     Event(&'a SessionEvent),
-    /// Fetched and permanently empty, unlike a row hidden by a fold or drawn in another row.
-    Empty,
     /// In the log, but not loaded here. Worth asking for with [`SessionLog::pages_to_fetch`].
     Unloaded,
 }
@@ -58,7 +56,6 @@ pub struct SessionLog {
     pub(super) received: Position,
     /// What's loaded, by position.
     pub(super) events: BTreeMap<Position, Arc<SessionEvent>>,
-    pub(super) empty: Arc<Empty>,
     /// The position of each event loaded, by its `seq`, when that isn't its position.
     pub(super) positions: HashMap<Seq, Position>,
     /// The pages loaded, as `pages::page_of` numbers them.
@@ -119,7 +116,6 @@ impl SessionLog {
     pub fn row(&self, index: usize) -> Row<'_> {
         match self.events.get(&Position::of_row(index)) {
             Some(event) => Row::Event(event.as_ref()),
-            None if self.empty.contains(index) => Row::Empty,
             None => Row::Unloaded,
         }
     }
@@ -149,17 +145,6 @@ impl SessionLog {
     /// Holds `event`. A position only ever has the one event, so one put in again replaces itself.
     pub(super) fn insert(&mut self, event: SessionEvent) {
         let position = self.position(&event);
-        let Some(row) = position.row() else { return };
-        if matches!(event.body, EventBody::AgentOther { .. }) {
-            Arc::make_mut(&mut self.empty).insert(row);
-            if let Some(previous) = self.events.remove(&position) {
-                self.positions.remove(&previous.seq);
-            }
-            return;
-        }
-        if self.empty.contains(row) {
-            Arc::make_mut(&mut self.empty).remove(row);
-        }
         if self.by == By::Place {
             self.positions.insert(event.seq, position);
         }
@@ -240,6 +225,41 @@ impl SessionLog {
         let removed = self.pending.remove(at);
         self.touched(self.row_count()..self.row_count() + 1);
         Some(removed)
+    }
+
+    /// The rows that are loaded, as runs in order: each event held. Every other row is [`Row::Unloaded`].
+    pub fn loaded_rows(&self) -> Vec<Range<usize>> {
+        let mut runs: Vec<Range<usize>> = Vec::new();
+        let recorded = self.row_count();
+        let events = self.events.keys().filter_map(|position| position.row()).filter(|row| *row < recorded);
+        for row in events {
+            match runs.last_mut() {
+                Some(run) if run.end == row => run.end += 1,
+                Some(_) | None => runs.push(row..row + 1),
+            }
+        }
+        runs
+    }
+
+    pub fn loaded_events(&self) -> usize {
+        self.events.len()
+    }
+
+    /// The events that are loaded, oldest first.
+    pub fn loaded(&self) -> impl Iterator<Item = &SessionEvent> {
+        self.events.values().map(Arc::as_ref)
+    }
+
+    /// Whether every event it follows is loaded, so looking through them looks through it all. One that doesn't know
+    /// yet how far its events go, as one by place doesn't until the hub says, holds none.
+    pub fn holds_every_event(&self) -> bool {
+        self.row_count() > 0 && self.events.len() == self.row_count()
+    }
+
+    /// Whether every one of `rows` that the log goes to is loaded.
+    pub fn holds(&self, rows: Range<usize>) -> bool {
+        let rows = rows.start..rows.end.min(self.row_count());
+        rows.is_empty() || self.events.range(Position::of_rows(rows.clone())).count() == rows.len()
     }
 
     /// How many times events have been added to what's held. It changes whenever looking through the events again
