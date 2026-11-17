@@ -61,7 +61,8 @@ fn create(ui: &mut Ui<'_>, prompt: Prompt<FileToSend>) {
 
 /// The dialog can only hold as many files as a prompt carries, so of those given back and those in it since, the last
 /// don't fit, and it says so. More than a prompt carries can't come from the dialog, but a request can hold them, and
-/// the hub refuses them before making anything, so all of it goes back. Then the dialog is full, and a prompt given
+/// the hub refuses them before making anything, so all of it goes back, and with no text, the hub keeps what fits as
+/// what's in the dialog, as it keeps a prompt with text given back. Then the dialog is full, and a prompt given
 /// back to it from a workspace that couldn't be made, as if Create had been pressed before those were attached, goes
 /// first.
 #[gpui_kit::test]
@@ -72,19 +73,20 @@ fn files_given_back_to_the_dialog_fit_as_many_as_a_prompt_carries_and_it_says_wh
     ui.press("escape");
     let before = ui.view().records().workspaces().len();
 
+    // Files and no text, which the hub keeps as what's in the dialog all the same.
     let too_many = (0..=MAX_PER_PROMPT).map(|i| file(&format!("file-{i}.txt"))).collect();
-    create(&mut ui, Prompt::carrying("say:too many", too_many));
+    create(&mut ui, Prompt::carrying("", too_many));
 
-    ui.wait("too many back in the dialog", |ui| ui.has_dialog() && ui.dialog_text() == "say:too many");
-    assert_eq!(ui.dialog_attached().len(), MAX_PER_PROMPT, "too many: as many as fit");
+    ui.wait("too many back in the dialog", |ui| ui.has_dialog() && ui.dialog_attached().len() == MAX_PER_PROMPT);
     let last = format!("file-{MAX_PER_PROMPT}.txt");
     ui.wait("which of too many didn't fit", |ui| ui.view().error.clone().is_some_and(|e| e.contains(&last)));
     assert_eq!(ui.view().records().workspaces().len(), before, "too many: nothing was made");
+    ui.wait("the hub to keep those that fit", |_| {
+        let kept = stack.client().records_list().unwrap().new_workspace_draft.unwrap();
+        kept.text.is_empty() && kept.files.len() == MAX_PER_PROMPT
+    });
 
-    // Emptied of what was typed, and of the error, so what comes next is the next case's own.
-    ui.press("secondary-a");
-    ui.press("backspace");
-    assert_eq!(ui.dialog_text(), "");
+    // Emptied of the error, so what comes next is the next case's own.
     ui.press("escape");
     let view = ui.view.clone();
     ui.cx.update(|cx| {
