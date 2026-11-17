@@ -4,7 +4,7 @@
 
 use gpui_kit::AppContext as _;
 use protocol::event::{ContentBlock, EventBody, SessionEvent};
-use protocol::model::SessionStatus;
+use protocol::model::{Seq, SessionStatus};
 
 use super::Ui;
 
@@ -65,14 +65,16 @@ impl Ui<'_> {
     /// on, and the log hasn't yet taken the newest turn's first words. So it's the end the record names, by its `seq`,
     /// as the transcript itself compares against.
     pub(crate) fn turn_drawn_to_its_end(&self) -> bool {
-        let Some(newest) =
-            self.pane().and_then(|pane| self.cx.read_entity(&pane, |p, _| p.session().map(|s| s.reply_seq)))
-        else {
-            return false;
-        };
+        let Some(newest) = self.reply_seq() else { return false };
         let events = self.events();
         let Some(ended) = events.iter().position(|event| event.seq == newest) else { return false };
         let said = events.iter().rposition(|event| matches!(event.body, EventBody::Assistant { .. }));
         said.is_none_or(|said| said < ended)
+    }
+
+    /// The event that ended the newest turn, as the open chat's record says, which moves once another turn has ended.
+    pub(crate) fn reply_seq(&self) -> Option<Seq> {
+        let pane = self.pane()?;
+        self.cx.read_entity(&pane, |p, _| p.session().map(|s| s.reply_seq))
     }
 }

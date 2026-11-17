@@ -75,8 +75,12 @@ fn an_update_can_be_finished_from_the_sidebar_while_agents_run_on_the_older_hub(
     assert!(!ui.cx.has_pending_prompt(), "the app's own dialog asks, never the system's");
     ui.click("restart-now-confirm");
 
+    // The older hub's process ends apart from the app hearing its connection go, so a connection that's ready can still
+    // be the older hub's, whose card is still drawn. It's the app's own hub that's waited for.
     ui.wait("a new hub", |ui| {
-        older.0.try_wait().unwrap().is_some() && matches!(ui.view().connection(), Connection::Ready(_))
+        older.0.try_wait().unwrap().is_some()
+            && matches!(ui.view().connection(), Connection::Ready(_))
+            && on_its_own_build(&ui.build_line())
     });
     assert!(stack.client().hub_status().unwrap().on_demand, "the app started this one because it needed it");
     assert!(!ui.has("finish-update"), "the new hub is this app's own build");

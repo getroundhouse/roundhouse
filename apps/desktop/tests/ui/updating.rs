@@ -174,8 +174,10 @@ fn restarting_to_update_doesnt_ask_about_whats_typed_or_attached_in_a_composer(c
 
     ui.click("restart-to-update");
 
+    // Restarting goes ahead once the hub has answered what's typed and attached, which is on its way to it, waited for
+    // on a thread of its own, so going ahead is waited for rather than looked for as soon as it's clicked.
+    ui.wait("it to go ahead", |ui| ui.has("update-problem"));
     assert_eq!(restart_question(&ui), None);
-    assert!(ui.has("update-problem"));
 }
 
 /// What's typed and not yet kept, since typing hasn't paused, is on its way to the hub, so restarting waits for it
@@ -286,8 +288,9 @@ fn restarting_to_update_with_nothing_typed_asks_nothing(cx: &mut TestAppContext)
 
     ui.click("restart-to-update");
 
+    // Restarting goes ahead once the hub has answered whatever's on its way to it, waited for on a thread of its own.
+    ui.wait("it to go ahead", |ui| ui.has("update-problem"));
     assert_eq!(restart_question(&ui), None);
-    assert!(ui.has("update-problem"));
 }
 
 /// In the version's place, for a few seconds, rather than in an alert.

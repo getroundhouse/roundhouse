@@ -105,7 +105,11 @@ fn subagents_that_ask_at_once_are_asked_in_turn_with_who_asks_and_how_many_wait(
     // Allowed, its command runs, and the turn ends.
     ui.click(id("question-answer-0"));
     ui.click(id("question-send"));
-    ui.wait("the removal", |ui| ui.session_status() == Some(SessionStatus::Idle) && !gone.exists());
+    // The chat's record says it's idle on the hub's feed, apart from its events, and the worktree changes on the disk,
+    // so the answers recorded are waited for, with the end of their turn, rather than read as soon as the chat is idle.
+    ui.wait("the removal, and its turn to be drawn to its end", |ui| {
+        ui.session_status() == Some(SessionStatus::Idle) && !gone.exists() && ui.turn_drawn_to_its_end()
+    });
     assert_eq!(outcomes(&ui), [ApprovalOutcome::Denied, ApprovalOutcome::Allowed]);
 }
 

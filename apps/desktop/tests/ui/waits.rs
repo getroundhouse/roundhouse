@@ -31,15 +31,24 @@ fn a_wait_s_line_says_where_its_pull_request_stands_and_stop_calls_it_off(cx: &m
     let wait = waiting().unwrap();
     let text = format!("wait-text/{}", wait.id);
     ui.wait("the line to say it", |ui| ui.shows_label(&text, "Waiting on #7: merge · 1 check running"));
+    // The wait's turn, so the read's below can be told from it.
+    ui.wait("the wait's turn to end", |ui| {
+        ui.session_status() == Some(SessionStatus::Background) && ui.turn_drawn_to_its_end()
+    });
+    let waits_turn = ui.reply_seq();
 
     github.pull_requests.set(7, Passed);
     ui.input(r#"mcp:get_pull_requests {"pull_requests":[7]}"#);
     ui.press("enter");
     ui.wait("the line to follow", |ui| ui.shows_label(&text, "Waiting on #7: merge · 0 checks running"));
     // The agent's read moved the line, in a turn whose end is drawn above the line and moves it down as it comes. So Stop
-    // is pressed once that's drawn, or the press can land where the button no longer is, and be lost.
+    // is pressed once that's drawn, or the press can land where the button no longer is, and be lost. The hub reads a
+    // pull request waited on by itself too, so the line can follow before the chat's record says the read's turn has
+    // begun, while it's still in the state the wait's turn left: it's the read's turn's end that's waited for.
     ui.wait("the read's turn to end", |ui| {
-        ui.session_status() == Some(SessionStatus::Background) && ui.turn_drawn_to_its_end()
+        ui.session_status() == Some(SessionStatus::Background)
+            && ui.reply_seq() > waits_turn
+            && ui.turn_drawn_to_its_end()
     });
 
     let stop = SharedString::from(format!("wait-stop/{}", wait.id));
