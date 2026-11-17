@@ -1,13 +1,15 @@
 //! A hub of another build: one across a real break, an older one the app replaces or finishes an update on by itself,
 //! and one someone runs themselves. Finishing an update by hand is in `restart_now`. Each is a stand-in, as
-//! `tools/stand-ins/stand-in-hub/` describes.
+//! `tools/stand-ins/stand-in-hub/` describes, since whether the app stops, restarts or keeps a hub shows only on a
+//! process, but for one the sidebar only reads, which is a fake hub.
 
 #![cfg(test)]
 
+use client_core::fake_hub::{self, HubBuild, World};
 use desktop::app::{Agents, BuildLine, Connection, Updating};
 use gpui_kit::TestAppContext;
 
-use crate::support::{Stack, StandInHub, Ui};
+use crate::support::{Stack, StandInHub, Ui, open_on_the_world};
 
 #[gpui_kit::test]
 fn a_hub_across_a_real_break_is_explained_and_can_be_restarted(cx: &mut TestAppContext) {
@@ -38,20 +40,6 @@ fn an_older_hub_with_nothing_running_is_replaced_when_the_app_connects(cx: &mut 
     let status = stack.client().hub_status().unwrap();
     assert_ne!(status.pid, older.0.id());
     assert!(status.on_demand, "the app started this one because it needed it");
-}
-
-#[gpui_kit::test]
-fn an_older_hub_with_an_agent_running_is_kept(cx: &mut TestAppContext) {
-    let mut stack = Stack::new();
-    stack.hub.build_number = Some(2);
-    let mut older = stack.start_stand_in_hub(&["--speaks-this-protocol", "--build", "1", "--running", "1"]);
-
-    let mut ui = Ui::open(cx, &stack);
-    // Nor when the app looks again.
-    ui.wait_out_a_look();
-
-    assert!(older.0.try_wait().unwrap().is_none());
-    assert!(matches!(ui.build_line().update, Some(Updating::Finishing { .. })));
 }
 
 /// A restart stops none of its agents, so the app doesn't wait for them.
@@ -103,14 +91,18 @@ fn an_older_hub_that_goes_as_the_app_joins_it_leaves_the_app_on_its_own(cx: &mut
     assert!(older.restarted(), "asked to restart, rather than to stop");
 }
 
-/// An agent finishing is usually what lets an update finish, and the app hears of that at once. It takes the chance
-/// even with the window in front, since waiting for someone to leave had the update look stuck.
+/// An older hub with an agent running is kept, when the app connects and when it looks again. An agent finishing is
+/// usually what lets an update finish, and the app hears of that at once. It takes the chance even with the window in
+/// front, since waiting for someone to leave had the update look stuck.
 #[gpui_kit::test]
-fn an_update_finishes_by_itself_once_the_agents_on_the_older_hub_are_done(cx: &mut TestAppContext) {
+fn an_older_hub_with_an_agent_running_is_kept_and_the_update_finishes_once_it_is_done(cx: &mut TestAppContext) {
     let mut stack = Stack::new();
     stack.hub.build_number = Some(2);
     let mut older = stack.start_stand_in_hub(&["--speaks-this-protocol", "--build", "1", "--running", "1"]);
     let mut ui = Ui::open(cx, &stack);
+    ui.wait_out_a_look();
+    assert!(older.0.try_wait().unwrap().is_none(), "running: the older hub is kept, after the app looks again");
+    assert!(matches!(ui.build_line().update, Some(Updating::Finishing { .. })), "running: the update waits to finish");
     ui.bring_to_front();
 
     older.set_running(0);
@@ -187,15 +179,17 @@ pub(crate) fn wait_for_the_apps_own_hub(ui: &mut Ui<'_>, older: &mut StandInHub)
     ui.wait("the app's own hub", |ui| on_its_own_build(&ui.build_line()));
 }
 
-/// The rules for which hub can be restarted are tested in `hub_source`. This is that the sidebar follows them.
+/// The rules for which hub can be restarted are tested in `hub_source`. This is that the sidebar follows them, which
+/// asks nothing of the hub but what it says of itself, so it's a fake hub that says it's an older build someone
+/// started by hand.
 #[gpui_kit::test]
 fn an_older_hub_started_by_hand_is_not_offered_to_finish(cx: &mut TestAppContext) {
-    let mut stack = Stack::new();
-    stack.hub.build_number = Some(2);
-    let _by_hand = stack.start_stand_in_hub(&["--speaks-this-protocol", "--build", "1", "--not-on-demand"]);
-    let mut ui = Ui::open(cx, &stack);
+    let mut world = World::default();
+    world.hub = Some(HubBuild { version: "0.9.0", number: fake_hub::BUILD_NUMBER - 1, on_demand: false });
 
-    assert!(ui.build_line().other_hub.is_some());
+    let (_fake, mut ui) = open_on_the_world(cx, world);
+
+    ui.wait("the build line to name the older hub", |ui| ui.build_line().other_hub.is_some());
     assert!(!ui.has("finish-update"));
 }
 #[gpui_kit::test]

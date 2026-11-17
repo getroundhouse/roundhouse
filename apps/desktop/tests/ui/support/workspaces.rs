@@ -36,9 +36,8 @@ impl<'a> Ui<'a> {
     /// first kept in memory. Waits for it to connect.
     pub(crate) fn open_again(&mut self, stack: &Stack) {
         self.cx.update_window(self.handle, |_, window, _| window.remove_window()).unwrap();
-        let (hub, checkout) = (stack.hub.clone(), stack.checkout.clone());
-        let opens = desktop::Opens::WhereItWasLeft;
-        (self.handle, self.view) = self.cx.update(|cx| desktop::open_main_window(hub, checkout, opens, cx)).unwrap();
+        let (hub, opens) = (stack.hub.clone(), desktop::Opens::WhereItWasLeft);
+        (self.handle, self.view) = self.cx.update(|cx| desktop::open_main_window(hub, None, opens, cx)).unwrap();
         self.seen_approval = Seq::default();
         self.wait("the app to connect", |ui| ui.view().client().is_some());
     }
