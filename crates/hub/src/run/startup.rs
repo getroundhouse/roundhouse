@@ -105,6 +105,7 @@ fn load_providers(
         worker_exe,
         instances_dir: paths.instances_dir.clone(),
         workspaces_root: paths.workspaces_root.clone(),
+        clones_dir: paths.clones_dir.clone(),
         shell,
         path,
     }));

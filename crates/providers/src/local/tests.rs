@@ -89,6 +89,7 @@ fn provider(dir: &Path) -> LocalProvider {
         worker_exe: "/bin/roundhoused".into(),
         instances_dir: dir.join("instances"),
         workspaces_root: dir.join("workspaces"),
+        clones_dir: dir.join("clones"),
         shell: Some("/bin/sh".into()),
         path: Some("/opt/tools".into()),
     })
@@ -134,9 +135,10 @@ async fn connect_answers_with_the_hubs_own_worker_for_the_instance() {
     let text = |path: PathBuf| path.to_string_lossy().into_owned();
     assert_eq!(command.program, "/bin/roundhoused");
     let state_dir = text(dir.path().join("instances/i"));
-    let workspaces = text(dir.path().join("workspaces"));
+    let (workspaces, clones) = (text(dir.path().join("workspaces")), text(dir.path().join("clones")));
     let transport = if cfg!(unix) { "--attach" } else { "--stdio" };
-    assert_eq!(command.args, ["worker", transport, "--workspaces-root", &workspaces, "--state-dir", &state_dir]);
+    let given = ["--workspaces-root", &workspaces, "--state-dir", &state_dir, "--clones-dir", &clones];
+    assert_eq!(command.args, [&["worker", transport][..], &given].concat());
     let path = command.env.iter().find(|(name, _)| name == "PATH").map(|(_, value)| value.as_str());
     assert!(path.is_some_and(|path| path.split(':').any(|entry| entry == "/opt/tools")), "{path:?}");
 }

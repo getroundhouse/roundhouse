@@ -2,6 +2,7 @@ use super::{agent, connection, moves, outbox, scripts, worktrees};
 use crate::asks::Asks;
 use crate::branch_watch::Whose;
 use crate::deleting::Deleter;
+use crate::git::Clones;
 use crate::git_credential::{CredentialHelper, GitCredentials};
 use crate::tools::Tools;
 use crate::{git, setup};
@@ -48,6 +49,10 @@ pub struct Config {
     /// keeps the setup log and each run's files. It's there before the worker serves, as claiming the instance makes
     /// it.
     pub state_dir: PathBuf,
+    /// Where the worker keeps its clones of the repositories it's told of by their address, which every worker on the
+    /// machine that its provider runs shares, and which outlives any instance. Its provider names it, as it does the
+    /// state directory.
+    pub clones_dir: PathBuf,
     /// Holds the user's own settings, and the places agent CLIs install to.
     pub home: Option<PathBuf>,
     /// Where to search for agent CLIs.
@@ -102,6 +107,7 @@ pub(super) struct State {
     pub(super) tools: Arc<Tools>,
     /// The git credential its hub set, which every process it starts is given.
     pub(super) credentials: GitCredentials,
+    pub(super) clones: Clones,
 }
 
 impl State {
@@ -146,6 +152,7 @@ impl Worker {
             watches: Mutex::new(Watches::default()),
             outbox,
             tools: Arc::new(Tools::new(asks.clone(), config.build, config.timers.wait_poll)),
+            clones: Clones::new(config.clones_dir.clone()),
             config,
             asks,
             credentials,
@@ -272,7 +279,7 @@ pub(super) async fn handle(
             let repository = git::github_remote(&given, Path::new(&repo_path)).await?;
             Ok(WorkerResponse::GithubRemote(GithubRemoteReply { repository }))
         }
-        WorkerRequest::SetupWorkspace(asked) => run_setup(state, &asked.repo_path, &asked.path, &asked.env).await,
+        WorkerRequest::SetupWorkspace(asked) => run_setup(state, &asked.source, &asked.path, &asked.env).await,
         WorkerRequest::CancelSetup => {
             stop_setup_script(state);
             Ok(WorkerResponse::Ok)
@@ -281,9 +288,7 @@ pub(super) async fn handle(
             let log = setup::setup_log_path(&state.config.state_dir);
             Ok(WorkerResponse::SetupLog(SetupLogReply { text: setup::read_log_tail(&log, SETUP_LOG_TAIL_BYTES) }))
         }
-        WorkerRequest::ArchiveScript(asked) => {
-            run_archive_script(state, &asked.repo_path, &asked.path, &asked.env).await
-        }
+        WorkerRequest::ArchiveScript(asked) => run_archive_script(state, &asked.source, &asked.path, &asked.env).await,
         WorkerRequest::AttachmentWrite(AttachmentWrite { path, name, data }) => {
             let written = tokio::task::spawn_blocking(move || {
                 crate::attachments::write(Path::new(&path), &name, data.as_slice())

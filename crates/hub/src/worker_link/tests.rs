@@ -30,6 +30,7 @@ fn provider_running(dir: &Path, script: &str) -> Arc<dyn Provider> {
         worker_exe: exe,
         instances_dir: dir.join("instances"),
         workspaces_root: dir.join("workspaces"),
+        clones_dir: dir.join("clones"),
         shell: Some("/bin/sh".into()),
         path: None,
     }))

@@ -69,6 +69,10 @@ enum Role {
         /// and keeps the setup log and each run's files.
         #[arg(long)]
         state_dir: PathBuf,
+        /// Where the worker keeps its clones of the repositories it's told of by their address, which every worker its
+        /// provider runs on this machine shares.
+        #[arg(long)]
+        clones_dir: PathBuf,
     },
 }
 
@@ -132,7 +136,7 @@ fn main() -> anyhow::Result<()> {
             anyhow::ensure!(failed.is_empty(), "{} of {} weren't deleted", failed.len(), paths.len());
             Ok(())
         }
-        Role::Worker { stdio: _, attach, listen, workspaces_root, state_dir } => {
+        Role::Worker { stdio: _, attach, listen, workspaces_root, state_dir, clones_dir } => {
             let transport = match (attach, listen) {
                 (true, _) => Transport::Attach,
                 (_, true) => Transport::Listen,
@@ -144,6 +148,7 @@ fn main() -> anyhow::Result<()> {
                     build: BUILD,
                     workspaces_root,
                     state_dir,
+                    clones_dir,
                     claude_bin,
                     codex_bin,
                     antigravity_bin,

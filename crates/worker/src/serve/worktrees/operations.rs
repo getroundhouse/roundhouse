@@ -42,23 +42,30 @@ impl Watches {
     }
 }
 
+/// The names git has in the repository, whose clone, if it's one, is made first, since a workspace is about to be.
 pub(in super::super) async fn names_git_has(state: &State, asked: NamesGitHas) -> Result<WorkerResponse, ApiError> {
     let (root, given) = (&state.config.workspaces_root, state.credentials.given());
-    let names = git::names_git_has(&given, root, &asked.repo_name, &asked.repo_path).await?;
+    let repo = state.clones.made_for(&given, &asked.source).await?;
+    let names = git::names_git_has(&given, root, &asked.repo_name, &repo).await?;
     Ok(WorkerResponse::NamesGitHas(NamesGitHasReply { names }))
 }
 
+/// Makes the workspace's worktree from the repository's checkout, or from its clone, made first if there's none.
 pub(in super::super) async fn prepare(state: &State, asked: PrepareWorkspace) -> Result<WorkerResponse, ApiError> {
-    let PrepareWorkspace { repo_name, repo_path, workspace_name, branch, base_ref } = asked;
+    let PrepareWorkspace { repo_name, source, workspace_name, branch, base_ref } = asked;
     let (root, given) = (&state.config.workspaces_root, state.credentials.given());
+    let repo = state.clones.made_for(&given, &source).await?;
     let base_ref = base_ref.as_deref();
-    let ready = git::prepare_workspace(&given, root, &repo_name, &repo_path, &workspace_name, &branch, base_ref);
+    let ready = git::prepare_workspace(&given, root, &repo_name, &repo, &workspace_name, &branch, base_ref);
     Ok(WorkerResponse::WorkspaceReady(ready.await?))
 }
 
+/// Puts the worktree back from the repository it was made from, the checkout or the clone, which isn't made again,
+/// since the branch would have gone with it.
 pub(in super::super) async fn restore(state: &State, asked: RestoreWorkspace) -> Result<WorkerResponse, ApiError> {
     let _alone = state.moves.alone(Path::new(&asked.path)).await;
-    git::restore_workspace(&state.credentials.given(), &asked.repo_path, &asked.path, &asked.branch).await?;
+    let repo = state.clones.repository(&asked.source);
+    git::restore_workspace(&state.credentials.given(), &repo, &asked.path, &asked.branch).await?;
     Ok(WorkerResponse::Ok)
 }
 
@@ -67,7 +74,8 @@ pub(in super::super) async fn restore(state: &State, asked: RestoreWorkspace) ->
 pub(in super::super) async fn remove(state: &State, asked: RemoveWorkspace) -> Result<WorkerResponse, ApiError> {
     let path = Path::new(&asked.path);
     let _alone = state.moves.alone(path).await;
-    git::remove_workspace(&state.credentials.given(), &asked, &state.config.deleter).await?;
+    let repo = state.clones.repository(&asked.source);
+    git::remove_workspace(&state.credentials.given(), &repo, &asked, &state.config.deleter).await?;
     state.watches.lock().stop(path);
     Ok(WorkerResponse::Ok)
 }
@@ -82,14 +90,14 @@ pub(in super::super) async fn there(state: &State, asked: WorktreeThere) -> Resu
 /// and copies the ignored files setup copies into it. One made there before, as when a new hub asks again what the
 /// last didn't hear back about, is answered with, and has copied what it's missing.
 pub(in super::super) async fn add_child(state: &State, asked: AddChildWorktree) -> Result<WorkerResponse, ApiError> {
-    let (repo, path) = (Path::new(&asked.repo_path), Path::new(&asked.path));
+    let (checkout, path) = (asked.source.checkout().map(Path::new), Path::new(&asked.path));
     let _alone = state.moves.alone(path).await;
     let mut warnings = Vec::new();
     let given = state.credentials.given();
     let commit = git::add_child_worktree(&given, Path::new(&asked.own), path, &asked.on, &mut warnings).await?;
     // Copying skips what's there, so one made before keeps what's changed in it since.
-    let settings = setup::load_settings(repo, path, state.config.home.as_deref(), &mut warnings);
-    let copied = setup::copy_local_files(&given, repo, path, &settings, &mut warnings).await;
+    let settings = setup::load_settings(checkout, path, state.config.home.as_deref(), &mut warnings);
+    let copied = setup::copy_local_files(&given, checkout, path, &settings, &mut warnings).await;
     let branches = git::branches::read_now(&given, path).await.ok();
     Ok(WorkerResponse::ChildWorktreeAdded(ChildWorktreeAdded { commit, copied, warnings, branches }))
 }

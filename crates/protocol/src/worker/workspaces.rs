@@ -3,6 +3,7 @@
 
 use serde::{Deserialize, Serialize};
 
+use super::repo_source::{RepoSource, beside_repo_path};
 use super::{Reply, Request, WorkerRequest, WorkerResponse};
 use crate::model::{BranchName, Branches};
 
@@ -14,7 +15,9 @@ use crate::model::{BranchName, Branches};
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct NamesGitHas {
     pub repo_name: String,
-    pub repo_path: String,
+    /// The repository, which a clone of is made first if the worker has none.
+    #[serde(flatten, with = "beside_repo_path")]
+    pub source: RepoSource,
 }
 
 impl Request for NamesGitHas {
@@ -37,12 +40,14 @@ impl Reply for NamesGitHasReply {
     }
 }
 
-/// Creates the worktree and its branch. Fails with `NameTaken` if the worktree's directory exists, or the branch, or a
-/// branch git can't have beside it, whatever its case.
+/// Creates the worktree and its branch, from the repository's checkout, or its clone, made first if the worker has none.
+/// Fails with `NameTaken` if the worktree's directory exists, or the branch, or a branch git can't have beside it,
+/// whatever its case.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct PrepareWorkspace {
     pub repo_name: String,
-    pub repo_path: String,
+    #[serde(flatten, with = "beside_repo_path")]
+    pub source: RepoSource,
     pub workspace_name: String,
     pub branch: BranchName,
     pub base_ref: Option<String>,
@@ -76,10 +81,12 @@ impl Reply for WorkspaceReady {
     }
 }
 
-/// Puts the worktree back from its kept branch.
+/// Puts the worktree back from its kept branch, which is in the repository's checkout, or in its clone, which a worker
+/// that has none refuses, since the branch went with it.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct RestoreWorkspace {
-    pub repo_path: String,
+    #[serde(flatten, with = "beside_repo_path")]
+    pub source: RepoSource,
     pub path: String,
     pub branch: BranchName,
 }
@@ -96,7 +103,8 @@ impl Request for RestoreWorkspace {
 /// `NeedsForce` if that would lose work, unless `force`. Stops watching the branches of another made for it.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct RemoveWorkspace {
-    pub repo_path: String,
+    #[serde(flatten, with = "beside_repo_path")]
+    pub source: RepoSource,
     pub path: String,
     pub force: bool,
     /// The workspace's own worktree, when `path` is another made for it, which is then moved aside to be deleted
@@ -142,10 +150,12 @@ impl Reply for WorktreeThereReply {
     }
 }
 
-/// Copies local files and runs the setup script. Resolves when it's finished, however long that is.
+/// Copies local files and runs the setup script. Resolves when it's finished, however long that is. A worktree made from
+/// a clone has no local files to copy, nor local settings.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct SetupWorkspace {
-    pub repo_path: String,
+    #[serde(flatten, with = "beside_repo_path")]
+    pub source: RepoSource,
     pub path: String,
     pub env: Vec<(String, String)>,
 }
@@ -214,7 +224,8 @@ impl Reply for SetupLogReply {
 /// Runs the archive script, if there is one. Fails if the script does.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct ArchiveScript {
-    pub repo_path: String,
+    #[serde(flatten, with = "beside_repo_path")]
+    pub source: RepoSource,
     pub path: String,
     pub env: Vec<(String, String)>,
 }

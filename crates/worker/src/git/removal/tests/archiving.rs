@@ -2,7 +2,7 @@ use super::super::*;
 use crate::git::tests::{new_repo, run};
 use crate::git::{prepare_workspace, restore_workspace, worktree_there};
 use process::Environment;
-use protocol::worker::RemoveWorkspace;
+use protocol::worker::{RemoveWorkspace, RepoSource};
 use std::time::{Duration, Instant};
 
 /// Long enough to delete a few files on a busy machine.
@@ -34,17 +34,8 @@ impl Archived {
         let dir = tempfile::tempdir().unwrap();
         let repo = new_repo(dir.path());
         let root = dir.path().join("ws");
-        let prepared = prepare_workspace(
-            &Environment::NONE,
-            &root,
-            "repo",
-            repo.to_str().unwrap(),
-            "alder",
-            &"alder".into(),
-            None,
-        )
-        .await
-        .unwrap();
+        let prepared =
+            prepare_workspace(&Environment::NONE, &root, "repo", &repo, "alder", &"alder".into(), None).await.unwrap();
         let path = PathBuf::from(prepared.path);
         std::fs::create_dir_all(path.join("ignored/deep")).unwrap();
         std::fs::write(path.join("ignored/deep/output"), "built\n").unwrap();
@@ -56,18 +47,22 @@ impl Archived {
     }
 
     pub(super) async fn remove_with(&self, force: bool, deleter: &Deleter) -> Result<(), ApiError> {
-        remove_workspace(&Environment::NONE, &self.removing(&self.path, force, None), deleter).await
+        remove_workspace(&Environment::NONE, &self.repo, &self.removing(&self.path, force, None), deleter).await
     }
 
     /// The request to remove the worktree at `path`, the workspace's own or, with `own`, another made for it.
     pub(super) fn removing(&self, path: &Path, force: bool, own: Option<&Path>) -> RemoveWorkspace {
         let text = |path: &Path| path.to_str().unwrap().to_string();
-        RemoveWorkspace { repo_path: text(&self.repo), path: text(path), force, own: own.map(text) }
+        RemoveWorkspace {
+            source: RepoSource::Checkout { path: text(&self.repo) },
+            path: text(path),
+            force,
+            own: own.map(text),
+        }
     }
 
     pub(super) async fn restore(&self) -> Result<(), ApiError> {
-        restore_workspace(&Environment::NONE, self.repo.to_str().unwrap(), self.path.to_str().unwrap(), &"alder".into())
-            .await
+        restore_workspace(&Environment::NONE, &self.repo, self.path.to_str().unwrap(), &"alder".into()).await
     }
 
     pub(super) fn deleting(&self) -> PathBuf {
@@ -218,9 +213,10 @@ async fn nothing_is_moved_aside_while_another_archive_holds_the_lock() {
     std::fs::create_dir_all(archived.deleting()).unwrap();
     let other = File::create(archived.deleting().join(LOCK)).unwrap();
     other.lock().unwrap();
-    let removing = archived.removing(&archived.path, false, None);
+    let (removing, repo) = (archived.removing(&archived.path, false, None), archived.repo.clone());
 
-    let mut archiving = tokio::spawn(async move { remove_workspace(&Environment::NONE, &removing, &deleter()).await });
+    let mut archiving =
+        tokio::spawn(async move { remove_workspace(&Environment::NONE, &repo, &removing, &deleter()).await });
 
     // Something that mustn't happen has no condition to wait on, so this is a bound. Right code never gets past it.
     let early = tokio::time::timeout(Duration::from_millis(500), &mut archiving).await;

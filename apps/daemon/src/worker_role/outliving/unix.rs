@@ -24,21 +24,23 @@ pub(crate) fn attach(given: &Given) -> anyhow::Result<()> {
         if worker::instance_claimed(state_dir)? {
             return Err(std::io::Error::other("a worker that's stopping still holds the instance"));
         }
-        start_listening(&exe, &given.workspaces_root, state_dir)
+        start_listening(&exe, given)
     })?;
     Ok(())
 }
 
 /// In a session of its own, so nothing that ends its hub or this command reaches it. What it logs goes where this
 /// command's does, which is the hub's log for the workspace.
-fn start_listening(exe: &Path, workspaces_root: &Path, state_dir: &Path) -> std::io::Result<()> {
+fn start_listening(exe: &Path, given: &Given) -> std::io::Result<()> {
     let mut command = std::process::Command::new(exe);
     command
         .args(["worker", "--listen", "--workspaces-root"])
-        .arg(workspaces_root)
+        .arg(&given.workspaces_root)
         .arg("--state-dir")
-        .arg(state_dir)
-        .current_dir(state_dir)
+        .arg(&given.state_dir)
+        .arg("--clones-dir")
+        .arg(&given.clones_dir)
+        .current_dir(&given.state_dir)
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null());
     process::detach(&mut command);

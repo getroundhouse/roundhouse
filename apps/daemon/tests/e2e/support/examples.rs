@@ -67,6 +67,8 @@ impl Stack {
             path("adapter-instances"),
             "--workspaces-root".into(),
             path("workspaces"),
+            "--clones".into(),
+            path("home/clones"),
             "--made".into(),
             path("instances-made"),
         ];

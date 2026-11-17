@@ -26,6 +26,9 @@ struct Args {
     /// The hub's, where workers make worktrees.
     #[arg(long)]
     workspaces_root: PathBuf,
+    /// The hub's, where workers keep their clones.
+    #[arg(long)]
+    clones: PathBuf,
     /// Where it writes the name each instance is made with.
     #[arg(long)]
     made: PathBuf,
@@ -102,6 +105,7 @@ async fn main() {
         worker_exe: args.worker,
         instances_dir: args.instances,
         workspaces_root: args.workspaces_root,
+        clones_dir: args.clones,
         // So it doesn't wait on the login shell of whoever runs the tests.
         shell: Some("/bin/sh".to_string()),
         path: std::env::var("PATH").ok(),

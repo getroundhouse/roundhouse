@@ -138,20 +138,20 @@ pub(super) async fn exists(path: &Path) -> bool {
     off_thread(path.to_path_buf(), |path| Ok(path.exists())).await.unwrap_or(false)
 }
 
+/// Puts the worktree at `path` back on `branch`, from the repository `repo`, its checkout or its clone.
 pub async fn restore_workspace(
     given: &Environment,
-    repo_path: &str,
+    repo: &Path,
     path: &str,
     branch: &BranchName,
 ) -> Result<(), ApiError> {
-    let repo = PathBuf::from(repo_path);
     if Path::new(path).exists() {
         return Err(ApiError::new(ErrorCode::Conflict, format!("{path} already exists")));
     }
-    if !ref_exists(given, &repo, &format!("refs/heads/{branch}")).await? {
+    if !ref_exists(given, repo, &format!("refs/heads/{branch}")).await? {
         return Err(ApiError::new(ErrorCode::Conflict, format!("branch {branch} no longer exists")));
     }
-    let changing = Worktrees::of(given, &repo).await?.changing().await?;
+    let changing = Worktrees::of(given, repo).await?.changing().await?;
     // A worktree deleted outside this app stays registered, and would block re-adding this path.
     changing.prune().await?;
     changing.add(&[path, branch.as_str()]).await?.succeeded()?;

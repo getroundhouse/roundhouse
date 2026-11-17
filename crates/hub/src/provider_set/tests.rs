@@ -12,6 +12,7 @@ fn local(dir: &Path) -> Arc<dyn Provider> {
         worker_exe: dir.join("roundhoused"),
         instances_dir: dir.join("instances"),
         workspaces_root: dir.join("workspaces"),
+        clones_dir: dir.join("clones"),
         shell: Some("/bin/sh".to_string()),
         path: None,
     }))

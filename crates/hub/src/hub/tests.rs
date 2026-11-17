@@ -94,6 +94,7 @@ fn hub_of(dir: &Path, agents: Vec<AgentDescription>, github: Github) -> Arc<Hub>
         worker_exe: dir.join("no-worker"),
         instances_dir: dir.join("instances"),
         workspaces_root: dir.join("workspaces"),
+        clones_dir: dir.join("clones"),
         shell: Some("/bin/sh".to_string()),
         path: None,
     };

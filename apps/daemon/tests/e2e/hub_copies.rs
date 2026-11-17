@@ -40,6 +40,8 @@ fn starting_a_hub_removes_the_copies_nothing_runs_from_but_not_a_worker_s() {
         .arg(stack.path("workspaces"))
         .arg("--state-dir")
         .arg(&state_dir)
+        .arg("--clones-dir")
+        .arg(stack.path("clones"))
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .spawn()

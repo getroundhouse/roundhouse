@@ -43,7 +43,7 @@ pub(in crate::git) struct Reading {
 }
 
 #[derive(Clone, Copy)]
-pub(super) enum Hold {
+pub(in crate::git) enum Hold {
     /// For a command that changes the worktrees.
     Alone,
     /// For a command that only reads them.
@@ -71,27 +71,33 @@ impl Worktrees {
     async fn hold(&self, how: Hold) -> Result<File, ApiError> {
         let failed =
             |e: io::Error| git_error(format!("couldn't lock the repository's worktrees, {}: {e}", self.lock.display()));
-        let file = off_thread(self.lock.clone(), |path| open(&path)).await.map_err(failed)?;
-        let tried = match how {
-            Hold::Alone => file.try_lock(),
-            Hold::BesideOthersReading => file.try_lock_shared(),
-        };
-        match tried {
-            Ok(()) => return Ok(file),
-            Err(TryLockError::WouldBlock) => info!(lock = %self.lock.display(), "{WAITING}"),
-            Err(TryLockError::Error(e)) => return Err(failed(e)),
-        }
-        // Off the runtime's threads, since it blocks for as long as git elsewhere takes.
-        off_thread(self.lock.clone(), move |_| {
-            match how {
-                Hold::Alone => file.lock(),
-                Hold::BesideOthersReading => file.lock_shared(),
-            }
-            .map(|()| file)
-        })
-        .await
-        .map_err(failed)
+        held(&self.lock, how, WAITING).await.map_err(failed)
     }
+}
+
+/// The lock whose file is at `path`, held as `how` says, once nothing else holds it in a way that keeps it from this.
+/// Its file is made if it isn't there, in a directory that is. Logs `waiting`, with the file, when it has to wait,
+/// since that's why what it's for can take a while.
+pub(in crate::git) async fn held(path: &Path, how: Hold, waiting: &'static str) -> io::Result<File> {
+    let file = off_thread(path.to_path_buf(), |path| open(&path)).await?;
+    let tried = match how {
+        Hold::Alone => file.try_lock(),
+        Hold::BesideOthersReading => file.try_lock_shared(),
+    };
+    match tried {
+        Ok(()) => return Ok(file),
+        Err(TryLockError::WouldBlock) => info!(lock = %path.display(), "{waiting}"),
+        Err(TryLockError::Error(e)) => return Err(e),
+    }
+    // Off the runtime's threads, since it blocks for as long as whatever holds it elsewhere takes.
+    off_thread(path.to_path_buf(), move |_| {
+        match how {
+            Hold::Alone => file.lock(),
+            Hold::BesideOthersReading => file.lock_shared(),
+        }
+        .map(|()| file)
+    })
+    .await
 }
 
 /// Opens the lock's file, making it if it isn't there. Only to read, if this user can't write it, as in a repository

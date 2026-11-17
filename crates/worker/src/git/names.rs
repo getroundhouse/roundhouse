@@ -13,15 +13,14 @@ use super::git_ok;
 const BRANCHES: &str = "refs/heads/";
 const ORIGIN_BRANCHES: &str = "refs/remotes/origin/";
 
-/// The names git already has in the repository, as [`NamesGitHas`](protocol::worker::NamesGitHas) says, each once, as
-/// git spells it.
+/// The names git already has in the repository `repo`, its checkout or its clone, as
+/// [`NamesGitHas`](protocol::worker::NamesGitHas) says, each once, as git spells it.
 pub async fn names_git_has(
     given: &Environment,
     root: &Path,
     repo_name: &str,
-    repo_path: &str,
+    repo: &Path,
 ) -> Result<Vec<String>, ApiError> {
-    let repo = Path::new(repo_path);
     let listed = refs(given, repo, &[BRANCHES, ORIGIN_BRANCHES]).await?;
     let branches =
         listed.iter().filter_map(|name| name.strip_prefix(BRANCHES).or_else(|| name.strip_prefix(ORIGIN_BRANCHES)));

@@ -13,9 +13,9 @@ async fn another_of_a_workspace_s_worktrees_is_moved_aside_beside_the_workspaces
     }
     let remove = |child: &Path| archived.removing(child, false, Some(&archived.path));
 
-    remove_workspace(&Environment::NONE, &remove(&first), &deleter()).await.unwrap();
+    remove_workspace(&Environment::NONE, &archived.repo, &remove(&first), &deleter()).await.unwrap();
     let left_after_the_first = (first.exists(), folder.exists());
-    remove_workspace(&Environment::NONE, &remove(&last), &deleter()).await.unwrap();
+    remove_workspace(&Environment::NONE, &archived.repo, &remove(&last), &deleter()).await.unwrap();
 
     assert_eq!(left_after_the_first, (false, true), "the folder stays while another is in it");
     assert!(archived.deleting().join(LOCK).exists(), "moved aside where the workspace's own would be");
