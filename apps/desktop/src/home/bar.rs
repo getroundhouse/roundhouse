@@ -1,7 +1,6 @@
 //! Home's bar, along the window's top: the search, what the list shows and in what order, and Create.
 
 use gpui_kit::assets::IconName as Lucide;
-use gpui_kit::component::menu::{PopupMenu, PopupMenuItem};
 use gpui_kit::component::{Icon, IconName, h_flex};
 use gpui_kit::{Context, InteractiveElement as _, IntoElement, ParentElement, Styled, WeakEntity, Window, div};
 
@@ -60,12 +59,12 @@ fn repos(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement {
     let this = cx.weak_entity();
     filter("home-repos", IconName::Folder, label).menu(
         gpui_kit::Anchor::TopLeft,
-        move |menu: PopupMenu, _: &mut Window, _| {
+        move |menu: look::Menu, _: &mut Window, _| {
             let all = menu_item(&this, "All projects", current.is_none(), |t, cx| t.filter_home(None, cx));
-            choices.iter().fold(menu.item(all).separator(), |menu, (id, name)| {
+            choices.iter().fold(menu.row(all).separator(), |menu, (id, name)| {
                 let id = id.clone();
                 let checked = current.as_ref() == Some(&id);
-                menu.item(menu_item(&this, name, checked, move |t, cx| t.filter_home(Some(id.clone()), cx)))
+                menu.row(menu_item(&this, name, checked, move |t, cx| t.filter_home(Some(id.clone()), cx)))
             })
         },
     )
@@ -76,10 +75,10 @@ fn archived(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement {
     let this = cx.weak_entity();
     filter("home-archived", Lucide::Archive, current.label().to_string()).menu(
         gpui_kit::Anchor::TopLeft,
-        move |menu: PopupMenu, _: &mut Window, _| {
+        move |menu: look::Menu, _: &mut Window, _| {
             ArchiveFilter::ALL.into_iter().fold(menu, |menu, archived| {
                 let pick = move |t: &mut AppView, cx: &mut Context<AppView>| t.filter_archived_in_home(archived, cx);
-                menu.item(menu_item(&this, archived.label(), archived == current, pick))
+                menu.row(menu_item(&this, archived.label(), archived == current, pick))
             })
         },
     )
@@ -90,10 +89,10 @@ fn sort(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement {
     let this = cx.weak_entity();
     filter("home-sort", Lucide::ArrowUpDown, current.label().to_string()).menu(
         gpui_kit::Anchor::TopLeft,
-        move |menu: PopupMenu, _: &mut Window, _| {
+        move |menu: look::Menu, _: &mut Window, _| {
             SORTS.into_iter().fold(menu, |menu, sort| {
                 let pick = move |t: &mut AppView, cx: &mut Context<AppView>| t.sort_home(sort, cx);
-                menu.item(menu_item(&this, sort.label(), sort == current, pick))
+                menu.row(menu_item(&this, sort.label(), sort == current, pick))
             })
         },
     )
@@ -105,9 +104,9 @@ fn menu_item(
     label: &str,
     checked: bool,
     pick: impl Fn(&mut AppView, &mut Context<AppView>) + 'static,
-) -> PopupMenuItem {
+) -> look::MenuRow {
     let this = this.clone();
-    PopupMenuItem::new(label.to_string()).checked(checked).on_click(move |_, _, cx| {
+    look::menu_row(label.to_string()).chosen(checked).on_choose(move |_, cx| {
         let _ = this.update(cx, |t, cx| pick(t, cx));
     })
 }

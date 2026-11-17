@@ -3,14 +3,13 @@
 
 use gpui_kit::assets::IconName as Lucide;
 use gpui_kit::base::Tabs;
-use gpui_kit::component::menu::{ContextMenuExt as _, PopupMenu, PopupMenuItem};
 use gpui_kit::component::{IconName, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     Anchor, AnyElement, App, Context, ElementId, InteractiveElement, IntoElement, ParentElement, Render,
     StatefulInteractiveElement, Styled, TestSupportExt as _, Window, div,
 };
-use look::{InRegion as _, LineText, Region, Typeset as _};
+use look::{InRegion as _, LineText, Region, RightClickMenu as _, Typeset as _};
 use protocol::model::{Session, SessionStatus};
 
 use super::setup::setup_log_view;
@@ -55,7 +54,7 @@ impl WorkspacePane {
             .child(tab::name().child(title))
             .children(expiring);
         let id = ElementId::Name(format!("tab-{}", session.id).into());
-        tab::tab(id, face, close, selected, cx).context_menu(menu).into_any_element()
+        tab::tab(id, face, close, selected, cx).right_click_menu(menu).into_any_element()
     }
 
     /// What a right-click on a chat's tab offers. Marking it needs a reply.
@@ -63,7 +62,7 @@ impl WorkspacePane {
         session: &Session,
         unread: bool,
         cx: &mut Context<Self>,
-    ) -> impl Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static {
+    ) -> impl Fn(look::Menu, &mut Window, &mut App) -> look::Menu + 'static {
         let marking = if unread { Some(Mark::Read) } else { session.has_reply().then_some(Mark::Unread) };
         // Renaming a chat with no title starts from nothing, so pressing Return doesn't make "Untitled" a title typed
         // by hand, which no generated one would ever replace.
@@ -125,19 +124,19 @@ impl WorkspacePane {
         look::icon_button("new-tab", look::ButtonKind::Borderless, look::ControlSize::Regular, IconName::Plus)
             .accessibility_label(NEW_TAB_LABEL)
             .tooltip(NEW_TAB_LABEL)
-            .menu(Anchor::TopLeft, move |mut menu: PopupMenu, _, _| {
-                let chat = |label: String| PopupMenuItem::new(label).icon(Lucide::MessageSquarePlus);
+            .menu(Anchor::TopLeft, move |mut menu: look::Menu, _, _| {
+                let chat = |label: String| look::menu_row(label).icon(Lucide::MessageSquarePlus);
                 if agents.len() < 2 {
-                    menu = menu.item(chat("New chat".into()).action(Box::new(NewChat)));
+                    menu = menu.row(chat("New chat".into()).key(Box::new(NewChat)));
                 } else {
                     for (kind, name) in &agents {
                         let (kind, this) = (*kind, this.clone());
-                        menu = menu.item(chat(format!("New {name} chat")).on_click(move |_, _, cx| {
+                        menu = menu.row(chat(format!("New {name} chat")).on_choose(move |_, cx| {
                             let _ = this.update(cx, |t, cx| t.new_chat_with(kind, cx));
                         }));
                     }
                 }
-                menu.item(PopupMenuItem::new("New terminal").icon(Lucide::Terminal).action(Box::new(NewTerminal)))
+                menu.row(look::menu_row("New terminal").icon(Lucide::Terminal).key(Box::new(NewTerminal)))
             })
     }
 

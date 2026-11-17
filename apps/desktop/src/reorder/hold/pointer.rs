@@ -1,8 +1,6 @@
 use crate::app::AppView;
-use gpui_kit::component::menu::PopupMenu;
 use gpui_kit::{
-    Context, DismissEvent, Div, Entity, InteractiveElement as _, MouseMoveEvent, Stateful,
-    StatefulInteractiveElement as _, Task, WeakEntity,
+    Context, Div, InteractiveElement as _, MouseMoveEvent, Stateful, StatefulInteractiveElement as _, Task,
 };
 use protocol::model::{Workspace, WorkspaceId};
 use std::collections::HashMap;
@@ -26,7 +24,7 @@ pub(crate) struct Hold<V> {
     /// Draws the list again once the pointer has rested for [`HOLDS_FOR`], so the order the hold kept back shows.
     pub(super) releasing: Option<Task<()>>,
     /// The menu opened from a row, while it's open.
-    pub(super) row_menu: Option<WeakEntity<PopupMenu>>,
+    pub(super) row_menu: Option<look::OpenMenu>,
     /// The order the workspaces were last shown in, and what the list was showing then.
     pub(super) shown: Option<(V, Vec<WorkspaceId>)>,
 }
@@ -44,7 +42,7 @@ impl<V: PartialEq> Hold<V> {
     /// is `showing` what it showed then.
     pub(crate) fn held(&self, showing: &V, now: Instant) -> Option<&[WorkspaceId]> {
         let moving = self.pointing && self.moved_at.is_some_and(|at| now < at + HOLDS_FOR);
-        let menu = self.row_menu.as_ref().is_some_and(|menu| menu.upgrade().is_some());
+        let menu = self.row_menu.as_ref().is_some_and(look::OpenMenu::is_open);
         let shown = self.shown.as_ref().filter(|(shown, _)| (moving || menu) && shown == showing);
         shown.map(|(_, order)| order.as_slice())
     }
@@ -110,21 +108,19 @@ fn pointer_moved<V: 'static>(app: &mut AppView, hold: Holder<V>, cx: &mut Contex
 /// dismissed, or goes without that, as it does when its row is no longer drawn.
 pub(crate) fn hold_while_open<V: 'static>(
     app: &mut AppView,
-    menu: &Entity<PopupMenu>,
+    menu: &look::OpenMenu,
     hold: Holder<V>,
     cx: &mut Context<AppView>,
 ) {
-    hold(app).row_menu = Some(menu.downgrade());
-    let id = menu.entity_id();
-    let ends = move |app: &mut AppView, cx: &mut Context<AppView>| {
+    hold(app).row_menu = Some(menu.clone());
+    let this = menu.clone();
+    menu.on_close(cx, move |app, cx| {
         let open = &mut hold(app).row_menu;
-        if open.as_ref().is_some_and(|open| open.entity_id() == id) {
+        if open.as_ref().is_some_and(|open| open.is(&this)) {
             *open = None;
             cx.notify();
         }
-    };
-    cx.subscribe(menu, move |app, _, _: &DismissEvent, cx| ends(app, cx)).detach();
-    cx.observe_release(menu, move |app, _, cx| ends(app, cx)).detach();
+    });
 }
 
 /// Puts `listed`, places in `workspaces`, in the order `held` gives their IDs, and any it doesn't name after them, in

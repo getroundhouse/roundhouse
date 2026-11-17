@@ -3,7 +3,6 @@
 //! texture while it's on.
 
 use gpui_kit::component::input::Textarea;
-use gpui_kit::component::menu::{PopupMenu, PopupMenuItem};
 use gpui_kit::component::{h_flex, v_flex};
 use gpui_kit::{
     Anchor, AnyElement, Context, Focusable as _, InteractiveElement as _, IntoElement, ParentElement as _, Render,
@@ -42,11 +41,11 @@ impl NewWorkspaceDialog {
         let repos = &self.offer.repos;
         let name = repos.iter().find(|(id, _)| *id == self.repo).map_or_default(|(_, name)| name.clone());
         let (choices, current, this) = (repos.clone(), self.repo.clone(), cx.weak_entity());
-        let menu = move |mut menu: PopupMenu, _: &mut Window, _: &mut Context<PopupMenu>| {
+        let menu = move |mut menu: look::Menu, _: &mut Window, _: &mut gpui_kit::App| {
             for (id, name) in &choices {
                 let (this, id) = (this.clone(), id.clone());
                 let checked = id == current;
-                menu = menu.item(PopupMenuItem::new(name.clone()).checked(checked).on_click(move |_, _, cx| {
+                menu = menu.row(look::menu_row(name.clone()).chosen(checked).on_choose(move |_, cx| {
                     let _ = this.update(cx, |t, cx| t.set_repo(id.clone(), cx));
                 }));
             }
@@ -103,11 +102,11 @@ impl NewWorkspaceDialog {
             let name = self.agent().map_or("Agent", |a| a.name.as_str()).to_string();
             look::button("new-workspace-agent", look::ButtonKind::Borderless, look::ControlSize::Small, name).menu(
                 Anchor::TopLeft,
-                move |mut menu: PopupMenu, _, _| {
+                move |mut menu: look::Menu, _, _| {
                     for (kind, name) in &agents {
                         let (kind, this) = (*kind, this.clone());
-                        menu = menu.item(PopupMenuItem::new(name.clone()).checked(current == Some(kind)).on_click(
-                            move |_, _, cx| {
+                        menu = menu.row(look::menu_row(name.clone()).chosen(current == Some(kind)).on_choose(
+                            move |_, cx| {
                                 let _ = this.update(cx, |t, cx| t.pick_agent(kind, cx));
                             },
                         ));

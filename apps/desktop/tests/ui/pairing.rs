@@ -12,6 +12,12 @@ use protocol::paths::ENV_LISTEN;
 
 use crate::support::{Stack, Ui, hub_environment, sidebar_row};
 
+/// The hub switcher's row that pairs a device, which names the machine as the app does on each system.
+const PAIR: &str =
+    if cfg!(target_os = "macos") { "Pair a device with this Mac…" } else { "Pair a device with this computer…" };
+/// The hub switcher's row that connects another hub.
+const CONNECT: &str = "Connect another hub…";
+
 #[gpui_kit::test]
 fn pairing_a_device_copies_its_link_and_confirms_when_the_device_connects(cx: &mut TestAppContext) {
     let stack = Stack::new();
@@ -19,7 +25,7 @@ fn pairing_a_device_copies_its_link_and_confirms_when_the_device_connects(cx: &m
     let mut ui = Ui::open(cx, &stack);
 
     ui.click("hub-switcher");
-    ui.click("hub-menu-pair");
+    ui.click_menu_item(PAIR);
     ui.wait("the pairing link", |ui| ui.has("copy-pairing-link"));
 
     ui.click("copy-pairing-link");
@@ -50,7 +56,7 @@ fn connecting_another_hub_previews_it_keeps_errors_inline_and_switches_with_this
     ui.cx.update(|cx| desktop::app::the_device_name_is("Ada’s MacBook Air", cx));
 
     ui.click("hub-switcher");
-    ui.click("hub-menu-connect");
+    ui.click_menu_item(CONNECT);
     assert!(ui.off("pair-hub"));
 
     // A malformed string disables Connect and explains what a pairing link looks like inline.
@@ -105,7 +111,7 @@ fn connecting_another_hub_previews_it_keeps_errors_inline_and_switches_with_this
 
     // Pairing another device with this computer stays available while viewing the remote hub, and Cancel closes it.
     ui.click("hub-switcher");
-    ui.click("hub-menu-pair");
+    ui.click_menu_item(PAIR);
     ui.wait("the local hub's pairing link", |ui| ui.has("copy-pairing-link"));
     ui.click("cancel-share-hub");
     assert!(!ui.has_dialog());
@@ -131,7 +137,7 @@ fn an_open_workspace_on_a_remote_hub_stays_drawn_when_the_hub_goes_unreachable(c
 
     let mut ui = Ui::open(cx, &local);
     ui.click("hub-switcher");
-    ui.click("hub-menu-connect");
+    ui.click_menu_item(CONNECT);
     ui.input(&pairing.link.to_string());
     ui.press("enter");
     ui.wait("the remote workspace row", |ui| !ui.has_dialog() && ui.has(sidebar_row(&ws.id)));

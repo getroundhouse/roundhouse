@@ -3,13 +3,8 @@
 
 use std::rc::Rc;
 
-use gpui_kit::component::menu::{PopupMenu, PopupMenuItem};
-use gpui_kit::component::tooltip::Tooltip;
 use gpui_kit::prelude::FluentBuilder as _;
-use gpui_kit::{
-    Anchor, App, InteractiveElement as _, IntoElement, ParentElement as _, RenderOnce, SharedString,
-    StatefulInteractiveElement as _, Styled as _, Window, div,
-};
+use gpui_kit::{Anchor, App, IntoElement, ParentElement as _, RenderOnce, SharedString, Styled as _, Window, div};
 use protocol::model::{AgentDescription, Effort, ModelName};
 
 /// What was picked in the model picker's menu.
@@ -115,42 +110,29 @@ impl RenderOnce for ModelPicker {
 /// The models, then the levels, with what's chosen checked. Each model but the chosen one says `switching` while it's
 /// pointed at.
 fn menu_of(
-    mut menu: PopupMenu,
+    mut menu: look::Menu,
     offered: &Offered,
     model: &ModelName,
     effort: Effort,
     switching: Option<&SharedString>,
     on_pick: &OnPick,
-) -> PopupMenu {
+) -> look::Menu {
     for (id, label) in offered.models.iter().cloned() {
-        let item = match switching.filter(|_| id != *model).cloned() {
-            // Named for assistive apps as a plain item is, which they're told the note of too, since they don't
-            // read the tooltip out.
-            Some(note) => PopupMenuItem::element(move |_, _| {
-                let (note, described) = (note.clone(), note.clone());
-                div()
-                    .id(label.clone())
-                    .flex_1()
-                    .aria_label(label.clone())
-                    .aria_description(described)
-                    .tooltip(move |window, cx| Tooltip::new(note.clone()).build(window, cx))
-                    .child(label.clone())
-            }),
-            None => PopupMenuItem::new(label),
-        };
-        menu = menu.item(picks(item.checked(id == *model), Picked::Model(id), on_pick));
+        let row = look::menu_row(label).chosen(id == *model);
+        let row = row.when_some(switching.filter(|_| id != *model).cloned(), look::MenuRow::tooltip);
+        menu = menu.row(picks(row, Picked::Model(id), on_pick));
     }
     menu = menu.separator().label("Effort");
     for &level in &offered.efforts {
         let label = effort_label(level).unwrap_or_default();
-        menu = menu.item(picks(PopupMenuItem::new(label).checked(effort == level), Picked::Effort(level), on_pick));
+        menu = menu.row(picks(look::menu_row(label).chosen(effort == level), Picked::Effort(level), on_pick));
     }
     menu
 }
 
-fn picks(item: PopupMenuItem, picked: Picked, on_pick: &OnPick) -> PopupMenuItem {
+fn picks(row: look::MenuRow, picked: Picked, on_pick: &OnPick) -> look::MenuRow {
     let on_pick = on_pick.clone();
-    item.on_click(move |_, window, cx| on_pick(picked.clone(), window, cx))
+    row.on_choose(move |window, cx| on_pick(picked.clone(), window, cx))
 }
 
 #[cfg(test)]

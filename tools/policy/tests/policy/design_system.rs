@@ -51,6 +51,26 @@ const KIT_SWITCH: KitPart = KitPart {
 /// The kit's radio, which nothing draws, since choosing one of a few is a `look::Switch`.
 const KIT_RADIO: KitPart = KitPart { named: "component::radio", instead: "look::switch", allowed: &[] };
 
+/// The kit's menu, which `look::Menu` fills, and which opens from a `look::Button` or a right-click through `look`.
+const KIT_MENU: KitPart = KitPart {
+    named: "component::menu",
+    instead: "look::menu_row",
+    allowed: &[
+        ("crates/look/src/menus/", "the component library's menu, which fills the kit's and sets how every one looks"),
+        ("crates/look/src/controls/", "the component library's button, which opens a menu with the kit's"),
+        ("apps/desktop/src/menus/", "the app's menus off the Mac, each of the kit's own, with its submenus and keys"),
+        ("apps/desktop/src/app/menu_button.rs", "the menu bar off the Mac, whose buttons hold their menus open"),
+        (
+            "apps/desktop/src/sidebar/hub.rs",
+            "the hub switcher, the kit's button drawn as a field, which opens a look::Menu with the kit's",
+        ),
+        (
+            "apps/desktop/src/workspace_pane/closed.rs",
+            "the closed chats' button, the kit's, lit by its icon, which opens a look::Menu with the kit's",
+        ),
+    ],
+};
+
 const KIT_BUTTON_ALLOWED: &[(&str, &str)] = &[
     ("crates/look/src/controls/", "the component library's button, which holds the kit's"),
     (
@@ -130,6 +150,11 @@ fn only_the_component_library_uses_the_kits_input() {
 #[test]
 fn only_the_component_library_uses_the_kits_switch() {
     only_the_component_library_uses(&KIT_SWITCH);
+}
+
+#[test]
+fn only_the_component_library_fills_the_kits_menu() {
+    only_the_component_library_uses(&KIT_MENU);
 }
 
 #[test]

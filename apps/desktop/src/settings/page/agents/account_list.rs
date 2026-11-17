@@ -6,7 +6,6 @@ use super::{kept, panel, row, words};
 use client_core::Agents;
 use client_core::records::Snapshot;
 use gpui_kit::assets::IconName as Lucide;
-use gpui_kit::component::menu::{PopupMenu, PopupMenuItem};
 use gpui_kit::component::{IconName, v_flex};
 use gpui_kit::{
     Anchor, AnyElement, App, Div, Entity, IntoElement, ParentElement as _, RenderOnce, ScrollHandle, Styled as _,
@@ -140,10 +139,10 @@ fn connect_button(drawing: &Drawing<'_>, kinds: &[&AgentDescription], on: bool) 
     let choices: Vec<(String, AgentKind)> = kinds.iter().map(|agent| (agent.name.clone(), agent.kind)).collect();
     let kept = drawing.kept.clone();
     button
-        .menu(Anchor::TopRight, move |menu: PopupMenu, _, _| {
+        .menu(Anchor::TopRight, move |menu: look::Menu, _, _| {
             choices.iter().fold(menu, |menu, (name, agent)| {
                 let open = open(&kept, *agent);
-                menu.item(PopupMenuItem::new(name.clone()).on_click(move |_, window, cx| open(window, cx)))
+                menu.row(look::menu_row(name.clone()).on_choose(move |window, cx| open(window, cx)))
             })
         })
         .into_any_element()

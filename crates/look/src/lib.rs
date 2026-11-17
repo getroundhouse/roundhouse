@@ -60,7 +60,7 @@ pub use clock::{
 pub use colors::NamedColor;
 pub use colors::{Colors, colors};
 pub use control_sizes::ControlSize;
-pub use controls::{Button, ButtonKind, Menu, Side, Sizing, button, glyph_button, icon_button};
+pub use controls::{Button, ButtonKind, MenuButton, Side, Sizing, button, glyph_button, icon_button};
 pub use copy::copy_button;
 pub use fields::{Field, FieldKind, field};
 pub use fit::{fit, pixels};
@@ -71,6 +71,9 @@ pub use hover::{HoldOpen, HoverCard, hover_card, hover_card_with_a_button};
 pub use icon_sizes::{IconSize, IconSizing};
 pub use keys::{Key, KeyKind, key};
 pub use mark::{Signal, Size, brand, chat_mark, mark};
+#[cfg(any(test, feature = "testing"))]
+pub use menus::shown_menu;
+pub use menus::{Menu, MenuRow, NoteKind, OpenMenu, RightClickMenu, menu, menu_row};
 pub use plan::{plan_colors, plan_texture};
 pub use raised::raised;
 pub use region::{InRegion, Region};

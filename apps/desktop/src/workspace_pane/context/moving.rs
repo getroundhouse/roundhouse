@@ -3,7 +3,6 @@
 //! chat's agent is at work, so this asks them only once it's refused.
 
 use client_core::ClientError;
-use gpui_kit::component::menu::{PopupMenu, PopupMenuItem};
 use gpui_kit::{Anchor, AnyElement, Context, IntoElement, PromptLevel, SharedString, WeakEntity, Window};
 use look::HoldOpen;
 use protocol::client::ErrorCode;
@@ -121,7 +120,7 @@ pub(super) fn button(moves: &Moves, hold: &HoldOpen) -> AnyElement {
         .off(moves.off)
         .menu(Anchor::BottomRight, move |menu, window, cx| {
             // Built as it opens, so this is when it starts to hold the card.
-            hold.while_open(&cx.entity(), window, cx);
+            hold.while_menu_open(&menu.open(), window, cx);
             menu_of(&moves, menu)
         })
         .into_any_element()
@@ -129,12 +128,12 @@ pub(super) fn button(moves: &Moves, hold: &HoldOpen) -> AnyElement {
 
 /// The accounts, with a check on the one the chat is on. One whose login doesn't work is off, since the hub would
 /// refuse it.
-fn menu_of(moves: &Moves, menu: PopupMenu) -> PopupMenu {
+fn menu_of(moves: &Moves, menu: look::Menu) -> look::Menu {
     moves.accounts.iter().fold(menu, |menu, choice| {
         let (pane, session, to) = (moves.pane.clone(), moves.session.clone(), choice.clone());
         let chosen = moves.on.as_ref() == Some(&choice.id);
-        menu.item(PopupMenuItem::new(choice.called.clone()).checked(chosen).disabled(!choice.works).on_click(
-            move |_, window, cx| {
+        menu.row(look::menu_row(choice.called.clone()).chosen(chosen).off(!choice.works).on_choose(
+            move |window, cx| {
                 if !chosen {
                     let to = to.clone();
                     let _ = pane.update(cx, |pane, cx| pane.move_chat(session.clone(), to, false, window, cx));

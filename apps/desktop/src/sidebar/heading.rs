@@ -1,7 +1,6 @@
 //! The heading over the projects: what the list is, the button that chooses its order, and Add project.
 
 use gpui_kit::assets::IconName as Lucide;
-use gpui_kit::component::menu::{PopupMenu, PopupMenuItem};
 use gpui_kit::component::{IconName, h_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
@@ -50,13 +49,13 @@ fn sort_button(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement {
     look::icon_button("sort-workspaces", look::ButtonKind::Faint, look::ControlSize::Small, Lucide::ArrowUpDown)
         .tooltip("Sort workspaces")
         .when(!app.sidebar.sort_menu_open, |button| button.shown_while_over(GROUP))
-        .menu(Anchor::TopRight, move |menu: PopupMenu, _: &mut Window, _| {
+        .menu(Anchor::TopRight, move |menu: look::Menu, _: &mut Window, _| {
             // A setting, which lasts once the app quits, and which the app draws again for when it changes.
             SORTS.into_iter().fold(menu.label("Sort by"), |menu, sort| {
-                let item = PopupMenuItem::new(sort.label()).checked(sort == current).on_click(move |_, _, cx| {
+                let row = look::menu_row(sort.label()).chosen(sort == current).on_choose(move |_, cx| {
                     crate::settings::change(cx, |settings| settings.sidebar_sort = sort);
                 });
-                menu.item(item)
+                menu.row(row)
             })
         })
         .on_open_change(move |open, _, cx| {

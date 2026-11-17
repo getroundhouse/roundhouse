@@ -1505,6 +1505,9 @@ impl PopupMenu {
                     h_flex()
                         .flex_row_dir(cx)
                         .flex_1()
+                        // So a row of the app's own is as wide as the menu,
+                        // and can cut itself short, rather than widening it.
+                        .min_w_0()
                         .min_h(item_height)
                         .items_center()
                         .gap_x(item_gap)

@@ -2,7 +2,6 @@
 //! Renew for a token, Sign in again for a sign-in, or both ways of connecting it again once it was disconnected; then
 //! Disconnect, while the hub holds a login for it. The menu is off with no hub to ask.
 
-use gpui_kit::component::menu::{PopupMenu, PopupMenuItem};
 use gpui_kit::{AnyElement, App, Context, SharedString, Window};
 use protocol::model::{GithubAccount, GithubLoginKind};
 
@@ -20,27 +19,27 @@ pub(super) fn menu(drawing: &Drawing<'_>, account: &GithubAccount, works: bool, 
     let default = drawing.is_default(account);
     let (kept, account) = (drawing.kept.clone(), account.clone());
     let id = SharedString::from(format!("git-more-{}", account.id));
-    account_row::menu(id, &name, !drawing.can_ask(cx), move |menu: PopupMenu, _, _| {
+    account_row::menu(id, &name, !drawing.can_ask(cx), move |menu: look::Menu, _, _| {
         let item = |label: &'static str, act: Act| {
             let (kept, account) = (kept.clone(), account.clone());
-            PopupMenuItem::new(label).on_click(move |_, window, cx| {
+            look::menu_row(label).on_choose(move |window, cx| {
                 kept.update(cx, |kept, cx| act(kept, &account, default, window, cx));
             })
         };
-        let menu = if default { menu } else { menu.item(item("Make default", make_default).disabled(!works)) };
+        let menu = if default { menu } else { menu.row(item("Make default", make_default).off(!works)) };
         let menu = match account.held_login.map(|held| held.how) {
-            Some(GithubLoginKind::SignIn) => menu.item(item("Sign in again", sign_in_again)),
+            Some(GithubLoginKind::SignIn) => menu.row(item("Sign in again", sign_in_again)),
             // An app's installation has a menu of its own, in `app_menu`, so one here is from a hub whose record says
             // it's no installation, and a token can renew it, as it can one connected a way this app doesn't know.
             Some(GithubLoginKind::Token | GithubLoginKind::App | GithubLoginKind::Unknown) => {
-                menu.item(item("Renew", renew))
+                menu.row(item("Renew", renew))
             }
-            None => menu.item(item("Connect again", renew)).item(item("Sign in again", sign_in_again)),
+            None => menu.row(item("Connect again", renew)).row(item("Sign in again", sign_in_again)),
         };
         if account.held_login.is_none() {
             return menu;
         }
-        menu.item(item("Disconnect", disconnect))
+        menu.row(item("Disconnect", disconnect))
     })
 }
 

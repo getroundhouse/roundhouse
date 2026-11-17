@@ -168,6 +168,14 @@ impl HoldOpen {
             cx.observe_release_in(view, window, move |shown, _, window, cx| shown.let_go(id, window, cx)).detach();
         });
     }
+
+    /// Holds the card open while `menu` is, as [`HoldOpen::while_open`] does, such as a menu opened from a button on
+    /// the card, which is drawn outside it.
+    pub fn while_menu_open(&self, menu: &crate::OpenMenu, window: &Window, cx: &mut App) {
+        if let Some(menu) = menu.kit() {
+            self.while_open(&menu, window, cx);
+        }
+    }
 }
 
 /// Whether a card shows, and what decides when it next does or goes, kept from one drawing to the next.

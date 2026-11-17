@@ -102,9 +102,24 @@ The pieces screens are built from, on the foundations in `look.md`: what each is
 ## Menus
 
 - **A menu's rows are as tall as a large control, with room to read and to aim at,** as the owner decided, from pictures of four, since menus are used all over and were among the weakest things to look at. A row's icon is a large icon, in the muted text's colour, then the row's words, in body text, and its key or a note faint at its end. A label over some rows is as tall as a row, in the muted text's colour. A thin line separates groups of rows. *Unconfirmed:* the room at each end of a row, 12px, and between its icon and its words, 8px.
+- **A row has an icon where it tells that row from the others in its menu,** such as Rename's pencil beside Archive's box, or what a row names, such as a hub's machine. Where every row does the same, such as closed chats', which each reopen a chat, none has one, since the same icon on each would tell none apart, and what the menu is for is said by what opens it. *Unconfirmed.*
 - **A row that's chosen has a check at its very end, after its key or its note, and only that row makes room for it,** as the owner decided, so the rows that can't be chosen, such as the hub switcher's Pair and Connect, start where the rest do, and a note, such as a hub's address, sits at the menu's edge until its row is chosen. The check is a large icon, in the text's colour.
 - **A menu is what opens over the rest, with a card's corners, the one thin edge and the one shadow,** and its rows sit 4px in from its edge, with a control's corners, so they follow the menu's. *Unconfirmed.*
 - **The row under the pointer, or chosen with the keyboard, is washed as a borderless button is,** `text` at 6%, as the owner decided, so it shows on the menu as a button's does on whatever it's on, where the grey a step above the menu barely did.
+- **A note at a row's end says something about what the row names, in a detail's text, and its kind says its colour:** faint for a detail, such as a hub's address or how long ago a chat was closed, the text's colour and stronger for how many need a look, and the error's for what went wrong. A row's words are cut short where they're long, so its note stays. `look::NoteKind` holds the kinds. *Unconfirmed.*
+- **Every menu is filled with `look`'s rows,** so none draws a row of its own, such as the hub switcher's and closed chats' once did. *Unconfirmed.*
+
+**Every kind of note at a menu's row's end, by its name.** Each is a kind in `look::NoteKind`. *Unconfirmed.*
+
+| Name | For |
+|---|---|
+| `Detail` | Something to know about what the row names, faint, such as a hub's address or how long ago a chat was closed |
+| `Count` | How many need a look, in the text's colour and stronger, such as the workspaces on another hub |
+| `Failure` | What went wrong, in the error's colour, such as a hub that can't be reached |
+
+**Every kind of row: an icon and a key, an icon, one that's off, a label over rows to choose one of, the one chosen checked, and a note; a shorter menu with the pointer on Rename…; and each kind of note.** *Unconfirmed.*
+
+![Every kind of menu row](screens/menu-rows.png)
 
 ## The status mark
 

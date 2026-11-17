@@ -8,7 +8,6 @@ use std::path::PathBuf;
 use gpui_kit::assets::IconName as Lucide;
 use gpui_kit::base::GlobalState;
 use gpui_kit::component::input::{Textarea, TextareaState};
-use gpui_kit::component::menu::PopupMenuItem;
 use gpui_kit::component::{IconName, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
@@ -125,14 +124,14 @@ where
         .tooltip(PLUS_LABEL)
         .menu(Anchor::BottomLeft, move |menu, _, _| {
             let (this, attach) = (this.clone(), attach.clone());
-            let files = PopupMenuItem::new("Attach files…").icon(Lucide::Paperclip).on_click(move |_, _, cx| {
+            let files = look::menu_row("Attach files…").icon(Lucide::Paperclip).on_choose(move |_, cx| {
                 let _ = this.update(cx, |_, cx| attached::pick(cx, attach.clone()));
             });
-            let planning = PopupMenuItem::new(PLAN_LABEL)
+            let planning = look::menu_row(PLAN_LABEL)
                 .icon(Lucide::Map)
-                .checked(plan == Plan::On)
-                .disabled(plan == Plan::Unavailable)
-                .action(Box::new(TogglePlanMode));
-            menu.action_context(field.clone()).item(files).item(planning)
+                .chosen(plan == Plan::On)
+                .off(plan == Plan::Unavailable)
+                .key(Box::new(TogglePlanMode));
+            menu.keys_from(field.clone()).row(files).row(planning)
         })
 }
