@@ -202,12 +202,15 @@ fn parse_value(value: &Value, subagents: &Subagents) -> Parsed {
         "control_response" => control_reply(value),
         "command_lifecycle" => prompt::command_lifecycle(value),
         "rate_limit_event" => limits::rate_limit_event(value),
+        // How long a call has been running, every few seconds while it runs. The call's start and result say
+        // everything the log keeps, and a client times a running call itself.
+        "tool_progress" => Parsed::Drop,
         _ => other(kind),
     }
 }
 
-/// A line of `kind` with no normalized form, which isn't a subagent's. Not every line's `parent_tool_use_id` names a
-/// subagent: a `tool_progress` line's names the call that's making progress.
+/// A line of `kind` with no normalized form, which isn't a subagent's, since not every line's `parent_tool_use_id`
+/// names a subagent.
 pub(super) fn other(kind: &str) -> Parsed {
     Parsed::Event(EventBody::AgentOther { kind: kind.to_string(), subagent: None })
 }
@@ -270,9 +273,12 @@ fn system(value: &Value) -> Parsed {
             },
         }),
         "background_tasks_changed" => tasks::listed(value),
-        "status" => match str_of(value, "permissionMode") {
-            Some(mode) => Parsed::Event(EventBody::AgentMode { permission_mode: super::super::mode::mode(mode) }),
-            None => other("system/status"),
+        "status" => match (str_of(value, "permissionMode"), str_of(value, "status")) {
+            (Some(mode), _) => Parsed::Event(EventBody::AgentMode { permission_mode: super::super::mode::mode(mode) }),
+            // Sent as each request to the model starts, which the run's state already says is under way. Noting
+            // which background tasks the request takes in reads the line before this.
+            (None, Some("requesting")) => Parsed::Drop,
+            (None, _) => other("system/status"),
         },
         // A running token count for a spinner. Several arrive per second while thinking.
         "thinking_tokens" => Parsed::Drop,

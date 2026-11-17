@@ -112,13 +112,21 @@ async fn dispatch(
                 )
                 .await;
         }
-        // The completed command carries its aggregate output. These transient chunks have no separate transcript
-        // content; recording each as AgentOther can put thousands of invisible events between a call and its result.
         // Idle can precede turn/completed. Only the normalized outcome makes Roundhouse idle.
         "thread/status/changed"
         | "thread/started"
+        // What the finished item says whole: a command's output, a reasoning summary's parts, and the turn's diff,
+        // which its file changes and the worktree hold. Each would put an event that draws nothing in the log for
+        // every chunk, thousands between a call and its result.
         | "item/reasoning/textDelta"
-        | "item/commandExecution/outputDelta" => {}
+        | "item/commandExecution/outputDelta"
+        | "item/reasoning/summaryPartAdded"
+        | "turn/diff/updated"
+        // State Codex keeps for its own interfaces: which of a thread's turns its app has read, whether its remote
+        // control is connected, and how its moderation classified the turn.
+        | "thread/readState/changed"
+        | "remoteControl/status/changed"
+        | "turn/moderationMetadata" => {}
         _ => {
             shared
                 .event(EventBody::AgentOther { kind: method.into(), subagent: scope.parent.clone() }, Some(raw))

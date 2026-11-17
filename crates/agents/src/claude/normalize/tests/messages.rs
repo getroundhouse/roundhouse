@@ -340,10 +340,22 @@ fn the_advisor_s_result_has_its_advice_only_when_it_can_be_read() {
 }
 
 #[test]
+fn heartbeats_are_not_kept_and_a_status_not_understood_is() {
+    // How long a call has run, and that a request to the model has started, which nothing in the log needs.
+    let progress = json!({"type":"tool_progress","tool_use_id":"t1","tool_name":"Bash","elapsed_time_seconds":3});
+    let requesting = json!({"type":"system","subtype":"status","status":"requesting","session_id":"s"});
+    let unknown = json!({"type":"system","subtype":"status","status":"thinking_harder","session_id":"s"});
+
+    assert_eq!(parse_line(&progress.to_string()), Parsed::Drop);
+    assert_eq!(parse_line(&requesting.to_string()), Parsed::Drop);
+    assert!(
+        matches!(parse_line(&unknown.to_string()), Parsed::Event(EventBody::AgentOther { kind, .. }) if kind == "system/status")
+    );
+}
+
+#[test]
 fn only_a_line_from_a_subagent_names_it() {
     let note = json!({"type":"user","message":{"content":[]},"isSynthetic":true,"parent_tool_use_id":"agent"});
-    // About a call, the agent's own or one starting a subagent, which `parent_tool_use_id` names.
-    let progress = json!({"type":"tool_progress","tool_use_id":"t1","tool_name":"Bash","parent_tool_use_id":"bash"});
     // About a subagent, but the agent's own: it names the call in `tool_use_id`.
     let started = json!({"type":"system","subtype":"task_started","tool_use_id":"agent","parent_tool_use_id":null});
 
@@ -355,7 +367,6 @@ fn only_a_line_from_a_subagent_names_it() {
     };
 
     assert_eq!(subagent(note).as_deref(), Some("agent"));
-    assert_eq!(subagent(progress), None);
     assert_eq!(subagent(started), None);
 }
 

@@ -50,7 +50,7 @@ Generate it from the CLI being qualified: fields and defaults can change between
 
 ### Code Mode and commands
 
-`item/commandExecution/outputDelta` carries transient fragments of a command's output. Roundhouse records the completed item's aggregate output rather than each fragment as an untranslated event. Other, unrecognized notifications still keep their raw lines for later normalization.
+`item/commandExecution/outputDelta` carries transient fragments of a command's output. Roundhouse records the completed item's aggregate output rather than each fragment as an untranslated event. It drops `item/reasoning/summaryPartAdded` and `turn/diff/updated` the same way, since the finished reasoning item and the turn's file changes say them whole, and `thread/readState/changed`, `remoteControl/status/changed` and `turn/moderationMetadata`, which say what Codex's own interfaces read. Other, unrecognized notifications still keep their raw lines for later normalization.
 
 The standalone distribution uses its sibling `codex-code-mode-host` executable for Code Mode. A sandbox that permitted only the `codex` executable made the CLI report that the host couldn't be found. Permitting reads of that installed release's directory let commands work, while the rest of the person's home stayed inaccessible. A worker needs the distribution's supporting executables, not just a copied `codex` binary.
 
