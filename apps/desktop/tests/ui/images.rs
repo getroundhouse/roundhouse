@@ -1,16 +1,20 @@
 //! Images in the workspace's file tab: one opened from All files, drawn with what kind it is and how big, and one the
-//! workspace changes, as it was and as it is, side by side, one side at a time, or as what changed.
+//! workspace changes, as it was and as it is, side by side, one side at a time, or as what changed. The worker reads
+//! each side, and how the window shows them is the app's, so those open on a fake hub holding made-up images, with no
+//! worker to wait for. Only reading an image again once it's changed needs the real one.
 
 #![cfg(test)]
 
 use std::io::Cursor;
 use std::path::PathBuf;
 
+use client_core::fake_hub::World;
 use desktop::image_diff::{Comparison, Shown, comparison};
 use gpui_kit::{AppContext as _, TestAppContext};
-use protocol::attachment::describe_size;
+use protocol::attachment::{AttachmentBytes, MediaType, describe_size};
+use protocol::model::{CommitId, FileContents, GitDiff, SessionStatus, WorktreeFiles};
 
-use crate::support::{Diff, Stack, Ui, git};
+use crate::support::{Diff, FakeHub, Stack, Ui, git};
 
 /// A PNG `width` by `height` pixels, all one colour.
 fn png(width: u32, height: u32) -> Vec<u8> {
@@ -63,12 +67,64 @@ fn compare(ui: &mut Ui<'_>, diff: &Diff, path: &str) -> (String, String) {
     sides(ui, diff)
 }
 
-/// A workspace whose repository has `shot.png`, 30 by 20, which the workspace makes 40 by 20 with [`MARKS`] in it, and
-/// `gone.png`, which it removes, and which adds `new.png`, with its worktree, and the images before, after and added.
-fn changing_an_image<'a>(cx: &'a mut TestAppContext, stack: &Stack) -> (Ui<'a>, Diff, PathBuf, [Vec<u8>; 3]) {
+/// What git says of the change [`changing_an_image`] makes, which only says each image differs.
+const PATCH: &str = "diff --git a/gone.png b/gone.png
+deleted file mode 100644
+index 1a2b3c4..0000000
+Binary files a/gone.png and /dev/null differ
+diff --git a/new.png b/new.png
+new file mode 100644
+index 0000000..5d6e7f8
+Binary files /dev/null and b/new.png differ
+diff --git a/shot.png b/shot.png
+index 9a8b7c6..5e4d3c2 100644
+Binary files a/shot.png and b/shot.png differ
+";
+
+/// An image, as the worker reads one.
+fn read_as_image(data: &[u8]) -> FileContents {
+    FileContents::Image { media_type: MediaType::Png, data: AttachmentBytes::new(data.to_vec()) }
+}
+
+/// The window on a fake hub holding `world`, once it's put one workspace in it, showing, with its chat, with nothing in
+/// it. The hub goes with the test, so it's returned to be kept.
+fn in_a_workspace(
+    cx: &mut TestAppContext,
+    world: impl FnOnce(&mut World, &protocol::model::WorkspaceId),
+) -> (FakeHub, Ui<'_>) {
+    let mut made = World::default();
+    let repo = made.repo("signals");
+    let workspace = made.workspace(&repo, "ledger");
+    made.chat(&workspace, SessionStatus::Idle, Vec::new());
+    world(&mut made, &workspace);
+    let fake = FakeHub::holding(made);
+    let mut ui = Ui::open_on(cx, &fake);
+    ui.wait("the workspace", |ui| ui.view().selected.as_ref() == Some(&workspace) && ui.pane().is_some());
+    (fake, ui)
+}
+
+/// The window on a fake hub holding a workspace whose base has `shot.png`, 30 by 20, which the workspace makes 40 by
+/// 20 with [`MARKS`] in it, and `gone.png`, which it removes, and which adds `new.png`, with its sidebar of changes
+/// open, and the images before, after and added.
+fn changing_an_image(cx: &mut TestAppContext) -> (FakeHub, Ui<'_>, Diff, [Vec<u8>; 3]) {
     let (before, after, added) = (png(30, 20), marked_png(40, 20, &MARKS), png(10, 10));
+    let (fake, mut ui) = in_a_workspace(cx, |world, workspace| {
+        let base_commit = Some(CommitId::from("3f4c19c8a2d1e0b7f6a5c4d3e2f1a0b9c8d7e6f5"));
+        world.diffs.insert(workspace.clone(), GitDiff { base_commit, patch: PATCH.to_string(), truncated: false });
+        world.base_files.insert("shot.png".to_string(), read_as_image(&before));
+        world.base_files.insert("gone.png".to_string(), read_as_image(&png(20, 10)));
+        world.worktree_files.insert("shot.png".to_string(), read_as_image(&after));
+        world.worktree_files.insert("new.png".to_string(), read_as_image(&added));
+    });
+    let diff = ui.open_changes();
+    (fake, ui, diff, [before, after, added])
+}
+
+/// A workspace whose repository has `shot.png`, 30 by 20, which the workspace makes 40 by 20 with [`MARKS`] in it, with
+/// its worktree, and the image before.
+fn changing_an_image_on_disk<'a>(cx: &'a mut TestAppContext, stack: &Stack) -> (Ui<'a>, Diff, PathBuf, Vec<u8>) {
+    let (before, after) = (png(30, 20), marked_png(40, 20, &MARKS));
     std::fs::write(stack.repo().join("shot.png"), &before).unwrap();
-    std::fs::write(stack.repo().join("gone.png"), png(20, 10)).unwrap();
     git(&stack.repo(), &["add", "."]);
     git(&stack.repo(), &["commit", "-qm", "shot"]);
     stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
@@ -77,22 +133,19 @@ fn changing_an_image<'a>(cx: &'a mut TestAppContext, stack: &Stack) -> (Ui<'a>, 
     let workspace = ui.new_workspace();
     let worktree = ui.worktree(&workspace);
     std::fs::write(worktree.join("shot.png"), &after).unwrap();
-    std::fs::write(worktree.join("new.png"), &added).unwrap();
-    std::fs::remove_file(worktree.join("gone.png")).unwrap();
     let diff = ui.open_changes();
-    (ui, diff, worktree, [before, after, added])
+    (ui, diff, worktree, before)
 }
 
-/// What it is goes by its bytes, so a screenshot saved without `.png` is still drawn.
+/// What it is goes by its bytes, which is how the worker reads it, as its own tests pin, so a screenshot saved without
+/// `.png` is still drawn.
 #[gpui_kit::test]
 fn an_image_opened_from_all_files_says_what_kind_it_is_and_how_big(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
-    let mut ui = Ui::open(cx, &stack);
-    ui.wait("the repository", |ui| ui.view().records().repos().len() == 1);
-    let workspace = ui.new_workspace();
     let shot = png(30, 20);
-    std::fs::write(ui.worktree(&workspace).join("shot"), &shot).unwrap();
+    let (_hub, mut ui) = in_a_workspace(cx, |world, _| {
+        world.worktree = WorktreeFiles { paths: vec!["shot".to_string()], folders: Vec::new(), truncated: false };
+        world.worktree_files.insert("shot".to_string(), read_as_image(&shot));
+    });
     ui.click("sidebar-tab-all-files");
     ui.wait("All files to list it", |ui| ui.has("all-file-shot"));
     let viewer = ui.cx.read_entity(&ui.pane().unwrap(), |p, _| p.diff.as_ref().map(|d| d.viewer.clone())).unwrap();
@@ -106,8 +159,7 @@ fn an_image_opened_from_all_files_says_what_kind_it_is_and_how_big(cx: &mut Test
 /// Before is as the diff's base has it, and after as the worktree does.
 #[gpui_kit::test]
 fn a_changed_image_shows_as_it_was_and_as_it_is_side_by_side_to_start_with(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let (mut ui, diff, _, [before, after, _]) = changing_an_image(cx, &stack);
+    let (_hub, mut ui, diff, [before, after, _]) = changing_an_image(cx);
 
     let shown = compare(&mut ui, &diff, "shot.png");
 
@@ -121,8 +173,7 @@ fn a_changed_image_shows_as_it_was_and_as_it_is_side_by_side_to_start_with(cx: &
 /// Before and After in its bar, a click on it, and Space each flip it, and the strip under the bar names the side shown.
 #[gpui_kit::test]
 fn a_changed_image_flips_between_its_sides_in_one_place(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let (mut ui, diff, _, [before, after, _]) = changing_an_image(cx, &stack);
+    let (_hub, mut ui, diff, [before, after, _]) = changing_an_image(cx);
     compare(&mut ui, &diff, "shot.png");
     let image = ui.cx.read_entity(&diff.file, |f, _| f.image.clone());
     let shown = |ui: &Ui<'_>| ui.cx.read_entity(&image, |image, _| image.shown());
@@ -146,8 +197,7 @@ fn a_changed_image_flips_between_its_sides_in_one_place(cx: &mut TestAppContext)
 /// has aren't counted, and the strip says how big each is.
 #[gpui_kit::test]
 fn a_changed_image_shows_what_changed_pixel_for_pixel(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let (mut ui, diff, _, [before, after, _]) = changing_an_image(cx, &stack);
+    let (_hub, mut ui, diff, [before, after, _]) = changing_an_image(cx);
     compare(&mut ui, &diff, "shot.png");
     let image = ui.cx.read_entity(&diff.file, |f, _| f.image.clone());
     assert_eq!(ui.cx.read_entity(&image, |image, _| image.difference()), None, "not compared until it's chosen");
@@ -165,8 +215,7 @@ fn a_changed_image_shows_what_changed_pixel_for_pixel(cx: &mut TestAppContext) {
 
 #[gpui_kit::test]
 fn an_added_image_has_only_the_side_after(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let (mut ui, diff, _, [_, _, added]) = changing_an_image(cx, &stack);
+    let (_hub, mut ui, diff, [_, _, added]) = changing_an_image(cx);
 
     let shown = compare(&mut ui, &diff, "new.png");
 
@@ -177,8 +226,7 @@ fn an_added_image_has_only_the_side_after(cx: &mut TestAppContext) {
 
 #[gpui_kit::test]
 fn a_removed_image_has_only_the_side_before(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let (mut ui, diff, _, _) = changing_an_image(cx, &stack);
+    let (_hub, mut ui, diff, _) = changing_an_image(cx);
 
     let shown = compare(&mut ui, &diff, "gone.png");
 
@@ -190,8 +238,7 @@ fn a_removed_image_has_only_the_side_before(cx: &mut TestAppContext) {
 /// So a file opened from Changes shows as it is now first, as every other comparison does.
 #[gpui_kit::test]
 fn a_file_opened_while_before_is_chosen_starts_at_after(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let (mut ui, diff, _, _) = changing_an_image(cx, &stack);
+    let (_hub, mut ui, diff, _) = changing_an_image(cx);
     compare(&mut ui, &diff, "shot.png");
     ui.click("image-before");
     let image = ui.cx.read_entity(&diff.file, |f, _| f.image.clone());
@@ -208,8 +255,7 @@ fn a_file_opened_while_before_is_chosen_starts_at_after(cx: &mut TestAppContext)
 /// while the window is being updated, which GPUI leaves out of letting go of an image then.
 #[gpui_kit::test]
 fn a_changed_image_lets_go_of_its_pictures_once_its_tab_closes(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let (mut ui, diff, _, _) = changing_an_image(cx, &stack);
+    let (_hub, mut ui, diff, _) = changing_an_image(cx);
     compare(&mut ui, &diff, "shot.png");
     ui.click("image-difference");
     let image = ui.cx.read_entity(&diff.file, |f, _| f.image.clone());
@@ -235,7 +281,7 @@ fn a_changed_image_lets_go_of_its_pictures_once_its_tab_closes(cx: &mut TestAppC
 #[gpui_kit::test]
 fn the_image_after_is_read_again_with_the_diff(cx: &mut TestAppContext) {
     let stack = Stack::new();
-    let (mut ui, diff, worktree, [before, ..]) = changing_an_image(cx, &stack);
+    let (mut ui, diff, worktree, before) = changing_an_image_on_disk(cx, &stack);
     compare(&mut ui, &diff, "shot.png");
     let again = png(50, 20);
     std::fs::write(worktree.join("shot.png"), &again).unwrap();

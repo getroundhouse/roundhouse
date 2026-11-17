@@ -5,17 +5,20 @@
 use std::io::Cursor;
 
 use client_core::FileToSend;
+use client_core::fake_hub::World;
+use client_core::fake_hub::events::{finished_turn, taken, text};
 use gpui_kit::component::TITLE_BAR_HEIGHT;
 use gpui_kit::{
     AppContext as _, Bounds, ClipboardEntry, ClipboardItem, ElementId, ExternalPaths, Image, ImageFormat, SharedString,
     TestAppContext, point, px, size,
 };
-use protocol::attachment::MediaType;
+use protocol::attachment::{Attachment, MediaType};
 use protocol::event::EventBody;
+use protocol::model::{AttachmentId, Seq, SessionStatus};
 use protocol::prompt::Prompt;
 use transcript::TranscriptEvent;
 
-use crate::support::{Stack, Ui};
+use crate::support::{FakeHub, Stack, Ui};
 
 /// A real PNG, so the app can read its size, as it does for any image it shows.
 fn png() -> Vec<u8> {
@@ -40,8 +43,9 @@ fn open_a_chat<'a>(cx: &'a mut TestAppContext, stack: &Stack) -> Ui<'a> {
     ui
 }
 
+/// A TIFF, as some apps copy a screenshot, goes as a PNG, since the agent can't be given a TIFF.
 #[gpui_kit::test]
-fn a_pasted_image_goes_with_the_prompt_and_the_agent_sees_it(cx: &mut TestAppContext) {
+fn a_pasted_image_goes_with_the_prompt_and_the_agent_sees_it_and_a_tiff_goes_as_a_png(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let mut ui = open_a_chat(cx, &stack);
 
@@ -61,19 +65,15 @@ fn a_pasted_image_goes_with_the_prompt_and_the_agent_sees_it(cx: &mut TestAppCon
     });
     let carried = carried.expect("the prompt carries the image");
     assert_eq!(stack.client().attachment_read(&ui.active_chat(), &carried.id).unwrap(), png());
-}
-
-/// As some apps copy a screenshot. The agent can't be given a TIFF, so it goes as a PNG.
-#[gpui_kit::test]
-fn a_pasted_tiff_goes_as_a_png(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = open_a_chat(cx, &stack);
 
     ui.paste(ClipboardItem::from(Image::from_bytes(ImageFormat::Tiff, encoded(image::ImageFormat::Tiff))));
-    ui.wait("the image to be attached", |ui| ui.attached() == ["Pasted image.png"]);
+    ui.wait("the TIFF to be attached", |ui| ui.attached() == ["Pasted image.png"]);
     ui.input("attached");
     ui.press("enter");
-    ui.wait_idle_with("the agent to see a PNG", |text| text.starts_with("attached: image/png "));
+    // The first turn's words start the same, so it's the second turn's that are waited for, after them.
+    ui.wait_idle_with("the agent to see the TIFF as a PNG", |text| {
+        text.strip_prefix(said.as_str()).is_some_and(|second| second.starts_with("attached: image/png "))
+    });
 }
 
 #[gpui_kit::test]
@@ -117,29 +117,19 @@ fn copied_files_of_any_kind_attach_by_name_and_a_folder_says_why_it_cant(cx: &mu
     ui.wait_idle_with("the agent to see the files", |text| text == said);
 }
 
+/// Even when the file comes once someone has switched chats, since a file can take a while to read.
 #[gpui_kit::test]
-fn attachments_stay_with_their_own_chat(cx: &mut TestAppContext) {
+fn attachments_stay_with_their_own_chat_even_read_after_switching_chats(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let mut ui = open_a_chat(cx, &stack);
     let first = ui.active_chat();
     ui.paste(ClipboardItem::from(Image::from_bytes(ImageFormat::Png, png())));
     ui.wait("the image to be attached", |ui| ui.attached().len() == 1);
 
-    ui.new_chat();
+    let second = ui.new_chat();
     assert!(ui.attached().is_empty(), "a new chat starts with nothing attached");
     ui.show_chat(&first);
-
     ui.wait("the first chat's image to come back", |ui| ui.attached() == ["Pasted image.png"]);
-}
-
-/// A file can take a while to read, and someone can switch chats meanwhile.
-#[gpui_kit::test]
-fn a_file_read_after_switching_chats_goes_to_the_chat_it_came_to(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = open_a_chat(cx, &stack);
-    let first = ui.active_chat();
-    let second = ui.new_chat();
-    ui.show_chat(&first);
 
     let pane = ui.pane().unwrap();
     let pasted = ClipboardItem::from(Image::from_bytes(ImageFormat::Png, png()));
@@ -148,10 +138,10 @@ fn a_file_read_after_switching_chats_goes_to_the_chat_it_came_to(cx: &mut TestAp
         p.activate(second.clone(), cx);
     });
     ui.frame();
-
-    assert!(ui.attached().is_empty(), "it isn't put in the chat showing now");
+    assert!(ui.attached().is_empty(), "the image read after switching isn't put in the chat showing now");
     ui.show_chat(&first);
-    ui.wait("the image in the chat it was pasted in", |ui| ui.attached() == ["Pasted image.png"]);
+    ui.wait("the image read after switching, in the chat it was pasted in", |ui| ui.attached().len() == 2);
+    assert_eq!(ui.attached(), ["Pasted image.png", "Pasted image.png"]);
 }
 
 #[gpui_kit::test]
@@ -188,23 +178,43 @@ fn a_prompt_that_couldnt_be_sent_comes_back_to_its_own_chat(cx: &mut TestAppCont
 }
 
 /// Over the window rather than in the chat, so nothing in the chat moves, and it shows even when its prompt is at the
-/// bottom of the window, as one jumped to from the outline is.
+/// bottom of the window, as one jumped to from the outline is. What a prompt carried is the hub's, so this opens on a
+/// fake hub holding a chat whose prompt carried an image, with no worker or agent to wait for.
 #[gpui_kit::test]
 fn a_prompts_image_opens_over_the_window_as_big_as_fits_and_a_click_or_escape_closes_it(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = open_a_chat(cx, &stack);
     // Wider than any window, so it has to shrink to fit.
-    ui.paste(ClipboardItem::from(Image::from_bytes(ImageFormat::Png, sized(4000, 100, image::ImageFormat::Png))));
-    ui.wait("the image to be attached", |ui| ui.attached().len() == 1);
-    ui.input("attached");
-    ui.press("enter");
-    // So nothing drawn after this moves the chat.
-    ui.wait_idle_with("the agent to see the image", |text| text.starts_with("attached: image/png"));
-    let carried = ui.events().into_iter().find_map(|e| match e.body {
-        EventBody::UserPrompt { prompt: Prompt { files: attachments, .. }, .. } => attachments.into_iter().next(),
-        _ => None,
+    let shot = sized(4000, 100, image::ImageFormat::Png);
+    let size_bytes = u64::try_from(shot.len()).unwrap();
+    let carried = Attachment {
+        id: AttachmentId::from("shot-1"),
+        name: "shot.png".into(),
+        media_type: MediaType::Png,
+        size_bytes,
+    };
+    let mut world = World::default();
+    world.attachments.insert(carried.id.clone(), shot);
+    let repo = world.repo("signals");
+    let workspace = world.workspace(&repo, "ledger");
+    let prompt = EventBody::UserPrompt {
+        client_msg_id: None,
+        prompt: Prompt::carrying("Look.".to_string(), vec![carried.clone()]),
+    };
+    world.chat(
+        &workspace,
+        SessionStatus::Idle,
+        vec![prompt, taken(Seq::new(1)), text("seen", "Seen."), finished_turn(3, 0.01)],
+    );
+    let fake = FakeHub::holding(world);
+    let mut ui = Ui::open_on(cx, &fake);
+    let thumbnail = ElementId::Name(format!("picture/attachment/{}", carried.id).into());
+    // Drawn from the hub's copy, as wide as a thumbnail goes, since the image is forty times as wide as it's tall, and
+    // until then as wide as a thumbnail's guessed to be, which is under twice its height.
+    ui.wait("the image's thumbnail", |ui| {
+        ui.transcript().is_some() && ui.has(thumbnail.clone()) && {
+            let drawn = ui.bounds(thumbnail.clone());
+            drawn.size.width > drawn.size.height * 2.
+        }
     });
-    let thumbnail = ElementId::Name(format!("picture/attachment/{}", carried.unwrap().id).into());
     let before = ui.bounds(thumbnail.clone());
 
     ui.click(thumbnail.clone());

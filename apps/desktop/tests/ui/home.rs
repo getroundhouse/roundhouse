@@ -1,14 +1,23 @@
-//! Home, which lists every workspace in place of the one showing.
+//! Home, which lists every workspace in place of the one showing. What it shows of the workspaces the hub holds, and
+//! where the keys go, is the app's, so those open on a fake hub, with no worker to wait for. Archiving and restoring
+//! need the real one.
 
 #![cfg(test)]
 
+use client_core::fake_hub::World;
 use gpui_kit::{SharedString, TestAppContext};
 use protocol::model::{WorkspaceId, WorkspaceStatus};
 
-use crate::support::{Held, Stack, Ui, home_row};
+use crate::support::{FakeHub, Held, Stack, Ui, home_row, open_on_the_world, with_a_chat};
 
 fn has(ui: &Ui, id: &WorkspaceId, status: WorkspaceStatus) -> bool {
     ui.view().records().workspaces().iter().any(|w| &w.id == id && w.status == status)
+}
+
+/// Opens Home over the workspace showing.
+fn to_home(ui: &mut Ui) {
+    ui.click("home");
+    ui.wait("Home", |ui| ui.has("home-page"));
 }
 
 /// A window with a repository and two workspaces, the second showing, and Home opened over it. Returns them.
@@ -16,15 +25,27 @@ fn open_home<'a>(cx: &'a mut TestAppContext, stack: &Stack) -> (Ui<'a>, Workspac
     let mut ui = Ui::open_with_a_repository(cx, stack);
     let first = ui.new_workspace();
     let second = ui.new_workspace();
-    ui.click("home");
-    ui.wait("Home", |ui| ui.has("home-page"));
+    to_home(&mut ui);
     (ui, first, second)
+}
+
+/// [`open_home`] on a fake hub, which goes with the test, so it's returned to be kept, with the workspace that isn't
+/// showing first.
+fn open_home_on_a_fake_hub(cx: &mut TestAppContext) -> (FakeHub, Ui<'_>, WorkspaceId, WorkspaceId) {
+    let mut world = World::default();
+    let repo = world.repo("signals");
+    let made = [with_a_chat(&mut world, &repo, "ledger"), with_a_chat(&mut world, &repo, "points")];
+    let (fake, mut ui) = open_on_the_world(cx, world);
+    ui.wait("a workspace", |ui| ui.view().selected.is_some() && ui.pane().is_some());
+    let showing = ui.view().selected.clone().unwrap();
+    let first = made.into_iter().find(|w| *w != showing).unwrap();
+    to_home(&mut ui);
+    (fake, ui, first, showing)
 }
 
 #[gpui_kit::test]
 fn home_shows_in_place_of_the_workspace_until_one_is_picked(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let (mut ui, first, second) = open_home(cx, &stack);
+    let (_hub, mut ui, first, second) = open_home_on_a_fake_hub(cx);
 
     assert!(!ui.has("workspace-title"), "the workspace under it is hidden");
     assert!(ui.has(home_row(&first)) && ui.has(home_row(&second)));
@@ -36,8 +57,7 @@ fn home_shows_in_place_of_the_workspace_until_one_is_picked(cx: &mut TestAppCont
 
 #[gpui_kit::test]
 fn the_list_narrows_to_what_the_search_matches_as_its_typed(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let (mut ui, first, second) = open_home(cx, &stack);
+    let (_hub, mut ui, first, second) = open_home_on_a_fake_hub(cx);
     let branch = ui.view().records().workspaces().iter().find(|w| w.id == first).unwrap().branch.clone();
 
     // Home's search has the keys, since the composer under it is hidden.
@@ -49,8 +69,7 @@ fn the_list_narrows_to_what_the_search_matches_as_its_typed(cx: &mut TestAppCont
 
 #[gpui_kit::test]
 fn the_workspaces_keys_do_nothing_while_home_hides_it(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let (mut ui, _, _) = open_home(cx, &stack);
+    let (_hub, mut ui, _, _) = open_home_on_a_fake_hub(cx);
     assert!(ui.changes_open(), "it starts open");
 
     ui.press("secondary-shift-d");

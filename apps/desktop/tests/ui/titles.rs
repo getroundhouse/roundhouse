@@ -4,10 +4,13 @@
 
 use std::time::Duration;
 
+use client_core::fake_hub::World;
+use client_core::fake_hub::events::user_prompt;
 use gpui_kit::test::TestWindowExt as _;
 use gpui_kit::{AppContext as _, SharedString, TestAppContext};
+use protocol::model::{SessionStatus, Title, TitleSource};
 
-use crate::support::{Stack, Ui};
+use crate::support::{Stack, Ui, open_on_the_world};
 
 /// Right-clicks something and picks Rename…, wherever it is in the menu.
 fn rename(ui: &mut Ui, id: &str) {
@@ -125,13 +128,25 @@ fn a_new_title_is_asked_for_from_the_header_and_the_rows_menu(cx: &mut TestAppCo
     ui.wait("the title again", |ui| ui.shows_label(&row, "Fix and test the login"));
     let stored = client.workspace_list(false).unwrap().into_iter().find(|w| w.id == workspace).unwrap();
     assert_eq!(stored.title.as_deref(), Some("Fix and test the login"));
+}
 
-    // A title as long as one can be gives way to the button, rather than pushing it out of the header.
+/// How the header lays out a title is the app's, so this opens on a fake hub holding a workspace with a title typed as
+/// long as one can be, and a chat with a prompt, so there's a title to ask for again.
+#[gpui_kit::test]
+fn a_title_as_long_as_one_can_be_gives_way_to_the_button_rather_than_pushing_it_out_of_the_header(
+    cx: &mut TestAppContext,
+) {
     let long = "word ".repeat(24);
-    rename(&mut ui, &row);
-    ui.input(&long);
-    ui.press("enter");
+    let mut world = World::default();
+    let repo = world.repo("signals");
+    let workspace = world.workspace(&repo, "ledger");
+    world.workspace_mut(&workspace).title = Some(Title::typed(&long).unwrap());
+    world.workspace_mut(&workspace).title_source = TitleSource::ByHand;
+    world.chat(&workspace, SessionStatus::Idle, vec![user_prompt("fix the login")]);
+    let (_hub, mut ui) = open_on_the_world(cx, world);
+
     ui.wait("the long title", |ui| ui.shows_label("workspace-title", long.trim()));
+
     let mut bounds =
         |id: &'static str| ui.cx.update_window(ui.handle, |_, window, _| window.find(id).bounds()).unwrap();
     let (button, header_end) = (bounds("regenerate-title"), bounds("toggle-diff"));

@@ -1,15 +1,43 @@
 //! All files in the sidebar of changes, and a file opened from it, which the workspace's one file tab shows as it is.
+//! The worker lists and reads a worktree, and what the window shows of it is the app's, so those open on a fake hub
+//! holding a made-up worktree, with no worker to wait for. What's read again once the worktree changes, and what's
+//! opened as the hub goes, need the real ones.
 
 #![cfg(test)]
 
 use client_core::Client;
+use client_core::fake_hub::World;
 use desktop::app::Connection;
 use desktop::file_view::FileView;
 use desktop::workspace_pane::{Opened, Showing};
 use gpui_kit::{AppContext as _, Entity, SharedString, TestAppContext};
-use protocol::model::SessionStatus;
+use protocol::model::{FileContents, GitDiff, SessionStatus, WorkspaceId, WorktreeFiles};
 
-use crate::support::{Stack, Ui};
+use crate::support::{FakeHub, Stack, Ui};
+
+/// What git says of the change [`browse`] makes, which adds its files but for the folder git ignores.
+const PATCH: &str = "diff --git a/.gitignore b/.gitignore
+new file mode 100644
+index 0000000..1e2f3a4
+--- /dev/null
++++ b/.gitignore
+@@ -0,0 +1 @@
++build/
+diff --git a/src/app/view.rs b/src/app/view.rs
+new file mode 100644
+index 0000000..2a1b3c4
+--- /dev/null
++++ b/src/app/view.rs
+@@ -0,0 +1 @@
++fn view() {}
+diff --git a/src/lib.rs b/src/lib.rs
+new file mode 100644
+index 0000000..5d6e7f8
+--- /dev/null
++++ b/src/lib.rs
+@@ -0,0 +1 @@
++mod app;
+";
 
 /// A workspace that adds two files in folders to the repository's `a.txt`, and a folder git ignores that holds only a
 /// folder, with All files showing them.
@@ -32,6 +60,38 @@ fn browse<'a>(cx: &'a mut TestAppContext, stack: &Stack) -> Ui<'a> {
     std::fs::write(worktree.join(".gitignore"), "build/\n").unwrap();
     show_all_files(&mut ui);
     ui
+}
+
+/// [`browsing`] on a fake hub, which goes with the test, so it's returned to be kept, in one of two workspaces that
+/// each make that change, with the other workspace.
+fn browsing_on_a_fake_hub(cx: &mut TestAppContext) -> (FakeHub, Ui<'_>, WorkspaceId) {
+    let strings = |names: &[&str]| Vec::from_iter(names.iter().map(ToString::to_string));
+    let listed = |paths: &[&str], folders: &[&str]| WorktreeFiles {
+        paths: strings(paths),
+        folders: strings(folders),
+        truncated: false,
+    };
+    let mut world = World::default();
+    let repo = world.repo("signals");
+    let workspaces = ["ledger", "points"].map(|name| world.workspace(&repo, name));
+    for workspace in &workspaces {
+        world.chat(workspace, SessionStatus::Idle, Vec::new());
+        let diff = GitDiff { base_commit: None, patch: PATCH.to_string(), truncated: false };
+        world.diffs.insert(workspace.clone(), diff);
+    }
+    world.worktree = listed(&[".gitignore", "a.txt", "src/app/view.rs", "src/lib.rs"], &["build"]);
+    world.worktree_folders.insert("build".to_string(), listed(&[], &["build/out"]));
+    world.worktree_folders.insert("build/out".to_string(), listed(&["build/out/app.txt"], &[]));
+    for (path, text) in [("src/lib.rs", "mod app;\n"), ("build/out/app.txt", "built\n")] {
+        world.worktree_files.insert(path.to_string(), FileContents::Text { text: text.to_string() });
+    }
+    let fake = FakeHub::holding(world);
+    let mut ui = Ui::open_on(cx, &fake);
+    ui.wait("a workspace", |ui| ui.view().selected.is_some() && ui.pane().is_some());
+    let showing = ui.view().selected.clone().unwrap();
+    let other = workspaces.into_iter().find(|w| *w != showing).unwrap();
+    show_all_files(&mut ui);
+    (fake, ui, other)
 }
 
 fn show_all_files(ui: &mut Ui<'_>) {
@@ -69,8 +129,7 @@ fn open_lib(ui: &mut Ui<'_>) {
 
 #[gpui_kit::test]
 fn all_files_lists_the_worktree_in_folders_that_start_closed(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = browsing(cx, &stack);
+    let (_hub, mut ui, _) = browsing_on_a_fake_hub(cx);
     assert!(ui.has("all-folder-src") && !ui.has("all-file-src/lib.rs"));
 
     ui.click("all-folder-src");
@@ -82,15 +141,14 @@ fn all_files_lists_the_worktree_in_folders_that_start_closed(cx: &mut TestAppCon
 
 #[gpui_kit::test]
 fn a_file_clicked_in_all_files_shows_as_it_is_in_the_file_tab(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = browsing(cx, &stack);
+    let (_hub, mut ui, _) = browsing_on_a_fake_hub(cx);
     let chats = ui.open_chats();
 
     open_lib(&mut ui);
     assert_eq!(tab(&ui), (Showing::File, Some("src/lib.rs".to_string()), Some(Opened::File)));
     assert_eq!(ui.open_chats(), chats, "it's the file tab, and opens no chat");
     ui.click("sidebar-tab-changes");
-    ui.wait("the changes", |ui| ui.has("file-a.txt") || ui.has("file-src/lib.rs"));
+    ui.wait("the changes", |ui| ui.has("file-src/lib.rs"));
     ui.click("file-src/lib.rs");
 
     assert_eq!(tab(&ui), (Showing::File, Some("src/lib.rs".to_string()), Some(Opened::Diff)), "the same tab");
@@ -100,8 +158,7 @@ fn a_file_clicked_in_all_files_shows_as_it_is_in_the_file_tab(cx: &mut TestAppCo
 /// Either one takes the other's place in the one tab, whichever comes first.
 #[gpui_kit::test]
 fn a_file_clicked_in_all_files_takes_the_place_of_a_diff(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = browsing(cx, &stack);
+    let (_hub, mut ui, _) = browsing_on_a_fake_hub(cx);
     ui.click("sidebar-tab-changes");
     ui.wait("the changes", |ui| ui.has("file-src/lib.rs"));
     ui.click("file-src/lib.rs");
@@ -117,8 +174,7 @@ fn a_file_clicked_in_all_files_takes_the_place_of_a_diff(cx: &mut TestAppContext
 /// A folder git ignores whole, such as `target`, can hold hundreds of thousands of files, so it's read as it opens.
 #[gpui_kit::test]
 fn a_folder_git_ignores_is_read_as_it_opens(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = browsing(cx, &stack);
+    let (_hub, mut ui, _) = browsing_on_a_fake_hub(cx);
     assert!(ui.has("all-folder-build") && !ui.has("all-folder-build/out"));
 
     ui.click("all-folder-build");
@@ -135,11 +191,11 @@ fn a_folder_git_ignores_is_read_as_it_opens(cx: &mut TestAppContext) {
 /// or the window's keys reach nothing.
 #[gpui_kit::test]
 fn the_window_keys_work_on_a_file_after_coming_back_to_it(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = browsing(cx, &stack);
+    let (_hub, mut ui, other) = browsing_on_a_fake_hub(cx);
     let browsed = ui.view().selected.clone().unwrap();
     open_lib(&mut ui);
-    ui.new_workspace();
+    ui.click(SharedString::from(format!("workspace-{other}")));
+    ui.wait("the other workspace", |ui| ui.view().selected.as_ref() == Some(&other) && ui.pane().is_some());
 
     ui.click(SharedString::from(format!("workspace-{browsed}")));
     assert_eq!(tab(&ui).0, Showing::File);
@@ -169,55 +225,36 @@ fn list_again(ui: &mut Ui<'_>, file: &str) {
     ui.wait("the files to be listed again", |ui| ui.has(SharedString::from(format!("all-file-{file}"))));
 }
 
+/// Each step writes what only it waits for: listing again reads again each folder open inside one read as it opens,
+/// a folder open stays open when a new file splits its row, and a folder left open inside a closed one is read again
+/// when it shows again.
 #[gpui_kit::test]
-fn a_folder_open_stays_open_when_a_new_file_splits_its_row(cx: &mut TestAppContext) {
+fn what_s_open_in_all_files_is_read_again_and_stays_open_as_the_worktree_changes(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let mut ui = browsing(cx, &stack);
     let worktree = ui.worktree(ui.view().selected.as_ref().unwrap());
+    ui.click("all-folder-build");
+    ui.wait("what's in the ignored folder", |ui| ui.has("all-folder-build/out"));
+    ui.click("all-folder-build/out");
+    ui.wait("what's in the folder in that", |ui| ui.has("all-file-build/out/app.txt"));
+
+    std::fs::write(worktree.join("build/out/later.txt"), "later\n").unwrap();
     std::fs::create_dir_all(worktree.join("docs/spec")).unwrap();
     std::fs::write(worktree.join("docs/spec/files.md"), "# Files\n").unwrap();
-    ui.click("sidebar-tab-all-files");
-    ui.wait("the folders, sharing a row", |ui| ui.has("all-folder-docs/spec"));
+    list_again(&mut ui, "build/out/later.txt");
+
+    ui.wait("the new folders, sharing a row", |ui| ui.has("all-folder-docs/spec"));
     ui.click("all-folder-docs/spec");
     assert!(ui.has("all-file-docs/spec/files.md"));
-
     std::fs::write(worktree.join("docs/README.md"), "# Docs\n").unwrap();
     list_again(&mut ui, "docs/README.md");
+    assert!(ui.has("all-folder-docs") && ui.has("all-folder-docs/spec"), "the split row is two now");
+    assert!(ui.has("all-file-docs/spec/files.md"), "and both folders of the split row stay open");
 
-    assert!(ui.has("all-folder-docs") && ui.has("all-folder-docs/spec"), "the row is two now");
-    assert!(ui.has("all-file-docs/spec/files.md"), "and both stay open");
-}
-
-#[gpui_kit::test]
-fn a_folder_left_open_inside_a_closed_one_is_read_again_when_it_shows_again(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = browsing(cx, &stack);
-    let worktree = ui.worktree(ui.view().selected.as_ref().unwrap());
     ui.click("all-folder-build");
-    ui.wait("what's in it", |ui| ui.has("all-folder-build/out"));
-    ui.click("all-folder-build/out");
-    ui.wait("what's in that", |ui| ui.has("all-file-build/out/app.txt"));
+    std::fs::write(worktree.join("build/out/again.txt"), "again\n").unwrap();
     ui.click("all-folder-build");
-
-    std::fs::write(worktree.join("build/out/later.txt"), "later\n").unwrap();
-    ui.click("all-folder-build");
-
-    ui.wait("what's in it now", |ui| ui.has("all-file-build/out/later.txt"));
-}
-
-#[gpui_kit::test]
-fn listing_again_reads_again_each_folder_open_inside_one_read_as_it_opens(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = browsing(cx, &stack);
-    let worktree = ui.worktree(ui.view().selected.as_ref().unwrap());
-    ui.click("all-folder-build");
-    ui.wait("what's in it", |ui| ui.has("all-folder-build/out"));
-    ui.click("all-folder-build/out");
-    ui.wait("what's in that", |ui| ui.has("all-file-build/out/app.txt"));
-
-    std::fs::write(worktree.join("build/out/later.txt"), "later\n").unwrap();
-
-    list_again(&mut ui, "build/out/later.txt");
+    ui.wait("what's in the folder left open, now", |ui| ui.has("all-file-build/out/again.txt"));
 }
 
 /// A folder opened, or a file clicked, just as the hub goes can't be read only because the connection has gone, so the
