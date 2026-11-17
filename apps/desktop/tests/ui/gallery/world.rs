@@ -10,9 +10,9 @@ use protocol::client::ErrorCode;
 use protocol::event::{EventBody, SessionEvent};
 use protocol::model::{
     Account, AttachmentId, CacheTtl, ContextUsage, DiffComment, FileContents, FoundGithubLogin, GitDiff, GithubAccount,
-    GithubSettings, GithubSignIn, GithubSignInStatus, InstanceId, ModelName, PORTS_PER_WORKSPACE, Place, PromptCache,
-    PullRequest, Records, Repo, RepoId, Rev, Seq, Session, SessionId, SessionStatus, Subagent, SubagentId, Title,
-    Workspace, WorkspaceId, WorktreeFiles,
+    GithubApp, GithubSettings, GithubSignIn, GithubSignInStatus, InstanceId, ModelName, PORTS_PER_WORKSPACE, Place,
+    PromptCache, PullRequest, Records, Repo, RepoId, Rev, Seq, Session, SessionId, SessionStatus, Subagent, SubagentId,
+    Title, Workspace, WorkspaceId, WorktreeFiles,
 };
 use protocol::prompt::Prompt;
 use protocol::tail::Tail;
@@ -77,6 +77,11 @@ pub(crate) struct World {
     /// How a sign-in with GitHub the app starts stands as the hub answers, which it does with the ID the app gave it,
     /// though it keeps no record of it. `None` refuses it, as the rest of what would change what the hub holds.
     pub(crate) sign_in_answer: Option<GithubSignInStatus>,
+    /// The apps of your own the hub has made.
+    pub(crate) github_apps: Vec<GithubApp>,
+    /// Why the hub couldn't look for where an app of your own is installed, as it answers each time it's asked. `None`
+    /// refuses it, as the rest of what would change what the hub holds.
+    pub(crate) app_look_refused: Option<ApiError>,
     /// Whether `pairing_start` hands out a deterministic pairing link, and whether `pairing_wait` resolves with this
     /// device name or stays waiting.
     pub(crate) pairing: Option<PairingWorld>,
@@ -165,7 +170,7 @@ impl World {
             github_accounts: self.github_accounts.clone(),
             github_sign_ins: self.github_sign_ins.clone(),
             found_github_logins: self.found_github_logins.clone(),
-            github_apps: Vec::new(),
+            github_apps: self.github_apps.clone(),
             github_reach: self.github_reach.clone(),
             rev: Rev::default(),
         }

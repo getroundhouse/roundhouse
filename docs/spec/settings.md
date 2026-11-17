@@ -143,7 +143,7 @@ The app's own settings, and where they're shown.
 
 ## Git
 
-- **Git lists the GitHub accounts agents push and open pull requests as, from the hub's records and settings, in two lists, Added and then Found, in a column 720 wide.** Each is a row of columns that line up from row to row: a picture, the name, with a `Default` badge on the default, how it was connected, `Signed in` or `Token`, what else there is to say, and a `…` menu. A row says only what isn't plain. The picture is the name's first letter in a circle, since the app fetches nothing from GitHub. A row is a table's, 44px tall, with a small `…`, which opens under it towards the left, so it stays inside the column. *Unconfirmed:* the row's height, and the menu's size and the way it opens.
+- **Git lists the GitHub accounts agents push and open pull requests as, from the hub's records and settings, in two lists, Added and then Found, in a column 720 wide.** Each is a row of columns that line up from row to row: a picture, the name, with a `Default` badge on the default, how it was connected, `Signed in`, `Token` or `App`, what else there is to say, and a `…` menu. A row says only what isn't plain. The picture is the name's first letter in a circle, since the app fetches nothing from GitHub, or for an app of your own, its mark. A row is a table's, 44px tall, with a small `…`, which opens under it towards the left, so it stays inside the column. *Unconfirmed:* the row's height, and the menu's size and the way it opens.
 
   **Git, with three accounts added, the default signed in, and the logins found on this Mac and a server.** *Unconfirmed.*
 
@@ -165,9 +165,9 @@ The app's own settings, and where they're shown.
 
   ![Git with no account added, and Found the default](screens/settings-git-none.png)
 
-- **Connect account opens a panel at the top of Added, with the ways to connect an account: Sign in with GitHub, and Use a token.** Each says what it takes, and has its button, and `Which should I choose?` opens the guide's page on who agents are on GitHub. Connect account is off while a panel is open there. *Unconfirmed:* the words and the link. *Not built:* an app of your own.
+- **Connect account opens a panel at the top of Added, with the ways to connect an account: Sign in with GitHub, Use a token, and Make an app of your own.** Each says who agents act as, you or the app's bot, and what it takes, and has its button, and `Which should I choose?` opens the guide's page on who agents are on GitHub. Connect account is off while a panel is open there. *Unconfirmed:* the words and the link.
 
-  **Connect account, open.** *Unconfirmed.*
+  **Connect account, open, with the three ways.** *Unconfirmed.*
 
   ![Choosing how to connect a GitHub account](screens/settings-git-choosing.png)
 
@@ -192,6 +192,35 @@ The app's own settings, and where they're shown.
 
   ![Pasting a token, masked](screens/settings-git-token.png)
 
+- **Make an app of your own opens a panel in three steps: choosing where to make it and its name, making it on GitHub, and installing it.** Each step has its number until it's done, then a check and what was chosen or made, and only the one it's at has what's in it under its line. Cancel puts the panel away at any step, with whatever it waits on, and once the app is installed Done does. An app GitHub has made stays, as the hub's record, whichever step the panel went at. Agents act as the app's bot, as the panel says under its title, by the bot's name once GitHub has said it, and only the hub holds the app's key. *Unconfirmed:* the steps, how they're drawn, and the words.
+- **Choosing where has Your account or An organization, by its name as in its address on GitHub, and the app's name, which has the cursor.** The name starts as the username of the first account in Added that isn't an app's installation, or else of the first `gh` login Found has, with `-roundhouse` after it, and empty with neither. An app is private, so it's made under the account or organization it's for, and installed only there, and one for another organization is made again under that. Make on GitHub is off until the names are filled in, and Enter makes it too. An organization's name GitHub can't have, or a name the hub refuses, is said in red under the fields. *Unconfirmed:* the default name, and the radios.
+
+  **Making an app, at its first step, under your own account, with its name to begin with.** *Unconfirmed.*
+
+  ![Making an app, choosing where and its name](screens/settings-git-app-choosing.png)
+
+  **Making it under an organization, by its name.** *Unconfirmed.*
+
+  ![Making an app under an organization](screens/settings-git-app-organization.png)
+
+- **Make on GitHub has the hub write the app's manifest, then serves a page that posts it to GitHub's form for making an app, under the account or organization chosen, and opens the browser on it.** The app serves it on this machine, where the browser is, on `127.0.0.1` alone, at a port the system gives it, and the page posts itself, with a button for a browser that runs no scripts. The step says to make the app on that page, where GitHub says if another app has the name and lets it be changed, and that the app waits for GitHub to send the person back, until a time 30 minutes on, with Open GitHub again, which opens the same page. *Unconfirmed:* the 30 minutes, and the words.
+- **The app takes only GitHub sending the person back with its code, to its own address, with the `state` it made for that try, which the page posted with the manifest.** It answers with a page that says to go back to Roundhouse, gives the code to the hub, which makes the app from it and keeps its key, and the panel goes on to installing it. Anything else that reaches it is taken for nothing: with another `state`, or none, it's answered with a page saying it isn't from the app being made, and at another path, with one saying there's nothing there. It stops listening once it has the code, on Cancel, as the panel goes, and after its 30 minutes, when the step says it stopped waiting, with Open GitHub again, which listens anew, with a new `state`. *Unconfirmed:* the pages and their words.
+
+  **Making it on GitHub, with the browser opened on GitHub's form, waiting for GitHub to send the person back.** *Unconfirmed.*
+
+  ![Making an app, waiting for GitHub](screens/settings-git-app-on-github.png)
+
+- **What stops a step is said in it, in red, with a way to go on.** A name the hub refuses, a hub that can't be reached, and a listener that couldn't start go back to the first step, with what was chosen, and Make on GitHub. A code the hub couldn't make into the app's key, as when GitHub didn't answer, has Try again, which gives the hub the same code, since GitHub takes it for an hour. A code GitHub no longer takes has Start again, which goes back to the first step, and says the app GitHub made has no key here, so to delete it on GitHub or choose another name. *Unconfirmed:* the way on from each, and the words.
+- **Installing has Install on GitHub, which opens GitHub's page for installing the app, where the repositories it reaches are chosen, and Check again.** The panel has the hub look for where it's installed each time the window comes to the front while it waits, and on Check again, and the hub looks every minute by itself too. Once the hub has connected an installation, the step says where it's installed, the panel says the bot is installed there and whether it's the default, and Done puts it away. The hub connects the installation as an account, so it becomes the default as any account the hub has a record of first does. *Unconfirmed:* looking as the window comes to the front, and the words.
+
+  **Installing it, as Install on GitHub in an app's menu opens the panel.** *Unconfirmed.*
+
+  ![Making an app, installing it](screens/settings-git-app-installing.png)
+
+  **Installing it, with the hub saying it couldn't look on GitHub, and Check again.** *Unconfirmed.*
+
+  ![Making an app, after the hub couldn't look for where it's installed](screens/settings-git-app-not-looked.png)
+
 - **An account's `…` menu has Make default, but on the default, which is off while its login can't be used; Renew for a token, which opens the token's panel under its row; Sign in again for a sign-in; both of those ways of connecting it again once it was disconnected; and Disconnect, while the hub holds its login.** A sign-in approved as the account's GitHub user renews its login in place. *Unconfirmed.*
 
   **The menu of a token's account.** *Unconfirmed.*
@@ -199,6 +228,23 @@ The app's own settings, and where they're shown.
   ![An account's menu, with Make default, Renew and Disconnect](screens/settings-git-menu.png)
 
 - **Disconnect asks first, in the system's alert, then has the hub forget the login.** The account stays, since the default can still name it, and the token isn't revoked on GitHub. Disconnecting the default says it stays the default, so agents can't push until it's connected again or another account is made the default. Why the hub couldn't do what an account's menu asked is said under its row, and why it couldn't make each machine's own the default under Found's heading. *Unconfirmed.*
+- **An app's installation is a row in Added, as an account whose user is the app's bot, listed with the rest: the app's mark in place of a letter, the bot's name, as `ada-roundhouse[bot]`, `App` as how it was connected, and `Installed on` and where, while its login works, or else how it stands, as `Renewing` while the hub makes its next token.** The hub makes each token from the app's key, an hour at a time, so when one ends isn't said. Any one can be the default, as any account can. Its menu has Make default, but on the default, which is off while its login can't be used; Disconnect, while the hub holds its login, which asks first, says the app stays installed, and has the hub forget its token; Connect again, which has the hub look for it again, and Install on GitHub, once it was disconnected or uninstalled; and Remove app, while the hub has the app. A default installation that can't be used says, in the box at the top of Added, that the hub is making its next token, or to connect it again, or that its app was removed. *Unconfirmed:* the mark, the menu, and the words.
+
+  **Git, with an app's installation as the default.** *Unconfirmed.*
+
+  ![Git, with an app's installation as the default](screens/settings-git-app.png)
+
+  **The menu of an app's installation.** *Unconfirmed.*
+
+  ![An installation's menu, with Disconnect and Remove app](screens/settings-git-app-menu.png)
+
+- **An app the hub has made that's installed nowhere is a row of its own, after the accounts, by its name, with its mark, `App`, and `Not installed` in amber.** Its menu has Install on GitHub, which opens GitHub's page and the panel at installing it, Check again, which has the hub look for it, and Remove app. *Unconfirmed.*
+
+  **An app installed nowhere, with its menu.** *Unconfirmed.*
+
+  ![An app installed nowhere, with Install on GitHub in its menu](screens/settings-git-app-not-installed.png)
+
+- **Remove app asks first, in the system's alert, then has the hub forget the app's key and every installation's login.** Nothing is deleted on GitHub, and the alert says to delete the app there to be rid of it. An installation that's the default stays the default, so agents can't push until another account is made the default, and the alert says so. Why the hub couldn't do what an app's menu asked is said under its row. *Unconfirmed.*
 - **With no hub to ask, the accounts and logins stay listed, and every button is off.** *Unconfirmed.*
 - **A hub that keeps no GitHub accounts says so in place of Added's rows, and that agents use each machine's own login, with Connect account off, nothing of a default under Added's heading, and no Found.** It's told apart by its settings, which say nothing of GitHub. *Unconfirmed.*
 

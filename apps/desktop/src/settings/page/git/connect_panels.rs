@@ -1,5 +1,6 @@
 //! The panels for connecting a GitHub account: Connect account's, with the ways to connect one, and the one a token is
-//! pasted into, for a new account or in place of an account's own login.
+//! pasted into, for a new account or in place of an account's own login. The panel for making an app of your own is
+//! `app_panel`'s.
 
 use gpui_kit::assets::IconName as Lucide;
 use gpui_kit::component::input::Input;
@@ -13,6 +14,7 @@ use look::{Hand as _, IconSizing as _, Typeset as _};
 
 use super::super::field::labelled;
 use super::Drawing;
+use super::app_words;
 use super::kept::{Kept, Panel};
 use super::panel::{Framed, button, buttons, framed};
 use super::token::TokenPanel;
@@ -23,20 +25,27 @@ const WHICH: &str = "https://getroundhouse.dev/docs/concepts/who-agents-are-on-g
 /// Where GitHub makes a fine-grained token.
 const MAKE_A_TOKEN: &str = "https://github.com/settings/personal-access-tokens/new";
 
+/// Who agents act as with an account the person connects as themselves.
+const AS_YOU: &str = "Agents act as you";
+
 /// Connect account, open: each way to connect an account, with who agents act as and what it takes.
 pub(super) fn choosing(drawing: &Drawing<'_>, panel: &Panel, cx: &App) -> AnyElement {
     let off = !drawing.can_ask(cx);
-    let (signing_in, pasting) = (drawing.kept.clone(), drawing.kept.clone());
+    let (signing_in, pasting, making) = (drawing.kept.clone(), drawing.kept.clone(), drawing.kept.clone());
     let sign_in = button("git-sign-in", "Sign in", false, off, move |_, cx| {
         signing_in.update(cx, |kept, cx| kept.sign_in(None, cx));
     });
     let token = button("git-use-token", "Paste a token", false, off, move |window, cx| {
         pasting.update(cx, |kept, cx| kept.open_token(None, window, cx));
     });
+    let name = app_words::default_name(drawing.records, drawing.github.and_then(|github| github.account.as_ref()));
+    let app = button("git-make-app", "Make an app", false, off, move |window, cx| {
+        making.update(cx, |kept, cx| kept.open_app(&name, window, cx));
+    });
     let choices = [
         choice(
             Lucide::Github,
-            "Sign in with GitHub",
+            ["Sign in with GitHub", AS_YOU],
             "Enter a code on GitHub, and the hub renews the login by itself. An organization that limits which apps \
              can reach it has to approve Roundhouse first.",
             sign_in.into_any_element(),
@@ -44,10 +53,17 @@ pub(super) fn choosing(drawing: &Drawing<'_>, panel: &Panel, cx: &App) -> AnyEle
         ),
         choice(
             Lucide::KeyRound,
-            "Use a token",
+            ["Use a token", AS_YOU],
             "A fine-grained one reaches only the repositories you choose, of one owner, and ends when you say. A \
              classic one reaches everything you can.",
             token.into_any_element(),
+            cx,
+        ),
+        choice(
+            Lucide::Bot,
+            ["Make an app of your own", "Agents act as its bot"],
+            app_words::CHOICE_SAYS,
+            app.into_any_element(),
             cx,
         ),
     ];
@@ -58,7 +74,8 @@ pub(super) fn choosing(drawing: &Drawing<'_>, panel: &Panel, cx: &App) -> AnyEle
     let body = v_flex().gap(look::Space::Small).child(h_flex().child(which(cx))).child(v_flex().children(rows));
     let framed_as = Framed {
         title: "Connect a GitHub account".into(),
-        lead: "Agents push, open pull requests and comment on GitHub as the account you connect.".into(),
+        lead: "Who agents are on GitHub when they push, open pull requests and comment: you, or an app of your own."
+            .into(),
         body: Some(body.into_any_element()),
         refused: None,
         buttons: buttons().child(cancel(drawing.kept)),
@@ -66,10 +83,12 @@ pub(super) fn choosing(drawing: &Drawing<'_>, panel: &Panel, cx: &App) -> AnyEle
     framed(drawing, panel, framed_as, cx)
 }
 
-/// A way to connect an account: its icon, its name, what it takes, and its button.
-fn choice(icon: Lucide, name: &'static str, says: &'static str, act: AnyElement, cx: &App) -> Div {
+/// A way to connect an account: its icon, its name, beside who agents act as, what it takes, and its button.
+fn choice(icon: Lucide, [name, acts_as]: [&'static str; 2], says: &'static str, act: AnyElement, cx: &App) -> Div {
     let colors = look::colors(cx);
     let icon = Icon::new(icon).sized(look::IconSize::Large).text_color(colors.text_muted);
+    let acts_as = div().typeset(look::Type::Detail).text_color(colors.text_faint).child(acts_as);
+    let name = h_flex().items_baseline().gap(look::Space::Small).child(div().emphasis().child(name)).child(acts_as);
     h_flex()
         .items_start()
         .gap(look::Space::Large)
@@ -80,7 +99,7 @@ fn choice(icon: Lucide, name: &'static str, says: &'static str, act: AnyElement,
                 .flex_1()
                 .min_w_0()
                 .gap(look::Space::XSmall)
-                .child(div().emphasis().child(name))
+                .child(name)
                 .child(div().text_color(colors.text_muted).child(says)),
         )
         .child(h_flex().flex_none().justify_end().child(act))

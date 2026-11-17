@@ -26,6 +26,7 @@ pub mod image_diff;
 mod keys;
 mod limits;
 pub mod lost_release;
+mod manifest_flow;
 mod menus;
 mod model_picker;
 mod names;
@@ -78,6 +79,10 @@ pub const WINDOW_SETTLES_AFTER: std::time::Duration = window_place::SETTLES_AFTE
 /// The sounds the app has played, by name, for a test to read.
 #[cfg(feature = "testing")]
 pub use sounds::played as sounds_played;
+
+/// What a browser and GitHub do with the page the app serves while an app of your own is made, for a test to do.
+#[cfg(feature = "testing")]
+pub use manifest_flow::browsing as github_app_browsing;
 
 actions!(
     roundhouse,

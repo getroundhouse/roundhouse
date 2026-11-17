@@ -9,6 +9,7 @@ mod feed;
 mod files;
 mod follow;
 mod github_account;
+mod github_app;
 mod lines;
 mod open_file;
 mod open_session;

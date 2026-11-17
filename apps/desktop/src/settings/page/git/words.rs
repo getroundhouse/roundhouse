@@ -1,6 +1,6 @@
 //! What Git says in words: what each list says of itself, how an added account's login stands, what stops a default
 //! being used, what a machine's own login is, what disconnecting asks, and what the hub's refusals mean. How a sign-in
-//! goes is in `sign_in_words`.
+//! goes is in `sign_in_words`, and what's said of apps of your own in `app_words`.
 
 use client_core::ClientError;
 use gpui_kit::App;
@@ -9,7 +9,8 @@ use protocol::model::{GhLogin, GhLoginWorks, GithubLoginKind, HeldGithubLogin, P
 
 /// What a search finds the page by, besides its name.
 pub(super) const ABOUT: &str = "The GitHub accounts agents push and open pull requests as: signing in with GitHub, \
-                                tokens, the default account, and the gh login each machine already has.";
+                                tokens, apps of your own, the default account, and the gh login each machine already \
+                                has.";
 
 /// What Added says of itself under its heading.
 pub(super) const ADDED_SAYS: &str = "GitHub accounts you've given the hub. Every machine's git and gh use the default \
@@ -42,11 +43,12 @@ pub(super) const NO_HUB: &str = "There's no hub to ask.";
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) enum Standing {
     /// It works, and ends on the day said, if its row has to say: a token's, since nothing renews it. A sign-in renews
-    /// itself, so when its token ends isn't said.
+    /// itself, and the hub makes an installation's next token itself, so when either's ends isn't said.
     Works { ends: Option<String> },
     /// A token that ended on the day said, so it needs a new one.
     Ended { on: String },
-    /// A sign-in whose token has ended, which the hub is renewing, as it tries to every minute.
+    /// A sign-in whose token has ended, which the hub is renewing, as it tries to every minute, or an installation's,
+    /// which it's making the next of.
     Renewing,
     /// A sign-in that can't be renewed, so it needs signing in again.
     SignInAgain,
@@ -62,16 +64,13 @@ impl Standing {
             return Standing::SignInAgain;
         }
         let on = held.ends_at_ms.and_then(|ends_at_ms| look::date(ends_at_ms, cx));
+        // A sign-in's token and an installation's are made again by the hub, so neither's end is said.
+        let renewed = matches!(held.how, GithubLoginKind::SignIn | GithubLoginKind::App);
         if held.works_at(now_ms) {
-            let ends = (held.how != GithubLoginKind::SignIn).then_some(on).flatten();
+            let ends = (!renewed).then_some(on).flatten();
             return Standing::Works { ends: ends.map(|on| format!("Ends {on}")) };
         }
-        match held.how {
-            GithubLoginKind::SignIn => Standing::Renewing,
-            GithubLoginKind::Token | GithubLoginKind::App | GithubLoginKind::Unknown => {
-                Standing::Ended { on: on.unwrap_or_default() }
-            }
-        }
+        if renewed { Standing::Renewing } else { Standing::Ended { on: on.unwrap_or_default() } }
     }
 
     /// What the row says of it, after how it was connected, if anything.
@@ -115,9 +114,9 @@ pub(super) fn connected_by(how: GithubLoginKind) -> &'static str {
     match how {
         GithubLoginKind::SignIn => "Signed in",
         GithubLoginKind::Token => "Token",
-        // A way a newer hub connects one, and an app's installation, as an older client takes it, until the page shows
-        // apps of your own.
-        GithubLoginKind::App | GithubLoginKind::Unknown => "Another way",
+        GithubLoginKind::App => super::app_words::APP,
+        // A way a newer hub connects one.
+        GithubLoginKind::Unknown => "Another way",
     }
 }
 

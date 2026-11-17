@@ -1,13 +1,21 @@
 //! Git, the page of the GitHub accounts agents push and open pull requests as, in two lists. Added has the accounts the
-//! person gave the hub, by signing in with GitHub or with a token, one of which can be the default, which every
-//! machine's git and gh use for github.com. Found has the `gh` login each provider's machines already have, as the hub
-//! found it, which agents there use only while the default is each machine's own. The page shows the hub's records and
-//! settings as they are: which is the default, how each login stands and how a sign-in goes are the hub's to say.
+//! person gave the hub, by signing in with GitHub, with a token, or as an app of your own's installation, one of which
+//! can be the default, which every machine's git and gh use for github.com, and each app installed nowhere yet. Found
+//! has the `gh` login each provider's machines already have, as the hub found it, which agents there use only while
+//! the default is each machine's own. The page shows the hub's records and settings as they are: which is the
+//! default, how each login stands, how a sign-in goes and where an app's installed are the hub's to say.
 
 use super::{Asking, Body, OfHub, Page, PageId, Within};
 
 mod account_menu;
 mod added;
+mod app_calls;
+mod app_made;
+mod app_menu;
+mod app_panel;
+mod app_panel_drawn;
+mod app_rows;
+mod app_words;
 mod connect_panels;
 mod found;
 mod git_page;

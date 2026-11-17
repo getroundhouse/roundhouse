@@ -7,7 +7,8 @@ use protocol::attachment::AttachmentBytes;
 use protocol::client::CLIENT_PROTOCOL_VERSION;
 use protocol::client::{
     ApiError, ClientFrame, ClientRequest, ClientResponse, ErrorCode, HelloReply, HubFrame, ReplyOutcome, admin,
-    attachments, comments, drafts, files, github_accounts, log, records, sessions, subscriptions, workspaces,
+    attachments, comments, drafts, files, github_accounts, github_apps, log, records, sessions, subscriptions,
+    workspaces,
 };
 use protocol::event::SessionEvent;
 use protocol::find::{Found, Needle};
@@ -269,9 +270,14 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
         | R::GithubAccountSetDefault(_)
         | R::GithubSignInCancel(_)
         | R::GithubAppMake(_)
-        | R::GithubAppInstallationsConnect(_)
         | R::GithubAppRemove(_) => Err(read_only("change anything")),
-        R::GithubAppManifestWrite(_) => Err(read_only("make an app of your own")),
+        R::GithubAppInstallationsConnect(_) => Err(world.app_look_refused.clone().unwrap_or_else(|| read_only("look"))),
+        // As a hub writes it, which changes nothing the hub holds, though with only what the app reads of it, its name
+        // and where GitHub sends the person back, since nothing here posts it to GitHub.
+        R::GithubAppManifestWrite(github_apps::GithubAppManifestWrite { name, redirect_url }) => {
+            let manifest = serde_json::json!({"name": name, "redirect_url": redirect_url, "public": false});
+            reply(C::GithubAppManifest(github_apps::GithubAppManifest { manifest }))
+        }
         // So a screen can show the app waiting on a workspace it asked for, or on a new title. The workspace's record
         // saying it's being made, or on its way out, is the world's to say.
         R::WorkspaceCreate(_) | R::WorkspaceRegenerateTitle(_) => Ok(Outcome::Never),

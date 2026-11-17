@@ -6,10 +6,11 @@ use std::collections::HashSet;
 
 use client_core::records::Snapshot;
 use gpui_kit::{Bounds, Context, FocusHandle, Pixels, PromptLevel, ScrollHandle, Task, Window};
-use protocol::model::{GithubAccountId, GithubSignInId, Record};
+use protocol::model::{GithubAccountId, GithubAppId, GithubSignInId, Record};
 
 use super::super::redraw::{RedrawAt, bring_into_sight};
 use super::Asking;
+use super::app_panel::AppPanel;
 use super::sign_in::SignInPanel;
 use super::token::TokenPanel;
 use super::words;
@@ -28,7 +29,7 @@ pub(super) struct Kept {
     /// The sign-ins whose panel was put away here, so one still waiting isn't shown again while the page shows.
     pub(super) put_away: HashSet<GithubSignInId>,
     /// Why the hub couldn't do what was last asked of an account's row, or of Found, to say there.
-    failed: Option<(Asked, String)>,
+    pub(super) failed: Option<(Asked, String)>,
     /// The wait for the hub to choose the default, while it hasn't answered.
     choosing: Option<Task<()>>,
     /// Draws the page again as a login it shows ends.
@@ -38,8 +39,11 @@ pub(super) struct Kept {
 /// Where what the hub couldn't do is said.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) enum Asked {
-    /// Under the account's row: disconnecting it, or making it the default.
+    /// Under the account's row: disconnecting it, making it the default, or, for an app's installation, connecting it
+    /// again or removing the app.
     Account(GithubAccountId),
+    /// Under the row of an app of your own that's installed nowhere: looking for where it's installed, or removing it.
+    App(GithubAppId),
     /// Under Found's heading: making each machine's own login the default.
     MachinesOwn,
 }
@@ -58,6 +62,8 @@ pub(super) enum Shows {
     Choosing,
     Token(TokenPanel),
     SignIn(SignInPanel),
+    /// Making an app of your own, or installing one.
+    App(AppPanel),
 }
 
 impl Panel {
@@ -65,7 +71,7 @@ impl Panel {
     pub(super) fn under(&self) -> Option<&GithubAccountId> {
         match &self.shows {
             Shows::Token(token) => token.renewing.as_ref().map(|renewing| &renewing.id),
-            Shows::Choosing | Shows::SignIn(_) => None,
+            Shows::Choosing | Shows::SignIn(_) | Shows::App(_) => None,
         }
     }
 }
@@ -94,6 +100,15 @@ impl Kept {
     /// Why the hub couldn't do what was last asked `at`, if it couldn't.
     pub(super) fn failed(&self, at: &Asked) -> Option<&str> {
         self.failed.as_ref().filter(|(asked, _)| asked == at).map(|(_, said)| said.as_str())
+    }
+
+    /// Gives the panel itself the focus, when something in it had it, as what had it goes, so keys still reach Settings.
+    pub(super) fn focus_the_panel(&self, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(panel) = &self.panel
+            && panel.focus.contains_focused(window, cx)
+        {
+            window.focus(&panel.focus, cx);
+        }
     }
 
     /// Whether the page waits for the hub to choose the default.
@@ -159,19 +174,18 @@ impl Kept {
         cx.notify();
     }
 
-    /// Asks whether to have the hub forget the login of the account `id`, called `name`, which says more when it's
-    /// the `default`, and does once it's confirmed.
+    /// Asks whether to have the hub forget the login of the account `id`, called `name`, saying what that `says`, and
+    /// does once it's confirmed.
     pub(super) fn ask_to_disconnect(
         &mut self,
         id: GithubAccountId,
         name: &str,
-        default: bool,
+        says: &'static str,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
         self.failed = None;
         let asked = words::disconnect_asks(name);
-        let says = words::disconnect_says(default);
         let answer = window.prompt(PromptLevel::Warning, &asked, Some(says), &["Cancel", "Disconnect"], cx);
         cx.spawn(async move |this, cx| {
             if answer.await == Ok(1) {
