@@ -274,6 +274,7 @@ pub(super) fn render_event(
         | EventBody::SubagentStarted { .. }
         | EventBody::SubagentContext { .. }
         | EventBody::SubagentEnded { .. }
+        | EventBody::TaskChanged { .. }
         | EventBody::AgentOther { .. }
         | EventBody::AgentCompacting { .. }
         | EventBody::ApprovalResolved { .. }

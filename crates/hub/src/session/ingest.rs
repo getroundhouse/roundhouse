@@ -182,6 +182,7 @@ async fn follow(session: &Arc<LiveSession>, run: RunId, current: bool, body: &Ev
         | EventBody::SubagentStarted { .. }
         | EventBody::SubagentContext { .. }
         | EventBody::SubagentEnded { .. }
+        | EventBody::TaskChanged { .. }
         | EventBody::AgentOther { .. }
         | EventBody::AgentCompacting { .. }
         | EventBody::AgentCompacted { .. }

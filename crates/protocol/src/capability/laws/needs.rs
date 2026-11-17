@@ -47,6 +47,7 @@ pub fn needs(body: &EventBody) -> Vec<Capability> {
         | EventBody::ApprovalResolved { .. }
         | EventBody::AgentExited { .. }
         | EventBody::Notice { .. }
+        | EventBody::TaskChanged { .. }
         | EventBody::AgentOther { .. }
         | EventBody::Unknown => Vec::new(),
     }

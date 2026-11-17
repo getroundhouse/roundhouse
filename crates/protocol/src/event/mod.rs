@@ -12,7 +12,7 @@ pub use content::{ContentBlock, Denied, LinkedImage};
 pub use ending::{ExitReason, TaskOutcome, TurnOutcome};
 pub use failure::{Again, FailureKind, RequestFailure};
 pub use file_change::{FileChange, Hunk, HunkLine, LineMark};
-pub use task::{AgentTask, EndedTask, TaskKind};
+pub use task::{AgentTask, EndedTask, TaskChange, TaskKind};
 pub use tokens::TokenUsage;
 
 mod approval;

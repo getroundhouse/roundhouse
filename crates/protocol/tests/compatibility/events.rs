@@ -1,7 +1,7 @@
 //! Events a hub kept in its log in the form an older hub wrote them, which every later hub and client has to read.
 
 use protocol::capability::turns::OwnTurn;
-use protocol::event::{Again, EventBody, FailureKind, RequestFailure, TaskKind, TaskOutcome};
+use protocol::event::{Again, EventBody, FailureKind, RequestFailure, TaskChange, TaskKind, TaskOutcome};
 use protocol::model::{Seq, WaitEnd, Watching};
 
 /// A hub stores events in the form it sends, so an agent's start recorded before hubs said which build it ran on has to
@@ -58,6 +58,28 @@ fn what_a_subagents_conversation_holds_keeps_the_form_and_the_kind_its_stored_un
     let counted = before.replace('}', r#","context_tokens":41020}"#);
     let EventBody::SubagentEnded { context_tokens: Some(41_020), .. } = serde_json::from_str(&counted).unwrap() else {
         panic!("{counted}");
+    };
+}
+
+/// A hub stores what the agent said of one of its background tasks in the form it sends, under this kind. A change a
+/// later agent names reads as one this build doesn't know, so the line is still kept.
+#[test]
+fn a_change_to_a_task_keeps_the_form_and_the_kind_its_stored_under() {
+    let stored = r#"{"type":"task_changed","task":"t1","change":"started"}"#;
+    let later = r#"{"type":"task_changed","task":"t1","change":"something_newer"}"#;
+
+    let changed: EventBody = serde_json::from_str(stored).unwrap();
+
+    assert_eq!(changed, EventBody::TaskChanged { task: "t1".into(), change: TaskChange::Started });
+    assert_eq!(changed.kind(), "task_changed");
+    assert_eq!(serde_json::to_string(&changed).unwrap(), stored);
+    for (change, said) in
+        [(TaskChange::Progressed, "progressed"), (TaskChange::Updated, "updated"), (TaskChange::Ended, "ended")]
+    {
+        assert_eq!(serde_json::to_value(change).unwrap(), said);
+    }
+    let EventBody::TaskChanged { change: TaskChange::Unknown, .. } = serde_json::from_str(later).unwrap() else {
+        panic!("{later}")
     };
 }
 

@@ -216,6 +216,7 @@ pub static PLAN_APPROVED: Scenario = Scenario {
                     | EventBody::AgentExited { .. }
                     | EventBody::Notice { .. }
                     | EventBody::AgentMode { .. }
+                    | EventBody::TaskChanged { .. }
                     | EventBody::AgentOther { .. }
                     | EventBody::AgentCompacting { .. }
                     | EventBody::CompactionAsked { .. }
@@ -250,6 +251,7 @@ pub static PLAN_APPROVED: Scenario = Scenario {
                             | EventBody::AgentExited { .. }
                             | EventBody::Notice { .. }
                             | EventBody::AgentMode { .. }
+                            | EventBody::TaskChanged { .. }
                             | EventBody::AgentOther { .. }
                             | EventBody::AgentCompacting { .. }
                             | EventBody::CompactionAsked { .. }

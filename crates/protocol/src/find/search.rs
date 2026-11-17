@@ -178,6 +178,7 @@ fn any_text(body: &EventBody, found: &mut impl FnMut(&str) -> bool) -> bool {
         | EventBody::ToolCallDropped { .. }
         | EventBody::ApprovalResolved { .. }
         | EventBody::AgentMode { .. }
+        | EventBody::TaskChanged { .. }
         | EventBody::AgentOther { .. }
         // A compaction isn't found in, as `docs/spec/chats.md` says.
         | EventBody::CompactionAsked { .. }

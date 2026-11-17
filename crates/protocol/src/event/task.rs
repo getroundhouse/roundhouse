@@ -58,3 +58,18 @@ pub struct EndedTask {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub wait: Option<EndedWait>,
 }
+
+/// What the agent said of one of its background tasks, which [`EventBody::TaskChanged`](super::EventBody::TaskChanged)
+/// records. One this build doesn't know reads as `Unknown`.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum TaskChange {
+    Started,
+    /// How it's getting on, such as what a subagent has used so far.
+    Progressed,
+    /// A change to what was said of it, such as its moving to the background, or its status as it ends.
+    Updated,
+    Ended,
+    #[serde(other)]
+    Unknown,
+}

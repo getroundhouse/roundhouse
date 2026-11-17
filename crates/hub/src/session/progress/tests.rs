@@ -5,8 +5,8 @@ use std::collections::HashMap;
 
 use protocol::capability::turns::OwnTurn;
 use protocol::event::{
-    Again, AgentRunState, AgentTask, ApprovalOutcome, ContentBlock, ExitReason, FailureKind, NoticeLevel, TaskKind,
-    TaskOutcome, TurnOutcome,
+    Again, AgentRunState, AgentTask, ApprovalOutcome, ContentBlock, ExitReason, FailureKind, NoticeLevel, TaskChange,
+    TaskKind, TaskOutcome, TurnOutcome,
 };
 use protocol::model::ApprovalId;
 use protocol::prompt::Prompt;
@@ -243,14 +243,14 @@ fn says(text: &str, subagent: Option<&str>) -> EventBody {
 }
 
 /// What Claude's CLI sends between two failed requests of the agent's own as one of its tasks ends and it picks up
-/// by itself, as the hub's own logs have it: a subagent's last words and end, the shorter list, the turn's start and
+/// by itself, as the hub's own logs have it: a subagent's last words, its task's change and its end, the shorter list, the turn's start and
 /// the agent's own lines with no form, its state, why it picked up, and its limits.
 fn picks_up_by_itself() -> Vec<EventBody> {
     let other = |kind: &str| EventBody::AgentOther { kind: kind.into(), subagent: None };
     vec![
         says("Here's the review.", Some("toolu_1")),
         EventBody::SubagentContext { subagent: "toolu_1".into(), tokens: 9 },
-        other("system/task_updated"),
+        EventBody::TaskChanged { task: "t1".into(), change: TaskChange::Updated },
         EventBody::SubagentEnded {
             subagent: "toolu_1".into(),
             outcome: TaskOutcome::Finished,

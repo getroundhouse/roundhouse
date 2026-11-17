@@ -1,4 +1,4 @@
-use protocol::event::{EventBody, TaskOutcome};
+use protocol::event::{EventBody, TaskChange, TaskOutcome};
 use serde_json::{Value, json};
 
 use crate::claude::normalize::{Normalizer, Parsed};
@@ -48,7 +48,7 @@ fn a_subagent_starts_with_what_it_was_asked_and_ends_with_its_report() {
     };
     assert_eq!(end, ended);
     assert!(
-        matches!(event(&mut normalizer, &notification("t1", "completed")), EventBody::AgentOther { .. }),
+        matches!(event(&mut normalizer, &notification("t1", "completed")), EventBody::TaskChanged { .. }),
         "it ended once"
     );
 }
@@ -164,13 +164,13 @@ fn a_subagent_says_how_many_tokens_its_conversation_holds_as_it_works_and_as_it_
     assert_eq!(working, EventBody::SubagentContext { subagent: "t1".into(), tokens: 37_386 });
     assert!(matches!(end, EventBody::SubagentEnded { context_tokens: Some(41_020), .. }), "{end:?}");
     assert!(
-        matches!(event(&mut normalizer, &progress("t1", 41_020)), EventBody::AgentOther { .. }),
+        matches!(event(&mut normalizer, &progress("t1", 41_020)), EventBody::TaskChanged { .. }),
         "it's ended, so nothing is working"
     );
 }
 
 #[test]
-fn progress_that_counts_no_tokens_or_isnt_a_subagents_stays_as_it_was() {
+fn progress_that_counts_no_tokens_or_isnt_a_subagents_is_only_a_change_to_its_task() {
     let mut normalizer = Normalizer::default();
     event(&mut normalizer, &started("t1", "local_agent", true));
     // A tool's task says how far it's got too, counting 0.
@@ -181,19 +181,19 @@ fn progress_that_counts_no_tokens_or_isnt_a_subagents_stays_as_it_was() {
     let uncounted = event(&mut normalizer, &uncounted);
     let a_tools = event(&mut normalizer, &progress("t2", 0));
 
-    assert!(matches!(uncounted, EventBody::AgentOther { kind, .. } if kind == "system/task_progress"));
-    assert!(matches!(a_tools, EventBody::AgentOther { kind, .. } if kind == "system/task_progress"));
+    let progressed = |task: &str| EventBody::TaskChanged { task: task.into(), change: TaskChange::Progressed };
+    assert_eq!((uncounted, a_tools), (progressed("t1"), progressed("t2")));
 }
 
 #[test]
-fn a_task_that_isnt_a_subagent_stays_as_it_was() {
+fn a_task_that_isnt_a_subagent_is_only_a_change_to_its_task() {
     let mut normalizer = Normalizer::default();
 
     let start = event(&mut normalizer, &started("t1", "local_bash", true));
     let end = event(&mut normalizer, &notification("t1", "completed"));
 
-    assert!(matches!(start, EventBody::AgentOther { kind, .. } if kind == "system/task_started"));
-    assert!(matches!(end, EventBody::AgentOther { kind, .. } if kind == "system/task_notification"));
+    assert_eq!(start, EventBody::TaskChanged { task: "t1".into(), change: TaskChange::Started });
+    assert_eq!(end, EventBody::TaskChanged { task: "t1".into(), change: TaskChange::Ended });
 }
 
 #[test]

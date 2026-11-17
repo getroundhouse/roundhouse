@@ -131,6 +131,7 @@ impl Printer {
             | EventBody::AgentState { .. }
             | EventBody::AgentLimits { .. }
             | EventBody::SubagentContext { .. }
+            | EventBody::TaskChanged { .. }
             | EventBody::AgentOther { .. }
             | EventBody::Unknown => {}
         }

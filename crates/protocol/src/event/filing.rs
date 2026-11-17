@@ -14,6 +14,7 @@ impl EventBody {
             EventBody::AgentInit { .. } => "agent_init",
             EventBody::AgentState { .. } => "agent_state",
             EventBody::AgentTasks { .. } => "agent_tasks",
+            EventBody::TaskChanged { .. } => "task_changed",
             EventBody::OwnTurn(_) => "own_turn",
             EventBody::AgentLimits { .. } => "agent_limits",
             EventBody::SubagentStarted { .. } => "subagent_started",
@@ -62,6 +63,7 @@ impl EventBody {
             | EventBody::AgentInit { .. }
             | EventBody::AgentState { .. }
             | EventBody::AgentTasks { .. }
+            | EventBody::TaskChanged { .. }
             | EventBody::OwnTurn(_)
             | EventBody::AgentLimits { .. }
             | EventBody::ToolCallDropped { .. }

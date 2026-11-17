@@ -169,17 +169,8 @@ impl Tail {
                     self.compacted(run);
                 }
             }
-            EventBody::TurnEnded { .. } => {
-                let in_background = &self.in_background;
-                let carries_on = |subagent: &SubagentId| in_background.iter().any(|b| b.subagent == *subagent);
-                self.messages.retain(|m| later(run, m.run) || m.subagent.as_ref().is_some_and(carries_on));
-                self.compacted(run);
-            }
-            EventBody::AgentExited { .. } => {
-                self.messages.retain(|m| later(run, m.run));
-                self.in_background.retain(|b| later(run, b.run));
-                self.compacted(run);
-            }
+            EventBody::TurnEnded { .. } => self.turn_ended(run),
+            EventBody::AgentExited { .. } => self.agent_exited(run),
             EventBody::SubagentStarted { in_background: true, .. } => {
                 if let Some(subagent) = body.subagent_started() {
                     self.in_background(run, subagent);
@@ -216,10 +207,27 @@ impl Tail {
             | EventBody::AgentMode { .. }
             | EventBody::SubagentStarted { in_background: false, .. }
             | EventBody::SubagentContext { .. }
+            | EventBody::TaskChanged { .. }
             | EventBody::AgentOther { .. }
             | EventBody::CacheExpired { .. }
             | EventBody::Unknown => {}
         }
+    }
+
+    /// The turn of `run` ended, which ends what it was writing, but for what a subagent in the background is writing,
+    /// since it carries on.
+    fn turn_ended(&mut self, run: Option<RunId>) {
+        let in_background = &self.in_background;
+        let carries_on = |subagent: &SubagentId| in_background.iter().any(|b| b.subagent == *subagent);
+        self.messages.retain(|m| later(run, m.run) || m.subagent.as_ref().is_some_and(carries_on));
+        self.compacted(run);
+    }
+
+    /// The agent of `run` exited, which ends everything it and its subagents were writing.
+    fn agent_exited(&mut self, run: Option<RunId>) {
+        self.messages.retain(|m| later(run, m.run));
+        self.in_background.retain(|b| later(run, b.run));
+        self.compacted(run);
     }
 
     /// `subagent`, which `run` started, works in the background, so the end of a turn leaves what it's writing.

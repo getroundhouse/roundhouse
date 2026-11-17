@@ -200,6 +200,7 @@ impl HintCollector {
             | EventBody::ApprovalResolved { .. }
             | EventBody::AgentExited { .. }
             | EventBody::AgentMode { .. }
+            | EventBody::TaskChanged { .. }
             | EventBody::AgentOther { .. }
             | EventBody::AgentCompacting { .. }
             | EventBody::CompactionAsked { .. }
