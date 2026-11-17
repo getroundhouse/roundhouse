@@ -32,8 +32,9 @@ pub(super) fn may_restart(hub: &HubStatus, app_build: Option<u64>) -> bool {
     hub.on_demand && (older_build || hub.protocol_version < protocol::client::CLIENT_PROTOCOL_VERSION)
 }
 
-/// Whether to replace this hub with this app's own without asking: one it may restart, and only if nothing would
-/// notice. This app is the one client, and its request for the status is the one thing the hub is doing.
+/// Whether to replace this hub with this app's own without asking: one it may restart, and only if that cuts nothing
+/// off. Nothing is running on it, and this app's request for the status is the one thing the hub is doing, whoever
+/// else is connected, as [`HubStatus::is_idle`] says.
 pub(super) fn should_replace(hub: &HubStatus, app_build: Option<u64>) -> bool {
     may_restart(hub, app_build) && hub.is_idle()
 }
@@ -217,10 +218,16 @@ mod tests {
     }
 
     #[test]
-    fn a_hub_with_anything_running_or_another_client_is_left_alone() {
+    fn a_hub_with_anything_running_or_under_way_is_left_alone() {
         assert!(!should_replace(&HubStatus { running_sessions: 1, ..older_idle_hub() }, Some(2)));
         assert!(!should_replace(&HubStatus { running_setups: 1, ..older_idle_hub() }, Some(2)));
-        assert!(!should_replace(&HubStatus { clients: 2, ..older_idle_hub() }, Some(2)));
         assert!(!should_replace(&HubStatus { requests: 2, ..older_idle_hub() }, Some(2)));
+    }
+
+    /// One that's only connected, such as the app on another device, connects again to the next hub, so it would
+    /// otherwise keep the update waiting for as long as it stays open.
+    #[test]
+    fn another_client_connected_doesnt_keep_a_hub() {
+        assert!(should_replace(&HubStatus { clients: 2, ..older_idle_hub() }, Some(2)));
     }
 }

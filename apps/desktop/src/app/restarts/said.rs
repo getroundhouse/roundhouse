@@ -54,11 +54,11 @@ pub(in super::super) fn restart_note(status: &HubStatus) -> String {
 }
 
 /// What the app asks before finishing an update by restarting the older hub. It only asks about a hub that's busy,
-/// so one with nothing running is busy with something else, which restarting cuts off too.
+/// so one with nothing running has a request under way, which restarting cuts off too.
 pub(super) fn finish_question(status: &HubStatus) -> String {
     match running(status) {
-        None => "Nothing is running on the previous version, but something else is using it, such as the command \
-                 line. Restarting now cuts that off."
+        None => "Nothing is running on the previous version, but something is still under way on it, such as \
+                 creating or archiving a workspace. Restarting now cuts that off."
             .to_string(),
         Some(running) => format!("This stops {running} still running on the previous version.{}", picks_up(status)),
     }
@@ -119,8 +119,8 @@ mod tests {
     fn finishing_an_update_says_what_would_stop() {
         assert_eq!(
             finish_question(&running_on(0, 0)),
-            "Nothing is running on the previous version, but something else is using it, such as the command line. \
-             Restarting now cuts that off."
+            "Nothing is running on the previous version, but something is still under way on it, such as creating \
+             or archiving a workspace. Restarting now cuts that off."
         );
         assert_eq!(
             finish_question(&running_on(2, 1)),

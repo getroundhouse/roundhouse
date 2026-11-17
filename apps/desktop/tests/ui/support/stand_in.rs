@@ -18,9 +18,9 @@ impl StandInHub {
         self.write("stand-in-running", agents);
     }
 
-    /// Has it say this many clients are connected from now on, as if some had come or gone.
-    pub(crate) fn set_clients(&self, clients: u32) {
-        self.write("stand-in-clients", clients);
+    /// Has it say this many requests are under way besides the one asking from now on, as if some had come or ended.
+    pub(crate) fn set_requests(&self, requests: u32) {
+        self.write("stand-in-requests", requests);
     }
 
     /// Has it say this many setup scripts are running from now on, as if some had started or finished.

@@ -34,8 +34,8 @@ impl UpdateQuestion {
     }
 }
 
-/// How often to look whether an older hub has gone idle, for what the records don't show, such as another client
-/// leaving it.
+/// How often to look whether an older hub has gone idle, for what the records don't show, such as a request ending
+/// that another client made.
 pub(in super::super) const LOOK_AGAIN: Duration = Duration::from_secs(30);
 
 /// The hub the app is connected to, when it's an older one a client started, which this app may restart. A hub's build
@@ -50,10 +50,10 @@ pub(in super::super) struct OlderHub {
 
 impl AppView {
     /// Finishes an update by itself, by restarting the older hub once nothing is running on it and nothing else is
-    /// using it, as when the app connects. Whenever that is, even while someone is using the app: the restart stops
-    /// nothing, and the workspace stays on screen through it, while waiting for a better moment left the update
+    /// under way on it, as when the app connects. Whenever that is, even while someone is using the app: the restart
+    /// stops nothing, and the workspace stays on screen through it, while waiting for a better moment left the update
     /// looking stuck.
-    /// Only the hub knows about other clients and setup scripts, so this asks it, and the hub has the last word as
+    /// Only the hub knows about requests under way and setup scripts, so this asks it, and the hub has the last word as
     /// it stops, since a prompt can be sent between this seeing it idle and stopping it.
     pub(in super::super) fn finish_update_when_idle(&mut self, cx: &mut Context<Self>) {
         let (Some(client), Some(OlderHub { pid, .. }), None) = (self.client(), self.restartable_hub, &self.looking)

@@ -4,11 +4,12 @@
 //! `agent_list` as unsupported, as a build from before hubs described their agents would, and refuses anything else. It
 //! holds the same lock as a real hub, and lets go of it before it exits, as a real hub does. A test can change how many
 //! agents it says are running, as if some had started or finished, by writing the number to [`RUNNING`] in its data
-//! directory, and how many clients are connected to it, by writing to [`CLIENTS`]. Asked to stop if it's idle, it goes
-//! by what it says then, as a hub does, unless it's told to be from before a hub could decide that, or to turn out
-//! busy. With `--keeps-workers` it says it keeps its workers, and asked to restart, it goes once no setup script is
-//! running, as a hub does, as many as it says are until a test writes another number to [`SETUPS`], unless they're told
-//! to end as it's asked, and leaves [`RESTARTED`] to say it restarted rather than stopped.
+//! directory, and how many requests it has under way besides the one asking, by writing to [`REQUESTS`]. Asked to stop
+//! if it's idle, it goes by what it says then, as a hub does, unless it's told to be from before a hub could decide
+//! that, or to turn out busy. With `--keeps-workers` it says it keeps its workers, and asked to restart, it goes once
+//! no setup script is running, as a hub does, as many as it says are until a test writes another number to
+//! [`SETUPS`], unless they're told to end as it's asked, and leaves [`RESTARTED`] to say it restarted rather than
+//! stopped.
 
 #![expect(clippy::unwrap_used, clippy::expect_used, reason = "a test program, so failing loudly is what it should do")]
 
@@ -32,9 +33,10 @@ struct Args {
     /// How many agents it says are running, until a test writes another number to [`RUNNING`].
     #[arg(long, default_value_t = 0)]
     running: u32,
-    /// How many clients it says are connected, until a test writes another number to [`CLIENTS`].
-    #[arg(long, default_value_t = 1)]
-    clients: u32,
+    /// How many requests it says it has under way besides the one asking, such as creating a workspace, until a test
+    /// writes another number to [`REQUESTS`].
+    #[arg(long, default_value_t = 0)]
+    requests: u32,
     /// Say it was started by hand, so a client mustn't restart it.
     #[arg(long)]
     not_on_demand: bool,
@@ -72,10 +74,10 @@ enum IfIdle {
     Busy,
 }
 
-/// The files in its data directory that say how many agents are running and how many clients are connected, once a
-/// test has written them.
+/// The files in its data directory that say how many agents are running, and how many requests are under way besides
+/// the one asking, once a test has written them.
 const RUNNING: &str = "stand-in-running";
-const CLIENTS: &str = "stand-in-clients";
+const REQUESTS: &str = "stand-in-requests";
 const SETUPS: &str = "stand-in-setups";
 
 /// What it leaves in its data directory as it goes for a restart.
@@ -139,11 +141,11 @@ fn status(args: &Args, paths: &Paths) -> HubStatus {
         started_at_ms: 0,
         workers: running,
         running_sessions: running,
-        clients: written(paths, CLIENTS, args.clients),
+        clients: 1,
         on_demand: !args.not_on_demand,
         build_number: args.build,
         running_setups: written(paths, SETUPS, args.setups),
-        requests: 1,
+        requests: 1 + written(paths, REQUESTS, args.requests),
         keeping_awake: false,
         keeps_workers: args.keeps_workers,
         oldest_protocol_version: None,

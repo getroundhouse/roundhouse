@@ -151,10 +151,12 @@ pub struct HubStatus {
 }
 
 impl HubStatus {
-    /// Whether nothing would notice the hub stopping: nothing is running on it, and whoever asked for this is its one
-    /// client, with their request the one thing it's doing.
+    /// Whether stopping the hub would cut nothing off: nothing is running on it, and the request asking for this is
+    /// the one thing it's doing. Other clients don't count. One that's only connected loses nothing, since it connects
+    /// again to the next hub, and what's typed in it is kept by the hub, while counting it would keep an older hub,
+    /// and the update waiting on it, for as long as an app on another device stays open.
     pub fn is_idle(&self) -> bool {
-        self.running_sessions == 0 && self.running_setups == 0 && self.requests <= 1 && self.clients <= 1
+        self.running_sessions == 0 && self.running_setups == 0 && self.requests <= 1
     }
 }
 

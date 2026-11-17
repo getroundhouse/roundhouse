@@ -28,7 +28,7 @@ impl Client {
         }
     }
 
-    /// Asks the hub to stop if nothing would notice, which it decides. A busy one refuses with `Conflict`, and one
+    /// Asks the hub to stop if that cuts nothing off, which it decides. A busy one refuses with `Conflict`, and one
     /// older than this request refuses it, as `is_unsupported` says.
     pub fn hub_shutdown_if_idle(&self) -> Result<()> {
         match self.call(admin::HubShutdownIfIdle) {
