@@ -9,6 +9,9 @@ mod latest;
 mod selecting;
 
 mod history;
-use history::{A_FRAME, press, settle_at_the_end, thumb, wait_for_the_list_to_settle, wait_for_the_tail};
+use history::{A_FRAME, press, settle_at_the_end, thumb, wait_for_the_list_to_settle};
 mod long_sessions;
-use long_sessions::{LONG, open_on_a_long_chat, open_on_a_long_session, prompts, session_of, session_saying};
+use long_sessions::{
+    LONG, long_reply, open_on_a_chat_saying, open_on_a_long_chat, open_on_a_long_session, prompts, session_of,
+    session_saying,
+};

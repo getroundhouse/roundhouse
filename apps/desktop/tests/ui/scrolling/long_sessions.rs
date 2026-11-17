@@ -20,7 +20,7 @@ pub(super) const LONG: usize = 700;
 const TO_A_PROMPT: usize = 25;
 
 /// The agent's `i`th reply in a long session: a line, a paragraph or a few screens, in turn.
-fn long_reply(i: usize) -> String {
+pub(super) fn long_reply(i: usize) -> String {
     "the signal box keeps a ledger. ".repeat([1, 4, 30][i % 3])
 }
 
@@ -37,14 +37,24 @@ pub(super) fn open_on_a_long_session<'a>(cx: &'a mut TestAppContext, stack: &Sta
 /// The same session, held by a fake hub, and open as [`open_on_a_long_session`] opens it. The hub goes with the
 /// test, so it's returned to be kept.
 pub(super) fn open_on_a_long_chat(cx: &mut TestAppContext) -> (FakeHub, Ui<'_>) {
+    open_on_a_chat_saying(cx, LONG, long_reply)
+}
+
+/// A chat held by a fake hub where the agent has said `count` things, over as many prompts as that takes, open as
+/// [`open_on_a_long_chat`] opens its own. The hub goes with the test, so it's returned to be kept.
+pub(super) fn open_on_a_chat_saying(
+    cx: &mut TestAppContext,
+    count: usize,
+    say: impl Fn(usize) -> String,
+) -> (FakeHub, Ui<'_>) {
     let mut world = World::default();
     let repo = world.repo("signals");
     let workspace = world.workspace(&repo, "ledger");
     let mut events = Vec::new();
-    for said in Vec::from_iter(0..LONG).chunks(TO_A_PROMPT) {
+    for said in Vec::from_iter(0..count).chunks(TO_A_PROMPT) {
         let prompt = Seq::new(u64::try_from(events.len() + 1).unwrap());
         events.extend([user_prompt("Keep the ledger."), taken(prompt)]);
-        events.extend(said.iter().map(|&i| text(&format!("msg-{i}"), &long_reply(i))));
+        events.extend(said.iter().map(|&i| text(&format!("msg-{i}"), &say(i))));
         events.push(finished_turn(12, 0.04));
     }
     let chat = world.chat(&workspace, SessionStatus::Idle, events);
