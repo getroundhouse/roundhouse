@@ -1,6 +1,8 @@
 use client_core::Approval;
+use protocol::capability::calls::Call;
+use protocol::capability::calls::call::{FilePatch, Patch, PatchChange};
 use protocol::event::{ApprovalDecision, Asking, CallKind, EventBody, QuestionAnswer};
-use protocol::fixtures::{ApprovalRequest, approval_request};
+use protocol::fixtures::{ApprovalRequest, approval_request, typed_request};
 use serde_json::{Value, json};
 
 use super::{Shown, ToolUse};
@@ -60,6 +62,25 @@ fn what_nobody_described_still_asks_something() {
     assert_eq!((fetch.question.text.as_str(), given(&fetch)), ("https://example.com", None), "said once");
     assert_eq!(plain.question.options[0].description.as_deref(), Some("This once"), "nothing runs");
     assert_eq!((bare.question.text.as_str(), given(&bare), bare.reason.as_deref()), ("Use this tool?", None, None));
+}
+
+/// A patch is asked about as what it would change, as an edit is: a patch of one file by that file, and one of several
+/// as several edits.
+#[test]
+fn a_patch_is_asked_about_as_the_edits_it_would_make() {
+    let file = |path: &str, change| FilePatch { path: path.into(), change };
+    let read = |files| {
+        let body = typed_request("a", "patch-1", Call::Patch(Patch { files }));
+        ToolUse::read(&body, Approval::of(&body).unwrap().into_owned(), true).unwrap()
+    };
+    let added = || file("src/signal.rs", PatchChange::Add { content: "fn may_pass() {}".into() });
+
+    let one = read(vec![added()]);
+    let several = read(vec![added(), file("src/old.rs", PatchChange::Delete)]);
+
+    assert_eq!((one.question.text.as_str(), given(&one)), ("Make this edit?", Some("src/signal.rs")));
+    assert_eq!((several.question.text.as_str(), given(&several)), ("Make these edits?", Some("2 files")));
+    assert!(matches!(several.given, Some(Shown::Change(_))), "shown as what it would change");
 }
 
 #[test]

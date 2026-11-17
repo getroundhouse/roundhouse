@@ -2,7 +2,8 @@ use super::super::{Printer, about};
 use crate::run::short;
 use client_core::calls::first_line;
 use client_core::{Answered, Approval, Given, ToolUseAsked};
-use protocol::event::{ApprovalOutcome, Asking, EventBody, Question, SessionEvent};
+use protocol::capability::calls::call::PatchChange;
+use protocol::event::{ApprovalOutcome, Asking, EventBody, LineMark, Question, SessionEvent};
 
 impl Printer {
     pub(in super::super) fn approval_requested(&mut self, event: &SessionEvent) {
@@ -58,7 +59,7 @@ fn tool_use(event: &SessionEvent) -> Vec<String> {
     let said = match &asked.given {
         Some(Given::Command(command)) => Some(*command),
         Some(Given::MainInput(input)) => Some(input.as_str()),
-        Some(given @ (Given::Edit(_) | Given::Write(_))) => given.path(),
+        Some(given @ (Given::Edit(_) | Given::Write(_) | Given::Patch(_))) => given.path(),
         None => None,
     };
     let first = asked.about.or(said.map(first_line)).map(str::to_string);
@@ -77,6 +78,14 @@ fn tool_use(event: &SessionEvent) -> Vec<String> {
             lines.extend(asked.about.map(|_| format!("  file: {}", write.path)));
             lines.extend(marked("+", write.content));
         }
+        Some(given @ Given::Patch(patch)) => {
+            // A patch of one file has it on the first line, as an edit does, where nothing's said of what it's for.
+            let said_once = asked.about.is_none() && given.path().is_some();
+            for file in &patch.files {
+                lines.extend((!said_once).then(|| format!("  file: {}", file.path)));
+                lines.extend(patched(&file.change, marked));
+            }
+        }
         Some(Given::Command(_) | Given::MainInput(_)) | None => {
             if let Some(said) = said.filter(|said| first.as_deref() != Some(*said)) {
                 lines.extend(marked("$", said));
@@ -87,6 +96,28 @@ fn tool_use(event: &SessionEvent) -> Vec<String> {
     lines.extend(asked.asked_by.iter().map(|call| format!("  asked by the subagent {call} started")));
     lines.push(format!("  roundhouse approve {} {approval_id}", event.session_id));
     lines
+}
+
+/// What a patch does to one file, as an edit's lines are printed: what it adds, what it takes out and what it keeps
+/// around them, `marked` each with its mark.
+fn patched(change: &PatchChange, marked: impl Fn(&str, &str) -> Vec<String>) -> Vec<String> {
+    match change {
+        PatchChange::Add { content } => marked("+", content),
+        PatchChange::Delete => vec!["  deleted".to_string()],
+        PatchChange::Update { move_to, hunks } => {
+            let moved = move_to.iter().map(|to| format!("  moved to: {to}"));
+            let lines = hunks.iter().flat_map(|hunk| &hunk.lines).flat_map(|line| {
+                let mark = match line.mark {
+                    LineMark::Added => "+",
+                    LineMark::Removed => "-",
+                    LineMark::Same | LineMark::Unknown => " ",
+                };
+                marked(mark, &line.text)
+            });
+            moved.chain(lines).collect()
+        }
+        PatchChange::Unknown => vec!["  a change this build doesn't know".to_string()],
+    }
 }
 
 /// A question, under its header, and its options numbered, with what each means.

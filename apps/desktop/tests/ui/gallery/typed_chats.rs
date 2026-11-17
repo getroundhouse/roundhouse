@@ -139,7 +139,7 @@ fn may_pass() -> Vec<HunkLine> {
 }
 
 /// Adding `may_pass` to the signal, and a depot that uses it.
-fn patch() -> Patch {
+pub(crate) fn patch() -> Patch {
     let update = PatchChange::Update { move_to: None, hunks: vec![PatchHunk { after: None, lines: may_pass() }] };
     Patch {
         files: vec![

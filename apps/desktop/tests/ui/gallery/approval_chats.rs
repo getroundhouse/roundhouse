@@ -4,16 +4,21 @@
 
 #![cfg(test)]
 
+use protocol::capability::calls::Call;
 use protocol::event::{ApprovalOutcome, Asking, CallKind, EventBody};
-use protocol::fixtures::{ApprovalRequest, approval_request};
-use protocol::model::SessionStatus;
+use protocol::fixtures::{ApprovalRequest, approval_request, typed_request};
+use protocol::model::{Seq, SessionStatus};
 use serde_json::json;
 
 use super::chats::{self, looked_around};
-use super::events::{replied, subagent_started, subagents_listed, text, tool_denied, tool_result, tool_use, within};
+use super::events::{
+    replied, subagent_started, subagents_listed, taken, text, tool_denied, tool_result, tool_use, typed_call,
+    user_prompt, within,
+};
 use super::frame::{CHAT, QUESTION};
 use super::screens::FOCUS;
 use super::steps::{Screen, Step};
+use super::typed_chats;
 use super::worlds::{chat_world, in_plan_mode};
 
 /// The screens about a tool's use the agent asks about.
@@ -57,7 +62,27 @@ pub(crate) const SCREENS: &[Screen] = &[
         frame: QUESTION,
         steps: &[Step::Select(FOCUS)],
     },
+    Screen {
+        name: "approval-patch",
+        spec: "chats.md",
+        world: Some(|| chat_world(SessionStatus::WaitingApproval, patched())),
+        frame: QUESTION,
+        steps: &[Step::Select(FOCUS)],
+    },
 ];
+
+/// Waiting to be allowed a patch of two files, as Codex's adapter asks: adding `may_pass` to the signal, and a depot
+/// that uses it, with nothing said of what it's for.
+fn patched() -> Vec<EventBody> {
+    let call = Call::Patch(typed_chats::patch());
+    vec![
+        user_prompt("Add a `may_pass` to the signal, and a depot that uses it."),
+        taken(Seq::new(1)),
+        text("msg-1", "I'll add it, and the depot."),
+        typed_call("msg-2", "patch-1", call.clone()),
+        typed_request("approval-1", "patch-1", call),
+    ]
+}
 
 /// Waiting to be allowed an edit to the project's settings for Claude, which says nothing of what it's for or why it's
 /// asked.

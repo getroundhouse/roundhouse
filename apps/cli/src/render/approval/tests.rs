@@ -1,6 +1,9 @@
 use client_core::{Answered, Approval};
+use protocol::capability::calls::Call;
+use protocol::capability::calls::call::{FilePatch, Patch, PatchChange, PatchHunk};
 use protocol::event::{ApprovalOutcome, Asking, CallKind, Question, QuestionAnswer, QuestionOption, SessionEvent};
-use protocol::fixtures::{ApprovalRequest, approval_request};
+use protocol::event::{HunkLine, LineMark};
+use protocol::fixtures::{ApprovalRequest, approval_request, typed_request};
 use protocol::model::Seq;
 use serde_json::{Value, json};
 
@@ -98,6 +101,33 @@ fn an_edit_prints_its_file_and_what_it_takes_out_and_puts_in() {
     assert_eq!(described[2..], change);
     assert_eq!(plain[0], "APPROVAL NEEDED: Edit: src/lib.rs", "its file said once");
     assert_eq!(plain[1..], change);
+}
+
+/// A patch prints each file it changes and what it does to each, as an edit's lines are printed, and a patch of one
+/// file has it on its first line.
+#[test]
+fn a_patch_prints_each_file_and_what_it_does_to_it() {
+    let line = |mark, text: &str| HunkLine { mark, text: text.into() };
+    let lines_of = |files| {
+        lines(&protocol::fixtures::event(Seq::new(7), typed_request("req_1", "p", Call::Patch(Patch { files }))))
+    };
+    let hunk = PatchHunk {
+        after: None,
+        lines: vec![line(LineMark::Same, "fn a() {"), line(LineMark::Removed, "1"), line(LineMark::Added, "2")],
+    };
+    let changed =
+        FilePatch { path: "src/lib.rs".into(), change: PatchChange::Update { move_to: None, hunks: vec![hunk] } };
+    let deleted = FilePatch { path: "old.rs".into(), change: PatchChange::Delete };
+
+    let both = lines_of(vec![changed.clone(), deleted]);
+    let one = lines_of(vec![changed]);
+
+    let change = ["    fn a() {", "  - 1", "  + 2"];
+    assert_eq!(both[..2], ["APPROVAL NEEDED: Edit", "  file: src/lib.rs"]);
+    assert_eq!(both[2..5], change);
+    assert_eq!(both[5..], ["  file: old.rs", "  deleted", "  roundhouse approve s req_1"]);
+    assert_eq!(one[0], "APPROVAL NEEDED: Edit: src/lib.rs", "its file said once");
+    assert_eq!(one[1..4], change);
 }
 
 #[test]

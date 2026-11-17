@@ -547,13 +547,13 @@ Every call is drawn the same way, as the first rule below says, and each kind fi
 
 - **A question nobody answered says `Not answered` in the block,** whether it was skipped, left out when others were answered, or the turn stopped before anyone could. The line leaves out a question nobody answered, and says `Not answered` only when none of them was. *Unconfirmed.*
 - **What was answered is on the hub's record,** kept as the answers are passed to the agent, so every client shows the same, after a restart too. One answered before the hub kept answers shows only what was asked. *Unconfirmed.*
-- **A request to use a tool is asked in the composer's place too, as a question with two answers,** `Allow` and `Deny`, on numbered rows, so it's answered where the person is already looking, by the same keys, rather than on a card that has scrolled away. Its header is the tool, then what the subagent that asks is for, when one does, or its kind, or `Subagent` where its record says neither or hasn't come. Its text is what the request says the use is for, which for a command is the agent's own line about it, and `Run this command?`, `Make this edit?` or `Write this file?` where it says nothing, or `Use this tool?` for any other tool with nothing to say it by. It has no `×`, since denying it is one of its answers. *Unconfirmed.*
+- **A request to use a tool is asked in the composer's place too, as a question with two answers,** `Allow` and `Deny`, on numbered rows, so it's answered where the person is already looking, by the same keys, rather than on a card that has scrolled away. Its header is the tool, then what the subagent that asks is for, when one does, or its kind, or `Subagent` where its record says neither or hasn't come. Its text is what the request says the use is for, which for a command is the agent's own line about it, and `Run this command?`, `Make this edit?`, `Make these edits?` for a patch of several files, or `Write this file?` where it says nothing, or `Use this tool?` for any other tool with nothing to say it by. It has no `×`, since denying it is one of its answers. *Unconfirmed.*
 
   **A command waiting to be allowed, in a chat that's planning, with Allow chosen.** *Unconfirmed.*
 
   ![A command waiting to be allowed, in a chat that's planning](screens/approval.png)
 
-- **Under its text is the command, whole,** in the code font on the composer's surface, scrolling once it's taller than seven lines or so, since what's allowed is the command and not what the agent says it's for. An edit or a file to write shows what it would change, as a diff under the file's path, scrolling both ways as an edit's diff does in the chat, since what's allowed is the change. Any other tool shows what its call's line says of it, such as a URL, and where nothing says what the use is for, that is its text. Then why the agent asks, in its own words, as a small detail, when it says: an agent with full access asks only about what it won't do unasked in any mode, so the reason is what there is to judge. *Unconfirmed.*
+- **Under its text is the command, whole,** in the code font on the composer's surface, scrolling once it's taller than seven lines or so, since what's allowed is the command and not what the agent says it's for. An edit or a file to write shows what it would change, as a diff under the file's path, scrolling both ways as an edit's diff does in the chat, since what's allowed is the change. A patch of several files, as Codex makes, says how many over its diff, and each file's path over its own lines, with `Deleted` for one it deletes. Any other tool shows what its call's line says of it, such as a URL, and where nothing says what the use is for, that is its text. Then why the agent asks, in its own words, as a small detail, when it says: an agent with full access asks only about what it won't do unasked in any mode, so the reason is what there is to judge. *Unconfirmed.*
 
   **A removal one of the agent's subagents wants to run, which the agent asks about even with full access, and says why.** *Unconfirmed.*
 
@@ -562,6 +562,10 @@ Every call is drawn the same way, as the first rule below says, and each kind fi
   **An edit to a file waiting to be allowed, which says nothing of what it's for: its file, and what it would change.** *Unconfirmed.*
 
   ![An edit waiting to be allowed, with its diff](screens/approval-edit.png)
+
+  **A patch of two files waiting to be allowed, as Codex asks for one: how many files, then each file's path over what it would change.** *Unconfirmed.*
+
+  ![A patch of two files waiting to be allowed, with each file's diff](screens/approval-patch.png)
 
 - **Its `0` row takes what the agent should do instead,** which denies the request and tells the agent in those words, so a no can say what would be a yes. Enter in that row sends only what's typed there: with nothing typed it leaves the row, as Escape does, so a row that says it denies never allows. *Unconfirmed.*
 
