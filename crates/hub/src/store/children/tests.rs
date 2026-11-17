@@ -74,20 +74,19 @@ fn a_record_made_ready_takes_its_branches_and_one_discarded_frees_its_path() {
     assert!(matches!(all.iter().find(|c| c.id == "c".into()).unwrap().status, ChildStatus::Removed { .. }));
 }
 
+/// The same again isn't recorded, as `same_again` has it of every record.
 #[test]
-fn branches_are_recorded_only_when_they_change() {
+fn branches_are_recorded_as_they_change_and_only_where_theres_a_worktree() {
     let dir = tempfile::tempdir().unwrap();
     let store = store_with_session(dir.path());
     store.insert_child(&child("a", "/c/x"), &"k1".into()).unwrap();
     let on = |name: &str| Branches { head: Head::Branch { name: BranchName::from(name) }, had: vec![] };
 
     let first = store.set_child_branches(&"w".into(), "/c/x", &on("alder/x")).unwrap();
-    let same = store.set_child_branches(&"w".into(), "/c/x", &on("alder/x")).unwrap();
     let switched = store.set_child_branches(&"w".into(), "/c/x", &on("alder/y")).unwrap();
     let nowhere = store.set_child_branches(&"w".into(), "/c/z", &on("alder/x")).unwrap();
 
     let (first, switched) = (first.unwrap(), switched.unwrap());
-    assert_eq!(same, None);
     assert!(switched.rev > first.rev);
     assert_eq!(switched.branches, Some(on("alder/y")));
     assert_eq!(nowhere, None, "no worktree there");

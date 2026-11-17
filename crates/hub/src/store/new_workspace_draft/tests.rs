@@ -37,21 +37,19 @@ fn a_hub_starts_with_nothing_kept_and_a_revision_for_it() {
     assert_eq!(store.list_records().unwrap().new_workspace_draft, Some(draft));
 }
 
+/// The same again changes nothing, as `same_again` has it of every record.
 #[test]
-fn whats_kept_is_there_until_something_else_is_and_the_same_again_changes_nothing() {
+fn whats_kept_is_there_until_something_else_is() {
     let dir = tempfile::tempdir().unwrap();
     let store = store_with_session(dir.path());
     let before = store.new_workspace_draft().unwrap().rev;
 
     let (kept, changed) = store.set_new_workspace_draft(&typed("fix the login", &[])).unwrap();
-    let (again, changed_again) = store.set_new_workspace_draft(&typed("fix the login", &[])).unwrap();
     let (replaced, _) = store.set_new_workspace_draft(&typed("fix the logout", &[])).unwrap();
 
     assert!(changed && kept.rev > before);
     assert_eq!((kept.repo_id.as_ref(), kept.text.as_str()), (Some(&RepoId::from("r")), "fix the login"));
     assert_eq!((kept.model.clone(), kept.effort, kept.plan), (Some(OPUS), Some(Effort::High), true));
-    assert!(!changed_again);
-    assert_eq!(again, kept, "the same revision");
     assert!(replaced.rev > kept.rev);
     assert_eq!(store.new_workspace_draft().unwrap(), replaced);
 }

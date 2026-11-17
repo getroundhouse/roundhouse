@@ -32,21 +32,6 @@ fn a_draft_is_kept_until_another_replaces_it_and_an_empty_one_clears_it() {
 }
 
 #[test]
-fn keeping_the_same_draft_again_leaves_the_revision_alone() {
-    let dir = tempfile::tempdir().unwrap();
-    let store = store_with_session(dir.path());
-    let first = store.set_draft(&id(), &DraftToKeep::new("same")).unwrap().session.session.rev;
-
-    let again = store.set_draft(&id(), &DraftToKeep::new("same")).unwrap();
-    let cleared_twice =
-        [DraftToKeep::default(), DraftToKeep::default()].map(|d| store.set_draft(&id(), &d).unwrap().changed);
-
-    assert!(!again.changed, "nothing changed, so nothing is announced");
-    assert_eq!(again.session.session.rev, first);
-    assert_eq!(cleared_twice, [true, false]);
-}
-
-#[test]
 fn a_change_to_the_draft_gives_the_session_a_newer_revision() {
     let dir = tempfile::tempdir().unwrap();
     let store = store_with_session(dir.path());

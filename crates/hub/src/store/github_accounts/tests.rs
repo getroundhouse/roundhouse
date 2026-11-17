@@ -27,8 +27,9 @@ fn a_hub_from_before_github_accounts_holds_none_and_each_machines_own_login_is_t
     assert_eq!(store.list_records().unwrap().github_accounts, []);
 }
 
+/// The same again moves neither, as `same_again` has it of every record.
 #[test]
-fn connecting_disconnecting_and_choosing_each_move_their_records_revision_and_the_same_again_doesnt() {
+fn connecting_disconnecting_and_choosing_each_move_their_records_revision() {
     let dir = tempfile::tempdir().unwrap();
     let store = open_in(dir.path());
     let (id, user, file) = (GithubAccountId::from("g"), ada(), LoginFile::new());
@@ -36,16 +37,12 @@ fn connecting_disconnecting_and_choosing_each_move_their_records_revision_and_th
 
     let connected = store.connect_github_login(&connecting(&id, &user, &file)).unwrap();
     let cleared = store.clear_github_login(&id).unwrap().unwrap();
-    let cleared_again = store.clear_github_login(&id).unwrap();
     let machines_own = store.set_github_default(None).unwrap();
-    let same_again = store.set_github_default(None).unwrap();
 
     let made_default = connected.settings.unwrap();
     assert!(made_default.rev > at_first, "{} isn't past {at_first}", made_default.rev);
     assert!(cleared.rev > connected.account.rev, "{} isn't past {}", cleared.rev, connected.account.rev);
-    assert_eq!(cleared_again, None);
     assert!(machines_own.rev > made_default.rev, "{} isn't past {}", machines_own.rev, made_default.rev);
-    assert_eq!(same_again, machines_own);
     assert_eq!(store.list_records().unwrap().rev, machines_own.rev, "the list is as new as the last change");
 }
 
@@ -65,9 +62,10 @@ fn a_row_naming_a_file_the_hub_doesnt_make_holds_no_login_and_is_listed_for_tidy
     assert_eq!(store.github_login_files().unwrap(), [(id, None)]);
 }
 
-/// Beside a token's account, which isn't listed to renew.
+/// Beside a token's account, which isn't listed to renew. Needing it once more moves nothing, as `same_again` has it of
+/// every record.
 #[test]
-fn renewing_a_sign_in_and_its_needing_signing_in_again_each_move_its_records_revision_and_once_only() {
+fn renewing_a_sign_in_and_its_needing_signing_in_again_each_move_its_records_revision() {
     let dir = tempfile::tempdir().unwrap();
     let store = open_in(dir.path());
     let (user, token_file, sign_in_file) = (ada(), LoginFile::new(), LoginFile::new());
@@ -80,7 +78,6 @@ fn renewing_a_sign_in_and_its_needing_signing_in_again_each_move_its_records_rev
     let listed = store.held_github_sign_ins().unwrap();
     let renewed = store.renew_github_sign_in(&signed_in, Some(20_000)).unwrap().unwrap();
     let needing = store.github_login_needs_sign_in(&signed_in).unwrap().unwrap();
-    let needing_again = store.github_login_needs_sign_in(&signed_in).unwrap();
 
     assert_eq!(listed, [(connected.clone(), sign_in_file)]);
     let held = renewed.held_login.unwrap();
@@ -88,7 +85,6 @@ fn renewing_a_sign_in_and_its_needing_signing_in_again_each_move_its_records_rev
     assert!(renewed.rev > connected.rev, "{} isn't past {}", renewed.rev, connected.rev);
     assert!(needing.held_login.unwrap().needs_sign_in);
     assert!(needing.rev > renewed.rev, "{} isn't past {}", needing.rev, renewed.rev);
-    assert_eq!(needing_again, None);
 }
 
 fn profile(name: &str, email: &str) -> GithubProfile {

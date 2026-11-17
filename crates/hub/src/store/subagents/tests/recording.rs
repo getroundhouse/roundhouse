@@ -174,7 +174,6 @@ fn a_subagents_record_names_the_model_of_its_newest_reply_and_changes_only_when_
     let on_haiku = subagent(&store, "agent");
     assert_eq!(model(&store, "agent").as_deref(), Some("claude-haiku-5-5"));
 
-    assert_eq!(record(&store, &reply(Some("agent"), "claude-haiku-5-5", thinking())).1, unchanged, "the same model");
     assert_eq!(record(&store, &message(Some("agent"), thinking())).1, unchanged, "a reply that names none");
     assert_eq!(record(&store, &reply(Some("agent"), "not a model", thinking())).1, unchanged, "a name that names none");
     assert_eq!(record(&store, &reply(None, "claude-opus-5-5", thinking())).1, unchanged, "the agent's own");
@@ -200,7 +199,6 @@ fn a_subagents_record_counts_what_its_conversation_holds_and_changes_only_when_t
     let counted = subagent(&store, "agent");
     assert_eq!(counted.context_tokens, Some(1_200));
 
-    assert_eq!(record(&store, &holds("agent", 1_200)).1, unchanged, "the same count");
     assert_eq!(record(&store, &holds("nobody", 7)).1, unchanged, "one the agent never said it started");
     assert_eq!(subagent(&store, "agent"), counted, "it keeps its revision, so it isn't sent again");
     assert_eq!(record(&store, &holds("agent", 900)).1, ["agent"]);

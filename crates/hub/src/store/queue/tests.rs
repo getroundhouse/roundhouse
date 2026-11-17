@@ -1,6 +1,6 @@
 use protocol::attachment::{Attachment, MediaType};
 use protocol::event::EventBody;
-use protocol::model::{ClientMessageId, QueuedPrompt, Session, SessionId};
+use protocol::model::{QueuedPrompt, Session, SessionId};
 use protocol::prompt::Prompt;
 
 use crate::store::SessionChange;
@@ -103,22 +103,6 @@ fn a_queue_kept_before_prompts_carried_files_reads_as_carrying_none() {
     lock(&store.writer).execute("UPDATE sessions SET queued = ? WHERE id = 's'", [older]).unwrap();
 
     assert_eq!(session(&store).queued, [queued("a", "first")]);
-}
-
-#[test]
-fn the_queue_moves_the_revision_only_when_it_changes() {
-    let dir = tempfile::tempdir().unwrap();
-    let store = store_with_session(dir.path());
-    let before = session(&store).rev;
-
-    let added = queue(&store, &queued("a", "first"));
-    let again = queue(&store, &queued("a", "first"));
-    let missing = store.unqueue_prompt(&"s".into(), &ClientMessageId::from("nope")).unwrap();
-
-    assert!(added.session.session.rev > before);
-    assert!(!again.changed);
-    assert!(!missing.changed);
-    assert_eq!(session(&store).rev, added.session.session.rev);
 }
 
 #[test]

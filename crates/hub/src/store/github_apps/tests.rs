@@ -28,8 +28,8 @@ fn a_hub_from_before_apps_has_none_and_the_accounts_it_held_are_no_apps_installa
     assert_eq!((account.installation.as_ref(), account.held_login.unwrap().how), (None, GithubLoginKind::Token));
 }
 
-/// Each is a change to the record a client follows, so each has a revision of its own, and learning the same bot again
-/// changes nothing.
+/// Each is a change to the record a client follows, so each has a revision of its own. Learning the same bot again
+/// changes nothing, as `same_again` has it of every record.
 #[test]
 fn an_apps_record_has_a_revision_of_its_own_as_its_made_its_bot_is_learned_and_its_removed() {
     let dir = tempfile::tempdir().unwrap();
@@ -47,13 +47,12 @@ fn an_apps_record_has_a_revision_of_its_own_as_its_made_its_bot_is_learned_and_i
 
     let made = store.make_github_app(&making).unwrap();
     let with_bot = store.set_github_app_bot(APP, &bot).unwrap().unwrap();
-    let same_bot = store.set_github_app_bot(APP, &bot).unwrap();
     let listed = store.list_records().unwrap().github_apps;
     let removed = store.remove_github_app(APP).unwrap().unwrap();
 
     assert_eq!((&made.owner, made.bot.as_ref(), with_bot.bot.as_ref()), (&owner, None, Some(&bot)));
     assert!(made.rev < with_bot.rev && with_bot.rev < removed, "{} {} {removed}", made.rev, with_bot.rev);
-    assert_eq!((same_bot, listed), (None, vec![with_bot]));
+    assert_eq!(listed, vec![with_bot]);
     assert_eq!(store.github_app_made_from(&code).unwrap(), None);
     assert_eq!(store.remove_github_app(APP).unwrap(), None);
 }

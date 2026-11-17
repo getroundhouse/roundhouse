@@ -94,10 +94,10 @@ fn marking_unread_brings_back_only_the_newest_reply() {
     assert!(store.mark_read(&"s".into(), newest).unwrap().changed, "and it can be read again");
 }
 
-/// A client only takes a copy with a newer revision, so each change has to move it, and asking for what's already
-/// so mustn't, since nothing would announce it.
+/// A client only takes a copy with a newer revision, so each change has to move it. Asking for what's already so
+/// leaves it, as `same_again` has it of every record.
 #[test]
-fn only_a_change_to_how_far_its_read_moves_its_revision() {
+fn each_change_to_how_far_its_read_moves_its_revision() {
     let dir = tempfile::tempdir().unwrap();
     let store = store_with_session(dir.path());
     let reply = turn(&store);
@@ -105,12 +105,9 @@ fn only_a_change_to_how_far_its_read_moves_its_revision() {
     let replied = rev(&store);
 
     let read = store.mark_read(&"s".into(), reply).unwrap().session.session.rev;
-    let read_again = store.mark_read(&"s".into(), reply).unwrap().session.session.rev;
     let unread = store.mark_unread(&"s".into()).unwrap().session.session.rev;
-    let unread_again = store.mark_unread(&"s".into()).unwrap().session.session.rev;
 
     assert!(replied > Rev::new(1) && read > replied && unread > read);
-    assert_eq!((read_again, unread_again), (read, unread));
     assert_eq!(store.list_records().unwrap().rev, unread);
 }
 
