@@ -1,4 +1,6 @@
-//! Settings' search, which finds a setting by what it's called or what it does.
+//! Settings' search, which finds a setting by what it's called or what it does. What a search leaves is
+//! `settings::page`'s rule, which its unit tests pin, so this shows that what's typed reaches it, and where the cursor
+//! and the keys go, on a fake hub, since a search asks the hub for nothing.
 
 #![cfg(test)]
 
@@ -7,17 +9,11 @@ use gpui_kit::{
     px,
 };
 
-use super::{KEEP_AWAKE, open_settings, settings_showing, typing};
-use crate::support::{Stack, Ui};
+use super::made_up::in_a_workspace;
+use super::{KEEP_AWAKE, open_settings, settings_showing};
+use crate::support::Ui;
 
 const THINKING: &str = "Always expand thinking";
-
-/// Opens a workspace, then Settings over it.
-fn in_settings<'a>(cx: &'a mut TestAppContext, stack: &Stack) -> Ui<'a> {
-    let mut ui = typing(cx, stack, "");
-    open_settings(&mut ui);
-    ui
-}
 
 /// Whether each setting is left: always expanding thinking, then keeping the computer awake.
 fn left(ui: &mut Ui<'_>) -> (bool, bool) {
@@ -31,123 +27,67 @@ fn search_for(ui: &mut Ui<'_>, typed: &str) {
     ui.frame();
 }
 
-#[gpui_kit::test]
-fn a_setting_is_found_by_what_its_called(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = in_settings(cx, &stack);
-    assert_eq!(left(&mut ui), (true, true));
-
-    ui.press("tab");
-    ui.input("awake");
+/// Types after whatever has the cursor.
+fn type_after(ui: &mut Ui<'_>, typed: &str) {
+    ui.input(typed);
     ui.frame();
-
-    assert_eq!(left(&mut ui), (false, true), "only what matches is left");
 }
 
+/// One walk through one window, each step a case of what's typed reaching the search, or of where the cursor and the
+/// keys go, each named in its assertion. Nothing here waits, since nothing goes to the hub.
 #[gpui_kit::test]
-fn cmd_f_puts_the_cursor_in_the_search_with_what_was_typed_selected(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = in_settings(cx, &stack);
-    search_for(&mut ui, "awake");
-    assert_eq!(left(&mut ui), (false, true));
-
-    search_for(&mut ui, "thinking");
-
-    assert_eq!(left(&mut ui), (true, false), "what's typed takes the place of what was");
-}
-
-/// Whether pressing `key` goes back from Settings with the cursor in the search and something typed there.
-fn goes_back_from_the_search(cx: &mut TestAppContext, key: &str) -> bool {
-    let stack = Stack::new();
-    let mut ui = in_settings(cx, &stack);
-    search_for(&mut ui, "awake");
-
-    ui.press(key);
-
-    !settings_showing(&mut ui)
-}
-
-#[gpui_kit::test]
-fn escape_goes_back_from_the_search_too(cx: &mut TestAppContext) {
-    assert!(goes_back_from_the_search(cx, "escape"));
-}
-
-#[gpui_kit::test]
-fn cmd_w_goes_back_from_the_search_too(cx: &mut TestAppContext) {
-    assert!(goes_back_from_the_search(cx, "secondary-w"));
-}
-
-#[gpui_kit::test]
-fn settings_opens_again_with_nothing_in_the_search(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = in_settings(cx, &stack);
-    search_for(&mut ui, "awake");
-    ui.click("settings-back");
-    assert!(!settings_showing(&mut ui));
-
+fn the_search_leaves_what_matches_what_is_typed_there_and_the_keys_still_reach_settings(cx: &mut TestAppContext) {
+    let (_hub, mut ui) = in_a_workspace(cx);
     open_settings(&mut ui);
-
-    assert_eq!(left(&mut ui), (true, true));
-}
-
-#[gpui_kit::test]
-fn a_search_that_matches_nothing_says_so_and_leaves_no_page(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = in_settings(cx, &stack);
+    assert_eq!(left(&mut ui), (true, true), "with nothing typed, everything is left");
     let general = ui.labelled("General");
     assert_eq!(general.len(), 1, "the page's row");
     assert_eq!(general[0].selected(), Some(true), "it's the page showing");
 
-    search_for(&mut ui, "nothing like it");
+    ui.press("tab");
+    type_after(&mut ui, "awake");
+    assert_eq!(left(&mut ui), (false, true), "Tab: what's typed after it finds a setting by what it's called");
 
-    assert!(ui.has("settings-nothing-found"));
-    assert!(ui.labelled("General").is_empty(), "the page's row has gone too");
-    assert_eq!(left(&mut ui), (false, false));
-}
+    click_at(&mut ui, point(px(700.), px(300.)));
+    type_after(&mut ui, " nothing like it");
+    assert_eq!(left(&mut ui), (false, true), "a press on the page: what's typed after it isn't in the search");
+    ui.press("escape");
+    assert!(!settings_showing(&mut ui), "a press on the page: Escape still goes back");
 
-#[gpui_kit::test]
-fn the_page_shows_again_once_the_search_no_longer_hides_it(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = in_settings(cx, &stack);
-    search_for(&mut ui, "nothing like it");
+    open_settings(&mut ui);
+    assert_eq!(left(&mut ui), (true, true), "after Escape: Settings opens again with nothing in the search");
+    search_for(&mut ui, "awake");
+    assert_eq!(left(&mut ui), (false, true), "Cmd-F puts the cursor in the search");
+    search_for(&mut ui, "thinking");
+    assert_eq!(left(&mut ui), (true, false), "Cmd-F again: what's typed takes the place of what was");
+
+    // The strip along the top stands in for a title bar in Settings too, so pressing it leaves the cursor where it
+    // was.
+    click_at(&mut ui, point(px(700.), px(20.)));
+    type_after(&mut ui, " nothing like it");
+    assert_eq!(left(&mut ui), (false, false), "a press on the strip: what's typed after it goes on in the search");
+    assert!(ui.has("settings-nothing-found"), "a search that matches nothing says so");
+    assert!(ui.labelled("General").is_empty(), "a search that matches nothing leaves no page's row either");
 
     // Cmd-F selects what's typed on every platform, where the kit's own key for that is only Cmd-A on a Mac.
     ui.press("secondary-f");
     ui.press("backspace");
+    assert!(!ui.has("settings-nothing-found"), "with the search emptied, nothing-found goes");
+    assert_eq!(left(&mut ui), (true, true), "with the search emptied, the page shows again");
 
-    assert!(!ui.has("settings-nothing-found"));
-    assert_eq!(left(&mut ui), (true, true));
-}
-
-/// The strip along the top stands in for a title bar in Settings too, so pressing it leaves the cursor where it was.
-#[gpui_kit::test]
-fn a_click_on_the_strip_leaves_the_cursor_in_the_search(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = in_settings(cx, &stack);
     search_for(&mut ui, "awake");
+    ui.click("settings-back");
+    assert!(!settings_showing(&mut ui), "the button goes back from the search");
+    open_settings(&mut ui);
+    assert_eq!(left(&mut ui), (true, true), "after the button: Settings opens again with nothing in the search");
 
-    click_at(&mut ui, point(px(700.), px(20.)));
-    ui.input(" nothing like it");
-    ui.frame();
-
-    assert_eq!(left(&mut ui), (false, false), "what's typed after it goes on in the search");
-}
-
-/// A press on the page below the strip that nothing there takes puts the cursor in no field, and keys still reach
-/// Settings.
-#[gpui_kit::test]
-fn a_click_on_the_page_takes_the_cursor_out_of_the_search(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = in_settings(cx, &stack);
-    search_for(&mut ui, "awake");
-
-    click_at(&mut ui, point(px(700.), px(300.)));
-    ui.input(" nothing like it");
-    ui.frame();
-
-    assert_eq!(left(&mut ui), (false, true), "what's typed after it isn't in the search");
-    ui.press("escape");
-    assert!(!settings_showing(&mut ui), "Escape still goes back");
+    for key in ["escape", "secondary-w"] {
+        search_for(&mut ui, "awake");
+        assert_eq!(left(&mut ui), (false, true), "{key}: the cursor is in the search, with something typed");
+        ui.press(key);
+        assert!(!settings_showing(&mut ui), "{key} goes back from the search too");
+        open_settings(&mut ui);
+    }
 }
 
 /// Presses and lets go of the left button at `position`, without moving, so it's no drag.

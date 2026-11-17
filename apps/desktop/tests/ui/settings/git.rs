@@ -58,8 +58,11 @@ pub(super) fn more(account: &GithubAccountId) -> SharedString {
     format!("git-more-{account}").into()
 }
 
+/// One walk through connecting a token: first one GitHub refuses, then one it knows, in the same panel.
 #[gpui_kit::test]
-fn a_token_connected_here_becomes_the_default_and_only_the_hub_keeps_it(cx: &mut TestAppContext) {
+fn a_token_connected_here_becomes_the_default_only_the_hub_keeps_it_and_one_github_refuses_says_why(
+    cx: &mut TestAppContext,
+) {
     let stack = Stack::new();
     let _github = stack.start_hub_with_stand_in_github(knowing_two());
     let mut ui = in_git(cx, &stack);
@@ -69,6 +72,14 @@ fn a_token_connected_here_becomes_the_default_and_only_the_hub_keeps_it(cx: &mut
     ui.click("git-connect");
     ui.click("git-use-token");
     assert!(ui.off("git-panel-connect"), "until there's a token");
+    ui.input("github_pat_github_never_made");
+    ui.press("enter");
+    ui.wait("GitHub's refusal", |ui| ui.has("git-refused"));
+    assert!(ui.has("git-panel"), "a token GitHub refuses: it stays open, to paste another");
+    assert!(ui.off("git-panel-connect"), "a token GitHub refuses: its field is empty");
+    assert!(ui.view().records().github_accounts().is_empty(), "a token GitHub refuses: nothing was connected");
+    assert!(the_hubs(&stack).is_empty(), "a token GitHub refuses: the hub has nothing either");
+
     ui.input(TOKEN);
     ui.click("git-panel-connect");
 
@@ -81,24 +92,6 @@ fn a_token_connected_here_becomes_the_default_and_only_the_hub_keeps_it(cx: &mut
     let everything = stack.dir.path();
     assert_eq!(files_holding(everything, TOKEN, "github-logins"), Vec::<PathBuf>::new(), "nothing else has it");
     assert_eq!(files_holding(everything, TOKEN, "").len(), 1, "the hub's GitHub logins do");
-}
-
-#[gpui_kit::test]
-fn a_token_github_refuses_says_why_and_is_gone_from_its_field(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let _github = stack.start_hub_with_stand_in_github(knowing_two());
-    let mut ui = in_git(cx, &stack);
-    ui.click("git-connect");
-    ui.click("git-use-token");
-    ui.input("github_pat_github_never_made");
-
-    ui.press("enter");
-
-    ui.wait("the refusal", |ui| ui.has("git-refused"));
-    assert!(ui.has("git-panel"), "it stays open, to paste another");
-    assert!(ui.off("git-panel-connect"), "its field is empty");
-    assert!(ui.view().records().github_accounts().is_empty());
-    assert!(the_hubs(&stack).is_empty());
 }
 
 #[gpui_kit::test]

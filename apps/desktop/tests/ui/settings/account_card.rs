@@ -1,20 +1,24 @@
-//! The card an account's row in Agents shows, against a real hub: once the pointer has rested on the row, or at once
-//! as the keyboard's focus comes to it, saying what the row's one line has no room for, which assistive apps are told
-//! too. Every token is plainly made up.
+//! The card an account's row in Agents shows, on a fake hub, since it asks the hub for nothing: once the pointer has
+//! rested on the row, or at once as the keyboard's focus comes to it, saying what the row's one line has no room for,
+//! which assistive apps are told too. What a card says of an account is `settings::page::agents`' rule, which its unit
+//! tests pin, and that a turn records an account's use and its limits is the backend's, which its tests pin. Every
+//! account is plainly made up.
 
 #![cfg(test)]
 
+use client_core::fake_hub::NOW_MS;
 use gpui_kit::test::{ElementSnapshot, TestQueryExt as _};
 use gpui_kit::{AppContext as _, ElementId, Role, TestAppContext};
 use look::Region;
-use protocol::model::AccountId;
+use protocol::model::{Account, AccountId, LimitWindow, UsageLimit};
 
-use super::agents::{connected, id, in_agents, record, to_agents};
-use crate::support::{Stack, Ui};
+use super::agents::{id, to_agents};
+use super::made_up::{DAY_MS, added, holding_logins};
+use crate::support::{FakeHub, Ui};
 
-const TOKEN: &str = "a-made-up-token";
 /// More than there are stops for Tab on Agents before the first account's row.
 const MOST_TABS: usize = 40;
+const HOUR_MS: i64 = 60 * 60_000;
 
 /// What the card that's open says, line by line, as it tells assistive apps.
 fn card_says(ui: &mut Ui<'_>) -> Vec<String> {
@@ -33,68 +37,69 @@ fn line(ui: &mut Ui<'_>, account: &AccountId) -> ElementSnapshot {
     groups.into_iter().find(|found| found.path().contains(&row)).expect("the row's line")
 }
 
-#[gpui_kit::test]
-fn resting_on_an_agent_accounts_row_shows_when_it_was_last_used_when_its_login_ends_and_whats_left_of_its_limits(
-    cx: &mut TestAppContext,
-) {
-    let stack = Stack::new();
-    let work = connected(&stack, "Work", TOKEN);
-    // A turn under Work, the default, so the hub records its use and its agent hears its limits.
-    let mut ui = Ui::open_with_a_repository(cx, &stack);
-    ui.new_workspace();
-    ui.input("say:hello");
-    ui.press("enter");
-    ui.wait_idle_with("the turn to finish", |text| text.contains("hello"));
-    ui.wait("its use and its limits", |ui| {
-        record(ui, &work).is_some_and(|a| a.used_at_ms.is_some() && !a.limits.is_empty())
-    });
-    let account = record(&ui, &work).unwrap();
-    // Held still where it was used, so it was used today, whenever this runs.
-    ui.cx.update(|cx| look::hold_still(account.used_at_ms.unwrap(), cx));
-    let ends = ui.cx.update(|cx| look::date(account.held_login.unwrap().ends_at_ms.unwrap(), cx)).unwrap();
-    to_agents(&mut ui);
-
-    ui.hover(id("account", &work));
-    assert!(!ui.has(Region::AccountCard.id()), "passing over the row shows nothing");
-    ui.wait_out_a_tooltip();
-    assert!(ui.visible(Region::AccountCard.id()), "resting on it does");
-    let (card, row) = (ui.bounds(Region::AccountCard.id()), ui.bounds(id("account", &work)));
-    assert!(!card.intersects(&row), "the card, {card:?}, covers its row, {row:?}");
-    let said = card_says(&mut ui);
-
-    assert_eq!(said[..2], ["Last used today".to_string(), format!("Ends {ends}")], "though its row says neither");
-    assert!(said.len() > 2, "with its limits: {said:?}");
-    assert!(said[2..].iter().all(|limit| limit.contains(" limit, ") && limit.contains("% left")), "{said:?}");
-    let told = line(&mut ui, &work);
-    let sentences = said.iter().map(|line| format!("{line}.")).collect::<Vec<_>>().join(" ");
-    assert_eq!(told.description(), Some(sentences.as_str()), "assistive apps are told what it says");
-    ui.hover("settings-page-agents");
-    ui.wait("the card to go", |ui| !ui.has(Region::AccountCard.id()));
+fn limit(window: LimitWindow, used_percent: u8, resets_in_ms: i64) -> UsageLimit {
+    UsageLimit { window, model: None, used_percent, resets_at_ms: Some(NOW_MS + resets_in_ms), heard_at_ms: None }
 }
 
+/// Work, the default, which nobody has used yet, listed first, then Workstation, used an hour ago, whose agent heard
+/// its limits.
+fn work_and_workstation() -> (Account, Account) {
+    let work = added("claude-login-0001", "Work", 200 * DAY_MS);
+    let workstation = Account {
+        used_at_ms: Some(NOW_MS - HOUR_MS),
+        limits: vec![limit(LimitWindow::FiveHours, 29, 2 * HOUR_MS), limit(LimitWindow::SevenDays, 4, 3 * DAY_MS)],
+        ..added("claude-login-0002", "Workstation", 300 * DAY_MS)
+    };
+    (work, workstation)
+}
+
+/// One walk through one window: the card of a used account by the pointer, then the card of one nobody has used by
+/// the keyboard.
 #[gpui_kit::test]
-fn the_keyboards_focus_on_an_agent_accounts_row_shows_its_card_at_once_until_it_moves_on(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let work = connected(&stack, "Work", TOKEN);
-    let mut ui = in_agents(cx, &stack);
-    let ends = {
-        let ends_at_ms = record(&ui, &work).unwrap().held_login.unwrap().ends_at_ms.unwrap();
+fn an_agent_accounts_card_shows_as_the_pointer_rests_on_its_row_or_at_once_as_the_keyboards_focus_comes_to_it(
+    cx: &mut TestAppContext,
+) {
+    let (work, used) = work_and_workstation();
+    let date = |ui: &mut Ui<'_>, account: &Account| {
+        let ends_at_ms = account.held_login.as_ref().unwrap().ends_at_ms.unwrap();
         ui.cx.update(|cx| look::date(ends_at_ms, cx)).unwrap()
     };
+    let fake = FakeHub::holding(holding_logins(vec![work.clone(), used.clone()]));
+    let mut ui = Ui::open_on(cx, &fake);
+    // Held still after it was used that day, so it was used today, whenever this runs.
+    ui.cx.update(|cx| look::hold_still(NOW_MS, cx));
+    let (work_ends, used_ends) = (date(&mut ui, &work), date(&mut ui, &used));
+    to_agents(&mut ui);
+
+    ui.hover(id("account", &used.id));
+    assert!(!ui.has(Region::AccountCard.id()), "the pointer: passing over the row shows nothing");
+    ui.wait_out_a_tooltip();
+    assert!(ui.visible(Region::AccountCard.id()), "the pointer: resting on it does");
+    let (card, row) = (ui.bounds(Region::AccountCard.id()), ui.bounds(id("account", &used.id)));
+    assert!(!card.intersects(&row), "the pointer: the card, {card:?}, covers its row, {row:?}");
+    let said = card_says(&mut ui);
+    assert_eq!(said[..2], ["Last used today".to_string(), format!("Ends {used_ends}")], "though its row says neither");
+    assert!(said.len() > 2, "the pointer: with its limits: {said:?}");
+    assert!(said[2..].iter().all(|limit| limit.contains(" limit, ") && limit.contains("% left")), "{said:?}");
+    let told = line(&mut ui, &used.id);
+    let sentences = said.iter().map(|line| format!("{line}.")).collect::<Vec<_>>().join(" ");
+    assert_eq!(told.description(), Some(sentences.as_str()), "the pointer: assistive apps are told what it says");
+    ui.hover("settings-page-agents");
+    ui.wait("the pointer's card to go", |ui| !ui.has(Region::AccountCard.id()));
 
     // Without the clock moving on, so with no wait.
     let tabs = (1..=MOST_TABS).find(|_| {
         ui.press("tab");
         ui.has(Region::AccountCard.id())
     });
-    assert!(tabs.is_some(), "no stop of Tab's showed the card");
-    let told = line(&mut ui, &work);
+    assert!(tabs.is_some(), "the keyboard: no stop of Tab's showed the card");
+    let told = line(&mut ui, &work.id);
     let said = card_says(&mut ui);
     ui.press("tab");
 
-    assert_eq!(told.focused(), Some(true), "its line has the focus");
-    assert_eq!(told.label(), Some("Work, Default, Claude Code"), "what it is, as the line says");
-    assert_eq!(said, [format!("Ends {ends}"), "No limits heard of yet".to_string()], "nobody has used it yet");
-    assert_eq!(told.description(), Some(format!("Ends {ends}. No limits heard of yet.").as_str()));
-    ui.wait("the card to go, as Tab moves on to the row's menu", |ui| !ui.has(Region::AccountCard.id()));
+    assert_eq!(told.focused(), Some(true), "the keyboard: its line has the focus");
+    assert_eq!(told.label(), Some("Work, Default, Claude Code"), "the keyboard: what it is, as the line says");
+    assert_eq!(said, [format!("Ends {work_ends}"), "No limits heard of yet".to_string()], "nobody has used it yet");
+    assert_eq!(told.description(), Some(format!("Ends {work_ends}. No limits heard of yet.").as_str()));
+    ui.wait("the keyboard's card to go, as Tab moves on to the row's menu", |ui| !ui.has(Region::AccountCard.id()));
 }
