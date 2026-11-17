@@ -9,7 +9,9 @@ use client_core::calls::Recorded;
 use client_core::session_log::{PromptAt, PromptState, SessionLog};
 use client_core::{Approval, ToolUseAsked};
 use gpui_kit::SharedString;
-use protocol::event::{ApprovalOutcome, ContentBlock, EventBody, Question, SessionEvent};
+use protocol::capability::approvals::Decision;
+use protocol::capability::asking::Question;
+use protocol::event::{ContentBlock, EventBody, SessionEvent};
 use protocol::model::{ApprovalId, PermissionMode, Seq, ToolUseId};
 use reply::{Answer, Reply};
 use settled::Settled;
@@ -61,8 +63,8 @@ pub(in super::super) enum Closes {
 }
 
 impl Closes {
-    /// For the record at `seq` that closes the approval `id` with `outcome`.
-    pub(super) fn read(log: &SessionLog, m: &Model, seq: Seq, id: &ApprovalId, outcome: ApprovalOutcome) -> Self {
+    /// For the record at `seq` that closes the approval `id`, which says whether it was `denied`.
+    pub(super) fn read(log: &SessionLog, m: &Model, seq: Seq, id: &ApprovalId, denied: bool) -> Self {
         let asked = |event: &&SessionEvent| {
             let EventBody::ApprovalRequested { approval_id, .. } = &event.body else { return false };
             approval_id == id
@@ -78,7 +80,7 @@ impl Closes {
         // A call's line says only that it was denied, so a request cancelled or allowed says so itself, whatever its
         // call's result says, as one from a log an adapter wrote wrongly might.
         let EventBody::ApprovalRequested { tool_use_id: Some(call), .. } = &request.body else { return Closes::Unsaid };
-        if outcome != ApprovalOutcome::Denied {
+        if !denied {
             return Closes::Unsaid;
         }
         // Read from the blocks themselves, rather than through `Returned`, which would read every result nearby whole
@@ -188,8 +190,8 @@ impl Around {
                 around.asked = Some(Asked { questions, key, open, settled: Settled::read(log, seq, approval_id) });
             }
         }
-        if let EventBody::ApprovalResolved { approval_id, outcome, .. } = body {
-            around.closes = Closes::read(log, m, seq, approval_id, *outcome);
+        if let EventBody::ApprovalResolved { approval_id, .. } = body {
+            around.closes = Closes::read(log, m, seq, approval_id, denied(body));
         }
         around
     }
@@ -263,6 +265,13 @@ pub(crate) fn drawn_with_its_call(log: &SessionLog, seq: Seq, tool_use_id: &Tool
 /// no longer waiting, rather than as a card.
 pub(in super::super) fn asks_questions(body: &EventBody) -> bool {
     Approval::of(body).is_some_and(|approval| approval.questions().is_some())
+}
+
+/// Whether `body` is the record of a request denied, or of a plan the agent is to keep planning, which says so as a
+/// denial does.
+pub(in super::super) fn denied(body: &EventBody) -> bool {
+    let EventBody::ApprovalResolved { decision: Some(decision), .. } = body else { return false };
+    matches!(**decision, Decision::Deny { .. } | Decision::KeepPlanning { .. })
 }
 
 /// The blocks an event holds, if it's one that holds any.

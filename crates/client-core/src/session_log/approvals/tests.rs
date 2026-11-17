@@ -1,21 +1,14 @@
-use protocol::event::{ApprovalOutcome, NoticeLevel};
-use protocol::fixtures::{self, event};
+use protocol::event::NoticeLevel;
+use protocol::fixtures::{self, allow_once, decided, event};
 
 use super::*;
 
 fn asked(seq: Seq, id: &str) -> SessionEvent {
-    event(seq, fixtures::approval_request(id, "Bash").into())
+    event(seq, fixtures::approval_request(id, fixtures::to_run("ls")).into())
 }
 
 fn answered(seq: Seq, id: &str) -> SessionEvent {
-    let body = EventBody::ApprovalResolved {
-        approval_id: id.into(),
-        outcome: ApprovalOutcome::Allowed,
-        answers_by_text: None,
-        answers_by_position: None,
-        by_setting: false,
-    };
-    event(seq, body)
+    event(seq, decided(id, allow_once()))
 }
 
 fn later(seq: Seq) -> SessionEvent {

@@ -16,8 +16,8 @@ use protocol::capability::{
     turns::OwnTurn,
 };
 use protocol::event::{
-    AgentRunState, AgentTask, ApprovalOutcome, ContentBlock, EndedTask, EventBody, ExitReason, SessionEvent, TaskKind,
-    TaskOutcome, TurnOutcome,
+    AgentRunState, AgentTask, ContentBlock, EndedTask, EventBody, ExitReason, SessionEvent, TaskKind, TaskOutcome,
+    TurnOutcome,
 };
 use protocol::fixtures;
 use protocol::model::{AgentSessionId, ApprovalId, PermissionMode, RunId, Seq, TaskId, ToolUseId};
@@ -146,7 +146,7 @@ impl Ledger {
                     && seen.iter().any(|item| matches!(item, EventBody::TurnEnded { .. })))
                     || (matches!(&body, EventBody::AgentState { state: AgentRunState::RequiresAction })
                         && seen.iter().any(|item| {
-                            matches!(item, EventBody::ApprovalRequested { request: Some(r), .. } if matches!(r.asks, Asks::Plan { .. }))
+                            matches!(item, EventBody::ApprovalRequested { request: r, .. } if matches!(r.asks, Asks::Plan { .. }))
                         }));
                 seen.push(body.clone());
                 self.push(Some(RUN), body);
@@ -278,19 +278,17 @@ async fn mixed_ungated_and_gated_wakeup_batch_drains_and_holds_plan_in_plan_mode
         None,
         EventBody::ApprovalResolved {
             approval_id: approval.clone(),
-            outcome: ApprovalOutcome::Allowed,
-            answers_by_text: None,
-            answers_by_position: None,
+            decision: Some(Box::new(Decision::Allow { remember: Remember::Once })),
             by_setting: false,
         },
     );
-    let allow_once = Decision::Allow { edited: None, remember: Remember::Once };
+    let allow_once = Decision::Allow { remember: Remember::Once };
     plan_agent.control(&Control::Decide { approval, decision: allow_once }).await.unwrap();
     let plan_wakeup = plan_ledger.collect_turn(&mut plan_h).await;
     plan_agent.stop().await;
     let claims = super::super::claims::claims();
     assert_eq!(laws::check(&plan_ledger.events, |_| &claims), []);
-    assert!(plan_wakeup.iter().any(|e| matches!(e, EventBody::ApprovalRequested { request: Some(r), .. } if matches!(&r.asks, Asks::Plan { plan, .. } if plan == "Plan ready."))));
+    assert!(plan_wakeup.iter().any(|e| matches!(e, EventBody::ApprovalRequested { request: r, .. } if matches!(&r.asks, Asks::Plan { plan, .. } if plan == "Plan ready."))));
 }
 
 #[tokio::test]

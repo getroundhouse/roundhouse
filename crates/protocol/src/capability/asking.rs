@@ -85,6 +85,18 @@ pub enum TypedAnswer {
 }
 
 impl Question {
+    /// What `answer` says to it, a part at a time: the label of each option it picked, leaving out any it doesn't
+    /// offer, then what was typed.
+    pub fn said<'a>(&'a self, answer: &'a QuestionAnswer) -> impl Iterator<Item = &'a str> {
+        let picked = answer.picked.iter().filter_map(|&option| self.options.get(usize::try_from(option).ok()?));
+        picked.map(|option| option.label.as_str()).chain(answer.typed.as_deref())
+    }
+
+    /// Whether several of its options can be chosen at once.
+    pub fn several(&self) -> bool {
+        self.choose == Choose::Several
+    }
+
     /// Whether `answer` answers it as it allows: options it offers, each once, one at most unless several can be
     /// chosen, and words typed only where an answer can be typed. What this build doesn't know of the question allows
     /// the least it could mean.
@@ -92,10 +104,21 @@ impl Question {
         let QuestionAnswer { picked, typed } = answer;
         let offered = picked.iter().all(|&at| (at as usize) < self.options.len());
         let once = picked.iter().enumerate().all(|(i, at)| !picked[..i].contains(at));
-        let how_many = self.choose == Choose::Several || picked.len() <= 1;
+        let how_many = self.several() || picked.len() <= 1;
         let typed = typed.is_none() || matches!(self.typed, TypedAnswer::Yes | TypedAnswer::Secret);
         offered && once && how_many && typed
     }
+}
+
+/// `answers` to `questions`, one for each, by each question's text, with the parts of what one says joined with a
+/// comma and a space, and a question it says nothing to left out, as Claude's CLI takes them, and so does a run of
+/// protocol 3. Of two questions alike, the answer to the last is kept.
+pub fn by_text(questions: &[Question], answers: &[QuestionAnswer]) -> BTreeMap<String, String> {
+    let said = |(question, answer): (&Question, &QuestionAnswer)| {
+        let parts: Vec<&str> = question.said(answer).collect();
+        (!parts.is_empty()).then(|| (question.text.clone(), parts.join(", ")))
+    };
+    questions.iter().zip(answers).filter_map(said).collect()
 }
 
 /// What the person answered one question, by position: the options they chose, by their place among its options, in

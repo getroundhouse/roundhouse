@@ -15,11 +15,16 @@ fn output_that_is_not_json_is_kept_rather_than_failing() {
 fn a_lone_surrogate_does_not_hide_an_approval() {
     // JSON.stringify writes half an emoji this way, and serde_json refuses it.
     let line = r#"{"type":"control_request","request_id":"r1","request":{"subtype":"can_use_tool","tool_name":"Bash","input":{"command":"echo \ud83d"}}}"#;
-    let Parsed::Event(EventBody::ApprovalRequested { approval_id, input, .. }) = parse_line(line) else {
+    let Parsed::Event(EventBody::ApprovalRequested { approval_id, request, .. }) = parse_line(line) else {
         panic!("{:?}", parse_line(line));
     };
     assert_eq!(approval_id, "r1".into());
-    assert_eq!(input["command"], "echo \u{fffd}");
+    let protocol::capability::approvals::Asks::Call { call: protocol::capability::calls::Call::Command(command) } =
+        request.asks
+    else {
+        panic!("{request:?}")
+    };
+    assert_eq!(command.command, "echo \u{fffd}");
 }
 
 #[test]
@@ -28,10 +33,10 @@ fn a_request_says_why_its_made_unless_what_it_says_is_blank() {
         let line = format!(
             r#"{{"type":"control_request","request_id":"r1","request":{{"subtype":"can_use_tool","tool_name":"Bash","input":{{}},"decision_reason":"{reason}"}}}}"#
         );
-        let Parsed::Event(EventBody::ApprovalRequested { reason, .. }) = parse_line(&line) else {
+        let Parsed::Event(EventBody::ApprovalRequested { request, .. }) = parse_line(&line) else {
             panic!("{:?}", parse_line(&line));
         };
-        reason
+        request.why
     };
 
     assert_eq!(request("It can't be checked").as_deref(), Some("It can't be checked"));
@@ -246,4 +251,26 @@ fn a_reply_names_the_model_it_came_from() {
     };
 
     assert_eq!(model("claude-haiku-5-5").as_deref(), Some("claude-haiku-5-5"));
+}
+
+/// With full access, the CLI asks to make a call only where it asks whatever the mode, as for a removal it can't rule
+/// out, which one from before it said so doesn't mark, so the request keeps no rule either. In plan mode it asks before
+/// any change, so it's asked as it comes.
+#[test]
+fn a_call_asked_about_with_full_access_is_asked_whatever_the_mode_and_keeps_no_rule() {
+    let suggested = json!([{"type":"addRules","rules":[{"toolName":"Bash","ruleContent":"rm:*"}],"behavior":"allow",
+        "destination":"localSettings"}]);
+    let asked = json!({"type":"control_request","request_id":"r1","request":{"subtype":"can_use_tool",
+        "tool_name":"Bash","input":{"command":"rm -rf \"$(cat gone)\""},"permission_suggestions":suggested}})
+    .to_string();
+    let asked_in = |mode: &str| {
+        let mut normalizer = Normalizer::default();
+        normalizer.line(&json!({"type":"system","subtype":"init","permissionMode":mode,"session_id":"s"}).to_string());
+        let parsed = normalizer.line(&asked).parsed;
+        let Parsed::Event(EventBody::ApprovalRequested { request, .. }) = parsed else { panic!("{parsed:?}") };
+        (request.always, request.suggested.len())
+    };
+
+    assert_eq!(asked_in("bypassPermissions"), (true, 0));
+    assert_eq!(asked_in("plan"), (false, 1));
 }

@@ -37,6 +37,7 @@ use verified_launch::launch;
 
 mod running;
 
+pub(super) use running::ClaudeProcess;
 #[cfg(test)]
 use running::refused;
 use running::{Shared, ask, control, drain_grace, write_line, write_to};

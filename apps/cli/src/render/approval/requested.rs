@@ -2,8 +2,10 @@ use super::super::{Printer, about};
 use crate::run::short;
 use client_core::calls::first_line;
 use client_core::{Answered, Approval, Given, ToolUseAsked};
+use protocol::capability::approvals::{Asks, Decision};
+use protocol::capability::asking::Question;
 use protocol::capability::calls::call::PatchChange;
-use protocol::event::{ApprovalOutcome, Asking, EventBody, LineMark, Question, SessionEvent};
+use protocol::event::{EventBody, LineMark, SessionEvent};
 
 impl Printer {
     pub(in super::super) fn approval_requested(&mut self, event: &SessionEvent) {
@@ -19,9 +21,10 @@ impl Printer {
     }
 
     pub(in super::super) fn approval_resolved(&mut self, event: &SessionEvent) {
-        let EventBody::ApprovalResolved { approval_id, outcome, .. } = &event.body else { return };
+        let EventBody::ApprovalResolved { approval_id, decision, .. } = &event.body else { return };
         let questions = self.asked.remove(approval_id).unwrap_or_default();
-        for line in resolved(approval_id.as_str(), *outcome, Answered::of(&event.body).as_ref(), &questions) {
+        let (decided, answered) = (decision.as_deref(), Answered::of(&event.body));
+        for line in resolved(approval_id.as_str(), decided, answered.as_ref(), &questions) {
             self.line(event.seq, &line);
         }
     }
@@ -31,20 +34,22 @@ impl Printer {
 pub(super) fn requested(event: &SessionEvent, approval: &Approval) -> Vec<String> {
     let EventBody::ApprovalRequested { approval_id, .. } = &event.body else { return Vec::new() };
     let session = &event.session_id;
-    match approval.asking() {
-        Asking::Questions { questions } => {
+    match approval.asks() {
+        Asks::Questions { questions } => {
             let mut lines: Vec<String> = questions.iter().flat_map(question).collect();
             let first = questions.first().map_or("", |question| question.text.as_str());
             lines.push(format!("  roundhouse answer {session} {approval_id} {first:?} <answer>"));
             lines
         }
-        Asking::Plan { plan } => {
+        Asks::Plan { plan, .. } => {
             let mut lines = vec!["PLAN:".to_string()];
             lines.extend(plan.lines().map(|line| format!("  {line}").trim_end().to_string()));
             lines.push(format!("  roundhouse approve {session} {approval_id}, or with --deny <what to change>"));
             lines
         }
-        Asking::ToolUse { .. } | Asking::Unknown => tool_use(event),
+        Asks::Call { .. } | Asks::Network { .. } | Asks::Access { .. } | Asks::Server(_) | Asks::Unknown => {
+            tool_use(event)
+        }
     }
 }
 
@@ -128,30 +133,38 @@ fn question(question: &Question) -> Vec<String> {
         let means = option.description.as_ref().map_or_default(|description| format!(": {description}"));
         lines.push(format!("  {number}. {}{means}", option.label));
     }
-    if question.multiple {
+    if question.several() {
         lines.push("  (any number of these)".to_string());
     }
     lines
 }
 
-/// What became of the approval `id`, and what was answered to each of `questions`, which are the ones it asked, if this
-/// printed it asking.
+/// What became of the approval `id`, as `decided` says, or that nobody decided, and what was answered to each of
+/// `questions`, which are the ones it asked, if this printed it asking.
 pub(super) fn resolved(
     id: &str,
-    outcome: ApprovalOutcome,
+    decided: Option<&Decision>,
     answered: Option<&Answered>,
     questions: &[Question],
 ) -> Vec<String> {
-    let mut lines = vec![format!("approval {} {outcome:?}", short(id))];
+    let mut lines = vec![format!("approval {} {}", short(id), became(decided))];
     let Some(answered) = answered else { return lines };
     for (at, question) in questions.iter().enumerate() {
         let answer = answered.to(at, question);
         lines.push(format!("  {}: {}", question.text, answer.as_deref().unwrap_or("not answered")));
     }
-    if questions.is_empty()
-        && let Answered::ByText(answers) = answered
-    {
-        lines.extend(answers.iter().map(|(question, answer)| format!("  {question}: {answer}")));
-    }
     lines
+}
+
+/// What became of a request, in a word, as `decided` says.
+fn became(decided: Option<&Decision>) -> &'static str {
+    match decided {
+        Some(Decision::Allow { .. } | Decision::ApprovePlan { .. } | Decision::Grant { .. } | Decision::Respond(_)) => {
+            "Allowed"
+        }
+        Some(Decision::Answer { .. }) => "Answered",
+        Some(Decision::Deny { .. } | Decision::KeepPlanning { .. }) => "Denied",
+        Some(Decision::Unknown) => "Unknown",
+        None => "Cancelled",
+    }
 }

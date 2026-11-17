@@ -1,7 +1,7 @@
 //! Which results say their call was denied, in the capture that denies one request and stops a turn while each of two
 //! more waits.
 
-use protocol::event::{ApprovalOutcome, ContentBlock, Denied, EventBody};
+use protocol::event::{ContentBlock, Denied, EventBody};
 use protocol::model::{ApprovalId, ToolUseId};
 
 use super::{blocks, events};
@@ -12,7 +12,7 @@ fn only_the_call_the_person_denied_says_so_and_not_those_a_stop_cancelled() {
     let cancelled: Vec<&ApprovalId> = events
         .iter()
         .filter_map(|e| match e {
-            EventBody::ApprovalResolved { approval_id, outcome: ApprovalOutcome::Cancelled, .. } => Some(approval_id),
+            EventBody::ApprovalResolved { approval_id, decision: None, .. } => Some(approval_id),
             _ => None,
         })
         .collect();

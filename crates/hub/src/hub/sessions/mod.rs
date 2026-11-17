@@ -5,7 +5,7 @@ use super::Hub;
 #[cfg(test)]
 use protocol::client::{ErrorCode, HubNotice};
 #[cfg(test)]
-use protocol::model::{AnswerDraft, Seq};
+use protocol::model::Seq;
 #[cfg(test)]
 use std::sync::Arc;
 

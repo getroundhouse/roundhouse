@@ -7,13 +7,16 @@
 use std::path::PathBuf;
 
 use client_core::ClientError;
+use protocol::capability::approvals::Asks;
 use protocol::client::ErrorCode;
-use protocol::event::{ApprovalDecision, EventBody};
+use protocol::event::EventBody;
 use protocol::model::Effort::{self, Medium};
 use protocol::model::PermissionMode::{FullAccess, Plan};
 use protocol::model::{ModelName, PermissionMode, SessionSettings, SessionSettingsChange};
 
-use crate::support::{Stack, assistant_text, in_mode, read_all, wait_for_approval, wait_for_turn_end, wait_until};
+use crate::support::{
+    Stack, approve_plan, assistant_text, in_mode, read_all, wait_for_approval, wait_for_turn_end, wait_until,
+};
 
 /// The changes of mode in the log.
 fn mode_changes(client: &client_core::Client, session: &protocol::model::SessionId) -> Vec<PermissionMode> {
@@ -53,8 +56,7 @@ fn a_change_of_model_mode_and_effort_reaches_the_running_agent_and_the_next_laun
     assert_eq!(session.settings(), SessionSettings { permission_mode: Plan, ..defaults.clone() });
     client.session_prompt(&session.id, "tool:echo first > first.txt", None).unwrap();
     let approval = wait_for_approval(&client, &session.id);
-    let allow = ApprovalDecision::Allow { updated_input: None, updated_permissions: None };
-    client.session_approve(&session.id, &approval, allow).unwrap();
+    client.session_decide(&session.id, &approval, protocol::fixtures::allow_once()).unwrap();
     wait_for_turn_end(&client, &session.id, 1);
     let launched = format!("--model {} --effort {}", defaults.model.as_str(), defaults.effort.as_str().unwrap());
     assert!(last_args(&stack).contains(&launched), "the description's: {}", last_args(&stack));
@@ -135,15 +137,13 @@ fn approving_a_plan_leaves_plan_mode_and_the_next_launch_agrees() {
     client.session_prompt(&session.id, "plan:Do the thing", None).unwrap();
     let approval = wait_for_approval(&client, &session.id);
     let asked = read_all(&client, &session.id).into_iter().find_map(|e| match e.body {
-        EventBody::ApprovalRequested { tool_name, input, .. } => Some((tool_name, input)),
+        EventBody::ApprovalRequested { request, .. } => Some(request.asks),
         _ => None,
     });
-    let (tool_name, input) = asked.unwrap();
-    assert_eq!((tool_name.as_str(), input["plan"].as_str()), ("ExitPlanMode", Some("Do the thing")));
+    assert!(matches!(&asked, Some(Asks::Plan { plan, .. }) if plan == "Do the thing"), "{asked:?}");
     assert_eq!(client.session_get(&session.id).unwrap().permission_mode, Plan);
 
-    let allow = ApprovalDecision::Allow { updated_input: None, updated_permissions: None };
-    client.session_approve(&session.id, &approval, allow).unwrap();
+    approve_plan(&client, &session.id, &approval);
     wait_for_turn_end(&client, &session.id, 1);
     assert_eq!(client.session_get(&session.id).unwrap().permission_mode, FullAccess);
 
@@ -169,8 +169,7 @@ fn an_agent_that_starts_in_plan_mode_has_full_access_once_its_plan_is_approved()
     let args = last_args(&stack);
     assert!(args.contains("--permission-mode bypassPermissions"), "{args}");
 
-    let allow = ApprovalDecision::Allow { updated_input: None, updated_permissions: None };
-    client.session_approve(&session.id, &approval, allow).unwrap();
+    approve_plan(&client, &session.id, &approval);
     wait_for_turn_end(&client, &session.id, 1);
     client.session_prompt(&session.id, "tool:echo made > made.txt", None).unwrap();
     let events = wait_for_turn_end(&client, &session.id, 2);

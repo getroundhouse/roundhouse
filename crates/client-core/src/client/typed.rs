@@ -6,8 +6,8 @@ use protocol::attachment::{Attachment, AttachmentBytes, MediaType};
 use protocol::client::drafts;
 use protocol::client::new_workspace::{NewWorkspaceCreate, NewWorkspaceMade};
 use protocol::model::{
-    AnswerDraft, AttachmentId, ClientRequestId, CommentDraft, DraftToKeep, NewWorkspaceDraft, NewWorkspaceDraftToKeep,
-    Session, SessionId, Workspace, WorkspaceId,
+    AttachmentId, ClientRequestId, CommentDraft, DecisionDraft, DraftToKeep, NewWorkspaceDraft,
+    NewWorkspaceDraftToKeep, Session, SessionId, Workspace, WorkspaceId,
 };
 
 use super::{Client, Result};
@@ -18,9 +18,9 @@ impl Client {
         self.call(drafts::SessionDraft { id: id.clone(), draft: draft.clone() })
     }
 
-    /// See [`drafts::SessionAnswerDraft`]. A hub older than this refuses it, as `is_unsupported` says.
-    pub fn session_answer_draft(&self, id: &SessionId, draft: Option<&AnswerDraft>) -> Result<Session> {
-        self.call(drafts::SessionAnswerDraft { id: id.clone(), draft: draft.cloned() })
+    /// See [`drafts::SessionDecisionDraft`]. A hub older than this refuses it, as `is_unsupported` says.
+    pub fn session_decision_draft(&self, id: &SessionId, draft: Option<&DecisionDraft>) -> Result<Session> {
+        self.call(drafts::SessionDecisionDraft { id: id.clone(), draft: draft.cloned() })
     }
 
     /// See [`drafts::WorkspaceCommentDraft`]. A hub older than this refuses it, as `is_unsupported` says.

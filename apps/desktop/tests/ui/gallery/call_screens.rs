@@ -5,8 +5,8 @@
 
 use look::Region;
 use protocol::capability::calls::Call;
-use protocol::event::{Asking, EventBody};
-use protocol::fixtures::{ApprovalRequest, approval_request};
+use protocol::event::EventBody;
+use protocol::fixtures::{ApprovalRequest, approval_request, plan};
 use protocol::model::{PermissionMode, Seq, SessionStatus, ToolUseId};
 
 use super::frame::{CHAT, CONTEXT};
@@ -109,12 +109,8 @@ fn planned() -> Vec<EventBody> {
     events.push(text("msg-3", "That's all it needs. Here's the plan."));
     events.push(typed_call("msg-4", "toolu-3", Call::Plan));
     events.push(
-        ApprovalRequest {
-            tool_use_id: Some(ToolUseId::from("toolu-3")),
-            asking: Some(Asking::Plan { plan: PLAN.to_string() }),
-            ..approval_request("approval-1", "ExitPlanMode")
-        }
-        .into(),
+        ApprovalRequest { tool_use_id: Some(ToolUseId::from("toolu-3")), ..approval_request("approval-1", plan(PLAN)) }
+            .into(),
     );
     events
 }

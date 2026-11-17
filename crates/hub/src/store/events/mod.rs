@@ -3,7 +3,7 @@
 #[cfg(test)]
 use super::{Store, lock};
 #[cfg(test)]
-use protocol::event::{ApprovalOutcome, EventBody, SessionEvent};
+use protocol::event::{EventBody, SessionEvent};
 #[cfg(test)]
 use protocol::model::{Place, RunId, Seq, SubagentId};
 #[cfg(test)]

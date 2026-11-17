@@ -4,7 +4,7 @@
 use serde::{Deserialize, Serialize};
 
 use super::{ClientRequest, ClientResponse, Reply, Request};
-use crate::event::ApprovalDecision;
+use crate::capability::approvals::Decision;
 use crate::model::{ApprovalId, AttachmentId, ClientMessageId, Seq, SessionId};
 use crate::prompt::Prompt;
 
@@ -43,19 +43,21 @@ impl Reply for PromptRecorded {
     }
 }
 
-/// Answering again is refused, changing nothing.
+/// Answers the request `approval_id` with `decision`. One that doesn't answer what the request asks, as
+/// [`Decision::answers`] says, is refused, and so is one the run that asked doesn't take, as [`Decision::allowed`]
+/// says. Answering again is refused, changing nothing.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
-pub struct SessionApprove {
+pub struct SessionDecide {
     pub id: SessionId,
     pub approval_id: ApprovalId,
-    pub decision: ApprovalDecision,
+    pub decision: Decision,
 }
 
-impl Request for SessionApprove {
+impl Request for SessionDecide {
     type Reply = ();
 
     fn into_request(self) -> ClientRequest {
-        ClientRequest::SessionApprove(self)
+        ClientRequest::SessionDecide(self)
     }
 }
 

@@ -1,9 +1,10 @@
 //! What the migration that typed Claude's calls made of what the hub had kept.
 
+use protocol::capability::approvals::Asks;
 use protocol::capability::calls::call::{Command, Read, Runs};
 use protocol::capability::calls::output::Lines;
 use protocol::capability::calls::{Call, CallOutput};
-use protocol::event::{Asking, ContentBlock, EventBody};
+use protocol::event::{ContentBlock, EventBody};
 use protocol::model::{LatelyCall, Seq, SessionId};
 use serde_json::{Value, json};
 
@@ -91,9 +92,10 @@ fn a_migrated_log_has_claude_s_calls_and_what_came_back_for_each_typed() {
         };
         assert!(matches!(&asked[..], [ContentBlock::Text { .. }, ContentBlock::Call { call, .. }] if *call == made));
         assert!(matches!(&answered[..], [ContentBlock::CallResult { output, .. }] if *output == came), "{answered:?}");
-        let EventBody::ApprovalRequested { asking, description, .. } = requested else { panic!("{requested:?}") };
-        assert_eq!(asking.as_deref(), Some(&Asking::ToolUse { typed: Some(ls()) }));
-        assert_eq!(description.as_deref(), Some("It's 'here'"), "the rest is as it was");
+        let EventBody::ApprovalRequested { request, .. } = requested else { panic!("{requested:?}") };
+        let Call::Command(command) = ls() else { unreachable!() };
+        let described = Call::Command(Command { description: Some("It's 'here'".into()), ..command });
+        assert_eq!(request.asks, Asks::Call { call: described }, "what it said it's for, as the command's");
         assert_eq!(serde_json::to_value(kept).unwrap(), other);
     }
     let (subagents, _) = store.list_subagents(&"s".into()).unwrap();

@@ -11,5 +11,5 @@ mod outputs;
 #[cfg(test)]
 mod tests;
 
-pub(super) use calls::{PLAN, QUESTIONS, call};
+pub(super) use calls::{PLAN, QUESTIONS, call, kind};
 pub(super) use outputs::say;

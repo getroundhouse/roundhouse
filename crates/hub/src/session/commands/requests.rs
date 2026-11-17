@@ -1,12 +1,15 @@
+use super::super::controls::Askable;
+use super::super::decisions::refusal;
 use super::super::{Command, LiveSession, LiveState, Origin};
 use crate::hub::Hub;
 use protocol::attachment::Attachment;
 use protocol::capability::Control;
+use protocol::capability::approvals::{Decision, Request};
 use protocol::client::{ApiError, ErrorCode};
-use protocol::event::{ApprovalDecision, ApprovalOutcome, EventBody, NoticeLevel};
+use protocol::event::{EventBody, NoticeLevel};
 use protocol::model::{ApprovalId, AttachmentId, ClientMessageId, Seq, SetupStatus};
 use protocol::prompt::Prompt;
-use protocol::worker::{AgentApproval, AgentStop, Delivery};
+use protocol::worker::{AgentStop, Delivery};
 use std::sync::Arc;
 use tokio::sync::{mpsc, oneshot};
 use tracing::warn;
@@ -23,8 +26,8 @@ pub(crate) async fn run_commands(session: Arc<LiveSession>, mut commands: mpsc::
             Command::Prompt { client_msg_id, prompt, reply } => {
                 session.handle_prompt(client_msg_id, prompt, reply).await;
             }
-            Command::Approve { approval_id, decision, reply } => {
-                let _ = reply.send(session.handle_approve(approval_id, decision).await);
+            Command::Decide { approval_id, decision, reply } => {
+                let _ = reply.send(session.handle_decide(approval_id, decision).await);
             }
             Command::Cancel { reply } => {
                 let _ = reply.send(session.handle_cancel().await);
@@ -188,29 +191,15 @@ impl LiveSession {
         }
     }
 
-    pub(super) async fn handle_approve(
-        &self,
-        approval_id: ApprovalId,
-        decision: ApprovalDecision,
-    ) -> Result<(), ApiError> {
-        // The answers are recorded as well as passed on, in the form they came, since the agent's own words for them
-        // are its adapter's to choose.
+    pub(super) async fn handle_decide(&self, approval_id: ApprovalId, decision: Decision) -> Result<(), ApiError> {
         let request = self.approval_request(&approval_id).await?;
-        let recorded_decision = super::super::decisions::redacted(&request, &decision);
-        let (outcome, answers_by_text, answers_by_position) = match &recorded_decision {
-            ApprovalDecision::Allow { .. } => (ApprovalOutcome::Allowed, None, None),
-            ApprovalDecision::AnswerByText { answers } => (ApprovalOutcome::Allowed, Some(answers.clone()), None),
-            ApprovalDecision::AnswerByPosition { answers } => (ApprovalOutcome::Allowed, None, Some(answers.clone())),
-            ApprovalDecision::Deny { .. } => (ApprovalOutcome::Denied, None, None),
-        };
+        // Recorded without what's typed in answer to a secret question, which reaches the agent and nothing else.
         let resolved = EventBody::ApprovalResolved {
             approval_id: approval_id.clone(),
-            outcome,
-            answers_by_text,
-            answers_by_position,
+            decision: Some(Box::new(decision.without_secrets(&request))),
             by_setting: false,
         };
-        // Whether it's still waiting, and whether the agent that asked can take this answer, are asked as the answer is
+        // Whether it's still waiting, and whether the agent that asked can take this decision, are asked as it's
         // recorded, in order with everything recorded before it, since a client can read the request in the log before
         // the session has taken it in. Both are asked before the log says the decision was made.
         let refused = |state: &LiveState| {
@@ -223,28 +212,30 @@ impl LiveSession {
             if asked_by.is_none() || state.agent.map(|agent| agent.run) != *asked_by {
                 return Some(ApiError::new(ErrorCode::Conflict, "the agent that asked has exited"));
             }
-            super::super::decisions::control(&request, approval_id.clone(), &decision, state.run_claims()).err()
+            refusal(&request, &decision, state.run_claims(), self.agent)
         };
         self.record_unless(Origin::Hub, resolved, None, refused).await?;
-        self.pass_on(approval_id, decision).await
+        self.pass_on(approval_id, decision, &request).await
     }
 
-    /// Passes `decision` on to the agent that asked, once it's recorded, and says in the log if it had gone.
+    /// Passes `decision` on the request `asked` to the agent that asked, once it's recorded, and says in the log if it
+    /// had gone.
     pub(in super::super) async fn pass_on(
         &self,
-        approval_id: ApprovalId,
-        decision: ApprovalDecision,
+        approval: ApprovalId,
+        decision: Decision,
+        asked: &Request,
     ) -> Result<(), ApiError> {
         let hub = self.hub()?;
         let link = hub
             .existing_worker(&self.workspace_id)
             .ok_or_else(|| ApiError::new(ErrorCode::Conflict, "the agent that asked has exited"))?;
-        let asked = self.approval_request(&approval_id).await?;
-        let claims = self.run_claims();
-        let delivered = match super::super::decisions::control(&asked, approval_id.clone(), &decision, claims.as_ref())?
-        {
-            Some(control) => self.control_agent(&link, control).await?,
-            None => link.call(AgentApproval { session_id: self.id.clone(), approval_id, decision }).await?,
+        let delivered = match self.askable(&link)? {
+            Askable::Claimed(claims) => {
+                self.control_claimed(&link, Control::Decide { approval, decision }, &claims).await?
+            }
+            Askable::Unclaimed => self.decide_unclaimed(&link, approval, &decision, asked).await?,
+            Askable::NotRunning => Delivery::AgentNotRunning,
         };
         if delivered == Delivery::Delivered {
             return Ok(());

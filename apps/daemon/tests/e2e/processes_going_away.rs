@@ -8,7 +8,7 @@ use std::time::Duration;
 use client_core::{Client, ClientError, SubscriptionItem};
 use hub::Timers;
 use protocol::client::ErrorCode;
-use protocol::event::{ApprovalDecision, EventBody, ExitReason, SessionEvent};
+use protocol::event::{EventBody, ExitReason, SessionEvent};
 use protocol::model::{Seq, SessionStatus};
 use protocol::paths::WORKER_SOCKET_FILE;
 
@@ -115,13 +115,7 @@ fn an_agent_dying_during_an_approval_closes_it() {
             .iter()
             .any(|e| matches!(e.body, EventBody::AgentExited { reason: ExitReason::Unexpected, signal: Some(9), .. }))
     );
-    let err = client
-        .session_approve(
-            &session.id,
-            &approval_id,
-            ApprovalDecision::Allow { updated_input: None, updated_permissions: None },
-        )
-        .unwrap_err();
+    let err = client.session_decide(&session.id, &approval_id, protocol::fixtures::allow_once()).unwrap_err();
     assert!(matches!(err, ClientError::Api(e) if e.code == ErrorCode::Conflict));
 }
 

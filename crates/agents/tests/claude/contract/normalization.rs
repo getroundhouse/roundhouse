@@ -1,8 +1,9 @@
 #![cfg(test)]
 
 use agents::claude::{Normalizer, Parsed};
+use protocol::capability::approvals::Asks;
 use protocol::capability::calls::{Call, CallKind, CallOutput};
-use protocol::event::{AgentRunState, ApprovalOutcome, Asking, ContentBlock, EventBody, FileChange, TurnOutcome};
+use protocol::event::{AgentRunState, ContentBlock, EventBody, FileChange, TurnOutcome};
 use protocol::model::{ApprovalId, CacheRequest, CacheTtl, PermissionMode, Seq, ToolUseId};
 use protocol::tail::{BlockKind, Tail};
 use serde_json::Value;
@@ -66,36 +67,40 @@ fn init_reports_what_the_hub_shows_and_relies_on() {
     assert!(agent_version.is_some_and(|v| !v.is_empty()));
 }
 
+/// What the CLI asked, as the capture has it, by each request's ID.
+fn asked() -> HashMap<String, Value> {
+    let lines = FIXTURE.lines().filter_map(|line| serde_json::from_str::<Value>(line).ok());
+    let requests =
+        lines.filter(|line| line["type"] == "control_request" && line["request"]["subtype"] == "can_use_tool");
+    requests.map(|line| (line["request_id"].as_str().unwrap().to_string(), line["request"].clone())).collect()
+}
+
 #[test]
-fn approvals_carry_what_a_client_must_show_and_the_cli_must_get_back() {
+fn approvals_carry_what_a_client_must_show_and_the_rules_the_cli_suggests() {
+    let asked = asked();
     let approvals: Vec<_> = events()
         .into_iter()
         .filter_map(|e| match e {
-            EventBody::ApprovalRequested {
-                approval_id,
-                tool_name,
-                tool_use_id,
-                input,
-                description,
-                suggestions,
-                asking,
-                ..
-            } => Some((approval_id, tool_name, tool_use_id, input, description, suggestions, asking)),
+            EventBody::ApprovalRequested { approval_id, tool_use_id, request, .. } => {
+                Some((asked[approval_id.as_str()].clone(), tool_use_id, request))
+            }
             _ => None,
         })
         .collect();
-    let bash: Vec<_> = approvals.iter().filter(|(_, tool, ..)| tool == "Bash").collect();
+    let bash: Vec<_> = approvals.iter().filter(|(asked, ..)| asked["tool_name"] == "Bash").collect();
     assert_eq!(bash.len(), 3);
-    for (id, _, tool_use_id, input, description, suggestions, asking) in bash {
-        assert!(!id.as_str().is_empty());
+    for (asked, tool_use_id, request) in bash {
         assert!(tool_use_id.as_ref().is_some_and(|t| t.as_str().starts_with("toolu_")));
-        assert!(input["command"].as_str().is_some_and(|c| c.contains("echo")));
-        assert!(description.is_some());
-        assert!(suggestions.is_array());
-        let Some(Asking::ToolUse { typed: Some(Call::Command(command)) }) = asking.as_deref() else {
-            panic!("{asking:?} isn't the command it makes");
+        let Asks::Call { call: Call::Command(command) } = &request.asks else {
+            panic!("{request:?} isn't the command it makes");
         };
-        assert_eq!(&command.command, input["command"].as_str().unwrap());
+        assert_eq!(command.command, asked["input"]["command"].as_str().unwrap());
+        assert_eq!(command.description.as_deref(), asked["description"].as_str(), "what it's for");
+        let [rule] = &request.suggested[..] else { panic!("{:?}", request.suggested) };
+        let suggested = &asked["permission_suggestions"][0]["rules"][0];
+        let content = suggested["ruleContent"].as_str().unwrap();
+        assert_eq!(rule.matching, format!("Bash({content})"), "the rule it suggests, but not the directory");
+        assert!(!request.always);
     }
 }
 
@@ -105,8 +110,8 @@ fn interrupting_during_an_approval_cancels_it_and_ends_the_turn_as_cancelled() {
     let asked: Vec<&ApprovalId> = events
         .iter()
         .filter_map(|e| match e {
-            EventBody::ApprovalRequested { approval_id, tool_name, .. } if tool_name != "AskUserQuestion" => {
-                Some(approval_id)
+            EventBody::ApprovalRequested { approval_id, request, .. } => {
+                (!matches!(request.asks, Asks::Questions { .. })).then_some(approval_id)
             }
             _ => None,
         })
@@ -114,7 +119,7 @@ fn interrupting_during_an_approval_cancels_it_and_ends_the_turn_as_cancelled() {
     let cancelled: Vec<&ApprovalId> = events
         .iter()
         .filter_map(|e| match e {
-            EventBody::ApprovalResolved { approval_id, outcome: ApprovalOutcome::Cancelled, .. } => Some(approval_id),
+            EventBody::ApprovalResolved { approval_id, decision: None, .. } => Some(approval_id),
             _ => None,
         })
         .collect();
@@ -145,37 +150,40 @@ fn the_cli_answers_changes_and_says_why_it_refuses() {
 
 #[test]
 fn a_plan_comes_for_approval_with_its_text() {
+    let asked = asked();
     let plan = events().into_iter().find_map(|e| match e {
-        EventBody::ApprovalRequested { tool_name, input, asking, .. } if tool_name == "ExitPlanMode" => {
-            Some((input, asking))
+        EventBody::ApprovalRequested { approval_id, request, .. } if matches!(request.asks, Asks::Plan { .. }) => {
+            Some((asked[approval_id.as_str()]["input"].clone(), request.asks))
         }
         _ => None,
     });
-    let (input, asking) = plan.unwrap();
+    let (input, asks) = plan.unwrap();
     let text = input["plan"].as_str().unwrap();
     assert!(!text.is_empty());
-    assert_eq!(asking.as_deref(), Some(&Asking::Plan { plan: text.to_string() }), "what it asks says the plan");
+    let file = input["planFilePath"].as_str().map(str::to_string);
+    assert_eq!(asks, Asks::Plan { plan: text.to_string(), file }, "what it asks says the plan, and its file");
 }
 
 #[test]
 fn a_question_comes_for_approval_with_its_options_and_takes_answers_back() {
     let events = events();
+    let requests = asked();
     let asked = events.iter().find_map(|e| match e {
-        EventBody::ApprovalRequested { tool_name, input, asking, .. } if tool_name == "AskUserQuestion" => {
-            Some((input, asking))
+        EventBody::ApprovalRequested { approval_id, request, .. } if matches!(request.asks, Asks::Questions { .. }) => {
+            Some((requests[approval_id.as_str()]["input"].clone(), &request.asks))
         }
         _ => None,
     });
-    let (input, asking) = asked.unwrap();
+    let (input, asks) = asked.unwrap();
     let question = &input["questions"][0];
     assert!(question["question"].as_str().is_some());
     assert!(question["options"][1]["label"].as_str().is_some());
     assert!(question["multiSelect"].is_boolean());
-    let Some(Asking::Questions { questions }) = asking.as_deref() else { panic!("{asking:?}") };
+    let Asks::Questions { questions } = asks else { panic!("{asks:?}") };
     let read = &questions[0];
     assert_eq!(Some(read.text.as_str()), question["question"].as_str(), "what it asks says the question");
     assert_eq!(Some(read.options[1].label.as_str()), question["options"][1]["label"].as_str());
-    assert_eq!(Some(read.multiple), question["multiSelect"].as_bool());
+    assert_eq!(Some(read.several()), question["multiSelect"].as_bool());
     let answered = events.iter().any(|e| match e {
         EventBody::AgentUser { blocks, .. } => blocks
             .iter()

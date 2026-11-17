@@ -2,6 +2,7 @@
 mod approvals;
 mod background;
 mod calls;
+mod decisions;
 mod harness;
 mod lifecycle;
 mod models;

@@ -1,5 +1,5 @@
 use protocol::event::EventBody;
-use protocol::fixtures::{self, ApprovalRequest};
+use protocol::fixtures;
 use protocol::model::{ApprovalId, OpenApproval};
 
 use super::*;
@@ -7,7 +7,7 @@ use crate::store::tests::store_with_session;
 use crate::store::{cancelled_approval, older, schema};
 
 fn asked(id: &str) -> EventBody {
-    ApprovalRequest { input: serde_json::json!({}), ..fixtures::approval_request(id, "Bash") }.into()
+    fixtures::approval_request(id, fixtures::to_run("ls")).into()
 }
 
 fn answered(id: &str) -> EventBody {

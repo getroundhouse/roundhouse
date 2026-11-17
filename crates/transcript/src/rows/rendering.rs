@@ -9,7 +9,7 @@ use crate::selection::Selection;
 use crate::texts::{Of, TextAt, Texts};
 use crate::transcript::{Model, Transcript};
 use crate::{attachments, find};
-use around::{Around, Closes, asks_questions, drawn_in_its_call, drawn_in_row};
+use around::{Around, Closes, asks_questions, denied, drawn_in_its_call, drawn_in_row};
 use client_core::session_log::{By, Row, SessionLog};
 use gpui_kit::component::{h_flex, v_flex};
 use gpui_kit::{
@@ -20,7 +20,7 @@ use look::{LineText, Typeset as _};
 use notices::{agent_exited, notice};
 use prompt::{Prompt, prompt_bubble};
 use protocol::capability::turns::OwnTurn;
-use protocol::event::{ApprovalOutcome, EventBody, SessionEvent};
+use protocol::event::{EventBody, SessionEvent};
 use protocol::model::Seq;
 use protocol::tail::Tail;
 use std::cell::RefCell;
@@ -249,8 +249,8 @@ pub(super) fn render_event(
         EventBody::ApprovalRequested { .. } => plan_card(seq, body, around.approval_open, shared, cx),
         // A question's line says what became of it, and so does a denied call's, as `Closes` says.
         EventBody::ApprovalResolved { .. } if matches!(around.closes, Closes::SaidElsewhere) => empty(),
-        EventBody::ApprovalResolved { outcome: ApprovalOutcome::Cancelled, .. } => muted_line("Approval cancelled", cx),
-        EventBody::ApprovalResolved { outcome: ApprovalOutcome::Denied, .. } => match &around.closes {
+        EventBody::ApprovalResolved { decision: None, .. } => muted_line("Approval cancelled", cx),
+        EventBody::ApprovalResolved { .. } if denied(body) => match &around.closes {
             Closes::ForASubagent { tool, subagent } => muted_line(format!("Denied {tool} for {subagent}"), cx),
             Closes::Unsaid | Closes::SaidElsewhere => muted_line("Denied", cx),
         },

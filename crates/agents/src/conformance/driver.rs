@@ -5,8 +5,10 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use async_trait::async_trait;
-use protocol::capability::Capabilities;
-use protocol::event::{ApprovalDecision, ApprovalOutcome, EventBody, SessionEvent};
+use protocol::capability::approvals::{AfterDenial, Asks, Decision, Remember, Request};
+use protocol::capability::asking::PlanContext;
+use protocol::capability::{Capabilities, Control};
+use protocol::event::{EventBody, SessionEvent};
 use protocol::model::{RunId, Seq};
 use protocol::prompt::Prompt;
 use tokio::sync::mpsc;
@@ -149,27 +151,27 @@ impl Driver {
             };
             let done = matches(&output);
             let asked =
-                if let AgentOutput::Event { body: EventBody::ApprovalRequested { approval_id, .. }, .. } = &output {
-                    Some(approval_id.clone())
+                if let AgentOutput::Event { body: EventBody::ApprovalRequested { approval_id, request, .. }, .. } =
+                    &output
+                {
+                    Some((approval_id.clone(), request.clone()))
                 } else {
                     None
                 };
             self.keep(output);
-            if let Some(approval_id) = asked {
+            if let Some((approval_id, request)) = asked {
+                let agent = self.agent()?;
+                let decision = yes(&request);
                 // Recorded before it's sent, as the hub records a decision.
+                let decided = Box::new(decision.clone());
                 let allowed = EventBody::ApprovalResolved {
                     approval_id: approval_id.clone(),
-                    outcome: ApprovalOutcome::Allowed,
-                    answers_by_text: None,
-                    answers_by_position: None,
+                    decision: Some(decided),
                     by_setting: false,
                 };
                 self.record(None, allowed);
-                let allow = ApprovalDecision::Allow { updated_input: None, updated_permissions: None };
-                self.agent()?
-                    .resolve_approval(&approval_id, &allow)
-                    .await
-                    .map_err(|e| Failed(format!("allowing: {e}")))?;
+                let control = Control::Decide { approval: approval_id, decision };
+                agent.control(&control).await.map_err(|e| Failed(format!("allowing: {e}")))?;
             }
             if done {
                 return Ok(());
@@ -214,5 +216,17 @@ impl Driver {
     pub(crate) async fn finish(mut self) -> (super::trial::Trial, Result<(), Failed>) {
         let stopped = self.stop().await;
         (super::trial::Trial { seen: self.seen, log: self.log, claims: self.claims, marks: self.marks }, stopped)
+    }
+}
+
+/// Yes to `request`: a use allowed once, and a plan approved in the conversation it was planned in. Questions aren't
+/// answered, since a scenario has no answers to give, and anything else is refused.
+fn yes(request: &Request) -> Decision {
+    match &request.asks {
+        Asks::Call { .. } | Asks::Network { .. } => Decision::Allow { remember: Remember::Once },
+        Asks::Plan { .. } => Decision::ApprovePlan { context: PlanContext::Kept },
+        Asks::Questions { .. } | Asks::Access { .. } | Asks::Server(_) | Asks::Unknown => {
+            Decision::Deny { words: None, then: AfterDenial::Continue, keep: None }
+        }
     }
 }

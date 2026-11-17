@@ -139,7 +139,7 @@ async fn background_calls_survive_turn_end_cancel_and_async_error_until_settled_
     let agent = h.started().await;
 
     agent.send_prompt(Seq::FIRST, &Prompt::new("start bg")).await.unwrap();
-    let allow = Decision::Allow { edited: None, remember: Remember::Once };
+    let allow = Decision::Allow { remember: Remember::Once };
     let approval = wait_for_approval(&mut h).await;
     agent.control(&Control::Decide { approval, decision: allow }).await.unwrap();
     let turn1 = collect_until_end(&mut h).await;
@@ -234,7 +234,7 @@ fn classify(body: EventBody) -> Option<Seen> {
     } else if let EventBody::ToolCallDropped { tool_use_id } = body {
         Some(Seen::Dropped(tool_use_id.to_string()))
     } else if let EventBody::ApprovalRequested { request, .. } = body {
-        let Asks::Plan { plan, .. } = request?.asks else { return None };
+        let Asks::Plan { plan, .. } = request.asks else { return None };
         Some(Seen::PlanAsked(plan))
     } else if let EventBody::TurnEnded { outcome, result, .. } = body {
         Some(Seen::Ended(outcome, result))
@@ -331,7 +331,7 @@ async fn buffered_wakeup_before_approved_plan_continuation_flushes_and_clears_re
     agent.send_prompt(Seq::FIRST, &Prompt::new("plan")).await.unwrap();
     let plan_id = wait_for_approval(&mut h).await;
 
-    let approve = Decision::ApprovePlan { then: super::super::claims::full_access(), context: PlanContext::Kept };
+    let approve = Decision::ApprovePlan { context: PlanContext::Kept };
     agent.control(&Control::Decide { approval: plan_id, decision: approve }).await.unwrap();
     let seen = collect_until_end(&mut h).await;
     agent.stop().await;

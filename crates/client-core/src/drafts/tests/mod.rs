@@ -1,7 +1,7 @@
 use super::*;
-use protocol::model::{AnswerDraft, CommentDraft, NewWorkspaceDraft, WorkspaceId};
+use protocol::model::{CommentDraft, DecisionDraft, NewWorkspaceDraft, WorkspaceId};
 
-mod answers_and_comments;
+mod decisions_and_comments;
 mod elsewhere;
 mod kinds;
 mod new_workspace;

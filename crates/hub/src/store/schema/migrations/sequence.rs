@@ -371,4 +371,7 @@ pub(in super::super) const MIGRATIONS: &[Migration] = &[
     // Typing what Claude's adapter recorded before it typed its calls: each call, with what came back for it, the call
     // each request for approval asked to make, and what each working subagent has done lately, in `typed_calls`.
     Rust(super::typed_calls::typed_calls),
+    // Typing each request for approval, what closed it, with the decision it stood for, and the draft of an answer to
+    // one, which `sessions.decision_draft` holds now, in `typed_requests`.
+    Rust(super::typed_requests::typed_requests),
 ];

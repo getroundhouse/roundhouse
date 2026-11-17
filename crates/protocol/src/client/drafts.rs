@@ -9,7 +9,7 @@ use super::attachments::AttachmentData;
 use super::{ClientRequest, ClientResponse, Reply, Request};
 use crate::attachment::{Attachment, AttachmentBytes, MediaType};
 use crate::model::{
-    AnswerDraft, AttachmentId, CommentDraft, DraftToKeep, NewWorkspaceDraft, NewWorkspaceDraftToKeep, Session,
+    AttachmentId, CommentDraft, DecisionDraft, DraftToKeep, NewWorkspaceDraft, NewWorkspaceDraftToKeep, Session,
     SessionId, Workspace, WorkspaceId,
 };
 
@@ -29,20 +29,20 @@ impl Request for SessionDraft {
     }
 }
 
-/// Keeps `draft` as what's chosen and typed in answer to the question the session's agent is waiting on, in place of
-/// what was kept. `None` clears it, as one with nothing chosen or typed does, and so does the question being answered
+/// Keeps `draft` as what's chosen and typed in answer to the request the session's agent is waiting on, in place of
+/// what was kept. `None` clears it, as one with nothing chosen or typed does, and so does the request being answered
 /// or cancelled, whoever answers it, after which one for it is left out.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
-pub struct SessionAnswerDraft {
+pub struct SessionDecisionDraft {
     pub id: SessionId,
-    pub draft: Option<AnswerDraft>,
+    pub draft: Option<DecisionDraft>,
 }
 
-impl Request for SessionAnswerDraft {
+impl Request for SessionDecisionDraft {
     type Reply = Session;
 
     fn into_request(self) -> ClientRequest {
-        ClientRequest::SessionAnswerDraft(self)
+        ClientRequest::SessionDecisionDraft(self)
     }
 }
 

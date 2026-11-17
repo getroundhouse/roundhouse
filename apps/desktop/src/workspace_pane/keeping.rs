@@ -129,7 +129,7 @@ impl WorkspacePane {
         if self.keeper.from_elsewhere(&KeptDraft::comment(self.workspace())) {
             self.take_writing(cx);
         }
-        let asked = self.open_sessions().filter(|s| self.keeper.from_elsewhere(&KeptDraft::answer(s)));
+        let asked = self.open_sessions().filter(|s| self.keeper.from_elsewhere(&KeptDraft::decision(s)));
         let asked = asked.map(|s| s.id.clone());
         for chat in asked.collect::<Vec<_>>() {
             self.take_answer(&chat, cx);
@@ -152,9 +152,9 @@ impl WorkspacePane {
         let (Some(panel), Some(session)) = (self.question(chat, cx), self.shown.session(chat)) else {
             return;
         };
-        self.keeper.took(KeptDraft::answer(session));
+        self.keeper.took(KeptDraft::decision(session));
         let question = panel.read(cx).approval_id().clone();
-        let kept = session.answer_draft.clone().filter(|kept| kept.approval_id == question && kept.says_anything());
+        let kept = session.decision_draft.clone().filter(|kept| kept.approval_id == question && kept.says_anything());
         self.with_window(cx, move |_, window, cx| panel.update(cx, |p, cx| p.take_so_far(kept.as_ref(), window, cx)));
     }
 
@@ -195,7 +195,7 @@ impl WorkspacePane {
     /// Has the hub keep what's chosen and typed in answer to the chat's question, as its transcript asks.
     pub(super) fn keep_answer(&self, chat: &SessionId, at_once: bool, cx: &App) {
         let so_far = self.question(chat, cx).and_then(|panel| panel.read(cx).so_far(cx));
-        let so_far = DraftChange::Answer(chat.clone(), so_far);
+        let so_far = DraftChange::Decision(chat.clone(), so_far);
         if at_once {
             self.keeper.set(so_far);
         } else {
@@ -302,7 +302,7 @@ impl WorkspacePane {
     fn unsent_chats<'a>(&'a self, cx: &'a App) -> impl Iterator<Item = Unsent> + 'a {
         let answering = move |id: &SessionId| {
             let any = self.question(id, cx).is_some_and(|question| question.read(cx).has_typed(cx));
-            Typed { any, unkept: self.keeper.unkept(&DraftKey::Answer(id.clone())) }
+            Typed { any, unkept: self.keeper.unkept(&DraftKey::Decision(id.clone())) }
         };
         let only_here = move |id: &SessionId| self.client.is_sending(id);
         let showing = std::iter::once_with(move || {

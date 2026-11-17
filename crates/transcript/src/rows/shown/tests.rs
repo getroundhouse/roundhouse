@@ -1,5 +1,7 @@
 use client_core::session_log::{Position, SessionLog};
-use protocol::event::{ApprovalOutcome, Asking, ContentBlock, EventBody, ExitReason, Question, TurnOutcome};
+use protocol::capability::approvals::Decision;
+use protocol::capability::asking::QuestionAnswer;
+use protocol::event::{ContentBlock, EventBody, ExitReason, TurnOutcome};
 use serde_json::{Value, json};
 
 use protocol::capability::calls::call::{Command, MessageSubagent, Read, StartSubagent};
@@ -7,7 +9,7 @@ use protocol::capability::calls::output::{Ended, Lines};
 use protocol::capability::calls::{Call, CallOutput};
 use protocol::find::Needle;
 use protocol::fixtures::{
-    ApprovalRequest, approval_request, command_output, typed_call, typed_command, typed_denied, typed_result,
+    approval_request, asking, command_output, decided, question, typed_call, typed_command, typed_denied, typed_result,
     typed_subagent,
 };
 use protocol::model::Seq;
@@ -297,21 +299,11 @@ fn a_match_in_a_command_opens_its_call() {
 
 #[test]
 fn a_question_the_agent_asked_isn_t_found_once_it_s_answered_on_its_line() {
-    let asked =
-        Question { text: "Which parser?".into(), header: Some("Parser".into()), options: Vec::new(), multiple: false };
-    let question: EventBody = ApprovalRequest {
-        tool_use_id: Some("ask".into()),
-        asking: Some(Asking::Questions { questions: vec![asked] }),
-        ..approval_request("q", "AskUserQuestion")
-    }
-    .into();
-    let answered = EventBody::ApprovalResolved {
-        approval_id: "q".into(),
-        outcome: ApprovalOutcome::Allowed,
-        answers_by_text: Some([("Which parser?".to_string(), "The new parser".to_string())].into()),
-        answers_by_position: None,
-        by_setting: false,
-    };
+    let mut request = approval_request("q", asking(vec![question("Which parser?", &[], false)]));
+    request.tool_use_id = Some("ask".into());
+    let question: EventBody = request.into();
+    let typed = QuestionAnswer { picked: Vec::new(), typed: Some("The new parser".into()) };
+    let answered = decided("q", Decision::Answer { answers: vec![typed] });
     let log = log([
         event(Seq::new(1), call("ask", Call::Questions)),
         event(Seq::new(2), question),

@@ -5,8 +5,8 @@ use std::time::Duration;
 use async_trait::async_trait;
 use protocol::attachment::AttachmentFile;
 use protocol::capability::{Control, settings};
-use protocol::event::{ApprovalDecision, EventBody, NoticeLevel, TurnOutcome};
-use protocol::model::{AgentSessionId, ApprovalId, ModelName, PermissionMode, Seq, SessionSettingsChange};
+use protocol::event::{EventBody, NoticeLevel, TurnOutcome};
+use protocol::model::{AgentSessionId, ModelName, PermissionMode, Seq, SessionSettingsChange};
 use protocol::prompt::Prompt;
 use serde_json::{Value, json};
 
@@ -75,10 +75,6 @@ impl AgentProcess for AntigravityProcess {
             extras: protocol::capability::prompts::Extras::default(),
         })
         .await
-    }
-    async fn resolve_approval(&self, id: &ApprovalId, decision: &ApprovalDecision) -> Result<(), AgentError> {
-        let decision = approvals::legacy(&self.shared, id, decision)?;
-        self.control(&Control::Decide { approval: id.clone(), decision }).await
     }
     async fn interrupt(&self) -> Result<(), AgentError> {
         self.control(&Control::Cancel).await

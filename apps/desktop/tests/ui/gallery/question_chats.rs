@@ -7,15 +7,17 @@
 use std::sync::Arc;
 
 use gpui_kit::PlatformTextSystem;
+use protocol::capability::approvals::{Asks, Decision};
+use protocol::capability::asking::{Choose, Question, QuestionAnswer, QuestionOption, TypedAnswer};
 use protocol::capability::calls::Call;
-use protocol::event::{ApprovalOutcome, Asking, EventBody, Question, QuestionOption};
-use protocol::fixtures::{ApprovalRequest, approval_request};
+use protocol::event::EventBody;
+use protocol::fixtures::{ApprovalRequest, approval_request, decided};
 use protocol::model::{SessionStatus, ToolUseId};
 
 use super::capture;
 use super::chats::looked_around;
 use super::worlds::chat_world;
-use client_core::fake_hub::events::{replied, said, text, typed_call};
+use client_core::fake_hub::events::{replied, said as said_to, text, typed_call};
 
 /// The line [`answered`] leaves for its second call, with two questions.
 pub(crate) const TWO_ASKED: &str = "Asked 2 questions";
@@ -46,10 +48,11 @@ pub(crate) fn questions() -> Vec<EventBody> {
 /// recorded, and the reply that followed.
 pub(crate) fn answered() -> Vec<EventBody> {
     let mut events = question();
-    events.extend(answer("toolu-3", "approval-1", &[(PR_STATE, "In the hub")]));
+    events.extend(answer("toolu-3", "approval-1", &[pr_state()], vec![picked(&[0], None)]));
     events.push(text("msg-4", TWO_MORE));
     events.extend(asking("msg-5", "toolu-4", "approval-2", vec![mark(), refresh()]));
-    events.extend(answer("toolu-4", "approval-2", &[(MARK, MARKED)]));
+    let marked = picked(&[0, 1], Some("Only while it's open"));
+    events.extend(answer("toolu-4", "approval-2", &[mark(), refresh()], vec![marked, QuestionAnswer::default()]));
     events.push(text("msg-6", REPLY));
     events.push(replied(REPLY, 64, 0.18));
     events
@@ -91,13 +94,26 @@ fn refresh() -> Question {
 }
 
 /// The question `text`, named `header`, offering `options`, each with what it means, if it says, of which several can
-/// be chosen if `multiple`.
-fn asked(text: &str, header: &str, multiple: bool, options: &[(&str, Option<&str>)]) -> Question {
-    let options = options
-        .iter()
-        .map(|(label, description)| QuestionOption { label: (*label).into(), description: description.map(Into::into) })
-        .collect();
-    Question { text: text.into(), header: Some(header.into()), options, multiple }
+/// be chosen if `several`, with any other answer typed instead.
+fn asked(text: &str, header: &str, several: bool, options: &[(&str, Option<&str>)]) -> Question {
+    let option = |(label, description): &(&str, Option<&str>)| QuestionOption {
+        label: (*label).into(),
+        description: description.map(Into::into),
+        preview: None,
+    };
+    let choose = if several { Choose::Several } else { Choose::One };
+    Question {
+        text: text.into(),
+        header: Some(header.into()),
+        options: options.iter().map(option).collect(),
+        choose,
+        typed: TypedAnswer::Yes,
+    }
+}
+
+/// An answer that picked the options at `picked`, in that order, and typed `typed`, if anything.
+fn picked(picked: &[u32], typed: Option<&str>) -> QuestionAnswer {
+    QuestionAnswer { picked: picked.to_vec(), typed: typed.map(str::to_string) }
 }
 
 /// The agent asking `questions`, in the message `message`, as Claude's adapter asks them.
@@ -106,29 +122,25 @@ fn asking(message: &str, call: &str, approval: &str, questions: Vec<Question>) -
         typed_call(message, call, Call::Questions),
         ApprovalRequest {
             tool_use_id: Some(ToolUseId::from(call)),
-            asking: Some(Asking::Questions { questions }),
-            ..approval_request(approval, "AskUserQuestion")
+            ..approval_request(approval, Asks::Questions { questions })
         }
         .into(),
     ]
 }
 
-/// The answers to the questions the call `call` asked, as the hub records them, and as the agent is told them.
-fn answer(call: &str, approval: &str, answers: &[(&str, &str)]) -> Vec<EventBody> {
-    let told: Vec<String> = answers.iter().map(|(question, answer)| format!("\"{question}\"=\"{answer}\"")).collect();
+/// The `answers` to `questions`, which the call `call` asked, one to each, as the hub records them, and as the agent
+/// is told them.
+fn answer(call: &str, approval: &str, questions: &[Question], answers: Vec<QuestionAnswer>) -> Vec<EventBody> {
+    let said = |(question, answer): (&Question, &QuestionAnswer)| {
+        let said: Vec<&str> = question.said(answer).collect();
+        (!said.is_empty()).then(|| format!("\"{}\"=\"{}\"", question.text, said.join(", ")))
+    };
+    let told: Vec<String> = questions.iter().zip(&answers).filter_map(said).collect();
     let told = format!(
         "Your questions have been answered: {}. You can now continue with these answers in mind.",
         told.join(", ")
     );
-    let answers = answers.iter().map(|(question, answer)| ((*question).to_string(), (*answer).to_string())).collect();
-    let closed = EventBody::ApprovalResolved {
-        approval_id: approval.into(),
-        outcome: ApprovalOutcome::Allowed,
-        answers_by_text: Some(answers),
-        answers_by_position: None,
-        by_setting: false,
-    };
-    vec![closed, said(call, &told)]
+    vec![decided(approval, Decision::Answer { answers }), said_to(call, &told)]
 }
 
 /// Each question an opened call shows, and what was answered to it, is copied with the rest, in the order shown, each

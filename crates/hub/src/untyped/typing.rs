@@ -13,12 +13,18 @@ use serde_json::Value;
 
 use super::older::{Returned, Use};
 use super::outputs::{self, Came};
-use super::{asking, calls};
+use super::{calls, requests};
 
 /// What a frame holds when it may hold one of the older forms: a block that's a call or what came back for one, or a
-/// request for approval. Each is a key and its value as JSON writes them, which a string, such as a text or a raw line,
-/// can't hold, since its quotes are escaped. A typed request for approval holds it too, which typing leaves as it is.
-const OLDER: [&str; 3] = [r#""type":"tool_use""#, r#""type":"tool_result""#, r#""type":"approval_requested""#];
+/// request for approval or its resolution. Each is a key and its value as JSON writes them, which a string, such as a
+/// text or a raw line, can't hold, since its quotes are escaped. A typed request or resolution holds it too, which
+/// typing leaves as it is.
+const OLDER: [&str; 4] = [
+    r#""type":"tool_use""#,
+    r#""type":"tool_result""#,
+    r#""type":"approval_requested""#,
+    r#""type":"approval_resolved""#,
+];
 
 /// Types what bodies hold in the older forms, read in the order they were recorded, each session's on a `Typing` of its
 /// own, or each worker's: call IDs are the agent's, unique to each call.
@@ -33,7 +39,9 @@ impl Typing {
     pub(crate) fn body(&mut self, body: &mut Value) -> bool {
         match body.get("type").and_then(Value::as_str) {
             Some("assistant" | "agent_user") => self.blocks(body),
-            Some("approval_requested") => asking::type_request(body),
+            Some("approval_requested") => requests::type_request(body),
+            // An agent closes a request only by cancelling it, which says nothing of what it asked.
+            Some("approval_resolved") => requests::type_resolution(body, None, None),
             _ => false,
         }
     }

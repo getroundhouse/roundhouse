@@ -4,7 +4,7 @@ use protocol::capability::{
     approvals::{AfterDenial, Asks, Decision, Remember, Request},
     asking::PlanContext,
 };
-use protocol::event::{AgentRunState, ApprovalDecision, EventBody, NoticeLevel, TurnOutcome};
+use protocol::event::{AgentRunState, EventBody, NoticeLevel, TurnOutcome};
 use protocol::model::{ApprovalId, PermissionMode, ToolUseId};
 use serde_json::{Value, json};
 
@@ -143,14 +143,8 @@ async fn ask(
         .event(
             EventBody::ApprovalRequested {
                 approval_id: id,
-                request: Some(Box::new(request)),
-                tool_name: String::new(),
+                request: Box::new(request),
                 tool_use_id: call,
-                input: Value::Null,
-                description: None,
-                suggestions: Box::new(Value::Null),
-                asking: None,
-                reason: None,
                 asked_by: None,
             },
             raw,
@@ -208,13 +202,13 @@ pub(super) async fn decide(shared: &Arc<Shared>, id: &ApprovalId, decision: &Dec
     Ok(())
 }
 
-fn can_answer(native: &NativeRequest, decision: &Decision) -> bool {
+pub(super) fn can_answer(native: &NativeRequest, decision: &Decision) -> bool {
     matches!(
         (native, decision),
         (NativeRequest::Plan, Decision::ApprovePlan { context: PlanContext::Kept, .. } | Decision::KeepPlanning { .. })
             | (
                 NativeRequest::Permission { .. },
-                Decision::Allow { edited: None, remember: Remember::Once | Remember::Conversation }
+                Decision::Allow { remember: Remember::Once | Remember::Conversation }
                     | Decision::Deny { words: None, keep: None, then: AfterDenial::Continue | AfterDenial::Stop }
             )
             | (NativeRequest::Elicitation { .. }, Decision::Answer { .. })
@@ -231,7 +225,7 @@ async fn answer(shared: &Arc<Shared>, waiting: &Waiting, decision: &Decision) ->
                 words.as_deref().filter(|w| !w.trim().is_empty()).unwrap_or("Keep planning; the plan is not approved.");
             switch_plan_mode(shared, PermissionMode::Plan, text).await
         }
-        (NativeRequest::Permission { id, request }, Decision::Allow { edited: None, remember }) => {
+        (NativeRequest::Permission { id, request }, Decision::Allow { remember }) => {
             let always = match remember {
                 Remember::Once => false,
                 Remember::Conversation => true,
@@ -283,33 +277,6 @@ async fn switch_plan_mode(shared: &Arc<Shared>, mode: PermissionMode, prompt_tex
         shared.event(EventBody::AgentMode { permission_mode: mode }, None).await;
     }
     control::send_prompt_rpc(shared, None, vec![json!({ "type": "text", "text": prompt_text })]).await
-}
-
-pub(super) fn legacy(shared: &Shared, id: &ApprovalId, decision: &ApprovalDecision) -> Result<Decision, AgentError> {
-    let state = shared.state.lock();
-    let waiting = state
-        .waiting
-        .get(id)
-        .ok_or_else(|| AgentError::Refused("That Antigravity request is no longer open".into()))?;
-    match decision {
-        ApprovalDecision::Allow { updated_input: None, updated_permissions: None } => {
-            Ok(if matches!(waiting.native, NativeRequest::Plan) {
-                Decision::ApprovePlan { then: super::claims::full_access(), context: PlanContext::Kept }
-            } else {
-                Decision::Allow { edited: None, remember: Remember::Once }
-            })
-        }
-        ApprovalDecision::Deny { message, interrupt: false } if matches!(waiting.native, NativeRequest::Plan) => {
-            Ok(Decision::KeepPlanning { words: message.clone() })
-        }
-        ApprovalDecision::Deny { message, interrupt } => Ok(Decision::Deny {
-            words: message.clone(),
-            then: if *interrupt { AfterDenial::Stop } else { AfterDenial::Continue },
-            keep: None,
-        }),
-        ApprovalDecision::AnswerByPosition { answers } => Ok(Decision::Answer { answers: answers.clone() }),
-        ApprovalDecision::Allow { .. } | ApprovalDecision::AnswerByText { .. } => Err(unsupported_decision()),
-    }
 }
 
 fn unsupported_decision() -> AgentError {

@@ -1,8 +1,9 @@
 //! What a session is sent: what arrives from its agent's worker, and what clients ask of it.
 
 use protocol::attachment::NewAttachment;
+use protocol::capability::approvals::Decision;
 use protocol::client::ApiError;
-use protocol::event::{ApprovalDecision, EventBody, ExitReason};
+use protocol::event::{EventBody, ExitReason};
 use protocol::model::{
     ApprovalId, AttachmentId, CacheRequest, ClientMessageId, ContextUsage, RunId, Seq, Session, UsageLimit,
 };
@@ -86,9 +87,9 @@ pub(crate) enum Command {
         prompt: Prompt<AttachmentId>,
         reply: oneshot::Sender<Result<(Seq, bool), ApiError>>,
     },
-    Approve {
+    Decide {
         approval_id: ApprovalId,
-        decision: ApprovalDecision,
+        decision: Decision,
         reply: oneshot::Sender<Result<(), ApiError>>,
     },
     Cancel {

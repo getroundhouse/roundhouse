@@ -1,19 +1,19 @@
+use protocol::capability::approvals::Asks;
 use protocol::capability::calls::call::{
     CellEdit, Command as TypedCommand, CommandPart, Edit, Fetch, FilePatch, FindFiles, GenerateImage, NotebookEdit,
     Patch, PatchChange, Replace, Replaces, Runs, Search as TypedSearch, Shows, StartSubagent, ViewImage, WebSearch,
 };
 use protocol::capability::calls::output::{Found, FoundLine, Paths, WebResult};
 use protocol::capability::calls::{Call, CallOutput};
-use protocol::event::{Asking, EventBody};
-use protocol::fixtures::{self, ApprovalRequest, approval_request};
+use protocol::event::EventBody;
+use protocol::fixtures::{self, approval_request, asking, plan};
 use serde_json::{Value, json};
 
-use super::{Looks, Only, ReadFile, Recorded, Search, ToolCall, asked_about, count, typed};
+use super::{Looks, Only, ReadFile, Recorded, Search, ToolCall, count, typed};
 
-/// A request to use the tool `tool` with `input`, which says what it asks if `asking` does, and nothing of what it's
-/// for.
-fn request(tool: &str, input: Value, asking: Option<Asking>) -> EventBody {
-    ApprovalRequest { input, asking, ..approval_request("a", tool) }.into()
+/// A request that asks `asks`.
+fn request(asks: Asks) -> EventBody {
+    approval_request("a", asks).into()
 }
 
 fn summary(call: &Call) -> Option<String> {
@@ -97,8 +97,8 @@ fn what_a_call_does_is_its_kind() {
     assert!(Recorded::Typed(&subagent(None, "Look")).hands_off());
     assert!(!Recorded::Typed(&Call::Command(fixtures::typed_command("ls"))).hands_off());
     assert!(Recorded::Typed(&Call::Questions).asks_the_person() && Recorded::Typed(&Call::Plan).asks_the_person());
-    let named = Recorded::Named { name: "ExitPlanMode", input: &Value::Null };
-    assert!(!named.asks_the_person() && !named.hands_off(), "not by its name");
+    let named = Call::Other { tool: "ExitPlanMode".into(), input: Value::Null };
+    assert!(!Recorded::Typed(&named).asks_the_person(), "not by its name");
 }
 
 /// A call is made only from its block, or the request to make it.
@@ -109,42 +109,17 @@ fn a_call_is_read_from_its_block_and_from_a_request_to_make_it() {
     let result = fixtures::typed_result("c", CallOutput::Words { text: "a.rs".into() }, false);
     assert!(Recorded::of(&result).is_none(), "a result is no call");
 
-    let request = |asking| request("shell", json!({ "command": "ls -la" }), asking);
-    let said = request(Some(Asking::ToolUse { typed: Some(Call::Command(fixtures::typed_command("ls -la"))) }));
+    let said = request(Asks::Call { call: Call::Command(fixtures::typed_command("ls -la")) });
     assert!(matches!(ToolCall::read(Recorded::asked(&said).unwrap()), ToolCall::Command(_)));
-    assert_eq!(asked_about(&said).as_deref(), Some("ls -la"));
-    assert!(Recorded::asked(&EventBody::Unknown).is_none() && asked_about(&EventBody::Unknown).is_none());
+    assert!(Recorded::asked(&EventBody::Unknown).is_none());
 }
 
-/// The tools here have names Claude gave other tools, so a request read by its tool's name would read as those. One
-/// this build can't read is asked about as any tool, by its name.
+/// Questions, a plan, and what this build can't read are no call, whatever made them.
 #[test]
-fn a_request_is_never_read_by_its_tool_s_name() {
-    let asking = |tool: &str, asking| request(tool, json!({ "pattern": "fn main", "command": "ls" }), asking);
-    let questions = asking("Grep", Some(Asking::Questions { questions: Vec::new() }));
-    let plan = asking("Bash", Some(Asking::Plan { plan: String::new() }));
-
-    assert!(Recorded::asked(&questions).unwrap().asks_the_person());
-    assert!(Recorded::asked(&plan).unwrap().asks_the_person());
-    for unread in [Some(Asking::Unknown), Some(Asking::ToolUse { typed: None }), None] {
-        let body = asking("Bash", unread);
-        assert!(
-            matches!(ToolCall::read(Recorded::asked(&body).unwrap()), ToolCall::Other(_)),
-            "any tool, not a command"
-        );
+fn a_request_that_asks_anything_but_a_call_makes_none() {
+    for asks in [asking(Vec::new()), plan(""), Asks::Unknown] {
+        assert!(Recorded::asked(&request(asks.clone())).is_none(), "{asks:?}");
     }
-}
-
-#[test]
-fn a_request_is_about_what_the_agent_said_it_s_for_when_it_said() {
-    let request: EventBody = ApprovalRequest {
-        input: json!({ "command": "rm -rf target" }),
-        description: Some("Clear the build".into()),
-        ..approval_request("a", "Bash")
-    }
-    .into();
-
-    assert_eq!(asked_about(&request).as_deref(), Some("Clear the build"));
 }
 
 /// A typed command, which its agent read as doing what `parts` says.

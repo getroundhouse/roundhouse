@@ -331,7 +331,7 @@ async fn real_agy_mode_switch_plan_background_mixed_wakeup_and_resumes_full_acce
 
     agent.send_prompt(Seq::FIRST, &Prompt::new("draft plan")).await.unwrap();
     let call1 = wait_call_approval(&mut rx).await;
-    let allow = Decision::Allow { edited: None, remember: Remember::Once };
+    let allow = Decision::Allow { remember: Remember::Once };
     agent.control(&Control::Decide { approval: call1, decision: allow.clone() }).await.unwrap();
 
     let status_turn = loop {
@@ -347,13 +347,13 @@ async fn real_agy_mode_switch_plan_background_mixed_wakeup_and_resumes_full_acce
     agent.control(&Control::Decide { approval: call2, decision: allow }).await.unwrap();
 
     let plan_approval: ApprovalId = loop {
-        if let EventBody::ApprovalRequested { approval_id, request: Some(req), .. } = recv_event(&mut rx).await
+        if let EventBody::ApprovalRequested { approval_id, request: req, .. } = recv_event(&mut rx).await
             && matches!(&req.asks, Asks::Plan { plan, .. } if plan == "1. Run post-approve step")
         {
             break approval_id;
         }
     };
-    let approve = Decision::ApprovePlan { then: super::super::claims::full_access(), context: PlanContext::Kept };
+    let approve = Decision::ApprovePlan { context: PlanContext::Kept };
     agent.control(&Control::Decide { approval: plan_approval, decision: approve }).await.unwrap();
     assert_ne!(agent.pid(), plan_pid, "ApprovePlan must restart agy WITH --dangerously-skip-permissions");
 
@@ -371,7 +371,7 @@ async fn real_agy_mode_switch_plan_background_mixed_wakeup_and_resumes_full_acce
 
 async fn wait_call_approval(rx: &mut mpsc::Receiver<AgentOutput>) -> ApprovalId {
     loop {
-        if let EventBody::ApprovalRequested { approval_id, request: Some(req), .. } = recv_event(rx).await
+        if let EventBody::ApprovalRequested { approval_id, request: req, .. } = recv_event(rx).await
             && matches!(req.asks, Asks::Call { .. })
         {
             return approval_id;

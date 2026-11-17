@@ -230,8 +230,8 @@ pub(super) async fn handle(
         R::SessionSendQueued(queue::SessionSendQueued { id, client_msg_id }) => {
             C::Session(hub.session_send_queued(id, client_msg_id).await?)
         }
-        R::SessionApprove(agent::SessionApprove { id, approval_id, decision }) => {
-            hub.session_approve(id, approval_id, decision).await?;
+        R::SessionDecide(agent::SessionDecide { id, approval_id, decision }) => {
+            hub.session_decide(id, approval_id, decision).await?;
             C::Ok
         }
         R::SessionConfigure(sessions::SessionConfigure { id, options }) => {
@@ -247,8 +247,8 @@ pub(super) async fn handle(
             C::Session(hub.session_call_off_wait(id, wait).await?)
         }
         R::SessionDraft(drafts::SessionDraft { id, draft }) => C::Session(hub.session_draft(id, draft).await?),
-        R::SessionAnswerDraft(drafts::SessionAnswerDraft { id, draft }) => {
-            C::Session(hub.session_answer_draft(id, draft).await?)
+        R::SessionDecisionDraft(drafts::SessionDecisionDraft { id, draft }) => {
+            C::Session(hub.session_decision_draft(id, draft).await?)
         }
         R::SessionRename(sessions::SessionRename { id, title }) => C::Session(hub.session_rename(id, &title).await?),
         R::SessionCancel(agent::SessionCancel { id }) => {

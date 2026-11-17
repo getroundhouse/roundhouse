@@ -6,20 +6,14 @@ use std::path::PathBuf;
 
 use client_core::calls::typed::output as said;
 use client_core::{Client, ClientError};
+use protocol::capability::approvals::{Asks, Decision};
 use protocol::capability::calls::{CallKind, CallOutput};
 use protocol::client::ErrorCode;
-use protocol::event::{ApprovalDecision, ApprovalOutcome, Asking, ContentBlock, Denied, EventBody, SessionEvent};
+use protocol::event::{ContentBlock, Denied, EventBody, SessionEvent};
+use protocol::fixtures::{allow_once, deny};
 use protocol::model::{ApprovalId, SessionId, SessionStatus};
 
 use crate::support::{Stack, read_all, wait_for_approval, wait_for_status, wait_for_turn_end};
-
-fn allow() -> ApprovalDecision {
-    ApprovalDecision::Allow { updated_input: None, updated_permissions: None }
-}
-
-fn deny(said: Option<&str>) -> ApprovalDecision {
-    ApprovalDecision::Deny { message: said.map(str::to_string), interrupt: false }
-}
 
 /// A chat in plan mode, which asks before each command, and the worktree its commands run in.
 struct Planning {
@@ -38,19 +32,13 @@ impl Planning {
         Self { stack, client, chat: chat.id, worktree }
     }
 
-    /// Has the agent run `command` in the chat's `turn`th turn, answers the approval it asks for as `answer` says,
+    /// Has the agent run `command` in the chat's `turn`th turn, decides the approval it asks for with `decision`,
     /// through `client`, and returns the approval and what that turn recorded.
-    fn run(
-        &self,
-        client: &Client,
-        turn: usize,
-        command: &str,
-        answer: ApprovalDecision,
-    ) -> (ApprovalId, Vec<SessionEvent>) {
+    fn run(&self, client: &Client, turn: usize, command: &str, decision: Decision) -> (ApprovalId, Vec<SessionEvent>) {
         let before = read_all(client, &self.chat).len();
         client.session_prompt(&self.chat, &format!("tool:{command}"), None).unwrap();
         let approval = wait_for_approval(client, &self.chat);
-        client.session_approve(&self.chat, &approval, answer).unwrap();
+        client.session_decide(&self.chat, &approval, decision).unwrap();
         (approval, wait_for_turn_end(client, &self.chat, turn)[before..].to_vec())
     }
 }
@@ -63,7 +51,6 @@ fn an_approval_is_answered_and_recorded_as_it_was_given_however_it_was_given() {
 
     allowed_by_a_different_client_once(&chat);
     denied_with_why_and_without(&chat);
-    edited_and_then_allowed(&chat);
     a_failed_command_recorded_as_one(&chat);
 }
 
@@ -79,14 +66,14 @@ fn allowed_by_a_different_client_once(chat: &Planning) {
     drop(first);
 
     let other = stack.client();
-    other.session_approve(id, &approval, allow()).unwrap();
+    other.session_decide(id, &approval, allow_once()).unwrap();
     let events = wait_for_turn_end(&other, id, 1);
-    let twice = other.session_approve(id, &approval, allow());
+    let twice = other.session_decide(id, &approval, allow_once());
 
     assert!(worktree.join("approved.txt").exists(), "it ran once the other client allowed it");
     let allowed = |body: &EventBody| {
-        let EventBody::ApprovalResolved { approval_id, outcome, .. } = body else { return false };
-        (approval_id, *outcome) == (&approval, ApprovalOutcome::Allowed)
+        let EventBody::ApprovalResolved { approval_id, decision: Some(decision), .. } = body else { return false };
+        (approval_id, &**decision) == (&approval, &allow_once())
     };
     assert!(events.iter().any(|e| allowed(&e.body)), "recorded as allowed");
     assert!(matches!(&twice, Err(ClientError::Api(e)) if e.code == ErrorCode::Conflict), "answered twice: {twice:?}");
@@ -118,28 +105,20 @@ fn denied_with_why_and_without(chat: &Planning) {
     assert_eq!(denied, Some(Denied { said: None }), "denied with nothing said");
 }
 
-/// What runs is the input as the person edited it, rather than as the agent asked.
-fn edited_and_then_allowed(chat: &Planning) {
-    let edited = ApprovalDecision::Allow {
-        updated_input: Some(serde_json::json!({"command": "echo edited > out.txt"})),
-        updated_permissions: None,
-    };
-    chat.run(&chat.client, 4, "echo original > out.txt", edited);
-    let out = std::fs::read_to_string(chat.worktree.join("out.txt")).unwrap();
-    assert_eq!(out, "edited\n", "the edited input ran");
-}
-
 /// So a client draws each from what's recorded, with none of the agent's names for its tools: the request to run a
 /// command, the call, and what came back all say it's a command, and what came back says how the command exited
 /// apart from what it printed.
 fn a_failed_command_recorded_as_one(chat: &Planning) {
-    let (_, events) = chat.run(&chat.client, 5, "echo kinds && exit 3", allow());
+    let (_, events) = chat.run(&chat.client, 4, "echo kinds && exit 3", allow_once());
 
     let command = Some(CallKind::Command);
     let asked: Vec<_> = events
         .iter()
         .filter_map(|event| match &event.body {
-            EventBody::ApprovalRequested { asking, .. } => Some(asking.as_deref().map(Asking::kind)),
+            EventBody::ApprovalRequested { request, .. } => match &request.asks {
+                Asks::Call { call } => Some(Some(call.kind())),
+                _ => Some(None),
+            },
             _ => None,
         })
         .collect();

@@ -6,7 +6,7 @@
 use std::path::{Path, PathBuf};
 
 use client_core::{Client, Restart};
-use protocol::event::{ApprovalDecision, EventBody, SessionEvent};
+use protocol::event::{EventBody, SessionEvent};
 use protocol::model::{BranchName, Head, Seq, SetupStatus};
 use protocol::worker::{WorkerFrame, WorkerOutcome, WorkerRequest, WorkerResponse};
 
@@ -148,8 +148,8 @@ fn an_approval_open_as_the_hub_went_can_be_answered_by_the_next_hub() {
 
     let client = stack.client();
     assert_eq!(pending_approval(&read_all(&client, &session.id)), Some(approval.clone()));
-    let allow = ApprovalDecision::Allow { updated_input: None, updated_permissions: None };
-    client.session_approve(&session.id, &approval, allow).unwrap();
+    let allow = protocol::fixtures::allow_once();
+    client.session_decide(&session.id, &approval, allow).unwrap();
     let events = wait_for_turn_end(&client, &session.id, 1);
     assert_gapless(&events);
     assert_eq!(count(&events, |b| matches!(b, EventBody::AgentStarted { .. })), 1, "{events:#?}");

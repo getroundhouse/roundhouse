@@ -7,7 +7,7 @@ use protocol::capability::{
     calls::{CallOutput, output::Ended},
     conversation::Start,
 };
-use protocol::event::{ApprovalOutcome, ContentBlock, Denied, EventBody, TurnOutcome};
+use protocol::event::{ContentBlock, Denied, EventBody, TurnOutcome};
 use protocol::model::{PermissionMode, Seq, ToolUseId};
 use protocol::prompt::Prompt;
 use serde_json::{Value, json};
@@ -149,7 +149,7 @@ async fn plan_mode_asks_permission_and_marks_denied_call_results() {
             body: EventBody::ApprovalRequested { approval_id, request, tool_use_id, .. }, ..
         } = plan.next().await
         {
-            assert!(matches!(request.as_deref().map(|r| &r.asks), Some(Asks::Call { .. })));
+            assert!(matches!(request.asks, Asks::Call { .. }));
             assert_eq!(tool_use_id, Some(ToolUseId::from("call-denied")), "the request names the call it would make");
             break approval_id;
         }
@@ -210,8 +210,7 @@ async fn plan_mode_holds_only_post_tool_plan_text_and_preserves_tokens_when_canc
         if let AgentOutput::Event { body: EventBody::ApprovalRequested { approval_id, request, .. }, .. } =
             h.next().await
         {
-            let Some(req) = request else { panic!("expected plan request") };
-            assert_eq!(req.asks, Asks::Plan { plan: "1. Update README.md".into(), file: None });
+            assert_eq!(request.asks, Asks::Plan { plan: "1. Update README.md".into(), file: None });
             break approval_id;
         }
     };
@@ -219,7 +218,7 @@ async fn plan_mode_holds_only_post_tool_plan_text_and_preserves_tokens_when_canc
     let mut resolved = false;
     let tokens = loop {
         if let AgentOutput::Event { body, .. } = h.next().await {
-            if let EventBody::ApprovalResolved { approval_id, outcome: ApprovalOutcome::Cancelled, .. } = &body
+            if let EventBody::ApprovalResolved { approval_id, decision: None, .. } = &body
                 && *approval_id == held_id
             {
                 resolved = true;
@@ -253,7 +252,7 @@ async fn an_approved_plans_turn_counts_what_the_plan_took_with_what_carrying_it_
         }
     };
 
-    let approve = Decision::ApprovePlan { then: super::super::claims::full_access(), context: PlanContext::Kept };
+    let approve = Decision::ApprovePlan { context: PlanContext::Kept };
     agent.control(&Control::Decide { approval: plan, decision: approve }).await.unwrap();
 
     let (outcome, result, tokens) = loop {
@@ -326,8 +325,7 @@ async fn mode_switches_swap_skip_permissions_flag_stop_background_tasks_and_keep
     };
     agent.configure(&mid).await.unwrap();
     let held = loop {
-        if let AgentOutput::Event { body: EventBody::ApprovalRequested { request: Some(req), .. }, .. } = h.next().await
-        {
+        if let AgentOutput::Event { body: EventBody::ApprovalRequested { request: req, .. }, .. } = h.next().await {
             break req.asks;
         }
     };
@@ -335,8 +333,8 @@ async fn mode_switches_swap_skip_permissions_flag_stop_background_tasks_and_keep
     agent.stop().await;
 }
 
-#[tokio::test]
-async fn elicitation_questions_round_trip_answers() {
+/// What Antigravity is answered for [`elicitation_fixture`]'s questions once they're decided with `decision`.
+async fn elicitation_reply(decision: Decision) -> Value {
     let mut h = Harness::new(
         &json!([{"on": "session/prompt", "actions": [elicitation_fixture()]}]),
         PermissionMode::FullAccess,
@@ -348,23 +346,41 @@ async fn elicitation_questions_round_trip_answers() {
         if let AgentOutput::Event { body: EventBody::ApprovalRequested { approval_id, request, .. }, .. } =
             h.next().await
         {
-            let Some(req) = request else { panic!("expected typed request") };
-            let Asks::Questions { questions } = &req.asks else { panic!("expected questions") };
+            let Asks::Questions { questions } = &request.asks else { panic!("expected questions") };
             assert_eq!(questions.len(), 2);
             break approval_id;
         }
     };
+    agent.control(&Control::Decide { approval: approval_id, decision }).await.unwrap();
+    let reply = h.reply_to(&json!("elic-1")).await;
+    agent.stop().await;
+    reply
+}
+
+#[tokio::test]
+async fn elicitation_questions_round_trip_answers() {
     let decision = Decision::Answer {
         answers: vec![
             QuestionAnswer { picked: vec![1], typed: None },
             QuestionAnswer { picked: vec![0, 1], typed: Some("Benchmarks".into()) },
         ],
     };
-    agent.control(&Control::Decide { approval: approval_id, decision }).await.unwrap();
-    let reply = h.reply_to(&json!("elic-1")).await;
+
+    let reply = elicitation_reply(decision).await;
+
     assert_eq!(reply["result"]["action"], "accept");
     assert_eq!(reply["result"]["content"]["question_0"], "2");
     assert_eq!(reply["result"]["content"]["question_1"], json!(["1", "2"]));
     assert_eq!(reply["result"]["content"]["question_1_other"], "Benchmarks");
-    agent.stop().await;
+}
+
+/// Questions the person chose not to answer, an empty answer to each, decline the form, which is how ACP says so,
+/// rather than cancelling it.
+#[tokio::test]
+async fn elicitation_questions_the_person_chose_not_to_answer_are_declined() {
+    let skipped = Decision::Answer { answers: vec![QuestionAnswer::default(), QuestionAnswer::default()] };
+
+    let reply = elicitation_reply(skipped).await;
+
+    assert_eq!(reply["result"], json!({"action": "decline"}));
 }

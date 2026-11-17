@@ -5,8 +5,8 @@ use client_core::fake_hub::events::{said, text, thought, typed_call};
 use gpui_kit::test::{ElementSnapshot, TestWindowExt as _};
 use gpui_kit::{AppContext as _, Entity, Pixels, ScrollDelta, TestAppContext, point, px};
 use protocol::capability::calls::Call;
-use protocol::event::{ApprovalOutcome, Asking, ContentBlock, EventBody, SessionEvent};
-use protocol::fixtures::{ApprovalRequest, approval_request};
+use protocol::event::{ContentBlock, EventBody, SessionEvent};
+use protocol::fixtures::{ApprovalRequest, approval_request, approve_plan, decided, plan as asking_for};
 use transcript::{Place, Transcript};
 
 use super::{A_FRAME, just_over_4_kb, open_on_a_chat, turns, wait_for_the_list_to_settle};
@@ -63,16 +63,9 @@ fn scrolling_up_into_a_long_plan_moves_as_far_as_the_wheel_turns(cx: &mut TestAp
     // As the hub records a plan from Claude, approved.
     let request = ApprovalRequest {
         tool_use_id: Some("toolu-plan".into()),
-        asking: Some(Asking::Plan { plan: plan.clone() }),
-        ..approval_request("approval-plan", "ExitPlanMode")
+        ..approval_request("approval-plan", asking_for(&plan))
     };
-    let approved = EventBody::ApprovalResolved {
-        approval_id: "approval-plan".into(),
-        outcome: ApprovalOutcome::Allowed,
-        answers_by_text: None,
-        answers_by_position: None,
-        by_setting: false,
-    };
+    let approved = decided("approval-plan", approve_plan());
     let planned = vec![
         typed_call("msg-plan", "toolu-plan", Call::Plan),
         request.into(),

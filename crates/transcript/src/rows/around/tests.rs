@@ -3,20 +3,21 @@ use std::sync::Arc;
 use client_core::Answered;
 use client_core::session_log::{RecordedApprovals, SessionLog};
 use protocol::attachment::{Attachment, MediaType};
+use protocol::capability::approvals::{Asks, Decision};
 use protocol::capability::asking::QuestionAnswer;
 use protocol::capability::calls::call::Read;
 use protocol::capability::calls::output::Ended;
 use protocol::capability::calls::{Call, CallOutput};
-use protocol::event::{ApprovalOutcome, Asking, ContentBlock, EventBody, Question, SessionEvent};
-use protocol::fixtures::{ApprovalRequest, approval_request};
+use protocol::event::{ContentBlock, EventBody, SessionEvent};
+use protocol::fixtures::{approval_request, cancelled, decided, deny, question as asked_as};
 use protocol::model::{
     Lately, LatelyCall, LatelyResult, OpenApproval, PermissionMode, Place, Seq, Subagent, SubagentStatus,
 };
 
 use super::{Answer, Around, Closes, Reply, Settled, block_key, retry_at};
 use crate::fixtures::{
-    advised, asked_a_question, asked_to_use, asking, calls, closed, closed_by_position, event, failed_request,
-    from_the_agent, log, prompt, record, result, subagents, turn_ended, within,
+    advised, asked_a_question, asked_to_use, asking, calls, event, failed_request, from_the_agent, log, prompt, record,
+    result, subagents, turn_ended, within,
 };
 use crate::folds::Fold;
 use crate::item_key::ItemKey;
@@ -43,20 +44,21 @@ fn a_question_is_drawn_only_once_it_s_no_longer_waiting() {
     let waiting = log([event(Seq::new(1), question.clone())]);
     assert!(Around::read(&waiting, &m, Seq::new(1), &question).asked.is_none(), "it's in the composer's place");
 
-    let answered =
-        log([event(Seq::new(1), question.clone()), event(Seq::new(2), closed("q", ApprovalOutcome::Denied, None))]);
+    let skipped = Decision::Answer { answers: vec![QuestionAnswer::default()] };
+    let answered = log([event(Seq::new(1), question.clone()), event(Seq::new(2), decided("q", skipped))]);
 
     assert!(Around::read(&answered, &m, Seq::new(1), &question).asked.is_some());
     assert!(Around::read(&answered, &m, Seq::new(1), &asked_to_use("a")).asked.is_none(), "only a question is a line");
 }
 
-/// The transcript goes by what the adapter says a request asks, whatever its tool is called.
+/// The transcript goes by what the adapter says a request asks.
 #[test]
 fn a_request_its_adapter_says_asks_questions_is_drawn_as_one() {
-    let question = Question { text: "Red or blue?".into(), header: None, options: Vec::new(), multiple: false };
-    let questions = asking("q", Asking::Questions { questions: vec![question.clone()] });
-    let tool = asking("t", Asking::ToolUse { typed: None });
-    let answered = closed_by_position("q", vec![QuestionAnswer { picked: Vec::new(), typed: Some("Blue".into()) }]);
+    let question = asked_as("Red or blue?", &[], false);
+    let questions = asking("q", Asks::Questions { questions: vec![question.clone()] });
+    let tool = asked_to_use("t");
+    let blue = vec![QuestionAnswer { picked: Vec::new(), typed: Some("Blue".into()) }];
+    let answered = decided("q", Decision::Answer { answers: blue.clone() });
     let log = log([
         event(Seq::new(1), questions.clone()),
         event(Seq::new(2), answered.clone()),
@@ -67,23 +69,17 @@ fn a_request_its_adapter_says_asks_questions_is_drawn_as_one() {
     let asked = Around::read(&log, &m, Seq::new(1), &questions).asked.unwrap();
 
     assert_eq!(asked.questions, [question]);
-    assert_eq!(
-        asked.settled,
-        Settled::Answered(Answered::ByPosition(vec![QuestionAnswer {
-            picked: Vec::new(),
-            typed: Some("Blue".into())
-        }]))
-    );
+    assert_eq!(asked.settled, Settled::Answered(Answered(blue)));
     assert!(matches!(Around::read(&log, &m, Seq::new(2), &answered).closes, Closes::SaidElsewhere));
     assert!(Around::read(&log, &m, Seq::new(3), &tool).asked.is_none(), "a tool's use is a card");
 }
 
 /// A command the agent asked to run, as the call `call`, and for the subagent `asked_by` if it's a subagent's.
 fn asked_to_run(id: &str, call: &str, asked_by: Option<&str>) -> EventBody {
-    let typed = Some(Call::Command(protocol::fixtures::typed_command("rm -rf build")));
-    let asking = Some(Asking::ToolUse { typed });
-    let (tool_use_id, asked_by) = (Some(call.into()), asked_by.map(Into::into));
-    ApprovalRequest { tool_use_id, asking, asked_by, ..approval_request(id, "Bash") }.into()
+    let call_to_run = Call::Command(protocol::fixtures::typed_command("rm -rf build"));
+    let mut request = approval_request(id, Asks::Call { call: call_to_run });
+    (request.tool_use_id, request.asked_by) = (Some(call.into()), asked_by.map(Into::into));
+    request.into()
 }
 
 /// The result of the call `id`, which the person denied.
@@ -96,7 +92,7 @@ fn denied(id: &str) -> EventBody {
 
 #[test]
 fn what_else_says_what_became_of_an_approval_is_a_questions_line_a_denied_calls_result_or_nothing() {
-    let closing = |id: &str| closed(id, ApprovalOutcome::Denied, None);
+    let closing = |id: &str| decided(id, deny(None));
     let log = log([
         event(Seq::new(1), asked_a_question("q")),
         event(Seq::new(2), closing("q")),
@@ -112,7 +108,7 @@ fn what_else_says_what_became_of_an_approval_is_a_questions_line_a_denied_calls_
         event(Seq::new(12), closing("x")),
         event(Seq::new(13), denied("run-y")),
         event(Seq::new(14), asked_to_run("z", "run-z", None)),
-        event(Seq::new(15), closed("z", ApprovalOutcome::Cancelled, None)),
+        event(Seq::new(15), cancelled("z")),
         event(Seq::new(16), denied("run-z")),
     ]);
     let mut m = Model::default();
@@ -122,8 +118,8 @@ fn what_else_says_what_became_of_an_approval_is_a_questions_line_a_denied_calls_
     assert!(matches!(closes(&m, Seq::new(4), "c"), Closes::SaidElsewhere), "its call's result says it was denied");
     assert!(matches!(closes(&m, Seq::new(7), "old"), Closes::Unsaid), "a result from before adapters said doesn't");
     assert!(matches!(closes(&m, Seq::new(12), "x"), Closes::Unsaid), "nor does another call's");
-    let cancelled = Around::read(&log, &m, Seq::new(15), &closed("z", ApprovalOutcome::Cancelled, None)).closes;
-    assert_eq!(cancelled, Closes::Unsaid, "nor a cancelled one's, which says only what a denial would");
+    let nobody = Around::read(&log, &m, Seq::new(15), &cancelled("z")).closes;
+    assert_eq!(nobody, Closes::Unsaid, "nor a cancelled one's, which says only what a denial would");
     let for_a = |subagent: &str| Closes::ForASubagent { tool: "Command".into(), subagent: subagent.into() };
     assert_eq!(closes(&m, Seq::new(10), "s"), for_a("Subagent"), "its call is in the subagent's work");
     let checking = Subagent { description: Some("Check the build".into()), ..record("agent", SubagentStatus::Working) };
@@ -136,7 +132,7 @@ fn what_else_says_what_became_of_an_approval_is_a_questions_line_a_denied_calls_
 #[test]
 fn a_typed_calls_result_says_it_was_denied_too() {
     let command = protocol::capability::calls::Call::Command(protocol::fixtures::typed_command("rm -rf build"));
-    let closing = closed("c", ApprovalOutcome::Denied, None);
+    let closing = decided("c", deny(None));
     let typed = |blocks| EventBody::AgentUser { subagent: None, blocks };
     let log = log([
         event(Seq::new(1), protocol::fixtures::typed_request("c", "run-c", command)),

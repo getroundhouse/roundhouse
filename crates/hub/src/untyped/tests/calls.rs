@@ -1,14 +1,15 @@
-//! That what Claude's adapter recorded untyped is typed as it records it now.
+//! That the calls Claude's adapter recorded untyped, what came back for them and a subagent's record of what it did
+//! lately, are typed as it records them now.
 
 use protocol::capability::calls::call::{Command, Edit, Read, Replace, Replaces, Runs};
 use protocol::capability::calls::output::{CommandOutput, Ended, FileOutcome, Lines};
 use protocol::capability::calls::{Call, CallOutput};
-use protocol::event::{Asking, ContentBlock, FileChange, Question};
+use protocol::event::{ContentBlock, FileChange};
 use protocol::model::{Lately, LatelyCall, LatelyResult, Said};
 use protocol::worker::WorkerFrame;
 use serde_json::{Value, json};
 
-use super::{Typing, lately};
+use super::super::{Typing, lately};
 
 fn tool_use(id: &str, name: &str, input: &Value) -> Value {
     json!({"type":"tool_use","id":id,"name":name,"input":input})
@@ -182,43 +183,6 @@ fn what_an_edit_changed_and_what_a_subagent_sent_back_are_their_outputs() {
 
 /// The adapter said what kind of call a request to use a tool asked to make, and before that, nothing of what one
 /// asked, which its tool and input said.
-#[test]
-fn a_request_for_approval_asks_to_make_its_call_typed() {
-    let request = |tool: &str, input: Value, asking: Option<Value>| {
-        let mut body = json!({"type":"approval_requested","approval_id":"a","tool_name":tool,"tool_use_id":"c",
-            "input":input,"description":null});
-        if let Some(asking) = asking {
-            body["asking"] = asking;
-        }
-        body
-    };
-    let asking = |mut body: Value| {
-        assert!(Typing::default().body(&mut body), "{body}");
-        serde_json::from_value::<Asking>(body["asking"].take()).unwrap()
-    };
-    let said_kind = Some(json!({"kind":"tool_use","call":{"kind":"command"}}));
-
-    assert_eq!(
-        asking(request("Bash", json!({"command":"ls"}), said_kind)),
-        Asking::ToolUse { typed: Some(bash("ls")) }
-    );
-    assert_eq!(asking(request("Bash", json!({"command":"ls"}), None)), Asking::ToolUse { typed: Some(bash("ls")) });
-    let questions = json!({"questions":[{"question":"Red or blue?","options":[{"label":"Red"}]}]});
-    let Asking::Questions { questions } = asking(request("AskUserQuestion", questions, None)) else { panic!() };
-    assert_eq!(questions.iter().map(|q: &Question| q.text.as_str()).collect::<Vec<_>>(), ["Red or blue?"]);
-    assert_eq!(asking(request("ExitPlanMode", json!({"plan":"1."}), None)), Asking::Plan { plan: "1.".into() });
-
-    let typed = serde_json::to_value(Asking::ToolUse { typed: Some(bash("ls")) }).unwrap();
-    let mut own = request("Bash", json!({"command":"ls"}), Some(typed));
-    let mut codex = request("", Value::Null, None);
-    codex["request"] = json!({"asks":{"kind":"unknown"}});
-    for body in [&mut own, &mut codex] {
-        let kept = body.clone();
-        assert!(!Typing::default().body(body), "already typed, or in a form of its own");
-        assert_eq!(*body, kept);
-    }
-}
-
 /// A worker of a build from before the adapter typed its calls sends them untyped, and one of a build since sends what
 /// reads as it did.
 #[test]

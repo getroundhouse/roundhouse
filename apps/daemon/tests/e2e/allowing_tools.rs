@@ -5,8 +5,9 @@
 use std::path::{Path, PathBuf};
 
 use client_core::{Client, Subscription};
+use protocol::capability::approvals::Decision;
 use protocol::client::HubNotice;
-use protocol::event::{ApprovalOutcome, EventBody, SessionEvent};
+use protocol::event::{EventBody, SessionEvent};
 use protocol::model::{HubSettingsChange, Session, SessionId, SessionStatus};
 
 use crate::support::{Stack, next_notice, wait_for_turn_end, workspace};
@@ -27,13 +28,16 @@ fn to_remove(worktree: &Path, name: &str) -> PathBuf {
     dir
 }
 
-/// Each request in `events`, in the order they're recorded, with how it was answered and whether the hub's setting
-/// answered it, and whether the answer came next.
-fn answered(events: &[SessionEvent]) -> Vec<(Option<(ApprovalOutcome, bool)>, bool)> {
+/// How a request was answered and whether the hub's setting answered it, or `None` where nothing did, and whether the
+/// answer came next.
+type Answered = (Option<(Option<Decision>, bool)>, bool);
+
+/// Each request in `events`, in the order they're recorded, with how it was answered.
+fn answered(events: &[SessionEvent]) -> Vec<Answered> {
     let answer = |at: usize, id| {
         events[at..].iter().enumerate().find_map(|(after, event)| match &event.body {
-            EventBody::ApprovalResolved { approval_id, outcome, by_setting, .. } if approval_id == id => {
-                Some(((*outcome, *by_setting), after == 1))
+            EventBody::ApprovalResolved { approval_id, decision, by_setting } if approval_id == id => {
+                Some(((decision.as_deref().cloned(), *by_setting), after == 1))
             }
             _ => None,
         })
@@ -42,7 +46,7 @@ fn answered(events: &[SessionEvent]) -> Vec<(Option<(ApprovalOutcome, bool)>, bo
         EventBody::ApprovalRequested { approval_id, .. } => Some(answer(at, approval_id)),
         _ => None,
     });
-    requests.map(|found| (found.map(|(answer, _)| answer), found.is_some_and(|(_, next)| next))).collect()
+    requests.map(|found| (found.clone().map(|(answer, _)| answer), found.is_some_and(|(_, next)| next))).collect()
 }
 
 /// When the person last did something, by the chat's record and by its workspace's, and when they last prompted it,
@@ -93,8 +97,12 @@ fn a_hub_set_to_allow_it_allows_what_an_agent_with_full_access_asks_and_nobody_i
 
     assert!(!removed.exists(), "it ran without anyone answering");
     let events = wait_for_turn_end(&client, &session.id, 1);
-    let allowed = (Some((ApprovalOutcome::Allowed, true)), true);
-    assert_eq!(answered(&events), [allowed], "the log says it was asked, and allowed by the setting");
+    let allowed = (Some((Some(protocol::fixtures::allow_once()), true)), true);
+    assert_eq!(
+        answered(&events),
+        std::slice::from_ref(&allowed),
+        "the log says it was asked, and allowed by the setting"
+    );
     assert_eq!(told.iter().find(|session| waits(session)), None, "nobody is told it waits");
     let [chat, its_workspace, prompted] = last_active(&client, &session, &events);
     assert_eq!((chat, its_workspace), (prompted, prompted), "the person did nothing since they prompted it");
@@ -106,6 +114,6 @@ fn a_hub_set_to_allow_it_allows_what_an_agent_with_full_access_asks_and_nobody_i
 
     assert!(!removed.exists());
     let events = wait_for_turn_end(&client, &session.id, 2);
-    assert_eq!(answered(&events)[1..], [allowed, allowed]);
+    assert_eq!(answered(&events)[1..], [allowed.clone(), allowed]);
     assert_eq!(told.iter().find(|session| waits(session)), None);
 }

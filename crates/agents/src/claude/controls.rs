@@ -1,16 +1,12 @@
 //! The typed runtime boundary, translated into Claude's existing protocol operations.
 
-use protocol::capability::{
-    Control,
-    approvals::{AfterDenial, Decision, Remember},
-    asking::PlanContext,
-};
-use protocol::event::ApprovalDecision;
+use protocol::capability::Control;
 use protocol::model::{PermissionMode, SessionSettingsChange};
 
+use super::process::ClaudeProcess;
 use crate::{AgentError, AgentProcess};
 
-pub(super) async fn apply(process: &dyn AgentProcess, control: &Control) -> Result<(), AgentError> {
+pub(super) async fn apply(process: &ClaudeProcess, control: &Control) -> Result<(), AgentError> {
     if !control.allowed(&process.capabilities()) {
         return Err(unsupported());
     }
@@ -29,9 +25,7 @@ pub(super) async fn apply(process: &dyn AgentProcess, control: &Control) -> Resu
                 })
                 .await
         }
-        Control::Decide { approval, decision } => {
-            process.resolve_approval(approval, &decision_for_cli(decision)?).await
-        }
+        Control::Decide { approval, decision } => process.decide(approval, decision).await,
         Control::Note { .. }
         | Control::Aside { .. }
         | Control::Overrule { .. }
@@ -52,26 +46,6 @@ pub(super) async fn apply(process: &dyn AgentProcess, control: &Control) -> Resu
         | Control::ListModels
         | Control::ListOutside => Err(unsupported()),
     }
-}
-
-fn decision_for_cli(decision: &Decision) -> Result<ApprovalDecision, AgentError> {
-    Ok(match decision {
-        Decision::Allow { edited: None, remember: Remember::Once }
-        | Decision::ApprovePlan { context: PlanContext::Kept, .. } => {
-            ApprovalDecision::Allow { updated_input: None, updated_permissions: None }
-        }
-        Decision::Deny { words, then: then @ (AfterDenial::Continue | AfterDenial::Stop), keep: None } => {
-            ApprovalDecision::Deny { message: words.clone(), interrupt: *then == AfterDenial::Stop }
-        }
-        Decision::KeepPlanning { words } => ApprovalDecision::Deny { message: words.clone(), interrupt: false },
-        Decision::Answer { answers } => ApprovalDecision::AnswerByPosition { answers: answers.clone() },
-        Decision::Allow { .. }
-        | Decision::Deny { .. }
-        | Decision::ApprovePlan { .. }
-        | Decision::Grant { .. }
-        | Decision::Respond(_)
-        | Decision::Unknown => return Err(unsupported()),
-    })
 }
 
 fn unsupported() -> AgentError {

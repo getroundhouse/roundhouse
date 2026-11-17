@@ -3,7 +3,7 @@ use crate::stand_in_hub;
 use crate::stand_in_hub::Does;
 use protocol::attachment::{Attachment, MediaType};
 use protocol::client::{ApiError, ClientRequest, ClientResponse, ErrorCode, ReplyOutcome, attachments, drafts};
-use protocol::model::{CommentDraft, NewWorkspaceDraft, Workspace};
+use protocol::model::{CommentDraft, NewWorkspaceDraft, SoFar, Workspace};
 use std::path::Path;
 use std::time::Duration;
 
@@ -17,8 +17,8 @@ pub(super) enum Answer {
     Answered,
     /// As a hub too old to keep drafts does.
     Refused,
-    /// As a hub that keeps chats' drafts but not answers, comments or the new-workspace dialog does. It says `refused`
-    /// before each it refuses.
+    /// As a hub that keeps chats' drafts but not decisions, comments or the new-workspace dialog does. It says
+    /// `refused` before each it refuses.
     KeepsOnlyChatsDrafts,
     /// As `Answered`, but as a hub that knows no kind of file but one that goes as it is, `Other`, refuses the rest, as
     /// one older than the app refuses a kind newer than it. It says `refused` before each.
@@ -28,7 +28,7 @@ pub(super) enum Answer {
 }
 
 /// What a fake hub was asked to keep, chat by chat, in the order it was asked: each draft's text, followed by the files
-/// it names, and `+` or `-` and a file's ID for one added or let go of. An answer or a comment says which it is, then
+/// it names, and `+` or `-` and a file's ID for one added or let go of. A decision or a comment says which it is, then
 /// what's typed in it, by its chat or its workspace. The new-workspace dialog's are the same as a chat's, by `dialog`.
 type Heard = flume::Receiver<(String, String)>;
 
@@ -86,9 +86,12 @@ fn heard_of(request: ClientRequest) -> Option<(String, String)> {
     if let ClientRequest::AttachmentRemove(attachments::AttachmentRemove { session_id, id }) = request {
         return Some((session_id.to_string(), format!("-{id}")));
     }
-    if let ClientRequest::SessionAnswerDraft(drafts::SessionAnswerDraft { id, draft }) = request {
-        let typed = draft.and_then(|draft| draft.answers.first().map(|so_far| so_far.typed.clone()));
-        return Some((id.to_string(), format!("answer {}", typed.as_deref().unwrap_or("none"))));
+    if let ClientRequest::SessionDecisionDraft(drafts::SessionDecisionDraft { id, draft }) = request {
+        let words = draft.and_then(|draft| match draft.so_far {
+            SoFar::Use { words, .. } => Some(words),
+            SoFar::Answers { .. } | SoFar::Unknown => None,
+        });
+        return Some((id.to_string(), format!("decision {}", words.as_deref().unwrap_or("none"))));
     }
     if let ClientRequest::WorkspaceCommentDraft(drafts::WorkspaceCommentDraft { id, draft }) = request {
         let text = draft.map(|draft| draft.text);
@@ -308,15 +311,15 @@ fn a_file_this_connection_has_given_the_hub_isnt_added_again() {
     assert!(!drafts.unkept(&DraftKey::Composer(chat("a"))), "it counts as having reached the hub");
 }
 
-/// A hub that keeps every draft, answer and comment, and the new-workspace dialog's, and answers with the record it's
+/// A hub that keeps every draft, decision and comment, and the new-workspace dialog's, and answers with the record it's
 /// kept on, carrying it, at the next of its revisions, from `first`.
 pub(super) fn keeping_hub(socket: &Path, first: u64) -> Client {
     let mut next = first;
     stand_in_hub::connect(socket, move |request| {
         let kept = if let ClientRequest::SessionDraft(drafts::SessionDraft { id, draft }) = request {
             ClientResponse::Session(told(id.as_str(), next, &draft.text))
-        } else if let ClientRequest::SessionAnswerDraft(drafts::SessionAnswerDraft { id, draft }) = request {
-            ClientResponse::Session(Session { answer_draft: draft, ..told(id.as_str(), next, "") })
+        } else if let ClientRequest::SessionDecisionDraft(drafts::SessionDecisionDraft { id, draft }) = request {
+            ClientResponse::Session(Session { decision_draft: draft, ..told(id.as_str(), next, "") })
         } else if let ClientRequest::WorkspaceCommentDraft(drafts::WorkspaceCommentDraft { id, draft }) = request {
             ClientResponse::Workspace(writing(id.as_str(), next, draft))
         } else if let ClientRequest::NewWorkspaceDraftKeep(drafts::NewWorkspaceDraftKeep { draft }) = request {

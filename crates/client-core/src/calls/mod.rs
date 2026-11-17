@@ -30,5 +30,5 @@ mod tests;
 
 mod recorded;
 pub mod typed;
-pub use recorded::{Recorded, ToolCall, asked_about, count, first_line};
+pub use recorded::{Recorded, ToolCall, count, first_line};
 use recorded::{description, main_input};

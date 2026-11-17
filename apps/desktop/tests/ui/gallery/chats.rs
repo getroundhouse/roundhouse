@@ -4,9 +4,10 @@
 #![cfg(test)]
 
 use protocol::attachment::Attachment;
+use protocol::capability::approvals::Asks;
 use protocol::capability::calls::Call;
 use protocol::capability::calls::call::Command;
-use protocol::event::{AgentRunState, AgentTask, Asking, EventBody, TaskKind, TurnOutcome};
+use protocol::event::{AgentRunState, AgentTask, EventBody, TaskKind, TurnOutcome};
 use protocol::fixtures::{self, ApprovalRequest, approval_request};
 use protocol::model::{MessageId, PermissionMode, Seq, TaskId, ToolUseId};
 use protocol::prompt::Prompt;
@@ -187,8 +188,7 @@ pub(crate) fn approval() -> Vec<EventBody> {
     events.push(
         ApprovalRequest {
             tool_use_id: Some(ToolUseId::from("toolu-3")),
-            asking: Some(Asking::ToolUse { typed: Some(Call::Command(run)) }),
-            ..approval_request("approval-1", "Bash")
+            ..approval_request("approval-1", Asks::Call { call: Call::Command(run) })
         }
         .into(),
     );

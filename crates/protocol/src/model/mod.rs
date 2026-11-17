@@ -40,7 +40,8 @@ pub use compaction_line::CompactionLine;
 pub use context::{ContextPart, ContextPartKind, ContextUsage, MaxSetBy};
 pub use counters::{Place, Rev, RunId, Seq};
 pub use draft::{
-    AnswerDraft, AnswerSoFar, CommentDraft, Draft, DraftToKeep, NewWorkspaceDraft, NewWorkspaceDraftToKeep,
+    AnswerSoFar, CommentDraft, DecisionDraft, Draft, DraftToKeep, NewWorkspaceDraft, NewWorkspaceDraftToKeep, SoFar,
+    UseChoice,
 };
 pub use effort::Effort;
 pub use files::{FileContents, FileOpened, FilePage, FilePages, OpenedText, PageLine, WorktreeFiles};

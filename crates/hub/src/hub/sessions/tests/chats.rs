@@ -6,7 +6,7 @@
 use std::time::Duration;
 
 use protocol::event::{AgentRunState, AgentTask, EventBody, TaskKind, TurnOutcome};
-use protocol::model::{AnswerSoFar, RunId, SessionId, SessionStatus};
+use protocol::model::{AnswerSoFar, DecisionDraft, RunId, SessionId, SessionStatus, SoFar};
 use protocol::prompt::Prompt;
 use tokio::sync::broadcast::error::RecvError;
 
@@ -57,11 +57,9 @@ fn a_session_read_before_it_was_deleted_isnt_kept_once_it_has_been() {
 async fn a_question_answered_takes_what_was_typed_in_answer_and_the_feed_tells_of_it() {
     let dir = tempfile::tempdir().unwrap();
     let hub = hub_in(dir.path());
-    let typed = AnswerDraft {
-        approval_id: "q".into(),
-        answers: vec![AnswerSoFar { typed: "half".into(), ..AnswerSoFar::default() }],
-    };
-    hub.session_answer_draft("s".into(), Some(typed)).await.unwrap();
+    let answers = vec![AnswerSoFar { typed: "half".into(), ..AnswerSoFar::default() }];
+    let typed = DecisionDraft { approval_id: "q".into(), so_far: SoFar::Answers { answers } };
+    hub.session_decision_draft("s".into(), Some(typed)).await.unwrap();
     let mut feed = hub.subscribe_feed();
     let live = hub.live_session(&"s".into()).await.unwrap();
 
@@ -75,7 +73,7 @@ async fn a_question_answered_takes_what_was_typed_in_answer_and_the_feed_tells_o
         }
     });
     let session = told.await.expect("the feed never told of the chat");
-    assert_eq!(session.answer_draft, None);
+    assert_eq!(session.decision_draft, None);
 }
 
 /// The list of what the agent runs in the background, with `count` tasks in it.

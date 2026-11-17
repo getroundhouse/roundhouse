@@ -4,7 +4,7 @@
 use dictation::fake::FakeEngine;
 use gpui_kit::{AppContext as _, Focusable as _, TestAppContext};
 use protocol::event::EventBody;
-use protocol::model::AnswerDraft;
+use protocol::model::{AnswerSoFar, DecisionDraft, SoFar};
 
 use super::support::{SCRIPT, ended, hearing, hold_option_space, let_go, live, press_space, ready, ready_with, say};
 use crate::support::{Stack, Ui};
@@ -19,8 +19,15 @@ fn say_in_answer(ui: &mut Ui, engine: &FakeEngine, words: &str) {
     ui.cx.update(|cx| transcript.read(cx).question().unwrap().read(cx).hear(&audio, cx));
 }
 
-fn answer(ui: &Ui) -> Option<AnswerDraft> {
-    ui.cx.read_entity(&ui.transcript().unwrap(), |t, cx| t.question().and_then(|p| p.read(cx).so_far(cx)))
+/// What's chosen and typed on each question asked, as the panel would have it kept, or `None` with nothing.
+fn answer(ui: &Ui) -> Option<Vec<AnswerSoFar>> {
+    let draft = ui.cx.read_entity(&ui.transcript().unwrap(), |t, cx| t.question().and_then(|p| p.read(cx).so_far(cx)));
+    answers_of(&draft?)
+}
+
+fn answers_of(draft: &DecisionDraft) -> Option<Vec<AnswerSoFar>> {
+    let SoFar::Answers { answers } = &draft.so_far else { return None };
+    Some(answers.clone())
 }
 
 #[gpui_kit::test]
@@ -42,8 +49,9 @@ fn a_dictated_answer_is_selected_kept_and_sent_with_its_last_words(cx: &mut Test
             .client()
             .session_get(&chat)
             .unwrap()
-            .answer_draft
-            .is_some_and(|draft| draft.answers[0].typed == "Fix the test." && draft.answers[0].other)
+            .decision_draft
+            .and_then(|draft| answers_of(&draft))
+            .is_some_and(|answers| answers[0].typed == "Fix the test." && answers[0].other)
     });
     hearing(&mut ui, "in");
     ui.press("enter");
@@ -61,13 +69,13 @@ fn cancelling_an_answer_restores_its_text_without_leaving_the_input(cx: &mut Tes
     ui.input("Keep this");
     hold_option_space(&mut ui);
     say_in_answer(&mut ui, &engine, "fix the test. / in hub");
-    ui.wait("the first sentence", |ui| answer(ui).is_some_and(|d| d.answers[0].typed.contains("Fix the test.")));
+    ui.wait("the first sentence", |ui| answer(ui).is_some_and(|d| d[0].typed.contains("Fix the test.")));
 
     ui.press("alt-escape");
     let_go(&mut ui);
     ui.input(" here");
 
-    assert_eq!(answer(&ui).unwrap().answers[0].typed, "Keep this here");
+    assert_eq!(answer(&ui).unwrap()[0].typed, "Keep this here");
     assert!(live(&mut ui).is_none());
     assert!(ui.has("question"));
 }
@@ -96,10 +104,10 @@ fn a_question_change_drops_tentative_words_and_the_next_answer_has_its_own_recor
     say_in_answer(&mut ui, &engine, "in hub");
     let_go(&mut ui);
 
-    ui.wait("the second answer", |ui| answer(ui).is_some_and(|d| d.answers[1].typed == "In hub."));
+    ui.wait("the second answer", |ui| answer(ui).is_some_and(|d| d[1].typed == "In hub."));
     let draft = answer(&ui).unwrap();
-    assert!(draft.answers[0].typed.is_empty());
-    assert_eq!(draft.answers[1].typed, "In hub.");
+    assert!(draft[0].typed.is_empty());
+    assert_eq!(draft[1].typed, "In hub.");
 }
 
 #[gpui_kit::test]
@@ -265,7 +273,8 @@ fn dictating_feedback_never_turns_an_empty_denial_into_allow(cx: &mut TestAppCon
     ui.press("enter");
     ui.wait("the dictated denial", |ui| {
         ui.events().iter().any(|event| {
-            matches!(event.body, EventBody::ApprovalResolved { outcome: protocol::event::ApprovalOutcome::Denied, .. })
+            matches!(&event.body, EventBody::ApprovalResolved { decision: Some(decision), .. }
+                if matches!(**decision, protocol::capability::approvals::Decision::Deny { .. }))
         })
     });
     ui.wait("the agent to receive the dictated denial", |ui| ui.told_to_agent().contains("Fix the test."));

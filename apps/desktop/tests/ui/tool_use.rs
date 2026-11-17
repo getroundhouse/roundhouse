@@ -6,10 +6,11 @@ use client_core::fake_hub::World;
 use client_core::fake_hub::events::{command, taken, user_prompt};
 use gpui_kit::test::TestWindowExt as _;
 use gpui_kit::{AppContext as _, ClipboardItem, TestAppContext, point, px};
+use protocol::capability::approvals::{Asks, Decision};
 use protocol::capability::calls::Call;
 use protocol::capability::calls::call::Command;
-use protocol::event::{ApprovalOutcome, Asking, EventBody};
-use protocol::fixtures::{ApprovalRequest, approval_request, typed_command};
+use protocol::event::EventBody;
+use protocol::fixtures::{ApprovalRequest, allow_once, approval_request, deny, typed_command};
 use protocol::model::{Seq, SessionStatus};
 
 use crate::support::{FakeHub, Stack, Ui, id};
@@ -17,10 +18,10 @@ use crate::support::{FakeHub, Stack, Ui, id};
 /// A removal the agent asks about even with full access, since what it removes is only known once it runs.
 const REMOVAL: &str = r#"rm -rf "$(cat gone-path)""#;
 
-/// What became of each request so far.
-fn outcomes(ui: &Ui) -> Vec<ApprovalOutcome> {
+/// What was decided of each request so far, with `None` for one nobody decided.
+fn outcomes(ui: &Ui) -> Vec<Option<Decision>> {
     let outcome = |event: &protocol::event::SessionEvent| match &event.body {
-        EventBody::ApprovalResolved { outcome, .. } => Some(*outcome),
+        EventBody::ApprovalResolved { decision, .. } => Some(decision.as_deref().cloned()),
         _ => None,
     };
     ui.events().iter().filter_map(outcome).collect()
@@ -78,7 +79,7 @@ fn a_tools_use_is_asked_in_the_composers_place_and_denied_in_the_persons_words(c
     ui.press("enter");
     ui.wait("the person's words", |ui| ui.told_to_agent().contains("Remove it by its full path"));
     ui.wait_for_the_turn();
-    assert_eq!(outcomes(&ui), [ApprovalOutcome::Denied]);
+    assert_eq!(outcomes(&ui), [Some(deny(Some("Remove it by its full path")))]);
     assert!(gone.exists(), "denied, so nothing was removed");
     assert!(ui.has(id("add")), "the composer is back");
     let denied = "Denied: Remove it by its full path";
@@ -110,7 +111,7 @@ fn subagents_that_ask_at_once_are_asked_in_turn_with_who_asks_and_how_many_wait(
     ui.wait("the removal, and its turn to be drawn to its end", |ui| {
         ui.session_status() == Some(SessionStatus::Idle) && !gone.exists() && ui.turn_drawn_to_its_end()
     });
-    assert_eq!(outcomes(&ui), [ApprovalOutcome::Denied, ApprovalOutcome::Allowed]);
+    assert_eq!(outcomes(&ui), [Some(deny(None)), Some(allow_once())]);
 }
 
 /// Only what's asked matters here, and nothing is answered, so the chat is made up for a fake hub.
@@ -138,11 +139,10 @@ fn asked_to_remove(cx: &mut TestAppContext) -> (FakeHub, Ui<'_>) {
     let removal = Command { description: Some(says_its_for.to_string()), ..typed_command(REMOVAL) };
     let request = ApprovalRequest {
         tool_use_id: Some("toolu-1".into()),
-        description: Some(says_its_for.to_string()),
-        asking: Some(Asking::ToolUse { typed: Some(Call::Command(removal)) }),
-        reason: Some("Dangerous rm operation on statically-unresolvable target: command substitution output".into()),
-        ..approval_request("approval-1", "Bash")
+        ..approval_request("approval-1", Asks::Call { call: Call::Command(removal) })
     };
+    let request =
+        request.because("Dangerous rm operation on statically-unresolvable target: command substitution output");
     let events = vec![
         user_prompt(&format!("tool:{REMOVAL}")),
         taken(Seq::new(1)),

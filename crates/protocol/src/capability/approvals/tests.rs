@@ -1,5 +1,5 @@
+use super::RuleEffect;
 use super::{Access, AfterDenial, Asks, Covers, Decision, Kept, Lasts, NetworkProtocol, Remember, Request, Rule};
-use super::{ApprovalMode, Beyond, RuleEffect, Unasked};
 use crate::capability::asking::{Choose, PlanContext, Question, QuestionAnswer, QuestionOption, TypedAnswer};
 use crate::capability::calls::{Call, CallKind};
 use crate::fixtures::typed_command;
@@ -27,14 +27,14 @@ fn answer(picked: &[u32], typed: Option<&str>) -> QuestionAnswer {
 }
 
 #[test]
-fn a_call_is_allowed_as_asked_or_edited_into_one_of_its_kind_or_refused() {
-    let request = asking(Asks::Call { call: Call::Command(typed_command("rm -rf build")) });
-    let allow = |edited, remember| Decision::Allow { edited, remember };
+fn a_call_is_allowed_or_refused() {
+    let suggested = vec![rule(RuleEffect::Allow), rule(RuleEffect::Deny)];
+    let request = Request { suggested, ..asking(Asks::Call { call: Call::Command(typed_command("rm -rf build")) }) };
+    let allow = |remember| Decision::Allow { remember };
 
-    assert!(allow(None, Remember::Once).answers(&request));
-    assert!(allow(Some(Call::Command(typed_command("rm -rf ./build"))), Remember::Conversation).answers(&request));
-    assert!(!allow(Some(Call::Advisor), Remember::Once).answers(&request), "edited into another kind of call");
-    assert!(allow(None, Remember::Rule(rule(RuleEffect::Allow))).answers(&request));
+    assert!(allow(Remember::Once).answers(&request));
+    assert!(allow(Remember::Conversation).answers(&request));
+    assert!(allow(Remember::Rule(rule(RuleEffect::Allow))).answers(&request));
     assert!(deny(Some(rule(RuleEffect::Deny))).answers(&request));
     for other in [Decision::Answer { answers: vec![] }, Decision::KeepPlanning { words: None }, Decision::Unknown] {
         assert!(!other.answers(&request), "{other:?}");
@@ -42,11 +42,22 @@ fn a_call_is_allowed_as_asked_or_edited_into_one_of_its_kind_or_refused() {
 }
 
 #[test]
+fn a_call_keeps_only_a_rule_it_suggests_wherever_the_person_keeps_it() {
+    let request = Request { suggested: vec![rule(RuleEffect::Allow)], ..asking(Asks::Call { call: Call::Advisor }) };
+    let keeping = |rule| Decision::Allow { remember: Remember::Rule(rule) }.answers(&request);
+
+    assert!(keeping(Rule { kept: Kept::Project, ..rule(RuleEffect::Allow) }), "kept somewhere else");
+    assert!(!keeping(Rule { matching: "*".into(), ..rule(RuleEffect::Allow) }), "wider than suggested");
+    assert!(!keeping(Rule { covers: Covers::Calls { call: CallKind::Write }, ..rule(RuleEffect::Allow) }));
+    assert!(!deny(Some(rule(RuleEffect::Deny))).answers(&request), "a denial it doesn't suggest keeping");
+}
+
+#[test]
 fn a_request_that_comes_whatever_the_mode_keeps_no_rule() {
     let request = Request { always: true, ..asking(Asks::Call { call: Call::Advisor }) };
 
-    assert!(Decision::Allow { edited: None, remember: Remember::Conversation }.answers(&request));
-    assert!(!Decision::Allow { edited: None, remember: Remember::Rule(rule(RuleEffect::Allow)) }.answers(&request));
+    assert!(Decision::Allow { remember: Remember::Conversation }.answers(&request));
+    assert!(!Decision::Allow { remember: Remember::Rule(rule(RuleEffect::Allow)) }.answers(&request));
     assert!(deny(None).answers(&request));
     assert!(!deny(Some(rule(RuleEffect::Deny))).answers(&request));
 }
@@ -81,14 +92,12 @@ fn a_question_takes_each_option_once_and_what_it_doesnt_know_allows_the_least() 
 #[test]
 fn every_other_request_takes_only_the_decisions_of_its_own_kind() {
     let plan = asking(Asks::Plan { plan: "1. Test".into(), file: None });
-    let then = ApprovalMode { unasked: Unasked::Everything, beyond: Beyond::Refused, sandbox: None, plan: false };
-    assert!(Decision::ApprovePlan { then, context: PlanContext::Kept }.answers(&plan));
+    assert!(Decision::ApprovePlan { context: PlanContext::Kept }.answers(&plan));
     assert!(Decision::KeepPlanning { words: None }.answers(&plan));
     assert!(!deny(None).answers(&plan));
 
     let host = asking(Asks::Network { host: "example.com".into(), protocol: NetworkProtocol::Https });
-    assert!(Decision::Allow { edited: None, remember: Remember::Once }.answers(&host));
-    assert!(!Decision::Allow { edited: Some(Call::Advisor), remember: Remember::Once }.answers(&host));
+    assert!(Decision::Allow { remember: Remember::Once }.answers(&host));
 
     let access = asking(Asks::Access { access: vec![Access::Read { path: "/srv".into() }, Access::Network] });
     let grant = |access| Decision::Grant { access, lasts: Lasts::Turn };
@@ -97,7 +106,7 @@ fn every_other_request_takes_only_the_decisions_of_its_own_kind() {
 
     let unknown = asking(Asks::Unknown);
     assert!(deny(None).answers(&unknown), "refused, which its adapter knows how to say");
-    assert!(!Decision::Allow { edited: None, remember: Remember::Once }.answers(&unknown));
+    assert!(!Decision::Allow { remember: Remember::Once }.answers(&unknown));
 }
 
 #[test]

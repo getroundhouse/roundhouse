@@ -154,8 +154,10 @@ fn any_text(body: &EventBody, found: &mut impl FnMut(&str) -> bool) -> bool {
         EventBody::Assistant { blocks, .. } | EventBody::AgentUser { blocks, .. } => {
             blocks.iter().any(|block| any_text_in_block(block, found))
         }
-        EventBody::ApprovalRequested { tool_name, input, description, .. } => {
-            found(tool_name) || any_text_in_input(input, found) || description.as_deref().is_some_and(&mut *found)
+        // What it asks, as the JSON a chat shows a call as, and why, the agent's words.
+        EventBody::ApprovalRequested { request, .. } => {
+            serde_json::to_value(&request.asks).is_ok_and(|asks| any_text_in_input(&asks, found))
+                || request.why.as_deref().is_some_and(&mut *found)
         }
         EventBody::Notice { message, .. } => found(message),
         EventBody::RequestFailed { failure, .. } => found(&failure.message),

@@ -5,11 +5,11 @@
 //! A command says nothing of what it does, since the adapter didn't read commands then, so a chat draws it as it drew
 //! it then, as a command, whatever it runs.
 
-use protocol::capability::calls::Call;
 use protocol::capability::calls::call::{
     CellEdit, Command, Edit, Fetch, FindFiles, LineRange, Monitor, NotebookEdit, Read, Replace, Replaces, Runs, Search,
     Shows, StartSubagent, UseSkill, WebSearch, Write,
 };
+use protocol::capability::calls::{Call, CallKind};
 use protocol::capability::output::{Todo, TodoList, TodoStatus};
 use protocol::capability::setup::ServerName;
 use serde_json::Value;
@@ -22,6 +22,30 @@ pub(super) const PLAN: &str = "ExitPlanMode";
 /// How the CLI named a tool from an MCP server: `mcp__<server>__<tool>`.
 const MCP_PREFIX: &str = "mcp__";
 const MCP_SEPARATOR: &str = "__";
+
+/// The kind of call `tool` made, by its name alone, as a rule the CLI suggested named a tool.
+pub(super) fn kind(tool: &str) -> CallKind {
+    match tool {
+        "Bash" => CallKind::Command,
+        "Read" => CallKind::Read,
+        "Write" => CallKind::Write,
+        "Edit" | "MultiEdit" => CallKind::Edit,
+        "NotebookEdit" => CallKind::NotebookEdit,
+        "Grep" => CallKind::Search,
+        "Glob" => CallKind::FindFiles,
+        "WebFetch" => CallKind::Fetch,
+        "WebSearch" => CallKind::WebSearch,
+        "Agent" | "Task" => CallKind::Subagent,
+        "TodoWrite" => CallKind::Todos,
+        "Skill" => CallKind::Skill,
+        "Monitor" => CallKind::Monitor,
+        "advisor" => CallKind::Advisor,
+        QUESTIONS => CallKind::Questions,
+        PLAN => CallKind::Plan,
+        _ if tool.strip_prefix(MCP_PREFIX).is_some_and(|rest| rest.contains(MCP_SEPARATOR)) => CallKind::Mcp,
+        _ => CallKind::Other,
+    }
+}
 
 /// The call one to `tool` with `input` made.
 pub(super) fn call(tool: &str, input: &Value) -> Call {

@@ -4,13 +4,12 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use super::{
-    CellEdit, Command, Edit, Fetch, FindFiles, FindInPage, GenerateImage, Lsp, LspQuestion, MessageSubagent, Monitor,
-    NotebookEdit, Patch, Read, Replaces, Runs, Schedule, Search, Shows, Sleep, StartSubagent, StopSubagent, UseSkill,
-    ViewImage, WaitForSubagents, WebSearch, When, Workflow, Write, WriteInput,
+    Command, Edit, Fetch, FindFiles, FindInPage, GenerateImage, Lsp, MessageSubagent, Monitor, NotebookEdit, Patch,
+    Read, Schedule, Search, Sleep, StartSubagent, StopSubagent, UseSkill, ViewImage, WaitForSubagents, WebSearch,
+    Workflow, Write, WriteInput,
 };
 use crate::capability::calls::CallKind;
 use crate::capability::output::TodoList;
-use crate::capability::settings::Effort;
 use crate::capability::setup::ServerName;
 
 /// What a call does, as its adapter read it from the agent's tool and input. One of a kind this build doesn't know
@@ -114,44 +113,6 @@ impl Call {
             Call::Mcp { .. } => CallKind::Mcp,
             Call::Other { .. } => CallKind::Other,
             Call::Unknown => CallKind::Unknown,
-        }
-    }
-
-    /// Whether it holds nothing this build doesn't know, so an adapter can give it to its agent, as it does the call a
-    /// person edited.
-    pub fn is_known(&self) -> bool {
-        match self {
-            Call::Command(command) => command.runs != Runs::Unknown,
-            Call::Edit(edit) => edit.edits.iter().all(|replace| replace.replaces != Replaces::Unknown),
-            Call::Patch(patch) => patch.files.iter().all(|file| file.change.is_known()),
-            Call::NotebookEdit(edit) => edit.does != CellEdit::Unknown,
-            Call::Search(search) => search.shows != Shows::Unknown,
-            Call::Todos(todos) => todos.is_known(),
-            Call::Subagent(subagent) => subagent.runs != Runs::Unknown && subagent.effort != Some(Effort::Unknown),
-            Call::Lsp(lsp) => lsp.asks != LspQuestion::Unknown,
-            Call::Schedule(schedule) => schedule.when != When::Unknown,
-            Call::WriteInput(_)
-            | Call::Read(_)
-            | Call::Write(_)
-            | Call::FindFiles(_)
-            | Call::Fetch(_)
-            | Call::WebSearch(_)
-            | Call::FindInPage(_)
-            | Call::MessageSubagent(_)
-            | Call::WaitForSubagents(_)
-            | Call::StopSubagent(_)
-            | Call::ViewImage(_)
-            | Call::GenerateImage(_)
-            | Call::Skill(_)
-            | Call::Advisor
-            | Call::Sleep(_)
-            | Call::Monitor(_)
-            | Call::Workflow(_)
-            | Call::Questions
-            | Call::Plan
-            | Call::Mcp { .. }
-            | Call::Other { .. } => true,
-            Call::Unknown => false,
         }
     }
 }

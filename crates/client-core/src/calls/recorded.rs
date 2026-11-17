@@ -6,7 +6,7 @@ use other::Other;
 use protocol::capability::approvals::Asks;
 use protocol::capability::calls::Call;
 use protocol::capability::calls::call::{GenerateImage, NotebookEdit, Patch};
-use protocol::event::{Asking, ContentBlock, EventBody};
+use protocol::event::{ContentBlock, EventBody};
 use search::Search;
 use serde_json::Value;
 use subagents::ToSubagents;
@@ -37,17 +37,11 @@ pub enum ToolCall<'a> {
     Typed(&'a protocol::capability::calls::Call),
 }
 
-/// A call as it's recorded: typed, as its agent's adapter records it, or, for a request for approval this build can't
-/// read, by the tool the request names and what the agent gave it, which is how a client asks about one, as
-/// [`Asking::Unknown`] says. It's made only from the block that makes the call, or the request to make it.
+/// A call as it's recorded, typed, as its agent's adapter records it. It's made only from the block that makes the
+/// call, or the request to make it.
 #[derive(Clone, Copy, Debug)]
 pub enum Recorded<'a> {
     Typed(&'a Call),
-    /// A request this build can't read, which a client asks about as any tool's use, by its name and input.
-    Named {
-        name: &'a str,
-        input: &'a Value,
-    },
 }
 
 impl<'a> Recorded<'a> {
@@ -57,28 +51,19 @@ impl<'a> Recorded<'a> {
         Some(Self::Typed(call))
     }
 
-    /// The call the request for approval `body` asks to make, or `None` for any other event: the typed call it names,
-    /// whichever form it's in. One that asks something else is one too, to the tool that asks it, and what it asks
-    /// says its kind, and one this build can't read is asked about by its tool and input.
+    /// The call the request for approval `body` asks to make, or `None` for one that asks something else and for any
+    /// other event.
     pub fn asked(body: &'a EventBody) -> Option<Self> {
-        let EventBody::ApprovalRequested { tool_name, input, asking, request, .. } = body else { return None };
-        if let Some(request) = request {
-            return match &request.asks {
-                Asks::Call { call } => Some(Self::Typed(call)),
-                Asks::Questions { .. }
-                | Asks::Plan { .. }
-                | Asks::Network { .. }
-                | Asks::Access { .. }
-                | Asks::Server(_)
-                | Asks::Unknown => None,
-            };
+        let EventBody::ApprovalRequested { request, .. } = body else { return None };
+        match &request.asks {
+            Asks::Call { call } => Some(Self::Typed(call)),
+            Asks::Questions { .. }
+            | Asks::Plan { .. }
+            | Asks::Network { .. }
+            | Asks::Access { .. }
+            | Asks::Server(_)
+            | Asks::Unknown => None,
         }
-        Some(match asking.as_deref() {
-            Some(Asking::ToolUse { typed: Some(call) }) => Self::Typed(call),
-            Some(Asking::Questions { .. }) => Self::Typed(&Call::Questions),
-            Some(Asking::Plan { .. }) => Self::Typed(&Call::Plan),
-            Some(Asking::ToolUse { typed: None } | Asking::Unknown) | None => Self::Named { name: tool_name, input },
-        })
     }
 
     /// Whether it hands work to a subagent.
@@ -92,10 +77,10 @@ impl<'a> Recorded<'a> {
         matches!(self, Self::Typed(Call::Questions | Call::Plan))
     }
 
-    /// What the agent gave a tool with no kind of its own, or `null` for a typed call, whose input is its own.
+    /// What the agent gave a tool with no kind of its own, or `null` for a call of a kind, whose input is its own.
     pub fn input(&self) -> &'a Value {
         match *self {
-            Self::Typed(Call::Mcp { input, .. } | Call::Other { input, .. }) | Self::Named { input, .. } => input,
+            Self::Typed(Call::Mcp { input, .. } | Call::Other { input, .. }) => input,
             Self::Typed(_) => &Value::Null,
         }
     }
@@ -106,18 +91,10 @@ impl<'a> Recorded<'a> {
     }
 }
 
-/// What a request to use a tool is about, on one line: what the agent said it's for, or what its call says, the same
-/// in every client. `None` for any other event, and for a call with nothing to say.
-pub fn asked_about(body: &EventBody) -> Option<String> {
-    let EventBody::ApprovalRequested { description, .. } = body else { return None };
-    description.clone().or_else(|| Recorded::asked(body)?.summary())
-}
-
 impl<'a> ToolCall<'a> {
     pub fn read(call: Recorded<'a>) -> Self {
         match call {
             Recorded::Typed(call) => super::typed::read(call),
-            Recorded::Named { name, input } => ToolCall::Other(Other::named_by(name, input)),
         }
     }
 

@@ -91,10 +91,7 @@ async fn resolving_a_child_approval_restores_background_state_when_the_root_is_f
             agent.shared.rpc.write(&json!({"method":"test/resolve"})).await.unwrap();
         } else {
             agent
-                .control(&Control::Decide {
-                    approval,
-                    decision: Decision::Allow { edited: None, remember: Remember::Once },
-                })
+                .control(&Control::Decide { approval, decision: Decision::Allow { remember: Remember::Once } })
                 .await
                 .unwrap();
         }

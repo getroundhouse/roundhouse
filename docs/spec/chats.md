@@ -578,7 +578,7 @@ Every call is drawn the same way, as the first rule below says, and each kind fi
 
   ![A patch of two files waiting to be allowed, with each file's diff](screens/approval-patch.png)
 
-- **Its `0` row takes what the agent should do instead,** which denies the request and tells the agent in those words, so a no can say what would be a yes. Enter in that row sends only what's typed there: with nothing typed it leaves the row, as Escape does, so a row that says it denies never allows. *Unconfirmed.*
+- **Its `0` row takes what the agent should do instead,** which denies the request and tells the agent in those words, so a no can say what would be a yes. It's there where the run that asks takes a denial in words, as its claims say, and Claude's does, and where its claims aren't known. Enter in that row sends only what's typed there: with nothing typed it leaves the row, as Escape does, so a row that says it denies never allows. *Unconfirmed.*
 
   **The removal again, with what to do instead typed, which denies it in those words, and two more requests waiting behind it.** *Unconfirmed.*
 

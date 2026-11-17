@@ -9,8 +9,9 @@ use gpui_kit::{
     Styled, TestSupportExt as _, div, px,
 };
 use look::{Shaped as _, Typeset as _};
-use protocol::capability::asking::QuestionAnswer;
-use protocol::event::{ApprovalDecision, EventBody, Question, QuestionOption};
+use protocol::capability::approvals::Decision;
+use protocol::capability::asking::{Choose, Question, QuestionAnswer, QuestionOption, TypedAnswer};
+use protocol::event::EventBody;
 
 /// What the typing row says while it's empty.
 pub(in super::super) const INSTEAD: &str = "Deny, and say what to do instead…";
@@ -79,10 +80,11 @@ impl ToolUse {
                 ToolUseAnswer::Allow => ("Allow", "This once"),
                 ToolUseAnswer::Deny => ("Deny", "The agent is told it can't, and carries on"),
             };
-            QuestionOption { label: label.into(), description: Some(means.into()) }
+            QuestionOption { label: label.into(), description: Some(means.into()), preview: None }
         };
         let options = ToolUseAnswer::ALL.iter().map(option).collect();
-        let question = Question { text, header: Some(asked.tool), options, multiple: false };
+        let typed = if can_type { TypedAnswer::Yes } else { TypedAnswer::No };
+        let question = Question { text, header: Some(asked.tool), options, choose: Choose::One, typed };
         Some(Self { approval, can_type, question, given, reason: asked.reason.map(str::to_string) })
     }
 
@@ -91,7 +93,7 @@ impl ToolUse {
     }
 
     /// The decision `answer` makes, or `None` for one that chooses neither answer, as `client_core` says.
-    pub(in super::super) fn decision(&self, answer: &QuestionAnswer) -> Option<ApprovalDecision> {
+    pub(in super::super) fn decision(&self, answer: &QuestionAnswer) -> Option<Decision> {
         self.approval.deciding_tool_use(answer)
     }
 

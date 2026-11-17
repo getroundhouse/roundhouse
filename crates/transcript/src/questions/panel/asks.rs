@@ -1,11 +1,13 @@
 //! What a panel asks, which says what it shows and how an answer is sent: the agent's questions, or whether the agent
 //! may use a tool. Each way the two differ is one match here, so the panel itself asks either the same way.
 
-use client_core::Approval;
+use client_core::{Approval, ToolUseAnswer};
 use gpui_kit::{AnyElement, App};
-use protocol::capability::asking::QuestionAnswer;
-use protocol::event::{ApprovalDecision, EventBody, Question};
-use protocol::model::SubagentId;
+use protocol::capability::Capabilities;
+use protocol::capability::approvals::{Decision, DecisionPart};
+use protocol::capability::asking::{Question, QuestionAnswer};
+use protocol::event::EventBody;
+use protocol::model::{AnswerSoFar, SoFar, SubagentId};
 
 use super::tool_use::{self, ToolUse};
 
@@ -17,20 +19,20 @@ pub(crate) enum Asks {
 }
 
 impl Asks {
-    /// What the request `body` asks in the composer's place, or `None` for a plan, whose card is in the transcript
-    /// with the plan, and for any other event.
-    pub(crate) fn of(body: &EventBody, claims: Option<&protocol::capability::Capabilities>) -> Option<Self> {
+    /// What the request `body` asks in the composer's place, of a run that claims `claims`, or `None` for a plan,
+    /// whose card is in the transcript with the plan, for what this build can't ask, and for any other event. A
+    /// tool's use can be denied in words only where the run takes them. Claims that aren't known at all, neither the
+    /// run's nor its kind's, come from a hub from before kinds said their claims, which runs only Claude, whose runs
+    /// take words, so they're taken to.
+    pub(crate) fn of(body: &EventBody, claims: Option<&Capabilities>) -> Option<Self> {
         let approval = Approval::of(body)?.into_owned();
         if approval.questions().is_some() {
             return Some(Asks::Questions(approval));
         }
-        let typed_request = matches!(body, EventBody::ApprovalRequested { request: Some(_), .. });
-        let words = !typed_request
-            || claims.is_some_and(|claims| {
-                claims.approvals.requests.as_ref().is_some_and(|requests| {
-                    requests.parts.contains(&protocol::capability::approvals::DecisionPart::Words)
-                })
-            });
+        let words = claims.is_none_or(|claims| {
+            let requests = claims.approvals.requests.as_ref();
+            requests.is_some_and(|requests| requests.parts.contains(&DecisionPart::Words))
+        });
         ToolUse::read(body, approval, words).map(Asks::ToolUse)
     }
 
@@ -61,7 +63,7 @@ impl Asks {
 
     /// The decision that `answers` make, one for each question shown, with one that has nothing in it for a question
     /// left. `None` where they decide nothing, as a tool's use with neither answer chosen does.
-    pub(super) fn decision(&self, answers: Vec<QuestionAnswer>) -> Option<ApprovalDecision> {
+    pub(super) fn decision(&self, answers: Vec<QuestionAnswer>) -> Option<Decision> {
         match self {
             Asks::Questions(approval) => Some(approval.answered(answers)),
             Asks::ToolUse(tool_use) => tool_use.decision(answers.first()?),
@@ -70,10 +72,39 @@ impl Asks {
 
     /// The decision that skips it, for what can be skipped. A tool's use can't, since denying it is one of its
     /// answers.
-    pub(super) fn skipped(&self) -> Option<ApprovalDecision> {
+    pub(super) fn skipped(&self) -> Option<Decision> {
         match self {
-            Asks::Questions(approval) => Some(approval.refused()),
+            Asks::Questions(approval) => Some(approval.refuse(None)),
             Asks::ToolUse(_) => None,
+        }
+    }
+
+    /// What's chosen and typed on each question shown, as a draft keeps it: answers to questions as they are, and a
+    /// tool's use by the answer chosen, by name, and the words being written to deny it in.
+    pub(super) fn drafted(&self, so_far: Vec<AnswerSoFar>) -> SoFar {
+        match self {
+            Asks::Questions(_) => SoFar::Answers { answers: so_far },
+            Asks::ToolUse(_) => {
+                let AnswerSoFar { picked, typed, other } = so_far.into_iter().next().unwrap_or_default();
+                let chosen = picked.first().and_then(|&at| ToolUseAnswer::at(usize::try_from(at).ok()?));
+                SoFar::Use { chosen: chosen.map(ToolUseAnswer::chosen), words: typed, writing: other }
+            }
+        }
+    }
+
+    /// What a draft, `so_far`, says is chosen and typed on each question shown, as [`Asks::drafted`] keeps it. One of
+    /// another kind, or that this build can't read, says nothing.
+    pub(super) fn answers_drafted(&self, so_far: &SoFar) -> Vec<AnswerSoFar> {
+        match (self, so_far) {
+            (Asks::Questions(_), SoFar::Answers { answers }) => answers.clone(),
+            (Asks::ToolUse(_), SoFar::Use { chosen, words, writing }) => {
+                let place = chosen.and_then(ToolUseAnswer::of).map(ToolUseAnswer::place);
+                let picked = place.iter().filter_map(|&place| u32::try_from(place).ok()).collect();
+                vec![AnswerSoFar { picked, typed: words.clone(), other: *writing }]
+            }
+            (Asks::Questions(_) | Asks::ToolUse(_), SoFar::Answers { .. } | SoFar::Use { .. } | SoFar::Unknown) => {
+                Vec::new()
+            }
         }
     }
 
@@ -111,21 +142,35 @@ impl Asks {
 #[cfg(test)]
 mod tests {
     use super::Asks;
-    use protocol::capability::{
-        Capabilities,
-        approvals::{DecisionPart, Requests},
-    };
+    use protocol::capability::Capabilities;
+    use protocol::capability::approvals::{DecisionPart, Requests};
     use protocol::event::EventBody;
+    use protocol::fixtures::{approval_request, to_run};
+    use protocol::model::{AnswerSoFar, SoFar, UseChoice};
+
     #[test]
-    fn a_typed_call_only_offers_a_written_denial_when_the_run_claims_it() {
-        let body: EventBody = serde_json::from_value(serde_json::json!({"type":"approval_requested","approval_id":"q",
-            "request":{"asks":{"asks":"call","call":{"kind":"other","tool":"sample","input":{}}}}}))
-        .unwrap();
-        assert!(!Asks::of(&body, None).unwrap().can_type(0));
+    fn a_call_only_offers_a_written_denial_when_the_run_claims_it_or_on_a_hub_from_before_claims() {
+        let body: EventBody = approval_request("q", to_run("ls")).into();
+        assert!(Asks::of(&body, None).unwrap().can_type(0), "a run from before claims takes words");
         let mut claims = Capabilities::default();
         claims.approvals.requests = Some(Requests { parts: Vec::new(), kept: Vec::new() });
         assert!(!Asks::of(&body, Some(&claims)).unwrap().can_type(0));
         claims.approvals.requests.as_mut().unwrap().parts.push(DecisionPart::Words);
         assert!(Asks::of(&body, Some(&claims)).unwrap().can_type(0));
+    }
+
+    #[test]
+    fn a_draft_keeps_a_tools_use_by_the_answer_chosen_and_the_words_being_written() {
+        let body: EventBody = approval_request("q", to_run("ls")).into();
+        let asks = Asks::of(&body, None).unwrap();
+        let deny = AnswerSoFar { picked: vec![1], typed: "Use -l".into(), other: true };
+
+        let drafted = asks.drafted(vec![deny.clone()]);
+
+        assert_eq!(drafted, SoFar::Use { chosen: Some(UseChoice::Deny), words: "Use -l".into(), writing: true });
+        assert_eq!(asks.answers_drafted(&drafted), [deny]);
+        let unknown = SoFar::Use { chosen: Some(UseChoice::Unknown), words: String::new(), writing: false };
+        assert_eq!(asks.answers_drafted(&unknown), [AnswerSoFar::default()], "a choice this build doesn't know");
+        assert_eq!(asks.answers_drafted(&SoFar::Answers { answers: vec![] }), [], "a draft of another kind");
     }
 }

@@ -1,7 +1,9 @@
-use protocol::capability::asking::QuestionAnswer;
-use protocol::event::{ApprovalDecision, Asking, Question};
+use protocol::capability::approvals::{AfterDenial, Asks, Decision, Remember, Rule, RuleEffect};
+use protocol::capability::asking::{self, PlanContext};
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
+
+use super::super::request::destination;
 
 /// Told to the agent when the person won't let it use a tool, and said nothing more.
 pub(super) const DENIED: &str = "The user denied this.";
@@ -10,10 +12,11 @@ pub(super) const KEEP_PLANNING: &str = "The user wants to keep planning. Ask the
 /// Told to the agent when the person would rather not answer its questions.
 pub(super) const NOT_ANSWERED: &str = "The user chose not to answer. Carry on if you can, or ask in chat.";
 
-/// A request waiting on the person: the tool's input, which allowing it sends back, and what it asks.
+/// A request waiting on the person: the input of the tool it asks to use, which allowing it sends back, and what it
+/// asks.
 pub(in crate::claude) struct Waiting {
     pub(in crate::claude) input: Value,
-    pub(in crate::claude) asking: Asking,
+    pub(in crate::claude) asks: Asks,
 }
 
 /// Whether `text`, what a call the person denied told the agent, is this adapter's own words for a denial, which it
@@ -23,58 +26,90 @@ pub(in crate::claude) fn denied_in_its_own_words(text: &str) -> bool {
 }
 
 /// What the CLI is told for `decision`, as the `response` of its `control_response`, on the request `waiting` was, or
-/// on one this process doesn't know, which it allows as asked.
-pub(in crate::claude) fn response(decision: &ApprovalDecision, waiting: Option<Waiting>) -> Value {
-    let (input, asking) = waiting.map_or((None, None), |waiting| (Some(waiting.input), Some(waiting.asking)));
-    match decision {
-        ApprovalDecision::Allow { updated_input, updated_permissions } => {
-            let mut body = json!({
-                "behavior": "allow",
-                "updatedInput": updated_input.clone().or(input).unwrap_or_else(|| json!({})),
-            });
-            if let Some(permissions) = updated_permissions {
-                body["updatedPermissions"] = permissions.clone();
+/// on one this process doesn't know, which it allows or refuses as asked. `None` for a decision the CLI has no form
+/// for, such as a use allowed for the conversation, or a rule kept where the CLI keeps none.
+pub(in crate::claude) fn response(decision: &Decision, waiting: Option<&Waiting>) -> Option<Value> {
+    let input = || waiting.map_or_else(|| json!({}), |waiting| waiting.input.clone());
+    let asks = waiting.map(|waiting| &waiting.asks);
+    Some(match decision {
+        Decision::Allow { remember } => {
+            let mut body = json!({"behavior": "allow", "updatedInput": input()});
+            match remember {
+                Remember::Once => {}
+                Remember::Rule(rule) => body["updatedPermissions"] = json!([kept(rule)?]),
+                Remember::Conversation | Remember::Unknown => return None,
             }
             body
         }
-        ApprovalDecision::Deny { message, interrupt } => {
-            let message = message.as_deref().unwrap_or_else(|| refusal(asking.as_ref()));
+        // Approving it leaves plan mode for the mode before, which is the only other one a chat can have.
+        Decision::ApprovePlan { context: PlanContext::Kept, .. } => {
+            json!({"behavior": "allow", "updatedInput": input()})
+        }
+        Decision::Deny { words, then, keep: None } => {
+            let interrupt = match then {
+                AfterDenial::Continue => false,
+                AfterDenial::Stop => true,
+                AfterDenial::Unknown => return None,
+            };
+            let message = words.as_deref().unwrap_or_else(|| refusal(asks));
             json!({"behavior": "deny", "message": message, "interrupt": interrupt})
         }
-        ApprovalDecision::AnswerByText { answers } => answered(input, answers),
-        ApprovalDecision::AnswerByPosition { answers } => {
-            let questions = match &asking {
-                Some(Asking::Questions { questions }) => questions.as_slice(),
-                Some(Asking::ToolUse { .. } | Asking::Plan { .. } | Asking::Unknown) | None => &[],
-            };
-            answered(input, &by_text(questions, answers))
+        Decision::KeepPlanning { words } => {
+            json!({"behavior": "deny", "message": words.as_deref().unwrap_or(KEEP_PLANNING), "interrupt": false})
         }
-    }
+        Decision::Answer { answers } => {
+            let Some(Asks::Questions { questions }) = asks else { return None };
+            let said = asking::by_text(questions, answers);
+            // None answered is how the person chooses not to answer, which the agent is told in so many words.
+            if said.is_empty() {
+                json!({"behavior": "deny", "message": NOT_ANSWERED, "interrupt": false})
+            } else {
+                answered(input(), &said)
+            }
+        }
+        Decision::Deny { .. }
+        | Decision::ApprovePlan { .. }
+        | Decision::Grant { .. }
+        | Decision::Respond(_)
+        | Decision::Unknown => return None,
+    })
 }
 
-/// The CLI takes answers as part of the tool's input. Allowing without them tells the agent the person didn't answer.
-fn answered(input: Option<Value>, answers: &BTreeMap<String, String>) -> Value {
-    let mut input = input.unwrap_or_else(|| json!({}));
+/// The CLI takes answers as part of the tool's input.
+fn answered(mut input: Value, answers: &BTreeMap<String, String>) -> Value {
     input["answers"] = json!(answers);
     json!({"behavior": "allow", "updatedInput": input})
 }
 
-/// The answers as the CLI wants them: by the question's text, with what was chosen and typed for one joined with a comma
-/// and a space, and a question with nothing left out. The CLI keys them by text, so of two questions alike, the agent
-/// hears the answer to the last.
-fn by_text(questions: &[Question], answers: &[QuestionAnswer]) -> BTreeMap<String, String> {
-    let said = |(question, answer): (&Question, &QuestionAnswer)| {
-        let parts: Vec<&str> = question.said(answer).collect();
-        (!parts.is_empty()).then(|| (question.text.clone(), parts.join(", ")))
+/// The CLI's update that keeps `rule`, which allows, from its own form, `Tool(content)` or `Tool`, as the request
+/// suggested it.
+fn kept(rule: &Rule) -> Option<Value> {
+    if rule.effect != RuleEffect::Allow {
+        return None;
+    }
+    let (tool, content) = match rule.matching.strip_suffix(')').and_then(|rest| rest.split_once('(')) {
+        Some((tool, content)) => (tool, Some(content)),
+        None => (rule.matching.as_str(), None),
     };
-    questions.iter().zip(answers).filter_map(said).collect()
+    let mut kept = json!({"toolName": tool});
+    if let Some(content) = content {
+        kept["ruleContent"] = content.into();
+    }
+    Some(json!({"type": "addRules", "rules": [kept], "behavior": "allow", "destination": destination(rule.kept)?}))
 }
 
 /// What the agent is told when the person says no and gives no words of their own, as fits what was asked.
-fn refusal(asking: Option<&Asking>) -> &'static str {
-    match asking {
-        Some(Asking::Questions { .. }) => NOT_ANSWERED,
-        Some(Asking::Plan { .. }) => KEEP_PLANNING,
-        Some(Asking::ToolUse { .. } | Asking::Unknown) | None => DENIED,
+fn refusal(asks: Option<&Asks>) -> &'static str {
+    match asks {
+        Some(Asks::Plan { .. }) => KEEP_PLANNING,
+        Some(
+            Asks::Call { .. }
+            | Asks::Network { .. }
+            | Asks::Access { .. }
+            | Asks::Questions { .. }
+            | Asks::Server(_)
+            | Asks::Unknown,
+        )
+        | None => DENIED,
     }
 }

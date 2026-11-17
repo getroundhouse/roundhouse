@@ -1,6 +1,6 @@
-use serde_json::Value;
-
-use crate::event::{Asking, EventBody, FailureKind, RequestFailure, SessionEvent, TurnOutcome};
+use crate::capability::approvals::{AfterDenial, Asks, Decision, Remember, Request};
+use crate::capability::asking::{Choose, PlanContext, Question, QuestionOption, TypedAnswer};
+use crate::event::{EventBody, FailureKind, RequestFailure, SessionEvent, TurnOutcome};
 use crate::model::{
     Account, AgentKind, ApprovalId, BranchName, ChildStatus, ChildWorktree, Draft, Effort, FoundGithubLogin, GhLogin,
     GhLoginWorks, GithubAccount, GithubApp, GithubAppId, GithubLoginKind, GithubReach, GithubRepositoryName,
@@ -43,7 +43,7 @@ pub fn session(id: &str) -> Session {
         queued: Vec::new(),
         queue_held: false,
         draft: Draft::default(),
-        answer_draft: None,
+        decision_draft: None,
         open_approvals: None,
         untaken: None,
         agent_opened: None,
@@ -259,56 +259,83 @@ pub fn subagent(call: &str) -> Subagent {
 #[derive(Clone)]
 pub struct ApprovalRequest {
     pub approval_id: ApprovalId,
-    pub tool_name: String,
+    pub request: Request,
     pub tool_use_id: Option<ToolUseId>,
-    pub input: Value,
-    pub description: Option<String>,
-    pub suggestions: Value,
-    pub asking: Option<Asking>,
-    pub reason: Option<String>,
     pub asked_by: Option<SubagentId>,
 }
 
-/// The agent itself asking to use `tool`, under the approval `id`, with no input. Like a request recorded before
-/// adapters said, it says nothing of what it asks, of why, or of the call it's for.
-pub fn approval_request(id: &str, tool: &str) -> ApprovalRequest {
-    ApprovalRequest {
-        approval_id: id.into(),
-        tool_name: tool.into(),
-        tool_use_id: None,
-        input: Value::Null,
-        description: None,
-        suggestions: Value::Null,
-        asking: None,
-        reason: None,
-        asked_by: None,
+/// The agent itself asking what `asks` says, under the approval `id`, suggesting nothing, and with no reason or call
+/// named.
+pub fn approval_request(id: &str, asks: Asks) -> ApprovalRequest {
+    let request = Request { asks, suggested: Vec::new(), always: false, why: None };
+    ApprovalRequest { approval_id: id.into(), request, tool_use_id: None, asked_by: None }
+}
+
+impl ApprovalRequest {
+    /// It, with the agent saying it asks because `why`.
+    #[must_use]
+    pub fn because(mut self, why: &str) -> Self {
+        self.request.why = Some(why.into());
+        self
     }
 }
 
 impl From<ApprovalRequest> for EventBody {
     fn from(request: ApprovalRequest) -> Self {
-        let ApprovalRequest {
-            approval_id,
-            tool_name,
-            tool_use_id,
-            input,
-            description,
-            suggestions,
-            asking,
-            reason,
-            asked_by,
-        } = request;
-        EventBody::ApprovalRequested {
-            request: None,
-            approval_id,
-            tool_name,
-            tool_use_id,
-            input,
-            description,
-            suggestions: Box::new(suggestions),
-            asking: asking.map(Box::new),
-            reason,
-            asked_by,
-        }
+        let ApprovalRequest { approval_id, request, tool_use_id, asked_by } = request;
+        EventBody::ApprovalRequested { approval_id, request: Box::new(request), tool_use_id, asked_by }
     }
+}
+
+/// A question with `text`, offering an option for each of `labels`, of which one can be chosen, or several where
+/// `several`, with any other answer typed instead.
+pub fn question(text: &str, labels: &[&str], several: bool) -> Question {
+    let option = |label: &&str| QuestionOption { label: (*label).into(), description: None, preview: None };
+    Question {
+        text: text.into(),
+        header: None,
+        options: labels.iter().map(option).collect(),
+        choose: if several { Choose::Several } else { Choose::One },
+        typed: TypedAnswer::Yes,
+    }
+}
+
+/// Asking to run `command`, as a typed call that says nothing more of it.
+pub fn to_run(command: &str) -> Asks {
+    Asks::Call { call: crate::capability::calls::Call::Command(super::typed_command(command)) }
+}
+
+/// Asking `questions`, in order.
+pub fn asking(questions: Vec<Question>) -> Asks {
+    Asks::Questions { questions }
+}
+
+/// Asking for the plan `plan` to be approved, with no file of it.
+pub fn plan(plan: &str) -> Asks {
+    Asks::Plan { plan: plan.into(), file: None }
+}
+
+/// The record that closes the request `id` with what the person decided, `decision`.
+pub fn decided(id: &str, decision: Decision) -> EventBody {
+    EventBody::ApprovalResolved { approval_id: id.into(), decision: Some(Box::new(decision)), by_setting: false }
+}
+
+/// The record that closes the request `id`, which nobody decided, as a stop does.
+pub fn cancelled(id: &str) -> EventBody {
+    EventBody::ApprovalResolved { approval_id: id.into(), decision: None, by_setting: false }
+}
+
+/// Allowing a use once, as it was asked.
+pub fn allow_once() -> Decision {
+    Decision::Allow { remember: Remember::Once }
+}
+
+/// Approving a plan, to be carried out in the conversation it was planned in.
+pub fn approve_plan() -> Decision {
+    Decision::ApprovePlan { context: PlanContext::Kept }
+}
+
+/// Refusing a use, in `words` when the person wrote some, and letting the agent carry on.
+pub fn deny(words: Option<&str>) -> Decision {
+    Decision::Deny { words: words.map(str::to_string), then: AfterDenial::Continue, keep: None }
 }

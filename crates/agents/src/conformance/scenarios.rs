@@ -4,7 +4,7 @@
 use std::time::Duration;
 
 use protocol::capability::calls::{Call, CallKind};
-use protocol::event::{Asking, ContentBlock, EventBody, TurnOutcome};
+use protocol::event::{ContentBlock, EventBody, TurnOutcome};
 use protocol::model::PermissionMode;
 
 use super::driver::INTERRUPTED;
@@ -188,11 +188,8 @@ pub static PLAN_APPROVED: Scenario = Scenario {
             name: "the agent asked for the plan to be approved",
             check: |trial| {
                 let asked = trial.events().any(|event| match event {
-                    EventBody::ApprovalRequested { request: Some(request), .. } => matches!(&request.asks,
+                    EventBody::ApprovalRequested { request, .. } => matches!(&request.asks,
                             protocol::capability::approvals::Asks::Plan { plan, .. } if plan.contains(PLAN)),
-                    EventBody::ApprovalRequested { asking: Some(asking), .. } => {
-                        matches!(&**asking, Asking::Plan { plan } if plan.contains(PLAN))
-                    }
                     EventBody::UserPrompt { .. }
                     | EventBody::PromptTaken { .. }
                     | EventBody::PromptDropped { .. }
@@ -210,7 +207,6 @@ pub static PLAN_APPROVED: Scenario = Scenario {
                     | EventBody::ToolCallDropped { .. }
                     | EventBody::TurnEnded { .. }
                     | EventBody::RequestFailed { .. }
-                    | EventBody::ApprovalRequested { .. }
                     | EventBody::ApprovalResolved { .. }
                     | EventBody::AgentExited { .. }
                     | EventBody::Notice { .. }
@@ -227,8 +223,7 @@ pub static PLAN_APPROVED: Scenario = Scenario {
                     let plans: Vec<_> = trial
                         .events()
                         .filter_map(|e| match e {
-                            EventBody::ApprovalRequested { request: Some(r), .. } => Some(format!("{:?}", r.asks)),
-                            EventBody::ApprovalRequested { asking, .. } => Some(format!("{asking:?}")),
+                            EventBody::ApprovalRequested { request, .. } => Some(format!("{:?}", request.asks)),
                             EventBody::UserPrompt { .. }
                             | EventBody::PromptTaken { .. }
                             | EventBody::PromptDropped { .. }

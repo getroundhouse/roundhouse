@@ -9,8 +9,7 @@ use process::testing::WholeEnvironment;
 pub(crate) use process::testing::git;
 use protocol::event::{ContentBlock, EventBody, SessionEvent};
 use protocol::model::{
-    AgentKind, ApprovalId, PermissionMode, Seq, Session, SessionId, SessionSettingsChange, SessionStatus, Workspace,
-    WorkspaceId,
+    AgentKind, PermissionMode, Seq, Session, SessionId, SessionSettingsChange, SessionStatus, Workspace, WorkspaceId,
 };
 use protocol::paths::Paths;
 use protocol::tail::Tail;
@@ -300,27 +299,6 @@ pub(crate) fn assistant_text(events: &[SessionEvent]) -> String {
         }
     }
     text
-}
-
-pub(crate) fn pending_approval(events: &[SessionEvent]) -> Option<ApprovalId> {
-    let mut open = None;
-    for event in events {
-        match &event.body {
-            EventBody::ApprovalRequested { approval_id, .. } => open = Some(approval_id.clone()),
-            EventBody::ApprovalResolved { approval_id, .. } if open.as_ref() == Some(approval_id) => open = None,
-            _ => {}
-        }
-    }
-    open
-}
-
-pub(crate) fn wait_for_approval(client: &Client, session_id: &SessionId) -> ApprovalId {
-    let mut found = None;
-    wait_until("an approval request", || {
-        found = pending_approval(&read_all(client, session_id));
-        found.is_some()
-    });
-    found.unwrap()
 }
 
 /// What a client would hold after reading a subscription: its events, and its streaming tail.

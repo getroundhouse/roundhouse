@@ -6,8 +6,8 @@
 use client_core::{DraftChange, Drafts, FileToSend, FilesFor, RecordsFeed};
 use protocol::attachment::MediaType;
 use protocol::model::{
-    AnswerDraft, AnswerSoFar, CommentDraft, DiffSide, Draft, DraftToKeep, NewWorkspaceDraftToKeep, SessionId,
-    SessionStatus, WorkspaceId,
+    AnswerSoFar, CommentDraft, DecisionDraft, DiffSide, Draft, DraftToKeep, NewWorkspaceDraftToKeep, SessionId,
+    SessionStatus, SoFar, WorkspaceId,
 };
 
 use crate::support::{Stack, wait_for_setup, wait_until};
@@ -68,7 +68,7 @@ fn comment_in(feed: &RecordsFeed, id: &WorkspaceId) -> Option<String> {
 /// What's typed in a chat's composer and in answer to its question, and the comment being written on its workspace's
 /// diff, each of which every client hears of as it's kept, and the next hub has.
 #[test]
-fn a_draft_an_answer_and_a_comment_being_written_are_kept_across_a_restart_and_every_client_hears_of_them() {
+fn a_draft_a_decision_and_a_comment_being_written_are_kept_across_a_restart_and_every_client_hears_of_them() {
     let mut stack = Stack::start();
     let client = stack.client();
     let feed = RecordsFeed::start(&client);
@@ -76,7 +76,7 @@ fn a_draft_an_answer_and_a_comment_being_written_are_kept_across_a_restart_and_e
     let comment =
         CommentDraft { path: "README.md".into(), side: DiffSide::New, line: 1, editing: None, text: "why?".into() };
     let so_far = AnswerSoFar { picked: vec![0], typed: "the other one".into(), other: true };
-    let answer = AnswerDraft { approval_id: "q".into(), answers: vec![so_far] };
+    let answer = DecisionDraft { approval_id: "q".into(), so_far: SoFar::Answers { answers: vec![so_far] } };
     // So only the notices of what's kept can bring it, rather than the feed's first list, or the notice that setup
     // has finished.
     let setup = wait_for_setup(&client, &workspace.id);
@@ -85,28 +85,28 @@ fn a_draft_an_answer_and_a_comment_being_written_are_kept_across_a_restart_and_e
 
     let drafted = client.session_draft(&session.id, &DraftToKeep::new("half a thought")).unwrap();
     let commented = client.workspace_comment_draft(&workspace.id, Some(&comment)).unwrap();
-    let answered = client.session_answer_draft(&session.id, Some(&answer)).unwrap();
+    let answered = client.session_decision_draft(&session.id, Some(&answer)).unwrap();
 
     assert_eq!(drafted.draft.text, "half a thought");
     assert_eq!(drafted.status, SessionStatus::Idle, "keeping a draft doesn't start the agent");
     assert_eq!(commented.comment_draft.as_ref(), Some(&comment));
-    assert_eq!(answered.answer_draft.as_ref(), Some(&answer));
+    assert_eq!(answered.decision_draft.as_ref(), Some(&answer));
     assert_eq!(answered.status, SessionStatus::Idle, "keeping an answer doesn't start the agent");
     wait_until("the feed to say what's typed", || draft_in(&feed, &session.id).as_deref() == Some("half a thought"));
     wait_until("the feed to say what's being written", || comment_in(&feed, &workspace.id).as_deref() == Some("why?"));
-    let answer_in = || feed.snapshot().session(&session.id).and_then(|s| s.answer_draft.clone());
+    let answer_in = || feed.snapshot().session(&session.id).and_then(|s| s.decision_draft.clone());
     wait_until("the feed to say what's typed in answer", || answer_in().as_ref() == Some(&answer));
     stack.kill_hub();
     stack.start_hub();
     let client = stack.client();
     let kept = client.session_get(&session.id).unwrap();
-    assert_eq!((kept.draft.text.as_str(), kept.answer_draft), ("half a thought", Some(answer)));
+    assert_eq!((kept.draft.text.as_str(), kept.decision_draft), ("half a thought", Some(answer)));
     let workspaces = client.workspace_list(false).unwrap();
     let kept = workspaces.into_iter().find(|w| w.id == workspace.id).unwrap();
     assert_eq!(kept.comment_draft, Some(comment));
     assert_eq!(client.session_draft(&session.id, &DraftToKeep::default()).unwrap().draft, Draft::default());
     assert_eq!(client.workspace_comment_draft(&workspace.id, None).unwrap().comment_draft, None);
-    assert_eq!(client.session_answer_draft(&session.id, None).unwrap().answer_draft, None);
+    assert_eq!(client.session_decision_draft(&session.id, None).unwrap().decision_draft, None);
 }
 
 #[test]

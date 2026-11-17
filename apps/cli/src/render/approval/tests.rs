@@ -1,27 +1,21 @@
 use client_core::{Answered, Approval};
-use protocol::capability::asking::QuestionAnswer;
+use protocol::capability::approvals::{Asks, Decision};
+use protocol::capability::asking::{Question, QuestionAnswer, QuestionOption};
 use protocol::capability::calls::Call;
-use protocol::capability::calls::call::{Edit, FilePatch, Patch, PatchChange, PatchHunk, Replace, Replaces};
-use protocol::event::{ApprovalOutcome, Asking, Question, QuestionOption, SessionEvent};
-use protocol::event::{HunkLine, LineMark};
-use protocol::fixtures::{ApprovalRequest, approval_request, typed_command, typed_request};
+use protocol::capability::calls::call::{Command, Edit, FilePatch, Patch, PatchChange, PatchHunk, Replace, Replaces};
+use protocol::event::{HunkLine, LineMark, SessionEvent};
+use protocol::fixtures::{ApprovalRequest, allow_once, approval_request, deny, question, typed_command, typed_request};
 use protocol::model::Seq;
 
 use super::{requested, resolved};
 
-fn event(tool: &str, asking: Asking) -> SessionEvent {
-    let body = ApprovalRequest { asking: Some(asking), ..approval_request("req_1", tool) };
-    protocol::fixtures::event(Seq::new(7), body.into())
+fn event(asks: Asks) -> SessionEvent {
+    protocol::fixtures::event(Seq::new(7), approval_request("req_1", asks).into())
 }
 
-/// A request to make `call`, which the request says is for `description`, if it says, in the form Claude's adapter
-/// asks in.
-fn asked_to(tool: &str, call: Call, description: Option<&str>) -> ApprovalRequest {
-    ApprovalRequest {
-        description: description.map(str::to_string),
-        asking: Some(Asking::ToolUse { typed: Some(call) }),
-        ..approval_request("req_1", tool)
-    }
+/// A request to make `call`.
+fn asked_to(call: Call) -> ApprovalRequest {
+    approval_request("req_1", Asks::Call { call })
 }
 
 fn lines(event: &SessionEvent) -> Vec<String> {
@@ -29,16 +23,14 @@ fn lines(event: &SessionEvent) -> Vec<String> {
 }
 
 fn colors() -> Question {
-    let red = QuestionOption { label: "Red".into(), description: Some("Warm".into()) };
-    let blue = QuestionOption { label: "Blue".into(), description: None };
-    Question { text: "Red or blue?".into(), header: Some("Color".into()), options: vec![red, blue], multiple: true }
+    let mut colors = Question { header: Some("Color".into()), ..question("Red or blue?", &["Red", "Blue"], true) };
+    colors.options[0] = QuestionOption { description: Some("Warm".into()), ..colors.options[0].clone() };
+    colors
 }
 
 #[test]
 fn a_question_prints_its_options_numbered_and_how_to_answer() {
-    let asking = Asking::Questions { questions: vec![colors()] };
-
-    let printed = lines(&event("AskUserQuestion", asking));
+    let printed = lines(&event(Asks::Questions { questions: vec![colors()] }));
 
     assert_eq!(
         printed,
@@ -54,10 +46,8 @@ fn a_question_prints_its_options_numbered_and_how_to_answer() {
 
 #[test]
 fn a_plan_prints_whole_and_a_tool_by_its_input() {
-    let plan = Asking::Plan { plan: "# Plan\n\n1. Read".into() };
-
-    let planned = lines(&event("ExitPlanMode", plan));
-    let tool = lines(&protocol::fixtures::event(Seq::new(7), asked_to("Bash", ls(), None).into()));
+    let planned = lines(&event(protocol::fixtures::plan("# Plan\n\n1. Read")));
+    let tool = lines(&protocol::fixtures::event(Seq::new(7), asked_to(ls()).into()));
 
     assert_eq!(
         planned,
@@ -72,12 +62,13 @@ fn ls() -> Call {
 
 #[test]
 fn a_tools_use_prints_its_command_whole_under_what_its_for_with_why_and_who_asks() {
-    let command = Call::Command(typed_command("D=\"$(cat path)\"\nrm -rf \"$D\""));
-    let asked = ApprovalRequest {
-        reason: Some("The target is only known once it runs".into()),
-        asked_by: Some("toolu_agent".into()),
-        ..asked_to("Bash", command, Some("Remove the scratch directory"))
+    let command = Command {
+        description: Some("Remove the scratch directory".into()),
+        ..typed_command("D=\"$(cat path)\"\nrm -rf \"$D\"")
     };
+    let mut asked = asked_to(Call::Command(command));
+    asked.request.why = Some("The target is only known once it runs".into());
+    asked.asked_by = Some("toolu_agent".into());
 
     let printed = lines(&protocol::fixtures::event(Seq::new(7), asked.into()));
 
@@ -98,15 +89,10 @@ fn a_tools_use_prints_its_command_whole_under_what_its_for_with_why_and_who_asks
 fn an_edit_prints_its_file_and_what_it_takes_out_and_puts_in() {
     let replace = Replace { old: "let a = 1;".into(), new: "let a = 2;\nlet b = 3;".into(), replaces: Replaces::One };
     let edit = Call::Edit(Edit { path: "src/lib.rs".into(), edits: vec![replace] });
-    let described = asked_to("Edit", edit, Some("Fix the numbers"));
-    let plain = ApprovalRequest { description: None, ..described.clone() };
 
-    let described = lines(&protocol::fixtures::event(Seq::new(7), described.into()));
-    let plain = lines(&protocol::fixtures::event(Seq::new(7), plain.into()));
+    let plain = lines(&protocol::fixtures::event(Seq::new(7), asked_to(edit).into()));
 
     let change = ["  - let a = 1;", "  + let a = 2;", "  + let b = 3;", "  roundhouse approve s req_1"];
-    assert_eq!(described[..2], ["APPROVAL NEEDED: Edit: Fix the numbers", "  file: src/lib.rs"]);
-    assert_eq!(described[2..], change);
     assert_eq!(plain[0], "APPROVAL NEEDED: Edit: src/lib.rs", "its file said once");
     assert_eq!(plain[1..], change);
 }
@@ -140,14 +126,14 @@ fn a_patch_prints_each_file_and_what_it_does_to_it() {
 
 #[test]
 fn what_was_answered_prints_by_question() {
-    let why = Question { text: "Why?".into(), header: None, options: Vec::new(), multiple: false };
+    let why = question("Why?", &[], false);
     let answers = vec![QuestionAnswer { picked: vec![0, 1], typed: None }, QuestionAnswer::default()];
+    let answer = Decision::Answer { answers: answers.clone() };
 
-    let printed = resolved("req_1", ApprovalOutcome::Allowed, Some(&Answered::ByPosition(answers)), &[colors(), why]);
-    let by_text = Answered::ByText([("Red or blue?".to_string(), "Teal".to_string())].into());
-    let unseen = resolved("req_1", ApprovalOutcome::Allowed, Some(&by_text), &[]);
+    let printed = resolved("req_1", Some(&answer), Some(&Answered(answers)), &[colors(), why]);
 
-    assert_eq!(printed, ["approval req_1 Allowed", "  Red or blue?: Red, Blue", "  Why?: not answered"]);
-    assert_eq!(unseen, ["approval req_1 Allowed", "  Red or blue?: Teal"], "one whose request this didn't print");
-    assert_eq!(resolved("req_1", ApprovalOutcome::Denied, None, &[colors()]), ["approval req_1 Denied"]);
+    assert_eq!(printed, ["approval req_1 Answered", "  Red or blue?: Red, Blue", "  Why?: not answered"]);
+    assert_eq!(resolved("req_1", Some(&deny(None)), None, &[colors()]), ["approval req_1 Denied"]);
+    assert_eq!(resolved("req_1", Some(&allow_once()), None, &[]), ["approval req_1 Allowed"]);
+    assert_eq!(resolved("req_1", None, None, &[]), ["approval req_1 Cancelled"], "nobody decided");
 }

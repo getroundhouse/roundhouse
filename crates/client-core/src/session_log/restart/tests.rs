@@ -15,16 +15,16 @@ fn waiting(seq: Seq) -> RecordedApprovals {
 
 /// The request `"a"` at `seq`, saying `note`, which tells one copy of it from another.
 fn asked(seq: Seq, note: &str) -> SessionEvent {
-    let mut request = fixtures::approval_request("a", "Bash");
-    request.description = Some(note.into());
+    let mut request = fixtures::approval_request("a", fixtures::to_run("ls"));
+    request.request.why = Some(note.into());
     event(seq, request.into())
 }
 
 /// What the open approvals say, one to each.
 fn notes(log: &SessionLog, recorded: &RecordedApprovals) -> Vec<String> {
     let note = |event: &&SessionEvent| {
-        let EventBody::ApprovalRequested { description, .. } = &event.body else { panic!("only requests are open") };
-        description.clone().unwrap_or_default()
+        let EventBody::ApprovalRequested { request, .. } = &event.body else { panic!("only requests are open") };
+        request.why.clone().unwrap_or_default()
     };
     log.open_approvals(Some(recorded)).iter().map(note).collect()
 }
