@@ -1,43 +1,27 @@
 //! What the app shows about updating itself. Only an app Velopack installed updates for real, so
-//! a failure here is made up, and a check finds a build that doesn't update.
+//! a failure here is made up, and a check finds a build that doesn't update. What the sidebar says of updating is
+//! the app's own, so a test of only that opens on a fake hub, with nothing in it. Restarting to update waits for
+//! what's on its way to a hub, so a test of that has a real one.
 
 #![cfg(test)]
 
+use client_core::fake_hub::World;
 use desktop::app::UpdateQuestion;
 use desktop::updates::{Kind, Problem};
 use gpui_kit::{App, Bounds, Pixels, TestAppContext};
 
 use crate::menus::{CHECK_FOR_UPDATES, choose};
-use crate::support::{Frozen, Stack, Ui};
+use crate::support::{FakeHub, Frozen, Stack, Ui, open_on_the_world};
 
-#[gpui_kit::test]
-fn a_failed_update_shows_in_the_sidebar(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = Ui::open(cx, &stack);
-    assert!(!ui.has("update-problem"));
-
-    let problem = Problem { kind: Kind::Unreachable, detail: "connection refused".to_string() };
-    ui.cx.update(|cx| desktop::updates::show_problem(problem, cx));
-
-    assert!(ui.has("update-problem"));
-}
-
-#[gpui_kit::test]
-fn a_check_under_way_shows_in_the_sidebar(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = Ui::open(cx, &stack);
-    assert!(!ui.has("checking-for-updates"));
-
-    ui.cx.update(desktop::updates::show_checking);
-
-    assert!(ui.has("checking-for-updates"));
+/// The window on a fake hub with nothing in it. The hub goes with the test, so it's returned to be kept.
+fn on_a_fake_hub(cx: &mut TestAppContext) -> (FakeHub, Ui<'_>) {
+    open_on_the_world(cx, World::default())
 }
 
 /// Over the build line, which stays, so its buttons are where they always are.
 #[gpui_kit::test]
 fn a_downloaded_update_shows_as_a_card_over_the_version(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = Ui::open(cx, &stack);
+    let (_fake, mut ui) = on_a_fake_hub(cx);
     assert!(ui.has("version"));
     assert!(!ui.has("update-card"));
 
@@ -47,14 +31,16 @@ fn a_downloaded_update_shows_as_a_card_over_the_version(cx: &mut TestAppContext)
     assert!(ui.bounds("update-card").bottom() <= ui.bounds("build-line").top());
 }
 
-/// Each takes the version's place, in a line that stays as tall, so nothing in the sidebar moves as a check starts
-/// and finishes. A long problem is cut short before the buttons, rather than pushing them along, which the gallery's
-/// pictures of one show.
+/// A check under way, what it found, and a failed update each show in the sidebar, and each takes the version's place,
+/// in a line that stays as tall, so nothing in the sidebar moves as a check starts and finishes. A long problem is cut
+/// short before the buttons, rather than pushing them along, which the gallery's pictures of one show.
 #[gpui_kit::test]
 fn what_a_check_says_takes_the_versions_place_without_moving_the_sidebar(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = Ui::open(cx, &stack);
+    let (_fake, mut ui) = on_a_fake_hub(cx);
     let at_rest = Places::of(&mut ui);
+    for id in ["checking-for-updates", "update-answer", "update-problem"] {
+        assert!(!ui.has(id), "{id} doesn't show before anything is said");
+    }
 
     in_the_versions_place(&mut ui, &at_rest, "checking-for-updates", desktop::updates::show_checking);
     in_the_versions_place(&mut ui, &at_rest, "update-answer", desktop::updates::show_up_to_date);
@@ -91,8 +77,7 @@ fn in_the_versions_place(ui: &mut Ui<'_>, at_rest: &Places, id: &'static str, sh
 /// As `Cmd-,` does. An assistive app finds it by its name, since it shows only a gear.
 #[gpui_kit::test]
 fn the_gear_opens_settings(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = Ui::open(cx, &stack);
+    let (_fake, mut ui) = on_a_fake_hub(cx);
     assert!(ui.shows_label("open-settings", "Settings"));
 
     ui.click("open-settings");
@@ -103,8 +88,7 @@ fn the_gear_opens_settings(cx: &mut TestAppContext) {
 /// As Check for Updates… in the menus does, here in a build that doesn't update, which says so.
 #[gpui_kit::test]
 fn check_for_updates_in_the_question_marks_menu_looks_now(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = Ui::open(cx, &stack);
+    let (_fake, mut ui) = on_a_fake_hub(cx);
     assert!(ui.shows_label("help", "Help"));
     assert!(!ui.has("update-answer"));
 
@@ -117,8 +101,7 @@ fn check_for_updates_in_the_question_marks_menu_looks_now(cx: &mut TestAppContex
 /// Each merge to `main` is the next version, so its history is the changelog until there's a page of one.
 #[gpui_kit::test]
 fn changelog_in_the_question_marks_menu_opens_the_history_of_main(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = Ui::open(cx, &stack);
+    let (_fake, mut ui) = on_a_fake_hub(cx);
 
     ui.click("help");
     ui.click_menu_item("Changelog");
@@ -310,8 +293,7 @@ fn restarting_to_update_with_nothing_typed_asks_nothing(cx: &mut TestAppContext)
 /// In the version's place, for a few seconds, rather than in an alert.
 #[gpui_kit::test]
 fn checking_for_updates_in_a_build_that_doesnt_update_says_so_in_the_sidebar(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = Ui::open(cx, &stack);
+    let (_fake, mut ui) = on_a_fake_hub(cx);
     assert!(!ui.has("update-answer"));
 
     choose(&mut ui, CHECK_FOR_UPDATES.0, CHECK_FOR_UPDATES.1);
@@ -323,8 +305,7 @@ fn checking_for_updates_in_a_build_that_doesnt_update_says_so_in_the_sidebar(cx:
 /// The sidebar already says why, which is the answer.
 #[gpui_kit::test]
 fn checking_for_updates_where_the_app_cant_update_adds_nothing_to_why(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = Ui::open(cx, &stack);
+    let (_fake, mut ui) = on_a_fake_hub(cx);
     let problem = Problem { kind: Kind::Translocated, detail: "/private/var/folders/AppTranslocation".to_string() };
     ui.cx.update(|cx| desktop::updates::show_problem(problem, cx));
 

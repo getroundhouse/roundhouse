@@ -1,15 +1,16 @@
 //! What a workspace says when agents can't push to its repository on GitHub as the default GitHub account, against a
-//! real hub that checks with a stand-in for GitHub. Every token is plainly made up.
+//! real hub that checks with a stand-in for GitHub, once from its check to the line, and against a fake hub that says
+//! what it found for the rest. Every token is plainly made up.
 
 #![cfg(test)]
 
+use client_core::fake_hub::{NOW_MS, World};
 use desktop::workspace_pane::{INSTALL_APP, OPEN_GIT};
 use gpui_kit::TestAppContext;
 use hub::{GithubAnswer, GithubScript};
-use protocol::client::github_apps::{GithubAppMake, GithubManifestCode};
-use protocol::model::GithubToken;
+use protocol::model::{GithubReach, GithubRepositoryName, GithubToken, InstalledApp, Reach, Rev, SessionStatus};
 
-use crate::support::{Stack, Ui, git};
+use crate::support::{Stack, Ui, git, open_on_the_world};
 
 const TOKEN: &str = "github_pat_made_up_for_a_test";
 
@@ -44,31 +45,30 @@ fn a_workspace_says_why_agents_cant_push_and_its_line_opens_git(cx: &mut TestApp
     assert!(!installs, "a token's line has no way to an app's page");
 }
 
-/// An app of your own's installation on adalabs, the default once the hub has made the app, refused `adalabs/app`,
-/// which the person didn't give it there, so the line has a way to GitHub's page for installing the app, where they
-/// do that. Nothing has been fetched from `origin`, as in the test above, so nothing reaches GitHub.
+/// An app of your own's installation on adalabs, the default, refused `adalabs/app`, which the person didn't give it
+/// there, so the line has a way to GitHub's page for installing the app, where they do that. Which installation the
+/// hub finds, and what it says of it, is the hub's own tests', `github_reach`'s among them, so this opens on a fake hub
+/// that says it.
 #[gpui_kit::test]
 fn an_installations_line_opens_where_its_app_is_installed(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let refused = GithubAnswer::git_says(403, "Permission to adalabs/app.git denied to ada-roundhouse[bot].");
-    let script = GithubScript {
-        conversions: vec![("a-code", GithubAnswer::app_made(9, "ada-roundhouse", (2, "adalabs")))],
-        named: vec![("ada-roundhouse[bot]", GithubAnswer::user(41, "ada-roundhouse[bot]", None))],
-        installations: vec![GithubAnswer::installations(&[(70, 2, "adalabs")])],
-        minted: vec![(70, vec![GithubAnswer::installation_token("ghs_made_up", "2099-01-01T00:00:00Z")])],
-        pushes: vec![("adalabs/app", vec![refused])],
-        ..GithubScript::default()
-    };
-    let _github = stack.start_hub_with_stand_in_github(script);
-    let repo = stack.repo();
-    git(&repo, &["remote", "add", "origin", "git@github.com:adalabs/app.git"]);
-    let client = stack.client();
-    client.call(GithubAppMake { code: GithubManifestCode::new("a-code") }).unwrap();
-    client.repo_add(repo.to_str().unwrap()).unwrap();
-    let mut ui = Ui::open(cx, &stack);
-    ui.wait("the repository", |ui| ui.view().records().repos().len() == 1);
+    let mut world = World::default();
+    let repo = world.repo("app");
+    let workspace = world.workspace(&repo, "ledger");
+    world.chat(&workspace, SessionStatus::Idle, Vec::new());
+    let bot = "ada-roundhouse[bot]";
+    let installation = Some(InstalledApp { slug: "ada-roundhouse".into(), on: "adalabs".into() });
+    let reason = format!("Permission to adalabs/app.git denied to {bot}.");
+    let repository = GithubRepositoryName::named("adalabs/app");
+    let reach = Reach::Refused { repository, username: bot.into(), reason, installation };
+    world.github_reach.push(GithubReach {
+        repo,
+        reach,
+        answered_at_ms: Some(NOW_MS),
+        stale: false,
+        rev: Rev::default(),
+    });
+    let (_fake, mut ui) = open_on_the_world(cx, world);
 
-    ui.new_workspace();
     ui.wait("the line saying so", |ui| ui.has(INSTALL_APP));
     ui.click(INSTALL_APP);
 

@@ -80,24 +80,37 @@ fn quit_from_the_menu(ui: &mut Ui<'_>) {
     choose(ui, QUIT.0, QUIT.1);
 }
 
+/// Quitting asks once, however often it's asked to quit while it waits or asks, and asks again after being told to keep
+/// working, rather than take that as the answer for good. Closing the window quits the app, so it asks as quitting
+/// does, and the window stays open while it asks. Each step follows the one before in one window, each waiting for a
+/// question only it asks, since the one before was answered.
 #[gpui_kit::test]
 fn quitting_asks_first_when_something_would_be_lost(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let mut ui = Ui::open_with_a_repository(cx, &stack);
+    let close = |ui: &mut Ui<'_>| VisualTestContext::from_window(ui.handle, ui.cx).simulate_close();
+    assert!(close(&mut ui), "with nothing to lose, it closes");
+    assert!(!ui.cx.has_pending_prompt(), "with nothing to lose, it doesn't ask");
     let _frozen = leave_something_in_the_dialog(&mut ui, &stack);
 
-    quit_from_the_menu(&mut ui);
-
+    // Twice before anything runs, so the second comes as the first waits, and again from the menu as it asks.
+    ui.cx.update(|cx| {
+        cx.dispatch_action(&desktop::Quit);
+        cx.dispatch_action(&desktop::Quit);
+    });
     ui.wait("the question", |ui| ui.cx.has_pending_prompt());
+    quit_from_the_menu(&mut ui);
     let (title, detail) = ui.cx.pending_prompt().unwrap();
     assert_eq!(title, "Quit Roundhouse?");
     assert_eq!(detail, "Something in 1 chat hasn't been sent, and quitting loses it.");
     ui.cx.simulate_prompt_answer("Keep working");
     ui.frame();
+    assert!(!ui.cx.has_pending_prompt(), "it asked more than once");
     assert_eq!(ui.view().quitting, Quitting::No);
-    // Asked again, rather than taken as already answered.
-    quit_from_the_menu(&mut ui);
-    ui.wait("the question again", |ui| ui.cx.has_pending_prompt());
+
+    assert!(!close(&mut ui), "it stays open to ask");
+
+    ui.wait("the question again, rather than the answer taken as given", |ui| ui.cx.has_pending_prompt());
     ui.cx.simulate_prompt_answer("Quit");
     ui.wait("quitting", |ui| ui.view().quitting == Quitting::Quit);
 }
@@ -141,23 +154,6 @@ fn quitting_asks_about_whats_typed_once_the_hub_has_had_long_enough_to_take_it(c
     ui.wait("the question", |ui| ui.cx.has_pending_prompt());
     let (_, detail) = ui.cx.pending_prompt().unwrap();
     assert_eq!(detail, "Something in 1 chat hasn't been sent, and quitting loses it.");
-}
-
-/// Closing the window quits the app, so it asks as quitting does, and the window stays open while it asks.
-#[gpui_kit::test]
-fn closing_the_window_asks_first_only_when_something_would_be_lost(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = Ui::open_with_a_repository(cx, &stack);
-    let close = |ui: &mut Ui<'_>| VisualTestContext::from_window(ui.handle, ui.cx).simulate_close();
-    assert!(close(&mut ui), "with nothing to lose, it closes");
-    assert!(!ui.cx.has_pending_prompt());
-    let _frozen = leave_something_in_the_dialog(&mut ui, &stack);
-
-    assert!(!close(&mut ui), "it stays open to ask");
-
-    ui.wait("the question", |ui| ui.cx.has_pending_prompt());
-    ui.cx.simulate_prompt_answer("Quit");
-    ui.wait("quitting", |ui| ui.view().quitting == Quitting::Quit);
 }
 
 /// Sends a prompt while the hub doesn't answer, so it's still on its way.
@@ -219,23 +215,4 @@ fn quitting_asks_about_a_prompt_the_hub_hasnt_taken_in_time(cx: &mut TestAppCont
     ui.wait("the question", |ui| ui.cx.has_pending_prompt());
     let (_, detail) = ui.cx.pending_prompt().unwrap();
     assert_eq!(detail, "Something in 1 chat hasn't been sent, and quitting loses it.");
-}
-
-#[gpui_kit::test]
-fn quitting_again_while_it_waits_or_asks_doesnt_ask_twice(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = Ui::open_with_a_repository(cx, &stack);
-    let _frozen = leave_something_in_the_dialog(&mut ui, &stack);
-
-    // Twice before anything runs, so the second comes as the first waits.
-    ui.cx.update(|cx| {
-        cx.dispatch_action(&desktop::Quit);
-        cx.dispatch_action(&desktop::Quit);
-    });
-    ui.wait("the question", |ui| ui.cx.has_pending_prompt());
-    quit_from_the_menu(&mut ui);
-    ui.cx.simulate_prompt_answer("Keep working");
-    ui.frame();
-
-    assert!(!ui.cx.has_pending_prompt(), "it asked more than once");
 }
