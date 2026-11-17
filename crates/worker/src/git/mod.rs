@@ -18,7 +18,6 @@ pub(crate) mod files;
 mod making;
 mod names;
 mod pull_request;
-pub(crate) mod remote_pull_requests;
 mod removal;
 mod repo_url;
 #[cfg(test)]

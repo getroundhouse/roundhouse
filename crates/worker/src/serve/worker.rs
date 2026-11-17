@@ -281,11 +281,6 @@ pub(super) async fn handle(
         }
         WorkerRequest::WatchBranches(asked) => worktrees::watch_branches(state, asked.path, Whose::Own).await,
         WorkerRequest::WatchChildBranches(asked) => worktrees::watch_branches(state, asked.path, Whose::Child).await,
-        WorkerRequest::ReadRemotePullRequests(asked) => {
-            let (path, repository) = (&asked.path, asked.repository);
-            let snapshot = git::remote_pull_requests::read(&given, path, repository, &asked.pull_requests).await;
-            Ok(WorkerResponse::RemotePullRequests(snapshot))
-        }
         WorkerRequest::GithubRateLimit(asked) => {
             Ok(WorkerResponse::GithubRateLimit(git::rate_limit(&given, &asked.path).await?))
         }
