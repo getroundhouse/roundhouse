@@ -40,17 +40,24 @@ fn a_reply_shows_all_of_itself_once_it_is_recorded_however_its_end_arrived(cx: &
     let mut ui = Ui::open(cx, &stack);
     ui.wait("the workspace", |ui| ui.transcript().is_some());
     let transcript = ui.transcript().unwrap();
-    stack.client().session_prompt(&session, "slow:6:word", None).unwrap();
+    let done = Gate::new(&stack, "done");
+    stack.client().session_prompt(&session, &format!("slow-until:{done}:word"), None).unwrap();
     // Drawn, rather than only in the session's log, which a thread of its own fills ahead of what the app has drawn.
     ui.wait("the start of the reply to be drawn", |ui| {
         ui.cx.read_entity(&transcript, |t, _| t.kept_texts()).iter().any(|kept| kept.contains("word0"))
     });
+    // The chunks the agent has gone on from, and the one it may be saying, come before this one, so the app hasn't
+    // drawn it.
+    let said = done.said();
+    let undrawn = format!("word{}", said + 1);
 
-    // The app doesn't run while this waits, so it takes in the rest of the reply and its record in one go. The hub
+    // The app doesn't run while these wait, so it takes in the rest of the reply and its record in one go. The hub
     // sends the end of the stream as soon as it's written, and the record once it's stored, so the turn is over
     // only once the app's log, which a thread of its own fills, holds the record too.
+    wait_until("the agent to have said what the app hasn't drawn", || done.said() > said + 1);
+    done.open();
     wait_for_the_whole_turn(&stack, &ui, &session);
-    ui.wait_idle_with("the recorded reply", |text| text.contains("word5"));
+    ui.wait_idle_with("the recorded reply", |text| text.contains(&undrawn));
     ui.settle(Duration::from_millis(16));
 
     let reply = ui.assistant_text();
@@ -152,7 +159,7 @@ fn the_stop_button_stops_the_turn(cx: &mut TestAppContext) {
     let mut ui = Ui::open(cx, &stack);
     ui.wait("the repository", |ui| ui.view().records().repos().len() == 1);
     ui.new_workspace();
-    ui.input("say:go; hang:60000");
+    ui.input("say:go; hang");
     ui.press("enter");
     ui.wait("the agent to start", |ui| ui.assistant_text().contains("go"));
     ui.wait("the Stop button", |ui| {

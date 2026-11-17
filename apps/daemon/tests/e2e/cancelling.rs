@@ -14,7 +14,7 @@ fn cancelling_stops_the_turn_and_keeps_the_session_usable() {
     let stack = Stack::start();
     let client = stack.client();
     let (_, session) = stack.workspace(&client);
-    client.session_prompt(&session.id, "hang:60000", None).unwrap();
+    client.session_prompt(&session.id, "hang", None).unwrap();
     wait_until("the tool to start", || {
         read_all(&client, &session.id).iter().any(|e| matches!(e.body, EventBody::Assistant { .. }))
     });

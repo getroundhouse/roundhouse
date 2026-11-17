@@ -1,13 +1,13 @@
 //! How the commands that work until a file a test makes exists, `slow-until`, `think-until`, `hang-until`,
-//! `request-until` and `agent-until`, wait on it, and the tool `hang:MS` runs for a time as `hang-until` does until
-//! then. While one waits on a file, a prompt that reaches the agent makes `FILE.prompted` once it's queued to be taken
-//! into the turn, so a test can wait for that before making FILE. A prompt the hub has recorded may not have reached
-//! the agent yet, since the hub sends it on after.
+//! `request-until`, `agent-until` and `agent-foreground-until`, wait on it, and how the tool `hang` runs until the turn
+//! is interrupted. While one waits on a file, a prompt that reaches the agent makes `FILE.prompted` once it's queued to
+//! be taken into the turn, so a test can wait for that before making FILE. A prompt the hub has recorded may not have
+//! reached the agent yet, since the hub sends it on after.
 
 use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::Receiver;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use parking_lot::Mutex;
 
@@ -17,8 +17,8 @@ use crate::{Input, Prompt, pause};
 /// The file a command waits on, while it does.
 static WAITING_ON: Mutex<Option<PathBuf>> = Mutex::new(None);
 
-/// How often [`hang`] looks again.
-const HANG_POLL: Duration = Duration::from_millis(50);
+/// How often [`pause_until`] looks again.
+const POLL: Duration = Duration::from_millis(20);
 
 /// The file a command waits on, which says the command waits on it for as long as it's held.
 pub(crate) struct WaitingOn(PathBuf);
@@ -65,16 +65,20 @@ pub(crate) fn until(file_and_text: &str) -> impl Iterator<Item = String> + use<>
     })
 }
 
-/// A tool that runs until `done` says, given how long it has run. Returns true if the turn was interrupted.
+/// A tool that runs until `file` exists, or with none, until the turn is interrupted. Returns true if it was.
 pub(crate) fn hang(
     turn: &mut Turn,
-    done: impl Fn(Duration) -> bool,
+    file: Option<&Path>,
     rx: &Receiver<Input>,
     queued: &mut VecDeque<Prompt>,
     eof: &mut bool,
 ) -> bool {
     let tool_use_id = turn.tool_use("hang");
-    if pause_until(done, rx, queued, eof) {
+    let interrupted = match file {
+        Some(file) => pause_until_made(file, rx, queued, eof),
+        None => pause_until(|| false, rx, queued, eof),
+    };
+    if interrupted {
         turn.tool_result(&tool_use_id, "stopped", true);
         return true;
     }
@@ -82,17 +86,23 @@ pub(crate) fn hang(
     false
 }
 
-/// Waits, saying nothing, until `done` says, given how long it has waited, as a tool does while it runs, or a request
-/// while its answer comes. Returns true if the turn was interrupted first.
-pub(crate) fn pause_until(
-    done: impl Fn(Duration) -> bool,
+/// Waits until `file` exists, saying nothing, as a tool does while it runs, or a request while its answer comes, and
+/// says when a prompt has reached the agent meanwhile. Returns true if the turn was interrupted first.
+pub(crate) fn pause_until_made(
+    file: &Path,
     rx: &Receiver<Input>,
     queued: &mut VecDeque<Prompt>,
     eof: &mut bool,
 ) -> bool {
-    let started = Instant::now();
-    while !done(started.elapsed()) {
-        if pause(rx, HANG_POLL, queued, eof) {
+    let waiting = WaitingOn::file(file);
+    pause_until(|| waiting.made(), rx, queued, eof)
+}
+
+/// Waits until `done` says. Input closing doesn't end it, as it doesn't end the real CLI's tool, which the CLI waits
+/// for before it finishes its turn and exits. Returns true if the turn was interrupted first.
+fn pause_until(done: impl Fn() -> bool, rx: &Receiver<Input>, queued: &mut VecDeque<Prompt>, eof: &mut bool) -> bool {
+    while !done() {
+        if pause(rx, POLL, queued, eof) {
             return true;
         }
     }

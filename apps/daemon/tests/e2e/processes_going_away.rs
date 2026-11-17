@@ -62,7 +62,7 @@ fn a_worker_crash_is_reported_and_the_next_prompt_gets_a_new_worker() {
     let stack = Stack::start();
     let client = stack.client();
     let (_, session) = stack.workspace(&client);
-    client.session_prompt(&session.id, "hang:60000", None).unwrap();
+    client.session_prompt(&session.id, "hang", None).unwrap();
     let mut agent_pid = None;
     wait_until("the agent to start", || {
         agent_pid = read_all(&client, &session.id).iter().find_map(|e| match &e.body {
@@ -173,7 +173,7 @@ fn killing_the_hub_and_worker_together_cannot_lead_to_two_agents() {
     let mut stack = Stack::start();
     let client = stack.client();
     let (_, session) = stack.workspace(&client);
-    client.session_prompt(&session.id, "say:first; hang:60000", None).unwrap();
+    client.session_prompt(&session.id, "say:first; hang", None).unwrap();
     let mut agent_pid = 0;
     wait_until("the tool to start", || {
         let events = read_all(&client, &session.id);
@@ -200,7 +200,7 @@ fn the_next_hub_ends_a_worker_the_last_one_left_still_stopping() {
     let client = stack.client();
     let (workspace, session) = stack.workspace(&client);
     let go = stack.path("late-output");
-    client.session_prompt(&session.id, &format!("say:first; late:{}:ghost; hang:60000", go.display()), None).unwrap();
+    client.session_prompt(&session.id, &format!("say:first; late:{}:ghost; hang", go.display()), None).unwrap();
     let mut agent_pid = 0;
     wait_until("the tool to start", || {
         let events = read_all(&client, &session.id);
@@ -262,7 +262,7 @@ fn an_exit_reported_late_cannot_be_mistaken_for_the_agent_that_replaced_it() {
     // agent leaves text streaming, which the old one's exit mustn't clear.
     let subscription = client.session_subscribe(&session.id, Seq::new(1)).unwrap();
     let mut follower = Follower::default();
-    client.session_prompt(&session.id, "partial:still writing; hang:60000", None).unwrap();
+    client.session_prompt(&session.id, "partial:still writing; hang", None).unwrap();
     follower.drain_until(&subscription, "the new agent's text", |f| f.tail_text().contains("still writing"));
     let late = |events: &[SessionEvent]| {
         events.iter().any(|e| matches!(&e.body, EventBody::AgentOther { kind, .. } if kind == "late_marker"))
@@ -333,7 +333,7 @@ fn a_prompt_sent_as_the_agent_dies_is_delivered_to_a_new_one() {
     }
 
     // The hub must still know about the agent it's on now, so losing it is noticed.
-    client.session_prompt(&session.id, "hang:60000", None).unwrap();
+    client.session_prompt(&session.id, "hang", None).unwrap();
     wait_until("the tool to start", || read_all(&client, &session.id).len() > seen + 2);
     let agent_pid = latest_started_pid(&read_all(&client, &session.id)).unwrap();
     signal(parent_of(agent_pid), libc::SIGKILL);

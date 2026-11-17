@@ -48,7 +48,7 @@ pub(super) fn typing<'a>(cx: &'a mut TestAppContext, stack: &Stack, typed: &str)
 
 /// Opens a workspace and has its agent think, then answer.
 fn after_thinking<'a>(cx: &'a mut TestAppContext, stack: &Stack) -> Ui<'a> {
-    let mut ui = typing(cx, stack, "think:2:pondering; say:first answer");
+    let mut ui = typing(cx, stack, "ponder:1:1; say:first answer");
     ui.press("enter");
     ui.wait_idle_with("the answer", |text| text.contains("first answer"));
     ui
@@ -178,7 +178,7 @@ fn thinking_closed_by_hand_stays_closed_while_new_thinking_opens(cx: &mut TestAp
 
     click_thinking(&mut ui, 0);
     assert_eq!(thinking_open(&mut ui), [false]);
-    stack.client().session_prompt(&ui.active_chat(), "think:2:again; say:second answer", None).unwrap();
+    stack.client().session_prompt(&ui.active_chat(), "ponder:1:2; say:second answer", None).unwrap();
     ui.wait_idle_with("the second answer", |text| text.contains("second answer"));
 
     assert_eq!(thinking_open(&mut ui), [false, true], "only the new thinking is open");

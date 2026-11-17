@@ -337,7 +337,7 @@ fn a_subagent_s_call_opened_while_it_works_makes_room_for_its_report(cx: &mut Te
     let done = Gate::new(&stack, "done");
     ui.paste_text(&format!("agent-until:{done}:Look around; tool:echo after; say:done"));
     ui.press("enter");
-    // The background line has the same label. Open the only call before releasing the subagent's work.
+    // The background line has the same label. Open the only call while the subagent is still writing its report.
     ui.wait("the subagent's call", |ui| ui.shown("call/").len() == 1);
     let call = ui.shown("call/").remove(0);
     ui.click(call);

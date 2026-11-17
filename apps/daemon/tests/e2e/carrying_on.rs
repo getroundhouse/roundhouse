@@ -13,7 +13,7 @@ use protocol::worker::{WorkerFrame, WorkerOutcome, WorkerRequest, WorkerResponse
 use crate::attaching::Attached;
 
 use crate::support::{
-    self, Follower, Stack, assert_gapless, assistant_text, commit_settings, is_alive, pending_approval, read_all,
+    self, Follower, Gate, Stack, assert_gapless, assistant_text, commit_settings, is_alive, pending_approval, read_all,
     started_pid, wait_for_approval, wait_for_setup, wait_for_turn_end, wait_until,
 };
 
@@ -106,7 +106,8 @@ fn a_hub_crash_leaves_the_agent_running_and_the_next_hub_carries_on_with_it() {
     let mut stack = Stack::start();
     let client = stack.client();
     let (_, session) = stack.workspace(&client);
-    client.session_prompt(&session.id, "say:before; hang:1500; say:after", None).unwrap();
+    let tool = Gate::new(&stack, "tool");
+    client.session_prompt(&session.id, &format!("say:before; hang-until:{tool}; say:after"), None).unwrap();
     // The hub may go before saying it has recorded this, so the next hub may hear it again.
     wait_until("the agent to start its tool", || assistant_text(&read_all(&client, &session.id)) == "before");
     let agent = started_pid(&read_all(&client, &session.id)).unwrap();
@@ -117,6 +118,9 @@ fn a_hub_crash_leaves_the_agent_running_and_the_next_hub_carries_on_with_it() {
     stack.start_hub();
 
     let client = stack.client();
+    // The rest of the turn comes once the next hub has the worker back, so it's that hub that carries on with it.
+    wait_until("the next hub to have the worker", || client.hub_status().unwrap().workers == 1);
+    tool.open();
     let events = wait_for_turn_end(&client, &session.id, 1);
     assert_one_agent_said_it_all_once(&events, "beforeafter");
     // The same agent takes the next prompt.
@@ -251,7 +255,7 @@ fn a_signal_while_a_restart_waits_for_a_setup_script_stops_the_agents() {
 fn an_agent_at_work_while_a_restart_waits(stack: &Stack) -> u32 {
     let client = stack.client();
     let (workspace, session) = stack.workspace(&client);
-    client.session_prompt(&session.id, "say:before; hang:60000", None).unwrap();
+    client.session_prompt(&session.id, "say:before; hang", None).unwrap();
     wait_until("the agent to start its tool", || assistant_text(&read_all(&client, &session.id)) == "before");
     let agent = started_pid(&read_all(&client, &session.id)).unwrap();
     commit_settings(stack, "[scripts]\nsetup = \"sleep 30\"\n");

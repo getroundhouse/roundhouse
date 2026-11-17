@@ -11,7 +11,7 @@ use protocol::event::{ContentBlock, EventBody, SessionEvent, TaskKind, TaskOutco
 use protocol::model::{ModelName, Place, SessionId, Subagent, SubagentId, SubagentStatus, ToolUseId};
 use protocol::tail::Tail;
 
-use crate::support::{Follower, Stack, TIMEOUT, read_all, wait_for_turn_end, wait_until};
+use crate::support::{Follower, Gate, Stack, TIMEOUT, read_all, wait_for_turn_end, wait_until};
 
 /// The call that started the subagent, once it's in the log.
 fn subagent_call(client: &Client, session_id: &SessionId) -> ToolUseId {
@@ -65,7 +65,8 @@ fn the_agents_own_events_and_a_subagents_are_read_and_followed_apart() {
     let stack = Stack::start();
     let client = stack.client();
     let (_, session) = stack.workspace(&client);
-    client.session_prompt(&session.id, "agent:Look around", None).unwrap();
+    let report = Gate::new(&stack, "report");
+    client.session_prompt(&session.id, &format!("agent-until:{report}:Look around"), None).unwrap();
     let (call, id) = subagent(&client, &session.id);
     let (own, subagent) = (client.session_subscribe_places(&session.id, None, Place::new(1)).unwrap(), {
         client.session_subscribe_places(&session.id, Some(&id), Place::new(1)).unwrap()
@@ -73,6 +74,7 @@ fn the_agents_own_events_and_a_subagents_are_read_and_followed_apart() {
     let (mut agent, mut work) = (Follower::default(), Follower::default());
 
     work.drain_until(&subagent, "the subagent to write", |work| work.tail_text().contains("There's"));
+    report.open();
     work.drain_until(&subagent, "the subagent's report", reported);
     wait_for_turn_end(&client, &session.id, 1);
     let (read, last) = client.session_read_places(&session.id, None, Place::new(1), 1000).unwrap();
@@ -128,7 +130,9 @@ fn a_follower_that_joins_as_a_subagent_writes_starts_from_only_what_it_follows()
     let stack = Stack::start();
     let client = stack.client();
     let (_, session) = stack.workspace(&client);
-    client.session_prompt(&session.id, "agent:Look around", None).unwrap();
+    // Held as it writes for as long as the test runs.
+    let report = Gate::new(&stack, "report");
+    client.session_prompt(&session.id, &format!("agent-until:{report}:Look around"), None).unwrap();
     let (_, id) = subagent(&client, &session.id);
     let first = client.session_subscribe_places(&session.id, Some(&id), Place::new(1)).unwrap();
     Follower::default().drain_until(&first, "the subagent to write", |work| work.tail_text().contains("There's"));
@@ -148,7 +152,8 @@ fn a_subagent_in_the_foreground_cut_off_as_it_writes_leaves_its_follower_nothing
     let stack = Stack::start();
     let client = stack.client();
     let (_, session) = stack.workspace(&client);
-    client.session_prompt(&session.id, "agent-foreground:Look around", None).unwrap();
+    let report = Gate::new(&stack, "report");
+    client.session_prompt(&session.id, &format!("agent-foreground-until:{report}:Look around"), None).unwrap();
     let (_, id) = subagent(&client, &session.id);
     let subagent = client.session_subscribe_places(&session.id, Some(&id), Place::new(1)).unwrap();
     let mut work = Follower::default();
@@ -200,7 +205,7 @@ fn the_hub_keeps_a_record_of_each_subagent_and_says_on_the_feed_as_it_changes() 
     let client = stack.client();
     let (_, session) = stack.workspace(&client);
     let feed = client.feed_subscribe().unwrap();
-    client.session_prompt(&session.id, "agent:Look around", None).unwrap();
+    client.session_prompt(&session.id, "agent-calls:1:Look around", None).unwrap();
     let call = subagent_call(&client, &session.id);
 
     let deadline = Instant::now() + TIMEOUT;
@@ -269,7 +274,7 @@ fn a_view_holds_only_the_agents_own_events_or_one_subagents_and_the_feed_keeps_t
     let client = stack.client();
     let (_, session) = stack.workspace(&client);
     let feed = RecordsFeed::start(&client);
-    client.session_prompt(&session.id, "agent:Look around", None).unwrap();
+    client.session_prompt(&session.id, "agent-calls:1:Look around", None).unwrap();
     let (_, id) = subagent(&client, &session.id);
 
     let own = OpenSession::start_view(&client, &session, View::Own);

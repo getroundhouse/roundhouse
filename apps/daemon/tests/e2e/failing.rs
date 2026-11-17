@@ -7,16 +7,19 @@ use protocol::event::{Again, EventBody, FailureKind, SessionEvent, TurnOutcome};
 use protocol::model::{ClientMessageId, SessionStatus};
 
 use crate::steering::wait_for_tool;
-use crate::support::{Stack, assistant_text, read_all, wait_for_status, wait_for_turn_end, wait_until};
+use crate::support::{Gate, Stack, assistant_text, read_all, wait_for_status, wait_for_turn_end, wait_until};
 
 #[test]
 fn a_turn_that_fails_on_a_request_stops_the_chat_short_and_holds_its_queue_until_the_person_sends_something() {
     let stack = Stack::start();
     let client = stack.client();
     let (_, session) = stack.workspace(&client);
-    client.session_prompt(&session.id, "hang:1000; fail:rate_limit", None).unwrap();
+    let tool = Gate::new(&stack, "tool");
+    client.session_prompt(&session.id, &format!("hang-until:{tool}; fail:rate_limit"), None).unwrap();
     wait_for_tool(&client, &session.id);
     client.session_queue(&session.id, ClientMessageId::from("q1"), "say:queued").unwrap();
+    // Queued with the hub, which holds it until the turn ends, so it never reaches the agent meanwhile.
+    tool.open();
 
     let events = wait_for_turn_end(&client, &session.id, 1);
     wait_for_status(&client, &session.id, SessionStatus::Idle);

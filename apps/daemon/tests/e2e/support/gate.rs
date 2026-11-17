@@ -8,8 +8,8 @@ use std::path::PathBuf;
 
 use super::{Stack, wait_until};
 
-/// What the fake agent's `slow-until:`, `think-until:`, `hang-until:`, `request-until:` and `agent-until:` work until,
-/// put in a script as its path. Their work ends once it's opened.
+/// What the fake agent's `slow-until:`, `think-until:`, `hang-until:`, `request-until:`, `agent-until:` and
+/// `agent-foreground-until:` work until, put in a script as its path. Their work ends once it's opened.
 pub(crate) struct Gate(PathBuf);
 
 impl Gate {
@@ -32,6 +32,12 @@ impl Gate {
     pub(crate) fn open_once_the_agent_has_a_prompt(&self) {
         self.wait_for_a_prompt();
         self.open();
+    }
+
+    /// How many chunks `slow-until:` or `think-until:` has said and gone on from, which the fake agent counts beside
+    /// the gate, so a test waits for it to have said more rather than for a time.
+    pub(crate) fn said(&self) -> usize {
+        std::fs::read_to_string(format!("{}.said", self.0.display())).map_or(0, |said| said.lines().count())
     }
 }
 

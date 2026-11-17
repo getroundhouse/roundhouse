@@ -152,8 +152,8 @@ fn a_queued_prompt_needs_text_or_files_and_files_the_session_has() {
     let stack = Stack::start();
     let client = stack.client();
     let (_, session) = stack.workspace(&client);
-    // Long enough that nothing queued here is sent before the end.
-    client.session_prompt(&session.id, "hang:20000", None).unwrap();
+    // Until the turn is stopped, so nothing queued here is sent before the end.
+    client.session_prompt(&session.id, "hang", None).unwrap();
     wait_for_tool(&client, &session.id);
     let shot = client.attachment_add(&session.id, &"a1".into(), "shot.png", MediaType::Png, png(64)).unwrap();
 
@@ -173,7 +173,7 @@ fn prompts_are_queued_in_the_order_they_were_written_though_the_first_is_still_a
     let stack = Stack::start();
     let client = stack.client();
     let (_, session) = stack.workspace(&client);
-    client.session_prompt(&session.id, "hang:20000", None).unwrap();
+    client.session_prompt(&session.id, "hang", None).unwrap();
     wait_for_tool(&client, &session.id);
     // Big enough to take far longer to add than a prompt with nothing to add takes to queue.
     let big = FileToSend::checked("big.log", MediaType::Text, vec![b'a'; 40 << 20]).unwrap();
@@ -206,7 +206,7 @@ fn a_stopped_turn_holds_the_queue_until_another_turn_ends() {
     let stack = Stack::start();
     let client = stack.client();
     let (_, session) = stack.workspace(&client);
-    client.session_prompt(&session.id, "hang:20000", None).unwrap();
+    client.session_prompt(&session.id, "hang", None).unwrap();
     wait_for_tool(&client, &session.id);
     queue(&client, &session.id, "q1", "say:held");
 
@@ -242,7 +242,7 @@ fn a_stopped_queue_stays_held_through_a_restart_until_the_person_sends_from_it()
     let mut stack = Stack::start();
     let client = stack.client();
     let (_, session) = stack.workspace(&client);
-    client.session_prompt(&session.id, "hang:20000", None).unwrap();
+    client.session_prompt(&session.id, "hang", None).unwrap();
     wait_for_tool(&client, &session.id);
     queue(&client, &session.id, "q1", "say:first in line");
     queue(&client, &session.id, "q2", "say:sent from the queue");
@@ -265,7 +265,7 @@ fn a_queue_whose_agent_went_away_mid_turn_is_held_and_sending_from_it_resumes_th
     let mut stack = Stack::start();
     let client = stack.client();
     let (_, session) = stack.workspace(&client);
-    client.session_prompt(&session.id, "hang:20000", None).unwrap();
+    client.session_prompt(&session.id, "hang", None).unwrap();
     wait_for_tool(&client, &session.id);
     queue(&client, &session.id, "q1", "say:first in line");
     queue(&client, &session.id, "q2", "say:sent from the queue");

@@ -123,7 +123,7 @@ fn a_chat_is_put_on_the_default_as_it_first_launches_and_stays_on_it_when_anothe
     let before = on(&client, &fresh);
     let feed = client.feed_subscribe().unwrap();
 
-    client.session_prompt(&fresh, "hang:60000", None).unwrap();
+    client.session_prompt(&fresh, "hang", None).unwrap();
     let announced = announced_on(&feed, &fresh);
     client.session_cancel(&fresh).unwrap();
     client.account_set_default(AgentKind::Claude, &chat.personal.id).unwrap();
@@ -189,7 +189,7 @@ fn a_chat_moved_to_the_account_its_on_keeps_its_agent() {
 fn moving_a_chat_whose_agent_is_at_work_needs_force_and_leaves_it_stopped_short() {
     let chat = TwoAccounts::start();
     let client = chat.client();
-    client.session_prompt(&chat.session, "hang:60000", None).unwrap();
+    client.session_prompt(&chat.session, "hang", None).unwrap();
     wait_until("the long tool to start", || {
         read_all(&client, &chat.session).iter().filter(|e| matches!(e.body, EventBody::Assistant { .. })).count() > 1
     });

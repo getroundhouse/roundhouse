@@ -1,97 +1,51 @@
 //! A subagent, started in the background as the real CLI starts one: the call's result only says it started, and
 //! the subagent's own calls and report come later, naming the call as their parent. It makes one call, or as many as
-//! it's asked for, for a subagent tab long enough to scroll. Its report streams in a few pieces, so a test can see
-//! what it's writing, and cut it off. The CLI's word on the task it runs as comes around that, as the real CLI's does:
-//! that it started, after the calls, how many tokens it's using, after each of its own calls, and that it finished,
-//! after its report, with the count then. In the background, its task is listed the line before it starts, and left
-//! out after it finishes. Its work is part of the turn here, so stopping the turn ends it, and the list leaves it out
-//! then too, though the real CLI's would carry on. One in the foreground is the same, but for the call's result, which
-//! comes last, with the report, and it isn't listed.
+//! it's asked for, for a subagent tab long enough to scroll. Its report streams in a few pieces, and one that works
+//! until a file exists writes the first and holds the rest until then, so a test can see what it's writing, and cut it
+//! off. The CLI's word on the task it runs as comes around that, as the real CLI's does: that it started, after the
+//! calls, how many tokens it's using, after each of its own calls, and that it finished, after its report, with the
+//! count then. In the background, its task is listed the line before it starts, and left out after it finishes. Its
+//! work is part of the turn here, so stopping the turn ends it, and the list leaves it out then too, though the real
+//! CLI's would carry on. One in the foreground is the same, but for the call's result, which comes last, with the
+//! report, and it isn't listed.
 
 use std::collections::VecDeque;
 use std::path::Path;
 use std::sync::mpsc::Receiver;
-use std::time::Duration;
 
 use serde_json::json;
 
 use crate::turn::{Block, Turn, Within};
-use crate::waiting::WaitingOn;
-use crate::{Input, Prompt, background, emit, pause};
-
-/// How long a subagent takes before its work arrives, so a test can open its call first.
-const WORKS_FOR: Duration = Duration::from_millis(1000);
-
-/// Between the pieces of its report, so a test can catch it part way.
-const WRITES_EVERY: Duration = Duration::from_millis(200);
+use crate::waiting::pause_until_made;
+use crate::{Input, Prompt, background, emit};
 
 /// How many tokens each of its calls adds to what the CLI says it's using, and its report on top of them.
 const TOKENS_A_CALL: usize = 1_200;
 const TOKENS_TO_REPORT: usize = 300;
-
-/// How often one that works until a file exists looks for it.
-const POLL: Duration = Duration::from_millis(20);
 
 /// The subagent a command asks for.
 pub(crate) struct Asked<'a> {
     description: &'a str,
     in_background: bool,
     calls: usize,
-    pace: Pace<'a>,
-}
-
-/// How long a subagent works before its work arrives, and how its report is written.
-#[derive(Clone, Copy)]
-enum Pace<'a> {
-    /// For [`WORKS_FOR`], and its report in pieces [`WRITES_EVERY`].
-    Timed,
-    /// Until the file exists, and its report as [`Pace::Timed`]'s is.
-    Until(&'a Path),
-    /// Not at all, and its report at once.
-    AtOnce,
-}
-
-impl Pace<'_> {
-    /// Waits as this says before the subagent's work arrives. Whether the turn was interrupted meanwhile.
-    fn works(self, rx: &Receiver<Input>, queued: &mut VecDeque<Prompt>, eof: &mut bool) -> bool {
-        match self {
-            Pace::Timed => pause(rx, WORKS_FOR, queued, eof),
-            Pace::Until(file) => {
-                let waiting = WaitingOn::file(file);
-                while !waiting.made() {
-                    if pause(rx, POLL, queued, eof) {
-                        return true;
-                    }
-                }
-                false
-            }
-            Pace::AtOnce => false,
-        }
-    }
-
-    /// How long between the pieces of its report.
-    fn writes_every(self) -> Duration {
-        match self {
-            Pace::Timed | Pace::Until(_) => WRITES_EVERY,
-            Pace::AtOnce => Duration::ZERO,
-        }
-    }
+    /// The file it holds the rest of its report for, once it has written the first piece, if it waits on one.
+    until: Option<&'a Path>,
 }
 
 impl<'a> Asked<'a> {
     pub(crate) fn read(command: &'a str) -> Option<Self> {
-        let asked = |description, in_background, calls| Asked { description, in_background, calls, pace: Pace::Timed };
-        if let Some(description) = command.strip_prefix("agent:") {
-            return Some(asked(description, true, 1));
+        let until = |rest: &'a str, in_background| {
+            let (file, description) = rest.split_once(':')?;
+            Some(Asked { description, in_background, calls: 1, until: Some(Path::new(file)) })
+        };
+        if let Some(rest) = command.strip_prefix("agent-until:") {
+            return until(rest, true);
         }
-        if let Some(description) = command.strip_prefix("agent-foreground:") {
-            return Some(asked(description, false, 1));
-        }
-        if let Some((file, description)) = command.strip_prefix("agent-until:").and_then(|rest| rest.split_once(':')) {
-            return Some(Asked { pace: Pace::Until(Path::new(file)), ..asked(description, true, 1) });
+        if let Some(rest) = command.strip_prefix("agent-foreground-until:") {
+            return until(rest, false);
         }
         let (calls, description) = command.strip_prefix("agent-calls:")?.split_once(':')?;
-        Some(Asked { pace: Pace::AtOnce, ..asked(description, true, calls.parse().unwrap()) })
+        Some(Asked { description, in_background: true, calls: calls.parse().unwrap(), until: None })
     }
 }
 
@@ -103,7 +57,7 @@ pub(crate) fn start(
     queued: &mut VecDeque<Prompt>,
     eof: &mut bool,
 ) -> bool {
-    let Asked { description, in_background, calls, pace } = *asked;
+    let Asked { description, in_background, calls, until } = *asked;
     // It's asked to do what it's for, as a sentence.
     let prompt = format!("{description}.");
     let input = json!({"description":description,"subagent_type":"Explore","prompt":prompt});
@@ -121,15 +75,6 @@ pub(crate) fn start(
     if in_background {
         turn.tool_result(&agent, "Async agent launched successfully.", false);
     }
-    let stopped = |turn: &Turn| {
-        if in_background {
-            background::unlisted(turn.config, turn.out, &task);
-        }
-        true
-    };
-    if pace.works(rx, queued, eof) {
-        return stopped(turn);
-    }
     let mut within = Turn { within: Some(Within { call: &agent, task: &task }), ..*turn };
     for made in 1..=calls {
         let call = within.named_tool_use("Bash", json!({"command":"ls","description":"List what's here"}));
@@ -143,10 +88,17 @@ pub(crate) fn start(
             "session_id":session_id}),
         );
     }
-    let report = ["There's ", "a README ", "here."].map(String::from).to_vec();
-    if within.say(Block::Text, report, pace.writes_every(), rx, queued, eof) {
-        return stopped(turn);
+    let mut report = within.start_writing(Block::Text);
+    within.write(&mut report, "There's ".to_string());
+    if until.is_some_and(|file| pause_until_made(file, rx, queued, eof)) {
+        if in_background {
+            background::unlisted(turn.config, turn.out, &task);
+        }
+        return true;
     }
+    within.write(&mut report, "a README ".to_string());
+    within.write(&mut report, "here.".to_string());
+    within.finish_writing(report);
     emit(
         turn.out,
         json!({"type":"system","subtype":"task_notification","task_id":task,"tool_use_id":agent,"status":"completed",

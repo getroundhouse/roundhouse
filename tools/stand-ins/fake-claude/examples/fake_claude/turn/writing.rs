@@ -35,6 +35,13 @@ pub(crate) fn message_id() -> String {
     format!("msg_fake_{}_{number}", std::process::id())
 }
 
+/// A message of one block as it streams, and what it has said so far.
+pub(crate) struct Writing {
+    id: String,
+    block: Block,
+    text: String,
+}
+
 pub(crate) struct Turn<'a> {
     pub(crate) config: &'a Config,
     pub(crate) out: &'a Out,
@@ -93,24 +100,39 @@ impl Turn<'_> {
         queued: &mut VecDeque<Prompt>,
         eof: &mut bool,
     ) -> bool {
-        let id = message_id();
-        cache::message_start(self, &id);
-        let name = block.name();
-        self.stream_event(&id, json!({"type":"content_block_start","index":0,"content_block":{"type":name,(name):""}}));
-        let mut text = String::new();
+        let mut writing = self.start_writing(block);
         for chunk in chunks {
-            let delta = json!({"type":format!("{name}_delta"),(name):chunk});
-            self.stream_event(&id, json!({"type":"content_block_delta","index":0,"delta":delta}));
-            text.push_str(&chunk);
+            self.write(&mut writing, chunk);
             if gap > Duration::ZERO && pause(rx, gap, queued, eof) {
                 return true;
             }
         }
-        // The real CLI sends the finished block before content_block_stop.
-        self.finish_message(&id, json!({"type":name,(name):text}));
-        self.stream_event(&id, json!({"type":"content_block_stop","index":0}));
-        self.stream_event(&id, json!({"type":"message_stop"}));
+        self.finish_writing(writing);
         false
+    }
+
+    /// Starts a message of one block, which [`Turn::write`] streams and [`Turn::finish_writing`] finishes.
+    pub(crate) fn start_writing(&self, block: Block) -> Writing {
+        let id = message_id();
+        cache::message_start(self, &id);
+        let name = block.name();
+        self.stream_event(&id, json!({"type":"content_block_start","index":0,"content_block":{"type":name,(name):""}}));
+        Writing { id, block, text: String::new() }
+    }
+
+    pub(crate) fn write(&self, writing: &mut Writing, chunk: String) {
+        let name = writing.block.name();
+        let delta = json!({"type":format!("{name}_delta"),(name):chunk});
+        self.stream_event(&writing.id, json!({"type":"content_block_delta","index":0,"delta":delta}));
+        writing.text.push_str(&chunk);
+    }
+
+    pub(crate) fn finish_writing(&self, writing: Writing) {
+        let name = writing.block.name();
+        // The real CLI sends the finished block before content_block_stop.
+        self.finish_message(&writing.id, json!({"type":name,(name):writing.text}));
+        self.stream_event(&writing.id, json!({"type":"content_block_stop","index":0}));
+        self.stream_event(&writing.id, json!({"type":"message_stop"}));
     }
 
     /// A call to the tool `name`, rather than a command.
