@@ -102,6 +102,41 @@ async fn an_effort_or_a_mode_the_agent_isnt_offered_is_refused_for_a_new_chat_an
     }
 }
 
+/// Which efforts a model takes is its own, so a change is judged by the settings it leaves the chat with, not by what
+/// it names alone: an effort the agent is offered, but not with the chat's model, and a model that isn't offered the
+/// chat's effort, are each refused, though neither change names both.
+#[tokio::test]
+async fn a_change_is_refused_for_the_settings_it_leaves_the_chat_with_as_well_as_for_what_it_names() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut claims = claimed();
+    let only_low = serde_json::json!({ "model": "haiku", "label": "Haiku", "efforts": ["low"] });
+    let offered = vec![serde_json::from_value(only_low).unwrap()];
+    claims.settings.models = Some(protocol::capability::settings::Models { offered });
+    let hub = hub_describing(dir.path(), vec![AgentDescription { capabilities: Some(claims), ..described() }]);
+    ready(&hub);
+    let (haiku, sonnet) = (ModelName::named("haiku"), ModelName::named("sonnet"));
+    let on = |model: &ModelName, effort| SessionSettingsChange {
+        model: Some(model.clone()),
+        effort: Some(effort),
+        ..SessionSettingsChange::default()
+    };
+    let at_low_on_haiku = hub.session_create(W.into(), AgentKind::Claude, on(&haiku, Effort::Low), None).await.unwrap();
+    let at_high_on_sonnet = hub.session_configure("s".into(), on(&sonnet, Effort::High)).await.unwrap();
+
+    let high = SessionSettingsChange { effort: Some(Effort::High), ..SessionSettingsChange::default() };
+    let to_haiku = SessionSettingsChange { model: Some(haiku), ..SessionSettingsChange::default() };
+    for (case, chat, change) in [
+        ("an effort the chat's model isn't offered", &at_low_on_haiku, high),
+        ("a model the chat's effort isn't offered for", &at_high_on_sonnet, to_haiku),
+    ] {
+        let changed = hub.session_configure(chat.id.clone(), change).await;
+
+        assert_eq!(code(&changed), Some(ErrorCode::InvalidRequest), "{case}: {changed:?}");
+        let kept = hub.session_get(chat.id.clone()).await.unwrap();
+        assert_eq!(kept.settings(), chat.settings(), "{case}: the chat's settings didn't change");
+    }
+}
+
 #[tokio::test]
 async fn only_an_agent_that_compacts_when_asked_is_asked_to() {
     let dir = tempfile::tempdir().unwrap();

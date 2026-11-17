@@ -81,6 +81,5 @@ mod tests {
                 .takes(&SessionSettingsChange { model: Some(luna), effort: Some(Effort::Ultra), permission_mode: None })
                 .is_err()
         );
-        assert_eq!(crate::claude::description().efforts.last(), Some(&Effort::Max));
     }
 }

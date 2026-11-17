@@ -69,14 +69,20 @@ async fn a_prompt_sent_during_setup_is_recorded_at_once_and_given_once_setup_has
     assert!(!launched, "an agent was launched before setup had finished");
 }
 
-/// Commands run one at a time, so once its prompt is dropped, the chat has dealt with it.
+/// Commands run one at a time, so once its prompt is dropped, the chat has dealt with it. Nor does the file the prompt
+/// carries go in the worktree, which only an agent would read.
 #[tokio::test(flavor = "multi_thread")]
 async fn closing_a_chat_with_a_prompt_waiting_on_setup_never_starts_its_agent() {
     let dir = tempfile::tempdir().unwrap();
     let (hub, asked) = hub_with_stand_in_workers(dir.path());
     let (workspace, chat) = a_chat(&hub).await;
     let end = setup_held(&hub, &asked, &workspace).await;
-    let (seq, _) = hub.session_prompt(chat.id.clone(), None, Prompt::new("go")).await.unwrap();
+    let kept_for = crate::attachment_files::FileFor::Session(chat.id.clone());
+    let data = protocol::attachment::AttachmentBytes::new(b"error at line 42".to_vec());
+    let text = protocol::attachment::MediaType::Text;
+    let added = hub.file_add(kept_for, "a1".into(), "build.log".into(), text, data, crate::store::AddedBy::Client);
+    let file = added.await.unwrap();
+    let (seq, _) = hub.session_prompt(chat.id.clone(), None, Prompt::carrying("go", vec![file.id])).await.unwrap();
 
     tokio::time::timeout(TIMEOUT, hub.session_close(chat.id.clone())).await.expect("closing waited").unwrap();
     end.send(SetupDone { code: Some(0) }).unwrap();
@@ -86,6 +92,8 @@ async fn closing_a_chat_with_a_prompt_waiting_on_setup_never_starts_its_agent() 
     waiting::task::until(TIMEOUT, "the prompt to be dropped, or given", || dropped() || launched()).await;
     assert!(!launched(), "an agent was launched for a closed chat");
     assert!(dropped(), "the prompt is dropped");
+    let written = asked.requests(|request| matches!(request, WorkerRequest::AttachmentWrite(_)).then_some(()));
+    assert!(written.is_empty(), "the file a closed chat's prompt carried was put in its worktree");
     let too_late = hub.session_prompt(chat.id.clone(), None, Prompt::new("too late")).await;
     assert_eq!(too_late.map_err(|e| e.code).err(), Some(ErrorCode::Conflict));
 }

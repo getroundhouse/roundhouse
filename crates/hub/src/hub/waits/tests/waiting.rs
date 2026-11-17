@@ -55,13 +55,16 @@ async fn a_wait_starts_from_a_read_of_its_own_even_just_after_one() {
     pull_requests.set(7, PullRequestState::Open);
 
     let (wait, pull_request) = ask(&hub, &link, start("toolu_1")).await.unwrap();
-    let (again, _) = ask(&hub, &link, start("toolu_1")).await.unwrap();
+    // Asking again needs no read, so one that would fail now changes nothing.
+    pull_requests.fail(true);
+    let again = ask(&hub, &link, start("toolu_1")).await;
 
     let running = Checks { passed: 0, failed: 0, pending: 1 };
     let checks = pull_request.map(|pr| pr.checks);
     assert_eq!((how(&wait), checks), (None, Some(running)), "not ended by the checks of the commit it replaced");
     assert_eq!((wait.number, wait.call.clone()), (7, Some("toolu_1".into())));
-    assert_eq!(again, wait, "the same call asking again gets the one it started, as when the agent's CLI asks again");
+    let again = again.expect("the same call asking again was read for again, rather than given the wait it started");
+    assert_eq!(again.0, wait, "the same call asking again gets the one it started, as when the agent's CLI asks again");
 }
 
 #[tokio::test]

@@ -177,6 +177,24 @@ async fn a_run_that_claims_what_needs_a_claim_it_doesnt_make_is_stopped_and_its_
     assert_eq!(on_record(&hub).await, None);
 }
 
+/// Whatever asks for the launch, and however late the chat was closed: a prompt on its way to the agent as the chat
+/// was closed, past where its delivery looked, or a wait that ended meanwhile, is refused here, under the lock closing
+/// takes.
+#[tokio::test]
+async fn a_closed_chats_agent_is_never_launched() {
+    let dir = tempfile::tempdir().unwrap();
+    let hub = hub_with_worktree(dir.path());
+    let (_link, asked) = worker(&hub, None, Some(claimed()));
+    let live = hub.live_session(&"s".into()).await.unwrap();
+    live.close().await.unwrap();
+
+    let Err(refused) = live.ensure_agent().await else { panic!("a closed chat's agent was launched") };
+
+    assert_eq!(refused.code, ErrorCode::Conflict, "{refused:?}");
+    assert_eq!(methods(&asked), ["agent_stop"], "only closing's stop was asked, and no launch");
+    assert!(!live.agent_running());
+}
+
 #[tokio::test]
 async fn a_run_of_this_protocol_that_hasnt_said_what_it_claims_is_asked_nothing() {
     let dir = tempfile::tempdir().unwrap();

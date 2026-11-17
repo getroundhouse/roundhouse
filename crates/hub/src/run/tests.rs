@@ -45,6 +45,20 @@ fn a_workspace_left_being_archived_or_restored_is_handed_over_as_it_was_left() {
     assert_eq!(store.get_workspace(&"birch".into()).unwrap().status, WorkspaceStatus::Restoring);
 }
 
+/// A setup the last run left running never finished, and its worker can't tell this hub how it ended, so it's recorded
+/// as failed rather than as running for ever.
+#[test]
+fn a_starting_hub_records_a_setup_the_last_left_running_as_failed() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = store_with_session(dir.path());
+    store.set_workspace_setup(&"w".into(), protocol::model::SetupStatus::Running).unwrap();
+
+    recover(&store).unwrap();
+
+    let setup = store.get_workspace(&"w".into()).unwrap().setup;
+    assert_eq!(setup, protocol::model::SetupStatus::Failed { code: None }, "it's left as the last run left it");
+}
+
 /// Only a worker this hub carries on with can be another build, and carrying on with one says which, so what the last
 /// run recorded, as when it was killed while carrying on with one, says nothing of the workers there are now.
 #[test]

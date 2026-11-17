@@ -280,9 +280,9 @@ fn every_reply_about_a_prompt_or_a_file_keeps_its_form() {
 #[test]
 fn every_reply_that_holds_a_model_type_keeps_its_result() {
     let replies = [
-        (ClientResponse::Session(fixtures::session("s")), "session"),
-        (ClientResponse::Workspace(fixtures::workspace("w")), "workspace"),
-        (ClientResponse::GitStatus(GitStatus::default()), "git_status"),
+        (ClientResponse::Session(fixtures::session("s")), r#""result":"session""#),
+        (ClientResponse::Workspace(fixtures::workspace("w")), r#""result":"workspace""#),
+        (ClientResponse::GitStatus(GitStatus::default()), r#""result":"git_status""#),
         (
             ClientResponse::HubSettings(HubSettings {
                 account_defaults: None,
@@ -291,17 +291,17 @@ fn every_reply_that_holds_a_model_type_keeps_its_result() {
                 github: None,
                 rev: Rev::new(1),
             }),
-            "hub_settings",
+            r#""result":"hub_settings""#,
         ),
-        (ClientResponse::NewWorkspaceDraft(NewWorkspaceDraft::default()), "new_workspace_draft"),
-        (ClientResponse::Records(Records::default()), "records"),
-        (ClientResponse::SessionAccount(SessionAccount::default()), "session_account"),
-        (ClientResponse::FilePages(FilePages::default()), "file_pages"),
+        (ClientResponse::NewWorkspaceDraft(NewWorkspaceDraft::default()), r#""result":"new_workspace_draft""#),
+        (ClientResponse::Records(Records::default()), r#""result":"records""#),
+        (ClientResponse::SessionAccount(SessionAccount::default()), r#""result":"session_account""#),
+        (ClientResponse::FilePages(FilePages::default()), r#""result":"file_pages""#),
     ];
 
     for (reply, result) in replies {
-        let written = serde_json::to_value(&reply).unwrap();
-        assert_eq!(written["result"], result, "{reply:?}");
-        assert_eq!(serde_json::from_value::<ClientResponse>(written).unwrap(), reply, "{result} reads back");
+        let written = serde_json::to_string(&reply).unwrap();
+        assert!(written.starts_with(&format!("{{{result}")), "{written} doesn't start with {result}");
+        assert_eq!(serde_json::from_str::<ClientResponse>(&written).unwrap(), reply, "{result} reads back");
     }
 }
