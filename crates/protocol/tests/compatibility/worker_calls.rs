@@ -12,8 +12,8 @@ use protocol::model::{
     Head, LoginToken, ModelName, PageLine, RunId, WorktreeFiles,
 };
 use protocol::worker::{
-    self, AgentSpec, RateLimit, RepoSource, RunningAgent, ToolsToken, WorkerCall, WorkerFrame, WorkerOutcome,
-    WorkerRequest, WorkerResponse,
+    self, AgentSpec, RepoSource, RunningAgent, ToolsToken, WorkerCall, WorkerFrame, WorkerOutcome, WorkerRequest,
+    WorkerResponse,
 };
 
 use super::keeps_its_form;
@@ -114,22 +114,24 @@ fn every_request_about_the_workspace_keeps_its_form() {
     );
 }
 
+/// A hub from before the hub read workspaces' pull requests itself asked the worker for one, and for GitHub's limit,
+/// which a worker now reads as a request it doesn't know, and refuses as unsupported, as after a rollback.
+#[test]
+fn the_requests_for_a_pull_request_and_githubs_limit_are_unknown_now() {
+    for form in [r#"{"method":"pull_request","path":"/w"}"#, r#"{"method":"github_rate_limit","path":"/w"}"#] {
+        let call: WorkerCall = serde_json::from_str(&format!(r#"{{"id":7,"request":{form}}}"#)).unwrap();
+        assert_eq!(call.request, WorkerRequest::Unknown, "{form}");
+    }
+}
+
 #[test]
 fn every_request_about_the_worktree_keeps_its_form() {
     asked(WorkerRequest::GitStatus(worker::GitStatus { path: "/w".into() }), r#"{"method":"git_status","path":"/w"}"#);
     let diff = WorkerRequest::GitDiff(worker::GitDiff { path: "/w".into(), base_ref: Some("origin/main".into()) });
     asked(diff, r#"{"method":"git_diff","path":"/w","base_ref":"origin/main"}"#);
     asked(
-        WorkerRequest::PullRequest(worker::PullRequest { path: "/w".into() }),
-        r#"{"method":"pull_request","path":"/w"}"#,
-    );
-    asked(
         WorkerRequest::WatchBranches(worker::WatchBranches { path: "/w".into() }),
         r#"{"method":"watch_branches","path":"/w"}"#,
-    );
-    asked(
-        WorkerRequest::GithubRateLimit(worker::GithubRateLimit { path: "/w".into() }),
-        r#"{"method":"github_rate_limit","path":"/w"}"#,
     );
     let data = AttachmentBytes::new(b"ok".to_vec());
     let write =
@@ -291,18 +293,6 @@ fn every_reply_about_the_worktree_keeps_its_form() {
     );
     let diff = GitDiff { base_commit: Some("c1".into()), patch: String::new(), truncated: false };
     answered(WorkerResponse::GitDiff(diff), r#"{"result":"git_diff","base_commit":"c1","patch":"","truncated":false}"#);
-    let found =
-        WorkerResponse::PullRequest(worker::PullRequestReply { pull_request: None, branch: Some("aspen".into()) });
-    answered(found, r#"{"result":"pull_request","pull_request":null,"branch":"aspen"}"#);
-    answered(
-        WorkerResponse::PullRequest(worker::PullRequestReply { pull_request: None, branch: None }),
-        r#"{"result":"pull_request","pull_request":null}"#,
-    );
-    let limit = RateLimit { limit: 5000, remaining: 4990, resets_at_ms: 9 };
-    answered(
-        WorkerResponse::GithubRateLimit(limit),
-        r#"{"result":"github_rate_limit","limit":5000,"remaining":4990,"resets_at_ms":9}"#,
-    );
     let written = WorkerResponse::AttachmentWritten(worker::AttachmentWritten {
         path: "/w/.context/attachments/build.log".into(),
     });

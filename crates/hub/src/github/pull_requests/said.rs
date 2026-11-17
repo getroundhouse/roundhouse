@@ -4,7 +4,6 @@
 //! [`ErrorCode::Worker`] for what may pass, such as GitHub failing or limiting the hub for now.
 
 use protocol::client::{ApiError, ErrorCode};
-use protocol::worker::RateLimit;
 use serde_json::Value;
 
 /// GitHub refusing the token a read went as. Reading again may get past it, once `gh` has logged in again, or the
@@ -42,6 +41,16 @@ pub(super) fn next(connection: &Value) -> Result<Option<String>, ApiError> {
         Some(true) => string(&connection["pageInfo"], "endCursor").map(Some),
         None => Err(incomplete()),
     }
+}
+
+/// GitHub's hourly limit on GraphQL for a token, as GitHub counted it in an answer. It counts points, not calls: a
+/// query costs one, or more when it asks for lists within lists.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct RateLimit {
+    pub(crate) limit: u32,
+    pub(crate) remaining: u32,
+    /// When it's back to `limit`.
+    pub(crate) resets_at_ms: i64,
 }
 
 /// What's left of GitHub's limit after a query, from its `rateLimit`.

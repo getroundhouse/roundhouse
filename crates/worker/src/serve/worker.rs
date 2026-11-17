@@ -21,9 +21,8 @@ use protocol::paths::AGENTS_DIR;
 use protocol::prompt::Prompt;
 use protocol::worker::{
     AccountFor, AgentApproval, AgentStop, AttachmentWrite, AttachmentWritten, FileOpenAt, FilePages, FileRead,
-    FileReadAt, FolderRead, GitDiff, GitStatus, PullRequest, PullRequestReply, ReadRepoUrl, Received,
-    RunningAgentsReply, ServeTools, SetupLog, SetupLogReply, TerminalShow, TerminalStop, TitleFor, ToolsServing,
-    WorkerFrame, WorkerRequest, WorkerResponse,
+    FileReadAt, FolderRead, GitDiff, GitStatus, ReadRepoUrl, Received, RunningAgentsReply, ServeTools, SetupLog,
+    SetupLogReply, TerminalShow, TerminalStop, TitleFor, ToolsServing, WorkerFrame, WorkerRequest, WorkerResponse,
 };
 use scripts::{Setup, run_archive_script, run_setup, stop_setup_script};
 use std::collections::HashMap;
@@ -273,17 +272,8 @@ pub(super) async fn handle(
         WorkerRequest::GitDiff(GitDiff { path, base_ref }) => {
             Ok(WorkerResponse::GitDiff(git::diff(&given, &path, base_ref.as_deref()).await?))
         }
-        WorkerRequest::PullRequest(PullRequest { path }) => {
-            // `gh` finds the pull request by the branch checked out.
-            let branch = git::branches::checked_out(&given, Path::new(&path)).await;
-            let pull_request = git::pull_request(&given, &path, branch.as_ref()).await?;
-            Ok(WorkerResponse::PullRequest(PullRequestReply { pull_request, branch }))
-        }
         WorkerRequest::WatchBranches(asked) => worktrees::watch_branches(state, asked.path, Whose::Own).await,
         WorkerRequest::WatchChildBranches(asked) => worktrees::watch_branches(state, asked.path, Whose::Child).await,
-        WorkerRequest::GithubRateLimit(asked) => {
-            Ok(WorkerResponse::GithubRateLimit(git::rate_limit(&given, &asked.path).await?))
-        }
         // The machine's own, so not with `given`, in a directory of no project's.
         WorkerRequest::FindGithubLogin => crate::found_login::reply(&state.config.scratch_dir).await,
         // The machine's own too, since the git credential's rewriting of GitHub's addresses is the worker's, not the

@@ -1,6 +1,6 @@
+use super::said::RateLimit;
 use protocol::client::ApiError;
 use protocol::model::{GithubRepositoryName, PullRequestNumber, PullRequestSelection, PullRequestsSnapshot};
-use protocol::worker::RateLimit;
 
 /// What one ask of a read is for: the pull requests `selection` names in `repository`, and those open under them in
 /// their stacks on GitHub.

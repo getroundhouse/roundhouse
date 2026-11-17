@@ -8,7 +8,6 @@ mod clones;
 pub(crate) mod files;
 mod making;
 mod names;
-mod pull_request;
 mod removal;
 mod repo_url;
 #[cfg(test)]
@@ -21,7 +20,6 @@ pub use making::prepare_workspace;
 use making::{made_there, make_on_branch, make_on_new_branch};
 pub use names::names_git_has;
 use names::no_branch_in_the_way;
-pub use pull_request::{pull_request, rate_limit};
 pub use removal::remove_workspace;
 pub use repo_url::repo_url;
 use worktrees::{Changing, Hold, Worktrees, held};

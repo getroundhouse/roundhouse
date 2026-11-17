@@ -10,7 +10,7 @@ use serde::Deserialize;
 use tokio::time::Instant;
 
 use super::token::token;
-use crate::gh::{Unran, run_gh_within};
+use crate::gh::{Unran, run_gh};
 
 /// What `gh` is asked: its login for github.com that it uses, in JSON, which `gh` 2.81 is the first to print, and which
 /// it prints with a zero exit code however the login stands. And not to renew a token it renews by itself, as `gh` 2.103
@@ -48,7 +48,7 @@ pub(super) async fn find(given: &Environment, dir: &Path) -> Result<(GhLogin, Op
 async fn status(given: &Environment, dir: &Path, until: Instant) -> Result<Option<Output>, ApiError> {
     let run = |args: &'static [&'static str]| {
         let within = until.saturating_duration_since(Instant::now());
-        async move { run_gh_within(within, given, dir, args).await }
+        async move { run_gh(within, given, dir, args).await }
     };
     let printed = match run(&ASKED).await {
         Ok(printed) if refused(&printed, "--no-refresh") => run(&ASKED_OF_AN_OLDER_GH).await,

@@ -5,7 +5,6 @@ use protocol::client::{ApiError, ErrorCode};
 use protocol::model::{
     GithubAccountId, GithubRepositoryName, GithubToken, ProviderName, RepoUrl, Workspace, WorkspaceId,
 };
-use protocol::worker::RateLimit;
 use tracing::info;
 
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -13,6 +12,7 @@ use std::time::Duration;
 
 use super::{Arc, Hub};
 use crate::github::ASK_WITHIN;
+use crate::github::RateLimit;
 use crate::github_logins::DefaultCredential;
 use crate::hub::found_github_logins::FOUND_WITHIN;
 use crate::jobs::{self, Limits};

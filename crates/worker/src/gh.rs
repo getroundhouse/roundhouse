@@ -1,11 +1,10 @@
-//! Running `gh`, as everything the worker asks of GitHub through it runs it.
+//! Running `gh`, as finding the machine's own login to GitHub runs it.
 
 use std::path::Path;
 use std::process::{Output, Stdio};
 use std::time::Duration;
 
 use process::Environment;
-use protocol::worker::GH_RUNS_WITHIN;
 use tokio::process::Command;
 
 /// Why `gh` didn't run to the end.
@@ -16,18 +15,9 @@ pub(crate) enum Unran {
 }
 
 /// Runs `gh` with `args` in `dir`, given `given`, and returns what it printed and how it exited, or why it didn't run
-/// to the end, which it hasn't once it has taken [`GH_RUNS_WITHIN`]. It never prompts, since nobody would see it.
-pub(crate) async fn run_gh(given: &Environment, dir: &Path, args: &[&str]) -> Result<Output, Unran> {
-    run_gh_within(GH_RUNS_WITHIN, given, dir, args).await
-}
-
-/// [`run_gh`], with `within` in place of [`GH_RUNS_WITHIN`], for several runs that share it.
-pub(crate) async fn run_gh_within(
-    within: Duration,
-    given: &Environment,
-    dir: &Path,
-    args: &[&str],
-) -> Result<Output, Unran> {
+/// to the end, which it hasn't once it has taken `within`, which several runs can share. It never prompts, since
+/// nobody would see it.
+pub(crate) async fn run_gh(within: Duration, given: &Environment, dir: &Path, args: &[&str]) -> Result<Output, Unran> {
     let mut command = Command::new("gh");
     command.args(args).current_dir(dir).env("GH_PROMPT_DISABLED", "1").stdin(Stdio::null()).kill_on_drop(true);
     given.apply(command.as_std_mut());

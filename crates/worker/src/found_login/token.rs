@@ -4,7 +4,7 @@ use std::time::Duration;
 use process::Environment;
 use protocol::model::GithubToken;
 
-use crate::gh::run_gh_within;
+use crate::gh::run_gh;
 
 /// What `gh` is asked: the token it uses for github.com's login it uses, and not to renew one it renews by itself, as it
 /// would if its time is up, which rotates what renews it, and forgets the login when GitHub refuses that, so reading it
@@ -21,7 +21,7 @@ pub(super) async fn token(within: Duration, given: &Environment, dir: &Path) -> 
     let until = tokio::time::Instant::now() + within;
     let run = |args: &'static [&'static str]| {
         let within = until.saturating_duration_since(tokio::time::Instant::now());
-        async move { run_gh_within(within, given, dir, args).await.ok() }
+        async move { run_gh(within, given, dir, args).await.ok() }
     };
     let mut printed = run(&ASKED).await?;
     if !printed.status.success() && String::from_utf8_lossy(&printed.stderr).contains("unknown flag: --no-refresh") {

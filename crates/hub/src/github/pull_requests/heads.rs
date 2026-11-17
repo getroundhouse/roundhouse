@@ -15,12 +15,12 @@
 
 use protocol::client::ApiError;
 use protocol::model::{BranchName, CommitId, GithubRepositoryName, GithubToken, PrState, PullRequestNumber};
-use protocol::worker::RateLimit;
 use serde_json::Value;
 
 use super::graphql::NoAnswer;
 use super::query::quote;
 use super::rounds::{Leaving, Spent};
+use super::said::RateLimit;
 use super::said::{failed, incomplete};
 use crate::github::Github;
 
