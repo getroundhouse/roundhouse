@@ -5,10 +5,10 @@ use crate::event::{
 };
 use crate::model::{
     Account, AgentKind, ApprovalId, BranchName, Call, CallResult, ChildStatus, ChildWorktree, Draft, Effort,
-    FoundGithubLogin, GhLogin, GhLoginWorks, GithubAccount, GithubApp, GithubAppId, GithubLoginKind, GithubSignIn,
-    GithubSignInStatus, GithubUser, GithubUserId, HeldGithubLogin, MadeBy, ModelName, PermissionMode, Place,
-    RecentWork, Rev, Seq, Session, SessionStatus, SetupStatus, Subagent, SubagentId, SubagentStatus, TitleSource,
-    ToolUseId, Workspace, WorkspaceStatus,
+    FoundGithubLogin, GhLogin, GhLoginWorks, GithubAccount, GithubApp, GithubAppId, GithubLoginKind, GithubReach,
+    GithubRepositoryName, GithubSignIn, GithubSignInStatus, GithubUser, GithubUserId, HeldGithubLogin, MadeBy,
+    ModelName, PermissionMode, Place, Reach, RecentWork, Rev, Seq, Session, SessionStatus, SetupStatus, Subagent,
+    SubagentId, SubagentStatus, TitleSource, ToolUseId, Workspace, WorkspaceStatus,
 };
 
 /// The session `id`, in the workspace `w`, idle with nothing in its log. Its agent is Claude, running Opus with full
@@ -162,6 +162,19 @@ pub fn found_github_login(provider: &str) -> FoundGithubLogin {
     FoundGithubLogin {
         provider: provider.into(),
         login: GhLogin::LoggedIn { username: "ada".into(), works: GhLoginWorks::Yes },
+        rev: Rev::default(),
+    }
+}
+
+/// Whether the default can push to the repository `repo`'s, which is `example/project` on GitHub: it can, as `ada`,
+/// as GitHub answered in this run of the hub, at the Unix epoch.
+pub fn github_reach(repo: &str) -> GithubReach {
+    let repository = GithubRepositoryName::named("example/project");
+    GithubReach {
+        repo: repo.into(),
+        reach: Reach::Pushes { repository, username: "ada".into() },
+        answered_at_ms: Some(0),
+        stale: false,
         rev: Rev::default(),
     }
 }

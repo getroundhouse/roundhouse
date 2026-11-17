@@ -213,3 +213,40 @@ fn whether_a_found_login_works_reads_as_unknown_when_its_from_a_newer_peer_or_no
         assert_eq!(login, GhLogin::LoggedIn { username: "ada".into(), works: GhLoginWorks::Unknown });
     }
 }
+
+/// As GitHub writes its addresses, and nothing an address could be moved by, or that has no owner or no name.
+#[test]
+fn a_repository_on_github_is_an_owner_and_a_name_of_githubs_letters() {
+    let read = |written: &str| GithubRepositoryName::try_from(written.to_string()).map(String::from);
+    let (not_both, not_githubs) = (GithubRepositoryNameError::NotOwnerAndName, GithubRepositoryNameError::NotGithubs);
+
+    assert_eq!(read("cli/cli"), Ok("cli/cli".to_string()));
+    assert_eq!(read("get-round_house/app.rs"), Ok("get-round_house/app.rs".to_string()));
+    assert_eq!(read(".github/.github"), Ok(".github/.github".to_string()));
+    for (written, why) in [
+        ("cli", not_both),
+        ("cli/", not_both),
+        ("/cli", not_both),
+        ("cli/cli/pulls", not_both),
+        ("", not_both),
+        ("cli/..", not_githubs),
+        ("./cli", not_githubs),
+        ("cli/cl i", not_githubs),
+        ("cli/cli?x=1", not_githubs),
+        ("cli/clí", not_githubs),
+    ] {
+        assert_eq!(read(written), Err(why), "{written}");
+    }
+}
+
+/// So a newer hub's word reaches no client as one this build knows, and a name that isn't one fails only its record.
+#[test]
+fn a_reach_in_a_state_from_a_newer_hub_reads_as_unknown_and_one_naming_no_repository_isnt_read() {
+    let newer = json!({"repo": "r", "reach": {"state": "pushes_sometimes", "repository": "cli/cli"}});
+    let not_one = json!({"repo": "r", "reach": {"state": "pushes", "repository": "cli", "username": "ada"}});
+
+    let read: GithubReach = serde_json::from_value(newer).unwrap();
+
+    assert_eq!((read.reach, read.rev), (Reach::Unknown, Rev::default()));
+    assert!(serde_json::from_value::<GithubReach>(not_one).is_err());
+}

@@ -98,3 +98,7 @@ pub(crate) const BEFORE_FOUND_GITHUB_LOGINS: usize = 60;
 
 /// How many migrations there were before the hub kept apps of your own.
 pub(crate) const BEFORE_GITHUB_APPS: usize = 62;
+
+/// How many migrations there were before the hub recorded whether the default GitHub account can push to each
+/// repository.
+pub(crate) const BEFORE_GITHUB_REACH: usize = 63;

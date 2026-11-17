@@ -97,8 +97,9 @@ impl Listed {
                 Record::GithubSignIn(sign_in) => listed.github.sign_in(sign_in),
                 Record::FoundGithubLogin(found) => listed.github.found(found),
                 Record::GithubApp(app) => listed.github.app(app),
-                // Held apart, as `HubRecords::apply_record` says.
-                Record::Subagent(_) => {}
+                // A subagent's held apart, as `HubRecords::apply_record` says. A repository's reach is held, but not
+                // listed for views. *Not built:* showing it.
+                Record::Subagent(_) | Record::GithubReach(_) => {}
             }
         }
         listed.github.order();

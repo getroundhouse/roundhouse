@@ -89,10 +89,12 @@ async fn answer(
         std::future::pending::<()>().await;
         return;
     };
+    // JSON, as the API's are, unless the answer says otherwise, as git's do.
+    let json = !headers.iter().any(|(name, _)| name.eq_ignore_ascii_case("content-type"));
     let headers = headers.into_iter().map(|(name, value)| format!("{name}: {value}\r\n")).collect::<Vec<_>>().concat();
+    let kind = if json { "content-type: application/json\r\n" } else { "" };
     let written = format!(
-        "HTTP/1.1 {status} Made Up\r\ncontent-type: application/json\r\n{headers}content-length: {}\r\n\
-         connection: close\r\n\r\n{body}",
+        "HTTP/1.1 {status} Made Up\r\n{kind}{headers}content-length: {}\r\nconnection: close\r\n\r\n{body}",
         body.len()
     );
     stream.write_all(written.as_bytes()).await.unwrap();

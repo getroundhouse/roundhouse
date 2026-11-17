@@ -19,9 +19,9 @@ use protocol::prompt::Prompt;
 use protocol::versions::Versions;
 use protocol::worker::{
     AccountFor, AgentApproval, AgentStop, AttachmentWrite, AttachmentWritten, FileOpenAt, FilePages, FileRead,
-    FileReadAt, FolderRead, GitDiff, GitStatus, HelloReply, PullRequest, PullRequestReply, Received,
-    RunningAgentsReply, ServeTools, SetupLog, SetupLogReply, TitleFor, ToolsServing, WORKER_PROTOCOL_VERSION,
-    WorkerFrame, WorkerRequest, WorkerResponse,
+    FileReadAt, FolderRead, GitDiff, GitStatus, GithubRemote, GithubRemoteReply, HelloReply, PullRequest,
+    PullRequestReply, Received, RunningAgentsReply, ServeTools, SetupLog, SetupLogReply, TitleFor, ToolsServing,
+    WORKER_PROTOCOL_VERSION, WorkerFrame, WorkerRequest, WorkerResponse,
 };
 use scripts::{Setup, run_archive_script, run_setup, stop_setup_script};
 use std::collections::HashMap;
@@ -267,6 +267,11 @@ pub(super) async fn handle(
         }
         // The machine's own, so not with `given`, in a directory of no project's.
         WorkerRequest::FindGithubLogin => crate::found_login::reply(&state.config.scratch_dir).await,
+        // With `given`, since the git credential rewrites GitHub's SSH addresses as a push meets them.
+        WorkerRequest::GithubRemote(GithubRemote { repo_path }) => {
+            let repository = git::github_remote(&given, Path::new(&repo_path)).await?;
+            Ok(WorkerResponse::GithubRemote(GithubRemoteReply { repository }))
+        }
         WorkerRequest::SetupWorkspace(asked) => run_setup(state, &asked.repo_path, &asked.path, &asked.env).await,
         WorkerRequest::CancelSetup => {
             stop_setup_script(state);

@@ -27,6 +27,10 @@ pub struct Script {
     /// `POST /app/installations/{id}/access_tokens`, in turn, by the installation, to a JWT as `installations` takes
     /// one. Any other installation is a 404, as GitHub answers one that's gone.
     pub minted: Vec<(u64, Vec<Answer>)>,
+    /// `GET /{owner}/{name}.git/info/refs?service=git-receive-pack`, which `git push` asks first, by the repository
+    /// asked of, such as `cli/cli`, in turn, whatever credential it's asked with. Any other is a 404, as GitHub answers a
+    /// repository it doesn't have.
+    pub pushes: Vec<(&'static str, Vec<Answer>)>,
 }
 
 /// What it answers with still, as it goes through the script.
@@ -39,6 +43,7 @@ pub(super) struct Answering {
     pub(super) named: HashMap<String, Answer>,
     pub(super) installations: VecDeque<Answer>,
     pub(super) minted: HashMap<u64, VecDeque<Answer>>,
+    pushes: HashMap<&'static str, VecDeque<Answer>>,
 }
 
 impl Answering {
@@ -53,6 +58,7 @@ impl Answering {
             named: script.named.into_iter().map(|(name, answer)| (name.to_string(), answer)).collect(),
             installations: script.installations.into(),
             minted: script.minted.into_iter().map(|(id, answers)| (id, answers.into())).collect(),
+            pushes: script.pushes.into_iter().map(|(repository, answers)| (repository, answers.into())).collect(),
         }
     }
 
@@ -80,6 +86,13 @@ pub(super) fn chosen(answering: &mut Answering, head: &str, body: &str) -> Answe
         let device = asked["device_code"].as_str().unwrap_or_default();
         let polls = answering.polls.get_mut(device);
         return polls.and_then(Answering::next).unwrap_or_else(|| Answer::device_flow_error("incorrect_device_code"));
+    }
+    let request_line = head.lines().next().unwrap_or_default();
+    if let Some(path) = request_line.strip_prefix("GET /")
+        && let Some((repository, _)) = path.split_once(".git/info/refs?service=git-receive-pack ")
+    {
+        let answer = answering.pushes.get_mut(repository).and_then(Answering::next);
+        return answer.unwrap_or_else(|| Answer::git_says(404, "Repository not found."));
     }
     let token = head.lines().find_map(|line| line.strip_prefix("authorization: Bearer ")).unwrap_or_default();
     answering.users.get(token).cloned().unwrap_or_else(|| Answer::status(401, Vec::new()))

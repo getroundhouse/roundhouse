@@ -14,6 +14,7 @@ pub(crate) mod blob;
 pub(crate) mod branches;
 mod children;
 pub(crate) mod files;
+mod github_remote;
 mod making;
 mod names;
 mod pull_request;
@@ -24,6 +25,7 @@ pub(crate) mod tests;
 mod worktrees;
 
 pub(crate) use children::add_child_worktree;
+pub use github_remote::github_remote;
 pub use making::prepare_workspace;
 use making::{made_there, make_on_branch, make_on_new_branch};
 pub use names::names_git_has;

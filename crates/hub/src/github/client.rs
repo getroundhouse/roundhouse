@@ -118,7 +118,7 @@ impl Github {
         Ok((status, body))
     }
 
-    async fn client(&self) -> Result<&Octocrab, ApiError> {
+    pub(super) async fn client(&self) -> Result<&Octocrab, ApiError> {
         self.client
             .get_or_try_init(|| async {
                 let builder = Octocrab::builder().base_uri(self.config.api.as_str()).map_err(|e| not_reached(&e))?;
