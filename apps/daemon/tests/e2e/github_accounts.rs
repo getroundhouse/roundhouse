@@ -182,3 +182,28 @@ fn a_hub_records_whether_the_default_can_push_to_a_workspaces_repository_on_gith
     let [again] = &listed(&stack)[..] else { panic!() };
     assert!(again.answered_at_ms > checked.answered_at_ms, "{again:?}");
 }
+
+/// Through the real worker of the local provider, whose checkout's `origin` is `cli/cli` over SSH, as `ssh://`, which
+/// the worker's rewriting of GitHub's SSH addresses doesn't take, so agents push there with the machine's own key,
+/// which the hub says without asking GitHub. Nothing is fetched from `origin`, so nothing reaches GitHub.
+#[test]
+fn a_hub_says_agents_push_as_the_machines_own_where_pushes_go_round_the_git_credential() {
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    let github = runtime.block_on(GithubStandIn::with(GithubScript {
+        users: vec![(TOKEN, GithubAnswer::user(7, "ada", None))],
+        ..GithubScript::default()
+    }));
+    let stack = Stack::start_with(vec![(ENV_TEST_GITHUB_API, github.api())]);
+    git(&stack.repo(), &["remote", "add", "origin", "ssh://github.com/cli/cli.git"]);
+    let client = stack.client();
+    client.call(GithubAccountConnect { token: GithubToken::new(TOKEN), id: None }).unwrap();
+    let listed = || client.records_list().unwrap().github_reach;
+
+    stack.workspace(&client);
+    wait_until("the repository's reach", || !listed().is_empty());
+
+    let [said] = &listed()[..] else { panic!("{:?}", listed()) };
+    assert_eq!(said.reach, Reach::PushesAsMachineOwn { repository: GithubRepositoryName::named("cli/cli") });
+    let pushes: Vec<_> = github.asked().into_iter().filter(|asked| asked.contains("git-receive-pack")).collect();
+    assert_eq!(pushes, [] as [String; 0], "GitHub isn't asked of a push the default doesn't make");
+}

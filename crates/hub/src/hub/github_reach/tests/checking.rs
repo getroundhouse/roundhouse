@@ -4,11 +4,12 @@ use std::sync::Arc;
 
 use protocol::client::github_accounts::GithubAccountConnect;
 use protocol::client::github_apps::GithubManifestCode;
-use protocol::model::{GithubToken, InstalledApp, Reach};
+use protocol::model::{GithubToken, InstalledApp, Reach, UnusableLogin};
+use protocol::worker::PushRoute;
 use tokio::sync::watch;
 
 use super::super::CHECKED_AGAIN_EVERY;
-use super::support::{CLI, account, checking, reads, told, told_within};
+use super::support::{CLI, account, checking, reads, reads_pushing, told, told_within};
 use crate::github::{Answer, Gate, Script, StandIn};
 use crate::github_logins::DefaultCredential;
 use crate::hub::Hub;
@@ -119,6 +120,37 @@ async fn a_repository_is_checked_for_what_its_address_names_as_each_is_read() {
     assert_eq!(elsewhere.reach, Reach::NotOnGithub);
     assert_eq!(on_github.reach, refused_as("ada"));
     assert_eq!(github.asked().len(), 1, "only cli/cli was asked of GitHub");
+}
+
+/// A worker says its pushes go round the git credential, as over SSH, so agents push as the machine's own whoever
+/// the default is, past a block too, and GitHub isn't asked. Added again and read as going through it, it's checked
+/// with the default. The feed tells of each record only as it changes, so each step changes it.
+#[tokio::test]
+async fn a_repository_whose_pushes_go_round_the_credential_is_said_to_push_as_the_machines_own() {
+    let github = refusing().await;
+    let dir = tempfile::tempdir().unwrap();
+    let hub = hub_calling_github(dir.path(), github.api());
+    let mut feed = hub.subscribe_feed();
+    let why = UnusableLogin::Disconnected;
+    let blocked = DefaultCredential::Blocked { reason: "ada was disconnected".into(), account: Some("g".into()), why };
+    let (credential, following) = watch::channel(blocked);
+    let _checking = checking(&hub, following);
+
+    reads_pushing(&hub, "https://github.com/cli/cli.git", PushRoute::Around).await;
+    let past_the_block = told(&mut feed).await;
+    credential.send_replace(DefaultCredential::MachineOwn);
+    let machines_own = told(&mut feed).await;
+    credential.send_replace(account("ada", "a-token"));
+    let as_an_account = told(&mut feed).await;
+    hub.store.add_repo(&"again".into(), "repo", "/repo", 0).unwrap();
+    reads(&hub, "https://github.com/cli/cli.git").await;
+    let through = told(&mut feed).await;
+
+    assert_eq!(past_the_block.reach, Reach::PushesAsMachineOwn { repository: CLI });
+    assert_eq!(machines_own.reach, Reach::MachineOwn { repository: CLI });
+    assert_eq!(as_an_account.reach, Reach::PushesAsMachineOwn { repository: CLI });
+    assert_eq!(through.reach, refused_as("ada"));
+    assert_eq!(github.asked().len(), 1, "only once it went through the credential");
 }
 
 /// As when another default is chosen, and as when the default's sign-in is renewed, which changes its token, and so

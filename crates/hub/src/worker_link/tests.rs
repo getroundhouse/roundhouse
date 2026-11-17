@@ -47,7 +47,7 @@ fn hub_using(dir: &Path, provider: &Arc<dyn Provider>) -> Arc<Hub> {
 fn hub_timed(dir: &Path, provider: &Arc<dyn Provider>, timers: Timers) -> Arc<Hub> {
     let store = Arc::new(store_with_session(dir));
     store.workspace_ready(&"w".into(), "/w", &"alder".into(), "main", None).unwrap();
-    store.read_repo_url(&"r".into(), "/repo", None).unwrap();
+    store.read_repo_url(&"r".into(), "/repo", None, None).unwrap();
     let providers = ProviderSet::only(provider.clone());
     let github = Github::new(crate::github::GithubConfig::at(NO_GITHUB.to_string()));
     Arc::new(Hub::new(Build::UNSTAMPED, store, HubDirs::in_dir(dir), providers, github, Vec::new(), false, timers))

@@ -111,3 +111,7 @@ pub(crate) const BEFORE_REPO_URLS: usize = 65;
 
 /// How many migrations there were before the hub recorded what it sends every worker for the default GitHub account.
 pub(crate) const BEFORE_GITHUB_SENT: usize = 66;
+
+/// How many migrations there were before the hub kept whether a push from each repository's checkout goes round the
+/// git credential.
+pub(crate) const BEFORE_PUSH_ROUTES: usize = 67;

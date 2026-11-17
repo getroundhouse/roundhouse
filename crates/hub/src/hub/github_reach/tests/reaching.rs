@@ -4,11 +4,16 @@
 use protocol::model::{GithubRepositoryName, GithubToken, InstalledApp, Reach, UnusableLogin};
 use protocol::worker::{GitCredential, GitIdentity};
 
-use super::super::reaching::reach;
+use super::super::reaching::{PushesTo, reach};
 use super::support::{CLI, account};
 use crate::github::{Answer, Github, GithubConfig, Script, StandIn};
 use crate::github_logins::DefaultCredential;
 use crate::hub::tests::NO_GITHUB;
+
+/// Pushes to `repository` that go through the git credential.
+fn through(repository: Option<GithubRepositoryName>) -> PushesTo {
+    PushesTo { repository, around: false }
+}
 
 #[tokio::test]
 async fn each_answer_github_gives_an_accounts_push_is_what_the_push_would_meet() {
@@ -26,10 +31,10 @@ async fn each_answer_github_gives_an_accounts_push_is_what_the_push_would_meet()
     let named = GithubRepositoryName::named;
 
     let reached = [
-        reach(&github, Some(named("ada/app")), &ada).await,
-        reach(&github, Some(CLI), &ada).await,
-        reach(&github, Some(named("ada/gone")), &ada).await,
-        reach(&github, Some(named("ada/revoked")), &ada).await,
+        reach(&github, through(Some(named("ada/app"))), &ada).await,
+        reach(&github, through(Some(CLI)), &ada).await,
+        reach(&github, through(Some(named("ada/gone"))), &ada).await,
+        reach(&github, through(Some(named("ada/revoked"))), &ada).await,
     ];
 
     let username = || "ada".into();
@@ -71,7 +76,7 @@ async fn an_installations_answer_names_its_bot_and_where_its_installed_not_the_u
         installation: Some(installed.clone()),
     };
 
-    let refused = reach(&calls, Some(CLI), &bots).await;
+    let refused = reach(&calls, through(Some(CLI)), &bots).await;
 
     let username = "ada-roundhouse[bot]".into();
     assert_eq!(
@@ -96,14 +101,36 @@ async fn what_the_hub_cant_check_with_says_why_without_asking_github() {
     let blocked = DefaultCredential::Blocked { reason: "ada was disconnected".into(), account: Some("g".into()), why };
     let nowhere = Github::new(GithubConfig::at(NO_GITHUB.to_string()));
 
-    let machines_own = reach(&calls, Some(CLI), &DefaultCredential::MachineOwn).await;
-    let block = reach(&calls, Some(CLI), &blocked).await;
-    let not_on_github = reach(&calls, None, &account("ada", "a-token")).await;
-    let unreachable = reach(&nowhere, Some(CLI), &account("ada", "a-token")).await;
+    let machines_own = reach(&calls, through(Some(CLI)), &DefaultCredential::MachineOwn).await;
+    let block = reach(&calls, through(Some(CLI)), &blocked).await;
+    let not_on_github = reach(&calls, through(None), &account("ada", "a-token")).await;
+    let unreachable = reach(&nowhere, through(Some(CLI)), &account("ada", "a-token")).await;
 
     assert_eq!(machines_own, Reach::MachineOwn { repository: CLI });
     assert_eq!(block, Reach::Blocked { repository: CLI, reason: "ada was disconnected".into() });
     assert_eq!(not_on_github, Reach::NotOnGithub);
     assert!(github.asked().is_empty(), "{:?}", github.asked());
     assert!(matches!(&unreachable, Reach::CouldntTell { repository, .. } if *repository == CLI), "{unreachable:?}");
+}
+
+/// A push that goes round the git credential goes as the machine's own login, so neither an account's token nor a
+/// block is what it meets, and GitHub isn't asked. Under the machine's own, that's what it says already.
+#[tokio::test]
+async fn a_push_round_the_credential_is_the_machines_own_whatever_the_default() {
+    let github = StandIn::start(Vec::new()).await;
+    let calls = Github::new(GithubConfig::at(github.api()));
+    let around = || PushesTo { repository: Some(CLI), around: true };
+    let why = UnusableLogin::Disconnected;
+    let blocked = DefaultCredential::Blocked { reason: "ada was disconnected".into(), account: Some("g".into()), why };
+
+    let as_an_account = reach(&calls, around(), &account("ada", "a-token")).await;
+    let past_a_block = reach(&calls, around(), &blocked).await;
+    let machines_own = reach(&calls, around(), &DefaultCredential::MachineOwn).await;
+    let nowhere = reach(&calls, PushesTo { repository: None, around: true }, &account("ada", "a-token")).await;
+
+    assert_eq!(as_an_account, Reach::PushesAsMachineOwn { repository: CLI });
+    assert_eq!(past_a_block, Reach::PushesAsMachineOwn { repository: CLI });
+    assert_eq!(machines_own, Reach::MachineOwn { repository: CLI });
+    assert_eq!(nowhere, Reach::NotOnGithub);
+    assert!(github.asked().is_empty(), "{:?}", github.asked());
 }

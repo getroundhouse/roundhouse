@@ -11,4 +11,5 @@ mod helper;
 mod tests;
 
 pub(crate) use credentials::GitCredentials;
+pub(crate) use files::rewriting;
 pub use helper::{CredentialHelper, answer_credential_request};

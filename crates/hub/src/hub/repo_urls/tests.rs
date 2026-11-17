@@ -23,7 +23,7 @@ fn roundhouse() -> RepoUrl {
 
 /// A stand-in for a worker that reads `url` from every checkout, as [`worker_answering`] says.
 fn worker_reading(url: Option<RepoUrl>) -> (Arc<WorkerLink>, Arc<Mutex<Vec<String>>>) {
-    worker_answering(Some(Ok(WorkerResponse::RepoUrl(RepoUrlReply { url }))))
+    worker_answering(Some(Ok(WorkerResponse::RepoUrl(RepoUrlReply { url, push: None }))))
 }
 
 /// A stand-in for a worker that answers each read with `answer`, or never, for `None`, and the checkouts it was asked

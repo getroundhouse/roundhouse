@@ -73,6 +73,10 @@ pub enum Reach {
     /// Not checked, since the default is each machine's own login, which the hub holds no token for, so a push goes as
     /// whatever that machine's git has.
     MachineOwn { repository: GithubRepositoryName },
+    /// Not checked, since a push from the repository's checkout goes round the git credential the hub hands workers,
+    /// as over SSH with the machine's key, which a person's `insteadOf` can make of an `https://` address, so agents
+    /// push to `repository` as the machine's own login, whoever the default is, as `PushRoute::Around` says.
+    PushesAsMachineOwn { repository: GithubRepositoryName },
     /// Not checked, since the default's login can't be used now, so a push to GitHub fails, saying `reason`, as the
     /// hub's block of every worker's git credential does.
     Blocked { repository: GithubRepositoryName, reason: String },
@@ -104,6 +108,7 @@ impl Reach {
             | Reach::TokenRefused { repository, .. }
             | Reach::CouldntTell { repository, .. }
             | Reach::MachineOwn { repository }
+            | Reach::PushesAsMachineOwn { repository }
             | Reach::Blocked { repository, .. } => Some(repository),
             Reach::NotOnGithub | Reach::Unknown => None,
         }
@@ -119,6 +124,7 @@ impl Reach {
             | Reach::TokenRefused { repository, username, .. } => Some((repository, username)),
             Reach::CouldntTell { .. }
             | Reach::MachineOwn { .. }
+            | Reach::PushesAsMachineOwn { .. }
             | Reach::Blocked { .. }
             | Reach::NotOnGithub
             | Reach::Unknown => None,

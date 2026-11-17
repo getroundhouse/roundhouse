@@ -28,6 +28,8 @@ pub(super) struct Said {
     pub(super) then: String,
     /// GitHub's page for installing the default's app, when what to do is done there.
     pub(super) install_at: Option<String>,
+    /// Whether what it says to do is done in Git in Settings, which the line's button opens.
+    pub(super) in_settings: bool,
 }
 
 /// What to do, after what's wrong, and GitHub's page for installing the default's app, when it's done there, as
@@ -51,7 +53,18 @@ pub(super) fn said(reach: &Reach) -> Option<Said> {
         // The block's reason says why and what to do, as git says it as it refuses the push.
         Reach::Blocked { repository, reason } => {
             let wrong = format!("Agents can't push to {repository}.");
-            return Some(Said { wrong, then: sentence(reason), install_at: None });
+            return Some(Said { wrong, then: sentence(reason), install_at: None, in_settings: true });
+        }
+        // What to do is in the repository's git config, not in Settings, so there's no button.
+        Reach::PushesAsMachineOwn { repository } => {
+            let wrong =
+                format!("Agents push to {repository} as their machine's own login, not the default GitHub account.");
+            let then = format!(
+                "Where origin pushes, as git config rewrites it, isn't https://github.com/, so pushes go round the \
+                 default, as over SSH with the machine's key. To push as the default, have origin push to \
+                 https://github.com/{repository}.git."
+            );
+            return Some(Said { wrong, then, install_at: None, in_settings: false });
         }
         Reach::Pushes { .. }
         | Reach::CouldntTell { .. }
@@ -60,7 +73,7 @@ pub(super) fn said(reach: &Reach) -> Option<Said> {
         | Reach::Unknown => return None,
     };
     let wrong = format!("Agents can't push to {repository} as {username}, the default GitHub account.");
-    Some(Said { wrong, then, install_at })
+    Some(Said { wrong, then, install_at, in_settings: true })
 }
 
 /// What to do once GitHub refused a push to `repository` as `username`, saying `reason`. A token's or a sign-in's
@@ -152,11 +165,11 @@ fn sentence(words: &str) -> String {
 }
 
 impl WorkspacePane {
-    /// A line above the composer while agents can't push to the workspace's repository on GitHub, with a way to Git
-    /// in Settings, where what it says to do is done, and to GitHub's page for installing the default's app, when
-    /// it's done there.
+    /// A line above the composer while agents can't push to the workspace's repository on GitHub as the default, with
+    /// a way to Git in Settings, where what it says to do is done, if that's where, and to GitHub's page for installing
+    /// the default's app, when it's done there.
     pub(super) fn push_line(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
-        let Said { wrong, then, install_at } = said(self.shown.github_reach()?)?;
+        let Said { wrong, then, install_at, in_settings } = said(self.shown.github_reach()?)?;
         let colors = look::colors(cx);
         // One paragraph, so what to do wraps on from what's wrong, which only its colour sets apart.
         let warned = (0..wrong.len(), HighlightStyle { color: Some(colors.warning), ..HighlightStyle::default() });
@@ -182,11 +195,11 @@ impl WorkspacePane {
                 .child(div().flex_1().min_w_0().child(words))
                 .children(install)
                 // Out past its own room, so its words end as far in as the line's start, as the setup line's do.
-                .child(
+                .children(in_settings.then(|| {
                     look::button(OPEN_GIT, look::ButtonKind::Borderless, size, "Open Git")
                         .stands_out(&[look::Side::Right])
-                        .on_click(cx.listener(|_, _, _, cx| cx.emit(PaneEvent::OpenGit))),
-                )
+                        .on_click(cx.listener(|_, _, _, cx| cx.emit(PaneEvent::OpenGit)))
+                }))
                 .into_any_element(),
         )
     }
