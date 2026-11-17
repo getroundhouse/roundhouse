@@ -10,6 +10,7 @@ mod failure;
 pub mod files;
 mod older;
 mod other;
+mod plain;
 mod returned;
 mod search;
 pub mod subagents;

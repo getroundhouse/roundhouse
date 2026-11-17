@@ -8,7 +8,7 @@ use super::other::{self, Other};
 use super::search::{Looks, Search};
 use super::subagents::ToSubagents;
 use super::web::{Fetch, WebSearch};
-use super::{Command, EditFile, ReadFile, ToolCall, WriteFile};
+use super::{Command, EditFile, ReadFile, Recorded, ToolCall, WriteFile, count, first_line, plain};
 use protocol::capability::calls::call::{CellEdit, CommandPart, FilePatch, NotebookEdit, Patch, PatchChange};
 use protocol::capability::calls::output::{FileOutcome, Found, McpContent};
 use protocol::capability::calls::{Call, CallOutput};
@@ -42,6 +42,7 @@ pub(super) fn read(call: &Call) -> ToolCall<'_> {
         Call::StopSubagent(stop) => ToolCall::ToSubagents(stop.into()),
         Call::Mcp { server, tool, input } => ToolCall::Other(Other::typed(Some(server.as_str()), tool, input)),
         Call::Other { tool, input } => ToolCall::Other(Other::typed(None, tool, input)),
+        Call::Advisor => ToolCall::Advisor,
         // Drawn as any typed call until each is drawn as its kind.
         Call::ViewImage(_)
         | Call::GenerateImage(_)
@@ -50,7 +51,6 @@ pub(super) fn read(call: &Call) -> ToolCall<'_> {
         | Call::Todos(_)
         | Call::Skill(_)
         | Call::Lsp(_)
-        | Call::Advisor
         | Call::Sleep(_)
         | Call::Monitor(_)
         | Call::Schedule(_)
@@ -79,73 +79,75 @@ fn only(command: &protocol::capability::calls::call::Command) -> Option<Only<'_>
 /// What a call is, in words, as the CLI prints it and a request to make it is headed. The chat draws some kinds with
 /// titles of their own that say more, such as how many lines a read read.
 pub fn title(call: &Call) -> String {
-    match call {
-        Call::Read(_) => "Read".into(),
-        Call::Write(_) => "Write".into(),
-        Call::Edit(_) | Call::Patch(_) => "Edit".into(),
-        Call::NotebookEdit(edit) => notebook_title(edit).into(),
-        Call::ViewImage(_) => "View an image".into(),
-        Call::GenerateImage(_) => "Make an image".into(),
-        Call::Search(_) => Looks::InFiles.title().into(),
-        Call::FindFiles(_) => Looks::ForNames.title().into(),
-        Call::Fetch(_) => Fetch::TITLE.into(),
-        Call::WebSearch(_) => WebSearch::TITLE.into(),
-        Call::Mcp { tool, .. } | Call::Other { tool, .. } => tool.clone(),
-        Call::MessageSubagent(to) => ToSubagents::from(to).title().into(),
-        Call::WaitForSubagents(wait) => ToSubagents::from(wait).title().into(),
-        Call::StopSubagent(stop) => ToSubagents::from(stop).title().into(),
-        Call::Unknown => other::UNKNOWN_TOOL.into(),
-        Call::Command(_)
-        | Call::WriteInput(_)
-        | Call::FindInPage(_)
-        | Call::Todos(_)
-        | Call::Subagent(_)
-        | Call::Skill(_)
-        | Call::Lsp(_)
-        | Call::Advisor
-        | Call::Sleep(_)
-        | Call::Monitor(_)
-        | Call::Schedule(_)
-        | Call::Workflow(_)
-        | Call::Questions
-        | Call::Plan => format!("{:?}", call.kind()),
-    }
+    let words = match call {
+        Call::Command(_) => "Command",
+        Call::WriteInput(input) => plain::write_input_title(input),
+        Call::Read(_) => "Read",
+        Call::Write(_) => "Write",
+        Call::Edit(_) | Call::Patch(_) => "Edit",
+        Call::NotebookEdit(edit) => notebook_title(edit),
+        Call::Search(_) => Looks::InFiles.title(),
+        Call::FindFiles(_) => Looks::ForNames.title(),
+        Call::Fetch(_) => Fetch::TITLE,
+        Call::WebSearch(_) => WebSearch::TITLE,
+        Call::FindInPage(_) => "Find in a page",
+        Call::Todos(_) => "Update the todo list",
+        Call::Subagent(_) => "Subagent",
+        Call::MessageSubagent(to) => ToSubagents::from(to).title(),
+        Call::WaitForSubagents(wait) => ToSubagents::from(wait).title(),
+        Call::StopSubagent(stop) => ToSubagents::from(stop).title(),
+        Call::ViewImage(_) => "View an image",
+        Call::GenerateImage(_) => "Make an image",
+        Call::Skill(_) => "Use a skill",
+        Call::Lsp(lsp) => plain::lsp_title(lsp),
+        Call::Advisor => "Ask the advisor",
+        Call::Sleep(_) => "Wait",
+        Call::Monitor(_) => "Monitor",
+        Call::Schedule(_) => "Schedule a prompt",
+        Call::Workflow(_) => "Run a workflow",
+        Call::Questions => "Ask questions",
+        Call::Plan => "Ask to approve a plan",
+        Call::Mcp { tool, .. } | Call::Other { tool, .. } => return tool.clone(),
+        Call::Unknown => other::UNKNOWN_TOOL,
+    };
+    words.into()
 }
 
-pub fn summary(call: &Call) -> String {
-    match call {
-        Call::Patch(patch) => paths(patch),
-        Call::Mcp { server, tool, .. } => format!("{server}: {tool}"),
-        Call::Other { tool, .. } => tool.clone(),
+/// What a call read as any typed call is about, on one line, as [`ToolCall::summary`] says: the input that says most
+/// of what it does, as any other tool's is. `None` for one with nothing to say, such as a wait for any subagent.
+pub(super) fn summary(call: &Call) -> Option<String> {
+    let about = match call {
+        Call::WriteInput(input) => Some(input.text.as_str()),
+        Call::FindInPage(find) => Some(find.pattern.as_str()),
+        Call::Todos(list) => return Some(count(list.items.len(), "todo", "todos")),
+        Call::ViewImage(view) => Some(view.path.as_str()),
+        Call::GenerateImage(made) => Some(made.prompt.as_str()),
+        Call::Skill(skill) => Some(skill.name.as_str()),
+        Call::Lsp(lsp) => return Some(plain::lsp_place(lsp)),
+        Call::Sleep(sleep) => return Some(plain::how_long(*sleep)),
+        Call::Monitor(monitor) => return Some(plain::watching(monitor)),
+        Call::Schedule(schedule) => Some(schedule.prompt.as_str()),
+        Call::Workflow(workflow) => workflow.name.as_deref(),
+        Call::Advisor | Call::Questions | Call::Plan | Call::Unknown => None,
+        // Read as kinds of their own, which say what they're about themselves.
         Call::Command(_)
-        | Call::WriteInput(_)
         | Call::Read(_)
         | Call::Write(_)
         | Call::Edit(_)
+        | Call::Patch(_)
         | Call::NotebookEdit(_)
         | Call::Search(_)
         | Call::FindFiles(_)
         | Call::Fetch(_)
         | Call::WebSearch(_)
-        | Call::FindInPage(_)
-        | Call::Todos(_)
         | Call::Subagent(_)
         | Call::MessageSubagent(_)
         | Call::WaitForSubagents(_)
         | Call::StopSubagent(_)
-        | Call::ViewImage(_)
-        | Call::GenerateImage(_)
-        | Call::Skill(_)
-        | Call::Lsp(_)
-        | Call::Advisor
-        | Call::Sleep(_)
-        | Call::Monitor(_)
-        | Call::Schedule(_)
-        | Call::Workflow(_)
-        | Call::Questions
-        | Call::Plan
-        | Call::Unknown => title(call),
-    }
+        | Call::Mcp { .. }
+        | Call::Other { .. } => return ToolCall::read(Recorded::Typed(call)).summary(),
+    };
+    about.map(first_line).filter(|about| !about.is_empty()).map(str::to_string)
 }
 
 /// What changing a notebook's cell does to it, in words.

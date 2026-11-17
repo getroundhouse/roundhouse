@@ -6,7 +6,7 @@ use std::collections::HashSet;
 use protocol::event::{ContentBlock, EventBody, Question};
 
 use super::english::{all_common_english, is_boilerplate};
-use crate::calls::{EditFile, ReadFile, Recorded, ToSubagents, ToolCall, WriteFile, typed};
+use crate::calls::{EditFile, ReadFile, Recorded, ToSubagents, ToolCall, WriteFile};
 use crate::records::InWorkspace;
 use crate::session_log::{Row, SessionLog};
 
@@ -253,8 +253,7 @@ impl HintCollector {
                 }
             }
             ToolCall::ToSubagents(ToSubagents::Message { message, .. }) => self.add_prose(message),
-            ToolCall::Typed(typed_call) => self.add_prose(&typed::summary(typed_call)),
-            ToolCall::Other(_) => {
+            ToolCall::Typed(_) | ToolCall::Other(_) => {
                 if let Some(summary) = call.summary() {
                     self.add_prose(&summary);
                 }

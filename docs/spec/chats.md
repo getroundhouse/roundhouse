@@ -346,6 +346,12 @@ Every call is drawn the same way, as the first rule below says, and each kind fi
 
   ![Two MCP tools' calls from Codex, one opened to its input and output](screens/tool-any-typed.png)
 
+- **A typed call of a kind with no drawing of its own is titled in words for what it does,** such as `Schedule a prompt`, `Run a workflow` or `Wait`, never by its kind's name, with its most telling input in faint monospace, such as the prompt, the workflow's name or `20 minutes`, and nothing more where it has none. Opened, its input, then what came back. The CLI prints it the same, and a request to use one is headed with its title. *Unconfirmed.*
+
+  **A prompt set for later and a workflow left running, from Antigravity, the prompt opened.** *Unconfirmed.*
+
+  ![A schedule and a workflow from Antigravity, titled in words, the schedule opened to its input](screens/tool-later-typed.png)
+
 - **A file call names the file in an outlined chip, and says how much it read or wrote,** such as `Read 10 lines` or `Write 12 lines`. Opened, the file's path, then its lines with their numbers in the file, highlighted for its language. The full path is only there, since the file's name is enough to tell calls apart. *Unconfirmed.*
 
   **Each kind of file call: a read, an edit opened to its diff, a new file, an edit that failed, and a write over a file that was there.** *Unconfirmed.*
