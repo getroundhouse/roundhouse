@@ -34,6 +34,11 @@ fn prompts_too_far_back_to_be_loaded_are_listed_and_jumped_to(cx: &mut TestAppCo
     let rows: Vec<usize> = listed.iter().map(|line| ui.row_of(&took(line))).collect();
     let (first, second) = (rows[0], rows[1]);
     assert!(ui.cx.read_entity(&transcript, |t, _| t.event_at(second).is_none()), "the second prompt isn't loaded");
+    // The outline is drawn once the loaded rows have a prompt, and the prompts that aren't loaded come in the hub's list,
+    // a reply of its own after the rows', so they're waited for rather than looked for in the list at once.
+    ui.wait("the hub's list of prompts in the outline", |ui| {
+        ui.has(row_id("outline-tick", first)) && ui.has(row_id("outline-tick", second))
+    });
 
     jump_to(&mut ui, second);
 

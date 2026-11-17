@@ -254,7 +254,11 @@ fn a_match_in_what_a_subagent_was_asked_opens_its_call_and_is_drawn_with_its_mar
     let (world, _) = chat_of(events, 0);
     let (_hub, mut ui) = open(cx, world);
     let transcript = ui.transcript().unwrap();
-    assert_eq!(ui.labelled(SUBAGENT_LINE).first().and_then(ElementSnapshot::expanded), Some(false));
+    // The chat's record makes its transcript, and its events, which draw the call's line, come after it on the chat's
+    // own follow, so the line is waited for rather than read as soon as the transcript is there.
+    let line_open = |ui: &mut Ui| ui.labelled(SUBAGENT_LINE).first().and_then(ElementSnapshot::expanded);
+    ui.wait("its call's line", |ui| line_open(ui).is_some());
+    assert_eq!(line_open(&mut ui), Some(false));
 
     find(&mut ui, "around.");
 

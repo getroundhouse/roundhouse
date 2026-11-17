@@ -87,7 +87,11 @@ fn archiving_from_home_leaves_home_showing_with_the_keys(cx: &mut TestAppContext
     ui.click(SharedString::from(format!("home-archive-{second}")));
 
     ui.wait("it to start archiving", |_| held.runs() == 1);
-    assert!(ui.shows_label(&format!("home-doing-{second}"), "Archiving…"), "its row says so in place of the button");
+    // The row says so from the workspace's record, which reaches the app on the hub's feed, apart from the script the
+    // hub runs once it has recorded it, so it's waited for rather than read as soon as the script has run.
+    ui.wait("its row to say so in place of the button", |ui| {
+        ui.shows_label(&format!("home-doing-{second}"), "Archiving…")
+    });
     held.release();
     ui.wait("it to be archived", |ui| has(ui, &second, WorkspaceStatus::Archived) && !ui.has(home_row(&second)));
     assert!(ui.has("home-page"), "the button doesn't also show the workspace, as its row would");
@@ -108,7 +112,11 @@ fn an_archived_row_says_its_being_restored_until_it_is(cx: &mut TestAppContext) 
     ui.click(SharedString::from(format!("home-restore-{first}")));
 
     ui.wait("it to start restoring", |_| held.runs() == 1);
-    assert!(ui.shows_label(&format!("home-doing-{first}"), "Restoring…"), "in place of the button");
+    // From the workspace's record, which reaches the app on the hub's feed, apart from the checkout the hub's worker
+    // makes once the hub has recorded it, so it's waited for rather than read as soon as the checkout has run.
+    ui.wait("its row to say so in place of the button", |ui| {
+        ui.shows_label(&format!("home-doing-{first}"), "Restoring…")
+    });
     held.release();
     ui.wait("it to be restored", |ui| has(ui, &first, WorkspaceStatus::Ready) && ui.view().busy.is_free());
 }

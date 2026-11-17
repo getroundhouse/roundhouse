@@ -71,6 +71,12 @@ fn each_kind_of_text_is_selected_with_the_rest_and_one_that_opens_only_while_it_
         let (name, reply) = (kind.name, after(kind.name));
         let (between, closed_has) = (kind.copied)(&ui);
         open_or_close(&mut ui, &kind.opens, true);
+        if matches!(kind.opens, Opens::Call(SUBAGENT_LINE)) {
+            // The subagent works in the background, kept apart, so its report is its record's, which comes on a
+            // request of its own, apart from the chat's events, and is waited for rather than copied as soon as the
+            // chat's last event is in.
+            ui.wait("the subagent's report", |ui| !ui.shown("report/").is_empty());
+        }
         let opened = everything_at_the_end(&mut ui, &reply);
         open_or_close(&mut ui, &kind.opens, false);
         let closed = everything_at_the_end(&mut ui, &reply);

@@ -77,7 +77,9 @@ fn a_rows_archive_button_shows_under_the_pointer_and_archives_it_without_opening
     // Held open, so nothing that comes once it's archived has moved the selection yet.
     assert_eq!(ui.view().selected.as_ref(), Some(&showing), "pressing it doesn't also open the workspace");
     ui.hover("send");
-    assert!(ui.shows_label(&format!("doing-{going}"), "Archiving…"), "its row says so, wherever the pointer is");
+    // The row says so from the workspace's record, which reaches the app on the hub's feed, apart from the script the
+    // hub runs once it has recorded it, so it's waited for rather than read as soon as the script has run.
+    ui.wait("its row to say so, wherever the pointer is", |ui| ui.shows_label(&format!("doing-{going}"), "Archiving…"));
     assert!(!ui.has(SharedString::from(format!("doing-{showing}"))), "the workspace showing isn't going");
     held.release();
     ui.wait("it to be archived", |ui| archived(ui, &going));
@@ -308,8 +310,10 @@ fn nothing_else_is_archived_or_restored_while_a_workspace_is_being_archived(cx: 
     ui.press("secondary-shift-a");
     ui.wait("it to start archiving", |_| held.runs() == 1);
     assert!(ui.off("pull-request-action"), "the pull request's Archive can't be pressed meanwhile");
-    assert!(ui.shows_label("pull-request-action", "Archiving…"), "and says why");
-    assert!(ui.shows_label(&format!("doing-{id}"), "Archiving…"), "as its row does, in place of its button");
+    // Why is the workspace's record's, which reaches the app on the hub's feed, apart from the script the hub runs once
+    // it has recorded it, so it's waited for rather than read as soon as the script has run.
+    ui.wait("the row to say why, in place of its button", |ui| ui.shows_label(&format!("doing-{id}"), "Archiving…"));
+    assert!(ui.shows_label("pull-request-action", "Archiving…"), "and the pull request's Archive does too");
     ui.hover(row(&other));
     assert!(ui.off(archive_button(&other)), "another row's can't be pressed either");
     ui.press("secondary-shift-a");
