@@ -56,6 +56,13 @@ fn every_request_about_an_agents_login_keeps_its_form() {
         r#"{"method":"account_connect","agent":"claude","name":"Work","token":"a-made-up-token","account":"claude-1"}"#,
     );
     asked(
+        ClientRequest::AccountSetDefault(accounts::AccountSetDefault {
+            agent: AgentKind::Claude,
+            account: "claude-1".into(),
+        }),
+        r#"{"method":"account_set_default","agent":"claude","account":"claude-1"}"#,
+    );
+    asked(
         ClientRequest::AccountDisconnect(accounts::AccountDisconnect { id: "claude-1".into() }),
         r#"{"method":"account_disconnect","id":"claude-1"}"#,
     );
@@ -229,4 +236,6 @@ fn a_request_with_no_fields_reads_with_fields_it_doesnt_know() {
     assert_eq!(read(r#"{"method":"agent_list","newer":1}"#), ClientRequest::AgentList);
     assert_eq!(read(r#"{"method":"repo_list","newer":1}"#), ClientRequest::RepoList);
     assert_eq!(read(r#"{"method":"records_list","newer":1}"#), ClientRequest::RecordsList);
+    assert_eq!(read(r#"{"method":"pairing_start","newer":1}"#), ClientRequest::PairingStart);
+    assert_eq!(read(r#"{"method":"device_list","newer":1}"#), ClientRequest::DeviceList);
 }
