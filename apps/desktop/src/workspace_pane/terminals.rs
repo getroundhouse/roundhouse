@@ -48,7 +48,8 @@ impl WorkspacePane {
         self.open_terminals().iter().any(|open| &open.id == id).then_some(id)
     }
 
-    fn view_in_front(&self) -> Option<&Entity<TerminalView>> {
+    /// The view of the terminal in front, if a terminal is.
+    pub(super) fn view_in_front(&self) -> Option<&Entity<TerminalView>> {
         self.terminal_in_front().and_then(|id| self.terminals.views.get(id))
     }
 

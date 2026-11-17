@@ -29,6 +29,7 @@ mod shown;
 mod stand_in;
 mod stand_in_gh;
 mod stand_in_github;
+mod terminal;
 mod workspaces;
 
 pub(crate) use asked::id;
@@ -56,6 +57,7 @@ pub(crate) use order::{
 pub(crate) use projects::{project_row, two_projects};
 pub(crate) use stand_in::StandInHub;
 pub(crate) use stand_in_gh::pull_request;
+pub(crate) use terminal::{Cells, in_window};
 pub(crate) use workspaces::{home_row, pencil, sidebar_row};
 
 mod stack;
