@@ -3,9 +3,13 @@
 //! for it, and the diff an edit shows while it's hovered scrolls both ways too, and keeps the wheel from the
 //! transcript. Which gesture goes to a block and which to the transcript, and where a block stops, are the rules of
 //! `transcript`'s `scroll_area`, which its own tests pin, so these show only that a block in a call's body hears the
-//! wheel, and the transcript under it hears what the block leaves it.
+//! wheel, and the transcript under it hears what the block leaves it. Only what the hub recorded matters, so each chat
+//! is made up for a fake hub.
 
 use std::time::Duration;
+
+use client_core::fake_hub::events::{edit, updated};
+use protocol::event::EventBody;
 
 use gpui_kit::{
     AppContext as _, ElementId, InputEvent as _, Modifiers, MouseMoveEvent, Pixels, Point, ScrollDelta, ScrollEvent,
@@ -13,8 +17,9 @@ use gpui_kit::{
 };
 use transcript::Place;
 
-use super::{COMMAND_LINE, in_a_new_workspace, open_a_call, open_a_command};
-use crate::support::{Stack, Ui};
+use super::COMMAND_LINE;
+use super::opening::{open_on_a_call, open_on_a_command, open_on_words_around};
+use crate::support::Ui;
 
 /// Longer than a mouse wheel's notches come apart in one spin, so the next notch starts a new gesture.
 const A_PAUSE: Duration = Duration::from_secs(1);
@@ -26,9 +31,8 @@ const LONG_LINE: usize = 400;
 /// over it.
 #[gpui_kit::test]
 fn a_call_s_output_takes_a_gesture_that_starts_on_it_and_leaves_the_rest_to_the_transcript(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = in_a_new_workspace(cx, &stack);
-    let (command, output) = open_a_command(&mut ui, "seq 1 20");
+    let printed = Vec::from_fn(20, |n| format!("{}\n", n + 1)).concat();
+    let (_fake, mut ui, command, output) = open_on_a_command(cx, "seq 1 20", &printed);
     // How far the output has scrolled in its block, which the transcript moving doesn't change.
     let scrolled_in = |ui: &mut Ui<'_>| top(ui, command.clone()) - top(ui, output.clone());
     let (start, transcript) = (scrolled_in(&mut ui), scrolled_to(&ui));
@@ -97,9 +101,7 @@ fn a_call_s_output_takes_a_gesture_that_starts_on_it_and_leaves_the_rest_to_the_
 
 #[gpui_kit::test]
 fn a_line_too_long_for_its_block_scrolls_sideways_to_its_end(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = in_a_new_workspace(cx, &stack);
-    open_a_call(&mut ui, &format!("edit:20:{LONG_LINE}"), "Edit");
+    let (_fake, mut ui) = open_on_a_call(cx, edited(20, LONG_LINE), "Edit");
     let lines = ui.shown("file/").remove(0);
     let (start, transcript) = (ui.bounds(lines.clone()).origin, scrolled_to(&ui));
     let at = ui.bounds(over(&lines)).center();
@@ -132,12 +134,8 @@ fn a_line_too_long_for_its_block_scrolls_sideways_to_its_end(cx: &mut TestAppCon
 
 #[gpui_kit::test]
 fn an_edit_s_diff_stays_while_the_pointer_is_on_it_and_scrolls(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = in_a_new_workspace(cx, &stack);
     // Enough words first that the transcript itself could scroll, then a diff longer and wider than its preview.
-    ui.input(&format!("burst:3000; edit:20:{LONG_LINE}; say:done"));
-    ui.press("enter");
-    ui.wait_idle_with("the turn to finish", |text| text.contains("done"));
+    let (_fake, mut ui) = open_on_words_around(cx, edited(20, LONG_LINE));
     let edit = ui.labelled("Edit")[0].path().last().unwrap().clone();
     ui.hover(edit);
     ui.wait_out_a_tooltip();
@@ -160,6 +158,21 @@ fn an_edit_s_diff_stays_while_the_pointer_is_on_it_and_scrolls(cx: &mut TestAppC
     ui.wait_out_a_tooltip();
 
     assert!(!ui.visible("edit-preview"), "the diff goes once the pointer leaves it");
+}
+
+/// An edit of a file's `lines` lines, each at least `width` characters long, and what came back, as the hub records the
+/// fake agent's `edit:LINES:WIDTH`: without a patch, so the edit is drawn from what it replaced.
+fn edited(lines: usize, width: usize) -> Vec<EventBody> {
+    let line = |word: &str, n: usize| {
+        let mut line = format!("{word} line {n}");
+        while line.len() < width {
+            line.push_str(" and so on");
+        }
+        line
+    };
+    let text = |word: &str| Vec::from_fn(lines, |n| line(word, n + 1)).join("\n");
+    let path = "/workspaces/ledger/notes.txt";
+    vec![edit("msg-edit", "toolu-edit", path, &text("old"), &text("new")), updated("toolu-edit", path)]
 }
 
 /// The area that shows the block part with this ID, such as a command's output or a file's lines, so the pointer is

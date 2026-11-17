@@ -24,18 +24,8 @@ pub(super) fn long_reply(i: usize) -> String {
     "the signal box keeps a ledger. ".repeat([1, 4, 30][i % 3])
 }
 
-/// A long session, open at its end with the scrollbar showing, and everything loaded so far measured.
-pub(super) fn open_on_a_long_session<'a>(cx: &'a mut TestAppContext, stack: &Stack) -> Ui<'a> {
-    let newest = session_saying(stack, LONG, long_reply);
-    let mut ui = Ui::open(cx, stack);
-    ui.wait("the workspace", |ui| ui.transcript().is_some());
-    let last = ui.row_of(&newest);
-    wait_for_the_list_to_settle(&mut ui, last);
-    ui
-}
-
-/// The same session, held by a fake hub, and open as [`open_on_a_long_session`] opens it. The hub goes with the
-/// test, so it's returned to be kept.
+/// A long session, held by a fake hub, open at its end with the scrollbar showing, and everything loaded so far
+/// measured. The hub goes with the test, so it's returned to be kept.
 pub(super) fn open_on_a_long_chat(cx: &mut TestAppContext) -> (FakeHub, Ui<'_>) {
     open_on_a_chat_saying(cx, LONG, long_reply)
 }

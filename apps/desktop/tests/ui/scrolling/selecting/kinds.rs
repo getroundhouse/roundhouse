@@ -1,18 +1,22 @@
 //! Selecting each kind of text the chat records, besides the agent's replies and the person's prompts, which are
 //! selected with the rest, as `super` checks: a plan, and what shows only while it's open, a thought, what shows of a
 //! compaction's summary, and what a call shows of its own, in a row of its own, which is what the advisor said, what a
-//! subagent was asked and reported, and a command and what it printed, each in the order the chat shows it.
+//! subagent was asked and reported, and a command and what it printed, each in a chat of its own. Only what the hub
+//! recorded matters, so each chat is made up for a fake hub, as the hub records the fake agent's scripts.
 
+use client_core::fake_hub::events::{self, said, text, typed_call};
 use gpui_kit::test::TestWindowExt as _;
 use gpui_kit::{AppContext as _, Bounds, Pixels, SharedString, TestAppContext};
-use protocol::event::{ContentBlock, EventBody};
-use protocol::model::SessionStatus;
+use protocol::capability::calls::Call;
+use protocol::event::{ApprovalOutcome, Asking, ContentBlock, EventBody};
+use protocol::fixtures::{ApprovalRequest, approval_request};
+use protocol::model::ToolUseId;
+use serde_json::json;
 
-use protocol::model::SessionId;
-
-use super::super::{settle_at_the_end, wait_for_the_list_to_settle};
-use super::{COMMAND_LINE, LAST, PRINTED, everything, on_the_reply_saying, open};
-use crate::support::{Stack, Ui};
+use super::super::{turns, wait_for_the_list_to_settle};
+use super::made_up::{advice, command, compacted, open_on_chats_of, show, subagent};
+use super::{COMMAND_LINE, LAST, PRINTED, everything, on_the_reply_saying};
+use crate::support::Ui;
 
 pub(super) const ADVISOR_LINE: &str = "Ask the advisor";
 /// What the advisor says, in words nothing else in the chat says as its own text.
@@ -25,6 +29,8 @@ pub(super) const REPORT: &str = "There's a README here.";
 /// What a compaction is told to keep, which its summary says too.
 const KEEP: &str = "the timetables and the sidings";
 const PLAN: &str = "Timetables first, then the sidings, then each junction.";
+/// What the agent thinks, in words nothing else in the chat says.
+const THOUGHT: &str = "The junction comes before the sidings, and each lever frame in its turn.\n\n";
 
 /// How a text that shows only while it's open is opened, and closed again.
 enum Opens {
@@ -39,8 +45,9 @@ enum Opens {
 /// A kind of text that shows only while it's open, and what a copy of everything has of it either way.
 struct Kind {
     name: &'static str,
-    /// What has the agent write it, and then the reply after it, which [`after`] says.
-    prompts: Vec<String>,
+    /// The chat that has it, and then the reply after it, which [`after`] says, as the hub records the fake agent's
+    /// scripts that write them.
+    chat: Vec<EventBody>,
     opens: Opens,
     copied: fn(&Ui<'_>) -> Copied,
 }
@@ -49,21 +56,18 @@ struct Kind {
 /// closed again, for what else in the chat says them.
 type Copied = (String, Vec<(String, usize)>);
 
-/// One chat, which has a call of each kind that shows text of its own, a thought, a compaction and then a plan, each
-/// the newest in the chat as it's copied. Each but the plan is copied with the rest while it's open, between what comes
-/// before and after it, and isn't once it's closed, though the rest is. A plan is selected with the rest, once it's
-/// approved.
+/// A chat for each kind of text a call shows of its own, a thought, and a compaction, and then one with a plan. Each
+/// but the plan is copied with the rest while it's open, between what comes before and after it, and isn't once it's
+/// closed, though the rest is. A plan is selected with the rest, once it's approved.
 #[gpui_kit::test]
 fn each_kind_of_text_is_selected_with_the_rest_and_one_that_opens_only_while_it_s_open(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let session = stack.chat_in_a_new_workspace();
-    stack.run(&session, "say:Hello");
-    let mut ui = open(cx, &stack);
+    let kinds = kinds();
+    let mut chats = Vec::from_iter(kinds.iter().map(|kind| kind.chat.clone()));
+    chats.push(planned());
+    let (_fake, mut ui, chats, _) = open_on_chats_of(cx, chats);
 
-    for kind in kinds() {
-        for prompt in &kind.prompts {
-            run_in_the_open_chat(&mut ui, &stack, &session, prompt);
-        }
+    for (kind, chat) in kinds.into_iter().zip(&chats) {
+        show(&mut ui, chat);
         let (name, reply) = (kind.name, after(kind.name));
         let (between, closed_has) = (kind.copied)(&ui);
         open_or_close(&mut ui, &kind.opens, true);
@@ -77,11 +81,7 @@ fn each_kind_of_text_is_selected_with_the_rest_and_one_that_opens_only_while_it_
         }
         assert!(opened.ends_with(&reply) && closed.ends_with(&reply), "with {name} either way, the rest is copied");
     }
-    // Last, since once it's approved, the agent asks before it runs a command.
-    stack.client().session_prompt(&session, &format!("plan:{PLAN}"), None).unwrap();
-    ui.approve_plan();
-    ui.wait("the plan's turn to end", |ui| ui.session_status() == Some(SessionStatus::Idle));
-    run_in_the_open_chat(&mut ui, &stack, &session, &format!("say:{LAST}"));
+    show(&mut ui, chats.last().unwrap());
     let all = everything_at_the_end(&mut ui, LAST);
 
     // The prompt has the plan's words too, after what asks for it.
@@ -89,19 +89,23 @@ fn each_kind_of_text_is_selected_with_the_rest_and_one_that_opens_only_while_it_
     assert!(all.ends_with(LAST), "to the last reply");
 }
 
-/// Each kind of text that shows only while it's open, in the order the chat has them.
+/// Each kind of text that shows only while it's open, each in a chat of its own.
 fn kinds() -> [Kind; 5] {
     [
         Kind {
             name: "advice",
-            prompts: vec![format!("advise:{ADVICE}; say:{}", after("advice"))],
+            chat: asked(&format!("advise:{ADVICE}"), "advice", advice(1, ADVICE)),
             opens: Opens::Call(ADVISOR_LINE),
             // The prompt says it too, before what follows it there.
             copied: |_| (format!("\n\n{ADVICE}\n\n{}", after("advice")), vec![(ADVICE.to_owned(), 1)]),
         },
         Kind {
             name: "a subagent's ask and report",
-            prompts: vec![format!("agent-calls:1:{SUBAGENT_LINE}; say:{}", after("a subagent's ask and report"))],
+            chat: asked(
+                &format!("agent-calls:1:{SUBAGENT_LINE}"),
+                "a subagent's ask and report",
+                subagent(1, SUBAGENT_LINE, ASKED, REPORT),
+            ),
             opens: Opens::Call(SUBAGENT_LINE),
             copied: |_| {
                 let reply = after("a subagent's ask and report");
@@ -111,7 +115,11 @@ fn kinds() -> [Kind; 5] {
         },
         Kind {
             name: "a command and its output",
-            prompts: vec![format!("tool:echo {PRINTED}; say:{}", after("a command and its output"))],
+            chat: asked(
+                &format!("tool:echo {PRINTED}"),
+                "a command and its output",
+                command(1, &format!("echo {PRINTED}"), &format!("{PRINTED}\n")),
+            ),
             opens: Opens::Call(COMMAND_LINE),
             copied: |_| {
                 let between = format!("\n\necho {PRINTED}\n\n{PRINTED}\n\n{}", after("a command and its output"));
@@ -120,7 +128,7 @@ fn kinds() -> [Kind; 5] {
         },
         Kind {
             name: "a thought",
-            prompts: vec![format!("ponder:1:7; say:{}", after("a thought"))],
+            chat: asked("ponder:1:7", "a thought", vec![events::thought("msg-thought", THOUGHT)]),
             opens: Opens::Thinking,
             copied: |ui| {
                 let start: String = thought(ui).chars().take(40).collect();
@@ -129,12 +137,52 @@ fn kinds() -> [Kind; 5] {
         },
         Kind {
             name: "a summary",
-            prompts: vec![format!("/compact {KEEP}"), format!("say:{}", after("a summary"))],
+            chat: turns(vec![
+                (
+                    format!("/compact {KEEP}"),
+                    vec![compacted(&format!("1. What was asked: the prompts so far.\n2. What to keep: {KEEP}"))],
+                ),
+                (format!("say:{}", after("a summary")), vec![text("msg-after", &after("a summary"))]),
+            ]),
             opens: Opens::Summary,
             // The prompt that asked for the compaction says it too.
             copied: |_| (format!("What to keep: {KEEP}"), vec![(KEEP.to_owned(), 1)]),
         },
     ]
+}
+
+/// A chat of one turn, as the hub records the fake agent's `script` followed by a reply after the kind of text
+/// `name`: what the script did, `did`, and then that reply.
+fn asked(script: &str, name: &str, mut did: Vec<EventBody>) -> Vec<EventBody> {
+    let reply = after(name);
+    did.push(text("msg-after", &reply));
+    turns(vec![(format!("{script}; say:{reply}"), did)])
+}
+
+/// A chat whose agent presented [`PLAN`], which was approved, and then said [`LAST`], as the hub records the fake
+/// agent's scripts.
+fn planned() -> Vec<EventBody> {
+    let (call, approval) = ("toolu-plan", "approval-plan");
+    let request = ApprovalRequest {
+        tool_use_id: Some(ToolUseId::from(call)),
+        input: json!({ "plan": PLAN }),
+        asking: Some(Asking::Plan { plan: PLAN.to_owned() }),
+        ..approval_request(approval, "ExitPlanMode")
+    };
+    let approved = EventBody::ApprovalResolved {
+        approval_id: approval.into(),
+        outcome: ApprovalOutcome::Allowed,
+        answers_by_text: None,
+        answers_by_position: None,
+        by_setting: false,
+    };
+    let planning = vec![
+        typed_call("msg-plan", call, Call::Plan),
+        request.into(),
+        approved,
+        said(call, "User has approved your plan."),
+    ];
+    turns(vec![(format!("plan:{PLAN}"), planning), (format!("say:{LAST}"), vec![text("msg-last", LAST)])])
 }
 
 /// Opens the newest text `opens` says, or closes it.
@@ -169,24 +217,6 @@ fn everything_at_the_end(ui: &mut Ui<'_>, reply: &str) -> String {
     let window = settled_at_its_last_row(ui);
     let on_it = on_the_reply_saying(ui, window, reply);
     everything(ui, on_it)
-}
-
-/// Has the agent run `prompt` in `session`, which the window has open, and waits for the window to show all of it.
-/// [`Stack::run`] waits for the hub to have the whole turn, but the window takes the turn's events in over its own
-/// connection, and only as the app runs, so it can still be a turn behind. So this runs the app until the window's log
-/// holds, in its row, the newest of the chat's own events the hub has, which is the last of the turn: the log takes
-/// the chat's events in the order the hub sends them, so it has the rest of the turn by then too, and every row the
-/// turn adds. A subagent's events aren't the chat's own, and the turn's own go on after the subagent's end. Then the
-/// list settles there. Where the transcript is.
-pub(super) fn run_in_the_open_chat(
-    ui: &mut Ui<'_>,
-    stack: &Stack,
-    session: &SessionId,
-    prompt: &str,
-) -> Bounds<Pixels> {
-    stack.run(session, prompt);
-    settle_at_the_end(ui, stack, session);
-    settled_at_its_last_row(ui)
 }
 
 /// Where the transcript is, once its list has settled at the chat's last row, for a chat whose rows the window has

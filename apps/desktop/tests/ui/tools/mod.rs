@@ -9,5 +9,4 @@ mod commands;
 mod wheel;
 
 mod opening;
-use opening::open_a_call;
-pub(crate) use opening::{COMMAND_LINE, in_a_new_workspace, open_a_command};
+pub(crate) use opening::{COMMAND_LINE, in_a_new_workspace};
