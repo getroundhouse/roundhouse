@@ -90,7 +90,7 @@ fn quitting_asks_first_when_something_would_be_lost(cx: &mut TestAppContext) {
     let mut ui = Ui::open_with_a_repository(cx, &stack);
     let close = |ui: &mut Ui<'_>| VisualTestContext::from_window(ui.handle, ui.cx).simulate_close();
     assert!(close(&mut ui), "with nothing to lose, it closes");
-    assert!(!ui.cx.has_pending_prompt(), "with nothing to lose, it doesn't ask");
+    assert!(ui.asked().is_none(), "with nothing to lose, it doesn't ask");
     let _frozen = leave_something_in_the_dialog(&mut ui, &stack);
 
     // Twice before anything runs, so the second comes as the first waits, and again from the menu as it asks.
@@ -98,20 +98,20 @@ fn quitting_asks_first_when_something_would_be_lost(cx: &mut TestAppContext) {
         cx.dispatch_action(&desktop::Quit);
         cx.dispatch_action(&desktop::Quit);
     });
-    ui.wait("the question", |ui| ui.cx.has_pending_prompt());
+    ui.wait("the question", |ui| ui.asked().is_some());
     quit_from_the_menu(&mut ui);
-    let (title, detail) = ui.cx.pending_prompt().unwrap();
+    let (title, detail) = ui.asked().unwrap();
     assert_eq!(title, "Quit Roundhouse?");
     assert_eq!(detail, "Something in 1 chat hasn't been sent, and quitting loses it.");
-    ui.cx.simulate_prompt_answer("Keep working");
-    ui.frame();
-    assert!(!ui.cx.has_pending_prompt(), "it asked more than once");
+    // Return keeps working, so it loses nothing.
+    ui.press("enter");
+    assert!(ui.asked().is_none(), "it asked more than once");
     assert_eq!(ui.view().quitting, Quitting::No);
 
     assert!(!close(&mut ui), "it stays open to ask");
 
-    ui.wait("the question again, rather than the answer taken as given", |ui| ui.cx.has_pending_prompt());
-    ui.cx.simulate_prompt_answer("Quit");
+    ui.wait("the question again, rather than the answer taken as given", |ui| ui.asked().is_some());
+    ui.click("quit-act");
     ui.wait("quitting", |ui| ui.view().quitting == Quitting::Quit);
 }
 
@@ -132,7 +132,7 @@ fn quitting_waits_for_whats_on_its_way_to_the_hub(cx: &mut TestAppContext) {
     quit_from_the_menu(&mut ui);
 
     ui.wait("quitting", |ui| ui.view().quitting == Quitting::Quit);
-    assert!(!ui.cx.has_pending_prompt());
+    assert!(ui.asked().is_none());
     assert_eq!(stack.client().session_get(&chat).unwrap().draft.text, "half a thought?");
 }
 
@@ -151,8 +151,8 @@ fn quitting_asks_about_whats_typed_once_the_hub_has_had_long_enough_to_take_it(c
 
     quit_from_the_menu(&mut ui);
 
-    ui.wait("the question", |ui| ui.cx.has_pending_prompt());
-    let (_, detail) = ui.cx.pending_prompt().unwrap();
+    ui.wait("the question", |ui| ui.asked().is_some());
+    let (_, detail) = ui.asked().unwrap();
     assert_eq!(detail, "Something in 1 chat hasn't been sent, and quitting loses it.");
 }
 
@@ -178,7 +178,7 @@ fn quitting_waits_for_a_prompt_on_its_way_to_the_hub(cx: &mut TestAppContext) {
     quit_from_the_menu(&mut ui);
 
     ui.wait("quitting", |ui| ui.view().quitting == Quitting::Quit);
-    assert!(!ui.cx.has_pending_prompt());
+    assert!(ui.asked().is_none());
     let (events, _) = stack.client().session_read(&chat, Seq::default(), 1000, false).unwrap();
     assert!(
         events.iter().any(
@@ -212,7 +212,7 @@ fn quitting_asks_about_a_prompt_the_hub_hasnt_taken_in_time(cx: &mut TestAppCont
 
     quit_from_the_menu(&mut ui);
 
-    ui.wait("the question", |ui| ui.cx.has_pending_prompt());
-    let (_, detail) = ui.cx.pending_prompt().unwrap();
+    ui.wait("the question", |ui| ui.asked().is_some());
+    let (_, detail) = ui.asked().unwrap();
     assert_eq!(detail, "Something in 1 chat hasn't been sent, and quitting loses it.");
 }

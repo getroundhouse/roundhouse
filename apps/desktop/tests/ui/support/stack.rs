@@ -6,7 +6,6 @@ use daemons::{binaries, hub_environment};
 use desktop::app::{AppView, BuildLine, Connection, HubSource};
 use desktop::checkout::Checkout;
 use desktop::workspace_pane::WorkspacePane;
-use gpui_kit::component::WindowExt as _;
 use gpui_kit::test::TestWindowExt;
 use gpui_kit::{
     AnyWindowHandle, AppContext as _, Bounds, ElementId, Entity, InputEvent as _, MouseMoveEvent, Pixels, ScrollDelta,
@@ -316,11 +315,6 @@ impl<'a> Ui<'a> {
         self.frame();
         self.cx.update_window(self.handle, |_, window, cx| window.right_click(id, cx)).unwrap();
         self.frame();
-    }
-
-    pub(crate) fn has_dialog(&mut self) -> bool {
-        self.frame();
-        self.cx.update_window(self.handle, |_, window, cx| window.has_active_dialog(cx)).unwrap()
     }
 
     pub(crate) fn input(&mut self, text: &str) {

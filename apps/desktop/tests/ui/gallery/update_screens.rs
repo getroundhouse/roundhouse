@@ -18,6 +18,13 @@ use client_core::fake_hub::{BUILD, World};
 pub(crate) const UPDATE_SCREENS: &[Screen] = &[
     Screen { name: "no-hub", spec: "updates.md", world: None, frame: Frame::Layout, steps: &[] },
     Screen {
+        name: "about",
+        spec: "menus.md",
+        world: Some(conversation),
+        frame: Frame::Dialog,
+        steps: &[Step::Select(FOCUS), Step::About, Step::WaitFor("told-ok"), Step::MoveAway],
+    },
+    Screen {
         name: "update-ready",
         spec: "updates.md",
         world: Some(conversation),

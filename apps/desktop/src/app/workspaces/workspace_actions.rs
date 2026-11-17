@@ -1,5 +1,6 @@
 use super::super::AppView;
 use super::{in_view, made};
+use crate::asking::{self, Question};
 use crate::busy::Busy;
 use crate::new_workspace::Request;
 use crate::rename;
@@ -8,7 +9,7 @@ use crate::settings::PageId;
 use crate::workspace_pane::{PaneEvent, WorkspacePane};
 use client_core::ClientError;
 use client_core::records::Snapshot;
-use gpui_kit::{App, AppContext as _, Context, PathPromptOptions, PromptLevel, Window};
+use gpui_kit::{App, AppContext as _, Context, PathPromptOptions, Window};
 use in_view::InView;
 use protocol::client::ErrorCode;
 use protocol::model::{PermissionMode, Record, Repo, RepoId, WorkspaceId, WorkspaceStatus};
@@ -309,19 +310,18 @@ impl AppView {
     pub(super) fn confirm_forced_archive(&mut self, id: WorkspaceId, reason: &str, cx: &mut Context<Self>) {
         let reason = reason.to_string();
         self.present(cx, move |_, window, cx| {
-            let answer = window.prompt(
-                PromptLevel::Warning,
-                "Archive anyway?",
-                Some(&reason),
-                &["Keep working", "Archive anyway"],
-                cx,
-            );
-            cx.spawn(async move |this, cx| {
-                if answer.await == Ok(1) {
-                    let _ = this.update(cx, |t, cx| t.archive(id, true, cx));
-                }
-            })
-            .detach();
+            let asked = Question {
+                id: "archive-anyway",
+                title: "Archive anyway?".into(),
+                says: reason.clone().into(),
+                keep: "Keep working",
+                act: "Archive anyway",
+                removes: false,
+            };
+            let (this, id) = (cx.weak_entity(), id.clone());
+            asking::ask(asked, window, cx, move |_, cx| {
+                let _ = this.update(cx, |t, cx| t.archive(id.clone(), true, cx));
+            });
         });
     }
 

@@ -2,13 +2,14 @@
 //! last answered. A token pasted into the panel is handed to the hub and kept nowhere else: not on disk, not in a log
 //! and not in the app's settings. Its field is made anew once the hub has answered, so nothing of it stays.
 
-use gpui_kit::{App, Bounds, Context, FocusHandle, Pixels, PromptLevel, ScrollHandle, Task, Window};
+use gpui_kit::{App, Bounds, Context, FocusHandle, Pixels, ScrollHandle, Task, Window};
 use protocol::model::{Account, AccountId, AgentKind, LoginToken, Record};
 
 use super::super::field::Field;
 use super::super::redraw::{RedrawAt, bring_into_sight};
 use super::Asking;
 use super::words::{self, Refused};
+use crate::asking::{self, Question};
 
 /// The page's state, kept only while it shows, so a token half pasted goes with it, and so does the wait for what the
 /// hub answers to one.
@@ -208,15 +209,18 @@ impl Kept {
     /// What was said of an earlier try goes, since this is another.
     pub(super) fn ask_to_disconnect(&mut self, id: AccountId, name: &str, window: &mut Window, cx: &mut Context<Self>) {
         self.not_disconnected = None;
-        let asked = words::disconnect_asks(name);
-        let answer =
-            window.prompt(PromptLevel::Warning, &asked, Some(words::DISCONNECT_SAYS), &["Cancel", "Disconnect"], cx);
-        cx.spawn(async move |this, cx| {
-            if answer.await == Ok(1) {
-                let _ = this.update(cx, |this, cx| this.disconnect(id, cx));
-            }
-        })
-        .detach();
+        let asked = Question {
+            id: "disconnect-agent-account",
+            title: words::disconnect_asks(name).into(),
+            says: words::DISCONNECT_SAYS.into(),
+            keep: "Cancel",
+            act: "Disconnect",
+            removes: true,
+        };
+        let this = cx.weak_entity();
+        asking::ask(asked, window, cx, move |_, cx| {
+            let _ = this.update(cx, |this, cx| this.disconnect(id.clone(), cx));
+        });
     }
 
     /// Has the hub forget the login of the account `id`, and says under its row why it couldn't, if it couldn't, as

@@ -187,15 +187,15 @@ fn disconnecting_asks_first_and_leaves_the_account_to_connect_again(cx: &mut Tes
 
     ui.click(id("account-more", &account));
     ui.click_menu_item("Disconnect");
-    ui.wait("the question", |ui| ui.cx.has_pending_prompt());
-    ui.cx.simulate_prompt_answer("Cancel");
+    ui.wait("the question", |ui| ui.asked().is_some());
+    ui.click("disconnect-agent-account-keep");
     ui.wait_for_every_call();
     assert!(the_hubs(&stack)[0].held_login.is_some(), "nothing is forgotten without asking");
 
     ui.click(id("account-more", &account));
     ui.click_menu_item("Disconnect");
-    ui.wait("the question", |ui| ui.cx.has_pending_prompt());
-    ui.cx.simulate_prompt_answer("Disconnect");
+    ui.wait("the question", |ui| ui.asked().is_some());
+    ui.click("disconnect-agent-account-act");
 
     ui.wait("it disconnected", |ui| record(ui, &account).is_some_and(|account| account.held_login.is_none()));
     assert_eq!(the_hubs(&stack)[0].held_login, None);

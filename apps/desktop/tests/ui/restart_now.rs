@@ -72,7 +72,6 @@ fn an_update_can_be_finished_from_the_sidebar_while_agents_run_on_the_older_hub(
     let detail = ask_to_finish(&mut ui);
     assert!(detail.starts_with("This stops the 3 agents still running on the previous version."), "{detail}");
     assert!(ui.has_dialog());
-    assert!(!ui.cx.has_pending_prompt(), "the app's own dialog asks, never the system's");
     ui.click("restart-now-confirm");
 
     ui.wait("a new hub", |ui| {

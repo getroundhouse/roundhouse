@@ -5,7 +5,7 @@
 use std::collections::HashSet;
 
 use client_core::records::Snapshot;
-use gpui_kit::{Bounds, Context, FocusHandle, Pixels, PromptLevel, ScrollHandle, Task, Window};
+use gpui_kit::{Bounds, Context, FocusHandle, Pixels, ScrollHandle, Task, Window};
 use protocol::model::{GithubAccountId, GithubAppId, GithubSignInId, Record};
 
 use super::super::redraw::{RedrawAt, bring_into_sight};
@@ -14,6 +14,7 @@ use super::app_panel::AppPanel;
 use super::sign_in::SignInPanel;
 use super::token::TokenPanel;
 use super::words;
+use crate::asking::{self, Question};
 
 /// The page's state, kept only while it shows, so a token half pasted goes with it, and so does the wait for what the
 /// hub answers.
@@ -185,14 +186,18 @@ impl Kept {
         cx: &mut Context<Self>,
     ) {
         self.failed = None;
-        let asked = words::disconnect_asks(name);
-        let answer = window.prompt(PromptLevel::Warning, &asked, Some(says), &["Cancel", "Disconnect"], cx);
-        cx.spawn(async move |this, cx| {
-            if answer.await == Ok(1) {
-                let _ = this.update(cx, |this, cx| this.disconnect(id, cx));
-            }
-        })
-        .detach();
+        let asked = Question {
+            id: "disconnect-github-account",
+            title: words::disconnect_asks(name).into(),
+            says: says.into(),
+            keep: "Cancel",
+            act: "Disconnect",
+            removes: true,
+        };
+        let this = cx.weak_entity();
+        asking::ask(asked, window, cx, move |_, cx| {
+            let _ = this.update(cx, |this, cx| this.disconnect(id.clone(), cx));
+        });
     }
 
     /// Has the hub forget the login of the account `id`, and says under its row why it couldn't, if it couldn't, as

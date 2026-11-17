@@ -59,8 +59,8 @@ fn an_installation_is_a_row_as_the_default_and_its_menu_disconnects_it_and_conne
     assert!(offers(&mut ui, "Disconnect") && offers(&mut ui, "Remove app"));
     assert!(!offers(&mut ui, "Make default"), "it's the default");
     ui.click_menu_item("Disconnect");
-    ui.wait("the question", |ui| ui.cx.has_pending_prompt());
-    ui.cx.simulate_prompt_answer("Disconnect");
+    ui.wait("the question", |ui| ui.asked().is_some());
+    ui.click("disconnect-github-account-act");
 
     ui.wait("agents blocked", |ui| ui.has("git-blocked") && ui.shows_label(&row, "Disconnected"));
     assert!(!held(&stack, &bot));
@@ -83,15 +83,15 @@ fn removing_an_app_asks_first_and_the_hub_forgets_it_leaving_its_installation_th
 
     open_menu(&mut ui, format!("git-more-{bot}"));
     ui.click_menu_item("Remove app");
-    ui.wait("the question", |ui| ui.cx.has_pending_prompt());
-    ui.cx.simulate_prompt_answer("Cancel");
+    ui.wait("the question", |ui| ui.asked().is_some());
+    ui.click("remove-github-app-keep");
     ui.wait_for_every_call();
     assert_eq!(stack.client().records_list().unwrap().github_apps.len(), 1, "nothing is removed without asking");
 
     open_menu(&mut ui, format!("git-more-{bot}"));
     ui.click_menu_item("Remove app");
-    ui.wait("the question", |ui| ui.cx.has_pending_prompt());
-    ui.cx.simulate_prompt_answer("Remove");
+    ui.wait("the question", |ui| ui.asked().is_some());
+    ui.click("remove-github-app-act");
 
     ui.wait("the app gone", |ui| ui.view().records().github_apps().is_empty() && ui.has("git-blocked"));
     assert!(stack.client().records_list().unwrap().github_apps.is_empty());

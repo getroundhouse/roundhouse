@@ -156,7 +156,7 @@ fn restarting_to_update_asks_first_when_something_would_be_lost(cx: &mut TestApp
     assert_eq!(detail, "Something in 1 comment hasn't been sent, and restarting loses it.");
     assert!(ui.has("update-question"));
     assert!(!ui.has("restart-to-update"));
-    assert!(!ui.cx.has_pending_prompt());
+    assert!(ui.asked().is_none());
     ui.click("update-not-now");
     assert_eq!(restart_question(&ui), None);
     assert!(ui.has("restart-to-update"));
@@ -299,7 +299,7 @@ fn checking_for_updates_in_a_build_that_doesnt_update_says_so_in_the_sidebar(cx:
     choose(&mut ui, CHECK_FOR_UPDATES.0, CHECK_FOR_UPDATES.1);
 
     assert!(ui.has("update-answer"));
-    assert!(!ui.cx.has_pending_prompt());
+    assert!(ui.asked().is_none());
 }
 
 /// The sidebar already says why, which is the answer.
@@ -313,5 +313,5 @@ fn checking_for_updates_where_the_app_cant_update_adds_nothing_to_why(cx: &mut T
 
     assert!(ui.has("update-problem"));
     assert!(!ui.has("update-answer"));
-    assert!(!ui.cx.has_pending_prompt());
+    assert!(ui.asked().is_none());
 }

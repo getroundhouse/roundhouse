@@ -93,8 +93,8 @@ fn the_core_loop(cx: &mut TestAppContext) {
 
     // Archive. Uncommitted work means asking first, and "keep working" leaves it all alone.
     ui.press("secondary-shift-a");
-    ui.wait("the question", |ui| ui.cx.has_pending_prompt());
-    ui.cx.simulate_prompt_answer("Keep working");
+    ui.wait("the question", |ui| ui.asked().is_some());
+    ui.click("archive-anyway-keep");
     ui.frame();
     assert!(worktree.join("a.txt").exists());
     assert_eq!(ui.view().records().workspaces().iter().find(|w| w.id == id).unwrap().status, WorkspaceStatus::Ready);
@@ -229,5 +229,5 @@ fn an_archive_that_force_cant_help_shows_the_error_rather_than_offering_force(cx
     ui.cx.update_entity(&ui.view.clone(), |v, cx| v.archive(id.clone(), false, cx));
     ui.wait("the error", |ui| ui.view().error.is_some());
     assert!(ui.view().error.clone().unwrap().contains("couldn't archive"));
-    assert!(!ui.cx.has_pending_prompt());
+    assert!(ui.asked().is_none());
 }

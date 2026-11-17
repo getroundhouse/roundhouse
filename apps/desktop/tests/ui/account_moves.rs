@@ -59,15 +59,15 @@ fn moving_a_chat_whose_agent_is_working_asks_first_and_moves_it_only_if_told_to(
 
     open_the_menu(&mut ui, "usage");
     ui.click_menu_item("Personal");
-    ui.wait("the question", |ui| ui.cx.has_pending_prompt());
-    ui.cx.simulate_prompt_answer("Keep working");
+    ui.wait("the question", |ui| ui.asked().is_some());
+    ui.click("move-chat-keep");
     ui.frame();
     open_the_menu(&mut ui, "usage");
     ui.click_menu_item("Personal");
-    ui.wait("the question again", |ui| ui.cx.has_pending_prompt());
+    ui.wait("the question again", |ui| ui.asked().is_some());
     // The hub refused this move as needing force, so the first answer moved nothing.
     let kept = (on(&ui), ui.session_status());
-    ui.cx.simulate_prompt_answer("Move anyway");
+    ui.click("move-chat-act");
     ui.wait("the chat to move", |ui| on(ui).as_ref() == Some(&personal));
     ui.wait("its agent to stop", |ui| ui.session_status() != Some(SessionStatus::Running));
 

@@ -8,7 +8,10 @@ use std::rc::Rc;
 use gpui_kit::component::dialog::{Dialog as KitDialog, DialogAction, DialogClose};
 use gpui_kit::component::{WindowExt as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
-use gpui_kit::{AnyElement, App, IntoElement, ParentElement, SharedString, Styled as _, Window, div};
+use gpui_kit::{
+    AnyElement, App, InteractiveElement as _, IntoElement, ParentElement, SharedString,
+    StatefulInteractiveElement as _, Styled as _, TestSupportExt as _, Window, div,
+};
 
 use super::DialogWidth;
 use crate::colors::colors;
@@ -35,6 +38,7 @@ pub fn dialog(title: impl Into<SharedString>) -> Dialog {
         width: DialogWidth::Regular,
         on_confirm: None,
         on_close: None,
+        careful: false,
     }
 }
 
@@ -73,6 +77,7 @@ pub struct Dialog {
     width: DialogWidth,
     on_confirm: Option<Confirm>,
     on_close: Option<Closed>,
+    careful: bool,
 }
 
 impl Dialog {
@@ -94,7 +99,7 @@ impl Dialog {
         self
     }
 
-    /// The answer that confirms it, as Enter does, which goes last.
+    /// The answer that confirms it, as Enter does unless it's [`Self::careful`], which goes last.
     pub fn confirms(mut self, button: Button) -> Self {
         self.answers.push(Answer::Confirms(button));
         self
@@ -109,6 +114,13 @@ impl Dialog {
     /// How wide it is.
     pub fn width(mut self, width: DialogWidth) -> Self {
         self.width = width;
+        self
+    }
+
+    /// Asks before what would stop or lose something, so Enter closes it, keeping things as they are, as its answer
+    /// that closes does, and only its button confirms it, as quitting with something unsent asks.
+    pub fn careful(mut self) -> Self {
+        self.careful = true;
         self
     }
 
@@ -129,20 +141,55 @@ impl Dialog {
     /// Its title and what it says over what's in it, and its answers along its foot, as a dialog lays them out.
     fn laid_out(self, cx: &App) -> LaidOut {
         let colors = colors(cx);
+        let (title, lead) = (self.title, self.lead);
+        // Each with what it says for a test to read, as an assistive app does.
         let heading = v_flex()
             .gap(Space::XSmall)
-            .child(div().typeset(Type::Heading).text_color(colors.text).child(self.title))
-            .children(self.lead.map(|lead| div().text_color(colors.text_muted).child(lead)));
+            .child(
+                div()
+                    .id("dialog-title")
+                    .aria_label(title.clone())
+                    .typeset(Type::Heading)
+                    .text_color(colors.text)
+                    .child(title)
+                    .test_support(),
+            )
+            .children(lead.map(|lead| {
+                div()
+                    .id("dialog-lead")
+                    .aria_label(lead.clone())
+                    .text_color(colors.text_muted)
+                    .child(lead)
+                    .test_support()
+            }));
         let content = v_flex().gap(Space::Large).child(heading).children(self.body).into_any_element();
+        let (on_confirm, on_close, careful) = (self.on_confirm, self.on_close, self.careful);
         // The kit's wrappers that close and confirm fill what they're in, so each is in a box of its button's size.
         let answers = self.answers.into_iter().map(|answer| match answer {
             Answer::Closes(button) => div().flex_none().child(DialogClose::new().child(button)).into_any_element(),
+            // Its own press, since Enter, which is the kit's confirming, only closes it. The kit runs what's done once
+            // it closes only as it closes it itself, so it's run here.
+            Answer::Confirms(button) if careful => {
+                let (confirm, closed) = (on_confirm.clone(), on_close.clone());
+                button
+                    .on_click(move |_, window, cx| {
+                        if confirm.as_ref().is_none_or(|confirm| confirm(window, cx)) {
+                            window.close_dialog(cx);
+                            if let Some(closed) = &closed {
+                                closed(window, cx);
+                            }
+                        }
+                    })
+                    .into_any_element()
+            }
             Answer::Confirms(button) => div().flex_none().child(DialogAction::new().child(button)).into_any_element(),
             Answer::Own(button) => button.into_any_element(),
         });
         let foot =
             h_flex().gap(Space::Small).children(self.start).child(div().flex_1()).children(answers).into_any_element();
-        LaidOut { content, foot, width: self.width, on_confirm: self.on_confirm, on_close: self.on_close }
+        // A careful dialog's Enter only closes it.
+        let on_confirm = if careful { None } else { on_confirm };
+        LaidOut { content, foot, width: self.width, on_confirm, on_close }
     }
 
     /// The kit's dialog, drawn as this one: raised, with a card's corners and the one edge, its title and what it says

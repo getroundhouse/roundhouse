@@ -3,13 +3,14 @@
 //! chat's agent is at work, so this asks them only once it's refused.
 
 use client_core::ClientError;
-use gpui_kit::{Anchor, AnyElement, Context, IntoElement, PromptLevel, SharedString, WeakEntity, Window};
+use gpui_kit::{Anchor, AnyElement, Context, IntoElement, SharedString, WeakEntity, Window};
 use look::HoldOpen;
 use protocol::client::ErrorCode;
 use protocol::model::{Account, AccountId, AgentKind, Session, SessionId};
 
 use super::super::composer::Hub;
 use super::super::{PaneEvent, WorkspacePane};
+use crate::asking::{self, Question};
 
 /// What the menu offers for the chat showing, worked out each time the pane is drawn.
 #[derive(Clone)]
@@ -101,14 +102,18 @@ impl WorkspacePane {
         let said = format!(
             "Its agent is working, and moving the chat stops it. It goes on under {called} once you send it something."
         );
-        let title = format!("Move this chat to {called}?");
-        let answer = window.prompt(PromptLevel::Warning, &title, Some(&said), &["Keep working", "Move anyway"], cx);
-        cx.spawn_in(window, async move |this, cx| {
-            if answer.await == Ok(1) {
-                let _ = this.update_in(cx, |t, window, cx| t.move_chat(session, to, true, window, cx));
-            }
-        })
-        .detach();
+        let asked = Question {
+            id: "move-chat",
+            title: format!("Move this chat to {called}?").into(),
+            says: said.into(),
+            keep: "Keep working",
+            act: "Move anyway",
+            removes: false,
+        };
+        let this = cx.weak_entity();
+        asking::ask(asked, window, cx, move |window, cx| {
+            let _ = this.update(cx, |t, cx| t.move_chat(session.clone(), to.clone(), true, window, cx));
+        });
     }
 }
 

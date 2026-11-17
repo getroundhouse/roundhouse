@@ -137,6 +137,7 @@ impl Driver {
             Step::UpdateProblem(kind, detail) => self.show_problem(*kind, detail),
             Step::UpdateChecking => self.cx.update(desktop::updates::show_checking),
             Step::UpToDate => self.cx.update(desktop::updates::show_up_to_date),
+            Step::About => self.cx.update(|cx| cx.dispatch_action(&desktop::About)),
             Step::OpenSettings => {
                 let open = Box::new(desktop::OpenSettings);
                 self.cx.update_window(self.handle, |_, window, cx| window.dispatch_action(open, cx)).unwrap();

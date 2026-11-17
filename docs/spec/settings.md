@@ -51,7 +51,7 @@ The app's own settings, and where they're shown.
 
   ![Settings saying the model is still on this Mac, with Delete the model](screens/settings-dictation-kept.png)
 
-- **Delete the model frees its room,** from the box, once dictation is ready, or while it isn't on and the model is still here. With dictation on, it's turned off first, so the model is let go of. The box says the model is being deleted until it's gone, and choosing On meanwhile downloads it again only once it has. If it can't all be deleted, an alert says why. *Unconfirmed.*
+- **Delete the model frees its room,** from the box, once dictation is ready, or while it isn't on and the model is still here. With dictation on, it's turned off first, so the model is let go of. The box says the model is being deleted until it's gone, and choosing On meanwhile downloads it again only once it has. If it can't all be deleted, a dialog says why. *Unconfirmed.*
 
   **Dictation on, and ready.** *Unconfirmed.*
 
@@ -133,7 +133,11 @@ The app's own settings, and where they're shown.
 
   ![Renewing a login, in the panel under its row](screens/settings-agents-renewing.png)
 
-- **Disconnect asks first, in the system's alert, then has the hub forget the token, so connecting it again takes pasting a token again.** The account stays, with Connect again in its menu, since its chats still name it. The token isn't revoked, so it still works wherever else it's kept, and agents already running under it go on until they stop, while the chats on it can't start again until it's reconnected or they're moved, as the alert says. Why the hub couldn't is said under the row, and so is there being no hub to ask, when it went while the alert was up. *Unconfirmed.*
+- **Disconnect asks first, in a dialog, then has the hub forget the token, so connecting it again takes pasting a token again.** The account stays, with Connect again in its menu, since its chats still name it. The token isn't revoked, so it still works wherever else it's kept, and agents already running under it go on until they stop, while the chats on it can't start again until it's reconnected or they're moved, as the dialog says. Why the hub couldn't is said under the row, and so is there being no hub to ask, when it went while the dialog was up. *Unconfirmed.*
+
+  **Asking before disconnecting an account, with Disconnect filled in the error's colour.** *Unconfirmed.*
+
+  ![Asking before disconnecting an account](screens/settings-agents-disconnect.png)
 - **With no hub to ask, the accounts stay listed, every button is off, and nothing is said of the hub's age.** *Unconfirmed.*
 - **A hub from before hubs kept logins can't connect one, and says so in place of Added's rows, with Connect account off.** One that describes its agents with none of them given what makes a login says so from the start, and one that refuses to connect a login as too old for it says so from then on, while Agents shows. One that hasn't described its agents, as before it has said, has Connect account off and says nothing of its age, since nothing it has said tells. *Unconfirmed.*
 
@@ -227,7 +231,7 @@ The app's own settings, and where they're shown.
 
   ![An account's menu, with Make default, Renew and Disconnect](screens/settings-git-menu.png)
 
-- **Disconnect asks first, in the system's alert, then has the hub forget the login.** The account stays, since the default can still name it, and the token isn't revoked on GitHub. Disconnecting the default says it stays the default, so agents can't push until it's connected again or another account is made the default. Why the hub couldn't do what an account's menu asked is said under its row, and why it couldn't make each machine's own the default under Found's heading. *Unconfirmed.*
+- **Disconnect asks first, in a dialog, then has the hub forget the login.** The account stays, since the default can still name it, and the token isn't revoked on GitHub. Disconnecting the default says it stays the default, so agents can't push until it's connected again or another account is made the default. Why the hub couldn't do what an account's menu asked is said under its row, and why it couldn't make each machine's own the default under Found's heading. *Unconfirmed.*
 - **An app's installation is a row in Added, as an account whose user is the app's bot, listed with the rest: the app's mark in place of a letter, the bot's name, as `ada-roundhouse[bot]`, `App` as how it was connected, and `Installed on` and where, while its login works, or else how it stands: `Disconnected` once the hub holds no login for it, and for the default, as the hub says, `Renewing` in amber once its token has ended while the hub makes the next.** The hub makes each token from the app's key, an hour at a time, so when one ends isn't said, nor on its record, and only the hub can say the default's has ended. Any one can be the default, as any account can. Its menu has Make default, but on the default, which is off while its login can't be used; Disconnect, while the hub holds its login, which asks first, says the app stays installed, and has the hub forget its token; Connect again, which has the hub look for it again, and Install on GitHub, once it was disconnected or uninstalled; and Remove app, while the hub has the app. A default installation that can't be used says why in the box at the top of Added, in the hub's words: that the hub is making its next token, or that it was disconnected or the app uninstalled there, with what to do. *Unconfirmed:* the mark, the menu, and the words.
 
   **Git, with an app's installation as the default.** *Unconfirmed.*
@@ -248,7 +252,7 @@ The app's own settings, and where they're shown.
 
   ![An app installed nowhere, with Install on GitHub in its menu](screens/settings-git-app-not-installed.png)
 
-- **Remove app asks first, in the system's alert, then has the hub forget the app's key and every installation's login.** Nothing is deleted on GitHub, and the alert says to delete the app there to be rid of it. An installation that's the default stays the default, so agents can't push until another account is made the default, and the alert says so. Why the hub couldn't do what an app's menu asked is said under its row. *Unconfirmed.*
+- **Remove app asks first, in a dialog, then has the hub forget the app's key and every installation's login.** Nothing is deleted on GitHub, and the dialog says to delete the app there to be rid of it. An installation that's the default stays the default, so agents can't push until another account is made the default, and the dialog says so. Why the hub couldn't do what an app's menu asked is said under its row. *Unconfirmed.*
 - **With no hub to ask, the accounts and logins stay listed, and every button is off.** *Unconfirmed.*
 - **A hub that keeps no GitHub accounts says so in place of Added's rows, and that agents use each machine's own login, with Connect account off, nothing of a default under Added's heading, and no Found.** It's told apart by its settings, which say nothing of GitHub. *Unconfirmed.*
 

@@ -261,8 +261,8 @@ fn the_edit_menu_has_the_text_boxs_actions(ui: &Ui<'_>) {
 fn about_says_which_build_this_is(ui: &mut Ui<'_>) {
     choose(ui, ABOUT.0, ABOUT.1);
 
-    ui.wait("About's alert", |ui| ui.cx.has_pending_prompt());
-    let (message, detail) = ui.cx.pending_prompt().unwrap();
+    ui.wait("About's alert", |ui| ui.asked().is_some());
+    let (message, detail) = ui.asked().unwrap();
     assert_eq!(message, "Roundhouse", "About's alert");
     assert_eq!(detail, format!("Version {}", client_core::fake_hub::BUILD), "About says which build this is");
 }

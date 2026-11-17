@@ -1,11 +1,12 @@
 //! What an app's rows ask the hub, outside the panel: to look for where an app is installed, and connect it there
 //! again, and to remove an app, which asks first. Why the hub couldn't is said under the row it was asked from.
 
-use gpui_kit::{Context, PromptLevel, Window};
+use gpui_kit::{Context, Window};
 use protocol::model::{GithubApp, GithubAppId, Record};
 
 use super::kept::{Asked, Kept};
 use super::{app_words, words};
+use crate::asking::{self, Question};
 
 impl Kept {
     /// Has the hub look for where `app` is installed now, and connect it there, as when it was disconnected, saying
@@ -42,16 +43,18 @@ impl Kept {
         cx: &mut Context<Self>,
     ) {
         self.failed = None;
-        let asked = app_words::remove_asks(&app.name);
-        let says = app_words::remove_says(default);
-        let answer = window.prompt(PromptLevel::Warning, &asked, Some(says), &["Cancel", "Remove"], cx);
-        let id = app.id;
-        cx.spawn(async move |this, cx| {
-            if answer.await == Ok(1) {
-                let _ = this.update(cx, |this, cx| this.remove_app(id, at, cx));
-            }
-        })
-        .detach();
+        let asked = Question {
+            id: "remove-github-app",
+            title: app_words::remove_asks(&app.name).into(),
+            says: app_words::remove_says(default).into(),
+            keep: "Cancel",
+            act: "Remove",
+            removes: true,
+        };
+        let (id, this) = (app.id, cx.weak_entity());
+        asking::ask(asked, window, cx, move |_, cx| {
+            let _ = this.update(cx, |this, cx| this.remove_app(id, at.clone(), cx));
+        });
     }
 
     /// Has the hub forget the app `id`. Its answer is the app as it last was, which isn't taken in, since the feed says
