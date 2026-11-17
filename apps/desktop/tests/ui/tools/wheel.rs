@@ -105,6 +105,14 @@ fn a_line_too_long_for_its_block_scrolls_sideways_to_its_end(cx: &mut TestAppCon
     let lines = ui.shown("file/").remove(0);
     let (start, transcript) = (ui.bounds(lines.clone()).origin, scrolled_to(&ui));
     let at = ui.bounds(over(&lines)).center();
+    let above = point(at.x, ui.bounds(over(&lines)).top() - px(4.));
+
+    // Sideways from the start, so the block hears it as sideways, and decides by what the gesture went to.
+    turn_at(&mut ui, above, point(px(-40.), px(0.)));
+    point_to(&mut ui, at);
+    keep_turning_at(&mut ui, at, point(px(-40.), px(0.)));
+
+    assert_eq!(ui.bounds(lines.clone()).origin, start, "a swipe that started on the transcript passes over the block");
 
     turn_at(&mut ui, at, point(px(-100.), px(0.)));
 
@@ -209,11 +217,16 @@ fn swipe(ui: &mut Ui<'_>, id: &ElementId, phase: TouchPhase, y: f32) {
 /// element's middle can be far outside what shows of it, so the pointer goes where it's told. It's there before the
 /// pause, so what was under it before, such as an edit's line, doesn't open a preview that covers `at`.
 fn turn_at(ui: &mut Ui<'_>, at: Point<Pixels>, delta: Point<Pixels>) {
+    point_to(ui, at);
+    ui.cx.executor().advance_clock(A_PAUSE);
+    keep_turning_at(ui, at, delta);
+}
+
+/// Moves the pointer to `at`, with no pause, so a gesture under way goes on.
+fn point_to(ui: &mut Ui<'_>, at: Point<Pixels>) {
     let moved = MouseMoveEvent { position: at, pressed_button: None, modifiers: Modifiers::default() };
     ui.cx.update_window(ui.handle, |_, window, cx| window.dispatch_event(moved.to_platform_input(), cx)).unwrap();
     ui.frame();
-    ui.cx.executor().advance_clock(A_PAUSE);
-    keep_turning_at(ui, at, delta);
 }
 
 /// Turns the wheel on at `at` by `delta`, in the same spin as the last turn.

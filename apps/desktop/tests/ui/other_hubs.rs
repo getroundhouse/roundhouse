@@ -131,7 +131,8 @@ fn an_update_finishes_by_itself_once_nothing_else_is_under_way_on_the_older_hub(
 }
 
 /// A hub from the update before this one can't be asked to stop only if it's idle, so the app goes by what the hub
-/// said was running, as it did before hubs could decide.
+/// said was running, as it did before hubs could decide. Such a hub stops whenever it's asked, so with an agent running
+/// it's the app's own check alone that keeps it, as it connects and when it looks again.
 #[gpui_kit::test]
 fn an_update_finishes_on_a_hub_from_before_one_could_decide_whether_it_is_idle(cx: &mut TestAppContext) {
     let mut stack = Stack::new();
@@ -139,6 +140,12 @@ fn an_update_finishes_on_a_hub_from_before_one_could_decide_whether_it_is_idle(c
     let args = ["--speaks-this-protocol", "--build", "1", "--running", "1", "--asked-to-stop-if-idle", "unknown"];
     let mut older = stack.start_stand_in_hub(&args);
     let mut ui = Ui::open(cx, &stack);
+    assert!(
+        matches!(ui.build_line().update, Some(Updating::Finishing { .. })),
+        "running: the app connects to the older hub and keeps it, rather than stopping it and starting its own"
+    );
+    ui.wait_out_a_look();
+    assert!(older.0.try_wait().unwrap().is_none(), "running: the older hub is kept, after the app looks again");
 
     older.set_running(0);
 
