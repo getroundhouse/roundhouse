@@ -8,6 +8,7 @@ use crate::{RunningProgram, Signal};
 
 fn number(signal: Signal) -> i32 {
     match signal {
+        Signal::Hangup => libc::SIGHUP,
         Signal::Interrupt => libc::SIGINT,
         Signal::Terminate => libc::SIGTERM,
         Signal::Kill => libc::SIGKILL,
@@ -39,6 +40,16 @@ pub(crate) fn signal_group(leader: u32, signal: Signal) {
     };
     // SAFETY: kill(2) takes any PID and signal, and has no memory effects.
     unsafe { libc::kill(-group, number(signal)) };
+}
+
+pub(crate) fn group_running(leader: u32) -> bool {
+    let Some(group) = i32::try_from(leader).ok().filter(|pid| *pid > 1) else {
+        return false;
+    };
+    // SAFETY: kill(2) takes any PID, and signal 0 only asks whether it could be sent.
+    let sent = unsafe { libc::kill(-group, 0) };
+    // A group of another user's is running too.
+    sent == 0 || std::io::Error::last_os_error().raw_os_error() == Some(libc::EPERM)
 }
 
 /// Nothing to do, since what a child is given takes the place of this process's own.
@@ -139,6 +150,28 @@ mod tests {
             "the child of the group leader is still running",
             || start_time(sleeper).is_none(),
         );
+    }
+
+    /// Its leader can go first, as a shell can before the job it ran in front.
+    #[test]
+    fn a_group_runs_until_the_last_of_it_has_gone() {
+        let mut command = Command::new("sh");
+        command.args(["-c", "sleep 30 & exit"]);
+        own_group(&mut command);
+        let mut leader = command.spawn().unwrap();
+
+        leader.wait().unwrap();
+        let outlasted = group_running(leader.id());
+        signal_group(leader.id(), Signal::Kill);
+
+        assert!(outlasted, "the group went with its leader");
+        // The one left is init's to reap, in its own time.
+        waiting::thread::until(
+            std::time::Duration::from_secs(5),
+            "the group is still running after it was killed",
+            || !group_running(leader.id()),
+        );
+        assert!(!group_running(0) && !group_running(1));
     }
 
     #[test]

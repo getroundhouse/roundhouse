@@ -97,6 +97,35 @@ fn what_comes_after_a_sequence_cut_off_partway_lands_as_it_does_on_the_worker() 
     assert_eq!(shows(&client), shows(&worker));
 }
 
+/// What the worker's copy answers, as a terminal does, since a program such as a shell waits for its answers.
+fn answers(write: impl FnOnce(&mut Mirror)) -> Vec<u8> {
+    let answered = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
+    let mut worker = Mirror::answering(SIZE, {
+        let answered = answered.clone();
+        move |bytes| answered.borrow_mut().extend_from_slice(bytes)
+    })
+    .unwrap();
+    write(&mut worker);
+    drop(worker);
+    std::rc::Rc::into_inner(answered).unwrap().into_inner()
+}
+
+#[test]
+fn the_workers_copy_says_where_the_cursor_is_and_what_the_terminal_is() {
+    assert_eq!(answers(|worker| worker.write(b"ab\x1b[6n")), b"\x1b[1;3R");
+    assert_eq!(answers(|worker| worker.write(b"\x1b[c")), b"\x1b[?62;22c");
+}
+
+#[test]
+fn a_new_size_is_the_one_a_program_is_told_of() {
+    let answered = answers(|worker| {
+        worker.resize(Size { cols: 40, rows: 10 }).unwrap();
+        worker.write(b"\x1b[99;99H\x1b[6n");
+    });
+
+    assert_eq!(answered, b"\x1b[10;40R");
+}
+
 /// Pieces of what programs write: words, line breaks, colours, moves, clears, a full-screen program starting and
 /// quitting, modes, a title and a working folder.
 fn piece() -> impl Strategy<Value = Vec<u8>> {

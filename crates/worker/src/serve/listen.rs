@@ -14,10 +14,10 @@ use super::connection::{self, Closing, Ended};
 use super::{Config, Worker};
 
 /// Serves hubs on a socket at `socket`, one at a time, until a hub asks the worker to stop, or a hub goes that didn't
-/// ask it to keep running without one, or it has had no hub for `idle_limit`. Then it stops every agent, after sending
-/// the last hub, if it's still there, what they said as they stopped. A hub that connects while another is connected is
-/// refused, so a hub that asks twice for its connection learns there's one already. The caller holds the instance's
-/// claim, so a socket already there is one a worker left behind.
+/// ask it to keep running without one, or it has had no hub for `idle_limit`. Then it stops every agent and terminal,
+/// after sending the last hub, if it's still there, what they said as they stopped. A hub that connects while another
+/// is connected is refused, so a hub that asks twice for its connection learns there's one already. The caller holds
+/// the instance's claim, so a socket already there is one a worker left behind.
 #[expect(
     clippy::disallowed_methods,
     reason = "the pause after a connection that couldn't be accepted, and the time a worker with no hub waits for one"

@@ -86,6 +86,7 @@ dictation-ui = { path = "crates/dictation-ui" }
 fetching = { path = "crates/fetching" }
 update-feed = { path = "crates/update-feed" }
 waiting = { path = "crates/waiting" }
+terminal-state = { path = "crates/terminal-state" }
 desktop = { path = "apps/desktop" }
 kit-sync = { path = "tools/kit-sync" }
 
@@ -158,6 +159,8 @@ objc2-foundation = { version = "0.3.2", default-features = false, features = ["s
 # built, nor the JWTs only an app's key needs.
 octocrab = { version = "0.54.9", default-features = false, features = ["default-client", "rustls", "rustls-ring"] }
 parking_lot = "0.12.5"
+# Wezterm's, under MIT. Runs a terminal's shell in a PTY on Unix, and in a pseudoconsole on Windows.
+portable-pty = "0.9.0"
 # Already under GPUI, through `url`. Reads the address of an image the agent's text points to, which can be escaped,
 # and the code GitHub sends the desktop app back with once an app of your own is made.
 percent-encoding = "2.3.2"

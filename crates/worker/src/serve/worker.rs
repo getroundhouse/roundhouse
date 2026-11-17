@@ -4,6 +4,7 @@ use crate::branch_watch::Whose;
 use crate::deleting::Deleter;
 use crate::git::Clones;
 use crate::git_credential::{CredentialHelper, GitCredentials};
+use crate::terminals::Terminals;
 use crate::tools::Tools;
 use crate::{git, setup};
 use agent::account_for;
@@ -20,8 +21,8 @@ use protocol::prompt::Prompt;
 use protocol::worker::{
     AccountFor, AgentApproval, AgentStop, AttachmentWrite, AttachmentWritten, FileOpenAt, FilePages, FileRead,
     FileReadAt, FolderRead, GitDiff, GitStatus, PullRequest, PullRequestReply, ReadRepoUrl, Received,
-    RunningAgentsReply, ServeTools, SetupLog, SetupLogReply, TitleFor, ToolsServing, WorkerFrame, WorkerRequest,
-    WorkerResponse,
+    RunningAgentsReply, ServeTools, SetupLog, SetupLogReply, TerminalShow, TerminalStop, TitleFor, ToolsServing,
+    WorkerFrame, WorkerRequest, WorkerResponse,
 };
 use scripts::{Setup, run_archive_script, run_setup, stop_setup_script};
 use std::collections::HashMap;
@@ -99,7 +100,8 @@ pub(super) struct State {
     /// there, so the answer is how that ended.
     pub(super) moves: Moves,
     pub(super) watches: Mutex<Watches>,
-    /// What agents say, what the worker asks, and the branches it watches, on its way to the hub.
+    /// What agents say, what the worker asks, what happens in its terminals, and the branches it watches, on its way
+    /// to the hub.
     pub(super) outbox: Arc<Outbox>,
     /// What the worker has asked its hub and waits to hear.
     pub(super) asks: Arc<Asks>,
@@ -107,6 +109,7 @@ pub(super) struct State {
     /// The git credential its hub set, which every process it starts is given.
     pub(super) credentials: GitCredentials,
     pub(super) clones: Clones,
+    pub(super) terminals: Terminals,
 }
 
 impl State {
@@ -149,6 +152,7 @@ impl Worker {
             calls: AtomicU64::new(0),
             moves: Moves::default(),
             watches: Mutex::new(Watches::default()),
+            terminals: Terminals::new(outbox.clone(), config.timers),
             outbox,
             tools: Arc::new(Tools::new(asks.clone(), config.build, config.timers.wait_poll)),
             clones: Clones::new(config.clones_dir.clone()),
@@ -159,8 +163,8 @@ impl Worker {
         Self { state, forwarders: Arc::new(tokio::sync::Mutex::new(JoinSet::new())) }
     }
 
-    /// Stops every agent and the setup script, and sends what the agents said as they stopped to the hub on `last`,
-    /// if there's one.
+    /// Stops every agent, terminal and the setup script, and sends what the agents said and the terminals' ends to the
+    /// hub on `last`, if there's one.
     pub(super) async fn stop(&self, last: Option<Closing>) {
         stop_everything(&self.state, &self.forwarders).await;
         self.state.outbox.detach().await;
@@ -171,8 +175,8 @@ impl Worker {
 }
 
 /// Serves the hub on `reader` and `writer`, which are the worker's stdin and stdout, until the hub closes them, then
-/// stops every agent and sends the hub what they said as they stopped. They're the hub's pipes, so a worker on them
-/// can't outlive its hub, and it stops whatever the hub asked. One that can is served by `listen`.
+/// stops every agent and terminal and sends the hub what they said as they stopped. They're the hub's pipes, so a
+/// worker on them can't outlive its hub, and it stops whatever the hub asked. One that can is served by `listen`.
 pub async fn serve<R, W>(reader: R, writer: W, config: Config)
 where
     R: AsyncRead + Send + Unpin + 'static,
@@ -207,7 +211,7 @@ async fn stop_everything(state: &State, forwarders: &tokio::sync::Mutex<JoinSet<
     for agent in agents {
         stops.spawn(async move { agent.stop().await });
     }
-    stops.join_all().await;
+    tokio::join!(stops.join_all(), state.terminals.stop_all());
     // After the agents, so their connections close first, and the port isn't left waiting out the server's closes for
     // the next worker to listen on.
     state.tools.stop().await;
@@ -233,8 +237,12 @@ pub(super) async fn handle(
     // What every process this request starts is given, as the hub last set it before sending this.
     let given = state.credentials.given();
     match request.map_err(|e| unsupported(Some(&e)))? {
-        // About the connection they came on, which answers them itself.
-        WorkerRequest::Hello(_) | WorkerRequest::Stop | WorkerRequest::GitCredentialSet(_) => {
+        // About the connection they came on, or to happen in the order they came, which it answers itself.
+        WorkerRequest::Hello(_)
+        | WorkerRequest::Stop
+        | WorkerRequest::GitCredentialSet(_)
+        | WorkerRequest::TerminalInput(_)
+        | WorkerRequest::TerminalResize(_) => {
             Err(ApiError::new(ErrorCode::Internal, "the connection answers this itself"))
         }
         WorkerRequest::Received(Received { through }) => {
@@ -242,14 +250,16 @@ pub(super) async fn handle(
             Ok(WorkerResponse::Ok)
         }
         WorkerRequest::RunningAgents => Ok(running_agents(state)),
-        // And those about terminals, which it refuses as a worker from before them does, until it runs them.
-        WorkerRequest::Unknown
-        | WorkerRequest::TerminalStart(_)
-        | WorkerRequest::TerminalInput(_)
-        | WorkerRequest::TerminalResize(_)
-        | WorkerRequest::TerminalShow(_)
-        | WorkerRequest::TerminalStop(_)
-        | WorkerRequest::RunningTerminals => Err(unsupported(None)),
+        WorkerRequest::Unknown => Err(unsupported(None)),
+        WorkerRequest::TerminalStart(start) => state.terminals.start(start, given).await.map(|()| WorkerResponse::Ok),
+        WorkerRequest::TerminalShow(TerminalShow { terminal }) => {
+            Ok(WorkerResponse::TerminalShown(state.terminals.show(&terminal).await?))
+        }
+        WorkerRequest::TerminalStop(TerminalStop { terminal }) => {
+            state.terminals.stop(&terminal).await;
+            Ok(WorkerResponse::Ok)
+        }
+        WorkerRequest::RunningTerminals => Ok(WorkerResponse::RunningTerminals(state.terminals.running())),
         WorkerRequest::NamesGitHas(asked) => worktrees::names_git_has(state, asked).await,
         WorkerRequest::PrepareWorkspace(asked) => worktrees::prepare(state, asked).await,
         WorkerRequest::RestoreWorkspace(asked) => worktrees::restore(state, asked).await,

@@ -5,6 +5,8 @@ use crate::sys;
 /// A signal sent to a process group.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Signal {
+    /// What a terminal sends as it closes. A shell that gets it sends it on to the jobs it started, and exits.
+    Hangup,
     Interrupt,
     Terminate,
     Kill,
@@ -36,4 +38,11 @@ pub fn signal_group(leader: u32, signal: Signal) {
 /// everything this process starts from then on, not only from `command`.
 pub fn detach(command: &mut Command) {
     sys::detach(command);
+}
+
+/// Whether any process is left in the group led by `leader`, which can outlast the leader itself. A PID that would ask
+/// of every process, or the system's own, has none.
+#[cfg(unix)]
+pub fn group_running(leader: u32) -> bool {
+    sys::group_running(leader)
 }
