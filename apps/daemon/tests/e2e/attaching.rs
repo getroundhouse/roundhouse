@@ -56,10 +56,15 @@ impl Attached {
         Self { command, lines }
     }
 
-    /// The worker's reply, which has to be the next thing it sends.
+    /// The worker's reply, which has to be the next thing it sends but for what its watches find of the branches. A
+    /// watch a hub before asked for goes on sending to whichever hub is connected whenever the branches change, so
+    /// that can come at any time, and says nothing of what the worker kept.
     pub(crate) fn call(&mut self, id: u64, request: WorkerRequest) -> WorkerOutcome {
         self.command.stdin.as_mut().unwrap().write_all(&frame::encode(&WorkerCall { id, request }).unwrap()).unwrap();
-        match self.frame_until(&format!("the reply to {id}"), Some) {
+        let not_the_branches = |frame| {
+            (!matches!(frame, WorkerFrame::Branches { .. } | WorkerFrame::ChildBranches { .. })).then_some(frame)
+        };
+        match self.frame_until(&format!("the reply to {id}"), not_the_branches) {
             WorkerFrame::Reply { id: answering, outcome } if answering == id => outcome,
             other => panic!("expected the reply to {id}, got {other:?}"),
         }
