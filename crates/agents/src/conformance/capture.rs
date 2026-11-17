@@ -62,7 +62,8 @@ impl Tap {
 }
 
 /// A fixture's text: one entry a line, with each of `named`'s strings replaced by the name it's given, such as a
-/// directory that differs every trial, and each UUID by one numbered in the order it first appears, since the CLI and
+/// directory that differs every trial, and the machine's name by `host`, since a fixture is public and a CLI can say
+/// which machine it's on, as Codex's remote control does. Each UUID by one numbered in the order it first appears, since the CLI and
 /// the adapter make them afresh every trial. The IDs of each kind of request the adapter makes by itself, as `lines`
 /// say, are numbered in a range of their own, since where it makes them and how often varies, so how they fall
 /// renumbers nothing else. A range is the fourth group of a version 4 UUID, from `8000`. Both look in every string and
@@ -75,10 +76,11 @@ pub fn fixture(entries: &[Entry], named: &[(String, String)], lines: &dyn Lines)
     let apart: Vec<Vec<&str>> = kinds.into_values().collect();
     // An entry is a value this module made, so it always serializes.
     let mut values: Vec<Value> = entries.iter().map(|entry| serde_json::to_value(entry).unwrap_or_default()).collect();
+    let named: Vec<(String, String)> = named.iter().cloned().chain(this_machine()).collect();
     let mut found: Vec<String> = Vec::new();
     for value in &mut values {
         each_string(value, &mut |text| {
-            for (from, name) in named {
+            for (from, name) in &named {
                 *text = text.replace(from.as_str(), name);
             }
             found.extend(uuids(text).map(|(_, id)| id.to_string()));
@@ -114,6 +116,15 @@ pub fn fixture(entries: &[Entry], named: &[(String, String)], lines: &dyn Lines)
         text.push('\n');
     }
     text
+}
+
+/// The machine's name as `hostname` says it, such as `Someones-Mac.local`, and without its domain, each named `host`,
+/// the longer first. None where it can't be told.
+fn this_machine() -> Vec<(String, String)> {
+    let Ok(out) = std::process::Command::new("hostname").output() else { return Vec::new() };
+    let full = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    let short = full.split('.').next().unwrap_or_default().to_string();
+    [full, short].into_iter().filter(|name| name.len() > 2).map(|name| (name, "host".to_string())).collect()
 }
 
 /// Changes each string in `value`, and each key.
@@ -205,6 +216,17 @@ mod tests {
         fn answer(&self, _: Option<&Value>, _: &Value) -> Value {
             Value::Null
         }
+    }
+
+    #[test]
+    fn a_fixture_never_says_which_machine_it_was_captured_on() {
+        let Some((machine, _)) = super::this_machine().into_iter().next() else { return };
+        let short = machine.split('.').next().unwrap_or_default().to_string();
+        let entries = [Entry::FromCli(json!({"serverName": machine, "said": format!("on {short} now")}))];
+
+        let text = fixture(&entries, &[], &Typed);
+        assert!(!text.contains(&short), "{text}");
+        assert!(text.contains(r#""serverName":"host""#) && text.contains("on host now"), "{text}");
     }
 
     #[test]
