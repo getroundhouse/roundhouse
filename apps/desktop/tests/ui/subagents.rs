@@ -197,6 +197,31 @@ fn a_subagent_tab_opened_by_its_call_shows_its_work_and_then_what_its_record_say
     ui.wait("the subagent's work, in its tab", |ui| ui.labelled(SUBAGENT_CALL).len() == 1);
 }
 
+/// The subagent tab draws what its subagent is still writing, as a chat draws what its agent is, and then what it wrote,
+/// once it's recorded.
+#[gpui_kit::test]
+fn the_subagent_tab_draws_what_its_subagent_is_still_writing(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let mut ui = in_a_new_workspace(cx, &stack);
+    let done = Gate::new(&stack, "done");
+    ui.paste_text(&format!("agent-until:{done}:{AGENT_LINE}; say:done"));
+    ui.press("enter");
+    ui.wait("the button that opens the subagent tab", |ui| !ui.shown("open-subagent/").is_empty());
+    let open = ui.shown("open-subagent/").remove(0);
+    ui.click(open);
+    ui.wait("the subagent tab", |ui| showing(ui) == Showing::Subagent);
+    let pane = ui.pane().unwrap();
+    let tab = ui.cx.read_entity(&pane, |p, _| p.subagent_transcript()).unwrap();
+    let drawn =
+        |ui: &Ui<'_>, text: &str| ui.cx.read_entity(&tab, |t, _| t.kept_texts()).iter().any(|kept| kept == text);
+
+    // The first piece of its report, which it holds the rest of until the gate opens.
+    ui.wait("what it's still writing", |ui| drawn(ui, "There's "));
+    done.open();
+
+    ui.wait("its report, recorded", |ui| drawn(ui, "There's a README here."));
+}
+
 /// The subagent tab sits at the far left, as the file tab does, just after it, so neither moves however many chats are
 /// open, and `Ctrl-Tab` comes to them in that order.
 #[gpui_kit::test]

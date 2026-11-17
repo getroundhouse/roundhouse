@@ -90,6 +90,12 @@ impl WorkspacePane {
         self.subagents.tab.as_ref().map(|tab| &tab.subagent)
     }
 
+    /// The subagent tab's transcript, while it's open.
+    #[cfg(feature = "testing")]
+    pub fn subagent_transcript(&self) -> Option<Entity<Transcript>> {
+        self.subagents.tab.as_ref().map(|tab| tab.transcript.clone())
+    }
+
     /// Every transcript the pane has: each chat's, and the subagent tab's.
     pub(super) fn every_transcript(&self) -> impl Iterator<Item = &Entity<Transcript>> {
         let tab = self.subagents.tab.as_ref().map(|tab| &tab.transcript);

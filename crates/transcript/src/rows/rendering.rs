@@ -145,7 +145,8 @@ fn render_shown(
             }
             let m = model.borrow();
             let pull_request = m.pull_request.as_ref();
-            let end = EndOfChat { tail, waiting: &waiting, at_work: &m.at_work, folds: &m.folds, pull_request };
+            let (at_work, folds, alone) = (&m.at_work, &m.folds, m.alone.is_some());
+            let end = EndOfChat { tail, waiting: &waiting, at_work, folds, pull_request, alone };
             shared.texts.drawing(Of::Tail, || render_tail(&end, shared, by, cx))
         }
         // Each text an event's row no longer draws is hidden, such as one in a fold that's been closed, or all of
