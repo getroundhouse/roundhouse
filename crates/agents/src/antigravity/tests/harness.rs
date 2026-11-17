@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use protocol::capability::conversation::Start;
 use protocol::event::EventBody;
-use protocol::model::{AgentKind, PermissionMode, RunId};
+use protocol::model::{AgentKind, ModelName, PermissionMode, RunId};
 use protocol::worker::AgentSpec;
 use serde_json::Value;
 use tokio::sync::mpsc;
@@ -29,7 +29,13 @@ impl Harness {
     }
 
     pub(super) fn with_tools(rules: &Value, mode: PermissionMode, start: Start, tools: Option<ToolServer>) -> Self {
-        Self::launching(rules, mode, start, tools, |_| {})
+        Self::launching(rules, mode, start, tools, |_| {}, None)
+    }
+
+    /// A new conversation in full access on `model` rather than the kind's default.
+    pub(super) fn on_model(rules: &Value, model: &'static str) -> Self {
+        let start = Start::New { conversation: None };
+        Self::launching(rules, PermissionMode::FullAccess, start, None, |_| {}, Some(ModelName::named(model)))
     }
 
     /// One whose home already has `conversation`'s own file, as `agy` keeps it, before the launch.
@@ -47,7 +53,7 @@ impl Harness {
         start: Start,
         seed: impl FnOnce(&std::path::Path),
     ) -> Self {
-        Self::launching(rules, mode, start, None, seed)
+        Self::launching(rules, mode, start, None, seed, None)
     }
 
     fn launching(
@@ -56,6 +62,7 @@ impl Harness {
         start: Start,
         tools: Option<ToolServer>,
         seed: impl FnOnce(&std::path::Path),
+        model: Option<ModelName>,
     ) -> Self {
         let room = tempfile::tempdir().unwrap();
         seed(room.path());
@@ -63,6 +70,9 @@ impl Harness {
         std::fs::write(room.path().join("native-script.json"), serde_json::to_vec(rules).unwrap()).unwrap();
         let mut settings = crate::antigravity::description().defaults;
         settings.permission_mode = mode;
+        if let Some(model) = model {
+            settings.model = model;
+        }
         let spec = AgentSpec {
             session_id: "test".into(),
             run: RunId::new(1),

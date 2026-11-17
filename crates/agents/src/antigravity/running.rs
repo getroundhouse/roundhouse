@@ -16,7 +16,7 @@ use tokio::sync::{mpsc, watch};
 use super::state::{Conversation, Ending};
 use super::{launch, supervise};
 use crate::jsonrpc::{Dialect, Rpc};
-use crate::{AgentError, AgentOptions, AgentOutput, AgentProcess};
+use crate::{AgentError, AgentOptions, AgentOutput, AgentProcess, acp};
 
 pub(super) const STOP_GRACE: Duration = Duration::from_secs(3);
 
@@ -263,6 +263,21 @@ pub(super) fn ensure_model_offers_effort(model: &ModelName, effort: settings::Ef
         return Err(AgentError::Refused("This Antigravity model does not offer that effort".into()));
     }
     Ok(())
+}
+
+/// Refuses a model the conversation's `model` option doesn't list, which is what this machine's sign-in offers, rather
+/// than leave `agy` to answer `Unknown model ID`. The catalog's Claude models come only with a Google account's
+/// sign-in, so a Gemini API key's conversation doesn't list them. A conversation that lists no models is left to `agy`.
+pub(super) fn ensure_sign_in_offers_model(options: &[acp::ConfigOption], model: &ModelName) -> Result<(), AgentError> {
+    let listed = options.iter().any(|option| option.id == "model");
+    if !listed || acp::config_offers_value(options, "model", model.as_str()) {
+        return Ok(());
+    }
+    Err(AgentError::Refused(if model.as_str().starts_with("claude-") {
+        "Antigravity offers Claude models only when it's signed in with a Google account, not a Gemini API key".into()
+    } else {
+        "Antigravity's sign-in on this machine doesn't offer this model".into()
+    }))
 }
 
 pub(super) fn effort_str(effort: settings::Effort) -> Result<&'static str, AgentError> {

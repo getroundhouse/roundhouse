@@ -18,7 +18,7 @@ One picker, in the composer's bottom row, chooses both, since how hard the agent
 |---|---|
 | **Claude models** | `fable`, `opus`, `sonnet` and `haiku` |
 | **Codex models** | GPT-6.1 Sol and Terra; GPT-6 Astra, Sol and Luna; GPT-5.6 Sol, Terra and Luna |
-| **Antigravity models** | Gemini 4 Carbon, Hydrogen and Argon; Gemini 3.8 Flash |
+| **Antigravity models** | Gemini 4 Carbon, Hydrogen and Argon; Gemini 3.8 Flash; Claude Opus 5.5 and Sonnet 5.5, when Antigravity is signed in with a Google account rather than a Gemini API key |
 | **Effort** | Low, Medium, High, Extra high and Max; Ultra on the Codex models that support it |
 
 - **Claude’s models are aliases,** which the Claude CLI resolves to its newest of each, so a new model arrives without an update to Roundhouse.

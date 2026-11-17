@@ -1,8 +1,9 @@
 use protocol::model::{AgentDescription, AgentKind, Effort, ModelChoice, ModelName, PermissionMode, SessionSettings};
 
-// A compiled snapshot of the native Gemini catalog offered under both Google OAuth and `gemini-api-key` in `agy` 1.5.9.
-// Refresh it with the CLI observations in docs/antigravity-cli.md.
-const MODELS: [(&str, &str, &[Effort], Effort); 4] = [
+// A compiled snapshot of `agy` 1.5.9's native catalog: the Gemini models it offers under both Google OAuth and
+// `gemini-api-key`, then the Claude models it offers only under Google OAuth. Refresh it with the CLI observations in
+// docs/antigravity-cli.md.
+const MODELS: [(&str, &str, &[Effort], Effort); 6] = [
     ("gemini-4-carbon", "Gemini 4 Carbon", &[Effort::Low, Effort::Medium, Effort::High], Effort::Medium),
     (
         "gemini-4-hydrogen",
@@ -12,6 +13,9 @@ const MODELS: [(&str, &str, &[Effort], Effort); 4] = [
     ),
     ("gemini-4-argon", "Gemini 4 Argon", &[Effort::Low, Effort::Medium, Effort::High], Effort::Medium),
     ("gemini-3.8-flash", "Gemini 3.8 Flash", &[Effort::Low, Effort::Medium, Effort::High], Effort::Low),
+    // `agy` doesn't say a Claude model's default thinking level, so each takes the middle one.
+    ("claude-opus-5-5", "Claude Opus 5.5", &[Effort::Low, Effort::Medium, Effort::High], Effort::Medium),
+    ("claude-sonnet-5-5", "Claude Sonnet 5.5", &[Effort::Low, Effort::Medium, Effort::High], Effort::Medium),
 ];
 
 pub(super) const TRIAL_MODEL: &str = "gemini-3.8-flash";
@@ -70,14 +74,20 @@ mod tests {
     #[test]
     fn the_catalog_keeps_each_models_efforts_and_defaults() {
         let agent = description();
-        assert_eq!(agent.models.len(), 4);
+        assert_eq!(agent.models.len(), 6);
         assert_eq!(agent.defaults.model.as_str(), "gemini-4-carbon");
         assert_eq!(agent.defaults.effort, Effort::Medium);
         let hydrogen = ModelName::named("gemini-4-hydrogen");
         let carbon = ModelName::named("gemini-4-carbon");
+        let opus = ModelName::named("claude-opus-5-5");
+        let sonnet = ModelName::named("claude-sonnet-5-5");
         assert!(agent.efforts_for(&hydrogen).contains(&Effort::Xhigh));
         assert!(!agent.efforts_for(&carbon).contains(&Effort::Xhigh));
+        assert_eq!(agent.efforts_for(&opus), [Effort::Low, Effort::Medium, Effort::High]);
+        assert_eq!(agent.efforts_for(&sonnet), [Effort::Low, Effort::Medium, Effort::High]);
         assert_eq!(agent.effort_when_switching(&carbon, Effort::Xhigh), Effort::Medium);
+        assert_eq!(agent.effort_when_switching(&opus, Effort::Xhigh), Effort::Medium);
+        assert_eq!(agent.effort_when_switching(&sonnet, Effort::High), Effort::High);
         assert_eq!(agent.effort_when_switching(&hydrogen, Effort::Low), Effort::Low);
         assert!(
             agent
