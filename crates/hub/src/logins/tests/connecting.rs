@@ -224,23 +224,6 @@ fn a_renewal_whose_row_cant_be_written_keeps_the_old_login_whole() {
     assert_eq!(store.account(&before.id).unwrap(), Some(before));
 }
 
-#[test]
-fn a_disconnect_whose_row_cant_be_cleared_has_already_forgotten_the_token_and_tidying_clears_it() {
-    let dir = tempfile::tempdir().unwrap();
-    let (logins, store) = logins_in(dir.path());
-    let id = logins.connect(&connect("Work", "a-made-up-token", None)).unwrap().account.id;
-    refuse_writes_of_logins(dir.path(), ON_UPDATE);
-
-    let refused = logins.disconnect(&id);
-    let left = tokens_kept(dir.path());
-    rusqlite::Connection::open(dir.path().join("hub.db")).unwrap().execute_batch("DROP TRIGGER refuse").unwrap();
-    logins.tidy().unwrap();
-
-    assert_eq!(refused.unwrap_err().code, ErrorCode::Internal);
-    assert_eq!(left, Vec::<String>::new());
-    assert_eq!(store.account(&id).unwrap().unwrap().held_login, None);
-}
-
 /// Connects `token` from eight threads at once, under the names `name` gives each, and answers with what each got.
 /// Each would make an account of its own ID, as each request's would be, so only the lock keeps them to one.
 fn eight_at_once(

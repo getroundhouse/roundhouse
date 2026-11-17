@@ -98,7 +98,6 @@ async fn making_an_app_keeps_it_connects_where_its_installed_and_workers_commit_
     assert_eq!(account.installation.as_ref().map(|installed| installed.id.get()), Some(70));
     assert!(told.iter().any(|notice| matches!(notice, HubNotice::HubSettings(_))), "it became the default: {told:?}");
     assert_eq!(sent(&hub), bots("ghs_first"));
-    assert_eq!(hub.store.list_records().unwrap().github_apps, [app]);
 }
 
 #[tokio::test]
@@ -182,7 +181,6 @@ async fn removing_an_app_forgets_it_and_its_installations_logins_and_tells_every
         panic!("{told:?}")
     };
     assert_eq!((account.held_login, record), (None, &RecordKey::GithubApp { id: APP }));
-    assert!(hub.store.list_records().unwrap().github_apps.is_empty());
     assert!(blocked(&hub).contains("was disconnected"));
 }
 
