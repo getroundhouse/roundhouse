@@ -1,5 +1,6 @@
+use protocol::capability::asking::QuestionAnswer;
 use protocol::capability::asking::{Choose, TypedAnswer};
-use protocol::event::{QuestionAnswer, TokenUsage, TurnOutcome};
+use protocol::event::{TokenUsage, TurnOutcome};
 use serde_json::json;
 
 use super::{

@@ -140,7 +140,7 @@ fn can_answer(native: &NativeRequest, decision: &Decision) -> bool {
             | (
                 NativeRequest::Command(_) | NativeRequest::File(_),
                 Decision::Allow { edited: None, remember: Remember::Once | Remember::Conversation }
-                    | Decision::Deny { words: None, keep: None, .. }
+                    | Decision::Deny { words: None, keep: None, then: AfterDenial::Continue | AfterDenial::Stop }
             )
             | (NativeRequest::Questions { .. }, Decision::Answer { .. })
     )
@@ -163,7 +163,7 @@ async fn answer(shared: &Shared, waiting: &Waiting, decision: &Decision) -> Resu
             let decision = match remember {
                 Remember::Once => "accept",
                 Remember::Conversation => "acceptForSession",
-                Remember::Rule(_) => return Err(unsupported_decision()),
+                Remember::Rule(_) | Remember::Unknown => return Err(unsupported_decision()),
             };
             shared.rpc.write(&json!({"id":id,"result":{"decision":decision}})).await
         }
@@ -190,7 +190,7 @@ async fn answer(shared: &Shared, waiting: &Waiting, decision: &Decision) -> Resu
 
 /// What Codex is told was answered to `question`: the options picked, as many as it lets be picked, and what was typed
 /// where it lets an answer be typed, so nothing it ruled out reaches it.
-fn words<'a>(question: &'a Question, answer: &'a protocol::event::QuestionAnswer) -> Vec<&'a str> {
+fn words<'a>(question: &'a Question, answer: &'a protocol::capability::asking::QuestionAnswer) -> Vec<&'a str> {
     let picked = answer.picked.iter().filter_map(|&index| question.options.get(usize::try_from(index).ok()?));
     let picked = picked.take(if question.choose == Choose::Several { usize::MAX } else { 1 });
     let typed = answer.typed.as_deref().filter(|_| matches!(question.typed, TypedAnswer::Yes | TypedAnswer::Secret));

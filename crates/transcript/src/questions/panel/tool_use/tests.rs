@@ -1,7 +1,8 @@
 use client_core::Approval;
+use protocol::capability::asking::QuestionAnswer;
 use protocol::capability::calls::Call;
 use protocol::capability::calls::call::{Edit, Fetch, FilePatch, Patch, PatchChange, Replace, Replaces, Write};
-use protocol::event::{ApprovalDecision, Asking, EventBody, QuestionAnswer};
+use protocol::event::{ApprovalDecision, Asking, EventBody};
 use protocol::fixtures::{ApprovalRequest, approval_request, typed_command, typed_request};
 use serde_json::json;
 

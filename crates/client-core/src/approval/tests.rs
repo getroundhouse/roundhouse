@@ -1,4 +1,5 @@
-use protocol::event::{ApprovalDecision, Asking, EventBody, Question, QuestionAnswer, QuestionOption};
+use protocol::capability::asking::QuestionAnswer;
+use protocol::event::{ApprovalDecision, Asking, EventBody, Question, QuestionOption};
 use protocol::fixtures::{ApprovalRequest, approval_request};
 use serde_json::{Value, json};
 

@@ -5,7 +5,8 @@
 use std::collections::BTreeMap;
 
 use client_core::Client;
-use protocol::event::{ApprovalDecision, ApprovalOutcome, ContentBlock, EventBody, QuestionAnswer, SessionEvent};
+use protocol::capability::asking::QuestionAnswer;
+use protocol::event::{ApprovalDecision, ApprovalOutcome, ContentBlock, EventBody, SessionEvent};
 use protocol::model::{ApprovalId, SessionId, SessionStatus};
 
 use crate::support::{Stack, read_all, wait_for_approval, wait_for_turn_end};

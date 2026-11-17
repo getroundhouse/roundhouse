@@ -8,7 +8,8 @@ use gpui_kit::{
     Styled, WeakEntity, Window, div,
 };
 use look::{InRegion as _, Region, Shaped as _};
-use protocol::event::{ApprovalDecision, Question, QuestionAnswer};
+use protocol::capability::asking::QuestionAnswer;
+use protocol::event::{ApprovalDecision, Question};
 use protocol::model::{ApprovalId, SubagentId};
 use std::time::{Duration, Instant};
 use typing::Other;

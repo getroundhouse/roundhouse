@@ -1,8 +1,9 @@
 //! Made-up events and logs, for tests that read the log the way drawing does.
 
 use client_core::session_log::SessionLog;
+use protocol::capability::asking::QuestionAnswer;
 use protocol::capability::calls::{Call, CallOutput};
-use protocol::event::{ApprovalOutcome, Asking, EventBody, Question, QuestionAnswer, SessionEvent, TurnOutcome};
+use protocol::event::{ApprovalOutcome, Asking, EventBody, Question, SessionEvent, TurnOutcome};
 pub(crate) use protocol::fixtures::event;
 use protocol::fixtures::{self, ApprovalRequest};
 use protocol::model::{Rev, Seq, Subagent, SubagentStatus};

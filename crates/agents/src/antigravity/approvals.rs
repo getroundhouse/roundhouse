@@ -215,7 +215,7 @@ fn can_answer(native: &NativeRequest, decision: &Decision) -> bool {
             | (
                 NativeRequest::Permission { .. },
                 Decision::Allow { edited: None, remember: Remember::Once | Remember::Conversation }
-                    | Decision::Deny { words: None, keep: None, .. }
+                    | Decision::Deny { words: None, keep: None, then: AfterDenial::Continue | AfterDenial::Stop }
             )
             | (NativeRequest::Elicitation { .. }, Decision::Answer { .. })
     )
@@ -235,7 +235,7 @@ async fn answer(shared: &Arc<Shared>, waiting: &Waiting, decision: &Decision) ->
             let always = match remember {
                 Remember::Once => false,
                 Remember::Conversation => true,
-                Remember::Rule(_) => return Err(unsupported_decision()),
+                Remember::Rule(_) | Remember::Unknown => return Err(unsupported_decision()),
             };
             let option = request.option_for(always, true).unwrap_or(if always { "allow_always" } else { "allow" });
             shared.rpc().reply(id.clone(), acp::permission_selected(option)).await

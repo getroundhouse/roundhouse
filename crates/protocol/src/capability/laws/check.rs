@@ -1,6 +1,6 @@
 //! Checking a log against the laws, an event at a time.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::hash::Hash;
 
 use super::needs;
@@ -17,6 +17,9 @@ pub enum Law {
     /// A request for approval is resolved only after it was made, by the hub once at most and before the agent, and by
     /// the agent once at most.
     ApprovalResolvesOnce,
+    /// A run's turn ends with none of its requests for approval open, since the turn waits for each, and one open as
+    /// the turn is cancelled is resolved as cancelled before it ends.
+    NoRequestOpenAtTurnEnd,
     /// A call's result comes after the call, and a call has one result at most.
     ResultFollowsCall,
     /// A subagent ends only after it started, by the hub once at most and before the agent, and by the agent once at
@@ -51,6 +54,8 @@ pub fn check<'c>(log: &[SessionEvent], claims: impl Fn(RunId) -> &'c Capabilitie
 struct Ledger {
     prompts: Settled<Seq>,
     requests: Settled<ApprovalId>,
+    /// The run that made each request.
+    asked_by: HashMap<ApprovalId, Option<RunId>>,
     subagents: Settled<SubagentId>,
     calls: HashSet<ToolUseId>,
     answered: HashSet<ToolUseId>,
@@ -80,11 +85,17 @@ impl Ledger {
         }
         if let EventBody::ApprovalRequested { approval_id, .. } = body {
             self.requests.record(approval_id.clone());
+            self.asked_by.insert(approval_id.clone(), event.run);
         }
         if let EventBody::ApprovalResolved { approval_id, .. } = body
             && !self.requests.settle(approval_id, by_agent)
         {
             broken.push(Law::ApprovalResolvesOnce);
+        }
+        if let EventBody::TurnEnded { .. } = body
+            && self.requests.open().any(|request| self.asked_by.get(request) == Some(&event.run))
+        {
+            broken.push(Law::NoRequestOpenAtTurnEnd);
         }
         if let EventBody::Assistant { blocks, .. } | EventBody::AgentUser { blocks, .. } = body
             && !self.calls_and_results(blocks)
@@ -144,6 +155,11 @@ impl<K: Clone + Eq + Hash> Settled<K> {
         self.by_hub.remove(&key);
         self.by_agent.remove(&key);
         self.recorded.insert(key);
+    }
+
+    /// What's been recorded and not settled yet.
+    fn open(&self) -> impl Iterator<Item = &K> {
+        self.recorded.iter().filter(|key| !self.by_hub.contains(key) && !self.by_agent.contains(key))
     }
 
     /// Whether settling `key` now, by the agent or by the hub, keeps the law.

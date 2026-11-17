@@ -5,7 +5,7 @@
 //! rebuilt if the normalization turns out to be wrong.
 
 pub use approval::{ApprovalDecision, ApprovalOutcome, secret_questions};
-pub use asking::{Asking, Question, QuestionAnswer, QuestionOption};
+pub use asking::{Asking, Question, QuestionOption};
 pub use compaction::{CompactedBy, CompactionOutcome};
 pub use content::{ContentBlock, Denied, LinkedImage};
 pub use ending::{ExitReason, TaskOutcome, TurnOutcome};

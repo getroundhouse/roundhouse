@@ -3,10 +3,9 @@
 
 #![cfg(test)]
 
+use protocol::capability::asking::QuestionAnswer;
 use protocol::client::{ClientFrame, ClientRequest, agent};
-use protocol::event::{
-    ApprovalDecision, ApprovalOutcome, Asking, EventBody, Question, QuestionAnswer, QuestionOption, SessionEvent,
-};
+use protocol::event::{ApprovalDecision, ApprovalOutcome, Asking, EventBody, Question, QuestionOption, SessionEvent};
 use protocol::frame;
 
 /// What an approval's event says it asks.

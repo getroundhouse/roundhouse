@@ -84,6 +84,37 @@ pub enum TypedAnswer {
     Unknown,
 }
 
+impl Question {
+    /// Whether `answer` answers it as it allows: options it offers, each once, one at most unless several can be
+    /// chosen, and words typed only where an answer can be typed. What this build doesn't know of the question allows
+    /// the least it could mean.
+    pub fn takes(&self, answer: &QuestionAnswer) -> bool {
+        let QuestionAnswer { picked, typed } = answer;
+        let offered = picked.iter().all(|&at| (at as usize) < self.options.len());
+        let once = picked.iter().enumerate().all(|(i, at)| !picked[..i].contains(at));
+        let how_many = self.choose == Choose::Several || picked.len() <= 1;
+        let typed = typed.is_none() || matches!(self.typed, TypedAnswer::Yes | TypedAnswer::Secret);
+        offered && once && how_many && typed
+    }
+}
+
+/// What the person answered one question, by position: the options they chose, by their place among its options, in
+/// the order it offers them, and what they typed as an answer of their own. One with neither wasn't answered.
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq, Eq)]
+pub struct QuestionAnswer {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub picked: Vec<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub typed: Option<String>,
+}
+
+impl QuestionAnswer {
+    /// Nothing chosen and nothing typed, which is no answer.
+    pub fn is_empty(&self) -> bool {
+        self.picked.is_empty() && self.typed.is_none()
+    }
+}
+
 /// What the conversation holds as the agent starts on an approved plan.
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[serde(rename_all = "snake_case")]
@@ -159,4 +190,6 @@ pub enum ServerAnswer {
     Decline,
     /// The person stops what the server was doing.
     Cancel,
+    #[serde(other)]
+    Unknown,
 }

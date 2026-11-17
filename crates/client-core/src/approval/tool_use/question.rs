@@ -1,7 +1,8 @@
 use super::super::Approval;
 use crate::calls::{EditFile, Recorded, ToolCall, WriteFile};
+use protocol::capability::asking::QuestionAnswer;
 use protocol::capability::calls::call::Patch;
-use protocol::event::{ApprovalDecision, Asking, EventBody, QuestionAnswer};
+use protocol::event::{ApprovalDecision, Asking, EventBody};
 use protocol::model::SubagentId;
 
 /// A tool's use the agent asks about.

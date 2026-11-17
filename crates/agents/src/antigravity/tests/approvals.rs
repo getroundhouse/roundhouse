@@ -1,4 +1,5 @@
 #![cfg(test)]
+use protocol::capability::asking::QuestionAnswer;
 use protocol::capability::{
     Control,
     approvals::{AfterDenial, Asks, Decision},
@@ -6,7 +7,7 @@ use protocol::capability::{
     calls::{CallOutput, output::Ended},
     conversation::Start,
 };
-use protocol::event::{ApprovalOutcome, ContentBlock, Denied, EventBody, QuestionAnswer, TurnOutcome};
+use protocol::event::{ApprovalOutcome, ContentBlock, Denied, EventBody, TurnOutcome};
 use protocol::model::{PermissionMode, Seq, ToolUseId};
 use protocol::prompt::Prompt;
 use serde_json::{Value, json};

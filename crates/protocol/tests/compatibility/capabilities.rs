@@ -90,9 +90,9 @@ fn typed_approvals_keep_the_fields_an_older_reader_requires() {
 fn every_control_a_run_of_this_build_claims_keeps_its_form() {
     use protocol::capability::approvals::{AfterDenial, ApprovalMode, Beyond, Decision, Remember, Unasked};
     use protocol::capability::asking::PlanContext;
+    use protocol::capability::asking::QuestionAnswer;
     use protocol::capability::prompts::Extras;
     use protocol::capability::settings::{Effort, Settings};
-    use protocol::event::QuestionAnswer;
     use protocol::model::{ModelName, Seq};
     use protocol::prompt::Prompt;
 
@@ -158,4 +158,28 @@ fn classifier_approval_mode_keeps_its_form() {
     let wire = serde_json::to_value(classifier).unwrap();
     assert_eq!(wire, json!({"unasked":"reads","beyond":"classifier"}));
     assert_eq!(serde_json::from_value::<ApprovalMode>(wire).unwrap(), classifier);
+}
+
+/// A decision the log keeps can be of a kind, or have a part, from a later build, which this one reads as unknown
+/// rather than failing the event it's in.
+#[test]
+fn a_decision_or_a_part_of_one_this_build_doesnt_know_reads_as_unknown() {
+    use protocol::capability::approvals::{AfterDenial, Decision, Lasts, Remember};
+    use protocol::capability::asking::ServerAnswer;
+
+    let read = |form| serde_json::from_value::<Decision>(form).unwrap();
+    assert_eq!(read(json!({"decision":"overrule","why":"Tested"})), Decision::Unknown);
+    assert_eq!(
+        read(json!({"decision":"allow","remember":{"remember":"for_the_project"}})),
+        Decision::Allow { edited: None, remember: Remember::Unknown }
+    );
+    assert_eq!(
+        read(json!({"decision":"deny","then":"rewind"})),
+        Decision::Deny { words: None, then: AfterDenial::Unknown, keep: None }
+    );
+    assert_eq!(
+        read(json!({"decision":"grant","access":[],"lasts":"day"})),
+        Decision::Grant { access: vec![], lasts: Lasts::Unknown }
+    );
+    assert_eq!(read(json!({"decision":"respond","answer":"defer"})), Decision::Respond(ServerAnswer::Unknown));
 }

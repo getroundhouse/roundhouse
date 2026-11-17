@@ -9,7 +9,7 @@ use gpui_kit::{
     StatefulInteractiveElement as _, Styled, TestSupportExt as _, div, px,
 };
 use look::{Hand as _, Typeset as _};
-use protocol::event::QuestionAnswer;
+use protocol::capability::asking::QuestionAnswer;
 
 use super::QuestionPanel;
 use super::heading::said;

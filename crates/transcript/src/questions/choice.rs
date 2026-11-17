@@ -1,6 +1,6 @@
 //! What's been chosen on each question, and the answers that makes. Nothing here draws, so the rules are tested alone.
 
-use protocol::event::QuestionAnswer;
+use protocol::capability::asking::QuestionAnswer;
 
 /// What's been chosen on one question: its options, by position, and whether what's typed in its Other row counts.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -86,7 +86,8 @@ mod tests {
     use proptest::collection::vec;
     use proptest::prelude::*;
     use proptest::test_runner::{Config, RngSeed};
-    use protocol::event::{Question, QuestionAnswer, QuestionOption};
+    use protocol::capability::asking::QuestionAnswer;
+    use protocol::event::{Question, QuestionOption};
 
     use super::{Choice, next_unanswered};
 

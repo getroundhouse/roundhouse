@@ -9,7 +9,8 @@ use gpui_kit::{
     Styled, TestSupportExt as _, div, px,
 };
 use look::{Shaped as _, Typeset as _};
-use protocol::event::{ApprovalDecision, EventBody, Question, QuestionAnswer, QuestionOption};
+use protocol::capability::asking::QuestionAnswer;
+use protocol::event::{ApprovalDecision, EventBody, Question, QuestionOption};
 
 /// What the typing row says while it's empty.
 pub(in super::super) const INSTEAD: &str = "Deny, and say what to do instead…";

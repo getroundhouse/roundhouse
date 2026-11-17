@@ -1,4 +1,5 @@
-use protocol::event::{ApprovalDecision, Asking, EventBody, Question, QuestionAnswer};
+use protocol::capability::asking::QuestionAnswer;
+use protocol::event::{ApprovalDecision, Asking, EventBody, Question};
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 

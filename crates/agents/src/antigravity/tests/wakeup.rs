@@ -3,6 +3,7 @@ use std::io::Write as _;
 use std::path::Path;
 use std::time::Duration;
 
+use protocol::capability::asking::QuestionAnswer;
 use protocol::capability::{
     Control,
     approvals::{Asks, Decision, Remember},
@@ -15,8 +16,8 @@ use protocol::capability::{
     turns::OwnTurn,
 };
 use protocol::event::{
-    AgentRunState, AgentTask, ApprovalOutcome, ContentBlock, EndedTask, EventBody, ExitReason, QuestionAnswer,
-    SessionEvent, TaskKind, TaskOutcome, TurnOutcome,
+    AgentRunState, AgentTask, ApprovalOutcome, ContentBlock, EndedTask, EventBody, ExitReason, SessionEvent, TaskKind,
+    TaskOutcome, TurnOutcome,
 };
 use protocol::fixtures;
 use protocol::model::{AgentSessionId, ApprovalId, PermissionMode, RunId, Seq, TaskId, ToolUseId};

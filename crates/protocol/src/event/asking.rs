@@ -4,6 +4,7 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::capability::asking::QuestionAnswer;
 use crate::capability::calls::{Call, CallKind};
 
 /// What an approval asks. One this build doesn't know reads as `Unknown`, which a client asks about as it would a
@@ -83,23 +84,6 @@ pub struct QuestionOption {
     /// What choosing it means, when the agent says.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
-}
-
-/// What the person answered one question, by position: the options they chose, by their place among its options, in
-/// the order it offers them, and what they typed as an answer of their own. One with neither wasn't answered.
-#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq, Eq)]
-pub struct QuestionAnswer {
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub picked: Vec<u32>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub typed: Option<String>,
-}
-
-impl QuestionAnswer {
-    /// Nothing chosen and nothing typed, which is no answer.
-    pub fn is_empty(&self) -> bool {
-        self.picked.is_empty() && self.typed.is_none()
-    }
 }
 
 #[cfg(test)]
