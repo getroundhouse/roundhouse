@@ -200,3 +200,19 @@ async fn a_read_asked_for_while_another_waits_shares_its_answer() {
     assert!(answers.iter().all(|pr| pr.as_ref().map(|pr| pr.number) == Some(7)), "{answers:?}");
     assert_eq!(queries(&github).len(), 3 * a_read, "the third shared the second's read");
 }
+
+/// GitHub deleted the branch as its pull request merged, so the branch has none of its own to list, and the one the
+/// workspace had is found by the branch's name.
+#[tokio::test]
+async fn a_pull_request_whose_branch_github_deleted_as_it_merged_is_still_the_workspaces() {
+    let dir = tempfile::tempdir().unwrap();
+    let (hub, pull_requests, _github) = hub_on_github(dir.path()).await;
+    pull_requests.set(7, PullRequestState::Open);
+    hub.workspace_pull_request("w".into()).await.unwrap();
+    pull_requests.set(7, PullRequestState::Merged);
+    pull_requests.delete_branch("branch");
+
+    let merged = hub.workspace_pull_request("w".into()).await.unwrap();
+
+    assert_eq!(merged.map(|pr| (pr.number, pr.state)), Some((7, PrState::Merged)));
+}

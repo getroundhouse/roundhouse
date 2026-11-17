@@ -27,6 +27,9 @@ struct Set {
     failing: bool,
     /// What each answer says is left of GitHub's limit, if a test says, and otherwise most of it.
     remaining: Option<u32>,
+    /// The branches that are gone from example/project, as GitHub can delete one as its pull request merges, so their
+    /// pull requests are found only by the branch's name.
+    deleted: Vec<String>,
 }
 
 /// What a pull request the stand-in answers for is.
@@ -90,6 +93,11 @@ impl PullRequests {
         set.heads.insert(number, head.to_string());
     }
 
+    /// `branch` is gone from example/project from now on, as when GitHub deleted it as its pull request merged.
+    pub fn delete_branch(&self, branch: &str) {
+        self.0.lock().deleted.push(branch.to_string());
+    }
+
     /// Every read fails from now on, with the 503 GitHub answers with when it can't, or answers again.
     pub fn fail(&self, failing: bool) {
         self.0.lock().failing = failing;
@@ -136,8 +144,18 @@ impl PullRequests {
                 };
                 parts.push((part.to_string(), pr));
             }
-            for (part, _) in aliased(asks, ": ref(") {
-                parts.push((part.to_string(), rules()));
+            for (part, asked) in aliased(asks, ": ref(") {
+                let branch = asked.strip_prefix("qualifiedName:").and_then(|asked| asked.split(')').next());
+                let branch: String = branch.and_then(|branch| serde_json::from_str(branch).ok()).unwrap_or_default();
+                let branch = branch.strip_prefix("refs/heads/").unwrap_or_default();
+                // A branch's pull requests are asked for of the branch itself, and `main`'s rules of `main`.
+                let answer =
+                    match (asked.contains("associatedPullRequests"), set.deleted.iter().any(|gone| gone == branch)) {
+                        (false, _) => rules(),
+                        (true, true) => Value::Null,
+                        (true, false) => json!({ "associatedPullRequests": set.heads(branch) }),
+                    };
+                parts.push((part.to_string(), answer));
             }
             for (part, branch) in aliased(asks, ": pullRequests(headRefName:") {
                 let branch: String =
@@ -169,7 +187,7 @@ impl Set {
         self.heads.get(&number).cloned().unwrap_or_else(|| format!("head-{number}"))
     }
 
-    /// The pull requests from `branch`, the newest first, as a branch's are asked for.
+    /// The pull requests from `branch`, the newest first, as a branch's are asked for, by the branch or by its name.
     fn heads(&self, branch: &str) -> Value {
         let nodes: Vec<Value> = self
             .states
@@ -179,7 +197,8 @@ impl Set {
             .map(|(number, state)| {
                 let state = if *state == PullRequestState::Merged { "MERGED" } else { "OPEN" };
                 json!({"number": number, "state": state, "headRefOid": self.head(*number),
-                    "headRepository": {"nameWithOwner": "example/project"}})
+                    "headRepository": {"nameWithOwner": "example/project"},
+                    "baseRepository": {"nameWithOwner": "example/project"}})
             })
             .collect();
         json!({ "nodes": nodes })
