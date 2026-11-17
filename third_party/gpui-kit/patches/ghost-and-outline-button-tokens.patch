@@ -1,0 +1,276 @@
+diff --git a/crates/component/src/button/button.rs b/crates/component/src/button/button.rs
+index 3a6e880..21bfbbe 100644
+--- a/crates/component/src/button/button.rs
++++ b/crates/component/src/button/button.rs
+@@ -957,17 +957,13 @@ enum ButtonStyleState {
+ impl ButtonVariant {
+     fn outline_background(&self, state: ButtonStyleState, cx: &mut App) -> Background {
+         match (self, state) {
+-            (Self::Default, ButtonStyleState::Normal) => cx.theme().input_background().into(),
+-            (Self::Default, ButtonStyleState::Hovered) => cx
+-                .theme()
+-                .input
+-                .mix_oklab(cx.theme().transparent, 0.5)
+-                .into(),
+-            (Self::Default, ButtonStyleState::Active) => cx
+-                .theme()
+-                .input
+-                .mix_oklab(cx.theme().transparent, 0.7)
+-                .into(),
++            (Self::Default, ButtonStyleState::Normal) => cx.theme().tokens.button_outline.into(),
++            (Self::Default, ButtonStyleState::Hovered) => {
++                cx.theme().tokens.button_outline_hover.into()
++            }
++            (Self::Default, ButtonStyleState::Active) => {
++                cx.theme().tokens.button_outline_active.into()
++            }
+             (Self::Primary, ButtonStyleState::Normal) => {
+                 cx.theme().tokens.primary.background.opacity(0.1)
+             }
+@@ -1223,14 +1219,7 @@ impl ButtonVariant {
+                 }
+             }
+             Self::Custom(colors) => colors.hover.into(),
+-            Self::Ghost => {
+-                let accent: Background = cx.theme().tokens.accent.into();
+-                if cx.theme().mode.is_dark() {
+-                    accent.opacity(0.5)
+-                } else {
+-                    accent
+-                }
+-            }
++            Self::Ghost => cx.theme().tokens.button_ghost_hover.into(),
+             Self::Link => cx.theme().transparent.into(),
+             Self::Text => cx.theme().transparent.into(),
+         };
+@@ -1278,7 +1267,7 @@ impl ButtonVariant {
+                     cx.theme().tokens.button_secondary_active.into()
+                 }
+             }
+-            Self::Ghost => cx.theme().tokens.button_active.into(),
++            Self::Ghost => cx.theme().tokens.button_ghost_active.into(),
+             Self::Danger => {
+                 if outline {
+                     self.outline_background(ButtonStyleState::Active, cx)
+@@ -1343,7 +1332,7 @@ impl ButtonVariant {
+             Self::Default => cx.theme().tokens.button_active.into(),
+             Self::Primary => cx.theme().tokens.button_primary_active.into(),
+             Self::Secondary => cx.theme().tokens.button_secondary_active.into(),
+-            Self::Ghost => cx.theme().tokens.secondary_active.into(),
++            Self::Ghost => cx.theme().tokens.button_ghost_selected.into(),
+             Self::Danger => cx.theme().tokens.button_danger_active.into(),
+             Self::Warning => cx.theme().tokens.button_warning_active.into(),
+             Self::Success => cx.theme().tokens.button_success_active.into(),
+diff --git a/crates/component/src/theme/schema.rs b/crates/component/src/theme/schema.rs
+index 04bfd42..ffc75a4 100644
+--- a/crates/component/src/theme/schema.rs
++++ b/crates/component/src/theme/schema.rs
+@@ -304,6 +304,15 @@ pub struct ThemeConfigColors {
+     /// Button danger hover background color, fallback to `danger_hover`.
+     #[serde(rename = "button.danger.hover.background")]
+     pub button_danger_hover: Option<SharedString>,
++    /// Ghost Button hover background color, fallback to `accent`, at half its strength in a dark theme.
++    #[serde(rename = "button.ghost.hover.background")]
++    pub button_ghost_hover: Option<SharedString>,
++    /// Ghost Button active background color, fallback to `button_active`.
++    #[serde(rename = "button.ghost.active.background")]
++    pub button_ghost_active: Option<SharedString>,
++    /// Ghost Button selected background color, fallback to `secondary_active`.
++    #[serde(rename = "button.ghost.selected.background")]
++    pub button_ghost_selected: Option<SharedString>,
+     /// Button info background color, fallback to `info`.
+     #[serde(rename = "button.info.background")]
+     pub button_info: Option<SharedString>,
+@@ -316,6 +325,15 @@ pub struct ThemeConfigColors {
+     /// Button info hover background color, fallback to `info_hover`.
+     #[serde(rename = "button.info.hover.background")]
+     pub button_info_hover: Option<SharedString>,
++    /// Outline Button background color, fallback to `input` at 30% in a dark theme, and `background` in a light one.
++    #[serde(rename = "button.outline.background")]
++    pub button_outline: Option<SharedString>,
++    /// Outline Button hover background color, fallback to `input` at 50%.
++    #[serde(rename = "button.outline.hover.background")]
++    pub button_outline_hover: Option<SharedString>,
++    /// Outline Button active background color, fallback to `input` at 70%.
++    #[serde(rename = "button.outline.active.background")]
++    pub button_outline_active: Option<SharedString>,
+     /// Button primary background color, fallback to `primary`.
+     #[serde(rename = "button.primary.background")]
+     pub button_primary: Option<SharedString>,
+@@ -819,6 +837,15 @@ impl ThemeColor {
+             button_active,
+             fallback = self.input.mix_oklab(transparent, 0.7)
+         );
++        apply_background_color!(button_outline, fallback = button_background);
++        apply_background_color!(
++            button_outline_hover,
++            fallback = self.input.mix_oklab(transparent, 0.5)
++        );
++        apply_background_color!(
++            button_outline_active,
++            fallback = self.input.mix_oklab(transparent, 0.7)
++        );
+         apply_background_color!(primary);
+         apply_color!(primary_foreground, fallback = self.foreground);
+         apply_background_color!(
+@@ -923,6 +950,17 @@ impl ThemeColor {
+         // Other colors
+         apply_background_color!(accent, fallback = tokens.secondary);
+         apply_color!(accent_foreground, fallback = self.foreground);
++        let ghost_hover = if config.mode.is_dark() {
++            ThemeToken::new(
++                tokens.accent.color.opacity(0.5),
++                tokens.accent.background.opacity(0.5),
++            )
++        } else {
++            tokens.accent
++        };
++        apply_background_color!(button_ghost_hover, fallback = ghost_hover);
++        apply_background_color!(button_ghost_active, fallback = tokens.button_active);
++        apply_background_color!(button_ghost_selected, fallback = tokens.secondary_active);
+         apply_background_color!(accordion, fallback = tokens.background);
+         apply_background_color!(
+             group_box,
+@@ -1226,6 +1264,95 @@ mod tests {
+         assert_eq!(theme.window_radius, px(10.));
+     }
+ 
++    #[test]
++    fn test_apply_config_reads_the_ghost_and_outline_button_colors() {
++        let config = serde_json::from_value::<ThemeConfig>(serde_json::json!({
++            "name": "Buttons",
++            "mode": "dark",
++            "colors": {
++                "button.ghost.hover.background": "#111111",
++                "button.ghost.active.background": "#222222",
++                "button.ghost.selected.background": "#333333",
++                "button.outline.background": "#444444",
++                "button.outline.hover.background": "#555555",
++                "button.outline.active.background": "#666666"
++            }
++        }))
++        .unwrap();
++
++        let mut theme = Theme::default();
++        theme.apply_config(&std::rc::Rc::new(config));
++
++        assert_eq!(
++            theme.button_ghost_hover,
++            try_parse_color("#111111").unwrap()
++        );
++        assert_eq!(
++            theme.button_ghost_active,
++            try_parse_color("#222222").unwrap()
++        );
++        assert_eq!(
++            theme.button_ghost_selected,
++            try_parse_color("#333333").unwrap()
++        );
++        assert_eq!(theme.button_outline, try_parse_color("#444444").unwrap());
++        assert_eq!(
++            theme.button_outline_hover,
++            try_parse_color("#555555").unwrap()
++        );
++        assert_eq!(
++            theme.button_outline_active,
++            try_parse_color("#666666").unwrap()
++        );
++        assert_eq!(
++            theme.tokens.button_ghost_hover.color,
++            theme.button_ghost_hover
++        );
++    }
++
++    #[test]
++    fn test_ghost_and_outline_button_colors_fall_back_to_what_they_were_derived_from() {
++        let transparent = gpui::transparent_black();
++        for mode in ["dark", "light"] {
++            let config = serde_json::from_value::<ThemeConfig>(serde_json::json!({
++                "name": "Derived",
++                "mode": mode,
++            }))
++            .unwrap();
++            let mut theme = Theme::default();
++            theme.apply_config(&std::rc::Rc::new(config));
++
++            let dark = mode == "dark";
++            let hover = if dark {
++                theme.accent.opacity(0.5)
++            } else {
++                theme.accent
++            };
++            assert_eq!(theme.button_ghost_hover, hover, "{mode}");
++            assert_eq!(theme.button_ghost_active, theme.button_active, "{mode}");
++            assert_eq!(
++                theme.button_ghost_selected, theme.secondary_active,
++                "{mode}"
++            );
++            let rest = if dark {
++                theme.input.mix_oklab(transparent, 0.3)
++            } else {
++                theme.background
++            };
++            assert_eq!(theme.button_outline, rest, "{mode}");
++            assert_eq!(
++                theme.button_outline_hover,
++                theme.input.mix_oklab(transparent, 0.5),
++                "{mode}"
++            );
++            assert_eq!(
++                theme.button_outline_active,
++                theme.input.mix_oklab(transparent, 0.7),
++                "{mode}"
++            );
++        }
++    }
++
+     #[test]
+     fn test_apply_config_reads_the_chart_colors() {
+         let config = serde_json::from_value::<ThemeConfig>(serde_json::json!({
+diff --git a/crates/component/src/theme/theme_color.rs b/crates/component/src/theme/theme_color.rs
+index e1dccc9..c9a6abb 100644
+--- a/crates/component/src/theme/theme_color.rs
++++ b/crates/component/src/theme/theme_color.rs
+@@ -85,6 +85,12 @@ pub struct ThemeColor {
+     pub button_danger_foreground: Hsla,
+     /// Button danger hover background color, fallback to `danger_hover`.
+     pub button_danger_hover: Hsla,
++    /// Ghost Button hover background color, fallback to `accent`, at half its strength in a dark theme.
++    pub button_ghost_hover: Hsla,
++    /// Ghost Button active background color, fallback to `button_active`.
++    pub button_ghost_active: Hsla,
++    /// Ghost Button selected background color, fallback to `secondary_active`.
++    pub button_ghost_selected: Hsla,
+     /// Button info background color, fallback to `info`.
+     pub button_info: Hsla,
+     /// Button info active background color, fallback to `info_active`.
+@@ -93,6 +99,12 @@ pub struct ThemeColor {
+     pub button_info_foreground: Hsla,
+     /// Button info hover background color, fallback to `info_hover`.
+     pub button_info_hover: Hsla,
++    /// Outline Button background color, fallback to `input` at 30% in a dark theme, and `background` in a light one.
++    pub button_outline: Hsla,
++    /// Outline Button hover background color, fallback to `input` at 50%.
++    pub button_outline_hover: Hsla,
++    /// Outline Button active background color, fallback to `input` at 70%.
++    pub button_outline_active: Hsla,
+     /// Button primary background color, fallback to `primary`.
+     pub button_primary: Hsla,
+     /// Button primary active background color, fallback to `primary_active`.
+@@ -420,10 +432,16 @@ define_theme_tokens! {
+     button_danger_active,
+     button_danger_foreground,
+     button_danger_hover,
++    button_ghost_hover,
++    button_ghost_active,
++    button_ghost_selected,
+     button_info,
+     button_info_active,
+     button_info_foreground,
+     button_info_hover,
++    button_outline,
++    button_outline_hover,
++    button_outline_active,
+     button_primary,
+     button_primary_active,
+     button_primary_foreground,

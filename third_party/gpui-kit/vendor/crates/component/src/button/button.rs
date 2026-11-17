@@ -1,3 +1,4 @@
+// Changed in Roundhouse's copy of gpui-kit, as third_party/README.md lists.
 use gpui_base::LogicalStyledExt as _;
 use std::{rc::Rc, time::Duration};
 
@@ -957,17 +958,13 @@ enum ButtonStyleState {
 impl ButtonVariant {
     fn outline_background(&self, state: ButtonStyleState, cx: &mut App) -> Background {
         match (self, state) {
-            (Self::Default, ButtonStyleState::Normal) => cx.theme().input_background().into(),
-            (Self::Default, ButtonStyleState::Hovered) => cx
-                .theme()
-                .input
-                .mix_oklab(cx.theme().transparent, 0.5)
-                .into(),
-            (Self::Default, ButtonStyleState::Active) => cx
-                .theme()
-                .input
-                .mix_oklab(cx.theme().transparent, 0.7)
-                .into(),
+            (Self::Default, ButtonStyleState::Normal) => cx.theme().tokens.button_outline.into(),
+            (Self::Default, ButtonStyleState::Hovered) => {
+                cx.theme().tokens.button_outline_hover.into()
+            }
+            (Self::Default, ButtonStyleState::Active) => {
+                cx.theme().tokens.button_outline_active.into()
+            }
             (Self::Primary, ButtonStyleState::Normal) => {
                 cx.theme().tokens.primary.background.opacity(0.1)
             }
@@ -1223,14 +1220,7 @@ impl ButtonVariant {
                 }
             }
             Self::Custom(colors) => colors.hover.into(),
-            Self::Ghost => {
-                let accent: Background = cx.theme().tokens.accent.into();
-                if cx.theme().mode.is_dark() {
-                    accent.opacity(0.5)
-                } else {
-                    accent
-                }
-            }
+            Self::Ghost => cx.theme().tokens.button_ghost_hover.into(),
             Self::Link => cx.theme().transparent.into(),
             Self::Text => cx.theme().transparent.into(),
         };
@@ -1278,7 +1268,7 @@ impl ButtonVariant {
                     cx.theme().tokens.button_secondary_active.into()
                 }
             }
-            Self::Ghost => cx.theme().tokens.button_active.into(),
+            Self::Ghost => cx.theme().tokens.button_ghost_active.into(),
             Self::Danger => {
                 if outline {
                     self.outline_background(ButtonStyleState::Active, cx)
@@ -1343,7 +1333,7 @@ impl ButtonVariant {
             Self::Default => cx.theme().tokens.button_active.into(),
             Self::Primary => cx.theme().tokens.button_primary_active.into(),
             Self::Secondary => cx.theme().tokens.button_secondary_active.into(),
-            Self::Ghost => cx.theme().tokens.secondary_active.into(),
+            Self::Ghost => cx.theme().tokens.button_ghost_selected.into(),
             Self::Danger => cx.theme().tokens.button_danger_active.into(),
             Self::Warning => cx.theme().tokens.button_warning_active.into(),
             Self::Success => cx.theme().tokens.button_success_active.into(),
