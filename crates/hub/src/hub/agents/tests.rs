@@ -52,29 +52,54 @@ async fn a_kind_of_agent_the_hub_has_no_description_of_is_refused() {
     assert_eq!(code(&refused), Some(ErrorCode::InvalidRequest), "{refused:?}");
     assert_eq!(hub.session_list(W.into()).await.unwrap().len(), 1, "no chat was made");
     assert_eq!(code(&newer), Some(ErrorCode::InvalidRequest), "a kind from a newer client: {newer:?}");
+    assert_eq!(claudes.session_list(W.into()).await.unwrap().len(), 1, "no chat of a kind from a newer client");
 }
 
+/// One this hub doesn't know, as from a newer client, as well as one the agent's description leaves out.
 #[tokio::test]
 async fn an_effort_or_a_mode_the_agent_isnt_offered_is_refused_for_a_new_chat_and_for_a_change() {
     let dir = tempfile::tempdir().unwrap();
     let hub = hub_in(dir.path());
     ready(&hub);
-    let at_max = SessionSettingsChange { effort: Some(Effort::Max), ..SessionSettingsChange::default() };
-    let unknown_mode =
-        SessionSettingsChange { permission_mode: Some(PermissionMode::Unknown), ..SessionSettingsChange::default() };
+    let at = |effort| SessionSettingsChange { effort: Some(effort), ..SessionSettingsChange::default() };
+    let in_mode = |mode| SessionSettingsChange { permission_mode: Some(mode), ..SessionSettingsChange::default() };
+    let refused = [
+        ("an effort it isn't offered", at(Effort::Max)),
+        ("an effort this hub doesn't know", at(Effort::Unknown)),
+        ("a mode this hub doesn't know", in_mode(PermissionMode::Unknown)),
+    ];
     let before = hub.session_get("s".into()).await.unwrap();
 
-    let new_chat = hub.session_create(W.into(), AgentKind::Claude, at_max.clone(), None).await;
-    let change = hub.session_configure("s".into(), at_max).await;
-    let mode = hub.session_configure("s".into(), unknown_mode).await;
-    let offered = SessionSettingsChange { effort: Some(Effort::Low), ..SessionSettingsChange::default() };
-    let taken = hub.session_configure("s".into(), offered).await.unwrap();
+    for (case, change) in refused {
+        let new_chat = hub.session_create(W.into(), AgentKind::Claude, change.clone(), None).await;
+        let changed = hub.session_configure("s".into(), change).await;
 
-    for refused in [new_chat.map(|_| ()), change.map(|_| ()), mode.map(|_| ())] {
-        assert_eq!(code(&refused), Some(ErrorCode::InvalidRequest), "{refused:?}");
+        assert_eq!(code(&new_chat), Some(ErrorCode::InvalidRequest), "{case}, for a new chat: {new_chat:?}");
+        assert_eq!(code(&changed), Some(ErrorCode::InvalidRequest), "{case}, for a change: {changed:?}");
+        assert_eq!(hub.session_list(W.into()).await.unwrap().len(), 1, "{case}: no chat was made");
+        let kept = hub.session_get("s".into()).await.unwrap();
+        assert_eq!(kept.settings(), before.settings(), "{case}: the chat's settings didn't change");
     }
-    assert_eq!(hub.session_list(W.into()).await.unwrap().len(), 1, "no chat was made");
-    assert_eq!(taken.settings(), SessionSettings { effort: Effort::Low, ..before.settings() });
+    // What the agent is offered is taken, each leaving the rest as it was.
+    let low = SessionSettings { effort: Effort::Low, ..before.settings() };
+    for (case, taken, expected) in [
+        ("an effort it's offered", at(Effort::Low), low.clone()),
+        (
+            "plan mode",
+            in_mode(PermissionMode::Plan),
+            SessionSettings { permission_mode: PermissionMode::Plan, ..low.clone() },
+        ),
+        (
+            "full access",
+            in_mode(PermissionMode::FullAccess),
+            SessionSettings { permission_mode: PermissionMode::FullAccess, ..low.clone() },
+        ),
+    ] {
+        let changed = hub.session_configure("s".into(), taken).await;
+
+        let changed = changed.unwrap_or_else(|e| panic!("{case} was refused: {e:?}"));
+        assert_eq!(changed.settings(), expected, "{case}");
+    }
 }
 
 #[tokio::test]

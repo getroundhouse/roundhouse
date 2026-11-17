@@ -13,3 +13,6 @@ mod dispatch;
 mod hello;
 mod network;
 pub(crate) use network::accept_devices;
+
+#[cfg(test)]
+mod tests;

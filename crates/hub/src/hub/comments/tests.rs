@@ -15,15 +15,18 @@ fn writing(side: DiffSide) -> CommentDraft {
 /// As from a newer client, which knows a side of a diff this hub doesn't. Refused as it would be saved, rather than as
 /// a request the hub doesn't know, which would say it keeps no comment being written at all.
 #[tokio::test]
-async fn a_comment_being_written_on_a_side_of_a_diff_the_hub_doesnt_know_is_refused() {
+async fn a_comment_or_one_being_written_on_a_side_of_a_diff_the_hub_doesnt_know_is_refused_and_not_saved() {
     let dir = tempfile::tempdir().unwrap();
     let hub = hub_in(dir.path());
 
-    let refused = hub.workspace_comment_draft("w".into(), Some(writing(DiffSide::Unknown))).await;
+    let being_written = hub.workspace_comment_draft("w".into(), Some(writing(DiffSide::Unknown))).await;
+    let comment = hub.comment_add("w".into(), "a.txt".into(), DiffSide::Unknown, 1, "Why?".into(), None).await;
 
-    assert_eq!(refused.map_err(|e| e.code).err(), Some(ErrorCode::InvalidRequest));
+    assert_eq!(being_written.map_err(|e| e.code).err(), Some(ErrorCode::InvalidRequest), "one being written");
     let kept = hub.workspace_comment_draft("w".into(), None).await.unwrap();
     assert_eq!(kept.comment_draft, None, "nothing was kept");
+    assert_eq!(comment.map_err(|e| e.code).err(), Some(ErrorCode::InvalidRequest), "a comment");
+    assert!(hub.comment_list("w".into()).await.unwrap().is_empty(), "no comment was saved");
 }
 
 /// So every client puts the box away as the comment shows, rather than waiting on the client that saved it.
