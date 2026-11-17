@@ -10,7 +10,7 @@ use super::WorkerLink;
 impl WorkerLink {
     /// Whether its worker chose protocol 3 in its hello.
     pub(crate) fn speaks_previous(&self) -> bool {
-        self.version.get() == Some(&previous::VERSION)
+        self.version() == Some(previous::VERSION)
     }
 
     /// The worker's reply to a request of protocol 3, as `T`, as [`WorkerLink::call`] reads it.

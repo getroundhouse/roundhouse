@@ -44,6 +44,20 @@ pub(super) fn restarts_at_once(hub: &HubStatus, app_build: Option<u64>) -> bool 
     may_restart(hub, app_build) && hub.keeps_workers
 }
 
+/// Which workers the app's update has to keep running on this hub, as [`crate::updates::keep_workers`] takes it: those
+/// of the oldest worker protocol it's running, if it's a hub the app restarts once it has updated, and whose workers
+/// outlive the restart. A hub from before it said is taken to run workers as old as this app's own hub speaks.
+pub(super) fn workers_to_keep(hub: &HubStatus) -> Option<u32> {
+    (hub.on_demand && hub.keeps_workers)
+        .then(|| hub.oldest_running_worker_protocol.unwrap_or(protocol::worker::HUB_SPEAKS.oldest))
+}
+
+/// Whether the hub runs workers older than the ones a hub of this build starts, which the update has to keep, so the
+/// oldest can still rise.
+pub(super) fn runs_older_workers(hub: &HubStatus) -> bool {
+    workers_to_keep(hub).is_some_and(|oldest| oldest < protocol::worker::HUB_SPEAKS.newest)
+}
+
 impl HubSource {
     /// The default hub for this user, with the daemon next to this binary, for an app that's `build`.
     pub fn default_local(build: Build) -> anyhow::Result<Self> {
@@ -107,6 +121,7 @@ mod tests {
             keeping_awake: false,
             keeps_workers: false,
             oldest_protocol_version: None,
+            oldest_running_worker_protocol: None,
         }
     }
 
@@ -147,6 +162,28 @@ mod tests {
         let keeps = HubStatus { keeps_workers: true, ..older_idle_hub() };
         assert!(!restarts_at_once(&keeps, Some(1)), "the same build");
         assert!(!restarts_at_once(&HubStatus { on_demand: false, ..keeps }, Some(2)), "started by hand");
+    }
+
+    #[test]
+    fn an_update_keeps_the_oldest_workers_of_a_hub_it_restarts_with_them_running() {
+        let hub = HubStatus { keeps_workers: true, oldest_running_worker_protocol: Some(4), ..older_idle_hub() };
+
+        assert_eq!(workers_to_keep(&hub), Some(4));
+        let from_before = HubStatus { oldest_running_worker_protocol: None, ..hub.clone() };
+        assert_eq!(workers_to_keep(&from_before), Some(protocol::worker::HUB_SPEAKS.oldest));
+        assert_eq!(workers_to_keep(&HubStatus { on_demand: false, ..hub.clone() }), None, "started by hand");
+        assert_eq!(workers_to_keep(&HubStatus { keeps_workers: false, ..hub }), None, "its workers stop with it");
+    }
+
+    #[test]
+    fn the_app_reads_the_status_again_only_while_the_hub_runs_older_workers_to_keep() {
+        let newest = protocol::worker::HUB_SPEAKS.newest;
+        let hub = HubStatus { keeps_workers: true, oldest_running_worker_protocol: Some(newest), ..older_idle_hub() };
+
+        assert!(!runs_older_workers(&hub), "only its own");
+        let older = HubStatus { oldest_running_worker_protocol: Some(newest - 1), ..hub.clone() };
+        assert!(runs_older_workers(&older));
+        assert!(!runs_older_workers(&HubStatus { keeps_workers: false, ..older }), "none to keep");
     }
 
     #[test]

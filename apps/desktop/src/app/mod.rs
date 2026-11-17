@@ -10,6 +10,7 @@ mod focus;
 mod home;
 mod hub_source;
 pub(crate) mod hubs;
+mod keeping_workers;
 mod menu_button;
 mod notifying;
 pub(crate) mod pairing;

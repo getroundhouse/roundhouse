@@ -20,7 +20,7 @@ pub(crate) use problem::Said;
 use problem::problem;
 pub use problem::{Kind, Problem, Refusal, Step};
 #[cfg(test)]
-use source::{SignedSource, UpdateFeedKey};
+use source::{SignedSource, UpdateFeedKey, WorkersToKeep};
 #[cfg(test)]
 use std::time::Duration;
 #[cfg(test)]
@@ -32,10 +32,10 @@ mod tests;
 mod updater;
 
 #[cfg(test)]
-pub(crate) use updater::{answered, checking, problem_shown};
+pub(crate) use updater::{answered, checking, installs, problem_shown};
 #[cfg(test)]
 use updater::{apply, keep_looking, keep_up_to_date, newest, options};
 pub use updater::{check_now, run_hooks, start};
-pub(crate) use updater::{observe, ready, restart_to_update, said};
+pub(crate) use updater::{keep_workers, observe, ready, restart_to_update, said};
 #[cfg(feature = "testing")]
 pub use updater::{show_checking, show_problem, show_ready, show_up_to_date};

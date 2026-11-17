@@ -33,16 +33,23 @@ fn hex(bytes: &[u8]) -> String {
     })
 }
 
-fn package_name(version: &str) -> String {
+pub(super) fn package_name(version: &str) -> String {
     format!("Roundhouse-{version}-osx-full.nupkg")
 }
 
 /// Publishes a full package for each release, in a feed `signer` signs, and serves each package as its reply.
 pub(super) fn publish(releases: &[(&str, &[u8], Reply)], signer: &Ed25519KeyPair) -> Server {
+    let speaking: Vec<_> =
+        releases.iter().map(|(version, package, reply)| (*version, *package, reply.clone(), None)).collect();
+    publish_speaking(&speaking, signer)
+}
+
+/// The same, with the worker versions each release's hub speaks, if the feed says.
+pub(super) fn publish_speaking(releases: &[(&str, &[u8], Reply, Option<Versions>)], signer: &Ed25519KeyPair) -> Server {
     let assets: Vec<serde_json::Value> = releases
         .iter()
-        .map(|(version, package, _)| {
-            serde_json::json!({
+        .map(|(version, package, _, speaks)| {
+            let mut asset = serde_json::json!({
                 "PackageId": "Roundhouse",
                 "Version": version,
                 "Type": "Full",
@@ -50,7 +57,11 @@ pub(super) fn publish(releases: &[(&str, &[u8], Reply)], signer: &Ed25519KeyPair
                 "SHA1": hex(digest(&SHA1_FOR_LEGACY_USE_ONLY, package).as_ref()),
                 "SHA256": hex(digest(&SHA256, package).as_ref()),
                 "Size": package.len(),
-            })
+            });
+            if let Some(speaks) = speaks {
+                asset["WorkerVersions"] = serde_json::to_value(speaks).unwrap();
+            }
+            asset
         })
         .collect();
     let feed = serde_json::to_vec(&serde_json::json!({ "Assets": assets })).unwrap();
@@ -59,13 +70,22 @@ pub(super) fn publish(releases: &[(&str, &[u8], Reply)], signer: &Ed25519KeyPair
         ("releases.osx.json".to_string(), vec![Reply::file(feed)]),
         ("releases.osx.json.sig".to_string(), vec![Reply::file(signature)]),
     ];
-    paths.extend(releases.iter().map(|(version, _, reply)| (package_name(version), vec![reply.clone()])));
+    paths.extend(releases.iter().map(|(version, _, reply, _)| (package_name(version), vec![reply.clone()])));
     serve(paths).unwrap()
 }
 
-/// The app's updater, set up as `start` sets it up, reading from `base`.
-pub(super) fn manager(base: &str, key: UpdateFeedKey, installed: &VelopackLocatorConfig) -> UpdateManager {
-    let source = SignedSource::waiting(base, key, Duration::ZERO);
+/// The app's updater, set up as `start` sets it up, reading from `base`, keeping no worker.
+fn manager(base: &str, key: UpdateFeedKey, installed: &VelopackLocatorConfig) -> UpdateManager {
+    manager_keeping(base, key, installed, &WorkersToKeep::oldest_at(None))
+}
+
+pub(super) fn manager_keeping(
+    base: &str,
+    key: UpdateFeedKey,
+    installed: &VelopackLocatorConfig,
+    workers: &WorkersToKeep,
+) -> UpdateManager {
+    let source = SignedSource::waiting(base, key, workers.clone(), Duration::ZERO);
     UpdateManager::new(source, Some(options()), Some(installed.clone())).unwrap()
 }
 
@@ -161,7 +181,8 @@ fn asking_looks_again_without_waiting_for_the_hour() {
     let state = tempfile::tempdir().unwrap();
     let (look_now, asked) = flume::bounded(1);
     let (looks, looked) = flume::unbounded();
-    std::thread::spawn(move || keep_looking(&manager, &asked, &looks, &OutOfReach::in_dir(state.path())));
+    let workers = WorkersToKeep::oldest_at(None);
+    std::thread::spawn(move || keep_looking(&manager, &workers, &asked, &looks, &OutOfReach::in_dir(state.path())));
     let (on_launch, _) = looked.recv_timeout(LOOK_TIMEOUT).unwrap();
     assert!(on_launch.unwrap().is_none());
 

@@ -10,13 +10,14 @@ use protocol::client::{ApiError, ErrorCode, HubNotice};
 use protocol::event::{EventBody, ExitReason};
 use protocol::model::{RunId, SessionStatus};
 use protocol::prompt::Prompt;
-use protocol::worker::{GitStatus, WorkerRequest};
+use protocol::worker::{GitStatus, WorkerRequest, previous};
 use tokio::sync::broadcast::error::TryRecvError;
 
 use super::*;
 use crate::hub::setup::SetupGate;
 use crate::hub::tests::{carried_on, flushed, hub_in, stand_in_worker};
 use crate::session::{Item, LiveSession, Origin};
+use crate::versions;
 
 const RUN: RunId = RunId::new(7);
 const TIMEOUT: Duration = Duration::from_secs(10);
@@ -148,4 +149,25 @@ async fn a_worker_of_another_build_is_replaced_once_two_looks_in_a_row_find_noth
         tokio::task::yield_now().await;
     }
     assert_eq!(hub.store.get_workspace(&w()).unwrap().worker_build, None);
+}
+
+/// What the app needs to take an update that ends none of the workers: the oldest protocol among them, counting the
+/// hub's own, since it goes on starting its own.
+#[tokio::test]
+async fn the_status_says_the_oldest_running_worker_protocol_counting_the_hub_s_own() {
+    let dir = tempfile::tempdir().unwrap();
+    let hub = hub_in(dir.path());
+    assert_eq!(hub.status().oldest_running_worker_protocol, Some(versions::WORKERS.newest), "with no worker");
+
+    stand_in_worker(&hub);
+    assert_eq!(hub.status().oldest_running_worker_protocol, Some(versions::WORKERS.newest), "with one of its own");
+
+    let refused = |_| Some(Err(ApiError::new(ErrorCode::Worker, "a stand-in does nothing")));
+    let left = WorkerLink::answering_previous(refused);
+    hub.workers.lock().insert("v".into(), left.clone());
+    assert_eq!(hub.status().oldest_running_worker_protocol, Some(previous::VERSION), "with one an earlier hub left");
+
+    // Still among them while whatever ends it gives back its instance, which a status read just then mustn't count.
+    left.kill();
+    assert_eq!(hub.status().oldest_running_worker_protocol, Some(versions::WORKERS.newest), "once it has closed");
 }

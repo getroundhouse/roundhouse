@@ -4,7 +4,7 @@ use answer::Answer;
 use flume::RecvTimeoutError;
 use gpui_kit::{App, BorrowAppContext as _, Context, Global, Subscription};
 use problem::{Kind, OutOfReach, Problem, Said, Shown, Step};
-use source::{SignedSource, UpdateFeedKey};
+use source::{Kept, SignedSource, UpdateFeedKey, WorkersToKeep};
 use std::path::Path;
 use std::time::{Duration, SystemTime};
 use velopack::{UpdateCheck, UpdateInfo, UpdateManager, UpdateOptions, VelopackApp};
@@ -30,12 +30,13 @@ const CHECK_EVERY: Duration = Duration::from_hours(1);
 /// What a look found, and how long the update server had been out of reach then.
 type Look = (Result<Option<UpdateInfo>, Problem>, Duration);
 
-/// Velopack, the update it has downloaded, if any, and a way to have it look now.
+/// Velopack, the update it has downloaded, if any, a way to have it look now, and which workers the update has to keep.
 struct Updater {
     pub(super) manager: UpdateManager,
     pub(super) ready: Option<UpdateInfo>,
     /// Wakes the thread that looks, so it looks now rather than at the end of its hour.
     pub(super) look_now: flume::Sender<()>,
+    pub(super) workers: WorkersToKeep,
 }
 
 impl Global for Updater {}
@@ -64,12 +65,13 @@ pub(super) fn options() -> UpdateOptions {
 /// been out of reach, and where Velopack keeps downloads on Linux.
 pub fn start(data_dir: &Path, cx: &mut App) {
     let paths = location::paths(data_dir);
-    let manager =
-        match UpdateManager::new(SignedSource::new(UPDATE_URL, UPDATE_FEED_KEY), Some(options()), paths.clone()) {
-            Ok(manager) => manager,
-            Err(velopack::Error::NotInstalled(_)) => return,
-            Err(e) => return show(problem(Step::Check, &e), cx),
-        };
+    let workers = WorkersToKeep::until_heard();
+    let source = SignedSource::new(UPDATE_URL, UPDATE_FEED_KEY, workers.clone());
+    let manager = match UpdateManager::new(source, Some(options()), paths.clone()) {
+        Ok(manager) => manager,
+        Err(velopack::Error::NotInstalled(_)) => return,
+        Err(e) => return show(problem(Step::Check, &e), cx),
+    };
     if let Some(problem) = location::installed(paths.as_ref()).and_then(|installed| location::cant_install(&installed))
     {
         return show(problem, cx);
@@ -79,7 +81,7 @@ pub fn start(data_dir: &Path, cx: &mut App) {
         async {}
     })
     .detach();
-    keep_up_to_date(manager, OutOfReach::in_dir(data_dir), cx);
+    keep_up_to_date(manager, workers, OutOfReach::in_dir(data_dir), cx);
 }
 
 /// Looks for an update now, rather than at the end of the hour, and says what it found in the sidebar, never in an
@@ -99,16 +101,36 @@ pub fn check_now(cx: &mut App) {
     });
 }
 
-/// Looks on launch, every hour and whenever someone checks, and keeps what each look finds.
-pub(super) fn keep_up_to_date(manager: UpdateManager, out_of_reach: OutOfReach, cx: &mut App) {
+/// Says which workers the update has to keep, as the app learns it from its hub, as [`WorkersToKeep`] says. A change
+/// looks again at once, rather than at the end of the hour, so what's ready is the newest update that keeps them,
+/// whether that's newer than before or older. The look shows nothing until it's done, since nobody asked for it. Older
+/// workers to keep drop the update that's ready first, which may not keep them, so a quit before the look is done, or
+/// after it fails, installs nothing rather than ending them.
+pub(crate) fn keep_workers(oldest: Option<u32>, cx: &mut App) {
+    let Some(updater) = cx.try_global::<Updater>() else { return };
+    let kept = updater.workers.set(oldest);
+    if kept == Kept::Same {
+        return;
+    }
+    // Full only when a look is already waiting to start, which reads what's just been set.
+    let _ = updater.look_now.try_send(());
+    if kept == Kept::Older {
+        cx.global_mut::<Updater>().ready = None;
+        cx.update_global::<Shown, _>(|shown, _| shown.ready = None);
+    }
+}
+
+/// Looks on launch, every hour, whenever someone checks, and whenever which workers to keep changes, and keeps what
+/// each look finds.
+pub(super) fn keep_up_to_date(manager: UpdateManager, workers: WorkersToKeep, out_of_reach: OutOfReach, cx: &mut App) {
     // Asking again before a look starts adds nothing, so one is enough.
     let (look_now, asked) = flume::bounded(1);
     cx.set_global(Shown::default());
-    cx.set_global(Updater { manager: manager.clone(), ready: None, look_now });
+    cx.set_global(Updater { manager: manager.clone(), ready: None, look_now, workers: workers.clone() });
     // A thread of its own, since a look blocks, a download can take minutes, and GPUI's background threads are the
     // ones the app's calls to its hub go through.
     let (looks, looked) = flume::unbounded();
-    std::thread::spawn(move || keep_looking(&manager, &asked, &looks, &out_of_reach));
+    std::thread::spawn(move || keep_looking(&manager, &workers, &asked, &looks, &out_of_reach));
     cx.spawn(async move |cx| {
         while let Ok(look) = looked.recv_async().await {
             cx.update(|cx| record(look, cx));
@@ -141,6 +163,12 @@ pub(crate) fn said(cx: &App) -> Option<Said<'_>> {
 /// The version of the update that's downloaded, if there is one.
 pub(crate) fn ready(cx: &App) -> Option<&str> {
     cx.try_global::<Shown>().and_then(|shown| shown.ready.as_deref())
+}
+
+/// The version of the update a quit would install, if any.
+#[cfg(test)]
+pub(crate) fn installs(cx: &App) -> Option<&str> {
+    cx.try_global::<Updater>()?.ready.as_ref().map(|info| info.TargetFullRelease.Version.as_str())
 }
 
 /// What a check someone asked for found, while it's shown, when it isn't an update or a problem.
@@ -190,14 +218,17 @@ pub fn show_ready(version: &str, cx: &mut App) {
     cx.set_global(Shown { ready: Some(version.to_string()), ..Shown::default() });
 }
 
-/// Looks, then waits an hour or until someone asks, for as long as the app takes what it finds.
+/// Looks, then waits an hour or until someone asks, for as long as the app takes what it finds. A look during which
+/// which workers to keep changed is followed by another at once, since what it found may not keep them.
 pub(super) fn keep_looking(
     manager: &UpdateManager,
+    workers: &WorkersToKeep,
     asked: &flume::Receiver<()>,
     looks: &flume::Sender<Look>,
     out_of_reach: &OutOfReach,
 ) {
     loop {
+        let keeping = workers.oldest();
         let found = newest(manager);
         let reached = !matches!(&found, Err(problem) if problem.kind == Kind::Unreachable);
         // Whoever has asked by now hears what this look found, since it reaches the app after they asked, so it
@@ -205,6 +236,9 @@ pub(super) fn keep_looking(
         let _ = asked.drain();
         if looks.send((found, out_of_reach.note(reached, SystemTime::now()))).is_err() {
             return;
+        }
+        if workers.oldest() != keeping {
+            continue;
         }
         if matches!(asked.recv_timeout(CHECK_EVERY), Err(RecvTimeoutError::Disconnected)) {
             return;
@@ -224,20 +258,20 @@ pub(super) fn newest(manager: &UpdateManager) -> Result<Option<UpdateInfo>, Prob
 }
 
 fn record((found, out_of_reach): Look, cx: &mut App) {
-    let mut downloaded = None;
+    // What the newest look found is what installs, even when that's nothing, as when the update an earlier look found
+    // would no longer keep the workers at work. A look finds again an update that's already downloaded. One that fails
+    // says nothing about what's ready.
+    let mut ready = None;
     let outcome = found.map(|found| {
-        if let Some(info) = found {
-            downloaded = Some(info.TargetFullRelease.Version.clone());
-            cx.global_mut::<Updater>().ready = Some(info);
-        }
+        ready = Some(found.as_ref().map(|info| info.TargetFullRelease.Version.clone()));
+        cx.global_mut::<Updater>().ready = found;
     });
-    // An update an earlier look downloaded answers too, as its card, since it's what installs. So does a problem, as
-    // itself.
+    // The update answers too, as its card. So does a problem, as itself.
     let up_to_date = cx.global::<Shown>().checking && outcome.is_ok() && cx.global::<Updater>().ready.is_none();
     cx.update_global::<Shown, _>(|shown, _| {
         shown.record(outcome, out_of_reach);
-        if downloaded.is_some() {
-            shown.ready = downloaded;
+        if let Some(ready) = ready {
+            shown.ready = ready;
         }
     });
     if up_to_date {

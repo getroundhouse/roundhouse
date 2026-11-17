@@ -71,6 +71,7 @@ pub(super) fn status(world: &World) -> HubStatus {
         keeping_awake: false,
         keeps_workers: false,
         oldest_protocol_version: None,
+        oldest_running_worker_protocol: None,
     }
 }
 

@@ -24,9 +24,13 @@ use velopack::{VelopackAsset, VelopackAssetFeed};
 mod tests;
 
 mod signed_feed;
+mod stepping;
+mod workers;
 
 #[cfg(test)]
 use signed_feed::FEED_LIMIT_BYTES;
 #[cfg(test)]
 pub(crate) use signed_feed::verified;
 pub(crate) use signed_feed::{SignedSource, SourceError, UpdateFeedKey};
+use stepping::only_speaking;
+pub(crate) use workers::{Kept, WorkersToKeep};

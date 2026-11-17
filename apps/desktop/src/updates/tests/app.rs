@@ -17,14 +17,36 @@ fn app_looking_at(
     installed: &VelopackLocatorConfig,
     cx: &mut TestAppContext,
 ) -> tempfile::TempDir {
+    app_keeping(base, key, installed, WorkersToKeep::oldest_at(None), cx)
+}
+
+/// The same, keeping `workers` until the app says otherwise.
+fn app_keeping(
+    base: &str,
+    key: UpdateFeedKey,
+    installed: &VelopackLocatorConfig,
+    workers: WorkersToKeep,
+    cx: &mut TestAppContext,
+) -> tempfile::TempDir {
     // The look runs on a real thread, against a real server.
     cx.executor().allow_parking();
     cx.add_window(|_, _| Blank);
     let state = tempfile::tempdir().unwrap();
     let out_of_reach = OutOfReach::in_dir(state.path());
-    let manager = manager(base, key, installed);
-    cx.update(|cx| keep_up_to_date(manager, out_of_reach, cx));
+    let manager = manager_keeping(base, key, installed, &workers);
+    cx.update(|cx| keep_up_to_date(manager, workers, out_of_reach, cx));
     state
+}
+
+/// Waits for the update a quit would install to be `version`, and checks the card says the same.
+fn ready_to_be(version: Option<&str>, cx: &mut TestAppContext) {
+    let deadline = Instant::now() + LOOK_TIMEOUT;
+    while cx.read(|cx| installs(cx).map(str::to_string)).as_deref() != version {
+        assert!(Instant::now() < deadline, "{version:?} never got ready");
+        cx.run_until_parked();
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    assert_eq!(cx.read(|cx| ready(cx).map(str::to_string)).as_deref(), version, "what the card says");
 }
 
 /// Checks for updates, and waits for the look that answers.
@@ -171,4 +193,59 @@ fn an_update_that_cant_install_says_so_and_stays_ready(cx: &mut TestAppContext) 
 
     assert_eq!(cx.read(|cx| problem_shown(cx).map(|p| p.kind)), Some(Kind::Failed(Step::Install)));
     assert_eq!(cx.read(|cx| ready(cx).map(str::to_string)).as_deref(), Some("0.1.6"));
+}
+
+/// Until the app hears from its hub, its update crosses no break in the worker protocol, and as soon as the hub says no
+/// worker as old is at work, it looks again and takes the newest. Should it come to keep older workers again, it drops
+/// the update at once, before the look that finds it can't keep them, and takes nothing.
+#[gpui_kit::test]
+fn the_update_ready_is_the_newest_whose_hub_speaks_the_workers_to_keep(cx: &mut TestAppContext) {
+    let (_dir, installed) = installed();
+    let pair = key_pair();
+    let (before, after) = (b"0.1.6, packaged".as_slice(), b"0.1.7, packaged".as_slice());
+    let server = publish_speaking(
+        &[
+            ("0.1.6", before, Reply::file(before), Some(Versions { oldest: 3, newest: 4 })),
+            ("0.1.7", after, Reply::file(after), Some(Versions { oldest: 4, newest: 5 })),
+        ],
+        &pair,
+    );
+    let _state = app_keeping(&server.base, public(&pair), &installed, WorkersToKeep::oldest_at(Some(3)), cx);
+    ready_to_be(Some("0.1.6"), cx);
+
+    cx.update(|cx| keep_workers(Some(4), cx));
+    ready_to_be(Some("0.1.7"), cx);
+
+    cx.update(|cx| keep_workers(Some(2), cx));
+    assert_eq!(cx.read(|cx| installs(cx).map(str::to_string)), None, "before the look");
+    ready_to_be(None, cx);
+}
+
+/// A look reads which workers to keep as it reads the feed, so one that changes while the look downloads what it found
+/// has the look followed by another at once, rather than at the end of the hour, though the look takes the asks that
+/// came while it ran as answered.
+#[gpui_kit::test]
+fn workers_to_keep_that_change_during_a_look_are_looked_for_again_at_once(cx: &mut TestAppContext) {
+    let (_dir, installed) = installed();
+    let pair = key_pair();
+    let (before, after) = (b"0.1.6, packaged".as_slice(), b"0.1.7, packaged".as_slice());
+    let (held, release) = Reply::file(before).held_after(0);
+    let server = publish_speaking(
+        &[
+            ("0.1.6", before, held, Some(Versions { oldest: 3, newest: 4 })),
+            ("0.1.7", after, Reply::file(after), Some(Versions { oldest: 4, newest: 5 })),
+        ],
+        &pair,
+    );
+    let _state = app_keeping(&server.base, public(&pair), &installed, WorkersToKeep::oldest_at(Some(3)), cx);
+    let deadline = Instant::now() + LOOK_TIMEOUT;
+    while !server.asked().contains(&package_name("0.1.6")) {
+        assert!(Instant::now() < deadline, "the first look never downloaded 0.1.6");
+        std::thread::sleep(Duration::from_millis(10));
+    }
+
+    cx.update(|cx| keep_workers(Some(4), cx));
+    release.now();
+
+    ready_to_be(Some("0.1.7"), cx);
 }

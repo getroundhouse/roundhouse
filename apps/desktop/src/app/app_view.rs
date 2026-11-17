@@ -1,5 +1,5 @@
 use super::failure::ConnectionFailure;
-use super::{home, hub_source, menu_button, notifying, quitting, restarts, settings};
+use super::{home, hub_source, keeping_workers, menu_button, notifying, quitting, restarts, settings};
 use crate::busy::Busy;
 use crate::checkout::Checkout;
 use crate::new_workspace::NewWorkspaceDialog;
@@ -102,6 +102,8 @@ pub struct AppView {
     pub(super) _watching_pull_requests: Task<()>,
     /// Draws the window again when what's said of a chat's cache next changes.
     pub(super) cache_clock: Option<Task<()>>,
+    /// What the app goes on reading of the hub's status for the updater, as `keeping_workers` says.
+    pub(super) keeping: keeping_workers::KeepingWorkers,
     /// The menus off the Mac, while they're open from the button in the corner.
     pub(super) menus_open: Option<menu_button::OpenMenus>,
     /// What the menus were last given to say.
@@ -165,6 +167,7 @@ impl AppView {
             looking: None,
             _watching_pull_requests: Self::watch_pull_requests(cx),
             cache_clock: None,
+            keeping: keeping_workers::KeepingWorkers::default(),
             menus_open: None,
             menus_say: None,
             telling: notifying::Telling::default(),
@@ -288,6 +291,7 @@ impl AppView {
         self.reconnect_dialog(&client, cx);
         self.joining = Some(client);
         let Some(status) = status else { return };
+        self.keep_workers_of(status, cx);
         let build = self.hub.build_number;
         let restarting = hub_source::restarts_at_once(status, build);
         let older = restarts::OlderHub { pid: status.pid, restarting };
