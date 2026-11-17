@@ -12,6 +12,8 @@ pub struct Source {
     pub ready: fn(&App) -> bool,
     pub record: Record,
     pub uses_microphone: fn(&App) -> bool,
+    /// Whether a recording mutes the sound output while it's dictated to, as the person has chosen.
+    pub mutes_output: fn(&App) -> bool,
 }
 
 impl Global for Source {}
@@ -25,6 +27,16 @@ impl Global for Active {}
 pub fn install(source: Source, cx: &mut App) {
     if !cx.has_global::<Source>() {
         crate::keys::install(cx);
+        // Quitting drops no field, so this ends the one dictated to, which unmutes what it muted, and waits for the
+        // sound to be unmuted, as long as quitting waits for anything.
+        cx.on_app_quit(|cx| {
+            unavailable(cx);
+            let restored = dictation::output_restored();
+            async move {
+                let _ = restored.recv_async().await;
+            }
+        })
+        .detach();
     }
     cx.set_global(source);
 }
@@ -35,6 +47,10 @@ pub(crate) fn ready(cx: &App) -> bool {
 
 pub(crate) fn uses_microphone(cx: &App) -> bool {
     cx.try_global::<Source>().is_some_and(|source| (source.uses_microphone)(cx))
+}
+
+pub(crate) fn mutes_output(cx: &App) -> bool {
+    cx.try_global::<Source>().is_some_and(|source| (source.mutes_output)(cx))
 }
 
 pub(crate) fn record(hints: Hints, cx: &App) -> Option<(Recording, flume::Receiver<Update>)> {

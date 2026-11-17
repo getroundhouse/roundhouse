@@ -128,14 +128,7 @@ pub fn open_main_window(
     settings::load(&hub.paths.data_dir, cx);
     accessibility_focus::install();
     keys::set(cx);
-    dictation_ui::install(
-        dictation_ui::Source {
-            ready: dictating::ready,
-            record: dictating::record,
-            uses_microphone: dictating::hears_the_microphone,
-        },
-        cx,
-    );
+    dictation_ui::install(dictating::source(), cx);
     dictating::start(&hub.paths.data_dir, cx);
     menus::set(hub.build_version, cx);
     std::thread::spawn(look::preload_highlighting);

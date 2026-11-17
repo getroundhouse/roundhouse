@@ -1810,6 +1810,7 @@ dependencies = [
  "flume",
  "objc2 0.6.5",
  "objc2-av-foundation",
+ "objc2-core-audio",
  "objc2-core-ml",
  "objc2-foundation 0.3.2",
  "parking_lot",

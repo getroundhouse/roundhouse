@@ -142,6 +142,8 @@ objc2 = "0.6.5"
 objc2-app-kit = { version = "0.3.2", default-features = false, features = ["std", "NSHapticFeedback", "NSSound"] }
 # Asks a Mac whether the app may use the microphone, and has the system ask the person.
 objc2-av-foundation = { version = "0.3.2", default-features = false, features = ["std", "AVCaptureDevice", "AVMediaFormat", "block2"] }
+# Already under cpal. Mutes a Mac's sound output while it's dictated to, if the person has chosen it.
+objc2-core-audio = { version = "0.3.2", default-features = false, features = ["std", "AudioHardware"] }
 # Runs dictation's model on a Mac, on Core ML.
 objc2-core-ml = { version = "0.3.2", default-features = false, features = ["std", "block2", "MLDictionaryFeatureProvider", "MLFeatureProvider", "MLFeatureValue", "MLModel", "MLModelConfiguration", "MLMultiArray"] }
 # Already under GPUI. Hands the sound for a chat that needs a look to AppKit, by its bytes or its name, and finds the

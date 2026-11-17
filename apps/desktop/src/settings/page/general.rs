@@ -41,6 +41,9 @@ pub(super) fn page(hub: &OfHub) -> Page {
     let mut settings = vec![always_expand_thinking, keep_awake, allow_asked];
     if dictation::HEARS {
         settings.push(super::dictation_row::setting());
+        if dictation::MUTES_OUTPUT {
+            settings.push(super::dictation_row::muting());
+        }
     }
     Page { id: PageId::General, name: "General", icon: Lucide::Settings2, body: Body::Settings(settings) }
 }

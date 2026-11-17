@@ -12,6 +12,10 @@ use std::path::{Path, PathBuf};
 /// Every setting that's the app's own, each with the value it has when nobody has chosen. A setting a hub carries
 /// out is the hub's, which keeps it.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "each is a switch of its own in Settings, independent of the others, and saved as true or false"
+)]
 pub(crate) struct Settings {
     #[serde(default)]
     pub(crate) hubs: Vec<crate::app::saved_hubs::SavedHub>,
@@ -46,6 +50,10 @@ pub(crate) struct Settings {
     /// person chooses, since turning it on downloads 2.4 GB.
     #[serde(default)]
     pub(crate) dictation: DictationChoice,
+    /// Whether the sound output is muted while something is dictated, so what's playing doesn't drown out what's said
+    /// or get heard with it. Off unless chosen, since it changes the whole system's sound rather than the app's.
+    #[serde(default)]
+    pub(crate) mute_while_dictating: bool,
     /// Settings this build doesn't know, which a newer one wrote, kept so that saving here doesn't lose them.
     #[serde(flatten)]
     pub(super) others: Map<String, Value>,
@@ -64,6 +72,7 @@ impl Default for Settings {
             play_sound: on(),
             sound: Sound::default(),
             dictation: DictationChoice::default(),
+            mute_while_dictating: false,
             others: Map::new(),
         }
     }

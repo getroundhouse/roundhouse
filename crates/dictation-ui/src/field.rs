@@ -111,14 +111,25 @@ impl Field {
         true
     }
 
+    /// Whether what's being dictated has the sound output muted, or a recording listening towards held Space has.
+    #[cfg(feature = "testing")]
+    pub fn mutes_output(&self) -> bool {
+        self.recording().is_some_and(dictation::Recording::mutes_output)
+    }
+
     /// Gives the field synthetic audio, including to a recording listening towards held Space.
     #[cfg(feature = "testing")]
     pub fn hear(&self, audio: &[f32]) {
-        let recording = self.underway.as_ref().map(|u| &u.recording).or_else(|| self.space_listening());
-        if let Some(recording) = recording {
+        if let Some(recording) = self.recording() {
             for buffer in audio.chunks(160) {
                 recording.feed(buffer.to_vec());
             }
         }
+    }
+
+    /// What's being dictated, or listening towards held Space.
+    #[cfg(feature = "testing")]
+    fn recording(&self) -> Option<&dictation::Recording> {
+        self.underway.as_ref().map(|u| &u.recording).or_else(|| self.space_listening())
     }
 }

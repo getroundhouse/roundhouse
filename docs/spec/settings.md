@@ -56,6 +56,8 @@ The app's own settings, and where they're shown.
 
   ![Settings saying dictation is ready, with Delete the model](screens/settings-dictation-ready.png)
 
+- **Mute sound while dictating, under Dictation, mutes the Mac's sound while something is dictated,** so music or a video doesn't drown out what's said, or get heard with it when it plays from speakers. It mutes once dictating starts, which for held Space is at 0.5 s rather than 0.2 s, when it starts to hear, so a press let go of in between doesn't cut what's playing. It unmutes once dictating stops, however it stops, quitting the app included, and doesn't wait for the last words to go in. It unmutes only what it muted: sound that was muted already stays muted, and sound unmuted meanwhile stays unmuted. It mutes the output sound plays from as dictating starts, and that's what it unmutes, even once sound plays from another. Some outputs can't be muted, such as many displays' speakers and some USB speakers and amps, which set their own volume, and those play on, as they do when the Mac's own mute is pressed. It's off unless chosen, since it changes the sound of the whole Mac rather than the app's. It's the app's setting, as dictation is. *Unconfirmed.* *Not built:* Windows and Linux, which have no dictation.
+
 ## Notifications
 
 - **A chat needs you while it needs a look, as the sidebar shows, or while it's stopped short:** it has a reply nobody has read, it's waiting on you for an answer or an approval, or its agent went away mid-turn or failed its turn, until a turn starts again. *Unconfirmed.*

@@ -60,6 +60,11 @@ impl Field {
             return;
         }
         let before = Before::of(self.input.read(cx));
+        // Only now, rather than as held Space starts to listen, so a press let go of before it dictates doesn't cut
+        // what's playing.
+        if source::mutes_output(cx) {
+            recording.mute_output();
+        }
         let hearing = cx.spawn_in(window, async move |this, cx| {
             while let Ok(update) = updates.recv_async().await {
                 if this.update_in(cx, |field, window, cx| field.heard(update, window, cx)).is_err() {
