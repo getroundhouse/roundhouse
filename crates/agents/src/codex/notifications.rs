@@ -6,7 +6,7 @@ use serde_json::Value;
 use tokio::sync::mpsc;
 
 use super::state::{Ended, ThreadId, TurnId};
-use super::{approvals, control, items, running::Shared, subagents};
+use super::{approvals, control, items, running::Shared, subagents, usage};
 use crate::{AgentError, AgentOutput};
 
 pub(super) async fn read(shared: Arc<Shared>, mut input: mpsc::Receiver<(Value, String)>) {
@@ -99,6 +99,8 @@ async fn dispatch(
             delta(shared, method, params, scope).await;
         }
         "serverRequest/resolved" => approvals::resolved(shared, &params["requestId"]).await,
+        "thread/tokenUsage/updated" => usage::tokens(shared, params, scope, raw).await,
+        "account/rateLimits/updated" => usage::limits(shared, params, scope, raw).await,
         "error" => {
             let message = params["error"]["message"].as_str().unwrap_or("Codex's request failed");
             shared

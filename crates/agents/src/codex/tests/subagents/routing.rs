@@ -91,3 +91,22 @@ async fn nested_agents_and_foreign_threads_cannot_change_the_root_turn() {
         "kept apart, by its thread: {kept:?}"
     );
 }
+
+#[tokio::test]
+async fn a_subagents_tokens_are_an_event_about_it_and_not_the_agents_own_context() {
+    let tokens = json!({"method":"thread/tokenUsage/updated","params":{"threadId":"child","turnId":"child-turn",
+        "tokenUsage":{"last":{"totalTokens":4321},"total":{"totalTokens":9999},"modelContextWindow":258_400}}});
+    let output = play(vec![
+        turn("thread", "root-turn", "inProgress"),
+        activity("thread", "root-turn", "child", "spawn", "started", true),
+        turn("child", "child-turn", "inProgress"),
+        tokens,
+        turn("child", "child-turn", "completed"),
+        turn("thread", "root-turn", "completed"),
+    ])
+    .await;
+
+    let child = SubagentId::from("child");
+    assert!(bodies(&output).contains(&&EventBody::SubagentContext { subagent: child, tokens: 4321 }));
+    assert!(!output.iter().any(|out| matches!(out, AgentOutput::Context(_))), "the agent's own context is its own");
+}
