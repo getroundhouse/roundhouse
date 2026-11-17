@@ -56,6 +56,17 @@ pub fn close_dialog(window: &mut Window, cx: &mut App) {
     window.close_dialog(cx);
 }
 
+/// Whether a dialog is open over the window, and not on its way out, such as for what the keyboard's focus goes to.
+pub fn dialog_open(window: &mut Window, cx: &mut App) -> bool {
+    window.has_active_dialog(cx)
+}
+
+/// Closes every dialog over the window, as the app does when what they were about has gone, such as the hub they
+/// asked of, without what's done as someone closes one.
+pub fn close_every_dialog(window: &mut Window, cx: &mut App) {
+    window.close_all_dialogs(cx);
+}
+
 /// One of a dialog's answers along its foot.
 enum Answer {
     /// Closes the dialog, as Cancel does.

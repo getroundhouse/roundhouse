@@ -6,7 +6,6 @@
 
 #![cfg(test)]
 
-use gpui_kit::component::WindowExt as _;
 use gpui_kit::test::{ElementSnapshot, TestWindowExt as _};
 use gpui_kit::{App, SharedString, Window};
 use image::RgbaImage;
@@ -161,7 +160,7 @@ fn region_in_the_column(region: Region) -> bool {
 pub(crate) fn crop(screen: &Screen, window: &mut Window, image: &RgbaImage, cx: &mut App) -> (RgbaImage, Vec<String>) {
     let scale = window.scale_factor();
     let whole = Area { left: 0, top: 0, right: image.width(), bottom: image.height() };
-    let mut problems = dialog_problem(&screen.frame, window.has_active_dialog(cx)).into_iter().collect::<Vec<_>>();
+    let mut problems = dialog_problem(&screen.frame, look::dialog_open(window, cx)).into_iter().collect::<Vec<_>>();
     let area = match area(&screen.frame, window, image, whole) {
         Ok(area) if area.is_empty() => {
             problems.push("its frame comes to nothing in the window, so it shows the whole window".to_string());

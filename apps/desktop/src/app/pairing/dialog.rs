@@ -4,22 +4,18 @@
 use std::path::PathBuf;
 
 use gpui_kit::assets::IconName as Lucide;
-use gpui_kit::component::WindowExt as _;
 use gpui_kit::component::input::{InputEvent, InputState};
 use gpui_kit::component::{Icon, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyElement, App, AppContext as _, Context, Entity, InteractiveElement as _, IntoElement, ParentElement as _,
-    Pixels, Render, Role, SharedString, StatefulInteractiveElement as _, Styled as _, Subscription, Task,
-    TestSupportExt as _, Window, div, px,
+    AnyElement, App, AppContext as _, Context, Entity, InteractiveElement as _, IntoElement, ParentElement as _, Role,
+    SharedString, StatefulInteractiveElement as _, Styled as _, Subscription, Task, TestSupportExt as _, Window, div,
 };
 use look::{Corner, IconSize, IconSizing as _, Shaped as _, Space, TaskRing, Type, Typeset as _};
 use protocol::pairing::PairingLink;
 
 use super::words::{ParsedInput, connect_failure, parse_input};
 use crate::app::{device_name, hubs, saved_hubs};
-
-const DIALOG_WIDTH: Pixels = px(460.);
 
 struct ConnectHub {
     data_dir: PathBuf,
@@ -35,27 +31,13 @@ struct ConnectHub {
 pub(crate) fn open(data_dir: PathBuf, window: &mut Window, cx: &mut App) {
     let input = cx.new(|cx| InputState::new(window, cx).placeholder("roundhouse://pair?…"));
     let field = input.clone();
-    let dialog = cx.new(|cx| ConnectHub::new(data_dir, field, window, cx));
-    let shown = dialog.clone();
-    window.open_dialog(cx, move |surface, _, cx| {
-        let colors = look::colors(cx);
-        let closing = shown.clone();
-        surface
-            .p_0()
-            .w(DIALOG_WIDTH)
-            .close_button(false)
-            .bg(colors.raised)
-            .border_color(colors.edge)
-            .corners(Corner::Card)
-            .child(shown.clone())
-            .on_ok(|_, _, _| false)
-            .on_close(move |_, _, cx| closing.update(cx, ConnectHub::closed))
-    });
+    let dialog = cx.new(|cx| ConnectHub::new(data_dir, field, cx));
+    look::open_dialog(window, cx, move |_, cx| ConnectHub::dialog(&dialog, cx));
     input.update(cx, |input, cx| input.focus(window, cx));
 }
 
 impl ConnectHub {
-    fn new(data_dir: PathBuf, input: Entity<InputState>, window: &mut Window, cx: &mut Context<Self>) -> Self {
+    fn new(data_dir: PathBuf, input: Entity<InputState>, cx: &mut Context<Self>) -> Self {
         let reading = device_name::read_in_background(cx);
         let naming = cx.spawn(async move |this, cx| {
             let resolved = reading.await;
@@ -64,14 +46,11 @@ impl ConnectHub {
                 cx.notify();
             });
         });
-        let sub = cx.subscribe_in(&input, window, |this, _, event: &InputEvent, window, cx| match event {
-            InputEvent::Change => {
-                if this.error.take().is_some() {
-                    cx.notify();
-                }
+        // Enter in the field confirms the dialog, which connects.
+        let sub = cx.subscribe(&input, |this, _, event: &InputEvent, cx| {
+            if matches!(event, InputEvent::Change) && this.error.take().is_some() {
+                cx.notify();
             }
-            InputEvent::PressEnter { .. } => this.submit(window, cx),
-            _ => {}
         });
         Self {
             data_dir,
@@ -126,7 +105,7 @@ impl ConnectHub {
                     let still_shown = this.read_with(cx, |this, _| this.shown).unwrap_or(false);
                     if still_shown {
                         let _ = handle.update(cx, |_, window, cx| {
-                            window.close_dialog(cx);
+                            look::close_dialog(window, cx);
                             hubs::finish_selection(intent, remote, window, cx);
                         });
                     }
@@ -153,50 +132,56 @@ impl ConnectHub {
     }
 }
 
-impl Render for ConnectHub {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let colors = look::colors(cx);
-        let parsed = parse_input(&self.input.read(cx).value());
-        let connecting = self.connecting_to.is_some();
+impl ConnectHub {
+    /// The dialog, as it stands now, built each time it's drawn, so it shows what's typed and how connecting goes.
+    fn dialog(this: &Entity<Self>, cx: &App) -> look::Dialog {
+        let connect = this.read(cx);
+        let parsed = parse_input(&connect.input.read(cx).value());
+        let connecting = connect.connecting_to.is_some();
         let preview = match &parsed {
-            ParsedInput::Valid(link) => Some(preview_card(link, self.device_name.as_deref(), cx)),
+            ParsedInput::Valid(link) => Some(preview_card(link, connect.device_name.as_deref(), cx)),
             ParsedInput::Empty | ParsedInput::Invalid(_) => None,
         };
         let can_submit = matches!(parsed, ParsedInput::Valid(_)) && !connecting;
-        let feedback = self.error.clone().or(match parsed {
+        let feedback = connect.error.clone().or(match parsed {
             ParsedInput::Invalid(hint) => Some(hint),
             ParsedInput::Empty | ParsedInput::Valid(_) => None,
         });
         let label = if connecting {
             "Connecting…"
-        } else if self.error.is_some() && can_submit {
+        } else if connect.error.is_some() && can_submit {
             "Try again"
         } else {
             "Connect"
         };
-        v_flex()
+        let shown = v_flex()
             .id("connect-hub-dialog")
             .w_full()
-            .p(Space::XLarge)
             .gap(Space::Large)
-            .typeset(Type::Body)
-            .text_color(colors.text)
             .child(
-                v_flex().gap(Space::XSmall).child(div().typeset(Type::Heading).child("Connect another hub")).child(
-                    div()
-                        .text_color(colors.text_muted)
-                        .child("Paste a single-use pairing link from the other machine’s hub switcher."),
-                ),
-            )
-            .child(
-                look::field("pair-link-input", &self.input, look::FieldKind::Boxed, look::ControlSize::Large)
+                look::field("pair-link-input", &connect.input, look::FieldKind::Boxed, look::ControlSize::Large)
                     .off(connecting),
             )
             .children(preview)
-            .when_some(self.connecting_to.as_deref(), |d, hub| d.child(reaching_line(hub, cx)))
+            .when_some(connect.connecting_to.as_deref(), |d, hub| d.child(reaching_line(hub, cx)))
             .when_some(feedback, |d, msg| d.child(feedback_alert(msg, cx)))
-            .child(connect_footer(label, can_submit, cx))
-            .test_support()
+            .test_support();
+        let (submitting, closing) = (this.clone(), this.clone());
+        look::dialog("Connect another hub")
+            .lead("Paste a single-use pairing link from the other machine’s hub switcher.")
+            .child(shown)
+            .closes(look::button("cancel-pair-hub", look::ButtonKind::Edged, look::ControlSize::Large, "Cancel"))
+            .confirms(
+                look::button("pair-hub", look::ButtonKind::Main, look::ControlSize::Large, label)
+                    .off(!can_submit && !connecting)
+                    .waiting(connecting),
+            )
+            // Connecting closes it once the hub is reached, so confirming only starts it.
+            .on_confirm(move |window, cx| {
+                submitting.update(cx, |this, cx| this.submit(window, cx));
+                false
+            })
+            .on_close(move |_, cx| closing.update(cx, ConnectHub::closed))
     }
 }
 
@@ -220,24 +205,6 @@ fn feedback_alert(msg: String, cx: &App) -> AnyElement {
         .text_color(look::colors(cx).error)
         .child(text)
         .test_support()
-        .into_any_element()
-}
-
-fn connect_footer(label: &'static str, can_submit: bool, cx: &mut Context<ConnectHub>) -> AnyElement {
-    h_flex()
-        .justify_end()
-        .gap(Space::Small)
-        .child(look::button("cancel-pair-hub", look::ButtonKind::Edged, look::ControlSize::Large, "Cancel").on_click(
-            cx.listener(|this, _, window, cx| {
-                this.closed(cx);
-                window.close_dialog(cx);
-            }),
-        ))
-        .child(
-            look::button("pair-hub", look::ButtonKind::Main, look::ControlSize::Large, label)
-                .off(!can_submit)
-                .on_click(cx.listener(|this, _, window, cx| this.submit(window, cx))),
-        )
         .into_any_element()
 }
 

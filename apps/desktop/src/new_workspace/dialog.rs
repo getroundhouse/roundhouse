@@ -3,14 +3,12 @@ use crate::attached::{Attachments, joined};
 use crate::model_picker::Picked;
 use crate::{attached, composing};
 use client_core::{Agents, FileToSend, FilesFor};
-use gpui_kit::component::WindowExt as _;
 use gpui_kit::component::input::{InputEvent, TextareaState};
 use gpui_kit::{
-    App, AppContext as _, ClipboardItem, Context, Entity, EventEmitter, FocusHandle, Focusable, Hsla,
-    ParentElement as _, Pixels, Styled as _, Subscription, Window, px,
+    App, AppContext as _, ClipboardItem, Context, Entity, EventEmitter, FocusHandle, Focusable, Hsla, Pixels,
+    Subscription, Window, px,
 };
 use keeping::Keeping;
-use look::Shaped as _;
 use protocol::attachment::Attachment;
 use protocol::model::{AgentDescription, AgentKind, AttachmentId, Effort, ModelName, PermissionMode, RepoId};
 use protocol::prompt::Prompt;
@@ -70,23 +68,13 @@ pub(crate) fn open(
     cx: &mut App,
 ) {
     let (shown, closed) = (dialog.clone(), Rc::new(closed));
-    window.open_dialog(cx, move |surface, _, cx| {
-        // The composer's corners, since it's where a prompt is written. The dialog's own padding is left to what's in
-        // it, which runs a line under the repository from edge to edge.
-        let ((background, edge), closed) = (shown.read(cx).colors(cx), closed.clone());
-        let closing = shown.clone();
-        surface
-            .p_0()
-            .w(WIDTH)
-            .close_button(false)
-            .bg(background)
-            .border_color(edge)
-            .corners(look::Corner::Card)
-            .child(shown.clone())
+    look::open_plain_dialog(window, cx, move |_, _| {
+        let (closing, closed) = (shown.clone(), closed.clone());
+        look::plain_dialog(shown.clone(), WIDTH)
             // Enter is the prompt's, which creates, and Create closes the dialog once it can act, so Enter pressed
             // while it waits leaves the dialog open.
-            .on_ok(|_, _, _| false)
-            .on_close(move |_, window, cx| {
+            .on_confirm(|_, _| false)
+            .on_close(move |window, cx| {
                 closing.update(cx, NewWorkspaceDialog::closed);
                 closed(window, cx);
             })

@@ -6,8 +6,10 @@ use gpui_kit::component::input::Textarea;
 use gpui_kit::component::{h_flex, v_flex};
 use gpui_kit::{
     Anchor, AnyElement, Context, Focusable as _, InteractiveElement as _, IntoElement, ParentElement as _, Render,
-    Styled as _, TestSupportExt as _, Window, px, transparent_black,
+    Styled as _, TestSupportExt as _, Window, div, px, transparent_black,
 };
+
+use look::Shaped as _;
 
 use super::NewWorkspaceDialog;
 use crate::attached;
@@ -19,19 +21,25 @@ impl Render for NewWorkspaceDialog {
         // An edge of its own inside the dialog's, which shows only while files are dragged over it.
         let target = v_flex().id("new-workspace").w_full().border_1().border_color(transparent_black());
         let target = composing::place(target, self.planning(), look::Corner::Card, cx, Self::toggle_plan_mode);
-        attached::takes_drops(target, cx, |_, paths, cx| Self::attach_paths(paths, cx)).child(self.header(cx)).child(
-            v_flex()
-                .w_full()
-                .relative()
-                .children(
-                    self.attached
-                        .tiles("new-workspace-attachments", cx, Self::remove_attached)
-                        .map(|t| t.px(look::Space::Small).pt(look::Space::Small)),
-                )
-                .child(self.prompt_field(cx))
-                .child(self.footer(cx))
-                .child(self.dictation.read(cx).edge()),
-        )
+        let target = attached::takes_drops(target, cx, |_, paths, cx| Self::attach_paths(paths, cx))
+            .child(self.header(cx))
+            .child(
+                v_flex()
+                    .w_full()
+                    .relative()
+                    .children(
+                        self.attached
+                            .tiles("new-workspace-attachments", cx, Self::remove_attached)
+                            .map(|t| t.px(look::Space::Small).pt(look::Space::Small)),
+                    )
+                    .child(self.prompt_field(cx))
+                    .child(self.footer(cx))
+                    .child(self.dictation.read(cx).edge()),
+            );
+        // The composer's surface and corners, since it's where a prompt is written, and its edge, which the line under
+        // the repository is too. A plain dialog is only what's in it, so this is its fill and edge.
+        let (background, edge) = self.colors(cx);
+        div().w_full().bg(background).border_1().border_color(edge).corners(look::Corner::Card).child(target)
     }
 }
 

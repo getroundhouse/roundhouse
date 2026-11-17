@@ -6,8 +6,10 @@
 mod tests;
 
 mod dialog;
+mod plain;
 mod widths;
 #[cfg(any(test, feature = "testing"))]
 pub use dialog::shown_dialog;
-pub use dialog::{Dialog, close_dialog, dialog, open_dialog};
+pub use dialog::{Dialog, close_dialog, close_every_dialog, dialog, dialog_open, open_dialog};
+pub use plain::{PlainDialog, open_plain_dialog, plain_dialog};
 pub use widths::DialogWidth;

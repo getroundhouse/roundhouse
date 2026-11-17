@@ -1,6 +1,5 @@
 use super::super::{AppView, Connection, hub_source};
 use super::{asking, said};
-use gpui_kit::component::WindowExt as _;
 use gpui_kit::{App, AppContext as _, Context, Task};
 use protocol::client::HubStatus;
 use std::path::Path;
@@ -182,7 +181,7 @@ impl AppView {
         let view = cx.weak_entity();
         cx.defer(move |cx| {
             if view.upgrade().is_some_and(|view| view.read(cx).visible) {
-                let _ = window.update(cx, |_, window, cx| window.close_dialog(cx));
+                let _ = window.update(cx, |_, window, cx| look::close_dialog(window, cx));
             }
         });
     }

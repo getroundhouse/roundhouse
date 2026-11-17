@@ -116,6 +116,12 @@ A key in one of the kit's menus or tooltips is the kit's, from the action it's b
 | Do something as it's confirmed, keeping it open if that says so, or once it's closed | `on_confirm`, `on_close` |
 | Set how wide it is | `width`, with a `look::DialogWidth` |
 | Close it once what it waited on has come, without what's done as someone closes it | `look::close_dialog` |
+| Ask before what would stop or lose something, so Enter keeps things as they are | `careful` |
+| Know whether one is open, or close every one, as when the hub they asked of has gone | `look::dialog_open`, `look::close_every_dialog` |
+| Open one that's only what's in it, which draws all of itself, such as the new workspace's composer | `look::open_plain_dialog(window, cx, build)`, where `build` makes a `look::plain_dialog(shown, width)` |
+| Put a plain one in the middle of the window, have a click on it close it, or do something on Enter or once it's closed | `centered`, `click_closes`, `on_confirm`, `on_close` |
+
+The app asks and tells only in these, never in the system's alert, and `tools/policy` refuses the kit's dialog outside `look`, and the system's alert anywhere.
 
 ## Toggles
 

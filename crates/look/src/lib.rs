@@ -65,7 +65,10 @@ pub use controls::{Button, ButtonKind, MenuButton, Side, Sizing, button, glyph_b
 pub use copy::copy_button;
 #[cfg(any(test, feature = "testing"))]
 pub use dialogs::shown_dialog;
-pub use dialogs::{Dialog, DialogWidth, close_dialog, dialog, open_dialog};
+pub use dialogs::{
+    Dialog, DialogWidth, PlainDialog, close_dialog, close_every_dialog, dialog, dialog_open, open_dialog,
+    open_plain_dialog, plain_dialog,
+};
 pub use fields::{Field, FieldKind, field};
 pub use fit::{fit, pixels};
 pub use hand::{Hand, Off};

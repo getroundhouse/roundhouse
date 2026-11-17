@@ -1,17 +1,16 @@
 //! The chat's images that a click opens over the window, for a closer look at one drawn small, or fitted to its
 //! column or its line: one a prompt carried, one a tool sent back, or one the agent's text points to. What draws one
-//! is [`opening`], and one drawn whole in the chat is [`whole`]. Opened, it's in the kit's dialog, as big as it is, up
+//! is [`opening`], and one drawn whole in the chat is [`whole`]. Opened, it's in a plain dialog, as big as it is, up
 //! to what fits in the window at its own shape, so the chat doesn't move under it however far from the bottom its row
 //! is. Escape or a click closes it, on the image or around it.
 
-use gpui_kit::component::dialog::DialogClose;
-use gpui_kit::component::{TITLE_BAR_HEIGHT, WindowExt as _, h_flex, window_paddings};
+use gpui_kit::component::{TITLE_BAR_HEIGHT, h_flex, window_paddings};
 use gpui_kit::{
     AnyElement, App, ClickEvent, Div, ImageSource, Img, InteractiveElement as _, IntoElement as _, ObjectFit,
     ParentElement as _, Pixels, Size, Stateful, StatefulInteractiveElement as _, Styled as _, StyledImage as _,
     TestSupportExt as _, Window, div, img, px, size,
 };
-use look::{Hand as _, fit, pixels};
+use look::{Hand as _, Shaped as _, fit, pixels};
 
 /// `frame`, for an image that a click on it opens over the window, with the hand over it. `covers` is the image's
 /// pixels, turned as its orientation says. What it draws the image at, and the image, are the caller's.
@@ -43,7 +42,7 @@ pub(crate) fn picture(image: impl Into<ImageSource>) -> Stateful<Img> {
 }
 
 fn open(image: ImageSource, covers: (u32, u32), window: &mut Window, cx: &mut App) {
-    window.open_dialog(cx, move |dialog, window, cx| {
+    look::open_plain_dialog(window, cx, move |window, cx| {
         // Drawn again as the window is resized, so it always fits.
         let shown = fitted(covers, room(window));
         // The dialog's own corners, which its edge is drawn on, less the edge, so the image's meet them.
@@ -55,16 +54,10 @@ fn open(image: ImageSource, covers: (u32, u32), window: &mut Window, cx: &mut Ap
             .hand()
             .child(picture(image.clone()).size_full().rounded(corners).object_fit(ObjectFit::Contain))
             .test_support();
-        // The dialog's own padding and the least height it gives, which a short image would leave a strip under, are
-        // let go, so the dialog is the image and its edge.
-        dialog
-            .p_0()
-            .min_h(px(0.))
-            .w(shown.width + look::EDGE * 2.)
-            .bg(look::colors(cx).inset)
-            .centered()
-            .close_button(false)
-            .child(DialogClose::new().child(opened))
+        let colors = look::colors(cx);
+        let framed =
+            div().bg(colors.inset).border_1().border_color(colors.edge).corners(look::Corner::Card).child(opened);
+        look::plain_dialog(framed, shown.width + look::EDGE * 2.).centered().click_closes()
     });
 }
 

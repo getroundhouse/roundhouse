@@ -3,7 +3,6 @@
 use std::collections::HashMap;
 
 use client_core::RemoteHub;
-use gpui_kit::component::WindowExt as _;
 use gpui_kit::{App, AppContext as _, Context, Entity, Global, IntoElement, Render, WeakEntity, Window};
 use protocol::pairing::Fingerprint;
 
@@ -72,7 +71,7 @@ impl Hubs {
         if key == self.selected {
             return;
         }
-        window.close_all_dialogs(cx);
+        look::close_every_dialog(window, cx);
         self.active().update(cx, |view, cx| {
             view.visible = false;
             if let Some(dialog) = &view.new_workspace {
