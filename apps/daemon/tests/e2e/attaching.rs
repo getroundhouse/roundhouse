@@ -2,11 +2,12 @@
 
 use std::io::{BufRead, BufReader, Write};
 use std::path::Path;
-use std::process::{Child, Command, Stdio};
+use std::process::{Child, Stdio};
 use std::sync::mpsc;
 use std::time::Instant;
 
 use process::ProcessRecord;
+use process::testing::WholeEnvironment;
 use protocol::client::ErrorCode;
 use protocol::frame;
 use protocol::paths::{WORKER_RECORD_FILE, WORKER_SOCKET_FILE};
@@ -30,7 +31,8 @@ impl Attached {
 
     /// To the worker whose state directory is `state_dir`, starting one if none is serving it.
     fn start_in(workspaces_root: &Path, state_dir: &Path) -> Self {
-        let mut command = Command::new(env!("CARGO_BIN_EXE_roundhoused"))
+        let mut command = WholeEnvironment::for_a_test(&state_dir.with_file_name("home"))
+            .command(env!("CARGO_BIN_EXE_roundhoused"))
             .args(["worker", "--attach", "--workspaces-root"])
             .arg(workspaces_root)
             .arg("--state-dir")

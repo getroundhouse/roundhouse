@@ -62,7 +62,7 @@ fn code<T>(result: Result<T, ApiError>) -> Option<ErrorCode> {
 }
 
 fn tracks_nothing(worktree: &Path) -> bool {
-    let upstream = std::process::Command::new("git").args(["rev-parse", "@{upstream}"]).current_dir(worktree).output();
+    let upstream = process::testing::git_in(worktree).args(["rev-parse", "@{upstream}"]).output();
     !upstream.unwrap().status.success()
 }
 

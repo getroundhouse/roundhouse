@@ -5,10 +5,11 @@
 #![cfg(test)]
 
 use std::path::PathBuf;
-use std::process::{Child, Command, Stdio};
+use std::process::{Child, Stdio};
 use std::time::{Duration, Instant};
 
 use client_core::Client;
+use process::testing::WholeEnvironment;
 
 use super::{Stack, TIMEOUT, binaries};
 
@@ -19,15 +20,14 @@ pub(crate) struct HubAhead {
 }
 
 impl Stack {
-    /// Starts the hub with `env` added to its environment, and waits for it to listen.
-    pub(crate) fn start_hub_ahead(&self, env: &[(&str, String)]) -> HubAhead {
-        let hub = Command::new(binaries().join("roundhoused"))
+    /// Starts the hub in `environment`, which `hub_environment` gives with what a test adds, and waits for it to
+    /// listen. Workers get the hub's own `PATH`, as `environment` sets it, since it has no login shell to ask.
+    pub(crate) fn start_hub_ahead(&self, environment: &WholeEnvironment) -> HubAhead {
+        let hub = environment
+            .command(binaries().join("roundhoused"))
             .args(["hub", "--on-demand"])
             .env(protocol::paths::ENV_HOME, &self.hub.paths.data_dir)
             .env(protocol::paths::ENV_WORKSPACES, &self.hub.paths.workspaces_root)
-            // No login shell, so workers get the hub's own PATH, as `env` may set it.
-            .env("SHELL", "/usr/bin/false")
-            .envs(env.iter().map(|(name, value)| (*name, value)))
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null())

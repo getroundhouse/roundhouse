@@ -18,7 +18,7 @@ const KEPT: &str = "keeping a worker from another build, with something at work"
 /// As an update has it: the hub restarts as a newer build than the workers it leaves, and every worker the next hub
 /// starts is its own build.
 fn update(stack: &mut Stack) {
-    stack.remove_env(worker::TEST_BUILD);
+    stack.env.remove(worker::TEST_BUILD);
     restart(stack);
     stack.start_hub();
 }

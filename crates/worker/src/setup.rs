@@ -182,16 +182,7 @@ mod tests {
     use super::*;
 
     fn run(cwd: &Path, args: &[&str]) {
-        let output = std::process::Command::new("git")
-            .args(args)
-            .current_dir(cwd)
-            .env("GIT_AUTHOR_NAME", "t")
-            .env("GIT_AUTHOR_EMAIL", "t@example.com")
-            .env("GIT_COMMITTER_NAME", "t")
-            .env("GIT_COMMITTER_EMAIL", "t@example.com")
-            .output()
-            .unwrap();
-        assert!(output.status.success(), "git {args:?}: {}", String::from_utf8_lossy(&output.stderr));
+        process::testing::git(cwd, args);
     }
 
     /// A repository with ignored local files, and a worktree that doesn't have them.

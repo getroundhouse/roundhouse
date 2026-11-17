@@ -40,7 +40,7 @@ pub(super) fn build(number: u64) -> StampedBuild {
 }
 
 fn stamped(original: &Path, number: u64) -> Daemon {
-    Daemon { path: original.to_path_buf(), build: Some(build(number)) }
+    Daemon { build: Some(build(number)), ..Daemon::in_place(original) }
 }
 
 /// Where build 1's copy goes, with any temporary files beside it.
@@ -137,6 +137,21 @@ fn any_other_build_starts_the_daemon_where_it_is() {
 
     assert_eq!(started_from(&paths), original.to_str().unwrap());
     assert!(!paths.daemons_dir.exists());
+}
+
+/// So nothing in this process's, such as `CARGO_MANIFEST_DIR`, which Cargo sets for a test, reaches a test's hub.
+#[test]
+fn a_daemon_in_an_environment_starts_its_hub_in_that_alone() {
+    let dir = tempfile::tempdir().unwrap();
+    let paths = paths_in(dir.path());
+    let says = "echo \"${ONLY-} ${CARGO_MANIFEST_DIR-none}\" > \"$ROUNDHOUSE_HOME/given\"";
+    let original = install(dir.path(), "app", &daemon_script(VERSION, says));
+    let vars = [("ONLY".as_ref(), "this".as_ref())];
+
+    start_hub(&paths, &Daemon::in_place(&original).in_environment(vars)).unwrap();
+
+    let given = || std::fs::read_to_string(paths.data_dir.join("given")).ok().filter(|said| said.ends_with('\n'));
+    assert_eq!(wait_for("the daemon to run", given), "this none\n");
 }
 
 /// Apart from this client, so closing its terminal doesn't reach the hub.

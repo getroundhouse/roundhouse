@@ -5,8 +5,8 @@
 
 use hub::{GithubScript, GithubStandIn};
 
-use super::Stack;
 use super::hub_ahead::HubAhead;
+use super::{Stack, hub_environment};
 
 /// The hub, and the stand-in it calls, which serves until the test ends. The hub is stopped first, as the fields are
 /// dropped in order, so it never calls a stand-in that has gone.
@@ -21,7 +21,7 @@ impl Stack {
     pub(crate) fn start_hub_with_stand_in_github(&self, script: GithubScript) -> StandInGithub {
         let serving = tokio::runtime::Runtime::new().unwrap();
         let github = serving.block_on(GithubStandIn::with(script));
-        let hub = self.start_hub_ahead(&[(protocol::paths::ENV_TEST_GITHUB_API, github.api())]);
+        let hub = self.start_hub_ahead(hub_environment().set(protocol::paths::ENV_TEST_GITHUB_API, github.api()));
         StandInGithub { _hub: hub, _github: github, _serving: serving }
     }
 }

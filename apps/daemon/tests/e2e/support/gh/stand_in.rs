@@ -74,9 +74,8 @@ impl StandInGh {
         install_executable(&source, &gh.bin.join("gh"));
         gh.say(NONE);
         gh.limit_left(5000);
-        stack.add_env("PATH", format!("{}:{}", gh.bin.display(), std::env::var("PATH").unwrap()));
-        // No login shell, so workers get this PATH, with the stand-in at its front.
-        stack.add_env("SHELL", "/usr/bin/false".to_string());
+        // Workers get the hub's PATH, since the stack's hubs have no login shell to ask for one.
+        stack.env.put_first_on_path(&gh.bin);
         stack.start_hub();
         gh
     }

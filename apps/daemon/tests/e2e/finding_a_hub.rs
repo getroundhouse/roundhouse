@@ -5,7 +5,7 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use client_core::{Client, Daemon, HubAdmin};
+use client_core::{Client, HubAdmin};
 use protocol::StampedBuild;
 use protocol::model::{AgentKind, SessionSettingsChange, WorkspaceStatus};
 
@@ -88,7 +88,7 @@ fn a_client_can_start_a_new_hub_as_soon_as_stopping_the_last_one_returns() {
 
     HubAdmin::connect(&stack.socket()).unwrap().stop().unwrap();
 
-    let daemon = Daemon::in_place(env!("CARGO_BIN_EXE_roundhoused"));
+    let daemon = stack.daemon(env!("CARGO_BIN_EXE_roundhoused"));
     let client = Client::connect_or_start(&stack.paths(), &daemon, "test").unwrap();
     let status = client.hub_status().unwrap();
     // First, because nothing else would stop this hub if an assertion failed.
@@ -136,7 +136,8 @@ fn a_stamped_build_runs_its_hub_from_a_copy_that_updating_the_app_leaves_alone()
     install_executable(Path::new(env!("CARGO_BIN_EXE_roundhoused")), &app.join("roundhoused"));
     // The version this daemon gives, which its copy is checked against.
     let build = StampedBuild::new(protocol::this_build!().version(), 1).unwrap();
-    let daemon = Daemon { path: app.join("roundhoused"), build: Some(build) };
+    let mut daemon = stack.daemon(app.join("roundhoused"));
+    daemon.build = Some(build);
     let copy = stack.paths().hub_copy(&build);
 
     let started = Client::connect_or_start(&stack.paths(), &daemon, "test").and_then(|client| client.hub_status());
@@ -146,7 +147,7 @@ fn a_stamped_build_runs_its_hub_from_a_copy_that_updating_the_app_leaves_alone()
     let command = command.unwrap();
     assert!(command.starts_with(&format!("{} hub", copy.display())), "{command}");
 
-    // The same file, with the environment the stack's hubs need for the fake agent, which a client doesn't pass on.
+    // The same file, started by the stack, so the test has the hub's process to wait for once it's stopped.
     stack.hub = Some(stack.command_at(&copy).spawn().unwrap());
     wait_until("the hub to accept connections", || Client::connect(&stack.socket(), "test").is_ok());
     // The update, with a daemon that can run neither a hub nor a worker.
@@ -229,7 +230,7 @@ fn replaces_a_hub_that_drops_the_connection(reads_hello_first: bool) {
         drop(connection);
     });
 
-    let daemon = Daemon::in_place(env!("CARGO_BIN_EXE_roundhoused"));
+    let daemon = stack.daemon(env!("CARGO_BIN_EXE_roundhoused"));
     let client = Client::connect_or_start(&stack.paths(), &daemon, "test").unwrap();
     hub_going_away.join().unwrap();
     assert!(client.hub_status().is_ok());

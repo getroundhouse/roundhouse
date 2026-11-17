@@ -6,7 +6,7 @@
 use std::path::{Path, PathBuf};
 
 use super::hub_ahead::HubAhead;
-use super::{Stack, Ui};
+use super::{Stack, Ui, hub_environment};
 
 /// What `gh pr view` prints for a pull request in this state, such as `OPEN` or `MERGED`, for [`StandInGh::report`].
 pub(crate) fn pull_request(state: &str) -> String {
@@ -68,8 +68,7 @@ exit 1
         std::fs::write(&gh, script).unwrap();
         std::fs::set_permissions(&gh, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
         // Workers get this PATH, with the stand-in at its front.
-        let path = format!("{}:{}", bin.display(), std::env::var("PATH").unwrap());
-        let hub = self.start_hub_ahead(&[("PATH", path)]);
+        let hub = self.start_hub_ahead(hub_environment().put_first_on_path(&bin));
         StandInGh { _hub: hub, answer, remote }
     }
 }

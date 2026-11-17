@@ -3,10 +3,10 @@
 #![cfg(test)]
 
 use std::path::PathBuf;
-use std::process::{Child, Command, Stdio};
+use std::process::{Child, Stdio};
 use std::time::{Duration, Instant};
 
-use super::{Stack, TIMEOUT, binaries};
+use super::{Stack, TIMEOUT, binaries, hub_environment};
 
 /// The hub, and its data directory, where a test writes what it says. Goes away with the test, even a failed one,
 /// since nothing else would stop it.
@@ -51,7 +51,8 @@ impl Drop for StandInHub {
 impl Stack {
     /// A hub of another build, run with these arguments.
     pub(crate) fn start_stand_in_hub(&self, args: &[&str]) -> StandInHub {
-        let hub = Command::new(binaries().join("examples/stand_in_hub"))
+        let hub = hub_environment()
+            .command(binaries().join("examples/stand_in_hub"))
             .args(args)
             .env(protocol::paths::ENV_HOME, &self.hub.paths.data_dir)
             .env(protocol::paths::ENV_WORKSPACES, &self.hub.paths.workspaces_root)

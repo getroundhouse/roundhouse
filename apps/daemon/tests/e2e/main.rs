@@ -21,6 +21,7 @@ mod context;
 mod core_loop;
 mod drafts;
 mod effort;
+mod environment;
 mod failing;
 mod feed;
 mod finding_a_hub;

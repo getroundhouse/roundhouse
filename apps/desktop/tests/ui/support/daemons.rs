@@ -4,6 +4,8 @@ use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
+use process::testing::WholeEnvironment;
+
 /// The binaries live in other packages, so `cargo test -p desktop` wouldn't otherwise rebuild them. They're in the
 /// folder Cargo says it built the hub in, with the examples in its `examples`. Where it keeps this test binary, and so
 /// what's near it, isn't something Cargo promises, and 1.100 moved it.
@@ -62,36 +64,24 @@ fn once_per_run(name: &str, build: impl FnOnce()) {
     std::fs::write(last_run, run).unwrap();
 }
 
-/// Where `gh` finds a login other than in `HOME`.
-const GH_LOGINS: [&str; 6] =
-    ["GH_TOKEN", "GITHUB_TOKEN", "GH_ENTERPRISE_TOKEN", "GITHUB_ENTERPRISE_TOKEN", "GH_CONFIG_DIR", "XDG_CONFIG_HOME"];
-
-/// What the daemons these tests start need to run the fake agent. Set once, and never changed, because
-/// tests here run in parallel and nothing else should be reading the environment at that moment.
-pub(crate) fn point_daemons_at_the_fake_agent() {
-    static DONE: OnceLock<()> = OnceLock::new();
-    DONE.get_or_init(|| {
-        // Under Cargo's target directory, so runs can't pile up in the system's. Conversation IDs are
-        // unique, so nothing here carries over from one run to the next.
-        let scratch = Path::new(env!("CARGO_TARGET_TMPDIR"));
-        let (timers, short) = hub::Timers::FOR_TESTS.env();
-        let (worker_timers, worker_short) = worker::Timers::FOR_TESTS.env();
-        let poll = worker::Timers::FOR_TESTS.wait_poll.as_millis().to_string();
-        // SAFETY: guarded by the OnceLock, and this runs before any daemon or thread here reads it.
-        unsafe {
-            std::env::set_var("ROUNDHOUSE_CLAUDE_BIN", binaries().join("examples/fake_claude"));
-            // So a test waits out only the time limits it's about. The hub passes the workers' on to them.
-            std::env::set_var(timers, short);
-            std::env::set_var(worker_timers, worker_short);
-            std::env::set_var("FAKE_CLAUDE_STATE", scratch.join("ui-agent-state"));
-            // So an agent started again doesn't sit through the CLI's 2 s before it asks after a task.
-            std::env::set_var("FAKE_CLAUDE_POLL_DEFAULT_MS", poll);
-            // So a real ~/.conductor/settings.toml can't change what these tests do.
-            std::env::set_var("HOME", scratch.join("ui-home"));
-            // So `gh` can't reach GitHub as whoever runs the tests.
-            for name in GH_LOGINS {
-                std::env::remove_var(name);
-            }
-        }
-    });
+/// The whole environment of every daemon these tests start, whether a test starts it or the app does: what
+/// [`WholeEnvironment::for_a_test`] gives, with a home of its own, so a real ~/.conductor/settings.toml or `gh` login
+/// can't change what these tests do, the fake agent, and the timers that only make a test wait shortened. A hub a
+/// client starts is told where its data and workspaces are as it starts.
+pub(crate) fn hub_environment() -> WholeEnvironment {
+    // Under Cargo's target directory, so runs can't pile up in the system's. Conversation IDs are unique, so nothing
+    // here carries over from one run to the next.
+    let scratch = Path::new(env!("CARGO_TARGET_TMPDIR"));
+    let (timers, short) = hub::Timers::FOR_TESTS.env();
+    let (worker_timers, worker_short) = worker::Timers::FOR_TESTS.env();
+    let mut environment = WholeEnvironment::for_a_test(&scratch.join("ui-home"));
+    environment
+        .set("ROUNDHOUSE_CLAUDE_BIN", binaries().join("examples/fake_claude"))
+        // So a test waits out only the time limits it's about. The hub passes the workers' on to them.
+        .set(timers, short)
+        .set(worker_timers, worker_short)
+        .set("FAKE_CLAUDE_STATE", scratch.join("ui-agent-state"))
+        // So an agent started again doesn't sit through the CLI's 2 s before it asks after a task.
+        .set("FAKE_CLAUDE_POLL_DEFAULT_MS", worker::Timers::FOR_TESTS.wait_poll.as_millis().to_string());
+    environment
 }

@@ -1,6 +1,7 @@
 use std::path::Path;
 use std::process::Command;
 
+use process::testing::WholeEnvironment;
 use protocol::worker::GithubCredential;
 
 use super::super::files::{Files, Handed};
@@ -97,10 +98,11 @@ fn a_process_given_the_files_sends_githubs_ssh_addresses_over_https() {
     let files = files(state.path());
     files.write(&Handed::Blocked("Renew ada in Settings".into())).unwrap();
     let url = |remote: &str| {
-        let mut git = Command::new("git");
         // Without the person's own config, which can send GitHub over SSH, as "What still goes round it" says.
-        git.args(["ls-remote", "--get-url", remote]).env("HOME", state.path()).env("GIT_CONFIG_NOSYSTEM", "1");
-        git.env_remove("XDG_CONFIG_HOME");
+        let mut environment = WholeEnvironment::for_a_test(state.path());
+        environment.set("GIT_CONFIG_NOSYSTEM", "1");
+        let mut git = environment.command("git");
+        git.args(["ls-remote", "--get-url", remote]);
         files.environment().apply(&mut git);
         String::from_utf8(git.output().unwrap().stdout).unwrap()
     };

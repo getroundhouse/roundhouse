@@ -3,11 +3,11 @@
 //! own `gh` is logged in as, whatever credential it was set.
 
 use std::collections::BTreeMap;
-use std::ffi::OsString;
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
-use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
+use std::process::{Child, ChildStdin, ChildStdout, Stdio};
 
+use process::testing::WholeEnvironment;
 use protocol::frame;
 use protocol::model::{GhLogin, GhLoginWorks, GithubToken};
 use protocol::worker::{
@@ -35,11 +35,11 @@ struct Worker {
 
 impl Worker {
     fn start() -> Self {
-        Self::start_with(Vec::new())
+        Self::start_with(|_| {})
     }
 
-    /// The same, with `env` set too.
-    fn start_with(env: Vec<(&str, OsString)>) -> Self {
+    /// The same, with what `change` changes of its environment.
+    fn start_with(change: impl FnOnce(&mut WholeEnvironment)) -> Self {
         let dir = tempfile::tempdir().unwrap();
         let home = dir.path().join("home");
         std::fs::create_dir_all(&home).unwrap();
@@ -49,19 +49,16 @@ impl Worker {
         std::fs::create_dir_all(work.join(".conductor")).unwrap();
         std::fs::write(work.join(".conductor/settings.toml"), "[scripts]\nsetup = \"sh asks-git.sh\"\n").unwrap();
         std::fs::write(work.join("asks-git.sh"), ASKS_GIT).unwrap();
-        let mut child = Command::new(env!("CARGO_BIN_EXE_roundhoused"))
+        let mut environment = WholeEnvironment::for_a_test(&home);
+        // None of this machine's own git config, which could hand over a real login.
+        environment.set("GIT_CONFIG_NOSYSTEM", "1").set("GIT_TERMINAL_PROMPT", "0");
+        change(&mut environment);
+        let mut child = environment
+            .command(env!("CARGO_BIN_EXE_roundhoused"))
             .args(["worker", "--stdio", "--workspaces-root"])
             .arg(dir.path().join("workspaces"))
             .arg("--state-dir")
             .arg(dir.path().join("instance"))
-            // None of this machine's own git config, which could hand over a real login.
-            .env("HOME", &home)
-            .env("GIT_CONFIG_NOSYSTEM", "1")
-            .env("GIT_TERMINAL_PROMPT", "0")
-            .env_remove("XDG_CONFIG_HOME")
-            .env_remove("GIT_CONFIG_COUNT")
-            .env_remove("GH_CONFIG_DIR")
-            .envs(env)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::null())
@@ -227,10 +224,9 @@ fn the_login_found_is_the_machines_own_while_an_accounts_credential_is_set() {
     let source = bin.path().join("gh.source");
     std::fs::write(&source, SAYS_WHOSE_LOGIN).unwrap();
     install_executable(&source, &bin.path().join("gh"));
-    let mut path = OsString::from(bin.path());
-    path.push(":");
-    path.push(std::env::var_os("PATH").unwrap());
-    let mut worker = Worker::start_with(vec![("PATH", path), ("GH_TOKEN", "machines-own".into())]);
+    let mut worker = Worker::start_with(|environment| {
+        environment.put_first_on_path(bin.path()).set("GH_TOKEN", "machines-own");
+    });
 
     worker.send(1, WorkerRequest::GitCredentialSet(GitCredentialSet { credential: account("ada", "made-up") }));
     worker.send(2, WorkerRequest::FindGithubLogin);

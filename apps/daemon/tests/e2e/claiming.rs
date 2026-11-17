@@ -2,15 +2,17 @@
 
 use std::io::{BufRead, BufReader, Write};
 use std::path::Path;
-use std::process::{Child, Command, Stdio};
+use std::process::{Child, Stdio};
 
+use process::testing::WholeEnvironment;
 use protocol::client::ErrorCode;
 use protocol::frame;
 use protocol::worker::WORKER_PROTOCOL_VERSION;
 use protocol::worker::{Hello, WorkerCall, WorkerFrame, WorkerOutcome, WorkerRequest};
 
 fn worker(dir: &Path) -> Child {
-    Command::new(env!("CARGO_BIN_EXE_roundhoused"))
+    WholeEnvironment::for_a_test(&dir.join("home"))
+        .command(env!("CARGO_BIN_EXE_roundhoused"))
         .args(["worker", "--stdio", "--workspaces-root"])
         .arg(dir.join("workspaces"))
         .arg("--state-dir")
