@@ -138,6 +138,8 @@ async fn write_lines(mut writer: Box<dyn AsyncWrite + Send + Unpin>, mut lines: 
 
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
+
     use serde_json::{Value, json};
 
     use super::*;
@@ -189,20 +191,20 @@ mod tests {
         // So writing fails, and what writes the lines stops taking them.
         drop(theirs);
 
-        let mut refused = false;
-        for _ in 0..1000 {
+        // Each call taken before then is given up on at once, as nothing will answer it.
+        let calls = &calls;
+        waiting::task::until_ok_async(Duration::from_secs(10), || async move {
             match calls.send(|id| json!({"id": id})).await {
-                Ok(given_up) => drop(given_up),
-                Err(NotSent::Closed) => {
-                    refused = true;
-                    break;
+                Ok(given_up) => {
+                    drop(given_up);
+                    Err("no call was refused once the stream couldn't be written")
                 }
+                Err(NotSent::Closed) => Ok(()),
                 Err(NotSent::Encoding(e)) => panic!("{e}"),
             }
-            tokio::task::yield_now().await;
-        }
+        })
+        .await;
 
-        assert!(refused, "a call was refused once the stream couldn't be written");
         assert_eq!(calls.waiting(), 0);
     }
 

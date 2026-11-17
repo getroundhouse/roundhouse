@@ -1,7 +1,5 @@
 //! Moving a chat to another account the hub holds a login for, and what that does to its agent and its next launch.
 
-use std::time::Duration;
-
 use protocol::capability::conversation::Start;
 use protocol::client::ErrorCode;
 use protocol::event::{EventBody, ExitReason};
@@ -9,11 +7,7 @@ use protocol::prompt::Prompt;
 use protocol::worker::WorkerRequest;
 
 use super::two_accounts::{TwoAccounts, cold};
-use crate::hub::stand_in_workers::the_agent_says;
-
-/// How long the hub has to answer a move, and to ask the worker to stop the agent, which takes it no time with a
-/// stand-in for the worker.
-const TIMEOUT: Duration = Duration::from_secs(10);
+use crate::hub::stand_in_workers::{TIMEOUT, the_agent_says};
 
 /// The conversation each launch of the chat's agent was started on, and whether it was to carry it on.
 fn started_on(accounts: &TwoAccounts) -> Vec<Start> {

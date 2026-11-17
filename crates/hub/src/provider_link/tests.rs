@@ -232,12 +232,12 @@ async fn shutting_down_waits_for_an_adapter_that_exits_once_its_stdin_closes() {
     let dir = tempfile::tempdir().unwrap();
     let finished = dir.path().join("finished");
     let provider = started(script(dir.path(), &format!("cat > /dev/null; : > {}", finished.display()))).await;
-    let asked = std::time::Instant::now();
 
-    provider.shut_down(ADAPTER_GRACE).await;
+    // A grace far longer than the test waits, so one that waits it out rather than for the adapter to exit fails.
+    let shut = tokio::time::timeout(Duration::from_secs(10), provider.shut_down(Duration::from_mins(10))).await;
 
+    shut.expect("shutting down waited out its grace for an adapter that had exited");
     assert!(finished.exists(), "it should have finished by itself");
-    assert!(asked.elapsed() < ADAPTER_GRACE / 2);
     assert!(!process::testing::is_running(pid(dir.path())));
 }
 
@@ -270,7 +270,8 @@ async fn an_adapter_that_exits_leaving_its_stdout_open_isnt_waited_for() {
     }
 }
 
-#[tokio::test]
+/// On tokio's paused clock, which a shut down that waited for the hello's time limit would move to it.
+#[tokio::test(start_paused = true)]
 async fn shutting_down_gives_up_on_a_hello_in_flight_and_starts_no_more_adapters() {
     let opens = Arc::new(AtomicUsize::new(0));
     let open = opening(opens.clone(), |_, stdio| scripted(stdio, vec![], Arc::default()));
@@ -279,14 +280,13 @@ async fn shutting_down_gives_up_on_a_hello_in_flight_and_starts_no_more_adapters
         let provider = provider.clone();
         async move { provider.say_hello().await }
     });
-    while opens.load(Ordering::SeqCst) == 0 {
-        tokio::task::yield_now().await;
-    }
-    let asked = std::time::Instant::now();
+    let opened = || opens.load(Ordering::SeqCst) > 0;
+    waiting::task::until(Duration::from_secs(10), "the adapter was never started for the hello", opened).await;
+    let asked = tokio::time::Instant::now();
 
     provider.shut_down(ADAPTER_GRACE).await;
 
-    assert!(asked.elapsed() < Duration::from_secs(1), "it waited for the hello");
+    assert_eq!(asked.elapsed(), Duration::ZERO, "it waited for the hello");
     let Err(ProviderError::Io { source, .. }) = hello.await.unwrap() else { panic!("it said hello") };
     assert_eq!(source.kind(), io::ErrorKind::Interrupted);
     assert!(provider.stop(&"i".into()).await.is_err());

@@ -139,8 +139,6 @@ impl ChildProcess {
 #[cfg(test)]
 #[cfg(unix)]
 mod tests {
-    use std::time::Instant;
-
     use tokio::io::{AsyncBufReadExt, BufReader};
 
     use super::*;
@@ -154,11 +152,11 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let Spawned { process: command, reader, writer } = sh(dir.path(), "cat; echo stopped >&2");
         drop(writer);
-        let started = Instant::now();
 
-        command.end(Duration::from_secs(10)).await;
+        // A grace far longer than the test waits, so ending that waits it out rather than for the command fails.
+        let ended = tokio::time::timeout(Duration::from_secs(10), command.end(Duration::from_mins(10))).await;
 
-        assert!(started.elapsed() < Duration::from_secs(5), "it should have exited by itself");
+        ended.expect("ending waited out its grace for a command that had exited");
         drop(reader);
         let log = std::fs::read_to_string(dir.path().join("logs/worker.log")).unwrap();
         assert_eq!(log, "stopped\n", "what it writes to stderr goes to its log");

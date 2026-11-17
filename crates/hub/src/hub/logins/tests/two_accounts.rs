@@ -3,7 +3,6 @@
 //! on.
 
 use std::sync::Arc;
-use std::time::Duration;
 
 use protocol::client::HubNotice;
 use protocol::client::accounts::AccountConnect;
@@ -17,11 +16,7 @@ use protocol::prompt::Prompt;
 use tokio::sync::broadcast;
 
 use crate::hub::Hub;
-use crate::hub::stand_in_workers::{Asked, a_chat, a_turn, hub_with_stand_in_workers, the_agent_says};
-
-/// How long the hub has to record what a test waits for, which it does on a task of its own. Far longer than that takes
-/// with a stand-in for the worker, so only what never comes runs out of it.
-const TIMEOUT: Duration = Duration::from_secs(10);
+use crate::hub::stand_in_workers::{Asked, TIMEOUT, a_chat, a_turn, hub_with_stand_in_workers, the_agent_says};
 
 /// A hub whose workspaces have stand-ins for their workers, and what those have been asked.
 pub(super) struct Chats {

@@ -32,6 +32,13 @@ async fn next(ended: &mut mpsc::UnboundedReceiver<Ended>) -> Ended {
     tokio::time::timeout(Duration::from_secs(600), ended.recv()).await.unwrap().unwrap()
 }
 
+/// Waits for a job's work to say it has got to where a test needs it, failing with `what` rather than hanging if it
+/// never does.
+async fn reached(said: tokio::sync::oneshot::Receiver<()>, what: &str) {
+    let reached = tokio::time::timeout(Duration::from_secs(600), said).await;
+    assert!(matches!(reached, Ok(Ok(()))), "{what}");
+}
+
 /// Waits until `done`, on the test's paused clock, which moves on while it does.
 async fn until(done: impl Fn() -> bool) {
     waiting::task::until(Duration::from_secs(600), "timed out waiting for the jobs", done).await;
@@ -165,18 +172,20 @@ async fn stopping_ends_every_job_where_it_is_without_its_after_step_and_starts_n
     let (ends, mut ended) = mpsc::unbounded_channel();
     let dropped = Arc::new(AtomicBool::new(false));
     let flag = dropped.clone();
+    let (began, beginning) = tokio::sync::oneshot::channel();
     jobs.start(
         KIND,
         "w",
         LIMITS,
         async move {
             let _dropped = Dropped(flag);
+            began.send(()).unwrap();
             std::future::pending::<()>().await;
         },
         telling(&ends),
     )
     .unwrap();
-    tokio::task::yield_now().await;
+    reached(beginning, "the job never began").await;
 
     jobs.stop();
 
@@ -216,8 +225,10 @@ async fn a_job_called_off_ends_where_it_is_and_its_after_step_runs_once_what_it_
     let finished = Arc::new(AtomicBool::new(false));
     let (flag, seen) = (finished.clone(), finished.clone());
     let (began, beginning) = tokio::sync::oneshot::channel();
-    let waiting = async {
+    let (stepped, at_its_step) = tokio::sync::oneshot::channel();
+    let waiting = async move {
         step("waiting on GitHub");
+        stepped.send(()).unwrap();
         std::future::pending::<()>().await;
     };
     jobs.start(KIND, "w", LIMITS, waiting, telling(&ends)).unwrap();
@@ -236,10 +247,10 @@ async fn a_job_called_off_ends_where_it_is_and_its_after_step_runs_once_what_it_
         tell(ended)
     };
     jobs.start(JobKind::ReadWaitedPullRequests, "v", LIMITS, keeping, after).unwrap();
-    tokio::task::yield_now().await;
+    reached(at_its_step, "the job never got to its step").await;
 
     jobs.call_off(&"w");
-    beginning.await.unwrap();
+    reached(beginning, "what the job runs uncut never began").await;
     jobs.call_off(&"v");
     jobs.call_off(&"nobody");
 
