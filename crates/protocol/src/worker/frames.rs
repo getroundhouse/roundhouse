@@ -7,7 +7,7 @@ use super::{AskId, WorkerAsk, WorkerOutcome};
 use crate::attachment::NewAttachment;
 use crate::event::EventBody;
 use crate::model::{Branches, CacheRequest, ContextUsage, RunId, SessionId, UsageLimit};
-use crate::tail::{StreamDelta, Tail};
+use crate::tail::{Retrying, StreamDelta, Tail};
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(tag = "frame", rename_all = "snake_case")]
@@ -36,6 +36,13 @@ pub enum WorkerFrame {
         session_id: SessionId,
         run: RunId,
         delta: StreamDelta,
+    },
+    /// The agent of `run` is trying a failed request to its model again. It isn't an event: only the newest matters,
+    /// and only until the agent writes again, so the hub keeps it in the session's tail, as a delta is.
+    AgentRetrying {
+        session_id: SessionId,
+        run: RunId,
+        retrying: Retrying,
     },
     /// What the agent of `run` is writing, as the deltas the worker has sent make it, with the subagents it runs in the
     /// background and its compaction under way. Sent to a hub as it says hello, after what the worker kept for it and

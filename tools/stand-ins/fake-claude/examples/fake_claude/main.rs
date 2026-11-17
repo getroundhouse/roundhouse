@@ -34,6 +34,8 @@
 //!   request-until:FILE  Wait for the model's answer, saying nothing, until FILE exists, as a slow request does, so
 //!                   a test sees what's drawn before it comes, and says when a prompt has reached it as `slow-until`
 //!                   does.
+//!   retry-until:FILE  Say the request to the model failed with a 503 and is being tried again, the second time of
+//!                   ten, then wait for its answer, as `request-until` does, until FILE exists.
 //!   partial:TEXT    Start a message and leave it unfinished, so a crash can cut it off.
 //!   late:FILE:TEXT  Leave a process holding stdout open until FILE exists, so an exit takes time to notice,
 //!                   then write TEXT as a delta and a `late_marker` line, as an agent that has been replaced

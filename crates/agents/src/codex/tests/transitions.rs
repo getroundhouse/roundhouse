@@ -86,6 +86,7 @@ async fn a_missing_intake_reply_is_settled_after_shutdown_without_a_restartable_
                 AgentOutput::Event { body: EventBody::AgentOther { kind, .. }, .. } if kind == "test/ready" => break,
                 AgentOutput::Event { .. }
                 | AgentOutput::Delta(_)
+                | AgentOutput::Retrying(_)
                 | AgentOutput::Context(_)
                 | AgentOutput::Cache(_)
                 | AgentOutput::Limits { .. }
@@ -104,6 +105,7 @@ async fn a_missing_intake_reply_is_settled_after_shutdown_without_a_restartable_
                 AgentOutput::Event { body: EventBody::PromptDropped { .. }, .. } => dropped += 1,
                 AgentOutput::Event { .. }
                 | AgentOutput::Delta(_)
+                | AgentOutput::Retrying(_)
                 | AgentOutput::Context(_)
                 | AgentOutput::Cache(_)
                 | AgentOutput::Limits { .. }
@@ -136,6 +138,7 @@ async fn a_broken_input_pipe_stops_the_process_and_settles_the_prompt() {
             AgentOutput::Event { body: EventBody::PromptDropped { .. }, .. } => dropped += 1,
             AgentOutput::Event { .. }
             | AgentOutput::Delta(_)
+            | AgentOutput::Retrying(_)
             | AgentOutput::Context(_)
             | AgentOutput::Cache(_)
             | AgentOutput::Limits { .. }

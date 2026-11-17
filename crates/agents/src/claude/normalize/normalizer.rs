@@ -11,7 +11,7 @@ use prompt::PromptProgress;
 use protocol::attachment::NewAttachment;
 use protocol::event::{AgentRunState, ApprovalOutcome, EventBody, TurnOutcome};
 use protocol::model::{CacheRequest, MessageId, SubagentId, ToolUseId};
-use protocol::tail::{BlockKind, DeltaChange, StreamDelta};
+use protocol::tail::{BlockKind, DeltaChange, Retrying, StreamDelta};
 use said::FailedRequests;
 use serde_json::Value;
 use std::collections::HashMap;
@@ -42,6 +42,8 @@ pub enum Parsed {
     EventWithImages { body: EventBody, images: Vec<NewAttachment>, raw: String },
     /// Live only. The finished message replaces these.
     Delta(StreamDelta),
+    /// Live only: the CLI is trying a failed request again, until the agent writes again.
+    Retrying(Retrying),
     /// The CLI is waiting on an answer the adapter doesn't support. It needs an error reply, or
     /// the session hangs.
     UnsupportedControl { request_id: String, subtype: String },
@@ -289,6 +291,7 @@ fn system(value: &Value) -> Parsed {
             (None, Some("requesting")) => Parsed::Drop,
             (None, _) => other("system/status"),
         },
+        "api_retry" => retrying(value),
         // A running token count for a spinner. Several arrive per second while thinking.
         "thinking_tokens"
         // What the CLI's own interface shows of git and GitHub: that the agent committed, pushed, rebased or merged,
@@ -298,6 +301,23 @@ fn system(value: &Value) -> Parsed {
         | "code_change_published" => Parsed::Drop,
         other_subtype => other(&format!("system/{other_subtype}")),
     }
+}
+
+/// `api_retry`, which the CLI sends before each try of a request that failed: which try comes next, of how many, the
+/// HTTP status the last failed with, when it got one, and how long it waits first. One with no try is kept for a later
+/// build.
+fn retrying(value: &Value) -> Parsed {
+    let Some(attempt) = value.get("attempt").and_then(Value::as_u64).and_then(|n| u32::try_from(n).ok()) else {
+        return other("system/api_retry");
+    };
+    let number = |key: &str| value.get(key).and_then(Value::as_u64);
+    Parsed::Retrying(Retrying {
+        run: None,
+        attempt,
+        of: number("max_retries").and_then(|n| u32::try_from(n).ok()),
+        status: number("error_status").and_then(|n| u16::try_from(n).ok()),
+        delay_ms: number("retry_delay_ms"),
+    })
 }
 
 fn assistant(value: &Value, subagent: Option<SubagentId>) -> EventBody {

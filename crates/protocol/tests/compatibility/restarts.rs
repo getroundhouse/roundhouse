@@ -4,6 +4,7 @@
 use protocol::client::{ClientFrame, ClientRequest, HubStatus};
 use protocol::frame;
 use protocol::model::{LimitWindow, ModelLabel, RunId};
+use protocol::tail::Tail;
 use protocol::worker::{
     Received, RunningAgent, RunningAgentsReply, WorkerCall, WorkerFrame, WorkerRequest, WorkerResponse,
 };
@@ -76,6 +77,32 @@ fn what_a_worker_says_an_agent_is_writing_keeps_its_form() {
     assert_eq!((session_id.as_str(), *run), ("s", RunId::new(4)));
     assert_eq!(tail.messages[0].blocks[0].text, "Reading the");
     assert_eq!(frame::encode(&read).unwrap(), [line.as_bytes(), b"\n"].concat());
+}
+
+/// An agent trying a request again, as a worker sends it, and a tail that holds it, as a worker sends one to a hub
+/// that connects and a hub sends one to a client. A tail from before says nothing of it.
+#[test]
+fn what_a_worker_says_of_a_request_tried_again_keeps_its_form() {
+    let retrying = r#"{"attempt":2,"of":10,"status":503,"delay_ms":1204}"#;
+    let line = format!(r#"{{"frame":"agent_retrying","session_id":"s","run":4,"retrying":{retrying}}}"#);
+    let kept =
+        format!(r#"{{"frame":"agent_tail","session_id":"s","run":4,"tail":{{"messages":[],"retrying":{retrying}}}}}"#);
+
+    let read: WorkerFrame = frame::decode(line.as_bytes()).unwrap();
+    let in_tail: WorkerFrame = frame::decode(kept.as_bytes()).unwrap();
+
+    let WorkerFrame::AgentRetrying { run, retrying, .. } = &read else { panic!("{read:?}") };
+    assert_eq!(*run, RunId::new(4));
+    assert_eq!(
+        (retrying.attempt, retrying.of, retrying.status, retrying.delay_ms),
+        (2, Some(10), Some(503), Some(1_204))
+    );
+    assert_eq!(frame::encode(&read).unwrap(), [line.as_bytes(), b"\n"].concat());
+    let WorkerFrame::AgentTail { tail, .. } = &in_tail else { panic!("{in_tail:?}") };
+    assert_eq!(tail.retrying.as_ref(), Some(retrying));
+    assert_eq!(frame::encode(&in_tail).unwrap(), [kept.as_bytes(), b"\n"].concat());
+    let before: Tail = serde_json::from_str(r#"{"messages":[]}"#).unwrap();
+    assert_eq!(before.retrying, None);
 }
 
 /// A restart works without a hello, as a stop does, so a client can restart a hub it can't otherwise talk to, once its

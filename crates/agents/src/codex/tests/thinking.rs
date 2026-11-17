@@ -36,6 +36,7 @@ async fn thinking_is_requested_from_codex_and_preserved_as_summary_text() {
             }
             AgentOutput::Event { body: EventBody::TurnEnded { .. }, .. } => break,
             AgentOutput::Event { .. }
+            | AgentOutput::Retrying(_)
             | AgentOutput::Context(_)
             | AgentOutput::Cache(_)
             | AgentOutput::Limits { .. }

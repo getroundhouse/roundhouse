@@ -35,6 +35,16 @@ pub(crate) fn request(turn: &Turn, error: &str) -> bool {
     true
 }
 
+/// Says the agent's request failed with a 503, and that it tries it again, a second time of ten, as the real CLI says
+/// before each try.
+pub(crate) fn retrying(turn: &Turn) {
+    emit(
+        turn.out,
+        json!({"type": "system", "subtype": "api_retry", "attempt": 2, "max_retries": 10, "retry_delay_ms": 1_204,
+            "error_status": 503, "error": "server_error", "session_id": turn.config.session_id, "uuid": message_id()}),
+    );
+}
+
 /// The `result` line that ends a turn that failed, if the turn going did, which the next turn starts without.
 pub(crate) fn ended(session_id: &str) -> Option<Value> {
     FAILED.swap(false, Ordering::SeqCst).then(|| {

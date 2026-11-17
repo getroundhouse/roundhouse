@@ -124,6 +124,9 @@ pub(in super::super) async fn route(hub: &Arc<Hub>, link: &WorkerLink, frame: Wo
             (session_id, Item::Limits { run, limits, every_models_week, seq }, seq)
         }
         WorkerFrame::AgentTail { session_id, run, tail } => (session_id, Item::Tail { run, tail }, None),
+        WorkerFrame::AgentRetrying { session_id, run, retrying } => {
+            (session_id, Item::Retrying { run, retrying }, None)
+        }
     };
     hub.route(&session_id, item).await;
     if let Some(seq) = seq {
@@ -155,6 +158,7 @@ fn agent_of(frame: &WorkerFrame) -> Option<(SessionId, RunId)> {
         | WorkerFrame::AgentContext { session_id, run, .. }
         | WorkerFrame::AgentCache { session_id, run, .. }
         | WorkerFrame::AgentLimits { session_id, run, .. }
-        | WorkerFrame::AgentTail { session_id, run, .. } => Some((session_id.clone(), *run)),
+        | WorkerFrame::AgentTail { session_id, run, .. }
+        | WorkerFrame::AgentRetrying { session_id, run, .. } => Some((session_id.clone(), *run)),
     }
 }

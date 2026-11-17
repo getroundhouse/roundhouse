@@ -170,6 +170,9 @@ async fn forward_output(
                 WorkerFrame::AgentEvent { session_id: session_id.clone(), run, body, raw, attachments, seq: None }
             }
             AgentOutput::Delta(delta) => WorkerFrame::AgentDelta { session_id: session_id.clone(), run, delta },
+            AgentOutput::Retrying(retrying) => {
+                WorkerFrame::AgentRetrying { session_id: session_id.clone(), run, retrying }
+            }
             AgentOutput::Context(context) => {
                 WorkerFrame::AgentContext { session_id: session_id.clone(), run, context, seq: None }
             }

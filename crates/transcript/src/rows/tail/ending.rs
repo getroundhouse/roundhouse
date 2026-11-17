@@ -19,7 +19,7 @@ use gpui_kit::{
 use look::{LineText, Signal};
 use protocol::event::SessionEvent;
 use protocol::model::QueuedPrompt;
-use protocol::tail::{BlockKind, Compacting, Tail};
+use protocol::tail::{BlockKind, Retrying, Tail};
 use std::time::Duration;
 
 /// What the end of the chat draws: what the agent is still writing, the prompts it hasn't read yet, what the
@@ -67,7 +67,7 @@ pub(in super::super) fn render_tail(end: &EndOfChat, shared: &Shared, by: By, cx
     let (written, placed) = still_writing(tail, alone, shared, folds.thinking_open(), cx);
     let mut after: Vec<AnyElement> = Vec::new();
     if at_work.working {
-        let line = working_line(at_work.turn_started_at_ms, tail.compacting.as_ref(), &shared.line_text, cx);
+        let line = working_line(at_work.turn_started_at_ms, tail, &shared.line_text, cx);
         after.push(line.into_any_element());
     }
     // Left going by a turn, or started during one.
@@ -153,14 +153,10 @@ pub(super) fn clipped(text: String) -> Div {
 
 /// The mark with its light sweeping, and how long the turn has taken so far, in the code font so the digits stay put.
 /// While the agent compacts its conversation, it says so after the time, and how much of the summary it has written
-/// when it says, since that's the only sign a compaction is getting on. The time and the words are on one baseline,
-/// as a call's title and its code are.
-fn working_line(
-    started_at_ms: Option<i64>,
-    compacting: Option<&Compacting>,
-    line_text: &LineText,
-    cx: &App,
-) -> impl IntoElement {
+/// when it says, since that's the only sign a compaction is getting on. While it tries a failed request again, it says
+/// that instead, since that's why nothing comes. The time and the words are on one baseline, as a call's title and its
+/// code are.
+fn working_line(started_at_ms: Option<i64>, tail: &Tail, line_text: &LineText, cx: &App) -> impl IntoElement {
     let so_far = started_at_ms.map(|started| {
         let elapsed = look::now_ms(cx) - started;
         // The hub's clock can be a little ahead of this one.
@@ -170,14 +166,33 @@ fn working_line(
         .id("working-line")
         .child(look::chat_mark(Signal::Working, look::Size::Inline, cx))
         .children(so_far.map(|so_far| line_text.code.set(div().flex_none().child(so_far))))
-        .children(compacting.map(|compacting| {
-            // Counted as tokens are, since it's said beside them.
-            let written = compacting.written_chars.filter(|chars| *chars > 0);
-            let written = written.map(|chars| format!(" · {} characters written", look::tokens(chars)));
-            // Cut off where the line ends, rather than running past the pane.
-            line_text.body.set(clipped(format!("Compacting the conversation{}", written.unwrap_or_default())).min_w_0())
-        }))
+        // Cut off where the line ends, rather than running past the pane.
+        .children(doing(tail).map(|doing| line_text.body.set(clipped(doing).min_w_0())))
         .test_support()
+}
+
+/// What the working line says the agent is doing, when it's more than working.
+fn doing(tail: &Tail) -> Option<String> {
+    if let Some(retrying) = &tail.retrying {
+        return Some(trying_again(retrying));
+    }
+    tail.compacting.as_ref().map(|compacting| {
+        // Counted as tokens are, since it's said beside them.
+        let written = compacting.written_chars.filter(|chars| *chars > 0);
+        let written = written.map(|chars| format!(" · {} characters written", look::tokens(chars)));
+        format!("Compacting the conversation{}", written.unwrap_or_default())
+    })
+}
+
+/// A failed request being tried again: which try, of how many when the agent says, and the status the last failed
+/// with, when it got one.
+fn trying_again(retrying: &Retrying) -> String {
+    let which = match retrying.of {
+        Some(of) => format!(" · {} of {of}", retrying.attempt),
+        None => format!(" · try {}", retrying.attempt),
+    };
+    let status = retrying.status.map_or_else(String::new, |status| format!(" · {status}"));
+    format!("Trying the request again{which}{status}")
 }
 
 fn last_line(text: &str) -> String {
