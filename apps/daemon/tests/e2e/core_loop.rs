@@ -9,7 +9,7 @@ use client_core::Client;
 use protocol::event::EventBody;
 use protocol::model::{Seq, WorkspaceStatus};
 
-use crate::support::{Stack, assert_gapless, assistant_text, git, read_all, wait_for_turn_end, wait_until};
+use crate::support::{Gate, Stack, assert_gapless, assistant_text, git, read_all, wait_for_turn_end, wait_until};
 
 #[test]
 fn a_session_runs_in_a_real_worktree_with_the_worker_as_a_separate_process() {
@@ -81,11 +81,13 @@ fn a_prompt_sent_mid_turn_folds_in_and_the_session_stays_running_until_it_is_don
     let stack = Stack::start();
     let client = stack.client();
     let (_, session) = stack.workspace(&client);
-    client.session_prompt(&session.id, "slow:10:first", None).unwrap();
+    let first = Gate::new(&stack, "first");
+    client.session_prompt(&session.id, &format!("slow-until:{first}:first"), None).unwrap();
     wait_until("the first turn to start", || {
         read_all(&client, &session.id).iter().any(|e| matches!(e.body, EventBody::AgentInit { .. }))
     });
     client.session_prompt(&session.id, "say:second", None).unwrap();
+    first.open_once_the_agent_has_a_prompt();
 
     let events = wait_for_turn_end(&client, &session.id, 1);
     let text = assistant_text(&events);
