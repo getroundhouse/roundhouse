@@ -1,4 +1,4 @@
-//! A world's base files, opened and paged as the worker opens and pages them, for the gallery's hub to answer with.
+//! A world's base files, opened and paged as the worker opens and pages them, for a fake hub to answer with.
 
 use protocol::client::{ApiError, ErrorCode};
 use protocol::model::{FileContents, FileOpened, FilePage, FilePages, OpenedText, PageLine};

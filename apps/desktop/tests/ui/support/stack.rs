@@ -100,21 +100,29 @@ pub(crate) struct Ui<'a> {
 impl<'a> Ui<'a> {
     pub(crate) fn open(cx: &'a mut TestAppContext, stack: &Stack) -> Self {
         let mut ui = Self::open_without_waiting(cx, stack);
-        ui.wait("the app to connect", |ui| matches!(ui.view().connection(), Connection::Ready(_)));
+        ui.wait_to_connect();
         ui
     }
 
     pub(crate) fn open_without_waiting(cx: &'a mut TestAppContext, stack: &Stack) -> Self {
-        // A real hub answers on real threads, which the scheduler otherwise reports as nondeterminism.
+        Self::open_window(cx, stack.hub.clone(), stack.checkout.clone())
+    }
+
+    /// Opens the app's main window on `hub`, told it was built from `checkout`.
+    pub(super) fn open_window(cx: &'a mut TestAppContext, hub: HubSource, checkout: Option<Checkout>) -> Self {
+        // A hub answers on real threads, which the scheduler otherwise reports as nondeterminism.
         cx.executor().allow_parking();
         cx.update(gpui_kit::init);
         // A test's clock stands still, so anything that moves would stay where it starts: a sliding sidebar, a mark,
         // the kit's own animations. `motion.rs` has how a test of something that moves plays it.
         cx.update(|cx| cx.set_reduce_motion(true));
-        let (hub, checkout) = (stack.hub.clone(), stack.checkout.clone());
         let (handle, view) =
             cx.update(|cx| desktop::open_main_window(hub, checkout, desktop::Opens::WhereItWasLeft, cx)).unwrap();
         Self { cx, handle, view, seen_approval: Seq::default() }
+    }
+
+    pub(super) fn wait_to_connect(&mut self) {
+        self.wait("the app to connect", |ui| matches!(ui.view().connection(), Connection::Ready(_)));
     }
 
     /// What the line at the bottom of the sidebar says.
@@ -159,8 +167,8 @@ impl<'a> Ui<'a> {
         self.seen_approval
     }
 
-    /// Runs the app until `done`, on real time, because a real hub is on the other end of the socket. One that times out
-    /// says what the window showed, such as an error a page drew.
+    /// Runs the app until `done`, on real time, because a hub is on the other end of the socket, answering on threads of
+    /// its own. One that times out says what the window showed, such as an error a page drew.
     #[track_caller]
     pub(crate) fn wait(&mut self, what: &str, mut done: impl FnMut(&mut Self) -> bool) {
         let frame_then = |ui: &mut Self| {

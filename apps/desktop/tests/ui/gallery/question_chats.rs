@@ -14,8 +14,8 @@ use serde_json::{Value, json};
 
 use super::capture;
 use super::chats::looked_around;
-use super::events::{replied, text, tool_result, tool_use};
 use super::worlds::chat_world;
+use client_core::fake_hub::events::{replied, text, tool_result, tool_use};
 
 /// The line [`answered`] leaves for its second call, with two questions.
 pub(crate) const TWO_ASKED: &str = "Asked 2 questions";

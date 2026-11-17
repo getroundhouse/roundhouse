@@ -1,4 +1,4 @@
-//! Each subagent's record, made from its chat's events as the hub keeps it as it records them, so a screen's records
+//! Each subagent's record, made from its chat's events as the hub keeps it as it records them, so a world's records
 //! and events always agree. Its model is the one its newest reply came from, and its tokens the agent's newest count
 //! of what its conversation holds.
 
@@ -101,7 +101,7 @@ pub(super) fn records_of(log: &[SessionEvent]) -> Vec<Subagent> {
 }
 
 /// What one of a subagent's blocks adds to its record: its calls, and while it works, what it's done lately, as the hub
-/// keeps them, but for cutting a long text short, which the screens' texts never are.
+/// keeps them, but for cutting a long text short, which no world's texts are long enough to need.
 fn note(subagent: &mut Subagent, block: &ContentBlock) {
     let called = Call::of(block);
     if let Some(call) = &called {

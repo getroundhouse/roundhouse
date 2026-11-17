@@ -1,5 +1,6 @@
 #![cfg(test)]
 
+use super::{LONG, open_on_a_long_session, prompts, session_of, session_saying};
 use crate::support::{Stack, Ui};
 use gpui_kit::test::TestWindowExt as _;
 use gpui_kit::{
@@ -260,16 +261,6 @@ fn dragging_the_scrollbar_s_thumb_goes_through_the_session_only_the_way_the_thum
     );
 }
 
-/// A long session, open at its end with the scrollbar showing, and everything loaded so far measured.
-pub(super) fn open_on_a_long_session<'a>(cx: &'a mut TestAppContext, stack: &Stack) -> Ui<'a> {
-    let newest = session_saying(stack, 700, |i| "the signal box keeps a ledger. ".repeat([1, 4, 30][i % 3]));
-    let mut ui = Ui::open(cx, stack);
-    ui.wait("the workspace", |ui| ui.transcript().is_some());
-    let last = ui.row_of(&newest);
-    wait_for_the_list_to_settle(&mut ui, last);
-    ui
-}
-
 /// Waits for the list to settle with the last event the chat of `session` shows, the newest of the agent's own as the
 /// hub recorded it, loaded in its row.
 pub(super) fn settle_at_the_end(ui: &mut Ui<'_>, stack: &Stack, session: &SessionId) {
@@ -359,36 +350,8 @@ pub(super) fn thumb(ui: &Ui<'_>) -> f32 {
     ui.cx.read_entity(&ui.transcript().unwrap(), |t, _| t.list().thumb().0)
 }
 
-/// Starts a session and has the agent say 700 things in it, which is more than a transcript loads at once. Returns
-/// the newest of the agent's own events in it, as the hub recorded it.
+/// Starts a session and has the agent say [`LONG`] things in it, which is more than a transcript loads at once.
+/// Returns the newest of the agent's own events in it, as the hub recorded it.
 fn long_session(stack: &Stack) -> SessionEvent {
-    session_saying(stack, 700, |i| format!("message {i}"))
-}
-
-/// Starts a session and has the agent say `count` things in it, over as many prompts as that takes. Returns the newest
-/// of the agent's own events in it, as the hub recorded it.
-pub(super) fn session_saying(stack: &Stack, count: usize, say: impl Fn(usize) -> String) -> SessionEvent {
-    session_of(stack, &saying(count, say))
-}
-
-/// The prompts that have the agent say `count` things.
-fn saying(count: usize, say: impl Fn(usize) -> String) -> Vec<String> {
-    // Each reply in one piece, since only what's recorded matters here, and streamed it took most of a test's time.
-    prompts(count, |i| format!("whole:{}", say(i)))
-}
-
-/// `count` of the fake agent's commands, a few to a prompt, as a person would ask, so no prompt is itself most of the
-/// session.
-fn prompts(count: usize, step: impl Fn(usize) -> String) -> Vec<String> {
-    Vec::from_fn(count, step).chunks(25).map(|prompt| prompt.join("; ")).collect()
-}
-
-/// Starts a session and runs each of `prompts` in it. Returns the newest of the agent's own events in it, as the hub
-/// recorded it.
-fn session_of(stack: &Stack, prompts: &[String]) -> SessionEvent {
-    let session = stack.chat_in_a_new_workspace();
-    for prompt in prompts {
-        stack.run(&session, prompt);
-    }
-    stack.newest_event(&session)
+    session_saying(stack, LONG, |i| format!("message {i}"))
 }

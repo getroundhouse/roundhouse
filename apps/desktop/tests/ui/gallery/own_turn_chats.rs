@@ -8,12 +8,14 @@ use protocol::event::{AgentTask, EndedTask, EventBody, TaskKind, TaskOutcome};
 use protocol::model::{EndedWait, Seq, SessionStatus, WaitEnd, WaitEnded};
 use serde_json::json;
 
-use super::events::{replied, subagent_ended, subagent_started, taken, task, text, tool_result, tool_use, user_prompt};
 use super::frame::CHAT;
 use super::screens::FOCUS;
 use super::steps::{Screen, Step};
 use super::subagent_chats::LAUNCHED;
 use super::worlds::chat_world;
+use client_core::fake_hub::events::{
+    replied, subagent_ended, subagent_started, taken, task, text, tool_result, tool_use, user_prompt,
+};
 
 /// The screens about turns the agent started by itself.
 pub(crate) const SCREENS: &[Screen] = &[Screen {

@@ -7,11 +7,11 @@ use protocol::event::{Again, EventBody, FailureKind, NoticeLevel, RequestFailure
 use protocol::model::SessionStatus;
 
 use super::chats::looked_around;
-use super::events::{finished_turn, text};
 use super::frame::CHAT;
 use super::screens::FOCUS;
 use super::steps::{Screen, Step};
 use super::worlds::chat_world;
+use client_core::fake_hub::events::{finished_turn, text};
 use client_core::fake_hub::{NOW_MS, World};
 
 /// The screens about a request that failed.

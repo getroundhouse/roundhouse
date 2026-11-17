@@ -11,14 +11,14 @@ use protocol::fixtures::{command_output, typed_command};
 use protocol::model::{ModelName, Seq, SessionStatus};
 use serde_json::json;
 
-use super::events::{
-    on, replied, subagent_context, subagent_ended, subagent_started, subagents_listed, taken, text, tool_result,
-    tool_use, typed_call, typed_result, user_prompt, within,
-};
 use super::frame::{CHAT, TABS_AND_CHAT};
 use super::screens::FOCUS;
 use super::steps::{Screen, Step};
 use super::worlds::chat_world;
+use client_core::fake_hub::events::{
+    on, replied, subagent_context, subagent_ended, subagent_started, subagents_listed, taken, text, tool_result,
+    tool_use, typed_call, typed_result, user_prompt, within,
+};
 
 /// The screens about subagents.
 pub(crate) const SCREENS: &[Screen] = &[

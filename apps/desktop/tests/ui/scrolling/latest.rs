@@ -6,7 +6,7 @@ use gpui_kit::{AppContext as _, ElementId, ScrollDelta, TestAppContext, point, p
 use look::Region;
 use look::motion::SCROLL;
 
-use super::{A_FRAME, open_on_a_long_session, settle_at_the_end, thumb};
+use super::{A_FRAME, open_on_a_long_chat, settle_at_the_end, thumb};
 use crate::support::{Stack, Ui};
 use crate::tools::in_a_new_workspace;
 
@@ -19,8 +19,7 @@ const SUBAGENT_CALL: &str = "List what's here";
 /// there goes. The list finds the end in sight as it lays the rows out, which is after the button is drawn.
 #[gpui_kit::test]
 fn scrolling_back_down_to_the_latest_row_takes_away_the_button_to_it(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = open_on_a_long_session(cx, &stack);
+    let (_fake, mut ui) = open_on_a_long_chat(cx);
     assert!(!shows(&mut ui), "there's no button at the latest row");
 
     ui.scroll("transcript", ScrollDelta::Pixels(point(px(0.), px(300.))));
@@ -35,8 +34,7 @@ fn scrolling_back_down_to_the_latest_row_takes_away_the_button_to_it(cx: &mut Te
 /// it isn't pressed again on the way.
 #[gpui_kit::test]
 fn the_button_slides_the_chat_down_to_the_latest_row(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = open_on_a_long_session(cx, &stack);
+    let (_fake, mut ui) = open_on_a_long_chat(cx);
     ui.scroll("transcript", ScrollDelta::Pixels(point(px(0.), px(300.))));
     assert!(shows(&mut ui));
     ui.allow_motion();
@@ -58,8 +56,7 @@ fn the_button_slides_the_chat_down_to_the_latest_row(cx: &mut TestAppContext) {
 /// Under Reduce Motion the button goes straight to the latest row, in the frame its click draws.
 #[gpui_kit::test]
 fn reduce_motion_takes_the_button_straight_to_the_latest_row(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = open_on_a_long_session(cx, &stack);
+    let (_fake, mut ui) = open_on_a_long_chat(cx);
     ui.scroll("transcript", ScrollDelta::Pixels(point(px(0.), px(300.))));
     assert!(shows(&mut ui));
 
@@ -72,8 +69,7 @@ fn reduce_motion_takes_the_button_straight_to_the_latest_row(cx: &mut TestAppCon
 /// Reduce Motion turned on partway through the scroll takes it the rest of the way in the next frame.
 #[gpui_kit::test]
 fn reduce_motion_turned_on_partway_takes_the_scroll_the_rest_of_the_way_at_once(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = open_on_a_long_session(cx, &stack);
+    let (_fake, mut ui) = open_on_a_long_chat(cx);
     ui.scroll("transcript", ScrollDelta::Pixels(point(px(0.), px(300.))));
     assert!(shows(&mut ui));
     ui.allow_motion();
@@ -94,8 +90,7 @@ fn reduce_motion_turned_on_partway_takes_the_scroll_the_rest_of_the_way_at_once(
 /// composer, so the button is checked again in a pane the composer is centred in, with the diff hidden.
 #[gpui_kit::test]
 fn the_button_sits_on_the_composers_left_edge_just_above_it(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = open_on_a_long_session(cx, &stack);
+    let (_fake, mut ui) = open_on_a_long_chat(cx);
     ui.scroll("transcript", ScrollDelta::Pixels(point(px(0.), px(300.))));
     assert!(shows(&mut ui));
     on_the_composers_edge_just_above_it(&mut ui);
@@ -179,8 +174,7 @@ fn open_on_a_session_of_commands<'a>(cx: &'a mut TestAppContext, stack: &Stack) 
 /// The wheel over the button scrolls the chat under it, as it does anywhere else in it.
 #[gpui_kit::test]
 fn the_wheel_over_the_button_scrolls_the_chat(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = open_on_a_long_session(cx, &stack);
+    let (_fake, mut ui) = open_on_a_long_chat(cx);
     ui.scroll("transcript", ScrollDelta::Pixels(point(px(0.), px(300.))));
     assert!(shows(&mut ui));
     let before = thumb(&ui);

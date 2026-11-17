@@ -3,8 +3,7 @@
 use std::path::Path;
 use std::sync::Arc;
 
-use client_core::Daemon;
-use desktop::app::{Connection, HubSource};
+use desktop::app::Connection;
 use gpui_kit::{HeadlessAppContext, PlatformTextSystem, px, size};
 
 use super::Driver;
@@ -12,6 +11,7 @@ use super::scrollbar::ChatScroll;
 use client_core::fake_hub;
 
 use crate::gallery::frame;
+use crate::support::hub_source;
 
 /// The real app, connected to a hub that holds `world`, if there's one, in a directory of its own, which goes with it,
 /// and in a [`frame::WIDE`] window if it's `wide`.
@@ -57,25 +57,6 @@ pub(super) fn open(
     }
     app.wait("the app to connect", |view, _| !matches!(view.connection(), Connection::Connecting));
     (dir, app)
-}
-
-/// Somewhere of its own, with a daemon that doesn't exist, so the app can't start a real hub in its place. The
-/// daemon's path is the same every run, because the app shows it when it can't start one.
-fn hub_source(dir: &Path) -> HubSource {
-    let paths = protocol::paths::resolve(|name| match name {
-        protocol::paths::ENV_HOME => Some(dir.join("home").to_string_lossy().into_owned()),
-        protocol::paths::ENV_WORKSPACES => Some(dir.join("workspaces").to_string_lossy().into_owned()),
-        _ => None,
-    })
-    .unwrap();
-    let daemon = Daemon::in_place("/nonexistent/roundhoused");
-    HubSource {
-        remote: None,
-        paths,
-        daemon,
-        build_number: Some(fake_hub::BUILD_NUMBER),
-        build_version: fake_hub::BUILD,
-    }
 }
 
 fn write_saved_hubs(data_dir: &Path, hubs: &[(&str, &str)]) {

@@ -8,11 +8,11 @@ use look::Region;
 use protocol::event::EventBody;
 use protocol::model::{Seq, SessionStatus};
 
-use super::events::{replied, taken, text, user_prompt};
 use super::frame::{CHAT, Frame, Part, SIDEBAR, SIDEBAR_MENU, WORKSPACE_CARD};
 use super::screens::FOCUS;
 use super::steps::{Screen, Step, Target};
 use super::worlds::{chat_world, conversation, diff, finishing_update, own_hub};
+use client_core::fake_hub::events::{replied, taken, text, user_prompt};
 use client_core::fake_hub::{BUILD, World};
 
 pub(crate) const UPDATE_SCREENS: &[Screen] = &[

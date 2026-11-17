@@ -11,15 +11,15 @@ use protocol::model::{Seq, SessionStatus};
 use serde_json::json;
 
 use super::chats::{self, looked_around};
-use super::events::{
-    replied, subagent_started, subagents_listed, taken, text, tool_denied, tool_result, tool_use, typed_call,
-    user_prompt, within,
-};
 use super::frame::{CHAT, QUESTION};
 use super::screens::FOCUS;
 use super::steps::{Screen, Step};
 use super::typed_chats;
 use super::worlds::{chat_world, in_plan_mode};
+use client_core::fake_hub::events::{
+    replied, subagent_started, subagents_listed, taken, text, tool_denied, tool_result, tool_use, typed_call,
+    user_prompt, within,
+};
 
 /// The screens about a tool's use the agent asks about.
 pub(crate) const SCREENS: &[Screen] = &[

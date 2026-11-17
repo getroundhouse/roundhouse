@@ -27,7 +27,6 @@ mod component_screens;
 mod context_screens;
 mod dictation_screens;
 mod diff_screens;
-mod events;
 mod failure_chats;
 mod failures_in_a_row;
 mod file_chats;

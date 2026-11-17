@@ -1,7 +1,5 @@
-//! Building the events the screens' chats are made of, as the hub would record them from Claude: as its words, or typed,
+//! Building the events a world's chats are made of, as the hub would record them from Claude: as its words, or typed,
 //! as an adapter that types its calls records them.
-
-#![cfg(test)]
 
 use protocol::attachment::Attachment;
 use protocol::capability::calls::{Call, CallOutput};
@@ -12,51 +10,51 @@ use protocol::fixtures;
 use protocol::model::{MessageId, ModelName, Seq, SubagentId, ToolUseId};
 use protocol::prompt::Prompt;
 
-pub(crate) fn user_prompt(text: &str) -> EventBody {
+pub fn user_prompt(text: &str) -> EventBody {
     EventBody::UserPrompt { client_msg_id: None, prompt: Prompt::new(text) }
 }
 
 /// The agent taking the prompt recorded at `prompt`, which is the first event of every chat here.
-pub(crate) fn taken(prompt: Seq) -> EventBody {
+pub fn taken(prompt: Seq) -> EventBody {
     EventBody::PromptTaken { prompt }
 }
 
 /// Something the agent wrote, as its own message, the way Claude sends each block.
-pub(crate) fn text(message: &str, text: &str) -> EventBody {
+pub fn text(message: &str, text: &str) -> EventBody {
     text_pointing(message, text, Vec::new())
 }
 
 /// The same, with the images in the worktree it points to, which the hub kept.
-pub(crate) fn text_pointing(message: &str, text: &str, images: Vec<LinkedImage>) -> EventBody {
+pub fn text_pointing(message: &str, text: &str, images: Vec<LinkedImage>) -> EventBody {
     from_the_agent(message, ContentBlock::Text { text: text.to_string(), images })
 }
 
-pub(crate) fn tool_use(message: &str, id: &str, name: &str, input: serde_json::Value) -> EventBody {
+pub fn tool_use(message: &str, id: &str, name: &str, input: serde_json::Value) -> EventBody {
     from_the_agent(message, fixtures::tool_use(id, name, input))
 }
 
 /// The typed call `id`, in the agent's message that makes it.
-pub(crate) fn typed_call(message: &str, id: &str, call: Call) -> EventBody {
+pub fn typed_call(message: &str, id: &str, call: Call) -> EventBody {
     from_the_agent(message, fixtures::typed_call(id, call))
 }
 
 /// What came back for the typed call `id`.
-pub(crate) fn typed_result(id: &str, output: CallOutput, is_error: bool) -> EventBody {
+pub fn typed_result(id: &str, output: CallOutput, is_error: bool) -> EventBody {
     EventBody::AgentUser { subagent: None, blocks: vec![fixtures::typed_result(id, output, is_error)] }
 }
 
 /// What the agent thought, as its own message.
-pub(crate) fn thought(message: &str, text: &str) -> EventBody {
+pub fn thought(message: &str, text: &str) -> EventBody {
     from_the_agent(message, ContentBlock::Thinking { text: text.to_string() })
 }
 
 /// What the advisor said. Its reply comes from the agent, in the call's message, since the API runs it.
-pub(crate) fn advised(message: &str, id: &str, text: &str) -> EventBody {
+pub fn advised(message: &str, id: &str, text: &str) -> EventBody {
     from_the_agent(message, answer(id, text, false, None))
 }
 
 /// The advisor's reply, encrypted for the model alone.
-pub(crate) fn advised_encrypted(message: &str, id: &str) -> EventBody {
+pub fn advised_encrypted(message: &str, id: &str) -> EventBody {
     let mut block = answer(id, "", false, None);
     if let ContentBlock::ToolResult { encrypted, .. } = &mut block {
         *encrypted = true;
@@ -65,7 +63,7 @@ pub(crate) fn advised_encrypted(message: &str, id: &str) -> EventBody {
 }
 
 /// Why asking the advisor failed.
-pub(crate) fn advice_failed(message: &str, id: &str, text: &str) -> EventBody {
+pub fn advice_failed(message: &str, id: &str, text: &str) -> EventBody {
     from_the_agent(message, answer(id, text, true, None))
 }
 
@@ -79,12 +77,12 @@ fn from_the_agent(message: &str, block: ContentBlock) -> EventBody {
     }
 }
 
-pub(crate) fn tool_result(id: &str, text: &str) -> EventBody {
+pub fn tool_result(id: &str, text: &str) -> EventBody {
     tool_answer(id, text, false, None)
 }
 
 /// A result that's only images, as a read of one is.
-pub(crate) fn tool_images(id: &str, images: Vec<Attachment>) -> EventBody {
+pub fn tool_images(id: &str, images: Vec<Attachment>) -> EventBody {
     let mut event = tool_answer(id, "", false, None);
     if let EventBody::AgentUser { blocks, .. } = &mut event
         && let [ContentBlock::ToolResult { images: shown, .. }] = blocks.as_mut_slice()
@@ -95,17 +93,17 @@ pub(crate) fn tool_images(id: &str, images: Vec<Attachment>) -> EventBody {
 }
 
 /// A result that says the call failed.
-pub(crate) fn tool_failed(id: &str, text: &str) -> EventBody {
+pub fn tool_failed(id: &str, text: &str) -> EventBody {
     tool_answer(id, text, true, None)
 }
 
 /// The result of a call the person denied, which tells the agent `text`, with what they `said`, if anything.
-pub(crate) fn tool_denied(id: &str, text: &str, said: Option<&str>) -> EventBody {
+pub fn tool_denied(id: &str, text: &str, said: Option<&str>) -> EventBody {
     EventBody::AgentUser { subagent: None, blocks: vec![fixtures::tool_denied(id, text, said)] }
 }
 
 /// A result that says what the call changed in a file, as Claude's edits and writes do.
-pub(crate) fn tool_changed(id: &str, text: &str, change: FileChange) -> EventBody {
+pub fn tool_changed(id: &str, text: &str, change: FileChange) -> EventBody {
     tool_answer(id, text, false, Some(change))
 }
 
@@ -123,7 +121,7 @@ fn answer(id: &str, text: &str, is_error: bool, changed: Option<FileChange>) -> 
 
 /// The end of a turn that went well. Opus answered, and read most of what it was sent from the cache, as a turn that
 /// reads around a repository does.
-pub(crate) fn finished_turn(seconds: u64, cost_usd: f64) -> EventBody {
+pub fn finished_turn(seconds: u64, cost_usd: f64) -> EventBody {
     let tokens =
         TokenUsage { input_tokens: 6, output_tokens: 1_840, cache_read_tokens: 412_377, cache_write_tokens: 9_615 };
     EventBody::TurnEnded {
@@ -142,7 +140,7 @@ pub(crate) fn finished_turn(seconds: u64, cost_usd: f64) -> EventBody {
 }
 
 /// A turn that finished saying `reply`, as the CLI ends one, so its copy button has something to copy.
-pub(crate) fn replied(reply: &str, seconds: u64, cost_usd: f64) -> EventBody {
+pub fn replied(reply: &str, seconds: u64, cost_usd: f64) -> EventBody {
     let mut ended = finished_turn(seconds, cost_usd);
     if let EventBody::TurnEnded { result, .. } = &mut ended {
         *result = Some(reply.to_string());
@@ -151,7 +149,7 @@ pub(crate) fn replied(reply: &str, seconds: u64, cost_usd: f64) -> EventBody {
 }
 
 /// `event` as the subagent started by the call `parent` sends it.
-pub(crate) fn within(parent: &str, mut event: EventBody) -> EventBody {
+pub fn within(parent: &str, mut event: EventBody) -> EventBody {
     if let EventBody::Assistant { subagent, .. } | EventBody::AgentUser { subagent, .. } = &mut event {
         *subagent = Some(SubagentId::from(parent));
     }
@@ -159,7 +157,7 @@ pub(crate) fn within(parent: &str, mut event: EventBody) -> EventBody {
 }
 
 /// `event` as a reply from `model`, such as a subagent's from a model other than the agent's.
-pub(crate) fn on(model: &str, mut event: EventBody) -> EventBody {
+pub fn on(model: &str, mut event: EventBody) -> EventBody {
     if let EventBody::Assistant { model: from, .. } = &mut event {
         *from = Some(model.to_string());
     }
@@ -167,7 +165,7 @@ pub(crate) fn on(model: &str, mut event: EventBody) -> EventBody {
 }
 
 /// The agent's word that a subagent started in the background, as the hub records it from the CLI's.
-pub(crate) fn subagent_started(call: &str, kind: &str, description: &str, prompt: &str) -> EventBody {
+pub fn subagent_started(call: &str, kind: &str, description: &str, prompt: &str) -> EventBody {
     EventBody::SubagentStarted {
         call: call.into(),
         subagent: None,
@@ -180,7 +178,7 @@ pub(crate) fn subagent_started(call: &str, kind: &str, description: &str, prompt
 
 /// A task in the background as the hub lists it once the agent has said which call started it: what it's for, and
 /// that call.
-pub(crate) fn task(kind: TaskKind, call: &str, description: &str) -> AgentTask {
+pub fn task(kind: TaskKind, call: &str, description: &str) -> AgentTask {
     AgentTask {
         id: format!("task-{call}").into(),
         description: Some(description.to_string()),
@@ -192,18 +190,18 @@ pub(crate) fn task(kind: TaskKind, call: &str, description: &str) -> AgentTask {
 
 /// The subagents working in the background, each by the call that started it and what it's for, as the hub records
 /// the list once the agent has said which call started each.
-pub(crate) fn subagents_listed(subagents: &[(&str, &str)]) -> EventBody {
+pub fn subagents_listed(subagents: &[(&str, &str)]) -> EventBody {
     let tasks = subagents.iter().map(|(call, description)| task(TaskKind::Subagent, call, description));
     EventBody::AgentTasks { tasks: tasks.collect(), stopped: Vec::new() }
 }
 
 /// The agent's word on how many tokens the conversation of a subagent at work holds.
-pub(crate) fn subagent_context(call: &str, tokens: u64) -> EventBody {
+pub fn subagent_context(call: &str, tokens: u64) -> EventBody {
     EventBody::SubagentContext { subagent: call.into(), tokens }
 }
 
 /// The agent's word that a subagent finished, with its report and how many tokens its conversation held.
-pub(crate) fn subagent_ended(call: &str, report: &str, tokens: u64) -> EventBody {
+pub fn subagent_ended(call: &str, report: &str, tokens: u64) -> EventBody {
     let (outcome, report) = (TaskOutcome::Finished, Some(report.into()));
     EventBody::SubagentEnded { subagent: call.into(), outcome, report, context_tokens: Some(tokens) }
 }

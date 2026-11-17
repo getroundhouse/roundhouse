@@ -1,0 +1,60 @@
+//! A fake hub, which serves a fixed [`World`] over the real protocol, for a test of what the window draws of what a
+//! hub holds, with no hub, worker or agent to wait for.
+
+#![cfg(test)]
+
+use std::path::Path;
+
+use client_core::Daemon;
+use client_core::fake_hub::{self, World};
+use desktop::app::HubSource;
+use gpui_kit::TestAppContext;
+use tempfile::TempDir;
+
+use super::Ui;
+
+/// A directory of its own, with a fake hub listening there. The hub's thread listens until the process ends, since
+/// nothing stops it, which costs a thread a test, and its socket goes with the directory.
+pub(crate) struct FakeHub {
+    _dir: TempDir,
+    hub: HubSource,
+}
+
+impl FakeHub {
+    pub(crate) fn holding(world: World) -> Self {
+        // Under /tmp because of the socket path limit.
+        let dir = tempfile::Builder::new().prefix("fake-").tempdir_in("/tmp").unwrap();
+        let hub = hub_source(dir.path());
+        std::fs::create_dir_all(&hub.paths.data_dir).unwrap();
+        fake_hub::serve(&hub.paths.socket, world);
+        Self { _dir: dir, hub }
+    }
+}
+
+/// Somewhere of its own, with a daemon that doesn't exist, so the app can't start a real hub in its place. The
+/// daemon's path is the same every run, because the app shows it when it can't start one.
+pub(crate) fn hub_source(dir: &Path) -> HubSource {
+    let paths = protocol::paths::resolve(|name| match name {
+        protocol::paths::ENV_HOME => Some(dir.join("home").to_string_lossy().into_owned()),
+        protocol::paths::ENV_WORKSPACES => Some(dir.join("workspaces").to_string_lossy().into_owned()),
+        _ => None,
+    })
+    .unwrap();
+    let daemon = Daemon::in_place("/nonexistent/roundhoused");
+    HubSource {
+        remote: None,
+        paths,
+        daemon,
+        build_number: Some(fake_hub::BUILD_NUMBER),
+        build_version: fake_hub::BUILD,
+    }
+}
+
+impl<'a> Ui<'a> {
+    /// Opens the window on the fake hub, as a stamped build, so with no checkout, and waits for it to connect.
+    pub(crate) fn open_on(cx: &'a mut TestAppContext, fake: &FakeHub) -> Self {
+        let mut ui = Self::open_window(cx, fake.hub.clone(), None);
+        ui.wait_to_connect();
+        ui
+    }
+}

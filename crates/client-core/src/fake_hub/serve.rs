@@ -22,7 +22,8 @@ use super::base_pages::{opened, paged};
 use super::stand_in::{claude, fixed_pairing, status, version};
 use super::world::{LoginSupport, NOW_MS, World};
 
-/// Listens until the process ends. Each screen gets its own socket, so nothing outlives the screen that needs it.
+/// Listens until the process ends, since nothing stops it. Each world gets a socket of its own, so no test reaches
+/// another's.
 pub fn serve(socket: &Path, world: World) {
     let listener = UnixListener::bind(socket).unwrap();
     let world = Arc::new(world);
@@ -109,7 +110,7 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
         R::SessionList(sessions::SessionList { workspace_id }) => reply(C::Sessions(sessions::Sessions {
             sessions: world.sessions.iter().filter(|s| s.workspace_id == workspace_id).cloned().collect(),
         })),
-        // A draft is taken as a hub that keeps it would, though it's left out of the screen's records, which don't
+        // A draft is taken as a hub that keeps it would, though it's left out of the world's records, which don't
         // change. So is an answer being typed.
         R::SessionGet(sessions::SessionGet { id })
         | R::SessionDraft(drafts::SessionDraft { id, .. })
@@ -121,7 +122,7 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
         R::AccountConnect(_) if world.logins == LoginSupport::None => {
             Err(ApiError::new(ErrorCode::Unsupported, "an older hub doesn't keep logins"))
         }
-        // As a hub that started it would answer, as the screen says it stands, though this one keeps no record of it, so
+        // As a hub that started it would answer, as the world says it stands, though this one keeps no record of it, so
         // a screen can show how a sign-in the app started went. The app shows it from the record the answer carries.
         R::GithubSignInStart(github_accounts::GithubSignInStart { id }) => {
             let status = world.sign_in_answer.clone().ok_or_else(|| read_only("change anything"))?;
@@ -129,20 +130,19 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
         }
         // As a hub too old to keep it, so a comment being written is what restarting would lose.
         R::WorkspaceCommentDraft(_) => {
-            Err(ApiError::new(ErrorCode::Unsupported, "the gallery's hub doesn't keep a comment being written"))
+            Err(ApiError::new(ErrorCode::Unsupported, "a fake hub doesn't keep a comment being written"))
         }
         // The same, for what's in the new-workspace dialog.
         R::NewWorkspaceDraftKeep(_)
         | R::NewWorkspaceDraftFileAdd(_)
         | R::NewWorkspaceDraftFileRead(_)
         | R::NewWorkspaceDraftFileRemove(_)
-        | R::NewWorkspaceCreate(_) => Err(ApiError::new(
-            ErrorCode::Unsupported,
-            "the gallery's hub doesn't keep what's in the new-workspace dialog",
-        )),
+        | R::NewWorkspaceCreate(_) => {
+            Err(ApiError::new(ErrorCode::Unsupported, "a fake hub doesn't keep what's in the new-workspace dialog"))
+        }
         R::SessionEnsure(sessions::SessionEnsure { workspace_id, .. }) => {
             let open = world.sessions.iter().rev().find(|s| s.workspace_id == workspace_id && s.closed_at_ms.is_none());
-            reply(C::Session(open.cloned().ok_or_else(|| read_only("give this workspace a chat in the screen"))?))
+            reply(C::Session(open.cloned().ok_or_else(|| read_only("give this workspace a chat"))?))
         }
         R::SessionRead(log::SessionRead { id, from_seq, limit, .. }) => {
             let session = world.session(&id)?;
@@ -300,7 +300,7 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
         | R::PairingWait(_)
         | R::DeviceList
         | R::DeviceRevoke(_)
-        | R::Unknown => Err(ApiError::new(ErrorCode::Unsupported, "the gallery's hub doesn't know that request")),
+        | R::Unknown => Err(ApiError::new(ErrorCode::Unsupported, "a fake hub doesn't know that request")),
     }
 }
 
@@ -329,5 +329,5 @@ fn subscribe_places(
 }
 
 fn read_only(what: &str) -> ApiError {
-    ApiError::new(ErrorCode::Unsupported, format!("the gallery's hub only shows a fixed screen, so it can't {what}"))
+    ApiError::new(ErrorCode::Unsupported, format!("a fake hub holds only what it was made with, so it can't {what}"))
 }

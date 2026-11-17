@@ -10,12 +10,12 @@ use protocol::tail::{Compacting, Tail};
 use serde_json::json;
 
 use super::chats::{finished, looked_around};
-use super::events::{replied, taken, text, thought, tool_result, tool_use, user_prompt};
 use super::frame::{CHAT, OUTLINE};
 use super::screens::FOCUS;
 use super::steps::{Screen, Step, Target};
 use super::worlds::chat_world;
 use client_core::fake_hub::World;
+use client_core::fake_hub::events::{replied, taken, text, thought, tool_result, tool_use, user_prompt};
 
 /// The screens about compacting.
 pub(crate) const SCREENS: &[Screen] = &[

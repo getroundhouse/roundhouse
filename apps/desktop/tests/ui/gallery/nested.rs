@@ -9,9 +9,9 @@ use protocol::model::{Seq, SessionStatus};
 use serde_json::json;
 
 use super::capture;
-use super::events::{taken, text, tool_failed, tool_result, tool_use, user_prompt, within};
 use super::worlds::chat_world;
 use client_core::fake_hub::World;
+use client_core::fake_hub::events::{taken, text, tool_failed, tool_result, tool_use, user_prompt, within};
 
 /// A text the `markdown` crate panics on, which the kit's text view ended the app on.
 const PANICS: &str = "a\n===\n---\nb\n===";

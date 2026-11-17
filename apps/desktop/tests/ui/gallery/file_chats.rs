@@ -8,10 +8,10 @@ use protocol::event::{EventBody, FileChange, Hunk, HunkLine, LineMark};
 use protocol::model::Seq;
 use serde_json::json;
 
-use super::events::{
+use super::tool_chats::ASK;
+use client_core::fake_hub::events::{
     finished_turn, replied, taken, text, tool_changed, tool_failed, tool_images, tool_result, tool_use, user_prompt,
 };
-use super::tool_chats::ASK;
 const SIGNAL: &str = "/workspaces/aspen/crates/signals/src/signal.rs";
 
 const SIGNAL_RS: &str = "//! What a signal on the line shows, and what it tells a train to do.

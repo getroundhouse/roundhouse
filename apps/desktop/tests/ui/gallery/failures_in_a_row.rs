@@ -9,14 +9,16 @@ use protocol::event::{Again, EndedTask, EventBody, TaskKind, TaskOutcome};
 use protocol::model::{EndedWait, Seq, SessionStatus, WaitEnd, WaitEnded};
 use serde_json::json;
 
-use super::events::user_prompt;
-use super::events::{replied, subagent_ended, subagent_started, taken, task, text, tool_result, tool_use};
 use super::failure_chats::{refused, stopped_short};
 use super::frame::CHAT;
 use super::screens::FOCUS;
 use super::steps::{Screen, Step};
 use super::subagent_chats::LAUNCHED;
 use super::worlds::chat_world;
+use client_core::fake_hub::events::user_prompt;
+use client_core::fake_hub::events::{
+    replied, subagent_ended, subagent_started, taken, task, text, tool_result, tool_use,
+};
 use client_core::fake_hub::{NOW_MS, World};
 
 /// The screens about failures in a row.
