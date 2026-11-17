@@ -1,16 +1,17 @@
 //! A database that every migration has run on, so a test's store starts as a copy of it rather than running all of them
-//! from nothing, which was most of what a typical test took.
+//! from nothing, which was most of what a typical test took. The hub's own tests copy it, and through
+//! [`give_a_migrated_database`], so do those that start a hub from outside, before it starts.
 //!
 //! nextest, which CI runs the tests with, starts a process for each test, so one made in each process would be made for
-//! every test. It's kept beside the test binary instead, named for the build of the binary, and each process reads it.
+//! every test. It's kept beside the test binary instead, named for the build of the binary, as
+//! [`process::testing::kept`] has it, and each process reads it.
 
-use std::fs::{self, OpenOptions};
-use std::hash::{DefaultHasher, Hash, Hasher};
+use std::fs;
 use std::io::{ErrorKind, Write};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::LazyLock;
 
-use super::Store;
+use super::{Store, StoreError};
 
 /// What `hub.db` holds once [`Store::open`] has made it and run every migration on it. Read from what this build of the
 /// test binary keeps, or made, and kept for the next process of this build. Any other build is another binary, so it
@@ -20,64 +21,49 @@ use super::Store;
 /// Every copy has the hub ID a migration chose at random for this one, so a test of what that migration gives opens a
 /// store of its own with [`Store::open`].
 static MIGRATED: LazyLock<Vec<u8>> = LazyLock::new(|| {
-    let kept = kept_at();
-    if let Some(bytes) = kept.as_deref().and_then(|path| fs::read(path).ok()) {
+    let kept = process::testing::kept("migrated.db", |path| migrate(path).map_err(std::io::Error::other));
+    if let Some(bytes) = kept.and_then(|path| fs::read(path).ok()) {
         return bytes;
     }
-    let bytes = migrate();
-    if let Some(path) = kept {
-        keep(&path, &bytes);
-    }
+    // Made where nothing else looks, and let go of once it's read.
+    let dir = std::env::temp_dir().join(format!("hub-migrating-{}", std::process::id()));
+    fs::create_dir_all(&dir).unwrap_or_else(|e| panic!("couldn't make {}: {e}", dir.display()));
+    let path = dir.join("hub.db");
+    migrate(&path).unwrap_or_else(|e| panic!("couldn't make a database with every migration: {e}"));
+    let bytes = fs::read(&path).unwrap_or_else(|e| panic!("couldn't read {}: {e}", path.display()));
+    let _ = fs::remove_dir_all(dir);
     bytes
 });
 
 /// Puts a copy of the migrated database at `path`, unless a database is there already, as when a test opens its store
-/// again, or opens one an older build left. [`Store::open`] then finds nothing to migrate in the copy.
+/// again, or opens one an older build left. [`Store::open`] then finds nothing to migrate in the copy. Only this user's,
+/// as the hub makes its own.
 pub(crate) fn copy_to(path: &Path) {
     let migrated: &[u8] = &MIGRATED;
-    match OpenOptions::new().write(true).create_new(true).open(path) {
-        Ok(mut file) => file.write_all(migrated).unwrap(),
+    match private_files::file_options().write(true).create_new(true).open(path) {
+        Ok(mut file) => file.write_all(migrated).unwrap_or_else(|e| panic!("couldn't write {}: {e}", path.display())),
         Err(e) if e.kind() == ErrorKind::AlreadyExists => {}
         Err(e) => panic!("couldn't make {}: {e}", path.display()),
     }
 }
 
-/// Makes the database, and reads it once its store has closed, so what was in its log is in it.
-fn migrate() -> Vec<u8> {
-    let dir = tempfile::tempdir().unwrap();
-    let path = dir.path().join("hub.db");
-    drop(Store::open(&path, &dir.path().join("backups")).unwrap());
-    assert!(!path.with_extension("db-wal").exists(), "the store's log is left beside it, so the database isn't whole");
-    fs::read(&path).unwrap()
+/// Puts a copy of the migrated database where a hub that's to start with `paths` keeps its own, unless one is there, in
+/// a data directory made as the hub, and a client that starts one, make it. The hub then opens it with its real
+/// [`Store::open`], which finds nothing to migrate. For a test that starts a hub from outside and isn't about what the
+/// migrations make, before the hub starts. Every hub given one has the same ID, which a migration chose at random for the database.
+#[cfg(feature = "testing")]
+pub fn give_a_migrated_database(paths: &protocol::paths::Paths) {
+    let dir = &paths.data_dir;
+    private_files::create_dir_all(dir).unwrap_or_else(|e| panic!("couldn't make {}: {e}", dir.display()));
+    copy_to(&paths.database);
 }
 
-/// Where this build of the test binary keeps the database: beside it, named for its size and when it was written, which
-/// a build that changes anything, a migration included, changes. `None` when the binary can't be found.
-fn kept_at() -> Option<PathBuf> {
-    let binary = std::env::current_exe().ok()?;
-    let written = fs::metadata(&binary).ok()?;
-    let mut build = DefaultHasher::new();
-    (written.len(), written.modified().ok()?).hash(&mut build);
-    let name = binary.file_name()?.to_str()?;
-    Some(binary.with_file_name(format!("{name}.{:016x}.migrated.db", build.finish())))
-}
-
-/// Keeps `bytes` at `path` for the processes after this one, and lets go of what earlier builds kept. Written beside it
-/// and renamed into place, so another process reads all of it or none. Nothing kept only means the next process makes
-/// it again, so a write that fails is let be.
-fn keep(path: &Path, bytes: &[u8]) {
-    let (Some(dir), Some(name)) = (path.parent(), path.file_name().and_then(|name| name.to_str())) else { return };
-    let writing = path.with_extension(format!("{}.writing", std::process::id()));
-    if fs::write(&writing, bytes).and_then(|()| fs::rename(&writing, path)).is_err() {
-        let _ = fs::remove_file(&writing);
-        return;
-    }
-    let binary = name.split('.').next().unwrap_or(name);
-    let earlier = fs::read_dir(dir).into_iter().flatten().flatten().map(|entry| entry.path()).filter(|other| {
-        let other_name = other.file_name().and_then(|n| n.to_str()).unwrap_or_default();
-        other != path && other_name.starts_with(&format!("{binary}.")) && other_name.ends_with(".migrated.db")
-    });
-    for other in earlier {
-        let _ = fs::remove_file(other);
-    }
+/// Makes the database at `path`, with what's in its log moved into it once its store has closed. A database made from
+/// nothing has nothing to back up, so nothing is written to the backups it's given.
+fn migrate(path: &Path) -> Result<(), StoreError> {
+    drop(Store::open(path, &path.with_extension("backups"))?);
+    let mut log = path.as_os_str().to_owned();
+    log.push("-wal");
+    assert!(!Path::new(&log).exists(), "the store's log is left beside it, so the database isn't whole");
+    Ok(())
 }

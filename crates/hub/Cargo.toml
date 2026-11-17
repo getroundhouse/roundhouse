@@ -6,9 +6,9 @@ publish.workspace = true
 license.workspace = true
 
 [features]
-# What tests of the hub from outside it need, such as the names it picks from, shorter timers, and a stand-in for
-# GitHub.
-testing = []
+# What tests of the hub from outside it need, such as the names it picks from, shorter timers, a stand-in for GitHub,
+# and a database every migration has run on, which is kept as tests of processes keep what they share.
+testing = ["process/testing"]
 
 [dependencies]
 base64.workspace = true

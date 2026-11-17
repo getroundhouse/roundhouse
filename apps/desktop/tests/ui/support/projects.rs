@@ -5,7 +5,7 @@ use client_core::fake_hub::World;
 use gpui_kit::{ElementId, SharedString, TestAppContext};
 use protocol::model::{RepoId, SessionStatus, WorkspaceId};
 
-use super::{FakeHub, Stack, Ui, git, wait_out_setup};
+use super::{FakeHub, Stack, Ui, wait_out_setup};
 
 /// A project's row in the sidebar.
 pub(crate) fn project_row(repo: &RepoId) -> ElementId {
@@ -18,11 +18,7 @@ pub(crate) fn project_row(repo: &RepoId) -> ElementId {
 pub(crate) fn two_projects<'a>(cx: &'a mut TestAppContext, stack: &Stack) -> (Ui<'a>, [RepoId; 2], [WorkspaceId; 4]) {
     let client = stack.client();
     let other = stack.dir.path().join("other");
-    std::fs::create_dir_all(&other).unwrap();
-    git(&other, &["init", "-q", "-b", "main"]);
-    std::fs::write(other.join("a.txt"), "one\n").unwrap();
-    git(&other, &["add", "."]);
-    git(&other, &["commit", "-qm", "first"]);
+    process::testing::repository_with_a_commit(&other);
     for path in [stack.repo(), other] {
         client.repo_add(path.to_str().unwrap()).unwrap();
     }

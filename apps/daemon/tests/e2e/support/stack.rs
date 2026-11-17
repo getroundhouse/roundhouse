@@ -45,11 +45,9 @@ impl Stack {
             hubs.set(name, value);
         }
         let mut stack = Stack { dir, hub: None, env: hubs };
-        std::fs::create_dir_all(stack.repo()).unwrap();
-        git(&stack.repo(), &["init", "-q", "-b", "main"]);
-        std::fs::write(stack.repo().join("a.txt"), "one\n").unwrap();
-        git(&stack.repo(), &["add", "."]);
-        git(&stack.repo(), &["commit", "-qm", "first"]);
+        process::testing::repository_with_a_commit(&stack.repo());
+        // Its hub makes its data directory and its database from nothing, unlike the window tests' hubs, since what a hub
+        // started by hand makes of them is what `connection::only_this_user_can_reach_the_hub_or_read_its_data` checks.
         stack.start_hub();
         stack
     }
