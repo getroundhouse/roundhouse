@@ -17,7 +17,8 @@ impl Ui<'_> {
         self.wait("the new-workspace dialog", Ui::has_dialog);
     }
 
-    /// Opens the dialog, and creates a workspace with nothing typed.
+    /// Opens the dialog, and creates a workspace with what it holds: nothing, unless the test typed in it before, since
+    /// the dialog keeps its draft when it closes, and the workspace's first chat then has that for its first prompt.
     pub(crate) fn new_workspace(&mut self) -> WorkspaceId {
         self.open_new_workspace();
         self.create_workspace()

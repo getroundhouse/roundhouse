@@ -3,7 +3,7 @@
 use client_core::session_log::Row;
 use dictation::fake::FakeEngine;
 use gpui_kit::{AppContext as _, TestAppContext};
-use protocol::event::EventBody;
+use protocol::event::{ContentBlock, EventBody};
 use protocol::model::SessionStatus;
 
 use super::support::{hearing, hold_option_space, let_go, ready_with, say};
@@ -35,13 +35,20 @@ fn composer_dialog_and_question_answers_pass_their_surrounding_terms_as_hints(cx
     let ws_name = ui.view().records().workspaces().last().unwrap().name.clone();
     ui.input("say:Check `Tokio` runtime");
     ui.press("enter");
+    // The chat's first turn was the dialog's text, which it kept, and that turn ended too, so this waits for the end
+    // of the turn after the reply whose `Tokio` the composer's hints take from the chat.
     ui.wait("the transcript to catch up with the reply", |ui| {
         ui.session_status() == Some(SessionStatus::Idle)
             && ui.transcript().is_some_and(|t| {
                 ui.cx.read_entity(&t, |t, _| {
                     let log = t.log();
                     (0..log.row_count())
-                        .any(|i| matches!(log.row(i), Row::Event(e) if matches!(e.body, EventBody::TurnEnded { .. })))
+                        .filter_map(|i| match log.row(i) {
+                            Row::Event(e) => Some(e),
+                            Row::Unloaded => None,
+                        })
+                        .skip_while(|e| !says_tokio(&e.body))
+                        .any(|e| matches!(e.body, EventBody::TurnEnded { .. }))
                 })
             })
     });
@@ -71,4 +78,10 @@ fn composer_dialog_and_question_answers_pass_their_surrounding_terms_as_hints(cx
             .is_some_and(|draft| draft.answers[0].typed == "Use SQLite in Tokio.")
     });
     assert!(engine.last_hints().words().iter().any(|h| h == "Postgres"));
+}
+
+/// Whether it's the agent's reply naming `Tokio`.
+fn says_tokio(body: &EventBody) -> bool {
+    let EventBody::Assistant { blocks, .. } = body else { return false };
+    blocks.iter().any(|block| matches!(block, ContentBlock::Text { text, .. } if text.contains("`Tokio`")))
 }
