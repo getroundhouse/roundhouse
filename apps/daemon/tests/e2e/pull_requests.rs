@@ -292,7 +292,7 @@ fn a_worker_started_only_to_read_stays_once_a_prompt_wants_it() {
     stack.restart_hub();
     let client = stack.client();
     wait_until("the first to be read again", || gh.views() == views + 1);
-    client.session_prompt(&session.id, "hang:60000", None).unwrap();
+    client.session_prompt(&session.id, "hang", None).unwrap();
     let mut agent = None;
     wait_until("the prompt's agent to start", || {
         agent = started_pid(&support::read_all(&client, &session.id));

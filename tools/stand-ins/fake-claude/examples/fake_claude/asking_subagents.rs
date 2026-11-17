@@ -5,17 +5,13 @@
 //! time. A subagent runs its command if it's allowed, and its task ends either way.
 
 use std::collections::VecDeque;
-use std::sync::mpsc::{Receiver, RecvTimeoutError};
-use std::time::Duration;
+use std::sync::mpsc::{Receiver, RecvError};
 
 use serde_json::{Value, json};
 
 use crate::tools::{asks_before, execute, request_to_run};
 use crate::turn::{Turn, Within, state_event};
 use crate::{Input, Prompt, background, emit};
-
-/// Between one subagent asking and the next starting, so the first is being asked when the second's request comes.
-const ASKS_EVERY: Duration = Duration::from_millis(300);
 
 /// A subagent with a request waiting.
 struct Asking {
@@ -38,13 +34,10 @@ pub(crate) fn start(
 ) -> bool {
     let (count, command) = spec.split_once(':').unwrap();
     assert!(asks_before(command), "{command} runs unasked, so nothing would wait");
-    let mut waiting: Vec<Asking> = Vec::new();
-    let mut to_start = 1..=count.parse::<usize>().unwrap();
-    waiting.extend(to_start.next().map(|n| ask(turn, n, command)));
-    while !waiting.is_empty() || !to_start.is_empty() {
-        match rx.recv_timeout(ASKS_EVERY) {
-            // Nothing came, so the next subagent starts, if there's one.
-            Err(RecvTimeoutError::Timeout) => waiting.extend(to_start.next().map(|n| ask(turn, n, command))),
+    // Each starts as soon as the one before has asked, so all of them ask before any answer is read.
+    let mut waiting: Vec<Asking> = (1..=count.parse::<usize>().unwrap()).map(|n| ask(turn, n, command)).collect();
+    while !waiting.is_empty() {
+        match rx.recv() {
             Ok(Input::Approval(response)) => answer(turn, &mut waiting, &response, command),
             Ok(Input::Interrupt) => {
                 for asking in &waiting {
@@ -54,7 +47,7 @@ pub(crate) fn start(
                 return true;
             }
             Ok(Input::Prompt(prompt) | Input::Resume(prompt)) => queued.push_back(prompt),
-            Ok(Input::Eof) | Err(RecvTimeoutError::Disconnected) => {
+            Ok(Input::Eof) | Err(RecvError) => {
                 *eof = true;
                 return true;
             }

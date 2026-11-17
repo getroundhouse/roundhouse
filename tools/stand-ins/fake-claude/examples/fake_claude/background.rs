@@ -68,16 +68,21 @@ pub(crate) fn start(turn: &mut Turn, call: Call, file: &str) -> bool {
         while !file.exists() {
             std::thread::sleep(POLL);
         }
-        // As long as the file says, if it says a number, so a test can see what the moment before the agent picks up
-        // again is taken for. Anything else it says is the script the agent picks up with, such as a failure.
+        // Once the file it names exists, if it names one, so a test can see what the moment before the agent picks up
+        // again is taken for for as long as it needs. Anything else it says is the script the agent picks up with,
+        // such as a failure.
         let said = std::fs::read_to_string(&file).unwrap_or_default();
         let said = said.trim();
-        let (pause, told) = match said.parse() {
-            Ok(ms) => (Duration::from_millis(ms), None),
-            Err(_) => (Duration::ZERO, Some(said).filter(|said| !said.is_empty())),
+        let (after, told) = match said.strip_prefix("after:") {
+            Some(after) => (Some(PathBuf::from(after)), None),
+            None => (None, Some(said).filter(|said| !said.is_empty())),
         };
         let told = told.map_or_else(|| format!("say:finished {}", file.display()), str::to_string);
-        finished(&config, &out, &id, "completed", told, pause);
+        finished(&config, &out, &id, "completed");
+        while after.as_ref().is_some_and(|after| !after.exists()) {
+            std::thread::sleep(POLL);
+        }
+        pick_up_again(&config, told);
     });
     false
 }
@@ -93,13 +98,16 @@ pub(crate) fn started(config: &Config, out: &Out, id: &str, kind: &'static str, 
     );
 }
 
-/// Ends a task that `completed` or `failed` by itself, taking it out of the list, and has the agent pick up again
-/// `pause` later with `told`, the prompt it gives, as the real CLI tells the agent either way, which starts a turn of its
-/// own, or joins the one that's running.
-pub(crate) fn finished(config: &Config, out: &Out, id: &str, status: &str, told: String, pause: Duration) {
+/// Ends a task that `completed` or `failed` by itself, taking it out of the list. The agent then picks up again, by
+/// [`pick_up_again`].
+pub(crate) fn finished(config: &Config, out: &Out, id: &str, status: &str) {
     notify(config, out, id, status);
     unlisted(config, out, id);
-    std::thread::sleep(pause);
+}
+
+/// Has the agent pick up again with `told`, the prompt it gives, as the real CLI tells the agent a task has ended
+/// either way, which starts a turn of its own, or joins the one that's running.
+pub(crate) fn pick_up_again(config: &Config, told: String) {
     let _ = config.input.send(Input::Resume(Prompt { text: told, uuid: None }));
 }
 

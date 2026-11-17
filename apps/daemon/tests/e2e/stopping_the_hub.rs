@@ -68,8 +68,8 @@ fn a_hub_stop_ends_the_agents_of_a_worker_that_doesnt_stop() {
     let mut stack = Stack::start_with(vec![Timers { shutdown_grace: grace, ..Timers::FOR_TESTS }.env()]);
     let client = stack.client();
     let (_, session) = stack.workspace(&client);
-    // Long enough to outlast the test. An agent whose input closes finishes its turn first.
-    client.session_prompt(&session.id, "hang:120000", None).unwrap();
+    // Until the turn is stopped. An agent whose input closes finishes its turn first, so it never exits by itself.
+    client.session_prompt(&session.id, "hang", None).unwrap();
     let mut agent = None;
     wait_until("the agent to start", || {
         agent = latest_started_pid(&read_all(&client, &session.id));

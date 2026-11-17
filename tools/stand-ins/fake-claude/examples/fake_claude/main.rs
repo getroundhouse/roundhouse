@@ -3,21 +3,22 @@
 //! worker relies on. `crates/agents/tests/claude/contract/mod.rs` holds the real captures, and
 //! `tools/smoke/real-claude.sh` runs the whole stack against the real thing.
 //!
-//! A prompt is a script: `;`-separated commands, each run in order.
+//! A prompt is a script: `;`-separated commands, each run in order. Nothing in one waits a set time, so a test can't
+//! race the agent's clock: a command that works while a test acts works until a file the test makes exists. One
+//! that names a command it doesn't have, as `NAME:` does, exits with code 2, naming it on stderr. Anything else, such as
+//! a prompt a person might type, it takes in and answers with nothing.
 //!   say:TEXT        Stream TEXT in chunks, then send the finished message.
-//!   slow:N:TEXT     Same, sending TEXT N times, numbered from 0, as `TEXT0 TEXT1 `, a chunk every 100 ms, so tests
-//!                   can act mid-stream.
-//!   slow-until:FILE:TEXT  Same, until FILE exists, so a test can act mid-stream for as long as it needs, and then has
-//!                   the message finish at once. A prompt that reaches the agent meanwhile makes `FILE.prompted` once
-//!                   it's queued to be taken into the turn, so a test can wait for that before making FILE. Each
-//!                   chunk that has gone adds a line to `FILE.said`, so a test can wait for it to have said more. See
-//!                   `waiting.rs`.
 //!   burst:N         Same, sending N numbered chunks as fast as possible.
 //!   whole:TEXT      As `say`, in one chunk, so a test that only needs what was said can say a great deal quickly.
 //!   prose:N:SEED    Say N paragraphs of made-up prose, the same for the same SEED, as fast as possible.
-//!   think:N:TEXT    Think, the way `slow` speaks, as the real CLI does with `--thinking-display summarized`.
-//!   think-until:FILE:TEXT  The same, the way `slow-until` speaks, and says when a prompt has reached it, and how much
-//!                   it has said, the same way.
+//!   slow-until:FILE:TEXT  Stream TEXT again and again, numbered from 0, as `TEXT0 TEXT1 `, until FILE exists, so a test
+//!                   can act mid-stream for as long as it needs, and then has the message finish at once. A prompt that
+//!                   reaches the agent meanwhile makes `FILE.prompted` once it's queued to be taken into the turn, so a
+//!                   test can wait for that before making FILE. Each chunk that has gone adds a line to `FILE.said`, so
+//!                   a test can wait for it to have said more, rather than for a number of chunks, which is only a
+//!                   pace. See `waiting.rs`.
+//!   think-until:FILE:TEXT  Think, the way `slow-until` speaks, as the real CLI does with `--thinking-display
+//!                   summarized`, and say when a prompt has reached it, and how much it has said, the same way.
 //!   ponder:N:SEED   Think N paragraphs of the same made-up prose, as fast as possible.
 //!   tool:COMMAND    Ask for approval unless in full access, as the real CLI does in plan mode for a call that
 //!                   writes, then run COMMAND with `sh -c`. A COMMAND that removes whatever another prints, with
@@ -25,9 +26,11 @@
 //!   edit:N          Edit `notes.txt`, changing each of N lines, without asking or touching the disk. The result
 //!                   comes back without a patch, so the edit is drawn from what it replaced.
 //!   edit:N:WIDTH    Same, with each line at least WIDTH characters long.
-//!   hang:MS         A tool that takes MS milliseconds. Cancelling stops it.
-//!   hang-until:FILE The same, until FILE exists, so a test can catch the agent at work for as long as it needs, and
-//!                   says when a prompt has reached it as `slow-until` does.
+//!   hang            A tool that runs until the turn is stopped, for a test that needs the agent at work until it ends
+//!                   it. Input closing doesn't end it, as it doesn't end the real CLI's tool, which the CLI waits for
+//!                   before it finishes its turn and exits, so only stopping the turn or the process ends it.
+//!   hang-until:FILE The same, until FILE exists, so a test can catch the agent at work for as long as it needs and
+//!                   then have it carry on, and says when a prompt has reached it as `slow-until` does.
 //!   request-until:FILE  Wait for the model's answer, saying nothing, until FILE exists, as a slow request does, so
 //!                   a test sees what's drawn before it comes, and says when a prompt has reached it as `slow-until`
 //!                   does.
@@ -49,20 +52,21 @@
 //!                   file given in the prompt by its name and first line, and each file given by its path by its
 //!                   name and size on disk. The script is the prompt's last text block.
 //!   background:FILE Start a background task, and go on without it. Once FILE exists it finishes, and the agent
-//!                   picks up again by itself to say `finished FILE`, in a turn that starts with `init` alone,
-//!                   after as many milliseconds as FILE says, if it says any. If FILE says a script instead, the
-//!                   agent picks up with that, such as `fail:rate_limit`. It's read as soon as it exists, so it has
-//!                   to appear whole. SIGTERM stops it, and lists none left.
+//!                   picks up again by itself to say `finished FILE`, in a turn that starts with `init` alone. If FILE
+//!                   says `after:OTHER`, it picks up only once OTHER exists too, so a test can catch the moment
+//!                   between. If FILE says a script instead, the agent picks up with that, such as `fail:rate_limit`.
+//!                   It's read as soon as it exists, so it has to appear whole. SIGTERM stops it, and lists none left.
 //!   monitor:FILE    The same, started by a `Monitor` call, so it's a monitor.
-//!   agents-ask:N:COMMAND  Start N subagents in the background, `Check 1` to `Check N`, each of which asks to run
-//!                   COMMAND before any is answered, as `tool:` would ask, and runs it if it's allowed.
-//!   agent:TEXT      Start a subagent for TEXT in the background, asked TEXT with a full stop, which makes a call
-//!                   and reports a second later.
-//!   agent-foreground:TEXT  The same in the foreground, so the call's result waits for its report.
-//!   agent-calls:N:TEXT  The same in the background, making N calls and reporting at once, for a test that needs
-//!                   only a subagent that has finished, or one whose work is long enough to scroll.
-//!   agent-until:FILE:TEXT  The same in the background, working until FILE exists, so a test can catch it at work, and
-//!                   says when a prompt has reached it as `slow-until` does.
+//!   agents-ask:N:COMMAND  Start N subagents in the background, `Check 1` to `Check N`, each as soon as the one before
+//!                   has asked, each of which asks to run COMMAND before any is answered, as `tool:` would ask, and
+//!                   runs it if it's allowed.
+//!   agent-calls:N:TEXT  Start a subagent for TEXT in the background, asked TEXT with a full stop, which makes N calls
+//!                   and reports at once, for a test that needs only a subagent that has finished, or one whose work
+//!                   is long enough to scroll.
+//!   agent-until:FILE:TEXT  The same, making one call, and writing the first piece of its report, `There's `, and the
+//!                   rest once FILE exists, so a test can catch it at work, and as it writes, and says when a prompt
+//!                   has reached it as `slow-until` does.
+//!   agent-foreground-until:FILE:TEXT  The same in the foreground, so the call's result waits for its report.
 //!   read:FILE       Read FILE, a PNG, as the real CLI reads an image: as an image block in the result, again in its
 //!                   record of the read, and then a line for the model saying how it shrank it.
 //!   advise          Ask the advisor, as the real CLI does, and get back a reply encrypted for the model alone.
@@ -334,8 +338,8 @@ fn control(out: &Out, value: &Value, conversation: &Path) -> Option<Input> {
     None
 }
 
-/// Waits without blocking on input, so a turn notices interrupts and later prompts as they arrive.
-/// Returns true if the turn should stop.
+/// Waits for input for as long as `wait` at most, so a turn notices interrupts and later prompts as they arrive while
+/// it polls for what it waits on. Returns true if the turn should stop.
 fn pause(rx: &Receiver<Input>, wait: Duration, queued: &mut VecDeque<Prompt>, eof: &mut bool) -> bool {
     match rx.recv_timeout(wait) {
         Ok(Input::Interrupt) => true,
@@ -354,11 +358,6 @@ fn pause(rx: &Receiver<Input>, wait: Duration, queued: &mut VecDeque<Prompt>, eo
             false
         }
         Ok(Input::Approval(_)) | Err(RecvTimeoutError::Timeout) => false,
-        // recv_timeout returns at once from here on, and the time still has to pass.
-        Err(RecvTimeoutError::Disconnected) => {
-            *eof = true;
-            std::thread::sleep(wait);
-            false
-        }
+        Err(RecvTimeoutError::Disconnected) => unreachable!("`Config` holds a sender for as long as the agent runs"),
     }
 }

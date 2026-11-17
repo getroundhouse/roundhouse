@@ -1,7 +1,7 @@
 use super::prose;
 use super::writing::{Block, Turn, message_id};
 use crate::tools::{ask_questions, edit_file, present_plan, run_tool};
-use crate::waiting::{WaitingOn, hang, pause_until, until};
+use crate::waiting::{hang, pause_until_made, until};
 use crate::{
     Config, Input, Out, Prompt, advisor, asking_subagents, background, cache, current_mode, current_model, emit, fail,
     lifecycle, mcp, read, subagent,
@@ -12,6 +12,10 @@ use std::os::unix::process::CommandExt as _;
 use std::path::Path;
 use std::sync::mpsc::Receiver;
 use std::time::Duration;
+
+/// How often `slow-until` and `think-until` say another chunk while they look for their file. Only a pace, so they
+/// don't say a great deal while a test catches up: a test waits for `FILE.said`, never for a number of chunks.
+const UNTIL_POLL: Duration = Duration::from_millis(100);
 
 pub(crate) fn state_event(config: &Config, out: &Out, state: &str) {
     emit(out, json!({"type":"system","subtype":"session_state_changed","state":state,"session_id":config.session_id}));
@@ -146,21 +150,11 @@ pub(crate) fn run_command(
     if let Some(text) = command.strip_prefix("whole:") {
         return turn.say(Block::Text, [text.to_string()], Duration::ZERO, rx, queued, eof);
     }
-    if let Some(rest) = command.strip_prefix("slow:") {
-        let (count, text) = rest.split_once(':').unwrap();
-        let chunks = Vec::from_fn(count.parse().unwrap(), |i| format!("{text}{i} "));
-        return turn.say(Block::Text, chunks, Duration::from_millis(100), rx, queued, eof);
-    }
     if let Some(rest) = command.strip_prefix("slow-until:") {
-        return turn.say(Block::Text, until(rest), Duration::from_millis(100), rx, queued, eof);
+        return turn.say(Block::Text, until(rest), UNTIL_POLL, rx, queued, eof);
     }
     if let Some(rest) = command.strip_prefix("think-until:") {
-        return turn.say(Block::Thinking, until(rest), Duration::from_millis(100), rx, queued, eof);
-    }
-    if let Some(rest) = command.strip_prefix("think:") {
-        let (count, text) = rest.split_once(':').unwrap();
-        let chunks = Vec::from_fn(count.parse().unwrap(), |i| format!("{text}{i} "));
-        return turn.say(Block::Thinking, chunks, Duration::from_millis(100), rx, queued, eof);
+        return turn.say(Block::Thinking, until(rest), UNTIL_POLL, rx, queued, eof);
     }
     if let Some(count) = command.strip_prefix("burst:") {
         let chunks = Vec::from_fn(count.parse().unwrap(), |i| format!("{i} "));
@@ -200,17 +194,14 @@ fn act(turn: &mut Turn, command: &str, rx: &Receiver<Input>, queued: &mut VecDeq
     if let Some(size) = command.strip_prefix("edit:") {
         return edit_file(turn, size);
     }
-    if let Some(ms) = command.strip_prefix("hang:") {
-        let total = Duration::from_millis(ms.parse().unwrap());
-        return hang(turn, |waited| waited >= total, rx, queued, eof);
+    if command == "hang" {
+        return hang(turn, None, rx, queued, eof);
     }
     if let Some(file) = command.strip_prefix("hang-until:") {
-        let waiting = WaitingOn::file(Path::new(file));
-        return hang(turn, move |_| waiting.made(), rx, queued, eof);
+        return hang(turn, Some(Path::new(file)), rx, queued, eof);
     }
     if let Some(file) = command.strip_prefix("request-until:") {
-        let waiting = WaitingOn::file(Path::new(file));
-        return pause_until(|_| waiting.made(), rx, queued, eof);
+        return pause_until_made(Path::new(file), rx, queued, eof);
     }
     if let Some(error) = command.strip_prefix("fail:") {
         return fail::request(turn, error);
@@ -235,14 +226,25 @@ fn act(turn: &mut Turn, command: &str, rx: &Receiver<Input>, queued: &mut VecDeq
     }
     if let Some(file) = command.strip_prefix("read:") {
         read::image(turn, file);
-    }
-    if let Some(tool) = command.strip_prefix("mcp:") {
+    } else if let Some(tool) = command.strip_prefix("mcp:") {
         mcp::call(turn, tool);
-    }
-    if let Some(reply) = advisor::Reply::read(command) {
+    } else if let Some(reply) = advisor::Reply::read(command) {
         advisor::ask(turn, &reply);
+    } else {
+        refuse_if_a_command(command);
     }
     false
+}
+
+/// Ends the agent, naming the command, if `command` names one it doesn't have, as `NAME:` does, so a script that asks
+/// for what it doesn't do, such as a command it no longer has, fails the test rather than passing without it. Anything
+/// else is words, such as a prompt a person might type, which it takes in and answers with nothing.
+fn refuse_if_a_command(command: &str) {
+    let Some((name, _)) = command.split_once(':') else { return };
+    if !name.is_empty() && name.chars().all(|c| c.is_ascii_lowercase() || c == '-') {
+        eprintln!("fake_claude: there's no command `{name}:`, as in `{command}`");
+        std::process::exit(2);
+    }
 }
 
 /// Never interrupted, since what it leaves behind is the point.

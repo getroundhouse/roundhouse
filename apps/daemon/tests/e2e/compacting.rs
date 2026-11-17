@@ -57,7 +57,7 @@ fn asking_to_compact_before_any_conversation_or_while_the_agent_is_on_a_turn_is_
     let conflict = |refused: &ClientError| matches!(refused, ClientError::Api(e) if e.code == ErrorCode::Conflict);
 
     let before_any = client.session_compact(&session.id, None).unwrap_err();
-    client.session_prompt(&session.id, "hang:60000", None).unwrap();
+    client.session_prompt(&session.id, "hang", None).unwrap();
     wait_until("the agent to be working", || client.session_get(&session.id).unwrap().status == SessionStatus::Running);
     let on_a_turn = client.session_compact(&session.id, None).unwrap_err();
 

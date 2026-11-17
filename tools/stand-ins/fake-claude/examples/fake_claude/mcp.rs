@@ -208,7 +208,8 @@ fn follow(config: &Config, out: &Out, followed: Followed, mut poll: Duration) {
             };
             let told = format!("say:{}", said.unwrap_or_default().lines().next().unwrap_or_default().replace(';', ","));
             change_kept(&config, |kept| kept.retain(|other| other.id != followed.id));
-            return background::finished(&config, &out, &followed.id, status, told, Duration::ZERO);
+            background::finished(&config, &out, &followed.id, status);
+            return background::pick_up_again(&config, told);
         }
     });
 }

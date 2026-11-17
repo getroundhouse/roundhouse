@@ -88,7 +88,7 @@ fn a_forced_archive_stops_a_running_agent() {
     let stack = Stack::start();
     let client = stack.client();
     let (workspace, session) = stack.workspace(&client);
-    client.session_prompt(&session.id, "hang:60000", None).unwrap();
+    client.session_prompt(&session.id, "hang", None).unwrap();
     let mut agent_pid = None;
     wait_until("the tool to start", || {
         let events = read_all(&client, &session.id);

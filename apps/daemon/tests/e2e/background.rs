@@ -10,7 +10,8 @@ use protocol::event::{EventBody, SessionEvent, TaskKind};
 use protocol::model::{SessionId, SessionStatus};
 
 use crate::support::{
-    Stack, assistant_text, is_alive, read_all, signal, started_pid, wait_for_status, wait_for_turn_end, wait_until,
+    Gate, Stack, assistant_text, is_alive, read_all, signal, started_pid, wait_for_status, wait_for_turn_end,
+    wait_until,
 };
 
 #[test]
@@ -68,20 +69,22 @@ fn several_tasks_ending_together_leave_the_chat_idle_with_none_listed() {
 }
 
 /// Starts work in the background that finishes once `done` exists, waits until the turn has ended with it going, and
-/// then has it finish, with the agent picking up again by itself `pause` after.
-fn finish_and_pause(stack: &Stack, client: &Client, session_id: &SessionId, pause: Duration) {
+/// then has it finish, with the agent picking up again by itself only once the gate this returns is opened.
+fn finish_and_hold(stack: &Stack, client: &Client, session_id: &SessionId) -> Gate {
     let done = stack.path("done");
     client.session_prompt(session_id, &format!("background:{}", done.display()), None).unwrap();
     wait_for_status(client, session_id, SessionStatus::Background);
-    // Moved into place whole, so the agent can't find it before it says how long.
-    let said = stack.path("pause");
-    std::fs::write(&said, pause.as_millis().to_string()).unwrap();
+    let picks_up = Gate::new(stack, "picks-up");
+    // Moved into place whole, so the agent can't find it before it says what it waits for.
+    let said = stack.path("after");
+    std::fs::write(&said, format!("after:{picks_up}")).unwrap();
     std::fs::rename(&said, &done).unwrap();
     wait_until("the work in the background to finish", || {
         read_all(client, session_id)
             .iter()
             .any(|event| matches!(&event.body, EventBody::AgentTasks { tasks, .. } if tasks.is_empty()))
     });
+    picks_up
 }
 
 /// Between its work in the background finishing and the turn it starts to take that in, nothing has said the agent
@@ -92,10 +95,11 @@ fn the_agent_is_at_work_from_its_work_in_the_background_finishing_until_it_picks
     let client = stack.client();
     let (_, session) = stack.workspace(&client);
 
-    finish_and_pause(&stack, &client, &session.id, Duration::from_millis(1500));
+    let picks_up = finish_and_hold(&stack, &client, &session.id);
 
     assert_eq!(client.session_get(&session.id).unwrap().status, SessionStatus::Background);
     assert_eq!(client.hub_status().unwrap().running_sessions, 1);
+    picks_up.open();
     let events = wait_for_turn_end(&client, &session.id, 2);
     assert!(assistant_text(&events).contains("finished"), "{}", assistant_text(&events));
     assert_eq!(client.session_get(&session.id).unwrap().status, SessionStatus::Idle);
@@ -105,14 +109,14 @@ fn the_agent_is_at_work_from_its_work_in_the_background_finishing_until_it_picks
 /// agent starts after that is a turn all the same.
 #[test]
 fn an_agent_that_takes_too_long_to_pick_up_again_is_taken_to_be_idle_and_its_turn_is_still_one() {
+    // Long enough for the test to see the chat still at work first, as `the_agent_is_at_work_…` above does.
     let within = Duration::from_millis(1500);
     let stack = Stack::start_with(vec![Timers { picks_up_within: within, ..Timers::FOR_TESTS }.env()]);
     let client = stack.client();
     let (_, session) = stack.workspace(&client);
 
-    // Twice as long, so the test has as long to see the chat still at work, and then as long to see it idle with one
-    // turn before the agent picks up again, as `the_agent_is_at_work_…` above has.
-    finish_and_pause(&stack, &client, &session.id, within * 2);
+    // The agent picks up again only once the test has seen the chat idle with one turn.
+    let picks_up = finish_and_hold(&stack, &client, &session.id);
     assert_eq!(client.session_get(&session.id).unwrap().status, SessionStatus::Background);
     wait_for_status(&client, &session.id, SessionStatus::Idle);
 
@@ -120,6 +124,7 @@ fn an_agent_that_takes_too_long_to_pick_up_again_is_taken_to_be_idle_and_its_tur
     let idle = read_all(&client, &session.id);
     assert_eq!(idle.iter().filter(|event| from_the_hub(event)).count(), 1, "{idle:#?}");
     assert_eq!(idle.iter().filter(|event| matches!(event.body, EventBody::TurnEnded { .. })).count(), 1);
+    picks_up.open();
     let events = wait_for_turn_end(&client, &session.id, 2);
     assert!(assistant_text(&events).contains("finished"), "{}", assistant_text(&events));
     assert_eq!(client.session_get(&session.id).unwrap().status, SessionStatus::Idle);
