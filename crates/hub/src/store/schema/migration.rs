@@ -6,6 +6,15 @@ use rusqlite::Connection;
 use std::path::Path;
 use tracing::info;
 
+/// One step from one schema to the next: SQL, or Rust for one that SQL can't say well, such as rewriting what's
+/// stored from one form to another. Each runs in a transaction of its own, which commits only once it's done, so one
+/// that fails part way leaves the database as the step before left it.
+#[derive(Clone, Copy)]
+pub(super) enum Migration {
+    Sql(&'static str),
+    Rust(fn(&rusqlite::Transaction<'_>) -> Result<(), StoreError>),
+}
+
 pub(crate) fn open_connection(path: &Path) -> rusqlite::Result<Connection> {
     let conn = Connection::open(path)?;
     conn.pragma_update(None, "journal_mode", "WAL")?;
@@ -39,7 +48,7 @@ pub(crate) fn migrate_to(conn: &mut Connection, backups_dir: &Path, target: usiz
 pub(super) fn migrate_through(
     conn: &mut Connection,
     backups_dir: &Path,
-    migrations: &[&str],
+    migrations: &[Migration],
 ) -> Result<(), StoreError> {
     let version = schema_version(conn)?;
     if version > migrations.len() {
@@ -56,7 +65,10 @@ pub(super) fn migrate_through(
     }
     for (reached, migration) in (1_i64..).zip(migrations).skip(version) {
         let tx = conn.transaction()?;
-        tx.execute_batch(migration)?;
+        match migration {
+            Migration::Sql(sql) => tx.execute_batch(sql)?,
+            Migration::Rust(migrate) => migrate(&tx)?,
+        }
         tx.pragma_update(None, "user_version", reached)?;
         tx.commit()?;
     }

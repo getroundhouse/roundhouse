@@ -23,6 +23,8 @@ pub(crate) use before::{
     BEFORE_USER_ACTIVITY, BEFORE_WAITING_ON, BEFORE_WORKSPACE_ACTIVITY,
 };
 #[cfg(test)]
+use migration::Migration;
+#[cfg(test)]
 use migrations::MIGRATIONS;
 
 #[cfg(test)]
