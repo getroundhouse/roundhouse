@@ -31,7 +31,7 @@ fn a_hub_started_with_every_signal_blocked_still_works() {
             Ok(())
         });
     }
-    stack.hub = Some(command.spawn().unwrap());
+    stack.hub = Some(command.spawn().unwrap().into());
     wait_until("the hub to accept connections", || Client::connect(&stack.socket(), "test").is_ok());
     let client = stack.client();
     let repo = client.repo_add(stack.repo().to_str().unwrap()).unwrap();
@@ -112,7 +112,7 @@ fn a_hub_started_through_a_link_stays_on_its_version_when_the_link_moves() {
     std::fs::write(stack.path("broken"), "#!/bin/sh\nexit 1\n").unwrap();
     install_executable(&stack.path("broken"), &new.join("roundhoused"));
     symlink(&old, &current).unwrap();
-    stack.hub = Some(stack.command_at(&current.join("roundhoused")).spawn().unwrap());
+    stack.hub = Some(stack.command_at(&current.join("roundhoused")).spawn().unwrap().into());
     wait_until("the hub to accept connections", || Client::connect(&stack.socket(), "test").is_ok());
 
     std::fs::remove_file(&current).unwrap();
@@ -148,7 +148,7 @@ fn a_stamped_build_runs_its_hub_from_a_copy_that_updating_the_app_leaves_alone()
     assert!(command.starts_with(&format!("{} hub", copy.display())), "{command}");
 
     // The same file, started by the stack, so the test has the hub's process to wait for once it's stopped.
-    stack.hub = Some(stack.command_at(&copy).spawn().unwrap());
+    stack.hub = Some(stack.command_at(&copy).spawn().unwrap().into());
     wait_until("the hub to accept connections", || Client::connect(&stack.socket(), "test").is_ok());
     // The update, with a daemon that can run neither a hub nor a worker.
     std::fs::write(stack.path("broken"), "#!/bin/sh\nexit 1\n").unwrap();

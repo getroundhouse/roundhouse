@@ -131,7 +131,7 @@ fn the_agent_does_not_inherit_a_parent_sessions_identity() {
     stack.kill_hub();
     let mut command = stack.command();
     command.env("CLAUDECODE", "1").env("CLAUDE_CODE_SESSION_ID", "parent").env("ANTHROPIC_API_KEY", "kept");
-    stack.hub = Some(command.spawn().unwrap());
+    stack.hub = Some(command.spawn().unwrap().into());
     wait_until("the hub", || Client::connect(&stack.socket(), "test").is_ok());
 
     let client = stack.client();

@@ -4,7 +4,6 @@
 
 use std::path::PathBuf;
 use std::process::Command;
-use std::time::{Duration, Instant};
 
 use client_core::ClientError;
 use protocol::client::ErrorCode;
@@ -12,8 +11,8 @@ use protocol::event::{ContentBlock, EventBody};
 use protocol::model::{PORTS_PER_WORKSPACE, Seq};
 
 use crate::support::{
-    Gate, Stack, assistant_text, commit_settings, git, is_alive, parent_of, read_all, signal, wait_for_setup,
-    wait_for_turn_end, wait_until,
+    Gate, Stack, assistant_text, commit_settings, git, is_alive, parent_of, patient_with_workers, read_all, signal,
+    wait_for_setup, wait_for_turn_end, wait_until,
 };
 
 #[test]
@@ -175,7 +174,7 @@ fn wait_for_pid(what: &str, pattern: &str) -> u32 {
 
 #[test]
 fn a_setup_script_stops_with_its_hub_and_with_a_killed_worker() {
-    let mut stack = Stack::start();
+    let mut stack = Stack::start_with(vec![patient_with_workers().env()]);
     // Unique to this run, since another checkout's can be running at once, so it finds only the script this run
     // started. It's once found, and then followed by its PID.
     let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap();
@@ -186,12 +185,10 @@ fn a_setup_script_stops_with_its_hub_and_with_a_killed_worker() {
     let (workspace, _) = stack.workspace(&client);
     let script = wait_for_pid("the script to start", &needle);
 
-    // A clean stop, promptly, and not after the hub gives up waiting on its worker.
-    let stopping = Instant::now();
+    // A clean stop, long before the hub would give up waiting on its worker.
     client.hub_shutdown().unwrap();
     let mut hub = stack.hub.take().unwrap();
     wait_until("the hub to exit", || !matches!(hub.try_wait(), Ok(None)));
-    assert!(stopping.elapsed() < Duration::from_secs(8), "took {:?}", stopping.elapsed());
     wait_until("the script to stop with it", || !is_alive(script));
     drop(client);
 

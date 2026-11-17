@@ -1,6 +1,7 @@
 //! Signalling the processes a stack runs, asking about them, and stopping its hub.
 
-use std::process::Command;
+use std::ops::{Deref, DerefMut};
+use std::process::{Child, Command};
 use std::time::Duration;
 
 use super::Stack;
@@ -20,6 +21,40 @@ pub(crate) use process::testing::is_running as is_alive;
 pub(crate) fn parent_of(pid: u32) -> u32 {
     let out = Command::new("ps").args(["-o", "ppid=", "-p", &pid.to_string()]).output().unwrap();
     String::from_utf8_lossy(&out.stdout).trim().parse().unwrap()
+}
+
+/// A hub a stack started. Dropped while it's still running, it's killed, and waited for, so it's never left behind,
+/// such as by a test that took it from the stack to see it exit, and failed first. Its workers and agents go as the
+/// stack is dropped, after it, by what they recorded.
+pub(crate) struct Hub(Child);
+
+impl From<Child> for Hub {
+    fn from(child: Child) -> Self {
+        Self(child)
+    }
+}
+
+impl Deref for Hub {
+    type Target = Child;
+
+    fn deref(&self) -> &Child {
+        &self.0
+    }
+}
+
+impl DerefMut for Hub {
+    fn deref_mut(&mut self) -> &mut Child {
+        &mut self.0
+    }
+}
+
+impl Drop for Hub {
+    fn drop(&mut self) {
+        if matches!(self.0.try_wait(), Ok(None)) {
+            let _ = self.0.kill();
+            let _ = self.0.wait();
+        }
+    }
 }
 
 impl Stack {
@@ -44,15 +79,11 @@ impl Stack {
     }
 
     /// With SIGTERM, which stops its workers and their agents, so the next hub starts the next agent afresh, and waits
-    /// for it to exit, or kills it if it takes too long.
+    /// for it to exit, or kills it, as dropping it does, if it takes too long.
     pub(crate) fn stop_hub(&mut self) {
         let Some(mut hub) = self.hub.take() else { return };
         terminate(hub.id());
-        if waiting::thread::up_to(Duration::from_secs(10), || !matches!(hub.try_wait(), Ok(None))) {
-            return;
-        }
-        let _ = hub.kill();
-        let _ = hub.wait();
+        waiting::thread::up_to(Duration::from_secs(10), || !matches!(hub.try_wait(), Ok(None)));
     }
 
     /// Each instance's worker, and the agents it recorded, with no hub to stop them, whichever provider has it.

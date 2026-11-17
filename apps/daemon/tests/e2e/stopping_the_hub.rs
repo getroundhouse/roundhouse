@@ -2,20 +2,20 @@
 
 #![cfg(test)]
 
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use hub::Timers;
 use protocol::event::EventBody;
 use protocol::model::SessionStatus;
 
 use crate::support::{
-    Stack, TIMEOUT, assistant_text, is_alive, latest_started_pid, parent_of, read_all, signal, wait_for_turn_end,
-    wait_until,
+    Stack, TIMEOUT, assistant_text, is_alive, latest_started_pid, parent_of, patient_with_workers, read_all, signal,
+    wait_for_turn_end, wait_until,
 };
 
 #[test]
 fn a_clean_hub_stop_stops_workers_and_agents_and_the_next_hub_resumes() {
-    let mut stack = Stack::start();
+    let mut stack = Stack::start_with(vec![patient_with_workers().env()]);
     let client = stack.client();
     let (_, session) = stack.workspace(&client);
     client.session_prompt(&session.id, "say:first", None).unwrap();
@@ -28,13 +28,11 @@ fn a_clean_hub_stop_stops_workers_and_agents_and_the_next_hub_resumes() {
         })
         .unwrap();
 
-    let stopping = Instant::now();
     client.hub_shutdown().unwrap();
     let mut hub = stack.hub.take().unwrap();
+    // Long before the hub would give up on a stuck worker, so this was a clean stop.
     wait_until("the hub to exit", || !matches!(hub.try_wait(), Ok(None)));
     assert!(!is_alive(agent_pid));
-    // Well under the 15 s the hub waits for a stuck worker, so this was a clean stop.
-    assert!(stopping.elapsed() < Duration::from_secs(8), "took {:?}", stopping.elapsed());
     assert!(!stack.socket().exists(), "the socket should be removed");
 
     stack.start_hub();
@@ -48,18 +46,19 @@ fn a_clean_hub_stop_stops_workers_and_agents_and_the_next_hub_resumes() {
 
 #[test]
 fn stopping_a_hub_with_several_workers_is_quick() {
-    let mut stack = Stack::start();
+    let mut stack = Stack::start_with(vec![patient_with_workers().env()]);
     let client = stack.client();
     for _ in 0..4 {
         let (workspace, _) = stack.workspace(&client);
         client.workspace_status(&workspace.id).unwrap();
     }
     assert_eq!(client.hub_status().unwrap().workers, 4);
-    let stopping = Instant::now();
+
     client.hub_shutdown().unwrap();
+
+    // Long before the hub would give up on any of them, so none of them held it up.
     let mut hub = stack.hub.take().unwrap();
     wait_until("the hub to exit", || !matches!(hub.try_wait(), Ok(None)));
-    assert!(stopping.elapsed() < Duration::from_secs(8), "took {:?}", stopping.elapsed());
 }
 
 #[test]
