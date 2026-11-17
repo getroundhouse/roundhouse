@@ -141,17 +141,33 @@ fn an_image_block_that_isn_t_an_image_stays_in_the_line() {
     }
 }
 
+/// A note of how much the CLI shrank an image says nothing the image kept with its result doesn't. Anything else it
+/// writes for the model is kept for a later build, since it can hold what nothing else records, such as a skill's text.
 #[test]
 fn a_line_written_for_the_model_isn_t_shown() {
-    let note =
+    let line = |note: &str| {
+        json!({"type":"user","message":{"role":"user","content":[{"type":"text","text":note}]},"isSynthetic":true})
+            .to_string()
+    };
+    let shrunk =
         "[Image: original 2640x1720, displayed at 2000x1303. Multiply coordinates by 1.32 to map to original image.]";
-    let line =
-        json!({"type":"user","message":{"role":"user","content":[{"type":"text","text":note}]},"isSynthetic":true});
 
+    assert_eq!(parse_line(&line(shrunk)), Parsed::Drop);
     assert_eq!(
-        parse_line(&line.to_string()),
+        parse_line(&line("Base directory for this skill: /skills/review\n\nRead the diff.")),
         Parsed::Event(EventBody::AgentOther { kind: "user/synthetic".into(), subagent: None })
     );
+}
+
+/// What the CLI's own interface shows of git and GitHub, which the worker and the agent's calls say.
+#[test]
+fn what_the_cli_shows_of_git_and_github_is_left_out() {
+    let changed = json!({"type":"system","subtype":"vcs_state_changed","kind":"push","branch":"b","cwd":"/w"});
+    let published = json!({"type":"system","subtype":"code_change_published","action":"created","provider":"github",
+        "repo":"o/r","identifier":"7","url":"https://github.com/o/r/pull/7"});
+
+    assert_eq!(parse_line(&changed.to_string()), Parsed::Drop);
+    assert_eq!(parse_line(&published.to_string()), Parsed::Drop);
 }
 
 #[test]
@@ -274,8 +290,8 @@ fn a_prompts_lifecycle_names_it_by_the_uuid_it_was_sent_with() {
 
     assert_eq!(progress("started"), PromptProgress::Started);
     assert_eq!(progress("cancelled"), PromptProgress::Cancelled);
-    assert_eq!(progress("queued"), PromptProgress::Other);
-    assert_eq!(progress("completed"), PromptProgress::Other);
+    assert_eq!(parse_line(&line("queued")), Parsed::Drop);
+    assert_eq!(parse_line(&line("completed")), Parsed::Drop);
     assert_eq!(progress("something newer"), PromptProgress::Other);
     let nameless = json!({"type":"command_lifecycle","state":"started"}).to_string();
     assert_eq!(

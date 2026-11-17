@@ -7,6 +7,10 @@ use serde_json::Value;
 
 use super::{Parsed, blocks, file_change, images, said};
 
+/// How the CLI's note of how much it shrank an image the agent read starts. It's written so the model can map a point on
+/// the image back, and says nothing the record doesn't, since the image is kept with the result it came in.
+const SHRUNK_IMAGE: &str = "[Image: original ";
+
 /// What the line `value` says, from the subagent `from`, or from the agent itself.
 pub(super) fn line(value: &Value, from: Option<SubagentId>) -> Parsed {
     // What a command the CLI ran printed is the CLI's, not the agent's. What a typed `/compact` printed is read first,
@@ -20,6 +24,11 @@ pub(super) fn line(value: &Value, from: Option<SubagentId>) -> Parsed {
     // summary is one too, but `compaction` reads it first. A result is shown even so, or its call would never get one.
     let for_the_model = value.get("isSynthetic").and_then(Value::as_bool) == Some(true);
     if for_the_model && !blocks.iter().any(|block| matches!(block, ContentBlock::ToolResult { .. })) {
+        if let [ContentBlock::Text { text, .. }] = blocks.as_slice()
+            && text.starts_with(SHRUNK_IMAGE)
+        {
+            return Parsed::Drop;
+        }
         return Parsed::Event(EventBody::AgentOther { kind: "user/synthetic".into(), subagent: from });
     }
     // Claude says what an edit changed beside the line's one result, rather than in it.

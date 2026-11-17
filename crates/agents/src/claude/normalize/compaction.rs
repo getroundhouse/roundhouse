@@ -72,7 +72,7 @@ fn summary_line(value: &Value) -> Option<String> {
 /// What the CLI says to a typed `/compact`, which the compaction's own event says better.
 fn replayed(value: &Value) -> Option<Parsed> {
     let (stream, said) = said::printed(value)?;
-    (stream == Stream::Out && said == "Compacted").then(|| other("user/compacted"))
+    (stream == Stream::Out && said == "Compacted").then_some(Parsed::Drop)
 }
 
 fn flag(value: &Value, key: &str) -> bool {
@@ -116,8 +116,11 @@ fn status(value: &Value) -> Option<Parsed> {
         let written_chars = value.get("compact_output_chars").and_then(Value::as_u64);
         return Some(Parsed::Event(EventBody::AgentCompacting { written_chars }));
     }
-    if str_of(value, "compact_result") != Some("failed") {
-        return None;
+    match str_of(value, "compact_result") {
+        Some("failed") => {}
+        // The boundary and the summary after it say how it went, as one event.
+        Some("success") => return Some(Parsed::Drop),
+        _ => return None,
     }
     let outcome = CompactionOutcome::Failed { error: str_of(value, "compact_error").map(str::to_string) };
     Some(Parsed::Event(EventBody::AgentCompacted { asked: None, keeping: None, outcome }))
@@ -234,10 +237,7 @@ mod tests {
             panic!()
         };
         assert_eq!(outcome, CompactionOutcome::Failed { error: Some("Not enough messages to compact.".to_string()) });
-        assert!(
-            matches!(parsed(&mut normalizer, &went_well), Parsed::Event(EventBody::AgentOther { .. })),
-            "the boundary says it"
-        );
+        assert_eq!(parsed(&mut normalizer, &went_well), Parsed::Drop, "the boundary and the summary say it");
     }
 
     #[test]
@@ -251,7 +251,7 @@ mod tests {
         let compacted = parsed(&mut normalizer, &replayed("Compacted "));
         let model = parsed(&mut normalizer, &replayed("Set model to `haiku`"));
 
-        assert!(matches!(compacted, Parsed::Event(EventBody::AgentOther { .. })), "{compacted:?}");
+        assert_eq!(compacted, Parsed::Drop);
         assert!(matches!(model, Parsed::Event(EventBody::Notice { .. })), "what any other command printed: {model:?}");
     }
 }

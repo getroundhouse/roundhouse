@@ -290,7 +290,12 @@ fn system(value: &Value) -> Parsed {
             (None, _) => other("system/status"),
         },
         // A running token count for a spinner. Several arrive per second while thinking.
-        "thinking_tokens" => Parsed::Drop,
+        "thinking_tokens"
+        // What the CLI's own interface shows of git and GitHub: that the agent committed, pushed, rebased or merged,
+        // and that it opened, pushed to, commented on or merged a pull request. The worker reads git itself, which
+        // the hub learns of a pull request from, and the call that did it is recorded.
+        | "vcs_state_changed"
+        | "code_change_published" => Parsed::Drop,
         other_subtype => other(&format!("system/{other_subtype}")),
     }
 }
