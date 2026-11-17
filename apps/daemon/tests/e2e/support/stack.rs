@@ -38,17 +38,32 @@ impl Stack {
 
     /// With `env` set for every hub, as setting it in [`Stack::env`] does for the hubs started after.
     pub(crate) fn start_with(env: Vec<(&'static str, String)>) -> Stack {
+        let mut stack = Stack::unstarted(env);
+        // So its first hub opens a store that has run every migration, rather than running them all on nothing, which
+        // only `Stack::start_from_nothing`'s tests are about. A hub started again opens what the one before left.
+        hub::store::give_a_migrated_database(&stack.paths());
+        stack.start_hub();
+        stack
+    }
+
+    /// With its hub's data directory and database left for the hub to make, as a hub started by hand on a machine that
+    /// has never run one makes them, for a test of what it makes.
+    pub(crate) fn start_from_nothing() -> Stack {
+        let mut stack = Stack::unstarted(Vec::new());
+        stack.start_hub();
+        stack
+    }
+
+    /// Its directory, its environment and its repository, with no hub, nor anything of one's, yet.
+    fn unstarted(env: Vec<(&'static str, String)>) -> Stack {
         // Under /tmp because of the socket path limit, which the default temp directory can exceed.
         let dir = tempfile::Builder::new().prefix("ah-").tempdir_in("/tmp").unwrap();
         let mut hubs = hub_environment(dir.path());
         for (name, value) in env {
             hubs.set(name, value);
         }
-        let mut stack = Stack { dir, hub: None, env: hubs };
+        let stack = Stack { dir, hub: None, env: hubs };
         process::testing::repository_with_a_commit(&stack.repo());
-        // Its hub makes its data directory and its database from nothing, unlike the window tests' hubs, since what a hub
-        // started by hand makes of them is what `connection::only_this_user_can_reach_the_hub_or_read_its_data` checks.
-        stack.start_hub();
         stack
     }
 
@@ -102,9 +117,23 @@ impl Stack {
         self.path("hub.log")
     }
 
+    /// Starts a hub, and waits until it accepts connections. One that exits first fails the test at once, with what it
+    /// wrote to its log, rather than once the wait has run out.
     pub(crate) fn start_hub(&mut self) {
-        self.hub = Some(self.command().spawn().unwrap().into());
-        wait_until("the hub to accept connections", || Client::connect(&self.socket(), "test").is_ok());
+        let (socket, log) = (self.socket(), self.hub_log());
+        let logged_before = std::fs::metadata(&log).map_or(0, |log| log.len());
+        let hub = self.hub.insert(self.command().spawn().unwrap().into());
+        wait_until("the hub to accept connections", || {
+            if let Some(status) = hub.try_wait().unwrap() {
+                let logged = std::fs::read(&log).unwrap_or_default();
+                let own = logged.get(usize::try_from(logged_before).unwrap()..).unwrap_or_default();
+                panic!(
+                    "the hub exited with {status} before it accepted a connection:\n{}",
+                    String::from_utf8_lossy(own)
+                );
+            }
+            Client::connect(&socket, "test").is_ok()
+        });
     }
 
     pub(crate) fn client(&self) -> Client {
@@ -133,13 +162,15 @@ impl Stack {
 }
 
 /// What every hub of a stack in `dir` runs in: what [`WholeEnvironment::for_a_test`] gives, with a home of its own, so
-/// a real ~/.conductor/settings.toml or `gh` login can't change what these tests do, the fake agent, and the timers
-/// that only make a test wait shortened.
+/// a real ~/.conductor/settings.toml or `gh` login can't change what these tests do, a `gh` that's logged in to
+/// nothing, the fake agent, and the timers that only make a test wait shortened.
 fn hub_environment(dir: &Path) -> WholeEnvironment {
     let (timers, short) = Timers::FOR_TESTS.env();
     let (worker_timers, worker_short) = worker::Timers::FOR_TESTS.env();
     let mut environment = WholeEnvironment::for_a_test(&dir.join("user-home"));
     environment
+        // Ahead of the person's own. A test that has `gh` answer, as `support::gh` does, puts its own ahead of this one.
+        .put_first_on_path(process::testing::logged_out_gh())
         .set(protocol::paths::ENV_HOME, dir.join("home"))
         .set(protocol::paths::ENV_WORKSPACES, dir.join("workspaces"))
         .set("ROUNDHOUSE_CLAUDE_BIN", fake_agent())

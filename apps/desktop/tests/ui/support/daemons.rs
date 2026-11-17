@@ -76,9 +76,8 @@ pub(crate) fn hub_environment() -> WholeEnvironment {
     let (worker_timers, worker_short) = worker::Timers::FOR_TESTS.env();
     let mut environment = WholeEnvironment::for_a_test(&scratch.join("ui-home"));
     environment
-        // Ahead of the person's own, so what a hub hears of `gh` doesn't turn on whether they have one, or which. A
-        // test that has `gh` answer puts its own ahead of this one.
-        .put_first_on_path(logged_out_gh(scratch))
+        // Ahead of the person's own. A test that has `gh` answer puts its own ahead of this one.
+        .put_first_on_path(process::testing::logged_out_gh())
         .set("ROUNDHOUSE_CLAUDE_BIN", binaries().join("examples/fake_claude"))
         // So a test waits out only the time limits it's about. The hub passes the workers' on to them.
         .set(timers, short)
@@ -87,40 +86,4 @@ pub(crate) fn hub_environment() -> WholeEnvironment {
         // So an agent started again doesn't sit through the CLI's 2 s before it asks after a task.
         .set("FAKE_CLAUDE_POLL_DEFAULT_MS", worker::Timers::FOR_TESTS.wait_poll.as_millis().to_string());
     environment
-}
-
-/// `gh` as it is before `gh auth login`, which is what the person's own printed in a home of the tests' own: it names
-/// no login for github.com, and refuses everything else.
-const LOGGED_OUT_GH: &str = r#"#!/bin/sh
-if [ "$1 $2" = 'auth status' ]; then
-  echo 'You are not logged into any GitHub hosts. To log in, run: gh auth login' >&2
-  exec echo '{"hosts":{}}'
-fi
-echo 'To get started with GitHub CLI, please run:  gh auth login' >&2
-exit 4
-"#;
-
-/// The folder that holds [`LOGGED_OUT_GH`] as `gh`, under `scratch`. Every test process shares it, so it's only ever
-/// replaced whole, by a rename, never written where a worker of another test may be running it. It's put there by
-/// `install`, so this multithreaded process never has it open for writing, which a child another test forks would
-/// inherit, and Linux then refuses to run it, as "text file busy".
-fn logged_out_gh(scratch: &Path) -> &'static Path {
-    static BIN: OnceLock<PathBuf> = OnceLock::new();
-    BIN.get_or_init(|| {
-        let bin = scratch.join("ui-gh");
-        let gh = bin.join("gh");
-        if std::fs::read_to_string(&gh).is_ok_and(|there| there == LOGGED_OUT_GH) {
-            return bin;
-        }
-        std::fs::create_dir_all(&bin).unwrap();
-        // This process's own, so two processes writing it at once don't meet.
-        let mine = |extension| bin.join(format!("gh-{}.{extension}", std::process::id()));
-        let (script, installed) = (mine("sh"), mine("next"));
-        std::fs::write(&script, LOGGED_OUT_GH).unwrap();
-        let status = std::process::Command::new("install").args(["-m", "755"]).arg(&script).arg(&installed).status();
-        assert!(status.is_ok_and(|status| status.success()), "install the stand-in for gh");
-        std::fs::rename(&installed, &gh).unwrap();
-        std::fs::remove_file(&script).unwrap();
-        bin
-    })
 }

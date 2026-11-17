@@ -108,7 +108,7 @@ fn mode(path: &Path) -> u32 {
 
 #[test]
 fn only_this_user_can_reach_the_hub_or_read_its_data() {
-    let stack = Stack::start();
+    let stack = Stack::start_from_nothing();
     assert_eq!(mode(&stack.path("home")), 0o700);
     assert_eq!(mode(&stack.socket()), 0o600);
     assert_eq!(mode(&stack.path("home/hub.db")), 0o600);
