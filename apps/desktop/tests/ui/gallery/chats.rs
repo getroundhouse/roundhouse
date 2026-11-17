@@ -4,14 +4,19 @@
 #![cfg(test)]
 
 use protocol::attachment::Attachment;
-use protocol::event::{AgentRunState, AgentTask, EventBody, TaskKind, TurnOutcome};
-use protocol::fixtures::{ApprovalRequest, approval_request};
+use protocol::capability::calls::Call;
+use protocol::capability::calls::call::Command;
+use protocol::event::{AgentRunState, AgentTask, Asking, EventBody, TaskKind, TurnOutcome};
+use protocol::fixtures::{self, ApprovalRequest, approval_request};
 use protocol::model::{MessageId, PermissionMode, Seq, TaskId, ToolUseId};
 use protocol::prompt::Prompt;
 use protocol::tail::{BlockKind, Tail, TailBlock, TailMessage};
 use serde_json::json;
 
-use client_core::fake_hub::events::{replied, taken, text, thought, tool_result, tool_use, user_prompt};
+use client_core::fake_hub::events::{
+    command, in_background, mcp, mcp_said, monitor, printed, read, read_back, replied, said, taken, text, thought,
+    user_prompt,
+};
 
 const ASK: &str = "The sidebar should show each workspace's PR state. Where would that come from?";
 
@@ -48,9 +53,7 @@ pub(crate) fn background() -> Vec<EventBody> {
 /// Partway through a turn, with the test run it started, and a monitor watching it, going in the background.
 pub(crate) fn started_in_background() -> Vec<EventBody> {
     let mut events = looked_around();
-    let command = json!({ "command": "cargo test --workspace", "description": "Run the full test suite",
-        "run_in_background": true });
-    events.push(tool_use("msg-3", "toolu-3", "Bash", command));
+    events.push(in_background("msg-3", "toolu-3", "cargo test --workspace", "Run the full test suite"));
     let suite = AgentTask {
         id: TaskId::from("b1"),
         description: Some("Run the full test suite".to_string()),
@@ -59,10 +62,9 @@ pub(crate) fn started_in_background() -> Vec<EventBody> {
         subagent: None,
     };
     events.push(EventBody::AgentTasks { tasks: vec![suite.clone()], stopped: Vec::new() });
-    events.push(tool_result("toolu-3", "Command running in background with ID: b1"));
-    let watch = json!({ "command": "tail -f target/test.log | grep --line-buffered FAILED",
-        "description": "Watch the run for failures", "timeout_ms": 600_000 });
-    events.push(tool_use("msg-4", "toolu-4", "Monitor", watch));
+    events.push(printed("toolu-3", "Command running in background with ID: b1"));
+    let watch = "tail -f target/test.log | grep --line-buffered FAILED";
+    events.push(monitor("msg-4", "toolu-4", watch, "Watch the run for failures", Some(600_000)));
     let watcher = AgentTask {
         id: TaskId::from("b2"),
         description: Some("Watch the run for failures".to_string()),
@@ -71,7 +73,7 @@ pub(crate) fn started_in_background() -> Vec<EventBody> {
         subagent: None,
     };
     events.push(EventBody::AgentTasks { tasks: vec![suite, watcher], stopped: Vec::new() });
-    events.push(tool_result("toolu-4", "Monitor started (task b2). You will be notified on each event."));
+    events.push(said("toolu-4", "Monitor started (task b2). You will be notified on each event."));
     events
 }
 
@@ -90,9 +92,9 @@ pub(crate) fn waiting() -> Vec<EventBody> {
     vec![
         user_prompt("Open a PR for this, and queue it once its checks pass."),
         taken(Seq::new(1)),
-        tool_use("msg-1", "toolu-1", "mcp__roundhouse__wait_for_pull_request", json!({ "until": "checks" })),
+        mcp("msg-1", "toolu-1", "roundhouse", "wait_for_pull_request", json!({ "until": "checks" })),
         EventBody::AgentTasks { tasks: vec![wait], stopped: Vec::new() },
-        tool_result("toolu-1", "The task w1 was moved to the background."),
+        mcp_said("toolu-1", "The task w1 was moved to the background.", false),
         text("msg-2", reply),
         replied(reply, 41, 0.12),
     ]
@@ -177,12 +179,15 @@ pub(crate) fn approval() -> Vec<EventBody> {
     }
     events
         .push(text("msg-3", "I'll run the desktop app's UI tests before changing anything, to see where they stand."));
-    events.push(tool_use("msg-4", "toolu-3", "Bash", json!({ "command": "cargo test -p desktop --test ui" })));
-    let input = json!({ "command": "cargo test -p desktop --test ui", "description": "Run the desktop UI tests" });
+    events.push(command("msg-4", "toolu-3", "cargo test -p desktop --test ui", None));
+    let run = Command {
+        description: Some("Run the desktop UI tests".to_string()),
+        ..fixtures::typed_command("cargo test -p desktop --test ui")
+    };
     events.push(
         ApprovalRequest {
             tool_use_id: Some(ToolUseId::from("toolu-3")),
-            input,
+            asking: Some(Asking::ToolUse { typed: Some(Call::Command(run)) }),
             ..approval_request("approval-1", "Bash")
         }
         .into(),
@@ -195,7 +200,7 @@ pub(crate) fn steered() -> Vec<EventBody> {
     let mut events = looked_around();
     events
         .push(text("msg-3", "I'll run the desktop app's UI tests before changing anything, to see where they stand."));
-    events.push(tool_use("msg-4", "toolu-3", "Bash", json!({ "command": "cargo test -p desktop --test ui" })));
+    events.push(command("msg-4", "toolu-3", "cargo test -p desktop --test ui", None));
     events.push(EventBody::UserPrompt {
         client_msg_id: None,
         prompt: Prompt::new("Only the sidebar's tests matter here, so skip the rest next time."),
@@ -267,10 +272,11 @@ fn thought_then_read() -> Vec<EventBody> {
         user_prompt("Why does the train stop at a caution signal in the depot test?"),
         taken(Seq::new(1)),
         thought("msg-1", FIRST_THOUGHT),
-        tool_use("msg-2", "toolu-1", "Read", json!({ "file_path": "/workspaces/aspen/crates/signals/src/train.rs" })),
-        tool_result(
+        read("msg-2", "toolu-1", "/workspaces/aspen/crates/signals/src/train.rs"),
+        read_back(
             "toolu-1",
-            "    52\t    fn approach(&mut self, signal: Aspect) {\n    53\t        if signal != Aspect::Clear {\n    54\t            self.brake();",
+            52,
+            "    fn approach(&mut self, signal: Aspect) {\n        if signal != Aspect::Clear {\n            self.brake();",
         ),
     ]
 }
@@ -290,24 +296,20 @@ pub(crate) fn looked_around() -> Vec<EventBody> {
         },
         text("msg-1", "I'll start with how the sidebar gets its records."),
     ];
-    events.push(tool_use(
+    events.push(command(
         "msg-1",
         "toolu-1",
-        "Bash",
-        json!({ "command": "rg -n 'HubNotice::Workspace' crates apps", "description": "Find where workspace notices go" }),
+        "rg -n 'HubNotice::Workspace' crates apps",
+        Some("Find where workspace notices go"),
     ));
-    events.push(tool_result(
-        "toolu-1",
-        "crates/hub/src/hub/workspaces.rs:224:        .inspect(|workspace| self.notify(HubNotice::Workspace(workspace.clone())))\n\
-         apps/desktop/src/app.rs:212:            HubNotice::Workspace(workspace) => {",
-    ));
-    events.push(tool_use(
-        "msg-2",
+    events.push(printed("toolu-1", "crates/hub/src/hub/workspaces.rs:224:        .inspect(|workspace| self.notify(HubNotice::Workspace(workspace.clone())))\n\
+         apps/desktop/src/app.rs:212:            HubNotice::Workspace(workspace) => {"));
+    events.push(read("msg-2", "toolu-2", "/workspaces/aspen/apps/desktop/src/sidebar.rs"));
+    events.push(read_back(
         "toolu-2",
-        "Read",
-        json!({ "file_path": "/workspaces/aspen/apps/desktop/src/sidebar.rs" }),
+        1,
+        "//! Workspaces grouped by repository, each with its status.\n\nuse gpui_kit::component::button::{Button, ButtonVariants as _};",
     ));
-    events.push(tool_result("toolu-2", "     1\t//! Workspaces grouped by repository, each with its status.\n     2\t\n     3\tuse gpui_kit::component::button::{Button, ButtonVariants as _};"));
     events
 }
 

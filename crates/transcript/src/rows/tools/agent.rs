@@ -213,10 +213,10 @@ fn apart_report<'a>(answer: Option<&'a Answer>, subagent: &'a Subagent) -> Optio
     }
 }
 
-/// Whether what a subagent's call sent back says anything to report: not nothing, as a subagent started in the
-/// background sends back, nor the words a result recorded before its agent typed that said only so in.
+/// Whether what a subagent's call sent back says anything to report: not nothing, as one started in the background
+/// sends back.
 fn says_something(text: &str) -> bool {
-    !text.trim().is_empty() && !agent::only_launched(text)
+    !text.trim().is_empty()
 }
 
 /// Kept apart: the blocks the subagent tab starts and ends with, and between them, while it works, what it's done lately:

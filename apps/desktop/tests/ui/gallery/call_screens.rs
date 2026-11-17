@@ -4,10 +4,10 @@
 #![cfg(test)]
 
 use look::Region;
+use protocol::capability::calls::Call;
 use protocol::event::{Asking, EventBody};
 use protocol::fixtures::{ApprovalRequest, approval_request};
 use protocol::model::{PermissionMode, Seq, SessionStatus, ToolUseId};
-use serde_json::json;
 
 use super::frame::{CHAT, CONTEXT};
 use super::screens::FOCUS;
@@ -15,7 +15,7 @@ use super::steps::{Screen, Step, Target};
 use super::worlds::{chat_world, context, in_plan_mode};
 use super::{chats, tool_chats};
 use client_core::fake_hub::World;
-use client_core::fake_hub::events::{replied, taken, text, tool_result, tool_use, user_prompt};
+use client_core::fake_hub::events::{printed, replied, taken, text, typed_call, user_prompt};
 
 pub(crate) const SCREENS: &[Screen] = &[
     Screen {
@@ -70,7 +70,7 @@ fn output_alone() -> Vec<EventBody> {
     vec![
         user_prompt("Did the sidebar's tests pass in the run you started?"),
         taken(Seq::new(1)),
-        tool_result("toolu-0", TEST_OUTPUT),
+        printed("toolu-0", TEST_OUTPUT),
         text("msg-1", reply),
         replied(reply, 6, 0.02),
     ]
@@ -82,7 +82,7 @@ fn advisor_waiting() -> World {
         user_prompt(tool_chats::ASK),
         taken(Seq::new(1)),
         text("msg-1", "Before I change `Aspect`, I'll ask the advisor whether the plan holds up."),
-        tool_use("msg-2", "srvtoolu-1", "advisor", json!({})),
+        typed_call("msg-2", "srvtoolu-1", Call::Advisor),
     ];
     let mut world = chat_world(SessionStatus::Running, events);
     let chat = world.sessions.last().unwrap().id.clone();
@@ -107,11 +107,10 @@ fn planned() -> Vec<EventBody> {
         }
     }
     events.push(text("msg-3", "That's all it needs. Here's the plan."));
-    events.push(tool_use("msg-4", "toolu-3", "ExitPlanMode", json!({ "plan": PLAN })));
+    events.push(typed_call("msg-4", "toolu-3", Call::Plan));
     events.push(
         ApprovalRequest {
             tool_use_id: Some(ToolUseId::from("toolu-3")),
-            input: json!({ "plan": PLAN }),
             asking: Some(Asking::Plan { plan: PLAN.to_string() }),
             ..approval_request("approval-1", "ExitPlanMode")
         }

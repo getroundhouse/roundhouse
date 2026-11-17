@@ -80,7 +80,7 @@ impl<'a> ToolUseAsked<'a> {
         }
         let typed = Recorded::asked(body).and_then(|call| match call {
             Recorded::Typed(call) => Some(call),
-            Recorded::Legacy { .. } => None,
+            Recorded::Named { .. } => None,
         });
         let typed_name = typed.map(crate::calls::typed::title);
         let tool_name = typed_name.as_ref().unwrap_or(tool_name);

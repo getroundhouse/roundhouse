@@ -1,14 +1,12 @@
 use serde_json::Value;
 
-use crate::event::{
-    Asking, CallKind, ContentBlock, Denied, EventBody, FailureKind, RequestFailure, SessionEvent, TurnOutcome,
-};
+use crate::event::{Asking, EventBody, FailureKind, RequestFailure, SessionEvent, TurnOutcome};
 use crate::model::{
-    Account, AgentKind, ApprovalId, BranchName, Call, CallResult, ChildStatus, ChildWorktree, Draft, Effort,
-    FoundGithubLogin, GhLogin, GhLoginWorks, GithubAccount, GithubApp, GithubAppId, GithubLoginKind, GithubReach,
-    GithubRepositoryName, GithubSignIn, GithubSignInStatus, GithubUser, GithubUserId, HeldGithubLogin, MadeBy,
-    ModelName, PermissionMode, Place, Reach, RecentWork, Rev, Seq, Session, SessionStatus, SetupStatus, Subagent,
-    SubagentId, SubagentStatus, TitleSource, ToolUseId, Workspace, WorkspaceStatus,
+    Account, AgentKind, ApprovalId, BranchName, ChildStatus, ChildWorktree, Draft, Effort, FoundGithubLogin, GhLogin,
+    GhLoginWorks, GithubAccount, GithubApp, GithubAppId, GithubLoginKind, GithubReach, GithubRepositoryName,
+    GithubSignIn, GithubSignInStatus, GithubUser, GithubUserId, HeldGithubLogin, MadeBy, ModelName, PermissionMode,
+    Place, Reach, Rev, Seq, Session, SessionStatus, SetupStatus, Subagent, SubagentId, SubagentStatus, TitleSource,
+    ToolUseId, Workspace, WorkspaceStatus,
 };
 
 /// The session `id`, in the workspace `w`, idle with nothing in its log. Its agent is Claude, running Opus with full
@@ -250,91 +248,9 @@ pub fn subagent(call: &str) -> Subagent {
         ended_at_ms: None,
         context_tokens: None,
         calls: 0,
-        latest_call: None,
-        recent: RecentWork::default(),
         lately: None,
         report: None,
         rev: Rev::default(),
-    }
-}
-
-/// A call to the tool `name`, as the block an agent makes it in, saying no kind, as one recorded before adapters said
-/// has none.
-pub fn tool_use(id: &str, name: &str, input: Value) -> ContentBlock {
-    ContentBlock::ToolUse { id: id.into(), name: name.into(), input, call: None }
-}
-
-/// What came back for the call `id`, as the block it comes in: its text, and whether it failed. It has no images,
-/// changed no file, isn't encrypted, isn't said to be denied, and says no kind, as one recorded before adapters said
-/// has none.
-pub fn tool_result(id: &str, text: &str, is_error: bool) -> ContentBlock {
-    ContentBlock::ToolResult {
-        tool_use_id: id.into(),
-        is_error,
-        text: text.into(),
-        images: Vec::new(),
-        change: None,
-        encrypted: false,
-        call: None,
-        exit_code: None,
-        denied: None,
-    }
-}
-
-/// `block`, a call or a result, saying it's of `kind`, as one recorded since adapters said does.
-///
-/// # Panics
-///
-/// If `block` is neither, since only those say a kind, and a test that handed it another would otherwise go on with a
-/// block that says none.
-pub fn of_kind(mut block: ContentBlock, kind: CallKind) -> ContentBlock {
-    match &mut block {
-        ContentBlock::ToolUse { call, .. } | ContentBlock::ToolResult { call, .. } => *call = Some(kind),
-        ContentBlock::Text { .. }
-        | ContentBlock::Thinking { .. }
-        | ContentBlock::Image { .. }
-        | ContentBlock::Unknown
-        | ContentBlock::Call { .. }
-        | ContentBlock::CallResult { .. } => panic!("only a legacy call or result needs its kind set: {block:?}"),
-    }
-    block
-}
-
-/// What came back for the command `id` that exited with `code` having printed `printed`, as recorded since adapters
-/// said: a failed result that says it answers a command, with how it exited beside what it printed.
-pub fn command_failed(id: &str, printed: &str, code: i32) -> ContentBlock {
-    let mut block = of_kind(tool_result(id, printed, true), CallKind::Command);
-    if let ContentBlock::ToolResult { exit_code, .. } = &mut block {
-        *exit_code = Some(code);
-    }
-    block
-}
-
-/// What came back for the call `id` the person denied, as recorded since adapters said: what the agent was told,
-/// `text`, as a failure, and what the person said, if anything.
-pub fn tool_denied(id: &str, text: &str, said: Option<&str>) -> ContentBlock {
-    let mut block = tool_result(id, text, true);
-    if let ContentBlock::ToolResult { denied, .. } = &mut block {
-        *denied = Some(Denied { said: said.map(str::to_string) });
-    }
-    block
-}
-
-/// A call to the tool `name`, as a subagent's record has it, saying no kind.
-pub fn call(id: &str, name: &str, input: Value) -> Call {
-    Call { id: id.into(), name: name.into(), input, kind: None }
-}
-
-/// What came back for a call, as a subagent's record has it: all of `text`, from a call that didn't fail.
-pub fn call_result(text: &str) -> CallResult {
-    CallResult {
-        is_error: false,
-        text: text.into(),
-        cut: false,
-        images: Vec::new(),
-        encrypted: false,
-        exit_code: None,
-        denied: None,
     }
 }
 

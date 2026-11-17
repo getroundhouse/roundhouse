@@ -79,8 +79,6 @@ fn text_of(block: &ContentBlock) -> Option<&str> {
     match block {
         ContentBlock::Text { text, .. } => Some(text),
         ContentBlock::Thinking { .. }
-        | ContentBlock::ToolUse { .. }
-        | ContentBlock::ToolResult { .. }
         | ContentBlock::Image { .. }
         | ContentBlock::Call { .. }
         | ContentBlock::CallResult { .. }
@@ -100,8 +98,6 @@ fn text_and_images(block: &mut ContentBlock) -> Option<(&str, &mut Vec<LinkedIma
     match block {
         ContentBlock::Text { text, images } => Some((text.as_str(), images)),
         ContentBlock::Thinking { .. }
-        | ContentBlock::ToolUse { .. }
-        | ContentBlock::ToolResult { .. }
         | ContentBlock::Image { .. }
         | ContentBlock::Call { .. }
         | ContentBlock::CallResult { .. }

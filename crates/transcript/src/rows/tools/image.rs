@@ -57,7 +57,7 @@ pub(super) fn shown(made: &GenerateImage, answer: Option<&Answer>, key: &ItemKey
 /// What it was asked to make, if anything says: what came back with the image, or else the call.
 fn asked<'a>(made: &'a GenerateImage, answer: Option<&'a Answer>) -> Option<&'a str> {
     let returned = answer.and_then(|answer| {
-        let Some(CallOutput::Image { prompt, .. }) = answer.output.as_deref() else { return None };
+        let CallOutput::Image { prompt, .. } = &*answer.output else { return None };
         prompt.as_deref()
     });
     returned.or(Some(made.prompt.as_str())).filter(|asked| !asked.trim().is_empty())

@@ -1,19 +1,14 @@
 use protocol::capability::calls::call::{
-    CellEdit, Command as TypedCommand, CommandPart, Fetch, FilePatch, FindFiles, GenerateImage, NotebookEdit, Patch,
-    PatchChange, Search as TypedSearch, Shows, ViewImage, WebSearch,
+    CellEdit, Command as TypedCommand, CommandPart, Edit, Fetch, FilePatch, FindFiles, GenerateImage, NotebookEdit,
+    Patch, PatchChange, Replace, Replaces, Runs, Search as TypedSearch, Shows, StartSubagent, ViewImage, WebSearch,
 };
 use protocol::capability::calls::output::{Found, FoundLine, Paths, WebResult};
 use protocol::capability::calls::{Call, CallOutput};
-use protocol::event::{Asking, CallKind, EventBody};
+use protocol::event::{Asking, EventBody};
 use protocol::fixtures::{self, ApprovalRequest, approval_request};
 use serde_json::{Value, json};
 
 use super::{Looks, Only, ReadFile, Recorded, Search, ToolCall, asked_about, count, typed};
-
-/// A call recorded with the kind its adapter said, or with none, as one from before adapters said.
-fn recorded<'a>(kind: Option<&'a CallKind>, name: &'a str, input: &'a Value) -> Recorded<'a> {
-    Recorded::Legacy { kind, name, input }
-}
 
 /// A request to use the tool `tool` with `input`, which says what it asks if `asking` does, and nothing of what it's
 /// for.
@@ -21,56 +16,60 @@ fn request(tool: &str, input: Value, asking: Option<Asking>) -> EventBody {
     ApprovalRequest { input, asking, ..approval_request("a", tool) }.into()
 }
 
-/// The summary of a call recorded before adapters said its kind, which is read from its tool's name.
-fn summary(name: &str, input: &Value) -> Option<String> {
-    recorded(None, name, input).summary()
+fn summary(call: &Call) -> Option<String> {
+    Recorded::Typed(call).summary()
 }
 
-#[test]
-fn a_known_tool_with_input_it_does_not_expect_is_drawn_like_any_other() {
-    let input = json!({ "script": "ls" });
+fn search(pattern: &str, path: Option<&str>) -> Call {
+    Call::Search(TypedSearch { pattern: pattern.into(), path: path.map(Into::into), files: None, shows: Shows::Lines })
+}
 
-    let call = ToolCall::read(recorded(None, "Bash", &input));
-
-    let ToolCall::Other(other) = call else { panic!("a command needs its command") };
-    assert_eq!(other.title, "Bash");
+fn subagent(description: Option<&str>, prompt: &str) -> Call {
+    Call::Subagent(StartSubagent {
+        persona: None,
+        description: description.map(Into::into),
+        prompt: prompt.into(),
+        model: None,
+        effort: None,
+        runs: Runs::Waits,
+        resumes: None,
+    })
 }
 
 #[test]
 fn a_call_s_summary_is_the_input_that_matters_most_for_its_kind() {
-    let command = json!({ "command": "\ncargo test\nsecond line", "description": "Run the tests" });
-    assert_eq!(summary("Bash", &command).as_deref(), Some("cargo test"), "its first line with anything on it");
-    let edit = json!({ "file_path": "src/a.rs", "old_string": "y", "new_string": "z" });
-    assert_eq!(summary("Edit", &edit).as_deref(), Some("src/a.rs"));
-    let search = json!({ "path": "src", "pattern": "fn main" });
-    assert_eq!(summary("Grep", &search).as_deref(), Some("fn main"), "what it looks for, rather than where");
-    let fetch = json!({ "url": "https://docs.rs/serde", "prompt": "What derives are there?" });
-    assert_eq!(summary("WebFetch", &fetch).as_deref(), Some("https://docs.rs/serde"));
-    assert_eq!(summary("WebSearch", &json!({ "query": "rail signals" })).as_deref(), Some("rail signals"));
-    assert_eq!(summary("advisor", &json!({})), None, "it takes no input");
+    let command =
+        TypedCommand { description: Some("Run the tests".into()), ..fixtures::typed_command("\ncargo test\nmore") };
+    assert_eq!(summary(&Call::Command(command)).as_deref(), Some("cargo test"), "its first line with anything on it");
+    let replace = Replace { old: "y".into(), new: "z".into(), replaces: Replaces::One };
+    let edit = Call::Edit(Edit { path: "src/a.rs".into(), edits: vec![replace] });
+    assert_eq!(summary(&edit).as_deref(), Some("src/a.rs"));
+    assert_eq!(summary(&search("fn main", Some("src"))).as_deref(), Some("fn main"), "what it looks for, not where");
+    let fetch = Call::Fetch(Fetch { url: "https://docs.rs/serde".into(), asking: Some("What derives?".into()) });
+    assert_eq!(summary(&fetch).as_deref(), Some("https://docs.rs/serde"));
+    let web =
+        Call::WebSearch(WebSearch { query: "rail signals".into(), only_domains: Vec::new(), not_domains: Vec::new() });
+    assert_eq!(summary(&web).as_deref(), Some("rail signals"));
+    assert_eq!(summary(&Call::Advisor), None, "it takes no input");
 }
 
 #[test]
 fn a_subagent_s_summary_is_what_it_s_for_or_else_what_it_was_asked() {
-    let described = json!({ "description": "Find the tests", "prompt": "Look for\nthe tests" });
-    let asked = json!({ "prompt": "Look for\nthe tests" });
-
-    assert_eq!(summary("Agent", &described).as_deref(), Some("Find the tests"));
-    assert_eq!(summary("Agent", &asked).as_deref(), Some("Look for"));
-    assert_eq!(summary("Agent", &json!({})), None);
+    assert_eq!(summary(&subagent(Some("Find the tests"), "Look for\nthe tests")).as_deref(), Some("Find the tests"));
+    assert_eq!(summary(&subagent(None, "Look for\nthe tests")).as_deref(), Some("Look for"));
+    assert_eq!(summary(&subagent(None, "")), None);
 }
 
 #[test]
 fn any_other_tool_s_summary_is_its_usual_input_or_else_its_first() {
-    assert_eq!(
-        summary("mcp__github__create_issue", &json!({ "title": "Signals" })).as_deref(),
-        Some("title: \"Signals\"")
-    );
-    assert_eq!(summary("ToolSearch", &json!({ "query": "select:Read\nmore" })).as_deref(), Some("select:Read"));
+    let other = |tool: &str, input: Value| Call::Other { tool: tool.into(), input };
+    let mcp = Call::Mcp { server: "github".into(), tool: "create_issue".into(), input: json!({ "title": "Signals" }) };
+    assert_eq!(summary(&mcp).as_deref(), Some("title: \"Signals\""));
+    assert_eq!(summary(&other("ToolSearch", json!({ "query": "select:Read\nmore" }))).as_deref(), Some("select:Read"));
     let described = json!({ "description": " Tidy up ", "todos": [] });
-    assert_eq!(summary("TodoWrite", &described).as_deref(), Some("Tidy up"), "what it's for says more");
-    assert_eq!(summary("TodoWrite", &json!({ "todos": [] })).as_deref(), Some("todos: []"));
-    assert_eq!(summary("Ping", &json!({})), None);
+    assert_eq!(summary(&other("TodoList", described)).as_deref(), Some("Tidy up"), "what it's for says more");
+    assert_eq!(summary(&other("TodoList", json!({ "todos": [] }))).as_deref(), Some("todos: []"));
+    assert_eq!(summary(&other("Ping", json!({}))), None);
 }
 
 #[test]
@@ -80,94 +79,60 @@ fn a_count_says_one_or_many() {
     assert_eq!(count(12, "match", "matches"), "12 matches");
 }
 
+/// So a client needs no agent's name for a tool: the call is what its adapter typed.
 #[test]
-fn a_command_is_known_by_its_tool() {
-    let input = json!({ "command": "ls", "description": "List files" });
-
-    assert!(matches!(ToolCall::read(recorded(None, "Bash", &input)), ToolCall::Command(_)));
-    assert!(matches!(ToolCall::read(recorded(None, "mcp__shell__run", &input)), ToolCall::Other(_)));
-}
-
-#[test]
-fn the_advisor_is_known_by_its_tool() {
-    assert!(matches!(ToolCall::read(recorded(None, "advisor", &json!({}))), ToolCall::Advisor));
-    assert!(matches!(ToolCall::read(recorded(None, "mcp__team__advisor", &json!({}))), ToolCall::Other(_)));
-}
-
-/// So a client needs no agent's name for a tool: whatever the tool is called, the call is what its adapter said.
-#[test]
-fn a_call_whose_adapter_said_its_kind_is_read_by_that_whatever_its_tool_is_called() {
-    let input = json!({ "command": "ls", "description": "List files" });
-
-    assert!(matches!(ToolCall::read(recorded(Some(&CallKind::Command), "shell", &input)), ToolCall::Command(_)));
-    let said_other = CallKind::Other { server: None, tool: "Bash".into() };
+fn a_call_is_read_by_what_its_adapter_typed() {
+    let looks = Call::FindFiles(FindFiles { pattern: "*.rs".into(), path: None });
     assert!(
-        matches!(ToolCall::read(recorded(Some(&said_other), "Bash", &input)), ToolCall::Other(_)),
-        "not by its name"
+        matches!(ToolCall::read(Recorded::Typed(&looks)), ToolCall::Search(search) if search.looks == Looks::ForNames)
     );
-    let search = json!({ "pattern": "*.rs" });
-    let found = ToolCall::read(recorded(Some(&CallKind::FindFiles), "find", &search));
-    assert!(matches!(found, ToolCall::Search(search) if search.looks == super::Looks::ForNames));
-    assert!(matches!(ToolCall::read(recorded(Some(&CallKind::Advisor), "consult", &json!({}))), ToolCall::Advisor));
-    assert!(matches!(ToolCall::read(recorded(Some(&CallKind::Subagent), "delegate", &json!({}))), ToolCall::Agent(_)));
+    assert!(matches!(ToolCall::read(Recorded::Typed(&Call::Advisor)), ToolCall::Advisor));
+    assert!(matches!(ToolCall::read(Recorded::Typed(&subagent(None, "Look"))), ToolCall::Agent(_)));
+    let named_like_a_command = Call::Other { tool: "Bash".into(), input: json!({ "command": "ls" }) };
+    assert!(matches!(ToolCall::read(Recorded::Typed(&named_like_a_command)), ToolCall::Other(_)), "not by its name");
 }
 
 #[test]
-fn a_call_of_a_kind_this_build_doesnt_know_is_drawn_as_any_tool_by_its_name() {
-    let input = json!({ "command": "ls" });
-
-    let call = ToolCall::read(recorded(Some(&CallKind::Unknown), "Bash", &input));
-
-    let ToolCall::Other(other) = call else { panic!("its kind isn't one this build draws") };
-    assert_eq!((other.title.as_str(), other.detail.as_deref()), ("Bash", Some("ls")));
+fn what_a_call_does_is_its_kind() {
+    assert!(Recorded::Typed(&subagent(None, "Look")).hands_off());
+    assert!(!Recorded::Typed(&Call::Command(fixtures::typed_command("ls"))).hands_off());
+    assert!(Recorded::Typed(&Call::Questions).asks_the_person() && Recorded::Typed(&Call::Plan).asks_the_person());
+    let named = Recorded::Named { name: "ExitPlanMode", input: &Value::Null };
+    assert!(!named.asks_the_person() && !named.hands_off(), "not by its name");
 }
 
+/// A call is made only from its block, or the request to make it.
 #[test]
-fn what_a_call_does_is_its_kind_or_for_one_from_before_kinds_its_tool_s() {
-    let nothing = Value::Null;
-    let hands_off = |kind, name| recorded(kind, name, &nothing).hands_off();
-    let asks_the_person = |kind, name| recorded(kind, name, &nothing).asks_the_person();
-
-    assert!(hands_off(Some(&CallKind::Subagent), "delegate") && hands_off(None, "Agent") && hands_off(None, "Task"));
-    assert!(!hands_off(Some(&CallKind::Command), "Agent"), "what its adapter said, not its name");
-    assert!(asks_the_person(Some(&CallKind::Questions), "ask") && asks_the_person(Some(&CallKind::Plan), "plan"));
-    assert!(asks_the_person(None, "AskUserQuestion") && asks_the_person(None, "ExitPlanMode"));
-    assert!(!asks_the_person(None, "Bash") && !asks_the_person(Some(&CallKind::Command), "ExitPlanMode"));
-}
-
-/// A call is made only from its block, or the request to make it, which is what keeps the kind its adapter said with
-/// it.
-#[test]
-fn a_call_is_read_from_its_block_and_from_a_request_to_make_it_with_the_kind_each_says() {
-    let before = fixtures::tool_use("c", "shell", json!({ "command": "ls" }));
-    let since = fixtures::of_kind(before.clone(), CallKind::Command);
-    assert!(matches!(ToolCall::read(Recorded::of(&before).unwrap()), ToolCall::Other(_)), "no kind, and no such tool");
-    assert!(matches!(ToolCall::read(Recorded::of(&since).unwrap()), ToolCall::Command(_)));
-    assert!(Recorded::of(&fixtures::tool_result("c", "a.rs", false)).is_none(), "a result is no call");
+fn a_call_is_read_from_its_block_and_from_a_request_to_make_it() {
+    let block = fixtures::typed_call("c", Call::Command(fixtures::typed_command("ls")));
+    assert!(matches!(ToolCall::read(Recorded::of(&block).unwrap()), ToolCall::Command(_)));
+    let result = fixtures::typed_result("c", CallOutput::Words { text: "a.rs".into() }, false);
+    assert!(Recorded::of(&result).is_none(), "a result is no call");
 
     let request = |asking| request("shell", json!({ "command": "ls -la" }), asking);
     let said = request(Some(Asking::ToolUse { typed: Some(Call::Command(fixtures::typed_command("ls -la"))) }));
     assert!(matches!(ToolCall::read(Recorded::asked(&said).unwrap()), ToolCall::Command(_)));
     assert_eq!(asked_about(&said).as_deref(), Some("ls -la"));
-    let before = request(None);
-    assert!(matches!(ToolCall::read(Recorded::asked(&before).unwrap()), ToolCall::Other(_)));
     assert!(Recorded::asked(&EventBody::Unknown).is_none() && asked_about(&EventBody::Unknown).is_none());
 }
 
-/// The tools here have names Claude gave other tools, so a request read by its tool's name would read as those. Only
-/// the last, a tool's use that says no kind, is one recorded before adapters said, and is read by its name.
+/// The tools here have names Claude gave other tools, so a request read by its tool's name would read as those. One
+/// this build can't read is asked about as any tool, by its name.
 #[test]
-fn a_request_that_says_its_kind_is_never_read_by_its_tool_s_name() {
-    let asking = |tool: &str, asking| request(tool, json!({ "pattern": "fn main", "command": "ls" }), Some(asking));
-    let questions = asking("Grep", Asking::Questions { questions: Vec::new() });
-    let plan = asking("Bash", Asking::Plan { plan: String::new() });
-    let newer = asking("Bash", Asking::Unknown);
-    let no_kind = asking("Bash", Asking::ToolUse { typed: None });
+fn a_request_is_never_read_by_its_tool_s_name() {
+    let asking = |tool: &str, asking| request(tool, json!({ "pattern": "fn main", "command": "ls" }), asking);
+    let questions = asking("Grep", Some(Asking::Questions { questions: Vec::new() }));
+    let plan = asking("Bash", Some(Asking::Plan { plan: String::new() }));
 
     assert!(Recorded::asked(&questions).unwrap().asks_the_person());
     assert!(Recorded::asked(&plan).unwrap().asks_the_person());
-    assert!(matches!(ToolCall::read(Recorded::asked(&newer).unwrap()), ToolCall::Other(_)), "any tool, not a command");
-    assert!(matches!(ToolCall::read(Recorded::asked(&no_kind).unwrap()), ToolCall::Command(_)), "by its tool's name");
+    for unread in [Some(Asking::Unknown), Some(Asking::ToolUse { typed: None }), None] {
+        let body = asking("Bash", unread);
+        assert!(
+            matches!(ToolCall::read(Recorded::asked(&body).unwrap()), ToolCall::Other(_)),
+            "any tool, not a command"
+        );
+    }
 }
 
 #[test]

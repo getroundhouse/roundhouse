@@ -3,6 +3,7 @@
 
 #![cfg(test)]
 
+use protocol::capability::calls::call::Runs;
 use protocol::capability::turns::OwnTurn;
 use protocol::event::{AgentTask, EndedTask, EventBody, TaskKind, TaskOutcome};
 use protocol::model::{EndedWait, Seq, SessionStatus, WaitEnd, WaitEnded};
@@ -11,10 +12,9 @@ use serde_json::json;
 use super::frame::CHAT;
 use super::screens::FOCUS;
 use super::steps::{Screen, Step};
-use super::subagent_chats::LAUNCHED;
 use super::worlds::chat_world;
 use client_core::fake_hub::events::{
-    replied, subagent_ended, subagent_started, taken, task, text, tool_result, tool_use, user_prompt,
+    launched, mcp, mcp_said, replied, subagent, subagent_ended, subagent_started, taken, task, text, user_prompt,
 };
 
 /// The screens about turns the agent started by itself.
@@ -35,9 +35,6 @@ const WAIT_TOOL: &str = "roundhouse/wait_for_pull_requests";
 /// the review finished, and another as the wait ended.
 fn picked_up() -> Vec<EventBody> {
     let reply = "Both are going. I'll pick up as each one reports.";
-    let review = json!({
-        "description": REVIEW, "subagent_type": "general-purpose", "prompt": REVIEW_PROMPT, "run_in_background": true,
-    });
     let wait_task = AgentTask {
         id: "w1".into(),
         description: Some(WAIT_TOOL.into()),
@@ -54,16 +51,17 @@ fn picked_up() -> Vec<EventBody> {
         user_prompt("Have an agent review the depot's design while #7's checks run, and queue #7 once they pass."),
         taken(Seq::new(1)),
         text("msg-1", "I'll have an agent review the depot, and wait on #7's checks meanwhile."),
-        tool_use("msg-1", "toolu-1", "Agent", review),
+        subagent("msg-1", "toolu-1", "general-purpose", REVIEW, REVIEW_PROMPT, Runs::Background),
         subagent_started("toolu-1", "general-purpose", REVIEW, REVIEW_PROMPT),
-        tool_result("toolu-1", LAUNCHED),
-        tool_use(
+        launched("toolu-1"),
+        mcp(
             "msg-2",
             "toolu-2",
-            "mcp__roundhouse__wait_for_pull_requests",
+            "roundhouse",
+            "wait_for_pull_requests",
             json!({ "pull_requests": [7], "until": "required_checks" }),
         ),
-        tool_result("toolu-2", "The task w1 was moved to the background."),
+        mcp_said("toolu-2", "The task w1 was moved to the background.", false),
         EventBody::AgentTasks {
             tasks: vec![task(TaskKind::Subagent, "toolu-1", REVIEW), wait_task.clone()],
             stopped: Vec::new(),

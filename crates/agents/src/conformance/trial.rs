@@ -4,8 +4,9 @@
 use std::fmt;
 use std::time::{Duration, Instant};
 
+use protocol::capability::calls::{Call, CallKind, CallOutput};
 use protocol::capability::{Capabilities, laws};
-use protocol::event::{CallKind, ContentBlock, EventBody, SessionEvent, TurnOutcome};
+use protocol::event::{ContentBlock, EventBody, SessionEvent, TurnOutcome};
 use protocol::model::{AgentSessionId, ModelName, Place, RunId, Seq};
 
 use super::scenario::{Against, Failed, Scenario};
@@ -74,21 +75,15 @@ impl Trial {
     }
 
     /// Each call the adapter said is of `kind`.
-    pub fn calls(&self, kind: &CallKind) -> Vec<&ContentBlock> {
+    pub fn calls(&self, kind: &CallKind) -> Vec<&Call> {
         self.blocks()
-            .filter(|block| match block {
-                ContentBlock::ToolUse { call: Some(call), .. } => call == kind,
-                ContentBlock::Call { call: protocol::capability::calls::Call::Command(_), .. } => {
-                    *kind == CallKind::Command
-                }
+            .filter_map(|block| match block {
+                ContentBlock::Call { call, .. } => (call.kind() == *kind).then_some(call),
                 ContentBlock::Text { .. }
                 | ContentBlock::Thinking { .. }
-                | ContentBlock::Call { .. }
                 | ContentBlock::CallResult { .. }
-                | ContentBlock::ToolUse { .. }
-                | ContentBlock::ToolResult { .. }
                 | ContentBlock::Image { .. }
-                | ContentBlock::Unknown => false,
+                | ContentBlock::Unknown => None,
             })
             .collect()
     }
@@ -97,18 +92,12 @@ impl Trial {
     pub fn results(&self) -> Vec<&str> {
         self.blocks()
             .filter_map(|block| match block {
-                ContentBlock::CallResult {
-                    output: protocol::capability::calls::CallOutput::Command(command), ..
-                } => Some(command.output.as_str()),
-                ContentBlock::ToolResult { text, .. }
-                | ContentBlock::CallResult {
-                    output: protocol::capability::calls::CallOutput::Words { text }, ..
-                } => Some(text.as_str()),
+                ContentBlock::CallResult { output: CallOutput::Command(command), .. } => Some(command.output.as_str()),
+                ContentBlock::CallResult { output: CallOutput::Words { text }, .. } => Some(text.as_str()),
                 ContentBlock::Text { .. }
                 | ContentBlock::Thinking { .. }
                 | ContentBlock::Call { .. }
                 | ContentBlock::CallResult { .. }
-                | ContentBlock::ToolUse { .. }
                 | ContentBlock::Image { .. }
                 | ContentBlock::Unknown => None,
             })

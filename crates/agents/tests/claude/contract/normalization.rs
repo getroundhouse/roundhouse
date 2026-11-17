@@ -253,7 +253,6 @@ fn every_call_is_typed_and_every_result_answers_one() {
                 assert!(kinds.contains_key(&tool_use_id), "{tool_use_id} answers no call");
                 answered += 1;
             }
-            ContentBlock::ToolUse { .. } | ContentBlock::ToolResult { .. } => panic!("{block:?} isn't typed"),
             ContentBlock::Text { .. }
             | ContentBlock::Thinking { .. }
             | ContentBlock::Image { .. }

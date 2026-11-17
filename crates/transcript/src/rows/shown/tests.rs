@@ -1,17 +1,21 @@
 use client_core::session_log::{Position, SessionLog};
-use protocol::event::{ApprovalOutcome, CallKind, ContentBlock, EventBody, ExitReason, TurnOutcome};
-use serde_json::json;
+use protocol::event::{ApprovalOutcome, Asking, ContentBlock, EventBody, ExitReason, Question, TurnOutcome};
+use serde_json::{Value, json};
 
-use protocol::capability::calls::call::MessageSubagent;
+use protocol::capability::calls::call::{Command, MessageSubagent, Read, StartSubagent};
+use protocol::capability::calls::output::{Ended, Lines};
 use protocol::capability::calls::{Call, CallOutput};
 use protocol::find::Needle;
-use protocol::fixtures::{ApprovalRequest, approval_request, typed_call, typed_result};
+use protocol::fixtures::{
+    ApprovalRequest, approval_request, command_output, typed_call, typed_command, typed_denied, typed_result,
+    typed_subagent,
+};
 use protocol::model::Seq;
 use protocol::prompt::Prompt;
 
 use super::{count, of_row, rows_drawing};
 use crate::find::Part;
-use crate::fixtures::{calls_to, event, from_the_agent, log, within};
+use crate::fixtures::{advised, event, from_the_agent, log, subagents, within};
 use crate::folds::Fold;
 use crate::transcript::Model;
 
@@ -27,8 +31,19 @@ fn says(text: &str) -> EventBody {
     agent(vec![ContentBlock::Text { text: text.into(), images: Vec::new() }])
 }
 
-fn call(id: &str, name: &str, input: serde_json::Value) -> EventBody {
-    agent(vec![protocol::fixtures::tool_use(id, name, input)])
+/// The agent making `call`, as the call `id`.
+fn call(id: &str, call: Call) -> EventBody {
+    agent(vec![typed_call(id, call)])
+}
+
+/// Running `command`, which the agent says is for `described`, if anything.
+fn command(command: &str, described: Option<&str>) -> Call {
+    Call::Command(Command { description: described.map(Into::into), ..typed_command(command) })
+}
+
+/// A call to a tool of no kind a client knows, by the agent's name for it, and what it was given.
+fn other(tool: &str, input: Value) -> Call {
+    Call::Other { tool: tool.into(), input }
 }
 
 /// `block` as what a call sent back to the agent.
@@ -36,13 +51,14 @@ fn came_back(block: ContentBlock) -> EventBody {
     EventBody::AgentUser { subagent: None, blocks: vec![block] }
 }
 
+/// What came back for the call `id`, as words.
 fn sent_back(id: &str, text: &str) -> EventBody {
-    came_back(protocol::fixtures::tool_result(id, text, false))
+    came_back(typed_result(id, CallOutput::Words { text: text.into() }, false))
 }
 
-/// A call to the tool `name`, recorded with the kind its adapter said it is.
-fn call_of(id: &str, name: &str, kind: CallKind, input: serde_json::Value) -> EventBody {
-    agent(vec![protocol::fixtures::of_kind(protocol::fixtures::tool_use(id, name, input), kind)])
+/// What the command made as the call `id` printed, and that it exited with `code`, which failed unless it's 0.
+fn printed(id: &str, text: &str, code: i32) -> EventBody {
+    came_back(typed_result(id, command_output(text, Some(code), Ended::Exited), code != 0))
 }
 
 /// What's found of `needle` in the row `ix`, by the part each is in.
@@ -51,60 +67,38 @@ fn parts(log: &SessionLog, needle: &str, ix: usize) -> Vec<Part> {
     of_row(log, &Model::default(), &needle, ix).into_iter().map(|found| found.id.1).collect()
 }
 
-/// The tools here have names no agent's adapter has, so only the kind each call says can be what draws it.
+/// Only the kind of each call can be what draws it: a command by its command, and a tool of no kind a client knows by
+/// what it was given.
 #[test]
-fn a_call_is_drawn_as_the_kind_its_adapter_said_whatever_its_tool_is_called() {
-    let input = json!({ "command": "cargo test parser" });
-    let unsaid = log([event(Seq::new(1), call("c", "shell", input.clone()))]);
-    let said = log([event(Seq::new(1), call_of("c", "shell", CallKind::Command, input))]);
+fn a_call_is_drawn_as_its_kind_and_one_of_no_kind_a_client_knows_by_its_input() {
+    let unknown = log([event(Seq::new(1), call("c", other("shell", json!({ "command": "cargo test parser" }))))]);
+    let typed = log([event(Seq::new(1), call("c", command("cargo test parser", None)))]);
 
-    assert_eq!(parts(&unsaid, "parser", 0), [Part::Input], "any tool, by its input");
-    assert_eq!(parts(&said, "parser", 0), [Part::Command]);
+    assert_eq!(parts(&unknown, "parser", 0), [Part::Input], "any tool, by its input");
+    assert_eq!(parts(&typed, "parser", 0), [Part::Command]);
 }
 
 #[test]
-fn a_call_its_adapter_said_hands_work_off_gathers_its_subagent_s_work() {
+fn a_call_that_hands_work_off_gathers_its_subagent_s_work() {
     let work = || event(Seq::new(2), within("helper", says("Looking at the parser")));
-    let unsaid = log([event(Seq::new(1), call("helper", "delegate", json!({}))), work()]);
-    let said = log([event(Seq::new(1), call_of("helper", "delegate", CallKind::Subagent, json!({}))), work()]);
+    let unknown = log([event(Seq::new(1), call("helper", other("delegate", json!({})))), work()]);
+    let typed = log([event(Seq::new(1), call("helper", Call::Subagent(typed_subagent("Look.")))), work()]);
 
-    assert_eq!((count(&unsaid, "parser", 0), count(&unsaid, "parser", 1)), (0, 1), "in a row of its own");
-    assert_eq!((count(&said, "parser", 0), count(&said, "parser", 1)), (1, 0), "in the call's row");
-    assert_eq!(rows_drawing(&said, &Model::default(), Position::of_row(1)), [0]);
+    assert_eq!((count(&unknown, "parser", 0), count(&unknown, "parser", 1)), (0, 1), "in a row of its own");
+    assert_eq!((count(&typed, "parser", 0), count(&typed, "parser", 1)), (1, 0), "in the call's row");
+    assert_eq!(rows_drawing(&typed, &Model::default(), Position::of_row(1)), [0]);
 }
 
+/// A failed command's result holds what it printed alone, so a line in it that reads like how Claude said a command
+/// exited is something the command printed, and is found.
 #[test]
-fn a_call_its_adapter_said_asks_the_person_something_is_left_to_its_approval() {
-    let input = json!({ "about": "Which parser?" });
-    let unsaid = log([event(Seq::new(1), call("ask", "inquire", input.clone()))]);
-    let said = log([event(Seq::new(1), call_of("ask", "inquire", CallKind::Questions, input))]);
+fn what_a_failed_command_printed_is_found_as_it_came() {
+    let log = log([
+        event(Seq::new(1), call("c", command("make", None))),
+        event(Seq::new(2), printed("c", "Exit code 9\nthe parser broke", 1)),
+    ]);
 
-    assert_eq!(count(&unsaid, "parser", 0), 1, "any tool, by its input");
-    assert_eq!(count(&said, "parser", 0), 0);
-}
-
-/// A failed result that says what kind of call it answers holds what came back alone, so a line in it that reads like
-/// how Claude said a command exited is something the command printed, and is found.
-#[test]
-fn what_a_failed_command_printed_is_found_as_it_came_when_its_result_says_its_kind() {
-    let printed = "Exit code 9\nthe parser broke";
-    let before = came_back(protocol::fixtures::tool_result("c", printed, true));
-    let since = came_back(protocol::fixtures::command_failed("c", printed, 1));
-    let made = || event(Seq::new(1), call_of("c", "shell", CallKind::Command, json!({ "command": "make" })));
-    let (before, since) = (log([made(), event(Seq::new(2), before)]), log([made(), event(Seq::new(2), since)]));
-
-    assert_eq!(count(&before, "Exit code 9", 0), 0, "from before adapters said, it's how the command exited");
-    assert_eq!(count(&since, "Exit code 9", 0), 1);
-    assert_eq!((count(&before, "parser", 0), count(&since, "parser", 0)), (1, 1));
-}
-
-/// What went wrong is shown the same way under any call: without what its agent put around it to say it failed.
-#[test]
-fn what_went_wrong_for_any_tool_is_found_without_the_tags_claude_put_around_it() {
-    let refused = protocol::fixtures::tool_result("c", "<tool_use_error>no such parser</tool_use_error>", true);
-    let log = log([event(Seq::new(1), call("c", "inquire", json!({}))), event(Seq::new(2), came_back(refused))]);
-
-    assert_eq!(count(&log, "tool_use_error", 0), 0);
+    assert_eq!(count(&log, "Exit code 9", 0), 1);
     assert_eq!(count(&log, "parser", 0), 1);
 }
 
@@ -145,8 +139,8 @@ fn a_prompt_is_found_where_its_drawn() {
 #[test]
 fn a_call_s_result_is_found_in_the_call_s_row_which_draws_it() {
     let log = log([
-        event(Seq::new(1), call("run", "Bash", json!({ "command": "cargo test", "description": "Run the tests" }))),
-        event(Seq::new(2), sent_back("run", "test parser ... FAILED\ntest lexer ... ok")),
+        event(Seq::new(1), call("run", command("cargo test", Some("Run the tests")))),
+        event(Seq::new(2), printed("run", "test parser ... FAILED\ntest lexer ... ok", 0)),
     ]);
 
     assert_eq!(count(&log, "failed", 0), 1, "what it printed");
@@ -179,11 +173,9 @@ fn a_message_to_a_subagent_is_found_as_what_it_was_asked() {
 /// what it printed.
 #[test]
 fn a_denied_calls_words_are_found_as_what_the_person_said() {
-    let denied = protocol::fixtures::tool_denied("run", "Use the full path", Some("Use the full path"));
-    let log = log([
-        event(Seq::new(1), call("run", "Bash", json!({ "command": "rm -rf build" }))),
-        event(Seq::new(2), came_back(denied)),
-    ]);
+    let denied = typed_denied("run", "Use the full path", Some("Use the full path"));
+    let log =
+        log([event(Seq::new(1), call("run", command("rm -rf build", None))), event(Seq::new(2), came_back(denied))]);
 
     assert_eq!(
         parts(&log, "full path", 0),
@@ -209,9 +201,10 @@ fn a_failure_said_in_a_later_card_isn_t_found_again() {
 
 #[test]
 fn what_the_app_writes_itself_isn_t_found() {
+    let lines = Lines { first: 1, lines: vec!["fn main() {}".into(), String::new()], total: None };
     let log = log([
-        event(Seq::new(1), call("read", "Read", json!({ "file_path": "/src/main.rs" }))),
-        event(Seq::new(2), sent_back("read", "     1\tfn main() {}\n     2\t")),
+        event(Seq::new(1), call("read", Call::Read(Read { path: "/src/main.rs".into(), lines: None, pages: None }))),
+        event(Seq::new(2), came_back(typed_result("read", CallOutput::Lines(lines), false))),
     ]);
 
     assert_eq!(count(&log, "main", 0), 2, "the path over the lines, and the line, once it's open");
@@ -223,7 +216,7 @@ fn what_the_app_writes_itself_isn_t_found() {
 #[test]
 fn a_subagent_s_work_is_found_in_the_call_that_started_it() {
     let log = log([
-        event(Seq::new(1), calls_to("Agent", &["helper"])),
+        event(Seq::new(1), subagents(&["helper"])),
         event(Seq::new(2), within("helper", says("Looking at the parser"))),
     ]);
 
@@ -236,14 +229,15 @@ fn a_subagent_s_work_is_found_in_the_call_that_started_it() {
 /// in the row of the call that started the subagent, between what it was asked and its report.
 #[test]
 fn a_call_s_prose_is_found_in_the_row_that_draws_it_in_the_order_it_shows() {
-    let asked = json!({ "description": "Look", "prompt": "Ask about the parser" });
+    let asked = StartSubagent { description: Some("Look".into()), ..typed_subagent("Ask about the parser") };
+    let report = CallOutput::Report { report: "The parser is sound.".into() };
     let log = log([
-        event(Seq::new(1), call("helper", "Agent", asked)),
-        event(Seq::new(2), within("helper", calls_to("advisor", &["nested"]))),
+        event(Seq::new(1), call("helper", Call::Subagent(asked))),
+        event(Seq::new(2), within("helper", advised(&["nested"]))),
         event(Seq::new(3), within("helper", from_the_agent(sent_back("nested", "Test the parser first.")))),
         // In the foreground, it reports in its call's result.
-        event(Seq::new(4), sent_back("helper", "The parser is sound.")),
-        event(Seq::new(5), calls_to("advisor", &["own"])),
+        event(Seq::new(4), came_back(typed_result("helper", report, false))),
+        event(Seq::new(5), advised(&["own"])),
         event(Seq::new(6), from_the_agent(sent_back("own", "The parser is fine."))),
     ]);
     let needle = Needle::new("parser").unwrap();
@@ -291,7 +285,7 @@ fn what_went_wrong_is_found_but_not_what_the_app_says_of_it() {
 
 #[test]
 fn a_match_in_a_command_opens_its_call() {
-    let log = log([event(Seq::new(1), call("run", "Bash", json!({ "command": "cargo build\ncargo fmt --all" })))]);
+    let log = log([event(Seq::new(1), call("run", command("cargo build\ncargo fmt --all", None)))]);
 
     let found = of_row(&log, &Model::default(), &Needle::new("fmt").unwrap(), 0);
 
@@ -303,10 +297,11 @@ fn a_match_in_a_command_opens_its_call() {
 
 #[test]
 fn a_question_the_agent_asked_isn_t_found_once_it_s_answered_on_its_line() {
-    let input = json!({ "questions": [{ "question": "Which parser?", "header": "Parser" }] });
+    let asked =
+        Question { text: "Which parser?".into(), header: Some("Parser".into()), options: Vec::new(), multiple: false };
     let question: EventBody = ApprovalRequest {
         tool_use_id: Some("ask".into()),
-        input: input.clone(),
+        asking: Some(Asking::Questions { questions: vec![asked] }),
         ..approval_request("q", "AskUserQuestion")
     }
     .into();
@@ -318,7 +313,7 @@ fn a_question_the_agent_asked_isn_t_found_once_it_s_answered_on_its_line() {
         by_setting: false,
     };
     let log = log([
-        event(Seq::new(1), call("ask", "AskUserQuestion", input)),
+        event(Seq::new(1), call("ask", Call::Questions)),
         event(Seq::new(2), question),
         event(Seq::new(3), answered),
     ]);

@@ -3,17 +3,19 @@
 
 #![cfg(test)]
 
+use protocol::capability::calls::call::Runs;
 use protocol::event::{AgentTask, EventBody, TaskKind};
 use protocol::model::{Seq, SessionStatus};
-use serde_json::json;
 
 use super::frame::{CHAT, Frame, Part};
 use super::screens::FOCUS;
 use super::steps::{Screen, Step};
-use super::subagent_chats::LAUNCHED;
 use super::worlds::chat_world;
 use client_core::fake_hub::World;
-use client_core::fake_hub::events::{replied, subagent_started, taken, task, text, tool_result, tool_use, user_prompt};
+use client_core::fake_hub::events::{
+    in_background, launched, monitor, printed, replied, said, subagent, subagent_started, taken, task, text,
+    user_prompt,
+};
 
 /// Several tasks' lines, from the first of them to the last, without the calls above that started them.
 const LINES: Frame = Frame::Around(Part::Line("6 subagents"), &[Part::Line("2 monitors")]);
@@ -74,25 +76,22 @@ fn starting(kind: TaskKind, at: usize, call: &str) -> (Vec<EventBody>, AgentTask
             let of = CRATES[at % CRATES.len()];
             let what_for = format!("{of}: typed aspects");
             let prompt = format!("Move the {of} crate over to typed aspects, and open a pull request for it.");
-            let asked = json!({ "description": what_for, "subagent_type": "general-purpose", "prompt": prompt });
             let events = vec![
-                tool_use(&message, call, "Agent", asked),
+                subagent(&message, call, "general-purpose", &what_for, &prompt, Runs::Background),
                 subagent_started(call, "general-purpose", &what_for, &prompt),
-                tool_result(call, LAUNCHED),
+                launched(call),
             ];
             (what_for, events)
         }
         TaskKind::Monitor => {
             let (what_for, command) = MONITORS[at % MONITORS.len()];
-            let asked = json!({ "command": command, "description": what_for, "timeout_ms": 600_000 });
             let heard = "Monitor started. You will be notified on each event.";
-            (what_for.to_string(), vec![tool_use(&message, call, "Monitor", asked), tool_result(call, heard)])
+            (what_for.to_string(), vec![monitor(&message, call, command, what_for, Some(600_000)), said(call, heard)])
         }
         TaskKind::Command | TaskKind::Wait => {
             let (what_for, command) = COMMANDS[at % COMMANDS.len()];
-            let asked = json!({ "command": command, "description": what_for, "run_in_background": true });
             let heard = "Command running in background.";
-            (what_for.to_string(), vec![tool_use(&message, call, "Bash", asked), tool_result(call, heard)])
+            (what_for.to_string(), vec![in_background(&message, call, command, what_for), printed(call, heard)])
         }
     };
     (events, task(kind, call, &what_for))

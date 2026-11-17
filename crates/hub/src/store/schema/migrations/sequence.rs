@@ -368,7 +368,7 @@ pub(in super::super) const MIGRATIONS: &[Migration] = &[
     Sql(repos::PUSH_ROUTES),
     // What each subagent has done lately, with each call typed, which its record shows while it works.
     Sql(subagents::LATELY),
-    // Each call Claude's adapter recorded before it typed them typed, with what came back for it, the call each request
-    // for approval asked to make, and what each working subagent has done lately, in `typed_calls`.
+    // Typing what Claude's adapter recorded before it typed its calls: each call, with what came back for it, the call
+    // each request for approval asked to make, and what each working subagent has done lately, in `typed_calls`.
     Rust(super::typed_calls::typed_calls),
 ];

@@ -1,4 +1,3 @@
-use super::older;
 use protocol::event::{ApprovalDecision, Asking, EventBody, Question, QuestionAnswer};
 use std::borrow::Cow;
 use std::collections::BTreeMap;
@@ -7,16 +6,13 @@ use std::collections::BTreeMap;
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Approval<'a> {
     pub(super) asking: Cow<'a, Asking>,
-    /// It's from before adapters said what each asks, so its adapter may take answers only by text, and a refusal only
-    /// in a client's words.
-    pub(super) from_before: bool,
     typed: Vec<protocol::capability::asking::TypedAnswer>,
 }
 
 impl<'a> Approval<'a> {
     /// What the request `body` asks, or `None` for any other event.
     pub fn of(body: &'a EventBody) -> Option<Self> {
-        let EventBody::ApprovalRequested { tool_name, input, asking, request, .. } = body else { return None };
+        let EventBody::ApprovalRequested { asking, request, .. } = body else { return None };
         if let Some(request) = request {
             use protocol::capability::{
                 approvals::Asks,
@@ -50,14 +46,12 @@ impl<'a> Approval<'a> {
                     (Asking::Unknown, Vec::new())
                 }
             };
-            return Some(Approval { asking: Cow::Owned(asking), from_before: false, typed });
+            return Some(Approval { asking: Cow::Owned(asking), typed });
         }
-        Some(match asking.as_deref() {
-            Some(asking) => Approval { asking: Cow::Borrowed(asking), from_before: false, typed: Vec::new() },
-            None => {
-                Approval { asking: Cow::Owned(older::asking(tool_name, input)), from_before: true, typed: Vec::new() }
-            }
-        })
+        // One that says nothing of what it asks is from a hub from before it typed what Claude's requests asked, and is
+        // asked about as any tool's use this build can't read, by its tool and input.
+        let asking = asking.as_deref().map_or(Cow::Owned(Asking::Unknown), Cow::Borrowed);
+        Some(Approval { asking, typed: Vec::new() })
     }
 
     pub fn secret(&self, question: usize) -> bool {
@@ -94,25 +88,20 @@ impl<'a> Approval<'a> {
     }
 
     /// No, with no words of the person's: the tool isn't to be used, the plan wants more work, or the questions are
-    /// left unanswered. The adapter tells the agent so, or for a request from before, the words clients used then do.
+    /// left unanswered. The adapter tells the agent so.
     pub fn refused(&self) -> ApprovalDecision {
-        let message = self.from_before.then(|| older::refusal(&self.asking).to_string());
-        ApprovalDecision::Deny { message, interrupt: false }
+        ApprovalDecision::Deny { message: None, interrupt: false }
     }
 
     /// The person's answers to its questions, one for each, in the order they were asked, with one that has nothing in
-    /// it for a question they left. A request from before has them by each question's text.
+    /// it for a question they left.
     pub fn answered(&self, answers: Vec<QuestionAnswer>) -> ApprovalDecision {
-        if !self.from_before {
-            return ApprovalDecision::AnswerByPosition { answers };
-        }
-        let questions = self.questions().unwrap_or_default();
-        ApprovalDecision::AnswerByText { answers: older::by_text(questions, &answers) }
+        ApprovalDecision::AnswerByPosition { answers }
     }
 
     /// The same, holding what it asks, for keeping past the event it was read from.
     pub fn into_owned(self) -> Approval<'static> {
-        Approval { asking: Cow::Owned(self.asking.into_owned()), from_before: self.from_before, typed: self.typed }
+        Approval { asking: Cow::Owned(self.asking.into_owned()), typed: self.typed }
     }
 }
 

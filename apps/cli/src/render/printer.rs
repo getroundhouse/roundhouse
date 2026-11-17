@@ -189,12 +189,12 @@ impl Printer {
             ContentBlock::Thinking { text } if !text.is_empty() => {
                 self.line(seq, &format!("(thinking) {}", first_line(text)));
             }
-            ContentBlock::ToolUse { .. } | ContentBlock::Call { .. } => {
+            ContentBlock::Call { .. } => {
                 if let Some(call) = Recorded::of(block) {
                     self.line(seq, &format!("tool {}", called(call)));
                 }
             }
-            ContentBlock::ToolResult { .. } | ContentBlock::CallResult { .. } => {
+            ContentBlock::CallResult { .. } => {
                 if let Some(returned) = Returned::of(block) {
                     for line in came_back(&returned) {
                         self.line(seq, &line);
@@ -275,7 +275,7 @@ pub(super) fn denial(denied: &Denied) -> String {
 /// A call, by the agent's name for its tool, with what it's about, as every client says it, if it says anything.
 pub(super) fn called(call: Recorded<'_>) -> String {
     let name = match call {
-        Recorded::Legacy { name, .. } => name.to_string(),
+        Recorded::Named { name, .. } => name.to_string(),
         Recorded::Typed(call) => client_core::calls::typed::title(call),
     };
     about(&name, call.summary())

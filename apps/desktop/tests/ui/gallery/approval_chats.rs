@@ -5,10 +5,10 @@
 #![cfg(test)]
 
 use protocol::capability::calls::Call;
+use protocol::capability::calls::call::{Command, Edit, Replace, Replaces, Runs};
 use protocol::event::{ApprovalOutcome, Asking, EventBody};
-use protocol::fixtures::{ApprovalRequest, approval_request, typed_request};
+use protocol::fixtures::{ApprovalRequest, approval_request, typed_command, typed_request};
 use protocol::model::{Seq, SessionStatus};
-use serde_json::json;
 
 use super::chats::{self, looked_around};
 use super::frame::{CHAT, QUESTION};
@@ -17,8 +17,8 @@ use super::steps::{Screen, Step};
 use super::typed_chats;
 use super::worlds::{chat_world, in_plan_mode};
 use client_core::fake_hub::events::{
-    replied, subagent_started, subagents_listed, taken, text, tool_denied, tool_result, tool_use, typed_call,
-    user_prompt, within,
+    command, denied as denied_with, launched, replied, subagent, subagent_started, subagents_listed, taken, text,
+    typed_call, user_prompt, within,
 };
 
 /// The screens about a tool's use the agent asks about.
@@ -89,16 +89,16 @@ fn patched() -> Vec<EventBody> {
 fn edit() -> Vec<EventBody> {
     let mut events = looked_around();
     events.push(text("msg-3", "I'll let Clippy run without asking, as the tests do."));
-    let input = json!({
-        "file_path": "/workspaces/aspen/.claude/settings.json",
-        "old_string": "    \"allow\": [\n      \"Bash(cargo test:*)\"\n    ]",
-        "new_string": "    \"allow\": [\n      \"Bash(cargo test:*)\",\n      \"Bash(cargo clippy:*)\"\n    ]",
-    });
-    events.push(tool_use("msg-4", "toolu-3", "Edit", input.clone()));
+    let replace = Replace {
+        old: "    \"allow\": [\n      \"Bash(cargo test:*)\"\n    ]".into(),
+        new: "    \"allow\": [\n      \"Bash(cargo test:*)\",\n      \"Bash(cargo clippy:*)\"\n    ]".into(),
+        replaces: Replaces::One,
+    };
+    let edit = Call::Edit(Edit { path: "/workspaces/aspen/.claude/settings.json".into(), edits: vec![replace] });
+    events.push(typed_call("msg-4", "toolu-3", edit.clone()));
     let request = ApprovalRequest {
         tool_use_id: Some("toolu-3".into()),
-        input,
-        asking: Some(Asking::ToolUse { typed: None }),
+        asking: Some(Asking::ToolUse { typed: Some(edit) }),
         ..approval_request("approval-1", "Edit")
     };
     events.push(request.into());
@@ -117,7 +117,7 @@ fn denied() -> Vec<EventBody> {
         answers_by_position: None,
         by_setting: false,
     });
-    events.push(tool_denied("toolu-3", instead, Some(instead)));
+    events.push(denied_with("toolu-3", instead, Some(instead)));
     events.push(text("msg-5", reply));
     events.push(replied(reply, 41, 0.12));
     events
@@ -150,24 +150,22 @@ fn removal(asking: usize) -> Vec<EventBody> {
     events.push(text("msg-3", "I'll have the change reviewed before going on."));
     for (call, lane) in LANES {
         let prompt = format!("Review the change for {}.", lane.trim_start_matches("Review lane: "));
-        let input = json!({ "description": lane, "subagent_type": "general-purpose", "prompt": prompt });
-        events.push(tool_use("msg-4", call, "Agent", input));
+        events.push(subagent("msg-4", call, "general-purpose", lane, &prompt, Runs::Background));
         events.push(subagent_started(call, "general-purpose", lane, &prompt));
     }
     events.push(subagents_listed(&LANES));
     for (call, _) in LANES {
-        events.push(tool_result(call, "Async agent launched successfully."));
+        events.push(launched(call));
     }
     for (at, (call, _)) in LANES.iter().take(asking).enumerate() {
         let (run, approval) = (format!("toolu-run-{at}"), format!("approval-{at}"));
         let described = "Run the harness on a made-up guide and show what it draws";
-        let input = json!({ "command": COMMAND, "description": described });
-        events.push(within(call, tool_use(&format!("msg-run-{at}"), &run, "Bash", input.clone())));
+        events.push(within(call, command(&format!("msg-run-{at}"), &run, COMMAND, Some(described))));
+        let typed = Call::Command(Command { description: Some(described.to_string()), ..typed_command(COMMAND) });
         let request = ApprovalRequest {
             tool_use_id: Some(run.as_str().into()),
-            input,
             description: Some(described.to_string()),
-            asking: Some(Asking::ToolUse { typed: None }),
+            asking: Some(Asking::ToolUse { typed: Some(typed) }),
             reason: Some(WHY.to_string()),
             asked_by: Some((*call).into()),
             ..approval_request(&approval, "Bash")

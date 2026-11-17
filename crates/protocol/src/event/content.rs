@@ -1,9 +1,7 @@
 //! What a message holds: its blocks.
 
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 
-use super::{CallKind, FileChange};
 use crate::attachment::Attachment;
 use crate::model::ToolUseId;
 
@@ -37,53 +35,11 @@ pub enum ContentBlock {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         denied: Option<Denied>,
         /// Images that came back beside what the call did, such as a screenshot a command made, each an attachment of
-        /// the session, as a `ToolResult`'s are. An image that's what the call is about, as a read of one is, is its
+        /// the session, as a text's are. An image that's what the call is about, as a read of one is, is its
         /// output instead, as [`CallOutput::Image`](crate::capability::calls::CallOutput::Image) and an MCP tool's
         /// [`McpContent::Image`](crate::capability::calls::output::McpContent::Image) are.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         images: Vec<Attachment>,
-    },
-    ToolUse {
-        id: ToolUseId,
-        /// The agent's own name for the tool, and what it gave it.
-        name: String,
-        input: Value,
-        /// What kind of call it is, as the agent's adapter read it from the tool. `None` in one recorded before
-        /// adapters said, which a client reads from the tool's name as Claude's were then.
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        call: Option<CallKind>,
-    },
-    /// What a call sent back. It comes in an `AgentUser` event, except for a tool the API runs itself, such as Claude's
-    /// advisor, whose result comes in an `Assistant` event.
-    ToolResult {
-        tool_use_id: ToolUseId,
-        is_error: bool,
-        text: String,
-        /// Images the tool sent back, such as a screenshot the agent read. Each is an attachment of the session, which
-        /// the hub keeps, so a client reads its bytes with `AttachmentRead`, as it does a prompt's. A result recorded
-        /// before the hub kept them names none.
-        #[serde(default, skip_serializing_if = "Vec::is_empty")]
-        images: Vec<Attachment>,
-        /// What the tool changed in a file, when the agent says, as with Claude's edits and writes.
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        change: Option<FileChange>,
-        /// What came back is encrypted, for the model alone, as the advisor's reply can be, so `text` holds none of it.
-        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-        encrypted: bool,
-        /// What kind of call it answers, as the agent's adapter read it, or `Unknown` when the adapter no longer knows
-        /// the call. With it, `text` is what came back alone, and how a command exited is `exit_code`. `None` only
-        /// in one recorded before adapters said, whose `text` is as Claude sent it then, with what it put in it to
-        /// say how it failed.
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        call: Option<CallKind>,
-        /// How the command exited, when the call was one and the agent said.
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        exit_code: Option<i32>,
-        /// The person wouldn't let the tool be used, as the agent's CLI says beside the result and its adapter
-        /// reads, so `text` is what the agent was told of it. Only a tool's use is marked: what became of questions or
-        /// a plan is their approval's to say. `None` for any other result, and in one recorded before adapters said.
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        denied: Option<Denied>,
     },
     Image {
         media_type: Option<String>,

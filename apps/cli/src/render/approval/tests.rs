@@ -1,17 +1,26 @@
 use client_core::{Answered, Approval};
 use protocol::capability::calls::Call;
-use protocol::capability::calls::call::{FilePatch, Patch, PatchChange, PatchHunk};
+use protocol::capability::calls::call::{Edit, FilePatch, Patch, PatchChange, PatchHunk, Replace, Replaces};
 use protocol::event::{ApprovalOutcome, Asking, Question, QuestionAnswer, QuestionOption, SessionEvent};
 use protocol::event::{HunkLine, LineMark};
-use protocol::fixtures::{ApprovalRequest, approval_request, typed_request};
+use protocol::fixtures::{ApprovalRequest, approval_request, typed_command, typed_request};
 use protocol::model::Seq;
-use serde_json::{Value, json};
 
 use super::{requested, resolved};
 
-fn event(tool: &str, input: Value, asking: Option<Asking>) -> SessionEvent {
-    let body = ApprovalRequest { input, asking, ..approval_request("req_1", tool) };
+fn event(tool: &str, asking: Asking) -> SessionEvent {
+    let body = ApprovalRequest { asking: Some(asking), ..approval_request("req_1", tool) };
     protocol::fixtures::event(Seq::new(7), body.into())
+}
+
+/// A request to make `call`, which the request says is for `description`, if it says, in the form Claude's adapter
+/// asks in.
+fn asked_to(tool: &str, call: Call, description: Option<&str>) -> ApprovalRequest {
+    ApprovalRequest {
+        description: description.map(str::to_string),
+        asking: Some(Asking::ToolUse { typed: Some(call) }),
+        ..approval_request("req_1", tool)
+    }
 }
 
 fn lines(event: &SessionEvent) -> Vec<String> {
@@ -28,7 +37,7 @@ fn colors() -> Question {
 fn a_question_prints_its_options_numbered_and_how_to_answer() {
     let asking = Asking::Questions { questions: vec![colors()] };
 
-    let printed = lines(&event("AskUserQuestion", json!({}), Some(asking)));
+    let printed = lines(&event("AskUserQuestion", asking));
 
     assert_eq!(
         printed,
@@ -46,25 +55,27 @@ fn a_question_prints_its_options_numbered_and_how_to_answer() {
 fn a_plan_prints_whole_and_a_tool_by_its_input() {
     let plan = Asking::Plan { plan: "# Plan\n\n1. Read".into() };
 
-    let planned = lines(&event("ExitPlanMode", json!({}), Some(plan)));
-    let tool = lines(&event("Bash", json!({"command": "ls -la"}), Some(Asking::ToolUse { typed: None })));
+    let planned = lines(&event("ExitPlanMode", plan));
+    let tool = lines(&protocol::fixtures::event(Seq::new(7), asked_to("Bash", ls(), None).into()));
 
     assert_eq!(
         planned,
         ["PLAN:", "  # Plan", "", "  1. Read", "  roundhouse approve s req_1, or with --deny <what to change>"]
     );
-    assert_eq!(tool, ["APPROVAL NEEDED: Bash: ls -la", "  roundhouse approve s req_1"]);
+    assert_eq!(tool, ["APPROVAL NEEDED: Command: ls -la", "  roundhouse approve s req_1"]);
+}
+
+fn ls() -> Call {
+    Call::Command(typed_command("ls -la"))
 }
 
 #[test]
 fn a_tools_use_prints_its_command_whole_under_what_its_for_with_why_and_who_asks() {
+    let command = Call::Command(typed_command("D=\"$(cat path)\"\nrm -rf \"$D\""));
     let asked = ApprovalRequest {
-        input: json!({"command": "D=\"$(cat path)\"\nrm -rf \"$D\""}),
-        description: Some("Remove the scratch directory".into()),
-        asking: Some(Asking::ToolUse { typed: None }),
         reason: Some("The target is only known once it runs".into()),
         asked_by: Some("toolu_agent".into()),
-        ..approval_request("req_1", "Bash")
+        ..asked_to("Bash", command, Some("Remove the scratch directory"))
     };
 
     let printed = lines(&protocol::fixtures::event(Seq::new(7), asked.into()));
@@ -72,7 +83,7 @@ fn a_tools_use_prints_its_command_whole_under_what_its_for_with_why_and_who_asks
     assert_eq!(
         printed,
         [
-            "APPROVAL NEEDED: Bash: Remove the scratch directory",
+            "APPROVAL NEEDED: Command: Remove the scratch directory",
             r#"  $ D="$(cat path)""#,
             r#"  $ rm -rf "$D""#,
             "  why: The target is only known once it runs",
@@ -84,13 +95,9 @@ fn a_tools_use_prints_its_command_whole_under_what_its_for_with_why_and_who_asks
 
 #[test]
 fn an_edit_prints_its_file_and_what_it_takes_out_and_puts_in() {
-    let input = json!({"file_path": "src/lib.rs", "old_string": "let a = 1;", "new_string": "let a = 2;\nlet b = 3;"});
-    let described = ApprovalRequest {
-        input: input.clone(),
-        description: Some("Fix the numbers".into()),
-        asking: Some(Asking::ToolUse { typed: None }),
-        ..approval_request("req_1", "Edit")
-    };
+    let replace = Replace { old: "let a = 1;".into(), new: "let a = 2;\nlet b = 3;".into(), replaces: Replaces::One };
+    let edit = Call::Edit(Edit { path: "src/lib.rs".into(), edits: vec![replace] });
+    let described = asked_to("Edit", edit, Some("Fix the numbers"));
     let plain = ApprovalRequest { description: None, ..described.clone() };
 
     let described = lines(&protocol::fixtures::event(Seq::new(7), described.into()));
@@ -128,15 +135,6 @@ fn a_patch_prints_each_file_and_what_it_does_to_it() {
     assert_eq!(both[5..], ["  file: old.rs", "  deleted", "  roundhouse approve s req_1"]);
     assert_eq!(one[0], "APPROVAL NEEDED: Edit: src/lib.rs", "its file said once");
     assert_eq!(one[1..4], change);
-}
-
-#[test]
-fn a_question_from_before_adapters_said_still_prints_as_one() {
-    let input = json!({"questions": [{"question": "Why?"}]});
-
-    let printed = lines(&event("AskUserQuestion", input, None));
-
-    assert_eq!(printed[0], "QUESTION: Why?");
 }
 
 #[test]

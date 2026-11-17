@@ -3,13 +3,14 @@
 #![cfg(test)]
 
 use client_core::fake_hub::World;
-use client_core::fake_hub::events::{taken, tool_use, user_prompt};
+use client_core::fake_hub::events::{command, taken, user_prompt};
 use gpui_kit::test::TestWindowExt as _;
 use gpui_kit::{AppContext as _, ClipboardItem, TestAppContext, point, px};
-use protocol::event::{ApprovalOutcome, Asking, CallKind, EventBody};
-use protocol::fixtures::{ApprovalRequest, approval_request};
+use protocol::capability::calls::Call;
+use protocol::capability::calls::call::Command;
+use protocol::event::{ApprovalOutcome, Asking, EventBody};
+use protocol::fixtures::{ApprovalRequest, approval_request, typed_command};
 use protocol::model::{Seq, SessionStatus};
-use serde_json::json;
 
 use crate::support::{FakeHub, Stack, Ui, id};
 
@@ -130,19 +131,18 @@ fn the_command_asked_about_can_be_selected_and_copied_while_the_typing_row_has_f
 /// request asked in the composer's place. The hub goes with the test, so it's returned to be kept.
 fn asked_to_remove(cx: &mut TestAppContext) -> (FakeHub, Ui<'_>) {
     let says_its_for = "Run a command the test asked for";
-    let input = json!({ "command": REMOVAL, "description": says_its_for });
+    let removal = Command { description: Some(says_its_for.to_string()), ..typed_command(REMOVAL) };
     let request = ApprovalRequest {
         tool_use_id: Some("toolu-1".into()),
-        input: input.clone(),
         description: Some(says_its_for.to_string()),
-        asking: Some(Asking::ToolUse { call: Some(CallKind::Command) }),
+        asking: Some(Asking::ToolUse { typed: Some(Call::Command(removal)) }),
         reason: Some("Dangerous rm operation on statically-unresolvable target: command substitution output".into()),
         ..approval_request("approval-1", "Bash")
     };
     let events = vec![
         user_prompt(&format!("tool:{REMOVAL}")),
         taken(Seq::new(1)),
-        tool_use("msg-1", "toolu-1", "Bash", input),
+        command("msg-1", "toolu-1", REMOVAL, Some(says_its_for)),
         request.into(),
     ];
     let mut world = World::default();

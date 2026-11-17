@@ -26,8 +26,6 @@ fn typed(lines: &[String]) -> (Vec<Call>, Vec<CallOutput>) {
                 ContentBlock::Text { .. }
                 | ContentBlock::Thinking { .. }
                 | ContentBlock::Image { .. }
-                | ContentBlock::ToolUse { .. }
-                | ContentBlock::ToolResult { .. }
                 | ContentBlock::Unknown => {}
             }
         }

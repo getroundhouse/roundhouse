@@ -11,12 +11,12 @@ pub use repo::repo;
 
 mod typed;
 pub use typed::{
-    command_output, image, typed_call, typed_command, typed_denied, typed_request, typed_result, with_images,
+    command_output, image, typed_call, typed_command, typed_denied, typed_request, typed_result, typed_subagent,
+    with_images,
 };
 
 mod builders;
 pub use builders::{
-    ApprovalRequest, account, approval_request, call, call_result, child_worktree, command_failed, event,
-    found_github_login, github_account, github_app, github_reach, github_sign_in, of_kind, request_failed, session,
-    subagent, subagent_started, tool_denied, tool_result, tool_use, turn_ended, workspace,
+    ApprovalRequest, account, approval_request, child_worktree, event, found_github_login, github_account, github_app,
+    github_reach, github_sign_in, request_failed, session, subagent, subagent_started, turn_ended, workspace,
 };

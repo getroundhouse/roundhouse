@@ -26,7 +26,7 @@ pub(super) fn call_before(log: &SessionLog, seq: Seq, id: &ToolUseId, reach: usi
     events_before(log, seq, reach).find_map(|event| {
         let EventBody::Assistant { blocks, .. } = &event.body else { return None };
         blocks.iter().find_map(|block| {
-            let (ContentBlock::ToolUse { id: made, .. } | ContentBlock::Call { id: made, .. }) = block else {
+            let ContentBlock::Call { id: made, .. } = block else {
                 return None;
             };
             (made == id).then(|| (event.seq, Recorded::of(block).is_some_and(|call| call.hands_off())))

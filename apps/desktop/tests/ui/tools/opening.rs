@@ -3,14 +3,14 @@
 use crate::support::{FakeHub, Stack, Ui};
 use client_core::fake_hub::World;
 use client_core::fake_hub::events::{
-    advice_failed, advised, advised_encrypted, finished_turn, taken, text, tool_result, tool_use, user_prompt,
+    self, advice_failed, advised, advised_encrypted, finished_turn, taken, text, typed_call, user_prompt,
 };
 use gpui_kit::test::ElementSnapshot;
 use gpui_kit::{AppContext as _, ElementId, TestAppContext};
 use image::ImageFormat;
+use protocol::capability::calls::Call;
 use protocol::event::EventBody;
 use protocol::model::{Seq, SessionStatus};
-use serde_json::json;
 use std::io::Cursor;
 
 /// The fake agent's commands come with no description, so their line says they run something.
@@ -130,7 +130,7 @@ pub(super) fn open_on_a_turn(cx: &mut TestAppContext, did: Vec<EventBody>) -> (F
 /// A command the agent ran, as its `n`th call, and what it printed, as the hub records them from Claude.
 pub(super) fn ran(n: usize, command: &str, printed: &str) -> Vec<EventBody> {
     let call = format!("toolu-{n}");
-    vec![tool_use(&format!("msg-{n}"), &call, "Bash", json!({ "command": command })), tool_result(&call, printed)]
+    vec![events::command(&format!("msg-{n}"), &call, command, None), events::printed(&call, printed)]
 }
 
 /// Whether the `n`th command's line says it's open, as it tells assistive apps.
@@ -142,7 +142,7 @@ fn command_open(ui: &mut Ui<'_>, n: usize) -> Option<bool> {
 /// saying why there's nothing to read.
 #[gpui_kit::test]
 fn a_call_to_the_advisor_opens_to_its_advice_or_a_line_saying_why_there_is_none(cx: &mut TestAppContext) {
-    let advisor = |id: &str| tool_use(&format!("msg-{id}"), id, "advisor", json!({}));
+    let advisor = |id: &str| typed_call(&format!("msg-{id}"), id, Call::Advisor);
     let (_fake, mut ui) = open_on_a_turn(
         cx,
         vec![

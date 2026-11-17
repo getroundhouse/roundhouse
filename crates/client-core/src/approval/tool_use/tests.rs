@@ -1,6 +1,8 @@
-use protocol::event::{ApprovalDecision, Asking, CallKind, EventBody, QuestionAnswer};
-use protocol::fixtures::{ApprovalRequest, approval_request};
-use serde_json::{Value, json};
+use protocol::capability::calls::Call;
+use protocol::capability::calls::call::{Command, Edit, Fetch, Replace, Replaces, Write};
+use protocol::event::{ApprovalDecision, Asking, EventBody, QuestionAnswer};
+use protocol::fixtures::{self, ApprovalRequest, approval_request};
+use serde_json::json;
 
 use super::{Given, ToolUseAnswer, ToolUseAsked};
 use crate::approval::Approval;
@@ -8,13 +10,19 @@ use crate::calls::{EditFile, WriteFile};
 
 const COMMAND: &str = "rm -rf \"$(cat path)\"\necho done";
 
-fn request(tool: &str, _kind: CallKind, input: Value, description: Option<&str>) -> ApprovalRequest {
+/// A request to make `call`, which the request says is for `description`, if it says, in the form Claude's adapter
+/// asks in.
+fn request(tool: &str, call: Call, description: Option<&str>) -> ApprovalRequest {
     ApprovalRequest {
-        input,
         description: description.map(str::to_string),
-        asking: Some(Asking::ToolUse { typed: None }),
+        asking: Some(Asking::ToolUse { typed: Some(call) }),
         ..approval_request("a", tool)
     }
+}
+
+/// Running `command`, which the agent said is for `described`, if it said.
+fn command(command: &str, described: Option<&str>) -> Call {
+    Call::Command(Command { description: described.map(str::to_string), ..fixtures::typed_command(command) })
 }
 
 #[test]
@@ -22,13 +30,13 @@ fn a_command_says_what_its_for_itself_whole_why_and_which_subagent_asks() {
     let body: EventBody = ApprovalRequest {
         reason: Some("Its target is only known once it runs".into()),
         asked_by: Some("toolu_agent".into()),
-        ..request("Bash", CallKind::Command, json!({ "command": COMMAND }), Some("Remove the scratch directory"))
+        ..request("Bash", command(COMMAND, None), Some("Remove the scratch directory"))
     }
     .into();
 
     let asked = ToolUseAsked::of(&body).unwrap();
 
-    assert_eq!(asked.tool, "Bash");
+    assert_eq!(asked.tool, "Command", "what the call is, in words, rather than the agent's name for its tool");
     assert_eq!(asked.about, Some("Remove the scratch directory"));
     assert_eq!(asked.given, Some(Given::Command(COMMAND)), "every line of it");
     assert_eq!(asked.reason, Some("Its target is only known once it runs"));
@@ -36,13 +44,13 @@ fn a_command_says_what_its_for_itself_whole_why_and_which_subagent_asks() {
 }
 
 #[test]
-fn a_command_is_for_what_its_input_says_when_the_request_says_nothing_or_only_space() {
-    let described = json!({ "command": "ls", "description": "List what's here" });
-    let said_in_its_input: EventBody = request("Bash", CallKind::Command, described.clone(), None).into();
-    let blank: EventBody = request("Bash", CallKind::Command, described, Some("  ")).into();
-    let nothing_said: EventBody = request("Bash", CallKind::Command, json!({ "command": "ls" }), None).into();
+fn a_command_is_for_what_its_agent_said_when_the_request_says_nothing_or_only_space() {
+    let described = || command("ls", Some("List what's here"));
+    let said_by_its_agent: EventBody = request("Bash", described(), None).into();
+    let blank: EventBody = request("Bash", described(), Some("  ")).into();
+    let nothing_said: EventBody = request("Bash", command("ls", None), None).into();
 
-    assert_eq!(ToolUseAsked::of(&said_in_its_input).unwrap().about, Some("List what's here"));
+    assert_eq!(ToolUseAsked::of(&said_by_its_agent).unwrap().about, Some("List what's here"));
     assert_eq!(ToolUseAsked::of(&blank).unwrap().about, Some("List what's here"));
     let nothing_said = ToolUseAsked::of(&nothing_said).unwrap();
     assert_eq!((nothing_said.about, nothing_said.reason, nothing_said.asked_by), (None, None, None));
@@ -50,11 +58,13 @@ fn a_command_is_for_what_its_input_says_when_the_request_says_nothing_or_only_sp
 
 #[test]
 fn an_edit_or_a_write_is_given_what_it_would_change_and_another_tool_its_main_input() {
-    let edit = json!({ "file_path": "src/lib.rs", "old_string": "a", "new_string": "b" });
-    let edit: EventBody = request("Edit", CallKind::Edit, edit, Some("Fix the typo")).into();
-    let write = json!({ "file_path": "notes.md", "content": "# Notes\n" });
-    let write: EventBody = request("Write", CallKind::Write, write, None).into();
-    let fetch: EventBody = request("WebFetch", CallKind::Fetch, json!({ "url": "https://example.com" }), None).into();
+    let replace = Replace { old: "a".into(), new: "b".into(), replaces: Replaces::One };
+    let edit = Call::Edit(Edit { path: "src/lib.rs".into(), edits: vec![replace] });
+    let edit: EventBody = request("Edit", edit, Some("Fix the typo")).into();
+    let write = Call::Write(Write { path: "notes.md".into(), content: "# Notes\n".into() });
+    let write: EventBody = request("Write", write, None).into();
+    let fetch = Call::Fetch(Fetch { url: "https://example.com".into(), asking: None });
+    let fetch: EventBody = request("WebFetch", fetch, None).into();
 
     let edit = ToolUseAsked::of(&edit).unwrap();
     let write = ToolUseAsked::of(&write).unwrap();
@@ -69,11 +79,11 @@ fn an_edit_or_a_write_is_given_what_it_would_change_and_another_tool_its_main_in
 
 #[test]
 fn a_tool_with_no_kind_of_its_own_has_a_readable_name_and_doesnt_say_whats_said_twice() {
-    let kind = || CallKind::Other { server: Some("team".into()), tool: "post_message".into() };
+    let post = |input| Call::Mcp { server: "team".into(), tool: "post_message".into(), input };
     let input = json!({ "channel": "general", "description": "Tell the team" });
-    let described_only: EventBody = request("mcp__team__post_message", kind(), input, Some("Tell the team")).into();
+    let described_only: EventBody = request("mcp__team__post_message", post(input), Some("Tell the team")).into();
     let with_a_path = json!({ "path": "notes.md" });
-    let with_an_input: EventBody = request("mcp__team__post_message", kind(), with_a_path, None).into();
+    let with_an_input: EventBody = request("mcp__team__post_message", post(with_a_path), None).into();
 
     let described_only = ToolUseAsked::of(&described_only).unwrap();
     let with_an_input = ToolUseAsked::of(&with_an_input).unwrap();
@@ -96,7 +106,7 @@ fn a_request_this_build_doesnt_know_is_a_tools_use_and_questions_a_plan_and_othe
 
 #[test]
 fn an_answer_allows_or_denies_by_its_place_and_whats_typed_denies_in_those_words() {
-    let body: EventBody = request("Bash", CallKind::Command, json!({ "command": "ls" }), None).into();
+    let body: EventBody = request("Bash", command("ls", None), None).into();
     let approval = Approval::of(&body).unwrap();
     let picked = |rows: &[u32]| QuestionAnswer { picked: rows.to_vec(), typed: None };
     let typed = QuestionAnswer { picked: vec![0], typed: Some("Use the full path".into()) };
@@ -117,8 +127,7 @@ fn an_answer_allows_or_denies_by_its_place_and_whats_typed_denies_in_those_words
 /// is asked about as the command it is.
 #[test]
 fn a_typed_command_that_only_reads_is_asked_about_as_a_command() {
-    use protocol::capability::calls::Call;
-    use protocol::capability::calls::call::{Command, CommandPart};
+    use protocol::capability::calls::call::CommandPart;
     let reads = vec![CommandPart::Read { path: "secrets.env".into() }];
     let call = Call::Command(Command { parts: reads, ..protocol::fixtures::typed_command("cat secrets.env") });
     let body = protocol::fixtures::typed_request("a", "run-cat", call);
@@ -132,7 +141,6 @@ fn a_typed_command_that_only_reads_is_asked_about_as_a_command() {
 /// by that file.
 #[test]
 fn a_typed_patch_is_asked_about_by_its_changes() {
-    use protocol::capability::calls::Call;
     use protocol::capability::calls::call::{FilePatch, Patch, PatchChange};
     let add = PatchChange::Add { content: "fn may_pass() {}".into() };
     let patch = Patch { files: vec![FilePatch { path: "src/signal.rs".into(), change: add }] };
@@ -151,7 +159,6 @@ fn a_typed_patch_is_asked_about_by_its_changes() {
 /// A typed call of any other kind is asked about by what its line says, not by its input as JSON.
 #[test]
 fn a_typed_call_of_any_other_kind_is_asked_about_as_its_line_says() {
-    use protocol::capability::calls::Call;
     use protocol::capability::calls::call::{Schedule, When};
     let schedule = Schedule { prompt: "Check #182's CI".into(), when: When::After { seconds: 1200 } };
     let body = protocol::fixtures::typed_request("a", "later-1", Call::Schedule(schedule));

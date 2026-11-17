@@ -52,7 +52,7 @@ pub(super) fn shown(search: &Search, answer: Option<&Answer>, key: &ItemKey, gat
 /// What it found, once it ran.
 fn found(answer: Option<&Answer>) -> Option<Found<'_>> {
     let answer = answer?;
-    Some(Found::of(answer.success()?, answer.output.as_deref()))
+    Some(Found::of(answer.success()?, &answer.output))
 }
 
 fn opened(found: &Found, toggle: &Toggle, cx: &App) -> Option<AnyElement> {

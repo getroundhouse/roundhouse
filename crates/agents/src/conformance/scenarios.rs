@@ -3,7 +3,8 @@
 
 use std::time::Duration;
 
-use protocol::event::{Asking, CallKind, ContentBlock, EventBody, TurnOutcome};
+use protocol::capability::calls::{Call, CallKind};
+use protocol::event::{Asking, ContentBlock, EventBody, TurnOutcome};
 use protocol::model::PermissionMode;
 
 use super::driver::INTERRUPTED;
@@ -59,9 +60,7 @@ pub static CANCEL_COMMAND: Scenario = Scenario {
                 .wait("the running command's call", |output| {
                     matches!(output,
                 crate::AgentOutput::Event { body: EventBody::Assistant { blocks, .. }, .. }
-                    if blocks.iter().any(|block| matches!(block,
-                        ContentBlock::ToolUse { call: Some(CallKind::Command), .. } |
-                        ContentBlock::Call { call: protocol::capability::calls::Call::Command(_), .. })))
+                    if blocks.iter().any(|block| matches!(block, ContentBlock::Call { call: Call::Command(_), .. })))
                 })
                 .await?;
             driver.interrupt().await?;

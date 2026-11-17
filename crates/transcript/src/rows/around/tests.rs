@@ -3,17 +3,19 @@ use std::sync::Arc;
 use client_core::Answered;
 use client_core::session_log::{RecordedApprovals, SessionLog};
 use protocol::attachment::{Attachment, MediaType};
+use protocol::capability::calls::call::Read;
+use protocol::capability::calls::output::Ended;
+use protocol::capability::calls::{Call, CallOutput};
 use protocol::event::{ApprovalOutcome, Asking, ContentBlock, EventBody, Question, QuestionAnswer, SessionEvent};
 use protocol::fixtures::{ApprovalRequest, approval_request};
 use protocol::model::{
-    CallResult, OpenApproval, PermissionMode, Place, RecentCall, RecentWork, Seq, Subagent, SubagentStatus,
+    Lately, LatelyCall, LatelyResult, OpenApproval, PermissionMode, Place, Seq, Subagent, SubagentStatus,
 };
-use serde_json::json;
 
 use super::{Answer, Around, Closes, Reply, Settled, block_key, retry_at};
 use crate::fixtures::{
-    asked, asking, calls, calls_to, closed, closed_by_position, event, failed_request, from_the_agent, log, prompt,
-    record, result, turn_ended, within,
+    advised, asked_a_question, asked_to_use, asking, calls, closed, closed_by_position, event, failed_request,
+    from_the_agent, log, prompt, record, result, subagents, turn_ended, within,
 };
 use crate::folds::Fold;
 use crate::item_key::ItemKey;
@@ -35,7 +37,7 @@ fn a_recorded_block_is_known_by_its_place_in_its_message() {
 
 #[test]
 fn a_question_is_drawn_only_once_it_s_no_longer_waiting() {
-    let question = asked("q", "AskUserQuestion");
+    let question = asked_a_question("q");
     let m = Model::default();
     let waiting = log([event(Seq::new(1), question.clone())]);
     assert!(Around::read(&waiting, &m, Seq::new(1), &question).asked.is_none(), "it's in the composer's place");
@@ -44,7 +46,7 @@ fn a_question_is_drawn_only_once_it_s_no_longer_waiting() {
         log([event(Seq::new(1), question.clone()), event(Seq::new(2), closed("q", ApprovalOutcome::Denied, None))]);
 
     assert!(Around::read(&answered, &m, Seq::new(1), &question).asked.is_some());
-    assert!(Around::read(&answered, &m, Seq::new(1), &asked("a", "Bash")).asked.is_none(), "only a question is a line");
+    assert!(Around::read(&answered, &m, Seq::new(1), &asked_to_use("a")).asked.is_none(), "only a question is a line");
 }
 
 /// The transcript goes by what the adapter says a request asks, whatever its tool is called.
@@ -77,17 +79,17 @@ fn a_request_its_adapter_says_asks_questions_is_drawn_as_one() {
 
 /// A command the agent asked to run, as the call `call`, and for the subagent `asked_by` if it's a subagent's.
 fn asked_to_run(id: &str, call: &str, asked_by: Option<&str>) -> EventBody {
-    let input = json!({ "command": "rm -rf build" });
-    let asking = Some(Asking::ToolUse { typed: None });
+    let typed = Some(Call::Command(protocol::fixtures::typed_command("rm -rf build")));
+    let asking = Some(Asking::ToolUse { typed });
     let (tool_use_id, asked_by) = (Some(call.into()), asked_by.map(Into::into));
-    ApprovalRequest { tool_use_id, input, asking, asked_by, ..approval_request(id, "Bash") }.into()
+    ApprovalRequest { tool_use_id, asking, asked_by, ..approval_request(id, "Bash") }.into()
 }
 
 /// The result of the call `id`, which the person denied.
 fn denied(id: &str) -> EventBody {
     EventBody::AgentUser {
         subagent: None,
-        blocks: vec![protocol::fixtures::tool_denied(id, "The user denied this.", None)],
+        blocks: vec![protocol::fixtures::typed_denied(id, "The user denied this.", None)],
     }
 }
 
@@ -95,7 +97,7 @@ fn denied(id: &str) -> EventBody {
 fn what_else_says_what_became_of_an_approval_is_a_questions_line_a_denied_calls_result_or_nothing() {
     let closing = |id: &str| closed(id, ApprovalOutcome::Denied, None);
     let log = log([
-        event(Seq::new(1), asked("q", "AskUserQuestion")),
+        event(Seq::new(1), asked_a_question("q")),
         event(Seq::new(2), closing("q")),
         event(Seq::new(3), asked_to_run("c", "run-c", None)),
         event(Seq::new(4), closing("c")),
@@ -121,7 +123,7 @@ fn what_else_says_what_became_of_an_approval_is_a_questions_line_a_denied_calls_
     assert!(matches!(closes(&m, Seq::new(12), "x"), Closes::Unsaid), "nor does another call's");
     let cancelled = Around::read(&log, &m, Seq::new(15), &closed("z", ApprovalOutcome::Cancelled, None)).closes;
     assert_eq!(cancelled, Closes::Unsaid, "nor a cancelled one's, which says only what a denial would");
-    let for_a = |subagent: &str| Closes::ForASubagent { tool: "Bash".into(), subagent: subagent.into() };
+    let for_a = |subagent: &str| Closes::ForASubagent { tool: "Command".into(), subagent: subagent.into() };
     assert_eq!(closes(&m, Seq::new(10), "s"), for_a("Subagent"), "its call is in the subagent's work");
     let checking = Subagent { description: Some("Check the build".into()), ..record("agent", SubagentStatus::Working) };
     m.subagents.insert(Arc::new(checking));
@@ -170,8 +172,8 @@ fn a_typed_result_answers_as_fully_as_any_other() {
 /// What's loaded can't say whether an approval's answer is in a page that isn't, and the session's record can.
 #[test]
 fn an_approvals_card_is_open_as_the_record_says_whatever_is_loaded_after_it() {
-    let request = asked("a", "Bash");
-    let with_a_gap = log([event(Seq::new(1), request.clone()), event(Seq::new(3), asked("b", "Bash"))]);
+    let request = asked_to_use("a");
+    let with_a_gap = log([event(Seq::new(1), request.clone()), event(Seq::new(3), asked_to_use("b"))]);
     let open = vec![
         OpenApproval { seq: Seq::new(1), approval_id: "a".into() },
         OpenApproval { seq: Seq::new(3), approval_id: "b".into() },
@@ -204,7 +206,7 @@ fn calls_made_at_once_each_get_their_own_result() {
 fn with_an_image(id: &str) -> EventBody {
     let mut shown = result(id);
     if let EventBody::AgentUser { blocks, .. } = &mut shown
-        && let [ContentBlock::ToolResult { images, .. }] = blocks.as_mut_slice()
+        && let [ContentBlock::CallResult { images, .. }] = blocks.as_mut_slice()
     {
         let size_bytes = 1;
         images.push(Attachment { id: "i1".into(), name: "image".into(), media_type: MediaType::Png, size_bytes });
@@ -225,7 +227,7 @@ fn a_call_s_images_are_fetched_only_once_it_s_open() {
 
 #[test]
 fn a_subagent_s_images_are_fetched_with_the_call_that_started_it() {
-    let agent = calls_to("Agent", &["a"]);
+    let agent = subagents(&["a"]);
     let log = log([
         event(Seq::new(1), agent.clone()),
         event(Seq::new(2), within("a", calls(&["b"]))),
@@ -244,16 +246,16 @@ fn a_subagent_s_images_are_fetched_with_the_call_that_started_it() {
 /// from its record, images and all.
 #[test]
 fn a_working_subagent_s_latest_images_are_fetched_once_its_call_under_working_on_is_open() {
-    let agent = calls_to("Agent", &["agent"]);
+    let agent = subagents(&["agent"]);
     let mut log = SessionLog::by_place(Place::default());
     log.apply_event(SessionEvent { place: Place::new(1), ..event(Seq::new(1), agent.clone()) });
     let image = Attachment { id: "i1".into(), name: "image".into(), media_type: MediaType::Png, size_bytes: 1 };
-    let read = protocol::fixtures::call("read", "Read", json!({ "file_path": "a.png" }));
-    let came_back = CallResult { images: vec![image], ..protocol::fixtures::call_result("") };
-    let recent =
-        RecentWork { calls: vec![RecentCall { before: None, call: read, result: Some(came_back) }], since: None };
+    let read = Call::Read(Read { path: "a.png".into(), lines: None, pages: None });
+    let output = CallOutput::Words { text: String::new() };
+    let came_back = LatelyResult { output, is_error: false, cut: false, images: vec![image], denied: None };
+    let made = LatelyCall { before: None, id: "read".into(), call: read, result: Some(came_back) };
     let mut m = Model::default();
-    m.subagents.insert(Arc::new(working("agent", recent)));
+    m.subagents.insert(Arc::new(working("agent", Lately { calls: vec![made], since: None })));
     m.folds.choose(ItemKey::Event(Seq::new(1), 0), Fold::Output, true);
     assert!(Around::read(&log, &m, Seq::new(1), &agent).images().is_empty(), "its read is closed");
 
@@ -262,17 +264,17 @@ fn a_working_subagent_s_latest_images_are_fetched_once_its_call_under_working_on
     assert_eq!(Around::read(&log, &m, Seq::new(1), &agent).images().len(), 1, "open, under Working on");
 }
 
-fn working(call: &str, recent: RecentWork) -> Subagent {
-    Subagent { calls: 1, recent, ..record(call, SubagentStatus::Working) }
+fn working(call: &str, lately: Lately) -> Subagent {
+    Subagent { calls: 1, lately: Some(lately), ..record(call, SubagentStatus::Working) }
 }
 
 #[test]
 fn a_result_from_the_agent_is_its_call_s_result_too() {
     let sent = from_the_agent(result("a"));
-    let log = log([event(Seq::new(1), calls_to("advisor", &["a"])), event(Seq::new(2), sent.clone())]);
+    let log = log([event(Seq::new(1), advised(&["a"])), event(Seq::new(2), sent.clone())]);
     let m = Model::default();
 
-    let call = Around::read(&log, &m, Seq::new(1), &calls_to("advisor", &["a"]));
+    let call = Around::read(&log, &m, Seq::new(1), &advised(&["a"]));
 
     assert_eq!(call.blocks[0].reply.result().map(Answer::shown), Some("from a"));
     assert!(Around::read(&log, &m, Seq::new(2), &sent).blocks[0].with_call, "so it isn't drawn twice");
@@ -319,18 +321,15 @@ fn a_result_without_its_call_nearby_is_drawn_where_it_is() {
     );
 }
 
-/// A failed result is read as it was recorded: one that says what kind of call it answers says how the command exited
-/// beside its text, and one from before has it in its text.
+/// A failed command says how it exited beside what it printed.
 #[test]
-fn a_failed_result_says_how_its_command_exited_however_it_was_recorded() {
-    let before = protocol::fixtures::tool_result("c", "Exit code 2\nno rule to make it", true);
-    let since = protocol::fixtures::command_failed("c", "no rule to make it", 2);
+fn a_failed_result_says_how_its_command_exited() {
+    let output = protocol::fixtures::command_output("no rule to make it", Some(2), Ended::Exited);
+    let block = protocol::fixtures::typed_result("c", output, true);
 
-    for block in [before, since] {
-        let reply = Reply::of(&block, &Model::default());
-        let failure = reply.result().and_then(Answer::failure).unwrap();
-        assert_eq!((failure.label().as_str(), failure.output), ("Exit 2", "no rule to make it"));
-    }
+    let reply = Reply::of(&block, &Model::default());
+    let failure = reply.result().and_then(Answer::failure).unwrap();
+    assert_eq!((failure.label().as_str(), failure.output), ("Exit 2", "no rule to make it"));
 }
 
 /// Retry asks the agent to carry on from the turn it stopped short on, so only the card that turn ended on has it, and

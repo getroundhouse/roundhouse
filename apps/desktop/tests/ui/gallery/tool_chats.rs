@@ -3,12 +3,16 @@
 
 #![cfg(test)]
 
+use protocol::capability::calls::call::{Fetch, WebSearch};
+use protocol::capability::calls::output::WebResult;
+use protocol::capability::calls::{Call, CallOutput};
 use protocol::event::EventBody;
 use protocol::model::Seq;
 use serde_json::json;
 
 use client_core::fake_hub::events::{
-    advice_failed, advised, advised_encrypted, replied, taken, text, tool_failed, tool_result, tool_use, user_prompt,
+    advice_failed, advised, advised_encrypted, command, exited, failed, mcp, mcp_said, printed, replied, said, taken,
+    text, typed_call, typed_result, user_prompt,
 };
 
 /// What the chats about the signalling crate were asked.
@@ -25,7 +29,6 @@ test signal_test::clear_and_caution_may_pass ... ok
 test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out";
 
 const FORMAT_FAILURE: &str = "\
-Exit code 1
 Diff in /workspaces/aspen/crates/signals/src/signal_test.rs:4:
  fn stop_may_not_pass() {
 -    assert!(!Aspect::Stop.may_pass()) ;
@@ -59,36 +62,23 @@ pub(crate) fn commands() -> Vec<EventBody> {
         user_prompt(ASK),
         taken(Seq::new(1)),
         text("msg-1", "I'll run the tests and check the formatting before changing anything."),
-        tool_use(
-            "msg-2",
-            "toolu-1",
-            "Bash",
-            json!({ "command": "cargo test -p signals may_pass", "description": "Run the signal tests" }),
-        ),
-        tool_result("toolu-1", TEST_OUTPUT),
-        tool_use(
-            "msg-3",
-            "toolu-2",
-            "Bash",
-            json!({ "command": "cargo fmt --all --check", "description": "Check formatting" }),
-        ),
-        tool_failed("toolu-2", FORMAT_FAILURE),
-        tool_use("msg-4", "toolu-3", "Bash", json!({ "command": "cargo fmt --all", "description": FORMAT_LINE })),
-        tool_result("toolu-3", ""),
-        tool_use("msg-5", "toolu-4", "Bash", json!({ "command": "git status --short" })),
-        tool_result("toolu-4", " M crates/signals/src/signal_test.rs"),
-        tool_use("msg-6", "toolu-5", "Bash", json!({ "command": SEARCH, "description": SEARCH_LINE })),
-        tool_result("toolu-5", SEARCH_OUTPUT),
-        tool_use(
+        command("msg-2", "toolu-1", "cargo test -p signals may_pass", Some("Run the signal tests")),
+        printed("toolu-1", TEST_OUTPUT),
+        command("msg-3", "toolu-2", "cargo fmt --all --check", Some("Check formatting")),
+        exited("toolu-2", FORMAT_FAILURE, 1),
+        command("msg-4", "toolu-3", "cargo fmt --all", Some(FORMAT_LINE)),
+        printed("toolu-3", ""),
+        command("msg-5", "toolu-4", "git status --short", None),
+        printed("toolu-4", " M crates/signals/src/signal_test.rs"),
+        command("msg-6", "toolu-5", SEARCH, Some(SEARCH_LINE)),
+        printed("toolu-5", SEARCH_OUTPUT),
+        command(
             "msg-7",
             "toolu-6",
-            "Bash",
-            json!({
-                "command": "cargo fmt --all && cargo clippy --workspace --all-targets --locked -- -D warnings",
-                "description": "Format and lint the workspace",
-            }),
+            "cargo fmt --all && cargo clippy --workspace --all-targets --locked -- -D warnings",
+            Some("Format and lint the workspace"),
         ),
-        tool_result("toolu-6", "    Finished `dev` profile [unoptimized + debuginfo] target(s) in 4.20s"),
+        printed("toolu-6", "    Finished `dev` profile [unoptimized + debuginfo] target(s) in 4.20s"),
         text("msg-8", reply),
         replied(reply, 31, 0.12),
     ]
@@ -101,31 +91,35 @@ pub(crate) fn any_tool() -> Vec<EventBody> {
         user_prompt("File the idea about saying why a train stopped."),
         taken(Seq::new(1)),
         text("msg-1", "I'll look for an existing issue first, then file one."),
-        tool_use(
+        mcp(
             "msg-2",
             "toolu-1",
-            "mcp__sentry__search_issues",
+            "sentry",
+            "search_issues",
             json!({ "query": "signal stopped without a reason", "project": "signals" }),
         ),
-        tool_failed("toolu-1", "<tool_use_error>Not authorized for the project signals</tool_use_error>"),
-        tool_use(
+        failed("toolu-1", "Not authorized for the project signals"),
+        typed_call(
             "msg-3",
             "toolu-2",
-            "ToolSearch",
-            json!({ "query": "select:mcp__github__create_issue", "max_results": 1 }),
+            Call::Other {
+                tool: "ToolSearch".into(),
+                input: json!({ "query": "select:mcp__github__create_issue", "max_results": 1 }),
+            },
         ),
-        tool_result("toolu-2", "mcp__github__create_issue"),
-        tool_use(
+        said("toolu-2", "mcp__github__create_issue"),
+        mcp(
             "msg-4",
             "toolu-3",
-            "mcp__github__create_issue",
+            "github",
+            "create_issue",
             json!({
                 "title": "Signals should say why a train stopped",
                 "body": "A train that stops at a signal logs \"stop\", but not which signal or why.",
                 "labels": ["kind/feature"],
             }),
         ),
-        tool_result("toolu-3", "Created issue #271: https://github.com/example/signals/issues/271"),
+        mcp_said("toolu-3", "Created issue #271: https://github.com/example/signals/issues/271", false),
         text("msg-5", reply),
         replied(reply, 14, 0.05),
     ]
@@ -140,60 +134,57 @@ pub(crate) fn advisor() -> Vec<EventBody> {
         user_prompt(ASK),
         taken(Seq::new(1)),
         text("msg-1", "Before I change `Aspect`, I'll ask the advisor whether the plan holds up."),
-        tool_use("msg-2", "srvtoolu-1", "advisor", json!({})),
+        typed_call("msg-2", "srvtoolu-1", Call::Advisor),
         advised_encrypted("msg-2", "srvtoolu-1"),
         text("msg-3", "It suggests testing caution as well as stop, so I'll cover every aspect."),
-        tool_use("msg-3", "srvtoolu-0", "advisor", json!({})),
+        typed_call("msg-3", "srvtoolu-0", Call::Advisor),
         EventBody::ToolCallDropped { tool_use_id: "srvtoolu-0".into() },
-        tool_use("msg-4", "srvtoolu-2", "advisor", json!({})),
+        typed_call("msg-4", "srvtoolu-2", Call::Advisor),
         advised("msg-4", "srvtoolu-2", advice),
-        tool_use("msg-5", "srvtoolu-3", "advisor", json!({})),
+        typed_call("msg-5", "srvtoolu-3", Call::Advisor),
         advice_failed("msg-5", "srvtoolu-3", "overloaded"),
         text("msg-6", reply),
         replied(reply, 48, 0.31),
     ]
 }
 
+/// The page the web search found that's fetched.
+const WIKIPEDIA: &str = "https://en.wikipedia.org/wiki/Railway_signal";
+
 /// A web search, a fetch of a page it found, and a fetch a site refused.
 pub(crate) fn web() -> Vec<EventBody> {
     let reply = "A flashing yellow means the train may go on, but should be ready to stop at the next signal.";
     let query = "flashing yellow railway signal meaning";
-    let links = json!([
-        { "title": "Railway signal", "url": "https://en.wikipedia.org/wiki/Railway_signal" },
-        { "title": "Signal aspects and what they tell a driver", "url": "https://www.example.org/signals/aspects" },
-        { "title": "Reading the line: a guide to signals", "url": "https://signals.example.com/guide" },
-    ]);
-    let results = format!(
-        "Web search results for query: \"{query}\"\n\nLinks: {links}\n\nA flashing yellow usually means the train may \
-         go on, but the next signal is at caution, so it should be ready to slow down. Railways differ, and some use \
-         it to warn of a diverging route.\n\n\nREMINDER: You MUST include the sources above in your response to the \
-         user using markdown hyperlinks."
-    );
+    let link = |title: &str, url: &str| WebResult { title: title.into(), url: url.into(), snippet: None };
+    let results = vec![
+        link("Railway signal", WIKIPEDIA),
+        link("Signal aspects and what they tell a driver", "https://www.example.org/signals/aspects"),
+        link("Reading the line: a guide to signals", "https://signals.example.com/guide"),
+    ];
+    let summary = "A flashing yellow usually means the train may go on, but the next signal is at caution, so it \
+                   should be ready to slow down. Railways differ, and some use it to warn of a diverging route.";
+    let search = WebSearch { query: query.into(), only_domains: Vec::new(), not_domains: Vec::new() };
+    let fetch = |url: &str, asking: &str| Call::Fetch(Fetch { url: url.into(), asking: Some(asking.into()) });
     let answer = "A **flashing yellow** is a preliminary caution: the train may pass, and the next signal shows \
                   caution.\n\n- Some railways use it to warn of a diverging route ahead.\n- Others use it for a \
                   medium speed approach.";
     vec![
         user_prompt("What does a flashing yellow signal mean on a railway?"),
         taken(Seq::new(1)),
-        tool_use("msg-1", "toolu-1", "WebSearch", json!({ "query": query })),
-        tool_result("toolu-1", &results),
-        tool_use(
+        typed_call("msg-1", "toolu-1", Call::WebSearch(search)),
+        typed_result("toolu-1", CallOutput::WebResults { results, summary: Some(summary.into()) }, false),
+        typed_call(
             "msg-2",
             "toolu-2",
-            "WebFetch",
-            json!({
-                "url": "https://en.wikipedia.org/wiki/Railway_signal",
-                "prompt": "What does a flashing yellow aspect mean, and does it differ between railways?",
-            }),
+            fetch(WIKIPEDIA, "What does a flashing yellow aspect mean, and does it differ between railways?"),
         ),
-        tool_result("toolu-2", answer),
-        tool_use(
+        typed_result("toolu-2", CallOutput::Page { url: WIKIPEDIA.into(), status: None, text: answer.into() }, false),
+        typed_call(
             "msg-3",
             "toolu-3",
-            "WebFetch",
-            json!({ "url": "https://signals.example.com/guide", "prompt": "What does a flashing yellow mean here?" }),
+            fetch("https://signals.example.com/guide", "What does a flashing yellow mean here?"),
         ),
-        tool_failed("toolu-3", "The server returned HTTP 403 Forbidden."),
+        failed("toolu-3", "The server returned HTTP 403 Forbidden."),
         text("msg-4", reply),
         replied(reply, 21, 0.08),
     ]

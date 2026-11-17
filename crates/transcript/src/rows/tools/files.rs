@@ -83,9 +83,9 @@ struct Read<'a> {
 impl<'a> Read<'a> {
     fn of(answer: Option<&'a Answer>) -> Self {
         let success = answer.and_then(Answer::success);
-        let output = answer.and_then(|answer| answer.output.as_deref());
         // What has no numbers, such as what a command that only reads printed, shows as it came.
-        let lines = success.map_or_default(|text| files::lines(text, output));
+        let lines =
+            answer.filter(|answer| answer.success().is_some()).map_or_default(|answer| files::lines(&answer.output));
         let images = answer.map_or_default(Answer::images);
         let text = success.filter(|text| lines.is_empty() && !text.trim().is_empty());
         Self { lines, images, text }

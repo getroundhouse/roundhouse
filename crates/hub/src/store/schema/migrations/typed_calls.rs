@@ -9,13 +9,18 @@ use crate::untyped::{Typing, lately};
 /// How many events are read at a time, so a long log is typed a part at a time rather than held whole.
 const AT_ONCE: i64 = 1000;
 
+/// What a subagent's record kept in the older forms, which `lately` holds typed: its newest call, which only a client
+/// from before `recent` read, and what it had done lately.
+const OLDER_COLUMNS: &str = "ALTER TABLE subagents DROP COLUMN latest_call; ALTER TABLE subagents DROP COLUMN recent;";
+
 /// Each call Claude's adapter recorded by its tool's name and input typed, with what came back for it, as each
 /// session's events have them in order, the call each request for approval asked to make, and what a working
-/// subagent's record says it has done lately. Only a body that changes is written, and an event the hub can't read
-/// is left as it is, as is a record whose work holds no call.
+/// subagent's record says it has done lately, whose older columns go. Only a body that changes is written, and an
+/// event the hub can't read is left as it is, as is a record whose work holds no call.
 pub(super) fn typed_calls(tx: &Transaction<'_>) -> Result<(), StoreError> {
     events(tx)?;
-    records(tx)
+    records(tx)?;
+    Ok(tx.execute_batch(OLDER_COLUMNS)?)
 }
 
 fn events(tx: &Transaction<'_>) -> Result<(), StoreError> {

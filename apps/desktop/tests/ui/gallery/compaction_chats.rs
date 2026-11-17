@@ -7,7 +7,6 @@
 use protocol::event::{CompactedBy, CompactionOutcome, EventBody, TurnOutcome};
 use protocol::model::{Seq, SessionStatus};
 use protocol::tail::{Compacting, Tail};
-use serde_json::json;
 
 use super::chats::{finished, looked_around};
 use super::frame::{CHAT, OUTLINE};
@@ -15,7 +14,7 @@ use super::screens::FOCUS;
 use super::steps::{Screen, Step, Target};
 use super::worlds::chat_world;
 use client_core::fake_hub::World;
-use client_core::fake_hub::events::{replied, taken, text, thought, tool_result, tool_use, user_prompt};
+use client_core::fake_hub::events::{command, edit, printed, replied, taken, text, thought, updated, user_prompt};
 
 /// The screens about compacting.
 pub(crate) const SCREENS: &[Screen] = &[
@@ -162,14 +161,8 @@ fn asked_as(keeping: Option<&str>) -> Vec<EventBody> {
         user_prompt("Go with the first. Add the field, and have the sidebar draw a badge from it."),
         taken(prompt),
         text("msg-5", "I'll add the field first."),
-        tool_use(
-            "msg-5",
-            "toolu-5",
-            "Edit",
-            json!({ "file_path": "/workspaces/aspen/crates/protocol/src/model.rs",
-                "old_string": "    pub branch: String,\n", "new_string": "    pub branch: String,\n    pub pull_request: Option<PullRequest>,\n" }),
-        ),
-        tool_result("toolu-5", "The file has been updated."),
+        edit("msg-5", "toolu-5", MODEL, "    pub branch: String,\n", WITH_PULL_REQUEST),
+        updated("toolu-5", MODEL),
         text("msg-6", reply),
         replied(reply, 41, 0.12),
     ]);
@@ -194,13 +187,8 @@ fn by_itself() -> Vec<EventBody> {
     let reply = "The badge is in. Every client gets it from the feed, and the sidebar's tests pass.";
     events.extend([
         thought("msg-6", "The summary says the field is added, so the sidebar is what's left."),
-        tool_use(
-            "msg-6",
-            "toolu-6",
-            "Bash",
-            json!({ "command": "cargo test -p desktop --test ui sidebar", "description": "Run the sidebar's tests" }),
-        ),
-        tool_result("toolu-6", "test result: ok. 31 passed; 0 failed"),
+        command("msg-6", "toolu-6", "cargo test -p desktop --test ui sidebar", Some("Run the sidebar's tests")),
+        printed("toolu-6", "test result: ok. 31 passed; 0 failed"),
         text("msg-7", reply),
         replied(reply, 214, 0.86),
     ]);
@@ -250,25 +238,18 @@ fn only_compacted(duration_ms: u64) -> EventBody {
 }
 
 /// A turn that has looked around and added the field, and is about to draw the badge.
+/// The file both edits change, and what each puts in it.
+const MODEL: &str = "/workspaces/aspen/crates/protocol/src/model.rs";
+const WITH_PULL_REQUEST: &str = "    pub branch: String,\n    pub pull_request: Option<PullRequest>,\n";
+
 fn so_far() -> Vec<EventBody> {
     let mut events = looked_around();
     events.extend([
         text("msg-3", "I'll add the field to `Workspace`, then draw the badge."),
-        tool_use(
-            "msg-3",
-            "toolu-3",
-            "Edit",
-            json!({ "file_path": "/workspaces/aspen/crates/protocol/src/model.rs",
-                "old_string": "    pub branch: String,\n", "new_string": "    pub branch: String,\n    pub pull_request: Option<PullRequest>,\n" }),
-        ),
-        tool_result("toolu-3", "The file has been updated."),
-        tool_use(
-            "msg-4",
-            "toolu-4",
-            "Bash",
-            json!({ "command": "cargo check --workspace", "description": "Check that everything still builds" }),
-        ),
-        tool_result("toolu-4", "Finished `dev` profile [unoptimized + debuginfo] target(s) in 41.20s"),
+        edit("msg-3", "toolu-3", MODEL, "    pub branch: String,\n", WITH_PULL_REQUEST),
+        updated("toolu-3", MODEL),
+        command("msg-4", "toolu-4", "cargo check --workspace", Some("Check that everything still builds")),
+        printed("toolu-4", "Finished `dev` profile [unoptimized + debuginfo] target(s) in 41.20s"),
     ]);
     events
 }

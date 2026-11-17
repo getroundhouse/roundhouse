@@ -5,11 +5,10 @@
 use std::time::Duration;
 
 use client_core::fake_hub::World;
-use client_core::fake_hub::events::{replied, taken, task, text, tool_result, tool_use, user_prompt};
+use client_core::fake_hub::events::{in_background, monitor, printed, replied, said, taken, task, text, user_prompt};
 use gpui_kit::{AppContext as _, SharedString, TestAppContext};
 use protocol::event::{EventBody, TaskKind};
 use protocol::model::{Seq, SessionId, SessionStatus, Title};
-use serde_json::json;
 
 use crate::support::{FakeHub, Gate, Stack, Ui};
 use crate::tools::in_a_new_workspace;
@@ -257,18 +256,16 @@ fn left_a_command_and_a_monitor_going() -> World {
     let mut world = World::default();
     let repo = world.repo("signals");
     let workspace = world.workspace(&repo, "ledger");
-    let tests = json!({ "command": "cargo test", "description": "Run the tests", "run_in_background": true });
-    let watch = json!({ "command": "tail -f test.log", "description": "Watch the run", "timeout_ms": 600_000 });
     let tasks =
         vec![task(TaskKind::Command, "toolu-1", "Run the tests"), task(TaskKind::Monitor, "toolu-2", "Watch the run")];
     let reply = "Both are going.";
     let events = vec![
         user_prompt("Run the tests, and watch the run"),
         taken(Seq::new(1)),
-        tool_use("msg-1", "toolu-1", "Bash", tests),
-        tool_result("toolu-1", "Command running in background."),
-        tool_use("msg-1", "toolu-2", "Monitor", watch),
-        tool_result("toolu-2", "Monitor started."),
+        in_background("msg-1", "toolu-1", "cargo test", "Run the tests"),
+        printed("toolu-1", "Command running in background."),
+        monitor("msg-1", "toolu-2", "tail -f test.log", "Watch the run", Some(600_000)),
+        said("toolu-2", "Monitor started."),
         EventBody::AgentTasks { tasks, stopped: Vec::new() },
         text("msg-2", reply),
         replied(reply, 5, 0.01),

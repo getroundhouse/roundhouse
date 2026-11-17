@@ -1,12 +1,12 @@
 //! Made-up events and logs, for tests that read the log the way drawing does.
 
 use client_core::session_log::SessionLog;
-use protocol::event::{ApprovalOutcome, Asking, EventBody, QuestionAnswer, SessionEvent, TurnOutcome};
+use protocol::capability::calls::{Call, CallOutput};
+use protocol::event::{ApprovalOutcome, Asking, EventBody, Question, QuestionAnswer, SessionEvent, TurnOutcome};
 pub(crate) use protocol::fixtures::event;
 use protocol::fixtures::{self, ApprovalRequest};
 use protocol::model::{Rev, Seq, Subagent, SubagentStatus};
 use protocol::prompt::Prompt;
-use serde_json::json;
 
 /// The record of the subagent the call `call` started, in the background, at `status`, with nothing else known about
 /// it yet. A test sets what it's about.
@@ -24,12 +24,22 @@ pub(crate) fn log(events: impl IntoIterator<Item = SessionEvent>) -> SessionLog 
 
 /// The agent running a command for each of `ids` at once.
 pub(crate) fn calls(ids: &[&str]) -> EventBody {
-    calls_to("Bash", ids)
+    calls_of(&Call::Command(fixtures::typed_command("make")), ids)
 }
 
-/// The agent calling the tool `name` once for each of `ids`, at once.
-pub(crate) fn calls_to(name: &str, ids: &[&str]) -> EventBody {
-    let blocks = ids.iter().map(|id| protocol::fixtures::tool_use(id, name, json!({}))).collect();
+/// The agent handing work to a subagent for each of `ids` at once.
+pub(crate) fn subagents(ids: &[&str]) -> EventBody {
+    calls_of(&Call::Subagent(fixtures::typed_subagent("Find where the tests live.")), ids)
+}
+
+/// The agent asking the advisor once for each of `ids`, at once.
+pub(crate) fn advised(ids: &[&str]) -> EventBody {
+    calls_of(&Call::Advisor, ids)
+}
+
+/// The agent making `call` once for each of `ids`, at once.
+fn calls_of(call: &Call, ids: &[&str]) -> EventBody {
+    let blocks = ids.iter().map(|id| fixtures::typed_call(id, call.clone())).collect();
     EventBody::Assistant { message_id: None, subagent: None, model: None, blocks, first_index: None }
 }
 
@@ -49,14 +59,19 @@ pub(crate) fn from_the_agent(body: EventBody) -> EventBody {
 
 /// The result of the call `id`.
 pub(crate) fn result(id: &str) -> EventBody {
-    let block = protocol::fixtures::tool_result(id, &format!("from {id}"), false);
+    let block = fixtures::typed_result(id, CallOutput::Words { text: format!("from {id}") }, false);
     EventBody::AgentUser { subagent: None, blocks: vec![block] }
 }
 
-/// The agent asking to use the tool `tool`, under the approval `id`, as a request recorded before adapters said what
-/// each asks, which is read from its tool.
-pub(crate) fn asked(id: &str, tool: &str) -> EventBody {
-    fixtures::approval_request(id, tool).into()
+/// The agent asking the person whether to go on, under the approval `id`, as its adapter says.
+pub(crate) fn asked_a_question(id: &str) -> EventBody {
+    let question = Question { text: "Go on?".into(), header: None, options: Vec::new(), multiple: false };
+    asking(id, Asking::Questions { questions: vec![question] })
+}
+
+/// The agent asking to run a command, under the approval `id`, as its adapter says.
+pub(crate) fn asked_to_use(id: &str) -> EventBody {
+    asking(id, Asking::ToolUse { typed: Some(Call::Command(fixtures::typed_command("ls"))) })
 }
 
 /// The agent asking `asking` under the approval `id`, as its adapter says, with a tool no client knows.

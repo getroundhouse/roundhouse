@@ -129,7 +129,7 @@ fn what_went_wrong_is_read_out_of_the_cli_s_words_only_where_the_adapter_hadn_t(
     let as_sent = failed("Exit code 2\nls: x: No such file", None);
     assert_eq!(output("Bash", &json!({"command":"ls x"}), as_sent), printed("ls: x: No such file", Some(2)));
     assert_eq!(
-        output("Bash", &json!({"command":"sleep 9"}), failed("Command timed out", None)),
+        output("Bash", &json!({"command":"cargo build"}), failed("Command timed out", None)),
         printed("Command timed out", None)
     );
     let refusal = "<tool_use_error>File does not exist.</tool_use_error>";

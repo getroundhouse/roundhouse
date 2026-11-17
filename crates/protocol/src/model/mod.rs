@@ -61,9 +61,7 @@ pub use queue::QueuedPrompt;
 pub use record::{Record, RecordKey, Records};
 pub use session::{AgentKind, OpenApproval, Session, SessionStatus};
 pub use settings::{SessionSettings, SessionSettingsChange};
-pub use subagent::{
-    Call, CallResult, Lately, LatelyCall, LatelyResult, RecentCall, RecentWork, Said, Subagent, SubagentStatus,
-};
+pub use subagent::{Lately, LatelyCall, LatelyResult, Said, Subagent, SubagentStatus};
 pub use terminal::Terminal;
 pub use title::{Title, TitleError, TitleSource};
 pub use wait::{EndedWait, Wait, WaitEnd, WaitEnded, WaitUntil, Watching};

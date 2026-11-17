@@ -5,7 +5,6 @@
 
 use protocol::event::{EventBody, TurnOutcome};
 use protocol::model::{Seq, SessionStatus};
-use serde_json::json;
 
 use super::chats;
 use super::frame::{CHAT, Frame, QUEUE, TABS};
@@ -13,7 +12,7 @@ use super::screens::FOCUS;
 use super::steps::{Screen, Step, Target};
 use super::worlds::{chat_world, conversation, queued};
 use client_core::fake_hub::World;
-use client_core::fake_hub::events::{taken, text, tool_result, tool_use, user_prompt};
+use client_core::fake_hub::events::{command, printed, taken, text, user_prompt};
 
 /// The tab of the chat nothing has been asked in yet, the seventh made in [`untitled`].
 const UNTITLED_TAB: &str = "chat-chat-7";
@@ -73,8 +72,8 @@ fn endings() -> Vec<EventBody> {
         user_prompt("Run the sidebar's tests, to see where they stand."),
         taken(second),
         text("msg-2", "I'll run the desktop app's sidebar tests first."),
-        tool_use("msg-3", "toolu-1", "Bash", json!({ "command": "cargo test -p desktop --test ui sidebar" })),
-        tool_result("toolu-1", "test result: ok. 41 passed; 0 failed; 0 ignored"),
+        command("msg-3", "toolu-1", "cargo test -p desktop --test ui sidebar", None),
+        printed("toolu-1", "test result: ok. 41 passed; 0 failed; 0 ignored"),
         ended(TurnOutcome::Cancelled, Vec::new(), 14_200),
     ]);
     let third = next_seq(&events);

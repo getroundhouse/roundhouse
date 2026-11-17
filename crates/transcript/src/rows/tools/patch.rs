@@ -117,7 +117,7 @@ fn names(files: &[Patched]) -> String {
 
 /// Each file of `patch`, with what came back for it, if anything has.
 fn patched<'a>(patch: &'a Patch, answer: Option<&'a Answer>) -> Vec<Patched<'a>> {
-    let output = answer.and_then(|answer| answer.output.as_deref());
+    let output = answer.map(|answer| &*answer.output);
     patch.files.iter().map(|file| one(file, typed::outcome(file, output))).collect()
 }
 

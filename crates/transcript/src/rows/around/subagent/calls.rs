@@ -83,7 +83,7 @@ impl Subagent {
         };
         for event in nearby::events_after(log, seq, REACH).filter(its_own) {
             let blocks = blocks_of(&event.body);
-            gathered.calls += blocks.iter().filter(|block| matches!(block, ContentBlock::ToolUse { .. })).count();
+            gathered.calls += blocks.iter().filter(|block| matches!(block, ContentBlock::Call { .. })).count();
             if let Some(events) = &mut gathered.events {
                 events.push((event.clone(), Around::read_as(log, m, event.seq, &event.body, opening)));
             }
@@ -180,14 +180,14 @@ mod tests {
 
     use super::nearby::is_loaded;
     use super::{Opening, Record, Subagent, drawn_in_its_call};
-    use crate::fixtures::{calls, calls_to, event, log, record, result, within};
+    use crate::fixtures::{calls, event, log, record, result, subagents, within};
     use crate::transcript::Model;
 
     #[test]
     fn a_subagent_s_event_out_of_its_call_s_reach_is_drawn_where_it_is() {
         let report = |seq| event(seq, within("agent", calls(&["report"])));
         let log = log([
-            event(Seq::new(1), calls_to("Agent", &["agent"])),
+            event(Seq::new(1), subagents(&["agent"])),
             report(Seq::new(2)),
             report(Seq::new(2001)),
             report(Seq::new(2002)),
@@ -211,7 +211,7 @@ mod tests {
         let m = Model::default();
         assert!(!drawn_in_its_call(&log, &m, &work), "its call isn't loaded");
 
-        log.apply_event(event(Seq::new(1), calls_to("Agent", &["agent"])));
+        log.apply_event(event(Seq::new(1), subagents(&["agent"])));
 
         assert!(drawn_in_its_call(&log, &m, &work));
     }
@@ -220,7 +220,7 @@ mod tests {
     fn a_call_the_log_lets_go_of_no_longer_draws_its_subagent_s_work() {
         let work = |seq| event(seq, within("agent", calls(&["work"])));
         let mut log = log((1..=1500).map(|seq| event(Seq::new(seq), result("x"))));
-        log.apply_event(event(Seq::new(1501), calls_to("Agent", &["agent"])));
+        log.apply_event(event(Seq::new(1501), subagents(&["agent"])));
         log.apply_event(work(Seq::new(1502)));
         let m = Model::default();
         assert!(drawn_in_its_call(&log, &m, &work(Seq::new(1502))), "found, and remembered");
@@ -247,7 +247,7 @@ mod tests {
     #[test]
     fn a_call_s_row_finds_the_record_of_the_subagent_it_started_whatever_its_agent_named_it() {
         let mut log = SessionLog::by_place(Place::default());
-        log.apply_event(SessionEvent { place: Place::new(1), ..event(Seq::new(1), calls_to("Agent", &["agent"])) });
+        log.apply_event(SessionEvent { place: Place::new(1), ..event(Seq::new(1), subagents(&["agent"])) });
         let mut m = Model::default();
         let started = Record { id: Some("thread-1".into()), calls: 3, ..record("agent", SubagentStatus::Working) };
         m.subagents.insert(Arc::new(started));
@@ -267,7 +267,7 @@ mod tests {
     #[test]
     fn a_call_s_row_keeps_no_work_apart_for_an_agent_that_doesn_t_record_its_subagents() {
         let mut log = SessionLog::by_place(Place::default());
-        log.apply_event(SessionEvent { place: Place::new(1), ..event(Seq::new(1), calls_to("Agent", &["agent"])) });
+        log.apply_event(SessionEvent { place: Place::new(1), ..event(Seq::new(1), subagents(&["agent"])) });
         let mut m = Model::default();
         let read = |m: &Model| Subagent::read(&log, m, Seq::new(1), &"agent".into(), false, Opening::AsChosen).apart;
         assert!(read(&m), "until its claims are known");
@@ -283,7 +283,7 @@ mod tests {
     #[test]
     fn a_subagent_s_work_is_gathered_from_among_everything_else() {
         let events = [
-            calls_to("Agent", &["agent"]),
+            subagents(&["agent"]),
             within("agent", calls(&["a"])),
             calls(&["the agent's own"]),
             within("another", calls(&["b"])),
