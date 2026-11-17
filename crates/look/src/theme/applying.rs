@@ -111,6 +111,15 @@ fn controls(c: &Colors) -> Vec<(&'static str, String)> {
         ("button.primary.foreground", hex(c.on_main)),
         ("button.primary.hover.background", hex(c.main_hover)),
         ("button.primary.active.background", hex(c.main_pressed)),
+        // A borderless button: lit under the pointer as a menu's row is, at half its strength, and pressed or on as
+        // something raised is.
+        ("button.ghost.hover.background", hex(c.menu_hover.opacity(0.5))),
+        ("button.ghost.active.background", hex(c.raised_pressed)),
+        ("button.ghost.selected.background", hex(c.raised_pressed)),
+        // An outlined button: filled with its own edge's colour, faintly at rest and more under the pointer and pressed.
+        ("button.outline.background", hex(c.control_edge.opacity(0.3))),
+        ("button.outline.hover.background", hex(c.control_edge.opacity(0.5))),
+        ("button.outline.active.background", hex(c.control_edge.opacity(0.7))),
         ("input.border", hex(c.control_edge)),
         ("ring", hex(c.brand)),
         ("caret", hex(c.brand)),

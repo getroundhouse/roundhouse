@@ -21,4 +21,5 @@ patches = [
     "code-block-actions",
     "strong-style",
     "layout-direction-fmt",
+    "ghost-and-outline-button-tokens",
 ]

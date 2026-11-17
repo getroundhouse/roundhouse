@@ -1,3 +1,4 @@
+// Changed in Roundhouse's copy of gpui-kit, as third_party/README.md lists.
 use std::{ops::Deref, sync::Arc};
 
 use crate::{ThemeMode, theme::DEFAULT_THEME_COLORS};
@@ -85,6 +86,12 @@ pub struct ThemeColor {
     pub button_danger_foreground: Hsla,
     /// Button danger hover background color, fallback to `danger_hover`.
     pub button_danger_hover: Hsla,
+    /// Ghost Button hover background color, fallback to `accent`, at half its strength in a dark theme.
+    pub button_ghost_hover: Hsla,
+    /// Ghost Button active background color, fallback to `button_active`.
+    pub button_ghost_active: Hsla,
+    /// Ghost Button selected background color, fallback to `secondary_active`.
+    pub button_ghost_selected: Hsla,
     /// Button info background color, fallback to `info`.
     pub button_info: Hsla,
     /// Button info active background color, fallback to `info_active`.
@@ -93,6 +100,12 @@ pub struct ThemeColor {
     pub button_info_foreground: Hsla,
     /// Button info hover background color, fallback to `info_hover`.
     pub button_info_hover: Hsla,
+    /// Outline Button background color, fallback to `input` at 30% in a dark theme, and `background` in a light one.
+    pub button_outline: Hsla,
+    /// Outline Button hover background color, fallback to `input` at 50%.
+    pub button_outline_hover: Hsla,
+    /// Outline Button active background color, fallback to `input` at 70%.
+    pub button_outline_active: Hsla,
     /// Button primary background color, fallback to `primary`.
     pub button_primary: Hsla,
     /// Button primary active background color, fallback to `primary_active`.
@@ -420,10 +433,16 @@ define_theme_tokens! {
     button_danger_active,
     button_danger_foreground,
     button_danger_hover,
+    button_ghost_hover,
+    button_ghost_active,
+    button_ghost_selected,
     button_info,
     button_info_active,
     button_info_foreground,
     button_info_hover,
+    button_outline,
+    button_outline_hover,
+    button_outline_active,
     button_primary,
     button_primary_active,
     button_primary_foreground,
