@@ -15,9 +15,14 @@ Each step takes `--channel` first, for which platform's releases it publishes: `
       sure apps get that feed, and prints `published`. Otherwise it refuses a VERSION that isn't newer than every
       published release, which no app would take. It puts the feed in DIR/base, and in DIR/releases with its newest
       full package, checked against it, for vpk to make a delta from, and prints `new`.
-  publish.py merge --version VERSION --keep COUNT --work DIR
+  publish.py merge --version VERSION --keep COUNT --worker-versions FILE --work DIR
       Writes the feed to sign and prints its path: the feed in DIR/base and the packages vpk made for VERSION in
-      DIR/releases, checked against their files, without releases older than the newest COUNT.
+      DIR/releases, checked against their files, with VERSION's full package saying which versions of the worker
+      protocol its hub speaks, from FILE, which `tools/build.sh --package` wrote beside the binaries. It refuses one
+      whose hub doesn't speak the newest published release's workers, since an app with those at work could never
+      update past them. It leaves out releases older than the newest COUNT, but for the newest whose hub speaks each
+      oldest worker version, as its full package, since that's the release an app steps to while it has workers that
+      old at work, so the update stops none of them.
   publish.py bridge --version VERSION --work DIR
       For a channel that took over from an older one, writes the older channel's feed to sign, listing only the full
       package of VERSION the feed in DIR/feed has, and prints its path. Prints nothing for any other channel.
@@ -60,6 +65,10 @@ if sys.version_info < (3, 9):
 HERE = Path(__file__).resolve().parent
 PACK_ID = "Roundhouse"
 VERSION = re.compile(r"^\d+\.\d+\.\d+$")
+# On a release's full package in the feed, which versions of the worker protocol its hub speaks, as
+# `{"oldest": 3, "newest": 4}`. Velopack reads only the fields it knows, so an app that doesn't read this reads the feed
+# as before.
+WORKER_VERSIONS = "WorkerVersions"
 
 
 def windows(channel: str) -> dict[str, str]:
@@ -83,6 +92,12 @@ CHANNELS = {
 }
 
 
+# The channels whose apps step through each break in the worker protocol: those whose hubs keep their workers through
+# an update, as KEEPS_WORKERS in crates/hub/src/hub/coordinator.rs has it. A Windows hub's workers stop with it, so its
+# apps take the newest. tools/update-steps checks the same ones in the merge queue.
+STEPS = {"osx", "linux-amd64", "linux-arm64"}
+
+
 # The channel each one took over from. An app looks for updates in the channel it was packaged for, so one packaged
 # before the change still reads the older channel's feed. Each release also signs that feed, listing only its own full
 # package, which was packaged for the newer channel, so such an app takes it and looks there from then on. amd64
@@ -92,7 +107,8 @@ TAKES_OVER = {"win-amd64": "win"}
 
 def use_channel(channel: str) -> None:
     """Chooses which platform's releases every step below publishes. A run publishes one."""
-    global FEED, STAGED_FEED, DOWNLOADS, OLDER_FEED  # noqa: PLW0603, since a run has one channel, chosen once as it starts
+    global CHANNEL, FEED, STAGED_FEED, DOWNLOADS, OLDER_FEED  # noqa: PLW0603, since a run has one, chosen as it starts
+    CHANNEL = channel
     FEED = f"releases.{channel}.json"
     STAGED_FEED = "staging/" + FEED
     DOWNLOADS = CHANNELS[channel]
@@ -318,7 +334,51 @@ def prepare(store: DirStore | S3Store, key: str, version: str, work: Path) -> st
     return "new"
 
 
-def merge(version: str, keep: int, work: Path) -> Path:
+def worker_versions(path: Path) -> dict[str, int]:
+    """What `roundhoused worker-versions` wrote at `path`, once it's a range of versions."""
+    try:
+        said = json.loads(path.read_text())
+    except (OSError, ValueError) as e:
+        raise Refused(f"couldn't read which worker versions the build speaks from {path}: {e}") from e
+    if not (isinstance(said, dict) and said.keys() == {"oldest", "newest"}
+            and all(type(said[end]) is int for end in said) and 1 <= said["oldest"] <= said["newest"]):
+        raise Refused(f"{path} doesn't say which worker versions the build speaks, as oldest and newest: {said}")
+    return said
+
+
+def kept(assets: list[dict], keep: int) -> list[dict]:
+    """The newest `keep` releases, and the full package of the newest release whose hub speaks each oldest worker
+    version, which an app with workers that old at work steps to. A hub speaks no worker version older than the one
+    before its own, so those are the last releases before each break."""
+    newest = set(sorted({version_of(asset) for asset in assets}, reverse=True)[:keep])
+    steps: dict[int, tuple[int, ...]] = {}
+    for asset in assets:
+        if asset["Type"] == "Full" and WORKER_VERSIONS in asset:
+            oldest = asset[WORKER_VERSIONS]["oldest"]
+            steps[oldest] = max(steps.get(oldest, ()), version_of(asset))
+    stepped_to = set(steps.values())
+    return [asset for asset in assets
+            if version_of(asset) in newest or (version_of(asset) in stepped_to and asset["Type"] == "Full")]
+
+
+def steps_from(assets: list[dict], version: str, speaks: dict[str, int]) -> None:
+    """Refuses `version`, on a channel whose apps step, if its hub doesn't speak the worker protocol of the newest
+    published release, which would leave no release for an app with those workers at work to step to, as "Updating the
+    app" in `docs/architecture.md` says. `tools/update-steps` holds such a break back in the merge queue, so this only
+    catches one that got past it. A release from before releases said what they speak says nothing to check."""
+    if CHANNEL not in STEPS:
+        return
+    fulls = [asset for asset in assets if asset["Type"] == "Full"]
+    if not fulls or WORKER_VERSIONS not in (latest := max(fulls, key=version_of)):
+        return
+    if speaks["oldest"] > latest[WORKER_VERSIONS]["newest"]:
+        raise Refused(f"{version}'s hub doesn't speak workers of protocol {latest[WORKER_VERSIONS]['newest']}, which "
+                      f"{latest['Version']}'s do, so an app with those at work could never update. tools/update-steps "
+                      "should have held the newer break back in the merge queue. \"Updating the app\" in "
+                      "docs/architecture.md says what's left to do")
+
+
+def merge(version: str, keep: int, speaks: dict[str, int], work: Path) -> Path:
     parse_version(version)
     if keep < 1:
         raise Refused("the feed has to keep at least the release it publishes")
@@ -330,9 +390,10 @@ def merge(version: str, keep: int, work: Path) -> Path:
     for asset in made:
         if asset["PackageId"] != PACK_ID or not file_matches(work / "releases" / asset["FileName"], asset):
             raise Refused(f"{asset['FileName']} doesn't match what vpk's feed says of it")
-    every = assets + made
-    kept = sorted({version_of(asset) for asset in every}, reverse=True)[:keep]
-    feed = {"Assets": [asset for asset in every if version_of(asset) in kept]}
+        if asset["Type"] == "Full":
+            asset[WORKER_VERSIONS] = speaks
+    steps_from(assets, version, speaks)
+    feed = {"Assets": kept(assets + made, keep)}
     path = work / "feed" / FEED
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(feed, separators=(",", ":")))
@@ -444,21 +505,22 @@ def main() -> int:
     steps = parser.add_subparsers(dest="step", required=True)
     for name, options in {
         "prepare": ("--store", "--key", "--version", "--work"),
-        "merge": ("--version", "--keep", "--work"),
+        "merge": ("--version", "--keep", "--worker-versions", "--work"),
         "bridge": ("--version", "--work"),
         "upload": ("--store", "--key", "--version", "--work"),
         "check": ("--url", "--key", "--version", "--work"),
     }.items():
         step = steps.add_parser(name)
         for option in options:
-            step.add_argument(option, required=True, type={"--keep": int, "--work": Path}.get(option, str))
+            types = {"--keep": int, "--worker-versions": Path, "--work": Path}
+            step.add_argument(option, required=True, type=types.get(option, str))
     args = parser.parse_args()
     use_channel(args.channel)
     try:
         if args.step == "prepare":
             print(prepare(open_store(args.store), args.key, args.version, args.work))
         elif args.step == "merge":
-            print(merge(args.version, args.keep, args.work))
+            print(merge(args.version, args.keep, worker_versions(args.worker_versions), args.work))
         elif args.step == "bridge":
             older = bridge(args.version, args.work)
             if older is not None:

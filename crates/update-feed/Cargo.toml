@@ -1,0 +1,18 @@
+[package]
+name = "update-feed"
+description = "What a release says in the update feed beyond what Velopack reads."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+license.workspace = true
+
+[dependencies]
+protocol.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
+
+[lints]
+workspace = true

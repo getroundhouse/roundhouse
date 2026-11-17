@@ -45,6 +45,10 @@ enum Role {
         /// What git asks: `get`, `store` or `erase`.
         action: String,
     },
+    /// Prints the versions of the worker protocol this build's hub speaks, as JSON, which only the build can say. The
+    /// release workflow writes it in the update feed, as `tools/package/publish.py` says.
+    #[command(hide = true)]
+    WorkerVersions,
     /// Runs agents and git for a workspace. Started by a hub's provider.
     #[command(group(clap::ArgGroup::new("transport").required(true)))]
     Worker {
@@ -75,6 +79,11 @@ fn forget_hub_variables() {
         // SAFETY: this runs on the main thread before any other exists, so nothing can be reading the environment.
         unsafe { std::env::remove_var(name) };
     }
+}
+
+fn say_worker_versions() -> anyhow::Result<()> {
+    println!("{}", serde_json::to_string(&protocol::worker::HUB_SPEAKS)?);
+    Ok(())
 }
 
 fn main() -> anyhow::Result<()> {
@@ -114,6 +123,7 @@ fn main() -> anyhow::Result<()> {
             std::io::stdout(),
             std::io::stderr(),
         )?),
+        Role::WorkerVersions => say_worker_versions(),
         Role::Delete { paths } => {
             let failed = worker::delete_trees(&paths);
             for (path, e) in &failed {

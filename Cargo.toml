@@ -18,10 +18,12 @@ members = [
     "crates/dictation",
     "crates/dictation-ui",
     "crates/fetching",
+    "crates/update-feed",
     "tools/policy",
     "tools/guide",
     "tools/kit-sync",
     "tools/spec-page",
+    "tools/update-steps",
     "tools/stand-ins/fake-claude",
     "tools/stand-ins/login-standin",
     "tools/stand-ins/native-standin",
@@ -44,10 +46,12 @@ default-members = [
     "crates/terminal-state",
     "crates/dictation",
     "crates/fetching",
+    "crates/update-feed",
     "tools/policy",
     "tools/guide",
     "tools/kit-sync",
     "tools/spec-page",
+    "tools/update-steps",
     "tools/stand-ins/fake-claude",
     "tools/stand-ins/login-standin",
     "tools/stand-ins/native-standin",
@@ -78,6 +82,7 @@ look = { path = "crates/look" }
 dictation = { path = "crates/dictation" }
 dictation-ui = { path = "crates/dictation-ui" }
 fetching = { path = "crates/fetching" }
+update-feed = { path = "crates/update-feed" }
 desktop = { path = "apps/desktop" }
 kit-sync = { path = "tools/kit-sync" }
 

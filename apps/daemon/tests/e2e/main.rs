@@ -54,4 +54,5 @@ mod subagents;
 mod support;
 mod titles;
 mod tools;
+mod worker_versions;
 mod workspaces;

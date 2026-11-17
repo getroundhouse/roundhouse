@@ -4,7 +4,8 @@
 # Mac, on Windows and on Linux. Needs `jq`, which macOS has.
 #
 #   tools/build.sh DIR                  Build this commit, put the binaries in DIR, and print the build
-#   tools/build.sh --package DIR        The same, stamped as a package, with the version people download
+#   tools/build.sh --package DIR        The same, stamped as a package, with the version people download, and
+#                                       DIR/worker-versions.json, which the release workflow says of it in the feed
 #   tools/build.sh --allow-dirty ...    Either, with uncommitted changes in the build
 #
 # `docs/architecture.md` says what the stamp is for. ROUNDHOUSE_BUILD is a package's version, or an install's commit,
@@ -89,5 +90,10 @@ if [ "${BASH_SOURCE[0]}" = "$0" ]; then
   stamp "$allow_dirty" "$kind"
   # Cargo writes to stderr, so the build is all that's printed.
   build_release "$1"
+  # Which versions of the worker protocol its hub speaks, which only the build can say. Asked here, on the platform it
+  # was built for, since Windows and Linux releases are packaged and published on another runner.
+  if [ "$kind" = package ]; then
+    "$1/roundhoused$EXE" worker-versions >"$1/worker-versions.json"
+  fi
   echo "$BUILD"
 fi

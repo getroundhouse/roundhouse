@@ -1,7 +1,10 @@
-use super::{agents, children, connection, found_login, git_credential, github, one_off, tools, workspaces, worktree};
+use super::{
+    agents, children, connection, found_login, git_credential, github, one_off, previous, tools, workspaces, worktree,
+};
 use crate::client::Outcome;
 use crate::model;
 use crate::model::{AgentAccount, FileContents, FileOpened, WorktreeFiles};
+use crate::versions::Versions;
 #[cfg(test)]
 use agents::Delivery;
 use agents::{AgentApproval, AgentControl, AgentSpec, AgentStarted, AgentStop};
@@ -33,6 +36,11 @@ use worktree::{
 /// The worker protocol's version, apart from the client protocol's, so a break in one doesn't break the other. It
 /// changes only for a real break, as "Changing the protocol" in `docs/architecture.md` says.
 pub const WORKER_PROTOCOL_VERSION: u32 = 4;
+
+/// The versions of this protocol a hub of this build speaks: its own, and the one before it, for a worker of an older
+/// build, as "Changing the protocol" in `docs/architecture.md` says. The update feed says it of each release, so an app
+/// can take one whose hub speaks every worker at work.
+pub const HUB_SPEAKS: Versions = Versions { oldest: previous::VERSION, newest: WORKER_PROTOCOL_VERSION };
 
 /// A request to a worker, which names what the worker answers it with.
 pub trait Request {
