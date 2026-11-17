@@ -1,5 +1,5 @@
-//! What the page says of apps of your own: the name an app is first given, how an installation's login stands, and
-//! which refusals are worth trying again.
+//! What the page says of apps of your own: the name an app is first given, how an installation's login stands, as its
+//! record and the hub say, and which refusals are worth trying again.
 
 use client_core::ClientError;
 use gpui_kit::TestAppContext;
@@ -7,12 +7,12 @@ use protocol::client::{ApiError, ErrorCode};
 use protocol::fixtures::found_github_login;
 use protocol::model::{
     FoundGithubLogin, GhLogin, GhLoginWorks, GithubAccount, GithubAccountId, GithubAppId, GithubInstallation,
-    GithubInstallationId, GithubLoginKind, GithubUser, GithubUserId, Records,
+    GithubInstallationId, GithubLoginKind, GithubUser, GithubUserId, Records, SentCredential, UnusableLogin,
 };
 
 use super::super::app_words;
 use super::super::words::{self, Standing};
-use super::made_up::{HOUR_MS, NOW_MS, held, listed, named};
+use super::made_up::{NOW_MS, held, listed, named};
 
 /// `name`'s account, `id`, as an installation of the app 9 on adalabs.
 pub(super) fn installed(id: &str, name: &str) -> GithubAccount {
@@ -47,30 +47,23 @@ fn an_app_is_first_named_after_someone_added_or_else_after_who_gh_is_logged_in_a
     assert_eq!(named_for(Vec::new(), vec![logged_out], None), "", "with nobody to name it after");
 }
 
+/// Its record says nothing of when its token ends, as the hub keeps it, so only the hub can say it's making the next,
+/// which it says only of the default, as what workers are sent.
 #[gpui_kit::test]
-fn an_installations_login_says_nothing_of_its_end_since_the_hub_makes_the_next(cx: &mut TestAppContext) {
-    let standing = |ends_at_ms| {
-        let held = held(GithubLoginKind::App, ends_at_ms, false);
-        cx.update(|cx| {
-            look::hold_still(NOW_MS, cx);
-            Standing::of(Some(&held), NOW_MS, cx)
-        })
-    };
+fn an_installations_record_says_it_works_while_the_hub_holds_it_and_only_the_hub_says_its_renewing(
+    cx: &mut TestAppContext,
+) {
+    let held = held(GithubLoginKind::App, None, false);
+    let (of_its_record, as_the_default) = cx.update(|cx| {
+        look::hold_still(NOW_MS, cx);
+        let renewing =
+            SentCredential::Blocked { account: "g0".into(), why: UnusableLogin::Renewing, reason: "Made up.".into() };
+        (Standing::of(Some(&held), NOW_MS, cx), Standing::sent(&renewing, Some(&held), cx))
+    });
 
-    assert_eq!(standing(None), Standing::Works { ends: None });
-    assert_eq!(standing(Some(NOW_MS + HOUR_MS)), Standing::Works { ends: None }, "from a hub that says one");
-    assert_eq!(standing(Some(NOW_MS - HOUR_MS)), Standing::Renewing, "and the hub makes the next once it has ended");
+    assert_eq!(of_its_record, Standing::Works { ends: None });
+    assert_eq!(as_the_default, Standing::Renewing);
     assert_eq!(words::connected_by(GithubLoginKind::App), "App");
-}
-
-#[test]
-fn what_stops_a_default_installation_says_what_to_do_as_its_app_stands() {
-    assert!(app_words::blocked("ada-roundhouse[bot]", true, true).contains("making its next from the app's key"));
-    assert!(app_words::blocked("ada-roundhouse[bot]", false, true).contains("Connect it again from its menu"));
-    assert_eq!(
-        app_words::blocked("ada-roundhouse[bot]", false, false),
-        "The default, ada-roundhouse[bot], is of an app that was removed. Make another account the default."
-    );
 }
 
 #[test]

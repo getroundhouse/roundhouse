@@ -251,3 +251,35 @@ fn a_reach_in_a_state_from_a_newer_hub_reads_as_unknown_and_one_naming_no_reposi
     assert_eq!((read.reach, read.rev), (Reach::Unknown, Rev::default()));
     assert!(serde_json::from_value::<GithubReach>(not_one).is_err());
 }
+
+/// So a client shows nothing of a newer hub's word as one this build knows, but the reason it gives, which says itself.
+#[test]
+fn what_a_newer_hub_sends_workers_or_why_it_blocks_reads_as_unknown() {
+    let newer = json!({"kind": "two_accounts", "accounts": ["g", "h"]});
+    let newer_block = json!({"kind": "blocked", "account": "g", "why": "on_holiday", "reason": "Ada is away."});
+
+    let read: SentCredential = serde_json::from_value(newer).unwrap();
+    let block: SentCredential = serde_json::from_value(newer_block).unwrap();
+
+    assert_eq!(read, SentCredential::Unknown);
+    let why = UnusableLogin::Unknown;
+    assert_eq!(block, SentCredential::Blocked { account: "g".into(), why, reason: "Ada is away.".into() });
+}
+
+/// As a copy of the settings read between the default changing and what's sent for it being worked out has it.
+#[test]
+fn whats_sent_is_for_the_default_it_names_and_each_machines_own_for_none() {
+    let (ada, grace) = (GithubAccountId::from("g1"), GithubAccountId::from("g2"));
+    let blocked = SentCredential::Blocked { account: ada.clone(), why: UnusableLogin::Ended, reason: "Ended.".into() };
+    let settings =
+        |account: Option<&GithubAccountId>| GithubSettings { account: account.cloned(), sent: Some(blocked.clone()) };
+
+    assert!(SentCredential::MachineOwn.is_for(None) && !SentCredential::MachineOwn.is_for(Some(&ada)));
+    assert!(SentCredential::Account { account: ada.clone() }.is_for(Some(&ada)));
+    assert!(blocked.is_for(Some(&ada)) && !blocked.is_for(Some(&grace)) && !blocked.is_for(None));
+    assert!(!SentCredential::Unknown.is_for(None), "a newer hub's can't be told");
+    assert_eq!(settings(Some(&ada)).sent_for_default(), Some(&blocked));
+    assert_eq!(settings(Some(&grace)).sent_for_default(), None, "the default changed, and it hasn't been worked out");
+    let older = GithubSettings { account: Some(ada), sent: None };
+    assert_eq!(older.sent_for_default(), None, "from a hub from before it said");
+}

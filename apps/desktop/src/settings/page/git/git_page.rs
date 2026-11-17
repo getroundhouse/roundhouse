@@ -5,10 +5,11 @@ use client_core::records::Snapshot;
 use gpui_kit::assets::IconName as Lucide;
 use gpui_kit::component::v_flex;
 use gpui_kit::{App, Entity, IntoElement, ParentElement as _, RenderOnce, ScrollHandle, Styled as _, Window, px};
-use protocol::model::{GithubAccount, GithubSettings};
+use protocol::model::{GithubAccount, GithubSettings, SentCredential};
 
 use super::super::account_row::{COLUMN_WIDTH, Columns};
 use super::kept::Kept;
+use super::words::Standing;
 use super::{Asking, Body, OfHub, Page, PageId, Within, added, found, words};
 
 /// How wide a row's middle columns are: how it was connected, `Signed in` or `Token`, and what else there is to say,
@@ -55,6 +56,21 @@ impl Drawing<'_> {
     /// Whether `account` is the default, as the hub's settings say.
     pub(super) fn is_default(&self, account: &GithubAccount) -> bool {
         self.github.is_some_and(|github| github.account.as_ref() == Some(&account.id))
+    }
+
+    /// What the hub sends every worker for the default, as its settings say, while they say it of the default they
+    /// name, as [`GithubSettings::sent_for_default`] says.
+    pub(super) fn sent(&self) -> Option<&SentCredential> {
+        self.github?.sent_for_default()
+    }
+
+    /// How `account`'s login stands: the default's as the hub says what workers are sent for it, and, while it
+    /// doesn't say, as from a hub from before it did, and any other's, as its record says at the page's moment.
+    pub(super) fn standing(&self, account: &GithubAccount, cx: &App) -> Standing {
+        match self.sent().filter(|_| self.is_default(account)) {
+            Some(sent) => Standing::sent(sent, account.held_login.as_ref(), cx),
+            None => Standing::of(account.held_login.as_ref(), self.now_ms, cx),
+        }
     }
 }
 

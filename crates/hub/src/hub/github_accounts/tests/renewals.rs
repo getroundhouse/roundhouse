@@ -6,7 +6,7 @@
 use std::path::Path;
 use std::sync::Arc;
 
-use protocol::model::GithubToken;
+use protocol::model::{GithubToken, SentCredential, UnusableLogin};
 use protocol::worker::{GitCredential, GitIdentity, GithubCredential};
 use tokio::sync::broadcast;
 
@@ -103,9 +103,47 @@ async fn a_renewal_that_may_pass_leaves_the_sign_in_as_it_is_and_past_its_end_it
     hub.check_github_logins(now_ms() + 2 * HOUR_MS).await;
 
     assert_eq!(github.asked().len(), 2, "each check asked GitHub");
-    assert_eq!(told(&mut feed), [], "no record changed");
+    assert_eq!(told(&mut feed), [], "no account's record changed");
     assert_eq!(hub.store.list_records().unwrap().github_accounts, before);
     assert_eq!(in_time, as_ada("a-token"));
     let GithubCredential::Blocked { reason } = sent(&hub) else { panic!("{:?}", sent(&hub)) };
     assert!(reason.contains("has ended, and Roundhouse is renewing it"), "{reason}");
+}
+
+/// The settings that say so, once the hub follows them as it does as it serves, as a renewal that fails leaves the
+/// default blocked past its renewed token's end, and the same settings as a renewal changes only the token.
+#[tokio::test]
+async fn every_client_is_told_of_the_settings_as_what_workers_are_sent_changes_and_not_as_a_renewal_does() {
+    let renewals = vec![
+        ("a-token-refresh", vec![Answer::granted("a-renewed-token", "a-renewed-refresh")]),
+        ("a-renewed-refresh", vec![Answer::status(503, Vec::new())]),
+    ];
+    let github = StandIn::with(Script { renewals, ..Script::default() }).await;
+    let dir = tempfile::tempdir().unwrap();
+    let hub = hub_signed_in(dir.path(), &github);
+    let telling = tokio::spawn(hub.tell_of_what_workers_are_sent());
+    let mut feed = hub.subscribe_feed();
+    let before = hub.store.hub_settings().unwrap();
+
+    hub.check_github_logins(now_ms()).await;
+    let renewed = (hub.store.hub_settings().unwrap(), sent(&hub));
+    hub.check_github_logins(now_ms() + 9 * HOUR_MS).await;
+    let told = tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        loop {
+            if let HubNotice::HubSettings(settings) = feed.recv().await.unwrap() {
+                return settings;
+            }
+        }
+    });
+    let told = told.await.expect("the settings were told of");
+    telling.abort();
+
+    assert_eq!(renewed, (before.clone(), as_ada("a-renewed-token")), "a renewal changes only the token");
+    let Some(SentCredential::Blocked { why, reason, .. }) = told.github.as_ref().unwrap().sent.clone() else {
+        panic!("{told:?}")
+    };
+    assert_eq!(why, UnusableLogin::Renewing);
+    assert_eq!(GithubCredential::Blocked { reason }, sent(&hub), "with the reason workers are given");
+    assert!(told.rev > before.rev);
+    assert_eq!(hub.store.hub_settings().unwrap(), told);
 }

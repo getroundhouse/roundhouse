@@ -26,6 +26,7 @@ pub(crate) mod tests;
 mod accounts;
 pub(crate) use accounts::{Connect, GithubAccountChange, GithubLogins};
 mod apps;
+mod blocks;
 pub(crate) use apps::{AppChange, AppRemoved};
 mod credential;
 mod default_credential;

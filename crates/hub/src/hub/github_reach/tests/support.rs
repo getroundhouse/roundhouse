@@ -28,7 +28,7 @@ pub(super) async fn reads(hub: &Arc<Hub>, url: &str) {
 /// The credential of `username`'s token `token`.
 pub(super) fn account(username: &str, token: &str) -> DefaultCredential {
     let credential = GitCredential { username: username.into(), token: GithubToken::new(token), identity: None };
-    DefaultCredential::Account { credential, username: username.into(), installation: None }
+    DefaultCredential::Account { account: "g".into(), credential, username: username.into(), installation: None }
 }
 
 /// The hub's checks, run as it runs them, but following `credential` rather than its logins.

@@ -1,6 +1,7 @@
 //! Git's screens of an app of your own, each of a state its rules in `settings.md` say: each step of the panel that
 //! makes one, as far as a screen can take it, since GitHub never sends anyone back here; why the hub couldn't look for
-//! where it's installed; and its rows, installed as the default and installed nowhere, with their menus.
+//! where it's installed; and its rows, installed as the default, as the default whose token has ended, and installed
+//! nowhere, with their menus.
 
 #![cfg(test)]
 
@@ -8,7 +9,9 @@ use super::frame::Frame;
 use super::screens::FOCUS;
 use super::steps::{Screen, Step};
 use super::world::World;
-use super::worlds::{github_accounts, github_app_installed, github_app_not_installed, github_app_not_looked};
+use super::worlds::{
+    github_accounts, github_app_installed, github_app_not_installed, github_app_not_looked, github_app_renewing,
+};
 
 /// Shows Git, once Settings is open.
 const GIT: Step = Step::Click("settings-page-git");
@@ -80,6 +83,7 @@ pub(crate) const SCREENS: &[Screen] = &[
         ],
     ),
     git("settings-git-app", github_app_installed, &[Step::Select(FOCUS), Step::OpenSettings, GIT]),
+    git("settings-git-app-renewing", github_app_renewing, &[Step::Select(FOCUS), Step::OpenSettings, GIT]),
     git(
         "settings-git-app-menu",
         github_app_installed,

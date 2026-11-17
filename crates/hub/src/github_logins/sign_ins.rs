@@ -80,7 +80,7 @@ impl GithubLogins {
     /// one transaction, as [`Locked::connect`](crate::login_files::Locked::connect) says, and then what workers are
     /// sent worked out again, as every change to a login has it, so a default it renews or makes reaches every worker.
     pub(crate) fn approve_sign_in(&self, approved: &Approved, owner: &TokenOwner) -> Result<SignInChange, ApiError> {
-        self.changing(approved.signed_in_at_ms, |files| {
+        let change = self.changing(approved.signed_in_at_ms, |files| {
             let sign_in = self.sign_in(&approved.sign_in)?;
             if !sign_in.status.is_waiting() {
                 return Ok(SignInChange::unchanged(sign_in));
@@ -101,7 +101,9 @@ impl GithubLogins {
                 Ok(((sign_in, GithubAccountChange { account, changed: true, settings }), replaced))
             })?;
             Ok(SignInChange { sign_in, changed: true, account: Some(account) })
-        })
+        })?;
+        let account = change.account.map(|account| account.settled(&self.store)).transpose()?;
+        Ok(SignInChange { account, ..change })
     }
 
     fn sign_in(&self, id: &GithubSignInId) -> Result<GithubSignIn, ApiError> {

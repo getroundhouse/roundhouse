@@ -83,6 +83,28 @@ fn a_hub_from_before_it_could_allow_a_tool_itself_asks_and_keeps_what_it_had() {
     assert!(!settings.keep_awake);
 }
 
+/// A hub from before it recorded what workers are sent has none on its settings until it's recorded, which it is as
+/// the hub starts, and the same again moves nothing.
+#[test]
+fn what_workers_are_sent_is_on_the_settings_once_recorded_and_moves_their_revision_only_as_it_changes() {
+    use protocol::model::SentCredential;
+    let dir = tempfile::tempdir().unwrap();
+    let store = older::store_from_before(dir.path(), schema::BEFORE_GITHUB_SENT, "");
+    let before = store.hub_settings().unwrap();
+    let account = SentCredential::Account { account: "g".into() };
+
+    let recorded = store.record_github_sent(&SentCredential::MachineOwn).unwrap().unwrap();
+    let again = store.record_github_sent(&SentCredential::MachineOwn).unwrap();
+    let changed = store.record_github_sent(&account).unwrap().unwrap();
+
+    assert_eq!(before.github.unwrap().sent, None);
+    assert_eq!(recorded.github.as_ref().unwrap().sent, Some(SentCredential::MachineOwn));
+    assert!(recorded.rev > before.rev);
+    assert_eq!(again, None, "the same again moves nothing");
+    assert_eq!((changed.github.as_ref().unwrap().sent.as_ref(), changed.rev > recorded.rev), (Some(&account), true));
+    assert_eq!(store.list_records().unwrap().hub_settings, Some(changed));
+}
+
 #[test]
 fn a_hub_is_given_an_id_once_and_keeps_it() {
     let (first, second) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());

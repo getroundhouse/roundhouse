@@ -6,6 +6,7 @@ use std::path::Path;
 use protocol::client::github_apps::GithubManifestCode;
 use protocol::model::{
     GithubAccount, GithubApp, GithubAppId, GithubInstallation, GithubInstallationId, GithubLoginKind, InstalledApp,
+    SentCredential, UnusableLogin,
 };
 use protocol::worker::{GitCredential, GitIdentity, GithubCredential};
 
@@ -243,6 +244,34 @@ fn a_check_makes_an_installations_next_token_before_its_last_ends_and_workers_ar
     assert!(changed.is_none(), "a new token changes nothing on the account's record");
     assert_eq!(sent(&logins), bots("ghs_next"));
     assert!(logins.check(ENDS_AT_MS + 1).unwrap().minting.is_empty(), "the next isn't due till it has 20 minutes left");
+}
+
+/// Its record says nothing of when its token ends, so only the hub can say it blocks once it has, and a new token,
+/// which changes only the token, changes nothing the settings say.
+#[test]
+fn the_settings_say_a_default_installation_whose_token_has_ended_blocks_until_the_next_is_made() {
+    let dir = tempfile::tempdir().unwrap();
+    let (logins, store) = logins_in(dir.path());
+    kept(&logins);
+    let account = installed(&logins, &on_adalabs(70), "ghs_first", ENDS_AT_MS);
+    let recorded = || store.hub_settings().unwrap().github.unwrap().sent.unwrap();
+    let installed = store.hub_settings().unwrap();
+
+    let due = logins.check(ENDS_AT_MS).unwrap().minting.pop().unwrap();
+    let ended = recorded();
+    let next = |token: &str, ends_at_ms| Minted::Token { token: GithubToken::new(token), ends_at_ms };
+    logins.minted(&due, next("ghs_next", ENDS_AT_MS + 3_600_000), ENDS_AT_MS).unwrap();
+    let made = store.hub_settings().unwrap();
+    logins.minted(&due, next("ghs_after", ENDS_AT_MS + 7_200_000), ENDS_AT_MS + 1).unwrap();
+
+    let SentCredential::Blocked { account: blocked, why, reason: said } = ended else { panic!("{ended:?}") };
+    assert_eq!((blocked, why), (account.id.clone(), UnusableLogin::Renewing));
+    assert!(said.contains("has ended, and Roundhouse is making another"), "{said}");
+    assert!(account.held_login.unwrap().works_at(ENDS_AT_MS), "which its record can't say");
+    assert_eq!(made.github.as_ref().unwrap().sent, Some(SentCredential::Account { account: account.id }));
+    assert_eq!(installed.github, made.github);
+    assert_eq!(store.hub_settings().unwrap(), made, "another token changes nothing the settings say");
+    assert_eq!(sent(&logins), bots("ghs_after"));
 }
 
 #[test]

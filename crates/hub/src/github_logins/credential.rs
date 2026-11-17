@@ -1,17 +1,18 @@
 //! What every worker gives the processes it starts for github.com, worked out from the default GitHub account in one
 //! place, under the logins' lock, and kept as it changes for each worker's link and the check of reach to follow, as
-//! "The worker's git credential" in `docs/architecture.md` says.
-
-use std::io;
+//! "The worker's git credential" in `docs/architecture.md` says, and recorded without its token on the hub's settings,
+//! for every client to show.
 
 use protocol::client::ApiError;
 use protocol::model::{
-    GithubAccount, GithubInstallation, GithubLoginKind, GithubToken, GithubUser, GithubUsername, InstalledApp,
+    GithubAccount, GithubAccountId, GithubInstallation, GithubLoginKind, GithubToken, GithubUser, HubSettings,
+    InstalledApp, SentCredential, UnusableLogin,
 };
 use protocol::worker::{GitCredential, GitIdentity};
 use tokio::sync::watch;
-use tracing::info;
+use tracing::{error, info};
 
+use super::blocks::{Unusable, lost, reason};
 use super::{DefaultCredential, GithubLogin, GithubLogins};
 use crate::login_files::{Locked, Stored};
 use crate::store::{GithubProfile, StoreError};
@@ -19,30 +20,19 @@ use crate::store::{GithubProfile, StoreError};
 /// Who git says it is as it gives GitHub an installation's token, as GitHub's docs give.
 const INSTALLATION_USERNAME: &str = "x-access-token";
 
-/// Why the login the hub holds for an account can't be used now.
-pub(super) enum Unusable {
-    /// It holds none, as once it was disconnected.
-    Disconnected,
-    /// Its token has ended, by GitHub's word.
-    Ended,
-    /// It's a sign-in's, whose token has ended, by GitHub's word, or that needs signing in again, as when GitHub has
-    /// refused what renews it, so only signing in again gives it a login that works.
-    SignInAgain,
-    /// It's a sign-in's whose token has ended, by GitHub's word, which what renews it still can, as the hub tries to at
-    /// each check, so it works again once that's done, as after a Mac wakes from a sleep past the token's end.
-    Renewing,
-    /// Its file holds a login in a form only a newer build reads, so this one can't use it, and keeps it for that one.
-    Newer,
-    /// Its file holds no token, or, with the error, can't be read.
-    Unreadable(Option<io::Error>),
-}
-
 impl GithubLogins {
     /// What workers are to give their processes for github.com, from now on, as it changes, with who GitHub knows the
     /// default as, as [`DefaultCredential`] says. It changes under the logins' lock, as each change to the logins is
     /// made, so it changes in the order they were made.
     pub(crate) fn git_credential(&self) -> watch::Receiver<DefaultCredential> {
         self.credential.subscribe()
+    }
+
+    /// The hub's settings each time what workers are sent was recorded anew on them, for the hub to tell every client
+    /// of, from now on. Only the newest is kept, which is all a client takes, as a copy no newer than its own is
+    /// dropped. `None` until it's first recorded after this is called.
+    pub(crate) fn recorded_settings(&self) -> watch::Receiver<Option<HubSettings>> {
+        self.recorded.subscribe()
     }
 
     /// Runs `change` under the logins' lock, then, still under it, works out what workers are to be sent at `now_ms`,
@@ -106,9 +96,13 @@ impl GithubLogins {
         Ok(if renewable { Unusable::Renewing } else { Unusable::SignInAgain })
     }
 
-    /// Has workers sent what they're to give their processes at `now_ms`, if that has changed.
+    /// Has workers sent what they're to give their processes at `now_ms`, and records it, without its token, on the
+    /// hub's settings, each if that has changed.
     pub(super) fn publish(&self, files: &Locked<'_, GithubLogin>, now_ms: i64) {
         let credential = self.worked_out(files, now_ms);
+        if let Some(sent) = credential.recorded() {
+            self.record_sent(&sent);
+        }
         self.credential.send_if_modified(|current| {
             if *current == credential {
                 return false;
@@ -120,38 +114,63 @@ impl GithubLogins {
         });
     }
 
+    /// Records `sent` on the hub's settings, and has them told of as [`GithubLogins::recorded_settings`] says, when
+    /// that changed them. One that can't be recorded leaves the last, until the next change, or the next check within a
+    /// minute, records it, and workers are sent it all the same.
+    fn record_sent(&self, sent: &SentCredential) {
+        match self.store.record_github_sent(sent) {
+            Ok(Some(settings)) => {
+                self.recorded.send_replace(Some(settings));
+            }
+            Ok(None) => {}
+            Err(e) => error!("couldn't record what workers are sent for github.com on the hub's settings: {e}"),
+        }
+    }
+
     /// What workers are to give their processes for github.com at `now_ms`, with who GitHub knows the default as, as
     /// [`DefaultCredential`] says: nothing while the default is each machine's own login, the default's username and
     /// token while its login can be used, with its commit identity, an installation's bot, or as GitHub's profile of a
-    /// token's or a sign-in's user said, once the hub has asked, and otherwise a block that says what to do, never the
-    /// machine's own in its place. So is a default the hub can't read, one whose profile it can't read, and an
+    /// token's or a sign-in's user said, once the hub has asked, and otherwise a block that says what to do, and why,
+    /// never the machine's own in its place. So is a default the hub can't read, one whose profile it can't read, and an
     /// installation whose app's record it can't read.
     fn worked_out(&self, files: &Locked<'_, GithubLogin>, now_ms: i64) -> DefaultCredential {
         let unread = |e: &dyn std::fmt::Display| {
-            let why = format!("Roundhouse couldn't read its default GitHub account ({e})");
-            blocked(&why, "It tries again within a minute.")
+            reason(
+                &format!("Roundhouse couldn't read its default GitHub account ({e})"),
+                "It tries again within a minute.",
+            )
         };
         let default = match self.store.hub_settings() {
             Ok(settings) => settings.github.and_then(|github| github.account),
-            Err(e) => return unread(&e),
+            Err(e) => {
+                return DefaultCredential::Blocked {
+                    reason: unread(&e),
+                    account: None,
+                    why: UnusableLogin::Unreadable,
+                };
+            }
         };
         let Some(id) = default else { return DefaultCredential::MachineOwn };
+        let blocked = |why, reason| DefaultCredential::Blocked { reason, account: Some(id.clone()), why };
         let account = match self.store.github_account(&id) {
             Ok(Some(account)) => account,
             Ok(None) => {
                 let why = "Roundhouse's default GitHub account is one it has no record of";
-                return blocked(why, "Choose another default in Roundhouse's Settings.");
+                return blocked(
+                    UnusableLogin::Unreadable,
+                    reason(why, "Choose another default in Roundhouse's Settings."),
+                );
             }
-            Err(e) => return unread(&e),
+            Err(e) => return blocked(UnusableLogin::Unreadable, unread(&e)),
         };
         let token = match self.token_of(files, &account, now_ms) {
             Ok(Ok(token)) => token,
-            Ok(Err(unusable)) => return lost(&account, &unusable),
-            Err(e) => return unread(&e.message),
+            Ok(Err(unusable)) => return blocked(unusable.said(), lost(&account, &unusable)),
+            Err(e) => return blocked(UnusableLogin::Unreadable, unread(&e.message)),
         };
         if let Some(installation) = &account.installation {
             return match self.installed_app(installation) {
-                Ok(Some(installed)) => installation_credential(account.user, installed, token),
+                Ok(Some(installed)) => installation_credential(account.id, account.user, installed, token),
                 // Removing an app forgets its installations' logins first, so only a store changed behind the hub's
                 // back has one whose login can be used without the app.
                 Ok(None) => {
@@ -159,18 +178,19 @@ impl GithubLogins {
                         "Roundhouse has no record of the app its default GitHub account, {}, is an installation of",
                         account.user.name,
                     );
-                    blocked(&why, "Choose another default in Roundhouse's Settings.")
+                    blocked(UnusableLogin::Unreadable, reason(&why, "Choose another default in Roundhouse's Settings."))
                 }
-                Err(e) => unread(&e),
+                Err(e) => blocked(UnusableLogin::Unreadable, unread(&e)),
             };
         }
         match self.store.github_profile(&account.id) {
             Ok(profile) => {
                 let identity = profile.map(|profile| identity_of(&account.user, profile));
                 let credential = GitCredential { username: account.user.name.clone(), token, identity };
-                DefaultCredential::Account { credential, username: account.user.name, installation: None }
+                let username = account.user.name;
+                DefaultCredential::Account { account: account.id, credential, username, installation: None }
             }
-            Err(e) => unread(&e),
+            Err(e) => blocked(UnusableLogin::Unreadable, unread(&e)),
         }
     }
 
@@ -181,14 +201,20 @@ impl GithubLogins {
     }
 }
 
-/// What git and `gh` are given for an app's installation, whose user is the app's `bot`, installed as `installed`
-/// says, and whose login's token is `token`: `x-access-token` as its username, as GitHub's docs give git for an
-/// installation's token, and the bot as the commit identity, so commits, pushes and pull requests all say the bot. A
-/// bot has no profile, so it's its name and the address GitHub links to it. GitHub knows the installation as the bot.
-fn installation_credential(bot: GithubUser, installed: InstalledApp, token: GithubToken) -> DefaultCredential {
+/// What git and `gh` are given for an app's installation, `account`, whose user is the app's `bot`, installed as
+/// `installed` says, and whose login's token is `token`: `x-access-token` as its username, as GitHub's docs give git
+/// for an installation's token, and the bot as the commit identity, so commits, pushes and pull requests all say the
+/// bot. A bot has no profile, so it's its name and the address GitHub links to it. GitHub knows the installation as the
+/// bot.
+fn installation_credential(
+    account: GithubAccountId,
+    bot: GithubUser,
+    installed: InstalledApp,
+    token: GithubToken,
+) -> DefaultCredential {
     let identity = identity_of(&bot, GithubProfile::default());
     let credential = GitCredential { username: INSTALLATION_USERNAME.into(), token, identity: Some(identity) };
-    DefaultCredential::Account { credential, username: bot.name, installation: Some(installed) }
+    DefaultCredential::Account { account, credential, username: bot.name, installation: Some(installed) }
 }
 
 /// Who commits are by as `user`, as its `profile` says: the name it goes by, or its username when it has none, or one
@@ -211,77 +237,4 @@ fn identity_of(user: &GithubUser, profile: GithubProfile) -> GitIdentity {
 /// every git.
 fn git_commits_as(name: &str) -> bool {
     name.chars().any(|c| c > ' ' && !".,:;<>\"\\'".contains(c))
-}
-
-/// A block, saying `why` agents push as nobody, and `to_do` about it. Git says it as it refuses to push, in a terminal
-/// or an agent's output, where nothing else says it's Roundhouse's, so it names Roundhouse.
-fn blocked(why: &str, to_do: &str) -> DefaultCredential {
-    DefaultCredential::Blocked {
-        reason: format!("{why}, so this workspace's agents push to GitHub as nobody. {to_do}"),
-    }
-}
-
-/// The block for a default, `account`, whose login can't be used, as `unusable` says. An app's installation is named
-/// with where it's installed, and is connected again, and renewed, with the app.
-fn lost(account: &GithubAccount, unusable: &Unusable) -> DefaultCredential {
-    let Some(installation) = &account.installation else { return lost_login(&account.user.name, unusable) };
-    let name = format!("{}, installed on {}", account.user.name, installation.on.name);
-    let elsewhere = "or choose another default in Roundhouse's Settings.";
-    match unusable {
-        Unusable::Disconnected => blocked(
-            &format!("Roundhouse's default GitHub account, {name}, was disconnected, or the app uninstalled there"),
-            &format!(
-                "Install the app there again, connect its installations again in Roundhouse's Settings, {elsewhere}"
-            ),
-        ),
-        Unusable::Renewing => blocked(
-            &format!(
-                "The token of Roundhouse's default GitHub account, {name}, has ended, and Roundhouse is making another"
-            ),
-            &format!(
-                "It tries every minute until GitHub answers. If this goes on, check the app is still on GitHub, {elsewhere}"
-            ),
-        ),
-        Unusable::Ended | Unusable::SignInAgain | Unusable::Newer | Unusable::Unreadable(_) => {
-            lost_login(&name.into(), unusable)
-        }
-    }
-}
-
-/// The block for a default, `name`, whose login can't be used, as `unusable` says.
-fn lost_login(name: &GithubUsername, unusable: &Unusable) -> DefaultCredential {
-    let connect_again = "Connect it again in Roundhouse's Settings, or choose another default there.";
-    match unusable {
-        Unusable::Disconnected => {
-            blocked(&format!("Roundhouse's default GitHub account, {name}, was disconnected"), connect_again)
-        }
-        Unusable::Ended => blocked(
-            &format!("The token of Roundhouse's default GitHub account, {name}, has ended"),
-            "Renew it in Roundhouse's Settings, or choose another default there.",
-        ),
-        Unusable::SignInAgain => blocked(
-            &format!("The sign-in of Roundhouse's default GitHub account, {name}, has ended"),
-            "Sign in with GitHub again in Roundhouse's Settings, or choose another default there.",
-        ),
-        Unusable::Renewing => blocked(
-            &format!(
-                "The token of Roundhouse's default GitHub account, {name}, has ended, and Roundhouse is renewing it"
-            ),
-            "It tries every minute until GitHub answers. If this goes on, sign in with GitHub again in Roundhouse's \
-             Settings.",
-        ),
-        Unusable::Newer => blocked(
-            &format!(
-                "The login of Roundhouse's default GitHub account, {name}, is one only a newer Roundhouse can read"
-            ),
-            "Update Roundhouse, connect the account again in its Settings, or choose another default there.",
-        ),
-        Unusable::Unreadable(None) => {
-            blocked(&format!("Roundhouse can't find the token of its default GitHub account, {name}"), connect_again)
-        }
-        Unusable::Unreadable(Some(e)) => blocked(
-            &format!("Roundhouse can't read the token of its default GitHub account, {name} ({e})"),
-            connect_again,
-        ),
-    }
 }

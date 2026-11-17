@@ -1,11 +1,11 @@
 //! GitHub accounts' and sign-ins' records, as the feed and a list carry them, spelled out, since a client of another
-//! build finds a record by its kind's name and its key.
+//! build finds a record by its kind's name and its key, and what the settings say workers are sent for the default.
 
 use protocol::client::{ClientResponse, HubNotice};
 use protocol::frame;
 use protocol::model::{
-    GithubAccount, GithubLoginKind, GithubSignIn, GithubSignInStatus, GithubUser, GithubUserId, HeldGithubLogin,
-    RecordKey, Records, Rev,
+    GithubAccount, GithubLoginKind, GithubSettings, GithubSignIn, GithubSignInStatus, GithubUser, GithubUserId,
+    HeldGithubLogin, RecordKey, Records, Rev, SentCredential, UnusableLogin,
 };
 
 const ACCOUNT: &str = r#""id":"g","user":{"id":7,"name":"ada"},"held_login":{"how":"token","connected_at_ms":1,"ends_at_ms":null,"needs_sign_in":false},"rev":2"#;
@@ -108,4 +108,39 @@ fn a_list_of_every_record_reads_its_sign_ins_and_one_from_a_hub_that_cant_sign_i
 
     assert_eq!(listed(&line).github_sign_ins, [sign_in()]);
     assert_eq!(listed(older).github_sign_ins, []);
+}
+
+/// What the hub's settings say it sends every worker for the default, in each form, and the settings of a hub from
+/// before they said, which say nothing of it.
+#[test]
+fn what_workers_are_sent_keeps_its_form_on_the_settings_and_one_from_a_hub_from_before_says_none() {
+    let reason = "The token of Roundhouse's default GitHub account, ada, has ended.";
+    let forms = [
+        (SentCredential::MachineOwn, r#"{"kind":"machine_own"}"#.to_string()),
+        (SentCredential::Account { account: "g".into() }, r#"{"kind":"account","account":"g"}"#.to_string()),
+        (
+            SentCredential::Blocked { account: "g".into(), why: UnusableLogin::Ended, reason: reason.to_string() },
+            format!(r#"{{"kind":"blocked","account":"g","why":"ended","reason":"{reason}"}}"#),
+        ),
+    ];
+    let whys = [
+        (UnusableLogin::Disconnected, "disconnected"),
+        (UnusableLogin::Ended, "ended"),
+        (UnusableLogin::Renewing, "renewing"),
+        (UnusableLogin::SignInAgain, "sign_in_again"),
+        (UnusableLogin::Newer, "newer"),
+        (UnusableLogin::Unreadable, "unreadable"),
+    ];
+    let older: GithubSettings = serde_json::from_str(r#"{"account":"g"}"#).unwrap();
+
+    for (sent, form) in forms {
+        let settings = GithubSettings { account: Some("g".into()), sent: Some(sent) };
+        let written = format!(r#"{{"account":"g","sent":{form}}}"#);
+        assert_eq!(serde_json::to_string(&settings).unwrap(), written);
+        assert_eq!(serde_json::from_str::<GithubSettings>(&written).unwrap(), settings);
+    }
+    for (why, form) in whys {
+        assert_eq!(serde_json::to_value(why).unwrap(), form);
+    }
+    assert_eq!(older, GithubSettings { account: Some("g".into()), sent: None });
 }

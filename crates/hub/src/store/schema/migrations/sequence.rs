@@ -361,4 +361,6 @@ pub(in super::super) const MIGRATIONS: &[&str] = &[
     github_accounts::GITHUB_PROFILES,
     // The address each repository's checkout fetches from, and whether it's to be read, in `repos`.
     repos::URLS,
+    // What the hub sends every worker for the default GitHub account, on the hub's settings, in `github_accounts`.
+    github_accounts::GITHUB_SENT,
 ];

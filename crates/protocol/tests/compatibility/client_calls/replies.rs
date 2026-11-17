@@ -41,12 +41,12 @@ fn a_hubs_settings_keep_their_form_and_one_from_a_hub_from_before_says_nothing_o
         r#"{"result":"hub_settings","keep_awake":false,"allow_asked_in_full_access":true,"rev":3}"#,
     );
     answered(
-        ClientResponse::HubSettings(settings(Some(GithubSettings { account: Some("g".into()) }))),
+        ClientResponse::HubSettings(settings(Some(GithubSettings { account: Some("g".into()), sent: None }))),
         r#"{"result":"hub_settings","keep_awake":false,"allow_asked_in_full_access":true,"github":{"account":"g"},"rev":3}"#,
     );
     // Each machine's own login the default, on a hub that keeps GitHub accounts.
     answered(
-        ClientResponse::HubSettings(settings(Some(GithubSettings { account: None }))),
+        ClientResponse::HubSettings(settings(Some(GithubSettings { account: None, sent: None }))),
         r#"{"result":"hub_settings","keep_awake":false,"allow_asked_in_full_access":true,"github":{"account":null},"rev":3}"#,
     );
     // From a hub from before it could allow a tool's use itself, which says nothing of it, nor of GitHub.

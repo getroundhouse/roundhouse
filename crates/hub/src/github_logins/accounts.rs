@@ -5,11 +5,11 @@ use std::sync::Arc;
 use protocol::client::github_accounts::GithubAccountConnect;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::model::{
-    GithubAccount, GithubAccountId, GithubAppId, GithubLoginKind, GithubToken, GithubUser, HubSettings,
+    GithubAccount, GithubAccountId, GithubAppId, GithubLoginKind, GithubToken, GithubUser, HubSettings, UnusableLogin,
 };
 use tokio::sync::watch;
 
-use super::credential::Unusable;
+use super::blocks::Unusable;
 use super::{DefaultCredential, GithubLogin};
 use crate::error::internal;
 use crate::github::TokenOwner;
@@ -19,14 +19,18 @@ use crate::store::{GithubConnected, GithubConnecting, Store, StoreError};
 
 /// Connects, disconnects and tidies the logins of GitHub accounts, chooses the default, and approves and ends sign-ins
 /// with GitHub, one at a time, under their files' lock, so none finds another half done, and works out after each
-/// change to a login what workers give their processes for github.com. Synchronous, and only called off the async threads. Nothing here calls GitHub, which is asked before the
-/// lock is taken, or a worker, whose link follows [`GithubLogins::git_credential`] on its own.
+/// change to a login what workers give their processes for github.com, which it records on the hub's settings.
+/// Synchronous, and only called off the async threads. Nothing here calls GitHub, which is asked before the lock is
+/// taken, a worker, whose link follows [`GithubLogins::git_credential`] on its own, or a client, which the hub tells of
+/// the settings as it follows [`GithubLogins::recorded_settings`].
 pub(crate) struct GithubLogins {
     pub(super) store: Arc<Store>,
     pub(super) files: LoginFiles<GithubLogin>,
     /// What workers are to give their processes for github.com, with who GitHub knows the default as, as of the last
     /// change, which is made under the lock.
     pub(super) credential: watch::Sender<DefaultCredential>,
+    /// The hub's settings as of the last time what workers are sent was recorded anew on them, under the lock.
+    pub(super) recorded: watch::Sender<Option<HubSettings>>,
 }
 
 /// A token to connect, as a client asked: trimmed, and given the ID a new account would get.
@@ -65,6 +69,14 @@ impl GithubAccountChange {
     fn unchanged(account: GithubAccount) -> Self {
         Self { account, changed: false, settings: None }
     }
+
+    /// The same, with the settings it changed as they are once what workers are sent for the default they name is
+    /// recorded on them too, rather than as the change read them just before, so the copy the hub announces never
+    /// names a default with what's sent for the one before it.
+    pub(super) fn settled(self, store: &Store) -> Result<Self, ApiError> {
+        let settings = self.settings.map(|_| store.hub_settings()).transpose()?;
+        Ok(Self { settings, ..self })
+    }
 }
 
 /// What a file in the GitHub logins' directory is kept for, as tidying names it: an account's login, or an app's key.
@@ -91,11 +103,18 @@ enum Plan {
 }
 
 impl GithubLogins {
-    /// The logins of a hub whose data directory is `data_dir`, with what workers are to be sent at `now_ms`.
+    /// The logins of a hub whose data directory is `data_dir`, with what workers are to be sent at `now_ms`, recorded
+    /// on the hub's settings, before any client can read them.
     pub(crate) fn new(store: Arc<Store>, data_dir: &Path, now_ms: i64) -> Self {
         // Replaced before this returns, so before anything can follow it. A block, so even a mistake there fails closed.
-        let unread = DefaultCredential::Blocked { reason: "Roundhouse hasn't read its GitHub accounts".to_string() };
-        let logins = Self { store, files: LoginFiles::new(data_dir), credential: watch::Sender::new(unread) };
+        let reason = "Roundhouse hasn't read its GitHub accounts".to_string();
+        let unread = DefaultCredential::Blocked { reason, account: None, why: UnusableLogin::Unreadable };
+        let logins = Self {
+            store,
+            files: LoginFiles::new(data_dir),
+            credential: watch::Sender::new(unread),
+            recorded: watch::Sender::new(None),
+        };
         logins.publish(&logins.files.lock(), now_ms);
         logins
     }
@@ -135,7 +154,8 @@ impl GithubLogins {
                 Ok(((account, settings), replaced))
             })?;
             Ok(GithubAccountChange { account, changed: true, settings })
-        })
+        })?
+        .settled(&self.store)
     }
 
     /// Has the hub forget the login it holds for `id`, keeping the record, as `GithubAccountDisconnect` says, at
@@ -153,13 +173,16 @@ impl GithubLogins {
 
     /// Makes `account` the default, or each machine's own login with `None`, as `GithubAccountSetDefault` says, under
     /// the same lock that connects and disconnects, so the login it checks is still there as it's chosen.
+    /// Answers with the settings as they are once what workers are sent for it is recorded on them too.
     pub(crate) fn set_default(&self, account: Option<&GithubAccountId>, now_ms: i64) -> Result<HubSettings, ApiError> {
         self.changing(now_ms, |files| {
             if let Some(id) = account {
                 self.usable(files, id, now_ms)?;
             }
-            Ok(self.store.set_github_default(account)?)
-        })
+            self.store.set_github_default(account)?;
+            Ok(())
+        })?;
+        Ok(self.store.hub_settings()?)
     }
 
     /// Makes the logins' files and the GitHub accounts' rows agree, as the hub starts, at `now_ms`, as

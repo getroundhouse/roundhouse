@@ -42,7 +42,7 @@ pub(super) fn listed(records: Records, default: Option<&str>) -> Snapshot {
         keep_awake: true,
         allow_asked_in_full_access: None,
         account_defaults: None,
-        github: Some(GithubSettings { account: default.map(GithubAccountId::from) }),
+        github: Some(GithubSettings { account: default.map(GithubAccountId::from), sent: None }),
         rev: Rev::default(),
     };
     let mut held = HubRecords::default();

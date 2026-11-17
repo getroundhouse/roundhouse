@@ -1,11 +1,12 @@
-use super::super::{Store, StoreError, from_text, lock, rev_of, text_of};
+use super::super::{Store, StoreError, from_text, json_at, lock, rev_of, text_of};
 use protocol::model::{
     AccountDefault, AccountId, AgentKind, GithubAccountId, GithubSettings, HubId, HubSettings, HubSettingsChange,
+    SentCredential,
 };
 use rusqlite::{Connection, params};
 
 pub(in super::super) fn hub_settings(conn: &Connection) -> rusqlite::Result<HubSettings> {
-    let columns = "keep_awake, allow_asked_in_full_access, rev, github_account_id";
+    let columns = "keep_awake, allow_asked_in_full_access, rev, github_account_id, github_sent";
     conn.query_row(&format!("SELECT {columns} FROM hub_settings"), [], |row| {
         // The outer SELECT remains active while the defaults are read, keeping one SQLite snapshot.
         let mut defaults = conn.prepare_cached("SELECT agent, account_id FROM account_defaults ORDER BY agent")?;
@@ -18,7 +19,10 @@ pub(in super::super) fn hub_settings(conn: &Connection) -> rusqlite::Result<HubS
             account_defaults: Some(account_defaults),
             keep_awake: row.get(0)?,
             allow_asked_in_full_access: Some(row.get(1)?),
-            github: Some(GithubSettings { account: row.get::<_, Option<String>>(3)?.map(GithubAccountId::from) }),
+            github: Some(GithubSettings {
+                account: row.get::<_, Option<String>>(3)?.map(GithubAccountId::from),
+                sent: json_at(row, 4)?,
+            }),
             rev: rev_of(row, 2)?,
         })
     })
@@ -49,6 +53,17 @@ impl Store {
             )?;
             hub_settings(tx)
         })
+    }
+
+    /// Records `sent` as what the hub sends every worker for the default GitHub account, and answers with the settings
+    /// when that changed them, which moves their revision, so a renewal that changes only the token changes nothing.
+    /// Called with the GitHub logins' lock held, as what's sent is worked out. Not synced, since the hub works it out
+    /// and records it again as it starts, before any client reads it.
+    pub(crate) fn record_github_sent(&self, sent: &SentCredential) -> Result<Option<HubSettings>, StoreError> {
+        let sent = serde_json::to_string(sent)?;
+        let conn = lock(&self.writer);
+        let changed = conn.execute("UPDATE hub_settings SET github_sent = ?1 WHERE github_sent IS NOT ?1", [&sent])?;
+        Ok(if changed == 0 { None } else { Some(hub_settings(&conn)?) })
     }
 
     /// This hub's ID, made when its database was.

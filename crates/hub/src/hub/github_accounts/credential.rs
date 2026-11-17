@@ -1,10 +1,12 @@
 //! What the hub's workers give their processes for github.com, as `crate::github_logins` works it out, for each
-//! worker's link to follow, and the check by the wall clock that finds the default's token has ended, and which
-//! sign-ins to renew before theirs does, until the hub stops.
+//! worker's link to follow, and as it records it on the hub's settings, for every client to hear of, and the check by
+//! the wall clock that finds the default's token has ended, and which sign-ins to renew before theirs does, until the
+//! hub stops.
 
 use std::sync::Arc;
 use std::time::Duration;
 
+use protocol::client::HubNotice;
 use tokio::sync::watch;
 use tokio::task::JoinHandle;
 use tokio::time::MissedTickBehavior;
@@ -19,6 +21,25 @@ impl Hub {
     /// [`GithubLogins::git_credential`](crate::github_logins::GithubLogins::git_credential) says.
     pub(crate) fn git_credential(&self) -> watch::Receiver<DefaultCredential> {
         self.github_logins.git_credential()
+    }
+
+    /// Tells every client of the hub's settings each time what workers are sent is recorded anew on them, as
+    /// [`GithubLogins::recorded_settings`](crate::github_logins::GithubLogins::recorded_settings) says, from when this
+    /// is called, so the hub calls it before it serves any client, here or paired, and no client misses a change made
+    /// after the records it lists. Each change to the logins has the logins record it, whatever made it, which is why
+    /// it's followed here rather than told of by each, and a client drops a copy no newer than one it has, so the
+    /// settings told of by what changed the default can come before or after. Until the task it runs on is ended, as
+    /// the hub stops.
+    pub(crate) fn tell_of_what_workers_are_sent(self: &Arc<Self>) -> impl Future<Output = ()> + Send + 'static {
+        let (hub, mut recorded) = (Arc::clone(self), self.github_logins.recorded_settings());
+        async move {
+            while recorded.changed().await.is_ok() {
+                let settings = recorded.borrow_and_update().clone();
+                if let Some(settings) = settings {
+                    hub.notify(HubNotice::HubSettings(settings));
+                }
+            }
+        }
     }
 
     /// Checks the GitHub logins as the hub starts and every
