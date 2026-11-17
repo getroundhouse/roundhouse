@@ -3,11 +3,6 @@
 //! order, is `crate::logins`'s.
 
 #[cfg(test)]
-use protocol::client::accounts::AccountConnect;
-#[cfg(test)]
-use protocol::client::{ErrorCode, HubNotice};
-
-#[cfg(test)]
 mod tests;
 
 mod login_calls;

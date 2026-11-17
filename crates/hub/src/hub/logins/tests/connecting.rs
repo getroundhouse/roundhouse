@@ -2,10 +2,11 @@
 //! worker, and a stand-in for the machine's worker. What's kept, and in what order, and what's refused, is tested in
 //! `crate::logins`. The daemon's `e2e/logins.rs` has launches under the hub's login through a real worker.
 
+use protocol::client::accounts::AccountConnect;
+use protocol::client::{ErrorCode, HubNotice};
 use protocol::model::{AgentDescription, AgentKind, LoginToken};
 use tokio::sync::broadcast::error::TryRecvError;
 
-use super::*;
 use crate::hub::tests::{A_TOKEN_LASTS_MS, described, hub_describing, hub_in};
 use crate::store::SessionLogin;
 
