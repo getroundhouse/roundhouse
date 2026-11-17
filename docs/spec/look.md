@@ -47,7 +47,7 @@ Each colour means one thing.
 | **Text** | | |
 | `text` | `#ebe7e3` | What to read |
 | `text_muted` | `#a39d97` | What's secondary, and a name that needs nothing from you |
-| `text_faint` | `#6f6964` | Line numbers, meta, hints, and a mark with no pull request |
+| `text_faint` | `#6f6964` | Line numbers, meta, hints, such as a field's placeholder, and a mark with no pull request |
 | **Buttons** | | |
 | `button` | `#211e1c` | A button with an edge, such as a dialog's Cancel |
 | `main` | `#f2eee9` | An area's one main action, such as Send |

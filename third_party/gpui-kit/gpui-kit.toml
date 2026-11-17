@@ -23,4 +23,5 @@ patches = [
     "layout-direction-fmt",
     "ghost-and-outline-button-tokens",
     "button-content-style",
+    "input-placeholder-color",
 ]

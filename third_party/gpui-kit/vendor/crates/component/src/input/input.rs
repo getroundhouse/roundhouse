@@ -1,3 +1,4 @@
+// Changed in Roundhouse's copy of gpui-kit, as third_party/README.md lists.
 use std::rc::Rc;
 
 use gpui::prelude::FluentBuilder as _;
@@ -589,6 +590,7 @@ impl RenderOnce for Input {
                 },
                 highlight_styles: cx.theme().highlight_theme.clone(),
                 editor_invisible: cx.theme().highlight_theme.style.editor_invisible,
+                placeholder: Some(cx.theme().input_placeholder),
                 editor_active_line: cx.theme().highlight_theme.style.editor_active_line,
                 editor_gutter_background: cx.theme().highlight_theme.style.editor_gutter_background,
                 fold_icon_renderer: Some(Rc::new(|ix, is_folded| {

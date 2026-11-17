@@ -188,6 +188,8 @@ pub struct ThemeColor {
     pub info_hover: Hsla,
     /// Border color for inputs such as Input, Select, etc.
     pub input: Hsla,
+    /// Placeholder text color for inputs, fallback to `muted_foreground`.
+    pub input_placeholder: Hsla,
     /// Link text color.
     pub link: Hsla,
     /// Active link text color.
@@ -484,6 +486,7 @@ define_theme_tokens! {
     info_foreground,
     info_hover,
     input,
+    input_placeholder,
     link,
     link_active,
     link_hover,

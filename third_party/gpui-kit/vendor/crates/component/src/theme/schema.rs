@@ -461,6 +461,9 @@ pub struct ThemeConfigColors {
     /// Border color for inputs such as Input, Select, etc.
     #[serde(rename = "input.border")]
     pub input: Option<SharedString>,
+    /// Placeholder text color for inputs, fallback to `muted.foreground`.
+    #[serde(rename = "input.placeholder")]
+    pub input_placeholder: Option<SharedString>,
     /// Link text color.
     #[serde(rename = "link")]
     pub link: Option<SharedString>,
@@ -818,6 +821,7 @@ impl ThemeColor {
             muted_foreground,
             fallback = self.muted.blend(self.foreground.opacity(0.7))
         );
+        apply_color!(input_placeholder, fallback = self.muted_foreground);
 
         // Button colors
         let active_darken = if config.mode.is_dark() { 0.2 } else { 0.1 };
@@ -1263,6 +1267,40 @@ mod tests {
         assert_eq!(theme.window_radius, px(0.));
         theme.apply_config(&std::rc::Rc::new(config));
         assert_eq!(theme.window_radius, px(10.));
+    }
+
+    #[test]
+    fn test_apply_config_reads_the_input_placeholder_color() {
+        let config = serde_json::from_value::<ThemeConfig>(serde_json::json!({
+            "name": "Placeholder",
+            "mode": "dark",
+            "colors": { "input.placeholder": "#123456" }
+        }))
+        .unwrap();
+
+        let mut theme = Theme::default();
+        theme.apply_config(&std::rc::Rc::new(config));
+
+        assert_eq!(theme.input_placeholder, try_parse_color("#123456").unwrap());
+        assert_eq!(
+            theme.tokens.input_placeholder.color,
+            theme.input_placeholder
+        );
+    }
+
+    #[test]
+    fn test_input_placeholder_color_falls_back_to_muted_foreground() {
+        for mode in ["dark", "light"] {
+            let config = serde_json::from_value::<ThemeConfig>(serde_json::json!({
+                "name": "Derived",
+                "mode": mode,
+            }))
+            .unwrap();
+            let mut theme = Theme::default();
+            theme.apply_config(&std::rc::Rc::new(config));
+
+            assert_eq!(theme.input_placeholder, theme.muted_foreground, "{mode}");
+        }
     }
 
     #[test]
