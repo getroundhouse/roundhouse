@@ -59,6 +59,23 @@ The pieces screens are built from, on the foundations in `look.md`: what each is
 
 ![Every kind of key](screens/key-kinds.png)
 
+## Fields
+
+- **A field on its own is boxed, and one in what frames it is bare,** as the owner decided. A boxed field has the edge of something to use, a faint fill and a copper ring while it's typed in, such as the rename dialog's, a setting's and Settings' search. A bare field is set in something that frames it already, such as Home's search in its bar and the find bar's, so it has none of them. `look::FieldKind` holds the kinds. *Unconfirmed:* the fill, `control_edge` at 30%, and the edge turning copper with the ring.
+- **A field is one of a control's sizes, as tall as the buttons beside it,** as the owner decided: large in a dialog, regular in a setting's panel and Settings' search, and small in the find bar. What's typed is its size's kind of text, it leaves its size's room at each end, and an icon before what's typed, such as a search's, is as big as a square's icon of its size, in the muted text's colour. *Unconfirmed.*
+- **What a field says while it's empty is faint, as a hint is,** such as Search settings, as the owner decided. So is what the composer says while it's empty.
+
+**Every kind of field, by its name.** Each is a kind in `look::FieldKind`. *Unconfirmed.*
+
+| Name | For |
+|---|---|
+| `Boxed` | On its own, with an edge and a faint fill, and a copper ring while it's typed in, such as a dialog's, a setting's or Settings' search |
+| `Bare` | Set in something that frames it already, with no edge, fill or ring of its own, such as Home's search in its bar or the find bar's |
+
+**Every kind of field in every state, at the regular size: empty, with something typed, typed in and off, as the app draws each.** Each typed in is pressed for real, one at a time. *Unconfirmed.*
+
+![Every kind of field in every state](screens/field-states.png)
+
 ## The status mark
 
 Every workspace and chat has a mark: a half circle of fine dots around a turntable, like a roundhouse seen from above. It has four rows of 9, 13, 17 and 21 dots, the same distance apart along every row. Each row has four more dots than the one inside it, so the fan keeps the same pattern with any number of rows, the rows sit a little further apart than the dots in them, and every row has a dot on the middle line, so the rows line up down it. The inner row has the fewest dots that keep it at least 2/5 of the way out to the outer row, which leaves room for the turntable. Fine dots give it a texture of its own. It's 26px wide in the sidebar, where it fills the room before a workspace's name and its dots are big enough to tell apart at a glance, and 16px in chat tabs, the working line and Home. A much bigger fan, such as the brand in an empty state, has more rows rather than bigger dots, so the texture stays fine, and its turntable stays the same share of its width.

@@ -69,7 +69,9 @@ pub(crate) struct SettingsView {
 impl RenderOnce for SettingsView {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         // Kept only while Settings shows, so it opens with nothing typed.
-        let search = window.use_keyed_state("settings-search", cx, InputState::new);
+        let search = window.use_keyed_state("settings-search", cx, |window, cx| {
+            InputState::new(window, cx).placeholder(super::sidebar::SEARCH_SAYS)
+        });
         let chosen = self.chosen;
         let scroll = window.use_keyed_state("settings-scroll", cx, |_, _| ScrollHandle::new()).read(cx).clone();
         let sections = found(sections(&self.hub), &search.read(cx).value());
