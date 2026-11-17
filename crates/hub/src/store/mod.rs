@@ -29,6 +29,8 @@ mod instances;
 mod lines;
 mod logins;
 mod made;
+#[cfg(test)]
+mod migrated;
 mod new_workspace_draft;
 #[cfg(test)]
 pub(crate) mod older;

@@ -108,14 +108,16 @@ fn what_workers_are_sent_is_on_the_settings_once_recorded_and_moves_their_revisi
 #[test]
 fn a_hub_is_given_an_id_once_and_keeps_it() {
     let (first, second) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
-    let store = store_with_session(first.path());
+    // Each runs every migration from nothing, since one of them chooses the ID, and a test's usual store is a copy of
+    // one they ran on once.
+    let open = |dir: &std::path::Path| crate::store::Store::open(&dir.join("hub.db"), &dir.join("backups")).unwrap();
+    let store = open(first.path());
     let id = store.hub_id().unwrap();
     assert_eq!(id.as_str().len(), 32, "{id}");
 
     drop(store);
-    let (path, backups) = (first.path().join("hub.db"), first.path().join("backups"));
-    assert_eq!(crate::store::Store::open(&path, &backups).unwrap().hub_id().unwrap(), id);
-    assert_ne!(store_with_session(second.path()).hub_id().unwrap(), id, "another hub is another");
+    assert_eq!(open(first.path()).hub_id().unwrap(), id);
+    assert_ne!(open(second.path()).hub_id().unwrap(), id, "another hub is another");
 }
 
 #[test]
