@@ -122,14 +122,104 @@ proptest! {
     }
 }
 
-#[test]
-fn images_on_lines_of_their_own_are_each_a_paragraph() {
-    let text = "Before and after:\n\n![Before](before.png)\n![After](after.png)\n\nThe badge moved.";
+/// Texts with images one after another, what each is made, and the blocks the kit's parser reads that as. The blank
+/// line and the line after it start as the paragraph's first line does, so the images stay in their list items, quotes
+/// and footnotes.
+const APART: &[(&str, &str, &str, &str)] = &[
+    (
+        "images on lines of their own",
+        "Before and after:\n\n![Before](before.png)\n![After](after.png)\n\nThe badge moved.",
+        "Before and after:\n\n![Before](before.png)\n\n![After](after.png)\n\nThe badge moved.",
+        "Paragraph[Before and after:] Paragraph[Before] Paragraph[After] Paragraph[The badge moved.]",
+    ),
+    (
+        "images on one line",
+        "![Before](before.png) ![After](after.png)  \n[![Linked](linked.png)](https://example.com)",
+        "![Before](before.png)\n\n![After](after.png)\n\n[![Linked](linked.png)](https://example.com)",
+        "Paragraph[Before] Paragraph[After] Paragraph[Link[Linked]]",
+    ),
+    (
+        "images in a list item",
+        "- The shots:\n\n  ![Before](before.png)\n  ![After](after.png)\n- Next",
+        "- The shots:\n\n  ![Before](before.png)\n\n  ![After](after.png)\n- Next",
+        "List[ListItem[Paragraph[The shots:] Paragraph[Before] Paragraph[After]] ListItem[Paragraph[Next]]]",
+    ),
+    (
+        "images in a quote",
+        "> ![Before](before.png)\n> ![After](after.png)",
+        "> ![Before](before.png)\n>\n> ![After](after.png)",
+        "Blockquote[Paragraph[Before] Paragraph[After]]",
+    ),
+    // The line after the blank one starts as the paragraph's first does, not as the image's did, which was code's.
+    (
+        "an image on an indented line isn't made code",
+        "![A](a.png)\n    ![B](b.png)",
+        "![A](a.png)\n\n![B](b.png)",
+        "Paragraph[A] Paragraph[B]",
+    ),
+    // A line can go on a quote's or a list item's paragraph without starting as its first does, and the image on it
+    // stays in the quote or the item.
+    (
+        "an image on a quote's lazy line",
+        "> ![A](a.png)\n![B](b.png)",
+        "> ![A](a.png)\n>\n> ![B](b.png)",
+        "Blockquote[Paragraph[A] Paragraph[B]]",
+    ),
+    (
+        "an image on a list item's lazy line",
+        "- ![A](a.png)\n![B](b.png)",
+        "- ![A](a.png)\n\n  ![B](b.png)",
+        "List[ListItem[Paragraph[A] Paragraph[B]]]",
+    ),
+    (
+        "an image on a numbered item's lazy line",
+        "10) ![A](a.png)\n![B](b.png)",
+        "10) ![A](a.png)\n\n    ![B](b.png)",
+        "List[ListItem[Paragraph[A] Paragraph[B]]]",
+    ),
+    (
+        "images on one line of a list item",
+        "- ![A](a.png) ![B](b.png)",
+        "- ![A](a.png)\n\n  ![B](b.png)",
+        "List[ListItem[Paragraph[A] Paragraph[B]]]",
+    ),
+    // A footnote's lines after the first are four spaces in, however long its label, and a task's box is only on its
+    // first, so a label or a box made spaces would put the image in code.
+    (
+        "images in a footnote",
+        "[^note]: ![A](a.png)\n![B](b.png)",
+        "[^note]: ![A](a.png)\n\n    ![B](b.png)",
+        "FootnoteDefinition[Paragraph[A] Paragraph[B]]",
+    ),
+    (
+        "images in a task",
+        "1. [ ] ![A](a.png)\n   ![B](b.png)",
+        "1. [ ] ![A](a.png)\n\n   ![B](b.png)",
+        "List[ListItem[Paragraph[A] Paragraph[B]]]",
+    ),
+    (
+        "images in a task in a quote",
+        "> - [x] ![A](a.png) ![B](b.png)",
+        "> - [x] ![A](a.png)\n>\n>   ![B](b.png)",
+        "Blockquote[List[ListItem[Paragraph[A] Paragraph[B]]]]",
+    ),
+    // A tab is as wide as it takes to reach the next stop, and a list item can take only part of one.
+    (
+        "images after a tab",
+        "- The shots:\n\n\t![A](a.png) ![B](b.png)",
+        "- The shots:\n\n\t![A](a.png)\n\n  ![B](b.png)",
+        "List[ListItem[Paragraph[The shots:] Paragraph[A] Paragraph[B]]]",
+    ),
+];
 
-    assert_eq!(
-        images_apart(text),
-        "Before and after:\n\n![Before](before.png)\n\n![After](after.png)\n\nThe badge moved."
-    );
+#[test]
+fn images_one_after_another_are_each_made_a_paragraph_where_they_were() {
+    for &(name, text, want, read_as) in APART {
+        let apart = images_apart(text);
+
+        assert_eq!(apart, want, "{name}");
+        assert_eq!(blocks(&apart), read_as, "{name}");
+    }
 }
 
 #[test]
@@ -137,32 +227,6 @@ fn a_text_the_parser_panics_on_is_left_as_it_is() {
     let text = "![Before](before.png)\n![After](after.png)\n\na\n===\n---\nb\n===";
 
     assert_eq!(images_apart(text), text);
-}
-
-#[test]
-fn images_on_one_line_are_each_a_paragraph() {
-    let text = "![Before](before.png) ![After](after.png)  \n[![Linked](linked.png)](https://example.com)";
-
-    assert_eq!(
-        images_apart(text),
-        "![Before](before.png)\n\n![After](after.png)\n\n[![Linked](linked.png)](https://example.com)"
-    );
-}
-
-/// The blank line and the line after it start as the paragraph's first line does, so the images stay in their list
-/// item or quote.
-#[test]
-fn images_in_a_list_item_or_a_quote_stay_in_it() {
-    let listed = images_apart("- The shots:\n\n  ![Before](before.png)\n  ![After](after.png)\n- Next");
-    let quoted = images_apart("> ![Before](before.png)\n> ![After](after.png)");
-
-    assert_eq!(listed, "- The shots:\n\n  ![Before](before.png)\n\n  ![After](after.png)\n- Next");
-    assert_eq!(
-        blocks(&listed),
-        "List[ListItem[Paragraph[The shots:] Paragraph[Before] Paragraph[After]] ListItem[Paragraph[Next]]]"
-    );
-    assert_eq!(quoted, "> ![Before](before.png)\n>\n> ![After](after.png)");
-    assert_eq!(blocks(&quoted), "Blockquote[Paragraph[Before] Paragraph[After]]");
 }
 
 #[test]
@@ -200,62 +264,4 @@ fn only_a_text_with_an_image_after_another_is_parsed() {
     for text in not_parsed {
         assert!(!an_image_may_follow_another(text), "{text:?} is parsed");
     }
-}
-
-/// The line after the blank one starts as the paragraph's first does, not as the image's did, which was code's.
-#[test]
-fn an_image_on_an_indented_line_is_not_made_code() {
-    let apart = images_apart("![A](a.png)\n    ![B](b.png)");
-
-    assert_eq!(apart, "![A](a.png)\n\n![B](b.png)");
-    assert_eq!(blocks(&apart), "Paragraph[A] Paragraph[B]");
-}
-
-/// A line can go on a quote's or a list item's paragraph without starting as its first does, and the image on it stays
-/// in the quote or the item.
-#[test]
-fn an_image_on_a_lazy_line_stays_in_its_quote_or_list_item() {
-    let quoted = images_apart("> ![A](a.png)\n![B](b.png)");
-    let listed = images_apart("- ![A](a.png)\n![B](b.png)");
-    let numbered = images_apart("10) ![A](a.png)\n![B](b.png)");
-
-    assert_eq!(quoted, "> ![A](a.png)\n>\n> ![B](b.png)");
-    assert_eq!(blocks(&quoted), "Blockquote[Paragraph[A] Paragraph[B]]");
-    assert_eq!(listed, "- ![A](a.png)\n\n  ![B](b.png)");
-    assert_eq!(blocks(&listed), "List[ListItem[Paragraph[A] Paragraph[B]]]");
-    assert_eq!(numbered, "10) ![A](a.png)\n\n    ![B](b.png)");
-    assert_eq!(blocks(&numbered), "List[ListItem[Paragraph[A] Paragraph[B]]]");
-}
-
-#[test]
-fn images_on_one_line_of_a_list_item_are_each_a_paragraph_in_it() {
-    let apart = images_apart("- ![A](a.png) ![B](b.png)");
-
-    assert_eq!(apart, "- ![A](a.png)\n\n  ![B](b.png)");
-    assert_eq!(blocks(&apart), "List[ListItem[Paragraph[A] Paragraph[B]]]");
-}
-
-/// A footnote's lines after the first are four spaces in, however long its label, and a task's box is only on its
-/// first, so a label or a box made spaces would put the image in code.
-#[test]
-fn images_in_a_footnote_or_a_task_stay_in_it() {
-    let noted = images_apart("[^note]: ![A](a.png)\n![B](b.png)");
-    let task = images_apart("1. [ ] ![A](a.png)\n   ![B](b.png)");
-    let quoted_task = images_apart("> - [x] ![A](a.png) ![B](b.png)");
-
-    assert_eq!(noted, "[^note]: ![A](a.png)\n\n    ![B](b.png)");
-    assert_eq!(blocks(&noted), "FootnoteDefinition[Paragraph[A] Paragraph[B]]");
-    assert_eq!(task, "1. [ ] ![A](a.png)\n\n   ![B](b.png)");
-    assert_eq!(blocks(&task), "List[ListItem[Paragraph[A] Paragraph[B]]]");
-    assert_eq!(quoted_task, "> - [x] ![A](a.png)\n>\n>   ![B](b.png)");
-    assert_eq!(blocks(&quoted_task), "Blockquote[List[ListItem[Paragraph[A] Paragraph[B]]]]");
-}
-
-/// A tab is as wide as it takes to reach the next stop, and a list item can take only part of one.
-#[test]
-fn images_after_a_tab_stay_in_their_list_item() {
-    let apart = images_apart("- The shots:\n\n\t![A](a.png) ![B](b.png)");
-
-    assert_eq!(apart, "- The shots:\n\n\t![A](a.png)\n\n  ![B](b.png)");
-    assert_eq!(blocks(&apart), "List[ListItem[Paragraph[The shots:] Paragraph[A] Paragraph[B]]]");
 }

@@ -148,45 +148,6 @@ mod tests {
     }
 
     #[test]
-    fn an_older_idle_hub_a_client_started_is_replaced() {
-        assert!(should_replace(&older_idle_hub(), Some(2)));
-    }
-
-    #[test]
-    fn idle_workers_do_not_keep_a_hub_running() {
-        let hub = HubStatus { workers: 3, ..older_idle_hub() };
-        assert!(should_replace(&hub, Some(2)));
-    }
-
-    #[test]
-    fn a_hub_the_same_age_or_newer_is_left_alone() {
-        assert!(!should_replace(&older_idle_hub(), Some(1)));
-        assert!(!should_replace(&HubStatus { build_number: Some(3), ..older_idle_hub() }, Some(2)));
-    }
-
-    #[test]
-    fn a_build_with_no_order_neither_replaces_nor_gets_replaced() {
-        assert!(!should_replace(&older_idle_hub(), None));
-        assert!(!should_replace(&HubStatus { build_number: None, ..older_idle_hub() }, Some(2)));
-    }
-
-    #[test]
-    fn a_hub_started_by_hand_is_left_alone() {
-        assert!(!should_replace(&HubStatus { on_demand: false, ..older_idle_hub() }, Some(2)));
-    }
-
-    /// Since a restart stops none of its agents, what's running on it doesn't matter.
-    #[test]
-    fn an_older_hub_that_keeps_its_workers_is_restarted_at_once_however_busy() {
-        let busy = HubStatus { running_sessions: 2, running_setups: 1, clients: 3, requests: 2, ..older_idle_hub() };
-        assert!(restarts_at_once(&HubStatus { keeps_workers: true, ..busy.clone() }, Some(2)));
-        assert!(!restarts_at_once(&busy, Some(2)), "one that stops its workers waits until it's idle");
-        let keeps = HubStatus { keeps_workers: true, ..older_idle_hub() };
-        assert!(!restarts_at_once(&keeps, Some(1)), "the same build");
-        assert!(!restarts_at_once(&HubStatus { on_demand: false, ..keeps }, Some(2)), "started by hand");
-    }
-
-    #[test]
     fn an_update_keeps_the_oldest_workers_of_a_hub_it_restarts_with_them_running() {
         let hub = HubStatus { keeps_workers: true, oldest_running_worker_protocol: Some(4), ..older_idle_hub() };
 
@@ -208,51 +169,60 @@ mod tests {
         assert!(!runs_older_workers(&HubStatus { keeps_workers: false, ..older }), "none to keep");
     }
 
-    #[test]
-    fn a_busy_older_hub_can_still_be_restarted_by_asking() {
-        let busy = HubStatus { running_sessions: 2, running_setups: 1, clients: 3, requests: 2, ..older_idle_hub() };
-        assert!(!should_replace(&busy, Some(2)));
-        assert!(may_restart(&busy, Some(2)));
+    /// Replaced without asking, as an older hub a client started is while that cuts nothing off.
+    const REPLACED: [bool; 3] = [true, true, false];
+    /// Restarted only once someone asks, as a busy one is.
+    const ASKED: [bool; 3] = [true, false, false];
+    /// Restarted at once, as a busy one that keeps its workers is.
+    const AT_ONCE: [bool; 3] = [true, false, true];
+    /// Left alone.
+    const LEFT: [bool; 3] = [false; 3];
+
+    /// What the app does with each hub, for an app of the build given, as `[may_restart, should_replace,
+    /// restarts_at_once]` say: restart it if asked, replace it without asking, or restart it at once.
+    fn restarts() -> Vec<(&'static str, HubStatus, Option<u64>, [bool; 3])> {
+        let idle = older_idle_hub;
+        let busy = HubStatus { running_sessions: 2, running_setups: 1, clients: 3, requests: 2, ..idle() };
+        let keeps = HubStatus { keeps_workers: true, ..idle() };
+        let older_protocol = HubStatus { protocol_version: protocol::client::CLIENT_PROTOCOL_VERSION - 1, ..idle() };
+        let newer_protocol = HubStatus { protocol_version: protocol::client::CLIENT_PROTOCOL_VERSION + 1, ..idle() };
+        vec![
+            ("an older idle hub a client started", idle(), Some(2), REPLACED),
+            ("with idle workers", HubStatus { workers: 3, ..idle() }, Some(2), REPLACED),
+            // One that's only connected, such as the app on another device, connects again to the next hub, so it
+            // would otherwise keep the update waiting for as long as it stays open.
+            ("with another client connected", HubStatus { clients: 2, ..idle() }, Some(2), REPLACED),
+            ("the same build", idle(), Some(1), LEFT),
+            ("a newer build", HubStatus { build_number: Some(3), ..idle() }, Some(2), LEFT),
+            ("an app with no build number", idle(), None, LEFT),
+            ("a hub with no build number", HubStatus { build_number: None, ..idle() }, Some(2), LEFT),
+            ("started by hand", HubStatus { on_demand: false, ..idle() }, Some(2), LEFT),
+            ("an agent running", HubStatus { running_sessions: 1, ..idle() }, Some(2), ASKED),
+            ("a setup running", HubStatus { running_setups: 1, ..idle() }, Some(2), ASKED),
+            // Replacing it would end its shell.
+            ("a terminal open", HubStatus { open_terminals: 1, ..idle() }, Some(2), ASKED),
+            ("a request under way", HubStatus { requests: 2, ..idle() }, Some(2), ASKED),
+            // One that stops its workers waits until it's idle.
+            ("busy", busy.clone(), Some(2), ASKED),
+            // Since a restart stops none of its agents, what's running on it doesn't matter.
+            ("busy, keeping its workers", HubStatus { keeps_workers: true, ..busy }, Some(2), AT_ONCE),
+            ("keeping its workers, the same build", keeps.clone(), Some(1), LEFT),
+            ("keeping its workers, started by hand", HubStatus { on_demand: false, ..keeps }, Some(2), LEFT),
+            // Older by protocol, whatever its build.
+            ("an older protocol", HubStatus { build_number: None, ..older_protocol.clone() }, None, REPLACED),
+            ("an older protocol, started by hand", HubStatus { on_demand: false, ..older_protocol }, None, LEFT),
+            ("a newer protocol", HubStatus { build_number: None, ..newer_protocol }, None, LEFT),
+        ]
     }
 
+    /// The app restarts only an older hub a client started, replaces one without asking only while that cuts nothing
+    /// off, and restarts one at once only if it keeps its workers.
     #[test]
-    fn a_hub_on_an_older_protocol_can_be_restarted_whatever_its_build() {
-        let across_a_break =
-            HubStatus { protocol_version: protocol::client::CLIENT_PROTOCOL_VERSION - 1, ..older_idle_hub() };
-        assert!(may_restart(&HubStatus { build_number: None, ..across_a_break.clone() }, None));
-        assert!(!may_restart(&HubStatus { on_demand: false, ..across_a_break }, None));
-        let newer = HubStatus {
-            protocol_version: protocol::client::CLIENT_PROTOCOL_VERSION + 1,
-            build_number: None,
-            ..older_idle_hub()
-        };
-        assert!(!may_restart(&newer, None));
-    }
+    fn the_app_restarts_only_an_older_hub_a_client_started_and_without_asking_only_one_that_loses_nothing() {
+        for (name, hub, app, want) in restarts() {
+            let got = [may_restart(&hub, app), should_replace(&hub, app), restarts_at_once(&hub, app)];
 
-    #[test]
-    fn only_an_older_hub_a_client_started_can_be_restarted() {
-        assert!(!may_restart(&older_idle_hub(), Some(1)));
-        assert!(!may_restart(&HubStatus { build_number: Some(3), ..older_idle_hub() }, Some(2)));
-        assert!(!may_restart(&HubStatus { on_demand: false, ..older_idle_hub() }, Some(2)));
-        assert!(!may_restart(&older_idle_hub(), None));
-        assert!(!may_restart(&HubStatus { build_number: None, ..older_idle_hub() }, Some(2)));
-    }
-
-    #[test]
-    fn a_hub_with_anything_running_or_under_way_is_left_alone() {
-        assert!(!should_replace(&HubStatus { running_sessions: 1, ..older_idle_hub() }, Some(2)));
-        assert!(!should_replace(&HubStatus { running_setups: 1, ..older_idle_hub() }, Some(2)));
-        assert!(
-            !should_replace(&HubStatus { open_terminals: 1, ..older_idle_hub() }, Some(2)),
-            "it would end its shell"
-        );
-        assert!(!should_replace(&HubStatus { requests: 2, ..older_idle_hub() }, Some(2)));
-    }
-
-    /// One that's only connected, such as the app on another device, connects again to the next hub, so it would
-    /// otherwise keep the update waiting for as long as it stays open.
-    #[test]
-    fn another_client_connected_doesnt_keep_a_hub() {
-        assert!(should_replace(&HubStatus { clients: 2, ..older_idle_hub() }, Some(2)));
+            assert_eq!(got, want, "{name}: [may restart, replaced, restarted at once]");
+        }
     }
 }

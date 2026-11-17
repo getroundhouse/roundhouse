@@ -15,38 +15,8 @@ fn heights(rows: &[Option<f32>]) -> Heights {
     heights
 }
 
-/// Where each row starts, and where the last ends.
-fn starts(heights: &Heights) -> Vec<Pixels> {
-    (0..=heights.rows()).map(|row| heights.above(row)).collect()
-}
-
-#[test]
-fn a_row_never_measured_counts_as_the_average_of_those_that_have_been() {
-    let none = heights(&[None, None]);
-    let some = heights(&[Some(10.), None, Some(30.), None]);
-
-    assert_eq!(none.guess(), narrow(FIRST_GUESS));
-    assert_eq!(some.guess(), px(20.));
-    assert_eq!((some.height_of(0), some.height_of(1)), (px(10.), px(20.)));
-    assert_eq!(some.total(), px(80.));
-}
-
-#[test]
-fn rows_that_show_nothing_dont_make_the_rest_count_as_nothing() {
-    let all = heights(&[Some(0.), Some(0.), None, None]);
-
-    assert_eq!(all.guess(), narrow(LEAST_GUESS));
-    assert_eq!(all.total(), narrow(LEAST_GUESS * 2.));
-}
-
-#[test]
-fn each_row_starts_where_the_ones_before_it_end() {
-    let all = heights(&[Some(10.), None, Some(30.), None, Some(0.), Some(50.)]);
-
-    // The four measured come to 90, so the others count as 22.5.
-    assert_eq!(starts(&all), [0., 10., 32.5, 62.5, 85., 85., 135.].map(px));
-}
-
+/// Where a row starts, and how tall each counts as, measured or not, is the law below's, as is a place that's inside a
+/// row. This pins what it leaves open, at a row of no height and past the end.
 #[test]
 fn a_place_down_the_session_is_in_the_row_that_covers_it() {
     let all = heights(&[Some(10.), None, Some(30.), None, Some(0.), Some(50.)]);
@@ -58,28 +28,6 @@ fn a_place_down_the_session_is_in_the_row_that_covers_it() {
     assert_eq!(all.row_at(px(85.)), (5, px(0.)), "a row of no height covers nothing");
     assert_eq!(all.row_at(px(134.)), (5, px(49.)));
     assert_eq!(all.row_at(px(500.)), (5, px(415.)), "past the end, it's the last row");
-}
-
-#[test]
-fn measuring_a_row_again_moves_everything_after_it() {
-    let mut all = heights(&[Some(10.), Some(20.), Some(30.)]);
-
-    all.measure(1, px(50.));
-
-    assert_eq!(starts(&all), [0., 10., 60., 90.].map(px));
-    assert_eq!(all.row_at(px(59.)), (1, px(49.)));
-}
-
-#[test]
-fn rows_that_come_and_go_at_the_end_leave_the_rest_as_measured() {
-    let mut all = heights(&[Some(10.), Some(20.), Some(30.)]);
-
-    all.set_rows(5);
-    assert_eq!(all.total(), px(100.), "two more, at the average of 20");
-    all.set_rows(2);
-
-    assert_eq!(all.total(), px(30.));
-    assert_eq!(all.row_at(px(25.)), (1, px(15.)));
 }
 
 /// What happens to a session's rows while it's open.

@@ -22,73 +22,72 @@ fn bounds((x, y): (f32, f32), (width, height): (f32, f32)) -> Bounds<Pixels> {
     Bounds::new(point(px(x), px(y)), size(px(width), px(height)))
 }
 
-#[test]
-fn a_window_opens_where_it_was_on_the_display_it_was_on() {
-    let left = place("desk", (40., 60.), (1800., 1200.), Mode::Windowed);
-
-    let opening = left.opening(&displays()).unwrap();
-
-    assert_eq!(opening.display, DisplayId::new(2));
-    assert_eq!(opening.bounds, WindowBounds::Windowed(bounds((40., 60.), (1800., 1200.))));
+/// A window left windowed on the laptop's own display.
+fn on_the_laptop(x_y: (f32, f32), size: (f32, f32)) -> Place {
+    place("built-in", x_y, size, Mode::Windowed)
 }
 
-#[test]
-fn each_mode_opens_as_itself_with_where_it_goes_back_to() {
-    let full_screen = place("built-in", (96., 61.), (1320., 860.), Mode::FullScreen);
-    let maximized = place("built-in", (96., 61.), (1320., 860.), Mode::Maximized);
-    let back_to = bounds((96., 61.), (1320., 860.));
+/// Where a window opens: on which display and as what, or `None` for its usual place.
+type Opens = Option<(DisplayId, WindowBounds)>;
 
-    assert_eq!(full_screen.opening(&displays()).unwrap().bounds, WindowBounds::Fullscreen(back_to));
-    assert_eq!(maximized.opening(&displays()).unwrap().bounds, WindowBounds::Maximized(back_to));
+/// Opening windowed on display `number`.
+fn windowed(number: u64, x_y: (f32, f32), size: (f32, f32)) -> (DisplayId, WindowBounds) {
+    (DisplayId::new(number), WindowBounds::Windowed(bounds(x_y, size)))
 }
 
-#[test]
-fn a_window_whose_display_is_gone_opens_in_its_usual_place() {
-    let left = place("at the office", (40., 60.), (1800., 1200.), Mode::Windowed);
-
-    assert_eq!(left.opening(&displays()), None);
-}
-
-#[test]
-fn a_window_on_a_display_with_no_id_opens_on_the_main_one() {
-    let left = Place { display: None, ..place("", (40., 60.), (1200., 800.), Mode::Windowed) };
-
-    assert_eq!(left.opening(&displays()).unwrap().display, DisplayId::new(1));
-}
-
-#[test]
-fn a_window_partly_off_its_display_opens_where_it_was() {
-    let left = place("built-in", (1400., 900.), (1320., 860.), Mode::Windowed);
-
-    assert!(left.opening(&displays()).is_some());
-}
-
-#[test]
-fn a_window_out_of_reach_opens_in_its_usual_place() {
-    // As when the display is set to show less than it did.
-    let off_the_side = place("built-in", (1500., 60.), (1320., 860.), Mode::Windowed);
-    let off_the_bottom = place("built-in", (40., 970.), (1320., 860.), Mode::Windowed);
-    let nowhere_near = place("built-in", (4000., 60.), (1320., 860.), Mode::Windowed);
-    // Plenty of it is on the display, but not the strip along its top, which it's moved by.
-    let off_the_top = place("built-in", (40., -800.), (1320., 860.), Mode::Windowed);
-
-    assert_eq!(off_the_side.opening(&displays()), None);
-    assert_eq!(off_the_bottom.opening(&displays()), None);
-    assert_eq!(nowhere_near.opening(&displays()), None);
-    assert_eq!(off_the_top.opening(&displays()), None);
-}
-
-#[test]
-fn a_size_that_isnt_one_opens_in_its_usual_place() {
+/// Where each window left somewhere opens.
+fn openings() -> Vec<(String, Place, Opens)> {
+    let (x_y, size) = ((96., 61.), (1320., 860.));
+    let opened_as = |mode| Some((DisplayId::new(1), mode));
+    let named = [
+        (
+            "where it was",
+            place("desk", (40., 60.), (1800., 1200.), Mode::Windowed),
+            Some(windowed(2, (40., 60.), (1800., 1200.))),
+        ),
+        // Each mode opens as itself, with where it goes back to.
+        (
+            "in full screen",
+            place("built-in", x_y, size, Mode::FullScreen),
+            opened_as(WindowBounds::Fullscreen(bounds(x_y, size))),
+        ),
+        (
+            "maximized",
+            place("built-in", x_y, size, Mode::Maximized),
+            opened_as(WindowBounds::Maximized(bounds(x_y, size))),
+        ),
+        (
+            "on the main display, with no id",
+            Place { display: None, ..on_the_laptop((40., 60.), (1200., 800.)) },
+            Some(windowed(1, (40., 60.), (1200., 800.))),
+        ),
+        ("partly off its display", on_the_laptop((1400., 900.), size), Some(windowed(1, (1400., 900.), size))),
+        ("on a display that's gone", place("at the office", (40., 60.), (1800., 1200.), Mode::Windowed), None),
+        // Out of reach, as when the display is set to show less than it did.
+        ("off the side", on_the_laptop((1500., 60.), size), None),
+        ("off the bottom", on_the_laptop((40., 970.), size), None),
+        ("nowhere near", on_the_laptop((4000., 60.), size), None),
+        // Plenty of it is on the display, but not the strip along its top, which it's moved by.
+        ("off the top", on_the_laptop((40., -800.), size), None),
+        ("at a place that isn't one", on_the_laptop((f32::NAN, 60.), size), None),
+    ];
     let not_sizes =
         [(0., 860.), (1320., 0.), (-1320., 860.), (1320., -860.), (f32::NAN, 860.), (1320., f32::NAN), (1320., 12.)];
-    for (width, height) in not_sizes {
-        let left = place("built-in", (40., 60.), (width, height), Mode::Windowed);
+    let not_a_size =
+        |(width, height)| (format!("{width} by {height}"), on_the_laptop((40., 60.), (width, height)), None);
+    let named = named.into_iter().map(|(name, left, opens)| (name.to_string(), left, opens));
+    named.chain(not_sizes.into_iter().map(not_a_size)).collect()
+}
 
-        assert_eq!(left.opening(&displays()), None, "{width} by {height}");
+/// A window opens where it was left, on the display it was on, unless that display is gone, or too little of the
+/// window would be on it to reach, or what was saved isn't a place.
+#[test]
+fn a_window_opens_where_it_was_left_unless_it_would_be_out_of_reach() {
+    for (name, left, want) in openings() {
+        let opening = left.opening(&displays()).map(|opening| (opening.display, opening.bounds));
+
+        assert_eq!(opening, want, "{name}");
     }
-    let nowhere = place("built-in", (f32::NAN, 60.), (1320., 860.), Mode::Windowed);
-    assert_eq!(nowhere.opening(&displays()), None);
 }
 
 #[test]

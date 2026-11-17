@@ -87,30 +87,34 @@ mod tests {
         given.iter().map(ToString::to_string).collect()
     }
 
+    /// Arguments given, the note taken out of them, and what's left.
+    type Given = (&'static str, &'static [&'static str], Option<&'static str>, &'static [&'static str]);
+
+    const NOTES: &[Given] = &[
+        (
+            "as a flag and its value",
+            &["aspen", "--note", "Check the diff", "diff"],
+            Some("Check the diff"),
+            &["aspen", "diff"],
+        ),
+        ("as one argument", &["--note=Check the diff", "aspen"], Some("Check the diff"), &["aspen"]),
+        (
+            "the last wins, and other flags stay",
+            &["--note", "first", "--notes", "--note=second"],
+            Some("second"),
+            &["--notes"],
+        ),
+        ("a flag with nothing after it", &["aspen", "--note"], None, &["aspen"]),
+    ];
+
     #[test]
-    fn a_note_is_taken_out_of_the_arguments_either_way_it_is_given() {
-        let mut given = args(&["aspen", "--note", "Check the diff", "diff"]);
-        assert_eq!(take_note(&mut given).as_deref(), Some("Check the diff"));
-        assert_eq!(given, args(&["aspen", "diff"]));
+    fn the_last_note_is_taken_out_of_the_arguments_however_it_is_given() {
+        for &(name, given, note, left) in NOTES {
+            let mut given = args(given);
 
-        let mut given = args(&["--note=Check the diff", "aspen"]);
-        assert_eq!(take_note(&mut given).as_deref(), Some("Check the diff"));
-        assert_eq!(given, args(&["aspen"]));
-    }
-
-    #[test]
-    fn the_last_note_wins_and_other_flags_stay() {
-        let mut given = args(&["--note", "first", "--notes", "--note=second"]);
-
-        assert_eq!(take_note(&mut given).as_deref(), Some("second"));
-        assert_eq!(given, args(&["--notes"]));
-    }
-
-    #[test]
-    fn a_note_flag_with_nothing_after_it_is_no_note() {
-        let mut given = args(&["aspen", "--note"]);
-        assert_eq!(take_note(&mut given), None);
-        assert_eq!(given, args(&["aspen"]));
+            assert_eq!(take_note(&mut given).as_deref(), note, "{name}");
+            assert_eq!(given, args(left), "{name}");
+        }
     }
 
     #[test]

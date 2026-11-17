@@ -6,7 +6,7 @@
 //! which is a better guess than the average, until it's drawn again.
 
 #[cfg(test)]
-use gpui_kit::{Pixels, px};
+use gpui_kit::px;
 
 #[cfg(test)]
 mod tests;
@@ -14,4 +14,4 @@ mod tests;
 mod measurements;
 pub(super) use measurements::Heights;
 #[cfg(test)]
-use measurements::{FIRST_GUESS, LEAST_GUESS, count, narrow};
+use measurements::{FIRST_GUESS, LEAST_GUESS, count};
