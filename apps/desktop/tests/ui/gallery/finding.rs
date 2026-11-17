@@ -55,6 +55,7 @@ fn every_kind_of_call() -> World {
         typed_chats::files_changed(),
         typed_chats::one_file_patches(),
         typed_chats::searched(),
+        typed_chats::mcp_tools(),
         what_went_wrong(),
     ];
     chat_world(SessionStatus::Idle, chats.concat())

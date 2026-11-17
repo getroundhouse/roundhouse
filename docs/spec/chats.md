@@ -336,11 +336,15 @@ Every call is drawn the same way, as the first rule below says, and each kind fi
 
   ![A result on a line of its own, opened](screens/tool-output-alone.png)
 
-- **Any other tool's title is its name made readable,** such as `Create issue` for `create_issue`, then the MCP server it's from in an outlined chip, and its most telling input in faint monospace. If the agent described the call, the description is the title and the tool's name follows it. Opened, its input as JSON, then what came back. *Unconfirmed.*
+- **Any other tool's title is its name made readable,** such as `Create issue` for `create_issue`, then the MCP server it's from in an outlined chip, and its most telling input in faint monospace. If the agent described the call, the description is the title and the tool's name follows it. Opened, its input as JSON, then what came back. A call from an agent that types its calls, as Codex's and Antigravity's adapters do, is drawn the same, and one that names no tool is titled `Unknown tool`. *Unconfirmed.*
 
   **Tools with no drawing of their own: one from an MCP server opened, one that failed, and a built-in one.** *Unconfirmed.*
 
   ![Other tools, one opened to its input and output](screens/tool-any.png)
+
+  **The same tools of MCP servers, from an agent that types its calls, as Codex's adapter does, one opened.** *Unconfirmed.*
+
+  ![Two MCP tools' calls from Codex, one opened to its input and output](screens/tool-any-typed.png)
 
 - **A file call names the file in an outlined chip, and says how much it read or wrote,** such as `Read 10 lines` or `Write 12 lines`. Opened, the file's path, then its lines with their numbers in the file, highlighted for its language. The full path is only there, since the file's name is enough to tell calls apart. *Unconfirmed.*
 
