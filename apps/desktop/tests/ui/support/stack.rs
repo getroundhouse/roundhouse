@@ -170,6 +170,23 @@ impl<'a> Ui<'a> {
         waiting::thread::until_or_say(TIMEOUT, what, self, frame_then, Ui::texts_shown);
     }
 
+    /// As [`Ui::wait`], saying what `said` makes of the app as well as what the window shows once it times out, for a
+    /// wait on what the window doesn't show, such as which of a chat's rows are loaded.
+    #[track_caller]
+    pub(crate) fn wait_saying(
+        &mut self,
+        what: &str,
+        mut done: impl FnMut(&mut Self) -> bool,
+        said: impl FnOnce(&mut Self) -> String,
+    ) {
+        let frame_then = |ui: &mut Self| {
+            ui.frame();
+            done(ui)
+        };
+        let said = |ui: &mut Self| format!("{}; {}", said(ui), ui.texts_shown());
+        waiting::thread::until_or_say(TIMEOUT, what, self, frame_then, said);
+    }
+
     /// Waits until no call the app started is under way, then for the app to take their replies, so whatever a call
     /// started by mistake would have done has been done.
     pub(crate) fn wait_for_every_call(&mut self) {

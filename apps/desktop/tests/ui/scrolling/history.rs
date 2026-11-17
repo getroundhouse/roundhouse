@@ -279,9 +279,13 @@ pub(super) fn settle_at_the_end(ui: &mut Ui<'_>, stack: &Stack, session: &Sessio
 
 /// Waits for `newest`, the newest of the agent's own events as the hub recorded it, to load, which it does live as the
 /// chat opens at its end, and says how many rows the chat has, as its log says.
+#[track_caller]
 pub(super) fn wait_for_the_tail(ui: &mut Ui<'_>, newest: &SessionEvent) -> usize {
     let (transcript, last) = (ui.transcript().unwrap(), ui.row_of(newest));
-    ui.wait("the tail to load", |ui| ui.cx.read_entity(&transcript, |t, _| t.event_at(last).is_some()));
+    let loaded = |ui: &mut Ui<'_>| ui.cx.read_entity(&transcript, |t, _| t.event_at(last).is_some());
+    let loading =
+        |ui: &mut Ui<'_>| format!("row {last} isn't loaded: {}", ui.cx.read_entity(&transcript, |t, _| t.loading()));
+    ui.wait_saying("the tail to load", loaded, loading);
     last + 1
 }
 
@@ -290,12 +294,16 @@ pub(super) fn wait_for_the_tail(ui: &mut Ui<'_>, newest: &SessionEvent) -> usize
 /// and as each long text in it is parsed on another thread and its row measured again. So the list has settled once
 /// every long text is parsed and no frame is asked for. Nothing is drawn after that, since that could bring another
 /// page.
+#[track_caller]
 pub(super) fn wait_for_the_list_to_settle(ui: &mut Ui<'_>, row: usize) {
     let transcript = ui.transcript().unwrap();
-    ui.wait("the rows there to load and the list to settle", |ui| {
+    let settled = |ui: &mut Ui<'_>| {
         ui.settle(A_FRAME);
         ui.cx.read_entity(&transcript, |t, _| t.event_at(row).is_some() && t.long_texts_parsed())
-    });
+    };
+    let loading =
+        |ui: &mut Ui<'_>| format!("waiting for row {row}: {}", ui.cx.read_entity(&transcript, |t, _| t.loading()));
+    ui.wait_saying("the rows there to load and the list to settle", settled, loading);
 }
 
 /// The scrollbar's thumb is put where the pointer is, and the list goes to the row that's that far down the session.
