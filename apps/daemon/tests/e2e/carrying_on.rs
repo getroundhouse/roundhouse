@@ -19,12 +19,14 @@ use crate::support::{
 
 /// As an update has the hub do: asks it to restart, and waits for it to go. A client starts the next one.
 pub(crate) fn restart(stack: &mut Stack) {
-    restart_then(stack, Restart::Exited);
+    restart_then(stack, Restart::Exited, || {});
 }
 
-/// Asks the hub to restart, as `restart` does, and waits for it to go, once it has said how that went.
-fn restart_then(stack: &mut Stack, said: Restart) {
+/// Asks the hub to restart, as `restart` does, and once it has said how that went, does `meanwhile`, such as letting
+/// what it waits for finish, and waits for it to go.
+fn restart_then(stack: &mut Stack, said: Restart, meanwhile: impl FnOnce()) {
     assert_eq!(client_core::restart_hub(&stack.client()).unwrap(), said);
+    meanwhile();
     let mut hub = stack.hub.take().unwrap();
     wait_until("the hub to exit", || !matches!(hub.try_wait(), Ok(None)));
 }
@@ -213,14 +215,15 @@ fn the_next_hub_hears_of_a_branch_checked_out_after_the_last_one_went() {
 #[test]
 fn a_restart_waits_for_a_setup_script_to_finish() {
     let mut stack = Stack::start();
-    commit_settings(&stack, "[scripts]\nsetup = \"sleep 1; touch ready.txt\"\n");
+    let setting_up = Gate::new(&stack, "setting-up");
+    commit_settings(&stack, &format!("[scripts]\nsetup = \"{}; touch ready.txt\"\n", setting_up.shell_wait()));
     let client = stack.client();
     let (workspace, _) = stack.workspace(&client);
     wait_until("the setup to start", || client.hub_status().unwrap().running_setups == 1);
     drop(client);
 
     // Asking says it's still finishing, rather than waiting for the setup.
-    restart_then(&mut stack, Restart::Finishing);
+    restart_then(&mut stack, Restart::Finishing, || setting_up.open());
     assert!(PathBuf::from(workspace.path.clone().unwrap()).join("ready.txt").exists(), "it went once setup was done");
     stack.start_hub();
     assert_eq!(wait_for_setup(&stack.client(), &workspace.id), SetupStatus::Succeeded);

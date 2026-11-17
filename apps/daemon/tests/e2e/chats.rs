@@ -81,11 +81,13 @@ fn closing_a_chat_stops_only_its_agent_and_reopening_continues_it() {
 #[test]
 fn closing_a_chat_with_a_prompt_waiting_on_setup_never_starts_its_agent() {
     let stack = Stack::start();
-    commit_settings(&stack, "[scripts]\nsetup = \"sleep 1\"\n");
+    let setting_up = Gate::new(&stack, "setting-up");
+    commit_settings(&stack, &format!("[scripts]\nsetup = \"{}\"\n", setting_up.shell_wait()));
     let client = stack.client();
     let (workspace, session) = stack.workspace(&client);
     client.session_prompt(&session.id, "tool:echo no > never.txt", None).unwrap();
     client.session_close(&session.id).unwrap();
+    setting_up.open();
     wait_until("setup to finish", || {
         client.workspace_list(false).unwrap()[0].setup != protocol::model::SetupStatus::Running
     });

@@ -3,7 +3,6 @@
 #![cfg(test)]
 
 use std::path::PathBuf;
-use std::time::{Duration, Instant};
 
 use protocol::client::ErrorCode;
 use protocol::event::{ApprovalDecision, EventBody};
@@ -11,7 +10,7 @@ use protocol::model::PermissionMode::{FullAccess, Plan, Unknown};
 use protocol::model::{AgentKind, ModelName, PermissionMode, SessionSettingsChange};
 
 use crate::support::{
-    Stack, assistant_text, commit_settings, in_mode, read_all, wait_for_approval, wait_for_turn_end, wait_until,
+    Gate, Stack, assistant_text, commit_settings, in_mode, read_all, wait_for_approval, wait_for_turn_end, wait_until,
 };
 
 /// The changes of mode in the log.
@@ -223,15 +222,20 @@ fn a_chat_with_no_mode_chosen_has_full_access() {
 #[test]
 fn a_mode_chosen_during_setup_applies_to_the_prompt_waiting_on_it() {
     let stack = Stack::start();
-    commit_settings(&stack, "[scripts]\nsetup = \"sleep 2\"\n");
+    let setting_up = Gate::new(&stack, "setting-up");
+    commit_settings(&stack, &format!("[scripts]\nsetup = \"{}\"\n", setting_up.shell_wait()));
     let client = stack.client();
     let (workspace, session) = stack.workspace_planning(&client);
     client.session_prompt(&session.id, "tool:echo done > done.txt", None).unwrap();
 
-    let started = Instant::now();
-    client.session_configure(&session.id, in_mode(FullAccess)).unwrap();
-    assert!(started.elapsed() < Duration::from_secs(1), "waited for setup: {:?}", started.elapsed());
+    // The setup runs until it's let go, so a mode that waited for it would never be set.
+    let configuring = stack.client();
+    let id = session.id.clone();
+    let configured = std::thread::spawn(move || configuring.session_configure(&id, in_mode(FullAccess)));
+    wait_until("the mode to be set during setup", || configured.is_finished());
+    configured.join().unwrap().unwrap();
     assert_eq!(client.workspace_list(false).unwrap()[0].setup, protocol::model::SetupStatus::Running);
+    setting_up.open();
 
     let path = PathBuf::from(workspace.path.unwrap());
     wait_until("the tool to run without asking", || path.join("done.txt").exists());
