@@ -1,15 +1,11 @@
 //! Whether the default GitHub account can push to each repository's repository on GitHub, spelled out: its records, as
-//! the feed and a list carry them, since a client of another build finds a record by its kind's name and its key, and
-//! the request that finds which repository on GitHub a repository pushes to, and its reply, since a worker can outlive
-//! the hub that started it.
+//! the feed and a list carry them, since a client of another build finds a record by its kind's name and its key.
 
 use protocol::client::{ClientResponse, HubNotice};
 use protocol::frame;
 use protocol::model::{GithubReach, GithubRepositoryName, Reach, RecordKey, Rev};
-use protocol::worker::{GithubRemote, GithubRemoteReply, WorkerRequest, WorkerResponse};
 
 use super::keeps_its_form;
-use super::worker_calls::{answered, asked};
 
 const CLI: GithubRepositoryName = GithubRepositoryName::named("cli/cli");
 
@@ -97,16 +93,4 @@ fn a_reach_from_a_newer_hub_reads_as_unknown_and_names_no_repository() {
 
     assert_eq!((read.reach.repository(), read.rev), (None, Rev::default()));
     assert_eq!(read.reach, Reach::Unknown);
-}
-
-#[test]
-fn finding_which_repository_on_github_a_repository_pushes_to_keeps_its_form() {
-    let reply = |repository| WorkerResponse::GithubRemote(GithubRemoteReply { repository });
-
-    asked(
-        WorkerRequest::GithubRemote(GithubRemote { repo_path: "/code/app".into() }),
-        r#"{"method":"github_remote","repo_path":"/code/app"}"#,
-    );
-    answered(reply(Some(CLI)), r#"{"result":"github_remote","repository":"cli/cli"}"#);
-    answered(reply(None), r#"{"result":"github_remote","repository":null}"#);
 }

@@ -20,8 +20,8 @@ use protocol::prompt::Prompt;
 use protocol::versions::Versions;
 use protocol::worker::{
     AccountFor, AgentApproval, AgentStop, AttachmentWrite, AttachmentWritten, FileOpenAt, FilePages, FileRead,
-    FileReadAt, FolderRead, GitDiff, GitStatus, GithubRemote, GithubRemoteReply, HelloReply, PullRequest,
-    PullRequestReply, Received, RunningAgentsReply, ServeTools, SetupLog, SetupLogReply, TitleFor, ToolsServing,
+    FileReadAt, FolderRead, GitDiff, GitStatus, HelloReply, PullRequest, PullRequestReply, ReadRepoUrl, Received,
+    RepoUrlReply, RunningAgentsReply, ServeTools, SetupLog, SetupLogReply, TitleFor, ToolsServing,
     WORKER_PROTOCOL_VERSION, WorkerFrame, WorkerRequest, WorkerResponse,
 };
 use scripts::{Setup, run_archive_script, run_setup, stop_setup_script};
@@ -274,10 +274,11 @@ pub(super) async fn handle(
         }
         // The machine's own, so not with `given`, in a directory of no project's.
         WorkerRequest::FindGithubLogin => crate::found_login::reply(&state.config.scratch_dir).await,
-        // With `given`, since the git credential rewrites GitHub's SSH addresses as a push meets them.
-        WorkerRequest::GithubRemote(GithubRemote { repo_path }) => {
-            let repository = git::github_remote(&given, Path::new(&repo_path)).await?;
-            Ok(WorkerResponse::GithubRemote(GithubRemoteReply { repository }))
+        // The machine's own too, since the git credential's rewriting of GitHub's addresses is the worker's, not the
+        // checkout's.
+        WorkerRequest::ReadRepoUrl(ReadRepoUrl { path }) => {
+            let url = git::repo_url(&process::Environment::NONE, Path::new(&path)).await?;
+            Ok(WorkerResponse::RepoUrl(RepoUrlReply { url }))
         }
         WorkerRequest::SetupWorkspace(asked) => run_setup(state, &asked.source, &asked.path, &asked.env).await,
         WorkerRequest::CancelSetup => {

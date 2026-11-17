@@ -117,14 +117,14 @@ fn every_reply_of_the_hub_itself_or_listing_its_records_keeps_its_form() {
         ClientResponse::Account(account),
         r#"{"result":"account","id":"claude-1","model_provider":null,"plan":null,"login":null,"email":null,"name":"Work","login_agent":null,"limits":[],"held_login":null,"used_at_ms":5,"rev":2}"#,
     );
-    let repo = Repo { id: "r".into(), name: "r".into(), path: "/r".into(), created_at_ms: 1, rev: Rev::new(2) };
+    let repo = Repo { created_at_ms: 1, rev: Rev::new(2), ..fixtures::repo("r") };
     answered(
         ClientResponse::Repo(repo.clone()),
-        r#"{"result":"repo","id":"r","name":"r","path":"/r","created_at_ms":1,"rev":2}"#,
+        r#"{"result":"repo","id":"r","name":"r","path":"/r","origin":{"kind":"checkout","path":"/r"},"created_at_ms":1,"rev":2}"#,
     );
     answered(
         ClientResponse::Repos(records::Repos { repos: vec![repo] }),
-        r#"{"result":"repos","repos":[{"id":"r","name":"r","path":"/r","created_at_ms":1,"rev":2}]}"#,
+        r#"{"result":"repos","repos":[{"id":"r","name":"r","path":"/r","origin":{"kind":"checkout","path":"/r"},"created_at_ms":1,"rev":2}]}"#,
     );
     answered(
         ClientResponse::Sessions(sessions::Sessions { sessions: vec![] }),

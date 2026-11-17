@@ -12,13 +12,7 @@ fn sample_workspace() -> InWorkspace {
     ws.name = "entrecampos".to_string();
     ws.branch = "entrecampos/dictation-hints".into();
     ws.repo_id = "r1".into();
-    let repo = Repo {
-        id: "r1".into(),
-        name: "roundhouse".into(),
-        path: "/repos/roundhouse".into(),
-        created_at_ms: 0,
-        rev: Rev::new(1),
-    };
+    let repo = Repo { name: "roundhouse".into(), rev: Rev::new(1), ..fixtures::repo("r1") };
     records.apply_list(Records { repos: vec![repo], workspaces: vec![ws], ..Records::default() });
     records.snapshot().in_workspace(&"w1".into()).unwrap()
 }

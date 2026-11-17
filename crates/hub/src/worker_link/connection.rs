@@ -65,9 +65,9 @@ impl WorkerLink {
     /// Starts the instance's worker, says hello and sets the hub's git credential, as [`WorkerLink::greet`] says, and
     /// from then on sets each the hub has, as [`Following::follow`] says. Then asks who the worker's machine's own
     /// `gh` is logged in as, if nobody has said for its provider since the hub started, as [`Hub::find_github_login`]
-    /// says, and which repository on GitHub its workspace's repository pushes to, if no worker of it has said, as
-    /// [`Hub::find_github_remote`] says, without waiting for either answer. On failure nothing is left running, so the
-    /// next attempt starts clean.
+    /// says, and, on a worker on the hub's machine, where each repository's checkout whose address is to be read
+    /// fetches from, as [`Hub::read_repo_urls`] says, without waiting for either answer. On failure nothing is left
+    /// running, so the next attempt starts clean.
     pub(crate) async fn open(
         hub: Arc<Hub>,
         provider: Arc<dyn Provider>,
@@ -92,7 +92,6 @@ impl WorkerLink {
         });
         let within = hub.timers.hello_within;
         let following = Following::new(link.clone(), hub.git_credential());
-        let asked_of = workspace_id.clone();
         tokio::spawn(acks::acknowledge(hub.clone(), link.clone()));
         tokio::spawn(reading::read_frames(
             hub.clone(),
@@ -106,8 +105,9 @@ impl WorkerLink {
         let failure = match link.greet(within, following).await {
             Ok(following) => {
                 tokio::spawn(following.follow());
-                hub.find_github_login(ProviderName::from(provider.name()), &link).await;
-                hub.find_github_remote(asked_of, &link).await;
+                let provider = ProviderName::from(provider.name());
+                hub.find_github_login(provider.clone(), &link).await;
+                tokio::spawn(Arc::clone(&hub).read_repo_urls(provider, Arc::clone(&link)));
                 return Ok(link);
             }
             Err(failure) => failure,

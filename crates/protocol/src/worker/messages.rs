@@ -1,6 +1,6 @@
 use super::{
-    agents, children, connection, found_login, git_credential, github, github_remote, one_off, previous, tools,
-    workspaces, worktree,
+    agents, children, connection, found_login, git_credential, github, one_off, previous, repo_url, tools, workspaces,
+    worktree,
 };
 use crate::client::Outcome;
 use crate::model;
@@ -20,8 +20,8 @@ use git_credential::GitCredentialSet;
 use github::{
     GithubRateLimit, PullRequest, PullRequestReply, RateLimit, ReadRemotePullRequests, RemotePullRequestsReply,
 };
-use github_remote::{GithubRemote, GithubRemoteReply};
 use one_off::{AccountFor, TitleFor, TitleReply};
+use repo_url::{ReadRepoUrl, RepoUrlReply};
 use serde::{Deserialize, Serialize};
 use tools::{ServeTools, ToolsServing};
 #[cfg(test)]
@@ -123,7 +123,7 @@ pub enum WorkerRequest {
     GitCredentialSet(GitCredentialSet),
     /// See [`FindGithubLogin`](super::FindGithubLogin).
     FindGithubLogin,
-    GithubRemote(GithubRemote),
+    ReadRepoUrl(ReadRepoUrl),
     /// Any request this build doesn't know, from a hub newer than it. A worker answers with
     /// [`ErrorCode::Unsupported`](crate::client::ErrorCode::Unsupported) and carries on, as a hub does a client's.
     #[serde(other)]
@@ -160,7 +160,7 @@ pub enum WorkerResponse {
     Account(AgentAccount),
     ToolsServing(ToolsServing),
     GithubLogin(GithubLoginReply),
-    GithubRemote(GithubRemoteReply),
+    RepoUrl(RepoUrlReply),
 }
 
 pub type WorkerOutcome = Outcome<WorkerResponse>;

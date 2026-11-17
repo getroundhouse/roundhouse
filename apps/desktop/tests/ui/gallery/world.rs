@@ -11,8 +11,8 @@ use protocol::event::{EventBody, SessionEvent};
 use protocol::model::{
     Account, AttachmentId, CacheTtl, ContextUsage, DiffComment, FileContents, FoundGithubLogin, GitDiff, GithubAccount,
     GithubApp, GithubSettings, GithubSignIn, GithubSignInStatus, InstanceId, ModelName, PORTS_PER_WORKSPACE, Place,
-    PromptCache, PullRequest, Records, Repo, RepoId, Rev, Seq, Session, SessionId, SessionStatus, Subagent, SubagentId,
-    Title, Workspace, WorkspaceId, WorktreeFiles,
+    PromptCache, PullRequest, Records, Repo, RepoId, RepoOrigin, Rev, Seq, Session, SessionId, SessionStatus, Subagent,
+    SubagentId, Title, Workspace, WorkspaceId, WorktreeFiles,
 };
 use protocol::prompt::Prompt;
 use protocol::tail::Tail;
@@ -122,7 +122,7 @@ impl World {
         self.repos.push(Repo {
             id: id.clone(),
             name: name.to_string(),
-            path: format!("/src/{name}"),
+            origin: RepoOrigin::Checkout { path: format!("/src/{name}") },
             created_at_ms,
             rev: Rev::default(),
         });

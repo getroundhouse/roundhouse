@@ -89,7 +89,7 @@ impl Hub {
         force: bool,
     ) -> Result<ChildWorktree, ApiError> {
         let removing =
-            RemoveWorkspace { source: repo_source(repo), path: child.path.clone(), force, own: Some(own.into()) };
+            RemoveWorkspace { source: repo_source(repo)?, path: child.path.clone(), force, own: Some(own.into()) };
         link.call(removing).await?;
         let id = child.id.clone();
         self.blocking(move |store| store.child_removed(&id)).await

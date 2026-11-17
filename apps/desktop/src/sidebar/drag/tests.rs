@@ -4,14 +4,11 @@ use gpui_kit::{Pixels, px};
 use proptest::prelude::*;
 use proptest::sample::Index;
 use proptest::test_runner::{Config, RngSeed};
-use protocol::model::{Repo, RepoId, Rev};
+use protocol::fixtures::repo;
+use protocol::model::RepoId;
 
 use super::super::{Line, places};
 use super::{groups, merged, ordered, slot, stack};
-
-fn repo(id: &str) -> Repo {
-    Repo { id: RepoId::from(id), name: id.into(), path: format!("/{id}"), created_at_ms: 0, rev: Rev::default() }
-}
 
 /// Projects as tall as `heights` say, from 32pt down the list, with the space between each.
 fn reaches(heights: &[f32]) -> Vec<Range<Pixels>> {

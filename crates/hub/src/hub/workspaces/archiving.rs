@@ -71,6 +71,7 @@ impl Hub {
     ) -> Result<Option<BranchName>, ApiError> {
         let id = &workspace.id;
         let repo = self.repo_of(workspace).await?;
+        let source = repo_source(&repo)?;
         let link = self.ensure_worker(id).await?;
         let owned = id.clone();
         let children = self.blocking(move |store| store.children_of(&owned)).await?;
@@ -89,8 +90,7 @@ impl Hub {
         // Interrupt setup first, so the script isn't running in a worktree that's about to go.
         let _ = link.call(CancelSetup).await;
         self.call_off_waits_of(id).await?;
-        let script =
-            ArchiveScript { source: repo_source(&repo), path: path.clone(), env: workspace_env(workspace, &repo) };
+        let script = ArchiveScript { source: source.clone(), path: path.clone(), env: workspace_env(workspace, &repo) };
         match link.call(script).await {
             Ok(()) => {}
             Err(e) if !force => return Err(e),
@@ -105,7 +105,7 @@ impl Hub {
         // way, which the next then finds ready. Each checks again unless forced, because an agent may have written
         // files before it stopped.
         self.remove_children(&repo, &link, &path, &children, force).await?;
-        link.call(RemoveWorkspace { source: repo_source(&repo), path, force, own: None }).await?;
+        link.call(RemoveWorkspace { source, path, force, own: None }).await?;
         let provider = self.provider(&workspace.provider)?;
         self.close_worker(workspace, &link, provider.as_ref()).await;
         // Agents are expected to rename their branch to match the work. Restoring needs its real name.
@@ -173,7 +173,7 @@ impl Hub {
         let repo = self.repo_of(workspace).await?;
         let path = workspace.path.clone().ok_or_else(|| internal("an archived workspace has no path"))?;
         let link = self.ensure_worker(&workspace.id).await?;
-        let request = RestoreWorkspace { source: repo_source(&repo), path, branch: workspace.branch.clone() };
+        let request = RestoreWorkspace { source: repo_source(&repo)?, path, branch: workspace.branch.clone() };
         link.call(request).await?;
         Ok((repo, link))
     }

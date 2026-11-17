@@ -78,14 +78,15 @@ impl Hub {
         mut stopped: watch::Receiver<bool>,
     ) -> SetupStatus {
         let workspace = ready.workspace();
-        let link = match self.ensure_worker(&workspace.id).await {
-            Ok(link) => link,
+        let started = async { Ok::<_, ApiError>((repo_source(repo)?, self.ensure_worker(&workspace.id).await?)) };
+        let (source, link) = match started.await {
+            Ok(started) => started,
             Err(e) => {
                 warn!(workspace = workspace.name, "setup couldn't start: {}", e.message);
                 return SetupStatus::Failed { code: None };
             }
         };
-        let (source, path, env) = (repo_source(repo), ready.path().to_owned(), workspace_env(workspace, repo));
+        let (path, env) = (ready.path().to_owned(), workspace_env(workspace, repo));
         let request = SetupWorkspace { source, path, env };
         let finished = async {
             let running = link.send(request).await?;

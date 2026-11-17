@@ -156,8 +156,8 @@ pub struct Records {
     /// Empty from a hub from before apps of your own.
     #[serde(default)]
     pub github_apps: Vec<GithubApp>,
-    /// Empty from a hub that doesn't check them, and for a repository no worker of has said which repository on
-    /// GitHub it pushes to.
+    /// Empty from a hub that doesn't check them, and none for a repository whose address no worker has read, and that
+    /// the hub hasn't checked before.
     #[serde(default)]
     pub github_reach: Vec<GithubReach>,
     /// The hub's newest revision when this was read. A record missing from the list is gone, unless

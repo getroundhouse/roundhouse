@@ -15,17 +15,20 @@ use providers::Provider;
 use std::sync::Arc;
 use tracing::{error, warn};
 
-/// What scripts and agents see, under the names Conductor uses, so that scripts written for it work.
+/// What scripts and agents see, under the names Conductor uses, so that scripts written for it work. The root is the
+/// repository's checkout on the hub's machine, which a repository with none has no root for.
 pub(crate) fn workspace_env(workspace: &Workspace, repo: &Repo) -> Vec<(String, String)> {
     let base = workspace.base_ref.as_deref().unwrap_or("main");
     let mut env = vec![
         ("CONDUCTOR_WORKSPACE_NAME".to_string(), workspace.name.clone()),
         ("CONDUCTOR_WORKSPACE_ID".to_string(), workspace.id.to_string()),
-        ("CONDUCTOR_ROOT_PATH".to_string(), repo.path.clone()),
         ("CONDUCTOR_DEFAULT_BRANCH".to_string(), base.trim_prefix("origin/").to_string()),
         ("CONDUCTOR_PORT".to_string(), workspace.port_base.to_string()),
         ("CONDUCTOR_IS_LOCAL".to_string(), "1".to_string()),
     ];
+    if let Some(root) = repo.origin.checkout() {
+        env.push(("CONDUCTOR_ROOT_PATH".to_string(), root.to_owned()));
+    }
     if let Some(path) = &workspace.path {
         env.push(("CONDUCTOR_WORKSPACE_PATH".to_string(), path.clone()));
     }
@@ -133,6 +136,7 @@ impl Hub {
         base_ref: Option<String>,
         provider: &dyn Provider,
     ) -> Result<Workspace, ApiError> {
+        let source = repo_source(repo)?;
         let (reply, link) = loop {
             let display_name = format!("roundhouse-{}", workspace.name);
             provider
@@ -144,7 +148,7 @@ impl Hub {
             let link = self.ensure_worker(&workspace.id).await?;
             let prepare = PrepareWorkspace {
                 repo_name: repo.name.clone(),
-                source: repo_source(repo),
+                source: source.clone(),
                 workspace_name: workspace.name.clone(),
                 branch: workspace.branch.clone(),
                 base_ref: base_ref.clone(),

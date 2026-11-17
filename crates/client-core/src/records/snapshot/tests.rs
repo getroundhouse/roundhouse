@@ -8,7 +8,7 @@ use protocol::model::{
 use crate::records::HubRecords;
 
 fn repo(id: &str, name: &str) -> Repo {
-    Repo { id: id.into(), name: name.into(), path: format!("/{name}"), created_at_ms: 0, rev: Rev::new(1) }
+    Repo { name: name.into(), rev: Rev::new(1), ..protocol::fixtures::repo(id) }
 }
 
 fn workspace(id: &str, created_at_ms: i64, rev: u64) -> Workspace {

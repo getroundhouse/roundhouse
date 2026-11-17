@@ -11,7 +11,7 @@ fn subagent(rev: u64) -> Subagent {
 
 /// A notice of each kind of record that's quick to make, with the key and revision it's of.
 fn of_a_record() -> Vec<(HubNotice, RecordKey, Rev)> {
-    let repo = Repo { id: "r".into(), name: "repo".into(), path: "/r".into(), created_at_ms: 0, rev: Rev::new(2) };
+    let repo = Repo { rev: Rev::new(2), ..crate::fixtures::repo("r") };
     let comment = DiffComment {
         id: "c".into(),
         workspace_id: "w".into(),

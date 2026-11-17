@@ -1,10 +1,9 @@
 use std::sync::Arc;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 
-use protocol::client::{ApiError, HubNotice};
-use protocol::model::{GithubReach, GithubRepositoryName, GithubToken};
-use protocol::worker::{GitCredential, GithubCredential, GithubRemoteReply, WorkerRequest, WorkerResponse};
+use protocol::client::HubNotice;
+use protocol::model::{GithubReach, GithubRepositoryName, GithubToken, RepoUrl};
+use protocol::worker::{GitCredential, GithubCredential, RepoUrlReply, WorkerRequest, WorkerResponse};
 use tokio::sync::{broadcast, watch};
 use tokio::task::JoinHandle;
 
@@ -14,25 +13,15 @@ use crate::worker_link::WorkerLink;
 
 pub(super) const CLI: GithubRepositoryName = GithubRepositoryName::named("cli/cli");
 
-/// What a worker answers an ask with: `None` for never.
-pub(super) type Answer = Option<Result<WorkerResponse, ApiError>>;
-
-/// A stand-in for a worker that answers every ask of where its repository pushes with `answer`, and counts how often
-/// it's asked.
-pub(super) fn worker_answering(answer: Answer) -> (Arc<WorkerLink>, Arc<AtomicUsize>) {
-    let asked = Arc::new(AtomicUsize::new(0));
-    let counted = Arc::clone(&asked);
+/// Has a stand-in for a worker on the hub's machine read that the checkout of the hub's repository, `r`, fetches from
+/// `url`, as the first worker here to link after `r` is added does, so its record has the address.
+pub(super) async fn reads(hub: &Arc<Hub>, url: &str) {
+    let url = RepoUrl::try_from(url.to_owned()).unwrap();
     let link = WorkerLink::answering(move |request| {
-        assert!(matches!(request, WorkerRequest::GithubRemote(_)), "{request:?}");
-        counted.fetch_add(1, Ordering::SeqCst);
-        answer.clone()
+        assert!(matches!(request, WorkerRequest::ReadRepoUrl(_)), "{request:?}");
+        Some(Ok(WorkerResponse::RepoUrl(RepoUrlReply { url: Some(url.clone()) })))
     });
-    (link, asked)
-}
-
-/// A stand-in for a worker whose repository pushes to `repository`, as [`worker_answering`] says.
-pub(super) fn worker_saying(repository: Option<GithubRepositoryName>) -> (Arc<WorkerLink>, Arc<AtomicUsize>) {
-    worker_answering(Some(Ok(WorkerResponse::GithubRemote(GithubRemoteReply { repository }))))
+    Arc::clone(hub).read_repo_urls("local".into(), link).await;
 }
 
 /// The credential of `username`'s token `token`.

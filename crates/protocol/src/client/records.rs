@@ -6,7 +6,9 @@ use serde::{Deserialize, Serialize};
 use super::{ClientRequest, ClientResponse, Reply, Request};
 use crate::model::{Records, Repo, Rev, SessionId, Subagent};
 
-/// Adding the same repository again returns the first record.
+/// Adds the repository whose checkout on the hub's machine `path` is in, and has a worker there read the address its
+/// `origin` fetches from, which the feed then tells of, as the [`Repo`] has it. Adding the same repository again
+/// returns the first record, and has its address read again.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct RepoAdd {
     pub path: String,
