@@ -1,9 +1,9 @@
 use crate::icon_sizes::IconSize;
 use crate::named::named;
-use crate::typography::Type;
+use crate::typography::{Type, Typeset as _};
 use gpui_kit::component::button::Button;
 use gpui_kit::component::{Sizable as _, Size};
-use gpui_kit::{Pixels, Styled as _, px};
+use gpui_kit::{Pixels, StyleRefinement, Styled as _, px};
 
 named! {
     /// How big a button is: how tall, the room at each end of its words, and how big its words and icon are.
@@ -78,22 +78,13 @@ impl ControlSize {
         }
     }
 
-    /// The kit's size whose words, and icon beside them, a button with words takes, which are [`Self::words`] and
-    /// [`Self::icon_with_words`]. The kit sets a button's words and icon from its size on what it draws inside the
-    /// button, which a style from outside doesn't reach, so the size is the kit's, and tests hold its text and its icon
-    /// to these.
-    pub(crate) const fn kit_words(self) -> Size {
+    /// The kit's size a button is given for what the kit still sizes from it: the room between its icon and its words,
+    /// and the caret after the words of one that opens a menu. Its words and icon are sized as [`Self::words`] and
+    /// [`Self::icon_with_words`] or [`Self::icon`] say, and its height and the room at its ends as this size's own.
+    const fn kit(self) -> Size {
         match self {
             ControlSize::Small => Size::XSmall,
             ControlSize::Regular => Size::Small,
-            ControlSize::Large => Size::Medium,
-        }
-    }
-
-    /// The kit's size whose icon a button that's only an icon takes, which is [`Self::icon`], as a test holds it.
-    pub(crate) const fn kit_icon(self) -> Size {
-        match self {
-            ControlSize::Small | ControlSize::Regular => Size::Small,
             ControlSize::Large => Size::Medium,
         }
     }
@@ -122,10 +113,13 @@ pub trait Sizing {
 
 impl Sizing for Button {
     fn sized(self, size: ControlSize) -> Self {
-        self.with_size(size.kit_words()).h(size.height()).px(size.padding())
+        let words = StyleRefinement::default().typeset(size.words());
+        let icon = Size::Size(size.icon_with_words().size());
+        self.with_size(size.kit()).content_style(words, icon).h(size.height()).px(size.padding())
     }
 
     fn sized_square(self, size: ControlSize) -> Self {
-        self.with_size(size.kit_icon()).size(size.height()).p_0()
+        let icon = Size::Size(size.icon().size());
+        self.with_size(size.kit()).content_style(StyleRefinement::default(), icon).size(size.height()).p_0()
     }
 }

@@ -1,10 +1,8 @@
 use gpui_kit::component::IconName;
-use gpui_kit::component::StyleSized as _;
 use gpui_kit::component::button::Button as KitButton;
-use gpui_kit::{CursorStyle, DefiniteLength, Length, Styled as _, TestAppContext, div, px};
+use gpui_kit::{CursorStyle, DefiniteLength, Length, Styled as _, TestAppContext, px};
 
 use super::{Button, ButtonKind, ControlSize, Sizing as _, button, icon_button};
-use crate::Typeset as _;
 use crate::spec_table;
 
 #[test]
@@ -28,18 +26,6 @@ fn a_button_with_words_is_as_tall_as_its_size_with_its_room_at_each_end() {
         assert_eq!(style.size.width, None, "{size:?}: as wide as its words");
         let room = Some(DefiniteLength::from(size.padding()));
         assert_eq!([style.padding.left, style.padding.right], [room; 2], "{size:?}");
-    }
-}
-
-/// The kit sets a button's words from its size, inside the button, so this holds the kit's size to the kind of text
-/// the spec says.
-#[test]
-fn a_buttons_words_are_the_kind_of_text_its_size_says() {
-    for &size in ControlSize::ALL {
-        let mut kit = div().button_text_size(size.kit_words());
-        let mut kind = div().typeset(size.words());
-
-        assert_eq!(kit.style().text.font_size, kind.style().text.font_size, "{size:?}");
     }
 }
 
