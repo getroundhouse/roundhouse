@@ -49,6 +49,11 @@ impl Held {
         std::fs::write(&self.released, "").unwrap();
     }
 
+    /// Holds the next run again, once the one let go has ended, for a test that holds the same thing twice.
+    pub(crate) fn hold_again(&self) {
+        std::fs::remove_file(&self.released).unwrap();
+    }
+
     pub(crate) fn runs(&self) -> usize {
         std::fs::read_to_string(&self.runs).map_or(0, |runs| runs.lines().count())
     }
