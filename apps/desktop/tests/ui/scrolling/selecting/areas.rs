@@ -1,7 +1,7 @@
 //! Selecting in an area that scrolls a long text of its own within its row: a drag from it, held past the area, scrolls
-//! the area on, for advice, for what a subagent was asked, in the chat and in its tab, for a command and for what it
-//! printed, and for a compaction's summary, which scrolls back too, and a press on what the area has moved out of
-//! sight is on what's drawn there instead.
+//! the area on, for advice, for what a subagent was asked, for a command and for what it printed, and for a
+//! compaction's summary, which scrolls back too, and a press on what the area has moved out of sight is on what's
+//! drawn there instead.
 
 use std::time::Duration;
 
@@ -9,11 +9,10 @@ use gpui_kit::{
     AppContext as _, Bounds, ElementId, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, Point,
     ScrollDelta, ScrollEvent, SharedString, TestAppContext, point, px,
 };
-use protocol::event::{ContentBlock, EventBody};
+use protocol::event::EventBody;
 
 use super::super::{A_FRAME, press};
 use super::kinds::{ADVISOR_LINE, run_in_the_open_chat, settled_at_its_last_row};
-use super::tab::open_its_tab;
 use super::{COMMAND_LINE, LAST, bounds, click, copy, head, on_the_reply_saying, open, settled, tail};
 use crate::support::{Stack, Ui};
 
@@ -27,25 +26,24 @@ const FIRST: &str = "What was asked";
 const A_PAUSE: Duration = Duration::from_secs(1);
 
 /// A drag that starts in a long text in an area of its own, held below the area, scrolls it on to its end, as the
-/// wheel would, and rests there: in what the advisor said, what a subagent was asked, at length, a long command, what a
-/// command printed, at length, and what the subagent tab says its subagent was asked, at such length that it's parsed
-/// on another thread, so it's drawn once its row has been measured again with it. Each is the newest in the chat as
-/// it's dragged in.
+/// wheel would, and rests there: in what the advisor said, what a subagent was asked, at length, a long command, and
+/// what a command printed, at length. Each is the newest in the chat as it's dragged in. The subagent tab's is in
+/// `super::tab`, since it opens a tab of its own.
 #[gpui_kit::test]
-fn a_drag_held_past_each_long_text_in_an_area_of_its_own_scrolls_the_area_on(cx: &mut TestAppContext) {
+fn a_drag_held_past_each_long_text_in_a_row_s_area_scrolls_the_area_on(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let session = stack.chat_in_a_new_workspace();
     stack.run(&session, "say:Hello");
     let mut ui = open(cx, &stack);
     // A subagent's asked what it's for, which its line says, and what it was asked, rather than the prompt that started
     // it, is known by its call's place in the chat.
-    let (asked, asked_at_length) = (long(), long().repeat(2));
+    let asked = long(1);
     let script = (1..=30).map(|n| format!("echo signal {n}")).collect::<Vec<_>>().join("\n");
     let areas = [
-        ("long advice", format!("advise:{}", long()), ADVISOR_LINE, "advice/"),
+        ("long advice", format!("advise:{}", long(1)), ADVISOR_LINE, "advice/"),
         ("a long ask of a subagent", format!("agent-calls:1:{asked}"), asked.as_str(), "prompt/event/"),
         ("a long command", format!("tool:{script}"), COMMAND_LINE, "command/"),
-        ("long output", "tool:seq 1 60".to_owned(), COMMAND_LINE, "output/"),
+        ("long output", "tool:seq 1 25".to_owned(), COMMAND_LINE, "output/"),
     ];
 
     for (name, prompt, line, part) in areas {
@@ -60,40 +58,17 @@ fn a_drag_held_past_each_long_text_in_an_area_of_its_own_scrolls_the_area_on(cx:
 
         held_past(&mut ui, name, part);
     }
-    assert!(asked_at_length.len() > 4 * 1024, "parsed on another thread: {} bytes", asked_at_length.len());
-    run_in_the_open_chat(&mut ui, &stack, &session, &format!("agent-calls:1:{asked_at_length}; say:{LAST}"));
-    ui.keep_to_the_end();
-    settled_at_its_last_row(&mut ui);
-    // The newest subagent's, rather than the one before's. It's there once the subagent's record is, which comes on
-    // the feed, apart from the chat's events.
-    let button = SharedString::from(format!("open-subagent/{}", newest_agent_call(&ui)));
-    ui.wait("the button that opens the subagent tab", |ui| ui.has(button.clone()));
-    open_its_tab(&mut ui, button);
-
-    held_past(&mut ui, "a long ask in the subagent tab", "prompt/call/");
 }
 
-/// The ID of the newest call in the chat `ui` shows that starts a subagent.
-fn newest_agent_call(ui: &Ui<'_>) -> String {
-    let calls = ui.events().into_iter().flat_map(|event| match event.body {
-        EventBody::Assistant { blocks, .. } => blocks,
-        _ => Vec::new(),
-    });
-    let mut ids = calls.filter_map(|block| match block {
-        ContentBlock::ToolUse { id, name, .. } if name == "Agent" => Some(id),
-        _ => None,
-    });
-    ids.next_back().expect("the agent's call that started a subagent").to_string()
-}
-
-/// Words enough to be scrolled far past the area they're in, that nothing else in the chat says.
-pub(super) fn long() -> String {
-    format!("{}Junctions last", "Timetables, sidings and points. ".repeat(120))
+/// Words enough to be scrolled far past the area they're in, that nothing else in the chat says, `times` as many as
+/// the fewest that are, since a drag that holds on takes longer the further it has to go.
+pub(super) fn long(times: usize) -> String {
+    format!("{}Junctions last", "Timetables, sidings and points. ".repeat(50 * times))
 }
 
 /// Presses in the newest text whose ID starts with `part`, and holds a drag below the area that scrolls it, which the
 /// area should follow to the text's end. `name` says which text it is if it doesn't.
-fn held_past(ui: &mut Ui<'_>, name: &str, part: &str) {
+pub(super) fn held_past(ui: &mut Ui<'_>, name: &str, part: &str) {
     let text = ui.shown(part).pop().unwrap_or_else(|| panic!("{name}: the text, drawn"));
     let area = bounds(ui, ElementId::from((ElementId::from((text.clone(), "scroll")), "area")));
     let before = bounds(ui, text.clone());
