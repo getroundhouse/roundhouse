@@ -1,14 +1,9 @@
-use std::time::Duration;
-
 use protocol::client::{ErrorCode, HubNotice};
 use protocol::model::{CommentDraft, DiffSide, RecordKey, SessionStatus, Workspace};
 use protocol::prompt::Prompt;
 
-use crate::hub::stand_in_workers::{a_chat, a_turn, hub_with_stand_in_workers};
+use crate::hub::stand_in_workers::{TIMEOUT, a_chat, a_turn, hub_with_stand_in_workers};
 use crate::hub::tests::hub_in;
-
-/// Long enough for the feed to hear of a change already made, on a loaded machine.
-const TIMEOUT: Duration = Duration::from_secs(10);
 
 fn writing(side: DiffSide) -> CommentDraft {
     CommentDraft { path: "src/lib.rs".into(), side, line: 12, editing: None, text: "why?".into() }

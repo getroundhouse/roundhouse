@@ -2,7 +2,6 @@
 //! whose agents hear of their account's limits as a test says.
 
 use std::sync::Arc;
-use std::time::Duration;
 
 use parking_lot::Mutex;
 use protocol::client::ApiError;
@@ -11,11 +10,7 @@ use protocol::model::{Account, AgentAccount, LimitWindow, SessionId, UsageLimit,
 use protocol::prompt::Prompt;
 
 use crate::hub::Hub;
-use crate::hub::stand_in_workers::{Asked, a_turn, logged_in, the_agent_says};
-
-/// How long the hub has to learn which account a launch runs under, and to keep what its agent heard, which it does on
-/// tasks of its own. Far longer than that takes with a stand-in for the worker, so only what never comes runs out of it.
-pub(super) const TIMEOUT: Duration = Duration::from_secs(10);
+use crate::hub::stand_in_workers::{Asked, TIMEOUT, a_turn, logged_in, the_agent_says};
 
 /// Who a machine's worker says is logged in to Claude's CLI there, or why it can't say, which a test can change.
 pub(super) type Machine = Arc<Mutex<Result<AgentAccount, ApiError>>>;

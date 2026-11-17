@@ -3,7 +3,6 @@
 
 use std::path::Path;
 use std::sync::Arc;
-use std::time::Duration;
 
 use protocol::client::ApiError;
 use protocol::event::{AgentRunState, EventBody, SessionEvent, TurnOutcome};
@@ -12,11 +11,7 @@ use protocol::model::{AttachmentId, QueuedPrompt, Seq, Session, SessionId, Works
 use protocol::prompt::Prompt;
 
 use crate::hub::Hub;
-use crate::hub::stand_in_workers::{Asked, a_chat, hub_with_stand_in_workers, the_agent_says};
-
-/// How long the hub has to give a prompt to the agent, which it does on a task of its own once the prompt is recorded.
-/// Far longer than that takes with a stand-in for the worker, so only a prompt that's never given runs out of it.
-const TIMEOUT: Duration = Duration::from_secs(10);
+use crate::hub::stand_in_workers::{Asked, TIMEOUT, a_chat, hub_with_stand_in_workers, the_agent_says};
 
 /// A chat in a workspace of its own, on a hub whose workers are stand-ins, and what they've been asked.
 pub(super) struct Chat {

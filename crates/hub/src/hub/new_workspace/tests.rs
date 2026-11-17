@@ -1,5 +1,3 @@
-use std::time::Duration;
-
 use protocol::attachment::{Attachment, AttachmentBytes, MediaType};
 use protocol::client::ErrorCode;
 use protocol::event::EventBody;
@@ -11,7 +9,7 @@ use protocol::worker::WorkerRequest;
 
 use crate::attachment_files::FileFor;
 use crate::hub::Hub;
-use crate::hub::stand_in_workers::hub_with_stand_in_workers;
+use crate::hub::stand_in_workers::{TIMEOUT, hub_with_stand_in_workers};
 use crate::hub::tests::hub_in;
 use crate::store::AddedBy;
 
@@ -60,10 +58,6 @@ async fn in_the_dialog(hub: &Hub) -> NewWorkspaceDraft {
 async fn dialogs_file(hub: &Hub, id: &str) -> Result<Vec<u8>, ErrorCode> {
     hub.file_read(FileFor::NewWorkspace, id.into()).await.map(AttachmentBytes::into_vec).map_err(|e| e.code)
 }
-
-/// How long a chat has to start its agent, which it does on a task of its own once the prompt is recorded. Far longer
-/// than it takes with a stand-in for the worker, so only a chat that never starts one runs out of it.
-const TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Its agent starts in the worktree its worker made, once the worker has put the prompt's file there.
 #[tokio::test]

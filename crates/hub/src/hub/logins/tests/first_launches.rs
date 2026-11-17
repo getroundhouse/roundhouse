@@ -2,7 +2,6 @@
 //! whose kind's default, can't be launched under.
 
 use std::sync::Arc;
-use std::time::Duration;
 
 use parking_lot::Mutex;
 use protocol::client::HubNotice;
@@ -11,11 +10,7 @@ use protocol::model::{AccountId, AgentKind, TitleSource};
 use tokio::sync::broadcast;
 
 use super::two_accounts::{Chats, TwoAccounts, announced_on};
-use crate::hub::stand_in_workers::{a_chat, titling};
-
-/// How long the hub has to announce what a test waits for, which it does on a task of its own. Far longer than that
-/// takes with a stand-in for the worker, so only what never comes runs out of it.
-const TIMEOUT: Duration = Duration::from_secs(10);
+use crate::hub::stand_in_workers::{TIMEOUT, a_chat, titling};
 
 /// When the feed next announces the account `id` as used after `after_ms`.
 async fn used_after(feed: &mut broadcast::Receiver<HubNotice>, id: &AccountId, after_ms: i64) -> i64 {
@@ -128,7 +123,7 @@ async fn a_chat_moved_before_its_first_prompt_is_titled_under_its_accounts_login
     chats.assign(&fresh, &accounts.personal.id, false).await.unwrap();
     let launched_under = chats.token_in_turn(&fresh, None).await;
     let titled = || chats.record(&fresh).title_source == TitleSource::Generated;
-    waiting::task::until(std::time::Duration::from_secs(10), "the chat's generated title", titled).await;
+    waiting::task::until(TIMEOUT, "the chat's generated title", titled).await;
 
     assert_eq!(chats.record(&fresh).title.as_deref(), Some("Under Personal"));
     assert_eq!(*titled_under.lock(), [Some("personal-token".to_string())]);

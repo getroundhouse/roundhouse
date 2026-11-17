@@ -130,7 +130,8 @@ fn states_from_the_hub(hub: &Hub) -> usize {
     events.iter().filter(|event| event.run.is_none() && matches!(event.body, EventBody::AgentState { .. })).count()
 }
 
-/// One that never does, as a CLI that changed might not, isn't left at work for ever, keeping the machine awake.
+/// One that never does, as a CLI that changed might not, isn't left at work for ever, keeping the machine awake. Being
+/// taken to be idle ends no turn, and if the agent picks up after all, that's a turn of its own, with a reply.
 #[tokio::test(start_paused = true)]
 #[expect(
     clippy::disallowed_methods,
@@ -140,6 +141,7 @@ async fn an_agent_that_doesnt_pick_up_again_after_its_work_in_the_background_is_
     let dir = tempfile::tempdir().unwrap();
     let hub = hub_in(dir.path());
     let live = hub.live_session(&"s".into()).await.unwrap();
+    let reply = || hub.store.get_session(&"s".into()).unwrap().session.reply_seq;
 
     background_over(&live).await;
     assert_eq!(live.status(), SessionStatus::Background, "it's still at work until it picks up again");
@@ -151,6 +153,11 @@ async fn an_agent_that_doesnt_pick_up_again_after_its_work_in_the_background_is_
 
     assert_eq!(live.status(), SessionStatus::Idle);
     assert_eq!(states_from_the_hub(&hub), 1);
+    assert_eq!(reply(), Seq::default(), "being taken to be idle ended a turn");
+    live.record(FROM_AGENT, picked_up(), None).await.unwrap();
+    assert_eq!(live.status(), SessionStatus::Running, "the agent picking up late isn't a turn");
+    let (ended, _) = live.record(FROM_AGENT, turn_ended(), None).await.unwrap();
+    assert_eq!((live.status(), reply()), (SessionStatus::Idle, ended.seq), "its end is a reply");
 }
 
 #[tokio::test(start_paused = true)]
