@@ -186,6 +186,13 @@ impl Store {
         self.writer.is_locked()
     }
 
+    /// Holds the writer until what this returns is dropped, so every write asked for meanwhile waits, as it would for
+    /// one under way.
+    #[cfg(test)]
+    pub(crate) fn holding_writes(&self) -> MutexGuard<'_, Connection> {
+        lock(&self.writer)
+    }
+
     // Repos ---------------------------------------------------------------------------------------
 
     // Workspaces ----------------------------------------------------------------------------------

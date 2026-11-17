@@ -92,16 +92,17 @@ impl Hub {
         self.flush_sessions().await;
     }
 
-    /// Leaves every worker running for the next hub, once it has heard what this hub recorded, and waits until what
+    /// Leaves every worker running for the next hub, once it has let go of what this hub recorded, and waits until what
     /// they sent is recorded, and each has let this hub go, so the next hub, which may start at once, isn't refused as
     /// a second hub.
     pub(crate) async fn leave_workers(self: &Arc<Self>) {
         self.shutting_down.store(true, Ordering::SeqCst);
         let links: Vec<_> = self.workers.lock().values().cloned().collect();
-        for link in &links {
-            link.leave(self).await;
-        }
+        // One deadline for all of it, so several stuck workers don't add up.
         let deadline = tokio::time::Instant::now() + self.timers.shutdown_grace;
+        for link in &links {
+            link.leave(self, deadline).await;
+        }
         for link in &links {
             if tokio::time::timeout_at(deadline, link.wait_closed()).await.is_err() {
                 warn!("a worker didn't let this hub go in time");
