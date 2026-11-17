@@ -1,4 +1,5 @@
 use super::super::{Worktrees, git, git_error, git_ok, off_thread, status};
+use super::forgotten::{forgotten, remove_forgotten};
 use crate::deleting::Deleter;
 use process::Environment;
 use protocol::client::{ApiError, ErrorCode};
@@ -72,16 +73,18 @@ async fn remove(
         return Ok(());
     }
     // Where git keeps its record of this worktree, which goes when git forgets it.
-    let record = git_ok(given, worktree, &["rev-parse", "--absolute-git-dir"]).await?;
-    let record = PathBuf::from(record.trim());
+    let found = git(given, worktree, &["rev-parse", "--absolute-git-dir"]).await?;
+    if !found.success && forgotten(given, repo, worktree).await? {
+        return remove_forgotten(given, worktree, force, deleting, deleter).await;
+    }
+    let record = PathBuf::from(found.succeeded()?.trim());
     if !force {
         if let Some(loss) = status(given, path).await?.loss_if_removed() {
             return Err(ApiError::new(ErrorCode::NeedsForce, loss));
         }
-        // Git refuses these unless forced, since a submodule's own commits are in the worktree. Moving it aside would
-        // skip that check, so git removes it as it always has.
+        // As git refuses them, since a submodule's own commits are in the worktree. Moving it aside skips git's check.
         if has_submodules(given, worktree, &record).await? {
-            return remove_in_place(given, repo, path, Force::No).await;
+            return Err(ApiError::new(ErrorCode::NeedsForce, "it has submodules, whose own commits would go with it"));
         }
     }
     let force = match force {
@@ -91,23 +94,18 @@ async fn remove(
     };
     // `forget` takes the record being gone to mean git has forgotten the worktree, so it has to be there to begin with.
     if !off_thread(record.clone(), |record| Ok(record.is_dir())).await.unwrap_or(false) {
-        warn!(path, record = %record.display(), "git's record of the worktree isn't where git said, so deleting in place");
-        return remove_in_place(given, repo, path, force).await;
+        return Err(git_error(format!("git's record of {path} isn't at {}, where git said it is", record.display())));
     }
-    let held = match Deleting::lock(deleting).await {
-        Ok(held) => held,
-        Err(e) => {
-            warn!(path = %deleting.display(), "couldn't delete a worktree in there, so deleting it in place: {e}");
-            return remove_in_place(given, repo, path, force).await;
-        }
-    };
-    let Some(moved) = held.move_in(worktree).await else {
-        drop(held);
-        return remove_in_place(given, repo, path, force).await;
-    };
+    let held = Deleting::lock(deleting).await.map_err(|e| couldnt_lock(deleting, &e))?;
+    let moved = held.move_in(worktree).await?;
     forget(given, repo, worktree, force, &record, &moved).await?;
     held.delete_waiting(given, deleter).await;
     Ok(())
+}
+
+/// Why a worktree can't be moved into `deleting`, whose lock couldn't be taken.
+pub(super) fn couldnt_lock(deleting: &Path, e: &io::Error) -> ApiError {
+    git_error(format!("couldn't lock {} to move the worktree there: {e}", deleting.display()))
 }
 
 async fn remove_in_place(given: &Environment, repo: &Path, path: &str, force: Force) -> Result<(), ApiError> {
@@ -158,14 +156,25 @@ pub(in super::super) async fn locked_part_made(record: &Path) -> bool {
     reason.is_ok_and(|reason| reason.trim() == "initializing")
 }
 
-/// Whether git might find submodules in the worktree: a gitlink in its index, or a submodule's repository in its git
-/// directory, `record`. Git looks more closely, and removing in place lets it.
+/// Whether the worktree has submodules, as git's own `git worktree remove` decides, which refuses them unless forced: a
+/// submodule's repository in its git directory, `record`, or a gitlink in its index with a repository checked out at
+/// its path.
 async fn has_submodules(given: &Environment, worktree: &Path, record: &Path) -> Result<bool, ApiError> {
     if off_thread(record.join("modules"), |modules| Ok(modules.is_dir())).await.unwrap_or(true) {
         return Ok(true);
     }
     let index = git_ok(given, worktree, &["ls-files", "--stage", "-z"]).await?;
-    Ok(index.split('\0').any(|entry| entry.starts_with("160000 ")))
+    // Each entry is its mode, its object, its stage, a tab, and its path.
+    let gitlinks: Vec<String> = index
+        .split('\0')
+        .filter(|entry| entry.starts_with("160000 "))
+        .filter_map(|entry| entry.split_once('\t'))
+        .map(|(_, path)| path.to_string())
+        .collect();
+    let checked_out =
+        move |worktree: PathBuf| Ok(gitlinks.iter().any(|path| worktree.join(path).join(".git").exists()));
+    // One that can't be read is taken to have them, so archiving asks rather than losing their commits.
+    Ok(off_thread(worktree.to_path_buf(), checked_out).await.unwrap_or(true))
 }
 
 /// Has git forget the worktree moved aside to `moved`. With its directory gone, git removes only its own record of
@@ -204,7 +213,7 @@ pub(super) async fn forget(
 /// A [`DELETING`], locked from moving a worktree in until git has forgotten it or it has gone back, and while what's
 /// there is listed to be deleted. So a worktree that may yet go back is never listed, even by another worker
 /// archiving beside it at the same time.
-struct Deleting {
+pub(super) struct Deleting {
     pub(super) dir: PathBuf,
     pub(super) _lock: File,
 }
@@ -227,17 +236,14 @@ impl Deleting {
         Ok(Self { dir: dir.to_path_buf(), _lock: lock })
     }
 
-    /// Moves the worktree in, under a name nothing else there has. `None` if it can't go there, such as when the
-    /// worktree is a disk of its own.
-    pub(super) async fn move_in(&self, worktree: &Path) -> Option<PathBuf> {
+    /// Moves the worktree in, under a name nothing else there has. Fails if it can't go there, such as when the
+    /// worktree is a disk of its own, or on Windows, while a process has a file in it open, or works in a folder in it.
+    /// The worktree is then left as it was, since deleting it where it is could stop part way, leaving half of it.
+    pub(super) async fn move_in(&self, worktree: &Path) -> Result<PathBuf, ApiError> {
         let moved = self.dir.join(format!("{}-{}", file_name(worktree), stamp()));
-        match rename(worktree, &moved).await {
-            Ok(()) => Some(moved),
-            Err(e) => {
-                warn!(path = %worktree.display(), "couldn't move the worktree aside, so deleting it in place: {e}");
-                None
-            }
-        }
+        rename(worktree, &moved).await.map(|()| moved).map_err(|e| {
+            git_error(format!("couldn't move {} aside to delete it, so it's left as it was: {e}", worktree.display()))
+        })
     }
 
     /// Deletes everything waiting, including what an earlier archive left, such as one a shutdown cut short. What

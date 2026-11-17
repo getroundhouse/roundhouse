@@ -28,7 +28,9 @@ The repository's `archive` script runs, if it has one, and then its agents stop.
 
 ## It won't lose your work
 
-Archiving refuses if the worktree has uncommitted changes, or commits on no branch, and asks before it goes on. So committed work can't be lost, and uncommitted work can't be lost by accident.
+Archiving refuses if the worktree has uncommitted changes, or commits on no branch, and asks before it goes on. So committed work can't be lost, and uncommitted work can't be lost by accident. It asks too if the worktree has submodules, whose own commits would go with it.
+
+Archiving either finishes or leaves the worktree as it was. If it can't move the worktree out of the way, as on Windows while a program has a file in it open, it says so and changes nothing.
 
 ## Find an archived workspace
 
