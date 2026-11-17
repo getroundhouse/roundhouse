@@ -148,7 +148,7 @@ impl Answer {
         Answer::With { status, headers, body: format!("{text}\n") }
     }
 
-    fn json(body: &serde_json::Value) -> Self {
+    pub(super) fn json(body: &serde_json::Value) -> Self {
         Answer::With { status: 200, headers: Vec::new(), body: body.to_string() }
     }
 }

@@ -3,7 +3,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use protocol::client::{ApiError, ErrorCode, HubNotice};
-use protocol::model::{GhLogin, ProviderName};
+use protocol::model::{GhLogin, GhLoginWorks, ProviderName};
 use protocol::worker::{FindGithubLogin, FoundToken, GH_RUNS_WITHIN, GithubLoginReply};
 use tracing::{info, warn};
 
@@ -16,7 +16,7 @@ use crate::worker_link::WorkerLink;
 /// works comes after, within the time the hub gives any call to GitHub. One that hasn't said by then is no longer waited on, so its
 /// workspace isn't kept at work by it, and its provider is asked again by the next link to it. Not something a test
 /// from outside would sit through, so not one of [`crate::Timers`].
-pub(super) const FOUND_WITHIN: Duration = GH_RUNS_WITHIN.saturating_add(GH_RUNS_WITHIN);
+pub(in crate::hub) const FOUND_WITHIN: Duration = GH_RUNS_WITHIN.saturating_add(GH_RUNS_WITHIN);
 
 impl Hub {
     /// Asks `link`'s worker, of `provider`, who its machine's own `gh` is logged in to github.com as, and records what
@@ -42,10 +42,22 @@ impl Hub {
         let provider = asking.provider().clone();
         let login = match tokio::time::timeout(FOUND_WITHIN, answer).await {
             Ok(Ok(GithubLoginReply { login: GhLogin::Unknown, .. })) => {
+                self.found_tokens.found(provider.clone(), None);
                 return info!(%provider, "{link} found a GitHub login of a kind this hub doesn't know, so it isn't kept");
             }
-            Ok(Ok(GithubLoginReply { login, token })) => self.checked(login, token.as_ref()).await,
+            Ok(Ok(GithubLoginReply { login, token })) => {
+                // Kept before GitHub is asked whether it works, so a read waiting on it isn't held up, and then let go
+                // of if GitHub refuses it, for a read to ask for it again.
+                self.found_tokens
+                    .found(provider.clone(), token.clone().filter(|_| matches!(login, GhLogin::LoggedIn { .. })));
+                let checked = self.checked(login, token.as_ref()).await;
+                if matches!(checked, GhLogin::LoggedIn { works: GhLoginWorks::Refused, .. }) {
+                    self.found_tokens.found(provider.clone(), None);
+                }
+                checked
+            }
             Ok(Err(e)) if e.code == ErrorCode::Unsupported => {
+                self.found_tokens.found(provider.clone(), None);
                 return info!(%provider, "{link} can't say who its machine's own gh is logged in as: {}", e.message);
             }
             Ok(Err(e)) => return warn!(%provider, "{link} couldn't say who its machine's own gh is: {}", e.message),

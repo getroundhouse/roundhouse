@@ -1,5 +1,5 @@
-//! The worker's tools, which an agent calls over MCP, and the hub answers, here with a pull request from a stand-in
-//! `gh`.
+//! The worker's tools, which an agent calls over MCP, and the hub answers, here with a pull request the hub reads from
+//! a stand-in for GitHub.
 
 #![cfg(test)]
 
@@ -7,7 +7,9 @@ use client_core::{Client, IdleStop, stop_hub_if_idle};
 use protocol::event::{ContentBlock, EventBody, ExitReason, SessionEvent, TaskKind};
 use protocol::model::{SessionId, SessionStatus};
 
-use crate::support::gh::{MERGED, OPEN, StandInGh};
+use hub::GithubPullRequestState::{Merged, Open};
+
+use crate::support::github::{StandInGithub, workspace_on_github};
 use crate::support::{
     Stack, assistant_text, is_alive, latest_started_pid, parent_of, read_all, started_pid, wait_for_status,
     wait_for_turn_end, wait_until,
@@ -51,26 +53,26 @@ fn run(client: &Client, chat: &SessionId, script: &str, turn: usize) -> Vec<(Str
 
 #[test]
 fn an_agent_asking_where_its_pull_request_stands_hears_what_the_hub_read_from_github() {
-    let mut stack = Stack::start();
-    let gh = StandInGh::start(&mut stack);
-    gh.say(OPEN);
+    let github = StandInGithub::start();
+    github.say(7, Open);
+    let (stack, _gh) = github.stack();
     let client = stack.client();
-    let (_, chat) = stack.workspace(&client);
+    let (_, chat) = workspace_on_github(&stack, &client);
 
     let answered = run(&client, &chat.id, READ, 1);
 
     let [(text, false)] = answered.as_slice() else { panic!("one call that worked: {answered:?}") };
-    assert!(text.contains("#7: T"), "{text}");
-    assert!(text.contains("https://example.com/7"), "{text}");
+    assert!(text.contains("#7: Change 7"), "{text}");
+    assert!(text.contains("https://github.com/example/project/pull/7"), "{text}");
 }
 
 #[test]
 fn an_agent_started_after_the_hub_restarts_reaches_the_tools_where_it_did_with_the_same_token() {
-    let mut stack = Stack::start();
-    let gh = StandInGh::start(&mut stack);
-    gh.say(OPEN);
+    let github = StandInGithub::start();
+    github.say(7, Open);
+    let (mut stack, _gh) = github.stack();
     let client = stack.client();
-    let (_, chat) = stack.workspace(&client);
+    let (_, chat) = workspace_on_github(&stack, &client);
     let answered = run(&client, &chat.id, READ, 1);
     assert!(!answered[0].1, "{answered:?}");
     let before = last_told(&stack);
@@ -86,18 +88,18 @@ fn an_agent_started_after_the_hub_restarts_reaches_the_tools_where_it_did_with_t
 
     assert_eq!(last_told(&stack), before, "the same address and token");
     let [(text, false)] = answered.as_slice() else { panic!("one call that worked: {answered:?}") };
-    assert!(text.contains("#7: T"), "{text}");
+    assert!(text.contains("#7: Change 7"), "{text}");
 }
 
 /// A hub that crashes leaves its worker serving the tools, so the agent the next hub carries on with reaches them as it
 /// did, and the next hub answers what the worker asks for it.
 #[test]
 fn the_agent_the_next_hub_carries_on_with_reaches_the_tools_as_it_did() {
-    let mut stack = Stack::start();
-    let gh = StandInGh::start(&mut stack);
-    gh.say(OPEN);
+    let github = StandInGithub::start();
+    github.say(7, Open);
+    let (mut stack, _gh) = github.stack();
     let client = stack.client();
-    let (_, chat) = stack.workspace(&client);
+    let (_, chat) = workspace_on_github(&stack, &client);
     let answered = run(&client, &chat.id, READ, 1);
     assert!(!answered[0].1, "{answered:?}");
     let agent = started_pid(&wait_for_turn_end(&client, &chat.id, 1)).unwrap();
@@ -109,7 +111,7 @@ fn the_agent_the_next_hub_carries_on_with_reaches_the_tools_as_it_did() {
     let answered = run(&client, &chat.id, READ, 2);
 
     let [(text, false)] = answered.as_slice() else { panic!("one call that worked: {answered:?}") };
-    assert!(text.contains("#7: T"), "{text}");
+    assert!(text.contains("#7: Change 7"), "{text}");
     assert_eq!(latest_started_pid(&read_all(&client, &chat.id)), Some(agent), "the agent the last hub started");
 }
 
@@ -118,11 +120,11 @@ fn the_agent_the_next_hub_carries_on_with_reaches_the_tools_as_it_did() {
 /// hears how the wait ended.
 #[test]
 fn an_agent_waiting_on_its_pull_request_hears_once_it_has_merged() {
-    let mut stack = Stack::start();
-    let gh = StandInGh::start(&mut stack);
-    gh.say(OPEN);
+    let github = StandInGithub::start();
+    github.say(7, Open);
+    let (stack, _gh) = github.stack();
     let client = stack.client();
-    let (_, chat) = stack.workspace(&client);
+    let (_, chat) = workspace_on_github(&stack, &client);
 
     client.session_prompt(&chat.id, WAIT, None).unwrap();
     let mut answered = Vec::new();
@@ -139,7 +141,7 @@ fn an_agent_waiting_on_its_pull_request_hears_once_it_has_merged() {
     assert_eq!(waiting.wait.map(|wait| wait.number), Some(7), "the chat's record has the hub's wait");
     // The next hub keeps the wait, so it doesn't keep the hub from stopping to update it.
     assert_eq!(client.hub_status().unwrap().running_sessions, 0);
-    gh.say(MERGED);
+    github.say(7, Merged);
     client.session_prompt(&chat.id, READ, None).unwrap();
 
     let events = wait_for_turn_end(&client, &chat.id, 3);
@@ -152,11 +154,11 @@ fn an_agent_waiting_on_its_pull_request_hears_once_it_has_merged() {
 /// off its list as one that failed, and picks up again by itself, saying what the hub last said of it.
 #[test]
 fn an_agent_whose_wait_the_person_calls_off_hears_and_the_chat_goes_idle() {
-    let mut stack = Stack::start();
-    let gh = StandInGh::start(&mut stack);
-    gh.say(OPEN);
+    let github = StandInGithub::start();
+    github.say(7, Open);
+    let (stack, _gh) = github.stack();
     let client = stack.client();
-    let (_, chat) = stack.workspace(&client);
+    let (_, chat) = workspace_on_github(&stack, &client);
     client.session_prompt(&chat.id, WAIT, None).unwrap();
     wait_for_status(&client, &chat.id, SessionStatus::Background);
     let wait = client.session_get(&chat.id).unwrap().wait.unwrap();
@@ -180,11 +182,11 @@ fn an_agent_whose_wait_the_person_calls_off_hears_and_the_chat_goes_idle() {
 /// carries on with it. One that stops, or goes with the machine, takes the agent with it, so the next hub starts it
 /// again, whose CLI asks after its task as it starts.
 fn a_wait_lasts_across_a_restart(stop: impl FnOnce(&mut Stack), carried_on: bool) {
-    let mut stack = Stack::start();
-    let gh = StandInGh::start(&mut stack);
-    gh.say(OPEN);
+    let github = StandInGithub::start();
+    github.say(7, Open);
+    let (mut stack, _gh) = github.stack();
     let client = stack.client();
-    let (_, chat) = stack.workspace(&client);
+    let (_, chat) = workspace_on_github(&stack, &client);
     client.session_prompt(&chat.id, WAIT, None).unwrap();
     wait_for_status(&client, &chat.id, SessionStatus::Background);
     let agent = started_pid(&read_all(&client, &chat.id)).unwrap();
@@ -195,14 +197,14 @@ fn a_wait_lasts_across_a_restart(stop: impl FnOnce(&mut Stack), carried_on: bool
     // as the first it reads. Not before the last hub has gone, since that read, held, would keep its worker from
     // stopping until the read timed out, or the hub gave up on the worker, 15 s on either way.
     stop(&mut stack);
-    gh.hold();
-    gh.say(MERGED);
+    github.hold();
+    github.say(7, Merged);
     stack.start_hub();
     let client = stack.client();
     let waiting = client.session_get(&chat.id).unwrap();
     let still = (waiting.status, waiting.background_tasks.len(), waiting.queue_held);
     assert_eq!(still, (SessionStatus::Background, 1, false), "nothing it was doing was cut off");
-    gh.release();
+    github.release();
 
     let events = wait_for_turn_end(&client, &chat.id, 2);
     let said = assistant_text(&events);

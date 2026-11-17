@@ -26,6 +26,17 @@ Pull requests are read with GitHub's CLI. Check that:
 
 Everything else works without `gh`.
 
+## An agent can't read or wait on a pull request
+
+The agent's call says why. Roundhouse reads the pull requests agents ask for and wait on from GitHub itself, so check that:
+
+- The repository's `origin` is on github.com. Roundhouse doesn't read pull requests on GitHub Enterprise Server or on a `ghe.com` host.
+- Either a GitHub account is the default in [Settings](../reference/settings.md#git), or `gh auth status` says you're logged in on the machine running the workspace.
+
+A wait that can't be read for want of a login goes on waiting, and Roundhouse reads it again once `gh` is logged in or an account is the default.
+
+A call that says the pull requests kept changing as they were read, as while a branch is pushed or the queue merges, works once they settle: ask again.
+
 ## An agent can't push
 
 Open the Git page in [Settings](../reference/settings.md#git):

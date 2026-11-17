@@ -80,6 +80,10 @@ pub(in super::super) struct Reading {
     /// When each workspace's was last read since the hub started, and how long it goes before a read nobody asks for.
     pub(super) schedules: Mutex<HashMap<WorkspaceId, Schedule>>,
     pub(super) budget: Mutex<Budget>,
+    /// Held while an agent's read of pull requests from GitHub, and a wait it starts, go, so the wait is recorded
+    /// before another of the workspace's agents' reads can judge it. Apart from [`Reading::gates`], since these need
+    /// no worker, and so don't wait behind one stuck in `gh`.
+    pub(super) agent_gates: Mutex<HashMap<WorkspaceId, Arc<AsyncMutex<()>>>>,
     pub(super) remote_read_at: Mutex<HashMap<WorkspaceId, Instant>>,
     pub(super) remote: Mutex<HashMap<super::remote::GroupKey, super::remote::RemoteSchedule>>,
 }
@@ -91,6 +95,7 @@ impl Reading {
             gates: Mutex::new(HashMap::new()),
             schedules: Mutex::new(HashMap::new()),
             budget,
+            agent_gates: Mutex::new(HashMap::new()),
             remote_read_at: Mutex::new(HashMap::new()),
             remote: Mutex::new(HashMap::new()),
         }

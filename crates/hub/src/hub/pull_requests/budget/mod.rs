@@ -12,4 +12,4 @@ mod tests;
 mod limits;
 #[cfg(test)]
 use limits::{BURST, GITHUB_SAID_FOR, PER_MINUTE};
-pub(super) use limits::{Budget, calls_to_read};
+pub(super) use limits::{Budget, calls_to_read, calls_up_front};

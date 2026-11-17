@@ -1,19 +1,17 @@
 use super::{
     ApiError, Arc, Duration, ErrorCode, GitHubRepository, HashSet, Hub, PullRequestNumber, PullRequestWaitUntil,
     PullRequestWatch, PullRequestsSnapshot, ReadPullRequests, START_WITHIN, Seen, SessionId, StartPullRequestWait,
-    Wait, WaitAnswer, WaitEnd, WaitEnded, WaitUntil, WorkerLink, WorkspaceId, new_id, now_ms, remote_rules,
+    Wait, WaitAnswer, WaitEnd, WaitEnded, WaitUntil, WorkspaceId, new_id, now_ms, remote_rules,
 };
 
 impl Hub {
     pub(crate) async fn remote_for_agent(
         self: &Arc<Self>,
         id: &WorkspaceId,
-        link: &WorkerLink,
         asked: ReadPullRequests,
     ) -> Result<PullRequestsSnapshot, ApiError> {
-        let read = self.read_remote_holding(id, link, None, asked.pull_requests, true);
-        let (snapshot, _held) =
-            tokio::time::timeout(START_WITHIN, read).await.map_err(|_| too_long())?.map_err(|failed| failed.error)?;
+        let read = self.read_remote_for_agent(id, asked.pull_requests);
+        let (snapshot, _held) = tokio::time::timeout(START_WITHIN, read).await.map_err(|_| too_long())??;
         self.observe_remote_waits(id, &snapshot).await;
         self.remote_was_read(id, &snapshot);
         Ok(snapshot)
@@ -22,7 +20,6 @@ impl Hub {
     pub(crate) async fn start_remote_wait(
         self: &Arc<Self>,
         id: &WorkspaceId,
-        link: &WorkerLink,
         session_id: SessionId,
         asked: StartPullRequestWait,
     ) -> Result<WaitAnswer, ApiError> {
@@ -30,9 +27,8 @@ impl Hub {
             return self.with_pull_request(started).await;
         }
         let timeout_ms = timeout_ms(asked.timeout_seconds)?;
-        let read = self.read_remote_holding(id, link, None, asked.pull_requests.clone(), true);
-        let (snapshot, _held) =
-            tokio::time::timeout(START_WITHIN, read).await.map_err(|_| too_long())?.map_err(|failed| failed.error)?;
+        let read = self.read_remote_for_agent(id, asked.pull_requests.clone());
+        let (snapshot, _held) = tokio::time::timeout(START_WITHIN, read).await.map_err(|_| too_long())??;
         self.observe_remote_waits(id, &snapshot).await;
         let at_ms = now_ms();
         let deadline_at_ms = timeout_ms

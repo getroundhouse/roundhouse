@@ -21,6 +21,8 @@ mod device_flow;
 pub(crate) use device_flow::{Approval, DeviceCode, GithubRefreshToken, Granted, Renewal};
 mod expiration;
 mod found;
+mod pull_requests;
+pub(crate) use pull_requests::{KEPT_FOR_OTHERS_PERCENT, PullRequestsAsk, PullRequestsRead, Unread, first_queries};
 mod reach;
 #[cfg(test)]
 use expiration::ends_at_ms;
@@ -28,4 +30,4 @@ pub(crate) use reach::PushAnswer;
 #[cfg(any(test, feature = "testing"))]
 mod stand_in;
 #[cfg(any(test, feature = "testing"))]
-pub use stand_in::{Answer, Gate, Script, StandIn};
+pub use stand_in::{Answer, Gate, PullRequestState, PullRequests, Script, StandIn};

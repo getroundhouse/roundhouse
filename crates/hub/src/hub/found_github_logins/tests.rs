@@ -79,7 +79,8 @@ async fn the_first_link_to_each_provider_is_asked_and_what_it_found_recorded_and
     assert_eq!(hub.records_list().await.unwrap().found_github_logins, [incus, local]);
 }
 
-/// Whatever the worker said of it, which a worker that hands the hub a token can't tell.
+/// Whatever the worker said of it, which a worker that hands the hub a token can't tell. One GitHub refused isn't kept to
+/// read pull requests with.
 #[tokio::test]
 async fn a_found_login_works_as_github_answers_the_hub_for_the_token_its_worker_handed_it() {
     let dir = tempfile::tempdir().unwrap();
@@ -99,6 +100,11 @@ async fn a_found_login_works_as_github_answers_the_hub_for_the_token_its_worker_
 
     assert_eq!(local.login, ada());
     assert_eq!(incus.login, GhLogin::LoggedIn { username: "ada".into(), works: GhLoginWorks::Refused });
+    let (local_kept, incus_kept) = (ProviderName::from("local"), ProviderName::from("incus"));
+    let local_kept = hub.found_tokens.of(&local_kept, Duration::ZERO).await;
+    let incus_kept = hub.found_tokens.of(&incus_kept, Duration::ZERO).await;
+    assert_eq!(local_kept.map(|found| found.token), Some(GithubToken::new("ada-token")));
+    assert_eq!(incus_kept, None, "the token GitHub refused");
     assert!(github.asked().iter().all(|asked| asked.starts_with("get /user ")), "{:?}", github.asked());
 }
 

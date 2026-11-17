@@ -201,6 +201,21 @@ pub(crate) fn hub_with_worktree(dir: &Path) -> Arc<Hub> {
     hub
 }
 
+/// A hub as [`hub_with_worktree`] makes one, which calls GitHub's API at `api`, such as a stand-in's, whose repository
+/// `r` is example/project on github.com, and whose workspaces' machines' own `gh`, the default while the hub holds no
+/// account, handed it the token `a-token`. It runs with a test's timers, so a test that calls a stand-in, and can't
+/// pause tokio's clock, waits out no spacing or pace.
+pub(crate) fn hub_reading_github(dir: &Path, api: String) -> Arc<Hub> {
+    let hub = hub_timed(dir, vec![described()], Github::new(GithubConfig::at(api)), Timers::FOR_TESTS);
+    hub.store.workspace_ready(&"w".into(), "/w", &"alder".into(), "main", None).unwrap();
+    let address = protocol::model::RepoUrl::try_from("https://github.com/example/project".to_string()).unwrap();
+    hub.store.read_repo_url(&"r".into(), "/repo", Some(&address), None).unwrap();
+    let provider = hub.store.get_workspace(&"w".into()).unwrap().provider;
+    let token = protocol::worker::FoundToken { token: protocol::model::GithubToken::new("a-token"), renews: false };
+    hub.found_tokens.found(provider, Some(token));
+    hub
+}
+
 /// An open pull request whose checks are running.
 pub(super) fn open() -> PullRequest {
     PullRequest {
