@@ -36,10 +36,7 @@ pub use connection::{Hello, HelloReply, Received, RunningAgent, RunningAgents, R
 pub use found_login::{FindGithubLogin, FoundToken, GithubLoginReply};
 pub use frames::WorkerFrame;
 pub use git_credential::{GitCredential, GitCredentialSet, GitIdentity, GithubCredential};
-pub use github::{
-    GH_RUNS_WITHIN, GithubRateLimit, PullRequest, PullRequestReply, RateLimit, ReadRemotePullRequests,
-    RemotePullRequestsReply,
-};
+pub use github::{GH_RUNS_WITHIN, GithubRateLimit, PullRequest, PullRequestReply, RateLimit};
 pub use one_off::{AccountFor, TitleFor, TitleReply};
 pub use repo_source::RepoSource;
 pub use repo_url::{PushRoute, ReadRepoUrl, RepoUrlReply};

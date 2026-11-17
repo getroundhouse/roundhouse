@@ -17,9 +17,7 @@ use connection::{RunningAgents, Stop};
 use found_login::FindGithubLogin;
 use found_login::GithubLoginReply;
 use git_credential::GitCredentialSet;
-use github::{
-    GithubRateLimit, PullRequest, PullRequestReply, RateLimit, ReadRemotePullRequests, RemotePullRequestsReply,
-};
+use github::{GithubRateLimit, PullRequest, PullRequestReply, RateLimit};
 use one_off::{AccountFor, TitleFor, TitleReply};
 use repo_url::{ReadRepoUrl, RepoUrlReply};
 use serde::{Deserialize, Serialize};
@@ -102,7 +100,6 @@ pub enum WorkerRequest {
     GitStatus(GitStatus),
     GitDiff(GitDiff),
     PullRequest(PullRequest),
-    ReadRemotePullRequests(ReadRemotePullRequests),
     WatchBranches(WatchBranches),
     WatchChildBranches(WatchChildBranches),
     GithubRateLimit(GithubRateLimit),
@@ -156,7 +153,6 @@ pub enum WorkerResponse {
     GitStatus(model::GitStatus),
     GitDiff(model::GitDiff),
     PullRequest(PullRequestReply),
-    RemotePullRequests(RemotePullRequestsReply),
     GithubRateLimit(RateLimit),
     SetupDone(SetupDone),
     SetupLog(SetupLogReply),

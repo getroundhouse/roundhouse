@@ -3,7 +3,6 @@
 use super::{Stack, install_executable};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
-mod remote;
 
 mod stand_in;
 pub(crate) use stand_in::LOGGED_IN_AS;
