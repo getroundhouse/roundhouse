@@ -128,18 +128,38 @@ fn a_typed_command_that_only_reads_is_asked_about_as_a_command() {
     assert_eq!(asked.given, Some(Given::Command("cat secrets.env")));
 }
 
-/// A patch is asked about by the files it changes and how, as its typed input says them, which is all the person has
-/// to go on.
+/// A patch is asked about by the files it changes and how, which is all the person has to go on, and one of one file
+/// by that file.
 #[test]
 fn a_typed_patch_is_asked_about_by_its_changes() {
     use protocol::capability::calls::Call;
     use protocol::capability::calls::call::{FilePatch, Patch, PatchChange};
     let add = PatchChange::Add { content: "fn may_pass() {}".into() };
-    let call = Call::Patch(Patch { files: vec![FilePatch { path: "src/signal.rs".into(), change: add }] });
-    let body = protocol::fixtures::typed_request("a", "patch-1", call);
+    let patch = Patch { files: vec![FilePatch { path: "src/signal.rs".into(), change: add }] };
+    let body = protocol::fixtures::typed_request("a", "patch-1", Call::Patch(patch.clone()));
 
     let asked = ToolUseAsked::of(&body).unwrap();
 
     assert_eq!(asked.tool, "Edit");
-    assert_eq!(asked.given, Some(Given::MainInput("src/signal.rs\n+fn may_pass() {}\n".into())));
+    assert_eq!(asked.given, Some(Given::Patch(&patch)));
+    assert_eq!(asked.given.as_ref().and_then(Given::path), Some("src/signal.rs"));
+    let mut both = patch.clone();
+    both.files.push(FilePatch { path: "src/depot.rs".into(), change: PatchChange::Delete });
+    assert_eq!(Given::Patch(&both).path(), None, "of no one file");
+}
+
+/// A typed call of any other kind is asked about by what its line says, not by its input as JSON.
+#[test]
+fn a_typed_call_of_any_other_kind_is_asked_about_as_its_line_says() {
+    use protocol::capability::calls::Call;
+    use protocol::capability::calls::call::{Schedule, When};
+    let schedule = Schedule { prompt: "Check #182's CI".into(), when: When::After { seconds: 1200 } };
+    let body = protocol::fixtures::typed_request("a", "later-1", Call::Schedule(schedule));
+
+    let asked = ToolUseAsked::of(&body).unwrap();
+
+    assert_eq!(
+        (asked.tool.as_str(), asked.given),
+        ("Schedule a prompt", Some(Given::MainInput("Check #182's CI".into())))
+    );
 }

@@ -104,6 +104,12 @@ impl Patched<'_> {
     }
 }
 
+/// What `patch` would do to each of its files, worked out from the patch, for where it's asked about before it's made:
+/// each file's path, where it moves to, if it does, and its change as a diff, which is empty for one it deletes.
+pub(super) fn asked(patch: &Patch) -> Vec<(String, &str, Rc<Vec<Section>>)> {
+    patched(patch, None).into_iter().map(|file| (file.label(), file.path, file.sections)).collect()
+}
+
 /// The names of the files, which is what a line has room for.
 fn names(files: &[Patched]) -> String {
     files.iter().map(|file| file_name(file.moved_to.unwrap_or(file.path))).collect::<Vec<_>>().join(", ")

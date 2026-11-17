@@ -53,7 +53,7 @@ Either way, the request takes the composer's place, as a question does, and is a
 ![A removal waiting to be allowed, asked about with full access](../../../spec/screens/approval-full-access.png)
 
 - **Its header is the tool,** then what the subagent that asks is for, when one does.
-- **Under what the agent says it's for is the command, whole.** A long one scrolls. An edit, or a file to write, shows what it would change, under the file's path. Another tool shows its main input, such as a URL.
+- **Under what the agent says it's for is the command, whole.** A long one scrolls. An edit, or a file to write, shows what it would change, under the file's path. A patch of several files, as Codex makes, says how many, and shows each file's path over what it would change. Another tool shows its main input, such as a URL.
 - **Under that is why the agent asks,** in its own words, when it says.
 - **`1` allows it and `2` denies it,** and `Enter` or the arrow sends what's chosen.
 - **`0` goes to the row for saying what to do instead, when the agent accepts a written denial.** What's typed there denies the request, and the agent is told in those words. `Enter` there sends only what's typed, so it never allows.

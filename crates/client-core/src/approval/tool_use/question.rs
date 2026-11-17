@@ -1,5 +1,6 @@
 use super::super::Approval;
 use crate::calls::{EditFile, Recorded, ToolCall, WriteFile};
+use protocol::capability::calls::call::Patch;
 use protocol::event::{ApprovalDecision, Asking, EventBody, QuestionAnswer};
 use protocol::model::SubagentId;
 
@@ -27,15 +28,21 @@ pub enum Given<'a> {
     Edit(EditFile<'a>),
     /// A file written whole, with all it will hold.
     Write(WriteFile<'a>),
+    /// Files changed at once, each added, deleted, or changed and maybe moved, with each change.
+    Patch(&'a Patch),
     /// The input that matters most to any other tool, on one line, such as a URL.
     MainInput(String),
 }
 
 impl Given<'_> {
-    /// The file it changes, for an edit or a write.
+    /// The file it changes, for an edit, a write, or a patch of one file.
     pub fn path(&self) -> Option<&str> {
         match self {
             Given::Edit(EditFile { path, .. }) | Given::Write(WriteFile { path, .. }) => Some(path),
+            Given::Patch(Patch { files }) => match files.as_slice() {
+                [file] => Some(&file.path),
+                _ => None,
+            },
             Given::Command(_) | Given::MainInput(_) => None,
         }
     }
@@ -86,8 +93,9 @@ impl<'a> ToolUseAsked<'a> {
             }
             ToolCall::Edit(edit) => (tool_name.clone(), said, Some(Given::Edit(edit))),
             ToolCall::Write(write) => (tool_name.clone(), said, Some(Given::Write(write))),
-            // Asked about by their typed input, until the panel draws what's asked as the chat draws the call.
-            ToolCall::Typed(_) | ToolCall::Patch(_) | ToolCall::NotebookEdit(_) => {
+            ToolCall::Patch(patch) => (tool_name.clone(), said, Some(Given::Patch(patch))),
+            // Asked about by its typed input, which holds what it puts in the cell, until an agent records one typed.
+            ToolCall::NotebookEdit(_) => {
                 (tool_name.clone(), said, typed.map(|call| Given::MainInput(crate::calls::typed::input(call))))
             }
             ToolCall::Other(other) => (other.name().to_string(), said, summary.map(Given::MainInput)),
@@ -95,6 +103,7 @@ impl<'a> ToolUseAsked<'a> {
             | ToolCall::Search(_)
             | ToolCall::Agent(_)
             | ToolCall::ToSubagents(_)
+            | ToolCall::Typed(_)
             | ToolCall::Fetch(_)
             | ToolCall::WebSearch(_)
             | ToolCall::Advisor => (tool_name.clone(), said, summary.map(Given::MainInput)),

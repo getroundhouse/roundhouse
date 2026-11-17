@@ -17,6 +17,8 @@ pub(in super::super) const INSTEAD: &str = "Deny, and say what to do instead…"
 /// What's asked of a use the agent said nothing about, and that has no input of its own to ask it by.
 const RUN_THIS: &str = "Run this command?";
 const MAKE_THIS: &str = "Make this edit?";
+/// What's asked about a patch of several files, as it's several edits.
+const MAKE_THESE: &str = "Make these edits?";
 const WRITE_THIS: &str = "Write this file?";
 const USE_THIS: &str = "Use this tool?";
 
@@ -54,9 +56,16 @@ impl ToolUse {
             (about, Some(Given::Command(command))) => {
                 (about.unwrap_or(RUN_THIS).to_string(), Some(Shown::Text(command.into())))
             }
-            (about, Some(given @ (Given::Edit(_) | Given::Write(_)))) => {
-                let asks = if matches!(given, Given::Edit(_)) { MAKE_THIS } else { WRITE_THIS };
-                (about.unwrap_or(asks).to_string(), ChangeAsked::of(&given).map(Shown::Change))
+            (about, Some(given @ (Given::Edit(_) | Given::Write(_) | Given::Patch(_)))) => {
+                let change = ChangeAsked::of(&given);
+                let asks = if matches!(given, Given::Write(_)) {
+                    WRITE_THIS
+                } else if change.as_ref().is_some_and(ChangeAsked::several) {
+                    MAKE_THESE
+                } else {
+                    MAKE_THIS
+                };
+                (about.unwrap_or(asks).to_string(), change.map(Shown::Change))
             }
             (Some(about), Some(Given::MainInput(input))) => (about.to_string(), Some(Shown::Text(input))),
             // With nothing said of what it's for, its main input is what's asked about.
