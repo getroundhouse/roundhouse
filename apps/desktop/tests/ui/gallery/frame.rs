@@ -141,6 +141,7 @@ fn region_in_the_column(region: Region) -> bool {
         | Region::TabBar
         | Region::OpenFile
         | Region::SetupLog
+        | Region::PushLine
         | Region::Transcript
         | Region::Outline
         | Region::FindBar

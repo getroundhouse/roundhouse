@@ -18,7 +18,7 @@ mod tests;
 use crate::sounds::Sound;
 #[cfg(test)]
 use crate::workspace_order::Sort;
-pub(crate) use page::{Asking, FIND_KEY, KEY_CONTEXT, OfHub, page};
+pub(crate) use page::{Asking, FIND_KEY, KEY_CONTEXT, OfHub, PageId, page};
 
 mod preferences;
 #[cfg(test)]

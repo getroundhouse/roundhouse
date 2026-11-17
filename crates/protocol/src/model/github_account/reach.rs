@@ -124,6 +124,11 @@ impl GithubRepositoryName {
     pub fn as_str(&self) -> &str {
         &self.0
     }
+
+    /// Whose it is: the user's or the organization's name before the `/`.
+    pub fn owner(&self) -> &str {
+        self.0.split_once('/').map_or(&self.0, |(owner, _)| owner)
+    }
 }
 
 impl TryFrom<String> for GithubRepositoryName {

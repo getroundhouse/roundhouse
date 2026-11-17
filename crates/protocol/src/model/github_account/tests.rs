@@ -237,6 +237,7 @@ fn a_repository_on_github_is_an_owner_and_a_name_of_githubs_letters() {
     ] {
         assert_eq!(read(written), Err(why), "{written}");
     }
+    assert_eq!(GithubRepositoryName::named("get-round_house/app.rs").owner(), "get-round_house");
 }
 
 /// So a newer hub's word reaches no client as one this build knows, and a name that isn't one fails only its record.

@@ -30,6 +30,7 @@ Everything else works without `gh`.
 
 Open the Git page in [Settings](../reference/settings.md#git):
 
+- **If the workspace says `Agents can't push to` its repository,** above the composer, GitHub refused the default, has no such repository it can see, or doesn't take its token, and the line says GitHub's words and what to do: make another account the default, add one that can push there, or ask the repository's owner for access, or to approve Roundhouse. **Open Git** at its end opens the Git page.
 - **If it says `Agents can't push.`,** the default GitHub account can't be used, and it says why and what to do: renew its token, sign in again, or make another account the default. Agents don't fall back on the machine's own login.
 - **If you've added no account,** agents push with the machine's own login. **Found** says who `gh` is logged in as there, and whether GitHub took its token, as of when the hub last started. Run `gh auth login` on that machine, or add an account.
 

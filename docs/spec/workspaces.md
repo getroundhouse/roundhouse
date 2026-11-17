@@ -158,6 +158,25 @@ A repository set up for Conductor works here unchanged, because Roundhouse reads
 - **Archiving refuses if any of a workspace's other worktrees has uncommitted changes or commits on no branch, naming which, as it does for the workspace's own, unless forced.** Then it removes them all, and keeps every branch, since squashed merges leave no way to tell that a branch's work has landed. *Not built.*
 - **Restoring brings back only the workspace's own worktree.** The others' branches are kept, and a worktree can be made on one again. *Not built.*
 
+## Pushing to GitHub
+
+- **Whether agents can push to a workspace's repository on GitHub as the default GitHub account is the repository's, so every workspace of it says the same, as the hub last found it,** since what GitHub takes depends on the repository and the account, not the workspace. The hub finds out by asking GitHub, as "Reach" in "State ownership" in `docs/architecture.md` says.
+- **A workspace that agents can't push from says so in a line above the composer, with why and what to do,** in every chat of it, so it's seen before work starts and when a push fails. It blocks nothing: agents push as they would anyway. *Unconfirmed:* the line above the composer.
+- **It says what's wrong in a warning's colour, then GitHub's own words, or the hub's, and what to do, quieter, on from it as one paragraph:** choose another default or connect an account that can push there, or ask the repository's owner to give the account access or to approve Roundhouse, as an organization that restricts OAuth Apps has to. *Unconfirmed.*
+- **`Open Git`, at the line's end, opens Settings at Git,** where another default is chosen and accounts are connected, as `settings.md` says, so what the line says to do is a click away. *Unconfirmed.*
+- **It says so when GitHub refuses the push, in GitHub's words, when GitHub has no such repository the account can see, when GitHub doesn't take the account's token, and while the default's login can't be used, in the hub's words, which say what to do.** It says nothing while a push would be taken, while the hub couldn't tell, as while GitHub can't be reached and hasn't answered for the account before, since a push that fails then says why itself, while the default is each machine's own login, which the hub holds no token to check with, and for a repository whose `origin` isn't on GitHub. *Unconfirmed.*
+
+  **A workspace whose repository GitHub refuses the default's pushes to, in GitHub's words.** *Unconfirmed.*
+
+  ![A line above the composer saying GitHub refuses pushes as the default](screens/push-refused.png)
+
+  **A workspace whose repository GitHub has none of that the default can see, as for a private one that isn't theirs.** *Unconfirmed.*
+
+  ![A line above the composer saying GitHub has no such repository the default can see](screens/push-not-found.png)
+
+- **The line goes once the hub finds that a push would be taken,** as when another default is chosen, which the hub checks at once, or an organization approves Roundhouse, which it finds within half an hour. *Unconfirmed.*
+- **What GitHub last answered stays until GitHub answers again,** so a hub that starts again shows the line its last run left, and checks at once, and while GitHub can't be reached, the line says what GitHub last said for the same account. It looks the same either way, since the hub checks again as it starts, so it's seldom out of date for long. *Unconfirmed:* no sign of an answer the last run left.
+
 ## Pull requests
 
 - **The top of the sidebar of changes is the pull request's bar,** level with the workspace's header: the pull request's number, which opens it on GitHub, the first thing in the way of merging it, and the one thing to do about it. The whole bar takes the pull request's colour, as `look.md` says, so where it stands reads at a glance from across the window. While the sidebar is hidden, the header shows the number and the action instead, since it has no room for the words. *Unconfirmed.*

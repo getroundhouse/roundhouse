@@ -35,6 +35,7 @@ mod outline;
 mod pairing;
 mod pickers;
 mod pull_requests;
+mod pushing;
 mod questions;
 mod queue;
 mod quitting;

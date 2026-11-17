@@ -1,8 +1,8 @@
 use protocol::client::HubNotice;
 use protocol::fixtures::{found_github_login, github_account, github_sign_in};
 use protocol::model::{
-    DiffComment, DiffSide, GithubAccount, GithubUser, GithubUserId, RecordKey, Records, Repo, Rev, Session, Subagent,
-    Title, Workspace,
+    DiffComment, DiffSide, GithubAccount, GithubReach, GithubRepositoryName, GithubUser, GithubUserId, Reach,
+    RecordKey, Records, Repo, Rev, Session, Subagent, Title, Workspace,
 };
 
 use crate::records::HubRecords;
@@ -197,4 +197,22 @@ fn what_a_hub_says_of_github_is_listed_in_the_order_views_show_it_and_found_by_i
         "this machine's first"
     );
     assert!(shown.github_account(&"gone".into()).is_none() && shown.github_sign_in(&"gone".into()).is_none());
+}
+
+#[test]
+fn a_workspace_says_what_a_push_from_it_meets_by_its_repositorys_reach() {
+    let reach =
+        |reach: Reach, rev: u64| GithubReach { reach, rev: Rev::new(rev), ..protocol::fixtures::github_reach("r") };
+    let repository = GithubRepositoryName::named("example/project");
+    let refused = Reach::Refused { repository, username: "ada".into(), reason: "Permission denied to ada.".into() };
+    let mut held = HubRecords::default();
+    held.apply_list(Records { github_reach: vec![reach(refused.clone(), 6)], ..listed() });
+
+    let shown = held.snapshot();
+    assert_eq!(shown.github_reach(&"r".into()), Some(&refused));
+    assert_eq!(shown.in_workspace(&"w".into()).unwrap().github_reach(), Some(&refused), "its repository's");
+    assert_eq!(shown.github_reach(&"r2".into()), None, "not checked yet");
+
+    held.apply_notice(HubNotice::GithubReach(reach(Reach::NotOnGithub, 8)));
+    assert_eq!(held.snapshot().in_workspace(&"w".into()).unwrap().github_reach(), Some(&Reach::NotOnGithub));
 }

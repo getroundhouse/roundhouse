@@ -36,13 +36,13 @@ impl Render for AppView {
         if home.is_none() {
             self.home.not_drawn();
         }
-        if self.settings_open() {
+        if let Some(shown) = &self.settings {
             // The workspace's keys are left out, since what they'd act on is hidden.
             let back = cx.listener(|t, _, window, cx| t.close_settings(window, cx));
-            let (hub, width) = (self.settings_of_hub(), Side::Left.width(cx));
+            let (hub, width, chosen) = (self.settings_of_hub(), Side::Left.width(cx), shown.chosen.clone());
             return self
                 .root(div(), cx)
-                .child(crate::settings::page(&self.settings_focus, width, back, hub))
+                .child(crate::settings::page(&self.settings_focus, width, back, hub, chosen))
                 .children(corner::menus(self, cx))
                 .children(window_buttons::of_windows(window, cx));
         }

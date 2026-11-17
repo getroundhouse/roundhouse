@@ -4,6 +4,7 @@ pub use dictation_ui::{LIVE_LINE, NOTHING_HEARD, SPACE_DICTATES_AFTER, SPACE_LIS
 pub use file_tab::Opened;
 pub(crate) use keeping::drafted;
 pub use microphone::{HIDE, MICROPHONE, TURN_ON};
+pub use pushing::OPEN_GIT;
 pub use reading::Mark;
 pub(crate) use reading::OnScreen;
 
@@ -21,6 +22,7 @@ mod front;
 mod keeping;
 mod microphone;
 mod pull_request;
+mod pushing;
 mod queue;
 mod reading;
 mod setup;

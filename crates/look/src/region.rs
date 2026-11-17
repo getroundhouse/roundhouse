@@ -23,6 +23,8 @@ pub enum Region {
     Queue,
     /// The setup script's log, above the composer.
     SetupLog,
+    /// What a push from the workspace would meet on GitHub, above the composer, while the default can't push there.
+    PushLine,
     /// The chat's rows.
     Transcript,
     /// The ticks at the right of a chat with several prompts, one for each, at the pane's edge.
@@ -66,6 +68,7 @@ impl Region {
             Region::Composer => "composer",
             Region::Queue => "queue",
             Region::SetupLog => "setup-log-text",
+            Region::PushLine => "push-line",
             Region::Transcript => "transcript",
             Region::Outline => "outline",
             Region::FindBar => "find-bar",

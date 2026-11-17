@@ -82,6 +82,8 @@ pub enum PaneEvent {
     /// What's in front under the tabs changed, so the chat being read may have.
     Showing,
     Present(Presentation),
+    /// Show Git in Settings, where the default GitHub account is chosen and accounts are connected.
+    OpenGit,
 }
 
 pub struct WorkspacePane {
