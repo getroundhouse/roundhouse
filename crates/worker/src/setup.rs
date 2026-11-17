@@ -190,6 +190,7 @@ pub fn read_log_tail(log: &Path, max_bytes: u64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::testing::given;
 
     fn run(cwd: &Path, args: &[&str]) {
         process::testing::git(cwd, args);
@@ -255,8 +256,7 @@ mod tests {
         write(repo.join("work-in-progress.txt"), "not ignored, so it's the user's work\n");
 
         let mut warnings = Vec::new();
-        let mut copied =
-            copy_local_files(&Environment::NONE, Some(&repo), &worktree, &Settings::default(), &mut warnings).await;
+        let mut copied = copy_local_files(&given(), Some(&repo), &worktree, &Settings::default(), &mut warnings).await;
         copied.sort();
         assert!(copied.contains(&".env.local".to_string()), "{copied:?}");
         assert_eq!(std::fs::read_to_string(worktree.join(".env.local")).unwrap(), "A=1\n");
@@ -272,8 +272,7 @@ mod tests {
         write(repo.join(".worktreeinclude"), "# just this\nconfig/*.local.json\n");
         write(repo.join("config/app.local.json"), "{}\n");
         write(repo.join(".env"), "A=1\n");
-        let copied =
-            copy_local_files(&Environment::NONE, Some(&repo), &worktree, &Settings::default(), &mut Vec::new()).await;
+        let copied = copy_local_files(&given(), Some(&repo), &worktree, &Settings::default(), &mut Vec::new()).await;
         assert_eq!(copied, vec!["config/app.local.json".to_string()]);
         assert!(!worktree.join(".env").exists(), "an include file replaces the default, it doesn't add to it");
     }
@@ -284,7 +283,7 @@ mod tests {
         let (repo, worktree) = repo_and_worktree(dir.path(), "certs/\n");
         write(repo.join("certs/local.pem"), "pem\n");
         let settings = Settings { file_include_globs: Some("certs/*.pem\n".into()), ..Default::default() };
-        let copied = copy_local_files(&Environment::NONE, Some(&repo), &worktree, &settings, &mut Vec::new()).await;
+        let copied = copy_local_files(&given(), Some(&repo), &worktree, &settings, &mut Vec::new()).await;
         assert_eq!(copied, vec!["certs/local.pem".to_string()]);
     }
 
@@ -295,8 +294,7 @@ mod tests {
         write(repo.join(".env"), "from the checkout\n");
         write(worktree.join(".env"), "already here\n");
         std::os::unix::fs::symlink("/etc/hosts", repo.join(".env.link")).unwrap();
-        let copied =
-            copy_local_files(&Environment::NONE, Some(&repo), &worktree, &Settings::default(), &mut Vec::new()).await;
+        let copied = copy_local_files(&given(), Some(&repo), &worktree, &Settings::default(), &mut Vec::new()).await;
         assert!(copied.is_empty(), "{copied:?}");
         assert_eq!(std::fs::read_to_string(worktree.join(".env")).unwrap(), "already here\n");
         assert!(!worktree.join(".env.link").exists());
@@ -308,7 +306,7 @@ mod tests {
         let log = dir.path().join("setup.log");
         let env = vec![("CONDUCTOR_WORKSPACE_NAME".to_string(), "alder".to_string())];
         let status = run_script(
-            &Environment::NONE,
+            &given(),
             "echo out $CONDUCTOR_WORKSPACE_NAME; pwd; echo err >&2; exit 3",
             dir.path(),
             &env,

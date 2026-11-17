@@ -8,11 +8,25 @@ use std::process::Command;
 pub struct Environment {
     set: Vec<(OsString, OsString)>,
     taken_out: Vec<OsString>,
+    /// Whether a process keeps nothing of what it inherits, but what its command was told to set, as a test gives the
+    /// code under it, through [`crate::testing::WholeEnvironment::given`]. Never in the product.
+    #[cfg(feature = "testing")]
+    inherits_nothing: bool,
 }
 
 impl Environment {
     /// Nothing beyond what a process inherits.
-    pub const NONE: Self = Self { set: Vec::new(), taken_out: Vec::new() };
+    pub const NONE: Self = Self {
+        set: Vec::new(),
+        taken_out: Vec::new(),
+        #[cfg(feature = "testing")]
+        inherits_nothing: false,
+    };
+
+    /// Nothing of what a process inherits, but what its command was told to set, such as a setting of the code that
+    /// starts it, which stays as the code set it.
+    #[cfg(feature = "testing")]
+    pub(crate) const INHERITING_NOTHING: Self = Self { set: Vec::new(), taken_out: Vec::new(), inherits_nothing: true };
 
     /// Gives `name` as `value`.
     #[must_use]
@@ -30,6 +44,10 @@ impl Environment {
 
     /// Puts it on `command`.
     pub fn apply(&self, command: &mut impl TakesEnvironment) {
+        #[cfg(feature = "testing")]
+        if self.inherits_nothing {
+            command.inherit_nothing();
+        }
         for name in &self.taken_out {
             command.take_out(name);
         }
@@ -44,6 +62,12 @@ impl Environment {
 pub trait TakesEnvironment {
     fn take_out(&mut self, name: &OsStr);
     fn give(&mut self, name: &OsStr, value: &OsStr);
+
+    /// Takes out everything the process would inherit, but what the command was told to set. Only a test asks it, to
+    /// give the code under it a whole environment of its own, through `testing::WholeEnvironment::given`, which only
+    /// the `testing` feature builds. It's a part of the trait in every build, since a crate that implements the trait
+    /// can't tell whether another crate in the same build turned that feature on.
+    fn inherit_nothing(&mut self);
 }
 
 impl TakesEnvironment for Command {
@@ -53,6 +77,15 @@ impl TakesEnvironment for Command {
 
     fn give(&mut self, name: &OsStr, value: &OsStr) {
         self.env(name, value);
+    }
+
+    /// What it inherits is this process's environment, as it is when it starts.
+    fn inherit_nothing(&mut self) {
+        let told: Vec<OsString> = self.get_envs().map(|(name, _)| name.to_os_string()).collect();
+        let inherited = std::env::vars_os().map(|(name, _)| name).filter(|name| !told.contains(name));
+        for name in inherited.collect::<Vec<_>>() {
+            self.env_remove(name);
+        }
     }
 }
 

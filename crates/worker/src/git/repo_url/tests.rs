@@ -9,14 +9,15 @@ use protocol::worker::{PushRoute, RepoUrlReply};
 
 use super::repo_url;
 use crate::git::tests::{new_repo, run};
+use crate::testing::given;
 
-/// The machine's own config, as the person's global `config` alone, written in `dir`. Without the `GIT_CONFIG_*` of
-/// whatever runs the tests, such as a worker's own, which gives its git credential's rewriting to what runs in a
-/// workspace, so only the code under test adds that.
+/// The machine's own config, as the person's global `config` alone, written in `dir`, in what a test gives the worker's
+/// git, which has none of the `GIT_CONFIG_*` of whatever runs the tests, such as a worker's own, which gives its git
+/// credential's rewriting to what runs in a workspace, so only the code under test adds that.
 fn machine(dir: &Path, config: &str) -> Environment {
     let global = dir.join("person.gitconfig");
     std::fs::write(&global, config).unwrap();
-    Environment::NONE.with("GIT_CONFIG_GLOBAL", global).with("GIT_CONFIG_NOSYSTEM", "1").without("GIT_CONFIG_COUNT")
+    given().with("GIT_CONFIG_GLOBAL", global)
 }
 
 async fn read(repo: &Path) -> RepoUrlReply {
@@ -65,7 +66,7 @@ async fn a_credential_in_origins_address_is_cut_out_before_it_is_said() {
 async fn a_directory_that_isnt_a_checkout_is_refused_rather_than_said_to_have_none() {
     let dir = tempfile::tempdir().unwrap();
 
-    let read = repo_url(&Environment::NONE, dir.path()).await;
+    let read = repo_url(&given(), dir.path()).await;
 
     assert_eq!(read.map_err(|e| e.code), Err(ErrorCode::Worker));
 }

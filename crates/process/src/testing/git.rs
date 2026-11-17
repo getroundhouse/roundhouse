@@ -8,10 +8,11 @@ use super::WholeEnvironment;
 /// Where git reads no config from.
 const NOTHING: &str = if cfg!(windows) { "NUL" } else { "/dev/null" };
 
-/// `git`, to run in `dir`, in a [`WholeEnvironment`] with no home, no config but what the repository has, and a
-/// made-up author, so none of the person's own git, such as their global config, their hooks or a `GIT_DIR` from a
-/// hook they're in, changes what it makes.
-pub fn git_in(dir: &Path) -> Command {
+/// The whole environment git runs in for a test: no home, no config but what the repository has, a made-up author, and
+/// no prompt for a password, so none of the person's own git, such as their global config, their hooks, their
+/// credential helper or a `GIT_DIR` from a hook they're in, changes what it does. A test's own git runs in it, through
+/// [`git_in`], and so does the git that the code under test starts, given it with [`WholeEnvironment::given`].
+pub fn git_environment() -> WholeEnvironment {
     let mut environment = WholeEnvironment::kept();
     environment
         .set("GIT_CONFIG_GLOBAL", NOTHING)
@@ -19,8 +20,14 @@ pub fn git_in(dir: &Path) -> Command {
         .set("GIT_AUTHOR_NAME", "t")
         .set("GIT_AUTHOR_EMAIL", "t@example.com")
         .set("GIT_COMMITTER_NAME", "t")
-        .set("GIT_COMMITTER_EMAIL", "t@example.com");
-    let mut git = environment.command("git");
+        .set("GIT_COMMITTER_EMAIL", "t@example.com")
+        .set("GIT_TERMINAL_PROMPT", "0");
+    environment
+}
+
+/// `git`, to run in `dir`, in [`git_environment`], so what it makes is the same whoever runs the test.
+pub fn git_in(dir: &Path) -> Command {
+    let mut git = git_environment().command("git");
     git.current_dir(dir);
     git
 }

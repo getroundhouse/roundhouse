@@ -166,11 +166,11 @@ fn entry(line: &[u8]) -> Option<Entry<'_>> {
 
 #[cfg(test)]
 mod tests {
-    use process::Environment;
     use protocol::model::CommitId;
 
     use super::{entry, find, is_object_id};
     use crate::git::tests::{new_repo, run};
+    use crate::testing::given;
 
     /// More than a pipe holds, so git is still writing when the start has been read, and is stopped.
     #[tokio::test]
@@ -182,8 +182,8 @@ mod tests {
         run(&repo, &["commit", "-qm", "long"]);
         let commit = CommitId::from(run(&repo, &["rev-parse", "HEAD"]));
         let (long, short) = (
-            find(&Environment::NONE, &repo, &commit, "long.txt").await.unwrap(),
-            find(&Environment::NONE, &repo, &commit, "a.txt").await.unwrap(),
+            find(&given(), &repo, &commit, "long.txt").await.unwrap(),
+            find(&given(), &repo, &commit, "a.txt").await.unwrap(),
         );
 
         let (start, all) = (long.start(&repo, 10).await.unwrap(), short.start(&repo, 10).await.unwrap());

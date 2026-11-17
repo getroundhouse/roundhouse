@@ -1,4 +1,4 @@
-use process::Environment;
+use crate::testing::given;
 use std::path::Path;
 
 use protocol::model::{BranchName, Branches, Head};
@@ -32,7 +32,7 @@ impl Watching {
         outbox.attach(frames, false).await;
         let stopping = watch::Sender::new(false);
         let (first, sent) = oneshot::channel();
-        let (_, given) = tokio::sync::watch::channel(Arc::new(Environment::NONE));
+        let (_, given) = tokio::sync::watch::channel(Arc::new(given()));
         tokio::spawn(watch(given, worktree.to_path_buf(), whose, outbox, stopping.subscribe(), first));
         tokio::time::timeout(PATIENCE, sent).await.expect("it never said").unwrap();
         Self { worktree: worktree.to_path_buf(), frames: received, _stopping: stopping }
@@ -52,8 +52,8 @@ impl Watching {
 /// The OS's watcher for `worktree`, once anything it heard of before it was watching has come and gone, and what it
 /// wakes.
 async fn listening(worktree: &Path) -> (Arc<Wakes>, Option<Box<dyn Watcher + Send>>) {
-    let places = branches::places(&Environment::NONE, worktree).await.unwrap();
-    let read = branches::read(&Environment::NONE, worktree, &places).await.unwrap();
+    let places = branches::places(&given(), worktree).await.unwrap();
+    let read = branches::read(&given(), worktree, &places).await.unwrap();
     let wakes = Arc::new(Wakes { places, last: Mutex::new(Some(read)), wake: Notify::new() });
     let watcher = start(&wakes);
     let _ = tokio::time::timeout(QUIET, wakes.wake.notified()).await;
@@ -78,7 +78,7 @@ async fn reading_the_branches_wakes_nothing_and_switching_does() {
     run(&repo, &["worktree", "add", "-q", "--no-track", "-b", "aspen", worktree.to_str().unwrap(), "main"]);
     let (wakes, _watcher) = listening(&worktree).await;
 
-    branches::read(&Environment::NONE, &worktree, &wakes.places).await.unwrap();
+    branches::read(&given(), &worktree, &wakes.places).await.unwrap();
     let read = woke(&wakes, QUIET).await;
     run(&worktree, &["switch", "-q", "-c", "header"]);
     let switched = woke(&wakes, PATIENCE).await;
@@ -112,7 +112,7 @@ async fn another_worktrees_commit_wakes_nothing() {
 async fn a_file_only_opened_or_read_doesnt_matter_and_one_written_does() {
     let dir = tempfile::tempdir().unwrap();
     let repo = new_repo(dir.path());
-    let places = branches::places(&Environment::NONE, &repo).await.unwrap();
+    let places = branches::places(&given(), &repo).await.unwrap();
     let wakes = Wakes { places, last: Mutex::new(None), wake: Notify::new() };
     let head = repo.canonicalize().unwrap().join(".git").join("HEAD");
     let access = |kind| heard(EventKind::Access(kind), head.clone());

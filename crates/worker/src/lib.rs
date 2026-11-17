@@ -21,6 +21,8 @@ mod linked_images;
 mod serve;
 pub mod setup;
 mod terminals;
+#[cfg(test)]
+mod testing;
 mod timers;
 mod tools;
 mod worktree_file;

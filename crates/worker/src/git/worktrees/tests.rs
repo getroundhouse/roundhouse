@@ -1,6 +1,6 @@
 use super::locking::{Changing, Hold, WAITING, Worktrees};
 use crate::git::tests::{new_repo, prepare, run};
-use process::Environment;
+use crate::testing::given;
 use std::cell::RefCell;
 use std::fmt::Debug;
 use std::fs::{OpenOptions, TryLockError};
@@ -25,7 +25,7 @@ struct BeingMade {
 
 impl BeingMade {
     async fn in_repo(repo: &Path) -> Self {
-        let changing = Worktrees::of(&Environment::NONE, repo).await.unwrap().changing().await.unwrap();
+        let changing = Worktrees::of(&given(), repo).await.unwrap().changing().await.unwrap();
         let common = run(repo, &["rev-parse", "--path-format=absolute", "--git-common-dir"]);
         let entry = Path::new(&common).join("worktrees").join("being-made");
         std::fs::create_dir_all(&entry).unwrap();
@@ -147,7 +147,7 @@ fn comes_free(worktrees: &Worktrees) {
 #[tokio::test]
 async fn changing_holds_the_lock_alone_and_reading_beside_others_reading() {
     let dir = tempfile::tempdir().unwrap();
-    let worktrees = Worktrees::of(&Environment::NONE, &new_repo(dir.path())).await.unwrap();
+    let worktrees = Worktrees::of(&given(), &new_repo(dir.path())).await.unwrap();
 
     let changing = worktrees.changing().await.unwrap();
     assert!(!free(&worktrees, Hold::BesideOthersReading), "something read the worktrees while they were being changed");
@@ -165,7 +165,7 @@ async fn changing_holds_the_lock_alone_and_reading_beside_others_reading() {
 #[tokio::test]
 async fn a_lock_this_user_cant_write_is_still_held() {
     let dir = tempfile::tempdir().unwrap();
-    let worktrees = Worktrees::of(&Environment::NONE, &new_repo(dir.path())).await.unwrap();
+    let worktrees = Worktrees::of(&given(), &new_repo(dir.path())).await.unwrap();
     drop(worktrees.changing().await.unwrap());
     let mut read_only = std::fs::metadata(&worktrees.lock).unwrap().permissions();
     read_only.set_readonly(true);
@@ -184,9 +184,9 @@ async fn a_repository_and_its_worktrees_share_one_lock_and_another_repository_ha
     let workspace = prepare(&dir.path().join("ws"), &repo, "alder", None).await.unwrap();
     let other = tempfile::tempdir().unwrap();
 
-    let ours = Worktrees::of(&Environment::NONE, &repo).await.unwrap().lock;
-    assert_eq!(Worktrees::of(&Environment::NONE, Path::new(&workspace.path)).await.unwrap().lock, ours);
-    assert_ne!(Worktrees::of(&Environment::NONE, &new_repo(other.path())).await.unwrap().lock, ours);
+    let ours = Worktrees::of(&given(), &repo).await.unwrap().lock;
+    assert_eq!(Worktrees::of(&given(), Path::new(&workspace.path)).await.unwrap().lock, ours);
+    assert_ne!(Worktrees::of(&given(), &new_repo(other.path())).await.unwrap().lock, ours);
 }
 
 /// A callsite can first be reached on another test's thread, which has no thread-local subscriber.

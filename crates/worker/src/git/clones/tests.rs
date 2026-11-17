@@ -12,6 +12,7 @@ use super::making::WAITING;
 use super::place::MAKING;
 use crate::git::tests::{new_repo, prepare, run};
 use crate::git::worktrees::tests::Logs;
+use crate::testing::given;
 
 /// Long enough for git on a busy machine.
 const TIMEOUT: Duration = Duration::from_secs(10);
@@ -56,7 +57,7 @@ fn clone_of(url: &str) -> RepoSource {
 /// What the worker gives every git, as it gives the git credential its hub set, here configuration that has `url`
 /// reach `remote`.
 fn reaching(url: &str, remote: &Remote) -> Environment {
-    Environment::NONE
+    given()
         .with("GIT_CONFIG_COUNT", "1")
         .with("GIT_CONFIG_KEY_0", format!("url.{}.insteadOf", remote.url()))
         .with("GIT_CONFIG_VALUE_0", url)
@@ -78,10 +79,10 @@ async fn a_clone_is_made_once_and_fetched_before_each_workspace_made_from_it() {
     let (clones, root) = (Clones::new(dir.path().join("clones")), dir.path().join("ws"));
     let source = clone_of(&remote.url());
 
-    let first_from = clones.made_for(&Environment::NONE, &source).await.unwrap();
+    let first_from = clones.made_for(&given(), &source).await.unwrap();
     let first = prepare(&root, &first_from, "alder", None).await.unwrap();
     let pushed = remote.push_another();
-    let second_from = clones.made_for(&Environment::NONE, &source).await.unwrap();
+    let second_from = clones.made_for(&given(), &source).await.unwrap();
     let second = prepare(&root, &second_from, "birch", None).await.unwrap();
 
     assert_eq!(first_from, second_from);
@@ -106,7 +107,7 @@ async fn a_worker_waits_for_another_making_the_clone_and_takes_the_one_it_made()
     std::fs::create_dir_all(lock.parent().unwrap()).unwrap();
     let other = File::create(&lock).unwrap();
     other.lock().unwrap();
-    let (given, source) = (Environment::NONE, clone_of(UNREACHABLE));
+    let (given, source) = (given(), clone_of(UNREACHABLE));
     let logs = Logs::capture();
     let wanting = clones.made_for(&given, &source);
     tokio::pin!(wanting);
@@ -136,7 +137,7 @@ async fn a_clone_cut_short_is_made_again_rather_than_taken_for_whole() {
     let url = format!("http://{}/ada/rails.git", silent.local_addr().unwrap());
     let (cloning, cut_url) = (clones.clone(), url.clone());
     let cut_short = tokio::spawn(async move {
-        let given = Environment::NONE;
+        let given = given();
         cloning.made_for(&given, &clone_of(&cut_url)).await
     });
     let accepted = tokio::time::timeout(TIMEOUT, silent.accept()).await.expect("git never asked the remote");
@@ -173,8 +174,8 @@ async fn a_checkout_is_used_as_it_is_and_an_address_like_an_option_is_refused() 
     let clones = Clones::new(dir.path().join("clones"));
     let checkout = RepoSource::Checkout { path: repo.to_string_lossy().into_owned() };
 
-    let made = clones.made_for(&Environment::NONE, &checkout).await.unwrap();
-    let refused = clones.made_for(&Environment::NONE, &clone_of("--upload-pack=touch /tmp/x")).await.unwrap_err();
+    let made = clones.made_for(&given(), &checkout).await.unwrap();
+    let refused = clones.made_for(&given(), &clone_of("--upload-pack=touch /tmp/x")).await.unwrap_err();
 
     assert_eq!((&made, &clones.repository(&checkout)), (&repo, &repo));
     assert_eq!(refused.code, ErrorCode::InvalidRequest);

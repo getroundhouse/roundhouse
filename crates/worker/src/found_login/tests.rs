@@ -10,6 +10,7 @@ use protocol::model::{GhLogin, GhLoginWorks, GithubToken};
 use protocol::worker::FoundToken;
 
 use super::find;
+use crate::testing::given;
 
 /// The login `gh` uses, logged in through its own config, as it prints it once GitHub has said its token works.
 const ADA: &str = r#"{"hosts":{"github.com":[{"state":"success","active":true,"host":"github.com","login":"ada","tokenSource":"keyring","scopes":"gist, read:org, repo","gitProtocol":"https"}]}}"#;
@@ -43,7 +44,7 @@ fn gh(dir: &Path, status: &str, token: &str) -> Environment {
     );
     std::fs::write(bin.join("gh"), script).unwrap();
     std::fs::set_permissions(bin.join("gh"), std::fs::Permissions::from_mode(0o755)).unwrap();
-    Environment::NONE.with("PATH", bin)
+    given().with("PATH", bin)
 }
 
 type Found = Result<(GhLogin, Option<FoundToken>), ApiError>;
@@ -136,7 +137,7 @@ echo '{"hosts":{}}'"#;
 async fn no_gh_on_the_path_is_not_installed() {
     let dir = tempfile::tempdir().unwrap();
 
-    let found = find(&Environment::NONE.with("PATH", dir.path()), dir.path()).await;
+    let found = find(&given().with("PATH", dir.path()), dir.path()).await;
 
     assert_eq!(found.unwrap(), (GhLogin::NotInstalled, None));
 }
