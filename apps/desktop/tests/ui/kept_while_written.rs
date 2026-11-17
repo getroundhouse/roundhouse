@@ -62,53 +62,34 @@ fn a_comment_being_written_is_there_when_the_app_opens_again_until_its_saved(cx:
     ui.wait("saving it to clear what's kept", |_| kept_comment(&stack, &workspace).is_none());
 }
 
-/// Here the box changes a comment the hub doesn't have, so the save is refused. The hub keeps it until a save reaches
-/// it, so nothing typed is lost, even if the app quits.
 #[gpui_kit::test]
-fn a_comment_that_couldnt_be_saved_comes_back_in_its_box_and_the_hub_still_keeps_it(cx: &mut TestAppContext) {
+fn whats_typed_in_answer_is_there_when_the_app_opens_again_until_its_sent(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let mut ui = Ui::open_with_a_repository(cx, &stack);
-    let workspace = ui.new_workspace();
-    let diff = open_a_diff(&mut ui);
-    let kept = CommentDraft {
-        path: "a.txt".to_string(),
-        side: DiffSide::New,
-        line: 2,
-        editing: Some("gone".into()),
-        text: "Why?".to_string(),
-    };
-    stack.client().workspace_comment_draft(&workspace, Some(&kept)).unwrap();
-    ui.wait("the box the comment was left in", |ui| writing(ui, &diff).as_ref() == Some(&kept));
+    ui.new_workspace();
+    let chat = ui.active_chat();
+    ui.ask(A_QUESTION);
+    ui.click(id("question-other"));
+    ui.input("Friday");
+    let kept = || stack.client().session_get(&chat).unwrap().answer_draft;
+    ui.wait("the hub to keep it", |_| typed_in_answer(kept().as_ref()) == Some("Friday"));
 
-    ui.cx.update_window(ui.handle, |_, window, cx| diff.file.update(cx, |f, cx| f.save_draft(window, cx))).unwrap();
+    ui.open_again(&stack);
 
-    ui.wait("the refusal", |ui| ui.view().error.is_some());
-    assert!(ui.view().error.clone().unwrap().contains("couldn't save that comment"));
-    ui.wait("the box to come back", |ui| writing(ui, &diff).as_ref() == Some(&kept));
-    ui.view().drafts().unwrap().flushed().recv().unwrap();
-    assert_eq!(kept_comment(&stack, &workspace), Some(kept));
+    ui.wait("the question", |ui| ui.has(id("question")));
+    ui.wait("what was typed in answer", |ui| typed_in_answer(so_far(ui).as_ref()) == Some("Friday"));
+    ui.click(id("question-send"));
+    ui.wait("sending it to clear what's kept", |_| kept().is_none());
 }
 
+/// A comment changed elsewhere shows in the box, which keeps the focus as the change moves it, and goes once it's put
+/// away there. One that can't be saved, as one changing a comment the hub doesn't have can't, comes back in its box,
+/// and the hub keeps it until a save reaches it, so nothing typed is lost, even if the app quits. A diff made only
+/// after a comment was written on it elsewhere opens its box.
 #[gpui_kit::test]
-fn a_comment_changed_elsewhere_shows_in_the_box_and_goes_when_its_put_away_there(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = Ui::open_with_a_repository(cx, &stack);
-    let workspace = ui.new_workspace();
-    let diff = open_a_diff(&mut ui);
-    ui.start_comment(&diff, "a.txt", 2);
-    ui.input("Why this word?");
-    ui.view().drafts().unwrap().flushed().recv().unwrap();
-    let changed = CommentDraft { text: "Why not another?".to_string(), ..writing(&ui, &diff).unwrap() };
-
-    stack.client().workspace_comment_draft(&workspace, Some(&changed)).unwrap();
-
-    ui.wait("what was typed elsewhere", |ui| writing(ui, &diff).as_ref() == Some(&changed));
-    stack.client().workspace_comment_draft(&workspace, None).unwrap();
-    ui.wait("the box to go", |ui| writing(ui, &diff).is_none());
-}
-
-#[gpui_kit::test]
-fn the_box_being_typed_in_keeps_the_focus_as_a_change_made_elsewhere_moves_it(cx: &mut TestAppContext) {
+fn a_comment_written_elsewhere_shows_in_the_box_on_the_diff_and_one_that_couldnt_be_saved_comes_back(
+    cx: &mut TestAppContext,
+) {
     let stack = Stack::new();
     let mut ui = Ui::open_with_a_repository(cx, &stack);
     let workspace = ui.new_workspace();
@@ -119,17 +100,45 @@ fn the_box_being_typed_in_keeps_the_focus_as_a_change_made_elsewhere_moves_it(cx
     let changed = CommentDraft { line: 1, text: "Why not another?".to_string(), ..writing(&ui, &diff).unwrap() };
 
     stack.client().workspace_comment_draft(&workspace, Some(&changed)).unwrap();
-    ui.wait("what was typed elsewhere", |ui| writing(ui, &diff).as_ref() == Some(&changed));
 
+    ui.wait("what was typed elsewhere", |ui| writing(ui, &diff).as_ref() == Some(&changed));
     ui.input(" Or this?");
     assert_eq!(writing(&ui, &diff).unwrap().text, "Why not another? Or this?", "typing goes on in the box");
+    ui.view().drafts().unwrap().flushed().recv().unwrap();
+    stack.client().workspace_comment_draft(&workspace, None).unwrap();
+    ui.wait("the box to go once it's put away elsewhere", |ui| writing(ui, &diff).is_none());
+
+    a_comment_that_couldnt_be_saved_comes_back_in_its_box(&mut ui, &stack, &workspace, &diff);
+    a_diff_opened_after_a_comment_was_written_elsewhere_opens_its_box(&mut ui, &stack);
 }
 
-#[gpui_kit::test]
-fn a_diff_opened_after_a_comment_was_written_elsewhere_opens_its_box(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = Ui::open_with_a_repository(cx, &stack);
-    ui.new_workspace();
+/// Here the box changes a comment the hub doesn't have, so the save is refused.
+fn a_comment_that_couldnt_be_saved_comes_back_in_its_box(
+    ui: &mut Ui<'_>,
+    stack: &Stack,
+    at: &WorkspaceId,
+    diff: &Diff,
+) {
+    let kept = CommentDraft {
+        path: "a.txt".to_string(),
+        side: DiffSide::New,
+        line: 2,
+        editing: Some("gone".into()),
+        text: "Why?".to_string(),
+    };
+    stack.client().workspace_comment_draft(at, Some(&kept)).unwrap();
+    ui.wait("the box the comment was left in", |ui| writing(ui, diff).as_ref() == Some(&kept));
+
+    ui.cx.update_window(ui.handle, |_, window, cx| diff.file.update(cx, |f, cx| f.save_draft(window, cx))).unwrap();
+
+    ui.wait("the refusal", |ui| ui.view().error.is_some());
+    assert!(ui.view().error.clone().unwrap().contains("couldn't save that comment"));
+    ui.wait("the box to come back", |ui| writing(ui, diff).as_ref() == Some(&kept));
+    ui.view().drafts().unwrap().flushed().recv().unwrap();
+    assert_eq!(kept_comment(stack, at), Some(kept), "the hub still keeps it");
+}
+
+fn a_diff_opened_after_a_comment_was_written_elsewhere_opens_its_box(ui: &mut Ui<'_>, stack: &Stack) {
     // Hidden in every workspace, so the next one's diff is made only as it's shown.
     if ui.changes_open() {
         ui.click("toggle-diff");
@@ -150,12 +159,16 @@ fn a_diff_opened_after_a_comment_was_written_elsewhere_opens_its_box(cx: &mut Te
     let heard = |ui: &mut Ui<'_>| ui.cx.read_entity(&pane, |p, _| p.workspace().comment_draft.is_some());
     ui.wait("the workspace's record to say it", heard);
 
-    let diff = open_a_diff(&mut ui);
-    ui.wait("the box the comment was left in", |ui| writing(ui, &diff).as_ref() == Some(&kept));
+    let diff = open_a_diff(ui);
+    ui.wait("the box the comment was left in, on the new diff", |ui| writing(ui, &diff).as_ref() == Some(&kept));
 }
 
+/// What's chosen or typed elsewhere shows in the question, and going to the typing row here with nothing chosen keeps
+/// nothing, so it doesn't undo it.
 #[gpui_kit::test]
-fn going_to_the_typing_row_doesnt_undo_an_answer_changed_elsewhere(cx: &mut TestAppContext) {
+fn an_answer_changed_elsewhere_shows_in_the_question_and_going_to_the_typing_row_doesnt_undo_it(
+    cx: &mut TestAppContext,
+) {
     let stack = Stack::new();
     let mut ui = Ui::open_with_a_repository(cx, &stack);
     ui.new_workspace();
@@ -167,33 +180,21 @@ fn going_to_the_typing_row_doesnt_undo_an_answer_changed_elsewhere(cx: &mut Test
     ui.click(id("question-other"));
 
     let elsewhere = AnswerSoFar { picked: vec![1], typed: String::new(), other: false };
-    let changed = AnswerDraft { approval_id: question, answers: vec![elsewhere] };
-    stack.client().session_answer_draft(&chat, Some(&changed)).unwrap();
+    let chosen = AnswerDraft { approval_id: question.clone(), answers: vec![elsewhere] };
+    stack.client().session_answer_draft(&chat, Some(&chosen)).unwrap();
 
-    ui.wait("what was chosen elsewhere", |ui| so_far(ui).as_ref() == Some(&changed));
+    ui.wait("what was chosen elsewhere", |ui| so_far(ui).as_ref() == Some(&chosen));
     ui.view().drafts().unwrap().flushed().recv().unwrap();
     let kept = stack.client().session_get(&chat).unwrap().answer_draft;
-    assert_eq!(kept.as_ref(), Some(&changed), "nothing from here replaced it");
-}
+    assert_eq!(kept.as_ref(), Some(&chosen), "nothing from here replaced it");
 
-#[gpui_kit::test]
-fn whats_typed_in_answer_is_there_when_the_app_opens_again_until_its_sent(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = Ui::open_with_a_repository(cx, &stack);
-    ui.new_workspace();
-    let chat = ui.active_chat();
-    ui.ask(A_QUESTION);
-    ui.click(id("question-other"));
-    ui.input("Friday");
-    let kept = || stack.client().session_get(&chat).unwrap().answer_draft;
-    ui.wait("the hub to keep it", |_| typed_in_answer(kept().as_ref()) == Some("Friday"));
+    ui.click(id("question-answer-0"));
+    ui.view().drafts().unwrap().flushed().recv().unwrap();
+    let elsewhere = AnswerSoFar { picked: Vec::new(), typed: "Friday".to_string(), other: true };
+    let typed = AnswerDraft { approval_id: question, answers: vec![elsewhere] };
+    stack.client().session_answer_draft(&chat, Some(&typed)).unwrap();
 
-    ui.open_again(&stack);
-
-    ui.wait("the question", |ui| ui.has(id("question")));
-    ui.wait("what was typed in answer", |ui| typed_in_answer(so_far(ui).as_ref()) == Some("Friday"));
-    ui.click(id("question-send"));
-    ui.wait("sending it to clear what's kept", |_| kept().is_none());
+    ui.wait("what was typed elsewhere", |ui| so_far(ui).as_ref() == Some(&typed));
 }
 
 /// A tool's use is asked as a question whose rows are `client_core::ToolUseAnswer::ALL`, in the order every client
@@ -228,22 +229,4 @@ fn whats_chosen_and_typed_for_a_tools_use_is_kept_and_shows_wherever_its_asked(c
     // Cleared elsewhere, it goes here too.
     stack.client().session_answer_draft(&chat, None).unwrap();
     ui.wait("it to go here", |ui| so_far(ui).is_none());
-}
-
-#[gpui_kit::test]
-fn an_answer_changed_elsewhere_shows_in_the_question(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = Ui::open_with_a_repository(cx, &stack);
-    ui.new_workspace();
-    let chat = ui.active_chat();
-    ui.ask(A_QUESTION);
-    ui.click(id("question-answer-0"));
-    ui.view().drafts().unwrap().flushed().recv().unwrap();
-    let question = so_far(&ui).unwrap().approval_id;
-    let elsewhere = AnswerSoFar { picked: Vec::new(), typed: "Friday".to_string(), other: true };
-
-    let changed = AnswerDraft { approval_id: question, answers: vec![elsewhere] };
-    stack.client().session_answer_draft(&chat, Some(&changed)).unwrap();
-
-    ui.wait("what was typed elsewhere", |ui| so_far(ui).as_ref() == Some(&changed));
 }

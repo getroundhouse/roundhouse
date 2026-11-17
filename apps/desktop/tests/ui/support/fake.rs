@@ -9,6 +9,8 @@ use client_core::Daemon;
 use client_core::fake_hub::{self, World};
 use desktop::app::HubSource;
 use gpui_kit::TestAppContext;
+use protocol::event::EventBody;
+use protocol::model::{SessionId, SessionStatus};
 use tempfile::TempDir;
 
 use super::Ui;
@@ -68,4 +70,23 @@ impl<'a> Ui<'a> {
         ui.wait_to_connect();
         ui
     }
+}
+
+/// A world of one workspace, with one chat in it, of `events`, in `status`, and that chat. A test changes the chat's
+/// record as the hub would have it through the world's `sessions`, of which it's the last.
+pub(crate) fn one_chat(status: SessionStatus, events: Vec<EventBody>) -> (World, SessionId) {
+    let mut world = World::default();
+    let repo = world.repo("signals");
+    let workspace = world.workspace(&repo, "ledger");
+    let chat = world.chat(&workspace, status, events);
+    (world, chat)
+}
+
+/// The window on a fake hub holding `world`, showing `chat`. The hub goes with the test, so it's returned to be kept.
+pub(crate) fn open_on_the_chat<'a>(cx: &'a mut TestAppContext, world: World, chat: &SessionId) -> (FakeHub, Ui<'a>) {
+    let fake = FakeHub::holding(world);
+    let mut ui = Ui::open_on(cx, &fake);
+    ui.wait("the chat", |ui| ui.transcript().is_some());
+    ui.activate_chat(chat);
+    (fake, ui)
 }

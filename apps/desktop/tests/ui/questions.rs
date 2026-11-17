@@ -1,24 +1,23 @@
-//! Questions from the agent, asked in the composer's place.
+//! Questions from the agent, asked in the composer's place. Each is answered to the agent, which goes on, so these run
+//! on a real hub.
 
 #![cfg(test)]
 
-use gpui_kit::{AppContext as _, TestAppContext};
+use gpui_kit::TestAppContext;
 use protocol::event::EventBody;
 use protocol::model::SessionStatus;
 
 use crate::support::{Stack, Ui, id};
+use crate::tools::in_a_new_workspace;
 
 /// The line a question leaves in the transcript once it's no longer waiting, for one question and for two.
 const ASKED: &str = "Asked";
 const ASKED_TWO: &str = "Asked 2 questions";
 
 #[gpui_kit::test]
-fn a_question_is_answered_by_choosing_or_typing_or_skipped(cx: &mut TestAppContext) {
+fn a_question_is_answered_by_choosing_or_typing_and_several_are_asked_one_at_a_time(cx: &mut TestAppContext) {
     let stack = Stack::new();
-    stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
-    let mut ui = Ui::open(cx, &stack);
-    ui.wait("the repository", |ui| ui.view().records().repos().len() == 1);
-    ui.new_workspace();
+    let mut ui = in_a_new_workspace(cx, &stack);
 
     // It takes the composer's place, and a choice waits for the arrow, so it can be changed first.
     ui.ask("ask:Red or blue?=Red/Blue");
@@ -45,35 +44,44 @@ fn a_question_is_answered_by_choosing_or_typing_or_skipped(cx: &mut TestAppConte
     ui.press("enter");
     ui.wait_idle_with("the reply", |text| text.contains("back"));
 
-    // It takes focus from the composer, and keys that come straight away are taken as typing meant for the composer.
-    // Once it settles, a number chooses and Enter sends.
-    ui.ask("ask:Tea or coffee?=Tea/Coffee");
-    ui.press("1");
-    ui.press("enter");
-    ui.let_what_is_asked_settle();
-    ui.press("2");
-    ui.press("enter");
-    ui.wait("the answer by keys", |ui| ui.told_to_agent().contains(r#""Tea or coffee?"=Coffee"#));
-    assert!(!ui.told_to_agent().contains("=Tea"), "keys before it settled chose nothing");
-    ui.wait_for_the_turn();
+    several_questions_are_asked_one_at_a_time(&mut ui);
+}
 
-    // Skipping lets the agent know, and once it's over, typing is a new message again.
-    ui.ask("ask:Now or later?=Now/Later");
-    ui.click(id("question-skip"));
-    ui.wait("the skip", |ui| ui.told_to_agent().contains("chose not to answer"));
-    ui.wait_for_the_turn();
-    ui.input("say:a new message");
+fn several_questions_are_asked_one_at_a_time(ui: &mut Ui<'_>) {
+    ui.ask("ask:*Which colors?=Red/Green/Blue|How many?=One/Two|Why?=Because");
+    // Only the first question has a third option.
+    let showing_the_first = |ui: &mut Ui| ui.has(id("question-answer-2"));
+
+    assert!(ui.off(id("question-send")), "nothing's chosen yet, so the arrow sends nothing");
+
+    // Several can be chosen for the first, and since more could follow, it stays.
+    ui.click(id("question-answer-0"));
+    ui.click(id("question-answer-2"));
+    assert!(showing_the_first(ui));
+
+    // Enter goes on to the next without an answer. That one takes one answer, so choosing it goes on again.
     ui.press("enter");
-    ui.wait_idle_with("the reply", |text| text.contains("a new message"));
+    assert!(!showing_the_first(ui));
+    ui.click(id("question-answer-1"));
+    // The third has only one option.
+    assert!(!ui.has(id("question-answer-1")), "went on to the third");
+    ui.click(id("question-back"));
+    assert!(ui.has(id("question-answer-1")) && !showing_the_first(ui), "back to the second");
+    ui.click(id("question-dot-0"));
+    assert!(showing_the_first(ui));
+
+    // The arrow sends what's answered, and leaves out the third, which isn't.
+    ui.click(id("question-send"));
+    ui.wait("the answers to the several", |ui| ui.told_to_agent().contains(r#""How many?"=Two"#));
+    let told = ui.told_to_agent();
+    assert!(told.contains(r#""Which colors?"=Red, Blue"#), "{told}");
+    assert!(!told.contains("Why?"), "{told}");
 }
 
 #[gpui_kit::test]
-fn an_answered_question_stays_as_a_line_that_opens_to_what_was_answered(cx: &mut TestAppContext) {
+fn a_question_answered_or_skipped_stays_as_a_line_that_opens_to_what_was_answered(cx: &mut TestAppContext) {
     let stack = Stack::new();
-    stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
-    let mut ui = Ui::open(cx, &stack);
-    ui.wait("the repository", |ui| ui.view().records().repos().len() == 1);
-    ui.new_workspace();
+    let mut ui = in_a_new_workspace(cx, &stack);
 
     // While it waits, it's asked in the composer's place, and the transcript leaves it out.
     ui.ask("ask:Red or blue?=Red/Blue|Why?=Because");
@@ -88,8 +96,13 @@ fn an_answered_question_stays_as_a_line_that_opens_to_what_was_answered(cx: &mut
     ui.wait_for_the_turn();
     ui.ask("ask:Now or later?=Now/Later");
     ui.click(id("question-skip"));
+    // Skipping lets the agent know, and once it's over, typing is a new message again.
+    ui.wait("the skip", |ui| ui.told_to_agent().contains("chose not to answer"));
     ui.wait("the skipped question's line", |ui| ui.labelled(ASKED).len() == 1);
     ui.wait_for_the_turn();
+    ui.input("say:a new message");
+    ui.press("enter");
+    ui.wait_idle_with("the reply", |text| text.contains("a new message"));
     assert_eq!(ui.labelled(ASKED_TWO).len(), 1, "the first is still a line of its own");
     assert!(ui.shown("asked/").is_empty(), "each starts closed");
 
@@ -102,50 +115,12 @@ fn an_answered_question_stays_as_a_line_that_opens_to_what_was_answered(cx: &mut
     assert_eq!(ui.shown("not-answered-0/").len(), 1, "the one that was skipped");
 }
 
+/// What's asked takes keys once it settles: the arrows move between questions, a number chooses, 0 goes to the typing
+/// row and Escape comes back out of it, and Enter sends. Closing Settings gives the focus to one that came meanwhile.
 #[gpui_kit::test]
-fn several_questions_are_asked_one_at_a_time(cx: &mut TestAppContext) {
+fn the_keys_answer_once_what_is_asked_settles_and_closing_settings_gives_it_the_focus(cx: &mut TestAppContext) {
     let stack = Stack::new();
-    stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
-    let mut ui = Ui::open(cx, &stack);
-    ui.wait("the repository", |ui| ui.view().records().repos().len() == 1);
-    ui.new_workspace();
-    ui.ask("ask:*Which colors?=Red/Green/Blue|How many?=One/Two|Why?=Because");
-    // Only the first question has a third option.
-    let showing_the_first = |ui: &mut Ui| ui.has(id("question-answer-2"));
-
-    assert!(ui.off(id("question-send")), "nothing's chosen yet, so the arrow sends nothing");
-
-    // Several can be chosen for the first, and since more could follow, it stays.
-    ui.click(id("question-answer-0"));
-    ui.click(id("question-answer-2"));
-    assert!(showing_the_first(&mut ui));
-
-    // Enter goes on to the next without an answer. That one takes one answer, so choosing it goes on again.
-    ui.press("enter");
-    assert!(!showing_the_first(&mut ui));
-    ui.click(id("question-answer-1"));
-    // The third has only one option.
-    assert!(!ui.has(id("question-answer-1")), "went on to the third");
-    ui.click(id("question-back"));
-    assert!(ui.has(id("question-answer-1")) && !showing_the_first(&mut ui), "back to the second");
-    ui.click(id("question-dot-0"));
-    assert!(showing_the_first(&mut ui));
-
-    // The arrow sends what's answered, and leaves out the third, which isn't.
-    ui.click(id("question-send"));
-    ui.wait("the answers", |ui| ui.told_to_agent().contains(r#""How many?"=Two"#));
-    let told = ui.told_to_agent();
-    assert!(told.contains(r#""Which colors?"=Red, Blue"#), "{told}");
-    assert!(!told.contains("Why?"), "{told}");
-}
-
-#[gpui_kit::test]
-fn the_keys_move_between_questions_and_into_and_out_of_typing(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
-    let mut ui = Ui::open(cx, &stack);
-    ui.wait("the repository", |ui| ui.view().records().repos().len() == 1);
-    ui.new_workspace();
+    let mut ui = in_a_new_workspace(cx, &stack);
     ui.ask("ask:*Which colors?=Red/Green/Blue|How many?=One/Two");
     ui.let_what_is_asked_settle();
     let showing_the_first = |ui: &mut Ui| ui.has(id("question-answer-2"));
@@ -167,21 +142,29 @@ fn the_keys_move_between_questions_and_into_and_out_of_typing(cx: &mut TestAppCo
     ui.press("right");
     ui.press("2");
     ui.press("enter");
-    ui.wait("the answers", |ui| ui.told_to_agent().contains(r#""How many?"=Two"#));
+    ui.wait("the answers by the arrows and numbers", |ui| ui.told_to_agent().contains(r#""How many?"=Two"#));
     let told = ui.told_to_agent();
     assert!(told.contains(r#""Which colors?"=Red"#) && !told.contains("Teal"), "{told}");
+    ui.wait_for_the_turn();
+
+    // It takes focus from the composer, and keys that come straight away are taken as typing meant for the composer.
+    // Once it settles, a number chooses and Enter sends.
+    ui.ask("ask:Tea or coffee?=Tea/Coffee");
+    ui.press("1");
+    ui.press("enter");
+    ui.let_what_is_asked_settle();
+    ui.press("2");
+    ui.press("enter");
+    ui.wait("the answer by keys", |ui| ui.told_to_agent().contains(r#""Tea or coffee?"=Coffee"#));
+    assert!(!ui.told_to_agent().contains("=Tea"), "keys before it settled chose nothing");
+    ui.wait_for_the_turn();
+
+    closing_settings_gives_focus_to_a_question_that_came_meanwhile(&mut ui, &stack);
 }
 
-#[gpui_kit::test]
-fn closing_settings_gives_focus_to_a_question_that_came_meanwhile(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
-    let mut ui = Ui::open(cx, &stack);
-    ui.wait("the repository", |ui| ui.view().records().repos().len() == 1);
-    ui.new_workspace();
-    ui.wait("the chat", |ui| ui.pane().is_some_and(|pane| ui.cx.read_entity(&pane, |p, _| p.active.is_some())));
-    let pane = ui.pane().unwrap();
-    let chat = ui.cx.read_entity(&pane, |p, _| p.active.clone()).unwrap();
+fn closing_settings_gives_focus_to_a_question_that_came_meanwhile(ui: &mut Ui<'_>, stack: &Stack) {
+    let chat = ui.active_chat();
+    ui.click("composer");
 
     // Settings keeps the composer's focus to give back, and the question comes while it shows.
     ui.press("secondary-,");
@@ -194,5 +177,5 @@ fn closing_settings_gives_focus_to_a_question_that_came_meanwhile(cx: &mut TestA
     ui.let_what_is_asked_settle();
     ui.press("2");
     ui.press("enter");
-    ui.wait("the answer by keys", |ui| ui.told_to_agent().contains(r#""Now or later?"=Later"#));
+    ui.wait("the answer by keys, after Settings", |ui| ui.told_to_agent().contains(r#""Now or later?"=Later"#));
 }
