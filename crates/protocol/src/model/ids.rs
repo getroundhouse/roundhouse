@@ -108,7 +108,9 @@ ids!(
     /// What GitHub calls a GitHub App in its addresses, such as `ada-roundhouse`, which its bot is named for, as
     /// `ada-roundhouse[bot]`. GitHub gives it as the app is made, from the name the person chose.
     GithubAppSlug,
-    /// Chosen by the client that opens the terminal, as a UUID, so opening it again can't open two.
+    /// Chosen by the client that opens the terminal, as a UUID, so opening it again can't open two. It names the files
+    /// the worker records the terminal's processes in, so the worker refuses one that can't name a file, as
+    /// [`crate::paths::can_name_a_file`] says.
     TerminalId,
 );
 

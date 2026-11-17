@@ -4,8 +4,6 @@
 //! Each ID is checked as it's turned into a path, so nothing a client or worker sends can name a file anywhere else.
 
 #[cfg(test)]
-use protocol::client::ErrorCode;
-#[cfg(test)]
 use protocol::model::{AttachmentId, SessionId};
 
 #[cfg(test)]

@@ -2,6 +2,7 @@
 //! shows, from everything its program writes, and sends the hub what happens in it as it happens, as "Terminals" in
 //! `docs/architecture.md` says.
 
+mod process_records;
 mod running;
 mod shell;
 

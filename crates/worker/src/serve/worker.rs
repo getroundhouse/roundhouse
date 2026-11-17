@@ -17,6 +17,7 @@ use parking_lot::Mutex;
 use protocol::Build;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::model::{RunId, SessionId};
+use protocol::paths::AGENTS_DIR;
 use protocol::prompt::Prompt;
 use protocol::worker::{
     AccountFor, AgentApproval, AgentStop, AttachmentWrite, AttachmentWritten, FileOpenAt, FilePages, FileRead,
@@ -152,7 +153,7 @@ impl Worker {
             calls: AtomicU64::new(0),
             moves: Moves::default(),
             watches: Mutex::new(Watches::default()),
-            terminals: Terminals::new(outbox.clone(), config.timers),
+            terminals: Terminals::new(outbox.clone(), config.state_dir.join(AGENTS_DIR), config.timers),
             outbox,
             tools: Arc::new(Tools::new(asks.clone(), config.build, config.timers.wait_poll)),
             clones: Clones::new(config.clones_dir.clone()),

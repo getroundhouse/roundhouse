@@ -3,6 +3,7 @@
 use std::path::{Path, PathBuf};
 
 use crate::StampedBuild;
+use crate::client::{ApiError, ErrorCode};
 
 /// A debug build keeps its data apart from a release build's, so one run from a checkout can't reach the
 /// installed app's hub, or migrate its database.
@@ -42,13 +43,36 @@ pub const WORKER_LOCK_FILE: &str = "worker.lock";
 /// Where a worker records itself in its state directory, so its provider can tell whether one runs there.
 pub const WORKER_RECORD_FILE: &str = "worker.pid";
 /// The folder in a worker's state directory where it records each process it runs that would outlive it, such as an
-/// agent, beside that run's other files, such as the one that tells the agent's CLI where the worker's tools are.
-/// Everything in it is a run's, so the provider stops what's recorded and removes all of it after a killed worker.
+/// agent, or a terminal's shell and the job it runs in front, beside that run's other files, such as the one that tells
+/// the agent's CLI where the worker's tools are. Everything in it is a run's, so the provider stops what's recorded and
+/// removes all of it after a killed worker.
 pub const AGENTS_DIR: &str = "agents";
 /// Where a local worker that can outlive its hub listens for it, in its state directory. The worker runs in that
 /// directory, and both it and what connects to it name the socket relative to it, since the whole path can be longer
 /// than a socket's may be.
 pub const WORKER_SOCKET_FILE: &str = "worker.sock";
+/// Longer than any ID a client or worker makes, which is a UUID.
+const MAX_FILE_NAME_ID_CHARS: usize = 64;
+
+/// Whether an ID can name a file, as an attachment's does, and a terminal's its process records: only lowercase
+/// letters, digits, `-` and `_`, which a UUID is, so no ID can climb out of the directory, and no two name one file on a
+/// disk that ignores case, as a Mac's does. It lets through a name Windows keeps for a device, such as `nul`, so a file
+/// named by an ID alone can be one there.
+pub fn can_name_a_file(id: &str) -> bool {
+    let allowed = |c: char| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-' || c == '_';
+    !id.is_empty() && id.len() <= MAX_FILE_NAME_ID_CHARS && id.chars().all(allowed)
+}
+
+/// `id`, if it can name a file, as [`can_name_a_file`] says, and otherwise a refusal, saying it's `whose` ID, such as
+/// "a terminal's".
+pub fn file_name_id<'a>(whose: &str, id: &'a str) -> Result<&'a str, ApiError> {
+    if can_name_a_file(id) {
+        return Ok(id);
+    }
+    let why = format!("{whose} ID can only be lowercase letters, digits, - and _");
+    Err(ApiError::new(ErrorCode::InvalidRequest, why))
+}
+
 /// The daemon's file.
 pub fn daemon_file() -> String {
     program_file(DAEMON_NAME)
@@ -243,6 +267,15 @@ mod tests {
     /// A whole path on the platform the test runs on.
     fn whole(path: &str) -> String {
         if cfg!(windows) { format!("C:{path}") } else { path.to_string() }
+    }
+
+    #[test]
+    fn only_an_id_that_stays_in_its_directory_and_has_one_case_can_name_a_file() {
+        assert!(can_name_a_file("0b9c5f3e-5d1a-4c47-9b1e-2f8e6a7d4c10"));
+        assert!(can_name_a_file(&"a_".repeat(32)));
+        for refused in ["", "../x", "a/b", "a.b", "A", "a\\b", &"a".repeat(65)] {
+            assert!(!can_name_a_file(refused), "{refused:?}");
+        }
     }
 
     #[test]

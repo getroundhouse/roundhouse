@@ -1,12 +1,14 @@
 //! The terminals a worker runs, by their IDs, and what it holds of each while its shell runs.
 
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use parking_lot::Mutex;
 use process::Environment;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::model::TerminalId;
+use protocol::paths;
 use protocol::terminal::TerminalSize;
 use protocol::worker::{
     RunningTerminal, RunningTerminalsReply, TerminalInput, TerminalResize, TerminalShown, TerminalStart,
@@ -25,6 +27,9 @@ pub(crate) struct Terminals {
     /// keeps two starts of one terminal from both starting it.
     starting: tokio::sync::Mutex<()>,
     outbox: Arc<Outbox>,
+    /// Where each keeps the process records of its shell and the job it runs in front, which is where the worker
+    /// records its agents.
+    process_records_dir: PathBuf,
     timers: Timers,
 }
 
@@ -82,14 +87,16 @@ impl Drop for Ending {
 }
 
 impl Terminals {
-    pub(crate) fn new(outbox: Arc<Outbox>, timers: Timers) -> Self {
+    pub(crate) fn new(outbox: Arc<Outbox>, process_records_dir: PathBuf, timers: Timers) -> Self {
         let inner = Arc::new(Mutex::new(Inner::default()));
-        Self { inner, starting: tokio::sync::Mutex::new(()), outbox, timers }
+        Self { inner, starting: tokio::sync::Mutex::new(()), outbox, process_records_dir, timers }
     }
 
     /// Starts a shell in the worktree, unless the terminal runs already.
     pub(crate) async fn start(&self, start: TerminalStart, given: Arc<Environment>) -> Result<(), ApiError> {
         allowed(start.size)?;
+        // Its ID names the files its process records are in. A hub refuses one that can't, but an older one doesn't.
+        paths::file_name_id("a terminal's", start.terminal.as_str())?;
         let _starting = self.starting.lock().await;
         let number = {
             let mut inner = self.inner.lock();
@@ -106,10 +113,11 @@ impl Terminals {
         let ended = watch::Sender::new(false);
         let ending = Ending { inner: self.inner.clone(), terminal: terminal.clone(), number, ended };
         let (inner, outbox, timers) = (self.inner.clone(), self.outbox.clone(), self.timers);
+        let records_dir = self.process_records_dir.clone();
         // Opening a PTY and forking block, so not on one of the runtime's threads. Serving it is there too, since a
         // terminal's thread that can't start drops its runtime where it was started from, which mustn't be one of them.
         let started = tokio::task::spawn_blocking(move || {
-            let (running, serving) = shell::start(start, timers, &given, ending, outbox)?;
+            let (running, serving) = shell::start(start, &records_dir, timers, &given, ending, outbox)?;
             inner.lock().running.insert(terminal, running);
             // Only once it's listed, so its end, however soon it comes, lets go of it.
             serving.serve()

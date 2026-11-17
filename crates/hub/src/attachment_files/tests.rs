@@ -1,3 +1,5 @@
+use protocol::client::ErrorCode;
+
 use super::*;
 
 fn ids(session: &str, id: &str) -> (FileFor, AttachmentId) {

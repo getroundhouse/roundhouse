@@ -15,6 +15,8 @@ pub struct Timers {
     pub wait_poll: Duration,
     /// How long a terminal's shell asked to end, and the job it runs, have to end by themselves before they're killed.
     pub terminal_stop_grace: Duration,
+    /// How often a terminal looks at which job its shell runs in front, to record it.
+    pub look_in_front_every: Duration,
 }
 
 impl Timers {
@@ -26,6 +28,10 @@ impl Timers {
         // Long enough for a program that saves as it's hung up on, such as an editor writing its recovery file, and
         // short enough that closing a tab, or archiving a workspace, doesn't seem to hang.
         terminal_stop_grace: Duration::from_secs(2),
+        // Asking is one system call, and recording one a small file, written only once another is in front, so a job
+        // is recorded within a second of starting, and what it's left unrecorded for, if the worker is killed that
+        // soon, is that second.
+        look_in_front_every: Duration::from_secs(1),
     };
 
     /// [`Timers::DEFAULT`], whatever `var` says, since only a build with the `testing` feature takes others, and the
@@ -54,9 +60,11 @@ impl Timers {
 #[cfg(feature = "testing")]
 impl Timers {
     /// What a test's worker runs with: a wait asked after every quarter of a second, the most often the Claude CLI
-    /// takes, and so the fake agent too. A terminal's stop grace is the worker's own, since it's a limit, which guards
-    /// against a process being slow, as one on a busy runner can be. Only a test of it shortens it.
-    pub const FOR_TESTS: Self = Self { wait_poll: Duration::from_millis(250), ..Self::DEFAULT };
+    /// takes, and so the fake agent too, and a terminal's job in front looked at twenty times a second. A terminal's
+    /// stop grace is the worker's own, since it's a limit, which guards against a process being slow, as one on a busy
+    /// runner can be. Only a test of it shortens it.
+    pub const FOR_TESTS: Self =
+        Self { wait_poll: Duration::from_millis(250), look_in_front_every: Duration::from_millis(50), ..Self::DEFAULT };
 
     /// The variable to give a worker, and its value, to have it run with these. A hub passes it on to the workers it
     /// starts.
@@ -80,10 +88,12 @@ mod tests {
         fn a_worker_takes_the_timers_a_test_gives_it(
             (secs, nanos) in (any::<u64>(), 0..1_000_000_000u32),
             (grace_secs, grace_nanos) in (any::<u64>(), 0..1_000_000_000u32),
+            (look_secs, look_nanos) in (any::<u64>(), 0..1_000_000_000u32),
         ) {
             let given = Timers {
                 wait_poll: Duration::new(secs, nanos),
                 terminal_stop_grace: Duration::new(grace_secs, grace_nanos),
+                look_in_front_every: Duration::new(look_secs, look_nanos),
             };
             let (name, value) = given.env();
 
