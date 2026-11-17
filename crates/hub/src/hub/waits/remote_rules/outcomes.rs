@@ -35,7 +35,12 @@ pub(in crate::hub::waits) fn baseline(snapshot: &PullRequestsSnapshot) -> Vec<Wa
 
 pub(in crate::hub::waits) fn observe(wait: &mut Wait, snapshot: &PullRequestsSnapshot, at_ms: i64) {
     let Some(watch) = &mut wait.watch else { return };
-    if wait.ended.is_some() || watch.snapshot.repository != snapshot.repository {
+    // One read before the snapshot the wait has, which can finish after it, as a read in the background that began
+    // before a wait's start read, says nothing newer.
+    if wait.ended.is_some()
+        || watch.snapshot.repository != snapshot.repository
+        || snapshot.observed_at_ms < watch.snapshot.observed_at_ms
+    {
         return;
     }
     // A foreground read may omit a lower PR that has left the stack. Only a read covering the prior scope

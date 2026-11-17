@@ -62,6 +62,8 @@ pub(crate) struct Hub {
     pub(super) github: Github,
     /// The providers whose machines' own GitHub login has been found since the hub started, or is being asked for.
     pub(super) github_logins_asked: Arc<found_github_logins::ProvidersAsked>,
+    /// The token each provider's machines' own `gh` uses, as found since the hub started, in memory alone.
+    pub(super) found_tokens: found_github_logins::FoundTokens,
     /// Told each time a worker has read a repository's address, whatever it read, for the check of reach to look again
     /// at which repository on GitHub each repository's record names.
     pub(super) addresses_read: Notify,
@@ -89,6 +91,8 @@ pub(crate) struct Hub {
     pub(super) pull_requests: pull_requests::Reading,
     /// The work the hub does on its own that's running now, by the workspace each job is about.
     pub(super) jobs: Jobs<WorkspaceId>,
+    /// The reads of the pull requests waits watch that are running now, by whose token each reads as.
+    pub(super) wait_reads: Jobs<pull_requests::ReadsAs>,
     /// The sign-ins with GitHub the hub is asking GitHub after, a job for each, as `Hub::wait_for_sign_in` says.
     pub(super) sign_ins: Jobs<GithubSignInId>,
     /// Whether the hub has stopped checking its GitHub logins, as it does as it stops, so no check, and no renewal,
@@ -173,6 +177,7 @@ impl Hub {
             github_logins: Arc::new(GithubLogins::new(store.clone(), &dirs.data, now_ms())),
             github,
             github_logins_asked: Arc::default(),
+            found_tokens: found_github_logins::FoundTokens::default(),
             addresses_read: Notify::new(),
             store,
             attachment_files: AttachmentFiles::new(dirs.attachments),
@@ -190,6 +195,7 @@ impl Hub {
             terminals: Terminals::default(),
             pull_requests: pull_requests::Reading::new(),
             jobs: Jobs::new(),
+            wait_reads: Jobs::new(),
             sign_ins: Jobs::new(),
             github_checks_stopped: watch::Sender::new(false),
             awake: Arc::default(),
@@ -228,6 +234,7 @@ impl Hub {
     /// stopped or left. A sign-in left waiting is recorded as ended as the next hub starts.
     pub(crate) fn stop_jobs(&self) {
         self.jobs.stop();
+        self.wait_reads.stop();
         self.sign_ins.stop();
     }
 

@@ -8,6 +8,7 @@ use protocol::worker::{RateLimit, WorkerRequest, WorkerResponse};
 
 use super::*;
 use crate::hub::tests::{hub_with_worktree, open, reading, reading_within, says};
+use crate::store::now_ms;
 
 #[tokio::test(start_paused = true)]
 async fn an_agent_asking_again_soon_after_a_read_waits_for_a_read_of_its_own() {

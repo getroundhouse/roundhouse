@@ -77,9 +77,13 @@ fn a_push_replaces_the_observation_and_main_advancing_alone_does_not_end_it() {
     now.pull_requests[0].checks_revision = Some("new-head".into());
 
     observe(&mut wait, &now, 2);
+    let mut older = snapshot(&wait);
+    older.observed_at_ms -= 1;
+    older.pull_requests[0].head = "head-7".into();
+    observe(&mut wait, &older, 3);
 
     assert_eq!(ended(&wait), None);
-    assert_eq!(snapshot(&wait), now);
+    assert_eq!(snapshot(&wait), now, "not one read before it, which finished after it");
 }
 
 #[test]

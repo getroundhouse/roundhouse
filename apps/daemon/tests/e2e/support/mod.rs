@@ -10,6 +10,7 @@ mod examples;
 mod feed;
 mod gate;
 pub(crate) mod gh;
+pub(crate) mod github;
 mod processes;
 
 mod stack;

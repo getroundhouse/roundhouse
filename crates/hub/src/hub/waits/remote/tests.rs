@@ -1,7 +1,8 @@
 use super::*;
-use crate::hub::tests::hub_with_worktree;
+use crate::github::{Answer, Script, StandIn};
+use crate::hub::tests::{hub_reading_github, hub_with_worktree};
 use protocol::fixtures::pull_request_wait;
-use protocol::worker::{RemotePullRequestsReply, WorkerRequest, WorkerResponse};
+use protocol::model::CheckState;
 
 fn request(call: &str) -> StartPullRequestWait {
     StartPullRequestWait {
@@ -12,37 +13,28 @@ fn request(call: &str) -> StartPullRequestWait {
     }
 }
 
-#[tokio::test(start_paused = true)]
+/// Read by the hub from GitHub, which answers the first start's read and then can't be reached.
+#[tokio::test]
 async fn explicit_waits_follow_remote_reads_and_failed_starts_leave_existing_waits() {
     let dir = tempfile::tempdir().unwrap();
-    let hub = hub_with_worktree(dir.path());
-    let snapshot = pull_request_wait("a").watch.unwrap().snapshot;
-    let answer = Arc::new(parking_lot::Mutex::new(Ok(snapshot.clone())));
-    let link = WorkerLink::answering({
-        let answer = answer.clone();
-        move |request| {
-            let WorkerRequest::ReadRemotePullRequests(_) = request else {
-                return Some(Ok(WorkerResponse::Ok));
-            };
-            Some(Ok(WorkerResponse::RemotePullRequests(RemotePullRequestsReply {
-                observation: answer.lock().clone(),
-                rate_limit: None,
-                cost: 4,
-                affected: Vec::new(),
-            })))
-        }
-    });
-    hub.workers.lock().insert("w".into(), link.clone());
-    let started = hub.start_remote_wait(&"w".into(), &link, "s".into(), request("first")).await.unwrap();
-    *answer.lock() = Err(ApiError::new(ErrorCode::Worker, "offline"));
+    let mut answers = Answer::pull_request_read(7, false);
+    answers.push(Answer::status(503, Vec::new()));
+    let github = StandIn::with(Script { graphql: answers, ..Script::default() }).await;
+    let hub = hub_reading_github(dir.path(), github.api());
+    let started = hub.start_remote_wait(&"w".into(), "s".into(), request("first")).await.unwrap();
 
-    let again = hub.start_remote_wait(&"w".into(), &link, "s".into(), request("first")).await.unwrap();
-    let failed = hub.start_remote_wait(&"w".into(), &link, "s".into(), request("second")).await;
+    let again = hub.start_remote_wait(&"w".into(), "s".into(), request("first")).await.unwrap();
+    let failed = hub.start_remote_wait(&"w".into(), "s".into(), request("second")).await;
 
     assert_eq!(again, started);
+    let watch = started.wait.watch.as_ref().unwrap();
+    assert_eq!(watch.snapshot.repository.name_with_owner, "example/project");
+    assert_eq!(watch.snapshot.pull_requests[0].checks[0].state, CheckState::Pending);
     assert_eq!(failed.unwrap_err().code, ErrorCode::Worker);
     assert_eq!(hub.store.remote_waits().unwrap(), [started.wait]);
     assert_eq!(hub.store.get_session(&"s".into()).unwrap().session.open_waits().len(), 1);
+    let asked = github.asked();
+    assert!(asked.iter().all(|asked| asked.contains("authorization: bearer a-token\r\n")), "{asked:?}");
 }
 
 #[tokio::test]

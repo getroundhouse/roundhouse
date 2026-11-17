@@ -4,6 +4,8 @@ use protocol::worker::RateLimit;
 use std::time::Duration;
 use tokio::time::Instant;
 
+use crate::github::KEPT_FOR_OTHERS_PERCENT;
+
 /// The calls a minute that reads nobody is waiting on spend once a burst is used up: one a second, so after a restart
 /// even two hundred workspaces are all read again within about five minutes. Spent flat out, that's 3,600 of GitHub's
 /// 5,000 an hour, so those reads also stop while only [`KEPT_FOR_OTHERS_PERCENT`] of it is left, whoever spent the rest.
@@ -16,8 +18,12 @@ pub(super) const BURST: u32 = 30;
 /// it meanwhile, so the hub's count of its own calls only says so much.
 pub(super) const GITHUB_SAID_FOR: Duration = Duration::from_mins(1);
 
-/// The part of GitHub's limit that reads nobody is waiting on leave alone, for agents and the user.
-const KEPT_FOR_OTHERS_PERCENT: u32 = 20;
+/// The calls a read of many pull requests from GitHub together takes up front, `queries`, as its first round makes,
+/// but never more than a burst, so a read of more than a burst's worth isn't put off for good. What all its rounds
+/// cost, as GitHub counted it, is charged once it's done.
+pub(in super::super) fn calls_up_front(queries: u32) -> u32 {
+    queries.min(BURST)
+}
 
 /// The calls reading a pull request takes: one to view it, and one more while it's open, for its place in the merge
 /// queue and what it has recorded of the queue and of reviews. Going by what was found last time, since what it is now

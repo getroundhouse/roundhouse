@@ -2,7 +2,6 @@
 
 use super::{Hub, START_WITHIN, new_id, now_ms, remote_rules};
 use crate::store::Seen;
-use crate::worker_link::WorkerLink;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::model::{
     GitHubRepository, PullRequestNumber, PullRequestWatch, PullRequestsSnapshot, SessionId, Wait, WaitEnd, WaitEnded,

@@ -12,7 +12,9 @@ use protocol::model::{
 };
 
 use crate::accounts::log_out;
-use crate::support::gh::{MERGED, OPEN, StandInGh};
+use hub::GithubPullRequestState::{Merged, Open};
+
+use crate::support::github::{StandInGithub, wait_for_address};
 use crate::support::{Stack, assistant_text, next_notice, read_all, wait_for_status, wait_for_turn_end, wait_until};
 
 const TOKEN: &str = "env:CLAUDE_CODE_OAUTH_TOKEN";
@@ -339,18 +341,19 @@ fn a_chat_whose_first_launch_found_nobody_logged_in_is_put_on_the_default_once_o
 /// wait ends.
 #[test]
 fn a_chat_only_waiting_on_a_pull_request_moves_without_asking_and_waits_on_under_its_account() {
-    let mut stack = Stack::start();
-    let gh = StandInGh::start(&mut stack);
-    gh.say(OPEN);
+    let github = StandInGithub::start();
+    github.say(7, Open);
+    let (stack, _gh) = github.stack();
     let chat = TwoAccounts::on(stack);
     let client = chat.client();
+    wait_for_address(&client);
     client.session_prompt(&chat.session, WAIT, None).unwrap();
     wait_for_status(&client, &chat.session, SessionStatus::Background);
 
     let moved = client.session_assign_account(&chat.session, &chat.personal.id, false).unwrap();
     wait_until("the agent to start again", || launches(&read_all(&client, &chat.session)).len() == 2);
     let waiting = client.session_get(&chat.session).unwrap();
-    gh.say(MERGED);
+    github.say(7, Merged);
     // Another chat's read finds the pull request merged, which ends the wait.
     client.session_prompt(&chat.another_chat(&client), READ, None).unwrap();
     let woken = assistant_text(&wait_for_turn_end(&client, &chat.session, 3));

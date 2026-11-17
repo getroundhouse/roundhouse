@@ -6,6 +6,7 @@ mod tests;
 
 mod asked;
 mod finding;
+mod tokens;
 pub(super) use asked::ProvidersAsked;
-#[cfg(test)]
-use finding::FOUND_WITHIN;
+pub(super) use finding::FOUND_WITHIN;
+pub(crate) use tokens::FoundTokens;

@@ -4,6 +4,7 @@ use protocol::model::{GitHubRepository, PullRequestNumber, PullRequestSelection,
 use std::collections::{BTreeMap, BTreeSet};
 
 pub(in crate::hub::pull_requests) type GroupKey = (WorkspaceId, String, Vec<PullRequestNumber>);
+#[derive(Clone)]
 pub(super) struct Group {
     pub(super) repository: GitHubRepository,
     pub(super) selection: PullRequestSelection,

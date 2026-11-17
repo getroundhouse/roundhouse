@@ -36,7 +36,7 @@ impl Hub {
         loop {
             tokio::time::sleep(pace).await;
             // A wait's first, since an agent waits on it.
-            self.start_due_wait_read().await;
+            self.start_due_wait_reads().await;
             let now = Instant::now();
             if now >= in_turn_after
                 && let Err(until) = self.start_due_read_in_turn().await
@@ -93,22 +93,23 @@ impl Hub {
         Ok(())
     }
 
-    /// Reads one nobody asked for, through its worker, starting one if it has none.
+    /// Reads one nobody asked for, through its worker, starting one if it has none, which it holds until it's done.
     async fn read_in_turn(self: &Arc<Self>, id: &WorkspaceId, path: String, calls: u32) {
-        let link = match self.worker_to_read(id).await {
-            Ok(link) => link,
+        let held = match self.worker_to_read(id).await {
+            Ok(held) => held,
             Err(e) => {
                 debug!(%id, "starting a worker to read the pull request: {}", e.message);
                 self.pull_requests.wait_longer(id);
                 return;
             }
         };
+        let link = held.link();
         // One the budget can't spare once GitHub has said what's left is left for the next look, which finds the same.
-        if self.spend(&link, &path, calls, Asked::InTurn).await.is_err() {
+        if self.spend(link, &path, calls, Asked::InTurn).await.is_err() {
             return;
         }
         if let Err(e) =
-            self.read_pull_request(id, path, &link, Asked::InTurn, When::Always).await.and_then(Answer::or_known)
+            self.read_pull_request(id, path, link, Asked::InTurn, When::Always).await.and_then(Answer::or_known)
         {
             debug!(%id, "reading the pull request in turn: {}", e.message);
         }
@@ -143,7 +144,7 @@ impl Hub {
     /// taking all the [`GH_RUNS_WITHIN`] the worker gives it, and if the workspace has no worker running, as long as
     /// its provider takes to clear the instance and start one, and the worker has to answer the hub's hello. Then, to
     /// stop the worker again and clear its instance, the worker's [`STOP_GRACE`] and its provider's time again.
-    pub(super) async fn read_limits(&self, id: &WorkspaceId, runs: u32) -> Limits {
+    pub(in crate::hub::pull_requests) async fn read_limits(&self, id: &WorkspaceId, runs: u32) -> Limits {
         // One whose workspace or provider can't be found fails at once, so it needs no more.
         let provider = self.workspace(id).await.and_then(|workspace| self.provider(&workspace.provider));
         let provider_takes = provider.map_or(Duration::ZERO, |provider| provider.starts_or_stops_within());

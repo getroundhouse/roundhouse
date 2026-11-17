@@ -78,10 +78,10 @@ impl Hub {
                 Ok(AskReply::PullRequest(PullRequestAnswer { pull_request }))
             }
             WorkerAsk::PullRequests(asked) => {
-                self.remote_for_agent(workspace_id, link, asked).await.map(AskReply::PullRequests)
+                self.remote_for_agent(workspace_id, asked).await.map(AskReply::PullRequests)
             }
             WorkerAsk::StartPullRequestWait(asked) => {
-                self.start_remote_wait(workspace_id, link, session_id, asked).await.map(AskReply::Wait)
+                self.start_remote_wait(workspace_id, session_id, asked).await.map(AskReply::Wait)
             }
             WorkerAsk::StartWait(StartWait { until, call }) => {
                 self.start_wait(workspace_id, link, session_id, until, call).await.map(AskReply::Wait)

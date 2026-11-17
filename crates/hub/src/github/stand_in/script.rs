@@ -2,6 +2,7 @@ use std::collections::{HashMap, VecDeque};
 
 use super::Answer;
 use super::apps::{as_the_app, named};
+use super::pull_requests::PullRequests;
 
 /// What the stand-in answers each call with. A call it has run out of answers for gets the last again.
 #[derive(Default)]
@@ -31,6 +32,10 @@ pub struct Script {
     /// asked of, such as `cli/cli`, in turn, whatever credential it's asked with. Any other is a 404, as GitHub answers a
     /// repository it doesn't have.
     pub pushes: Vec<(&'static str, Vec<Answer>)>,
+    /// `POST /graphql`, in turn, whatever it asks.
+    pub graphql: Vec<Answer>,
+    /// `POST /graphql` once `graphql` has none, answered from these as they are when it's asked.
+    pub pull_requests: Option<PullRequests>,
 }
 
 /// What it answers with still, as it goes through the script.
@@ -44,6 +49,8 @@ pub(super) struct Answering {
     pub(super) installations: VecDeque<Answer>,
     pub(super) minted: HashMap<u64, VecDeque<Answer>>,
     pushes: HashMap<&'static str, VecDeque<Answer>>,
+    graphql: VecDeque<Answer>,
+    pull_requests: Option<PullRequests>,
 }
 
 impl Answering {
@@ -59,6 +66,8 @@ impl Answering {
             installations: script.installations.into(),
             minted: script.minted.into_iter().map(|(id, answers)| (id, answers.into())).collect(),
             pushes: script.pushes.into_iter().map(|(repository, answers)| (repository, answers.into())).collect(),
+            graphql: script.graphql.into(),
+            pull_requests: script.pull_requests,
         }
     }
 
@@ -71,6 +80,11 @@ impl Answering {
 pub(super) fn chosen(answering: &mut Answering, head: &str, body: &str) -> Answer {
     if let Some(answer) = as_the_app(answering, head).or_else(|| named(answering, head)) {
         return answer;
+    }
+    if head.starts_with("POST /graphql ") {
+        let scripted = Answering::next(&mut answering.graphql);
+        let made = || answering.pull_requests.as_ref().map(|pull_requests| pull_requests.answer(body));
+        return scripted.or_else(made).unwrap_or_else(|| Answer::status(404, Vec::new()));
     }
     if head.starts_with("POST /login/device/code ") {
         return Answering::next(&mut answering.codes).unwrap_or_else(|| Answer::status(404, Vec::new()));

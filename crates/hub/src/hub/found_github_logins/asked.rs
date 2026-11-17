@@ -18,9 +18,15 @@ impl ProvidersAsked {
         Some(Asking { asked: Arc::clone(self), provider, answered: false })
     }
 
+    /// Forgets that `provider` was answered, as once GitHub refuses the token its worker handed the hub, so the next
+    /// link to it asks again.
+    pub(crate) fn forget(&self, provider: &ProviderName) {
+        self.0.lock().remove(provider);
+    }
+
     /// Whether `provider` has been answered, or is being asked.
     #[cfg(test)]
-    pub(super) fn has(&self, provider: &ProviderName) -> bool {
+    pub(in crate::hub) fn has(&self, provider: &ProviderName) -> bool {
         self.0.lock().contains(provider)
     }
 }

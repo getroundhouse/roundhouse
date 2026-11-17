@@ -1,9 +1,11 @@
-//! A real hub with a stand-in for `gh` at the front of its `PATH`, which reports the pull request a test has it
+//! A real hub with a stand-in for `gh` at the front of its `PATH`, which reports the branch's pull request a test has it
 //! report, as the hub's own tests do in `apps/daemon/tests/e2e/pull_requests.rs`.
 
 #![cfg(test)]
 
 use std::path::{Path, PathBuf};
+
+use process::testing::WholeEnvironment;
 
 use super::hub_ahead::HubAhead;
 use super::{Stack, Ui, hub_environment};
@@ -17,7 +19,6 @@ pub(crate) fn pull_request(state: &str) -> String {
 pub(crate) struct StandInGh {
     _hub: HubAhead,
     answer: PathBuf,
-    remote: PathBuf,
 }
 
 impl StandInGh {
@@ -25,11 +26,6 @@ impl StandInGh {
     /// request, as it does for a branch with none.
     pub(crate) fn report(&self, json: &str) {
         write_whole(&self.answer, json);
-    }
-
-    /// A complete GraphQL response for explicit PR reads, apart from the branch's `pr view` answer.
-    pub(crate) fn report_remote(&self, json: &str) {
-        write_whole(&self.remote, json);
     }
 
     /// Has `gh` fail from now on, as it does when it can't reach GitHub, which says nothing about the pull request.
@@ -41,20 +37,23 @@ impl StandInGh {
 impl Stack {
     /// Starts the hub before the app opens, which then uses it rather than starting its own.
     pub(crate) fn start_hub_with_stand_in_gh(&self) -> StandInGh {
+        self.start_hub_with_gh(&mut hub_environment(), "")
+    }
+
+    /// The same, in `environment`, with `also` at the start of the stand-in, as a line of shell that answers more.
+    pub(super) fn start_hub_with_gh(&self, environment: &mut WholeEnvironment, also: &str) -> StandInGh {
         let bin = self.dir.path().join("bin");
         std::fs::create_dir_all(&bin).unwrap();
         let answer = self.dir.path().join("gh-pr-view.json");
-        let remote = self.dir.path().join("gh-remote.json");
-        // It's in no merge queue. Commands other than PR reads fail, such as asking how much of GitHub's limit is left, which
+        // It's in no merge queue. Commands other than the branch's PR read fail, such as asking how much of GitHub's limit is left, which
         // then goes unknown. A pull request that doesn't say its newest commit gets the one checked out, as one
         // pushed from the worktree has, so it's the branch's own.
         let (offline, answer_path) = (answer.with_extension("offline"), answer.display());
         let script = format!(
             r#"#!/bin/sh
+{also}
 [ "$1 $2" = 'api graphql' ] && exec echo '{{"data":{{"resource":{{"mergeQueueEntry":null}}}}}}'
-[ "$1 $2" = 'repo view' ] && exec echo '{{"url":"https://github.com/example/project","nameWithOwner":"example/project"}}'
 [ -f '{offline}' ] && {{ echo 'error connecting to api.github.com' >&2; exit 1; }}
-[ "$1 $2" = 'api --hostname' ] && exec cat '{remote}'
 [ "$1 $2" = 'pr view' ] || exit 1
 [ -f '{answer_path}' ] && grep -q headRefOid '{answer_path}' && exec cat '{answer_path}'
 [ -f '{answer_path}' ] && exec sed "1s/^{{/{{\"headRefOid\":\"$(git rev-parse HEAD)\",/" '{answer_path}'
@@ -62,14 +61,13 @@ echo 'no pull requests found for branch "x"' >&2
 exit 1
 "#,
             offline = offline.display(),
-            remote = remote.display()
         );
         let gh = bin.join("gh");
         std::fs::write(&gh, script).unwrap();
         std::fs::set_permissions(&gh, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
         // Workers get this PATH, with the stand-in at its front.
-        let hub = self.start_hub_ahead(hub_environment().put_first_on_path(&bin));
-        StandInGh { _hub: hub, answer, remote }
+        let hub = self.start_hub_ahead(environment.put_first_on_path(&bin));
+        StandInGh { _hub: hub, answer }
     }
 }
 

@@ -47,4 +47,4 @@ mod tests;
 mod connection;
 #[cfg(test)]
 use connection::NEXT_LINK_ID;
-pub(crate) use connection::{STOP_GRACE, WorkerLink};
+pub(crate) use connection::{ReadHold, STOP_GRACE, WorkerLink};
