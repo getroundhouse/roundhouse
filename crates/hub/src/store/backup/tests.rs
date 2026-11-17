@@ -121,7 +121,7 @@ fn never_wait(_: i32) -> bool {
 #[test]
 fn a_copy_doesnt_wait_for_whatever_holds_the_wal_back() {
     let dir = tempfile::tempdir().unwrap();
-    let (conn, _reading) = held_back(&dir.path().join("hub.db"));
+    let (mut conn, _reading) = held_back(&dir.path().join("hub.db"));
     conn.busy_handler(Some(never_wait)).unwrap();
 
     back_up(&conn, 1, &dir.path().join("backups")).unwrap();
