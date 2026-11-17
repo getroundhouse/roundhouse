@@ -28,17 +28,21 @@ fn position(events: &[SessionEvent], wanted: impl Fn(&EventBody) -> bool) -> Opt
 /// A prompt sent while the agent runs a long tool, which it hasn't taken yet.
 /// A prompt sent mid-turn, once the agent has read it. Recording it isn't enough, since the hub delivers it after: an
 /// agent that went away first would have the prompt delivered to the one that replaces it, which takes it.
-fn waiting_prompt(client: &Client, session_id: &SessionId) -> Seq {
+fn waiting_prompt(stack: &Stack, client: &Client, session_id: &SessionId) -> Seq {
     client.session_prompt(session_id, "hang", None).unwrap();
     wait_for_tool(client, session_id);
     let (steered, _) = client.session_prompt(session_id, "say:never", None).unwrap();
-    // The CLI says it has queued a prompt as it reads one.
-    wait_until("the agent to read the prompt", || {
-        read_all(client, session_id).iter().any(|e| {
-            e.seq > steered && matches!(&e.body, EventBody::AgentOther { kind, .. } if kind == "command_lifecycle")
-        })
-    });
+    wait_for_read(stack, "say:never");
     steered
+}
+
+/// Waits until the agent has read the prompt `text`, which the fake agent notes as it says it queued it. The adapter
+/// records nothing of that, since the prompt's being taken says more.
+fn wait_for_read(stack: &Stack, text: &str) {
+    let read = stack.agent_state().join("read-prompts");
+    wait_until("the agent to read the prompt", || {
+        std::fs::read_to_string(&read).is_ok_and(|read| read.lines().any(|line| line == text))
+    });
 }
 
 fn wait_for_drop(client: &Client, session_id: &SessionId, prompt: Seq) {
@@ -136,7 +140,7 @@ fn a_prompt_the_agent_hadnt_taken_when_it_died_is_dropped() {
     let stack = Stack::start();
     let client = stack.client();
     let (_, session) = stack.workspace(&client);
-    let steered = waiting_prompt(&client, &session.id);
+    let steered = waiting_prompt(&stack, &client, &session.id);
 
     signal(agent_pid(&client, &session.id), libc::SIGKILL);
 
@@ -148,7 +152,7 @@ fn a_prompt_the_agent_hadnt_taken_when_its_worker_was_lost_is_dropped() {
     let stack = Stack::start();
     let client = stack.client();
     let (_, session) = stack.workspace(&client);
-    let steered = waiting_prompt(&client, &session.id);
+    let steered = waiting_prompt(&stack, &client, &session.id);
 
     signal(parent_of(agent_pid(&client, &session.id)), libc::SIGKILL);
 
@@ -160,7 +164,7 @@ fn a_prompt_the_agent_hadnt_taken_when_it_went_with_its_hub_is_dropped() {
     let mut stack = Stack::start();
     let client = stack.client();
     let (_, session) = stack.workspace(&client);
-    let steered = waiting_prompt(&client, &session.id);
+    let steered = waiting_prompt(&stack, &client, &session.id);
 
     stack.kill_hub_and_workers();
     stack.start_hub();
@@ -175,7 +179,7 @@ fn a_prompt_the_agent_hadnt_taken_when_its_hub_went_away_is_dropped_if_its_worke
     let mut stack = Stack::start();
     let client = stack.client();
     let (_, session) = stack.workspace(&client);
-    let steered = waiting_prompt(&client, &session.id);
+    let steered = waiting_prompt(&stack, &client, &session.id);
     let worker = parent_of(agent_pid(&client, &session.id));
     drop(client);
 
@@ -197,11 +201,7 @@ fn a_prompt_the_agent_hadnt_taken_when_its_hub_went_away_is_taken_once_the_next_
     let (first, _) = client.session_prompt(&session.id, &format!("hang-until:{tool}"), None).unwrap();
     wait_for_tool(&client, &session.id);
     let (steered, _) = client.session_prompt(&session.id, "say:steered", None).unwrap();
-    wait_until("the agent to read the prompt", || {
-        read_all(&client, &session.id).iter().any(|e| {
-            e.seq > steered && matches!(&e.body, EventBody::AgentOther { kind, .. } if kind == "command_lifecycle")
-        })
-    });
+    wait_for_read(&stack, "say:steered");
     drop(client);
 
     stack.kill_hub();

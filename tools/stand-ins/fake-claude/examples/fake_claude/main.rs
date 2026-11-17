@@ -86,7 +86,8 @@
 //!
 //! A prompt sent mid-turn folds in once the script running finishes, and a prompt with a `uuid` is reported with
 //! `command_lifecycle` lines, as the real CLI does. Stopping a turn drops the prompts it hadn't taken, as the worker asks
-//! with `cancel_queued`.
+//! with `cancel_queued`. Each prompt it reads is added to `read-prompts` in `$FAKE_CLAUDE_STATE`, a line each, as it says
+//! it queued it, which the adapter doesn't record, so a test can wait for the agent to have read one.
 //!
 //! Conversations persist as files in `$FAKE_CLAUDE_STATE`. `--resume` fails if there isn't one and
 //! `--session-id` fails if there is, as with the real CLI.
@@ -212,7 +213,8 @@ fn main() {
     let config = Config { conversation: state.join(&session_id), session_id, input: input_tx.clone() };
     mcp::follow_again(&args, &config, &out);
     let (control_out, conversation) = (out.clone(), config.conversation.clone());
-    std::thread::spawn(move || read_stdin(input_tx, control_out, &conversation));
+    let read = state.join("read-prompts");
+    std::thread::spawn(move || read_stdin(input_tx, control_out, &conversation, &read));
 
     // The real CLI finishes its turn on EOF, then exits. Prompts sent mid-turn fold into that turn.
     let mut queued: VecDeque<Prompt> = VecDeque::new();
@@ -266,7 +268,7 @@ fn keep_launch(args: &[String], state: &Path) {
     mcp::connect(args, state);
 }
 
-fn read_stdin(input: mpsc::Sender<Input>, out: Out, conversation: &Path) {
+fn read_stdin(input: mpsc::Sender<Input>, out: Out, conversation: &Path, read: &Path) {
     for line in std::io::stdin().lock().lines() {
         let Ok(line) = line else { break };
         let Ok(value) = serde_json::from_str::<Value>(&line) else { continue };
@@ -277,6 +279,8 @@ fn read_stdin(input: mpsc::Sender<Input>, out: Out, conversation: &Path) {
                     uuid: value["uuid"].as_str().map(str::to_string),
                 };
                 lifecycle(&out, &prompt, "queued");
+                let mut file = std::fs::OpenOptions::new().create(true).append(true).open(read).unwrap();
+                writeln!(file, "{}", prompt.text).unwrap();
                 Input::Prompt(prompt)
             }
             Some("control_response") => Input::Approval(value["response"].clone()),

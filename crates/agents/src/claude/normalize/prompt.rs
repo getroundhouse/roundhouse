@@ -11,7 +11,7 @@ use super::{Parsed, other, str_of};
 pub enum PromptProgress {
     Started,
     Cancelled,
-    /// `queued`, `completed`, or something newer. Nothing changes for these.
+    /// A state this build doesn't know, whose line is kept for a later one.
     Other,
 }
 
@@ -21,6 +21,9 @@ pub(super) fn command_lifecycle(value: &Value) -> Parsed {
     let progress = match str_of(value, "state") {
         Some("started") => PromptProgress::Started,
         Some("cancelled") => PromptProgress::Cancelled,
+        // That the CLI read the prompt, and that the turn that took it ended, which the prompt's being taken and the
+        // turn's end say.
+        Some("queued" | "completed") => return Parsed::Drop,
         _ => PromptProgress::Other,
     };
     Parsed::Prompt { uuid: uuid.to_string(), progress }
