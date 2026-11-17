@@ -14,7 +14,7 @@ use look::{Hand as _, IconSizing as _, Typeset as _};
 use super::super::field::labelled;
 use super::Drawing;
 use super::app_made::installation;
-use super::app_panel::{AppPanel, AppStep, Choosing, LISTENS_FOR, OnGithub};
+use super::app_panel::{AppPanel, AppStep, Choosing, OnGithub, listens_for};
 use super::app_words;
 use super::kept::{Kept, Panel};
 use super::panel::{Framed, button, buttons, framed, refusal};
@@ -173,7 +173,7 @@ fn on_github(drawing: &Drawing<'_>, stands: &OnGithub, cx: &App) -> AnyElement {
             let again = button("git-open-github", "Open GitHub again", true, off, move |window, cx| {
                 kept.update(cx, |kept, cx| kept.open_github_from_the_start(window, cx));
             });
-            let minutes = LISTENS_FOR.as_secs() / 60;
+            let minutes = listens_for(cx).as_secs() / 60;
             v_flex()
                 .gap(look::Space::Large)
                 .child(refusal(app_words::stopped_waiting(minutes), cx))

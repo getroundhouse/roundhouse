@@ -66,10 +66,10 @@ pub(super) struct Given {
 
 impl Github {
     /// Asks GitHub after `code`'s token, first and between each ask as long as GitHub says, longer after it says
-    /// `slow_down`, until the person approves or refuses, or the code ends, by GitHub's word or by the clock, as
-    /// [`paced`] says. Dropping it stops asking.
-    pub(crate) async fn wait_for_approval(&self, code: &DeviceCode) -> Approval {
-        paced(code.interval, code.ends, || self.ask_after_token(code)).await
+    /// `slow_down`, and never sooner than `least`, until the person approves or refuses, or the code ends, by GitHub's
+    /// word or by the clock, as [`paced`] says. Dropping it stops asking.
+    pub(crate) async fn wait_for_approval(&self, code: &DeviceCode, least: Duration) -> Approval {
+        paced(code.interval, least, code.ends, || self.ask_after_token(code)).await
     }
 
     /// What one ask after `code`'s token comes to, as GitHub answers it, without a limit of its own.

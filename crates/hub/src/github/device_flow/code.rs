@@ -18,9 +18,6 @@ pub(crate) const SCOPES: &str = "repo workflow read:org gist project write:packa
 /// How long to wait between two asks after a sign-in's token when GitHub says nothing of it, as its docs give.
 pub(super) const DEFAULT_INTERVAL: Duration = Duration::from_secs(5);
 
-/// The least time between two asks, whatever GitHub says, so one that said none isn't asked in a loop.
-pub(super) const LEAST_INTERVAL: Duration = Duration::from_secs(1);
-
 protocol::tokens!(
     /// What the hub asks GitHub with how a sign-in stands, and takes its token with once it's approved. With the app's
     /// client ID, which is no secret, it's all it takes, so the hub keeps it only in memory, and only while the
@@ -40,7 +37,8 @@ pub(crate) struct DeviceCode {
     pub(crate) lasts: Duration,
     /// When it ends, by tokio's clock, from when GitHub's answer came.
     pub(super) ends: Instant,
-    /// How long to wait between two asks after its token, as GitHub first said.
+    /// How long to wait between two asks after its token, as GitHub first said, or [`DEFAULT_INTERVAL`] when it said
+    /// nothing of it. Asking keeps to the hub's least all the same, as [`paced`](super::pacing::paced) says.
     pub(super) interval: Duration,
 }
 
@@ -76,7 +74,7 @@ impl Github {
         }
         let code: Given = serde_json::from_str(&body).map_err(|_| refusal("for a sign-in's code", &body))?;
         let lasts = Duration::from_secs(code.expires_in);
-        let interval = code.interval.map_or(DEFAULT_INTERVAL, Duration::from_secs).max(LEAST_INTERVAL);
+        let interval = code.interval.map_or(DEFAULT_INTERVAL, Duration::from_secs);
         Ok(DeviceCode {
             device: GithubDeviceCode::new(code.device_code),
             user_code: code.user_code.into(),

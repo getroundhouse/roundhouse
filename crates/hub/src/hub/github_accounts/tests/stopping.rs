@@ -9,7 +9,6 @@ use protocol::model::GithubToken;
 use tokio::time::Instant;
 
 use super::renewals::{hub_signed_in, renewing};
-use super::*;
 use crate::github::{Answer, Gate, GithubRefreshToken};
 use crate::github_logins::tests::{ada_signed_in, login_ending, sign_in_held};
 use crate::hub::tests::hub_in;
@@ -34,14 +33,12 @@ async fn a_stop_while_github_renews_a_sign_in_waits_for_its_answer_and_keeps_wha
         async move { hub.stop_checking_github_logins(watching).await }
     });
     hub.github_checks_stopped.subscribe().wait_for(|stopped| *stopped).await.unwrap();
-    let stopped_before_github_answered = stopping.is_finished();
     gate.open();
     stopping.await.unwrap();
 
-    assert!(!stopped_before_github_answered, "the stop waited for GitHub's answer");
     let held = sign_in_held(&hub.github_logins, &hub.store, &"g".into());
     let renewed = (GithubToken::new("a-renewed-token"), Some(GithubRefreshToken::new("a-renewed-refresh")));
-    assert_eq!((held.token, held.refresh), renewed, "what GitHub gave was kept before the stop ended");
+    assert_eq!((held.token, held.refresh), renewed, "the stop waited for GitHub's answer, and kept what it gave");
     assert_eq!(github.asked().len(), 1, "and no check started after");
 }
 
@@ -53,7 +50,7 @@ async fn a_stop_between_checks_waits_for_no_check() {
     let hub = hub_in(dir.path());
     let account = ada_signed_in(&hub.github_logins, &hub.store, login_ending("a-token", now_ms() - 2 * DAY_MS));
     let watching = tokio::spawn(Arc::clone(&hub).watch_github_logins());
-    tokio::time::sleep(CHECKED_EVERY / 2).await;
+    tokio::time::sleep(hub.timers.check_github_logins_every / 2).await;
     let started = Instant::now();
 
     hub.stop_checking_github_logins(watching).await;

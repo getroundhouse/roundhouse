@@ -31,7 +31,7 @@ impl Hub {
         let hub = Arc::clone(self);
         let work = async move {
             step("asking GitHub after the sign-in, until the person approves or refuses it or its code ends");
-            let approval = hub.github.wait_for_approval(&code).await;
+            let approval = hub.github.wait_for_approval(&code, hub.timers.sign_in_pace).await;
             let answered_at_ms = now_ms();
             drop(code);
             match approval {

@@ -1,8 +1,8 @@
 //! A GitHub account connected through a real hub, which asks a stand-in for GitHub whose its token is, as what a
 //! workspace's git uses for github.com: the hub makes it the default and sets it on the workspace's worker, whose setup
-//! script's git gets it, and commits as it, and a block once it's disconnected. And who a provider's machine's own `gh`
-//! is logged in as, which the hub records once a worker there has said, and whether the default can push to a
-//! workspace's repository.
+//! script's git gets it, and commits as it, and a block once it's disconnected, and the next token the hub's check of
+//! its logins makes an app's installation. And who a provider's machine's own `gh` is logged in as, which the hub
+//! records once a worker there has said, and whether the default can push to a workspace's repository.
 
 #![cfg(test)]
 
@@ -10,6 +10,7 @@ use std::path::PathBuf;
 
 use hub::{GithubAnswer, GithubGate, GithubScript, GithubStandIn};
 use protocol::client::github_accounts::{GithubAccountConnect, GithubAccountDisconnect};
+use protocol::client::github_apps::{GithubAppMake, GithubManifestCode};
 use protocol::model::{
     FoundGithubLogin, GhLogin, GhLoginWorks, GithubReach, GithubRepositoryName, GithubToken, Reach, SetupStatus,
 };
@@ -80,6 +81,47 @@ fn a_workspaces_commits_are_by_the_default_github_account_on_a_machine_with_no_g
     let by = std::fs::read_to_string(PathBuf::from(workspace.path.unwrap()).join("by")).unwrap();
     let ada = "Ada Lovelace <7+ada@users.noreply.github.com>";
     assert_eq!(by, format!("{ada}, {ada}\n"));
+}
+
+/// Asks git for github.com's credential until it fills one, as once the hub has the default's next token, keeping what
+/// it filled in `filled`, or fails after five seconds or so.
+const ASKS_GIT_UNTIL_FILLED: &str = r"tries=0
+until printf 'protocol=https\nhost=github.com\n\n' | git credential fill > filled 2> said; do
+  tries=$((tries + 1))
+  [ $tries -lt 250 ] || exit 1
+  sleep 0.01
+done";
+
+/// An app of your own, made from a code, whose installation's first token GitHub gives as having ended already, so
+/// the default, which the installation becomes, blocks. The hub checks its logins as it starts, and then once a
+/// minute, so only the hub that starts again makes the next token, which a workspace's git gets.
+#[test]
+fn a_workspaces_git_gets_the_token_the_check_makes_an_installation_as_the_hub_starts_again() {
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    let tokens = vec![
+        GithubAnswer::installation_token("ghs_made_up_and_ended", "2020-01-01T00:00:00Z"),
+        GithubAnswer::installation_token("ghs_made_up_next", "2099-01-01T00:00:00Z"),
+    ];
+    let github = runtime.block_on(GithubStandIn::with(GithubScript {
+        conversions: vec![("a-code", GithubAnswer::app_made(9, "ada-roundhouse", (2, "adalabs")))],
+        named: vec![("ada-roundhouse[bot]", GithubAnswer::user(41, "ada-roundhouse[bot]", None))],
+        installations: vec![GithubAnswer::installations(&[(70, 2, "adalabs")])],
+        minted: vec![(70, tokens)],
+        ..GithubScript::default()
+    }));
+    let mut stack = Stack::start_with(vec![(ENV_TEST_GITHUB_API, github.api())]);
+    commit_settings(&stack, &format!("[scripts]\nsetup = '''\n{ASKS_GIT_UNTIL_FILLED}\n'''\n"));
+    stack.client().call(GithubAppMake { code: GithubManifestCode::new("a-code") }).unwrap();
+
+    stack.restart_hub();
+    let client = stack.client();
+    let (workspace, _) = stack.workspace(&client);
+
+    assert_eq!(wait_for_setup(&client, &workspace.id), SetupStatus::Succeeded, "git never filled it");
+    let filled = std::fs::read_to_string(PathBuf::from(workspace.path.unwrap()).join("filled")).unwrap();
+    assert!(filled.contains("username=x-access-token\npassword=ghs_made_up_next\n"), "{filled}");
+    let minted = github.asked().iter().filter(|asked| asked.starts_with("post /app/installations/70/")).count();
+    assert_eq!(minted, 2, "as the app was made, and as the hub started again");
 }
 
 /// Through the real worker of the local provider, and a stand-in for `gh` on its `PATH`, to every client.

@@ -1,6 +1,7 @@
 //! Git in Settings, against a real hub that calls a stand-in for GitHub: connecting a token, which becomes the
-//! default, one GitHub refuses, disconnecting, which asks first and leaves the default blocked, and choosing the
-//! default, an account or each machine's own login. Every token is plainly made up.
+//! default, one GitHub refuses, disconnecting, which asks first and leaves the default blocked, renewing an account's
+//! token and connecting it again from its menu, and choosing the default, an account or each machine's own login.
+//! Every token is plainly made up.
 
 #![cfg(test)]
 
@@ -126,6 +127,45 @@ fn disconnecting_asks_first_and_the_default_stays_the_default_with_agents_blocke
     assert_eq!(default(&ui), Some(account));
     let logins = stack.hub.paths.data_dir.join("github-logins");
     assert!(files_holding(&logins, TOKEN, "").is_empty(), "the hub forgot the token");
+}
+
+/// Another token of ada's, which GitHub knows as hers.
+const ADAS_NEXT: &str = "github_pat_ada_made_up_next";
+
+/// A token for the account itself, rather than a new account for the same user, which would leave the default with
+/// no login, and blocked.
+#[gpui_kit::test]
+fn renew_and_connect_again_from_an_accounts_menu_put_the_token_in_place_of_the_accounts_own(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let ada = GithubAnswer::user(7, "ada", None);
+    let script = GithubScript { users: vec![(TOKEN, ada.clone()), (ADAS_NEXT, ada)], ..GithubScript::default() };
+    let _github = stack.start_hub_with_stand_in_github(script);
+    let account = connected(&stack, TOKEN);
+    let mut ui = in_git(cx, &stack);
+    ui.wait("its row", |ui| ui.has(more(&account)));
+    let logins = stack.hub.paths.data_dir.join("github-logins");
+
+    ui.click(more(&account));
+    ui.click_menu_item("Renew");
+    ui.input(ADAS_NEXT);
+    ui.press("enter");
+    ui.wait("the new login", |ui| !ui.has("git-panel"));
+    let ids = |accounts: Vec<GithubAccount>| accounts.into_iter().map(|account| account.id).collect::<Vec<_>>();
+    let renewed = (ids(the_hubs(&stack)), files_holding(&logins, TOKEN, "").len());
+    stack.client().github_account_disconnect(&account).unwrap();
+    ui.wait("agents blocked", |ui| ui.has("git-blocked"));
+    ui.click(more(&account));
+    ui.click_menu_item("Connect again");
+    ui.input(TOKEN);
+    ui.press("enter");
+
+    ui.wait("the login again", |ui| !ui.has("git-panel"));
+    assert_eq!(renewed, (vec![account.clone()], 0), "renewed in place, and the token it had forgotten");
+    assert_eq!(ids(the_hubs(&stack)), std::slice::from_ref(&account), "connected again in place");
+    assert!(the_hubs(&stack)[0].held_login.is_some());
+    assert_eq!(the_hubs_default(&stack), Some(account));
+    assert_eq!(files_holding(&logins, TOKEN, "").len(), 1);
+    ui.wait("agents unblocked", |ui| !ui.has("git-blocked"));
 }
 
 #[gpui_kit::test]

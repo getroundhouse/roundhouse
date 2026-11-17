@@ -79,9 +79,12 @@ pub(super) fn hub_describing(dir: &Path, agents: Vec<AgentDescription>) -> Arc<H
     hub_of(dir, agents, Github::new(GithubConfig::at(NO_GITHUB.to_string())))
 }
 
-/// The same, which calls GitHub's API at `api`, such as a stand-in's.
+/// The same, which calls GitHub's API at `api`, such as a stand-in's, and asks after a sign-in's token as often as a
+/// test's hub does, as [`Timers::FOR_TESTS`] has it, since a test that calls a stand-in can't pause tokio's clock,
+/// which a request to the stand-in would race.
 pub(crate) fn hub_calling_github(dir: &Path, api: String) -> Arc<Hub> {
-    hub_of(dir, vec![described()], Github::new(GithubConfig::at(api)))
+    let timers = Timers { sign_in_pace: Timers::FOR_TESTS.sign_in_pace, ..Timers::DEFAULT };
+    hub_timed(dir, vec![described()], Github::new(GithubConfig::at(api)), timers)
 }
 
 /// Where a test's hub that isn't about GitHub has GitHub's API, which nothing serves, so a call that reaches it fails
@@ -89,6 +92,10 @@ pub(crate) fn hub_calling_github(dir: &Path, api: String) -> Arc<Hub> {
 pub(crate) const NO_GITHUB: &str = "http://127.0.0.1:9";
 
 fn hub_of(dir: &Path, agents: Vec<AgentDescription>, github: Github) -> Arc<Hub> {
+    hub_timed(dir, agents, github, Timers::DEFAULT)
+}
+
+fn hub_timed(dir: &Path, agents: Vec<AgentDescription>, github: Github, timers: Timers) -> Arc<Hub> {
     let store = Arc::new(store_with_session(dir));
     let config = LocalConfig {
         worker_exe: dir.join("no-worker"),
@@ -99,7 +106,7 @@ fn hub_of(dir: &Path, agents: Vec<AgentDescription>, github: Github) -> Arc<Hub>
         path: None,
     };
     let providers = ProviderSet::only(Arc::new(LocalProvider::new(config)));
-    Arc::new(Hub::new(Build::UNSTAMPED, store, HubDirs::in_dir(dir), providers, github, agents, false, Timers::DEFAULT))
+    Arc::new(Hub::new(Build::UNSTAMPED, store, HubDirs::in_dir(dir), providers, github, agents, false, timers))
 }
 
 /// A stand-in for `w`'s worker, which fails every call, as `hub`'s worker.

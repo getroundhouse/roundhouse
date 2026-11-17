@@ -14,13 +14,6 @@ use tracing::error;
 use super::super::Hub;
 use crate::store::now_ms;
 
-/// How often the hub checks the GitHub logins by the wall clock, and as it starts: whether the default's token has
-/// ended, and which sign-ins to renew. Tokio's timers don't count the time a Mac sleeps, so waiting until a token's
-/// end, or until it's due to be renewed, would wait as long again as the Mac slept, where checking every minute it's
-/// awake finds it within a minute of waking. Until then, a push fails at GitHub, which says the token is bad, rather
-/// than with the block, which says what to do.
-pub(super) const CHECKED_EVERY: Duration = Duration::from_secs(60);
-
 impl Hub {
     /// What workers are to give their processes for github.com, from now on, as it changes, as
     /// [`GithubLogins::git_credential`](crate::github_logins::GithubLogins::git_credential) says.
@@ -28,12 +21,13 @@ impl Hub {
         self.github_logins.git_credential()
     }
 
-    /// Checks the GitHub logins as the hub starts and every [`CHECKED_EVERY`] after, by the wall clock, as
+    /// Checks the GitHub logins as the hub starts and every
+    /// [`check_github_logins_every`](crate::Timers::check_github_logins_every) after, by the wall clock, as
     /// [`Hub::check_github_logins`] says, each once the last has finished, until
     /// [`Hub::stop_checking_github_logins`].
     pub(crate) async fn watch_github_logins(self: Arc<Self>) {
         let stopped = stopped(self.github_checks_stopped.subscribe());
-        check_by_the_wall_clock(CHECKED_EVERY, now_ms, stopped, |now_ms| {
+        check_by_the_wall_clock(self.timers.check_github_logins_every, now_ms, stopped, |now_ms| {
             let hub = Arc::clone(&self);
             async move { hub.check_github_logins(now_ms).await }
         })
