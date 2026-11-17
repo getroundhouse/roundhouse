@@ -12,7 +12,7 @@ use protocol::event::{ContentBlock, EventBody};
 use protocol::model::{PORTS_PER_WORKSPACE, Seq};
 
 use crate::support::{
-    Stack, assistant_text, commit_settings, git, parent_of, read_all, signal, wait_for_setup, wait_for_turn_end,
+    Gate, Stack, assistant_text, commit_settings, git, parent_of, read_all, signal, wait_for_setup, wait_for_turn_end,
     wait_until,
 };
 
@@ -48,12 +48,14 @@ echo "$CONDUCTOR_WORKSPACE_NAME $CONDUCTOR_PORT $CONDUCTOR_ROOT_PATH" > setup-ra
 #[test]
 fn a_prompt_sent_during_setup_is_recorded_at_once_and_delivered_when_it_finishes() {
     let stack = Stack::start();
-    commit_settings(&stack, "[scripts]\nsetup = \"sleep 1; touch ready.txt\"\n");
+    let setting_up = Gate::new(&stack, "setting-up");
+    commit_settings(&stack, &format!("[scripts]\nsetup = \"{}; touch ready.txt\"\n", setting_up.shell_wait()));
     let client = stack.client();
     let (_, session) = stack.workspace(&client);
     let (seq, _) = client.session_prompt(&session.id, "tool:test -f ready.txt && echo was-ready", None).unwrap();
     assert_eq!(seq, Seq::new(1));
     assert!(!read_all(&client, &session.id).iter().any(|e| matches!(e.body, EventBody::AgentStarted { .. })));
+    setting_up.open();
     let events = wait_for_turn_end(&client, &session.id, 1);
     let saw_it = events.iter().any(|e| match &e.body {
         EventBody::AgentUser { blocks, .. } => {
@@ -105,8 +107,9 @@ fn a_hub_reports_a_setup_for_as_long_as_it_runs() {
 #[test]
 fn a_hub_reports_a_request_for_as_long_as_it_works_on_it() {
     let stack = Stack::start();
-    let marker = stack.path("archive-started");
-    commit_settings(&stack, &format!("[scripts]\narchive = \"touch {}; sleep 2\"\n", marker.display()));
+    let (marker, held) = (stack.path("archive-started"), Gate::new(&stack, "archiving"));
+    let script = format!("touch {}; {}", marker.display(), held.shell_wait());
+    commit_settings(&stack, &format!("[scripts]\narchive = \"{script}\"\n"));
     let client = stack.client();
     let (workspace, _) = stack.workspace(&client);
     assert_eq!(client.hub_status().unwrap().requests, 1, "only this request");
@@ -117,6 +120,7 @@ fn a_hub_reports_a_request_for_as_long_as_it_works_on_it() {
     wait_until("the archive script to start", || marker.exists());
 
     assert_eq!(client.hub_status().unwrap().requests, 2);
+    held.open();
     archive.join().unwrap().unwrap();
     assert_eq!(client.hub_status().unwrap().requests, 1);
 }

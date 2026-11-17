@@ -165,7 +165,8 @@ pub(super) async fn taken_so_far(link: &WorkerLink) {
 /// Where the workspace's other worktree `try` goes.
 pub(super) const TRY: &str = "/ws/.children/alder/try";
 
-/// Something that mustn't happen has no condition to wait on, so this is a bound. Right code never gets past it.
+/// Something that mustn't happen has no condition to wait on, so a test waits this long for it on tokio's paused clock,
+/// which moves only once every task is waiting. Waiting it out means what's tested has gone as far as it can.
 pub(super) const BOUND: Duration = Duration::from_millis(300);
 
 /// A new worktree's branch goes in the workspace's folder, a name the worker says is taken gets the next number, and

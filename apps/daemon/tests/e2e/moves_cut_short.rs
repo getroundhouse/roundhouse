@@ -10,17 +10,17 @@ use process::ProcessRecord;
 use protocol::model::{SetupStatus, Workspace, WorkspaceId, WorkspaceStatus};
 use protocol::paths::WORKER_RECORD_FILE;
 
-use crate::support::{Stack, commit_settings, git, install_executable, wait_for_setup, wait_for_turn_end, wait_until};
-use crate::support::{assistant_text, workspace};
+use crate::support::{Gate, Stack, commit_settings, git, install_executable, wait_for_setup, wait_for_turn_end};
+use crate::support::{assistant_text, wait_until, workspace};
 
-/// A shell line that says it has started, by making `started`, and then waits for `go` to be there.
-fn held(started: &Path, go: &Path) -> String {
-    format!("touch {}; until [ -e {} ]; do sleep 0.05; done", started.display(), go.display())
+/// A shell line that says it has started, by making `started`, and then waits for `go` to be opened.
+fn held(started: &Path, go: &Gate) -> String {
+    format!("touch {}; {}", started.display(), go.shell_wait())
 }
 
-/// A ready workspace whose archive script waits to be let go, and the files that say it has started and let it go.
-fn workspace_with_a_held_archive(stack: &Stack, client: &Client) -> (Workspace, PathBuf, PathBuf) {
-    let (started, go) = (stack.path("archive-started"), stack.path("archive-go"));
+/// A ready workspace whose archive script waits to be let go, the file that says it has started, and what lets it go.
+fn workspace_with_a_held_archive(stack: &Stack, client: &Client) -> (Workspace, PathBuf, Gate) {
+    let (started, go) = (stack.path("archive-started"), Gate::new(stack, "archive-go"));
     commit_settings(stack, &format!("[scripts]\narchive = \"{}\"\n", held(&started, &go)));
     let (made, _) = stack.workspace(client);
     wait_for_setup(client, &made.id);
@@ -60,7 +60,7 @@ fn an_archive_cut_short_with_the_worktree_still_there_leaves_the_workspace_ready
     wait_for_workspace(&client, &made.id, WorkspaceStatus::Ready);
 
     // It's a workspace like any other: an agent runs in it, and it can be archived.
-    std::fs::write(&go, "").unwrap();
+    go.open();
     let session = client.session_list(&made.id).unwrap().remove(0);
     client.session_prompt(&session.id, "say:still here", None).unwrap();
     assert_eq!(assistant_text(&wait_for_turn_end(&client, &session.id, 1)), "still here");
@@ -83,7 +83,7 @@ fn an_archive_cut_short_after_the_worktree_went_leaves_the_workspace_archived() 
     // As far as the hub got before it went: the worktree removed, and nothing recorded.
     stack.kill_hub();
     git(&stack.repo(), &["worktree", "remove", "--force", worktree.to_str().unwrap()]);
-    std::fs::write(&go, "").unwrap();
+    go.open();
     stack.start_hub();
     let client = stack.client();
     wait_for_workspace(&client, &made.id, WorkspaceStatus::Archived);
@@ -107,7 +107,7 @@ fn a_restore_cut_short_is_settled_once_the_worker_has_finished_putting_the_workt
     let worktree = PathBuf::from(made.path.clone().unwrap());
 
     // Git runs this as it checks the worktree out, so the worker is still putting it back when the hub goes.
-    let (started, go) = (stack.path("checkout-started"), stack.path("checkout-go"));
+    let (started, go) = (stack.path("checkout-started"), Gate::new(&stack, "checkout-go"));
     let hook = stack.path("post-checkout");
     std::fs::write(&hook, format!("#!/bin/sh\n{}\n", held(&started, &go))).unwrap();
     install_executable(&hook, &stack.repo().join(".git/hooks/post-checkout"));
@@ -125,7 +125,7 @@ fn a_restore_cut_short_is_settled_once_the_worker_has_finished_putting_the_workt
     assert!(worktree.exists());
     assert_eq!(workspace(&client, &made.id).status, WorkspaceStatus::Restoring);
 
-    std::fs::write(&go, "").unwrap();
+    go.open();
     wait_for_workspace(&client, &made.id, WorkspaceStatus::Ready);
     // By the worker that was putting the worktree back, which answers once it has finished, rather than one started
     // since, which would find the folder there at once. The hub's own tests have it take a worker's answer over that.

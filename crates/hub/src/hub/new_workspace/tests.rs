@@ -4,7 +4,7 @@ use protocol::model::{AttachmentId, NewWorkspaceDraftToKeep, RepoId};
 
 use crate::attachment_files::FileFor;
 use crate::hub::tests::hub_in;
-use crate::store::{AddedBy, now_ms};
+use crate::store::AddedBy;
 
 fn in_the_repo(files: &[&str]) -> NewWorkspaceDraftToKeep {
     NewWorkspaceDraftToKeep {
@@ -50,13 +50,11 @@ async fn the_dialogs_files_wait_as_long_again_once_a_workspace_is_made_from_them
     hub.file_add(FileFor::NewWorkspace, "f1".into(), "notes.txt".into(), MediaType::Text, data, AddedBy::Client)
         .await
         .unwrap();
-    let asked_at = now_ms() + 1;
-    while now_ms() < asked_at {
-        std::thread::yield_now();
-    }
+    // Added at the start of the clock, so long before it's asked for, by any clock.
+    hub.store.holding_writes().execute("UPDATE new_workspace_draft_files SET created_at_ms = 0", []).unwrap();
 
     let _ = hub.new_workspace_create(in_the_repo(&["f1"]), "make".into()).await;
 
-    let let_go_of = hub.blocking(move |store| store.let_go_of_unnamed_new_workspace_draft_files(asked_at)).await;
+    let let_go_of = hub.blocking(|store| store.let_go_of_unnamed_new_workspace_draft_files(1)).await;
     assert_eq!(let_go_of.unwrap(), Vec::<AttachmentId>::new(), "added before it was asked for, and renewed since");
 }

@@ -8,4 +8,5 @@ mod dependencies;
 mod design_system;
 mod licenses;
 mod rust_standards;
+mod waits;
 mod workspace;

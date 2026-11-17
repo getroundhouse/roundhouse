@@ -245,7 +245,7 @@ fn classify(body: EventBody) -> Option<Seen> {
 
 #[tokio::test]
 async fn buffered_wakeup_before_user_message_chunk_stays_separate_from_turn_reply_and_plan_hold() {
-    let cmd_args = json!({"CommandLine": "sleep 1", "WaitMsBeforeAsync": 500});
+    let cmd_args = json!({"CommandLine": "sleep 30", "WaitMsBeforeAsync": 500});
     let script = json!([
         {
             "on": "session/prompt", "at": 1,
