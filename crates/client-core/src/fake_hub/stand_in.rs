@@ -1,7 +1,7 @@
 use protocol::client::{CLIENT_PROTOCOL_VERSION, HubStatus};
 use protocol::model::{
     AgentDescription, AgentFeature, AgentKind, Effort, LoginDescription, ModelChoice, ModelName, PermissionMode,
-    SessionSettings, SessionStatus,
+    SessionSettings,
 };
 use protocol::pairing::{Pairing, PairingCode, PairingLink};
 
@@ -49,13 +49,9 @@ pub(super) fn version(world: &World) -> &'static str {
 }
 
 /// Started by hand, as far as the app can tell, unless the world says otherwise. A hub a client started is never
-/// replaced, because its running chats keep it busy.
+/// replaced, because its running chats keep it busy. They're counted as the hub counts them.
 pub(super) fn status(world: &World) -> HubStatus {
-    let running = world
-        .sessions
-        .iter()
-        .filter(|s| matches!(s.status, SessionStatus::Running | SessionStatus::WaitingApproval))
-        .count();
+    let running = world.sessions.iter().filter(|s| s.status.counts_as_running(&s.background_tasks)).count();
     HubStatus {
         pid: std::process::id(),
         hub_version: version(world).to_string(),
