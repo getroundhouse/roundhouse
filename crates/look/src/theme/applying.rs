@@ -121,6 +121,8 @@ fn controls(c: &Colors) -> Vec<(&'static str, String)> {
         ("button.outline.hover.background", hex(c.text.opacity(0.06))),
         ("button.outline.active.background", hex(c.text.opacity(0.12))),
         ("input.border", hex(c.control_edge)),
+        // A field's placeholder is a hint, so it takes the hints' colour, as `look.md`'s table of colours says.
+        ("input.placeholder", hex(c.text_faint)),
         ("ring", hex(c.brand)),
         ("caret", hex(c.brand)),
         // The kit holds a selection to at most 30%, so it takes the brand's copper at that, as `selection` is.

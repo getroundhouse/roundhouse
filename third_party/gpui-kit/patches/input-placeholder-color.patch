@@ -1,0 +1,134 @@
+diff --git a/crates/base/src/input/base/element.rs b/crates/base/src/input/base/element.rs
+index 6b8da23..ebb7c42 100644
+--- a/crates/base/src/input/base/element.rs
++++ b/crates/base/src/input/base/element.rs
+@@ -3224,7 +3224,10 @@ impl<M: InputModeKind> Element for TextElement<M> {
+         let (display_text, text_color) = if is_empty {
+             (
+                 &Rope::from(placeholder.as_str()),
+-                dim(state.editor_style.muted_foreground),
++                dim(state
++                    .editor_style
++                    .placeholder
++                    .unwrap_or(state.editor_style.muted_foreground)),
+             )
+         } else if state.masked {
+             (
+diff --git a/crates/base/src/input/editor/highlighting.rs b/crates/base/src/input/editor/highlighting.rs
+index b4f52ae..cc49a4f 100644
+--- a/crates/base/src/input/editor/highlighting.rs
++++ b/crates/base/src/input/editor/highlighting.rs
+@@ -117,6 +117,9 @@ pub struct InputEditorStyle {
+     pub diagnostics: DiagnosticColors,
+     pub highlight_styles: SharedHighlightStyleResolver,
+     pub editor_invisible: Option<Hsla>,
++    /// The placeholder's text, shown while the input is empty, or
++    /// `muted_foreground` when unset.
++    pub placeholder: Option<Hsla>,
+     pub editor_active_line: Option<Hsla>,
+     pub editor_gutter_background: Option<Hsla>,
+     pub fold_icon_renderer: Option<FoldIconRenderer>,
+@@ -172,6 +175,7 @@ impl Default for InputEditorStyle {
+             diagnostics: DiagnosticColors::default(),
+             highlight_styles: Arc::new(NoHighlightStyles),
+             editor_invisible: None,
++            placeholder: None,
+             editor_active_line: None,
+             editor_gutter_background: None,
+             fold_icon_renderer: None,
+diff --git a/crates/component/src/input/input.rs b/crates/component/src/input/input.rs
+index dcb56f4..0ed0d39 100644
+--- a/crates/component/src/input/input.rs
++++ b/crates/component/src/input/input.rs
+@@ -589,6 +589,7 @@ impl RenderOnce for Input {
+                 },
+                 highlight_styles: cx.theme().highlight_theme.clone(),
+                 editor_invisible: cx.theme().highlight_theme.style.editor_invisible,
++                placeholder: Some(cx.theme().input_placeholder),
+                 editor_active_line: cx.theme().highlight_theme.style.editor_active_line,
+                 editor_gutter_background: cx.theme().highlight_theme.style.editor_gutter_background,
+                 fold_icon_renderer: Some(Rc::new(|ix, is_folded| {
+diff --git a/crates/component/src/theme/schema.rs b/crates/component/src/theme/schema.rs
+index ffc75a4..0d45e7e 100644
+--- a/crates/component/src/theme/schema.rs
++++ b/crates/component/src/theme/schema.rs
+@@ -460,6 +460,9 @@ pub struct ThemeConfigColors {
+     /// Border color for inputs such as Input, Select, etc.
+     #[serde(rename = "input.border")]
+     pub input: Option<SharedString>,
++    /// Placeholder text color for inputs, fallback to `muted.foreground`.
++    #[serde(rename = "input.placeholder")]
++    pub input_placeholder: Option<SharedString>,
+     /// Link text color.
+     #[serde(rename = "link")]
+     pub link: Option<SharedString>,
+@@ -817,6 +820,7 @@ impl ThemeColor {
+             muted_foreground,
+             fallback = self.muted.blend(self.foreground.opacity(0.7))
+         );
++        apply_color!(input_placeholder, fallback = self.muted_foreground);
+ 
+         // Button colors
+         let active_darken = if config.mode.is_dark() { 0.2 } else { 0.1 };
+@@ -1264,6 +1268,40 @@ mod tests {
+         assert_eq!(theme.window_radius, px(10.));
+     }
+ 
++    #[test]
++    fn test_apply_config_reads_the_input_placeholder_color() {
++        let config = serde_json::from_value::<ThemeConfig>(serde_json::json!({
++            "name": "Placeholder",
++            "mode": "dark",
++            "colors": { "input.placeholder": "#123456" }
++        }))
++        .unwrap();
++
++        let mut theme = Theme::default();
++        theme.apply_config(&std::rc::Rc::new(config));
++
++        assert_eq!(theme.input_placeholder, try_parse_color("#123456").unwrap());
++        assert_eq!(
++            theme.tokens.input_placeholder.color,
++            theme.input_placeholder
++        );
++    }
++
++    #[test]
++    fn test_input_placeholder_color_falls_back_to_muted_foreground() {
++        for mode in ["dark", "light"] {
++            let config = serde_json::from_value::<ThemeConfig>(serde_json::json!({
++                "name": "Derived",
++                "mode": mode,
++            }))
++            .unwrap();
++            let mut theme = Theme::default();
++            theme.apply_config(&std::rc::Rc::new(config));
++
++            assert_eq!(theme.input_placeholder, theme.muted_foreground, "{mode}");
++        }
++    }
++
+     #[test]
+     fn test_apply_config_reads_the_ghost_and_outline_button_colors() {
+         let config = serde_json::from_value::<ThemeConfig>(serde_json::json!({
+diff --git a/crates/component/src/theme/theme_color.rs b/crates/component/src/theme/theme_color.rs
+index c9a6abb..35d2d81 100644
+--- a/crates/component/src/theme/theme_color.rs
++++ b/crates/component/src/theme/theme_color.rs
+@@ -187,6 +187,8 @@ pub struct ThemeColor {
+     pub info_hover: Hsla,
+     /// Border color for inputs such as Input, Select, etc.
+     pub input: Hsla,
++    /// Placeholder text color for inputs, fallback to `muted_foreground`.
++    pub input_placeholder: Hsla,
+     /// Link text color.
+     pub link: Hsla,
+     /// Active link text color.
+@@ -483,6 +485,7 @@ define_theme_tokens! {
+     info_foreground,
+     info_hover,
+     input,
++    input_placeholder,
+     link,
+     link_active,
+     link_hover,

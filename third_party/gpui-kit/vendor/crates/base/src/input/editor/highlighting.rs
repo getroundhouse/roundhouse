@@ -1,3 +1,4 @@
+// Changed in Roundhouse's copy of gpui-kit, as third_party/README.md lists.
 use std::{ops::Range, rc::Rc, sync::Arc};
 
 use gpui::{AnyElement, Context, HighlightStyle, Hsla, SharedString, Window};
@@ -117,6 +118,9 @@ pub struct InputEditorStyle {
     pub diagnostics: DiagnosticColors,
     pub highlight_styles: SharedHighlightStyleResolver,
     pub editor_invisible: Option<Hsla>,
+    /// The placeholder's text, shown while the input is empty, or
+    /// `muted_foreground` when unset.
+    pub placeholder: Option<Hsla>,
     pub editor_active_line: Option<Hsla>,
     pub editor_gutter_background: Option<Hsla>,
     pub fold_icon_renderer: Option<FoldIconRenderer>,
@@ -172,6 +176,7 @@ impl Default for InputEditorStyle {
             diagnostics: DiagnosticColors::default(),
             highlight_styles: Arc::new(NoHighlightStyles),
             editor_invisible: None,
+            placeholder: None,
             editor_active_line: None,
             editor_gutter_background: None,
             fold_icon_renderer: None,
