@@ -1,8 +1,10 @@
 //! What a subagent has done lately, which its call shows under `Working on` while it works, as the blocks to draw:
 //! each of its newest calls after what it wrote just before it, then what it's written since, as its record has them.
 
+use protocol::capability::calls::CallOutput;
+use protocol::capability::calls::output::CommandOutput;
 use protocol::event::ContentBlock;
-use protocol::model::{Call, CallResult, Said, Subagent as Record};
+use protocol::model::{Call, CallResult, Lately as TypedLately, LatelyCall, Said, Subagent as Record};
 
 use crate::item_key::ItemKey;
 
@@ -15,8 +17,12 @@ pub(super) struct Lately {
     pub(super) result: Option<ContentBlock>,
 }
 
-/// Oldest first. A record from a hub from before it kept what a subagent's done lately has only its newest call.
+/// Oldest first. A record from a hub that keeps its calls typed has them so, and one from a hub from before it kept
+/// what a subagent's done lately has only its newest call.
 pub(super) fn lately(record: &Record) -> Vec<Lately> {
+    if let Some(work) = &record.lately {
+        return typed(work, record);
+    }
     let work = &record.recent;
     if work.calls.is_empty() && work.since.is_none() {
         return record.latest_call.iter().map(|call| called(call, None)).collect();
@@ -33,6 +39,58 @@ pub(super) fn lately(record: &Record) -> Vec<Lately> {
         .map_or_else(|| ItemKey::Since(record.call.clone()), |made| ItemKey::After(made.call.id.clone()));
     blocks.extend(work.since.as_ref().map(|said| wrote(said, since)));
     blocks
+}
+
+/// As [`lately`] reads the older form, but each call typed, with what came back as its output.
+fn typed(work: &TypedLately, record: &Record) -> Vec<Lately> {
+    let mut blocks = Vec::new();
+    for made in &work.calls {
+        blocks.extend(made.before.as_ref().map(|said| wrote(said, ItemKey::Before(made.id.clone()))));
+        blocks.push(typed_call(made));
+    }
+    let since =
+        work.calls.last().map_or_else(|| ItemKey::Since(record.call.clone()), |made| ItemKey::After(made.id.clone()));
+    blocks.extend(work.since.as_ref().map(|said| wrote(said, since)));
+    blocks
+}
+
+/// A typed call, with what came back for it when that's whole, or says what went wrong, as [`called`] has it.
+fn typed_call(made: &LatelyCall) -> Lately {
+    let block = ContentBlock::Call { id: made.id.clone(), call: made.call.clone() };
+    let result = made.result.as_ref().filter(|result| !result.cut || result.is_error).map(|result| {
+        let output = if result.cut { started(result.output.clone()) } else { result.output.clone() };
+        ContentBlock::CallResult {
+            tool_use_id: made.id.clone(),
+            output,
+            is_error: result.is_error,
+            denied: result.denied.clone(),
+            images: result.images.clone(),
+        }
+    });
+    Lately { block, key: ItemKey::Call(made.id.clone()), result }
+}
+
+/// What went wrong, of which `output` holds only the start, saying so where it's words, which are all a failure
+/// shows, as [`ContentBlock::CallResult`] says.
+fn started(output: CallOutput) -> CallOutput {
+    let more = |text: String| format!("{}…", text.trim_end());
+    match output {
+        CallOutput::Command(command) => CallOutput::Command(CommandOutput { output: more(command.output), ..command }),
+        CallOutput::Words { text } => CallOutput::Words { text: more(text) },
+        CallOutput::Report { report } => CallOutput::Report { report: more(report) },
+        other @ (CallOutput::Lines(_)
+        | CallOutput::Image { .. }
+        | CallOutput::Document { .. }
+        | CallOutput::Changed { .. }
+        | CallOutput::Found(_)
+        | CallOutput::Paths(_)
+        | CallOutput::Page { .. }
+        | CallOutput::WebResults { .. }
+        | CallOutput::Mcp { .. }
+        | CallOutput::Encrypted
+        | CallOutput::Backgrounded { .. }
+        | CallOutput::Unknown) => other,
+    }
 }
 
 fn wrote(said: &Said, key: ItemKey) -> Lately {
@@ -65,8 +123,14 @@ fn called(call: &Call, result: Option<&CallResult>) -> Lately {
 
 #[cfg(test)]
 mod tests {
+    use protocol::capability::calls::call::Read;
+    use protocol::capability::calls::output::Ended;
+    use protocol::capability::calls::{Call as TypedCall, CallOutput};
     use protocol::event::{CallKind, ContentBlock};
-    use protocol::model::{Call, CallResult, RecentCall, RecentWork, Said, Subagent, SubagentStatus};
+    use protocol::model::{
+        Call, CallResult, Lately as TypedLately, LatelyCall, LatelyResult, RecentCall, RecentWork, Said, Subagent,
+        SubagentStatus,
+    };
     use serde_json::json;
 
     use super::{Lately, lately};
@@ -92,13 +156,10 @@ mod tests {
     fn shown(record: &Subagent) -> Vec<(String, ItemKey, Option<String>)> {
         let text_of = |block: &ContentBlock| match block {
             ContentBlock::Text { text, .. } => format!("text {text}"),
-            ContentBlock::ToolUse { id, .. } => format!("call {id}"),
+            ContentBlock::ToolUse { id, .. } | ContentBlock::Call { id, .. } => format!("call {id}"),
             ContentBlock::ToolResult { text, .. } => text.clone(),
-            other @ (ContentBlock::Thinking { .. }
-            | ContentBlock::Image { .. }
-            | ContentBlock::Unknown
-            | ContentBlock::Call { .. }
-            | ContentBlock::CallResult { .. }) => {
+            ContentBlock::CallResult { output, .. } => client_core::calls::typed::output(output),
+            other @ (ContentBlock::Thinking { .. } | ContentBlock::Image { .. } | ContentBlock::Unknown) => {
                 format!("{other:?}")
             }
         };
@@ -174,5 +235,49 @@ mod tests {
         };
         let ContentBlock::ToolResult { call, exit_code, .. } = result else { panic!("a result") };
         assert_eq!((made, call, *exit_code), (&said, &said, Some(2)));
+    }
+
+    /// A hub that keeps a subagent's calls typed has what it's done lately so, which is drawn in the same order, each
+    /// call typed with what came back as its output, and what went wrong, cut short, saying so.
+    #[test]
+    fn what_a_subagent_did_lately_is_drawn_from_its_typed_calls_where_the_record_has_them() {
+        let read = |id: &str| Read { path: format!("{id}.rs"), lines: None, pages: None };
+        let came =
+            |output, cut, is_error| Some(LatelyResult { output, is_error, cut, images: Vec::new(), denied: None });
+        let failed = protocol::fixtures::command_output("No such file", Some(1), Ended::Exited);
+        let calls = vec![
+            LatelyCall {
+                before: Some(said("First this.", false)),
+                id: "b".into(),
+                call: TypedCall::Read(read("b")),
+                result: came(CallOutput::Words { text: "fn b".into() }, false, false),
+            },
+            LatelyCall {
+                before: None,
+                id: "long".into(),
+                call: TypedCall::Read(read("long")),
+                result: came(CallOutput::Words { text: "fn long".into() }, true, false),
+            },
+            LatelyCall {
+                before: None,
+                id: "failed".into(),
+                call: TypedCall::Command(protocol::fixtures::typed_command("cat gone.rs")),
+                result: came(failed, true, true),
+            },
+        ];
+        let typed = TypedLately { calls, since: Some(said("Nearly done.", false)) };
+        let record = Subagent { lately: Some(typed), ..record(RecentWork::default(), Some(call("old"))) };
+
+        assert_eq!(
+            shown(&record),
+            [
+                ("text First this.".into(), ItemKey::Before("b".into()), None),
+                ("call b".into(), ItemKey::Call("b".into()), Some("fn b".into())),
+                ("call long".into(), ItemKey::Call("long".into()), None),
+                ("call failed".into(), ItemKey::Call("failed".into()), Some("No such file…".into())),
+                ("text Nearly done.".into(), ItemKey::After("failed".into()), None),
+            ],
+            "not the older form's newest call"
+        );
     }
 }
