@@ -69,6 +69,7 @@ fn a_github_accounts_record_keeps_its_form_held_or_disconnected() {
         id: "g".into(),
         user: GithubUser { id: GithubUserId::new(7), name: "ada".into() },
         held_login,
+        installation: None,
         rev: Rev::new(2),
     };
     answered(

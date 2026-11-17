@@ -58,7 +58,8 @@ fn nothing_is_answered_but_a_get_for_github_with_something_given() {
 #[test]
 fn a_value_with_a_line_in_it_is_never_answered() {
     let state = tempfile::tempdir().unwrap();
-    let credential = GitCredential { username: "ada".into(), token: GithubToken::new("made-up\nusername=eve") };
+    let credential =
+        GitCredential { username: "ada".into(), token: GithubToken::new("made-up\nusername=eve"), identity: None };
     files(state.path()).write(&Handed::Account(credential)).unwrap();
 
     let (answer, said) = answered(state.path(), "get", ASKED);

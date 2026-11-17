@@ -20,7 +20,11 @@ fn set(credential: GithubCredential) -> WorkerRequest {
 }
 
 fn ada() -> GithubCredential {
-    GithubCredential::Account(GitCredential { username: "ada".into(), token: GithubToken::new("made-up") })
+    GithubCredential::Account(GitCredential {
+        username: "ada".into(),
+        token: GithubToken::new("made-up"),
+        identity: None,
+    })
 }
 
 /// The directory a worker in `dir` keeps the files in.

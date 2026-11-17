@@ -1,8 +1,7 @@
-use std::fmt;
-
 use serde::{Deserialize, Serialize};
 
 use super::super::{GithubAccountId, GithubUsername, Rev};
+use super::{GithubInstallation, GithubUserId};
 
 /// A GitHub account the hub holds, or held, a login for, as a record of its own, so every client shows the same of it.
 /// The default, as [`GithubSettings::account`](crate::model::GithubSettings::account) names it, is the one agents push
@@ -16,37 +15,21 @@ pub struct GithubAccount {
     /// `None` once its login was disconnected, or its file is gone.
     #[serde(default)]
     pub held_login: Option<HeldGithubLogin>,
+    /// Where it's installed, for one that's an installation of an app of your own, whose `user` is then the app's bot.
+    /// It stays once its login has gone, as when the app was removed or uninstalled there. `None` for any other, and
+    /// from a hub from before apps.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub installation: Option<GithubInstallation>,
     #[serde(default)]
     pub rev: Rev,
 }
 
-/// A GitHub user: its number, which never changes, and the name it goes by, which its user can change.
+/// A GitHub user: its number, which never changes, and the name it goes by, which its user can change. An organization
+/// is numbered and named as a user is, and so is an app's bot, such as `ada-roundhouse[bot]`.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct GithubUser {
     pub id: GithubUserId,
     pub name: GithubUsername,
-}
-
-/// GitHub's own number for a user, which tells two users apart where their names can't, as when one renames itself
-/// and another takes the name. A plain number on the wire.
-#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Hash)]
-#[serde(transparent)]
-pub struct GithubUserId(u64);
-
-impl GithubUserId {
-    pub const fn new(id: u64) -> Self {
-        Self(id)
-    }
-
-    pub const fn get(self) -> u64 {
-        self.0
-    }
-}
-
-impl fmt::Display for GithubUserId {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.0.fmt(f)
-    }
 }
 
 /// What a [`GithubAccount`]'s record says of the login the hub holds for it, as
@@ -60,7 +43,9 @@ pub struct HeldGithubLogin {
     pub connected_at_ms: i64,
     /// When it ends, by GitHub's word, converted to the hub's clock. `None` for one that doesn't end, such as a token
     /// made with no end, and for one whose end GitHub gave in a form this hub couldn't read. For a sign-in, when the
-    /// token it gave ends, which renewing it moves.
+    /// token it gave ends, which renewing it moves. `None` for an app's installation, whose token the hub makes again
+    /// from the app's key before each ends, an hour after it was made, so its record doesn't change every hour.
+    /// *Unconfirmed.*
     #[serde(default)]
     pub ends_at_ms: Option<i64>,
     /// Whether it can't be renewed, so the person has to sign in again, as when a sign-in's refresh token has ended or
@@ -87,6 +72,10 @@ pub enum GithubLoginKind {
     /// Signing in with GitHub, through the hub's OAuth App, as a [`GithubSignIn`](super::GithubSignIn) did, whose token
     /// GitHub ends after a few hours, and which the hub can renew with the refresh token it was given beside it.
     SignIn,
+    /// An installation of an app of your own, as [`GithubInstallation`] says, whose token, which lasts an hour, the hub
+    /// makes from the app's key, and makes again before it ends, so it needs nothing of the person while the app's
+    /// installed there.
+    App,
     /// One from a newer peer.
     #[serde(other)]
     Unknown,

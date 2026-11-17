@@ -5,9 +5,9 @@
 use serde::{Deserialize, Serialize};
 
 use super::{
-    Account, AccountId, CommentId, DiffComment, FoundGithubLogin, GithubAccount, GithubAccountId, GithubSignIn,
-    GithubSignInId, HubSettings, NewWorkspaceDraft, ProviderName, Repo, RepoId, Rev, Session, SessionId, Subagent,
-    SubagentId, Workspace, WorkspaceId,
+    Account, AccountId, CommentId, DiffComment, FoundGithubLogin, GithubAccount, GithubAccountId, GithubApp,
+    GithubAppId, GithubSignIn, GithubSignInId, HubSettings, NewWorkspaceDraft, ProviderName, Repo, RepoId, Rev,
+    Session, SessionId, Subagent, SubagentId, Workspace, WorkspaceId,
 };
 
 /// Which record, of which kind. A kind this build doesn't know reads as `Unknown`.
@@ -53,6 +53,10 @@ pub enum RecordKey {
     FoundGithubLogin {
         provider: ProviderName,
     },
+    /// Sent once it has been removed, as [`GithubApp`] says.
+    GithubApp {
+        id: GithubAppId,
+    },
     #[serde(other)]
     Unknown,
 }
@@ -72,6 +76,7 @@ pub enum Record {
     GithubAccount(GithubAccount),
     GithubSignIn(GithubSignIn),
     FoundGithubLogin(FoundGithubLogin),
+    GithubApp(GithubApp),
 }
 
 impl Record {
@@ -90,6 +95,7 @@ impl Record {
             Record::GithubAccount(account) => RecordKey::GithubAccount { id: account.id.clone() },
             Record::GithubSignIn(sign_in) => RecordKey::GithubSignIn { id: sign_in.id.clone() },
             Record::FoundGithubLogin(found) => RecordKey::FoundGithubLogin { provider: found.provider.clone() },
+            Record::GithubApp(app) => RecordKey::GithubApp { id: app.id },
         }
     }
 
@@ -107,6 +113,7 @@ impl Record {
             Record::GithubAccount(account) => account.rev,
             Record::GithubSignIn(sign_in) => sign_in.rev,
             Record::FoundGithubLogin(found) => found.rev,
+            Record::GithubApp(app) => app.rev,
         }
     }
 }
@@ -136,6 +143,9 @@ pub struct Records {
     /// Empty from a hub that doesn't find them, and until a provider has been asked since the hub started.
     #[serde(default)]
     pub found_github_logins: Vec<FoundGithubLogin>,
+    /// Empty from a hub from before apps of your own.
+    #[serde(default)]
+    pub github_apps: Vec<GithubApp>,
     /// The hub's newest revision when this was read. A record missing from the list is gone, unless
     /// a client holds a copy newer than this.
     pub rev: Rev,
@@ -155,6 +165,7 @@ impl Records {
             github_accounts,
             github_sign_ins,
             found_github_logins,
+            github_apps,
             rev: _,
         } = self;
         let records = repos.into_iter().map(Record::Repo);
@@ -166,7 +177,8 @@ impl Records {
         let records = records.chain(new_workspace_draft.into_iter().map(Record::NewWorkspaceDraft));
         let records = records.chain(github_accounts.into_iter().map(Record::GithubAccount));
         let records = records.chain(github_sign_ins.into_iter().map(Record::GithubSignIn));
-        records.chain(found_github_logins.into_iter().map(Record::FoundGithubLogin))
+        let records = records.chain(found_github_logins.into_iter().map(Record::FoundGithubLogin));
+        records.chain(github_apps.into_iter().map(Record::GithubApp))
     }
 }
 
@@ -176,11 +188,12 @@ mod tests {
     use crate::fixtures;
 
     #[test]
-    fn a_list_gives_its_github_accounts_sign_ins_and_found_logins_as_records() {
+    fn a_list_gives_its_github_accounts_sign_ins_found_logins_and_apps_as_records() {
         let list = Records {
             github_accounts: vec![fixtures::github_account("g")],
             github_sign_ins: vec![fixtures::github_sign_in("s")],
             found_github_logins: vec![fixtures::found_github_login("local")],
+            github_apps: vec![fixtures::github_app(9)],
             ..Records::default()
         };
 
@@ -188,6 +201,7 @@ mod tests {
 
         let found = RecordKey::FoundGithubLogin { provider: "local".into() };
         let signing_in = RecordKey::GithubSignIn { id: "s".into() };
-        assert_eq!(keys, [RecordKey::GithubAccount { id: "g".into() }, signing_in, found]);
+        let app = RecordKey::GithubApp { id: GithubAppId::new(9) };
+        assert_eq!(keys, [RecordKey::GithubAccount { id: "g".into() }, signing_in, found, app]);
     }
 }

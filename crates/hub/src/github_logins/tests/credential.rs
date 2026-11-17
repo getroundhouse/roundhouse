@@ -15,7 +15,11 @@ pub(super) fn sent(logins: &GithubLogins) -> GithubCredential {
 }
 
 pub(super) fn account(username: &str, token: &str) -> GithubCredential {
-    GithubCredential::Account(GitCredential { username: username.into(), token: GithubToken::new(token) })
+    GithubCredential::Account(GitCredential {
+        username: username.into(),
+        token: GithubToken::new(token),
+        identity: None,
+    })
 }
 
 /// What a block says, which fails for anything but a block, since nothing but one may take a lost default's place.

@@ -1,12 +1,14 @@
 use super::{
-    admin, agent, attachments, comments, feed, hello, log, new_workspace, records, request, sessions, workspaces,
+    admin, agent, attachments, comments, feed, github_apps, hello, log, new_workspace, records, request, sessions,
+    workspaces,
 };
 use crate::attachment::Attachment;
 use crate::event::SessionEvent;
 use crate::find::Found;
 use crate::model::{
-    Account, DiffComment, FileContents, FileOpened, FilePages, GitDiff, GitStatus, GithubAccount, GithubSignIn,
-    HubSettings, NewWorkspaceDraft, Records, Repo, Session, SessionAccount, TitleError, Workspace, WorktreeFiles,
+    Account, DiffComment, FileContents, FileOpened, FilePages, GitDiff, GitStatus, GithubAccount, GithubApp,
+    GithubSignIn, HubSettings, NewWorkspaceDraft, Records, Repo, Session, SessionAccount, TitleError, Workspace,
+    WorktreeFiles,
 };
 use crate::tail::{StreamDelta, Tail};
 use feed::HubNotice;
@@ -94,6 +96,8 @@ pub enum ClientResponse {
     Account(Account),
     GithubAccount(GithubAccount),
     GithubSignIn(GithubSignIn),
+    GithubApp(GithubApp),
+    GithubAppManifest(github_apps::GithubAppManifest),
     WorktreeFiles(WorktreeFiles),
     FileContents(FileContents),
     FileOpened(FileOpened),

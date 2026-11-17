@@ -44,8 +44,9 @@ pub use effort::Effort;
 pub use files::{FileContents, FileOpened, FilePage, FilePages, OpenedText, PageLine, WorktreeFiles};
 pub use git::{GitDiff, GitFile, GitStatus};
 pub use github_account::{
-    FoundGithubLogin, GhLogin, GhLoginWorks, GithubAccount, GithubLoginKind, GithubSignIn, GithubSignInStatus,
-    GithubToken, GithubUser, GithubUserId, HeldGithubLogin,
+    FoundGithubLogin, GhLogin, GhLoginWorks, GithubAccount, GithubApp, GithubAppId, GithubInstallation,
+    GithubInstallationId, GithubLoginKind, GithubSignIn, GithubSignInStatus, GithubToken, GithubUser, GithubUserId,
+    HeldGithubLogin,
 };
 pub use hub_settings::{AccountDefault, GithubSettings, HubSettings, HubSettingsChange};
 pub use model_name::{ModelName, ModelNameError};
@@ -70,9 +71,9 @@ pub(crate) use ids::ids;
 mod tokens;
 pub use ids::{
     AccountId, AgentSessionId, ApprovalId, AskKey, AttachmentId, BranchName, ChildWorktreeId, ClientMessageId,
-    ClientRequestId, CommentId, CommitId, DeviceId, GithubAccountId, GithubSignInId, GithubUserCode, GithubUsername,
-    HubId, InstanceId, MessageId, ProviderName, RemoteName, RepoId, SessionId, SubagentId, TaskId, ToolUseId, WaitId,
-    WorkerTarget, WorkspaceId,
+    ClientRequestId, CommentId, CommitId, DeviceId, GithubAccountId, GithubAppSlug, GithubSignInId, GithubUserCode,
+    GithubUsername, HubId, InstanceId, MessageId, ProviderName, RemoteName, RepoId, SessionId, SubagentId, TaskId,
+    ToolUseId, WaitId, WorkerTarget, WorkspaceId,
 };
 mod repo;
 pub use repo::Repo;

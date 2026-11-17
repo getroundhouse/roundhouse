@@ -56,7 +56,7 @@ async fn a_check_renews_a_sign_in_thats_due_and_tells_every_client_of_its_record
     let ends_at_ms = account.held_login.unwrap().ends_at_ms.unwrap();
     assert!(ends_at_ms >= checked_at_ms + 8 * HOUR_MS, "it ends 8 hours from when GitHub gave it, not {ends_at_ms}");
     assert_eq!(hub.store.github_account(&account.id).unwrap().as_ref(), Some(account));
-    let renewed = GitCredential { username: "ada".into(), token: GithubToken::new("a-renewed-token") };
+    let renewed = GitCredential { username: "ada".into(), token: GithubToken::new("a-renewed-token"), identity: None };
     assert_eq!(sent(&hub), GithubCredential::Account(renewed));
     let asked = github.asked();
     assert_eq!(asked.len(), 1, "GitHub was asked once, and the check waited for its answer");
@@ -96,7 +96,7 @@ async fn a_renewal_that_may_pass_leaves_the_sign_in_as_it_is_and_past_its_end_it
     assert_eq!(github.asked().len(), 2, "each check asked GitHub");
     assert_eq!(told(&mut feed), [], "no record changed");
     assert_eq!(hub.store.list_records().unwrap().github_accounts, before);
-    let token = GitCredential { username: "ada".into(), token: GithubToken::new("a-token") };
+    let token = GitCredential { username: "ada".into(), token: GithubToken::new("a-token"), identity: None };
     assert_eq!(in_time, GithubCredential::Account(token));
     let GithubCredential::Blocked { reason } = sent(&hub) else { panic!("{:?}", sent(&hub)) };
     assert!(reason.contains("has ended, and Roundhouse is renewing it"), "{reason}");

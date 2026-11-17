@@ -27,8 +27,21 @@ fn any_sign_in() -> impl Strategy<Value = GithubSignIn> {
     })
 }
 
+fn any_user() -> impl Strategy<Value = GithubUser> {
+    (any::<u64>(), "[a-z][a-z0-9-]{0,38}(\\[bot\\])?")
+        .prop_map(|(id, name)| GithubUser { id: GithubUserId::new(id), name: GithubUsername::from(name) })
+}
+
+fn any_installation() -> impl Strategy<Value = GithubInstallation> {
+    (any::<u64>(), any::<u64>(), any_user()).prop_map(|(app, id, on)| GithubInstallation {
+        app: GithubAppId::new(app),
+        id: GithubInstallationId::new(id),
+        on,
+    })
+}
+
 fn any_account() -> impl Strategy<Value = GithubAccount> {
-    let how = prop_oneof![Just(GithubLoginKind::Token), Just(GithubLoginKind::SignIn)];
+    let how = prop_oneof![Just(GithubLoginKind::Token), Just(GithubLoginKind::SignIn), Just(GithubLoginKind::App)];
     let held_login = (how, any::<i64>(), proptest::option::of(any::<i64>()), any::<bool>()).prop_map(
         |(how, connected_at_ms, ends_at_ms, needs_sign_in)| HeldGithubLogin {
             how,
@@ -37,15 +50,30 @@ fn any_account() -> impl Strategy<Value = GithubAccount> {
             needs_sign_in,
         },
     );
-    let name = "[a-z][a-z0-9-]{0,38}".prop_map(GithubUsername::from);
-    (any::<u64>(), name, proptest::option::of(held_login), any::<u64>()).prop_map(|(user, name, held_login, rev)| {
-        GithubAccount {
+    let installation = proptest::option::of(any_installation());
+    (any_user(), proptest::option::of(held_login), installation, any::<u64>()).prop_map(
+        |(user, held_login, installation, rev)| GithubAccount {
             id: GithubAccountId::from("6f1c2a9e-made-up"),
-            user: GithubUser { id: GithubUserId::new(user), name },
+            user,
             held_login,
+            installation,
             rev: Rev::new(rev),
-        }
-    })
+        },
+    )
+}
+
+fn any_app() -> impl Strategy<Value = GithubApp> {
+    let slug = "[a-z][a-z0-9-]{0,33}".prop_map(GithubAppSlug::from);
+    (any::<u64>(), slug, ".{0,34}", any_user(), proptest::option::of(any_user()), any::<u64>()).prop_map(
+        |(id, slug, name, owner, bot, rev)| GithubApp {
+            id: GithubAppId::new(id),
+            slug,
+            name,
+            owner,
+            bot,
+            rev: Rev::new(rev),
+        },
+    )
 }
 
 fn any_gh_login() -> impl Strategy<Value = GhLogin> {
@@ -73,7 +101,15 @@ proptest! {
         prop_assert_eq!(serde_json::from_str::<FoundGithubLogin>(&written).unwrap(), found);
     }
 
-    /// Held or disconnected, ending or not.
+    /// Whoever's bot it is, numbered or not.
+    #[test]
+    fn an_apps_record_reads_back_as_it_was(app in any_app()) {
+        let written = serde_json::to_string(&app).unwrap();
+
+        prop_assert_eq!(serde_json::from_str::<GithubApp>(&written).unwrap(), app);
+    }
+
+    /// Held or disconnected, ending or not, an installation or not.
     #[test]
     fn an_accounts_record_reads_back_as_it_was(account in any_account()) {
         let written = serde_json::to_string(&account).unwrap();

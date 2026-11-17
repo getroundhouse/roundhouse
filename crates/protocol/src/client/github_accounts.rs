@@ -49,8 +49,11 @@ impl Reply for GithubAccount {
 /// Has the hub forget the login it holds for the account, and answers with the account's record, which stays, with no
 /// login, since the default can name it. Disconnecting the default leaves it the default, holding no login that can be
 /// used, until it's connected again or another is chosen. It doesn't revoke the token on GitHub, which works wherever
-/// else it's kept until it ends. Disconnecting an account whose login the hub doesn't hold changes nothing, so sending
-/// it again does nothing more. Refused with `NotFound` when the hub has no record of the account.
+/// else it's kept until it ends. Disconnecting an app of your own's installation has the hub stop making its tokens,
+/// and the hub's own looks for where the app is installed leave it disconnected while the app stays installed there:
+/// only [`GithubAppInstallationsConnect`](super::github_apps::GithubAppInstallationsConnect) connects it again. It
+/// doesn't uninstall the app on GitHub. Disconnecting an account whose login the hub doesn't hold changes nothing, so
+/// sending it again does nothing more. Refused with `NotFound` when the hub has no record of the account.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct GithubAccountDisconnect {
     pub id: GithubAccountId,

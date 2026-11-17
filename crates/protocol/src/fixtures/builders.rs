@@ -5,10 +5,10 @@ use crate::event::{
 };
 use crate::model::{
     Account, AgentKind, ApprovalId, BranchName, Call, CallResult, ChildStatus, ChildWorktree, Draft, Effort,
-    FoundGithubLogin, GhLogin, GhLoginWorks, GithubAccount, GithubLoginKind, GithubSignIn, GithubSignInStatus,
-    GithubUser, GithubUserId, HeldGithubLogin, MadeBy, ModelName, PermissionMode, Place, RecentWork, Rev, Seq, Session,
-    SessionStatus, SetupStatus, Subagent, SubagentId, SubagentStatus, TitleSource, ToolUseId, Workspace,
-    WorkspaceStatus,
+    FoundGithubLogin, GhLogin, GhLoginWorks, GithubAccount, GithubApp, GithubAppId, GithubLoginKind, GithubSignIn,
+    GithubSignInStatus, GithubUser, GithubUserId, HeldGithubLogin, MadeBy, ModelName, PermissionMode, Place,
+    RecentWork, Rev, Seq, Session, SessionStatus, SetupStatus, Subagent, SubagentId, SubagentStatus, TitleSource,
+    ToolUseId, Workspace, WorkspaceStatus,
 };
 
 /// The session `id`, in the workspace `w`, idle with nothing in its log. Its agent is Claude, running Opus with full
@@ -129,6 +129,19 @@ pub fn github_account(id: &str) -> GithubAccount {
             ends_at_ms: None,
             needs_sign_in: false,
         }),
+        installation: None,
+        rev: Rev::default(),
+    }
+}
+
+/// The app of your own `id`, `ada-roundhouse`, made by ada, whose bot GitHub has numbered.
+pub fn github_app(id: u64) -> GithubApp {
+    GithubApp {
+        id: GithubAppId::new(id),
+        slug: "ada-roundhouse".into(),
+        name: "Ada's Roundhouse".to_string(),
+        owner: GithubUser { id: GithubUserId::new(1), name: "ada".into() },
+        bot: Some(GithubUser { id: GithubUserId::new(41), name: "ada-roundhouse[bot]".into() }),
         rev: Rev::default(),
     }
 }

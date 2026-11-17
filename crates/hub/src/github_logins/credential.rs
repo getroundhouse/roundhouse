@@ -5,13 +5,16 @@
 use std::io;
 
 use protocol::client::ApiError;
-use protocol::model::{GithubAccount, GithubLoginKind, GithubToken, GithubUsername};
-use protocol::worker::{GitCredential, GithubCredential};
+use protocol::model::{GithubAccount, GithubLoginKind, GithubToken, GithubUser, GithubUsername};
+use protocol::worker::{GitCredential, GitIdentity, GithubCredential};
 use tokio::sync::watch;
 use tracing::info;
 
 use super::{GithubLogin, GithubLogins};
 use crate::login_files::{Locked, Stored};
+
+/// Who git says it is as it gives GitHub an installation's token, as GitHub's docs give.
+const INSTALLATION_USERNAME: &str = "x-access-token";
 
 /// Why the login the hub holds for an account can't be used now.
 pub(super) enum Unusable {
@@ -51,7 +54,9 @@ impl GithubLogins {
         changed
     }
 
-    /// The token the hub holds for `account`, a token's or a sign-in's, or why it can't be used at `now_ms`.
+    /// The token the hub holds for `account`, a token's, a sign-in's or an installation's, or why it can't be used at
+    /// `now_ms`. An installation's record doesn't say when its token ends, as
+    /// [`HeldGithubLogin::ends_at_ms`](protocol::model::HeldGithubLogin::ends_at_ms) says, so its file does.
     pub(super) fn token_of(
         &self,
         files: &Locked<'_, GithubLogin>,
@@ -71,7 +76,10 @@ impl GithubLogins {
         }
         let Some(file) = self.store.github_login_file(&account.id)? else { return Ok(Err(Unusable::Disconnected)) };
         Ok(match files.read(&file) {
-            Ok(Stored::Secret(login)) => Ok(login.token().clone()),
+            Ok(Stored::Secret(GithubLogin::Installation(made))) if made.token_ends_at_ms <= now_ms => {
+                Err(Unusable::Renewing)
+            }
+            Ok(Stored::Secret(login)) => login.token().cloned().ok_or(Unusable::Unreadable(None)),
             Ok(Stored::Newer) => Err(Unusable::Newer),
             Ok(Stored::Nothing) => Err(Unusable::Unreadable(None)),
             Err(e) => Err(Unusable::Unreadable(Some(e))),
@@ -130,11 +138,24 @@ impl GithubLogins {
             Err(e) => return unread(&e),
         };
         match self.token_of(files, &account, now_ms) {
-            Ok(Ok(token)) => GithubCredential::Account(GitCredential { username: account.user.name, token }),
-            Ok(Err(unusable)) => lost(&account.user.name, &unusable),
+            Ok(Ok(token)) => GithubCredential::Account(credential_of(account, token)),
+            Ok(Err(unusable)) => lost(&account, &unusable),
             Err(e) => unread(&e.message),
         }
     }
+}
+
+/// What git and `gh` are given for `account`, whose login's token is `token`: its username, or, for an app's
+/// installation, `x-access-token`, as GitHub's docs give git for an installation's token, with the app's bot as the
+/// commit identity, with the address GitHub links to the bot, so commits, pushes and pull requests all say the bot.
+/// Other accounts are given no commit identity yet, which the credential can carry for any account.
+fn credential_of(account: GithubAccount, token: GithubToken) -> GitCredential {
+    if account.installation.is_none() {
+        return GitCredential { username: account.user.name, token, identity: None };
+    }
+    let GithubUser { id, name } = account.user;
+    let identity = GitIdentity { email: format!("{id}+{name}@users.noreply.github.com"), name: name.to_string() };
+    GitCredential { username: INSTALLATION_USERNAME.into(), token, identity: Some(identity) }
 }
 
 /// A block, saying `why` agents push as nobody, and `to_do` about it. Git says it as it refuses to push, in a terminal
@@ -143,8 +164,35 @@ fn blocked(why: &str, to_do: &str) -> GithubCredential {
     GithubCredential::Blocked { reason: format!("{why}, so this workspace's agents push to GitHub as nobody. {to_do}") }
 }
 
+/// The block for a default, `account`, whose login can't be used, as `unusable` says. An app's installation is named
+/// with where it's installed, and is connected again, and renewed, with the app.
+fn lost(account: &GithubAccount, unusable: &Unusable) -> GithubCredential {
+    let Some(installation) = &account.installation else { return lost_login(&account.user.name, unusable) };
+    let name = format!("{}, installed on {}", account.user.name, installation.on.name);
+    let elsewhere = "or choose another default in Roundhouse's Settings.";
+    match unusable {
+        Unusable::Disconnected => blocked(
+            &format!("Roundhouse's default GitHub account, {name}, was disconnected, or the app uninstalled there"),
+            &format!(
+                "Install the app there again, connect its installations again in Roundhouse's Settings, {elsewhere}"
+            ),
+        ),
+        Unusable::Renewing => blocked(
+            &format!(
+                "The token of Roundhouse's default GitHub account, {name}, has ended, and Roundhouse is making another"
+            ),
+            &format!(
+                "It tries every minute until GitHub answers. If this goes on, check the app is still on GitHub, {elsewhere}"
+            ),
+        ),
+        Unusable::Ended | Unusable::SignInAgain | Unusable::Newer | Unusable::Unreadable(_) => {
+            lost_login(&name.into(), unusable)
+        }
+    }
+}
+
 /// The block for a default, `name`, whose login can't be used, as `unusable` says.
-fn lost(name: &GithubUsername, unusable: &Unusable) -> GithubCredential {
+fn lost_login(name: &GithubUsername, unusable: &Unusable) -> GithubCredential {
     let connect_again = "Connect it again in Roundhouse's Settings, or choose another default there.";
     match unusable {
         Unusable::Disconnected => {

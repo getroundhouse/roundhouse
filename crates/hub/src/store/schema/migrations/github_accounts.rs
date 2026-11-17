@@ -48,3 +48,40 @@ pub(super) const FOUND_GITHUB_LOGINS: &str = r"
         UPDATE found_github_logins SET rev = (SELECT value FROM counters WHERE name = 'rev') WHERE rowid = NEW.rowid;
     END;
 ";
+
+/// Each app of your own the hub holds the key of, as a record the feed announces, by GitHub's number for it: what
+/// GitHub calls it, who made it, its bot once GitHub has said its number, the file in the GitHub logins' directory its
+/// key is in, as `crate::login_files` says, and the code GitHub made it from, which GitHub takes only once, so the same
+/// code again is the same app. Removing it deletes its row, and its removal moves the revision, as a sign-in's does.
+/// Each GitHub account that's an installation of one says which app, which installation, and the user or organization
+/// it's on, which stay once its login has gone, as GitHub numbers and names them, and every account from before is
+/// none.
+pub(super) const GITHUB_APPS: &str = r"
+    CREATE TABLE github_apps (
+        id INTEGER PRIMARY KEY,
+        slug TEXT NOT NULL,
+        name TEXT NOT NULL,
+        owner_id INTEGER NOT NULL,
+        owner TEXT NOT NULL,
+        bot_id INTEGER,
+        bot TEXT,
+        key_file TEXT NOT NULL,
+        made_from TEXT NOT NULL UNIQUE,
+        rev INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE TRIGGER github_apps_rev_on_insert AFTER INSERT ON github_apps BEGIN
+        UPDATE counters SET value = value + 1 WHERE name = 'rev';
+        UPDATE github_apps SET rev = (SELECT value FROM counters WHERE name = 'rev') WHERE rowid = NEW.rowid;
+    END;
+    CREATE TRIGGER github_apps_rev_on_update AFTER UPDATE ON github_apps WHEN NEW.rev = OLD.rev BEGIN
+        UPDATE counters SET value = value + 1 WHERE name = 'rev';
+        UPDATE github_apps SET rev = (SELECT value FROM counters WHERE name = 'rev') WHERE rowid = NEW.rowid;
+    END;
+    CREATE TRIGGER github_apps_rev_on_delete AFTER DELETE ON github_apps BEGIN
+        UPDATE counters SET value = value + 1 WHERE name = 'rev';
+    END;
+    ALTER TABLE github_accounts ADD COLUMN app_id INTEGER;
+    ALTER TABLE github_accounts ADD COLUMN installation_id INTEGER;
+    ALTER TABLE github_accounts ADD COLUMN installed_on_id INTEGER;
+    ALTER TABLE github_accounts ADD COLUMN installed_on TEXT;
+";

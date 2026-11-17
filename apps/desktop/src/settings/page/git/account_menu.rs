@@ -29,7 +29,10 @@ pub(super) fn menu(drawing: &Drawing<'_>, account: &GithubAccount, works: bool, 
         let menu = if default { menu } else { menu.item(item("Make default", make_default).disabled(!works)) };
         let menu = match account.held_login.map(|held| held.how) {
             Some(GithubLoginKind::SignIn) => menu.item(item("Sign in again", sign_in_again)),
-            Some(GithubLoginKind::Token | GithubLoginKind::Unknown) => menu.item(item("Renew", renew)),
+            // An app's installation, as an older client takes it, until the page shows apps of your own.
+            Some(GithubLoginKind::Token | GithubLoginKind::App | GithubLoginKind::Unknown) => {
+                menu.item(item("Renew", renew))
+            }
             None => menu.item(item("Connect again", renew)).item(item("Sign in again", sign_in_again)),
         };
         if account.held_login.is_none() {

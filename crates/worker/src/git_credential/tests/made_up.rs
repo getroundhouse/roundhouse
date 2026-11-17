@@ -13,5 +13,5 @@ pub(super) fn files(state: &Path) -> Files {
 }
 
 pub(super) fn ada() -> GitCredential {
-    GitCredential { username: "ada".into(), token: GithubToken::new("made-up") }
+    GitCredential { username: "ada".into(), token: GithubToken::new("made-up"), identity: None }
 }

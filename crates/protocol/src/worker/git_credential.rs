@@ -61,11 +61,29 @@ pub enum GithubCredential {
 
 /// A GitHub account's username and token, which git gives GitHub for github.com, whatever username a remote names,
 /// and `gh` says it's logged in as. Its token's `Debug` says only that it's there, so a request that carries one can
-/// be logged whole. Who commits are by, for an app, comes with the app.
+/// be logged whole. For an installation of an app of your own, the username is `x-access-token`, as GitHub's docs give
+/// git for an installation's token.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct GitCredential {
     pub username: GithubUsername,
     pub token: GithubToken,
+    /// Who commits are by, as the account the hub added, whichever way it was connected, so `git commit` works on a
+    /// machine with no git config of its own, and commits say the account rather than whoever the machine's git does.
+    /// A worker sets it as git's `user.name` and `user.email` for every process it starts, from their next `git`, over
+    /// the repository's and the person's own, and takes them out again with a credential that has none. A worker from
+    /// before it reads past it, so it pushes as the account, and commits as whoever the machine's git says. `None`
+    /// from a hub from before it, and from one that gives an account none, which commits as the machine's git says.
+    /// This hub gives one only to an app's installation, as its bot.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub identity: Option<GitIdentity>,
+}
+
+/// Who a commit is by, as git's `user.name` and `user.email` say it: for an app's installation, its bot,
+/// `ada-roundhouse[bot]`, with the address GitHub links to the bot, `41+ada-roundhouse[bot]@users.noreply.github.com`.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct GitIdentity {
+    pub name: String,
+    pub email: String,
 }
 
 #[cfg(test)]
@@ -76,8 +94,16 @@ mod tests {
     use super::*;
 
     fn credential(token: String) -> impl Strategy<Value = GithubCredential> {
-        let account = "[a-z][a-z0-9-]{0,38}".prop_map(move |username| {
-            GithubCredential::Account(GitCredential { username: username.into(), token: GithubToken::new(&token) })
+        let identity = proptest::option::of(("[a-z][a-z0-9-]{0,30}", 1..u64::MAX).prop_map(|(slug, id)| GitIdentity {
+            name: format!("{slug}[bot]"),
+            email: format!("{id}+{slug}[bot]@users.noreply.github.com"),
+        }));
+        let account = ("[a-z][a-z0-9-]{0,38}", identity).prop_map(move |(username, identity)| {
+            GithubCredential::Account(GitCredential {
+                username: username.into(),
+                token: GithubToken::new(&token),
+                identity,
+            })
         });
         let blocked = ".{0,40}".prop_map(|reason| GithubCredential::Blocked { reason });
         prop_oneof![Just(GithubCredential::MachineOwn), account, blocked]

@@ -9,11 +9,11 @@ use protocol::event::ApprovalDecision;
 use protocol::frame;
 use protocol::model::{
     AgentAccount, AgentKind, AgentLogin, Branches, FileContents, FileOpened, FilePage, FilePages, GitDiff, GitStatus,
-    GithubToken, Head, LoginToken, ModelName, PageLine, RunId, WorktreeFiles,
+    Head, LoginToken, ModelName, PageLine, RunId, WorktreeFiles,
 };
 use protocol::worker::{
-    self, AgentSpec, GithubCredential, RateLimit, RunningAgent, ToolsToken, WorkerCall, WorkerFrame, WorkerOutcome,
-    WorkerRequest, WorkerResponse,
+    self, AgentSpec, RateLimit, RunningAgent, ToolsToken, WorkerCall, WorkerFrame, WorkerOutcome, WorkerRequest,
+    WorkerResponse,
 };
 
 use super::keeps_its_form;
@@ -225,36 +225,6 @@ fn a_request_with_no_fields_reads_with_fields_it_doesnt_know() {
     assert_eq!(read(r#"{"method":"stop","newer":1}"#), WorkerRequest::Stop);
     assert_eq!(read(r#"{"method":"running_agents","newer":1}"#), WorkerRequest::RunningAgents);
     assert_eq!(read(r#"{"method":"cancel_setup","newer":1}"#), WorkerRequest::CancelSetup);
-}
-
-#[test]
-fn every_git_credential_keeps_its_form() {
-    let set = |credential| WorkerRequest::GitCredentialSet(worker::GitCredentialSet { credential });
-    let ada = worker::GitCredential { username: "ada".into(), token: GithubToken::new("made-up") };
-    let renew = "Renew ada in Settings".to_string();
-
-    asked(set(GithubCredential::MachineOwn), r#"{"method":"git_credential_set","credential":{"kind":"machine_own"}}"#);
-    asked(
-        set(GithubCredential::Account(ada)),
-        r#"{"method":"git_credential_set","credential":{"kind":"account","username":"ada","token":"made-up"}}"#,
-    );
-    asked(
-        set(GithubCredential::Blocked { reason: renew }),
-        r#"{"method":"git_credential_set","credential":{"kind":"blocked","reason":"Renew ada in Settings"}}"#,
-    );
-}
-
-/// From a newer hub, which a worker treats as blocked rather than as one it knows.
-#[test]
-fn a_git_credential_of_a_kind_this_build_doesnt_know_reads_as_unknown() {
-    let line = r#"{"method":"git_credential_set","credential":{"kind":"app","installation":9,"token":"made-up"}}"#;
-
-    let read = frame::decode::<WorkerRequest>(line.as_bytes()).unwrap();
-
-    assert_eq!(
-        read,
-        WorkerRequest::GitCredentialSet(worker::GitCredentialSet { credential: GithubCredential::Unknown })
-    );
 }
 
 #[test]

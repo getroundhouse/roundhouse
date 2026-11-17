@@ -6,7 +6,7 @@ use crate::hub::Hub;
 use crate::store::AddedBy;
 use protocol::client::{
     ApiError, ClientRequest, ClientResponse, ErrorCode, accounts, admin, agent, attachments, comments, drafts, files,
-    github_accounts, log, new_workspace, queue, records, sessions, subscriptions, waits, workspaces,
+    github_accounts, github_apps, log, new_workspace, queue, records, sessions, subscriptions, waits, workspaces,
 };
 use protocol::model::{Place, Seq};
 use std::sync::Arc;
@@ -207,6 +207,12 @@ pub(super) async fn handle(
         R::GithubSignInCancel(github_accounts::GithubSignInCancel { id }) => {
             C::GithubSignIn(hub.github_sign_in_cancel(id).await?)
         }
+        R::GithubAppManifestWrite(asked) => C::GithubAppManifest(crate::github::manifest(&asked)?),
+        R::GithubAppMake(github_apps::GithubAppMake { code }) => C::GithubApp(hub.github_app_make(code).await?),
+        R::GithubAppInstallationsConnect(github_apps::GithubAppInstallationsConnect { id }) => {
+            C::GithubApp(hub.github_app_installations_connect(id).await?)
+        }
+        R::GithubAppRemove(github_apps::GithubAppRemove { id }) => C::GithubApp(hub.github_app_remove(id).await?),
         R::SessionQueue(queue::SessionQueue { id, client_msg_id, prompt }) => {
             C::Session(hub.session_queue(id, client_msg_id, prompt).await?)
         }
