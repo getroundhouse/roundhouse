@@ -5,8 +5,8 @@ use protocol::model::{Checks, PullRequest, PullRequestFound, QueuedPrompt, Sessi
 use protocol::prompt::Prompt;
 
 use super::{chat_world, sidebar};
-use crate::gallery::world::World;
 use crate::gallery::{chats, pull_requests};
+use client_core::fake_hub::World;
 
 pub(in crate::gallery) fn streaming() -> World {
     let mut world = World::default();

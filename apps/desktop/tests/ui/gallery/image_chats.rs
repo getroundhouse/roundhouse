@@ -9,8 +9,8 @@ use protocol::model::{AttachmentId, Seq, SessionStatus};
 
 use super::events::{replied, taken, text_pointing, user_prompt};
 use super::pictures;
-use super::world::World;
 use super::worlds::chat_world;
+use client_core::fake_hub::World;
 
 /// Where the reply in [`pointed`] says its screenshot is.
 const AFTER: &str = "docs/screens/board-after.png";

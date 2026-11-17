@@ -6,7 +6,7 @@ use desktop::updates::Kind;
 use gpui_kit::Pixels;
 
 use super::frame::Frame;
-use super::world::World;
+use client_core::fake_hub::World;
 
 pub(crate) struct Screen {
     /// Also the image's file name.

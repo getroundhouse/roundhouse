@@ -2,8 +2,6 @@
 //! and events always agree. Its model is the one its newest reply came from, and its tokens the agent's newest count
 //! of what its conversation holds.
 
-#![cfg(test)]
-
 use std::collections::BTreeMap;
 
 use protocol::event::{ContentBlock, EventBody, SessionEvent};
@@ -12,7 +10,8 @@ use protocol::model::{
 };
 
 /// The records of the subagents in `log`, by subagent.
-pub(crate) fn records_of(log: &[SessionEvent]) -> Vec<Subagent> {
+#[expect(clippy::too_many_lines, reason = "a short arm for each event that changes a record, and the rest by name")]
+pub(super) fn records_of(log: &[SessionEvent]) -> Vec<Subagent> {
     let mut held: BTreeMap<SubagentId, Subagent> = BTreeMap::new();
     for event in log {
         let rev = Rev::new(event.seq.get());
@@ -70,7 +69,32 @@ pub(crate) fn records_of(log: &[SessionEvent]) -> Vec<Subagent> {
                     subagent.rev = rev;
                 }
             }
-            _ => {}
+            // Nothing of a subagent's record, an agent's own message included.
+            EventBody::UserPrompt { .. }
+            | EventBody::PromptTaken { .. }
+            | EventBody::PromptDropped { .. }
+            | EventBody::AgentStarted { .. }
+            | EventBody::AgentInit { .. }
+            | EventBody::AgentState { .. }
+            | EventBody::AgentTasks { .. }
+            | EventBody::TaskChanged { .. }
+            | EventBody::OwnTurn(_)
+            | EventBody::AgentLimits { .. }
+            | EventBody::Assistant { .. }
+            | EventBody::AgentUser { .. }
+            | EventBody::ToolCallDropped { .. }
+            | EventBody::TurnEnded { .. }
+            | EventBody::RequestFailed { .. }
+            | EventBody::ApprovalRequested { .. }
+            | EventBody::ApprovalResolved { .. }
+            | EventBody::Notice { .. }
+            | EventBody::AgentMode { .. }
+            | EventBody::AgentOther { .. }
+            | EventBody::AgentCompacting { .. }
+            | EventBody::CompactionAsked { .. }
+            | EventBody::AgentCompacted { .. }
+            | EventBody::CacheExpired { .. }
+            | EventBody::Unknown => {}
         }
     }
     held.into_values().collect()

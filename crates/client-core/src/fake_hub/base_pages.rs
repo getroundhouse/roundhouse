@@ -1,7 +1,5 @@
 //! A world's base files, opened and paged as the worker opens and pages them, for the gallery's hub to answer with.
 
-#![cfg(test)]
-
 use protocol::client::{ApiError, ErrorCode};
 use protocol::model::{FileContents, FileOpened, FilePage, FilePages, OpenedText, PageLine};
 

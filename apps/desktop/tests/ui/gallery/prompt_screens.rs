@@ -8,8 +8,8 @@ use super::events::{replied, taken, text, user_prompt};
 use super::frame::CHAT;
 use super::screens::FOCUS;
 use super::steps::{Screen, Step};
-use super::world::World;
 use super::worlds::chat_world;
+use client_core::fake_hub::World;
 
 pub(crate) const SCREENS: &[Screen] = &[
     Screen {

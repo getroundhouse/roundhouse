@@ -6,8 +6,9 @@ publish.workspace = true
 license.workspace = true
 
 [features]
-# What only tests use, such as asking for a session's account as clients did before accounts were records.
-testing = []
+# What only tests use, such as asking for a session's account as clients did before accounts were records, and the
+# fake hub, which makes its records from protocol's fixtures.
+testing = ["protocol/testing"]
 
 [dependencies]
 ring.workspace = true

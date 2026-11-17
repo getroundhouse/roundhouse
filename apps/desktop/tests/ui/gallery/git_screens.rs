@@ -8,11 +8,11 @@ use protocol::model::GithubSignInStatus;
 use super::frame::Frame;
 use super::screens::FOCUS;
 use super::steps::{Screen, Step};
-use super::world::World;
 use super::worlds::{
     ada, conversation, github_accounts, github_default_ended, github_signing_in, github_signing_in_to,
     no_github_accounts,
 };
+use client_core::fake_hub::World;
 
 /// Shows Git, once Settings is open.
 const GIT: Step = Step::Click("settings-page-git");

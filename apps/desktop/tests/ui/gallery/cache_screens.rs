@@ -13,8 +13,8 @@ use super::events::{replied, taken, text, user_prompt};
 use super::frame::{CHAT, Frame, Part, TURN_CARD};
 use super::screens::FOCUS;
 use super::steps::{Screen, Step, Target};
-use super::world::World;
 use super::worlds::{chat_world, conversation, titled};
+use client_core::fake_hub::World;
 
 /// The screens about the cache.
 pub(crate) const SCREENS: &[Screen] = &[

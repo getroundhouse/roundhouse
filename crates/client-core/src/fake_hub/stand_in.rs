@@ -5,13 +5,13 @@ use protocol::model::{
 };
 use protocol::pairing::{Pairing, PairingCode, PairingLink};
 
-use super::super::world::{LoginSupport, NOW_MS, World};
+use super::world::{LoginSupport, NOW_MS, World};
 
 /// The build the app and its hub both say they are, so the label on every screen stays the same whatever this
 /// checkout's version is.
-pub(crate) const BUILD: &str = "1.0.0";
+pub const BUILD: &str = "1.0.0";
 /// The app's build number, which a screen's hub can be older than.
-pub(crate) const BUILD_NUMBER: u64 = 2;
+pub const BUILD_NUMBER: u64 = 2;
 
 /// Claude as the app's own hub describes it, so the picker, the context's cards, a turn's card and Agents say what
 /// they would, or as a hub from before hubs kept logins does, which says nothing of what makes one.

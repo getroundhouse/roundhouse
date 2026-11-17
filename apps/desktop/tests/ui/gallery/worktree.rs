@@ -7,7 +7,7 @@ use protocol::attachment::{AttachmentBytes, MediaType};
 use protocol::model::{FileContents, WorktreeFiles};
 
 use super::pictures;
-use super::world::World;
+use client_core::fake_hub::World;
 
 /// Gives the world's hub the worktree to list, to read a folder of, and to open a file from.
 pub(crate) fn put_in(world: &mut World) {

@@ -6,9 +6,9 @@
 use protocol::model::{CommitId, GitDiff};
 
 use super::worktree::{SHOT_HEIGHT, png};
-use super::world::World;
 use super::worlds::{finished_chat, sidebar};
 use super::{patch, pictures};
+use client_core::fake_hub::World;
 
 /// The screen the branch changes, which the screens open.
 pub(crate) const CHANGED: &str = "docs/spec/screens/sidebar.png";

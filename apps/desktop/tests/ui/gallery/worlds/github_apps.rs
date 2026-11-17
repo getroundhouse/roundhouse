@@ -10,7 +10,7 @@ use protocol::model::{
 };
 
 use super::github::{blocking, github_accounts, sending};
-use crate::gallery::world::{HOUR_MS, NOW_MS, World};
+use client_core::fake_hub::{HOUR_MS, NOW_MS, World};
 
 /// [`github_accounts`], with the app installed on `adalabs`, made two days ago, whose installation is the default.
 pub(in crate::gallery) fn github_app_installed() -> World {

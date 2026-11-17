@@ -8,10 +8,10 @@
 use super::frame::Frame;
 use super::screens::FOCUS;
 use super::steps::{Screen, Step};
-use super::world::World;
 use super::worlds::{
     github_accounts, github_app_installed, github_app_not_installed, github_app_not_looked, github_app_renewing,
 };
+use client_core::fake_hub::World;
 
 /// Shows Git, once Settings is open.
 const GIT: Step = Step::Click("settings-page-git");

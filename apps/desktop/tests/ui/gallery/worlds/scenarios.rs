@@ -1,9 +1,9 @@
 #![cfg(test)]
 
 use super::super::screens::FOCUS;
-use super::super::world::{HOUR_MS, HubBuild, NOW_MS, World};
 use super::super::{chats, file_chats, patch, pictures, pull_requests, worktree};
 use super::accounts;
+use client_core::fake_hub::{HOUR_MS, HubBuild, NOW_MS, World};
 use protocol::attachment::{Attachment, MediaType};
 use protocol::model::{
     AttachmentId, Checks, CommentId, CommitId, ContextPart, ContextPartKind, ContextUsage, DiffComment, DiffSide,

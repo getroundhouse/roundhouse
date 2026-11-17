@@ -8,8 +8,8 @@ use look::Region;
 use super::frame::{Frame, Part};
 use super::screens::FOCUS;
 use super::steps::{Screen, Step};
-use super::world::World;
 use super::worlds::titled;
+use client_core::fake_hub::World;
 
 pub(crate) const SCREENS: &[Screen] = &[
     Screen {

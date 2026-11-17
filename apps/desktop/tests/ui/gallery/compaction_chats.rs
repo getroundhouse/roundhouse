@@ -14,8 +14,8 @@ use super::events::{replied, taken, text, thought, tool_result, tool_use, user_p
 use super::frame::{CHAT, OUTLINE};
 use super::screens::FOCUS;
 use super::steps::{Screen, Step, Target};
-use super::world::World;
 use super::worlds::chat_world;
+use client_core::fake_hub::World;
 
 /// The screens about compacting.
 pub(crate) const SCREENS: &[Screen] = &[

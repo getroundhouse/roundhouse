@@ -13,9 +13,9 @@ use super::events::{replied, taken, text, tool_result, tool_use, user_prompt};
 use super::frame::{CHAT, CONTEXT};
 use super::screens::FOCUS;
 use super::steps::{Screen, Step, Target};
-use super::world::World;
 use super::worlds::{chat_world, context, in_plan_mode};
 use super::{chats, tool_chats};
+use client_core::fake_hub::World;
 
 pub(crate) const SCREENS: &[Screen] = &[
     Screen {

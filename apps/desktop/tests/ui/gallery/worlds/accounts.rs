@@ -6,7 +6,7 @@ use protocol::fixtures::account;
 use protocol::model::{Account, AccountSource, AgentKind, HeldLogin, LimitWindow, UsageLimit};
 
 use super::{context, conversation};
-use crate::gallery::world::{HOUR_MS, LoginSupport, NOW_MS, World};
+use client_core::fake_hub::{HOUR_MS, LoginSupport, NOW_MS, World};
 
 const DAY_MS: i64 = 24 * HOUR_MS;
 /// How long a token `claude setup-token` makes lasts, as the hub takes it to.
