@@ -49,15 +49,11 @@ fn an_icon_is_drawn_as_big_as_its_size(cx: &mut TestAppContext) {
     }
 }
 
-/// A button sizes its icon by the kit's size it's given, inside it, where a style from outside doesn't reach, so this
-/// holds the icon the kit draws at each of those sizes to the size the spec says a button's icon is.
+/// The kit's Copy button takes only the kit's size, and sizes its icon by it, inside it, where a style from outside
+/// doesn't reach, so this holds the icon the kit draws at that size to a small square's.
 #[gpui_kit::test]
-fn a_buttons_icon_is_as_big_as_its_size_says(cx: &mut TestAppContext) {
-    for &control in ControlSize::ALL {
-        let with_words = Icon::new(IconName::Plus).with_size(control.kit_words());
-        let square = Icon::new(IconName::Close).with_size(control.kit_icon());
+fn a_copy_buttons_icon_is_a_small_squares(cx: &mut TestAppContext) {
+    let icon = Icon::new(IconName::Copy).with_size(crate::copy::KIT_SIZE);
 
-        assert_eq!(drawn(cx, with_words), [control.icon_with_words().size(); 2], "{control:?}, beside its words");
-        assert_eq!(drawn(cx, square), [control.icon().size(); 2], "{control:?}, as a square");
-    }
+    assert_eq!(drawn(cx, icon), [ControlSize::Small.icon().size(); 2]);
 }

@@ -310,9 +310,11 @@ impl Button {
         self.compact
     }
 
-    /// Presentation supplied by a styled compound control. Standalone buttons
-    /// retain their normal size-derived content style.
-    pub(crate) fn content_style(mut self, style: StyleRefinement, icon_size: Size) -> Self {
+    /// Styles what's inside the button, its icon, label and children, over
+    /// the style its size gives them, and sets its icon's size, for a design
+    /// system whose text and icons don't follow the button's size. A button
+    /// without it keeps its normal size-derived content style.
+    pub fn content_style(mut self, style: StyleRefinement, icon_size: Size) -> Self {
         self.content_style = style;
         self.icon_size = Some(icon_size);
         self
