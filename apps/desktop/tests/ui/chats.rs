@@ -309,13 +309,14 @@ fn several_background_tasks_of_a_kind_share_a_line_that_opens_to_theirs(cx: &mut
     let mut ui = in_a_new_workspace(cx, &stack);
     let chat = ui.active_chat();
     let going = || stack.client().session_get(&chat).unwrap().background_tasks;
-    // Starts five commands that each run until its file is there, and gives their lines once the turn has left them.
-    let start = |ui: &mut Ui<'_>, lot: &str| {
+    // Starts five commands, one more than have a line each, that each run until its file is there, after saying
+    // `said`, and gives their lines once the turn has left them.
+    let start = |ui: &mut Ui<'_>, lot: &str, said: &str| {
         let files = Vec::from_fn(5, |at| stack.dir.path().join(format!("{lot}-{at}")));
         let each: Vec<String> = files.iter().map(|file| format!("background:{}", file.display())).collect();
         // A click in the chat gives it the focus, for copying what's selected there.
         ui.click("composer");
-        ui.input(&format!("burst:3000; {}", each.join("; ")));
+        ui.paste_text(&format!("{said}{}", each.join("; ")));
         ui.press("enter");
         ui.wait(&format!("the {lot} turn to end with five left going"), |ui| {
             ui.session_status() == Some(SessionStatus::Background) && going().len() == 5
@@ -325,7 +326,10 @@ fn several_background_tasks_of_a_kind_share_a_line_that_opens_to_theirs(cx: &mut
     };
     let shown = |ui: &mut Ui<'_>, lines: &[SharedString]| lines.iter().filter(|line| ui.has((*line).clone())).count();
 
-    let (files, lines) = start(&mut ui, "first");
+    // So the chat is longer than the window. Said in one piece, since streamed a few characters at a time, as the
+    // next lot needn't be, it's drawn again for each, which a slow machine takes seconds over.
+    let paragraphs = Vec::from_fn(80, |at| format!("Paragraph {at} of what was said before the tasks."));
+    let (files, lines) = start(&mut ui, "first", &format!("whole:{}; ", paragraphs.join("\n\n")));
     ui.wait("their one line", |ui| ui.shows_label(SEVERAL, "5 commands"));
     assert_eq!(shown(&mut ui, &lines), 0, "closed, none has a line of its own");
     // The line the turn ends with can come just after, and would move the tasks' line as it's clicked.
@@ -354,7 +358,7 @@ fn several_background_tasks_of_a_kind_share_a_line_that_opens_to_theirs(cx: &mut
         std::fs::write(file, "").unwrap();
     }
     ui.wait("them all to finish", |ui| ui.session_status() == Some(SessionStatus::Idle) && going().is_empty());
-    let (_, lines) = start(&mut ui, "second");
+    let (_, lines) = start(&mut ui, "second", "");
 
     ui.wait("the next lot's line", |ui| ui.shows_label(SEVERAL, "5 commands"));
     assert_eq!(shown(&mut ui, &lines), 0, "a line that came back starts closed");
