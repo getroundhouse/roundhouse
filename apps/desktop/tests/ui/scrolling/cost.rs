@@ -4,7 +4,7 @@ use desktop::workspace_pane::WorkspacePane;
 use gpui_kit::test::TestWindowExt as _;
 use gpui_kit::{AppContext as _, ScrollDelta, TestAppContext, point, px};
 
-use super::{A_FRAME, open_on_a_long_session, session_saying, wait_for_the_tail};
+use super::{A_FRAME, long_reply, open_on_a_chat_saying, open_on_a_long_session};
 use crate::support::{Stack, Ui};
 
 /// A change of the chat's width puts every row's height out of date. Only the rows in the window, and a few to a
@@ -13,8 +13,9 @@ use crate::support::{Stack, Ui};
 fn a_change_of_width_measures_what_shows_and_not_the_whole_session(cx: &mut TestAppContext) {
     /// More than a window holds with what's laid out past its ends, and far fewer than are loaded.
     const A_WINDOWFUL: u64 = 150;
-    let stack = Stack::new();
-    let mut ui = open_on_a_long_session(cx, &stack);
+    // A long chat whose last page, which loads with the one before it, is most of a page, so more than two windowfuls
+    // load.
+    let (_fake, mut ui) = open_on_a_chat_saying(cx, 850, long_reply);
     let transcript = ui.transcript().unwrap();
     let drawn = |ui: &Ui<'_>| ui.cx.read_entity(&transcript, |t, _| t.list().rows_drawn());
     let to_measure = |ui: &Ui<'_>| ui.cx.read_entity(&transcript, |t, _| t.list().rows_to_measure());
@@ -41,13 +42,10 @@ fn a_change_of_width_measures_what_shows_and_not_the_whole_session(cx: &mut Test
 /// A frame of a transcript at rest draws the rows in its window, and none of the rest to find heights it has.
 #[gpui_kit::test]
 fn a_frame_at_rest_draws_only_the_rows_that_show(cx: &mut TestAppContext) {
-    let stack = Stack::new();
     // Replies of a line each, so a window holds a few dozen of them and the room past its ends holds as many again.
-    let newest = session_saying(&stack, 300, |i| format!("message {i}"));
-    let mut ui = Ui::open(cx, &stack);
-    ui.wait("the workspace", |ui| ui.transcript().is_some());
+    let (_fake, mut ui) = open_on_a_chat_saying(cx, 300, |i| format!("message {i}"));
     let transcript = ui.transcript().unwrap();
-    let total = wait_for_the_tail(&mut ui, &newest);
+    let total = ui.cx.read_entity(&transcript, |t, _| t.row_count());
     // Away from the end, so there are rows past both ends of the window.
     ui.scroll("transcript", ScrollDelta::Pixels(point(px(0.), px(2000.))));
     ui.settle(A_FRAME);
@@ -78,6 +76,7 @@ fn a_frame_at_rest_draws_only_the_rows_that_show(cx: &mut TestAppContext) {
 
 /// What the agent adds comes at the end, and alters no row before it, so nothing else is measured again for it. A
 /// page of history that loads or is let go does put every height out of date, and a new row was once taken for one.
+/// On a real hub, since the agent adds the row as the window watches.
 #[gpui_kit::test]
 fn a_row_the_agent_adds_puts_no_other_rows_height_out_of_date(cx: &mut TestAppContext) {
     let stack = Stack::new();

@@ -207,21 +207,28 @@ mod tests {
         heard.flinging(&[Moved]);
 
         assert_eq!(heard.wheel.owner, Owner::Transcript);
+
+        // Fingers that move as they touch, and lift at once, leave the fling to the transcript too.
+        heard.heard(Started, point(px(0.), px(10.)), true);
+        heard.still(Ended);
+        assert_eq!(heard.wheel.owner, Owner::Transcript, "decided at the lift");
     }
 
     #[test]
     fn a_gesture_keeps_what_it_went_to_until_it_ends() {
-        let mut heard = Heard::new();
-        heard.still(Started);
-        heard.wheel.owner = area();
+        for owner in [area(), Owner::Transcript] {
+            let mut heard = Heard::new();
+            heard.still(Started);
+            heard.wheel.owner = owner.clone();
 
-        heard.flinging(&[Moved]);
-        heard.now += SPIN_GAP;
-        heard.flinging(&[Moved]);
-        heard.still(Ended);
-        heard.flinging(&[Moved]);
+            heard.flinging(&[Moved]);
+            heard.now += SPIN_GAP;
+            heard.flinging(&[Moved]);
+            heard.still(Ended);
+            heard.flinging(&[Moved]);
 
-        assert_eq!(heard.wheel.owner, area(), "through a pause with the fingers down, the lift and the fling");
+            assert_eq!(heard.wheel.owner, owner, "through a pause with the fingers down, the lift and the fling");
+        }
     }
 
     #[test]

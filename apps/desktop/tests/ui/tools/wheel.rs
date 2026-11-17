@@ -1,7 +1,9 @@
-//! The wheel over what a call shows. Its block scrolls once it's too tall, until it reaches an end and the wheel goes
-//! on to the transcript. A scroll stays with what it started on, and a fling stops at the block's end. A block of a
-//! file's lines scrolls sideways along a line too long for it, and a swipe goes one way, the way it started. The diff
-//! an edit shows while it's hovered scrolls both ways too, and keeps the wheel from the transcript.
+//! The wheel over what a call shows, through the window. A call's block scrolls once it's too tall, until it reaches
+//! an end and the wheel goes on to the transcript. A block of a file's lines scrolls sideways along a line too long
+//! for it, and the diff an edit shows while it's hovered scrolls both ways too, and keeps the wheel from the
+//! transcript. Which gesture goes to a block and which to the transcript, and where a block stops, are the rules of
+//! `transcript`'s `scroll_area`, which its own tests pin, so these show only that a block in a call's body hears the
+//! wheel, and the transcript under it hears what the block leaves it.
 
 use std::time::Duration;
 
@@ -19,22 +21,11 @@ const A_PAUSE: Duration = Duration::from_secs(1);
 /// Characters in a line far too long for any block to show whole.
 const LONG_LINE: usize = 400;
 
+/// One walk through how a command's output and the transcript share the wheel: the output keeps from the transcript
+/// what it scrolls and the fling it stops, and leaves it the rest, and a gesture that starts on the transcript passes
+/// over it.
 #[gpui_kit::test]
-fn a_call_s_output_scrolls_under_the_wheel_and_leaves_the_transcript(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = in_a_new_workspace(cx, &stack);
-    let (_, output) = open_a_command(&mut ui, "seq 1 20");
-    let (lines, transcript) = (top(&mut ui, output.clone()), scrolled_to(&ui));
-
-    wheel(&mut ui, &over(&output), -100.);
-    wheel(&mut ui, &over(&output), 40.);
-
-    assert_eq!(scrolled_to(&ui), transcript, "the wheel over the output leaves the transcript under it");
-    assert_eq!(top(&mut ui, output), lines - px(60.), "and scrolls the output");
-}
-
-#[gpui_kit::test]
-fn at_either_end_of_its_output_the_wheel_goes_on_to_the_transcript(cx: &mut TestAppContext) {
+fn a_call_s_output_takes_a_gesture_that_starts_on_it_and_leaves_the_rest_to_the_transcript(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let mut ui = in_a_new_workspace(cx, &stack);
     let (command, output) = open_a_command(&mut ui, "seq 1 20");
@@ -48,6 +39,12 @@ fn at_either_end_of_its_output_the_wheel_goes_on_to_the_transcript(cx: &mut Test
     assert_eq!(scrolled_in(&mut ui), start, "and leaves the output at its top");
 
     let transcript = scrolled_to(&ui);
+    wheel(&mut ui, &over(&output), -100.);
+    wheel(&mut ui, &over(&output), 40.);
+
+    assert_eq!(scrolled_to(&ui), transcript, "the wheel over the output leaves the transcript under it");
+    assert_eq!(scrolled_in(&mut ui), start + px(60.), "and scrolls the output");
+
     wheel(&mut ui, &over(&output), -1000.);
     let end = scrolled_in(&mut ui);
     assert!(end > start, "the wheel down takes the output to its end first");
@@ -61,106 +58,41 @@ fn at_either_end_of_its_output_the_wheel_goes_on_to_the_transcript(cx: &mut Test
     let transcript = scrolled_to(&ui);
     wheel(&mut ui, &over(&output), 40.);
 
-    assert_eq!(scrolled_in(&mut ui), end - px(40.), "back up, the wheel scrolls the output again");
+    assert_eq!(scrolled_in(&mut ui), end - px(40.), "back up after a pause, the wheel scrolls the output again");
     assert_eq!(scrolled_to(&ui), transcript, "and leaves the transcript");
-}
 
-#[gpui_kit::test]
-fn a_fling_of_a_call_s_output_stops_at_its_end(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = in_a_new_workspace(cx, &stack);
-    let (command, output) = open_a_command(&mut ui, "seq 1 20");
-    let scrolled_in = |ui: &mut Ui<'_>| top(ui, command.clone()) - top(ui, output.clone());
-    let top_of_output = scrolled_in(&mut ui);
-    // Down to the end of the output, so a swipe up has the output to scroll and the transcript to carry on into.
-    wheel(&mut ui, &over(&output), -1000.);
-    swipe(&mut ui, &over(&output), TouchPhase::Started, 40.);
-    swipe(&mut ui, &over(&output), TouchPhase::Moved, 1000.);
-    swipe(&mut ui, &over(&output), TouchPhase::Ended, 0.);
-    let transcript = scrolled_to(&ui);
-    assert_eq!(scrolled_in(&mut ui), top_of_output, "the swipe takes the output back to its top");
-
-    swipe(&mut ui, &over(&output), TouchPhase::Moved, 60.);
-    swipe(&mut ui, &over(&output), TouchPhase::Moved, 60.);
-
-    assert_eq!(scrolled_to(&ui), transcript, "the fling it leaves stops there, without carrying the transcript on");
-    assert_eq!(scrolled_in(&mut ui), top_of_output);
-
-    swipe(&mut ui, &over(&output), TouchPhase::Started, 40.);
-
-    assert_ne!(scrolled_to(&ui), transcript, "touching again, the swipe scrolls the transcript");
-}
-
-#[gpui_kit::test]
-fn a_fling_of_the_transcript_passes_over_a_call_s_output(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = in_a_new_workspace(cx, &stack);
-    let (command, output) = open_a_command(&mut ui, "seq 1 20");
-    let scrolled_in = |ui: &mut Ui<'_>| top(ui, command.clone()) - top(ui, output.clone());
-    // Partway down the output, so it has room to catch a fling up if it would.
-    wheel(&mut ui, &over(&output), -60.);
-    let line = ui.labelled(COMMAND_LINE)[0].path().last().unwrap().clone();
-    swipe(&mut ui, &line, TouchPhase::Started, 40.);
-    swipe(&mut ui, &line, TouchPhase::Ended, 0.);
-    let (inside, transcript) = (scrolled_in(&mut ui), scrolled_to(&ui));
-
-    swipe(&mut ui, &over(&output), TouchPhase::Moved, 30.);
-
-    assert_ne!(scrolled_to(&ui), transcript, "the transcript's fling carries on over the output");
-    assert_eq!(scrolled_in(&mut ui), inside, "and leaves the output where it was");
-}
-
-#[gpui_kit::test]
-fn a_swipe_that_starts_on_the_transcript_carries_on_over_a_call_s_output(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = in_a_new_workspace(cx, &stack);
-    let (command, output) = open_a_command(&mut ui, "seq 1 20");
-    let scrolled_in = |ui: &mut Ui<'_>| top(ui, command.clone()) - top(ui, output.clone());
-    // Partway down the output, so it has room to take the swipe up if it would.
-    wheel(&mut ui, &over(&output), -60.);
-    let line = ui.labelled(COMMAND_LINE)[0].path().last().unwrap().clone();
-    swipe(&mut ui, &line, TouchPhase::Started, 40.);
-    let (inside, transcript) = (scrolled_in(&mut ui), scrolled_to(&ui));
-
-    swipe(&mut ui, &over(&output), TouchPhase::Moved, 30.);
-
-    assert_ne!(scrolled_to(&ui), transcript, "the fingers go on scrolling the transcript over the output");
-    assert_eq!(scrolled_in(&mut ui), inside, "and leave the output where it was");
-}
-
-#[gpui_kit::test]
-fn a_spin_of_the_wheel_that_starts_on_the_transcript_carries_on_over_a_call_s_output(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = in_a_new_workspace(cx, &stack);
-    let (command, output) = open_a_command(&mut ui, "seq 1 20");
-    let scrolled_in = |ui: &mut Ui<'_>| top(ui, command.clone()) - top(ui, output.clone());
-    wheel(&mut ui, &over(&output), -60.);
     let line = ui.labelled(COMMAND_LINE)[0].path().last().unwrap().clone();
     wheel(&mut ui, &line, 40.);
     let (inside, transcript) = (scrolled_in(&mut ui), scrolled_to(&ui));
 
     keep_turning(&mut ui, &over(&output), 30.);
 
-    assert_ne!(scrolled_to(&ui), transcript, "the spin goes on scrolling the transcript over the output");
+    assert_ne!(scrolled_to(&ui), transcript, "a spin that starts on the transcript scrolls it on over the output");
     assert_eq!(scrolled_in(&mut ui), inside, "and leaves the output where it was");
 
     let transcript = scrolled_to(&ui);
     wheel(&mut ui, &over(&output), 30.);
 
     assert_eq!(scrolled_in(&mut ui), inside - px(30.), "after a pause, the wheel scrolls the output");
-    assert_eq!(scrolled_to(&ui), transcript);
-}
+    assert_eq!(scrolled_to(&ui), transcript, "and not the transcript");
 
-#[gpui_kit::test]
-fn the_wheel_over_output_that_fits_scrolls_the_transcript(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = in_a_new_workspace(cx, &stack);
-    let (_, output) = open_a_command(&mut ui, "echo short");
+    // Down to the end of the output, so a swipe up has the output to scroll and the transcript to carry on into.
+    wheel(&mut ui, &over(&output), -1000.);
+    swipe(&mut ui, &over(&output), TouchPhase::Started, 40.);
+    swipe(&mut ui, &over(&output), TouchPhase::Moved, 1000.);
+    swipe(&mut ui, &over(&output), TouchPhase::Ended, 0.);
     let transcript = scrolled_to(&ui);
+    assert_eq!(scrolled_in(&mut ui), start, "a swipe takes the output back to its top");
 
-    wheel(&mut ui, &over(&output), 40.);
+    swipe(&mut ui, &over(&output), TouchPhase::Moved, 60.);
+    swipe(&mut ui, &over(&output), TouchPhase::Moved, 60.);
 
-    assert_ne!(scrolled_to(&ui), transcript, "a block with nothing to scroll leaves the wheel to the transcript");
+    assert_eq!(scrolled_to(&ui), transcript, "the fling it leaves stops there, without carrying the transcript on");
+    assert_eq!(scrolled_in(&mut ui), start, "and leaves the output at its top");
+
+    swipe(&mut ui, &over(&output), TouchPhase::Started, 40.);
+
+    assert_ne!(scrolled_to(&ui), transcript, "touching again, the swipe scrolls the transcript");
 }
 
 #[gpui_kit::test]
@@ -196,26 +128,6 @@ fn a_line_too_long_for_its_block_scrolls_sideways_to_its_end(cx: &mut TestAppCon
     turn_at(&mut ui, at, point(px(-100.), px(0.)));
 
     assert_eq!(ui.bounds(lines).right(), end, "and stops there");
-}
-
-#[gpui_kit::test]
-fn a_block_of_long_lines_moves_sideways_only_for_a_gesture_that_went_to_it(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = in_a_new_workspace(cx, &stack);
-    // Its two lines fit, so the block has nothing to scroll down.
-    open_a_call(&mut ui, &format!("edit:1:{LONG_LINE}"), "Edit");
-    let (lines, line) = (ui.shown("file/").remove(0), ui.labelled("Edit")[0].path().last().unwrap().clone());
-    let (at, transcript) = (ui.bounds(over(&lines)).center(), scrolled_to(&ui));
-
-    turn_at(&mut ui, at, point(px(0.), px(40.)));
-
-    assert_ne!(scrolled_to(&ui), transcript, "the wheel up over a block that fits scrolls the transcript");
-
-    wheel(&mut ui, &line, 40.);
-    let (left, at) = (ui.bounds(lines.clone()).left(), ui.bounds(over(&lines)).center());
-    keep_turning_at(&mut ui, at, point(px(-100.), px(-5.)));
-
-    assert_eq!(ui.bounds(lines).left(), left, "a spin that started on the transcript doesn't move it sideways");
 }
 
 #[gpui_kit::test]
