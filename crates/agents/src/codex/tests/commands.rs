@@ -75,3 +75,33 @@ async fn command_output_chunks_are_transient_but_the_completed_output_and_unknow
         body: EventBody::AgentOther { kind, .. }, raw: Some(raw), ..
     } if kind == "future/notification" && raw.contains("kept"))));
 }
+
+/// Notifications whose finished item says the same, or that only Codex's own interfaces read, leave nothing in the log.
+#[tokio::test]
+async fn notifications_that_leave_nothing_in_the_record_are_not_kept() {
+    let at = json!({"threadId":"thread","turnId":"root-turn"});
+    let with = |method: &str, more: Value| {
+        let mut params = at.clone();
+        params.as_object_mut().unwrap().extend(more.as_object().unwrap().clone());
+        json!({"method": method, "params": params})
+    };
+    let mut actions = vec![turn("thread", "root-turn", "inProgress")];
+    actions.push(with("item/reasoning/summaryPartAdded", json!({"itemId":"r","summaryIndex":1})));
+    actions.push(with("turn/diff/updated", json!({"diff":"--- a/x\n+++ b/x\n"})));
+    actions.push(with("thread/readState/changed", json!({"readState":{}})));
+    actions.push(with("turn/moderationMetadata", json!({"metadata":{}})));
+    actions.push(json!({"method":"remoteControl/status/changed","params":{"status":"disabled","installationId":"i"}}));
+    actions.push(with("future/notification", json!({"value":"kept"})));
+    actions.push(turn("thread", "root-turn", "completed"));
+
+    let output = play(actions).await;
+    let others: Vec<_> = bodies(&output)
+        .into_iter()
+        .filter_map(|body| {
+            let EventBody::AgentOther { kind, .. } = body else { return None };
+            // The stand-in's word of each request the adapter sent it.
+            (kind != "test/request").then(|| kind.clone())
+        })
+        .collect();
+    assert_eq!(others, ["future/notification"]);
+}
