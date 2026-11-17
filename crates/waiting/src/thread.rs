@@ -93,10 +93,12 @@ mod tests {
 
         until(LIMIT, "it never held", || {
             looks += 1;
+            // Read before it's let go, so the look that lets it go never sees it set, however soon it's set.
+            let held = done.load(Ordering::SeqCst);
             if looks == 2 {
                 set.wait();
             }
-            done.load(Ordering::SeqCst)
+            held
         });
 
         setting.join().unwrap();
