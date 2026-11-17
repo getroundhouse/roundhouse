@@ -65,7 +65,7 @@ fn each_page_fetched_is_told_of_as_it_is_put_in_place() {
     let held = Mutex::new(Arc::new(log));
     let told = Mutex::new(Vec::new());
 
-    source.asked(&client, &held, &|| told.lock().push(held.lock().loaded_events())).unwrap();
+    source.asked(Some(&client), &held, &|| told.lock().push(held.lock().loaded_events())).unwrap();
 
     assert_eq!(*told.lock(), [250, 500, 750], "told of each page, the one looked at first, as it's put in place");
 }

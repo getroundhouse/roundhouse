@@ -3,7 +3,7 @@ use super::github::GithubListed;
 use crate::Agents;
 use protocol::model::{
     Account, AccountId, DiffComment, HubSettings, NewWorkspaceDraft, Reach, Record, Repo, RepoId, Session, SessionId,
-    Subagent, SubagentId, Workspace, WorkspaceId,
+    Subagent, SubagentId, Terminal, Workspace, WorkspaceId,
 };
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -30,6 +30,8 @@ pub(in super::super) struct Listed {
     pub(super) session_at: HashMap<SessionId, (WorkspaceId, usize)>,
     /// The same.
     pub(super) comments: HashMap<WorkspaceId, Group<DiffComment>>,
+    /// Each workspace's, in the order they opened.
+    pub(super) terminals: HashMap<WorkspaceId, Group<Terminal>>,
     pub(super) accounts: HashMap<AccountId, Account>,
     pub(super) hub_settings: Option<HubSettings>,
     pub(super) new_workspace_draft: Option<NewWorkspaceDraft>,
@@ -75,7 +77,8 @@ impl Listed {
     /// From every record held, with when each copy was taken in.
     pub(in super::super) fn of<'a>(held: impl Iterator<Item = (&'a Record, Taken)>) -> Self {
         let mut listed = Listed::default();
-        let (mut workspaces, mut sessions, mut comments) = (Vec::new(), HashMap::new(), HashMap::new());
+        let (mut workspaces, mut sessions, mut comments, mut terminals) =
+            (Vec::new(), HashMap::new(), HashMap::new(), HashMap::new());
         for (record, taken) in held {
             match record {
                 Record::Repo(repo) => listed.repos.push(repo.clone()),
@@ -98,9 +101,12 @@ impl Listed {
                 Record::FoundGithubLogin(found) => listed.github.found(found),
                 Record::GithubApp(app) => listed.github.app(app),
                 Record::GithubReach(reach) => listed.github.reach(reach),
-                // A subagent is held apart, as `HubRecords::apply_record` says, and a terminal is held, but no view
-                // shows terminals yet.
-                Record::Subagent(_) | Record::Terminal(_) => {}
+                Record::Terminal(terminal) => {
+                    let its: &mut Vec<_> = terminals.entry(terminal.workspace_id.clone()).or_default();
+                    its.push((terminal.clone(), taken));
+                }
+                // Held apart, as `HubRecords::apply_record` says.
+                Record::Subagent(_) => {}
             }
         }
         listed.github.order();
@@ -121,6 +127,8 @@ impl Listed {
         }
         let oldest_first = |a: &DiffComment, b: &DiffComment| (a.created_at_ms, &a.id).cmp(&(b.created_at_ms, &b.id));
         listed.comments = comments.into_iter().map(|(id, its)| (id, Group::of(its, oldest_first))).collect();
+        let first_opened_first = |a: &Terminal, b: &Terminal| (a.opened_at_ms, &a.id).cmp(&(b.opened_at_ms, &b.id));
+        listed.terminals = terminals.into_iter().map(|(id, its)| (id, Group::of(its, first_opened_first))).collect();
         listed
     }
 }
@@ -187,6 +195,11 @@ impl Snapshot {
     /// The comments on the workspace's diff, oldest first.
     pub fn comments(&self, workspace: &WorkspaceId) -> &[DiffComment] {
         self.records.comments.get(workspace).map_or(&[], |its| &its.items)
+    }
+
+    /// The workspace's open terminals, in the order they opened.
+    pub fn terminals(&self, workspace: &WorkspaceId) -> &[Terminal] {
+        self.records.terminals.get(workspace).map_or(&[], |its| &its.items)
     }
 
     /// The record of the account `id`. `None` until it's arrived, and from a hub from before it kept them.
@@ -266,6 +279,12 @@ impl Changes<'_> {
         copies(self.now) != copies(self.then)
     }
 
+    /// Whether any of the workspace's terminals changed, came or went.
+    pub fn terminals(&self, workspace: &WorkspaceId) -> bool {
+        let copies = |snapshot: &Snapshot| snapshot.records.terminals.get(workspace).map(|its| its.copies);
+        copies(self.now) != copies(self.then)
+    }
+
     /// Whether any of the session's subagents changed, came or went.
     pub fn subagents(&self, session: &SessionId) -> bool {
         let copies = |snapshot: &Snapshot| snapshot.subagents.sessions.get(session).map(|its| its.copies);
@@ -273,9 +292,9 @@ impl Changes<'_> {
     }
 }
 
-/// One workspace's part of a [`Snapshot`], for a view of that workspace: its record, its sessions and the comments on
-/// its diff, with the rest of the snapshot behind them. It's only made for a workspace the snapshot has, so it always
-/// has its record.
+/// One workspace's part of a [`Snapshot`], for a view of that workspace: its record, its sessions, the comments on its
+/// diff and its terminals, with the rest of the snapshot behind them. It's only made for a workspace the snapshot has,
+/// so it always has its record.
 #[derive(Clone, Debug)]
 pub struct InWorkspace {
     pub(super) all: Snapshot,
@@ -313,6 +332,11 @@ impl InWorkspace {
     /// The comments on its diff, oldest first.
     pub fn comments(&self) -> &[DiffComment] {
         self.all.comments(&self.workspace().id)
+    }
+
+    /// Its open terminals, in the order they opened.
+    pub fn terminals(&self) -> &[Terminal] {
+        self.all.terminals(&self.workspace().id)
     }
 
     /// The whole snapshot it's part of, such as for the accounts its sessions name and their subagents.

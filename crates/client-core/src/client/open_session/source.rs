@@ -110,14 +110,15 @@ impl Source for SessionSource {
                 log.apply_delta(&delta);
                 true
             }
-            SubscriptionItem::Notice(_) => false,
+            SubscriptionItem::Notice(_) | SubscriptionItem::Terminal(_) => false,
         })
     }
 
     /// Fetches the pages around where the view is looking that aren't loaded, nearest first, telling readers of each as
     /// it's put in place, then each request waiting on an answer that none of them holds, then the session's prompts
-    /// if they haven't been listed.
-    fn asked(&mut self, client: &Client, held: &Mutex<Arc<SessionLog>>, tell: &dyn Fn()) -> Result<bool> {
+    /// if they haven't been listed, once there's a connection to fetch them on.
+    fn asked(&mut self, connection: Option<&Client>, held: &Mutex<Arc<SessionLog>>, tell: &dyn Fn()) -> Result<bool> {
+        let Some(client) = connection else { return Ok(false) };
         let pages = change(held).pages_to_fetch();
         let requests = change(held).requests_to_fetch();
         let fetched = !pages.is_empty() || !requests.is_empty();

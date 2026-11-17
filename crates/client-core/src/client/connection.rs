@@ -9,6 +9,7 @@ use protocol::event::SessionEvent;
 use protocol::frame;
 use protocol::model::{AttachmentId, SessionId};
 use protocol::tail::{StreamDelta, Tail};
+use protocol::terminal::TerminalUpdate;
 use std::collections::{HashMap, HashSet};
 use std::io::{BufRead, BufReader, Write};
 use std::path::Path;
@@ -68,6 +69,8 @@ pub enum SubscriptionItem {
     Delta(StreamDelta),
     /// Only on a feed subscription.
     Notice(Box<HubNotice>),
+    /// Only on a terminal's.
+    Terminal(TerminalUpdate),
 }
 
 /// Why a subscription's channel closed.
@@ -139,10 +142,27 @@ pub(super) struct Inner {
 impl Inner {
     /// Asks the hub to stop following `subscription_id`, without waiting for its reply, which is dropped when it comes.
     pub(super) fn unsubscribe(&self, subscription_id: u64) -> Result<()> {
+        self.send_only(subscriptions::SessionUnsubscribe { subscription_id }.into_request())
+    }
+
+    /// Sends `request` without waiting for its reply, which the reader drops, since nothing waits for it.
+    pub(super) fn send_only(&self, request: ClientRequest) -> Result<()> {
         let id = self.next_id.fetch_add(1, Ordering::Relaxed);
-        let request = subscriptions::SessionUnsubscribe { subscription_id }.into_request();
+        self.send(id, request)
+    }
+
+    /// Sends `request` as call `id`, or says there's no connection to send it on.
+    fn send(&self, id: u64, request: ClientRequest) -> Result<()> {
         let line = frame::encode(&ClientFrame { id, request }).map_err(|e| ClientError::Unexpected(e.to_string()))?;
-        self.writer.lock().write_all(&line)?;
+        if *self.disconnected.lock() {
+            return Err(ClientError::Disconnected);
+        }
+        // Writing to the hub only fails once it has gone, which the reader may not have found yet, so the connection
+        // ends here.
+        if self.writer.lock().write_all(&line).is_err() {
+            end_connection(self);
+            return Err(ClientError::Disconnected);
+        }
         Ok(())
     }
 }
@@ -239,17 +259,21 @@ impl Client {
     /// Sends one request; an introduction deadline ends the whole connection if its reply never arrives.
     fn exchange_until(&self, request: ClientRequest, deadline: Option<Instant>) -> Result<ClientResponse> {
         let id = self.inner.next_id.fetch_add(1, Ordering::Relaxed);
-        let line = frame::encode(&ClientFrame { id, request }).map_err(|e| ClientError::Unexpected(e.to_string()))?;
         let (reply_tx, reply_rx) = flume::bounded(1);
+        // Before it's sent, so a reader that finishes after it was sent fails it, rather than leaving it to wait.
         self.inner.pending.lock().insert(id, reply_tx);
-        if *self.inner.disconnected.lock() {
-            self.inner.pending.lock().remove(&id);
-            return Err(ClientError::Disconnected);
-        }
-        // Writing to the hub only fails once it has gone, which the reader may not have found yet.
-        if self.inner.writer.lock().write_all(&line).is_err() {
-            self.disconnect();
-            return Err(ClientError::Disconnected);
+        match self.inner.send(id, request) {
+            Ok(()) => {}
+            // Its socket goes too, whether the write failed or the connection had ended already.
+            Err(ClientError::Disconnected) => {
+                self.disconnect();
+                return Err(ClientError::Disconnected);
+            }
+            // One that couldn't be encoded, which leaves the connection as it was.
+            Err(e) => {
+                self.inner.pending.lock().remove(&id);
+                return Err(e);
+            }
         }
         match deadline {
             None => reply_rx.recv().map_err(|_| ClientError::Disconnected)?,
@@ -306,8 +330,9 @@ fn read_frames(inner: &Arc<Inner>, stream: impl std::io::Read) {
             HubFrame::Notice { subscription_id, notice } => {
                 deliver(inner, subscription_id, SubscriptionItem::Notice(Box::new(notice)));
             }
-            // Nothing attaches to a terminal yet, so no subscription follows one.
-            HubFrame::Terminal { .. } => {}
+            HubFrame::Terminal { subscription_id, update } => {
+                deliver(inner, subscription_id, SubscriptionItem::Terminal(update));
+            }
         }
     }
     end_connection(inner);

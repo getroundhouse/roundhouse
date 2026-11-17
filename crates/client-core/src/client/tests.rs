@@ -143,3 +143,34 @@ fn a_hub_that_goes_before_its_reply_to_stop_gets_out_has_stopped() {
 
     assert!(matches!(hub.join().unwrap(), ClientRequest::HubShutdown), "it was asked to stop");
 }
+
+/// What a client writes with once its hub has gone, as a socket's writer is.
+struct Gone;
+
+impl std::io::Write for Gone {
+    fn write(&mut self, _: &[u8]) -> std::io::Result<usize> {
+        Err(std::io::ErrorKind::BrokenPipe.into())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+/// A write fails once the hub has gone, which the reader may not have found yet, as when the hub's machine went away
+/// without a word, so the write ends the connection, as the reader would.
+#[test]
+fn a_write_that_fails_ends_the_connection() {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let stream = std::net::TcpStream::connect(listener.local_addr().unwrap()).unwrap();
+    // Kept open, so the reader waits on it, and only the write can end the connection.
+    let (_hub, _) = listener.accept().unwrap();
+    let reader = Box::new(stream.try_clone().unwrap());
+    let transport = transport::Transport { reader, writer: Box::new(Gone), closer: transport::Closer::tcp(stream) };
+    let client = Client::from_transport(transport).unwrap();
+
+    let typed = client.terminal_input(&"t".into(), b"x");
+
+    assert!(matches!(typed, Err(ClientError::Disconnected)), "{typed:?}");
+    assert!(client.is_disconnected());
+}
