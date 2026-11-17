@@ -1,4 +1,5 @@
 use super::super::*;
+use crate::store::now_ms;
 use crate::store::tests::store_with_session;
 use protocol::event::{ExitReason, TaskOutcome};
 use protocol::fixtures;
@@ -112,13 +113,19 @@ fn a_subagent_that_starts_again_after_it_ended_works_again_under_the_call_that_f
     record(&store, &message(Some("task-1"), vec![tool_use("read")]));
     record(&store, &ended("task-1", TaskOutcome::Finished, Some("They're in tests/.")));
     let finished = subagent(&store, "task-1");
+    // So it starts again later than it ended, as it would after any time finished.
+    while now_ms() <= finished.ended_at_ms.unwrap() {
+        std::thread::yield_now();
+    }
 
-    assert_eq!(record(&store, &start("toolu_send", true)).1, ["task-1"]);
+    let (restart, changed) = record(&store, &start("toolu_send", true));
+    assert_eq!(changed, ["task-1"]);
 
     let again = subagent(&store, "task-1");
     assert_eq!((again.status, again.ended_at_ms, again.report), (Working, None, None), "its next report is its own");
     assert_eq!((again.call.as_str(), again.calls, again.in_background), ("toolu_agent", 1, true));
-    assert_eq!((again.prompt, again.started_at_ms), (finished.prompt, finished.started_at_ms), "as it first started");
+    assert_eq!(again.prompt, finished.prompt, "as it first started");
+    assert_eq!(again.started_at_ms, restart.ts_ms, "at it from when it started again");
     assert!(again.rev > finished.rev);
     let (subagents, _) = store.list_subagents(&"s".into()).unwrap();
     assert_eq!(subagents.len(), 1, "no record for the call that messaged it");

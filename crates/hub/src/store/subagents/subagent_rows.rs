@@ -42,13 +42,13 @@ impl Store {
 }
 
 // One that starts again after it ended, as Claude's does when it's messaged, works again, under the call that first
-// started it, with what it was first asked, and its report is the one it gives next. Another call can't start one
-// that's already a subagent's.
+// started it, with what it was first asked, from when it started again, so how long it's at it isn't the time it sat
+// finished, and its report is the one it gives next. Another call can't start one that's already a subagent's.
 const STARTED: &str = "INSERT INTO subagents
      (session_id, id, call, kind, description, prompt, in_background, status, started_at_ms)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT (session_id, id) DO UPDATE SET status = excluded.status, in_background = excluded.in_background,
-         ended_at_ms = NULL, report = NULL
+         started_at_ms = excluded.started_at_ms, ended_at_ms = NULL, report = NULL
          WHERE status <> excluded.status
      ON CONFLICT DO NOTHING";
 
