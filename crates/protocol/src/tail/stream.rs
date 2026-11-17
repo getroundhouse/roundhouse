@@ -63,6 +63,9 @@ pub struct Tail {
     /// The agent is compacting its conversation, as it last said, or has been asked to and hasn't said yet.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub compacting: Option<Compacting>,
+    /// The agent is trying a request to its model again, which failed, as it last said.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub retrying: Option<Retrying>,
 }
 
 /// A compaction under way, or asked for.
@@ -78,6 +81,26 @@ pub struct Compacting {
     /// How much of the summary is written so far, in characters, when the agent says.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub written_chars: Option<u64>,
+}
+
+/// A request of the agent's to its model that failed and that it's trying again, as its CLI says before each try. It's
+/// over once the agent writes again, the request fails for good, or the turn or the agent ends.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Retrying {
+    /// The run retrying, so the end of an earlier run's turn can't say it's over. The hub sets it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub run: Option<RunId>,
+    /// Which try comes next, from 1.
+    pub attempt: u32,
+    /// How many it tries before it gives up, when it says.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub of: Option<u32>,
+    /// The HTTP status the last try failed with, when it got one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub status: Option<u16>,
+    /// How long it waits before the next try, in milliseconds.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub delay_ms: Option<u64>,
 }
 
 /// A subagent working in the background, and the run that started it, whose end it goes with.
@@ -113,6 +136,9 @@ pub struct TailBlock {
 
 impl Tail {
     pub fn apply(&mut self, delta: &StreamDelta) {
+        if delta.subagent.is_none() {
+            self.retried(delta.run);
+        }
         if matches!(delta.change, DeltaChange::MessageStop) {
             self.messages.retain(|m| m.message_id != delta.message_id);
             return;
@@ -167,8 +193,10 @@ impl Tail {
                 }
                 if subagent.is_none() {
                     self.compacted(run);
+                    self.retried(run);
                 }
             }
+            EventBody::RequestFailed { subagent: None, .. } => self.retried(run),
             EventBody::TurnEnded { .. } => self.turn_ended(run),
             EventBody::AgentExited { .. } => self.agent_exited(run),
             EventBody::SubagentStarted { in_background: true, .. } => {
@@ -203,7 +231,7 @@ impl Tail {
             | EventBody::ApprovalRequested { .. }
             | EventBody::ApprovalResolved { .. }
             | EventBody::Notice { .. }
-            | EventBody::RequestFailed { .. }
+            | EventBody::RequestFailed { subagent: Some(_), .. }
             | EventBody::AgentMode { .. }
             | EventBody::SubagentStarted { in_background: false, .. }
             | EventBody::SubagentContext { .. }
@@ -221,6 +249,7 @@ impl Tail {
         let carries_on = |subagent: &SubagentId| in_background.iter().any(|b| b.subagent == *subagent);
         self.messages.retain(|m| later(run, m.run) || m.subagent.as_ref().is_some_and(carries_on));
         self.compacted(run);
+        self.retried(run);
     }
 
     /// The agent of `run` exited, which ends everything it and its subagents were writing.
@@ -228,6 +257,7 @@ impl Tail {
         self.messages.retain(|m| later(run, m.run));
         self.in_background.retain(|b| later(run, b.run));
         self.compacted(run);
+        self.retried(run);
     }
 
     /// `subagent`, which `run` started, works in the background, so the end of a turn leaves what it's writing.
@@ -242,16 +272,26 @@ impl Tail {
         self.compacting = self.compacting.take().filter(|compacting| later(run, compacting.run));
     }
 
+    /// The agent of `run` is trying a failed request again, as `retrying` says, with the run set.
+    pub fn retrying(&mut self, run: RunId, retrying: Retrying) {
+        self.retrying = Some(Retrying { run: Some(run), ..retrying });
+    }
+
+    /// `run`'s retrying is over, or an earlier run's.
+    fn retried(&mut self, run: Option<RunId>) {
+        self.retrying = self.retrying.take().filter(|retrying| later(run, retrying.run));
+    }
+
     /// Whether nothing is being written.
     pub fn is_empty(&self) -> bool {
-        self.messages.is_empty() && self.compacting.is_none()
+        self.messages.is_empty() && self.compacting.is_none() && self.retrying.is_none()
     }
 
     /// Whether it holds nothing of any run, not even a subagent in the background, which [`Tail::is_empty`] leaves out
     /// since one writes nothing until it does.
     pub fn holds_nothing(&self) -> bool {
-        let Tail { messages, in_background, compacting } = self;
-        messages.is_empty() && in_background.is_empty() && compacting.is_none()
+        let Tail { messages, in_background, compacting, retrying } = self;
+        messages.is_empty() && in_background.is_empty() && compacting.is_none() && retrying.is_none()
     }
 
     /// What the agent itself is writing, or the subagent `subagent`. It holds no other's messages for the end of a
@@ -259,9 +299,10 @@ impl Tail {
     #[must_use]
     pub fn of(&self, subagent: Option<&SubagentId>) -> Tail {
         let messages = self.messages.iter().filter(|message| message.subagent.as_ref() == subagent);
-        // Only the agent compacts its conversation, so a subagent's tail never says it's compacting.
+        // Only the agent compacts its conversation, or says it's retrying, so a subagent's tail never says either.
         let compacting = self.compacting.clone().filter(|_| subagent.is_none());
-        Tail { messages: messages.cloned().collect(), in_background: Vec::new(), compacting }
+        let retrying = self.retrying.filter(|_| subagent.is_none());
+        Tail { messages: messages.cloned().collect(), in_background: Vec::new(), compacting, retrying }
     }
 
     /// Updates the tail for an event from `run` that no hub has recorded yet, as its worker sends it on, so it has
@@ -277,12 +318,13 @@ impl Tail {
         let messages = self.messages.iter().map(|message| message.run);
         let in_background = self.in_background.iter().map(|background| background.run);
         let compacting = self.compacting.iter().map(|compacting| compacting.run);
-        let runs: BTreeSet<RunId> = messages.chain(in_background).chain(compacting).flatten().collect();
+        let retrying = self.retrying.iter().map(|retrying| retrying.run);
+        let runs: BTreeSet<RunId> = messages.chain(in_background).chain(compacting).chain(retrying).flatten().collect();
         runs.into_iter().collect()
     }
 
-    /// What `run` is writing, the subagents it runs in the background, and its compaction, which a worker sends a hub
-    /// that connects to it.
+    /// What `run` is writing, the subagents it runs in the background, its compaction and its retrying, which a worker
+    /// sends a hub that connects to it.
     #[must_use]
     pub fn of_run(&self, run: RunId) -> Tail {
         let of = |by: Option<RunId>| by == Some(run);
@@ -290,6 +332,7 @@ impl Tail {
             messages: self.messages.iter().filter(|message| of(message.run)).cloned().collect(),
             in_background: self.in_background.iter().filter(|background| of(background.run)).cloned().collect(),
             compacting: self.compacting.clone().filter(|compacting| of(compacting.run)),
+            retrying: self.retrying.filter(|retrying| of(retrying.run)),
         }
     }
 
@@ -307,6 +350,10 @@ impl Tail {
         self.compacting = match written.compacting {
             Some(compacting) => Some(Compacting { run: Some(run), ..compacting }),
             None => self.compacting.take().filter(|compacting| !of(compacting.run)),
+        };
+        self.retrying = match written.retrying {
+            Some(retrying) => Some(Retrying { run: Some(run), ..retrying }),
+            None => self.retrying.take().filter(|retrying| !of(retrying.run)),
         };
     }
 }

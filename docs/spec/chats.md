@@ -735,6 +735,12 @@ Every call is drawn the same way, as the first rule below says, and each kind fi
 
   ![The agent compacting](screens/compacting.png)
 
+- **While the agent tries a failed request to its model again, the working line says so after the time,** `Trying the request again`, which try it is of how many when the agent says, and the status the last try failed with, such as `3 of 10 · 503`, since otherwise nothing says why nothing comes. It says so in place of a compaction's words, and stops as soon as the agent writes again, its request fails for good, or its turn ends. The hub's tail holds it, so every client says the same, and nothing of it is kept in the chat. Only Claude says it. *Unconfirmed.*
+
+  **The agent trying a request again a third time, forty seconds into a turn.**
+
+  ![The agent trying a request again](screens/retrying.png)
+
 - **A compaction that failed is a red line saying why,** such as `Couldn't compact the conversation. Not enough messages to compact.`, or only that it couldn't when the agent didn't say.
 
   **A compaction asked for with too little to compact.**

@@ -203,6 +203,10 @@ fn act(turn: &mut Turn, command: &str, rx: &Receiver<Input>, queued: &mut VecDeq
     if let Some(file) = command.strip_prefix("request-until:") {
         return pause_until_made(Path::new(file), rx, queued, eof);
     }
+    if let Some(file) = command.strip_prefix("retry-until:") {
+        fail::retrying(turn);
+        return pause_until_made(Path::new(file), rx, queued, eof);
+    }
     if let Some(error) = command.strip_prefix("fail:") {
         return fail::request(turn, error);
     }

@@ -1,7 +1,7 @@
 use super::super::kinds;
 use super::{
-    blocks, calls, compaction, denied, limits, own_turns, pending, prompt, request, said, subagents, surrogates, tasks,
-    turn_end, user,
+    blocks, calls, compaction, denied, limits, own_turns, pending, prompt, request, retrying, said, subagents,
+    surrogates, tasks, turn_end, user,
 };
 use calls::OpenCalls;
 use compaction::Compactions;
@@ -11,7 +11,7 @@ use prompt::PromptProgress;
 use protocol::attachment::NewAttachment;
 use protocol::event::{AgentRunState, ApprovalOutcome, EventBody, TurnOutcome};
 use protocol::model::{CacheRequest, MessageId, SubagentId, ToolUseId};
-use protocol::tail::{BlockKind, DeltaChange, StreamDelta};
+use protocol::tail::{BlockKind, DeltaChange, Retrying, StreamDelta};
 use said::FailedRequests;
 use serde_json::Value;
 use std::collections::HashMap;
@@ -42,6 +42,8 @@ pub enum Parsed {
     EventWithImages { body: EventBody, images: Vec<NewAttachment>, raw: String },
     /// Live only. The finished message replaces these.
     Delta(StreamDelta),
+    /// Live only: the CLI is trying a failed request again, until the agent writes again.
+    Retrying(Retrying),
     /// The CLI is waiting on an answer the adapter doesn't support. It needs an error reply, or
     /// the session hangs.
     UnsupportedControl { request_id: String, subtype: String },
@@ -289,6 +291,7 @@ fn system(value: &Value) -> Parsed {
             (None, Some("requesting")) => Parsed::Drop,
             (None, _) => other("system/status"),
         },
+        "api_retry" => retrying::read(value),
         // A running token count for a spinner. Several arrive per second while thinking.
         "thinking_tokens"
         // What the CLI's own interface shows of git and GitHub: that the agent committed, pushed, rebased or merged,

@@ -17,7 +17,7 @@ A workspace can have several chats, each with its own agent, all in the same wor
 
 ## A turn
 
-A turn runs from a prompt until the agent finishes responding. While it lasts, the chat ends with the working line: the mark with its light sweeping, and how long the turn has taken so far.
+A turn runs from a prompt until the agent finishes responding. While it lasts, the chat ends with the working line: the mark with its light sweeping, and how long the turn has taken so far. While a Claude agent tries a failed request to its model again, the line says so after the time, such as `Trying the request again · 3 of 10 · 503`, until the agent writes again.
 
 A finished turn ends with how long it took and when it ended, such as `1m, 48s · 2:15 PM`, and a button that copies the agent's final message. A stopped turn says `Stopped`, and one that failed says why, in red.
 

@@ -86,6 +86,9 @@ impl Writing {
             WorkerFrame::AgentEvent { session_id, run, body, .. } => {
                 self.change(session_id, |tail| tail.on_agent_event(*run, body));
             }
+            WorkerFrame::AgentRetrying { session_id, run, retrying } => {
+                self.change(session_id, |tail| tail.retrying(*run, *retrying));
+            }
             WorkerFrame::AgentContext { .. }
             | WorkerFrame::AgentCache { .. }
             | WorkerFrame::AgentLimits { .. }
@@ -134,6 +137,7 @@ fn number_of(frame: &mut WorkerFrame) -> Option<&mut Option<u64>> {
         // are read again for each hub that watches them, and what an agent is writing is sent again to each hub that
         // connects.
         WorkerFrame::AgentDelta { .. }
+        | WorkerFrame::AgentRetrying { .. }
         | WorkerFrame::AgentTail { .. }
         | WorkerFrame::Reply { .. }
         | WorkerFrame::Ask { .. }

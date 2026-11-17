@@ -1,10 +1,11 @@
-//! A chat whose turn failed on a request to the model, and the screen of it, which the gallery takes after the
-//! compactions'.
+//! A chat whose turn failed on a request to the model, one whose agent is trying a failed request again, and the
+//! screens of them, which the gallery takes after the compactions'.
 
 #![cfg(test)]
 
 use protocol::event::{Again, EventBody, FailureKind, NoticeLevel, RequestFailure, TurnOutcome};
 use protocol::model::SessionStatus;
+use protocol::tail::{Retrying, Tail};
 
 use super::chats::looked_around;
 use super::frame::CHAT;
@@ -15,13 +16,33 @@ use client_core::fake_hub::events::{finished_turn, text};
 use client_core::fake_hub::{NOW_MS, World};
 
 /// The screens about a request that failed.
-pub(crate) const SCREENS: &[Screen] = &[Screen {
-    name: "request-failed",
-    spec: "chats.md",
-    frame: CHAT,
-    world: Some(failed_world),
-    steps: &[Step::Select(FOCUS)],
-}];
+pub(crate) const SCREENS: &[Screen] = &[
+    Screen {
+        name: "request-failed",
+        spec: "chats.md",
+        frame: CHAT,
+        world: Some(failed_world),
+        steps: &[Step::Select(FOCUS)],
+    },
+    Screen {
+        name: "retrying",
+        spec: "chats.md",
+        frame: CHAT,
+        world: Some(retrying_world),
+        steps: &[Step::Select(FOCUS)],
+    },
+];
+
+/// Partway through a turn, its agent trying a request again a third time, of ten, after the API answered 503, forty
+/// seconds in.
+fn retrying_world() -> World {
+    let mut world = chat_world(SessionStatus::Running, looked_around());
+    let chat = world.sessions.last().unwrap().id.clone();
+    let retrying = Retrying { run: None, attempt: 3, of: Some(10), status: Some(503), delay_ms: Some(2_400) };
+    world.tails.insert(chat.clone(), Tail { retrying: Some(retrying), ..Tail::default() });
+    world.working_for(&chat, 41_300);
+    world
+}
 
 /// What the CLI says when the account's usage limit refuses a request, made up with an address, as the real one's has.
 pub(crate) const LIMIT_REACHED: &str = "You've reached your usage limit. Switch to another model, or manage usage at https://example.com/usage, to continue.";

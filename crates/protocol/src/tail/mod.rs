@@ -16,9 +16,13 @@ mod carrying_on;
 mod compacting;
 #[cfg(test)]
 mod laws;
+#[cfg(test)]
+mod retrying;
 
 #[cfg(test)]
 mod tests;
 
 mod stream;
-pub use stream::{BlockKind, Compacting, DeltaChange, InBackground, StreamDelta, Tail, TailBlock, TailMessage};
+pub use stream::{
+    BlockKind, Compacting, DeltaChange, InBackground, Retrying, StreamDelta, Tail, TailBlock, TailMessage,
+};

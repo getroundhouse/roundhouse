@@ -93,3 +93,46 @@ fn the_agent_picking_up_by_itself_into_the_same_failure_repeats_the_one_before()
     assert_eq!(third, Again { previous: twice, times: 3 });
     assert!(events.iter().any(|e| matches!(e.body, EventBody::OwnTurn(_))), "picked up by itself: {events:#?}");
 }
+
+/// A request the agent tries again reaches a client in the session's tail, which says which try and why, and nothing of
+/// it is recorded. Its answer coming ends it, for the hub and the client alike.
+#[test]
+fn a_request_being_tried_again_is_in_the_tail_until_the_agent_answers() {
+    use client_core::SubscriptionItem;
+    use protocol::model::Seq;
+    use protocol::tail::{Retrying, Tail};
+
+    let stack = Stack::start();
+    let client = stack.client();
+    let (_, session) = stack.workspace(&client);
+    let subscription = client.session_subscribe(&session.id, Seq::new(1)).unwrap();
+    let answer = Gate::new(&stack, "answer");
+    client.session_prompt(&session.id, &format!("retry-until:{answer}; say:answered"), None).unwrap();
+
+    // What a client holds of the tail, as it follows the session, until `until` says so of it.
+    let follow = |tail: &mut Tail, until: fn(&Tail) -> bool| {
+        while !until(tail) {
+            match subscription.items.recv_timeout(crate::support::TIMEOUT).expect("more of the session") {
+                SubscriptionItem::Event(event) => tail.on_event(event.seq, event.run, &event.body),
+                SubscriptionItem::Delta(delta) => tail.apply(&delta),
+                SubscriptionItem::Tail(snapshot) => *tail = snapshot,
+                SubscriptionItem::Notice(_) => {}
+            }
+        }
+    };
+    let mut tail = Tail::default();
+    follow(&mut tail, |tail| tail.retrying.is_some());
+    let retrying = tail.retrying.unwrap();
+    assert_eq!(
+        Retrying { run: None, ..retrying },
+        Retrying { run: None, attempt: 2, of: Some(10), status: Some(503), delay_ms: Some(1_204) }
+    );
+    assert!(retrying.run.is_some(), "the hub says whose");
+    answer.open();
+    follow(&mut tail, |tail| tail.retrying.is_none());
+
+    let events = wait_for_turn_end(&client, &session.id, 1);
+    assert_eq!(assistant_text(&events), "answered");
+    let kept = |e: &SessionEvent| matches!(&e.body, EventBody::AgentOther { kind, .. } if kind == "system/api_retry");
+    assert!(!events.iter().any(kept), "nothing of it is recorded");
+}

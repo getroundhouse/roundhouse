@@ -40,6 +40,7 @@ pub(super) async fn read_stdout(mut stdout: Output, shared: Arc<Shared>, output:
                 continue;
             }
             Parsed::Delta(delta) => AgentOutput::Delta(delta),
+            Parsed::Retrying(retrying) => AgentOutput::Retrying(retrying),
             Parsed::EventWithImages { body, images, raw } => {
                 AgentOutput::Event { body, raw: Some(raw), attachments: images }
             }

@@ -1,7 +1,7 @@
 use protocol::attachment::NewAttachment;
 use protocol::event::{EventBody, ExitReason};
 use protocol::model::{CacheRequest, ContextUsage, UsageLimit};
-use protocol::tail::StreamDelta;
+use protocol::tail::{Retrying, StreamDelta};
 
 #[derive(Debug)]
 pub enum AgentOutput {
@@ -12,6 +12,9 @@ pub enum AgentOutput {
         attachments: Vec<NewAttachment>,
     },
     Delta(StreamDelta),
+    /// The agent is trying a failed request to its model again. Only the newest matters, and only until the agent
+    /// writes again, so it's live, as a delta is.
+    Retrying(Retrying),
     /// How full the agent's context is now. It answers the adapter's own question rather than being something the
     /// agent said, and only the newest matters, so it isn't an event.
     Context(ContextUsage),
@@ -53,9 +56,11 @@ impl AgentOutput {
             AgentOutput::Exited { code, signal, stderr_tail, requested } => {
                 Some(Self::exit_event(*code, *signal, stderr_tail.clone(), *requested))
             }
-            AgentOutput::Delta(_) | AgentOutput::Context(_) | AgentOutput::Cache(_) | AgentOutput::Limits { .. } => {
-                None
-            }
+            AgentOutput::Delta(_)
+            | AgentOutput::Retrying(_)
+            | AgentOutput::Context(_)
+            | AgentOutput::Cache(_)
+            | AgentOutput::Limits { .. } => None,
         }
     }
 }

@@ -7,7 +7,7 @@ use protocol::model::{
     ApprovalId, AttachmentId, CacheRequest, ClientMessageId, ContextUsage, RunId, Seq, Session, UsageLimit,
 };
 use protocol::prompt::Prompt;
-use protocol::tail::{StreamDelta, Tail};
+use protocol::tail::{Retrying, StreamDelta, Tail};
 use tokio::sync::oneshot;
 
 /// What arrives from a worker.
@@ -25,6 +25,11 @@ pub(crate) enum Item {
     Delta {
         run: RunId,
         delta: StreamDelta,
+    },
+    /// The agent of `run` is trying a failed request to its model again, which goes in the tail until it writes again.
+    Retrying {
+        run: RunId,
+        retrying: Retrying,
     },
     /// What the agent of `run` is writing, as its worker kept it for this hub, which missed the deltas that wrote it. It
     /// comes after what the worker kept for the hub and before anything new, so the deltas after it follow on from it.

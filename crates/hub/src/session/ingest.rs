@@ -7,7 +7,7 @@ use protocol::event::{
     ApprovalDecision, ApprovalOutcome, Asking, CompactionOutcome, EventBody, ExitReason, SessionEvent,
 };
 use protocol::model::{ApprovalId, ContextUsage, PermissionMode, RunId, SessionSettingsChange};
-use protocol::tail::{StreamDelta, Tail};
+use protocol::tail::{Retrying, StreamDelta, Tail};
 use tokio::sync::mpsc;
 use tracing::{error, warn};
 
@@ -27,6 +27,7 @@ pub(crate) async fn run_ingest(session: Arc<LiveSession>, mut items: mpsc::Recei
             }
             Item::Delta { run, delta } => session.apply_delta(run, delta),
             Item::Tail { run, tail } => session.take_tail(run, tail),
+            Item::Retrying { run, retrying } => session.retrying(run, retrying),
             Item::Context { run, context, .. } => session.note_context(run, context).await,
             // Sent when the hub took it, by the hub's clock, less how long the model took to start answering.
             Item::Cache { run, request, .. } => session.note_cache(run, request, crate::store::now_ms()).await,
@@ -223,6 +224,17 @@ impl LiveSession {
             return;
         }
         state.tail.replace_run(run, tail);
+        publish(&mut state, LiveItem::Rewritten);
+    }
+
+    /// The agent of `run` is trying a failed request again. Only the current run's reaches anyone, as with its deltas,
+    /// and each subscriber is sent the tail whole, since no delta says it.
+    fn retrying(&self, run: RunId, retrying: Retrying) {
+        let mut state = self.state.lock();
+        if state.agent.is_none_or(|agent| agent.run != run) {
+            return;
+        }
+        state.tail.retrying(run, retrying);
         publish(&mut state, LiveItem::Rewritten);
     }
 
