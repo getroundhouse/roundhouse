@@ -45,7 +45,7 @@ fn the_scrollbar_s_thumb_goes_up_a_long_session_as_steadily_as_the_wheel_does(cx
     // which the wheel's check below is about.
     let newest = session_of(
         &stack,
-        &prompts(400, |i| match i {
+        &prompts(450, |i| match i {
             _ if i % 100 == 50 => format!("prose:22:{i}"),
             _ if i % 5 == 0 => format!("prose:{}:{i}", [1, 2, 1, 3][i / 5 % 4]),
             _ => format!("whole:{}", "train {i} is on the main line. ".repeat([1, 2, 1, 1, 1][i * 3 % 5])),
@@ -214,7 +214,7 @@ fn the_scrollbar_s_thumb_keeps_its_length_through_a_few_very_long_rows(cx: &mut 
 fn dragging_the_scrollbar_s_thumb_goes_through_the_session_only_the_way_the_thumb_goes(cx: &mut TestAppContext) {
     let stack = Stack::new();
     // Short prompts, and replies from a line to a few screens long, more than a transcript loads at once.
-    let newest = session_of(&stack, &prompts(400, |i| format!("prose:{}:{i}", [1, 2, 8, 1, 3, 20][i % 6])));
+    let newest = session_of(&stack, &prompts(450, |i| format!("prose:{}:{i}", [1, 2, 8, 1, 3, 20][i % 6])));
     let mut ui = Ui::open(cx, &stack);
     ui.wait("the workspace", |ui| ui.transcript().is_some());
     let transcript = ui.transcript().unwrap();
