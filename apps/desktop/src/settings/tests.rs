@@ -14,6 +14,7 @@ fn what_is_saved_reads_back_the_same() {
         sidebar_sort: Sort::Oldest,
         collapsed_projects: BTreeSet::from([RepoId::from("one"), RepoId::from("another")]),
         project_order: vec![RepoId::from("another"), RepoId::from("one")],
+        mute_while_dictating: true,
         ..Settings::default()
     };
 
@@ -28,6 +29,7 @@ fn nothing_saved_reads_as_nobody_has_chosen() {
 
     assert_eq!(file.read(), Settings::default());
     assert!(!Settings::default().always_expand_thinking);
+    assert!(!Settings::default().mute_while_dictating, "the whole system's sound is left alone until it's chosen");
 }
 
 #[test]
@@ -87,6 +89,7 @@ fn saving_keeps_what_a_newer_build_wrote() {
             "play_sound": true,
             "sound": "chime",
             "dictation": "ask_first",
+            "mute_while_dictating": false,
             "from_later": [1, 2],
         })
     );

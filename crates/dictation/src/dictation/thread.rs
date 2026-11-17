@@ -67,7 +67,7 @@ impl Dictation {
         let input = Buffer::new();
         let (updates, read) = flume::unbounded();
         let cancelled = Cancelled::default();
-        let recording = Recording::new(input.clone(), cancelled.clone());
+        let recording = Recording::new(input.clone(), audio, cancelled.clone());
         let asked = Asked { audio, hints, input, updates, cancelled };
         if let Err(flume::SendError(Request::Record(asked))) = self.requests.send(Request::Record(asked)) {
             let _ = asked.updates.send(Update::Failed(DictationError::Engine(stopped())));

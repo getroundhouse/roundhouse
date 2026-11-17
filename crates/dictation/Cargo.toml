@@ -22,12 +22,14 @@ realfft.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 
-# The microphone, through Core Audio, and asking whether the app may use it, and the model, on Core ML.
+# The microphone, through Core Audio, and asking whether the app may use it, muting the sound output, and the model, on
+# Core ML.
 [target.'cfg(target_os = "macos")'.dependencies]
 block2.workspace = true
 cpal.workspace = true
 objc2.workspace = true
 objc2-av-foundation.workspace = true
+objc2-core-audio.workspace = true
 objc2-core-ml.workspace = true
 objc2-foundation = { workspace = true, features = ["NSDictionary", "NSError", "NSProcessInfo", "NSURL", "NSValue"] }
 

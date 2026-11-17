@@ -1,5 +1,6 @@
-//! The Dictation row of General: Ask first, On or Off, and under it a box that says how dictation stands, as
-//! `docs/spec/settings.md` says. Only where `dictation::HEARS`.
+//! The Dictation row of General: Ask first, On or Off, and under it a box that says how dictation stands, and the
+//! switch under it that mutes the sound while dictating, as `docs/spec/settings.md` says. Only where `dictation::HEARS`,
+//! and the switch only where `dictation::MUTES_OUTPUT`.
 
 use std::rc::Rc;
 
@@ -25,6 +26,19 @@ pub(super) fn setting() -> Setting {
             menu: Rc::new(choices),
         },
         status_box: Some(Box::new(crate::dictating::status_box)),
+    }
+}
+
+pub(super) fn muting() -> Setting {
+    Setting {
+        name: "Mute sound while dictating",
+        does: "Mute this Mac's sound while you dictate, and unmute it once you stop, so music or a video doesn't drown \
+               you out. A display's speakers, and some USB speakers and amps, whose volume only they can set, play on.",
+        control: Control::Switch {
+            is_on: Box::new(|cx| Some(get(cx).mute_while_dictating)),
+            set: Rc::new(|on, cx| change(cx, |settings| settings.mute_while_dictating = on)),
+        },
+        status_box: None,
     }
 }
 

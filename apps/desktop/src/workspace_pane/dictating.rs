@@ -113,4 +113,10 @@ impl WorkspacePane {
     pub fn hear(&self, audio: &[f32], cx: &gpui_kit::App) {
         self.dictation.read(cx).hear(audio);
     }
+
+    /// Whether what's being dictated has the sound output muted.
+    #[cfg(feature = "testing")]
+    pub fn mutes_output(&self, cx: &gpui_kit::App) -> bool {
+        self.dictation.read(cx).mutes_output()
+    }
 }

@@ -269,12 +269,22 @@ pub(crate) fn ready(cx: &App) -> bool {
 }
 
 /// Whether a recording hears the microphone, which the system has to allow first, rather than audio a test gives it.
-pub(crate) fn hears_the_microphone(cx: &App) -> bool {
+fn hears_the_microphone(cx: &App) -> bool {
     dictating(cx).audio == AudioIn::Microphone
 }
 
+/// Whether a recording mutes the sound output while it's dictated to: where this platform can, once it's chosen.
+fn mutes_output(cx: &App) -> bool {
+    dictation::MUTES_OUTPUT && crate::settings::get(cx).mute_while_dictating
+}
+
+/// What fields dictate with: this app's model, as it stands, and the person's choices.
+pub(crate) fn source() -> dictation_ui::Source {
+    dictation_ui::Source { ready, record, uses_microphone: hears_the_microphone, mutes_output }
+}
+
 /// Starts a recording biased toward `hints`, once dictation is ready, and gives it and what's heard of it.
-pub(crate) fn record(hints: dictation::Hints, cx: &App) -> Option<(Recording, flume::Receiver<Update>)> {
+fn record(hints: dictation::Hints, cx: &App) -> Option<(Recording, flume::Receiver<Update>)> {
     let dictating = dictating(cx);
     match &dictating.readiness {
         Readiness::Ready(Hearing(dictation)) => Some(dictation.record(dictating.audio, hints)),

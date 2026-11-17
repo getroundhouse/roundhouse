@@ -37,14 +37,7 @@ pub(in crate::app) fn host(cx: &mut TestAppContext) -> (tempfile::TempDir, AnyWi
     let (window, host) = cx.update(|cx| {
         gpui_kit::init(cx);
         look::apply(cx);
-        dictation_ui::install(
-            dictation_ui::Source {
-                ready: crate::dictating::ready,
-                record: crate::dictating::record,
-                uses_microphone: crate::dictating::hears_the_microphone,
-            },
-            cx,
-        );
+        dictation_ui::install(crate::dictating::source(), cx);
         crate::dictating::start(&source.paths.data_dir, cx);
         let (window, host) = gpui_kit::open_window(gpui_kit::WindowOptions::default(), cx, |window, cx| {
             cx.new(|cx| Hubs::new(source, None, window, cx))
