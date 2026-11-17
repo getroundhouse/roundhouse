@@ -47,6 +47,13 @@ pub(crate) struct Model {
 }
 
 impl Model {
+    /// Whether the agent's run says it records each subagent's work as its own, so the tab has it to show, as
+    /// `Subagents` in `capability::background` says. Taken as so until its claims are known, as from a hub from
+    /// before runs claimed, which only Claude's ran under.
+    pub(crate) fn records_subagents(&self) -> bool {
+        self.claims.as_ref().is_none_or(|run| run.claims.background.subagents.is_some())
+    }
+
     /// One that's drawn nothing yet, for a chat or for its subagent tab.
     pub(super) fn with(at_work: AtWork) -> Self {
         Model {

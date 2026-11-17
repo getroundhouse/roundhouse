@@ -3,13 +3,17 @@
 
 #![cfg(test)]
 
+use protocol::capability::calls::call::{Runs, StartSubagent};
+use protocol::capability::calls::output::Ended;
+use protocol::capability::calls::{Call, CallOutput};
 use protocol::event::EventBody;
-use protocol::model::{Seq, SessionStatus};
+use protocol::fixtures::{command_output, typed_command};
+use protocol::model::{ModelName, Seq, SessionStatus};
 use serde_json::json;
 
 use super::events::{
     on, replied, subagent_context, subagent_ended, subagent_started, subagents_listed, taken, text, tool_result,
-    tool_use, user_prompt, within,
+    tool_use, typed_call, typed_result, user_prompt, within,
 };
 use super::frame::{CHAT, TABS_AND_CHAT};
 use super::screens::FOCUS;
@@ -24,6 +28,13 @@ pub(crate) const SCREENS: &[Screen] = &[
         world: Some(|| chat_world(SessionStatus::Running, subagents(true))),
         frame: CHAT,
         steps: &[Step::Select(FOCUS), Step::Open("Find checks for a stop signal"), Step::Open("Review the change")],
+    },
+    Screen {
+        name: "tool-subagent-typed",
+        spec: "chats.md",
+        world: Some(|| chat_world(SessionStatus::Idle, typed_subagent())),
+        frame: CHAT,
+        steps: &[Step::Select(FOCUS), Step::Open(REVIEWER)],
     },
     Screen {
         name: "subagent-tab",
@@ -208,4 +219,51 @@ pub(crate) fn subagents(working: bool) -> Vec<EventBody> {
         replied(reply, 94, 0.41),
     ]);
     events
+}
+
+/// The task path Codex names its subagent by, which is all it says of what the subagent is for.
+const REVIEWER: &str = "/root/reviewer";
+/// The model the subagent runs on, one of Codex's.
+const LUNA: &str = "gpt-6-luna";
+
+/// A subagent an agent that types its calls started, as Codex's adapter records one: its call, typed, with its
+/// persona and no prompt, since Codex doesn't say one, named by its thread, which ran the signal tests in its own
+/// conversation, and its report as its call's result.
+pub(crate) fn typed_subagent() -> Vec<EventBody> {
+    let start = StartSubagent {
+        persona: Some("explorer".into()),
+        description: Some(REVIEWER.into()),
+        prompt: String::new(),
+        model: Some(ModelName::named(LUNA)),
+        effort: None,
+        runs: Runs::Background,
+        resumes: None,
+    };
+    let report = "Both checks use `may_pass` now, and the signal tests pass.";
+    let tested = command_output("test result: ok. 5 passed; 0 failed", Some(0), Ended::Exited);
+    let reply = "The reviewer says both checks use `may_pass`, and the tests pass.";
+    vec![
+        user_prompt("Have someone check that train.rs and depot.rs use `may_pass` now."),
+        taken(Seq::new(1)),
+        text("msg-1", "I'll have a reviewer check the change."),
+        typed_call("msg-2", "spawn-1", Call::Subagent(start)),
+        EventBody::SubagentStarted {
+            call: "spawn-1".into(),
+            subagent: Some("thread-1".into()),
+            kind: Some("explorer".into()),
+            description: Some(REVIEWER.into()),
+            prompt: None,
+            in_background: true,
+        },
+        on(
+            LUNA,
+            within("thread-1", typed_call("sub-1", "run-1", Call::Command(typed_command("cargo test -p signals")))),
+        ),
+        within("thread-1", typed_result("run-1", tested, false)),
+        on(LUNA, within("thread-1", text("sub-2", report))),
+        subagent_ended("thread-1", report, 9_840),
+        typed_result("spawn-1", CallOutput::Report { report: report.into() }, false),
+        text("msg-3", reply),
+        replied(reply, 41, 0.12),
+    ]
 }

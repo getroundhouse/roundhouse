@@ -2,6 +2,7 @@
 
 use std::fmt::Write as _;
 
+use super::agent::Agent;
 use super::command::Only;
 use super::search::{Looks, Search};
 use super::web::{Fetch, WebSearch};
@@ -33,13 +34,13 @@ pub(super) fn read(call: &Call) -> ToolCall<'_> {
         }
         Call::Fetch(fetch) => ToolCall::Fetch(Fetch { url: &fetch.url, prompt: fetch.asking.as_deref() }),
         Call::WebSearch(search) => ToolCall::WebSearch(WebSearch { query: &search.query }),
+        Call::Subagent(start) => ToolCall::Agent(Agent::typed(start)),
         // Drawn as any typed call until each is drawn as its kind.
         Call::ViewImage(_)
         | Call::GenerateImage(_)
         | Call::WriteInput(_)
         | Call::FindInPage(_)
         | Call::Todos(_)
-        | Call::Subagent(_)
         | Call::MessageSubagent(_)
         | Call::WaitForSubagents(_)
         | Call::StopSubagent(_)

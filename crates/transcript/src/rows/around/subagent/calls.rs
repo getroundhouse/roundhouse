@@ -40,7 +40,10 @@ impl Subagent {
         open: bool,
         opening: Opening,
     ) -> Self {
-        if log.by() == By::Place {
+        // An agent that doesn't record its subagents' work, as Antigravity's adapter can't, since its CLI doesn't send
+        // it, has none kept apart for the tab to show, so its call is drawn as one whose work was gathered, of which
+        // there's none.
+        if log.by() == By::Place && m.records_subagents() {
             let record = m.subagents.started_by(id).cloned();
             let calls = record.as_ref().map_or(0, |record| usize::try_from(record.calls).unwrap_or(usize::MAX));
             m.subagent_rows.borrow_mut().insert(id.clone(), seq);
@@ -59,7 +62,8 @@ impl Subagent {
                 .collect();
             return Self { call: id.clone(), calls, events: None, apart: true, record, lately };
         }
-        // A log by `seq` is from a hub too old to keep a subagent's events apart, which names each by its call.
+        // A log by `seq` is from a hub too old to keep a subagent's events apart, which names each by its call. One by
+        // place holds none of a subagent's.
         let subagent = SubagentId::of_call(id);
         let its_own = |event: &&SessionEvent| parent_of(&event.body) == Some(&subagent);
         let mut gathered = Self {
@@ -163,8 +167,9 @@ mod tests {
     use std::sync::Arc;
 
     use client_core::session_log::SessionLog;
+    use protocol::capability::{Capabilities, Claimed};
     use protocol::event::SessionEvent;
-    use protocol::model::{Place, Seq, SubagentId, SubagentStatus, ToolUseId};
+    use protocol::model::{Place, RunCapabilities, RunId, Seq, SubagentId, SubagentStatus, ToolUseId};
 
     use super::nearby::is_loaded;
     use super::{Opening, Record, Subagent, drawn_in_its_call};
@@ -248,6 +253,24 @@ mod tests {
         assert_eq!(m.subagents.subagent_started_by(&"agent".into()), SubagentId::from("thread-1"), "its tab's");
         let unrecorded = m.subagents.subagent_started_by(&"other".into());
         assert_eq!(unrecorded, SubagentId::from("other"), "one with no record is named by its call");
+    }
+
+    /// An agent that doesn't record its subagents' work, as Antigravity's doesn't, has none apart for the tab, so its
+    /// call's row has no record or button, as one whose work wasn't kept apart.
+    #[test]
+    fn a_call_s_row_keeps_no_work_apart_for_an_agent_that_doesn_t_record_its_subagents() {
+        let mut log = SessionLog::by_place(Place::default());
+        log.apply_event(SessionEvent { place: Place::new(1), ..event(Seq::new(1), calls_to("Agent", &["agent"])) });
+        let mut m = Model::default();
+        let read = |m: &Model| Subagent::read(&log, m, Seq::new(1), &"agent".into(), false, Opening::AsChosen).apart;
+        assert!(read(&m), "until its claims are known");
+
+        let mut claims = Capabilities::default();
+        m.claims = Some(RunCapabilities::new(RunId::new(1), claims.clone()));
+        assert!(!read(&m), "without subagents");
+        claims.background.subagents = Some(Claimed {});
+        m.claims = Some(RunCapabilities::new(RunId::new(1), claims));
+        assert!(read(&m), "with them");
     }
 
     #[test]
