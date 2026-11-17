@@ -167,6 +167,7 @@ fn a_request_is_resolved_after_it_was_made_by_the_hub_before_the_agent_and_by_ea
     assert_eq!(breaches(&log, &claims()), expected);
 }
 
+/// Each time it starts, as one given more work starts again once it's ended.
 #[test]
 fn a_subagent_ends_after_it_started_by_the_hub_before_the_agent_and_by_each_once() {
     let log = [
@@ -181,9 +182,15 @@ fn a_subagent_ends_after_it_started_by_the_hub_before_the_agent_and_by_each_once
         from_run(1, 9, subagent_started("v", false)),
         from_run(1, 10, subagent_ended("v")),
         from_hub(11, subagent_ended("v")),
+        from_run(1, 12, subagent_started("v", false)),
+        from_hub(13, subagent_ended("v")),
+        from_run(1, 14, subagent_ended("v")),
+        from_run(1, 15, subagent_started("v", false)),
+        from_run(1, 16, subagent_ended("v")),
+        from_run(1, 17, subagent_ended("v")),
     ];
 
-    let expected = [1, 5, 8, 11].map(|seq| (Law::SubagentEndsOnce, seq));
+    let expected = [1, 5, 8, 11, 17].map(|seq| (Law::SubagentEndsOnce, seq));
     assert_eq!(breaches(&log, &claims()), expected);
 }
 

@@ -7,7 +7,7 @@ use protocol::model::{Place, SessionId, SubagentId};
 use super::{Client, Result, Subscription};
 
 impl Client {
-    /// Returns the agent's own events, or those of the subagent `subagent` started, from `from_place` on, and the place
+    /// Returns the agent's own events, or those of the subagent `subagent`, from `from_place` on, and the place
     /// of the newest of them. A hub from before places refuses it, which [`super::ClientError::is_unsupported`] says.
     /// See [`log::SessionReadPlaces`].
     pub fn session_read_places(

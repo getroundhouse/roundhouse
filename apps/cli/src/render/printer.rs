@@ -145,7 +145,7 @@ impl Printer {
         }
     }
 
-    /// That the agent started a subagent, by what it's for, or failing that its call.
+    /// That the agent started a subagent, by what it's for, or failing that its ID.
     pub(super) fn subagent(&mut self, seq: Seq, description: Option<&str>, subagent: &SubagentId) {
         let what = description.unwrap_or(subagent.as_str());
         self.line(seq, &format!("started a subagent: {what}"));

@@ -28,7 +28,7 @@ impl Appended {
     }
 }
 
-/// Which events a read by place takes: the agent's own, or those of the subagent `subagent` started, from `from` on,
+/// Which events a read by place takes: the agent's own, or those of the subagent `subagent`, from `from` on,
 /// and none recorded after `through`, if it's set.
 #[derive(Clone, Copy, Debug)]
 pub struct Places<'a> {
@@ -243,7 +243,7 @@ impl Store {
     }
 }
 
-/// The place of the newest event from the agent itself, or from the subagent `subagent` started, or 0 if there's none.
+/// The place of the newest event from the agent itself, or from the subagent `subagent`, or 0 if there's none.
 fn last_place(conn: &Connection, session_id: &SessionId, subagent: Option<&SubagentId>) -> rusqlite::Result<Place> {
     conn.query_row(
         "SELECT ifnull(max(place), 0) FROM events WHERE session_id = ? AND subagent IS ?",

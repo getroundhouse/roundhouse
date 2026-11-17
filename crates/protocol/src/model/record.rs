@@ -34,9 +34,11 @@ pub enum RecordKey {
         id: AccountId,
     },
     /// A subagent, in its session. The hub never removes one, so this isn't sent, and a peer from before it would read
-    /// it as `Unknown`.
+    /// it as `Unknown`. Its ID is written `call`, as it was when a subagent was named by the call that started it, so a
+    /// peer from then reads it.
     Subagent {
         session_id: SessionId,
+        #[serde(rename = "call")]
         subagent: SubagentId,
     },
     /// Disconnecting one keeps its record, so the hub never removes one, and this isn't sent, as [`GithubAccount`]
