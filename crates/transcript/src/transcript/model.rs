@@ -88,6 +88,13 @@ impl SubagentRecords {
         self.by_id.get(subagent)
     }
 
+    /// What `subagent`'s record says it's for, or else its kind. `None` where it says neither, or hasn't come.
+    pub(crate) fn called(&self, subagent: &SubagentId) -> Option<String> {
+        let record = self.get(subagent)?;
+        let said = [&record.description, &record.kind].into_iter().flatten().map(|words| words.trim());
+        said.into_iter().find(|words| !words.is_empty()).map(str::to_string)
+    }
+
     /// The record of the subagent `call` started, once it's come.
     pub(crate) fn started_by(&self, call: &ToolUseId) -> Option<&Arc<Subagent>> {
         self.by_id.get(self.started_by.get(call)?)

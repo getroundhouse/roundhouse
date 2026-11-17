@@ -7,6 +7,8 @@
 //! drawn where it is instead, so nothing the subagent did goes missing.
 
 mod lately;
+mod named;
+pub(in crate::rows) use named::Names;
 
 mod calls;
 pub(in crate::rows) use calls::Subagent;

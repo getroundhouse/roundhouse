@@ -86,7 +86,7 @@ pub(super) fn render_block(
         ContentBlock::ToolUse { .. } | ContentBlock::Call { .. } => {
             // One that asks the person something is drawn from its approval, which has everything that was asked.
             let recorded = Recorded::of(block).filter(|call| !call.asks_the_person())?;
-            tools::call(&toggle, recorded, &drawing.reply, drawing.subagent.as_ref(), cx)
+            tools::call(&toggle, recorded, drawing, cx)
         }
         ContentBlock::ToolResult { .. } | ContentBlock::CallResult { .. } if drawing.with_call => return None,
         ContentBlock::ToolResult { .. } | ContentBlock::CallResult { .. } => {

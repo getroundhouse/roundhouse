@@ -30,6 +30,14 @@ pub(in crate::rows) struct Subagent {
     pub(in crate::rows) lately: Vec<(ContentBlock, BlockAround)>,
 }
 
+/// Whether subagents' work is kept apart from the chat's, in the subagent tab, so a call about one is drawn from its
+/// record: from a hub that sends the chat only the agent's own events, for an agent that records its subagents' work.
+/// Antigravity's adapter can't, since its CLI doesn't send it, so its subagents have none kept apart for the tab to
+/// show.
+pub(super) fn kept_apart(log: &SessionLog, m: &Model) -> bool {
+    log.by() == By::Place && m.records_subagents()
+}
+
 impl Subagent {
     /// What the subagent started by the call `id`, in the event at `seq`, has done.
     pub(in super::super) fn read(
@@ -40,10 +48,9 @@ impl Subagent {
         open: bool,
         opening: Opening,
     ) -> Self {
-        // An agent that doesn't record its subagents' work, as Antigravity's adapter can't, since its CLI doesn't send
-        // it, has none kept apart for the tab to show, so its call is drawn as one whose work was gathered, of which
-        // there's none.
-        if log.by() == By::Place && m.records_subagents() {
+        // One whose work isn't kept apart is drawn as one whose work was gathered, of which an agent that doesn't
+        // record its subagents' work has none.
+        if kept_apart(log, m) {
             let record = m.subagents.started_by(id).cloned();
             let calls = record.as_ref().map_or(0, |record| usize::try_from(record.calls).unwrap_or(usize::MAX));
             m.subagent_rows.borrow_mut().insert(id.clone(), seq);

@@ -112,10 +112,6 @@ fn standing(subagent: Option<&Subagent>) -> Option<String> {
     (!words.is_empty()).then(|| words.join(" · "))
 }
 
-/// The button that asks for the work of the subagent `call` started in the subagent tab, which is named `title` until
-/// its record comes. It says Open, and it's outlined, as a button that opens something is, so it reads as the way in,
-/// apart from the call's line, whose click opens the call where it is. A subagent's line in the background has it
-/// too, so the way to its tab is at the chat's end wherever its call is.
 /// Which subagent an Open button opens.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum Opens {
@@ -137,6 +133,11 @@ impl Opens {
     }
 }
 
+/// The button that asks for the work of the subagent `opens` names in the subagent tab, which is named `title` until
+/// its record comes. It says Open, and it's outlined, as a button that opens something is, so it reads as the way in,
+/// apart from the call's line, whose click opens the call where it is. A subagent's line in the background has it
+/// too, so the way to its tab is at the chat's end wherever its call is, and so does a call that messages it or stops
+/// it.
 pub(in crate::rows) fn open_tab(id: ElementId, opens: Opens, title: &str, this: &WeakEntity<Transcript>) -> AnyElement {
     let (this, title) = (this.clone(), title.to_string());
     look::button(id, look::ButtonKind::Outlined, look::ControlSize::Small, "Open")

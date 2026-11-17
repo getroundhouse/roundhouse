@@ -16,6 +16,7 @@ mod numbered;
 mod other;
 mod patch;
 mod search;
+mod to_subagents;
 pub(super) mod typed;
 mod web;
 

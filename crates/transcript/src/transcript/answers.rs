@@ -4,7 +4,7 @@
 use client_core::session_log::RecordedApprovals;
 use gpui_kit::{AppContext as _, Context, Entity, Focusable as _};
 use protocol::event::{ApprovalDecision, EventBody};
-use protocol::model::{ApprovalId, Seq, Session, Subagent, SubagentId};
+use protocol::model::{ApprovalId, Seq, Session, SubagentId};
 
 use super::{Model, Transcript, TranscriptEvent};
 use crate::questions::{Asks, QuestionPanel};
@@ -128,12 +128,6 @@ impl Model {
     /// What `subagent` is called, to say who asks: what it's for, or its kind, or `Subagent` where its record says
     /// neither or hasn't come.
     pub(crate) fn subagent_called(&self, subagent: &SubagentId) -> String {
-        self.subagents.get(subagent).and_then(|subagent| called(subagent)).unwrap_or_else(|| A_SUBAGENT.to_string())
+        self.subagents.called(subagent).unwrap_or_else(|| A_SUBAGENT.to_string())
     }
-}
-
-/// What `subagent`'s record says it's for, or else its kind.
-fn called(subagent: &Subagent) -> Option<String> {
-    let said = [&subagent.description, &subagent.kind].into_iter().flatten().map(|words| words.trim());
-    said.into_iter().find(|words| !words.is_empty()).map(str::to_string)
 }

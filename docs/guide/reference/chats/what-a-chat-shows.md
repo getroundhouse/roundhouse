@@ -60,12 +60,13 @@ An agent can hand part of its work to a subagent. Its call says what the subagen
 
 - **Opened, the call shows what the subagent was asked,** what it's done lately while it works, and its report once it's done.
 - **`Open`, at the end of the line, opens the subagent tab,** with everything the subagent did, in order.
+- **A call that sends a subagent a message, waits for it or stops it names it,** as `Message`, `Wait for` or `Stop` and what the subagent is for, and has `Open` too. Opened, a message shows what it asked.
 - **The band at the top of the tab says where the subagent stands,** such as `Working · Opus 5.5 · 3 calls · 24.6k context`. Its context is how many tokens its conversation holds, not what it has used in all, so it can fall when the subagent compacts.
 - **A workspace has one subagent tab.** Opening another subagent shows that one in the same tab. `Cmd-W` closes it.
 
 ![Two subagents' calls, opened](../../../spec/screens/tool-subagent.png)
 
-A subagent's work is kept out of the chat, so it doesn't bury the conversation it's part of. A subagent that starts working again after it finished, as Claude's does when the agent sends it a message, and Codex's does with follow-up work, says so in the same call, its time counts from when it started again, and its report is the one it gives next. Codex names its subagents by their task paths, and a message to one doesn't by itself start more of its work. What it was asked appears only when Codex supplies it. Antigravity doesn't say what its subagents do, so its subagent's call has no `Open` button, and opens to what it was asked and what came back.
+A subagent's work is kept out of the chat, so it doesn't bury the conversation it's part of. A subagent that starts working again after it finished, as Claude's does when the agent sends it a message, and Codex's does with follow-up work, says so in the same call, its time counts from when it started again, and its report is the one it gives next. Codex names its subagents by their task paths, and a message to one doesn't by itself start more of its work. What it was asked appears only when Codex supplies it. Antigravity doesn't say what its subagents do, so its subagent's call has no `Open` button, and opens to what it was asked and what came back, and its message to a subagent says only that, as `Message a subagent`.
 
 ## Work in the background
 

@@ -130,9 +130,10 @@ impl Line {
         self.fill(frame, lead, title, line_text, cx).test_support().into_any_element()
     }
 
-    /// `frame`, holding what every line does after `lead`: the title, which takes at most most of the line and gives
-    /// way to a button at its end rather than pushing it off, since the button always shows, then the parts, then the
-    /// button at the far end.
+    /// `frame`, holding what every line does after `lead`: the title, which takes at most most of the line, then the
+    /// parts, then a button at the far end. The title and the parts give way to the button rather than pushing it off,
+    /// since it always shows: the parts that are cut off where they end first, such as a summary, and then the title,
+    /// which still takes at most most of what's left.
     fn fill(
         self,
         frame: Stateful<Div>,
@@ -141,18 +142,18 @@ impl Line {
         line_text: &LineText,
         cx: &App,
     ) -> Stateful<Div> {
-        let title = div()
-            .flex_none()
-            .max_w(relative(0.7))
-            .overflow_hidden()
-            .text_ellipsis()
-            .when(self.action.is_some(), |d| d.flex_shrink(1.).min_w_0())
-            .child(title);
-        frame
-            .child(lead)
-            .child(line_text.body.set(title))
-            .children(self.parts.into_iter().map(|part| part.render(line_text, cx)))
-            .when_some(self.action, |d, action| d.child(div().flex_1()).child(div().flex_none().child(action)))
+        let title = div().flex_none().max_w(relative(0.7)).overflow_hidden().text_ellipsis().child(title);
+        let title = line_text.body.set(title);
+        let parts = self.parts.into_iter().map(|part| part.render(line_text, cx));
+        let frame = frame.child(lead);
+        match self.action {
+            None => frame.child(title).children(parts),
+            Some(action) => frame
+                .child(
+                    h_flex().flex_1().min_w_0().overflow_hidden().gap(look::Space::Small).child(title).children(parts),
+                )
+                .child(div().flex_none().child(action)),
+        }
     }
 }
 

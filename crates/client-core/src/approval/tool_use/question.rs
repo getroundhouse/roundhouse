@@ -94,6 +94,7 @@ impl<'a> ToolUseAsked<'a> {
             ToolCall::Read(_)
             | ToolCall::Search(_)
             | ToolCall::Agent(_)
+            | ToolCall::ToSubagents(_)
             | ToolCall::Fetch(_)
             | ToolCall::WebSearch(_)
             | ToolCall::Advisor => (tool_name.clone(), said, summary.map(Given::MainInput)),
