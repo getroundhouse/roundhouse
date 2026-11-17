@@ -59,6 +59,14 @@ The pieces screens are built from, on the foundations in `look.md`: what each is
 
 ![Every kind of key](screens/key-kinds.png)
 
+## Toggles
+
+- **A setting that's on or off is a toggle, flipped where it's shown,** such as Settings' Keep computer awake. On is the main action's light fill under a knob in the pane's colour. Off is a dark track under a knob in the muted text's colour, so an off toggle still reads as one, as the owner decided. One that's greyed out can't be flipped, and still shows whether it's on, under the arrow, as `look.md` says. `look::Toggle` is it. *Unconfirmed:* the knob in the pane's colour while it's on.
+
+  **A toggle on, off, and each greyed out.** *Unconfirmed.*
+
+  ![Every state of a toggle](screens/toggle-states.png)
+
 ## Fields
 
 - **A field on its own is boxed, and one in what frames it is bare,** as the owner decided. A boxed field has the edge of something to use, a faint fill and a copper ring while it's typed in, such as the rename dialog's, a setting's and Settings' search. A bare field is set in something that frames it already, such as Home's search in its bar and the find bar's, so it has none of them. `look::FieldKind` holds the kinds. *Unconfirmed:* the fill, `control_edge` at 30%, and the edge turning copper with the ring.

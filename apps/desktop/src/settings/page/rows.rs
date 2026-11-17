@@ -1,10 +1,9 @@
 //! A setting's row: what it's called and what it does on the left, its control on the right, how it stands in a box
 //! under them when there's something to say, and a line under it all that sets it apart from the next.
 
-use gpui_kit::component::switch::Switch;
 use gpui_kit::component::{h_flex, v_flex};
 use gpui_kit::{Anchor, AnyElement, App, IntoElement, ParentElement as _, Styled as _, div};
-use look::{Off as _, Typeset as _};
+use look::Typeset as _;
 
 use super::{Control, Setting};
 
@@ -22,11 +21,10 @@ pub(super) fn row(setting: &Setting, cx: &App) -> AnyElement {
             // One that can't be read or changed just now shows off and can't be flipped.
             let on = is_on(cx);
             let set = set.clone();
-            Switch::new(setting.name)
+            look::toggle(setting.name, on.unwrap_or(false))
                 .accessibility_label(setting.name)
-                .checked(on.unwrap_or(false))
-                .off_while(on.is_none())
-                .on_click(move |on: &bool, _, cx: &mut App| set(*on, cx))
+                .off(on.is_none())
+                .on_flip(move |on: &bool, _, cx: &mut App| set(*on, cx))
                 .into_any_element()
         }
         Control::Choice { id, chosen, menu } => {

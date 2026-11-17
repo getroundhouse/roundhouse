@@ -1,3 +1,4 @@
+// Changed in Roundhouse's copy of gpui-kit, as third_party/README.md lists.
 use crate::{
     ActiveTheme, Disableable, FocusableExt, Side, Sizable, Size, StyleSized as _, StyledExt,
     ThemeStyled as _, text::Text, tooltip::ComponentTooltip,
@@ -190,7 +191,11 @@ impl RenderOnce for Switch {
         // would let the track show through the thumb. Fading the track alone
         // lands on the pixels a grouped fade would: the thumb is `background`.
         let disabled_bg = if checked { checked_bg } else { unchecked_bg }.opacity(0.5);
-        let toggle_bg: Background = cx.theme().tokens.switch_thumb.into();
+        let toggle_bg: Background = if checked {
+            cx.theme().tokens.switch_thumb.into()
+        } else {
+            cx.theme().tokens.switch_thumb_unchecked.into()
+        };
         let disabled_label_color = cx.theme().muted_foreground;
 
         let (bg_width, bg_height) = match self.size {

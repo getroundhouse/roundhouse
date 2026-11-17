@@ -81,3 +81,14 @@ A key in one of the kit's menus or tooltips is the kit's, from the action it's b
 | Say what an assistive app calls it, where nothing beside it says | `accessibility_label` |
 | Mark it off | `off` |
 | Share a row, rather than fill the width it's in | `grows` |
+
+## Toggles
+
+`docs/spec/components.md` has a toggle's states, and `crates/look/src/toggles` the code. A toggle draws whether it's on from what the place that holds the setting gives it, and says when it's flipped, so the place sets what it holds and draws it again.
+
+| To | Call |
+|---|---|
+| Make one, on or off | `look::toggle(id, on)` |
+| Do something as it's flipped | `on_flip` |
+| Say what an assistive app calls it, such as the setting's name | `accessibility_label` |
+| Grey it out, so it can't be flipped | `off` |
