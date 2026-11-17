@@ -3,7 +3,7 @@
 
 #![cfg(test)]
 
-use protocol::capability::calls::call::{MessageSubagent, Runs, StartSubagent, StopSubagent};
+use protocol::capability::calls::call::{MessageSubagent, Read, Runs, StartSubagent, StopSubagent};
 use protocol::capability::calls::output::Ended;
 use protocol::capability::calls::{Call, CallOutput};
 use protocol::event::EventBody;
@@ -33,6 +33,13 @@ pub(crate) const SCREENS: &[Screen] = &[
         name: "tool-subagent-typed",
         spec: "chats.md",
         world: Some(|| chat_world(SessionStatus::Idle, typed_subagent())),
+        frame: CHAT,
+        steps: &[Step::Select(FOCUS), Step::Open(REVIEWER)],
+    },
+    Screen {
+        name: "tool-subagent-typed-working",
+        spec: "chats.md",
+        world: Some(|| chat_world(SessionStatus::Running, typed_subagent_working())),
         frame: CHAT,
         steps: &[Step::Select(FOCUS), Step::Open(REVIEWER)],
     },
@@ -285,6 +292,26 @@ pub(crate) fn typed_subagent() -> Vec<EventBody> {
         typed_result("spawn-1", CallOutput::Report { report: report.into() }, false),
         text("msg-3", reply),
         replied(reply, 41, 0.12),
+    ]
+}
+
+/// A subagent an agent that types its calls started, at work, as Codex's adapter records it: it's run the tests, and
+/// is reading a file, which hasn't come back yet, so its call shows what it's done lately from its record.
+fn typed_subagent_working() -> Vec<EventBody> {
+    let tested = command_output("test result: ok. 5 passed; 0 failed", Some(0), Ended::Exited);
+    let read = Read { path: "/workspaces/aspen/crates/signals/src/depot.rs".into(), lines: None, pages: None };
+    let sub = |event| on(LUNA, within("thread-1", event));
+    vec![
+        user_prompt("Have someone check that train.rs and depot.rs use `may_pass` now."),
+        taken(Seq::new(1)),
+        text("msg-1", "I'll have a reviewer check the change."),
+        typed_call("msg-2", "spawn-1", Call::Subagent(codex_subagent(REVIEWER))),
+        codex_started("spawn-1", "thread-1", REVIEWER),
+        sub(text("sub-1", "I'll run the signal tests first.")),
+        sub(typed_call("sub-2", "run-1", Call::Command(typed_command("cargo test -p signals")))),
+        within("thread-1", typed_result("run-1", tested, false)),
+        sub(text("sub-3", "They pass. Now the checks themselves.")),
+        sub(typed_call("sub-4", "read-1", Call::Read(read))),
     ]
 }
 

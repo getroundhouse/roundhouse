@@ -6,7 +6,8 @@ use std::collections::BTreeMap;
 
 use protocol::event::{ContentBlock, EventBody, SessionEvent};
 use protocol::model::{
-    Call, CallResult, ModelName, RecentCall, RecentWork, Rev, Said, Subagent, SubagentId, SubagentStatus,
+    Call, CallResult, Lately, LatelyCall, LatelyResult, ModelName, RecentCall, RecentWork, Rev, Said, Subagent,
+    SubagentId, SubagentStatus,
 };
 
 /// The records of the subagents in `log`, by subagent.
@@ -43,6 +44,7 @@ pub(super) fn records_of(log: &[SessionEvent]) -> Vec<Subagent> {
                     subagent.report.clone_from(report);
                     subagent.context_tokens = context_tokens.or(subagent.context_tokens);
                     subagent.recent = RecentWork::default();
+                    subagent.lately = None;
                     subagent.ended_at_ms = Some(event.ts_ms);
                     subagent.rev = rev;
                 }
@@ -65,6 +67,7 @@ pub(super) fn records_of(log: &[SessionEvent]) -> Vec<Subagent> {
                 for subagent in held.values_mut().filter(|s| s.status == SubagentStatus::Working) {
                     subagent.status = SubagentStatus::Stopped;
                     subagent.recent = RecentWork::default();
+                    subagent.lately = None;
                     subagent.ended_at_ms = Some(event.ts_ms);
                     subagent.rev = rev;
                 }
@@ -97,7 +100,10 @@ pub(super) fn records_of(log: &[SessionEvent]) -> Vec<Subagent> {
             | EventBody::Unknown => {}
         }
     }
-    held.into_values().collect()
+    // The hub sends what it's done lately with its calls typed only once it's made one.
+    let typed =
+        |subagent: Subagent| Subagent { lately: subagent.lately.filter(|work| !work.calls.is_empty()), ..subagent };
+    held.into_values().map(typed).collect()
 }
 
 /// What one of a subagent's blocks adds to its record: its calls, and while it works, what it's done lately, as the hub
@@ -108,9 +114,13 @@ fn note(subagent: &mut Subagent, block: &ContentBlock) {
         subagent.calls += 1;
         subagent.latest_call = Some(call.clone());
     }
+    if let ContentBlock::Call { .. } = block {
+        subagent.calls += 1;
+    }
     if subagent.status != SubagentStatus::Working {
         return;
     }
+    note_typed(subagent.lately.get_or_insert_default(), block);
     let work = &mut subagent.recent;
     match block {
         ContentBlock::Text { text, .. } => {
@@ -138,6 +148,37 @@ fn note(subagent: &mut Subagent, block: &ContentBlock) {
         | ContentBlock::Image { .. }
         | ContentBlock::Call { .. }
         | ContentBlock::CallResult { .. }
+        | ContentBlock::Unknown => {}
+    }
+}
+
+/// What one of a subagent's blocks adds to what it's done lately with its calls typed, as the hub keeps it, as
+/// [`note`] adds to the older form.
+fn note_typed(work: &mut Lately, block: &ContentBlock) {
+    match block {
+        ContentBlock::Text { text, .. } => {
+            let text = match work.since.take() {
+                Some(since) => format!("{}\n\n{text}", since.text),
+                None => text.clone(),
+            };
+            work.since = Some(Said { text, cut: false });
+        }
+        ContentBlock::Call { id, call } => {
+            work.calls.push(LatelyCall { before: work.since.take(), id: id.clone(), call: call.clone(), result: None });
+            if work.calls.len() > 3 {
+                work.calls.remove(0);
+            }
+        }
+        ContentBlock::CallResult { tool_use_id, output, is_error, denied, images } => {
+            if let Some(made) = work.calls.iter_mut().find(|made| made.id == *tool_use_id) {
+                let (output, is_error, images, denied) = (output.clone(), *is_error, images.clone(), denied.clone());
+                made.result = Some(LatelyResult { output, is_error, cut: false, images, denied });
+            }
+        }
+        ContentBlock::Thinking { .. }
+        | ContentBlock::Image { .. }
+        | ContentBlock::ToolUse { .. }
+        | ContentBlock::ToolResult { .. }
         | ContentBlock::Unknown => {}
     }
 }
