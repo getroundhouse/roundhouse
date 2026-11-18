@@ -11,10 +11,11 @@ use gpui_kit::{
 };
 use look::{Shaped as _, Typeset as _};
 
-use super::{Comparison, ImageDiff, Outcome, Shown, Side, choose, comparison, stacked};
+use super::{Comparison, ImageDiff, Outcome, Shown, Side, comparison, stacked};
 use crate::file_header::{bar, copy_path};
 use crate::file_image::{FileImage, Placed, fitted};
 use crate::file_view::placeholder;
+use crate::shared_choice::choose;
 
 impl Render for ImageDiff {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {

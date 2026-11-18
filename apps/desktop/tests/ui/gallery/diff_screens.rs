@@ -123,6 +123,26 @@ pub(crate) const DIFF_SCREENS: &[Screen] = &[
         ],
     },
     Screen {
+        name: "markdown-opened",
+        spec: "files.md",
+        world: Some(diff),
+        frame: FILE,
+        steps: &[Step::Select(FOCUS), Step::AllFiles, Step::ViewFile(worktree::README), Step::MoveAway],
+    },
+    Screen {
+        name: "markdown-source",
+        spec: "files.md",
+        world: Some(diff),
+        frame: FILE,
+        steps: &[
+            Step::Select(FOCUS),
+            Step::AllFiles,
+            Step::ViewFile(worktree::README),
+            Step::Click("markdown-source"),
+            Step::MoveAway,
+        ],
+    },
+    Screen {
         name: "all-files-older-hub",
         spec: "files.md",
         world: Some(own_hub),

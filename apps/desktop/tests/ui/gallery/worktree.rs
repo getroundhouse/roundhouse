@@ -18,6 +18,7 @@ pub(crate) fn put_in(world: &mut World) {
         world.worktree_folders.insert((*folder).to_string(), files);
     }
     world.worktree_files.insert(OPENED.to_string(), FileContents::Text { text: MODEL.to_string() });
+    world.worktree_files.insert(README.to_string(), FileContents::Text { text: README_TEXT.to_string() });
     world.worktree_files.insert(PICTURE.to_string(), png(pictures::badge(SHOT_HEIGHT, false)));
 }
 
@@ -123,3 +124,40 @@ pub enum WorkspaceStatus {
     Unknown,
 }
 "#;
+
+/// The Markdown file the screens of one rendered open, as All files lists it.
+pub(crate) const README: &str = "README.md";
+
+/// What it holds: a little of each kind of block, as a README has.
+pub(crate) const README_TEXT: &str = r"# Tidewater
+
+A small service that keeps a team's tide tables in step with the harbour's sensors, and warns before a berth runs dry.
+
+It reads each sensor every minute, keeps a week of readings in SQLite, and serves them at `/tides` for the dashboard. See [the design notes](docs/design.md) for why it polls rather than subscribes.
+
+## Getting started
+
+1. Install Rust 1.90 or later.
+2. Copy `.env.example` to `.env`, and set `HARBOUR_URL`.
+3. Run it:
+
+```sh
+cargo run -- --port 8080
+```
+
+## Configuration
+
+| Variable | What it sets | Default |
+|---|---|---|
+| `HARBOUR_URL` | Where the sensors are read from | none |
+| `POLL_SECONDS` | How often each sensor is read | `60` |
+| `KEEP_DAYS` | How long readings are kept | `7` |
+
+> A berth is flagged as running dry when the forecast low is under **1.2 m** for more than ten minutes.
+
+## Status
+
+- [x] Read the harbour's sensors
+- [x] Serve readings at `/tides`
+- [ ] Send warnings to the team's channel
+";

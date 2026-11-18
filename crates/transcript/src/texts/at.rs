@@ -36,20 +36,23 @@ impl TextAt {
     pub(crate) fn seq(self) -> Option<Seq> {
         match self.of {
             Of::Event(seq) => Some(seq),
-            Of::Head | Of::Tail | Of::Foot => None,
+            Of::Head | Of::Tail | Of::Foot | Of::Document(_) => None,
         }
     }
 }
 
 /// What draws a text, in the chat's order: the subagent tab's head, which says what its subagent was asked above the
 /// tab's first row, an event's row, the end of the chat, with what the agent is still writing and the prompts it
-/// hasn't read yet, or the tab's foot, its report, below that.
+/// hasn't read yet, or the tab's foot, its report, below that. Or one of the blocks at the top of a
+/// [`Document`](crate::Document), by its place among them, such as a file the file tab shows rendered, which keeps
+/// texts of its own and is never in a chat.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub(crate) enum Of {
     Head,
     Event(Seq),
     Tail,
     Foot,
+    Document(usize),
 }
 
 impl Of {
@@ -59,7 +62,7 @@ impl Of {
     pub(crate) fn can_go_on(self) -> bool {
         match self {
             Of::Tail => true,
-            Of::Head | Of::Event(_) | Of::Foot => false,
+            Of::Head | Of::Event(_) | Of::Foot | Of::Document(_) => false,
         }
     }
 }

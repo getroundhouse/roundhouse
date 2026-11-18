@@ -76,7 +76,7 @@ pub(crate) fn list_row_of(of: Of, tail: usize) -> Option<usize> {
     match of {
         Of::Head => Some(0),
         Of::Tail | Of::Foot => Some(tail),
-        Of::Event(_) => None,
+        Of::Event(_) | Of::Document(_) => None,
     }
 }
 

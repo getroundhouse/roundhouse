@@ -105,7 +105,7 @@ fn a_text_parsed_apart_is_parsed_wherever_it_s_moved_to_meanwhile(cx: &mut TestA
     let reply = TextKey::named("reply");
     let long = "The signal box keeps a ledger.\n\n".repeat(2 * AT_ONCE / 32);
     texts.0.borrow_mut().placed(&reply, at(Seq::new(1)));
-    let (_, apart) = texts.parsed(&reply, &long, at(Seq::new(1)).of, ImagesAre::TheKits);
+    let (_, apart) = texts.parsed(&reply, &long, at(Seq::new(1)).of, ImagesAre::TheKits, None);
     cx.update(|cx| texts.parse_apart(reply.clone(), apart.expect("parsed apart"), cx));
     texts.new_frame();
 

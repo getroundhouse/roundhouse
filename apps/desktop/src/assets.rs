@@ -19,6 +19,7 @@ gpui_kit::assets::icon_assets!(
         CircleCheck,
         CircleFadingArrowUp,
         CircleQuestionMark,
+        CodeXml,
         Columns2,
         CornerDownRight,
         Download,

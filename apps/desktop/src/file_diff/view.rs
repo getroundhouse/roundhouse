@@ -2,7 +2,8 @@
 //! until the app quits, as it shares the sidebar's, and the switch for it is at the right end of the file tab's bar.
 
 use gpui_kit::assets::IconName as Lucide;
-use gpui_kit::{AnyElement, App, Global, IntoElement as _};
+
+use crate::shared_choice::OnASwitch;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum DiffView {
@@ -15,12 +16,10 @@ pub enum DiffView {
     WholeFile,
 }
 
-impl DiffView {
-    /// In the order the switch shows them.
-    pub const ALL: [Self; 3] = [Self::Unified, Self::Split, Self::WholeFile];
+impl OnASwitch for DiffView {
+    const ALL: &'static [Self] = &[Self::Unified, Self::Split, Self::WholeFile];
 
-    /// The ID of its button on the switch.
-    pub fn id(self) -> &'static str {
+    fn id(self) -> &'static str {
         match self {
             Self::Unified => "diff-unified",
             Self::Split => "diff-split",
@@ -43,7 +42,9 @@ impl DiffView {
             Self::WholeFile => Lucide::FileText,
         }
     }
+}
 
+impl DiffView {
     /// Whether the old side is beside the new one.
     pub(super) fn split(self) -> bool {
         self == Self::Split
@@ -53,29 +54,4 @@ impl DiffView {
     pub(super) fn everything(self) -> bool {
         self == Self::WholeFile
     }
-}
-
-/// The view chosen, which every workspace shares until the app quits.
-pub(super) struct Chosen(DiffView);
-
-impl Global for Chosen {}
-
-/// The view chosen last, or the first, before any has been.
-pub(super) fn chosen(cx: &App) -> DiffView {
-    cx.try_global::<Chosen>().map_or_default(|chosen| chosen.0)
-}
-
-/// The three views, as one switch on a track, with the one showing on.
-pub(super) fn switch(cx: &App) -> AnyElement {
-    let showing = chosen(cx);
-    DiffView::ALL
-        .into_iter()
-        .fold(look::switch(look::SwitchKind::Tracked), |switch, view| {
-            switch.icon(view.id(), view.icon(), view.name(), view == showing, move |_, cx| {
-                if chosen(cx) != view {
-                    cx.set_global(Chosen(view));
-                }
-            })
-        })
-        .into_any_element()
 }

@@ -58,7 +58,7 @@ impl Selection {
 
     /// How far to scroll a list in `bounds` down, at `now`, for a pointer held past its top or bottom, if it is.
     /// Up is less than nothing. It's nothing the first frame the pointer's past it, which only starts the clock.
-    pub(crate) fn scroll_past_edge(&self, bounds: Bounds<Pixels>, now: Instant) -> Option<Pixels> {
+    pub(super) fn scroll_past_edge(&self, bounds: Bounds<Pixels>, now: Instant) -> Option<Pixels> {
         let mut selecting = self.inner.borrow_mut();
         let drag = selecting.drag.as_mut()?;
         drag.scrolling.by(drag.pointer.y, bounds.top()..bounds.bottom(), now)

@@ -4,6 +4,7 @@ use crate::file_view::LINE_HEIGHT;
 use crate::image_diff::ImageDiff;
 use crate::patch::FilePatch;
 use crate::review::{Review, ReviewEvent};
+use crate::shared_choice::{Chosen, chosen, switch};
 use crate::{FlipImage, image_diff};
 use draft::Draft;
 use draw::{Drawing, FOLD_HEIGHT, SIGN, gutter};
@@ -24,7 +25,6 @@ use sides::Extent;
 use std::collections::HashMap;
 use std::ops::Range;
 use std::rc::Rc;
-#[cfg(any(test, feature = "testing"))]
 use view::DiffView;
 
 #[derive(Clone, Debug)]
@@ -86,7 +86,7 @@ impl FileDiff {
             }
         });
         // Every workspace's diff shows as the one chosen last.
-        let choosing = cx.observe_global::<view::Chosen>(Self::lay_out_again);
+        let choosing = cx.observe_global::<Chosen<DiffView>>(Self::lay_out_again);
         let image = cx.new(|cx| ImageDiff::new(review.clone(), cx));
         Self {
             review,
@@ -154,7 +154,7 @@ impl FileDiff {
     /// How it shows a diff, as chosen last in any workspace.
     #[cfg(feature = "testing")]
     pub fn shown_as(&self, cx: &App) -> DiffView {
-        view::chosen(cx)
+        chosen::<DiffView>(cx)
     }
 
     /// Opens `lines` of the file that shows, by their numbers on the old side.
@@ -178,7 +178,7 @@ impl FileDiff {
             return self.rows.clone();
         }
         let Some(shown) = &self.shown else { return Rc::from([]) };
-        let (view, notes, commit) = (view::chosen(cx), self.notes(cx), self.review.read(cx).base_commit.clone());
+        let (view, notes, commit) = (chosen::<DiffView>(cx), self.notes(cx), self.review.read(cx).base_commit.clone());
         let none = Opened::default();
         let opened = self.path.as_ref().and_then(|path| self.opened.get(path)).unwrap_or(&none);
         let known = shown.sides.known().unwrap_or_default();
@@ -232,7 +232,7 @@ impl FileDiff {
             return placeholder("Nothing in this file's lines changed", look::colors(cx).text_muted);
         }
         let (mono, size) = (look::Type::Code.family(cx), look::Type::Code.size(window.rem_size()));
-        let split = view::chosen(cx).split();
+        let split = chosen::<DiffView>(cx).split();
         let highest = usize::try_from(highest(&shown.file, shown.sides.extent.lines())).unwrap_or(usize::MAX);
         let (numbers, gutter) = gutter(highest, split);
         let advance = window.text_system().advance(window.text_system().resolve_font(&font(mono)), size, 'm');
@@ -337,7 +337,7 @@ impl Render for FileDiff {
                 let renamed = file.old_path().filter(|old| *old != file.path()).map(|old| format!("from {old}"));
                 v_flex()
                     .size_full()
-                    .child(file_header(file.path(), renamed, Some(view::switch(cx)), cx))
+                    .child(file_header(file.path(), renamed, Some(switch::<DiffView>(cx)), cx))
                     .child(div().flex_1().min_h_0().child(self.lines(window, cx)))
                     .into_any_element()
             }

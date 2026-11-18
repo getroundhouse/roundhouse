@@ -26,6 +26,8 @@ pub(super) struct ProseElement {
     /// The area that scrolls it, if it's in one.
     pub(super) area: Option<ElementId>,
     pub(super) style: Style,
+    /// Where it stands among the blocks of a text it's one of, if it is one.
+    pub(super) flow: Option<FlowPosition>,
     /// What it was parsed as, whose blocks it draws, or nothing until it's parsed on another thread.
     pub(super) text: Option<Rc<Parsed>>,
     /// How it's to be parsed on another thread, if it is, which it's drawn as `text` until it's in.
@@ -92,7 +94,7 @@ impl Element for ProseElement {
             Some(parsed) => div()
                 .w_full()
                 .text_color(style.foreground())
-                .child(div().children(blocks(&parsed.blocks, &context, window, cx)))
+                .child(div().children(blocks(&parsed.blocks, self.flow, &context, window, cx)))
                 .into_any_element(),
             None => div().into_any_element(),
         };
@@ -160,15 +162,24 @@ impl ProseElement {
     }
 }
 
-/// `blocks`, each laid out as the kit's text view lays it out among the others. Each is known by its place among them,
-/// since where the kit's parser says a block is in a text that went on counts from where it was parsed again from, and
-/// the kit would know blocks by that.
-fn blocks(blocks: &[BlockNode], context: &RenderContext, window: &mut Window, cx: &mut App) -> Vec<AnyElement> {
+/// `blocks`, each laid out as the kit's text view lays it out among the others, or for a text that's one block of
+/// another, where `flow` says it stands among that one's. Each is known by its place among them, since where the
+/// kit's parser says a block is in a text that went on counts from where it was parsed again from, and the kit would
+/// know blocks by that.
+fn blocks(
+    blocks: &[BlockNode],
+    flow: Option<FlowPosition>,
+    context: &RenderContext,
+    window: &mut Window,
+    cx: &mut App,
+) -> Vec<AnyElement> {
     let all: Vec<&BlockNode> = blocks.iter().collect();
     let last = all.len().saturating_sub(1);
+    let one = all.len() == 1;
     (blocks.iter().enumerate())
         .map(|(ix, block)| {
-            block.render_with_id(("block", ix), FlowPosition::at(&all, ix, ix == last), context, window, cx)
+            let at = flow.filter(|_| one).unwrap_or_else(|| FlowPosition::at(&all, ix, ix == last));
+            block.render_with_id(("block", ix), at, context, window, cx)
         })
         .collect()
 }

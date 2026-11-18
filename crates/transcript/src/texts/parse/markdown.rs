@@ -68,19 +68,31 @@ pub(super) struct Start {
 /// Parses `source`, whose images are `images` to draw, and keys each of its leaves by its place in it. One the kit's
 /// parser can't read is a paragraph, as it's written.
 pub(in super::super) fn parse(source: String, images: ImagesAre) -> Parsed {
-    let (mut blocks, mut leaves, mut starts) = (Vec::new(), Vec::new(), Some(Vec::new()));
-    if let Some(read) = read(&source, 0, images) {
+    parse_shown(source, images, None)
+}
+
+/// Parses `source` as [`parse`] does, but where `shown` says its own text ends, it keeps only the blocks that start in
+/// that, and what's after it is only read: definitions from the rest of the text it was cut from, which a reference
+/// or a footnote's mark in it is read by, as a document's block has them, and which another block draws.
+pub(in super::super) fn parse_shown(source: String, images: ImagesAre, shown: Option<usize>) -> Parsed {
+    let (mut blocks, mut leaves, mut starts, mut links) = (Vec::new(), Vec::new(), Some(Vec::new()), BTreeMap::new());
+    if let Some(mut read) = read(&source, 0, images) {
+        // Before what isn't its own goes, since its references go where the definitions after it say.
+        defined(&read, &mut links);
+        if let Some(shown) = shown {
+            read.retain(|block| block.span().is_none_or(|span| span.start < shown));
+        }
         more(read, 0, &mut blocks, &mut leaves, &mut starts);
     } else {
         let mut paragraph = Paragraph::default();
-        paragraph.push(InlineNode::new(source.clone()));
+        paragraph.push(InlineNode::new(&source[..shown.unwrap_or(source.len())]));
         blocks.push(BlockNode::Paragraph(leaf(paragraph, &mut leaves)));
         starts = None;
     }
     if may_define(&source) {
         starts = None;
     }
-    made(source, blocks, leaves, starts, true, images)
+    made(source, blocks, leaves, starts, true, images, links)
 }
 
 /// Where a text that goes on from one parsed is parsed again from: the byte its block starts at, which block that is,
@@ -136,7 +148,9 @@ pub(in super::super) fn joined(parsed: &Parsed, again: Again, source: String, re
     let mut starts = parsed.starts.as_ref().map(|starts| starts[..block].to_vec());
     more(rest, byte, &mut blocks, &mut leaves, &mut starts);
     // Parsed again from its start, it's parsed whole.
-    made(source, blocks, leaves, starts, byte == 0, parsed.images)
+    let mut links = BTreeMap::new();
+    defined(&blocks, &mut links);
+    made(source, blocks, leaves, starts, byte == 0, parsed.images, links)
 }
 
 /// Whether the block that starts at `byte` of `source` has a blank line before it, or nothing, so no block before it
@@ -188,9 +202,8 @@ fn made(
     starts: Option<Vec<Start>>,
     whole: bool,
     images: ImagesAre,
+    links: BTreeMap<SharedString, LinkMark>,
 ) -> Parsed {
-    let mut links = BTreeMap::new();
-    defined(&blocks, &mut links);
     Parsed { source, blocks, leaves: leaves.into(), links, starts, whole, images }
 }
 
@@ -233,7 +246,7 @@ pub(crate) fn leaves(source: &str) -> Arc<[String]> {
     parse(source.to_owned(), ImagesAre::TheKits).leaves
 }
 
-fn keyed(block: BlockNode, leaves: &mut Vec<String>) -> BlockNode {
+pub(super) fn keyed(block: BlockNode, leaves: &mut Vec<String>) -> BlockNode {
     let all = |children: Vec<BlockNode>, leaves: &mut Vec<String>| -> Vec<BlockNode> {
         children.into_iter().map(|child| keyed(child, leaves)).collect()
     };

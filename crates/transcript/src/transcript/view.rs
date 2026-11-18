@@ -257,7 +257,7 @@ impl Transcript {
     pub(crate) fn redrawn(&mut self, of: Of, cx: &mut Context<Self>) {
         let row = match of {
             Of::Event(seq) => self.log.row_of(seq),
-            Of::Head | Of::Tail | Of::Foot => {
+            Of::Head | Of::Tail | Of::Foot | Of::Document(_) => {
                 self.list.row_count().checked_sub(1).and_then(|tail| crate::rows::list_row_of(of, tail))
             }
         };

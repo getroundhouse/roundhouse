@@ -6,5 +6,9 @@
 mod tests;
 
 mod markdown;
+mod top_blocks;
+#[cfg(test)]
+pub(super) use markdown::parse;
 pub(crate) use markdown::{ATOM, Parsed, leaves};
-pub(super) use markdown::{Again, ImagesAre, again, gone_on, joined, parse, rest};
+pub(super) use markdown::{Again, ImagesAre, again, gone_on, joined, parse_shown, rest};
+pub(crate) use top_blocks::{TopBlock, top_blocks};

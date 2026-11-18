@@ -31,7 +31,7 @@
 
 pub(crate) use at::{Among, Of, Place, TextAt};
 use parse::ImagesAre;
-pub(crate) use parse::{ATOM, Parsed, leaves};
+pub(crate) use parse::{ATOM, Parsed, TopBlock, leaves, top_blocks};
 pub(crate) use plain::Plain;
 pub(crate) use style::Style;
 
