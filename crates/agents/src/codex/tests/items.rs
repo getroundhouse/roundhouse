@@ -6,7 +6,7 @@ use protocol::capability::calls::{Call, CallOutput};
 use protocol::event::{CompactedBy, CompactionOutcome, ContentBlock, EventBody};
 use serde_json::{Value, json};
 
-use super::script::{bodies, item, play, turn};
+use super::script::{bodies, item, others, play, turn};
 use crate::AgentOutput;
 
 /// What the adapter recorded, with the raw line it was recorded with.
@@ -31,17 +31,6 @@ fn calls(output: &[AgentOutput]) -> (Recorded<'_, Call>, Recorded<'_, CallOutput
         }
     }
     (calls, results)
-}
-
-/// What the adapter kept as lines it doesn't understand, but for the fake app server's own.
-fn others(output: &[AgentOutput]) -> Vec<&str> {
-    bodies(output)
-        .into_iter()
-        .filter_map(|body| {
-            let EventBody::AgentOther { kind, .. } = body else { return None };
-            (kind != "test/request").then_some(kind.as_str())
-        })
-        .collect()
 }
 
 #[tokio::test]

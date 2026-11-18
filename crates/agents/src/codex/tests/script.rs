@@ -71,3 +71,14 @@ pub(super) async fn play(mut actions: Vec<Value>) -> Vec<AgentOutput> {
 pub(super) fn bodies(output: &[AgentOutput]) -> Vec<&EventBody> {
     output.iter().filter_map(|out| if let AgentOutput::Event { body, .. } = out { Some(body) } else { None }).collect()
 }
+
+/// What the adapter kept as lines it doesn't understand, but for the fake app server's own.
+pub(super) fn others(output: &[AgentOutput]) -> Vec<&str> {
+    bodies(output)
+        .into_iter()
+        .filter_map(|body| {
+            let EventBody::AgentOther { kind, .. } = body else { return None };
+            (kind != "test/request").then_some(kind.as_str())
+        })
+        .collect()
+}

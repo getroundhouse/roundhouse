@@ -6,7 +6,7 @@ use serde_json::Value;
 use tokio::sync::mpsc;
 
 use super::state::{Ended, ThreadId, TurnId};
-use super::{approvals, control, items, notices, running::Shared, subagents, usage};
+use super::{approvals, control, items, notices, running::Shared, subagents, turn_reports, usage};
 use crate::{AgentError, AgentOutput};
 
 pub(super) async fn read(shared: Arc<Shared>, mut input: mpsc::Receiver<(Value, String)>) {
@@ -67,6 +67,28 @@ async fn notification(shared: &Shared, value: &Value, raw: String) -> Result<(),
     dispatch(shared, method, params, &scope, raw).await
 }
 
+/// What Codex says that the adapter has no use for, which it asks Codex not to send as it initializes, rather than
+/// dropping each as it comes.
+pub(super) const UNUSED: [&str; 10] = [
+    // Idle can precede turn/completed. Only the normalized outcome makes Roundhouse idle.
+    "thread/status/changed",
+    "thread/started",
+    // What the finished item says whole: a command's output and a reasoning summary's parts, which would otherwise put
+    // an event that draws nothing in the log for every chunk, thousands between a call and its result.
+    "item/reasoning/textDelta",
+    "item/commandExecution/outputDelta",
+    "item/reasoning/summaryPartAdded",
+    // State Codex keeps for its own interfaces: which of a thread's turns its app has read, whether its remote
+    // control is connected, and how its moderation classified the turn.
+    "thread/readState/changed",
+    "remoteControl/status/changed",
+    "turn/moderationMetadata",
+    // The thread's settings as it starts, which the adapter sets again with each turn it starts.
+    "thread/settings/updated",
+    // A compaction, as its `contextCompaction` item says too, which Codex's schema calls the one to read.
+    "thread/compacted",
+];
+
 async fn dispatch(
     shared: &Shared,
     method: &str,
@@ -85,6 +107,7 @@ async fn dispatch(
                 state.turn = Some(id.clone());
                 state.reply = None;
                 state.plan = None;
+                state.turn_diff = None;
                 // The turn Codex compacts in, which takes the compaction asked for, as the person's message takes a
                 // prompt.
                 state.compaction.as_mut().filter(|asked| asked.turn.is_none()).map(|asked| {
@@ -116,23 +139,10 @@ async fn dispatch(
         "warning" => notices::warning(shared, params, scope, raw).await,
         "mcpServer/startupStatus/updated" => notices::mcp_server(shared, params, scope, raw).await,
         "error" => notices::error(shared, params, scope, raw).await,
-        // Idle can precede turn/completed. Only the normalized outcome makes Roundhouse idle.
-        "thread/status/changed"
-        | "thread/started"
-        // What the finished item says whole: a command's output, a reasoning summary's parts, and the turn's diff,
-        // which its file changes and the worktree hold. Each would put an event that draws nothing in the log for
-        // every chunk, thousands between a call and its result.
-        | "item/reasoning/textDelta"
-        | "item/commandExecution/outputDelta"
-        | "item/reasoning/summaryPartAdded"
-        | "turn/diff/updated"
-        // State Codex keeps for its own interfaces: which of a thread's turns its app has read, whether its remote
-        // control is connected, and how its moderation classified the turn.
-        | "thread/readState/changed"
-        | "remoteControl/status/changed"
-        | "turn/moderationMetadata"
-        // The thread's settings as it starts, which the adapter sets again with each turn it starts.
-        | "thread/settings/updated" => {}
+        "turn/diff/updated" => turn_reports::changes(shared, params, scope).await,
+        "turn/plan/updated" => turn_reports::plan(shared, params, scope).await?,
+        // From a Codex that sends them though it was asked not to.
+        method if UNUSED.contains(&method) => {}
         // Codex waiting on a running command with nothing to write to it, which the finished command says whole.
         "item/commandExecution/terminalInteraction" if params["stdin"] == "" => {}
         _ => {
