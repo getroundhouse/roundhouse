@@ -241,7 +241,7 @@ fn missing_problem(missing: Part) -> String {
         Part::Line(label) => format!("no line labelled {label:?} is drawn when its picture is taken"),
         Part::Menu => "no menu is open when its picture is taken".to_string(),
     };
-    format!("its frame names {missing:?}, but {why}. `docs/testing.md` says how a screen's frame is chosen")
+    format!("its frame names {missing:?}, but {why}. `docs/spec/README.md` says what a screen's picture shows")
 }
 
 /// What may be open over the window when the picture is taken: a menu, and what each hover waited for, such as a

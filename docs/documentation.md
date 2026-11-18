@@ -32,7 +32,7 @@ The guide is the one kind written for someone using the product rather than buil
 | `docs/rust.md` | Standards | Owner | How Rust is written, whatever the crate. A rule about one part of the system goes in that part's doc |
 | `docs/gpui.md` | Standards | Owner | How code that uses GPUI is written |
 | `docs/component-library.md` | Standards | Owner | How code makes and uses the components screens are built from, and how a component's API is laid out |
-| `docs/testing.md` | Standards | Owner | Where each kind of test goes |
+| `docs/testing.md` | Standards | Owner | Where each kind of test goes, and what a test runs in |
 | `docs/pull-requests.md` | Standards | Owner | How a change is split into pull requests, and how each and its commit are written |
 | `docs/reviews.md` | Standards | Owner | How agents review a change when the owner asks for a review |
 | `docs/manual-checks.md` | Reference | Owner | What a person has to judge by hand |
