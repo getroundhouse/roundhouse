@@ -3,8 +3,8 @@ use protocol::capability::settings::Effort;
 use protocol::client::ErrorCode;
 use protocol::event::EventBody;
 use protocol::model::{
-    AgentDescription, AgentKind, AttachmentId, ModelName, NewWorkspaceDraft, NewWorkspaceDraftToKeep, PermissionMode,
-    RepoId, Seq, SessionId,
+    AgentDescription, AgentKind, AttachmentId, ModelName, NewWorkspaceDraft, NewWorkspaceDraftToKeep, RepoId, Seq,
+    SessionId,
 };
 use protocol::prompt::Prompt;
 use protocol::worker::WorkerRequest;
@@ -37,7 +37,7 @@ async fn kept_in_the_dialog(hub: &Hub) -> NewWorkspaceDraftToKeep {
     let draft = NewWorkspaceDraftToKeep {
         model: Some(ModelName::named("sonnet")),
         effort: Some(Effort::Low),
-        plan: true,
+        mode: Some(protocol::fixtures::plan_mode()),
         ..in_the_repo(&["notes"])
     };
     hub.new_workspace_draft_keep(draft.clone()).await.unwrap();
@@ -74,8 +74,8 @@ async fn a_workspace_made_from_the_dialog_has_what_it_said_and_the_dialog_is_emp
     assert_eq!((made.unchosen, made.unsent), (None, None));
     assert_eq!((&session.workspace_id, &workspace.repo_id), (&workspace.id, made_of.repo_id.as_ref().unwrap()));
     assert_eq!(
-        (&session.model, session.effort.clone(), session.permission_mode),
-        (&ModelName::named("sonnet"), Effort::Low, PermissionMode::Plan)
+        (&session.model, session.effort.clone(), session.mode),
+        (&ModelName::named("sonnet"), Effort::Low, protocol::fixtures::plan_mode())
     );
     let [Prompt { text, files }] = prompts(&hub, &session.id).try_into().unwrap();
     assert_eq!(text, "fix the login");
@@ -84,7 +84,7 @@ async fn a_workspace_made_from_the_dialog_has_what_it_said_and_the_dialog_is_emp
         [("notes", "notes.txt")]
     );
     let kept = in_the_dialog(&hub).await;
-    assert_eq!((kept.text.as_str(), kept.files.as_slice(), kept.plan), ("", [].as_slice(), false));
+    assert_eq!((kept.text.as_str(), kept.files.as_slice(), kept.mode), ("", [].as_slice(), None));
     assert_eq!(
         (kept.repo_id, kept.model, kept.effort),
         (made_of.repo_id, made_of.model, made_of.effort),
@@ -152,10 +152,10 @@ async fn with_nothing_typed_the_workspace_and_its_chat_are_made_and_nothing_is_s
 
     let made = hub.new_workspace_create(made_of, "make it".into()).await.unwrap();
 
-    assert_eq!(made.session.permission_mode, PermissionMode::Plan);
+    assert_eq!(made.session.mode, protocol::fixtures::plan_mode());
     assert_eq!(made.unsent, None);
     assert_eq!(prompts(&hub, &made.session.id), []);
-    assert!(!in_the_dialog(&hub).await.plan, "the dialog is emptied, plan mode too");
+    assert_eq!(in_the_dialog(&hub).await.mode, None, "the dialog is emptied, plan mode too");
 }
 
 /// So a chat that's to plan doesn't start on it with full access. Here the effort is one Claude doesn't offer, as this

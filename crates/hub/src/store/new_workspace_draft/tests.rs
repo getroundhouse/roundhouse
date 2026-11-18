@@ -22,7 +22,7 @@ fn typed(text: &str, files: &[&str]) -> NewWorkspaceDraftToKeep {
         files: files.iter().map(|&id| id.into()).collect(),
         model: Some(OPUS),
         effort: Some(Effort::High),
-        plan: true,
+        mode: Some(protocol::fixtures::plan_mode()),
     }
 }
 
@@ -50,7 +50,8 @@ fn whats_kept_is_there_until_something_else_is() {
 
     assert!(changed && kept.rev > before);
     assert_eq!((kept.repo_id.as_ref(), kept.text.as_str()), (Some(&RepoId::from("r")), "fix the login"));
-    assert_eq!((kept.model.clone(), kept.effort.clone(), kept.plan), (Some(OPUS), Some(Effort::High), true));
+    let planning = Some(protocol::fixtures::plan_mode());
+    assert_eq!((kept.model.clone(), kept.effort.clone(), kept.mode), (Some(OPUS), Some(Effort::High), planning));
     assert!(replaced.rev > kept.rev);
     assert_eq!(store.new_workspace_draft().unwrap(), replaced);
 }
@@ -161,7 +162,7 @@ fn whats_in_the_dialog_is_replaced_only_if_it_says_what_was_asked() {
     let (made, _) = store.set_new_workspace_draft(&typed("fix the login", &["f1"])).unwrap();
     let emptied = typed("", &[]);
     let since = [typed("fix the login and more", &["f1"]), typed("fix the login", &[]), {
-        NewWorkspaceDraftToKeep { plan: false, ..typed("fix the login", &["f1"]) }
+        NewWorkspaceDraftToKeep { mode: None, ..typed("fix the login", &["f1"]) }
     }];
 
     for typed_since in since {
@@ -172,7 +173,8 @@ fn whats_in_the_dialog_is_replaced_only_if_it_says_what_was_asked() {
     }
     let (there, changed) = store.replace_new_workspace_draft(&typed("fix the login", &["f1"]), &emptied).unwrap();
     assert!(changed);
-    assert_eq!((there.text.as_str(), there.files.as_slice(), there.plan), ("", [].as_slice(), true));
+    let planning = Some(protocol::fixtures::plan_mode());
+    assert_eq!((there.text.as_str(), there.files.as_slice(), there.mode), ("", [].as_slice(), planning));
     assert!(there.rev > made.rev);
 }
 

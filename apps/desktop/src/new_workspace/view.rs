@@ -131,7 +131,7 @@ impl NewWorkspaceDialog {
             )
         });
         let field = self.prompt.focus_handle(cx);
-        let plan = Plan::of(self.planning());
+        let plan = if self.can_plan() { Plan::of(self.planning()) } else { Plan::Unavailable };
         let plus =
             composing::plus_menu("new-workspace-add", plan, field, cx, |_, paths, cx| Self::attach_paths(paths, cx));
         let create = look::button("new-workspace-create", look::ButtonKind::Main, look::ControlSize::Regular, "Create")

@@ -123,13 +123,16 @@ fn whats_in_the_new_workspace_dialog_is_kept_with_its_files_across_a_restart_and
     let draft = NewWorkspaceDraftToKeep {
         text: "fix the login".into(),
         files: vec![file.clone()],
-        plan: true,
+        mode: Some(protocol::fixtures::plan_mode()),
         ..NewWorkspaceDraftToKeep::default()
     };
 
     let kept = client.new_workspace_draft_keep(&draft).unwrap();
 
-    assert_eq!((kept.text.as_str(), kept.files.as_slice(), kept.plan), ("fix the login", [added].as_slice(), true));
+    assert_eq!(
+        (kept.text.as_str(), kept.files.as_slice(), kept.mode),
+        ("fix the login", [added].as_slice(), Some(protocol::fixtures::plan_mode()))
+    );
     wait_until("the feed to say what's in the dialog", || dialog_in().as_deref() == Some("fix the login"));
     stack.kill_hub();
     stack.start_hub();

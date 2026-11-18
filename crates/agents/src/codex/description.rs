@@ -1,5 +1,5 @@
-use protocol::capability::settings::Effort;
-use protocol::model::{AgentDescription, AgentKind, ModelName, PermissionMode, SessionSettings};
+use protocol::capability::settings::{Effort, Settings};
+use protocol::model::{AgentDescription, AgentKind, ModelName};
 
 pub fn description() -> AgentDescription {
     AgentDescription {
@@ -9,11 +9,10 @@ pub fn description() -> AgentDescription {
         usage_heading: "Codex usage".into(),
         models: Vec::new(),
         efforts: Vec::new(),
-        modes: PermissionMode::CHOSEN.to_vec(),
-        defaults: SessionSettings {
-            model: ModelName::named("gpt-6.1-sol"),
-            permission_mode: PermissionMode::FullAccess,
-            effort: Effort::Low,
+        defaults: Settings {
+            model: Some(ModelName::named("gpt-6.1-sol")),
+            effort: Some(Effort::Low),
+            ..Settings::default()
         },
         features: Vec::new(),
         // The native CLI owns and refreshes this machine's login. It is never read or copied by Roundhouse.

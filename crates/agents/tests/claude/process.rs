@@ -7,9 +7,11 @@ use std::time::Duration;
 
 use agents::claude::spawn_at;
 use agents::{AgentError, AgentOptions, AgentOutput};
+use protocol::capability::approvals::ApprovalMode;
 use protocol::capability::settings::{Effort, Settings};
 use protocol::event::{CompactedBy, CompactionOutcome, ContentBlock, EventBody, NoticeLevel};
-use protocol::model::{AgentKind, PermissionMode, RunId, Seq, SessionSettings};
+use protocol::fixtures;
+use protocol::model::{AgentKind, RunId, Seq};
 use protocol::prompt::Prompt;
 use protocol::worker::AgentSpec;
 use tokio::sync::mpsc;
@@ -27,7 +29,7 @@ pub(crate) fn spec(dir: &Path) -> AgentSpec {
         agent: AgentKind::Claude,
         cwd: dir.to_string_lossy().into_owned(),
         start: protocol::capability::conversation::Start::New { conversation: Some("s".into()) },
-        settings: typed(&agents::claude::description().defaults),
+        settings: agents::claude::description().defaults,
         env: vec![],
         tools_token: None,
         login: None,
@@ -88,12 +90,7 @@ printf '{"type":"assistant","message":{"id":"m","content":[{"type":"text","text"
 
 fn in_plan_mode(dir: &Path) -> AgentSpec {
     let defaults = agents::claude::description().defaults;
-    AgentSpec { settings: typed(&SessionSettings { permission_mode: PermissionMode::Plan, ..defaults }), ..spec(dir) }
-}
-
-/// `settings`, as a hub of this build sends them to a worker.
-fn typed(settings: &SessionSettings) -> protocol::capability::settings::Settings {
-    settings.for_capabilities(&agents::claude::description().capabilities.unwrap()).unwrap()
+    AgentSpec { settings: Settings { mode: Some(fixtures::plan_mode()), ..defaults }, ..spec(dir) }
 }
 
 /// Reads the first two lines the agent is sent into `lines`, then waits to be stopped.
@@ -168,15 +165,15 @@ printf '{{"type":"system","subtype":"init","session_id":"s","permissionMode":"pl
     let _agent =
         spawn_at(script(dir.path(), &body), in_plan_mode(dir.path()), tx, AgentOptions::default()).await.unwrap();
 
-    let reported: Vec<PermissionMode> = until_exit(&mut rx)
+    let reported: Vec<ApprovalMode> = until_exit(&mut rx)
         .await
         .into_iter()
         .filter_map(|item| match item {
-            AgentOutput::Event { body: EventBody::AgentMode { permission_mode }, .. } => Some(permission_mode),
+            AgentOutput::Event { body: EventBody::AgentMode { mode }, .. } => Some(mode),
             _ => None,
         })
         .collect();
-    assert_eq!(reported, [PermissionMode::FullAccess, PermissionMode::Plan]);
+    assert_eq!(reported, [fixtures::full_access(), fixtures::plan_mode()]);
 }
 
 #[tokio::test]

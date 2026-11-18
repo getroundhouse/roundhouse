@@ -1,9 +1,11 @@
 use crate::new_workspace::Request;
 use client_core::{Client, ClientError, FileToSend, Written};
 use protocol::attachment::Attachment;
+use protocol::capability::approvals::ApprovalMode;
+use protocol::capability::settings::Settings;
 use protocol::client::ApiError;
 use protocol::client::new_workspace::{NewWorkspaceMade, UnsentPrompt};
-use protocol::model::{NewWorkspaceDraftToKeep, PermissionMode, Session, SessionSettingsChange, Workspace};
+use protocol::model::{NewWorkspaceDraftToKeep, Session, Workspace};
 use protocol::prompt::Prompt;
 
 /// How far making a workspace got.
@@ -22,7 +24,7 @@ pub(in super::super) struct Unsent {
     /// What wasn't sent, to give back, or `None` once the hub has put it in the new chat's composer itself.
     pub(in super::super) given_back: Option<GivenBack>,
     /// The mode the chat was to start in, which goes back with the prompt.
-    pub(in super::super) permission_mode: PermissionMode,
+    pub(in super::super) mode: Option<ApprovalMode>,
     pub(in super::super) failed: Step,
     pub(in super::super) error: ClientError,
 }
@@ -40,9 +42,9 @@ pub(in super::super) struct GivenBack {
 impl Unsent {
     /// All of `request`, given back, since `failed` failed before anything was sent.
     pub(super) fn of(request: Request, failed: Step, error: ClientError) -> Self {
-        let Request { prompt, coming_back, permission_mode, .. } = request;
+        let Request { prompt, coming_back, mode, .. } = request;
         let given_back = Some(GivenBack { prompt, coming_back, in_the_dialog: false });
-        Self { given_back, permission_mode, failed, error }
+        Self { given_back, mode, failed, error }
     }
 }
 
@@ -100,7 +102,7 @@ pub(in super::super) fn make(client: &Client, request: Request) -> Made {
 /// files the dialog hadn't read back. A chat that couldn't be given what was chosen is said to have failed at that.
 fn unsent_by_the_hub(request: Request, unchosen: Option<ApiError>, unsent: Option<UnsentPrompt>) -> Option<Unsent> {
     let failed = if unchosen.is_some() { Step::Model } else { Step::Prompt };
-    let permission_mode = request.permission_mode;
+    let mode = request.mode;
     match (unsent, unchosen) {
         (Some(UnsentPrompt { error, in_composer: false }), unchosen) => {
             let mut unsent = Unsent::of(request, failed, ClientError::Api(unchosen.unwrap_or(error)));
@@ -111,12 +113,10 @@ fn unsent_by_the_hub(request: Request, unchosen: Option<ApiError>, unsent: Optio
         }
         (Some(UnsentPrompt { error, in_composer: true }), unchosen) => {
             let error = ClientError::Api(unchosen.unwrap_or(error));
-            Some(Unsent { given_back: None, permission_mode, failed, error })
+            Some(Unsent { given_back: None, mode, failed, error })
         }
         // Nothing was typed, so there's nothing to give back, but the chat still isn't as chosen.
-        (None, Some(unchosen)) => {
-            Some(Unsent { given_back: None, permission_mode, failed, error: ClientError::Api(unchosen) })
-        }
+        (None, Some(unchosen)) => Some(Unsent { given_back: None, mode, failed, error: ClientError::Api(unchosen) }),
         (None, None) => None,
     }
 }
@@ -169,7 +169,7 @@ fn make_into(
     made.session = Some(session);
     if !chosen {
         let (model, effort) = (request.model.clone(), request.effort.clone());
-        let options = SessionSettingsChange { model, permission_mode: Some(request.permission_mode), effort };
+        let options = Settings { model, mode: request.mode, effort, ..Settings::default() };
         made.session = Some(client.session_configure(&chat, options).map_err(at(Step::Model))?);
     }
     if written.prompt.says_or_carries() {
@@ -183,5 +183,5 @@ fn make_into(
 fn as_chosen(session: &Session, request: &Request) -> bool {
     request.model.as_ref().is_none_or(|model| *model == session.model)
         && request.effort.clone().is_none_or(|effort| effort == session.effort)
-        && session.permission_mode == request.permission_mode
+        && request.mode.is_none_or(|mode| mode == session.mode)
 }

@@ -9,7 +9,7 @@ use protocol::capability::{
     settings::Settings,
 };
 use protocol::event::{ContentBlock, Denied, EventBody, TurnOutcome};
-use protocol::model::{PermissionMode, Seq, ToolUseId};
+use protocol::model::{Seq, ToolUseId};
 use protocol::prompt::Prompt;
 use serde_json::{Value, json};
 
@@ -95,7 +95,7 @@ async fn full_access_auto_allows_permission_requests_and_parses_command_envelope
             ]
         }
     ]);
-    let mut full = Harness::new(&script, PermissionMode::FullAccess, Start::New { conversation: None });
+    let mut full = Harness::new(&script, super::super::claims::full_access(), Start::New { conversation: None });
     let agent = full.started().await;
     agent.send_prompt(Seq::FIRST, &Prompt::new("clean up")).await.unwrap();
     let mut selected = None;
@@ -142,7 +142,7 @@ async fn plan_mode_asks_permission_and_marks_denied_call_results() {
             ]
         }
     ]);
-    let mut plan = Harness::new(&script, PermissionMode::Plan, Start::New { conversation: None });
+    let mut plan = Harness::new(&script, super::super::claims::plan(), Start::New { conversation: None });
     let agent = plan.started().await;
     agent.send_prompt(Seq::FIRST, &Prompt::new("plan it")).await.unwrap();
     let approval_id = loop {
@@ -204,7 +204,7 @@ async fn plan_mode_holds_only_post_tool_plan_text_and_preserves_tokens_when_canc
             {"result": {"stopReason": "end_turn", "usage": {"inputTokens": 80, "outputTokens": 20, "thoughtTokens": 5, "cachedReadTokens": 0, "cachedWriteTokens": 0, "totalTokens": 100}}}
         ]
     }]);
-    let mut h = Harness::new(&script, PermissionMode::Plan, Start::New { conversation: None });
+    let mut h = Harness::new(&script, super::super::claims::plan(), Start::New { conversation: None });
     let agent = h.started().await;
     agent.send_prompt(Seq::FIRST, &Prompt::new("make a plan")).await.unwrap();
     let held_id = loop {
@@ -244,7 +244,7 @@ async fn an_approved_plans_turn_counts_what_the_plan_took_with_what_carrying_it_
         {"on": "session/prompt", "at": 1, "actions": [said("1. Update README.md"), ended(80, 20)]},
         {"on": "session/prompt", "at": 2, "actions": [said("Done."), ended(200, 30)]}
     ]);
-    let mut h = Harness::new(&script, PermissionMode::Plan, Start::New { conversation: None });
+    let mut h = Harness::new(&script, super::super::claims::plan(), Start::New { conversation: None });
     let agent = h.started().await;
     agent.send_prompt(Seq::FIRST, &Prompt::new("make a plan")).await.unwrap();
     let plan = loop {
@@ -293,7 +293,7 @@ async fn mode_switches_swap_skip_permissions_flag_stop_background_tasks_and_keep
         {"on": "session/prompt", "at": 2, "actions": [reply("1. Plan step")]},
         {"on": "session/set_config_option", "at": 5, "actions": [{"result": {}}, {"id": 6, "jsonrpc": "2.0", "result": {"stopReason": "end_turn"}}]}
     ]);
-    let mut h = Harness::new(&script, PermissionMode::FullAccess, Start::New { conversation: None });
+    let mut h = Harness::new(&script, super::super::claims::full_access(), Start::New { conversation: None });
     let agent = h.started().await;
     let first_pid = agent.pid();
     agent.send_prompt(Seq::FIRST, &Prompt::new("start bg")).await.unwrap();
@@ -309,7 +309,7 @@ async fn mode_switches_swap_skip_permissions_flag_stop_background_tasks_and_keep
                 matches!(&body, EventBody::ToolCallDropped { tool_use_id } if tool_use_id.as_str() == "bg-swap");
             saw_stopped |=
                 matches!(&body, EventBody::AgentTasks { tasks, stopped } if tasks.is_empty() && stopped.len() == 1);
-            if matches!(body, EventBody::AgentMode { permission_mode: PermissionMode::Plan }) {
+            if matches!(body, EventBody::AgentMode { mode } if mode.plan) {
                 break;
             }
         }
@@ -337,7 +337,7 @@ async fn mode_switches_swap_skip_permissions_flag_stop_background_tasks_and_keep
 async fn elicitation_reply(decision: Decision) -> Value {
     let mut h = Harness::new(
         &json!([{"on": "session/prompt", "actions": [elicitation_fixture()]}]),
-        PermissionMode::FullAccess,
+        super::super::claims::full_access(),
         Start::New { conversation: None },
     );
     let agent = h.started().await;

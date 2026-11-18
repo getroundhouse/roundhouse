@@ -5,7 +5,6 @@ use std::time::Duration;
 
 use protocol::capability::calls::{Call, CallKind};
 use protocol::event::{ContentBlock, EventBody, TurnOutcome};
-use protocol::model::PermissionMode;
 
 use super::driver::INTERRUPTED;
 use super::scenario::{BOTH, Check, SCRIPTED_ONLY, Scenario};
@@ -18,7 +17,7 @@ pub static ALL: &[&Scenario] = &[&PLAIN_TURN, &CANCEL_COMMAND, &RESUME, &THINKIN
 pub static PLAIN_TURN: Scenario = Scenario {
     name: "plain_turn",
     against: BOTH,
-    mode: PermissionMode::FullAccess,
+    plans: false,
     steps: |driver| {
         Box::pin(async move {
             driver.start().await?;
@@ -50,7 +49,7 @@ pub const PRINTED: &str = "hello-from-42";
 pub static CANCEL_COMMAND: Scenario = Scenario {
     name: "cancel_command",
     against: BOTH,
-    mode: PermissionMode::FullAccess,
+    plans: false,
     steps: |driver| {
         Box::pin(async move {
             driver.start().await?;
@@ -99,7 +98,7 @@ pub const READY: &str = "Reply with the single word: ready";
 pub static RESUME: Scenario = Scenario {
     name: "resume",
     against: BOTH,
-    mode: PermissionMode::FullAccess,
+    plans: false,
     steps: |driver| {
         Box::pin(async move {
             driver.start().await?;
@@ -143,7 +142,7 @@ pub const ASKED: &str = "What word did I ask you to remember? Reply with just th
 pub static THINKING: Scenario = Scenario {
     name: "thinking",
     against: SCRIPTED_ONLY,
-    mode: PermissionMode::FullAccess,
+    plans: false,
     steps: |driver| {
         Box::pin(async move {
             driver.start().await?;
@@ -170,7 +169,7 @@ pub const THOUGHT: &str = "Weighing it up.";
 pub static PLAN_APPROVED: Scenario = Scenario {
     name: "plan_approved",
     against: BOTH,
-    mode: PermissionMode::Plan,
+    plans: true,
     steps: |driver| {
         Box::pin(async move {
             driver.start().await?;
@@ -263,11 +262,9 @@ pub static PLAN_APPROVED: Scenario = Scenario {
             check: |trial| {
                 let modes: Vec<_> = trial
                     .events()
-                    .filter_map(|event| {
-                        if let EventBody::AgentMode { permission_mode } = event { Some(*permission_mode) } else { None }
-                    })
+                    .filter_map(|event| if let EventBody::AgentMode { mode } = event { Some(*mode) } else { None })
                     .collect();
-                holds(modes.last() == Some(&PermissionMode::FullAccess), || format!("its modes were {modes:?}"))
+                holds(modes.last().is_some_and(|mode| !mode.plan), || format!("its modes were {modes:?}"))
             },
         },
         THE_TURN_SUCCEEDED,

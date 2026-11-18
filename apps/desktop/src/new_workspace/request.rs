@@ -2,8 +2,9 @@
 
 use client_core::FileToSend;
 use protocol::attachment::Attachment;
+use protocol::capability::approvals::ApprovalMode;
 use protocol::capability::settings::Effort;
-use protocol::model::{AgentKind, ModelName, NewWorkspaceDraftToKeep, PermissionMode, RepoId};
+use protocol::model::{AgentKind, ModelName, NewWorkspaceDraftToKeep, RepoId};
 use protocol::prompt::{Prompt, says_or_carries};
 
 /// What Create asks the app to make.
@@ -22,8 +23,8 @@ pub struct Request {
     /// for what the agent starts a chat with.
     pub model: Option<ModelName>,
     pub effort: Option<Effort>,
-    /// Plan mode, if it was on in the dialog, and full access otherwise.
-    pub permission_mode: PermissionMode,
+    /// The agent's plan mode, if plan mode was on in the dialog, and otherwise `None`, for the one it starts a chat in.
+    pub mode: Option<ApprovalMode>,
     /// What Create had the hub keep as what's in the dialog, which the hub makes the workspace from. It's what the
     /// dialog keeps, not what it shows, so its model and effort are `None` unless one was picked or kept, as the hub's
     /// copy says, and the hub can tell once the dialog says nothing else.
@@ -43,7 +44,7 @@ impl Request {
         prompt: Prompt<FileToSend>,
         agent: AgentKind,
         (model, effort): (Option<ModelName>, Option<Effort>),
-        permission_mode: PermissionMode,
+        mode: Option<ApprovalMode>,
     ) -> Self {
         let made_of = NewWorkspaceDraftToKeep {
             agent: Some(agent),
@@ -52,10 +53,10 @@ impl Request {
             files: prompt.files.iter().map(|file| file.attachment.id.clone()).collect(),
             model: model.clone(),
             effort: effort.clone(),
-            plan: permission_mode == PermissionMode::Plan,
+            mode,
         };
         let coming_back = Vec::new();
-        Self { repo, prompt, coming_back, agent, model, effort, permission_mode, made_of, kept: None }
+        Self { repo, prompt, coming_back, agent, model, effort, mode, made_of, kept: None }
     }
 
     /// Whether there's a prompt to send once the workspace is made, counting the files still coming back.

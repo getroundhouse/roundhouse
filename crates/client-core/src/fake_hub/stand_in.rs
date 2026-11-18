@@ -1,9 +1,6 @@
-use protocol::capability::settings::Effort;
+use protocol::capability::settings::{Effort, Settings};
 use protocol::client::{CLIENT_PROTOCOL_VERSION, HubStatus};
-use protocol::model::{
-    AgentDescription, AgentFeature, AgentKind, LoginDescription, ModelChoice, ModelName, PermissionMode,
-    SessionSettings,
-};
+use protocol::model::{AgentDescription, AgentFeature, AgentKind, LoginDescription, ModelChoice, ModelName};
 use protocol::pairing::{Pairing, PairingCode, PairingLink};
 
 use super::world::{LoginSupport, NOW_MS, World};
@@ -20,7 +17,7 @@ pub(super) fn claude(world: &World) -> AgentDescription {
     let offered =
         |model: &'static str, label: &str| ModelChoice { model: ModelName::named(model), label: label.into() };
     AgentDescription {
-        capabilities: None,
+        capabilities: Some(protocol::fixtures::claude_claims()),
         kind: AgentKind::Claude,
         name: "Claude Code".into(),
         usage_heading: "Claude usage".into(),
@@ -31,11 +28,10 @@ pub(super) fn claude(world: &World) -> AgentDescription {
             offered("haiku", "Haiku"),
         ],
         efforts: Effort::ALL.into_iter().filter(|effort| *effort != Effort::Ultra).collect(),
-        modes: PermissionMode::CHOSEN.to_vec(),
-        defaults: SessionSettings {
-            model: ModelName::named("opus"),
-            permission_mode: PermissionMode::FullAccess,
-            effort: Effort::Xhigh,
+        defaults: Settings {
+            model: Some(ModelName::named("opus")),
+            effort: Some(Effort::Xhigh),
+            ..Settings::default()
         },
         features: vec![AgentFeature::Compacts],
         login: (world.logins != LoginSupport::None).then(|| LoginDescription {

@@ -66,7 +66,7 @@ pub async fn title_for(
         agent: AgentKind::Codex,
         cwd: room.path().to_string_lossy().into_owned(),
         start: Start::New { conversation: None },
-        settings: Settings { model: Some(description().defaults.model), ..Settings::default() },
+        settings: Settings { model: description().defaults.model, ..Settings::default() },
         env: Vec::new(),
         tools_token: None,
         login: None,

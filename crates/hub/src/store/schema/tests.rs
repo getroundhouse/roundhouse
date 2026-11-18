@@ -1,5 +1,6 @@
 use std::fs;
 
+use protocol::capability::approvals::ApprovalMode;
 use protocol::event::{AgentTask, TaskKind};
 use protocol::model::AgentAccount;
 
@@ -159,11 +160,13 @@ fn a_chat_from_before_full_access_keeps_only_plan_mode() {
 
     migrate(&mut conn, &backups).unwrap();
 
-    let mode = |id: &str| -> String {
-        conn.query_row("SELECT permission_mode FROM sessions WHERE id = ?", [id], |row| row.get(0)).unwrap()
+    let mode = |id: &str| -> ApprovalMode {
+        let json: String = conn.query_row("SELECT mode FROM sessions WHERE id = ?", [id], |row| row.get(0)).unwrap();
+        serde_json::from_str(&json).unwrap()
     };
     let modes: Vec<_> = ["asks", "edits", "planning", "full", "unset"].map(mode).into();
-    assert_eq!(modes, ["bypassPermissions", "bypassPermissions", "plan", "bypassPermissions", "bypassPermissions"]);
+    let (full, plan) = (protocol::fixtures::full_access(), protocol::fixtures::plan_mode());
+    assert_eq!(modes, [full, full, plan, full, full]);
 }
 
 /// What the person sent before sessions kept when they last did, by the log: their prompts and answers, and not an

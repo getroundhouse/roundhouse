@@ -2,11 +2,12 @@ use super::super::Hub;
 use crate::attachment_files::FileFor;
 use crate::store::AddedBy;
 use protocol::attachment::{Attachment, AttachmentBytes};
+use protocol::capability::settings::Settings;
 use protocol::client::new_workspace::{NewWorkspaceMade, UnsentPrompt};
 use protocol::client::{ApiError, ErrorCode, HubNotice};
 use protocol::model::{
-    AttachmentId, ClientMessageId, ClientRequestId, DraftToKeep, NewWorkspaceDraftToKeep, PermissionMode, Session,
-    SessionSettingsChange, Workspace, WorkspaceId,
+    AttachmentId, ClientMessageId, ClientRequestId, DraftToKeep, NewWorkspaceDraftToKeep, Session, Workspace,
+    WorkspaceId,
 };
 use protocol::prompt::{Prompt, PromptProblem, says_or_carries};
 use std::sync::Arc;
@@ -42,11 +43,7 @@ impl Hub {
                 ));
             }
             description
-                .takes(&SessionSettingsChange {
-                    model: Some(model.clone()),
-                    effort: made_of.effort.clone(),
-                    permission_mode: None,
-                })
+                .takes(&Settings { model: Some(model.clone()), effort: made_of.effort.clone(), ..Settings::default() })
                 .map_err(|e| ApiError::new(ErrorCode::InvalidRequest, e.to_string()))?;
         }
         let files = self.dialog_files(&made_of, again).await?;
@@ -100,11 +97,10 @@ impl Hub {
     ) -> Result<(Session, Option<ApiError>), ApiError> {
         let session =
             self.session_ensure(workspace.clone(), made_of.agent.unwrap_or_else(|| self.new_chat_kind())).await?;
-        let mode = if made_of.plan { PermissionMode::Plan } else { PermissionMode::FullAccess };
         let as_chosen = made_of.agent.is_none_or(|agent| agent == session.agent)
             && made_of.model.as_ref().is_none_or(|model| *model == session.model)
             && made_of.effort.clone().is_none_or(|effort| effort == session.effort)
-            && session.permission_mode == mode;
+            && made_of.mode.is_none_or(|mode| mode == session.mode);
         if as_chosen {
             return Ok((session, None));
         }
@@ -117,8 +113,8 @@ impl Hub {
                 )),
             ));
         }
-        let (model, effort) = (made_of.model.clone(), made_of.effort.clone());
-        let chosen = SessionSettingsChange { model, permission_mode: Some(mode), effort };
+        let (model, mode, effort) = (made_of.model.clone(), made_of.mode, made_of.effort.clone());
+        let chosen = Settings { model, mode, effort, ..Settings::default() };
         match self.session_configure(session.id.clone(), chosen).await {
             Ok(configured) => Ok((configured, None)),
             Err(unchosen) => Ok((session, Some(unchosen))),

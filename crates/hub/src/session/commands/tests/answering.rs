@@ -30,7 +30,7 @@ async fn an_answer_to_a_request_in_the_log_is_taken_however_soon_it_comes() {
         agent_session_id: None,
         model: None,
         cwd: None,
-        permission_mode: None,
+        mode: None,
         agent_version: None,
     };
     live.send_item(Item::Event { run, body: Box::new(init), raw: None, attachments: Vec::new(), seq: None }).await;

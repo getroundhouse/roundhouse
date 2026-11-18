@@ -7,8 +7,9 @@
 #![cfg(test)]
 
 use client_core::Client;
+use protocol::capability::settings::Settings;
 use protocol::event::{EventBody, SessionEvent};
-use protocol::model::{Account, AgentKind, LoginToken, SessionId, SessionSettingsChange, SessionStatus};
+use protocol::model::{Account, AgentKind, LoginToken, SessionId, SessionStatus};
 
 use crate::accounts::log_out;
 use hub::GithubPullRequestState::{Merged, Open};
@@ -50,7 +51,7 @@ impl TwoAccounts {
     /// Another chat in the same workspace, on no account until its agent first starts.
     fn another_chat(&self, client: &Client) -> SessionId {
         let workspace = client.session_get(&self.session).unwrap().workspace_id;
-        client.session_create(&workspace, AgentKind::Claude, SessionSettingsChange::default(), None).unwrap().id
+        client.session_create(&workspace, AgentKind::Claude, Settings::default(), None).unwrap().id
     }
 }
 

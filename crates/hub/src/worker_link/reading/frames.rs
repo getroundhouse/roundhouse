@@ -5,7 +5,7 @@ use crate::session::Item;
 use crate::untyped::Typing;
 use protocol::client::{ApiError, ErrorCode, Outcome, error_chain};
 use protocol::frame;
-use protocol::model::{InstanceId, RunId, SessionId, WorkspaceId};
+use protocol::model::{AgentKind, InstanceId, RunId, SessionId, WorkspaceId};
 use protocol::worker::{AskAnswer, AskId, WorkerAsk, WorkerFrame};
 use providers::Provider;
 use std::collections::HashMap;
@@ -61,7 +61,11 @@ pub(in super::super) async fn read_frames(
                 break;
             }
         };
-        let parsed = match untyped.frame(bytes) {
+        let kind = match crate::untyped::naming_a_mode(bytes) {
+            Some(session) => hub.live_session(&session).await.map_or(AgentKind::Unknown, |session| session.agent()),
+            None => AgentKind::Unknown,
+        };
+        let parsed = match untyped.frame(bytes, kind) {
             Ok(parsed) => parsed,
             Err(e) => {
                 // A reply from a newer worker, as after a rollback, ends its call rather than leaving it to wait until

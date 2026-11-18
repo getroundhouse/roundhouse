@@ -7,36 +7,37 @@
 use std::path::PathBuf;
 
 use client_core::ClientError;
-use protocol::capability::approvals::Asks;
+use protocol::capability::approvals::{ApprovalMode, Asks};
 use protocol::capability::settings::Effort::{self, Medium};
+use protocol::capability::settings::Settings;
 use protocol::client::ErrorCode;
 use protocol::event::EventBody;
-use protocol::model::PermissionMode::{FullAccess, Plan};
-use protocol::model::{ModelName, PermissionMode, SessionSettings, SessionSettingsChange};
+use protocol::fixtures::{full_access, plan_mode};
+use protocol::model::ModelName;
 
 use crate::support::{
     Stack, approve_plan, assistant_text, in_mode, read_all, wait_for_approval, wait_for_turn_end, wait_until,
 };
 
 /// The changes of mode in the log.
-fn mode_changes(client: &client_core::Client, session: &protocol::model::SessionId) -> Vec<PermissionMode> {
+fn mode_changes(client: &client_core::Client, session: &protocol::model::SessionId) -> Vec<ApprovalMode> {
     read_all(client, session)
         .into_iter()
         .filter_map(|e| match e.body {
-            EventBody::AgentMode { permission_mode } => Some(permission_mode),
+            EventBody::AgentMode { mode } => Some(mode),
             _ => None,
         })
         .collect()
 }
 
 /// Settings that set only the model.
-fn on_model(model: &'static str) -> SessionSettingsChange {
-    SessionSettingsChange { model: Some(ModelName::named(model)), ..SessionSettingsChange::default() }
+fn on_model(model: &'static str) -> Settings {
+    Settings { model: Some(ModelName::named(model)), ..Settings::default() }
 }
 
 /// Settings that set only the effort.
-fn at(effort: Effort) -> SessionSettingsChange {
-    SessionSettingsChange { effort: Some(effort), ..SessionSettingsChange::default() }
+fn at(effort: Effort) -> Settings {
+    Settings { effort: Some(effort), ..Settings::default() }
 }
 
 /// What the fake agent's CLI was last launched with.
@@ -53,38 +54,35 @@ fn a_change_of_model_mode_and_effort_reaches_the_running_agent_and_the_next_laun
     let client = stack.client();
     let (workspace, session) = stack.workspace_planning(&client);
     let defaults = agents::claude::description().defaults;
-    assert_eq!(session.settings(), SessionSettings { permission_mode: Plan, ..defaults.clone() });
+    assert_eq!(session.settings(), Settings { mode: Some(plan_mode()), ..defaults.clone() });
     client.session_prompt(&session.id, "tool:echo first > first.txt", None).unwrap();
     let approval = wait_for_approval(&client, &session.id);
     client.session_decide(&session.id, &approval, protocol::fixtures::allow_once()).unwrap();
     wait_for_turn_end(&client, &session.id, 1);
-    let launched = format!("--model {} --effort {}", defaults.model.as_str(), defaults.effort.as_str().unwrap());
+    let (model, effort) = (defaults.model.unwrap(), defaults.effort.unwrap());
+    let launched = format!("--model {} --effort {}", model.as_str(), effort.as_str().unwrap());
     assert!(last_args(&stack).contains(&launched), "the description's: {}", last_args(&stack));
 
-    let change =
-        SessionSettingsChange { model: Some(ModelName::named("sonnet")), effort: Some(Medium), ..in_mode(FullAccess) };
+    let change = Settings { model: Some(ModelName::named("sonnet")), effort: Some(Medium), ..in_mode(full_access()) };
     let changed = client.session_configure(&session.id, change).unwrap();
-    assert_eq!(
-        (changed.model, changed.permission_mode, changed.effort),
-        (ModelName::named("sonnet"), FullAccess, Medium)
-    );
+    assert_eq!((changed.model, changed.mode, changed.effort), (ModelName::named("sonnet"), full_access(), Medium));
 
     // The same process, and it no longer asks, at the new level.
     client.session_prompt(&session.id, "tool:echo second > second.txt;effort", None).unwrap();
     let events = wait_for_turn_end(&client, &session.id, 2);
     // The agent reports its new mode after taking it, so the report can come after the reply. It comes before what the
     // next turn says, though, so it's in the log by the turn's end.
-    assert_eq!(mode_changes(&client, &session.id), [FullAccess], "reported by the agent, and only by it");
+    assert_eq!(mode_changes(&client, &session.id), [full_access()], "reported by the agent, and only by it");
     let path = PathBuf::from(workspace.path.clone().unwrap());
     assert!(path.join("second.txt").exists());
     assert!(assistant_text(&events).ends_with("effort=medium"), "{}", assistant_text(&events));
     assert_eq!(events.iter().filter(|e| matches!(e.body, EventBody::AgentStarted { .. })).count(), 1);
     assert_eq!(events.iter().filter(|e| matches!(e.body, EventBody::ApprovalRequested { .. })).count(), 1);
     let last_init = events.iter().rev().find_map(|e| match &e.body {
-        EventBody::AgentInit { model, permission_mode, .. } => Some((model.clone(), *permission_mode)),
+        EventBody::AgentInit { model, mode, .. } => Some((model.clone(), *mode)),
         _ => None,
     });
-    assert_eq!(last_init, Some((Some("sonnet".to_string()), Some(FullAccess))));
+    assert_eq!(last_init, Some((Some("sonnet".to_string()), Some(full_access()))));
 
     // A new process starts with what was chosen, from the hub's own record.
     drop(client);
@@ -92,7 +90,7 @@ fn a_change_of_model_mode_and_effort_reaches_the_running_agent_and_the_next_laun
     stack.start_hub();
     let client = stack.client();
     let kept = client.session_get(&session.id).unwrap();
-    assert_eq!((kept.permission_mode, kept.effort), (FullAccess, Medium));
+    assert_eq!((kept.mode, kept.effort), (full_access(), Medium));
     client.session_prompt(&session.id, "tool:echo third > third.txt;effort", None).unwrap();
     wait_until("the third file", || path.join("third.txt").exists());
     assert!(assistant_text(&wait_for_turn_end(&client, &session.id, 3)).ends_with("effort=medium"));
@@ -141,11 +139,11 @@ fn approving_a_plan_leaves_plan_mode_and_the_next_launch_agrees() {
         _ => None,
     });
     assert!(matches!(&asked, Some(Asks::Plan { plan, .. }) if plan == "Do the thing"), "{asked:?}");
-    assert_eq!(client.session_get(&session.id).unwrap().permission_mode, Plan);
+    assert_eq!(client.session_get(&session.id).unwrap().mode, plan_mode());
 
     approve_plan(&client, &session.id, &approval);
     wait_for_turn_end(&client, &session.id, 1);
-    assert_eq!(client.session_get(&session.id).unwrap().permission_mode, FullAccess);
+    assert_eq!(client.session_get(&session.id).unwrap().mode, full_access());
 
     drop(client);
     stack.stop_hub();
@@ -176,7 +174,7 @@ fn an_agent_that_starts_in_plan_mode_has_full_access_once_its_plan_is_approved()
 
     assert!(PathBuf::from(workspace.path.unwrap()).join("made.txt").exists());
     assert_eq!(events.iter().filter(|e| matches!(e.body, EventBody::ApprovalRequested { .. })).count(), 1);
-    assert_eq!(client.session_get(&session.id).unwrap().permission_mode, FullAccess);
+    assert_eq!(client.session_get(&session.id).unwrap().mode, full_access());
 }
 
 #[test]

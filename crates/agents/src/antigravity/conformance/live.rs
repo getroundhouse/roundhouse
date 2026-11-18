@@ -185,12 +185,8 @@ impl Launcher for RealCli {
         } else {
             Start::New { conversation: None }
         };
-        let mut settings = crate::antigravity::description().defaults;
-        settings.model = ModelName::named(super::super::description::TRIAL_MODEL);
-        settings.effort = Effort::Low;
-        settings.permission_mode = self.scenario.mode;
-        let claims = crate::antigravity::description().capabilities.unwrap_or_default();
-        let settings = settings.for_capabilities(&claims).map_err(|e| Failed(e.to_string()))?;
+        let trial_model = ModelName::named(super::super::description::TRIAL_MODEL);
+        let settings = self.scenario.settings(&crate::antigravity::description(), trial_model, Effort::Low)?;
         let spec = AgentSpec {
             session_id: "conformance".into(),
             run,

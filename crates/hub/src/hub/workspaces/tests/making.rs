@@ -4,10 +4,10 @@
 use std::sync::Arc;
 
 use parking_lot::Mutex;
+use protocol::capability::settings::Settings;
 use protocol::client::{ApiError, ErrorCode, HubNotice};
 use protocol::model::{
-    AgentKind, Branch, Branches, ClientRequestId, Head, RecordKey, SessionSettingsChange, SetupStatus, WorkspaceId,
-    WorkspaceStatus,
+    AgentKind, Branch, Branches, ClientRequestId, Head, RecordKey, SetupStatus, WorkspaceId, WorkspaceStatus,
 };
 use protocol::worker::{PrepareWorkspace, RepoSource, SetupDone, WorkerRequest, WorkerResponse, WorktreeThereReply};
 
@@ -82,7 +82,7 @@ async fn a_request_sent_again_gets_what_it_made_however_things_have_changed_sinc
     let a_workspace = || hub.workspace_create("r".into(), None, None, Some("a workspace".into()));
     let workspace = a_workspace().await.unwrap();
     let a_chat = |request: &str| {
-        let (unchanged, request) = (SessionSettingsChange::default(), ClientRequestId::from(request));
+        let (unchanged, request) = (Settings::default(), ClientRequestId::from(request));
         hub.session_create(workspace.id.clone(), AgentKind::Claude, unchanged, Some(request))
     };
     let chat = a_chat("a chat").await.unwrap();

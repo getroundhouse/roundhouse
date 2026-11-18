@@ -10,7 +10,6 @@ use crate::model::ModelName;
 
 /// What a chat runs with. A launch names the model, and every other setting the kind claims, so none is left to the
 /// agent's own configuration, and leaves out only what the kind doesn't claim. A change names only what it changes.
-/// It takes the place of `SessionSettings` and `SessionSettingsChange`.
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq, Eq)]
 #[serde(default)]
 pub struct Settings {

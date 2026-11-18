@@ -2,7 +2,7 @@ use crate::{AgentError, AgentOptions, AgentOutput, AgentProcess, antigravity, cl
 use protocol::attachment::NewAttachment;
 use protocol::capability::approvals::ApprovalMode;
 use protocol::capability::settings::{Effort, Settings};
-use protocol::model::{AgentAccount, AgentDescription, AgentKind, ModelName, PermissionMode, Title};
+use protocol::model::{AgentAccount, AgentDescription, AgentKind, ModelName, Title};
 use protocol::prompt::Prompt;
 use protocol::worker::AgentSpec;
 use std::path::Path;
@@ -51,30 +51,19 @@ pub(crate) fn launch(spec: &AgentSpec) -> Result<Launch, AgentError> {
 /// What `kind` runs with where nothing names a setting, as a connection to its CLI that starts no conversation does.
 pub(crate) fn defaults(kind: AgentKind) -> Result<Launch, AgentError> {
     let description = described(kind)?;
-    let settings = Settings { model: Some(description.defaults.model.clone()), ..Settings::default() };
-    launching(&description, &settings)
+    launching(&description, &description.defaults)
 }
 
 fn launching(description: &AgentDescription, settings: &Settings) -> Result<Launch, AgentError> {
     let model = settings.model.clone().ok_or_else(|| AgentError::Refused("A launch names its model".into()))?;
-    let default_mode = || description.capabilities.as_ref()?.approvals.modes.as_ref().map(|modes| modes.default);
-    let mode = settings.mode.or_else(default_mode).filter(|mode| mode.is_known()).ok_or(AgentError::UnknownMode)?;
-    let effort = settings.effort.as_ref().unwrap_or(&description.defaults.effort);
+    let mode = settings.mode.or_else(|| description.default_mode());
+    let mode = mode.filter(|mode| mode.is_known()).ok_or(AgentError::UnknownMode)?;
+    let effort = settings.effort.as_ref().or(description.defaults.effort.as_ref()).ok_or(AgentError::UnknownEffort)?;
     Ok(Launch { model, mode, effort: effort.known().ok_or(AgentError::UnknownEffort)? })
 }
 
 fn described(kind: AgentKind) -> Result<AgentDescription, AgentError> {
     descriptions().into_iter().find(|description| description.kind == kind).ok_or(AgentError::UnknownKind)
-}
-
-/// `mode` as the log says a mode until the log's mode is typed too: plan mode, or full access, the only other mode a
-/// chat can be given, or unknown for one an agent reports that this build doesn't know.
-pub(crate) fn as_logged(mode: ApprovalMode) -> PermissionMode {
-    match mode {
-        mode if !mode.is_known() => PermissionMode::Unknown,
-        mode if mode.plan => PermissionMode::Plan,
-        _ => PermissionMode::FullAccess,
-    }
 }
 
 /// The account `kind`'s CLI runs under here, with `options.login` or with this machine's own, from a one-off call
@@ -144,7 +133,8 @@ mod tests {
         let launch = super::launch(&launching(named.clone())).unwrap();
         assert_eq!((launch.model, launch.mode, launch.effort), (opus.clone(), planning, Effort::Max));
         let only_a_model = super::launch(&launching(Settings { model: Some(opus), ..Settings::default() })).unwrap();
-        assert_eq!((only_a_model.mode, only_a_model.effort), (modes.default, claude.defaults.effort), "the kind's");
+        let kinds = (modes.default, claude.defaults.effort.unwrap());
+        assert_eq!((only_a_model.mode, only_a_model.effort), kinds, "the kind's");
         let unnamed = Settings { effort: Some(Effort::Persistent), ..named.clone() };
         assert_eq!(super::launch(&launching(unnamed)).unwrap().effort, Effort::Persistent, "one it has no level for");
 
@@ -162,19 +152,22 @@ mod tests {
         }
     }
 
-    /// A kind declares its modes and either offers its defaults or gets its model choices from the launch.
+    /// A kind claims its modes and either offers its defaults or gets its model choices from the launch, and its
+    /// defaults name a model and an effort and leave the mode to its claims.
     #[test]
     fn a_kind_declares_its_choices_or_gets_its_catalog_at_launch() {
         for agent in super::descriptions() {
-            let defaults = &agent.defaults;
+            let model = agent.defaults.model.clone().unwrap();
+            let effort = agent.defaults.effort.clone().unwrap();
 
             if agent.discovers_models() {
                 assert!(agent.models.is_empty() && agent.efforts.is_empty(), "{:?} discovers both", agent.kind);
             } else {
-                assert!(agent.label(&defaults.model).is_some(), "{:?}'s model", agent.kind);
-                assert!(agent.efforts_for(&defaults.model).contains(&defaults.effort), "{:?}'s effort", agent.kind);
+                assert!(agent.label(&model).is_some(), "{:?}'s model", agent.kind);
+                assert!(agent.efforts_for(&model).contains(&effort), "{:?}'s effort", agent.kind);
             }
-            assert!(agent.modes.contains(&defaults.permission_mode), "{:?}'s mode", agent.kind);
+            assert!(agent.default_mode().is_some_and(ApprovalMode::is_known), "{:?}'s mode", agent.kind);
+            assert_eq!(agent.defaults.mode, None, "{:?}'s mode is its claims'", agent.kind);
         }
     }
 }

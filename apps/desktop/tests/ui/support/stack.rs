@@ -13,8 +13,9 @@ use gpui_kit::{
 };
 use process::testing::WholeEnvironment;
 pub(crate) use process::testing::git;
+use protocol::capability::approvals::ApprovalMode;
 use protocol::capability::settings::Effort;
-use protocol::model::{ModelName, PermissionMode, Seq};
+use protocol::model::{ModelName, Seq};
 use std::path::PathBuf;
 use std::time::Duration;
 use tempfile::TempDir;
@@ -351,9 +352,9 @@ impl<'a> Ui<'a> {
         self.click(ElementId::Integer(position as u64));
     }
 
-    pub(crate) fn chat_mode(&self) -> Option<PermissionMode> {
+    pub(crate) fn chat_mode(&self) -> Option<ApprovalMode> {
         let pane = self.pane()?;
-        self.cx.read_entity(&pane, |p, _| p.session().map(|s| s.permission_mode))
+        self.cx.read_entity(&pane, |p, _| p.session().map(|s| s.mode))
     }
 }
 

@@ -5,13 +5,12 @@
 //! CLI's words.
 
 use protocol::capability::Control;
+use protocol::capability::approvals::ApprovalMode;
 use protocol::capability::settings::Effort;
 use protocol::capability::settings::{Effort as Level, Settings};
 use protocol::client::{ApiError, ErrorCode, HubNotice};
 use protocol::event::{EventBody, ExitReason};
-use protocol::model::{
-    AgentKind, ModelName, PermissionMode, Seq, Session, SessionId, SessionSettings, SessionSettingsChange, SetupStatus,
-};
+use protocol::model::{AgentKind, ModelName, Seq, Session, SessionId, SetupStatus};
 use protocol::prompt::Prompt;
 use protocol::worker::{SetupDone, WorkerRequest, WorkerResponse};
 use tokio::sync::broadcast;
@@ -21,17 +20,18 @@ use crate::hub::stand_in_workers::{
     Asked, TIMEOUT, a_chat, a_turn, answering_first, hub_with_stand_in_workers, the_agent_says,
 };
 use crate::hub::tests::claimed;
+use crate::session::ChatSettings;
 
-fn in_mode(mode: PermissionMode) -> SessionSettingsChange {
-    SessionSettingsChange { permission_mode: Some(mode), ..SessionSettingsChange::default() }
+fn in_mode(mode: ApprovalMode) -> Settings {
+    Settings { mode: Some(mode), ..Settings::default() }
 }
 
-fn on_model(model: &'static str) -> SessionSettingsChange {
-    SessionSettingsChange { model: Some(ModelName::named(model)), ..SessionSettingsChange::default() }
+fn on_model(model: &'static str) -> Settings {
+    Settings { model: Some(ModelName::named(model)), ..Settings::default() }
 }
 
-fn at(effort: Effort) -> SessionSettingsChange {
-    SessionSettingsChange { effort: Some(effort), ..SessionSettingsChange::default() }
+fn at(effort: Effort) -> Settings {
+    Settings { effort: Some(effort), ..Settings::default() }
 }
 
 /// What a launch, or a change asked of a running agent, names: `model`, plan mode or full access, and `effort`, by the
@@ -43,11 +43,11 @@ fn named(model: &'static str, plan: bool, effort: Level) -> Settings {
 }
 
 /// Each change of mode the chat's log records, in order.
-fn modes_logged(hub: &Hub, chat: &SessionId) -> Vec<PermissionMode> {
+fn modes_logged(hub: &Hub, chat: &SessionId) -> Vec<ApprovalMode> {
     let log = hub.store.read_events(chat, Seq::FIRST, 1000, u64::MAX, false).unwrap();
     let mode = |body: EventBody| {
-        let EventBody::AgentMode { permission_mode } = body else { return None };
-        Some(permission_mode)
+        let EventBody::AgentMode { mode } = body else { return None };
+        Some(mode)
     };
     log.into_iter().filter_map(|event| mode(event.body)).collect()
 }
@@ -71,8 +71,8 @@ fn last_told(feed: &mut broadcast::Receiver<HubNotice>, chat: &SessionId) -> Opt
         .last()
 }
 
-fn record(hub: &Hub, chat: &SessionId) -> SessionSettings {
-    hub.store.get_session(chat).unwrap().session.settings()
+fn record(hub: &Hub, chat: &SessionId) -> ChatSettings {
+    ChatSettings::of(&hub.store.get_session(chat).unwrap().session)
 }
 
 /// The agent exits by itself between turns, so the next prompt launches another.
@@ -91,27 +91,31 @@ async fn a_change_with_no_agent_running_is_saved_leaving_the_rest_and_the_first_
     let (_, chat) = a_chat(&hub).await;
     let mut feed = hub.subscribe_feed();
 
-    let planning = hub.session_configure(chat.id.clone(), in_mode(PermissionMode::Plan)).await.unwrap();
+    let planning = hub.session_configure(chat.id.clone(), in_mode(protocol::fixtures::plan_mode())).await.unwrap();
     let told = last_told(&mut feed, &chat.id);
     let on_haiku = hub.session_configure(chat.id.clone(), on_model("haiku")).await.unwrap();
-    hub.session_configure(chat.id.clone(), in_mode(PermissionMode::Plan)).await.unwrap();
+    hub.session_configure(chat.id.clone(), in_mode(protocol::fixtures::plan_mode())).await.unwrap();
     let low = hub.session_configure(chat.id.clone(), at(Effort::Low)).await.unwrap();
     let logged = modes_logged(&hub, &chat.id);
     let launch = a_turn(&hub, &asked, &chat.id, Prompt::new("go"), None).await;
 
-    let described = chat.settings();
-    let plan = SessionSettings { permission_mode: PermissionMode::Plan, ..described.clone() };
-    assert_eq!(planning.settings(), plan, "the model and the effort as they were");
+    let described = ChatSettings::of(&chat);
+    let plan = ChatSettings { mode: protocol::fixtures::plan_mode(), ..described.clone() };
+    assert_eq!(ChatSettings::of(&planning), plan, "the model and the effort as they were");
     assert_eq!(told.as_ref(), Some(&planning), "every client heard of it");
-    let haiku = SessionSettings { model: ModelName::named("haiku"), ..plan };
-    assert_eq!(on_haiku.settings(), haiku, "the mode as it was");
-    let expected = SessionSettings { effort: Effort::Low, ..haiku };
-    assert_eq!(low.settings(), expected, "the model and the mode as they were");
+    let haiku = ChatSettings { model: ModelName::named("haiku"), ..plan };
+    assert_eq!(ChatSettings::of(&on_haiku), haiku, "the mode as it was");
+    let expected = ChatSettings { effort: Effort::Low, ..haiku };
+    assert_eq!(ChatSettings::of(&low), expected, "the model and the mode as they were");
     assert_eq!(record(&hub, &chat.id), expected, "as the record says");
-    assert_eq!(logged, [PermissionMode::Plan], "once, since the others changed no mode");
+    assert_eq!(logged, [protocol::fixtures::plan_mode()], "once, since the others changed no mode");
     assert_eq!(changes_asked(&asked, &chat.id), [], "no agent was running to ask");
     assert_eq!(launch.settings, named("haiku", true, Level::Low));
-    assert_eq!(modes_logged(&hub, &chat.id), [PermissionMode::Plan], "starting in plan mode isn't a change of mode");
+    assert_eq!(
+        modes_logged(&hub, &chat.id),
+        [protocol::fixtures::plan_mode()],
+        "starting in plan mode isn't a change of mode"
+    );
 }
 
 /// The running agent is asked to take a change, and it's saved once the agent has, so what's shown is never ahead of
@@ -123,21 +127,18 @@ async fn a_change_while_the_agent_runs_is_handed_to_it_and_saved_and_the_next_la
     let (hub, asked) = hub_with_stand_in_workers(dir.path());
     let (_, chat) = a_chat(&hub).await;
     a_turn(&hub, &asked, &chat.id, Prompt::new("go"), None).await;
-    let everything = SessionSettingsChange { model: Some(ModelName::named("haiku")), ..in_mode(PermissionMode::Plan) };
-    let everything = SessionSettingsChange { effort: Some(Effort::Low), ..everything };
+    let everything = Settings { model: Some(ModelName::named("haiku")), ..in_mode(protocol::fixtures::plan_mode()) };
+    let everything = Settings { effort: Some(Effort::Low), ..everything };
 
     let changed = hub.session_configure(chat.id.clone(), everything).await.unwrap();
     let launched_by_then = asked.launches(&chat.id).len();
     crash(&hub, &asked, &chat.id).await;
     let next = a_turn(&hub, &asked, &chat.id, Prompt::new("go on"), None).await;
 
-    let expected = SessionSettings {
-        model: ModelName::named("haiku"),
-        permission_mode: PermissionMode::Plan,
-        effort: Effort::Low,
-    };
+    let expected =
+        ChatSettings { model: ModelName::named("haiku"), mode: protocol::fixtures::plan_mode(), effort: Effort::Low };
     assert_eq!(changes_asked(&asked, &chat.id), [named("haiku", true, Level::Low)]);
-    assert_eq!((changed.settings(), record(&hub, &chat.id)), (expected.clone(), expected));
+    assert_eq!((ChatSettings::of(&changed), record(&hub, &chat.id)), (expected.clone(), expected));
     assert_eq!(launched_by_then, 1, "the agent took it as it ran");
     assert_eq!(modes_logged(&hub, &chat.id), [], "the agent says it changed mode, and the hub doesn't");
     assert_eq!(next.settings, named("haiku", true, Level::Low));
@@ -157,8 +158,8 @@ async fn a_change_the_running_agent_refuses_is_refused_in_its_words_and_changes_
     });
     a_turn(&hub, &asked, &chat.id, Prompt::new("go"), None).await;
     let before = record(&hub, &chat.id);
-    let everything = SessionSettingsChange { effort: Some(Effort::Low), ..in_mode(PermissionMode::Plan) };
-    let everything = SessionSettingsChange { model: Some(ModelName::named("not-a-model")), ..everything };
+    let everything = Settings { effort: Some(Effort::Low), ..in_mode(protocol::fixtures::plan_mode()) };
+    let everything = Settings { model: Some(ModelName::named("not-a-model")), ..everything };
 
     let refused = hub.session_configure(chat.id.clone(), everything).await.unwrap_err();
     crash(&hub, &asked, &chat.id).await;
@@ -182,7 +183,7 @@ async fn a_change_made_while_a_prompt_waits_on_setup_is_answered_at_once_and_the
     let dir = tempfile::tempdir().unwrap();
     let (hub, asked) = hub_with_stand_in_workers(dir.path());
     let (workspace, _) = a_chat(&hub).await;
-    let planning = in_mode(PermissionMode::Plan);
+    let planning = in_mode(protocol::fixtures::plan_mode());
     let chat = hub.session_create(workspace.id.clone(), AgentKind::Claude, planning, None).await.unwrap();
     waiting::task::until(TIMEOUT, "the first setup to finish", || hub.setup_gates.lock().is_empty()).await;
     let (let_go, waiting) = std::sync::mpsc::channel::<()>();
@@ -195,7 +196,7 @@ async fn a_change_made_while_a_prompt_waits_on_setup_is_answered_at_once_and_the
     hub.workspace_rerun_setup(workspace.id.clone()).await.unwrap();
     let (seq, _) = hub.session_prompt(chat.id.clone(), None, Prompt::new("go")).await.unwrap();
 
-    let changing = hub.session_configure(chat.id.clone(), in_mode(PermissionMode::FullAccess));
+    let changing = hub.session_configure(chat.id.clone(), in_mode(protocol::fixtures::full_access()));
     let changed = tokio::time::timeout(TIMEOUT, changing).await.expect("the change waited for setup to finish");
     let setup_meanwhile = hub.store.get_workspace(&workspace.id).unwrap().setup;
     let launched_meanwhile = asked.launches(&chat.id).len();
@@ -203,7 +204,7 @@ async fn a_change_made_while_a_prompt_waits_on_setup_is_answered_at_once_and_the
     let given = || asked.prompts_given(&chat.id).contains(&seq);
     waiting::task::until(TIMEOUT, "the prompt to be given once setup had finished", given).await;
 
-    assert_eq!(changed.unwrap().permission_mode, PermissionMode::FullAccess);
+    assert_eq!(changed.unwrap().mode, protocol::fixtures::full_access());
     assert_eq!(setup_meanwhile, SetupStatus::Running, "setup was still running as the change was answered");
     assert_eq!(launched_meanwhile, 0, "nothing was launched before setup finished");
     assert_eq!(asked.launches(&chat.id)[0].settings, named("sonnet", false, Level::High));

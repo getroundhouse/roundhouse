@@ -1,3 +1,4 @@
+use super::ChatSettings;
 use super::controls::Askable;
 use super::{Starting, commands, ingest, limits, messages, progress};
 use crate::attachment_files::FileFor;
@@ -10,11 +11,12 @@ use ingest::run_ingest;
 use messages::{Command, Item};
 use parking_lot::Mutex;
 use progress::Progress;
+use protocol::capability::settings::Settings;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::event::EventBody;
 use protocol::model::{
-    AgentKind, AgentSessionId, ContextUsage, PromptCache, RunId, Seq, Session, SessionId, SessionSettings,
-    SessionSettingsChange, SessionStatus, SubagentId, WorkspaceId,
+    AgentKind, AgentSessionId, ContextUsage, PromptCache, RunId, Seq, Session, SessionId, SessionStatus, SubagentId,
+    WorkspaceId,
 };
 use protocol::tail::{StreamDelta, Tail};
 use protocol::worker::Delivery;
@@ -126,7 +128,7 @@ pub(super) struct LiveState {
     pub(super) agent_session_id: Option<AgentSessionId>,
     pub(super) capabilities: Option<protocol::model::RunCapabilities>,
     /// What the next agent launches with.
-    pub(super) settings: SessionSettings,
+    pub(super) settings: ChatSettings,
     /// Which login the chat is on, as its record says, which the next agent launches under. On none until a launch is
     /// handed a login, which puts it on the hub's for that account, or its worker says whose the ambient login an agent
     /// of it runs under is, which puts it on that.
@@ -214,7 +216,7 @@ impl LiveSession {
                 agent_opened: stored.agent_opened,
                 agent_session_id: stored.agent_session_id,
                 capabilities: stored.session.agent_capabilities.clone(),
-                settings: stored.session.settings(),
+                settings: ChatSettings::of(&stored.session),
                 login: SessionLogin::of_record(&stored.session),
                 closed_at_ms: stored.session.closed_at_ms,
                 live: None,
@@ -288,11 +290,11 @@ impl LiveSession {
     /// Saved only once a running agent has agreed, so what's shown is never ahead of what's true. A running agent reports
     /// a change of mode itself, and with none running, it goes in the log here, so the log says when every change was
     /// made.
-    pub(crate) async fn configure(&self, mut options: SessionSettingsChange) -> Result<Session, ApiError> {
+    pub(crate) async fn configure(&self, mut change: Settings) -> Result<Session, ApiError> {
         let hub = self.hub()?;
         // Before the lock, which a launch takes, since the agent may be asked what it offers, which can take a while.
         let discovered =
-            if hub.agent(self.agent)?.discovers_models() && (options.model.is_some() || options.effort.is_some()) {
+            if hub.agent(self.agent)?.discovers_models() && (change.model.is_some() || change.effort.is_some()) {
                 let target = protocol::client::admin::ModelTarget::Session(self.id.clone());
                 Some(hub.agent_for(self.agent, target).await?)
             } else {
@@ -303,54 +305,51 @@ impl LiveSession {
         match discovered {
             Some(description) => {
                 // Whoever asks, so a model the agent stopped offering can't be chosen as a full ID instead.
-                if let Some(model) = &options.model
+                if let Some(model) = &change.model
                     && description.label(model).is_none()
                 {
                     return Err(ApiError::new(ErrorCode::InvalidRequest, "the agent doesn't offer that model here"));
                 }
-                if let Some(model) = &options.model
-                    && options.effort.is_none()
+                if let Some(model) = &change.model
+                    && change.effort.is_none()
                 {
-                    options.effort = Some(description.effort_for_choice(model, Some(&current.effort)));
+                    change.effort = Some(description.effort_for_choice(model, Some(&current.effort)));
                 }
                 description
-                    .takes(&current.changed(options.clone()).into())
+                    .takes(&current.changed(&change).settings())
                     .map_err(|e| ApiError::new(ErrorCode::InvalidRequest, e.to_string()))?;
             }
-            None => hub.offered(self.agent, &current.changed(options.clone()).into())?,
+            None => hub.offered(self.agent, &current.changed(&change).settings())?,
         }
         let mut agent_took_it = false;
         if let Some(link) = hub.existing_worker(&self.workspace_id) {
             let delivery = match self.askable(&link)? {
                 Askable::Claimed(claims) => {
-                    let settings = options
-                        .for_capabilities(&claims)
-                        .map_err(|e| ApiError::new(ErrorCode::Unsupported, e.to_string()))?;
-                    self.control_claimed(&link, protocol::capability::Control::Change(settings), &claims).await?
+                    self.control_claimed(&link, protocol::capability::Control::Change(change.clone()), &claims).await?
                 }
-                Askable::Unclaimed => self.configure_previous(&link, options.clone()).await?,
+                Askable::Unclaimed => self.configure_previous(&link, &change).await?,
                 Askable::NotRunning => Delivery::AgentNotRunning,
             };
             agent_took_it = delivery == Delivery::Delivered;
         }
         let was = self.state.lock().settings.clone();
-        self.keep_options(&hub, options.clone()).await?;
-        if let Some(mode) = options.permission_mode.filter(|mode| *mode != was.permission_mode && !agent_took_it) {
-            self.record_or_log(Origin::Hub, EventBody::AgentMode { permission_mode: mode }).await;
+        self.keep_settings(&hub, change.clone()).await?;
+        if let Some(mode) = change.mode.filter(|mode| *mode != was.mode && !agent_took_it) {
+            self.record_or_log(Origin::Hub, EventBody::AgentMode { mode }).await;
         }
         // Another model's cache doesn't hold the conversation, so the next request finds nothing cached.
-        if options.model.is_some_and(|model| model != was.model) {
+        if change.model.is_some_and(|model| model != was.model) {
             self.keep_cache(None).await;
         }
         self.announce(&hub).await
     }
 
-    /// Saves the settings `change` sets, and launches the next agent with them.
-    pub(super) async fn keep_options(&self, hub: &Hub, change: SessionSettingsChange) -> Result<(), ApiError> {
+    /// Saves the model, mode and effort `change` sets, and launches the next agent with them.
+    pub(super) async fn keep_settings(&self, hub: &Hub, change: Settings) -> Result<(), ApiError> {
         let (id, saved) = (self.id.clone(), change.clone());
-        hub.blocking(move |store| store.set_session_options(&id, &saved)).await?;
+        hub.blocking(move |store| store.set_session_settings(&id, &saved)).await?;
         let mut state = self.state.lock();
-        state.settings = state.settings.clone().changed(change);
+        state.settings = state.settings.clone().changed(&change);
         Ok(())
     }
 

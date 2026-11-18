@@ -9,9 +9,10 @@ use own_turns::OwnTurns;
 use pending::PendingCalls;
 use prompt::PromptProgress;
 use protocol::attachment::NewAttachment;
+use protocol::capability::approvals::ApprovalMode;
 use protocol::capability::approvals::Asks;
 use protocol::event::{AgentRunState, EventBody, TurnOutcome};
-use protocol::model::{CacheRequest, MessageId, PermissionMode, SubagentId, ToolUseId};
+use protocol::model::{CacheRequest, MessageId, SubagentId, ToolUseId};
 use protocol::tail::{BlockKind, DeltaChange, Retrying, StreamDelta};
 use said::FailedRequests;
 use serde_json::Value;
@@ -82,7 +83,7 @@ pub struct Normalizer {
     pub(super) failed: FailedRequests,
     pub(super) own_turns: OwnTurns,
     /// The mode the CLI last said it's in, in which it asks to make a call only when it asks whatever the mode.
-    pub(super) mode: Option<PermissionMode>,
+    pub(super) mode: Option<ApprovalMode>,
 }
 
 impl Normalizer {
@@ -164,17 +165,14 @@ impl Normalizer {
     /// Notes the mode the CLI says it's in, and says of a request in `parsed`, the line `value`, which subagent asks
     /// it, and whether it's asked whatever the mode.
     fn asking(&mut self, parsed: &mut Parsed, value: &Value) {
-        if let Parsed::Event(
-            EventBody::AgentInit { permission_mode: Some(mode), .. } | EventBody::AgentMode { permission_mode: mode },
-        ) = parsed
-        {
+        if let Parsed::Event(EventBody::AgentInit { mode: Some(mode), .. } | EventBody::AgentMode { mode }) = parsed {
             self.mode = Some(*mode);
         }
         if let Parsed::Event(EventBody::ApprovalRequested { asked_by, request, .. }) = parsed {
             *asked_by = Subagents::asked_by(value);
             // With full access, the CLI asks to make a call only where it asks whatever the mode, as its check of a
             // removal does, which a CLI from before it said so doesn't mark.
-            if self.mode == Some(PermissionMode::FullAccess) && matches!(request.asks, Asks::Call { .. }) {
+            if self.mode == Some(super::super::claims::full_access()) && matches!(request.asks, Asks::Call { .. }) {
                 request.always = true;
                 request.suggested.clear();
             }
@@ -290,7 +288,7 @@ fn system(value: &Value) -> Parsed {
             agent_session_id: id_of(value, "session_id"),
             model: string_of(value, "model"),
             cwd: string_of(value, "cwd"),
-            permission_mode: str_of(value, "permissionMode").map(super::super::mode::mode),
+            mode: str_of(value, "permissionMode").map(super::super::mode::mode),
             agent_version: string_of(value, "claude_code_version"),
         }),
         "session_state_changed" => Parsed::Event(EventBody::AgentState {
@@ -303,7 +301,7 @@ fn system(value: &Value) -> Parsed {
         }),
         "background_tasks_changed" => tasks::listed(value),
         "status" => match (str_of(value, "permissionMode"), str_of(value, "status")) {
-            (Some(mode), _) => Parsed::Event(EventBody::AgentMode { permission_mode: super::super::mode::mode(mode) }),
+            (Some(mode), _) => Parsed::Event(EventBody::AgentMode { mode: super::super::mode::mode(mode) }),
             // Sent as each request to the model starts, which the run's state already says is under way. Noting
             // which background tasks the request takes in reads the line before this.
             (None, Some("requesting")) => Parsed::Drop,

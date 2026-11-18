@@ -51,16 +51,6 @@ pub(super) fn plan() -> approvals::ApprovalMode {
     }
 }
 
-/// A mode `agy` reports that this build doesn't know, which neither skips its permissions nor plans.
-pub(super) fn unknown() -> approvals::ApprovalMode {
-    approvals::ApprovalMode {
-        unasked: approvals::Unasked::Unknown,
-        beyond: approvals::Beyond::Unknown,
-        sandbox: None,
-        plan: false,
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

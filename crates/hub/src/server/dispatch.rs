@@ -117,8 +117,8 @@ pub(super) async fn handle(
             hub.comment_delete(id).await?;
             C::Ok
         }
-        R::SessionCreate(sessions::SessionCreate { workspace_id, agent: kind, options, client_request_id }) => {
-            C::Session(hub.session_create(workspace_id, kind, options, client_request_id).await?)
+        R::SessionCreate(sessions::SessionCreate { workspace_id, agent: kind, settings, client_request_id }) => {
+            C::Session(hub.session_create(workspace_id, kind, settings, client_request_id).await?)
         }
         R::SessionEnsure(sessions::SessionEnsure { workspace_id, agent: kind }) => {
             C::Session(hub.session_ensure(workspace_id, kind).await?)
@@ -234,8 +234,8 @@ pub(super) async fn handle(
             hub.session_decide(id, approval_id, decision).await?;
             C::Ok
         }
-        R::SessionConfigure(sessions::SessionConfigure { id, options }) => {
-            C::Session(hub.session_configure(id, options).await?)
+        R::SessionConfigure(sessions::SessionConfigure { id, settings }) => {
+            C::Session(hub.session_configure(id, settings).await?)
         }
         R::SessionClose(sessions::SessionClose { id }) => C::Session(hub.session_close(id).await?),
         R::SessionReopen(sessions::SessionReopen { id }) => C::Session(hub.session_reopen(id).await?),

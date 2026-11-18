@@ -5,7 +5,7 @@
 use desktop::busy::Busy;
 use desktop::new_workspace::NewWorkspaceDialog;
 use gpui_kit::{AppContext as _, Entity, SharedString};
-use protocol::model::{PermissionMode, WorkspaceId};
+use protocol::model::WorkspaceId;
 
 use super::{Ui, after_every_workspace};
 
@@ -65,6 +65,6 @@ impl Ui<'_> {
 
     /// Whether the dialog's first chat is to start in plan mode.
     pub(crate) fn dialog_planning(&self) -> bool {
-        self.cx.read_entity(&self.dialog(), |d, _| d.mode()) == PermissionMode::Plan
+        self.cx.read_entity(&self.dialog(), |d, _| d.mode()).is_some_and(|mode| mode.plan)
     }
 }

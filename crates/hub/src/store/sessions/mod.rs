@@ -3,7 +3,7 @@
 #[cfg(test)]
 use super::{Store, StoreError, lock};
 #[cfg(test)]
-use protocol::model::{QueuedPrompt, RunId, SessionSettingsChange, SessionStatus};
+use protocol::model::{QueuedPrompt, RunId, SessionStatus};
 
 #[cfg(test)]
 mod tests;

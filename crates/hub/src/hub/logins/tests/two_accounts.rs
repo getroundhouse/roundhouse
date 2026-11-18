@@ -4,13 +4,13 @@
 
 use std::sync::Arc;
 
+use protocol::capability::settings::Settings;
 use protocol::client::HubNotice;
 use protocol::client::accounts::AccountConnect;
 use protocol::client::sessions::SessionAssignAccount;
 use protocol::event::{EventBody, ExitReason, SessionEvent};
 use protocol::model::{
-    Account, AccountId, AgentKind, CacheRequest, CacheTtl, LoginToken, Seq, Session, SessionId, SessionSettingsChange,
-    Workspace,
+    Account, AccountId, AgentKind, CacheRequest, CacheTtl, LoginToken, Seq, Session, SessionId, Workspace,
 };
 use protocol::prompt::Prompt;
 use tokio::sync::broadcast;
@@ -39,7 +39,7 @@ impl Chats {
 
     /// Another chat of Claude's in `workspace`, on no account until its agent first launches.
     pub(super) async fn another_chat(&self, workspace: &Workspace) -> SessionId {
-        let unchanged = SessionSettingsChange::default();
+        let unchanged = Settings::default();
         self.hub.session_create(workspace.id.clone(), AgentKind::Claude, unchanged, None).await.unwrap().id
     }
 

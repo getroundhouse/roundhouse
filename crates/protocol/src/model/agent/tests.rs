@@ -1,13 +1,17 @@
 use serde_json::json;
 
 use super::*;
+use crate::capability::approvals::{ApprovalMode, Unasked};
 
 const OPUS: ModelName = ModelName::named("opus");
 
 /// An agent offered two models, two levels and plan mode as well as full access, which compacts when asked.
 fn described() -> AgentDescription {
+    let mut claims = crate::capability::Capabilities::default();
+    claims.approvals.modes = Some(crate::fixtures::modes());
+    claims.settings.effort = Some(crate::capability::Claimed {});
     AgentDescription {
-        capabilities: None,
+        capabilities: Some(claims),
         kind: AgentKind::Claude,
         name: "Agent".to_string(),
         usage_heading: "Agent usage".to_string(),
@@ -16,37 +20,44 @@ fn described() -> AgentDescription {
             ModelChoice { model: ModelName::named("haiku"), label: "Haiku".to_string() },
         ],
         efforts: vec![Effort::Low, Effort::High],
-        modes: vec![PermissionMode::FullAccess, PermissionMode::Plan],
-        defaults: SessionSettings { model: OPUS, permission_mode: PermissionMode::FullAccess, effort: Effort::High },
+        defaults: Settings { model: Some(OPUS), effort: Some(Effort::High), ..Settings::default() },
         features: vec![AgentFeature::Compacts],
         login: None,
     }
 }
 
-fn setting(effort: Option<Effort>, permission_mode: Option<PermissionMode>) -> SessionSettingsChange {
-    SessionSettingsChange { model: Some(ModelName::named("claude-opus-5-5")), permission_mode, effort }
+fn setting(effort: Option<Effort>, mode: Option<ApprovalMode>) -> Settings {
+    Settings { model: Some(ModelName::named("claude-opus-5-5")), mode, effort, ..Settings::default() }
 }
 
 #[test]
 fn a_chat_is_given_only_an_effort_and_a_mode_its_agent_is_offered_and_any_model() {
     let agent = described();
+    let plan = crate::fixtures::plan_mode();
 
-    assert_eq!(agent.takes(&setting(Some(Effort::High), Some(PermissionMode::Plan))), Ok(()));
-    assert_eq!(agent.takes(&SessionSettingsChange::default()), Ok(()), "nothing to change");
+    assert_eq!(agent.takes(&setting(Some(Effort::High), Some(plan))), Ok(()));
+    assert_eq!(agent.takes(&Settings::default()), Ok(()), "nothing to change");
     assert_eq!(agent.takes(&setting(Some(Effort::Max), None)), Err(NotOffered::Effort));
     assert_eq!(agent.takes(&setting(Some(Effort::Unknown), None)), Err(NotOffered::Effort));
-    assert_eq!(agent.takes(&setting(None, Some(PermissionMode::Unknown))), Err(NotOffered::Mode));
-    let planless = AgentDescription { modes: vec![PermissionMode::FullAccess], ..described() };
-    assert_eq!(planless.takes(&setting(None, Some(PermissionMode::Plan))), Err(NotOffered::Mode));
+    let asks_first = ApprovalMode { unasked: Unasked::Reads, plan: false, ..plan };
+    assert_eq!(agent.takes(&setting(None, Some(asks_first))), Err(NotOffered::Mode), "one it doesn't offer");
+    let mut planless = described();
+    planless.capabilities.as_mut().unwrap().approvals.modes.as_mut().unwrap().others.clear();
+    assert_eq!(planless.takes(&setting(None, Some(plan))), Err(NotOffered::Mode));
+    assert_eq!(planless.modes(), [crate::fixtures::full_access()]);
+    assert_eq!(described().default_mode(), Some(crate::fixtures::full_access()));
+    let speedy = Settings { speed: Some(crate::capability::settings::Speed::Fast), ..Settings::default() };
+    assert_eq!(agent.takes(&speedy), Err(NotOffered::Settings), "a setting it doesn't claim");
 }
 
 #[test]
 fn a_level_or_a_mode_from_a_newer_peer_is_never_taken_even_if_offered() {
-    let newer =
-        AgentDescription { efforts: vec![Effort::Unknown], modes: vec![PermissionMode::Unknown], ..described() };
+    let newer_mode = ApprovalMode { unasked: Unasked::Unknown, ..crate::fixtures::full_access() };
+    let mut newer = AgentDescription { efforts: vec![Effort::Unknown], ..described() };
+    newer.capabilities.as_mut().unwrap().approvals.modes.as_mut().unwrap().others.push(newer_mode);
 
     assert_eq!(newer.takes(&setting(Some(Effort::Unknown), None)), Err(NotOffered::Effort));
-    assert_eq!(newer.takes(&setting(None, Some(PermissionMode::Unknown))), Err(NotOffered::Mode));
+    assert_eq!(newer.takes(&setting(None, Some(newer_mode))), Err(NotOffered::Mode));
 }
 
 #[test]
@@ -67,8 +78,10 @@ fn on_the_wire_it_reads_as_it_was_written() {
         json!({
             "kind": "claude", "name": "Agent", "usage_heading": "Agent usage",
             "models": [{ "model": "opus", "label": "Opus" }, { "model": "haiku", "label": "Haiku" }],
-            "efforts": ["low", "high"], "modes": ["bypassPermissions", "plan"],
-            "defaults": { "model": "opus", "permission_mode": "bypassPermissions", "effort": "high" },
+            "capabilities": wire["capabilities"],
+            "efforts": ["low", "high"],
+            "defaults": { "model": "opus", "mode": null, "effort": "high", "speed": null, "thinking": null,
+                "persona": null, "style": null, "verbosity": null, "advisor": null, "budget": null },
             "features": ["compacts"],
         })
     );

@@ -1,6 +1,6 @@
-use super::super::{AgentKind, ModelName, PermissionMode, SessionSettings, SessionSettingsChange};
-use crate::capability::settings::Effort;
-use crate::capability::settings::EffortOffer;
+use super::super::{AgentKind, ModelName};
+use crate::capability::approvals::ApprovalMode;
+use crate::capability::settings::{Effort, EffortOffer, Settings};
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
@@ -15,8 +15,8 @@ impl RunCapabilities {
     }
 }
 
-/// A kind of agent, as its adapter describes it: what the interface calls it, the models, efforts and approval modes a
-/// chat can be given, what a chat runs with until another is chosen, what it does that not every agent does, and what
+/// A kind of agent, as its adapter describes it: what the interface calls it, the models and efforts a chat can be
+/// given, what a chat runs with until another is chosen, what it does that not every agent does, and what
 /// login a hub can hold for it. The hub serves one for each kind it runs, so a client offers what the agent takes rather
 /// than holding a list of its own.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
@@ -34,11 +34,10 @@ pub struct AgentDescription {
     pub models: Vec<ModelChoice>,
     /// Kind-wide effort choices for clients reading an older catalog. A resolved catalog gives each model its own levels.
     pub efforts: Vec<Effort>,
-    /// The approval modes a chat can be given.
-    pub modes: Vec<PermissionMode>,
-    /// What a chat runs with until another is chosen, which the hub gives one that names none of them. Each is one of
-    /// those offered.
-    pub defaults: SessionSettings,
+    /// What a chat runs with until another is chosen, which the hub gives one that names none of them: a model and its
+    /// effort, each one of those offered. Its approval mode is the one its claims give first, as
+    /// [`AgentDescription::default_mode`] says.
+    pub defaults: Settings,
     /// What it does that not every agent does. Whatever a hub leaves out, the agent doesn't do.
     #[serde(default)]
     pub features: Vec<AgentFeature>,
@@ -111,14 +110,9 @@ impl AgentDescription {
             .and_then(|id| catalog.offered.iter().find(|m| &m.model == id))
             .or_else(|| catalog.offered.first());
         if let Some(initial) = initial {
-            self.defaults.model.clone_from(&initial.model);
-            if let Some(effort) =
-                initial.default_effort.as_ref().or_else(|| initial.efforts.first().map(EffortOffer::id))
-            {
-                self.defaults.effort.clone_from(effort);
-            } else {
-                self.defaults.effort = Effort::Unset;
-            }
+            self.defaults.model = Some(initial.model.clone());
+            let effort = initial.default_effort.as_ref().or_else(|| initial.efforts.first().map(EffortOffer::id));
+            self.defaults.effort = Some(effort.cloned().unwrap_or(Effort::Unset));
         }
         self.models =
             catalog.offered.iter().map(|m| ModelChoice { model: m.model.clone(), label: m.label.clone() }).collect();
@@ -164,7 +158,7 @@ impl AgentDescription {
             .as_ref()
             .and_then(|claims| claims.settings.models.as_ref())
             .and_then(|models| models.offered().iter().find(|offer| offer.model == *model));
-        let default = offer.map_or(Some(&self.defaults.effort), |offer| offer.default_effort.as_ref());
+        let default = offer.map_or(self.defaults.effort.as_ref(), |offer| offer.default_effort.as_ref());
         previous
             .filter(|e| levels.contains(e))
             .or_else(|| default.filter(|e| levels.contains(e)))
@@ -188,20 +182,36 @@ impl AgentDescription {
         self.models.iter().find(|choice| choice.model == *model).map(|choice| choice.label.as_str())
     }
 
-    /// Whether a chat can be given what `change` sets: only an effort and a mode it's offered, and never one this build
-    /// has no name for, since neither could be passed on to the agent. Any model is taken, since the agent's CLI takes
-    /// full IDs as well as the names offered, and says itself which it doesn't know.
-    pub fn takes(&self, change: &SessionSettingsChange) -> Result<(), NotOffered> {
-        if let Some(claims) = &self.capabilities {
-            let settings = change.for_capabilities(claims)?;
-            if !settings.allowed(claims) {
-                return Err(NotOffered::Settings);
-            }
+    /// The approval modes a chat can be given, as its claims say, the one it starts in first. None from a hub from
+    /// before claims.
+    pub fn modes(&self) -> Vec<ApprovalMode> {
+        let modes = self.capabilities.as_ref().and_then(|claims| claims.approvals.modes.as_ref());
+        modes.map_or_else(Vec::new, |modes| [modes.default].into_iter().chain(modes.others.iter().copied()).collect())
+    }
+
+    /// The approval mode a chat starts in until another is chosen, as its claims say. `None` from a hub from before
+    /// claims.
+    pub fn default_mode(&self) -> Option<ApprovalMode> {
+        self.modes().first().copied()
+    }
+
+    /// The approval mode a chat plans in, as its claims say, if it offers one.
+    pub fn plan_mode(&self) -> Option<ApprovalMode> {
+        self.modes().into_iter().find(|mode| mode.plan)
+    }
+
+    /// Whether a chat can be given what `settings` set: only a mode its claims offer and an effort its model is
+    /// offered, never one this build has no name for, since neither could be passed on to the agent, and nothing else
+    /// its claims don't take, as [`Settings::allowed`] says. Any model is taken, since the agent's CLI takes full IDs as
+    /// well as the names offered, and says itself which it doesn't know.
+    pub fn takes(&self, settings: &Settings) -> Result<(), NotOffered> {
+        if settings.mode.is_some_and(|mode| !mode.is_known() || !self.modes().contains(&mode)) {
+            return Err(NotOffered::Mode);
         }
-        if let Some(effort) = &change.effort
+        if let Some(effort) = &settings.effort
             && !self.discovers_models()
         {
-            let allowed = match &change.model {
+            let allowed = match &settings.model {
                 Some(model) => self.offers_effort(model, effort),
                 None => effort.as_str().is_some() && self.efforts.contains(effort),
             };
@@ -209,9 +219,10 @@ impl AgentDescription {
                 return Err(NotOffered::Effort);
             }
         }
-        let offered = |mode: PermissionMode| mode != PermissionMode::Unknown && self.modes.contains(&mode);
-        if change.permission_mode.is_some_and(|mode| !offered(mode)) {
-            return Err(NotOffered::Mode);
+        if let Some(claims) = &self.capabilities
+            && !settings.allowed(claims)
+        {
+            return Err(NotOffered::Settings);
         }
         Ok(())
     }

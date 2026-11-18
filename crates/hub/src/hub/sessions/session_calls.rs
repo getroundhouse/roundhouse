@@ -3,13 +3,14 @@ use crate::error::internal;
 use crate::session::{Command, LiveSession};
 use crate::store::{Places, Reading, Store, StoreError};
 use protocol::capability::approvals::Decision;
+use protocol::capability::settings::Settings;
 use protocol::client::log::ReadLimit;
 use protocol::client::{ApiError, ErrorCode, HubNotice, log, records};
 use protocol::event::SessionEvent;
 use protocol::find::{Found, Needle};
 use protocol::model::{
     ApprovalId, AttachmentId, ClientMessageId, CompactionLine, DecisionDraft, DraftToKeep, Place, PromptLine,
-    RecordKey, Seq, Session, SessionId, SessionSettingsChange, SubagentId, WorkspaceId,
+    RecordKey, Seq, Session, SessionId, SubagentId, WorkspaceId,
 };
 use protocol::prompt::Prompt;
 use std::collections::{HashMap, HashSet};
@@ -206,13 +207,14 @@ impl Hub {
     pub(crate) async fn session_configure(
         self: &Arc<Self>,
         id: SessionId,
-        options: SessionSettingsChange,
+        change: Settings,
     ) -> Result<Session, ApiError> {
+        crate::session::ChatSettings::keeps(&change)?;
         let session = self.live_session(&id).await?;
-        self.offered(session.agent(), &options)?;
+        self.offered(session.agent(), &change)?;
         // Not through the session's queue, because a prompt waiting on setup holds that. The choice
         // has to apply when that prompt finally starts the agent.
-        session.configure(options).await
+        session.configure(change).await
     }
 
     /// A chat nothing has been sent in has nothing to go back to, so closing it deletes it, along with any files added

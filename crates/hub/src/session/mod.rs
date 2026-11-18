@@ -12,6 +12,7 @@ use protocol::model::{ContextUsage, RunId, Seq, SessionStatus};
 
 mod account_moves;
 mod cache;
+mod chat_settings;
 mod commands;
 mod controls;
 mod decisions;
@@ -29,6 +30,7 @@ mod status;
 mod tests;
 mod waits;
 
+pub(crate) use chat_settings::ChatSettings;
 pub(crate) use messages::{Command, Item};
 pub(crate) use progress::Progress;
 pub(crate) use starting::Starting;

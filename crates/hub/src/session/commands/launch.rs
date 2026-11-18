@@ -6,11 +6,11 @@ use protocol::capability::Capabilities;
 use protocol::capability::conversation::Start;
 use protocol::client::{ApiError, ErrorCode, HubNotice};
 use protocol::event::{EventBody, ExitReason};
-use protocol::model::{PermissionMode, RunCapabilities, RunId, SessionSettings};
+use protocol::model::{RunCapabilities, RunId};
 use protocol::worker::{AgentSpec, AgentStarted, AgentStop, previous};
 use tracing::{error, warn};
 
-use super::super::{AgentRun, Command, LiveSession, Origin};
+use super::super::{AgentRun, ChatSettings, Command, LiveSession, Origin};
 use crate::hub::Hub;
 use crate::logins::Handed;
 use crate::store::Store;
@@ -110,12 +110,15 @@ impl LiveSession {
             };
             (state.agent_opened, start, state.settings.clone())
         };
-        // A mode this build has no name for, which the agent went into by itself, can't be asked for, so the agent
-        // starts with full access, as `PermissionMode::Unknown` says, rather than not at all.
-        if kept.permission_mode == PermissionMode::Unknown {
-            kept.permission_mode = PermissionMode::FullAccess;
+        // A mode its kind doesn't offer, which the agent went into by itself, can't be asked for, so the agent starts
+        // in the one a chat starts in, rather than not at all.
+        let kind = hub.agent(self.agent)?;
+        if !kind.modes().contains(&kept.mode)
+            && let Some(starts_in) = kind.default_mode()
+        {
+            kept.mode = starts_in;
         }
-        let settings = hub.launch_settings(self.agent, &kept)?;
+        let settings = kept.settings();
         let asked = hub.blocking(Store::next_run).await?;
         self.record_login(hub, asked, login.as_ref()).await?;
         let tools_token = hub.tools_for(&self.workspace_id, &self.id, link).await;
@@ -207,9 +210,11 @@ impl LiveSession {
         hub: &Hub,
         link: &WorkerLink,
         spec: AgentSpec,
-        kept: SessionSettings,
+        kept: ChatSettings,
     ) -> Result<(AgentStarted, Option<Capabilities>), ApiError> {
         let started = if link.speaks_previous() {
+            let ChatSettings { model, mode, effort } = kept;
+            let kept = previous::Kept { model, permission_mode: mode, effort };
             link.call_previous(previous::AgentStart::of(spec, kept).into_request()).await?
         } else {
             link.call(spec).await?

@@ -148,7 +148,8 @@ fn picks(row: look::MenuRow, picked: Picked, on_pick: &OnPick) -> look::MenuRow 
 
 #[cfg(test)]
 mod tests {
-    use protocol::model::{AgentKind, ModelChoice, PermissionMode, SessionSettings};
+    use protocol::capability::settings::Settings;
+    use protocol::model::{AgentKind, ModelChoice};
 
     use super::*;
 
@@ -164,12 +165,7 @@ mod tests {
             usage_heading: "Claude usage".to_string(),
             models: vec![offered(OPUS, "Opus"), offered(ModelName::named("fable"), "Fable")],
             efforts: vec![Effort::High, Effort::Unknown, Effort::Max],
-            modes: vec![PermissionMode::FullAccess],
-            defaults: SessionSettings {
-                model: OPUS,
-                permission_mode: PermissionMode::FullAccess,
-                effort: Effort::High,
-            },
+            defaults: Settings { model: Some(OPUS), effort: Some(Effort::High), ..Settings::default() },
             features: Vec::new(),
             login: None,
         }

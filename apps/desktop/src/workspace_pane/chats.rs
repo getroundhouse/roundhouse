@@ -5,8 +5,9 @@ use std::time::Duration;
 use client_core::ClientError;
 use client_core::records::InWorkspace;
 use gpui_kit::{AppContext, Context, Result, Window};
+use protocol::capability::settings::Settings;
 use protocol::client::ErrorCode;
-use protocol::model::{Record, Session, SessionId, SessionSettingsChange, TerminalId};
+use protocol::model::{Record, Session, SessionId, TerminalId};
 use transcript::{Transcript, TranscriptEvent};
 
 use super::attaching::Composed;
@@ -72,7 +73,7 @@ impl WorkspacePane {
         );
         // A level this app can't name, such as a newer hub's, can't be asked for, so the new chat gets what its agent
         // starts a chat with.
-        let options = SessionSettingsChange { model, permission_mode: None, effort };
+        let options = Settings { model, effort, ..Settings::default() };
         let creating = self
             .client
             .start(move |client| client.session_create(&id, agent, options, Some(client_core::new_request_id())));

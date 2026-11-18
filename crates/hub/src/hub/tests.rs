@@ -9,8 +9,8 @@ use protocol::capability::settings::Effort;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::model::{
     AgentDescription, AgentFeature, AgentKind, Apart, Branch, BranchName, Branches, Checks, CommitId, Head, Local,
-    LoginDescription, MergeState, ModelChoice, ModelName, PermissionMode, PrState, PullRequest, RemoteName, RepoUrl,
-    Review, RunId, SessionId, SessionSettings, Upstream,
+    LoginDescription, MergeState, ModelChoice, ModelName, PrState, PullRequest, RemoteName, RepoUrl, Review, RunId,
+    SessionId, Upstream,
 };
 use protocol::tail::{DeltaChange, StreamDelta, Tail};
 use providers::Provider;
@@ -37,11 +37,10 @@ pub(super) fn described() -> AgentDescription {
         usage_heading: "Claude usage".to_string(),
         models: vec![ModelChoice { model: ModelName::named("sonnet"), label: "Sonnet".to_string() }],
         efforts: vec![Effort::Low, Effort::High],
-        modes: vec![PermissionMode::FullAccess, PermissionMode::Plan],
-        defaults: SessionSettings {
-            model: ModelName::named("sonnet"),
-            permission_mode: PermissionMode::FullAccess,
-            effort: Effort::High,
+        defaults: protocol::capability::settings::Settings {
+            model: Some(ModelName::named("sonnet")),
+            effort: Some(Effort::High),
+            ..Default::default()
         },
         features: vec![AgentFeature::Compacts],
         login: Some(LoginDescription {
@@ -53,10 +52,9 @@ pub(super) fn described() -> AgentDescription {
 
 /// What Claude claims as a hub's tests describe it, as [`described`] says.
 pub(crate) fn claimed() -> Capabilities {
-    use protocol::capability::approvals::{self, ApprovalMode, Beyond, Modes, Unasked};
+    use protocol::capability::approvals;
     use protocol::capability::{Claimed, context, settings};
-    let mode = |plan| ApprovalMode { unasked: Unasked::Everything, beyond: Beyond::Asks, sandbox: None, plan };
-    let modes = Modes { default: mode(false), others: vec![mode(true)] };
+    let modes = protocol::fixtures::modes();
     let compaction = context::Compaction { keeping: context::Keeping::Read };
     Capabilities {
         approvals: approvals::Claims { modes: Some(modes), ..approvals::Claims::default() },

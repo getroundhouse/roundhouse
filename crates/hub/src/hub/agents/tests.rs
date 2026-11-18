@@ -1,11 +1,11 @@
 //! What the hub does with its agents' descriptions, against a hub that never starts a worker: what a new chat runs,
 //! what a chat is refused, and whether the agent is asked to compact.
 
+use crate::session::ChatSettings;
 use protocol::capability::settings::Effort;
+use protocol::capability::settings::Settings;
 use protocol::client::{ApiError, ErrorCode};
-use protocol::model::{
-    AgentDescription, AgentKind, ModelName, PermissionMode, SessionSettings, SessionSettingsChange, WorkspaceId,
-};
+use protocol::model::{AgentDescription, AgentKind, ModelName, WorkspaceId};
 
 use crate::hub::tests::{claimed, described, hub_describing, hub_in};
 
@@ -26,15 +26,18 @@ async fn a_new_chat_runs_what_its_agents_description_says_unless_it_names_someth
     let hub = hub_in(dir.path());
     ready(&hub);
 
-    let made = hub.session_create(WorkspaceId::from(W), AgentKind::Claude, SessionSettingsChange::default(), None);
+    let made = hub.session_create(WorkspaceId::from(W), AgentKind::Claude, Settings::default(), None);
     let made = made.await.unwrap();
-    let chosen = SessionSettingsChange { effort: Some(Effort::Low), ..SessionSettingsChange::default() };
+    let chosen = Settings { effort: Some(Effort::Low), ..Settings::default() };
     let low = hub.session_create(W.into(), AgentKind::Claude, chosen, None).await.unwrap();
 
-    assert_eq!(made.settings(), described().defaults);
+    let defaults = described().defaults;
+    let (model, effort) = (defaults.model.unwrap(), defaults.effort.unwrap());
+    let given = ChatSettings { model, mode: protocol::fixtures::full_access(), effort };
+    assert_eq!(ChatSettings::of(&made), given, "its kind's defaults, in the mode its claims give first");
     let sonnet = ModelName::named("sonnet");
-    let expected = SessionSettings { model: sonnet, permission_mode: PermissionMode::FullAccess, effort: Effort::Low };
-    assert_eq!(low.settings(), expected);
+    let expected = ChatSettings { model: sonnet, mode: protocol::fixtures::full_access(), effort: Effort::Low };
+    assert_eq!(ChatSettings::of(&low), expected);
 }
 
 #[tokio::test]
@@ -47,8 +50,8 @@ async fn a_kind_of_agent_the_hub_has_no_description_of_is_refused() {
     let claudes = hub_in(other.path());
     ready(&claudes);
 
-    let refused = hub.session_create(W.into(), AgentKind::Claude, SessionSettingsChange::default(), None).await;
-    let newer = claudes.session_create(W.into(), AgentKind::Unknown, SessionSettingsChange::default(), None).await;
+    let refused = hub.session_create(W.into(), AgentKind::Claude, Settings::default(), None).await;
+    let newer = claudes.session_create(W.into(), AgentKind::Unknown, Settings::default(), None).await;
 
     assert_eq!(code(&refused), Some(ErrorCode::InvalidRequest), "{refused:?}");
     assert_eq!(hub.session_list(W.into()).await.unwrap().len(), 1, "no chat was made");
@@ -62,12 +65,12 @@ async fn an_effort_or_a_mode_the_agent_isnt_offered_is_refused_for_a_new_chat_an
     let dir = tempfile::tempdir().unwrap();
     let hub = hub_in(dir.path());
     ready(&hub);
-    let at = |effort| SessionSettingsChange { effort: Some(effort), ..SessionSettingsChange::default() };
-    let in_mode = |mode| SessionSettingsChange { permission_mode: Some(mode), ..SessionSettingsChange::default() };
+    let at = |effort| Settings { effort: Some(effort), ..Settings::default() };
+    let in_mode = |mode| Settings { mode: Some(mode), ..Settings::default() };
     let refused = [
         ("an effort it isn't offered", at(Effort::Max)),
         ("an effort this hub doesn't know", at(Effort::Unknown)),
-        ("a mode this hub doesn't know", in_mode(PermissionMode::Unknown)),
+        ("a mode this hub doesn't know", in_mode(protocol::capability::approvals::ApprovalMode::UNKNOWN)),
     ];
     let before = hub.session_get("s".into()).await.unwrap();
 
@@ -79,27 +82,27 @@ async fn an_effort_or_a_mode_the_agent_isnt_offered_is_refused_for_a_new_chat_an
         assert_eq!(code(&changed), Some(ErrorCode::InvalidRequest), "{case}, for a change: {changed:?}");
         assert_eq!(hub.session_list(W.into()).await.unwrap().len(), 1, "{case}: no chat was made");
         let kept = hub.session_get("s".into()).await.unwrap();
-        assert_eq!(kept.settings(), before.settings(), "{case}: the chat's settings didn't change");
+        assert_eq!(ChatSettings::of(&kept), ChatSettings::of(&before), "{case}: the chat's settings didn't change");
     }
     // What the agent is offered is taken, each leaving the rest as it was.
-    let low = SessionSettings { effort: Effort::Low, ..before.settings() };
+    let low = ChatSettings { effort: Effort::Low, ..ChatSettings::of(&before) };
     for (case, taken, expected) in [
         ("an effort it's offered", at(Effort::Low), low.clone()),
         (
             "plan mode",
-            in_mode(PermissionMode::Plan),
-            SessionSettings { permission_mode: PermissionMode::Plan, ..low.clone() },
+            in_mode(protocol::fixtures::plan_mode()),
+            ChatSettings { mode: protocol::fixtures::plan_mode(), ..low.clone() },
         ),
         (
             "full access",
-            in_mode(PermissionMode::FullAccess),
-            SessionSettings { permission_mode: PermissionMode::FullAccess, ..low.clone() },
+            in_mode(protocol::fixtures::full_access()),
+            ChatSettings { mode: protocol::fixtures::full_access(), ..low.clone() },
         ),
     ] {
         let changed = hub.session_configure("s".into(), taken).await;
 
         let changed = changed.unwrap_or_else(|e| panic!("{case} was refused: {e:?}"));
-        assert_eq!(changed.settings(), expected, "{case}");
+        assert_eq!(ChatSettings::of(&changed), expected, "{case}");
     }
 }
 
@@ -116,16 +119,16 @@ async fn a_change_is_refused_for_the_settings_it_leaves_the_chat_with_as_well_as
     let hub = hub_describing(dir.path(), vec![AgentDescription { capabilities: Some(claims), ..described() }]);
     ready(&hub);
     let (haiku, sonnet) = (ModelName::named("haiku"), ModelName::named("sonnet"));
-    let on = |model: &ModelName, effort| SessionSettingsChange {
+    let on = |model: &ModelName, effort| Settings {
         model: Some(model.clone()),
         effort: Some(effort),
-        ..SessionSettingsChange::default()
+        ..Settings::default()
     };
     let at_low_on_haiku = hub.session_create(W.into(), AgentKind::Claude, on(&haiku, Effort::Low), None).await.unwrap();
     let at_high_on_sonnet = hub.session_configure("s".into(), on(&sonnet, Effort::High)).await.unwrap();
 
-    let high = SessionSettingsChange { effort: Some(Effort::High), ..SessionSettingsChange::default() };
-    let to_haiku = SessionSettingsChange { model: Some(haiku), ..SessionSettingsChange::default() };
+    let high = Settings { effort: Some(Effort::High), ..Settings::default() };
+    let to_haiku = Settings { model: Some(haiku), ..Settings::default() };
     for (case, chat, change) in [
         ("an effort the chat's model isn't offered", &at_low_on_haiku, high),
         ("a model the chat's effort isn't offered for", &at_high_on_sonnet, to_haiku),
@@ -134,7 +137,7 @@ async fn a_change_is_refused_for_the_settings_it_leaves_the_chat_with_as_well_as
 
         assert_eq!(code(&changed), Some(ErrorCode::InvalidRequest), "{case}: {changed:?}");
         let kept = hub.session_get(chat.id.clone()).await.unwrap();
-        assert_eq!(kept.settings(), chat.settings(), "{case}: the chat's settings didn't change");
+        assert_eq!(ChatSettings::of(&kept), ChatSettings::of(chat), "{case}: the chat's settings didn't change");
     }
 }
 

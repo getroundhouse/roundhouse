@@ -338,7 +338,8 @@ async fn on_mode(shared: &Shared, mode_id: &str, raw: String) {
     let mode = match mode_id {
         "plan" => super::claims::plan(),
         "accept-edits" | "yolo" => super::claims::full_access(),
-        _ => super::claims::unknown(),
+        // One `agy` added since, which neither skips its permissions nor plans.
+        _ => protocol::capability::approvals::ApprovalMode::UNKNOWN,
     };
     let changed = {
         let mut state = shared.state.lock();
@@ -352,6 +353,6 @@ async fn on_mode(shared: &Shared, mode_id: &str, raw: String) {
         }
     };
     if changed {
-        shared.event(EventBody::AgentMode { permission_mode: crate::registry::as_logged(mode) }, Some(raw)).await;
+        shared.event(EventBody::AgentMode { mode }, Some(raw)).await;
     }
 }

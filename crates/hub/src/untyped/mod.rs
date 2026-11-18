@@ -1,7 +1,8 @@
 //! What Claude's adapter recorded before it typed its calls, typed as it records them now: each call by the tool's name
 //! and input, what came back for each, each request for approval, and what a subagent's record said it had done lately,
 //! and what the hub recorded of each decision before it typed them. Codex's and Antigravity's adapters typed their
-//! requests from the start, beside fields of the older form, which go. The store's migration types what the hub kept,
+//! requests from the start, beside fields of the older form, which go. Every adapter named its approval modes before
+//! they were typed, as the hub did, which `modes` types by each chat's kind. The store's migration types what the hub kept,
 //! and the worker link what a worker of an older build still sends, so nothing past them reads the older forms.
 //!
 //! It's frozen, as Claude's tools and words were when the adapter stopped recording them, and it never changes, while
@@ -10,6 +11,7 @@
 
 mod calls;
 mod lately;
+mod modes;
 mod older;
 mod outputs;
 mod requests;
@@ -18,5 +20,6 @@ mod tests;
 mod typing;
 
 pub(crate) use lately::lately;
+pub(crate) use modes::{mode, type_mode};
 pub(crate) use requests::{type_request, type_resolution};
-pub(crate) use typing::Typing;
+pub(crate) use typing::{Typing, naming_a_mode};

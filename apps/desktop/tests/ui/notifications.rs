@@ -144,7 +144,7 @@ fn chats_that_need_you_within_two_seconds_sound_once_and_later_sound_again(cx: &
     let stack = Stack::new();
     let (mut ui, elsewhere, first) = open_with_one_elsewhere(cx, &stack);
     // Made by the hub alone, so no other workspace needs making to leave it, and nobody is reading it.
-    let settings = protocol::model::SessionSettingsChange::default();
+    let settings = protocol::capability::settings::Settings::default();
     let second = stack.client().session_create(&elsewhere, AgentKind::Claude, settings, None).unwrap().id;
     ui.wait("the second chat", |ui| ui.view().records().every_session().any(|s| s.id == second));
     stack.client().session_prompt(&first, "say:one", None).unwrap();

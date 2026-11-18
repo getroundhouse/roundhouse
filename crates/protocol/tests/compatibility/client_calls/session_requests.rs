@@ -3,14 +3,15 @@
 
 use protocol::attachment::{AttachmentBytes, MediaType};
 use protocol::capability::approvals::{AfterDenial, Decision};
-use protocol::capability::settings::Effort;
+use protocol::capability::settings::{Effort, Settings};
 use protocol::client::{
     ClientRequest, agent, attachments, drafts, log, new_workspace, queue, sessions, subscriptions, waits,
 };
+use protocol::fixtures;
 use protocol::frame;
 use protocol::model::{
-    AgentKind, AnswerSoFar, DecisionDraft, DraftToKeep, ModelName, NewWorkspaceDraftToKeep, PermissionMode, Place, Seq,
-    SessionSettingsChange, SoFar, UseChoice,
+    AgentKind, AnswerSoFar, DecisionDraft, DraftToKeep, ModelName, NewWorkspaceDraftToKeep, Place, Seq, SoFar,
+    UseChoice,
 };
 use protocol::prompt::Prompt;
 
@@ -18,20 +19,17 @@ use super::asked;
 
 #[test]
 fn every_request_about_a_session_keeps_its_form() {
-    let options = SessionSettingsChange {
-        model: Some(ModelName::named("opus")),
-        permission_mode: Some(PermissionMode::Plan),
-        effort: None,
-    };
+    let settings =
+        Settings { model: Some(ModelName::named("opus")), mode: Some(fixtures::plan_mode()), ..Settings::default() };
     let create = ClientRequest::SessionCreate(sessions::SessionCreate {
         workspace_id: "w".into(),
         agent: AgentKind::Claude,
-        options,
+        settings,
         client_request_id: Some("q".into()),
     });
     asked(
         create,
-        r#"{"method":"session_create","workspace_id":"w","agent":"claude","model":"opus","permission_mode":"plan","effort":null,"client_request_id":"q"}"#,
+        r#"{"method":"session_create","workspace_id":"w","agent":"claude","settings":{"model":"opus","mode":{"unasked":"reads","beyond":"asks","plan":true},"effort":null,"speed":null,"thinking":null,"persona":null,"style":null,"verbosity":null,"advisor":null,"budget":null},"client_request_id":"q"}"#,
     );
     asked(
         ClientRequest::SessionEnsure(sessions::SessionEnsure { workspace_id: "w".into(), agent: AgentKind::Claude }),
@@ -42,10 +40,10 @@ fn every_request_about_a_session_keeps_its_form() {
         r#"{"method":"session_list","workspace_id":"w"}"#,
     );
     asked(ClientRequest::SessionGet(sessions::SessionGet { id: "s".into() }), r#"{"method":"session_get","id":"s"}"#);
-    let options = SessionSettingsChange { model: None, permission_mode: None, effort: Some(Effort::High) };
+    let settings = Settings { effort: Some(Effort::High), ..Settings::default() };
     asked(
-        ClientRequest::SessionConfigure(sessions::SessionConfigure { id: "s".into(), options }),
-        r#"{"method":"session_configure","id":"s","model":null,"permission_mode":null,"effort":"high"}"#,
+        ClientRequest::SessionConfigure(sessions::SessionConfigure { id: "s".into(), settings }),
+        r#"{"method":"session_configure","id":"s","settings":{"model":null,"mode":null,"effort":"high","speed":null,"thinking":null,"persona":null,"style":null,"verbosity":null,"advisor":null,"budget":null}}"#,
     );
     asked(
         ClientRequest::SessionClose(sessions::SessionClose { id: "s".into() }),

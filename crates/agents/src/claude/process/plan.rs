@@ -9,7 +9,6 @@ use std::sync::atomic::Ordering;
 use process::{Signal, signal_group};
 use protocol::capability::approvals::ApprovalMode;
 use protocol::event::{EventBody, NoticeLevel};
-use protocol::model::PermissionMode;
 use serde_json::json;
 use tokio::process::ChildStdin;
 use tokio::sync::mpsc;
@@ -57,11 +56,11 @@ pub(super) async fn start_in(
 /// means it took a prompt before going into plan mode, and may be about to use a tool with full access, so it's
 /// stopped.
 pub(super) async fn passed_on(shared: &Shared, output: &mpsc::Sender<AgentOutput>, event: &EventBody) -> bool {
-    if let EventBody::AgentMode { permission_mode } = event {
-        return !(shared.entering_plan.swap(false, Ordering::SeqCst) && *permission_mode == PermissionMode::Plan);
+    if let EventBody::AgentMode { mode } = event {
+        return !(shared.entering_plan.swap(false, Ordering::SeqCst) && mode.plan);
     }
-    let EventBody::AgentInit { permission_mode: started_in, .. } = event else { return true };
-    if !shared.entering_plan.swap(false, Ordering::SeqCst) || *started_in == Some(PermissionMode::Plan) {
+    let EventBody::AgentInit { mode: started_in, .. } = event else { return true };
+    if !shared.entering_plan.swap(false, Ordering::SeqCst) || started_in.is_some_and(|mode| mode.plan) {
         return true;
     }
     stop(shared, output, "it started on a prompt first").await;

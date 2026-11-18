@@ -1,11 +1,10 @@
 //! What the page's unit tests are drawn from: a moment held still, logins, accounts and how a hub describes Claude,
 //! each plainly made up.
 
-use protocol::capability::settings::Effort;
+use protocol::capability::settings::{Effort, Settings};
 use protocol::fixtures::account;
 use protocol::model::{
-    Account, AgentDescription, AgentKind, HeldLogin, LimitWindow, LoginDescription, ModelName, PermissionMode,
-    SessionSettings, UsageLimit,
+    Account, AgentDescription, AgentKind, HeldLogin, LimitWindow, LoginDescription, ModelName, UsageLimit,
 };
 
 /// Sunday 1 November 2026, at 3 PM in UTC, which held still is the local time zone.
@@ -37,11 +36,10 @@ pub(super) fn claude(login: Option<LoginDescription>) -> AgentDescription {
         usage_heading: "Claude usage".to_string(),
         models: Vec::new(),
         efforts: Vec::new(),
-        modes: Vec::new(),
-        defaults: SessionSettings {
-            model: ModelName::named("opus"),
-            permission_mode: PermissionMode::FullAccess,
-            effort: Effort::Xhigh,
+        defaults: Settings {
+            model: Some(ModelName::named("opus")),
+            effort: Some(Effort::Xhigh),
+            ..Settings::default()
         },
         features: Vec::new(),
         login,

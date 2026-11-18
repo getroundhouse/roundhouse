@@ -22,6 +22,7 @@ mod session_accounts;
 mod subagents;
 mod tools;
 mod typed_calls;
+mod typed_modes;
 mod typed_requests;
 mod waiting;
 mod waits;

@@ -5,10 +5,12 @@ use std::io::Write;
 use anyhow::bail;
 use client_core::{Agents, Client, Ended, SubscriptionItem};
 use protocol::capability::settings::Effort;
+use protocol::capability::settings::Settings;
 use protocol::event::EventBody;
-use protocol::model::{PermissionMode, Seq, Session, SessionId, SessionSettingsChange};
+use protocol::model::{AgentDescription, AgentKind, Seq, Session, SessionId};
 
 use crate::args::SessionCmd;
+use crate::modes::mode_name;
 use crate::render;
 use crate::run::short;
 use crate::workspace::find_workspace;
@@ -17,9 +19,14 @@ pub(crate) fn session_command(client: &Client, command: SessionCmd) -> anyhow::R
     match command {
         SessionCmd::New { workspace, agent, model, permission_mode, effort } => {
             let workspace = find_workspace(client, &workspace)?;
-            let options = SessionSettingsChange { model, permission_mode, effort };
-            let agent = agent.unwrap_or(Agents::read(client)?.for_new_chat());
-            let session = client.session_create(&workspace.id, agent, options, Some(client_core::new_request_id()))?;
+            let agents = Agents::read(client)?;
+            let agent = agent.unwrap_or(agents.for_new_chat());
+            let mode = match permission_mode {
+                Some(name) => Some(name.among(described(&agents, agent)?)?),
+                None => None,
+            };
+            let settings = Settings { model, mode, effort, ..Settings::default() };
+            let session = client.session_create(&workspace.id, agent, settings, Some(client_core::new_request_id()))?;
             println!("{}", session.id);
         }
         SessionCmd::List { workspace } => {
@@ -40,8 +47,12 @@ pub(crate) fn session_command(client: &Client, command: SessionCmd) -> anyhow::R
         }
         SessionCmd::Set { session, model, permission_mode, effort } => {
             let session = find_session(client, &session)?;
+            let mode = match permission_mode {
+                Some(name) => Some(name.among(described(&Agents::read(client)?, session.agent)?)?),
+                None => None,
+            };
             let session =
-                client.session_configure(&session.id, SessionSettingsChange { model, permission_mode, effort })?;
+                client.session_configure(&session.id, Settings { model, mode, effort, ..Settings::default() })?;
             println!("{}", options(&session));
         }
         SessionCmd::Close { session } => {
@@ -77,17 +88,15 @@ pub(crate) fn print_log(client: &Client, session: &str, from: Seq, limit: u32, r
 
 /// What the session runs with.
 fn options(session: &Session) -> String {
-    format!(
-        "model={} mode={} effort={}",
-        session.model.as_str(),
-        mode_name(session.permission_mode),
-        effort_name(&session.effort),
-    )
+    format!("model={} mode={} effort={}", session.model.as_str(), mode_name(session.mode), effort_name(&session.effort))
 }
 
-/// A mode an agent went into by itself, or one from a newer hub, has no name here.
-pub(crate) fn mode_name(mode: PermissionMode) -> &'static str {
-    mode.as_str().unwrap_or("unknown")
+/// What the hub says `kind` offers, which only a hub older than this client doesn't.
+fn described(agents: &Agents, kind: AgentKind) -> anyhow::Result<&AgentDescription> {
+    match agents.of(kind) {
+        Some(agent) => Ok(agent),
+        None => bail!("the hub doesn't describe {}, so it can't say what its modes are", kind.as_str()),
+    }
 }
 
 /// A level from a newer hub has no name here.
@@ -219,13 +228,6 @@ mod tests {
         let shown = [&Effort::Max, &Effort::Unknown].map(effort_name);
 
         assert_eq!(shown, ["max", "unknown"]);
-    }
-
-    #[test]
-    fn a_mode_a_chat_cant_have_is_shown_as_unknown() {
-        let shown = [PermissionMode::Plan, PermissionMode::Unknown].map(mode_name);
-
-        assert_eq!(shown, ["plan", "unknown"]);
     }
 
     #[test]

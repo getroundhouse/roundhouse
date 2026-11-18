@@ -1,11 +1,12 @@
 use client_core::calls::{Recorded, Returned, first_line};
 use protocol::attachment::Attachment;
+use protocol::capability::approvals::ApprovalMode;
 use protocol::capability::asking::Question;
 use protocol::capability::turns::OwnTurn;
 use protocol::event::{
     AgentTask, CompactionOutcome, ContentBlock, Denied, EventBody, SessionEvent, TaskOutcome, TurnOutcome,
 };
-use protocol::model::{ApprovalId, MessageId, PermissionMode, Seq, SubagentId, TaskId};
+use protocol::model::{ApprovalId, MessageId, Seq, SubagentId, TaskId};
 use protocol::tail::{DeltaChange, StreamDelta, Tail};
 use std::collections::HashMap;
 use std::io::Write;
@@ -62,14 +63,8 @@ impl Printer {
     }
 
     /// What the agent says it's running as, with `?` for what it left out.
-    pub(super) fn ready(
-        &mut self,
-        seq: Seq,
-        model: Option<&str>,
-        permission_mode: Option<PermissionMode>,
-        cwd: Option<&str>,
-    ) {
-        let mode = permission_mode.map_or("?", crate::session::mode_name);
+    pub(super) fn ready(&mut self, seq: Seq, model: Option<&str>, mode: Option<ApprovalMode>, cwd: Option<&str>) {
+        let mode = mode.map_or("?", crate::modes::mode_name);
         let (model, cwd) = (model.unwrap_or("?"), cwd.unwrap_or("?"));
         self.line(seq, &format!("agent ready: model {model}, permissions {mode}, in {cwd}"));
     }
@@ -80,8 +75,8 @@ impl Printer {
             EventBody::AgentStarted { pid, resumed, build, previous_build, .. } => {
                 self.line(event.seq, &started(*pid, *resumed, build.as_deref(), previous_build.as_deref()));
             }
-            EventBody::AgentInit { model, permission_mode, cwd, .. } => {
-                self.ready(event.seq, model.as_deref(), *permission_mode, cwd.as_deref());
+            EventBody::AgentInit { model, mode, cwd, .. } => {
+                self.ready(event.seq, model.as_deref(), *mode, cwd.as_deref());
             }
             EventBody::Assistant { message_id, blocks, first_index, .. } => {
                 for (position, block) in blocks.iter().enumerate() {
@@ -106,8 +101,8 @@ impl Printer {
             EventBody::AgentExited { .. } => self.exited(event),
             EventBody::Notice { level, message, .. } => self.line(event.seq, &format!("{level:?}: {message}")),
             EventBody::RequestFailed { failure, again, .. } => self.line(event.seq, &request_failed(failure, *again)),
-            EventBody::AgentMode { permission_mode } => {
-                self.line(event.seq, &format!("approval mode: {}", crate::session::mode_name(*permission_mode)));
+            EventBody::AgentMode { mode } => {
+                self.line(event.seq, &format!("approval mode: {}", crate::modes::mode_name(*mode)));
             }
             EventBody::AgentTasks { tasks, stopped } => self.background(event.seq, tasks, stopped),
             EventBody::OwnTurn(OwnTurn::TaskEnded { ended }) => self.line(event.seq, &own_turn(ended)),

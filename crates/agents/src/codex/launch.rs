@@ -142,7 +142,7 @@ pub(super) async fn conversation(
                 agent_session_id: Some(id.into()),
                 model: response["model"].as_str().map(str::to_owned),
                 cwd: Some(spec.cwd.clone()),
-                permission_mode: Some(crate::registry::as_logged(settings.mode)),
+                mode: Some(settings.mode),
                 agent_version: None,
             },
             None,

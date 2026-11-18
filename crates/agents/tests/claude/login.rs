@@ -22,10 +22,7 @@ fn spec(dir: &Path) -> AgentSpec {
         agent: AgentKind::Claude,
         cwd: dir.to_string_lossy().into_owned(),
         start: protocol::capability::conversation::Start::New { conversation: Some("s".into()) },
-        settings: {
-            let description = agents::claude::description();
-            description.defaults.for_capabilities(&description.capabilities.unwrap()).unwrap()
-        },
+        settings: agents::claude::description().defaults,
         env: vec![],
         tools_token: None,
         login: None,

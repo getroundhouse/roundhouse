@@ -125,7 +125,7 @@ pub(super) async fn conversation(
                 agent_session_id: Some(id),
                 model: Some(model),
                 cwd: Some(spec.cwd.clone()),
-                permission_mode: Some(crate::registry::as_logged(mode)),
+                mode: Some(mode),
                 agent_version: None,
             },
             None,

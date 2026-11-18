@@ -5,9 +5,9 @@ use crate::event::{EventBody, FailureKind, RequestFailure, SessionEvent, TurnOut
 use crate::model::{
     Account, AgentKind, ApprovalId, BranchName, ChildStatus, ChildWorktree, Draft, FoundGithubLogin, GhLogin,
     GhLoginWorks, GithubAccount, GithubApp, GithubAppId, GithubLoginKind, GithubReach, GithubRepositoryName,
-    GithubSignIn, GithubSignInStatus, GithubUser, GithubUserId, HeldGithubLogin, MadeBy, ModelName, PermissionMode,
-    Place, Reach, Rev, Seq, Session, SessionStatus, SetupStatus, Subagent, SubagentId, SubagentStatus, TitleSource,
-    ToolUseId, Workspace, WorkspaceStatus,
+    GithubSignIn, GithubSignInStatus, GithubUser, GithubUserId, HeldGithubLogin, MadeBy, ModelName, Place, Reach, Rev,
+    Seq, Session, SessionStatus, SetupStatus, Subagent, SubagentId, SubagentStatus, TitleSource, ToolUseId, Workspace,
+    WorkspaceStatus,
 };
 
 /// The session `id`, in the workspace `w`, idle with nothing in its log. Its agent is Claude, running Opus with full
@@ -21,7 +21,7 @@ pub fn session(id: &str) -> Session {
         agent: AgentKind::Claude,
         agent_capabilities: None,
         model: ModelName::named("opus"),
-        permission_mode: PermissionMode::FullAccess,
+        mode: super::full_access(),
         effort: Effort::Xhigh,
         status: SessionStatus::Idle,
         last_seq: Seq::default(),

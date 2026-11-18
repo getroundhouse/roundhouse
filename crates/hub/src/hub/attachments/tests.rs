@@ -3,9 +3,10 @@
 
 use protocol::attachment::{Attachment, AttachmentBytes, AttachmentFile, MediaType};
 use protocol::capability::Control;
+use protocol::capability::settings::Settings;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::event::EventBody;
-use protocol::model::{AgentKind, AttachmentId, Seq, SessionId, SessionSettingsChange};
+use protocol::model::{AgentKind, AttachmentId, Seq, SessionId};
 use protocol::prompt::Prompt;
 use protocol::worker::WorkerRequest;
 
@@ -147,7 +148,7 @@ async fn a_prompt_can_be_only_files_and_can_only_carry_what_was_added_to_its_own
     let dir = tempfile::tempdir().unwrap();
     let (hub, asked) = hub_with_stand_in_workers(dir.path());
     let (workspace, chat) = a_chat(&hub).await;
-    let unchanged = SessionSettingsChange::default();
+    let unchanged = Settings::default();
     let other = hub.session_create(workspace.id.clone(), AgentKind::Claude, unchanged, None).await.unwrap().id;
     let shot = add(&hub, &other, "a1", "shot.png", MediaType::Png, &png(64)).await.unwrap();
     let prompt = |chat: &SessionId, prompt: Prompt<AttachmentId>| hub.session_prompt(chat.clone(), None, prompt);

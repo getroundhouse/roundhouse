@@ -7,11 +7,12 @@ use super::LiveSession;
 use crate::hub::Hub;
 use crate::worker_link::WorkerLink;
 use protocol::capability::approvals::{self, Decision};
+use protocol::capability::settings::Settings;
 use protocol::capability::{Capabilities, Control};
 use protocol::client::{ApiError, ErrorCode};
-use protocol::model::{AgentKind, ApprovalId, RunId, SessionId, SessionSettingsChange};
+use protocol::model::{AgentKind, ApprovalId, RunId, SessionId};
 use protocol::worker::previous::{
-    AgentApproval, AgentCancel, AgentCompact, AgentConfigure, AgentPrompt, ApprovalDecision, Request,
+    self, AgentApproval, AgentCancel, AgentCompact, AgentConfigure, AgentPrompt, ApprovalDecision, Request,
 };
 use protocol::worker::{AgentControl, Delivery};
 use tracing::warn;
@@ -51,11 +52,8 @@ impl LiveSession {
 
     /// Changes the settings of a run of protocol 3 that hasn't said what it claims, with the request that came before
     /// controls.
-    pub(super) async fn configure_previous(
-        &self,
-        link: &WorkerLink,
-        options: SessionSettingsChange,
-    ) -> Result<Delivery, ApiError> {
+    pub(super) async fn configure_previous(&self, link: &WorkerLink, change: &Settings) -> Result<Delivery, ApiError> {
+        let options = previous::Change::of(change);
         link.call_previous(Request::AgentConfigure(AgentConfigure { session_id: self.id.clone(), options })).await
     }
 

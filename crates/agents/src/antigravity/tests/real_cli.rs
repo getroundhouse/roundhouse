@@ -7,6 +7,7 @@ use std::path::Path;
 use std::time::Duration;
 
 use hyper::StatusCode;
+use protocol::capability::approvals::ApprovalMode;
 use protocol::capability::settings::Effort;
 use protocol::capability::{
     Control,
@@ -19,7 +20,7 @@ use protocol::capability::{
 };
 use protocol::event::{AgentRunState, EventBody, ExitReason, SessionEvent, TurnOutcome};
 use protocol::fixtures;
-use protocol::model::{AgentKind, ApprovalId, ModelName, PermissionMode, RunId, Seq};
+use protocol::model::{AgentKind, ApprovalId, ModelName, RunId, Seq};
 use protocol::prompt::Prompt;
 use protocol::worker::AgentSpec;
 use serde_json::{Value, json};
@@ -73,7 +74,7 @@ async fn scripted_gemini(script: impl Fn(&Value) -> Vec<Value> + Send + Sync + '
 async fn spawn_real_agy(
     room: &Path,
     server: &Server,
-    mode: PermissionMode,
+    mode: ApprovalMode,
 ) -> (std::sync::Arc<dyn AgentProcess>, mpsc::Receiver<AgentOutput>) {
     let work = room.join("work");
     std::fs::create_dir_all(&work).unwrap();
@@ -83,12 +84,12 @@ async fn spawn_real_agy(
     std::fs::create_dir_all(&cfg).unwrap();
     std::fs::write(cfg.join("settings.json"), json!({ "modelProvider": "gemini" }).to_string()).unwrap();
 
-    let mut settings = super::super::description().defaults;
-    settings.model = ModelName::named("gemini-3.8-flash");
-    settings.effort = Effort::Low;
-    settings.permission_mode = mode;
-    let claims = super::super::claims::claims();
-    let settings = settings.for_capabilities(&claims).unwrap();
+    let settings = protocol::capability::settings::Settings {
+        model: Some(ModelName::named("gemini-3.8-flash")),
+        mode: Some(mode),
+        effort: Some(Effort::Low),
+        ..Default::default()
+    };
     let spec = AgentSpec {
         session_id: "real-probe".into(),
         run: RUN,
@@ -192,7 +193,7 @@ async fn real_agy_parallel_background_commands_wake_twice_and_obey_laws() {
     let room = tempfile::tempdir().unwrap();
     let readme_path = room.path().join("work").join("README.md").display().to_string();
     let server = scripted_gemini(move |req| parallel_bg_script(&readme_path, req)).await;
-    let (agent, mut rx) = spawn_real_agy(room.path(), &server, PermissionMode::FullAccess).await;
+    let (agent, mut rx) = spawn_real_agy(room.path(), &server, super::super::claims::full_access()).await;
     let (mut events, mut next_seq) = (Vec::<SessionEvent>::new(), 1_u64);
     let mut record = |run: Option<RunId>, body: EventBody| {
         let seq = Seq::new(next_seq);
@@ -273,7 +274,7 @@ fn subagent_script(req: &Value) -> Vec<Value> {
 async fn real_agy_subagent_runs_command_under_skip_permissions_and_wakes_parent() {
     let room = tempfile::tempdir().unwrap();
     let server = scripted_gemini(subagent_script).await;
-    let (agent, mut rx) = spawn_real_agy(room.path(), &server, PermissionMode::FullAccess).await;
+    let (agent, mut rx) = spawn_real_agy(room.path(), &server, super::super::claims::full_access()).await;
     while !matches!(recv_event(&mut rx).await, EventBody::AgentInit { .. }) {}
     agent.send_prompt(Seq::FIRST, &Prompt::new("delegate")).await.unwrap();
     let mut results = Vec::new();
@@ -320,7 +321,7 @@ async fn real_agy_mode_switch_plan_background_mixed_wakeup_and_resumes_full_acce
     let room = tempfile::tempdir().unwrap();
     let readme_path = room.path().join("work").join("README.md").display().to_string();
     let server = scripted_gemini(move |req| mode_switch_plan_script(&readme_path, req)).await;
-    let (agent, mut rx) = spawn_real_agy(room.path(), &server, PermissionMode::FullAccess).await;
+    let (agent, mut rx) = spawn_real_agy(room.path(), &server, super::super::claims::full_access()).await;
     while !matches!(recv_event(&mut rx).await, EventBody::AgentInit { .. }) {}
     let full_pid = agent.pid();
 

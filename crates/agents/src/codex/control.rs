@@ -91,7 +91,7 @@ async fn change(shared: &Shared, settings: &protocol::capability::settings::Sett
         settings.mode.inspect(|&mode| state.settings.mode = mode)
     };
     if let Some(mode) = mode {
-        shared.event(EventBody::AgentMode { permission_mode: crate::registry::as_logged(mode) }, None).await;
+        shared.event(EventBody::AgentMode { mode }, None).await;
     }
     Ok(())
 }

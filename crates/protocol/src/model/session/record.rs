@@ -1,9 +1,9 @@
 use super::super::{
     AccountId, AccountSource, ApprovalId, CACHE_WORTH_TELLING_TOKENS, ContextUsage, DecisionDraft, Draft, ModelName,
-    PermissionMode, PromptCache, QueuedPrompt, Rev, Seq, SessionId, SessionSettings, Title, TitleSource, Wait,
-    WorkspaceId,
+    PromptCache, QueuedPrompt, Rev, Seq, SessionId, Title, TitleSource, Wait, WorkspaceId,
 };
-use crate::capability::settings::Effort;
+use crate::capability::approvals::ApprovalMode;
+use crate::capability::settings::{Effort, Settings};
 use crate::event::{AgentTask, TaskKind, TurnOutcome};
 use serde::{Deserialize, Serialize};
 
@@ -143,8 +143,9 @@ pub struct Session {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub agent_capabilities: Option<super::super::RunCapabilities>,
     pub model: ModelName,
-    /// The agent's approval mode, as it last reported it or was told.
-    pub permission_mode: PermissionMode,
+    /// The agent's approval mode, as it last reported it or was told. One it went into by itself, which its kind doesn't
+    /// offer, can be one this build doesn't know.
+    pub mode: ApprovalMode,
     /// How hard the agent thinks.
     pub effort: Effort,
     pub status: SessionStatus,
@@ -278,12 +279,13 @@ impl Session {
         self.status.in_turn() || untaken || self.agent_opened == Some(false)
     }
 
-    /// What it runs with.
-    pub fn settings(&self) -> SessionSettings {
-        SessionSettings {
-            model: self.model.clone(),
-            permission_mode: self.permission_mode,
-            effort: self.effort.clone(),
+    /// What it runs with, as a launch takes it.
+    pub fn settings(&self) -> Settings {
+        Settings {
+            model: Some(self.model.clone()),
+            mode: Some(self.mode),
+            effort: Some(self.effort.clone()),
+            ..Settings::default()
         }
     }
 

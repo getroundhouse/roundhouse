@@ -7,7 +7,7 @@ use desktop::new_workspace::Request;
 use gpui_kit::component::Theme;
 use gpui_kit::{AppContext as _, SharedString, TestAppContext};
 use protocol::event::EventBody;
-use protocol::model::{AgentKind, PermissionMode, RepoId, SessionStatus, WorkspaceId, WorkspaceStatus};
+use protocol::model::{AgentKind, RepoId, SessionStatus, WorkspaceId, WorkspaceStatus};
 use protocol::prompt::Prompt;
 
 use desktop::busy::Busy;
@@ -212,8 +212,7 @@ fn new_shows_its_working_until_the_workspace_is_ready_or_fails(cx: &mut TestAppC
 
 /// What the new-workspace dialog asks for when Create is pressed with nothing in it.
 fn nothing_typed(repo: &RepoId) -> Request {
-    let (agent, permission_mode) = (AgentKind::Claude, PermissionMode::FullAccess);
-    Request::new(repo.clone(), Prompt::default(), agent, (None, None), permission_mode)
+    Request::new(repo.clone(), Prompt::default(), AgentKind::Claude, (None, None), None)
 }
 
 #[gpui_kit::test]

@@ -374,4 +374,7 @@ pub(in super::super) const MIGRATIONS: &[Migration] = &[
     // Typing each request for approval, what closed it, with the decision it stood for, and the draft of an answer to
     // one, which `sessions.decision_draft` holds now, in `typed_requests`.
     Rust(super::typed_requests::typed_requests),
+    // Typing each chat's approval mode, which `sessions.mode` holds now, each one its log names, and the
+    // new-workspace dialog's, in `typed_modes`.
+    Rust(super::typed_modes::typed_modes),
 ];

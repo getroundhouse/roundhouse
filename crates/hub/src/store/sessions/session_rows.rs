@@ -4,10 +4,11 @@ use super::super::made::{Made, inserted, made_by};
 use super::super::{
     Store, StoreError, StoredSession, current_rev, from_text, json_at, lock, rev_of, seq_column, seq_of, text_of,
 };
+use protocol::capability::approvals::ApprovalMode;
+use protocol::capability::settings::Settings;
 use protocol::model::{
     Account, AccountId, AccountSource, AgentKind, AttachmentId, ClientRequestId, ContextUsage, Draft, ModelName,
-    PromptCache, QueuedPrompt, Rev, RunId, Session, SessionId, SessionSettingsChange, SessionStatus, Title, Wait,
-    WorkspaceId,
+    PromptCache, QueuedPrompt, Rev, RunId, Session, SessionId, SessionStatus, Title, Wait, WorkspaceId,
 };
 use rusqlite::{Connection, OptionalExtension, Row, TransactionBehavior, params};
 
@@ -24,7 +25,7 @@ pub(crate) struct Moved {
 /// What a session's row holds, as it's written.
 macro_rules! session_row_columns {
     () => {
-        "id, workspace_id, agent, model, permission_mode, status, last_seq, created_at_ms, updated_at_ms, agent_session_id, agent_opened, title, closed_at_ms, reply_seq, read_seq, background_tasks, title_source, queued, queue_held, turn_started_at_ms, effort, context, account_id, user_active_at_ms, prompt_cache, draft, decision_draft, untaken, open_approvals, reply_outcome, agent_capabilities, account_source"
+        "id, workspace_id, agent, model, mode, status, last_seq, created_at_ms, updated_at_ms, agent_session_id, agent_opened, title, closed_at_ms, reply_seq, read_seq, background_tasks, title_source, queued, queue_held, turn_started_at_ms, effort, context, account_id, user_active_at_ms, prompt_cache, draft, decision_draft, untaken, open_approvals, reply_outcome, agent_capabilities, account_source"
     };
 }
 
@@ -41,6 +42,12 @@ pub(in super::super) const SESSION_COLUMNS: &str = concat!(
 pub(in super::super) fn queue_from(json: &str) -> rusqlite::Result<Vec<QueuedPrompt>> {
     serde_json::from_str(json)
         .map_err(|e| rusqlite::Error::FromSqlConversionFailure(17, rusqlite::types::Type::Text, Box::new(e)))
+}
+
+/// A session's approval mode, from its column, which holds it as JSON.
+fn mode_from(json: &str) -> rusqlite::Result<ApprovalMode> {
+    serde_json::from_str(json)
+        .map_err(|e| rusqlite::Error::FromSqlConversionFailure(4, rusqlite::types::Type::Text, Box::new(e)))
 }
 
 /// The wait a session has open, from the JSON its query writes.
@@ -64,7 +71,7 @@ pub(in super::super) fn session_from_row(row: &Row) -> rusqlite::Result<StoredSe
             workspace_id: row.get::<_, String>(1)?.into(),
             agent: from_text::<AgentKind>(row.get(2)?)?,
             model: from_text(row.get(3)?)?,
-            permission_mode: from_text(row.get(4)?)?,
+            mode: mode_from(&row.get::<_, String>(4)?)?,
             status: from_text(row.get(5)?)?,
             last_seq: seq_of(row, 6)?,
             created_at_ms: row.get(7)?,
@@ -135,7 +142,7 @@ impl Store {
                 session.workspace_id.as_str(),
                 text_of(&session.agent),
                 session.model.as_str(),
-                text_of(&session.permission_mode),
+                serde_json::to_string(&session.mode)?,
                 text_of(&session.status),
                 seq_column(session.last_seq),
                 session.created_at_ms,
@@ -211,17 +218,16 @@ impl Store {
         Ok(sessions.into_iter().map(|s| s.session).collect())
     }
 
-    /// A setting that's `None` is left as it is.
-    pub fn set_session_options(&self, id: &SessionId, options: &SessionSettingsChange) -> Result<(), StoreError> {
-        let SessionSettingsChange { model, permission_mode, effort } = options;
+    /// Keeps the model, mode and effort `change` sets. One that's `None` is left as it is, and a chat keeps no other.
+    pub fn set_session_settings(&self, id: &SessionId, change: &Settings) -> Result<(), StoreError> {
+        let Settings { model, mode, effort, .. } = change;
         lock(&self.writer).execute(
             "UPDATE sessions
-                 SET model = COALESCE(?, model), permission_mode = COALESCE(?, permission_mode),
-                     effort = COALESCE(?, effort)
+                 SET model = COALESCE(?, model), mode = COALESCE(?, mode), effort = COALESCE(?, effort)
                  WHERE id = ?",
             params![
                 model.as_ref().map(ModelName::as_str),
-                permission_mode.as_ref().map(text_of),
+                mode.as_ref().map(serde_json::to_string).transpose()?,
                 effort.as_ref().map(text_of),
                 id.as_str()
             ],

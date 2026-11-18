@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use protocol::capability::settings::Effort;
 use protocol::client::{ApiError, ClientRequest, ClientResponse, ErrorCode, ReplyOutcome, admin};
-use protocol::model::{AgentDescription, AgentKind, ModelName, PermissionMode, Rev, SessionSettings};
+use protocol::model::{AgentDescription, AgentKind, ModelName, Rev};
 
 use super::*;
 use crate::stand_in_hub::{self, Does};
@@ -21,11 +21,10 @@ fn claude() -> AgentDescription {
         usage_heading: "Claude usage".to_string(),
         models: Vec::new(),
         efforts: vec![Effort::High],
-        modes: vec![PermissionMode::FullAccess],
-        defaults: SessionSettings {
-            model: ModelName::named("opus"),
-            permission_mode: PermissionMode::FullAccess,
-            effort: Effort::High,
+        defaults: protocol::capability::settings::Settings {
+            model: Some(ModelName::named("opus")),
+            effort: Some(Effort::High),
+            ..Default::default()
         },
         features: Vec::new(),
         login: None,

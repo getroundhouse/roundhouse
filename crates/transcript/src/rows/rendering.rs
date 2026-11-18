@@ -254,9 +254,7 @@ pub(super) fn render_event(
             Closes::ForASubagent { tool, subagent } => muted_line(format!("Denied {tool} for {subagent}"), cx),
             Closes::Unsaid | Closes::SaidElsewhere => muted_line("Denied", cx),
         },
-        EventBody::AgentMode { permission_mode } => {
-            muted_line(mode::mode_change(around.mode_before, *permission_mode), cx)
-        }
+        EventBody::AgentMode { mode } => muted_line(mode::mode_change(around.mode_before, *mode), cx),
         EventBody::AgentExited { reason, stderr_tail, .. } => agent_exited(seq, *reason, stderr_tail, find, cx),
         EventBody::Notice { level, message, .. } => notice(seq, *level, message, shared, find, cx),
         EventBody::OwnTurn(OwnTurn::TaskEnded { ended }) => own_turn::lines(event, ended, shared, cx),

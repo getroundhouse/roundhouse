@@ -4,7 +4,7 @@ use agents::claude::{Normalizer, Parsed};
 use protocol::capability::approvals::Asks;
 use protocol::capability::calls::{Call, CallKind, CallOutput};
 use protocol::event::{AgentRunState, ContentBlock, EventBody, FileChange, TurnOutcome};
-use protocol::model::{ApprovalId, CacheRequest, CacheTtl, PermissionMode, Seq, ToolUseId};
+use protocol::model::{ApprovalId, CacheRequest, CacheTtl, Seq, ToolUseId};
 use protocol::tail::{BlockKind, Tail};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -56,14 +56,12 @@ fn every_line_is_understood_or_deliberately_kept() {
 #[test]
 fn init_reports_what_the_hub_shows_and_relies_on() {
     let init = events().into_iter().find(|e| matches!(e, EventBody::AgentInit { .. })).unwrap();
-    let EventBody::AgentInit { agent_session_id, model, cwd, permission_mode, agent_version, .. } = init else {
-        unreachable!()
-    };
+    let EventBody::AgentInit { agent_session_id, model, cwd, mode, agent_version, .. } = init else { unreachable!() };
     assert!(agent_session_id.is_some_and(|id| !id.as_str().is_empty()));
     assert!(model.is_some_and(|m| m.contains("haiku")));
     assert_eq!(cwd.as_deref(), Some("/tmp/fixture"));
     // Captured launched with `--permission-mode manual`, which the CLI reports as `default`, a mode a chat can't have.
-    assert_eq!(permission_mode, Some(PermissionMode::Unknown));
+    assert_eq!(mode, Some(protocol::capability::approvals::ApprovalMode::UNKNOWN));
     assert!(agent_version.is_some_and(|v| !v.is_empty()));
 }
 

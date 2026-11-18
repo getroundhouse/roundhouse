@@ -192,7 +192,11 @@ fn a_worker_s_frame_reads_with_its_agent_s_calls_typed() {
     };
     let mut typing = Typing::default();
     let read = |typing: &mut Typing, body: Value| {
-        let WorkerFrame::AgentEvent { body, .. } = typing.frame(frame(body).as_bytes()).unwrap() else { panic!() };
+        let WorkerFrame::AgentEvent { body, .. } =
+            typing.frame(frame(body).as_bytes(), protocol::model::AgentKind::Claude).unwrap()
+        else {
+            panic!()
+        };
         serde_json::to_value(body).unwrap()["blocks"].take()
     };
 

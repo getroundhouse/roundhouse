@@ -7,7 +7,8 @@ use std::time::Duration;
 
 use client_core::{Client, HubAdmin};
 use protocol::StampedBuild;
-use protocol::model::{AgentKind, SessionSettingsChange, WorkspaceStatus};
+use protocol::capability::settings::Settings;
+use protocol::model::{AgentKind, WorkspaceStatus};
 
 use crate::support::{
     Stack, commit_settings, install_executable, terminate, wait_for_setup, wait_for_turn_end, wait_until,
@@ -46,8 +47,7 @@ fn a_hub_started_with_every_signal_blocked_still_works() {
     assert_eq!(workspace.status, WorkspaceStatus::Ready);
 
     // An agent started under it works too, and stopping it by signal still does.
-    let session =
-        client.session_create(&workspace.id, AgentKind::Claude, SessionSettingsChange::default(), None).unwrap();
+    let session = client.session_create(&workspace.id, AgentKind::Claude, Settings::default(), None).unwrap();
     client.session_prompt(&session.id, "tool:echo done > done.txt", None).unwrap();
     wait_for_turn_end(&client, &session.id, 1);
     assert!(PathBuf::from(workspace.path.unwrap()).join("done.txt").exists());

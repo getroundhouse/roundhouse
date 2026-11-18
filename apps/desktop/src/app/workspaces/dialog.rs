@@ -4,7 +4,8 @@
 
 use client_core::Client;
 use gpui_kit::{App, AppContext as _, Context, Entity, WeakEntity, Window};
-use protocol::model::{PermissionMode, RepoId, WorkspaceId};
+use protocol::capability::approvals::ApprovalMode;
+use protocol::model::{RepoId, WorkspaceId};
 
 use super::made::GivenBack;
 use crate::app::AppView;
@@ -58,8 +59,8 @@ impl AppView {
                 self.dialog_closed(window, cx);
             }
             Err(request) => dialog.update(cx, |dialog, cx| {
-                let new_workspace::Request { prompt, coming_back, permission_mode, .. } = *request;
-                dialog.give_back(prompt, coming_back, permission_mode, window, cx);
+                let new_workspace::Request { prompt, coming_back, mode, .. } = *request;
+                dialog.give_back(prompt, coming_back, mode, window, cx);
             }),
         }
     }
@@ -110,7 +111,12 @@ impl AppView {
 
     /// Puts back a prompt for a workspace that couldn't be made, with the mode it was to start in, and opens the dialog
     /// to show where it went, unless another dialog is open.
-    pub(super) fn give_back_to_dialog(&mut self, given_back: GivenBack, mode: PermissionMode, cx: &mut Context<Self>) {
+    pub(super) fn give_back_to_dialog(
+        &mut self,
+        given_back: GivenBack,
+        mode: Option<ApprovalMode>,
+        cx: &mut Context<Self>,
+    ) {
         let Some(dialog) = self.new_workspace.clone() else { return };
         let GivenBack { prompt, coming_back, .. } = given_back;
         let _ = self.window.update(cx, |_, window, cx| {
@@ -179,7 +185,7 @@ mod tests {
                     coming_back: Vec::new(),
                     in_the_dialog: false,
                 },
-                PermissionMode::Plan,
+                Some(protocol::fixtures::plan_mode()),
                 cx,
             );
         });

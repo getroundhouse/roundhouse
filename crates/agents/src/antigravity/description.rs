@@ -1,5 +1,6 @@
 use protocol::capability::settings::Effort;
-use protocol::model::{AgentDescription, AgentKind, ModelChoice, ModelName, PermissionMode, SessionSettings};
+use protocol::capability::settings::Settings;
+use protocol::model::{AgentDescription, AgentKind, ModelChoice, ModelName};
 
 // A compiled snapshot of `agy` 1.5.9's native catalog: the Gemini models it offers under both Google OAuth and
 // `gemini-api-key`, then the Claude models it offers only under Google OAuth. Refresh it with the CLI observations in
@@ -56,11 +57,10 @@ pub fn description() -> AgentDescription {
             .map(|model| ModelChoice { model: model.model, label: model.label })
             .collect(),
         efforts: vec![Effort::Low, Effort::Medium, Effort::High, Effort::Xhigh],
-        modes: PermissionMode::CHOSEN.to_vec(),
-        defaults: SessionSettings {
-            model: ModelName::named("gemini-4-carbon"),
-            permission_mode: PermissionMode::FullAccess,
-            effort: Effort::Medium,
+        defaults: Settings {
+            model: Some(ModelName::named("gemini-4-carbon")),
+            effort: Some(Effort::Medium),
+            ..Settings::default()
         },
         features: Vec::new(),
         // The native CLI owns and refreshes this machine's login. It is never read or copied by Roundhouse.
@@ -71,13 +71,12 @@ pub fn description() -> AgentDescription {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use protocol::model::SessionSettingsChange;
 
     #[test]
     fn the_catalog_keeps_each_models_efforts_and_defaults() {
         let agent = description();
-        assert_eq!(agent.defaults.model.as_str(), "gemini-4-carbon");
-        assert_eq!(agent.defaults.effort, Effort::Medium);
+        assert_eq!(agent.defaults.model, Some(ModelName::named("gemini-4-carbon")));
+        assert_eq!(agent.defaults.effort, Some(Effort::Medium));
         let hydrogen = ModelName::named("gemini-4-hydrogen");
         let carbon = ModelName::named("gemini-4-carbon");
         let opus = ModelName::named("claude-opus-5-5");
@@ -91,13 +90,7 @@ mod tests {
         assert_eq!(agent.effort_for_choice(&sonnet, Some(&Effort::High)), Effort::High);
         assert_eq!(agent.effort_for_choice(&hydrogen, Some(&Effort::Low)), Effort::Low);
         assert!(
-            agent
-                .takes(&SessionSettingsChange {
-                    model: Some(carbon),
-                    effort: Some(Effort::Xhigh),
-                    permission_mode: None,
-                })
-                .is_err()
+            agent.takes(&Settings { model: Some(carbon), effort: Some(Effort::Xhigh), ..Settings::default() }).is_err()
         );
     }
 }

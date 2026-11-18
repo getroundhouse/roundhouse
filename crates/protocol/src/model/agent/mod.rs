@@ -1,9 +1,9 @@
 //! What a kind of agent is called and offers, as its adapter describes it.
 
 #[cfg(test)]
-use super::{AgentKind, ModelName, PermissionMode, SessionSettings, SessionSettingsChange};
+use super::{AgentKind, ModelName};
 #[cfg(test)]
-use crate::capability::settings::Effort;
+use crate::capability::settings::{Effort, Settings};
 
 #[cfg(test)]
 mod tests;

@@ -7,7 +7,7 @@ use look::Region;
 use protocol::capability::calls::Call;
 use protocol::event::EventBody;
 use protocol::fixtures::{ApprovalRequest, approval_request, plan};
-use protocol::model::{PermissionMode, Seq, SessionStatus, ToolUseId};
+use protocol::model::{Seq, SessionStatus, ToolUseId};
 
 use super::frame::{CHAT, CONTEXT};
 use super::screens::FOCUS;
@@ -102,8 +102,8 @@ const PLAN: &str = "**Show each workspace's PR state in the sidebar**
 fn planned() -> Vec<EventBody> {
     let mut events = chats::looked_around();
     for event in &mut events {
-        if let EventBody::AgentInit { permission_mode, .. } = event {
-            *permission_mode = Some(PermissionMode::Plan);
+        if let EventBody::AgentInit { mode, .. } = event {
+            *mode = Some(protocol::fixtures::plan_mode());
         }
     }
     events.push(text("msg-3", "That's all it needs. Here's the plan."));
