@@ -29,9 +29,7 @@ fn main() {
         let method = request["method"].as_str().unwrap_or_default();
         let count = calls.entry(method.to_owned()).or_default();
         *count += 1;
-        if let Some(rule) =
-            rules.iter().find(|rule| rule["on"] == method && rule["at"].as_u64().is_none_or(|at| at == *count))
-        {
+        if let Some(rule) = rules.iter().find(|rule| matches(rule, method, *count, &request["params"])) {
             for action in rule["actions"].as_array().unwrap() {
                 act(action, &request);
             }
@@ -66,6 +64,12 @@ fn main() {
             }
         }
     }
+}
+
+fn matches(rule: &Value, method: &str, count: u64, params: &Value) -> bool {
+    rule["on"] == method
+        && rule["at"].as_u64().is_none_or(|at| at == count)
+        && rule.get("params").is_none_or(|expected| expected == params)
 }
 
 fn prior_calls(root: &Path) -> HashMap<String, u64> {

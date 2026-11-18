@@ -152,6 +152,7 @@ fn a_call_is_known_unless_it_holds_something_this_build_doesnt_know() {
 
     assert!(calls.iter().all(Call::is_known));
     assert!(!Call::Unknown.is_known());
+    assert!(holding(CallKind::Subagent, "/effort").is_known(), "an effort ID from a newer CLI is preserved");
     for (kind, pointer) in [
         (CallKind::Command, "/runs"),
         (CallKind::Edit, "/edits/0/replaces"),
@@ -161,7 +162,6 @@ fn a_call_is_known_unless_it_holds_something_this_build_doesnt_know() {
         (CallKind::Search, "/shows"),
         (CallKind::Todos, "/items/0/status"),
         (CallKind::Subagent, "/runs"),
-        (CallKind::Subagent, "/effort"),
         (CallKind::Lsp, "/asks"),
         (CallKind::Schedule, "/when/when"),
     ] {

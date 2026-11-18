@@ -8,7 +8,7 @@ impl SessionSettings {
         SessionSettingsChange {
             model: Some(self.model.clone()),
             permission_mode: Some(self.permission_mode),
-            effort: Some(self.effort),
+            effort: Some(self.effort.clone()),
         }
         .for_capabilities(claims)
     }
@@ -34,26 +34,7 @@ impl SessionSettingsChange {
         if self.effort == Some(Effort::Unknown) {
             return Err(NotOffered::Effort);
         }
-        Ok(settings::Settings {
-            model: self.model.clone(),
-            mode,
-            effort: self.effort.map(Into::into),
-            ..Default::default()
-        })
-    }
-}
-
-impl From<Effort> for settings::Effort {
-    fn from(effort: Effort) -> Self {
-        match effort {
-            Effort::Low => Self::Low,
-            Effort::Medium => Self::Medium,
-            Effort::High => Self::High,
-            Effort::Xhigh => Self::Xhigh,
-            Effort::Max => Self::Max,
-            Effort::Ultra => Self::Ultra,
-            Effort::Unknown => Self::Unknown,
-        }
+        Ok(settings::Settings { model: self.model.clone(), mode, effort: self.effort.clone(), ..Default::default() })
     }
 }
 
@@ -73,13 +54,7 @@ impl SessionSettings {
             Some(mode) if mode.plan => PermissionMode::Plan,
             Some(_) => PermissionMode::FullAccess,
         };
-        let effort = match settings.effort {
-            None => defaults.effort,
-            Some(effort) => Effort::ALL
-                .into_iter()
-                .find(|named| settings::Effort::from(*named) == effort && effort != settings::Effort::Unknown)
-                .ok_or(NotOffered::Effort)?,
-        };
+        let effort = settings.effort.as_ref().unwrap_or(&defaults.effort).known().ok_or(NotOffered::Effort)?;
         Ok(SessionSettings { model, permission_mode, effort })
     }
 }

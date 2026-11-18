@@ -1,8 +1,7 @@
 use super::super::{Effort, ModelName, PermissionMode};
 use serde::{Deserialize, Serialize};
 
-/// What a session runs with. It always names a model, an approval mode and an effort, so the agent's CLI never picks
-/// any of them for itself. What a session runs with until another is chosen is its agent's to say, as
+/// What a session runs with. It names a model, an approval mode, and the effort when the model takes one. What a session runs with until another is chosen is its agent's to say, as
 /// [`AgentDescription::defaults`](super::super::AgentDescription::defaults) does.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct SessionSettings {

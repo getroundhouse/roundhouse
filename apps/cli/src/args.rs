@@ -213,10 +213,9 @@ fn mode() -> impl TypedValueParser<Value = PermissionMode> {
         .try_map(|name| PermissionMode::parse(&name).ok_or("not a mode a chat can have"))
 }
 
-/// Takes the name of any level, and lists them all in the help and in the error for another name.
+/// Takes a CLI effort ID, including a level added since this build.
 fn effort() -> impl TypedValueParser<Value = Effort> {
-    PossibleValuesParser::new(Effort::ALL.into_iter().filter_map(Effort::as_str))
-        .try_map(|name| Effort::parse(&name).ok_or("not a level of effort"))
+    clap::builder::StringValueParser::new().try_map(|name| Effort::parse(&name).ok_or("not a level of effort"))
 }
 
 fn agent_kind() -> impl TypedValueParser<Value = AgentKind> {

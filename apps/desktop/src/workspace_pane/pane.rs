@@ -97,6 +97,7 @@ pub(super) enum Next {
 }
 
 pub struct WorkspacePane {
+    pub(super) model_lookup: crate::model_lookup::Lookup,
     pub(super) client: Client,
     /// Client-core's copy of the hub's records, which replies go into.
     pub(super) records: RecordsFeed,
@@ -202,6 +203,7 @@ impl WorkspacePane {
             busy: Busy::Free,
             retitling: false,
             reading: Reading::default(),
+            model_lookup: crate::model_lookup::Lookup::default(),
             dictation,
             dictation_chat: None,
             after_dictation: None,
@@ -260,6 +262,7 @@ impl WorkspacePane {
     /// it's being read. What the hub reads from the worktree waits for [`Self::catch_up`], so a reconnect doesn't
     /// start a worker for every pane at once.
     pub fn reconnect(&mut self, client: &Client, cx: &mut Context<Self>) {
+        self.model_lookup.reset();
         self.client = client.clone();
         self.hub = composer::Hub::Here;
         self.showing_changed(cx);
@@ -320,6 +323,7 @@ impl WorkspacePane {
         // Once the sessions and the terminals are both taken in, whichever the next tab is.
         self.show_next(cx);
         self.pass_on_agents(cx);
+        self.follow_models(false, cx);
         if changes.comments(&id)
             && let Some(diff) = &self.diff
         {

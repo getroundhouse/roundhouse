@@ -80,6 +80,7 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
         R::HubStatus => reply(C::HubStatus(status(world))),
         R::RepoList => reply(C::Repos(records::Repos { repos: world.repos.clone() })),
         R::RecordsList => reply(C::Records(world.records())),
+        R::ModelsFor(asked) => reply(C::ModelList(world.model_list_for(&asked)?)),
         // As the app's own hub describes its agent, even as an older hub, so a screen of one draws the agent as it
         // would, but for what makes a login, which a hub from before hubs kept them doesn't say.
         R::AgentList => {

@@ -91,24 +91,12 @@ impl AgentProcess for CodexProcess {
 async fn change(shared: &Shared, settings: &protocol::capability::settings::Settings) -> Result<(), AgentError> {
     let mode = {
         let mut state = shared.state.lock();
-        let model = settings.model.as_ref().unwrap_or(&state.settings.model);
-        let effort = settings.effort.unwrap_or_else(|| state.settings.effort.into());
-        if super::description::models()
-            .offered
-            .iter()
-            .find(|offer| offer.model == *model)
-            .is_some_and(|offer| !offer.efforts.contains(&effort))
-        {
-            return Err(AgentError::Refused("This Codex model does not offer that effort".into()));
+        if let Some(effort) = &settings.effort {
+            state.settings.effort = effort.known().ok_or(AgentError::UnknownEffort)?;
         }
-        let effort = protocol::model::Effort::ALL
-            .into_iter()
-            .find(|level| protocol::capability::settings::Effort::from(*level) == effort)
-            .ok_or(AgentError::UnknownEffort)?;
         if let Some(model) = &settings.model {
             state.settings.model.clone_from(model);
         }
-        state.settings.effort = effort;
         settings.mode.map(|mode| {
             let mode = if mode.plan { PermissionMode::Plan } else { PermissionMode::FullAccess };
             state.settings.permission_mode = mode;

@@ -6,7 +6,7 @@ Which model a chat runs, how hard it thinks, and whether it asks before changing
 
 The new-workspace dialog offers Claude, Codex and Antigravity. In an existing workspace, the `+` beside the chat tabs offers a new chat for each agent. A chat keeps its agent; choose another by opening another chat.
 
-Codex and Antigravity offer the native model catalogs captured in this Roundhouse build, including each model’s supported effort levels. Changing models keeps the current effort if supported, or selects the new model’s default. Codex starts with **GPT-6.1 Sol at Low effort**, and Antigravity starts with **Gemini 4 Carbon at Medium effort**, each using its CLI’s sign-in on the worker’s machine.
+Codex looks up models and their supported effort levels under your CLI sign-in and the selected project, even for your first workspace. Roundhouse asks your CLI once and shares the list across the project's chats and the new-workspace dialog. It asks again when the list is an hour old, so a model your CLI gained since shows up, or straight away when you choose Retry, which also appears if the lookup fails. Antigravity uses the catalog in this Roundhouse build and starts with Gemini 4 Carbon at Medium effort. Switching models keeps your effort when the model supports it, otherwise it selects the model’s default.
 
 ## The model and its effort
 
@@ -17,13 +17,13 @@ One picker, in the composer's bottom row, chooses both, since how hard the agent
 | | Choices |
 |---|---|
 | **Claude models** | `fable`, `opus`, `sonnet` and `haiku` |
-| **Codex models** | GPT-6.1 Sol and Terra; GPT-6 Astra, Sol and Luna; GPT-5.6 Sol, Terra and Luna |
+| **Codex models** | The models your Codex CLI offers |
 | **Antigravity models** | Gemini 4 Carbon, Hydrogen and Argon; Gemini 3.8 Flash; Claude Opus 5.5 and Sonnet 5.5, when Antigravity is signed in with a Google account rather than a Gemini API key |
-| **Effort** | Low, Medium, High, Extra high and Max; Ultra on the Codex models that support it |
+| **Effort** | The levels offered by the selected model |
 
 - **Claude’s models are aliases,** which the Claude CLI resolves to its newest of each, so a new model arrives without an update to Roundhouse.
-- **A Claude chat nobody has chosen for runs Opus at Extra high; Codex runs GPT-6.1 Sol at Low; Antigravity runs Gemini 4 Carbon at Medium.**
-- **Every chat names its model and effort itself,** so your own CLI settings and your account don't decide them.
+- **A Claude chat nobody has chosen for runs Opus at Extra high; Codex uses its discovered defaults; Antigravity runs Gemini 4 Carbon at Medium.**
+- **Each chat keeps its selected model.** When the model offers effort levels, the chat keeps the selected level too.
 - **A new chat with the same agent keeps the model and effort of the chat it was opened from.** Switching agents uses that agent’s defaults.
 - **A new effort reaches an agent that's already working without stopping it.** Codex and Antigravity accept model, mode and effort changes for their next turn.
 - **For Claude, choosing another model writes the conversation to the prompt cache again,** and the picker says how much before you switch. See [Context, compacting and the cache](context-compacting-and-the-cache.md).

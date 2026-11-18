@@ -20,24 +20,11 @@ pub(crate) fn model_label<'a>(model: &'a ModelName, agent: Option<&'a AgentDescr
     agent.and_then(|agent| agent.label(model)).unwrap_or(model.as_str())
 }
 
-/// What the picker calls a level. `None` for one this build doesn't know, which it leaves unsaid.
-pub(crate) fn effort_label(effort: Effort) -> Option<&'static str> {
-    match effort {
-        Effort::Low => Some("Low"),
-        Effort::Medium => Some("Medium"),
-        Effort::High => Some("High"),
-        Effort::Xhigh => Some("Extra high"),
-        Effort::Max => Some("Max"),
-        Effort::Ultra => Some("Ultra"),
-        Effort::Unknown => None,
-    }
-}
-
 /// What the picker's menu lists: the models with what each is called, then the levels.
 #[derive(Debug, PartialEq, Eq)]
 struct Offered {
     models: Vec<(ModelName, SharedString)>,
-    efforts: Vec<Effort>,
+    efforts: Vec<protocol::capability::settings::EffortOffer>,
 }
 
 impl Offered {
@@ -47,10 +34,19 @@ impl Offered {
     fn to(agent: Option<&AgentDescription>, model: &ModelName, effort: Effort) -> Offered {
         let Some(agent) = agent else {
             let models = vec![(model.clone(), SharedString::from(model.as_str().to_string()))];
-            return Offered { models, efforts: effort.known().into_iter().collect() };
+            return Offered {
+                models,
+                efforts: effort
+                    .as_str()
+                    .is_some()
+                    .then_some(effort)
+                    .map(protocol::capability::settings::EffortOffer::Id)
+                    .into_iter()
+                    .collect(),
+            };
         };
         let models = agent.models.iter().map(|choice| (choice.model.clone(), choice.label.clone().into())).collect();
-        Offered { models, efforts: agent.efforts_for(model) }
+        Offered { models, efforts: agent.effort_offers(model) }
     }
 }
 
@@ -69,7 +65,7 @@ pub(crate) fn model_picker(
         id,
         label: model_label(model, agent).to_string(),
         model: model.clone(),
-        effort,
+        effort: effort.clone(),
         offered: Offered::to(agent, model, effort),
         switching: switching.map(Into::into),
         on_pick: Rc::new(on_pick),
@@ -95,14 +91,21 @@ impl RenderOnce for ModelPicker {
     /// The model's name, then the effort in muted text, as `Opus  Extra high`. With a level this build can't name, only
     /// the model.
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
-        let effort = effort_label(self.effort);
+        let effort = self
+            .offered
+            .efforts
+            .iter()
+            .find(|e| e.id() == &self.effort)
+            .and_then(|e| e.label())
+            .or_else(|| self.effort.label())
+            .map(str::to_owned);
         let muted = look::colors(cx).text_muted;
         let (offered, model, chosen, switching, on_pick) =
             (self.offered, self.model, self.effort, self.switching, self.on_pick);
         look::button(self.id, look::ButtonKind::Borderless, look::ControlSize::Small, self.label)
             .when_some(effort, |button, effort| button.after(div().text_color(muted).child(effort)))
             .menu(Anchor::BottomLeft, move |menu, _, _| {
-                menu_of(menu, &offered, &model, chosen, switching.as_ref(), &on_pick)
+                menu_of(menu, &offered, &model, &chosen, switching.as_ref(), &on_pick)
             })
     }
 }
@@ -113,7 +116,7 @@ fn menu_of(
     mut menu: look::Menu,
     offered: &Offered,
     model: &ModelName,
-    effort: Effort,
+    effort: &Effort,
     switching: Option<&SharedString>,
     on_pick: &OnPick,
 ) -> look::Menu {
@@ -122,10 +125,17 @@ fn menu_of(
         let row = row.when_some(switching.filter(|_| id != *model).cloned(), look::MenuRow::tooltip);
         menu = menu.row(picks(row, Picked::Model(id), on_pick));
     }
+    if offered.efforts.is_empty() {
+        return menu;
+    }
     menu = menu.separator().label("Effort");
-    for &level in &offered.efforts {
-        let label = effort_label(level).unwrap_or_default();
-        menu = menu.row(picks(look::menu_row(label).chosen(effort == level), Picked::Effort(level), on_pick));
+    for level in &offered.efforts {
+        let label = level.label().unwrap_or_default().to_owned();
+        menu = menu.row(picks(
+            look::menu_row(label).chosen(effort == level.id()),
+            Picked::Effort(level.id().clone()),
+            on_pick,
+        ));
     }
     menu
 }
@@ -179,13 +189,22 @@ mod tests {
 
         let models: Vec<_> = offered.models.iter().map(|(model, label)| (model.as_str(), label.as_ref())).collect();
         assert_eq!(models, [("opus", "Opus"), ("fable", "Fable")]);
-        assert_eq!(offered.efforts, [Effort::High, Effort::Max]);
+        assert_eq!(
+            offered.efforts.iter().map(protocol::capability::settings::EffortOffer::id).collect::<Vec<_>>(),
+            [&Effort::High, &Effort::Max]
+        );
     }
 
     #[test]
     fn with_no_description_the_menu_offers_only_what_the_chat_runs() {
         let offered = Offered::to(None, &OPUS, Effort::Xhigh);
-        assert_eq!(offered, Offered { models: vec![(OPUS, "opus".into())], efforts: vec![Effort::Xhigh] });
+        assert_eq!(
+            offered,
+            Offered {
+                models: vec![(OPUS, "opus".into())],
+                efforts: vec![protocol::capability::settings::EffortOffer::Id(Effort::Xhigh)]
+            }
+        );
 
         let newer = Offered::to(None, &OPUS, Effort::Unknown);
         assert!(newer.efforts.is_empty(), "a level from a newer hub can't be named, so it isn't offered");
@@ -193,8 +212,8 @@ mod tests {
 
     #[test]
     fn every_level_has_a_name_and_one_from_a_newer_hub_has_none() {
-        let names: Vec<_> = Effort::ALL.into_iter().map(effort_label).collect();
+        let names: Vec<_> = Effort::ALL.iter().map(Effort::label).collect();
         assert_eq!(names, [Some("Low"), Some("Medium"), Some("High"), Some("Extra high"), Some("Max"), Some("Ultra")]);
-        assert_eq!(effort_label(Effort::Unknown), None);
+        assert_eq!(Effort::Unknown.label(), None);
     }
 }

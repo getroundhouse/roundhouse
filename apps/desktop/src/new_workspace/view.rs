@@ -33,6 +33,12 @@ impl Render for NewWorkspaceDialog {
                             .map(|t| t.px(look::Space::Small).pt(look::Space::Small)),
                     )
                     .child(self.prompt_field(cx))
+                    .children(
+                        (self.base_agent().is_some_and(protocol::model::AgentDescription::discovers_models)
+                            && self.agent().is_some()
+                            && !self.selection_available())
+                        .then_some("The saved model or effort is unavailable. Choose again to create this workspace."),
+                    )
                     .child(self.footer(cx))
                     .child(self.dictation.read(cx).edge()),
             );
@@ -97,8 +103,9 @@ impl NewWorkspaceDialog {
         }
         let this = cx.weak_entity();
         // Only once there's something to show, which a hub that doesn't describe its agents leaves to the hub.
-        let picker = self.shown().map(|(model, effort)| {
-            model_picker("new-workspace-model", self.agent(), &model, effort, None, move |picked, _, cx| {
+        let agent = self.agent();
+        let picker = self.shown().filter(|_| !self.models_waiting()).map(|(model, effort)| {
+            model_picker("new-workspace-model", agent.as_ref(), &model, effort, None, move |picked, _, cx| {
                 let _ = this.update(cx, |t, cx| t.pick(picked, cx));
             })
             .into_any_element()
@@ -106,8 +113,8 @@ impl NewWorkspaceDialog {
         let agents: Vec<_> = self.offer.agents.named().map(|a| (a.kind, a.name.clone())).collect();
         let agent_picker = (agents.len() > 1).then(|| {
             let this = cx.weak_entity();
-            let current = self.agent().map(|a| a.kind);
-            let name = self.agent().map_or("Agent", |a| a.name.as_str()).to_string();
+            let current = self.base_agent().map(|a| a.kind);
+            let name = self.base_agent().map_or("Agent", |a| a.name.as_str()).to_string();
             look::button("new-workspace-agent", look::ButtonKind::Borderless, look::ControlSize::Small, name).menu(
                 Anchor::TopLeft,
                 move |mut menu: look::Menu, _, _| {
@@ -133,7 +140,7 @@ impl NewWorkspaceDialog {
             .on_click(cx.listener(|t, _, _, cx| t.create(cx)));
         bar.child(plus)
             // A row, so the picker keeps its own width and its caret stays beside what it says.
-            .child(h_flex().flex_1().min_w_0().children(agent_picker).children(picker))
+            .child(h_flex().flex_1().min_w_0().children(agent_picker).children(picker).children(self.models_status(cx)))
             .children(crate::dictating::microphone(&self.dictation, cx))
             .child(create)
             .into_any_element()

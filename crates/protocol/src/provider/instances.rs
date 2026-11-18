@@ -178,7 +178,7 @@ pub enum InstanceState {
 
 /// A program and its arguments, so a command can't be empty, and what to add to its environment.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
-pub struct WorkerCommand {
+pub struct Command {
     pub program: String,
     #[serde(default)]
     pub args: Vec<String>,
@@ -186,7 +186,10 @@ pub struct WorkerCommand {
     pub env: Vec<(String, String)>,
 }
 
-impl Reply for WorkerCommand {
+/// The command returned by an instance connection.
+pub type WorkerCommand = Command;
+
+impl Reply for Command {
     fn read(response: ProviderResponse) -> Result<Self, ProviderResponse> {
         let ProviderResponse::Command(command) = response else { return Err(response) };
         Ok(command)

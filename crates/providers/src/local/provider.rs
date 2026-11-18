@@ -50,6 +50,14 @@ pub struct LocalProvider {
 }
 
 impl LocalProvider {
+    async fn worker_env(&self) -> Vec<(String, String)> {
+        let login = self.login_path.get_or_init(|| read_login_path(self.config.shell.clone())).await;
+        merge_paths(login.as_deref(), self.config.path.as_deref())
+            .map(|path| ("PATH".to_string(), path))
+            .into_iter()
+            .collect()
+    }
+
     pub fn new(config: LocalConfig) -> Self {
         let login_path = Arc::new(OnceCell::new());
         // Read it up front, so the first workspace doesn't pay for a slow shell startup.
@@ -340,11 +348,7 @@ impl Provider for LocalProvider {
         if !dir.is_dir() {
             return Err(ProviderError::NotFound(instance_id.clone()));
         }
-        let login = self.login_path.get_or_init(|| read_login_path(self.config.shell.clone())).await;
-        let env = merge_paths(login.as_deref(), self.config.path.as_deref())
-            .map(|path| ("PATH".to_string(), path))
-            .into_iter()
-            .collect();
+        let env = self.worker_env().await;
         let text = |path: &Path| path.to_string_lossy().into_owned();
         Ok(WorkerCommand {
             program: text(&self.config.worker_exe),
@@ -359,6 +363,19 @@ impl Provider for LocalProvider {
                 text(&self.config.clones_dir),
             ],
             env,
+        })
+    }
+
+    async fn open_preflight(
+        &self,
+        launch: &crate::OpenPreflight,
+    ) -> Result<protocol::provider::Command, ProviderError> {
+        let crate::OpenPreflight { project, agent } = launch;
+        let checkout = project.checkout().ok_or(ProviderError::Unsupported("open preflight without a checkout"))?;
+        Ok(protocol::provider::Command {
+            program: self.config.worker_exe.to_string_lossy().into_owned(),
+            args: vec!["preflight".into(), agent.as_str().into(), "--".into(), checkout.into()],
+            env: self.worker_env().await,
         })
     }
 

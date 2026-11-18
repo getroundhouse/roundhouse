@@ -160,7 +160,10 @@ fn configuration(
 ) -> Value {
     let plan = settings.permission_mode == PermissionMode::Plan;
     let mut config = json!({"features.memories":false,"features.goals":false,"features.default_mode_request_user_input":true,
-        "model_reasoning_effort":settings.effort.as_str(),"model_reasoning_summary":"auto"});
+        "model_reasoning_summary":"auto"});
+    if let Some(level) = settings.effort.as_str() {
+        config["model_reasoning_effort"] = json!(level);
+    }
     if let Some(tools) = &options.tools {
         config["mcp_servers.roundhouse"] = json!({"url":tools.url,
             "http_headers":{"Authorization":format!("Bearer {}", tools.token.as_str())}});

@@ -4,6 +4,7 @@
 //! opens, in this app or another, since the hub keeps it, as `keeping` says.
 
 mod keeping;
+mod models;
 mod request;
 mod view;
 

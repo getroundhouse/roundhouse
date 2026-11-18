@@ -31,6 +31,22 @@ fn every_request_of_the_hub_itself_or_for_its_records_keeps_its_form() {
     let settings = HubSettingsChange::default();
     asked(ClientRequest::HubConfigure(admin::HubConfigure { settings }), r#"{"method":"hub_configure"}"#);
     asked(ClientRequest::AgentList, r#"{"method":"agent_list"}"#);
+    asked(
+        ClientRequest::ModelsFor(admin::ModelsFor {
+            agent: AgentKind::Codex,
+            target: admin::ModelTarget::Project("r".into()),
+            again: false,
+        }),
+        r#"{"method":"models_for","agent":"codex","target":{"project":"r"}}"#,
+    );
+    asked(
+        ClientRequest::ModelsFor(admin::ModelsFor {
+            agent: AgentKind::Codex,
+            target: admin::ModelTarget::Session("s".into()),
+            again: true,
+        }),
+        r#"{"method":"models_for","agent":"codex","target":{"session":"s"},"again":true}"#,
+    );
     asked(ClientRequest::RepoAdd(records::RepoAdd { path: "/r".into() }), r#"{"method":"repo_add","path":"/r"}"#);
     asked(ClientRequest::RepoList, r#"{"method":"repo_list"}"#);
     asked(ClientRequest::RecordsList, r#"{"method":"records_list"}"#);

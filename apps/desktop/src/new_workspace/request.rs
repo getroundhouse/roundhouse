@@ -50,7 +50,7 @@ impl Request {
             text: prompt.text.clone(),
             files: prompt.files.iter().map(|file| file.attachment.id.clone()).collect(),
             model: model.clone(),
-            effort,
+            effort: effort.clone(),
             plan: permission_mode == PermissionMode::Plan,
         };
         let coming_back = Vec::new();

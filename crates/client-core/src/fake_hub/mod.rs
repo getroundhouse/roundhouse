@@ -8,6 +8,7 @@
 
 mod base_pages;
 pub mod events;
+mod model_lists;
 mod serve;
 mod stand_in;
 mod subagent_records;

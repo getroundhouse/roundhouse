@@ -28,6 +28,11 @@ impl Keeping {
     pub(crate) fn new(keeper: Option<Drafts>, client: Option<Client>) -> Self {
         Self { keeper, client, ..Self::default() }
     }
+
+    /// The connection there is, which the dialog asks the hub on.
+    pub(super) fn client(&self) -> Option<&Client> {
+        self.client.as_ref()
+    }
 }
 
 impl NewWorkspaceDialog {
@@ -66,7 +71,7 @@ impl NewWorkspaceDialog {
             text: self.prompt.read(cx).text().to_string(),
             files: coming_back.chain(self.attached.ids()).collect(),
             model: self.model.clone(),
-            effort: self.effort,
+            effort: self.effort.clone(),
             plan: self.planning(),
         }
     }
@@ -83,7 +88,7 @@ impl NewWorkspaceDialog {
             && files == there
             && repo.is_none_or(|repo| *repo == self.repo)
             && kept.model.as_ref().is_none_or(|model| Some(model) == self.model.as_ref())
-            && kept.effort.is_none_or(|effort| Some(effort) == self.effort)
+            && kept.effort.clone().is_none_or(|effort| Some(effort) == self.effort)
             && kept.plan == self.planning()
     }
 
@@ -140,7 +145,9 @@ impl NewWorkspaceDialog {
 
     /// Carries on on a new connection, reading back any files the last one couldn't.
     pub(crate) fn reconnect(&mut self, client: &Client, cx: &mut Context<Self>) {
+        self.model_lookup.reset();
         self.keeping.client = Some(client.clone());
+        self.follow_models(false, cx);
         self.bring_back(cx);
     }
 

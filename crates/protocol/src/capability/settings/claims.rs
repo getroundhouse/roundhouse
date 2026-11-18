@@ -10,12 +10,9 @@ area! { "a chat's settings";
     /// The models [`Models::offered`] lists can be chosen, each saying what it takes, and a model named by its full ID
     /// can be too, which the agent says whether it knows. Every chat names a model, so this is only what's offered.
     Models => models: Models,
-    /// The models come from the agent at runtime, since they depend on its account, its model providers and its
-    /// project's configuration, as opencode's and Antigravity's do, rather than being built into the adapter alone. The
-    /// agent reports [`Report::Models`](crate::capability::Report::Models) when a session starts or its offered models
-    /// change, and in reply to [`Control::ListModels`](crate::capability::Control::ListModels), and the hub keeps the
-    /// newest list on the session's record in place of the kind's list for that chat, so a model added to the account
-    /// or the project shows without a new build.
+    /// A running agent can send a replacement catalog with [`Report::Models`](crate::capability::Report::Models)
+    /// and answer [`Control::ListModels`](crate::capability::Control::ListModels). Pre-session discovery is
+    /// advertised independently by [`Models::Discoverable`].
     DiscoveredModels => discovered_models: Claimed,
     /// How hard the model thinks can be chosen, from the efforts each model offers.
     Effort => effort: Claimed,
@@ -46,7 +43,43 @@ area! { "a chat's settings";
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
-pub struct Models {
-    /// In the order they're listed.
-    pub offered: Vec<ModelOffer>,
+#[serde(from = "CatalogSource", into = "CatalogSource")]
+pub enum Models {
+    /// The agent says what it offers where a chat would launch, before any chat there starts, which the hub asks it
+    /// and keeps as a [`ModelList`](crate::model::ModelList).
+    Discoverable,
+    /// In the order they are listed. This reads the original static wire shape.
+    Static { offered: Vec<ModelOffer> },
+}
+
+// Older peers read the offered field of both forms, including an empty list before discovery.
+#[derive(Serialize, Deserialize)]
+struct CatalogSource {
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    discoverable: bool,
+    offered: Vec<ModelOffer>,
+}
+
+impl From<CatalogSource> for Models {
+    fn from(source: CatalogSource) -> Self {
+        if source.discoverable { Self::Discoverable } else { Self::Static { offered: source.offered } }
+    }
+}
+
+impl From<Models> for CatalogSource {
+    fn from(models: Models) -> Self {
+        match models {
+            Models::Static { offered } => Self { discoverable: false, offered },
+            Models::Discoverable => Self { discoverable: true, offered: Vec::new() },
+        }
+    }
+}
+
+impl Models {
+    pub fn offered(&self) -> &[ModelOffer] {
+        match self {
+            Self::Static { offered } => offered,
+            Self::Discoverable => &[],
+        }
+    }
 }

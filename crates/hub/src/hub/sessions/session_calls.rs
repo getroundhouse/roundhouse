@@ -1,14 +1,13 @@
-use super::super::{Hub, new_id};
+use super::super::Hub;
 use crate::error::internal;
 use crate::session::{Command, LiveSession};
-use crate::store::{Made, Places, Reading, Store, StoreError, StoredSession, now_ms};
+use crate::store::{Places, Reading, Store, StoreError};
 use protocol::client::{ApiError, ErrorCode, HubNotice, log, records};
 use protocol::event::{ApprovalDecision, SessionEvent};
 use protocol::find::{Found, Needle};
 use protocol::model::{
-    AgentKind, AnswerDraft, ApprovalId, AttachmentId, ClientMessageId, ClientRequestId, CompactionLine, Draft,
-    DraftToKeep, Place, PromptLine, RecordKey, Rev, Seq, Session, SessionId, SessionSettings, SessionSettingsChange,
-    SessionStatus, SubagentId, TitleSource, WorkspaceId,
+    AnswerDraft, ApprovalId, AttachmentId, ClientMessageId, CompactionLine, DraftToKeep, Place, PromptLine, RecordKey,
+    Seq, Session, SessionId, SessionSettingsChange, SubagentId, WorkspaceId,
 };
 use protocol::prompt::Prompt;
 use std::collections::{HashMap, HashSet};
@@ -46,101 +45,6 @@ impl Sessions {
 }
 
 impl Hub {
-    pub(crate) async fn session_create(
-        self: &Arc<Self>,
-        workspace_id: WorkspaceId,
-        agent: AgentKind,
-        options: SessionSettingsChange,
-        client_request_id: Option<ClientRequestId>,
-    ) -> Result<Session, ApiError> {
-        if let Some(made) = self.made_earlier::<StoredSession>(client_request_id.as_ref()).await? {
-            return Ok(made.session);
-        }
-        let settings = self.agent(agent)?.defaults.clone().changed(options);
-        self.offered(agent, &settings.clone().into())?;
-        self.ready_workspace(&workspace_id).await?;
-        let id = new_id();
-        let now = now_ms();
-        let SessionSettings { model, permission_mode, effort } = settings;
-        let stored = StoredSession {
-            session: Session {
-                account: None,
-                account_source: None,
-                agent_capabilities: None,
-                reply_outcome: None,
-                id: id.clone().into(),
-                workspace_id,
-                agent,
-                model,
-                permission_mode,
-                effort,
-                status: SessionStatus::Idle,
-                last_seq: Seq::default(),
-                created_at_ms: now,
-                updated_at_ms: now,
-                title: None,
-                title_source: TitleSource::FirstLine,
-                closed_at_ms: None,
-                reply_seq: Seq::default(),
-                read_seq: Seq::default(),
-                turn_started_at_ms: None,
-                user_active_at_ms: None,
-                background_tasks: Vec::new(),
-                wait: None,
-                waits: Some(Vec::new()),
-                context: None,
-                prompt_cache: None,
-                queued: Vec::new(),
-                queue_held: false,
-                draft: Draft::default(),
-                answer_draft: None,
-                open_approvals: Some(Vec::new()),
-                untaken: Some(Vec::new()),
-                agent_opened: Some(false),
-                rev: Rev::default(),
-            },
-            agent_session_id: self.new_conversation_id(agent, &id)?,
-            agent_opened: false,
-        };
-        match self.blocking(move |store| store.insert_session(&stored, client_request_id.as_ref())).await? {
-            Made::New(made) => {
-                self.notify(HubNotice::Session(made.session.clone()));
-                // Making it moved when the person last did something in its workspace.
-                self.announce_workspace(&made.session.workspace_id).await;
-                Ok(made.session)
-            }
-            Made::Earlier(made) => Ok(made.session),
-        }
-    }
-
-    fn new_conversation_id(
-        &self,
-        agent: AgentKind,
-        id: &str,
-    ) -> Result<Option<protocol::model::AgentSessionId>, ApiError> {
-        let claims = self.agent(agent)?.capabilities.as_ref();
-        let named = claims.map_or(agent == AgentKind::Claude, |claims| {
-            matches!(
-                claims.conversation.resume.as_ref().map(|resume| &resume.ids),
-                Some(protocol::capability::conversation::ConversationIds::Given)
-            )
-        });
-        Ok(named.then(|| id.into()))
-    }
-
-    pub(crate) async fn session_ensure(
-        self: &Arc<Self>,
-        workspace_id: WorkspaceId,
-        agent: AgentKind,
-    ) -> Result<Session, ApiError> {
-        let _one_at_a_time = self.ensuring_session.lock().await;
-        let sessions = self.session_list(workspace_id.clone()).await?;
-        match sessions.into_iter().rfind(Session::is_open) {
-            Some(open) => Ok(open),
-            None => self.session_create(workspace_id, agent, SessionSettingsChange::default(), None).await,
-        }
-    }
-
     pub(crate) async fn session_list(&self, workspace_id: WorkspaceId) -> Result<Vec<Session>, ApiError> {
         self.blocking(move |store| store.list_sessions(&workspace_id)).await
     }

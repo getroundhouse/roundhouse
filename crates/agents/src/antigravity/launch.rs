@@ -244,7 +244,7 @@ async fn apply_initial_settings(shared: &Shared, id: &AgentSessionId, strict_eff
     let rpc = shared.rpc();
     let (mode, model, effort) = {
         let state = shared.state.lock();
-        (state.process_mode, state.model.clone(), state.effort)
+        (state.process_mode, state.model.clone(), state.effort.clone())
     };
     ensure_sign_in_offers_model(&shared.state.lock().config_options, &model)?;
     rpc.ask("session/set_mode", json!({ "sessionId": id, "modeId": mode_id(mode) })).await?;
@@ -252,7 +252,7 @@ async fn apply_initial_settings(shared: &Shared, id: &AgentSessionId, strict_eff
         .ask("session/set_config_option", json!({ "sessionId": id, "configId": "model", "value": model.as_str() }))
         .await?;
     update_options(shared, &model_reply);
-    let level = effort_str(effort)?;
+    let level = effort_str(&effort)?;
     let (has_thought, offers_level) = {
         let state = shared.state.lock();
         (

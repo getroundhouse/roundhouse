@@ -2,11 +2,12 @@
 //! depend on this crate, including a future mobile client.
 //!
 //! The wire format is newline-delimited JSON over any byte stream: a Unix socket between client
-//! and hub, and stdio between hub and worker and between hub and provider adapter. Each protocol has a version of
+//! and hub, and stdio between hub and worker and between hub and provider adapter. Each of these protocols has a version of
 //! its own, and both sides say hello first and use the newest version they both speak, as [`versions`] works out.
 //! Fields, enum variants and requests can all be added without a version bump, because unknown fields are ignored,
 //! unknown variants decode as `Unknown`, and a hub, a worker or a provider adapter answers a request it doesn't know,
 //! or can't read, with [`client::ErrorCode::Unsupported`]. A bump means a real break.
+//! A stream opened for [`preflight`] carries a single question and answer, with no hello, and a version of its own.
 
 #![warn(clippy::wildcard_enum_match_arm)]
 
@@ -23,6 +24,7 @@ pub mod frame;
 pub mod model;
 pub mod pairing;
 pub mod paths;
+pub mod preflight;
 pub mod prompt;
 pub mod provider;
 pub mod short_text;

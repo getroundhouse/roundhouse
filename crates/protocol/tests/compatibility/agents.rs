@@ -21,9 +21,9 @@ fn what_each_kind_offers_reads_and_what_a_newer_hub_adds_reads_as_unknown() {
         (AgentKind::Claude, "Claude Code", "Claude usage")
     );
     assert_eq!(claude.label(&ModelName::named("haiku")), Some("Haiku"));
-    assert_eq!(claude.efforts, [Effort::Low, Effort::Xhigh, Effort::Unknown]);
+    assert_eq!(claude.efforts, [Effort::Low, Effort::Xhigh, Effort::parse("future").unwrap()]);
     assert_eq!(claude.modes, [PermissionMode::FullAccess, PermissionMode::Plan]);
-    assert_eq!((claude.defaults.model.as_str(), claude.defaults.effort), ("opus", Effort::Xhigh));
+    assert_eq!((claude.defaults.model.as_str(), claude.defaults.effort.clone()), ("opus", Effort::Xhigh));
     assert_eq!(claude.features, [AgentFeature::Compacts, AgentFeature::Unknown]);
     assert_eq!(other.kind, AgentKind::Unknown);
     assert!(other.features.is_empty(), "one left out does nothing it might not");

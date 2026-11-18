@@ -74,6 +74,7 @@ pub enum ClientResponse {
     Repos(records::Repos),
     Records(Records),
     Agents(admin::Agents),
+    ModelList(crate::model::ModelList),
     Workspace(Workspace),
     Workspaces(workspaces::Workspaces),
     GitStatus(GitStatus),

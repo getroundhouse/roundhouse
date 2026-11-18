@@ -4,7 +4,7 @@ Short answers.
 
 ## Which agents does it run?
 
-Claude, Codex and Antigravity, through their installed CLIs. Choose the agent in the new-workspace dialog, or from the chat tabs’ `+`. Codex starts with GPT-6.1 Sol at Low effort, and Antigravity starts with Gemini 4 Carbon at Medium effort.
+Claude, Codex and Antigravity, through their installed CLIs. Choose the agent in the new-workspace dialog, or from the chat tabs’ `+`. Codex starts with the default model and effort its CLI offers for your project, and Antigravity starts with Gemini 4 Carbon at Medium effort.
 
 ## Do I need an account?
 

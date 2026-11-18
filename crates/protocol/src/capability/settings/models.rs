@@ -2,7 +2,37 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::model::ModelName;
+use crate::model::{Effort, ModelName};
+
+/// All models offered in one launch context. Reading the catalog never starts a turn.
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq, Eq)]
+pub struct ModelCatalog {
+    pub offered: Vec<ModelOffer>,
+    pub default_model: Option<ModelName>,
+}
+
+/// The adapter's level, with its display name when different from its usual label.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[serde(untagged)]
+pub enum EffortOffer {
+    Named { id: Effort, label: String },
+    Id(Effort),
+}
+
+impl EffortOffer {
+    pub fn id(&self) -> &Effort {
+        match self {
+            Self::Named { id, .. } | Self::Id(id) => id,
+        }
+    }
+
+    pub fn label(&self) -> Option<&str> {
+        match self {
+            Self::Named { label, .. } => Some(label),
+            Self::Id(id) => id.label(),
+        }
+    }
+}
 
 /// A model a chat is offered, and what it takes.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
@@ -18,7 +48,7 @@ pub struct ModelOffer {
     pub model_provider: Option<String>,
     /// Least first. Empty for a model with no choice of effort.
     #[serde(default)]
-    pub efforts: Vec<Effort>,
+    pub efforts: Vec<EffortOffer>,
     /// What it thinks at when no effort is chosen.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub default_effort: Option<Effort>,
@@ -35,27 +65,6 @@ pub struct ModelOffer {
     pub price: Option<Price>,
     #[serde(default)]
     pub stage: Stage,
-}
-
-/// How hard a model thinks before it answers. The union of every agent's levels, each model offering its own, least
-/// first, in [`ModelOffer::efforts`]. It has no order of its own, since one from a newer peer can't be placed.
-#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Hash)]
-#[serde(rename_all = "snake_case")]
-pub enum Effort {
-    /// It doesn't reason before it answers.
-    None,
-    Minimal,
-    Low,
-    Medium,
-    High,
-    Xhigh,
-    Max,
-    /// Codex's level above the most, which also hands work to subagents by itself.
-    Ultra,
-    /// Codex's `persistent`, which some of its models offer.
-    Persistent,
-    #[serde(other)]
-    Unknown,
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Hash)]

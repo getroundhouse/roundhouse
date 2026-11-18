@@ -55,7 +55,7 @@ impl Hub {
         {
             return Err(ApiError::new(ErrorCode::InvalidRequest, format!("{name} isn't a valid workspace name")));
         }
-        let (provider_name, provider) = self.providers.default_provider()?;
+        let (provider_name, provider) = self.providers.for_new_workspace()?;
         let mut names = Names::new(name);
         let workspace = match self.record_new_workspace(&repo, provider_name, &mut names, client_request_id).await? {
             Made::New(workspace) => workspace,

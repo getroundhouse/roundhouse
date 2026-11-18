@@ -117,3 +117,41 @@ impl Reply for Agents {
         Ok(agents)
     }
 }
+
+/// Where a chat would run, for the hub to work out which provider, project and login that is.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ModelTarget {
+    /// The new-workspace dialog's first chat, before its workspace exists.
+    Project(crate::model::RepoId),
+    Workspace(crate::model::WorkspaceId),
+    Session(crate::model::SessionId),
+}
+
+/// Which [`ModelList`](crate::model::ModelList) applies to `target`, for an agent that discovers its own models. The
+/// reply is the record as it is now, and the hub starts asking the agent if it has no list there yet, or if `again`,
+/// unless it's asking already. Each change after that comes on the feed, so a client follows the record the reply
+/// names rather than asking again. An agent that doesn't discover its models is refused, since its description says
+/// what it offers.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct ModelsFor {
+    pub agent: crate::model::AgentKind,
+    pub target: ModelTarget,
+    /// Asks the agent again, as Retry does, even though the hub has a list.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub again: bool,
+}
+
+impl Request for ModelsFor {
+    type Reply = crate::model::ModelList;
+    fn into_request(self) -> ClientRequest {
+        ClientRequest::ModelsFor(self)
+    }
+}
+
+impl Reply for crate::model::ModelList {
+    fn read(response: ClientResponse) -> Result<Self, ClientResponse> {
+        let ClientResponse::ModelList(list) = response else { return Err(response) };
+        Ok(list)
+    }
+}

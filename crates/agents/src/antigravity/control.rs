@@ -222,12 +222,12 @@ async fn change(shared: &Arc<Shared>, requested: &settings::Settings) -> Result<
         let state = shared.state.lock();
         let id = state.session_id.clone().ok_or(AgentError::Exited)?;
         let idle = !state.in_turn() && state.waiting.is_empty();
-        (id, state.model.clone(), state.effort, idle, state.process_mode)
+        (id, state.model.clone(), state.effort.clone(), idle, state.process_mode)
     };
     let next_model = requested.model.as_ref().unwrap_or(&current_model);
-    let next_effort = requested.effort.unwrap_or(current_effort);
-    let level = effort_str(next_effort)?;
-    ensure_model_offers_effort(next_model, next_effort)?;
+    let next_effort = requested.effort.clone().unwrap_or(current_effort);
+    let level = effort_str(&next_effort)?;
+    ensure_model_offers_effort(next_model, &next_effort)?;
     if let Some(model) = &requested.model {
         ensure_sign_in_offers_model(&shared.state.lock().config_options, model)?;
     }
@@ -317,8 +317,8 @@ async fn rollback_config(
         shared.state.lock().model.clone_from(model);
     }
     if let Some(effort) = effort {
-        if let Ok(level) = effort_str(effort) {
-            let _ = apply_effort(shared, session_id, effort, level, false).await;
+        if let Ok(level) = effort_str(&effort) {
+            let _ = apply_effort(shared, session_id, effort.clone(), level, false).await;
         }
         shared.state.lock().effort = effort;
     }

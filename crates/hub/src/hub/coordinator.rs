@@ -1,3 +1,4 @@
+use super::agents::ModelLists;
 use super::terminals::Terminals;
 use super::{awake, feed, found_github_logins, pull_requests, sessions, setup};
 use crate::attachment_files::AttachmentFiles;
@@ -88,6 +89,8 @@ pub(crate) struct Hub {
     /// Workspaces whose setup is running. Removed as it finishes, which also wakes anyone waiting.
     pub(super) setup_gates: Mutex<HashMap<WorkspaceId, SetupGate>>,
     pub(super) terminals: Terminals,
+    /// What the agents that discover their own models offer, where the hub has been asked.
+    pub(super) model_lists: ModelLists,
     pub(super) pull_requests: pull_requests::Reading,
     /// The reads of workspaces' own pull requests nobody asked for that are running now, by whose token each reads
     /// as.
@@ -194,6 +197,7 @@ impl Hub {
             sessions: Mutex::new(Sessions::default()),
             setup_gates: Mutex::new(HashMap::new()),
             terminals: Terminals::default(),
+            model_lists: ModelLists::default(),
             pull_requests: pull_requests::Reading::new(),
             own_reads: Jobs::new(),
             wait_reads: Jobs::new(),
@@ -231,12 +235,14 @@ impl Hub {
             .ok_or_else(|| ApiError::new(ErrorCode::Unavailable, format!("there's no provider {name}")))
     }
 
-    /// Ends every job where it is, sign-ins' included, and starts none after, as the hub stops, before its workers are
-    /// stopped or left. A sign-in left waiting is recorded as ended as the next hub starts.
+    /// Ends every job where it is, sign-ins' and lookups of models included, and starts none after, as the hub stops,
+    /// before its workers are stopped or left. A sign-in left waiting is recorded as ended as the next hub starts, and
+    /// lists of models aren't kept.
     pub(crate) fn stop_jobs(&self) {
         self.own_reads.stop();
         self.wait_reads.stop();
         self.sign_ins.stop();
+        self.model_lists.stop();
     }
 
     /// Ends each provider's adapter, after the workers are stopped.
@@ -266,8 +272,9 @@ impl Hub {
 
     /// Every record, as of one revision, for a client starting to follow the feed.
     pub(crate) async fn records_list(&self) -> Result<Records, ApiError> {
-        let (listed, terminals) = self.terminals.listed_with(self.blocking(Store::list_records)).await;
-        Ok(Records { terminals, ..listed? })
+        let listing = self.model_lists.listed_with(self.blocking(Store::list_records));
+        let ((listed, model_lists), terminals) = self.terminals.listed_with(listing).await;
+        Ok(Records { terminals, model_lists, ..listed? })
     }
 
     pub(crate) async fn workspace(&self, id: &WorkspaceId) -> Result<Workspace, ApiError> {

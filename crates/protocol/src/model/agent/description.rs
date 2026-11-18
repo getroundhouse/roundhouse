@@ -1,4 +1,5 @@
 use super::super::{AgentKind, Effort, ModelName, PermissionMode, SessionSettings, SessionSettingsChange};
+use crate::capability::settings::EffortOffer;
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
@@ -30,8 +31,7 @@ pub struct AgentDescription {
     /// The models a chat is offered, in the order they're listed. A chat can run another, such as one named by its
     /// full ID, since what a name means is the agent's CLI's to say.
     pub models: Vec<ModelChoice>,
-    /// The levels a chat is offered, least first. One from a newer hub reads as [`Effort::Unknown`], which a client
-    /// can't name and doesn't offer.
+    /// Kind-wide effort choices for clients reading an older catalog. A resolved catalog gives each model its own levels.
     pub efforts: Vec<Effort>,
     /// The approval modes a chat can be given.
     pub modes: Vec<PermissionMode>,
@@ -93,40 +93,83 @@ pub enum NotOffered {
 }
 
 impl AgentDescription {
-    /// The selected model's levels when its catalog says, otherwise the kind's legacy levels.
-    pub fn efforts_for(&self, model: &ModelName) -> Vec<Effort> {
-        let offered = self
-            .capabilities
-            .as_ref()
-            .and_then(|claims| claims.settings.models.as_ref())
-            .and_then(|models| models.offered.iter().find(|offer| offer.model == *model));
-        self.efforts
-            .iter()
-            .copied()
-            .filter(|effort| {
-                effort.known().is_some() && offered.is_none_or(|offer| offer.efforts.contains(&(*effort).into()))
-            })
-            .collect()
+    pub fn discovers_models(&self) -> bool {
+        matches!(
+            self.capabilities.as_ref().and_then(|c| c.settings.models.as_ref()),
+            Some(crate::capability::settings::Models::Discoverable)
+        )
     }
 
-    /// Keep an effort when the new model takes it, or use that model's default.
-    pub fn effort_when_switching(&self, model: &ModelName, current: Effort) -> Effort {
-        let efforts = self.efforts_for(model);
-        if efforts.contains(&current) {
-            return current;
+    /// The description where `catalog` applies, with its models and their efforts in place of the kind's, and its
+    /// default model and that model's default effort as what a chat there starts with.
+    #[must_use]
+    pub fn with_catalog(mut self, catalog: crate::capability::settings::ModelCatalog) -> Self {
+        let initial = catalog
+            .default_model
+            .as_ref()
+            .and_then(|id| catalog.offered.iter().find(|m| &m.model == id))
+            .or_else(|| catalog.offered.first());
+        if let Some(initial) = initial {
+            self.defaults.model.clone_from(&initial.model);
+            if let Some(effort) =
+                initial.default_effort.as_ref().or_else(|| initial.efforts.first().map(EffortOffer::id))
+            {
+                self.defaults.effort.clone_from(effort);
+            } else {
+                self.defaults.effort = Effort::Unset;
+            }
         }
-        let default = self
+        self.models =
+            catalog.offered.iter().map(|m| ModelChoice { model: m.model.clone(), label: m.label.clone() }).collect();
+        self.efforts.clear();
+        for level in catalog.offered.iter().flat_map(|m| &m.efforts).map(EffortOffer::id) {
+            if !self.efforts.contains(level) {
+                self.efforts.push(level.clone());
+            }
+        }
+        if let Some(claims) = &mut self.capabilities {
+            claims.settings.models = Some(crate::capability::settings::Models::Static { offered: catalog.offered });
+        }
+        self
+    }
+
+    /// The selected model's levels when its catalog says, otherwise the kind's legacy levels.
+    pub fn efforts_for(&self, model: &ModelName) -> Vec<Effort> {
+        self.effort_offers(model).into_iter().map(|e| e.id().clone()).collect()
+    }
+
+    pub fn effort_offers(&self, model: &ModelName) -> Vec<crate::capability::settings::EffortOffer> {
+        if let Some(offer) = self
+            .capabilities
+            .as_ref()
+            .and_then(|c| c.settings.models.as_ref())
+            .and_then(|m| m.offered().iter().find(|offer| &offer.model == model))
+        {
+            return offer.efforts.clone();
+        }
+        self.efforts.iter().filter_map(Effort::known).map(EffortOffer::Id).collect()
+    }
+
+    pub fn offers_effort(&self, model: &ModelName, effort: &Effort) -> bool {
+        let levels = self.efforts_for(model);
+        if levels.is_empty() { effort == &Effort::Unset } else { effort.as_str().is_some() && levels.contains(effort) }
+    }
+
+    /// Keep a previously chosen effort if available, otherwise use the selected model's default.
+    pub fn effort_for_choice(&self, model: &ModelName, previous: Option<&Effort>) -> Effort {
+        let levels = self.efforts_for(model);
+        let offer = self
             .capabilities
             .as_ref()
             .and_then(|claims| claims.settings.models.as_ref())
-            .and_then(|models| models.offered.iter().find(|offer| offer.model == *model))
-            .and_then(|offer| offer.default_effort);
-        efforts
-            .iter()
-            .copied()
-            .find(|effort| Some((*effort).into()) == default)
-            .or_else(|| efforts.first().copied())
-            .unwrap_or(self.defaults.effort)
+            .and_then(|models| models.offered().iter().find(|offer| offer.model == *model));
+        let default = offer.map_or(Some(&self.defaults.effort), |offer| offer.default_effort.as_ref());
+        previous
+            .filter(|e| levels.contains(e))
+            .or_else(|| default.filter(|e| levels.contains(e)))
+            .or_else(|| levels.first())
+            .cloned()
+            .unwrap_or(Effort::Unset)
     }
 
     pub fn has(&self, feature: AgentFeature) -> bool {
@@ -154,14 +197,16 @@ impl AgentDescription {
                 return Err(NotOffered::Settings);
             }
         }
-        if let (Some(model), Some(effort)) = (&change.model, change.effort)
-            && !self.efforts_for(model).contains(&effort)
+        if let Some(effort) = &change.effort
+            && !self.discovers_models()
         {
-            return Err(NotOffered::Effort);
-        }
-        let offered = |effort: Effort| effort.known().is_some_and(|effort| self.efforts.contains(&effort));
-        if change.effort.is_some_and(|effort| !offered(effort)) {
-            return Err(NotOffered::Effort);
+            let allowed = match &change.model {
+                Some(model) => self.offers_effort(model, effort),
+                None => effort.as_str().is_some() && self.efforts.contains(effort),
+            };
+            if !allowed {
+                return Err(NotOffered::Effort);
+            }
         }
         let offered = |mode: PermissionMode| mode != PermissionMode::Unknown && self.modes.contains(&mode);
         if change.permission_mode.is_some_and(|mode| !offered(mode)) {

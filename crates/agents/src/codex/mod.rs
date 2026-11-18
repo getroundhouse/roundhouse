@@ -1,6 +1,7 @@
 //! Codex's persistent app-server, translated into Roundhouse's capability contracts.
 
 mod approvals;
+mod catalog;
 mod claims;
 mod control;
 mod description;
@@ -18,6 +19,7 @@ mod terminals;
 mod turn;
 mod usage;
 
+pub use catalog::models_for;
 pub use description::description;
 pub use one_off::{account, title_for};
 pub use running::{spawn, spawn_at};

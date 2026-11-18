@@ -148,7 +148,7 @@ fn an_effort_picked_reaches_the_running_agent_and_the_next_chat(cx: &mut TestApp
 
     ui.new_chat();
     let pane = ui.pane().unwrap();
-    assert_eq!(ui.cx.read_entity(&pane, |p, _| p.session().map(|s| s.effort)), Some(Effort::Medium));
+    assert_eq!(ui.cx.read_entity(&pane, |p, _| p.session().map(|s| s.effort.clone())), Some(Effort::Medium));
 }
 
 #[gpui_kit::test]

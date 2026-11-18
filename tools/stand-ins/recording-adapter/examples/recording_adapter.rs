@@ -93,6 +93,14 @@ impl Provider for Recording {
         self.local.connect(instance_id).await
     }
 
+    async fn open_preflight(
+        &self,
+        launch: &protocol::provider::OpenPreflight,
+    ) -> Result<protocol::provider::Command, ProviderError> {
+        std::fs::write(self.made.with_extension("preflight"), protocol::frame::encode(launch).unwrap()).unwrap();
+        self.local.open_preflight(launch).await
+    }
+
     async fn make_base_image(&self, instance_id: &InstanceId) -> Result<(), ProviderError> {
         self.local.make_base_image(instance_id).await
     }

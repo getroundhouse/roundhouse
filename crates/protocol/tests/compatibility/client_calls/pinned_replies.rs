@@ -34,6 +34,7 @@ pinned! {
     ],
     "client_calls/github_apps.rs" => [GithubApp(_), GithubAppManifest(_)],
     "terminals.rs" => [Terminal(_)],
+    "model_lists.rs" => [ModelList(_)],
 }
 
 #[test]

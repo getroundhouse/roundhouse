@@ -11,4 +11,10 @@ impl Client {
     pub fn agent_list(&self) -> Result<Vec<AgentDescription>> {
         Ok(self.call(admin::AgentList)?.agents)
     }
+
+    /// See [`admin::ModelsFor`]. The record, and each change of it after, comes on the feed, so a client follows it
+    /// there by the key this gives.
+    pub fn models_for(&self, asked: admin::ModelsFor) -> Result<protocol::model::ModelList> {
+        self.call(asked)
+    }
 }

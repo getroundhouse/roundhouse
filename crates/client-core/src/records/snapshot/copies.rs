@@ -2,8 +2,8 @@ use super::super::Taken;
 use super::github::GithubListed;
 use crate::Agents;
 use protocol::model::{
-    Account, AccountId, DiffComment, HubSettings, NewWorkspaceDraft, Reach, Record, Repo, RepoId, Session, SessionId,
-    Subagent, SubagentId, Terminal, Workspace, WorkspaceId,
+    Account, AccountId, DiffComment, HubSettings, ModelList, ModelListKey, NewWorkspaceDraft, Reach, Record, Repo,
+    RepoId, Session, SessionId, Subagent, SubagentId, Terminal, Workspace, WorkspaceId,
 };
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -33,6 +33,7 @@ pub(in super::super) struct Listed {
     /// Each workspace's, in the order they opened.
     pub(super) terminals: HashMap<WorkspaceId, Group<Terminal>>,
     pub(super) accounts: HashMap<AccountId, Account>,
+    pub(super) model_lists: HashMap<ModelListKey, ModelList>,
     pub(super) hub_settings: Option<HubSettings>,
     pub(super) new_workspace_draft: Option<NewWorkspaceDraft>,
     pub(super) github: GithubListed,
@@ -96,6 +97,9 @@ impl Listed {
                     listed.accounts.insert(account.id.clone(), account.clone());
                 }
                 Record::NewWorkspaceDraft(draft) => listed.new_workspace_draft = Some(draft.clone()),
+                Record::ModelList(list) => {
+                    listed.model_lists.insert(list.key.clone(), list.clone());
+                }
                 Record::GithubAccount(account) => listed.github.account(account),
                 Record::GithubSignIn(sign_in) => listed.github.sign_in(sign_in),
                 Record::FoundGithubLogin(found) => listed.github.found(found),
@@ -200,6 +204,17 @@ impl Snapshot {
     /// The workspace's open terminals, in the order they opened.
     pub fn terminals(&self, workspace: &WorkspaceId) -> &[Terminal] {
         self.records.terminals.get(workspace).map_or(&[], |its| &its.items)
+    }
+
+    /// What an agent that discovers its own models offers where `key` says. `None` until it's arrived, and once the hub
+    /// has let go of it.
+    pub fn model_list(&self, key: &ModelListKey) -> Option<&ModelList> {
+        self.records.model_lists.get(key)
+    }
+
+    /// Every list of models the hub holds, in no order.
+    pub fn model_lists(&self) -> impl Iterator<Item = &ModelList> {
+        self.records.model_lists.values()
     }
 
     /// The record of the account `id`. `None` until it's arrived, and from a hub from before it kept them.

@@ -43,7 +43,7 @@ fn loaded(dir: &Path, file: Option<String>) -> ProviderSet {
 }
 
 fn default_name(set: &ProviderSet) -> Result<String, ApiError> {
-    set.default_provider().map(|(name, provider)| {
+    set.for_new_workspace().map(|(name, provider)| {
         assert_eq!(provider.name(), name.as_str(), "the provider it names");
         name.to_string()
     })

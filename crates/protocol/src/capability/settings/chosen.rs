@@ -32,7 +32,7 @@ impl Settings {
         let Settings { model: _, mode, effort, speed, thinking, persona, style, verbosity, advisor, budget } = self;
         [
             mode.map(|_| crate::capability::approvals::Capability::Modes.into()),
-            effort.map(|_| Capability::Effort.into()),
+            effort.as_ref().map(|_| Capability::Effort.into()),
             speed.map(|_| Capability::Speed.into()),
             thinking.map(|_| crate::capability::output::Capability::Thinking.into()),
             persona.as_ref().map(|_| Capability::Personas.into()),

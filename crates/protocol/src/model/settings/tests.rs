@@ -106,7 +106,7 @@ fn an_adapter_runs_a_launch_with_its_model_and_only_settings_it_can_name() {
     let newer_effort = settings::Settings { effort: Some(settings::Effort::Unknown), ..typed.clone() };
     assert_eq!(SessionSettings::from_typed(&newer_effort, &defaults), Err(NotOffered::Effort));
     let unnamed_effort = settings::Settings { effort: Some(settings::Effort::Persistent), ..typed.clone() };
-    assert_eq!(SessionSettings::from_typed(&unnamed_effort, &defaults), Err(NotOffered::Effort));
+    assert_eq!(SessionSettings::from_typed(&unnamed_effort, &defaults).unwrap().effort, Effort::Persistent);
     let newer_mode =
         settings::Settings { mode: Some(ApprovalMode { unasked: Unasked::Unknown, ..FULL_ACCESS }), ..typed };
     assert_eq!(SessionSettings::from_typed(&newer_mode, &defaults), Err(NotOffered::Mode));

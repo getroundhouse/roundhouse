@@ -3,7 +3,7 @@
 use gpui_kit::{AppContext as _, TestAppContext};
 use protocol::model::{AgentKind, Effort, Session};
 
-use crate::support::{Stack, Ui};
+use crate::support::{Stack, Ui, git};
 use crate::tools::in_a_new_workspace;
 
 /// One agent other than Claude, chosen for a new chat: what the chat starts on, what's picked for it after, each with
@@ -29,13 +29,13 @@ fn cases() -> [Choosing; 2] {
         Choosing {
             agent: AgentKind::Codex,
             item: "New Codex chat",
-            starts_on: ("gpt-6.1-sol", Effort::Low),
+            starts_on: ("orchard", Effort::Low),
             picked: vec![
-                picked("Ultra", None, Some(Effort::Ultra)),
+                picked("deep", None, Effort::parse("deep")),
                 // Its supported default effort.
-                picked("GPT-6 Luna", Some("gpt-6-luna"), Some(Effort::Medium)),
+                picked("Meadow", Some("meadow"), Some(Effort::Medium)),
             ],
-            left_on: ("gpt-6-luna", Effort::Medium),
+            left_on: ("meadow", Effort::Medium),
         },
         Choosing {
             agent: AgentKind::Antigravity,
@@ -53,12 +53,13 @@ fn cases() -> [Choosing; 2] {
 
 /// The agent, model and effort the hub has for a chat.
 fn on(session: &Session) -> (AgentKind, &str, Effort) {
-    (session.agent, session.model.as_str(), session.effort)
+    (session.agent, session.model.as_str(), session.effort.clone())
 }
 
 #[gpui_kit::test]
 fn choosing_another_agent_and_then_using_the_keyboard_keeps_each_chats_agent(cx: &mut TestAppContext) {
-    let stack = Stack::new();
+    let stack = codex_stack();
+    offer_models(&stack);
     let client = stack.client();
     let mut ui = in_a_new_workspace(cx, &stack);
     let claude = ui.active_chat();
@@ -93,14 +94,61 @@ fn choosing_another_agent_and_then_using_the_keyboard_keeps_each_chats_agent(cx:
 /// the app's session, once the hub's answer has arrived.
 fn pick(ui: &mut Ui<'_>, picked: &Picked, agent: AgentKind) {
     let pane = ui.pane().unwrap();
+    ui.wait("the chat model catalog", |ui| ui.has("model-picker"));
     ui.click("model-picker");
     ui.click_menu_item(picked.item);
     ui.wait(&format!("{agent:?}: {} shown", picked.item), |ui| {
         ui.cx.read_entity(&pane, |p, _| {
             p.session().is_some_and(|s| {
                 picked.model.is_none_or(|model| s.model.as_str() == model)
-                    && picked.effort.is_none_or(|effort| s.effort == effort)
+                    && picked.effort.as_ref().is_none_or(|effort| &s.effort == effort)
             })
         })
     });
+}
+
+fn codex_stack() -> Stack {
+    let mut environment = crate::support::hub_environment();
+    environment.set(agents::ENV_CODEX_BIN, agents::testing::Example::new("native_standin").path());
+    Stack::in_environment(&environment)
+}
+
+fn offer_models(stack: &Stack) {
+    let model = |id, label, default, efforts: &[&str], selected| {
+        serde_json::json!({
+            "model":id, "displayName":label, "isDefault":default, "hidden":false,
+            "supportedReasoningEfforts":efforts.iter().map(|e| serde_json::json!({"reasoningEffort":e})).collect::<Vec<_>>(),
+            "defaultReasoningEffort":selected
+        })
+    };
+    let catalog = serde_json::json!({"data":[model("orchard", "Orchard", true, &["low","deep"], "low"),
+        model("meadow", "Meadow", false, &["medium"], "medium")]});
+    let script = serde_json::json!([{"on":"model/list","actions":[{"result":catalog}]}, {"on":"turn/start","actions":[{"result":{"turn":{"id":"turn"}}}]}]);
+    std::fs::write(stack.repo().join("native-script.json"), script.to_string()).unwrap();
+    git(&stack.repo(), &["add", "native-script.json"]);
+    git(&stack.repo(), &["commit", "-qm", "catalog for this checkout"]);
+}
+
+#[gpui_kit::test]
+fn discovery_can_be_retried_before_the_first_workspace(cx: &mut TestAppContext) {
+    let stack = codex_stack();
+    let client = stack.client();
+    client.repo_add(stack.repo().to_str().unwrap()).unwrap();
+    let mut ui = crate::support::Ui::open(cx, &stack);
+    ui.wait("the project", |ui| ui.view().records().repos().len() == 1);
+    ui.open_new_workspace();
+    ui.input("read the project");
+    ui.pick_item("new-workspace-agent", "Codex");
+    ui.wait("a failed model lookup", |ui| ui.texts_shown().contains("Retry"));
+    assert_eq!(ui.dialog_text(), "read the project");
+    assert!(client.workspace_list(true).unwrap().is_empty());
+    offer_models(&stack);
+    ui.click("load-models");
+    ui.wait("models from the repaired CLI", |ui| ui.has("new-workspace-model"));
+    ui.pick_item("new-workspace-model", "deep");
+    ui.click("new-workspace-create");
+    ui.wait_for_a_new_workspace(0);
+    let session = client.session_get(&ui.active_chat()).unwrap();
+    assert_eq!(session.model.as_str(), "orchard");
+    assert_eq!(session.effort.as_str(), Some("deep"));
 }

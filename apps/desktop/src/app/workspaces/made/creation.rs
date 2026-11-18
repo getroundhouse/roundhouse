@@ -168,7 +168,7 @@ fn make_into(
     let chosen = as_chosen(&session, request);
     made.session = Some(session);
     if !chosen {
-        let (model, effort) = (request.model.clone(), request.effort);
+        let (model, effort) = (request.model.clone(), request.effort.clone());
         let options = SessionSettingsChange { model, permission_mode: Some(request.permission_mode), effort };
         made.session = Some(client.session_configure(&chat, options).map_err(at(Step::Model))?);
     }
@@ -182,6 +182,6 @@ fn make_into(
 /// with, or another client made it, and either may be what was chosen. Nothing chosen is what the agent starts with.
 fn as_chosen(session: &Session, request: &Request) -> bool {
     request.model.as_ref().is_none_or(|model| *model == session.model)
-        && request.effort.is_none_or(|effort| effort == session.effort)
+        && request.effort.clone().is_none_or(|effort| effort == session.effort)
         && session.permission_mode == request.permission_mode
 }

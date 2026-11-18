@@ -80,14 +80,18 @@ mod tests {
         }
     }
 
-    /// A chat's model, effort and mode until another is chosen, which a picker shows among what it offers.
+    /// A kind declares its modes and either offers its defaults or gets its model choices from the launch.
     #[test]
-    fn what_a_chat_of_each_kind_starts_with_is_among_what_its_offered() {
+    fn a_kind_declares_its_choices_or_gets_its_catalog_at_launch() {
         for agent in super::descriptions() {
             let defaults = &agent.defaults;
 
-            assert!(agent.label(&defaults.model).is_some(), "{:?}'s model", agent.kind);
-            assert!(agent.efforts_for(&defaults.model).contains(&defaults.effort), "{:?}'s effort", agent.kind);
+            if agent.discovers_models() {
+                assert!(agent.models.is_empty() && agent.efforts.is_empty(), "{:?} discovers both", agent.kind);
+            } else {
+                assert!(agent.label(&defaults.model).is_some(), "{:?}'s model", agent.kind);
+                assert!(agent.efforts_for(&defaults.model).contains(&defaults.effort), "{:?}'s effort", agent.kind);
+            }
             assert!(agent.modes.contains(&defaults.permission_mode), "{:?}'s mode", agent.kind);
         }
     }

@@ -598,10 +598,10 @@ Every call is drawn the same way, as the first rule below says, and each kind fi
 ## The model and plan mode
 
 - **A workspace can have Claude, Codex and Antigravity chats.** Choose the agent in the new-workspace dialog or from the chat tabs' `+`; a chat keeps the kind it was created with. When only one kind is offered, the tabs' `+` offers New chat, which starts its chat, rather than a chat with each. The keyboard shortcut starts another of the current chat's kind. *Unconfirmed.*
-- **Codex starts on GPT-6.1 Sol at Low effort, with the worker machine's native Codex sign-in.** Roundhouse leaves those credentials with Codex. Its model, mode and effort changes apply on the next turn. Its completed plan waits for approval even when Codex returns it as ordinary final text, so implementation cannot follow an unapproved plan. *Unconfirmed.*
+- **Codex starts with the model and effort its CLI offers as defaults, with the worker machine's native Codex sign-in.** Roundhouse leaves those credentials with Codex. Its model, mode and effort changes apply on the next turn. Its completed plan waits for approval even when Codex returns it as ordinary final text, so implementation cannot follow an unapproved plan. *Unconfirmed.*
   ![Choose the agent for a new chat](screens/new-chat-agents.png)
 
-- **The Codex model picker offers the compiled native catalog and each model’s supported efforts, including Ultra where supported.** Switching to a model that cannot use the current effort selects that model’s default. The catalog is a snapshot; refreshing it ships in a Roundhouse update. *Unconfirmed.*
+- **The Codex picker reads the available models and each model’s efforts from the CLI under the launch login and project, even when choosing the first workspace’s first prompt.** Every client shows the same list, which the hub asks the CLI for once for a project, provider and login, again on Retry, and in the background once it's an hour old, keeping the list it has meanwhile. A model the list doesn't have is refused, from any client, the command line included. It keeps the current effort when the new model offers it, otherwise choosing that model’s default. A model with no effort control shows only its name. A failed lookup offers retry, and a chat whose lookup failed still shows the model it runs. An unavailable saved choice keeps the draft until another choice is made.
 
   ![Codex models and the selected model’s effort levels](screens/codex-models.png)
 
@@ -639,7 +639,7 @@ Every call is drawn the same way, as the first rule below says, and each kind fi
 
 - **A chat that's planning when its agent stops is still planning when the agent comes back.** Otherwise an agent that restarted would make changes nobody had approved. *Unconfirmed.*
 - **A new chat of the same agent keeps the model and its effort, but not plan mode,** which belongs to the task at hand. *Unconfirmed.*
-- **Every chat names its model and its effort, and never leaves either to the agent's CLI,** so the chat decides which model and level the agent runs, rather than the user's own Claude settings or the account. An alias such as `opus` is still the CLI's to resolve to a model. There's no default model to choose.
+- **Every chat names its model and, on a model that offers a choice, its effort,** so the chat decides which model and level the agent runs, rather than the user's own Claude settings or the account. An alias such as `opus` is still the CLI's to resolve to a model. There's no default model to choose.
 - **For Claude, the model picker offers aliases:** `fable`, `opus`, `sonnet` and `haiku`. They follow the CLI's newest of each without a release here. *Unconfirmed.*
 - **The model and its effort are one picker,** since how hard the agent thinks is part of choosing what thinks. It shows the model's name, then the effort in muted text, such as `Opus Extra high`, and its menu lists the models, then the levels: Low, Medium, High, Extra high and Max, which are the CLI's own. *Unconfirmed.*
 

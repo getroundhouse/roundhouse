@@ -175,7 +175,7 @@ pub(super) async fn control(shared: &Shared, request: Value) -> Result<Value, Ag
 /// Changes the effort, and reads it back. The CLI answers success to a level it doesn't know, and changes nothing, so
 /// only the level it reports applying says the change took.
 async fn set_effort(shared: &Shared, effort: Effort) -> Result<(), AgentError> {
-    let asked = super::super::effort::level(effort).ok_or(AgentError::UnknownEffort)?;
+    let asked = super::super::effort::level(&effort).ok_or(AgentError::UnknownEffort)?;
     let settings = json!({"effortLevel": asked});
     control(shared, json!({"subtype": "apply_flag_settings", "settings": settings})).await?;
     let read = control(shared, json!({"subtype": "get_settings"})).await?;
@@ -289,7 +289,7 @@ impl AgentProcess for ClaudeProcess {
             let mode = super::super::mode::name(mode).ok_or(AgentError::UnknownMode)?;
             control(&self.shared, json!({"subtype": "set_permission_mode", "mode": mode})).await?;
         }
-        if let Some(effort) = options.effort {
+        if let Some(effort) = options.effort.clone() {
             set_effort(&self.shared, effort).await?;
         }
         Ok(())

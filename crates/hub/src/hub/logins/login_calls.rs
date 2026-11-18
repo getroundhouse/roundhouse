@@ -10,18 +10,21 @@ use tracing::error;
 
 impl Hub {
     /// Has the hub hold a login, as `AccountConnect` says, and tells every client what that changed of the account's
-    /// record.
+    /// record. The kind's lists of models are let go of, since the login can be another plan's, or the kind's default.
     pub(crate) async fn account_connect(&self, asked: AccountConnect) -> Result<Account, ApiError> {
-        let login = self.login_of(asked.agent)?;
+        let (login, agent) = (self.login_of(asked.agent)?, asked.agent);
         let connect = Connect::new(asked, &login, now_ms())?;
         let change = self.on_logins(move |logins| logins.connect(&connect)).await?;
+        self.forget_model_lists(|key| key.agent == agent).await;
         Ok(self.announce_account(change))
     }
 
     /// Has the hub forget the login it holds for the account, as `AccountDisconnect` says, and tells every client when
-    /// that changed the account's record.
+    /// that changed the account's record. The lists of models under its login are let go of.
     pub(crate) async fn account_disconnect(&self, id: AccountId) -> Result<Account, ApiError> {
+        let gone = id.clone();
         let change = self.on_logins(move |logins| logins.disconnect(&id)).await?;
+        self.forget_model_lists(|key| key.account.as_ref() == Some(&gone)).await;
         Ok(self.announce_account(change))
     }
 
@@ -69,7 +72,10 @@ impl Hub {
 
     pub(crate) async fn account_set_default(&self, asked: AccountSetDefault) -> Result<HubSettings, ApiError> {
         self.login_of(asked.agent)?;
+        let agent = asked.agent;
         let settings = self.on_logins(move |logins| logins.set_default(asked.agent, &asked.account, now_ms())).await?;
+        // A launch that names no account is handed another login now, so its lists of models no longer apply.
+        self.forget_model_lists(|key| key.agent == agent).await;
         self.notify(HubNotice::HubSettings(settings.clone()));
         Ok(settings)
     }

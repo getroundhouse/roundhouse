@@ -38,7 +38,7 @@ pub fn build_args(spec: &AgentSpec, resume: bool) -> Result<Vec<String>, AgentEr
     // running, or one for a chat in a mode of the CLI's own, which can't be chosen. Converted here, where it's used,
     // as the start does, until the adapters take typed settings in #1274.
     let SessionSettings { model, permission_mode: _, effort } = crate::registry::settings_of(spec)?;
-    let level = crate::claude::effort::level(effort).ok_or(AgentError::UnknownEffort)?;
+    let level = crate::claude::effort::level(&effort).ok_or(AgentError::UnknownEffort)?;
     let mut args: Vec<String> = [
         "-p",
         "--input-format",
