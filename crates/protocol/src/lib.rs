@@ -21,6 +21,7 @@ pub mod find;
 #[cfg(feature = "testing")]
 pub mod fixtures;
 pub mod frame;
+mod hub_copies;
 pub mod model;
 pub mod pairing;
 pub mod paths;

@@ -33,6 +33,8 @@ impl Client {
         // A client starts a hub once the one before has gone, as for an update, which is when a copy goes out of use.
         if let Some(build) = &daemon.build {
             old_copies::remove_unused(paths, build);
+            #[cfg(windows)]
+            super::fixed::remove_leftovers(paths);
         }
         Ok(client)
     }
@@ -110,6 +112,7 @@ impl Daemon {
     }
 
     /// The file to start a hub from: the build's own copy, made the first time it's needed, or else the daemon itself.
+    /// On Windows, [`start_hub`] starts a copy's hub from the fixed path it links the copy to.
     pub(super) fn to_start(&self, paths: &Paths) -> io::Result<PathBuf> {
         let Some(build) = &self.build else {
             return Ok(self.path.clone());
@@ -131,6 +134,8 @@ pub(super) fn start_hub(paths: &Paths, daemon: &Daemon) -> io::Result<()> {
     let log = private_files::file_options().create(true).append(true).open(&paths.log)?;
     // Whole paths, since the hub doesn't run where this client does. A bare name is looked up on `PATH` instead.
     let exe = daemon.to_start(paths)?;
+    #[cfg(windows)]
+    let exe = if daemon.build.is_some() { at_fixed_path(paths, exe, &log) } else { exe };
     let exe = if exe.components().count() > 1 { whole(&exe)? } else { exe };
     let data_dir = whole(&paths.data_dir)?;
     let mut command = daemon.command(&exe);
@@ -151,6 +156,24 @@ pub(super) fn start_hub(paths: &Paths, daemon: &Daemon) -> io::Result<()> {
     waiting_out_busy(|| command.spawn())
         .map_err(|e| io::Error::new(e.kind(), format!("starting {}: {e}", exe.display())))?;
     Ok(())
+}
+
+/// The build's `copy` at [`Paths::fixed_hub`], to start the hub from there, or else the copy itself, which only costs
+/// the firewall asking again whether it may listen. Why it couldn't goes in the hub's log, which it writes to next.
+#[cfg(windows)]
+fn at_fixed_path(paths: &Paths, copy: PathBuf, mut log: &File) -> PathBuf {
+    use std::io::Write;
+    match super::fixed::place(paths, &copy) {
+        Ok(fixed) => fixed,
+        Err(e) => {
+            let _ = writeln!(
+                log,
+                "Starting the hub from {}, since it couldn't go where it's started from: {e}",
+                copy.display()
+            );
+            copy
+        }
+    }
 }
 
 /// `path` from the root down, as this process names it. One that's whole already is left as it's spelled, since a
