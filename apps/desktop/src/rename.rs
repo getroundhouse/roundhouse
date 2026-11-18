@@ -43,7 +43,7 @@ pub(crate) fn open(
 
 /// What to say when the hub couldn't title a workspace again.
 pub(crate) fn regenerating_failed(e: &ClientError) -> String {
-    crate::failed::couldnt("regenerate the title", e)
+    client_core::refusals::couldnt("regenerate the title", e)
 }
 
 /// What's being renamed, which the dialog's title says.
@@ -56,7 +56,7 @@ pub(crate) enum Renaming {
 impl Renaming {
     /// What to say when renaming fails.
     pub(crate) fn failed(self, e: &ClientError) -> String {
-        crate::failed::couldnt(&format!("rename the {}", self.noun()), e)
+        client_core::refusals::couldnt(&format!("rename the {}", self.noun()), e)
     }
 
     fn noun(self) -> &'static str {

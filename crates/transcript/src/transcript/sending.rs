@@ -80,7 +80,7 @@ impl Transcript {
         let asking = self.client.start(move |client| client.session_compact(&id, keeping.as_deref()));
         cx.spawn(async move |this, cx| {
             let Err(e) = asking.recv().await else { return };
-            let message = couldnt("couldn't compact", &e);
+            let message = client_core::refusals::couldnt("compact", &e);
             let _ = this.update(cx, |_, cx| match typed {
                 Some(text) => cx.emit(TranscriptEvent::NotSent { message, prompt: Prompt::new(text) }),
                 None => cx.emit(TranscriptEvent::Error(message)),
@@ -95,7 +95,7 @@ impl Transcript {
         let calling_off = self.client.start(move |client| client.session_call_off_wait(&id, &wait));
         cx.spawn(async move |this, cx| {
             if let Err(e) = calling_off.recv().await {
-                let message = couldnt("couldn't stop the wait", &e);
+                let message = client_core::refusals::couldnt("stop the wait", &e);
                 let _ = this.update(cx, |_, cx| cx.emit(TranscriptEvent::Error(message)));
             }
         })
@@ -107,29 +107,20 @@ impl Transcript {
         let stopping = self.client.start(move |client| client.session_cancel(&id));
         cx.spawn(async move |this, cx| {
             if let Err(e) = stopping.recv().await {
-                let _ =
-                    this.update(cx, |_, cx| cx.emit(TranscriptEvent::Error(format!("couldn't stop the agent: {e}"))));
+                let _ = this.update(cx, |_, cx| {
+                    cx.emit(TranscriptEvent::Error(client_core::refusals::couldnt("stop the agent", &e)));
+                });
             }
         })
         .detach();
     }
 }
 
-/// What to tell someone that what they asked for didn't happen, as `what` says it. A hub older than the app refuses a
-/// request it doesn't know, which updating it fixes.
-fn couldnt(what: &str, error: &client_core::ClientError) -> String {
-    if error.is_unsupported() {
-        format!("{what}: the hub is older than the app, and can't until it's updated")
-    } else {
-        format!("{what}: {error}")
-    }
-}
-
 /// What to tell someone whose prompt didn't go. A hub from before attachments is the one failure they can fix.
 fn not_sent(error: &client_core::ClientError) -> String {
     if error.is_unsupported() {
-        "couldn't send that: the hub is older than the app, and can't take attachments until it's updated".to_string()
+        "Couldn't send that: this hub can't take attachments until it's updated".to_string()
     } else {
-        format!("couldn't send that: {error}")
+        client_core::refusals::couldnt("send that", error)
     }
 }

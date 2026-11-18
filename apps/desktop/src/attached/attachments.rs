@@ -41,7 +41,7 @@ impl Attachments {
     pub(crate) fn push(&mut self, file: Attached) -> Result<(), String> {
         if self.0.len() >= MAX_PER_PROMPT {
             let name = file.name();
-            return Err(format!("couldn't attach {name}: {}", PromptProblem::TooManyFiles));
+            return Err(format!("Couldn't attach {name}: {}", PromptProblem::TooManyFiles));
         }
         self.0.push(file);
         Ok(())

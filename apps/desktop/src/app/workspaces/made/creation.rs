@@ -65,11 +65,11 @@ impl Step {
     /// What to say when this step failed.
     pub(in super::super) fn failed(self, e: &ClientError) -> String {
         match self {
-            Step::Workspace => format!("couldn't create the workspace: {e}"),
-            Step::Chat => format!("couldn't start the workspace's chat: {e}"),
-            Step::Model => format!("couldn't give the chat the model, effort and mode chosen: {e}"),
-            Step::Prompt => format!("couldn't send that: {e}"),
-            Step::Answer => format!("couldn't tell whether the workspace was made: {e}"),
+            Step::Workspace => client_core::refusals::couldnt("create the workspace", e),
+            Step::Chat => client_core::refusals::couldnt("start the workspace's chat", e),
+            Step::Model => client_core::refusals::couldnt("give the chat the model, effort and mode chosen", e),
+            Step::Prompt => client_core::refusals::couldnt("send that", e),
+            Step::Answer => client_core::refusals::couldnt("tell whether the workspace was made", e),
         }
     }
 }

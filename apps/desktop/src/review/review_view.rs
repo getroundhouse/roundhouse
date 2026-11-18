@@ -76,13 +76,13 @@ impl Review {
                     let (truncated, base) = (diff.truncated, diff.base_commit);
                     let parsing = cx.background_spawn(async move {
                         let mut files =
-                            patch::parse(&diff.patch).map_err(|e| format!("couldn't read the diff: {e}"))?;
+                            patch::parse(&diff.patch).map_err(|e| format!("Couldn't read the diff: {e}"))?;
                         files.sort_by(|a, b| a.path().cmp(b.path()));
                         Ok::<_, String>((files, truncated, base))
                     });
                     parsing.await
                 }
-                Err(e) => Err(format!("couldn't load the diff: {e}")),
+                Err(e) => Err(client_core::refusals::couldnt("load the diff", &e)),
             };
             let _ = this.update(cx, |t, cx| {
                 if ask != t.asks {

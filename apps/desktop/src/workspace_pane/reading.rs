@@ -130,7 +130,10 @@ impl WorkspacePane {
                 if let Err(e) = marked
                     && !e.is_unsupported()
                 {
-                    cx.emit(PaneEvent::Error(format!("couldn't mark the chat {}: {e}", mark.word())));
+                    cx.emit(PaneEvent::Error(client_core::refusals::couldnt(
+                        &format!("mark the chat {}", mark.word()),
+                        &e,
+                    )));
                 }
                 cx.notify();
             });

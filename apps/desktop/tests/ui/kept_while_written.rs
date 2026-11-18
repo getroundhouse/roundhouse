@@ -169,7 +169,7 @@ fn a_comment_that_couldnt_be_saved_comes_back_in_its_box(
     ui.cx.update_window(ui.handle, |_, window, cx| diff.file.update(cx, |f, cx| f.save_draft(window, cx))).unwrap();
 
     ui.wait("the refusal", |ui| ui.view().error.is_some());
-    assert!(ui.view().error.clone().unwrap().contains("couldn't save that comment"));
+    assert!(ui.view().error.clone().unwrap().contains("Couldn't save that comment"));
     ui.wait("the box to come back", |ui| writing(ui, diff).as_ref() == Some(&kept));
     ui.view().drafts().unwrap().flushed().recv().unwrap();
     assert_eq!(kept_comment(stack, at), Some(kept), "the hub still keeps it");

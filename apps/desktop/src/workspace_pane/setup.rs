@@ -76,7 +76,8 @@ impl WorkspacePane {
         let starting = self.client.start(move |client| client.workspace_rerun_setup(&id));
         cx.spawn(async move |this, cx| {
             if let Err(e) = starting.recv().await {
-                let _ = this.update(cx, |_, cx| cx.emit(PaneEvent::Error(format!("couldn't run setup: {e}"))));
+                let _ =
+                    this.update(cx, |_, cx| cx.emit(PaneEvent::Error(client_core::refusals::couldnt("run setup", &e))));
             }
         })
         .detach();

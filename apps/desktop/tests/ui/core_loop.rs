@@ -207,7 +207,7 @@ fn new_shows_its_working_until_the_workspace_is_ready_or_fails(cx: &mut TestAppC
     let gone = |ui: &mut Ui| ui.view().records().workspaces().iter().all(|w| w.status != WorkspaceStatus::Creating);
     ui.wait("the failure", |ui| ui.view().error.is_some() && ui.view().busy.is_free() && gone(ui));
     let error = ui.view().error.clone().unwrap();
-    assert!(error.contains("couldn't create the workspace"), "the hub's failure is shown rather than lost: {error}");
+    assert!(error.contains("Couldn't create the workspace"), "the hub's failure is shown rather than lost: {error}");
 }
 
 /// What the new-workspace dialog asks for when Create is pressed with nothing in it.
@@ -227,6 +227,6 @@ fn an_archive_that_force_cant_help_shows_the_error_rather_than_offering_force(cx
     stack.client().workspace_archive(&id, false).unwrap();
     ui.cx.update_entity(&ui.view.clone(), |v, cx| v.archive(id.clone(), false, cx));
     ui.wait("the error", |ui| ui.view().error.is_some());
-    assert!(ui.view().error.clone().unwrap().contains("couldn't archive"));
+    assert!(ui.view().error.clone().unwrap().contains("Couldn't archive"));
     assert!(ui.asked().is_none());
 }

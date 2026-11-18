@@ -217,7 +217,7 @@ impl AppView {
                     Ok(status) if status.pid == pid && t.still_finishing(pid) => then(t, status, cx),
                     // Another hub since, which the app connects to rather than asks about.
                     Ok(_) => {}
-                    Err(e) => t.show_error(format!("couldn't see what's running on the hub: {e}"), cx),
+                    Err(e) => t.show_error(client_core::refusals::couldnt("see what's running on the hub", &e), cx),
                 }
             });
         }));

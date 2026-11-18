@@ -119,7 +119,7 @@ impl Transcript {
         match decision {
             Some(decision) => self.answer_approval(approval_id, decision, cx),
             None => {
-                cx.emit(TranscriptEvent::Error("couldn't approve that: it asks for more than a yes".into()));
+                cx.emit(TranscriptEvent::Error("Couldn't approve that: it asks for more than a yes".into()));
             }
         }
     }
@@ -135,7 +135,7 @@ impl Transcript {
                     if let Some(panel) = t.asking.as_ref().filter(|p| *p.read(cx).approval_id() == answering_id) {
                         panel.update(cx, QuestionPanel::not_answered);
                     }
-                    cx.emit(TranscriptEvent::Error(format!("couldn't answer that: {e}")));
+                    cx.emit(TranscriptEvent::Error(client_core::refusals::couldnt("answer that", &e)));
                 });
             }
         })

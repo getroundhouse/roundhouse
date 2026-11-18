@@ -75,7 +75,7 @@ impl Review {
                 match saved {
                     Ok(_) => cx.emit(ReviewEvent::Saved),
                     Err(e) => {
-                        cx.emit(ReviewEvent::Error(format!("couldn't save that comment: {e}")));
+                        cx.emit(ReviewEvent::Error(client_core::refusals::couldnt("save that comment", &e)));
                         cx.emit(ReviewEvent::NotSaved(saving));
                     }
                 }
@@ -94,7 +94,7 @@ impl Review {
             if let Err(e) = deleting.recv().await {
                 let _ = this.update(cx, |t, cx| {
                     t.kept(&[id], cx);
-                    cx.emit(ReviewEvent::Error(format!("couldn't delete that comment: {e}")));
+                    cx.emit(ReviewEvent::Error(client_core::refusals::couldnt("delete that comment", &e)));
                 });
             }
         })
@@ -122,7 +122,7 @@ impl Review {
                 // Those already deleted go when client-core hears so, and the rest show again.
                 let _ = this.update(cx, |t, cx| {
                     t.kept(&ids, cx);
-                    cx.emit(ReviewEvent::Error(format!("couldn't clear sent comments: {e}")));
+                    cx.emit(ReviewEvent::Error(client_core::refusals::couldnt("clear sent comments", &e)));
                 });
             }
         })

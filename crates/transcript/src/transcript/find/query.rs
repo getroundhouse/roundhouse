@@ -226,7 +226,7 @@ impl Transcript {
             query.counting = Some(Self::count_stretch(stretch, query.needle.clone(), known, cx));
         }
         if let Some(e) = query.search.take_error() {
-            cx.emit(TranscriptEvent::Error(format!("couldn't find in the whole chat: {e}")));
+            cx.emit(TranscriptEvent::Error(client_core::refusals::couldnt("find in the whole chat", &e)));
         }
         self.after_counting(cx);
     }

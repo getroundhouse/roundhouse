@@ -106,7 +106,7 @@ fn a_new_title_is_asked_for_from_the_header_and_the_rows_menu(cx: &mut TestAppCo
     // With no title to be had, it says so and keeps the one it has.
     ui.click(SharedString::from("regenerate-title"));
     ui.wait("why there's no new title", |ui| {
-        ui.view().error.as_deref().is_some_and(|error| error.starts_with("couldn't regenerate the title: "))
+        ui.view().error.as_deref().is_some_and(|error| error.starts_with("Couldn't regenerate the title: "))
     });
     assert!(ui.shows_label(&row, "say:fix the login"));
     assert!(ui.on(SharedString::from("regenerate-title")), "and can be asked again");

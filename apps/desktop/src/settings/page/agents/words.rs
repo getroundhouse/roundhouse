@@ -224,11 +224,10 @@ pub(super) fn refused(e: &ClientError, renewing: bool) -> Refused {
     })
 }
 
-/// What to say when the hub couldn't forget an account's login. Any refusal but its not having the account is said in
-/// the hub's own words, an older hub's too, rather than as [`refusals::reason`] says it.
+/// What to say when the hub couldn't forget an account's login.
 pub(super) fn disconnect_failed(e: &ClientError) -> String {
     if e.is_not_found() {
         return refusals::gone("account");
     }
-    format!("Couldn't disconnect it: {e}")
+    refusals::couldnt("disconnect it", e)
 }
