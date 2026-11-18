@@ -1,6 +1,6 @@
 # Watch context and limits
 
-Three things run out in a long chat: the agent's context, your plan's limits, and the prompt cache. In a Claude chat, the composer shows the first two, and the chat says when the third is about to cost you. Antigravity shows context usage without plan limits, prompt cache estimates or `Compact now`, and Codex shows context usage and plan limits without prompt cache estimates or `Compact now`; indicators an agent doesn't report stay absent.
+Three things run out in a long chat: the agent's context, your plan's limits, and the prompt cache. In a Claude chat, the composer shows the first two, and the chat says when the third is about to cost you. Antigravity shows context usage without plan limits, prompt cache estimates or `Compact now`, and Codex shows context usage and plan limits without prompt cache estimates; indicators an agent doesn't report stay absent.
 
 ## How full the context is
 
@@ -17,7 +17,7 @@ A ring beside Send fills as the agent's context does. Rest the pointer on it for
 When a context fills, the agent compacts by itself: it swaps what it holds for a summary, and carries on. You can do that sooner, at a moment that suits the work:
 
 - **`Compact now`,** on the ring's card.
-- **`/compact`,** typed in the composer. What follows it says what to keep, such as `/compact keep the failing test's output`.
+- **`/compact`,** typed in the composer. What follows it says what to keep, such as `/compact keep the failing test's output`, for an agent that reads it, as Claude does.
 
 A compaction shows in the chat as a rule, with how many tokens the context went from and to. Click it to read the summary the agent carries on from.
 

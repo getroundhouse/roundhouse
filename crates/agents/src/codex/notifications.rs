@@ -80,10 +80,22 @@ async fn dispatch(
                 return Ok(());
             }
             let id: TurnId = serde_json::from_value(params["turn"]["id"].clone())?;
-            shared.state.lock().turn = Some(id);
-            shared.state.lock().reply = None;
-            shared.state.lock().plan = None;
+            let compacting = {
+                let mut state = shared.state.lock();
+                state.turn = Some(id.clone());
+                state.reply = None;
+                state.plan = None;
+                // The turn Codex compacts in, which takes the compaction asked for, as the person's message takes a
+                // prompt.
+                state.compaction.as_mut().filter(|asked| asked.turn.is_none()).map(|asked| {
+                    asked.turn = Some(id);
+                    asked.asked
+                })
+            };
             shared.event(EventBody::AgentState { state: AgentRunState::Running }, Some(raw)).await;
+            if let Some(prompt) = compacting {
+                shared.event(EventBody::PromptTaken { prompt }, None).await;
+            }
         }
         "turn/completed" => {
             if let Some(call) = &scope.parent {
@@ -191,7 +203,13 @@ async fn complete(shared: &Shared, turn: &Value, raw: String) -> Result<(), Agen
 /// Records how the agent's own turn ended, with what it last replied, and what the agent's doing now. A cancelled turn
 /// has no reply, since what it last said was cut off.
 pub(super) async fn record_end(shared: &Shared, outcome: TurnOutcome, error: Option<String>, raw: Option<String>) {
-    let reply = shared.state.lock().reply.take();
+    let (reply, compacted) = {
+        let mut state = shared.state.lock();
+        (state.reply.take(), state.compaction.take_if(|asked| asked.turn.is_some()))
+    };
+    // A turn that was only the compaction asked for, as Codex's is, whose end is drawn as the compaction is. One that
+    // went wrong says so, and what's wrong, so its end is drawn.
+    let only_compacted = outcome == TurnOutcome::Success && compacted.is_some_and(|asked| asked.answered);
     let end = EventBody::TurnEnded {
         outcome,
         result: reply.filter(|_| outcome != TurnOutcome::Cancelled),
@@ -202,7 +220,7 @@ pub(super) async fn record_end(shared: &Shared, outcome: TurnOutcome, error: Opt
         started_at_ms: None,
         models: Vec::new(),
         tokens: None,
-        only_compacted: false,
+        only_compacted,
         request_failed: false,
     };
     shared.event(end, raw).await;

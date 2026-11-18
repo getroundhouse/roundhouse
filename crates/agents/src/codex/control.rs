@@ -11,7 +11,7 @@ use serde_json::{Value, json};
 use super::{
     approvals, notifications,
     running::{CodexProcess, Shared},
-    state::Ended,
+    state::{AskedCompaction, Ended},
 };
 use crate::{AgentError, AgentProcess};
 
@@ -37,10 +37,11 @@ impl AgentProcess for CodexProcess {
             Control::Cancel => cancel(&self.shared).await,
             Control::Decide { approval, decision } => approvals::decide(&self.shared, approval, decision).await,
             Control::Change(settings) => change(&self.shared, settings).await,
+            // Codex reads nothing to keep, which its claims say, so none is sent.
+            Control::Compact { asked, .. } => compact(&self.shared, *asked).await,
             Control::Note { .. }
             | Control::Aside { .. }
             | Control::Overrule { .. }
-            | Control::Compact { .. }
             | Control::Rewind { .. }
             | Control::UndoRewind
             | Control::RestoreFiles { .. }
@@ -142,6 +143,37 @@ async fn prompt_to(shared: &Shared, seq: Seq, prompt: &Prompt<AttachmentFile>) -
     }
 }
 
+/// Asks Codex to compact the thread, the request recorded at `asked`, which it does in a turn of its own once it has
+/// answered. That turn starting takes the request, as [`notifications`] says. Only between turns, as the hub asks.
+async fn compact(shared: &Shared, asked: Seq) -> Result<(), AgentError> {
+    let thread = {
+        let mut state = shared.state.lock();
+        if state.asking() || state.turn.is_some() || state.compaction.is_some() {
+            return Err(AgentError::Refused("Codex compacts only between turns".into()));
+        }
+        let thread = state.thread.clone().ok_or(AgentError::Exited)?;
+        state.compaction = Some(AskedCompaction { asked, turn: None, answered: false });
+        thread
+    };
+    match shared.rpc.ask("thread/compact/start", json!({"threadId":thread})).await {
+        Ok(_) => Ok(()),
+        Err(error) if super::rpc::refused(&error) => {
+            shared.state.lock().compaction = None;
+            Err(error)
+        }
+        // As for a prompt, a failed write or a missing reply doesn't prove Codex didn't take it, so the process is
+        // stopped, and its exit settles the request.
+        Err(error) => {
+            let message = error.to_string();
+            shared
+                .event(EventBody::Notice { level: protocol::event::NoticeLevel::Error, message, subagent: None }, None)
+                .await;
+            shared.stop().await;
+            Ok(())
+        }
+    }
+}
+
 pub(super) async fn turn(shared: &Shared, input: Vec<Value>) -> Result<(), AgentError> {
     super::turn::send(shared, input).await
 }
@@ -198,6 +230,9 @@ async fn cancel(shared: &Shared) -> Result<(), AgentError> {
 pub(super) async fn settle(shared: &Shared, parent: Option<&protocol::model::SubagentId>) {
     let (prompts, requests, calls) = {
         let mut state = shared.state.lock();
+        // One Codex hasn't started compacting is dropped with the prompts it hasn't taken.
+        let untaken_compaction =
+            parent.is_none().then(|| state.compaction.take_if(|asked| asked.turn.is_none())).flatten();
         // Child commands can finish after their turn, including after a follow-up begins. Keep their pending
         // calls until that completion, so its genuine output is recorded once under the old invocation.
         let calls = if parent.is_none() {
@@ -208,9 +243,10 @@ pub(super) async fn settle(shared: &Shared, parent: Option<&protocol::model::Sub
         (
             {
                 let sending = state.sending;
-                let prompts: Vec<_> =
+                let mut prompts: Vec<_> =
                     state.untaken.iter().copied().filter(|seq| parent.is_none() && Some(*seq) != sending).collect();
                 state.untaken.retain(|seq| parent.is_some() || Some(*seq) == sending);
+                prompts.extend(untaken_compaction.map(|asked| asked.asked));
                 prompts
             },
             state
