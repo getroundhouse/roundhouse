@@ -9,7 +9,7 @@ mod settling;
 #[cfg(test)]
 mod tests;
 
-pub(super) use removing::would_lose;
+pub(super) use removing::{archive_would_lose, would_lose};
 
 mod creation;
 use creation::{Making, add, git_status, watch_child};

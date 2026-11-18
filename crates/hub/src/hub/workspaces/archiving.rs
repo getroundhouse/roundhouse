@@ -15,7 +15,7 @@ use tracing::{error, info, warn};
 use super::workspace_env;
 use crate::error::internal;
 use crate::hub::Hub;
-use crate::hub::children::would_lose;
+use crate::hub::children::{archive_would_lose, would_lose};
 use crate::hub::ready::ReadyWorkspace;
 use crate::hub::repo_source::repo_source;
 use crate::session::Command;
@@ -76,15 +76,12 @@ impl Hub {
         let owned = id.clone();
         let children = self.blocking(move |store| store.children_of(&owned)).await?;
 
-        // Before anything changes, so refusing leaves the workspace as it was. A status that can't be read can't say
-        // nothing would be lost, so it refuses too, and forcing goes on without it.
+        // Before anything changes, so refusing leaves the workspace as it was. A status that can't be read refuses too,
+        // as `archive_would_lose` says, and forcing goes on without it.
         let status = link.call(GitStatus { path: path.clone() }).await;
         if !force {
             // Every worktree's, so forcing past one's doesn't lose another's untold.
-            let own = match &status {
-                Ok(status) => status.loss_if_removed(),
-                Err(e) => Some(unread(e)),
-            };
+            let own = archive_would_lose(&status);
             let losses: Vec<String> = own.into_iter().chain(would_lose(&link, &children).await).collect();
             if !losses.is_empty() {
                 return Err(ApiError::new(ErrorCode::NeedsForce, losses.join("\n")));
@@ -287,13 +284,4 @@ impl Hub {
             }
         }
     }
-}
-
-/// Why archiving is refused when the worktree's status couldn't be read, as `e` says, in words for a person, as
-/// [`protocol::model::GitStatus::loss_if_removed`] says what would be lost.
-fn unread(e: &ApiError) -> String {
-    format!(
-        "Whether archiving would lose work couldn't be read ({}). Archive with force to remove it anyway",
-        e.message
-    )
 }
