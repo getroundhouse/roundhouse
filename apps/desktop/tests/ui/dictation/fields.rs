@@ -243,6 +243,7 @@ fn dictating_feedback_never_turns_an_empty_denial_into_allow(cx: &mut TestAppCon
     let stack = Stack::new();
     let mut ui = Ui::open_with_a_repository(cx, &stack);
     ui.new_workspace();
+    let chat = ui.active_chat();
     let engine = ready(&mut ui);
     ui.ask(r#"tool:rm -rf "$(cat gone-path)""#);
     ui.click("question-answer-0");
@@ -250,7 +251,11 @@ fn dictating_feedback_never_turns_an_empty_denial_into_allow(cx: &mut TestAppCon
     hold_option_space(&mut ui);
     ui.press("enter");
     ended(&mut ui);
-    assert_eq!(ui.session_status(), Some(protocol::model::SessionStatus::WaitingApproval));
+    // An answer sent is a call of the app's, and the hub records it before it replies, so once every call has ended
+    // the hub's record says whether one was sent. The window's copy of the record comes on the feed, and can be later.
+    ui.wait_for_every_call();
+    let status = stack.client().session_get(&chat).unwrap().status;
+    assert_eq!(status, protocol::model::SessionStatus::WaitingApproval, "the empty denial sent nothing");
 
     ui.click("question-other");
     let_go(&mut ui);

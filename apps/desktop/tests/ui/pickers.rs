@@ -52,6 +52,12 @@ fn shift_tab_turns_plan_mode_on_and_off_and_the_model_picker_changes_a_running_c
     assert!(!planning(&mut ui));
     ui.pick_item("model-picker", "Sonnet");
     ui.wait("the model", |_| client.session_get(&chat).unwrap().model == ModelName::named("sonnet"));
+    // An agent started again would be in the chat's events, which come apart from its record. Once the picker's call has
+    // ended, whatever it started is in the log ahead of the next turn, so that turn drawn to its end shows it.
+    ui.wait_for_every_call();
+    ui.input("say:on sonnet");
+    ui.press("enter");
+    ui.wait_idle_with("a turn on the new model", |text| text.ends_with("on sonnet"));
     let started = ui.events().iter().filter(|e| matches!(e.body, EventBody::AgentStarted { .. })).count();
     assert_eq!(started, 1, "the running agent was changed, not replaced");
 
