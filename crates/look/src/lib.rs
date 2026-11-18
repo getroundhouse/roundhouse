@@ -23,6 +23,7 @@ mod counts;
 mod dialogs;
 mod fan;
 mod fields;
+mod file_icons;
 mod fit;
 mod hand;
 mod heights;
@@ -76,6 +77,7 @@ pub use dialogs::{
     open_plain_dialog, plain_dialog,
 };
 pub use fields::{Field, FieldKind, field};
+pub use file_icons::{FILE_ICON, file_icon, file_icon_asset, folder_icon};
 pub use fit::{fit, pixels};
 pub use hand::{Hand, Off};
 pub use heights::{BarSize, RowSize};

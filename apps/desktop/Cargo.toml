@@ -66,9 +66,8 @@ windows-sys = { workspace = true, features = [
     "Win32_UI_WindowsAndMessaging",
 ] }
 
-# Reads the file icons' manifest into tables, so the app never parses it, and says which file a failure was about.
+# Says which file a failure to embed the app's icon was about.
 [build-dependencies]
-serde_json.workspace = true
 anyhow.workspace = true
 
 [dev-dependencies]

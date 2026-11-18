@@ -3,11 +3,11 @@
 use gpui_kit::component::{Icon, IconName, h_flex};
 use look::{Hand as _, IconSizing as _, Typeset as _};
 
-use crate::file_icons::{ICON, file_icon};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     App, ElementId, InteractiveElement as _, IntoElement, ParentElement as _, Pixels, Stateful, Styled as _, div, px,
 };
+use look::{FILE_ICON, file_icon};
 
 const PADDING: look::Space = look::Space::Medium;
 /// The space between the things in a row.
@@ -32,7 +32,7 @@ impl List {
     /// How far a folder's contents sit inside it.
     fn indent(self) -> Pixels {
         match self {
-            List::AllFiles => ICON.size() + GAP.size(),
+            List::AllFiles => FILE_ICON.size() + GAP.size(),
             // Under the folder's icon, as All files' are under its name, with each chevron's drawing level with the
             // icon's.
             List::Changes => CHEVRON.size() + GAP.size() - CHEVRON_ROOM,
@@ -42,7 +42,7 @@ impl List {
     /// Where the line down a folder's contents sits: under the middle of what starts its row.
     fn guide(self) -> Pixels {
         match self {
-            List::AllFiles => ICON.size() / 2.,
+            List::AllFiles => FILE_ICON.size() / 2.,
             List::Changes => CHEVRON.size() / 2.,
         }
     }

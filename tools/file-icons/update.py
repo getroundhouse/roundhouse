@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Replaces apps/desktop/file-icons/ with the icons, the manifest, the colours and the license of a pinned release of
+"""Replaces crates/look/file-icons/ with the icons, the manifest, the colours and the license of a pinned release of
 Catppuccin's icons.
 
 The desktop app draws these icons beside files and folders, and gives each name the icon the manifest does, so they
@@ -8,7 +8,7 @@ where the manifest is built, and it has to match the checksum pinned here. Only 
 those the manifest gives a file's name or extension, and the plain file, folder and open folder.
 
 Each icon is kept with its colours named rather than filled in, as `var(--vscode-ctp-blue)`, and `palette.json` says
-what each name is in the Mocha flavour, which `apps/desktop/build/file_icons.rs` fills in. The palette is read from
+what each name is in the Mocha flavour, which `crates/look/build/file_icons.rs` fills in. The palette is read from
 the release's own Mocha icons, and the release is refused unless filling it in gives back every one of them exactly, so
 the app draws what Catppuccin does. Each icon is also checked for anything a picture shouldn't hold, such as a script
 or a link out, before anything is written.
@@ -37,7 +37,7 @@ RELEASE = (
 FLAVOR = "mocha"
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
-OUT = ROOT / "apps/desktop/file-icons"
+OUT = ROOT / "crates/look/file-icons"
 MANIFEST = "theme.json"
 PALETTE = "palette.json"
 
@@ -51,7 +51,7 @@ HEX = re.compile(r"#[0-9a-f]{6}")
 # The elements a drawing of an icon is made of: those Catppuccin's are, and the few more a drawing like them would use.
 # Anything else, such as a script, text, a style sheet, a picture from elsewhere, or a `<use>`, which can repeat a part
 # of the drawing until it takes minutes to draw, is more than an icon needs, so an icon with one is turned away rather
-# than trusted. `apps/desktop/build/file_icons.rs` checks the same, with the same limits, so a change to one belongs in
+# than trusted. `crates/look/build/file_icons.rs` checks the same, with the same limits, so a change to one belongs in
 # both.
 DRAWING = {
     "svg", "g", "path", "circle", "ellipse", "rect", "line", "polyline", "polygon", "defs", "clipPath", "mask",
