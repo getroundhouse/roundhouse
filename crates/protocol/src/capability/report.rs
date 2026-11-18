@@ -232,6 +232,11 @@ impl Report {
         Some(needs)
     }
 
+    /// Whether a run that claims `claims` can say it, which one this build doesn't know never can.
+    pub fn allowed(&self, claims: &super::Capabilities) -> bool {
+        self.needs().is_some_and(|needs| claims.has(needs))
+    }
+
     /// Who keeps it.
     pub fn keeper(&self) -> Keeper {
         match self {

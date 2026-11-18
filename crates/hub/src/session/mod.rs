@@ -20,7 +20,6 @@ mod ingest;
 mod limits;
 mod messages;
 mod pickup;
-mod previous;
 mod progress;
 mod queue;
 mod record;

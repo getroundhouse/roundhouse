@@ -1,60 +1,48 @@
-//! Speaking protocol 3, the version before this one, to a worker of an older build, which the hub replaces with one of
+//! Speaking protocol 4, the version before this one, to a worker of an older build, which the hub replaces with one of
 //! its own once its workspace is idle. It goes with [`protocol::worker::previous`], at the next break, as "Changing the
 //! protocol" in `docs/architecture.md` says, and so does each place that asks [`WorkerLink::speaks_previous`].
 
-use protocol::client::ApiError;
-use protocol::worker::{Reply, TitleFor, TitleReply, previous};
+use protocol::frame;
+use protocol::worker::{WorkerFrame, previous};
 
 use super::WorkerLink;
 
 impl WorkerLink {
-    /// Whether its worker chose protocol 3 in its hello.
+    /// Whether its worker chose protocol 4 in its hello.
     pub(crate) fn speaks_previous(&self) -> bool {
         self.version() == Some(previous::VERSION)
     }
 
-    /// The worker's reply to a request of protocol 3, as `T`, as [`WorkerLink::call`] reads it.
-    pub(crate) async fn call_previous<T: Reply>(&self, request: previous::Request) -> Result<T, ApiError> {
-        self.send_call(|id| previous::Call { id, request }).await?.await
-    }
-
-    /// A title for a prompt, from the worker. Protocol 3 asks for one under a login with a request of its own, which a
-    /// worker from before logins refuses rather than asking under its machine's own.
-    pub(crate) async fn title(&self, title: TitleFor) -> Result<TitleReply, ApiError> {
-        if self.speaks_previous() && title.login.is_some() {
-            return self.call_previous(previous::Request::TitleUnderLogin(title)).await;
+    /// `bytes`, which this protocol has no form for, as the frame they'd be now, if its worker speaks protocol 4 and
+    /// they're one of the frames that protocol has of its own.
+    pub(crate) fn previous_frame(&self, bytes: &[u8]) -> Option<WorkerFrame> {
+        if !self.speaks_previous() {
+            return None;
         }
-        self.call(title).await
+        frame::decode::<previous::Frame>(bytes).ok().map(WorkerFrame::from)
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use parking_lot::Mutex;
-    use protocol::model::{AgentKind, AgentLogin, LoginToken};
-    use protocol::worker::{TitleFor, TitleReply, WorkerResponse};
-    use std::sync::Arc;
+    use protocol::capability::Report;
+    use protocol::worker::WorkerFrame;
 
     use super::WorkerLink;
 
+    /// Only a worker of protocol 4 sends its frames, so a worker of this protocol that sends one has sent what it
+    /// shouldn't, which goes no further.
     #[tokio::test]
-    async fn a_title_under_a_login_goes_to_a_worker_of_protocol_3_as_a_request_of_its_own() {
-        let asked = Arc::new(Mutex::new(Vec::new()));
-        let kept = asked.clone();
-        let link = WorkerLink::answering_previous(move |request| {
-            kept.lock().push(request["method"].as_str().unwrap().to_string());
-            Some(Ok(WorkerResponse::Title(TitleReply { title: "T".into() })))
-        });
-        let title = |login: Option<AgentLogin>| TitleFor {
-            agent: AgentKind::Claude,
-            prompt: "x".into(),
-            images: vec![],
-            login,
+    async fn a_frame_of_protocol_4_is_read_as_the_frame_it_would_be_now_only_from_a_worker_of_protocol_4() {
+        let line = br#"{"frame":"agent_context","session_id":"s","run":4,"context":{"used_tokens":5,"max_tokens":9}}"#;
+        let refused = |_| None;
+
+        let read = WorkerLink::answering_previous(refused).previous_frame(line);
+        let Some(WorkerFrame::AgentReport { report: Report::Context { context }, .. }) = read else {
+            panic!("{read:?}")
         };
+        assert_eq!((context.used_tokens, context.max_tokens), (5, 9));
 
-        link.title(title(None)).await.unwrap();
-        link.title(title(Some(AgentLogin { token: LoginToken::new("synthetic") }))).await.unwrap();
-
-        assert_eq!(*asked.lock(), ["title_for", "title_under_login"]);
+        assert_eq!(WorkerLink::answering(refused).previous_frame(line), None, "from a worker of this protocol");
     }
 }

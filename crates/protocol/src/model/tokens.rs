@@ -36,10 +36,9 @@ mod tests {
     use serde::Serialize;
 
     use crate::capability::conversation::Start;
-    use crate::capability::settings::Effort;
     use crate::capability::settings::Settings;
     use crate::client::{ClientRequest, ClientResponse, accounts, devices, github_accounts, github_apps};
-    use crate::model::{AgentKind, AgentLogin, GhLogin, GhLoginWorks, GithubToken, LoginToken, ModelName, RunId};
+    use crate::model::{AgentKind, AgentLogin, GhLogin, GhLoginWorks, GithubToken, LoginToken, RunId};
     use crate::pairing::{DeviceToken, Fingerprint, Pairing, PairingCode, PairingLink};
     use crate::worker::{self, GithubCredential, ToolsToken, WorkerRequest, WorkerResponse};
 
@@ -151,16 +150,9 @@ mod tests {
             login: GhLogin::LoggedIn { username: "ada".into(), works: GhLoginWorks::Yes },
             token: Some(worker::FoundToken { token: GithubToken::new(SECRET), renews: true }),
         };
-        let settings = worker::previous::Kept {
-            model: ModelName::named("opus"),
-            permission_mode: crate::fixtures::plan_mode(),
-            effort: Effort::Low,
-        };
-        let previous = worker::previous::AgentStart::of(launch(), settings);
         vec![
             carrier("AgentLogin", &login()),
             carrier("AgentSpec", &WorkerRequest::AgentStart(launch())),
-            carrier("protocol 3's AgentStart", &previous.into_request()),
             carrier("TitleFor", &WorkerRequest::TitleFor(title)),
             carrier(
                 "AccountFor",

@@ -15,13 +15,13 @@ use async_trait::async_trait;
 use parking_lot::Mutex;
 use protocol::capability::conversation::Start;
 use protocol::capability::settings::Settings;
-use protocol::capability::{Control, Report, settings, turns};
+use protocol::capability::{Control, Report, context, settings, turns};
 use protocol::client::ApiError;
 use protocol::event::{AgentRunState, EventBody, TurnOutcome};
 use protocol::fixtures::turn_ended;
 use protocol::model::{
-    AgentAccount, AgentKind, AgentSessionId, AttachmentId, CacheRequest, InstanceId, ProviderName, RunId, Seq, Session,
-    SessionId, Workspace, WorkspaceId,
+    AgentAccount, AgentKind, AgentSessionId, AttachmentId, CacheRequest, CacheTtl, InstanceId, ProviderName, RunId,
+    Seq, Session, SessionId, Workspace, WorkspaceId,
 };
 use protocol::prompt::Prompt;
 use protocol::worker::{
@@ -377,15 +377,19 @@ pub(super) async fn the_agent_asks_its_model(
     request: CacheRequest,
 ) {
     let run = last_started(asked, session).expect("only an agent that was started asks its model anything");
-    hub.route(session, Item::Report { run, report: Report::Cache { request }, seq: None }).await;
+    let report = Report::Cache { request };
+    hub.route(session, Item::Report { run, report, seq: None, held_to_claims: true }).await;
     flushed(&hub.live_session(session).await.expect("a chat that's there")).await;
 }
 
 /// What a stand-in's agent claims as it starts: what Claude claims as the hub's tests describe it, as [`claimed`] says,
-/// and cancelling a turn and taking a change of its model, mode and effort as it runs, as Claude's CLI claims them, so
-/// a test can stop a turn, or change a chat's settings, as the person does.
+/// cancelling a turn and taking a change of its model, mode and effort as it runs, and the prompt cache it marks, as
+/// Claude's CLI claims them, so a test can stop a turn, or change a chat's settings, as the person does, or have its
+/// agent ask its model.
 fn claims() -> protocol::capability::Capabilities {
     let mut claims = claimed();
+    let ttls = vec![CacheTtl::FiveMinutes, CacheTtl::OneHour];
+    claims.context.cache = Some(context::Cache { kind: context::CacheKind::Marked { ttls } });
     claims.turns.cancel = Some(turns::Cancel { stops: turns::CancelStops::Nothing });
     let (now, next_turn) = (Some(settings::Takes::Now), Some(settings::Takes::NextTurn));
     let live = settings::LiveChanges { model: next_turn, mode: now, effort: next_turn, ..Default::default() };

@@ -1,3 +1,4 @@
+use protocol::capability::Report;
 use protocol::event::{EventBody, ExitReason};
 use protocol::model::RunId;
 use protocol::tail::{DeltaChange, StreamDelta};
@@ -5,13 +6,8 @@ use protocol::tail::{DeltaChange, StreamDelta};
 use super::*;
 
 fn limits() -> WorkerFrame {
-    WorkerFrame::AgentLimits {
-        session_id: "s".into(),
-        run: RunId::new(1),
-        limits: Vec::new(),
-        every_models_week: false,
-        seq: None,
-    }
+    let report = Report::Limits { limits: Vec::new(), every_models_week: false };
+    WorkerFrame::AgentReport { session_id: "s".into(), run: RunId::new(1), report, seq: None }
 }
 
 fn delta() -> WorkerFrame {
@@ -70,7 +66,7 @@ fn being_written(frames: &[Arc<WorkerFrame>]) -> Vec<(u64, String)> {
 }
 
 fn number(frame: &WorkerFrame) -> Option<u64> {
-    if let WorkerFrame::AgentLimits { seq, .. } = frame { *seq } else { None }
+    if let WorkerFrame::AgentReport { seq, .. } = frame { *seq } else { None }
 }
 
 /// What a hub on a channel of its own has been sent so far.

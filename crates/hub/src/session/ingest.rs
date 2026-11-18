@@ -24,7 +24,7 @@ pub(crate) async fn run_ingest(session: Arc<LiveSession>, mut items: mpsc::Recei
             Item::Delta { run, delta } => session.apply_delta(run, delta),
             Item::Tail { run, tail } => session.take_tail(run, tail),
             Item::Retrying { run, retrying } => session.retrying(run, retrying),
-            Item::Report { run, report, .. } => session.take_report(run, report).await,
+            Item::Report { run, report, held_to_claims, .. } => session.take_report(run, report, held_to_claims).await,
             Item::AgentLost { link, reason } => session.agent_lost(link, reason).await,
             Item::PickupDue { wait } => session.no_pickup(wait).await,
             Item::Flush(done) => {
@@ -52,8 +52,8 @@ async fn ingest_event(
     follow(session, run, current, &body).await;
     let body = session.with_waits(body).await;
     let origin = Origin::Run { run, current, numbered };
-    if current && let Some((approval_id, request)) = allowed_by_the_hub(session, &body) {
-        allow(session, origin, (body, raw), approval_id, request).await;
+    if current && let Some(approval_id) = allowed_by_the_hub(session, &body) {
+        allow(session, origin, (body, raw), approval_id).await;
         return;
     }
     let stale_approval = if let EventBody::ApprovalRequested { approval_id, .. } = &body
@@ -77,12 +77,12 @@ async fn ingest_event(
     }
 }
 
-/// The request in `body`, and its ID, if the hub allows it itself, as [`the_hub_allows`] says.
-fn allowed_by_the_hub(session: &LiveSession, body: &EventBody) -> Option<(ApprovalId, Request)> {
+/// The ID of the request in `body`, if the hub allows it itself, as [`the_hub_allows`] says.
+fn allowed_by_the_hub(session: &LiveSession, body: &EventBody) -> Option<ApprovalId> {
     let EventBody::ApprovalRequested { approval_id, request, .. } = body else { return None };
     let mode = session.state.lock().settings.mode;
     let set_to = session.hub().is_ok_and(|hub| hub.allows_asked_in_full_access());
-    the_hub_allows(mode, request, set_to).then(|| (approval_id.clone(), Request::clone(request)))
+    the_hub_allows(mode, request, set_to).then(|| approval_id.clone())
 }
 
 /// Whether the hub allows `request` itself, in a session in `mode`, when its settings are `set_to`: a call asked about
@@ -92,7 +92,7 @@ pub(super) fn the_hub_allows(mode: ApprovalMode, request: &Request, set_to: bool
     set_to && mode.is_full_access() && matches!(request.asks, Asks::Call { .. })
 }
 
-/// Records the request `asked`, which is `request`, with the hub's decision allowing it, and passes that on to the
+/// Records the request `asked`, which is `approval_id`, with the hub's decision allowing it, and passes that on to the
 /// agent. It's passed on from a task of its own, since the agent's worker replies on the connection whose events this
 /// task takes in, and waits for this task when there are many, so waiting for the reply here could leave each waiting
 /// on the other.
@@ -101,7 +101,6 @@ async fn allow(
     origin: Origin,
     asked: (EventBody, Option<String>),
     approval_id: ApprovalId,
-    request: Request,
 ) {
     let allowed = Decision::Allow { remember: Remember::Once };
     let answer = EventBody::ApprovalResolved {
@@ -115,7 +114,7 @@ async fn allow(
     }
     let session = session.clone();
     tokio::spawn(async move {
-        if let Err(e) = session.pass_on(approval_id, allowed, &request).await {
+        if let Err(e) = session.pass_on(approval_id, allowed).await {
             warn!(session = %session.id, "could not pass on a tool's use the hub allowed: {e}");
         }
     });

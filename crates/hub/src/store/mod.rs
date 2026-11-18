@@ -34,7 +34,6 @@ mod migrated;
 mod new_workspace_draft;
 #[cfg(test)]
 pub(crate) mod older;
-mod previous;
 mod prompts;
 mod queue;
 mod reading;

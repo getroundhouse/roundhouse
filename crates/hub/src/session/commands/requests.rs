@@ -4,7 +4,7 @@ use super::super::{Command, LiveSession, LiveState, Origin};
 use crate::hub::Hub;
 use protocol::attachment::Attachment;
 use protocol::capability::Control;
-use protocol::capability::approvals::{Decision, Request};
+use protocol::capability::approvals::Decision;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::event::{EventBody, NoticeLevel};
 use protocol::model::{ApprovalId, AttachmentId, ClientMessageId, Seq, SetupStatus};
@@ -212,29 +212,23 @@ impl LiveSession {
             if asked_by.is_none() || state.agent.map(|agent| agent.run) != *asked_by {
                 return Some(ApiError::new(ErrorCode::Conflict, "the agent that asked has exited"));
             }
-            refusal(&request, &decision, state.run_claims(), self.agent)
+            refusal(&request, &decision, state.run_claims())
         };
         self.record_unless(Origin::Hub, resolved, None, refused).await?;
-        self.pass_on(approval_id, decision, &request).await
+        self.pass_on(approval_id, decision).await
     }
 
-    /// Passes `decision` on the request `asked` to the agent that asked, once it's recorded, and says in the log if it
+    /// Passes `decision` on the request `approval` to the agent that asked, once it's recorded, and says in the log if it
     /// had gone.
-    pub(in super::super) async fn pass_on(
-        &self,
-        approval: ApprovalId,
-        decision: Decision,
-        asked: &Request,
-    ) -> Result<(), ApiError> {
+    pub(in super::super) async fn pass_on(&self, approval: ApprovalId, decision: Decision) -> Result<(), ApiError> {
         let hub = self.hub()?;
         let link = hub
             .existing_worker(&self.workspace_id)
             .ok_or_else(|| ApiError::new(ErrorCode::Conflict, "the agent that asked has exited"))?;
-        let delivered = match self.askable(&link)? {
+        let delivered = match self.askable()? {
             Askable::Claimed(claims) => {
                 self.control_claimed(&link, Control::Decide { approval, decision }, &claims).await?
             }
-            Askable::Unclaimed => self.decide_unclaimed(&link, approval, &decision, asked).await?,
             Askable::NotRunning => Delivery::AgentNotRunning,
         };
         if delivered == Delivery::Delivered {

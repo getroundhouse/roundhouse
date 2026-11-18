@@ -1,5 +1,4 @@
-//! A launch in the form its worker's protocol has, the claims the run it starts is held to, how the session's record
-//! keeps them.
+//! A launch, the claims the run it starts is held to, and how the session's record keeps them.
 
 use std::sync::Arc;
 
@@ -10,7 +9,7 @@ use protocol::client::{ErrorCode, HubNotice};
 use protocol::event::EventBody;
 use protocol::model::{ModelName, Rev, RunCapabilities, RunId, Seq, SessionId};
 use protocol::worker::{AgentStarted, Delivery, WorkerRequest, WorkerResponse};
-use serde_json::{Value, json};
+use serde_json::Value;
 
 use crate::hub::Hub;
 use crate::hub::tests::{claimed, flushed, hub_with_worktree, serving};
@@ -34,28 +33,6 @@ fn worker(hub: &Hub, found: Option<RunId>, claims: Option<Capabilities>) -> (Arc
             already_running: found.is_some(),
             capabilities: claims.clone().map(Box::new),
         })))
-    });
-    serving(hub, &link);
-    (link, asked)
-}
-
-/// A stand-in for `w`'s worker of protocol 3, whose launch claims nothing and finds `found` running if it's given, and
-/// which refuses a control as a Claude worker from before claims does, and takes everything else.
-fn worker_of_protocol_3(hub: &Hub, found: Option<RunId>) -> (Arc<WorkerLink>, Asked) {
-    let asked = Asked::default();
-    let kept = asked.clone();
-    let link = WorkerLink::answering_previous(move |request| {
-        kept.lock().push(request.clone());
-        Some(match request["method"].as_str().unwrap() {
-            "agent_start" | "agent_start_under_login" => Ok(WorkerResponse::AgentStarted(AgentStarted {
-                pid: 7,
-                run: found.unwrap_or_else(|| serde_json::from_value(request["run"].clone()).unwrap()),
-                already_running: found.is_some(),
-                capabilities: None,
-            })),
-            "agent_control" => Err(protocol::client::ApiError::new(ErrorCode::Unsupported, "unknown method")),
-            _ => Ok(WorkerResponse::Ok),
-        })
     });
     serving(hub, &link);
     (link, asked)
@@ -244,38 +221,6 @@ async fn a_run_of_this_protocol_that_hasnt_said_what_it_claims_is_asked_nothing(
 }
 
 #[tokio::test]
-async fn a_worker_of_protocol_3_is_launched_and_asked_in_its_own_forms() {
-    let dir = tempfile::tempdir().unwrap();
-    let hub = hub_with_worktree(dir.path());
-    let (link, asked) = worker_of_protocol_3(&hub, None);
-    let live = hub.live_session(&"s".into()).await.unwrap();
-
-    live.ensure_agent().await.unwrap();
-    let prompt = Control::Prompt {
-        seq: Seq::new(1),
-        prompt: protocol::prompt::Prompt::new("x"),
-        extras: protocol::capability::prompts::Extras::default(),
-    };
-    let prompted = live.control_agent(&link, prompt).await.unwrap();
-    let cancelled = live.control_agent(&link, Control::Cancel).await.unwrap();
-    let compact = Control::Compact { asked: Seq::new(2), keeping: Some("The API".into()) };
-    let compacted = live.control_agent(&link, compact).await.unwrap();
-    live.configure(Settings { effort: Some(Effort::Low), ..Settings::default() }).await.unwrap();
-
-    let launch = launch(&asked);
-    let settings = json!([launch["model"], launch["permission_mode"], launch["effort"]]);
-    assert_eq!(settings, json!(["opus", "bypassPermissions", "xhigh"]), "the chat's settings as the hub keeps them");
-    assert_eq!(launch.get("settings"), None);
-    assert_eq!([prompted, cancelled, compacted], [Delivery::Delivered; 3]);
-    let sent = ["agent_start", "agent_control", "agent_prompt", "agent_cancel", "agent_compact", "agent_configure"];
-    assert_eq!(methods(&asked), sent, "a Claude run from before claims is sent what came before controls");
-    let sent = |method: &str| asked.lock().iter().find(|request| request["method"] == method).cloned().unwrap();
-    let compact = sent("agent_compact");
-    assert_eq!((&compact["asked"], &compact["keeping"]), (&json!(2), &json!("The API")));
-    assert_eq!(sent("agent_configure")["effort"], "low");
-}
-
-#[tokio::test]
 async fn a_runs_exit_that_takes_its_claims_off_the_record_is_announced_though_the_session_had_moved_on() {
     let dir = tempfile::tempdir().unwrap();
     let hub = hub_with_worktree(dir.path());
@@ -344,38 +289,4 @@ fn exited() -> EventBody {
         signal: None,
         stderr_tail: vec![],
     }
-}
-
-#[tokio::test]
-async fn a_run_of_protocol_3_found_running_has_the_claims_it_said_as_it_initialized_put_back() {
-    let dir = tempfile::tempdir().unwrap();
-    let hub = hub_with_worktree(dir.path());
-    let found = RunId::new(1);
-    let init = EventBody::AgentInit {
-        capabilities: Some(Box::new(claimed())),
-        agent_session_id: None,
-        model: None,
-        cwd: None,
-        mode: None,
-        agent_version: None,
-    };
-    let lost = EventBody::AgentExited {
-        reason: protocol::event::ExitReason::WorkerLost,
-        code: None,
-        signal: None,
-        stderr_tail: vec![],
-    };
-    hub.blocking(move |store| {
-        store.append(&"s".into(), Some(found), &init, None, None, None)?;
-        store.append(&"s".into(), Some(found), &lost, None, None, None).map(drop)
-    })
-    .await
-    .unwrap();
-    let (_link, _asked) = worker_of_protocol_3(&hub, Some(found));
-    let live = hub.live_session(&"s".into()).await.unwrap();
-
-    live.ensure_agent().await.unwrap();
-
-    assert_eq!(live.run_claims(), Some(claimed()));
-    assert_eq!(on_record(&hub).await, Some(RunCapabilities { run: found, claims: Box::new(claimed()) }));
 }

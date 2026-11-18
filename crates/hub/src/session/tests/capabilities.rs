@@ -9,7 +9,7 @@ use protocol::capability::{Capabilities, Claimed};
 use protocol::client::ErrorCode;
 use protocol::event::EventBody;
 use protocol::fixtures::{approval_request, asking, deny, question, to_run};
-use protocol::model::{AgentKind, RunCapabilities, RunId};
+use protocol::model::{RunCapabilities, RunId};
 use std::sync::Arc;
 
 async fn initialized(live: &Arc<LiveSession>, run: RunId, conversation: &str, claims: Capabilities) {
@@ -104,8 +104,7 @@ async fn a_secret_answer_goes_to_the_agent_and_not_the_log() {
     assert!(sent.contains("synthetic-secret"), "the agent gets it");
 }
 
-/// A run that says what it claims takes what they allow. One that says nothing is a Claude run of protocol 3 from a
-/// build before claims, which takes a decision in that protocol's form, and nothing else.
+/// A run that says what it claims takes what they allow, and one that has said nothing takes nothing.
 #[test]
 fn a_decision_goes_only_to_a_run_that_takes_it() {
     let rule = Rule {
@@ -117,23 +116,21 @@ fn a_decision_goes_only_to_a_run_that_takes_it() {
     };
     let request = Request { suggested: vec![rule.clone()], ..approval_request("c", to_run("ls")).request };
     let denied = deny(None);
-    let refused = |decision: &Decision, claims: Option<&Capabilities>, agent| {
-        refusal(&request, decision, claims, agent).map(|e| e.code)
-    };
+    let refused =
+        |decision: &Decision, claims: Option<&Capabilities>| refusal(&request, decision, claims).map(|e| e.code);
     let mut claims = Capabilities::default();
 
-    assert_eq!(refused(&denied, Some(&claims), AgentKind::Claude), Some(ErrorCode::Unsupported), "none claimed");
+    assert_eq!(refused(&denied, Some(&claims)), Some(ErrorCode::Unsupported), "none claimed");
     claims.approvals.requests = Some(Requests { parts: Vec::new(), kept: Vec::new() });
-    assert_eq!(refused(&denied, Some(&claims), AgentKind::Claude), None);
-    assert_eq!(refused(&denied, None, AgentKind::Claude), None, "protocol 3 has a form for it");
-    assert_eq!(refused(&denied, None, AgentKind::Codex), Some(ErrorCode::Unsupported), "only Claude's said none");
+    assert_eq!(refused(&denied, Some(&claims)), None);
+    assert_eq!(refused(&denied, None), Some(ErrorCode::Unsupported), "none said");
     let newer = Decision::Unknown;
-    assert_eq!(refused(&newer, Some(&claims), AgentKind::Claude), Some(ErrorCode::Unsupported), "from a newer client");
+    assert_eq!(refused(&newer, Some(&claims)), Some(ErrorCode::Unsupported), "from a newer client");
     let stopping = Decision::Deny { words: None, then: AfterDenial::Stop, keep: None };
-    assert_eq!(refused(&stopping, Some(&claims), AgentKind::Claude), Some(ErrorCode::Unsupported), "a part unclaimed");
+    assert_eq!(refused(&stopping, Some(&claims)), Some(ErrorCode::Unsupported), "a part unclaimed");
     let keeping = Decision::Deny { words: None, then: AfterDenial::Continue, keep: Some(rule) };
     assert!(keeping.answers(&request));
-    assert_eq!(refused(&keeping, None, AgentKind::Claude), Some(ErrorCode::Unsupported));
+    assert_eq!(refused(&keeping, Some(&claims)), Some(ErrorCode::Unsupported), "a rule to keep, unclaimed");
 }
 
 #[test]
@@ -142,7 +139,7 @@ fn a_decision_that_doesnt_answer_what_was_asked_is_refused() {
     let request = approval_request("q", asking(vec![only_an_option])).request;
     let mut claims = Capabilities::default();
     claims.asking.questions = Some(Claimed {});
-    let decide = |answers| refusal(&request, &Decision::Answer { answers }, Some(&claims), AgentKind::Claude);
+    let decide = |answers| refusal(&request, &Decision::Answer { answers }, Some(&claims));
     let answering = |picked, typed: Option<&str>| vec![QuestionAnswer { picked, typed: typed.map(str::to_string) }];
 
     assert!(decide(answering(vec![0], None)).is_none());

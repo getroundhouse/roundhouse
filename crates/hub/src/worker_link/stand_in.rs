@@ -40,12 +40,13 @@ impl WorkerLink {
         self
     }
 
-    /// The same, for a worker that chose protocol 3, whose requests `answer` reads as JSON, since this one's types
-    /// can't read every one of them.
+    /// The same, for a worker that chose protocol 4, the version before this one.
     pub(crate) fn answering_previous(
-        answer: impl Fn(serde_json::Value) -> Option<Result<WorkerResponse, ApiError>> + Send + 'static,
+        answer: impl Fn(WorkerRequest) -> Option<Result<WorkerResponse, ApiError>> + Send + 'static,
     ) -> Arc<WorkerLink> {
-        Self::stand_in(protocol::worker::previous::VERSION, ChildProcess::already_exited(), answer)
+        Self::stand_in(protocol::worker::previous::VERSION, ChildProcess::already_exited(), move |request| {
+            answer(serde_json::from_value(request).expect("the hub sends requests"))
+        })
     }
 
     fn stand_in(

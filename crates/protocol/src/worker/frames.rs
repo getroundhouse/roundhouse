@@ -5,8 +5,9 @@ use serde::{Deserialize, Serialize};
 
 use super::{AskId, WorkerAsk, WorkerOutcome};
 use crate::attachment::NewAttachment;
+use crate::capability::Report;
 use crate::event::EventBody;
-use crate::model::{Branches, CacheRequest, ContextUsage, RunId, SessionId, TerminalId, UsageLimit};
+use crate::model::{Branches, RunId, SessionId, TerminalId};
 use crate::tail::{Retrying, StreamDelta, Tail};
 use crate::terminal::{TerminalUpdate, UpdateIndex};
 
@@ -54,41 +55,12 @@ pub enum WorkerFrame {
         run: RunId,
         tail: Tail,
     },
-    /// How full the agent's context is now. It isn't an event: it answers the worker's own question rather than
-    /// being something the agent said, and only the newest matters, which the hub keeps on the session's record.
-    AgentContext {
+    /// What the agent of `run` said that isn't an event, which the hub keeps where the report's keeper says, if the run
+    /// claims what it needs, as [`Report`] says, and drops otherwise.
+    AgentReport {
         session_id: SessionId,
         run: RunId,
-        context: ContextUsage,
-        /// Its number among what the worker keeps until a hub has recorded it, for a hub that said
-        /// [`keep_running_without_hub`](super::Hello::keep_running_without_hub). `None` otherwise.
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        seq: Option<u64>,
-    },
-    /// One of the agent's own requests to its model, as the model started to answer it. It isn't an event, since a
-    /// turn makes many, but each matters: the hub keeps what the newest left on the session's record, and compares
-    /// each with the one before to find a cache that had expired.
-    AgentCache {
-        session_id: SessionId,
-        run: RunId,
-        request: CacheRequest,
-        /// Its number among what the worker keeps until a hub has recorded it, for a hub that said
-        /// [`keep_running_without_hub`](super::Hello::keep_running_without_hub). `None` otherwise.
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        seq: Option<u64>,
-    },
-    /// What's used of each of the account's limits, as the agent answered when the worker asked. It isn't an event,
-    /// as how full the context is isn't: the agent wasn't told it as it worked, and the hub keeps the newest on the
-    /// account's record, as it does what the agent hears by itself.
-    AgentLimits {
-        session_id: SessionId,
-        run: RunId,
-        limits: Vec<UsageLimit>,
-        /// Whether `limits` holds every model's own week the account has, as an answer that lists them all does, so
-        /// one the hub heard of earlier that isn't among them has gone, such as a model whose label changed. `false`
-        /// from a worker that doesn't say, which leaves every one the hub knows of.
-        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-        every_models_week: bool,
+        report: Report,
         /// Its number among what the worker keeps until a hub has recorded it, for a hub that said
         /// [`keep_running_without_hub`](super::Hello::keep_running_without_hub). `None` otherwise.
         #[serde(default, skip_serializing_if = "Option::is_none")]

@@ -111,8 +111,8 @@ impl Question {
 }
 
 /// `answers` to `questions`, one for each, by each question's text, with the parts of what one says joined with a
-/// comma and a space, and a question it says nothing to left out, as Claude's CLI takes them, and so does a run of
-/// protocol 3. Of two questions alike, the answer to the last is kept.
+/// comma and a space, and a question it says nothing to left out, as Claude's CLI takes them. Of two questions alike,
+/// the answer to the last is kept.
 pub fn by_text(questions: &[Question], answers: &[QuestionAnswer]) -> BTreeMap<String, String> {
     let said = |(question, answer): (&Question, &QuestionAnswer)| {
         let parts: Vec<&str> = question.said(answer).collect();

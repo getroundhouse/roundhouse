@@ -17,7 +17,10 @@ fn a_launch_says_what_it_starts_from_in_its_own_form() {
     spec.start = Start::Resume { conversation: "chosen-by-cli".into() };
     let sent = serde_json::to_value(&spec).unwrap();
     assert_eq!((&sent["start"], &sent["conversation"]), (&json!("resume"), &json!("chosen-by-cli")));
-    assert!(sent.get("agent_session_id").is_none(), "only protocol 3 has its ID and whether to resume it");
+    assert!(
+        sent.get("agent_session_id").is_none(),
+        "only the form from before `Start` has its ID and whether to resume it"
+    );
     assert_eq!(serde_json::from_value::<AgentSpec>(sent).unwrap(), spec);
 }
 

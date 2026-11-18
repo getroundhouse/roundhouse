@@ -7,8 +7,6 @@ use std::sync::atomic::Ordering;
 
 use agents::{AgentOptions, AgentOutput, BinaryLookup, Instructions, ToolServer};
 use protocol::attachment::NewAttachment;
-use protocol::capability::Report;
-use protocol::capability::account::Limit;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::model::{AgentKind, AgentLogin, RunId, SessionId};
 use protocol::paths::AGENTS_DIR;
@@ -175,10 +173,9 @@ async fn forward_output(
             AgentOutput::Retrying(retrying) => {
                 WorkerFrame::AgentRetrying { session_id: session_id.clone(), run, retrying }
             }
-            AgentOutput::Report(report) => match reported(&session_id, run, report) {
-                Some(frame) => frame,
-                None => continue,
-            },
+            AgentOutput::Report(report) => {
+                WorkerFrame::AgentReport { session_id: session_id.clone(), run, report, seq: None }
+            }
             AgentOutput::Exited { code, signal, stderr_tail, requested } => {
                 {
                     let mut agents = state.agents.lock();
@@ -199,24 +196,6 @@ async fn forward_output(
         };
         state.outbox.send(frame).await;
     }
-}
-
-/// The frame protocol 4 has for `report`, which has one for how full the context is, the agent's requests to its
-/// model, and the account's limits, and none for any other report, which goes no further.
-fn reported(session_id: &SessionId, run: RunId, report: Report) -> Option<WorkerFrame> {
-    let session_id = session_id.clone();
-    let frame = if let Report::Context { context } = report {
-        WorkerFrame::AgentContext { session_id, run, context, seq: None }
-    } else if let Report::Cache { request } = report {
-        WorkerFrame::AgentCache { session_id, run, request, seq: None }
-    } else if let Report::Limits { limits, every_models_week } = report {
-        let limits = limits.iter().map(Limit::usage).collect();
-        WorkerFrame::AgentLimits { session_id, run, limits, every_models_week, seq: None }
-    } else {
-        warn!("the agent of {session_id} said what this worker can't send its hub: {report:?}");
-        return None;
-    };
-    Some(frame)
 }
 
 pub(crate) async fn stop_agent(state: &State, session_id: &SessionId) -> Result<WorkerResponse, ApiError> {

@@ -1,3 +1,4 @@
+use protocol::capability::Keeper;
 use protocol::model::SessionId;
 use protocol::tail::{StreamDelta, Tail};
 use protocol::worker::WorkerFrame;
@@ -89,9 +90,7 @@ impl Writing {
             WorkerFrame::AgentRetrying { session_id, run, retrying } => {
                 self.change(session_id, |tail| tail.retrying(*run, *retrying));
             }
-            WorkerFrame::AgentContext { .. }
-            | WorkerFrame::AgentCache { .. }
-            | WorkerFrame::AgentLimits { .. }
+            WorkerFrame::AgentReport { .. }
             | WorkerFrame::AgentTail { .. }
             | WorkerFrame::Reply { .. }
             | WorkerFrame::Ask { .. }
@@ -130,20 +129,28 @@ impl Writing {
 /// Where the frame's number goes, if it's one the hub records.
 fn number_of(frame: &mut WorkerFrame) -> Option<&mut Option<u64>> {
     match frame {
-        WorkerFrame::AgentEvent { seq, .. }
-        | WorkerFrame::AgentContext { seq, .. }
-        | WorkerFrame::AgentCache { seq, .. }
-        | WorkerFrame::AgentLimits { seq, .. } => Some(seq),
+        WorkerFrame::AgentEvent { seq, .. } => Some(seq),
+        WorkerFrame::AgentReport { report, seq, .. } if kept(report.keeper()) => Some(seq),
         // A reply is only for the hub that asked, an ask is asked again of each hub until it's answered, the branches
         // are read again for each hub that watches them, what an agent is writing is sent again to each hub that
-        // connects, and a hub asks what a terminal shows as a client attaches to it.
+        // connects, a report kept nowhere is only for the hub there, and a hub asks what a terminal shows as a client
+        // attaches to it.
         WorkerFrame::AgentDelta { .. }
         | WorkerFrame::AgentRetrying { .. }
+        | WorkerFrame::AgentReport { .. }
         | WorkerFrame::AgentTail { .. }
         | WorkerFrame::Reply { .. }
         | WorkerFrame::Ask { .. }
         | WorkerFrame::Branches { .. }
         | WorkerFrame::ChildBranches { .. }
         | WorkerFrame::Terminal { .. } => None,
+    }
+}
+
+/// Whether a hub keeps a report that `keeper` keeps, so one that missed it is sent it.
+fn kept(keeper: Keeper) -> bool {
+    match keeper {
+        Keeper::Log | Keeper::Session | Keeper::Account => true,
+        Keeper::Shown | Keeper::Answer => false,
     }
 }
