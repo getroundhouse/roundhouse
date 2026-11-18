@@ -10,27 +10,35 @@ use gpui_kit::component::h_flex;
 use gpui_kit::test::TestWindowExt as _;
 use gpui_kit::{
     AnyElement, AppContext as _, Bounds, Context, HeadlessAppContext, IntoElement, ParentElement, PlatformTextSystem,
-    Render, Window, WindowBounds, WindowOptions, px, size,
+    Render, Styled as _, Window, WindowBounds, WindowOptions, div, px, size,
 };
-use look::{Signal, TaskRing, Work};
+use look::{Moving, MovingMarks, Signal, TaskRing, Work};
 
 #[derive(Clone, Copy)]
 enum Drawn {
     Mark(Signal),
     Ring(TaskRing),
+    /// Room for a mark that moves, which is painted over the view rather than in it.
+    Room(Moving),
 }
 
-struct Marks(Vec<Drawn>);
+struct Marks {
+    drawn: Vec<Drawn>,
+    moving: MovingMarks,
+}
 
 impl Render for Marks {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        self.moving.draw_again();
+        let moving = self.moving.clone();
         let element = |drawn: &Drawn| -> AnyElement {
             match *drawn {
                 Drawn::Mark(signal) => look::mark(signal, Work::Open, look::Size::Row, cx).into_any_element(),
                 Drawn::Ring(ring) => look::task_ring(ring, cx).into_any_element(),
+                Drawn::Room(mark) => moving.room(mark).into_any_element(),
             }
         };
-        h_flex().children(self.0.iter().map(element))
+        div().relative().child(h_flex().children(self.drawn.iter().map(element))).child(self.moving.over())
     }
 }
 
@@ -63,7 +71,8 @@ fn frames_for(drawn: Vec<Drawn>, motion: Motion) -> usize {
         show: false,
         ..Default::default()
     };
-    let (handle, _) = cx.update(|cx| gpui_kit::open_window(options(cx), cx, |_, cx| cx.new(|_| Marks(drawn)))).unwrap();
+    let marks = |_: &mut Context<Marks>| Marks { drawn, moving: MovingMarks::default() };
+    let (handle, _) = cx.update(|cx| gpui_kit::open_window(options(cx), cx, |_, cx| cx.new(marks))).unwrap();
     cx.run_until_parked();
     cx.update_window(handle, |_, window, cx| {
         window.simulate_next_frame(cx);
@@ -97,4 +106,18 @@ fn reduce_motion_and_pictures_hold_a_working_mark_still() {
     assert_eq!(frames_asked_for(&[Signal::Working, Signal::Background], Motion::HeldStill), 0);
     assert_eq!(frames_for(vec![Drawn::Ring(TaskRing::Running)], Motion::Reduced), 0);
     assert_eq!(frames_for(vec![Drawn::Ring(TaskRing::Running)], Motion::HeldStill), 0);
+}
+
+#[test]
+fn a_moving_mark_painted_over_its_view_asks_for_the_next_frame_and_a_still_one_doesnt() {
+    let rooms = |marks: &[Moving]| marks.iter().copied().map(Drawn::Room).collect::<Vec<_>>();
+    let moving = [Moving::ChatMark(Signal::Working), Moving::TaskRing(TaskRing::Running), Moving::Robot];
+
+    for mark in moving {
+        assert!(frames_for(rooms(&[mark]), Motion::Allowed) > 0, "{mark:?} held still");
+        assert_eq!(frames_for(rooms(&[mark]), Motion::Reduced), 0, "{mark:?} moved under Reduce Motion");
+    }
+    let still = [Moving::ChatMark(Signal::Idle), Moving::TaskRing(TaskRing::Watching)];
+    assert_eq!(frames_for(rooms(&still), Motion::Allowed), 0);
+    assert_eq!(frames_for(Vec::new(), Motion::Allowed), 0, "with no room left, nothing is painted over");
 }

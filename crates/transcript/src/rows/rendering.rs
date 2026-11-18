@@ -16,7 +16,7 @@ use gpui_kit::{
     AnyElement, App, Div, ElementId, Hsla, InteractiveElement as _, IntoElement, ParentElement, SharedString, Stateful,
     Styled, WeakEntity, div,
 };
-use look::{LineText, Typeset as _};
+use look::{LineText, MovingMarks, Typeset as _};
 use notices::{agent_exited, notice};
 use prompt::{Prompt, prompt_bubble};
 use protocol::capability::turns::OwnTurn;
@@ -43,6 +43,8 @@ pub(crate) struct Shared {
     /// The texts the rows draw from the kit's blocks, and what's selected of them.
     pub(crate) texts: Texts,
     pub(crate) selection: Selection,
+    /// Where the marks that move are painted, over the transcript rather than in it.
+    pub(crate) moving: MovingMarks,
 }
 
 /// Draws the list's row `item` from `log`, the version of the log whose rows the list was last told of, which every

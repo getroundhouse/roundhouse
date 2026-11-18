@@ -62,18 +62,7 @@ pub(crate) const LIGHT: f32 = 0.92;
 
 /// A workspace's mark, whose fan is in its pull request's colour.
 pub fn mark(signal: Signal, work: Work, size: Size, cx: &App) -> impl IntoElement {
-    let colors = colors(cx);
-    // Only the pull request colours the fan, so its colour means one thing. A reply nobody has read, or a question
-    // waiting on an answer, isn't on the mark at all: the name beside it says to look.
-    let color = work.fan(colors);
-    let hub = match signal {
-        Signal::Failed => colors.stopped,
-        Signal::Background => colors.text.opacity(LIGHT),
-        Signal::Idle | Signal::SettingUp | Signal::Working => unlit(color),
-    };
-    let moves = matches!(signal, Signal::Working | Signal::Background | Signal::SettingUp) && clock::moving(cx);
-    let t = if moves { clock::elapsed() } else { STILL_S };
-    drawn(signal, color, hub, size.width(), t, moves, cx)
+    drawn(Painted::now(signal, work, cx), size.width())
 }
 
 /// A chat's mark, which says only what its agent is doing. A pull request is the workspace's, not one chat's, so the
@@ -82,11 +71,17 @@ pub fn chat_mark(signal: Signal, size: Size, cx: &App) -> impl IntoElement {
     mark(signal, Work::NoPr, size, cx)
 }
 
+/// A chat's mark, painted within `bounds`, as [`chat_mark`] draws it. Returns whether it moves, so what paints it asks
+/// for the next frame.
+pub(crate) fn paint_chat_mark(signal: Signal, bounds: Bounds<Pixels>, window: &mut Window, cx: &App) -> bool {
+    Painted::now(signal, Work::NoPr, cx).paint(bounds, window, cx)
+}
+
 /// The mark in copper with nothing on it: the brand, for empty states. Copper is the theme's focus ring, because
 /// focus is the one other place the brand colour shows. The app icon is the same fan, drawn for each of its sizes.
 pub fn brand(width: Pixels, cx: &App) -> impl IntoElement {
     let copper = colors(cx).brand;
-    drawn(Signal::Idle, copper, unlit(copper), width, STILL_S, false, cx)
+    drawn(Painted { signal: Signal::Idle, color: copper, hub: unlit(copper), t: STILL_S, moves: false }, width)
 }
 
 /// A turntable, or a ring's hub, with nothing to say: in the dots' colour, and quieter than them.
@@ -94,21 +89,58 @@ pub(crate) fn unlit(fan: Hsla) -> Hsla {
     fan.opacity(0.6)
 }
 
-fn drawn(signal: Signal, color: Hsla, hub: Hsla, width: Pixels, t: f64, moves: bool, cx: &App) -> impl IntoElement {
-    let light = colors(cx).text;
-    canvas(
+/// A mark as it's painted at a moment: its fan's colour, its turntable's, and how far through its motion it is.
+#[derive(Clone, Copy)]
+struct Painted {
+    signal: Signal,
+    color: Hsla,
+    hub: Hsla,
+    t: f64,
+    moves: bool,
+}
+
+impl Painted {
+    /// A mark of `work` saying `signal`, as it is now.
+    fn now(signal: Signal, work: Work, cx: &App) -> Self {
+        let colors = colors(cx);
+        // Only the pull request colours the fan, so its colour means one thing. A reply nobody has read, or a question
+        // waiting on an answer, isn't on the mark at all: the name beside it says to look.
+        let color = work.fan(colors);
+        let hub = match signal {
+            Signal::Failed => colors.stopped,
+            Signal::Background => colors.text.opacity(LIGHT),
+            Signal::Idle | Signal::SettingUp | Signal::Working => unlit(color),
+        };
+        let moves = matches!(signal, Signal::Working | Signal::Background | Signal::SettingUp) && clock::moving(cx);
+        let t = if moves { clock::elapsed() } else { STILL_S };
+        Painted { signal, color, hub, t, moves }
+    }
+
+    /// Paints it within `bounds`, and returns whether it moves.
+    fn paint(self, bounds: Bounds<Pixels>, window: &mut Window, cx: &App) -> bool {
+        let Painted { signal, color, hub, t, moves } = self;
+        let light = colors(cx).text;
+        fan::in_one_layer(window, bounds, |window| paint(bounds, signal, color, hub, light, t, window));
+        moves
+    }
+}
+
+/// How big a mark `width` wide is, for `room`, which holds it.
+pub(crate) fn sized<E: Styled>(room: E, width: Pixels) -> E {
+    room.flex_none().w(width).h(width * ASPECT)
+}
+
+fn drawn(painted: Painted, width: Pixels) -> impl IntoElement {
+    let drawn = canvas(
         |_, _, _| {},
-        move |bounds, (), window, _| {
-            fan::in_one_layer(window, bounds, |window| paint(bounds, signal, color, hub, light, t, window));
+        move |bounds, (), window, cx| {
             // Drawn again on the display's next frame, for as long as it's on screen and moving.
-            if moves {
+            if painted.paint(bounds, window, cx) {
                 window.request_animation_frame();
             }
         },
-    )
-    .flex_none()
-    .w(width)
-    .h(width * ASPECT)
+    );
+    sized(drawn, width)
 }
 
 fn paint(bounds: Bounds<Pixels>, signal: Signal, color: Hsla, hub: Hsla, light: Hsla, t: f64, window: &mut Window) {

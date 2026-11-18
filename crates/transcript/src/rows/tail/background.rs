@@ -9,7 +9,7 @@ use gpui_kit::{
     AnyElement, App, Div, ElementId, InteractiveElement as _, IntoElement, ParentElement,
     StatefulInteractiveElement as _, Styled, TestSupportExt as _, WeakEntity, div,
 };
-use look::TaskRing;
+use look::{Moving, TaskRing};
 use protocol::event::AgentTask;
 use protocol::model::{Wait, WaitId, WaitUntil};
 
@@ -38,10 +38,12 @@ pub(super) fn lines(tasks: &[AgentTask], folds: &Folds, by: By, shared: &Shared,
 
 /// A group's mark, which each of its tasks' lines starts with, and what pointing at one of them says. The ring or
 /// the robot says it's in the background, so a line's words don't. The fan is the agent's, so no task has one.
-fn mark(group: TaskGroup, cx: &App) -> (AnyElement, &'static str) {
+fn mark(group: TaskGroup, shared: &Shared, cx: &App) -> (AnyElement, &'static str) {
     match group {
-        TaskGroup::Subagents => (look::robot_at_work(cx).into_any_element(), "Running in the background"),
-        TaskGroup::Commands => (ring(TaskRing::Running, cx), "Running in the background"),
+        TaskGroup::Subagents => (shared.moving.room(Moving::Robot).into_any_element(), "Running in the background"),
+        TaskGroup::Commands => {
+            (shared.moving.room(Moving::TaskRing(TaskRing::Running)).into_any_element(), "Running in the background")
+        }
         TaskGroup::Monitors => (ring(TaskRing::Watching, cx), "Watching in the background"),
     }
 }
@@ -51,7 +53,7 @@ fn mark(group: TaskGroup, cx: &App) -> (AnyElement, &'static str) {
 /// line has room. Clicking it opens it to their own lines, and closes it again, as a call's line does.
 fn several(group: TaskGroup, tasks: &[&AgentTask], open: bool, shared: &Shared, cx: &App) -> AnyElement {
     let colors = look::colors(cx);
-    let (mark, pointed_at) = mark(group, cx);
+    let (mark, pointed_at) = mark(group, shared, cx);
     let count = format!("{} {}", tasks.len(), group.name());
     let this = shared.this.clone();
     let set_open = move |cx: &mut App| {
@@ -86,7 +88,7 @@ fn what_for(tasks: &[&AgentTask]) -> String {
 /// line has, so its line reads as that call, and it ends with the button that opens the subagent tab, as its call's
 /// line does, once the agent has said which subagent it is, or which call started it.
 fn going(group: TaskGroup, task: &AgentTask, by: By, shared: &Shared, cx: &App) -> Div {
-    let (mark, pointed_at) = mark(group, cx);
+    let (mark, pointed_at) = mark(group, shared, cx);
     let text = task.description.clone().unwrap_or_else(|| group.one().to_string());
     let open = Opens::task(task).filter(|_| by == By::Place).map(|opens| {
         let id = ElementId::Name(format!("background-open/{}", task.id).into());

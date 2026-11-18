@@ -220,7 +220,7 @@ impl WorkspacePane {
                 let from = chat.map(|chat| (chat.id.clone(), chat_title(chat).to_string()));
                 band(from, title, self.subagents.shown(self.shown.all()), cx)
             }))
-            .child(div().flex_1().min_h_0().w_full().child(tab.transcript.clone()))
+            .child(div().flex_1().min_h_0().w_full().child(Transcript::drawn(&tab.transcript, cx)))
             .into_any_element()
     }
 }

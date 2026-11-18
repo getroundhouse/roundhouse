@@ -38,6 +38,7 @@ mod list_rows;
 mod mark;
 mod menus;
 pub mod motion;
+mod moving;
 mod named;
 mod pills;
 mod plan;
@@ -98,6 +99,7 @@ pub use mark::{Signal, Size, brand, chat_mark, mark};
 #[cfg(any(test, feature = "testing"))]
 pub use menus::shown_menu;
 pub use menus::{Menu, MenuRow, NoteKind, OpenMenu, RightClickMenu, menu, menu_row};
+pub use moving::{Moving, MovingMarks};
 pub use pills::{Pill, PillKind, pill};
 pub use plan::{plan_colors, plan_texture};
 pub use raised::raised;
