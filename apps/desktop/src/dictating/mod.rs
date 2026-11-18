@@ -7,6 +7,7 @@
 mod choice;
 mod deleting;
 mod downloading;
+pub(crate) mod language;
 mod microphone;
 mod readiness;
 mod words;

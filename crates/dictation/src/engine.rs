@@ -2,7 +2,7 @@
 //! at a time, once each has ended, for its final text, heard whole from the pieces the recording was cut into at its
 //! pauses.
 
-use crate::{Hints, Samples};
+use crate::{Hints, Language, Samples};
 
 /// A model that turns speech into text. It's loaded, used and dropped on the thread [`crate::Dictation`] keeps for it,
 /// so it needn't be `Send`: Core ML's models aren't.
@@ -11,12 +11,13 @@ pub trait Engine {
     /// that would be longer is heard whole in parts.
     fn longest_piece(&self) -> Samples;
 
-    /// Starts hearing a recording from its start, for its live text, biased toward `hints`.
-    fn listen(&self, hints: &Hints) -> Box<dyn Listening + '_>;
+    /// Starts hearing a recording in `language` from its start, for its live text, biased toward `hints`.
+    fn listen(&self, hints: &Hints, language: Language) -> Box<dyn Listening + '_>;
 
-    /// The final text of some of a recording, heard whole, at [`crate::SAMPLE_RATE`], biased toward `hints`: a sentence's
-    /// pieces, or as many as fit. It's no longer than [`Engine::longest_piece`]. Empty when nothing was said in it.
-    fn transcribe(&self, piece: &[f32], hints: &Hints) -> Result<String, EngineError>;
+    /// The final text of some of a recording in `language`, heard whole, at [`crate::SAMPLE_RATE`], biased toward
+    /// `hints`: a sentence's pieces, or as many as fit. It's no longer than [`Engine::longest_piece`]. Empty when nothing
+    /// was said in it.
+    fn transcribe(&self, piece: &[f32], hints: &Hints, language: Language) -> Result<String, EngineError>;
 }
 
 /// One recording, being heard for its live text.

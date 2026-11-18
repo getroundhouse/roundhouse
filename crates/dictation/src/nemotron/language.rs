@@ -1,5 +1,5 @@
-//! The language a recording is heard in: the prompt its encoders are given, and the alphabet what's heard is written
-//! in. The prompt only leans the model toward the language. On a short phrase it can't make out, it can still choose
+//! What the model is told of the language a recording is heard in: the prompt its encoders are given, and the alphabet
+//! what's heard is written in. The prompt only leans the model toward the language. On a short phrase it can't make out, it can still choose
 //! pieces in another language's alphabet, NVIDIA's own decoding included, so the decoder leaves those pieces out.
 
 use super::vocab::Vocabulary;
@@ -26,28 +26,91 @@ impl Alphabet {
     }
 }
 
-/// A language the model hears: its prompt's number, as the model's `metadata.json` numbers them, and its alphabet.
-pub(super) struct Language {
-    pub(super) prompt: i32,
-    alphabet: Alphabet,
+/// What the model is told of a recording's language: its prompt's number, as the model's `metadata.json` numbers them,
+/// and the alphabet it's written in, unless the model is left to tell.
+pub(super) struct Prompt {
+    pub(super) number: i32,
+    alphabet: Option<Alphabet>,
 }
 
-/// English, the first of the model's prompts.
-pub(super) const ENGLISH: Language = Language { prompt: 0, alphabet: Alphabet::Latin };
+impl Prompt {
+    pub(super) fn of(language: crate::Language) -> Self {
+        use crate::Language as L;
+        let (number, alphabet) = match language {
+            L::Auto => return Self { number: 127, alphabet: None },
+            L::Bulgarian => (30, Alphabet::Cyrillic),
+            L::Croatian => (29, Alphabet::Latin),
+            L::Czech => (22, Alphabet::Latin),
+            L::Danish => (25, Alphabet::Latin),
+            L::Dutch => (16, Alphabet::Latin),
+            L::English => (0, Alphabet::Latin),
+            L::Estonian => (60, Alphabet::Latin),
+            L::Finnish => (26, Alphabet::Latin),
+            L::French => (8, Alphabet::Latin),
+            L::German => (9, Alphabet::Latin),
+            L::Greek => (21, Alphabet::Greek),
+            L::Hungarian => (23, Alphabet::Latin),
+            L::Italian => (15, Alphabet::Latin),
+            L::Latvian => (61, Alphabet::Latin),
+            L::Lithuanian => (31, Alphabet::Latin),
+            L::Maltese => (102, Alphabet::Latin),
+            L::Polish => (17, Alphabet::Latin),
+            L::Portuguese => (13, Alphabet::Latin),
+            L::Romanian => (20, Alphabet::Latin),
+            L::Russian => (11, Alphabet::Cyrillic),
+            L::Slovak => (28, Alphabet::Latin),
+            L::Slovenian => (62, Alphabet::Latin),
+            L::Spanish => (3, Alphabet::Latin),
+            L::Swedish => (24, Alphabet::Latin),
+            L::Ukrainian => (19, Alphabet::Cyrillic),
+        };
+        Self { number, alphabet: Some(alphabet) }
+    }
+}
 
-/// The tokens whose pieces have a letter outside a language's alphabet. Pieces with no letters, such as punctuation,
-/// digits and `<unk>`, are in every language.
+/// The tokens a recording isn't heard as, for each alphabet, worked out once from the vocabulary.
+pub(super) struct LeftOut {
+    latin: OtherAlphabets,
+    cyrillic: OtherAlphabets,
+    greek: OtherAlphabets,
+}
+
+impl LeftOut {
+    pub(super) fn new(vocabulary: &Vocabulary) -> Self {
+        let other_than = |alphabet| OtherAlphabets::new(vocabulary, alphabet);
+        Self {
+            latin: other_than(Alphabet::Latin),
+            cyrillic: other_than(Alphabet::Cyrillic),
+            greek: other_than(Alphabet::Greek),
+        }
+    }
+
+    /// Those a recording `prompt` is given isn't heard as: none, when the model is left to tell its language.
+    pub(super) fn of(&self, prompt: &Prompt) -> &OtherAlphabets {
+        match prompt.alphabet {
+            None => &LEAVES_OUT_NONE,
+            Some(Alphabet::Latin) => &self.latin,
+            Some(Alphabet::Cyrillic) => &self.cyrillic,
+            Some(Alphabet::Greek) => &self.greek,
+        }
+    }
+}
+
+/// What a recording whose language the model is left to tell leaves out, which lasts as long as what it's of does.
+static LEAVES_OUT_NONE: OtherAlphabets = OtherAlphabets::NONE;
+
+/// The tokens whose pieces have a letter outside an alphabet. Pieces with no letters, such as punctuation, digits and
+/// `<unk>`, are in every alphabet.
 #[derive(Debug, PartialEq, Eq)]
 pub(super) struct OtherAlphabets(Vec<usize>);
 
 impl OtherAlphabets {
-    /// None, for tests of what doesn't depend on the alphabet.
-    #[cfg(test)]
+    /// None.
     pub(super) const NONE: Self = Self(Vec::new());
 
-    pub(super) fn new(vocabulary: &Vocabulary, language: &Language) -> Self {
+    fn new(vocabulary: &Vocabulary, alphabet: Alphabet) -> Self {
         let in_another = |text: &str| {
-            text.chars().filter(|c| c.is_alphabetic()).any(|letter| Alphabet::of(letter) != Some(language.alphabet))
+            text.chars().filter(|c| c.is_alphabetic()).any(|letter| Alphabet::of(letter) != Some(alphabet))
         };
         Self((0..vocabulary.pieces().len()).filter(|&token| in_another(vocabulary.text(token))).collect())
     }
@@ -66,16 +129,43 @@ impl OtherAlphabets {
 
 #[cfg(test)]
 mod tests {
-    use super::{Alphabet, ENGLISH, OtherAlphabets};
+    use std::collections::HashSet;
+
+    use super::{Alphabet, LeftOut, OtherAlphabets, Prompt};
+    use crate::Language;
     use crate::nemotron::vocab::Vocabulary;
 
-    #[test]
-    fn english_leaves_out_the_pieces_with_cyrillic_or_greek_letters_and_keeps_those_with_none() {
-        let pieces = ["<unk>", "▁the", "▁café", "ł", "ß", "▁Та", "й", "▁το", "ά", "▁", ".", "1", "€", "▁tak▁так"];
+    fn vocabulary(pieces: &[&str]) -> Vocabulary {
         let json = pieces.iter().enumerate().map(|(id, piece)| format!("\"{id}\": \"{piece}\"")).collect::<Vec<_>>();
-        let vocabulary = Vocabulary::parse(&format!("{{{}}}", json.join(", "))).unwrap();
+        Vocabulary::parse(&format!("{{{}}}", json.join(", "))).unwrap()
+    }
 
-        assert_eq!(OtherAlphabets::new(&vocabulary, &ENGLISH), OtherAlphabets(vec![5, 6, 7, 8, 13]));
+    #[test]
+    fn each_alphabet_leaves_out_the_pieces_with_another_alphabets_letters_and_keeps_those_with_none() {
+        let pieces = ["<unk>", "▁the", "▁café", "ł", "ß", "▁Та", "й", "▁το", "ά", "▁", ".", "1", "€", "▁tak▁так"];
+        let vocabulary = vocabulary(&pieces);
+
+        assert_eq!(OtherAlphabets::new(&vocabulary, Alphabet::Latin), OtherAlphabets(vec![5, 6, 7, 8, 13]));
+        assert_eq!(OtherAlphabets::new(&vocabulary, Alphabet::Cyrillic), OtherAlphabets(vec![1, 2, 3, 4, 7, 8, 13]));
+        assert_eq!(OtherAlphabets::new(&vocabulary, Alphabet::Greek), OtherAlphabets(vec![1, 2, 3, 4, 5, 6, 13]));
+    }
+
+    #[test]
+    fn a_language_leaves_out_the_other_alphabets_and_auto_leaves_out_none() {
+        let left_out = LeftOut::new(&vocabulary(&["▁the", "▁Та", "▁το"]));
+        let of = |language| left_out.of(&Prompt::of(language));
+
+        assert_eq!(of(Language::English), &OtherAlphabets(vec![1, 2]));
+        assert_eq!(of(Language::Ukrainian), &OtherAlphabets(vec![0, 2]));
+        assert_eq!(of(Language::Greek), &OtherAlphabets(vec![0, 1]));
+        assert_eq!(of(Language::Auto), &OtherAlphabets::NONE);
+    }
+
+    #[test]
+    fn each_language_has_a_prompt_of_its_own() {
+        let numbers: HashSet<i32> = Language::ALL.into_iter().map(|language| Prompt::of(language).number).collect();
+        assert_eq!(numbers.len(), Language::ALL.len());
+        assert_eq!(Prompt::of(Language::English).number, 0);
     }
 
     #[test]

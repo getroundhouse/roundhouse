@@ -13,12 +13,13 @@ use super::buffer::Buffer;
 use super::joins::{self, Ends, Join, is_mark};
 use super::recording::{Cancelled, Input, Update};
 use crate::pauses::{Cut, Pauses};
-use crate::{DictationError, Ending, Engine, Heard, Hints, Listening, Samples};
+use crate::{DictationError, Ending, Engine, Heard, Hints, Language, Listening, Samples};
 
 /// Hears the recording `input` brings until it's stopped, which gives how it went, or cancelled, which gives `None`.
 pub(super) fn hear(
     engine: &dyn Engine,
     hints: &Hints,
+    language: Language,
     input: &Buffer,
     updates: &flume::Sender<Update>,
     cancelled: &Cancelled,
@@ -26,7 +27,8 @@ pub(super) fn hear(
     let mut hearing = Hearing {
         engine,
         hints,
-        listening: engine.listen(hints),
+        language,
+        listening: engine.listen(hints, language),
         pauses: Pauses::new(engine.longest_piece()),
         ended: VecDeque::new(),
         audio: Vec::new(),
@@ -57,6 +59,7 @@ pub(super) fn hear(
 struct Hearing<'e> {
     engine: &'e dyn Engine,
     hints: &'e Hints,
+    language: Language,
     listening: Box<dyn Listening + 'e>,
     pauses: Pauses,
     /// Pieces that have ended but aren't final yet, in order: those of a sentence that hasn't ended, or whose end isn't
@@ -238,7 +241,7 @@ impl Hearing<'_> {
         let words = pieces.iter().flat_map(|piece| &piece.live).skip_while(|heard| is_mark(heard));
         let live: String = words.map(|heard| heard.text.as_str()).collect();
         let audio: Vec<f32> = pieces.into_iter().flat_map(|piece| piece.audio).collect();
-        let heard = self.engine.transcribe(&audio, self.hints)?;
+        let heard = self.engine.transcribe(&audio, self.hints, self.language)?;
         let text = if joins::has_words(&heard) { heard } else { live };
         let carries_on = std::mem::take(&mut self.carries_on);
         if let Some((text, next_carries_on)) = joins::final_text(&text, carries_on, ends) {

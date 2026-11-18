@@ -3,7 +3,8 @@
 //! 16 kHz, and no longer than 15 s.
 //!
 //! `cargo run -p dictation --release --example transcribe -- <model directory> <file.wav>...`, where the directory
-//! holds the files `dictation::nemotron::MODEL` lists. The first run compiles the encoders for the Neural Engine,
+//! holds the files `dictation::nemotron::MODEL` lists. `--language en` hears them in a language, by its code, rather
+//! than leave the model to tell, and `--hint word` biases it toward a word. The first run compiles the encoders for the Neural Engine,
 //! which takes tens of seconds.
 
 #![expect(clippy::unwrap_used, clippy::expect_used, reason = "a tool run by hand, which stops at the first problem")]
@@ -12,15 +13,19 @@ use std::path::Path;
 use std::time::Instant;
 
 use dictation::nemotron::Nemotron;
-use dictation::{Engine as _, Hints};
+use dictation::{Engine as _, Hints, Language};
 
 fn main() {
     let mut hint_words = Vec::new();
+    let mut language = Language::Auto;
     let mut positional = Vec::new();
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
         if arg == "--hint" {
             hint_words.push(args.next().expect("a word after --hint"));
+        } else if arg == "--language" {
+            let code = args.next().expect("a language's code after --language");
+            language = Language::from_code(&code).unwrap_or_else(|| panic!("no language has the code {code:?}"));
         } else {
             positional.push(arg);
         }
@@ -32,14 +37,14 @@ fn main() {
     eprintln!("loaded in {:?}", started.elapsed());
     for file in files {
         let audio = read(Path::new(file));
-        let mut listening = engine.listen(&hints);
+        let mut listening = engine.listen(&hints, language);
         let mut live = String::new();
         // 10 ms at a time, as the microphone gives it.
         for buffer in audio.chunks(160) {
             live.extend(listening.hear(buffer).unwrap().into_iter().map(|heard| heard.text));
         }
         live.extend(listening.finish().unwrap().into_iter().map(|heard| heard.text));
-        let whole = engine.transcribe(&audio, &hints).unwrap();
+        let whole = engine.transcribe(&audio, &hints, language).unwrap();
         println!("{}", serde_json::json!({ "file": file, "live": live.trim(), "whole": whole }));
     }
 }

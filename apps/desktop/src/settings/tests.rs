@@ -89,6 +89,7 @@ fn saving_keeps_what_a_newer_build_wrote() {
             "play_sound": true,
             "sound": "chime",
             "dictation": "ask_first",
+            "dictation_language": "auto",
             "mute_while_dictating": false,
             "from_later": [1, 2],
         })

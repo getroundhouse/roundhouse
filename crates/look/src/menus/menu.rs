@@ -41,6 +41,13 @@ impl Menu {
         self
     }
 
+    /// Scrolls once its rows would make it taller than half the window, or 450px, and opens on the row that's chosen,
+    /// for a long list to choose one from, such as dictation's languages.
+    pub fn scrolls(mut self) -> Self {
+        self.kit = self.kit.scrollable(true);
+        self
+    }
+
     /// Exactly `width` wide, such as as wide as what opens it.
     pub fn width(mut self, width: Pixels) -> Self {
         self.kit = self.kit.min_w(width).max_w(width);

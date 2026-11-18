@@ -1,7 +1,8 @@
 use super::{Decoder, Encoded, MAX_LIVE_LAG, MOST_A_STEP, Token};
 use crate::Hints;
+use crate::Language;
 use crate::hints::HintGraph;
-use crate::nemotron::language::{ENGLISH, OtherAlphabets};
+use crate::nemotron::language::{LeftOut, OtherAlphabets, Prompt};
 use crate::nemotron::parts::Tensor;
 use crate::nemotron::stand_in::{self, ScriptedTransducer};
 use crate::nemotron::transducer::{BLANK, ENCODED};
@@ -163,7 +164,8 @@ fn a_piece_in_another_alphabet_is_never_heard_even_when_the_model_likes_it_best(
         _ => vec![(BLANK, 10.0)],
     });
     let window = encoded(&[0.0, 1.0], Steps(0));
-    let english = OtherAlphabets::new(&vocabulary, &ENGLISH);
+    let left_out = LeftOut::new(&vocabulary);
+    let english = left_out.of(&Prompt::of(Language::English));
 
     let heard = |other_alphabets| {
         let tokens = Decoder::new(other_alphabets).decode_all(&transducer, &empty_hints(), &window, Steps(0)..Steps(2));
@@ -171,5 +173,5 @@ fn a_piece_in_another_alphabet_is_never_heard_even_when_the_model_likes_it_best(
     };
 
     assert_eq!(heard(&EVERY_ALPHABET), " Та");
-    assert_eq!(heard(&english), " Too");
+    assert_eq!(heard(english), " Too");
 }

@@ -50,6 +50,10 @@ pub(crate) struct Settings {
     /// person chooses, since turning it on downloads 2.4 GB.
     #[serde(default)]
     pub(crate) dictation: DictationChoice,
+    /// The language what's dictated is heard in. Auto unless chosen, since the model hears any of its languages under
+    /// Auto, and a wrong one far worse.
+    #[serde(default, with = "crate::dictating::language")]
+    pub(crate) dictation_language: dictation::Language,
     /// Whether the sound output is muted while something is dictated, so what's playing doesn't drown out what's said
     /// or get heard with it. Off unless chosen, since it changes the whole system's sound rather than the app's.
     #[serde(default)]
@@ -72,6 +76,7 @@ impl Default for Settings {
             play_sound: on(),
             sound: Sound::default(),
             dictation: DictationChoice::default(),
+            dictation_language: dictation::Language::default(),
             mute_while_dictating: false,
             others: Map::new(),
         }
