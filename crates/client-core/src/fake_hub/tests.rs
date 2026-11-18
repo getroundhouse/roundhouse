@@ -2,7 +2,7 @@
 //! fake hub works something out of its world, it does so by the rule the hub follows, as `protocol` states it.
 
 use protocol::client::{ErrorCode, log};
-use protocol::event::{EventBody, ExitReason, TaskKind};
+use protocol::event::{ContentBlock, EventBody, ExitReason, TaskKind};
 use protocol::model::{AgentKind, Place, Seq, SessionStatus, SubagentId};
 
 use super::events::{subagent_started, taken, task, text, user_prompt, within};
@@ -132,6 +132,28 @@ fn a_chat_s_subagents_go_by_the_id_their_agent_gives_or_by_their_call() {
 
     let ids: Vec<_> = subagents.iter().map(protocol::model::Subagent::id).collect();
     assert_eq!(ids, [SubagentId::from("agent-7"), SubagentId::of_call(&"toolu_1".into())]);
+}
+
+/// As `Lately::add` says: what a subagent wrote, and not what was written to it, cut short.
+#[test]
+fn what_a_subagent_has_done_lately_is_what_it_wrote_cut_short() {
+    let mut world = World::default();
+    let repo = world.repo("aspen");
+    let workspace = world.workspace(&repo, "elm");
+    let told = EventBody::AgentUser {
+        subagent: Some("toolu_1".into()),
+        blocks: vec![ContentBlock::Text { text: "Look around".into(), images: Vec::new() }],
+    };
+    let long = "a".repeat(5_000);
+    let events =
+        vec![subagent_started("toolu_1", "explore", "Look", "Look around"), told, within("toolu_1", text("m1", &long))];
+    let chat = world.chat(&workspace, SessionStatus::Running, events);
+    let (_dir, client) = served(world);
+
+    let (subagents, _) = client.session_subagents(&chat).unwrap();
+
+    let since = subagents[0].lately.as_ref().and_then(|work| work.since.as_ref()).unwrap();
+    assert!(since.cut && since.text.chars().all(|c| c == 'a'), "only what it wrote, cut short: {since:?}");
 }
 
 /// As `Subagent::named` says: a subagent its agent gave an ID is read, followed and searched by its call as by that ID.

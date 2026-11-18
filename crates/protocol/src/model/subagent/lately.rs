@@ -1,11 +1,14 @@
-//! What a subagent has done lately, from its events: each call as it was made, with the text it wrote just before it,
-//! and what came back as its output, with each text it holds cut short.
+//! What a subagent has done lately, from its events, which its call shows while it works: its newest calls, each as it
+//! was made, with the text it wrote just before it and what came back, then what it's written since. Every change to a
+//! subagent's record goes to every client, so only a few calls are kept, and each text is cut short. A call is kept
+//! whole, so its line says what it did, such as how many lines a write wrote. A write holds the whole file, so that's
+//! what can still make a record large. The hub keeps a subagent's record by this, and a fake hub makes one by it.
 
-use protocol::capability::calls::CallOutput;
-use protocol::capability::calls::output::{CommandOutput, FileOutcome, Found, FoundLine, Lines, McpContent, Paths};
-use protocol::event::ContentBlock;
-use protocol::model::{Lately, LatelyCall, LatelyResult, Said};
-use protocol::short_text::start_of;
+use super::record::{Lately, LatelyCall, LatelyResult, Said};
+use crate::capability::calls::CallOutput;
+use crate::capability::calls::output::{CommandOutput, FileOutcome, Found, FoundLine, Lines, McpContent, Paths};
+use crate::event::ContentBlock;
+use crate::short_text::start_of;
 
 /// How many of its newest calls are kept, which is as many as its call shows.
 pub(super) const CALLS_KEPT: usize = 3;
@@ -17,42 +20,44 @@ pub(super) const TEXT_KEPT: usize = 1_000;
 /// changes.
 pub(super) const RESULT_KEPT: usize = 2_000;
 
-/// Adds what one of its messages did, block by block, and says whether that changed anything. `wrote` says the message
-/// is the subagent's own, so its text is what it wrote. Text in a `user` line was written to it, such as the prompt
-/// the CLI sends a subagent run in the foreground, which its call already shows, so only what came back is taken
-/// from one.
-pub(in super::super) fn add(work: &mut Lately, blocks: &[ContentBlock], wrote: bool) -> bool {
-    let mut changed = false;
-    for block in blocks {
-        match block {
-            ContentBlock::Text { text, .. } if wrote => changed |= wrote_text(&mut work.since, text),
-            ContentBlock::Call { id, call } => {
-                // Whole, as the record's newest call always has been, so its line says what it did.
-                work.calls.push(LatelyCall {
-                    before: work.since.take(),
-                    id: id.clone(),
-                    call: call.clone(),
-                    result: None,
-                });
-                if work.calls.len() > CALLS_KEPT {
-                    work.calls.remove(0);
+impl Lately {
+    /// Adds what one of its messages did, block by block, and says whether that changed anything. `wrote` says the
+    /// message is the subagent's own, so its text is what it wrote. Text in a `user` line was written to it, such as
+    /// the prompt the CLI sends a subagent run in the foreground, which its call already shows, so only what came back
+    /// is taken from one.
+    pub fn add(&mut self, blocks: &[ContentBlock], wrote: bool) -> bool {
+        let mut changed = false;
+        for block in blocks {
+            match block {
+                ContentBlock::Text { text, .. } if wrote => changed |= wrote_text(&mut self.since, text),
+                ContentBlock::Call { id, call } => {
+                    // Whole, as the record's newest call always has been, so its line says what it did.
+                    self.calls.push(LatelyCall {
+                        before: self.since.take(),
+                        id: id.clone(),
+                        call: call.clone(),
+                        result: None,
+                    });
+                    if self.calls.len() > CALLS_KEPT {
+                        self.calls.remove(0);
+                    }
+                    changed = true;
                 }
-                changed = true;
+                ContentBlock::CallResult { tool_use_id, output, is_error, denied, images } => {
+                    let Some(made) = self.calls.iter_mut().find(|made| made.id == *tool_use_id) else { continue };
+                    let (output, cut) = kept(output);
+                    let (is_error, images, denied) = (*is_error, images.clone(), denied.clone());
+                    made.result = Some(LatelyResult { output, is_error, cut, images, denied });
+                    changed = true;
+                }
+                ContentBlock::Text { .. }
+                | ContentBlock::Thinking { .. }
+                | ContentBlock::Image { .. }
+                | ContentBlock::Unknown => {}
             }
-            ContentBlock::CallResult { tool_use_id, output, is_error, denied, images } => {
-                let Some(made) = work.calls.iter_mut().find(|made| made.id == *tool_use_id) else { continue };
-                let (output, cut) = kept(output);
-                let (is_error, images, denied) = (*is_error, images.clone(), denied.clone());
-                made.result = Some(LatelyResult { output, is_error, cut, images, denied });
-                changed = true;
-            }
-            ContentBlock::Text { .. }
-            | ContentBlock::Thinking { .. }
-            | ContentBlock::Image { .. }
-            | ContentBlock::Unknown => {}
         }
+        changed
     }
-    changed
 }
 
 /// What came back, as a record keeps it, and whether any of it was cut: each text it holds, in the order they come,

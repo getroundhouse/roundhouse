@@ -1,5 +1,4 @@
 use super::super::{Store, StoreError, current_rev, from_text, json_at, lock, rev_of, text_of};
-use super::lately;
 use protocol::event::{ContentBlock, EventBody, SessionEvent};
 use protocol::model::{Lately, ModelName, Rev, SessionId, Subagent, SubagentId, SubagentStatus};
 use rusqlite::types::ValueRef;
@@ -155,7 +154,7 @@ fn note_work(
     let made = blocks.iter().filter(|block| matches!(block, ContentBlock::Call { .. })).count();
     let wrote = matches!(event.body, EventBody::Assistant { .. });
     let mut lately = working_on(tx, session, subagent)?;
-    let added = lately.as_mut().is_some_and(|work| lately::add(work, blocks, wrote));
+    let added = lately.as_mut().is_some_and(|work| work.add(blocks, wrote));
     if made == 0 && !added {
         return Ok(changed(model, subagent));
     }
