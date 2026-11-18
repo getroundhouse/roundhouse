@@ -8,7 +8,7 @@ use crate::find::{FindLook, Part};
 use crate::folds::Folds;
 use crate::item_key::ItemKey;
 use crate::texts::{Style, TextAt, Written};
-use crate::transcript::{AtWork, Model, PullRequestStanding};
+use crate::transcript::{AtWork, Model};
 use crate::{attachments, find};
 use client_core::session_log::{By, SessionLog};
 use gpui_kit::component::v_flex;
@@ -23,7 +23,7 @@ use protocol::tail::{BlockKind, Retrying, Tail};
 use std::time::Duration;
 
 /// What the end of the chat draws: what the agent is still writing, the prompts it hasn't read yet, what the
-/// session's record says it's at, and where the pull request stands, which a line for a wait on it says.
+/// session's record says it's at.
 pub(in super::super) struct EndOfChat<'a> {
     pub(in super::super) tail: &'a Tail,
     pub(in super::super) waiting: &'a [Waiting],
@@ -31,7 +31,6 @@ pub(in super::super) struct EndOfChat<'a> {
     /// What's open, which says how a thought still being written shows, and which lines for several background tasks
     /// have theirs under them.
     pub(in super::super) folds: &'a Folds,
-    pub(in super::super) pull_request: Option<&'a PullRequestStanding>,
     /// It's the subagent tab's, whose tail the hub sends with only what its subagent is writing.
     pub(in super::super) alone: bool,
 }
@@ -63,7 +62,7 @@ pub(in super::super) fn waiting(log: &SessionLog, m: &Model) -> Vec<Waiting> {
 /// read `by` place, which keeps its work apart, since only then can the tab read it. Nothing's found at the end of the
 /// chat, since it isn't counted, so nothing's marked there either.
 pub(in super::super) fn render_tail(end: &EndOfChat, shared: &Shared, by: By, cx: &App) -> AnyElement {
-    let EndOfChat { tail, waiting, at_work, folds, pull_request, alone } = *end;
+    let EndOfChat { tail, waiting, at_work, folds, alone } = *end;
     let (written, placed) = still_writing(tail, alone, shared, folds.thinking_open(), cx);
     let mut after: Vec<AnyElement> = Vec::new();
     if at_work.working {
@@ -72,7 +71,7 @@ pub(in super::super) fn render_tail(end: &EndOfChat, shared: &Shared, by: By, cx
     }
     // Left going by a turn, or started during one.
     after.extend(background::lines(&at_work.background, folds, by, shared, cx));
-    let wait = at_work.waits.iter().map(|wait| background::wait_line(wait, pull_request, shared, cx));
+    let wait = at_work.waits.iter().map(|wait| background::wait_line(wait, shared, cx));
     after.extend(wait.map(IntoElement::into_any_element));
     if waiting.is_empty() {
         if written.is_empty() && after.is_empty() {

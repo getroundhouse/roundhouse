@@ -8,9 +8,8 @@ use gpui_kit::{
     AnyElement, App, Div, InteractiveElement as _, IntoElement, ParentElement as _, Styled as _, Window, div,
 };
 use look::{IconSizing as _, Typeset as _, Work};
-use protocol::model::{BranchName, Local, PullRequest, Standing, Workspace};
+use protocol::model::{BranchName, PullRequest, Standing, Workspace};
 use std::time::Duration;
-use transcript::PullRequestStanding;
 use words::Action;
 
 /// How often the pull request showing is read again. Soon enough to see a check finish or the queue merge it within
@@ -49,17 +48,6 @@ impl Lookup {
 
     pub fn work(&self) -> Work {
         self.standing().map_or(Work::NoPr, words::work)
-    }
-
-    /// Where it stands on GitHub, which a chat's line for a wait on it says, as [`words::for_a_wait`] does, leaving out
-    /// the worktree, since a wait goes by what GitHub says. `None` until it's known, with none, and where that says
-    /// nothing.
-    pub fn for_a_wait(&self) -> Option<PullRequestStanding> {
-        let pr = self.pull_request()?;
-        let on_github = PullRequest { local: Local::default(), ..pr.clone() };
-        let words =
-            words::for_a_wait(Standing::of(Some(&on_github)), pr.checks, pr.base.as_ref().map(BranchName::as_str))?;
-        Some(PullRequestStanding { number: pr.number, words })
     }
 
     /// Takes the hub's answer, unless a newer ask has been made, whose answer can arrive first, so this one says

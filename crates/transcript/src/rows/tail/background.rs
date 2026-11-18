@@ -19,7 +19,7 @@ use crate::rows::Shared;
 use crate::rows::line::{START_CHARS, lead, opening};
 use crate::rows::tools::agent::{Opens, open_tab};
 use crate::task_lines::{TaskGroup, TaskLine, task_lines};
-use crate::transcript::{PullRequestStanding, Transcript};
+use crate::transcript::Transcript;
 use client_core::calls::agent;
 
 /// The lines for the tasks the agent runs in the background, as `crate::task_lines` lists them.
@@ -95,18 +95,19 @@ fn going(group: TaskGroup, task: &AgentTask, by: By, shared: &Shared, cx: &App) 
     in_the_background(("background", task.id.as_str()), mark, text, pointed_at, open, cx)
 }
 
-/// The agent's wait on the pull request, as the hub keeps it: the ring a monitor has, held still, since nothing runs
-/// for it here, what it waits on, and where the pull request stands on GitHub, which the agent's own words for it
-/// don't say, then Stop, which calls it off. Pointing at it says what ends it.
-pub(super) fn wait_line(wait: &Wait, standing: Option<&PullRequestStanding>, shared: &Shared, cx: &App) -> Div {
-    let (text, pointed_at) = wait_words(wait, standing);
+/// The agent's wait on pull requests, as the hub keeps it: the ring a monitor has, held still, since nothing runs for
+/// it here, what it waits on, and where its pull requests stand, as the hub last read them, then Stop, which calls it
+/// off. Pointing at it says what ends it.
+pub(super) fn wait_line(wait: &Wait, shared: &Shared, cx: &App) -> Div {
+    let (text, pointed_at) = wait_words(wait);
     let stop = stop_waiting(&wait.id, &shared.this);
     in_the_background(("wait", wait.id.as_str()), ring(TaskRing::Watching, cx), text, pointed_at, Some(stop), cx)
 }
 
-/// What a wait's line says, and what pointing at it says: what it waits on, and where the pull request stands, from
-/// what's said of the one it waits on.
-fn wait_words(wait: &Wait, standing: Option<&PullRequestStanding>) -> (String, &'static str) {
+/// What a wait's line says, and what pointing at it says: what it waits on, and where its pull requests stand, from
+/// the hub's reading of them. A wait the singular tool started, which only a hub from before it was dropped can still
+/// have open, has no reading, so it says only what it waits on.
+fn wait_words(wait: &Wait) -> (String, &'static str) {
     let what = format!("Waiting on {}", waits::watched(&wait.watching()));
     if let Some(watch) = &wait.watch {
         let pending = watch
@@ -138,12 +139,7 @@ fn wait_words(wait: &Wait, standing: Option<&PullRequestStanding>) -> (String, &
         }
         WaitUntil::Done | WaitUntil::Merged | WaitUntil::Unknown => "Until it's merged or closed, or needs the agent",
     };
-    // What's said of another pull request says nothing of this one, which the branch had as the wait started.
-    let text = match standing.filter(|standing| standing.number == wait.number) {
-        Some(standing) => format!("{what} \u{b7} {}", standing.words),
-        None => what,
-    };
-    (text, pointed_at)
+    (what, pointed_at)
 }
 
 /// Calls off the wait. Its line goes as the hub records that, and the agent's CLI hears as it next asks after its task,
@@ -203,11 +199,10 @@ mod tests {
     use protocol::model::{Wait, WaitUntil};
 
     use super::wait_words;
-    use crate::transcript::PullRequestStanding;
 
-    /// The branch's pull request can be another by the time the app reads it, which says nothing of the one waited on.
+    /// A wait the singular tool started has no reading of its pull request, so its line says only what it waits on.
     #[test]
-    fn a_waits_line_says_where_only_its_own_pull_request_stands() {
+    fn a_wait_with_no_reading_says_only_what_it_waits_on() {
         let wait = Wait {
             id: "w1".into(),
             session_id: "s1".into(),
@@ -219,14 +214,9 @@ mod tests {
             started_at_ms: 0,
             ended: None,
         };
-        let standing = |number| PullRequestStanding { number, words: "2 checks running".to_string() };
-        let said = |wait: &Wait, standing: Option<&PullRequestStanding>| wait_words(wait, standing).0;
 
-        assert_eq!(said(&wait, Some(&standing(7))), "Waiting on #7's checks \u{b7} 2 checks running");
-        assert_eq!(said(&wait, Some(&standing(8))), "Waiting on #7's checks", "another pull request's");
-        assert_eq!(said(&wait, None), "Waiting on #7's checks");
-        let done = Wait { until: WaitUntil::Done, ..wait.clone() };
-        assert_eq!(said(&done, Some(&standing(7))), "Waiting on #7 \u{b7} 2 checks running");
+        assert_eq!(wait_words(&wait).0, "Waiting on #7's checks");
+        assert_eq!(wait_words(&Wait { until: WaitUntil::Done, ..wait }).0, "Waiting on #7");
     }
 
     /// A wait asked about pull requests names them, what for and how many of the checks it goes by are still running,
@@ -235,13 +225,13 @@ mod tests {
     fn a_waits_line_names_the_pull_requests_it_was_asked_about() {
         let wait = protocol::fixtures::pull_request_wait("w1");
 
-        let (said, _) = wait_words(&wait, None);
+        let (said, _) = wait_words(&wait);
 
         assert_eq!(said, "Waiting on #7 \u{b7} 1 required check running");
         let merge = Wait { until: WaitUntil::Merged, ..wait.clone() };
-        assert_eq!(wait_words(&merge, None).0, "Waiting on #7 to merge \u{b7} 1 check running");
+        assert_eq!(wait_words(&merge).0, "Waiting on #7 to merge \u{b7} 1 check running");
         let mut unread = wait;
         unread.watch.as_mut().unwrap().read_error = Some("offline".into());
-        assert_eq!(wait_words(&unread, None).0, "Waiting on #7 for required checks \u{b7} couldn't refresh GitHub");
+        assert_eq!(wait_words(&unread).0, "Waiting on #7 for required checks \u{b7} couldn't refresh GitHub");
     }
 }
