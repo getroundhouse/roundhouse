@@ -1,10 +1,11 @@
 [package]
 name = "look"
-description = "How the app looks: every colour it draws with, every kind of text it sets and every corner it rounds, by what each is for, every size a button, a bar, a row and an icon come in, the width of an edge, the theme made from them, code's colours, the words that changed in a diff's lines, the status mark, the app icon, and the parts of the window tests find."
+description = "How the app looks: every colour it draws with, every kind of text it sets and every corner it rounds, by what each is for, every size a button, a bar, a row and an icon come in, the width of an edge, the theme made from them, code's colours, the words that changed in a diff's lines, the status mark, the app icon, the file icons, and the parts of the window tests find."
 version.workspace = true
 edition.workspace = true
 publish.workspace = true
 license.workspace = true
+build = "build/main.rs"
 
 [features]
 # What only tests use: holding the marks and the time still for pictures, setting off a scroll by a test's clock, and
@@ -22,6 +23,10 @@ similar.workspace = true
 # highlighting a large diff from 12.2 s of CPU to 2.6 s.
 syntect = { workspace = true, features = ["default-fancy", "regex-onig"] }
 two-face = { workspace = true, features = ["syntect-onig"] }
+
+# Reads the file icons' manifest into tables, so the app never parses it.
+[build-dependencies]
+serde_json.workspace = true
 
 [dev-dependencies]
 # For a test that installs the theme in an app and reads it back.

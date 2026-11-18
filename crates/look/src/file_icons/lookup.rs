@@ -1,35 +1,37 @@
 use gpui_kit::component::Icon;
 use gpui_kit::{AnyElement, App, IntoElement as _, Styled as _, img};
-use look::IconSizing as _;
+
+use crate::colors::colors;
+use crate::icon_sizes::{IconSize, IconSizing as _};
 
 include!(concat!(env!("OUT_DIR"), "/file_icons.rs"));
 
 /// How big a file's or a folder's icon is drawn: a large icon, since it stands for its row. Each is embedded at this
 /// size, as `build/file_icons.rs` has it, which a test holds to it.
-pub(crate) const ICON: look::IconSize = look::IconSize::Large;
+pub const FILE_ICON: IconSize = IconSize::Large;
 
 /// The icon at `path`, if it's one of these, for the app's asset source.
-pub(crate) fn load(path: &str) -> Option<&'static [u8]> {
+pub fn file_icon_asset(path: &str) -> Option<&'static [u8]> {
     find(ICONS, path.strip_prefix("file-icons/")?.strip_suffix(".svg")?)
 }
 
 /// The icon for the file at `path`: its kind's, in its own colours, or the plain file, if it has no kind of its own.
-pub(crate) fn file_icon(path: &str, cx: &App) -> AnyElement {
+pub fn file_icon(path: &str, cx: &App) -> AnyElement {
     match file_kind(path) {
         FILE => plain(FILE, cx).into_any_element(),
-        kind => img(asset(kind)).size(ICON.size()).flex_none().into_any_element(),
+        kind => img(asset(kind)).size(FILE_ICON.size()).flex_none().into_any_element(),
     }
 }
 
 /// The plain folder, open or closed.
-pub(crate) fn folder_icon(open: bool, cx: &App) -> Icon {
+pub fn folder_icon(open: bool, cx: &App) -> Icon {
     plain(if open { OPEN_FOLDER } else { FOLDER }, cx)
 }
 
 /// An icon that stands for no kind in particular, the plain file or a folder, in the muted text colour, so it gives way
 /// to those that say what a file is. It's drawn as the kit's icons are, which keeps only its shape.
 fn plain(name: &str, cx: &App) -> Icon {
-    Icon::empty().path(asset(name)).sized(ICON).flex_none().text_color(look::colors(cx).text_muted)
+    Icon::empty().path(asset(name)).sized(FILE_ICON).flex_none().text_color(colors(cx).text_muted)
 }
 
 pub(super) fn asset(name: &str) -> String {

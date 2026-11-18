@@ -1,5 +1,4 @@
 use super::listed;
-use crate::file_icons::folder_icon;
 use crate::file_tree::{List, Row, chain, file_frame, folder_row, split};
 use client_core::{Client, ClientError};
 use gpui_kit::component::v_flex;
@@ -10,6 +9,7 @@ use gpui_kit::{
 };
 use listed::Listed;
 use look::Typeset as _;
+use look::folder_icon;
 use protocol::client::ErrorCode;
 use protocol::model::{WorkspaceId, WorktreeFiles};
 use std::collections::{BTreeMap, HashMap, HashSet};

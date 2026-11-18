@@ -294,7 +294,7 @@
       ],
       dependencyDashboardApproval: true,
       prBodyNotes: [
-        "> [!WARNING]\n> This changes only `VERSION`. Set `INTEGRITY` in `tools/file-icons/update.py` to the new release's, run the script, then `cargo test -p desktop` and accept the gallery's screens if the icons look different, before merging.",
+        "> [!WARNING]\n> This changes only `VERSION`. Set `INTEGRITY` in `tools/file-icons/update.py` to the new release's, run the script, then `cargo test -p look` and accept the gallery's screens if the icons look different, before merging.",
       ],
     },
     {

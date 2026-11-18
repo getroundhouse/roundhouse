@@ -18,7 +18,7 @@ fn named() -> Vec<&'static str> {
 #[test]
 fn every_icon_a_name_can_get_is_embedded() {
     // A name the asset source can't find draws as nothing at all, rather than failing.
-    let missing: Vec<&str> = named().into_iter().filter(|icon| load(&asset(icon)).is_none()).collect();
+    let missing: Vec<&str> = named().into_iter().filter(|icon| file_icon_asset(&asset(icon)).is_none()).collect();
     assert!(missing.is_empty(), "named but not embedded: {missing:?}");
 }
 
@@ -54,7 +54,7 @@ fn every_icon_is_in_its_colours_and_of_the_size_it_s_drawn_at() {
         .map(|(name, _)| *name)
         .collect();
     assert!(wrong_size.is_empty(), "not drawn at {ICON_SIZE}: {wrong_size:?}");
-    assert_eq!(gpui_kit::px(ICON_SIZE), ICON.size(), "embedded at the size they're drawn at");
+    assert_eq!(gpui_kit::px(ICON_SIZE), FILE_ICON.size(), "embedded at the size they're drawn at");
     // A colour left named, as `var(--vscode-ctp-blue)`, would draw as nothing.
     let unfilled: Vec<&str> = ICONS.iter().filter(|(_, svg)| contains(svg, b"var(")).map(|(name, _)| *name).collect();
     assert!(unfilled.is_empty(), "colours not filled in: {unfilled:?}");
@@ -64,7 +64,7 @@ fn every_icon_is_in_its_colours_and_of_the_size_it_s_drawn_at() {
 fn the_plain_file_and_the_folders_are_drawn_in_one_colour() {
     // They're drawn as icons in the text colour they're given, which keeps only their shape.
     for name in [FILE, FOLDER, OPEN_FOLDER] {
-        let svg = String::from_utf8_lossy(load(&asset(name)).unwrap_or_default()).to_string();
+        let svg = String::from_utf8_lossy(file_icon_asset(&asset(name)).unwrap_or_default()).to_string();
         let mut colours: Vec<&str> = svg.match_indices('#').map(|(at, _)| &svg[at..(at + 7).min(svg.len())]).collect();
         colours.sort_unstable();
         colours.dedup();

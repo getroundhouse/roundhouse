@@ -41,7 +41,7 @@ const CRATES_IO: &str = "registry+https://github.com/rust-lang/crates.io-index";
 /// listed here.
 const VENDORED: &[(&str, &str, &str, &[&str])] = &[
     // Catppuccin's icons, manifest and colours, which `tools/file-icons/update.py` writes.
-    ("apps/desktop/file-icons", "LICENSE", "MIT", &["Permission is hereby granted, free of charge"]),
+    ("crates/look/file-icons", "LICENSE", "MIT", &["Permission is hereby granted, free of charge"]),
     // gpui-kit and the crates under it, which `tools/kit-sync` writes. Each crate's manifest says so too.
     // `crates/component-macros` has a symbolic link to the copy's own `LICENSE-APACHE`, as upstream has it, which
     // the search for licenses skips, as it skips every link.

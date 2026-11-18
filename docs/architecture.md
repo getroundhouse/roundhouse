@@ -114,7 +114,7 @@ crates/
   providers/       The trait a provider adapter written in Rust implements, the loop that serves it over the provider protocol, and the local provider
   client-core/     Connection, and each hub's records, open sessions and open terminals, kept in sync. Shared by every Rust client. No UI
   transcript/      A session's history and live output, in a list of its own, on the kit's Markdown blocks
-  look/            How the app looks: every colour it draws with, by what it's for, the theme made from them, code's colours, the words that changed in a diff's lines, the components screens are built from, such as buttons, the status mark and the app icon, and the parts of the window tests find
+  look/            How the app looks: every colour it draws with, by what it's for, the theme made from them, code's colours, the words that changed in a diff's lines, the components screens are built from, such as buttons, the status mark and the app icon, the file icons, and the parts of the window tests find
   terminal-state/  What a terminal shows, kept from what the program in it writes on Ghostty's terminal core, the bytes that draw it again in another terminal, a plain copy of it to draw, and what its program reads for a key or a paste. No IO and no UI
   dictation-ui/    GPUI dictation attached to an opted-in text field: recording, shortcuts, live text, insertion and cancellation; shared by desktop and transcript
   dictation/       Hearing speech and turning it into text on the device: the microphone, muting the sound output while it's heard, cutting a recording at its pauses, the trait an engine implements, the engine for NVIDIA's nemotron model on Core ML, the model's files, downloading and deleting them, and a stand-in engine for tests. No UI and no async runtime. Unconfirmed
@@ -137,7 +137,7 @@ tools/
   spec-page/       Draws the spec as a page to read in a browser, each area's screens beside its rules, and which are confirmed, and the design system's page beside it. Unconfirmed
   stand-ins/       The programs tests run in place of others, such as the Claude CLI, each the example of a package of its own that depends only on what it uses. Unconfirmed
   smoke/           Runs the stack against the real Claude CLI, and regenerates its fixture
-  file-icons/      Replaces the desktop app's file icons with a pinned, checked release of Catppuccin's icons. Unconfirmed
+  file-icons/      Replaces look's file icons with a pinned, checked release of Catppuccin's icons. Unconfirmed
   kit-sync/        Brings the copy of gpui-kit and our patches on top of it to the release it pins, and records or drops individual patches
   build.sh         Builds the binaries in release, stamped with which build they are, for `install.sh`, `package/` and the release workflow
   check-stamp.sh   Checks that only the binaries read the build stamp, so the libraries compile the same whatever it is. Unconfirmed

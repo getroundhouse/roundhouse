@@ -18,7 +18,6 @@ mod executor_waits;
 mod failed;
 pub mod file_diff;
 mod file_header;
-mod file_icons;
 mod file_image;
 mod file_tree;
 pub mod file_view;

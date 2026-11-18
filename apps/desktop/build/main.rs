@@ -1,8 +1,6 @@
-//! The desktop app's build script. It builds the tables the file icons are found in, and puts the app's own icon in
-//! the program when it's built for Windows.
+//! The desktop app's build script. It puts the app's own icon in the program when it's built for Windows.
 
 mod app_icon;
-mod file_icons;
 
 use std::env;
 use std::error::Error;
@@ -14,7 +12,6 @@ const APP_ICON: &str = "icons/AppIcon.ico";
 fn main() -> Result<(), Box<dyn Error>> {
     let dir = Path::new(env!("CARGO_MANIFEST_DIR"));
     let out_dir = PathBuf::from(env::var("OUT_DIR")?);
-    file_icons::write(&dir.join("file-icons"), &out_dir)?;
     // Only for MSVC's ABI, since MSVC's linker and LLVM's take a `.res` as it is. A build for `windows-gnu` links with
     // GNU's ld, which isn't one of them, so it goes without the icon rather than risk a program that doesn't link.
     let windows = env::var("CARGO_CFG_TARGET_OS")? == "windows";
