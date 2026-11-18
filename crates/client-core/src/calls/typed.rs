@@ -1,4 +1,4 @@
-//! Views of typed calls. Legacy tool inputs are decoded only by `recorded`; these read the contract directly.
+//! Views of typed calls, each read from its call's contract.
 
 use std::fmt::Write as _;
 
