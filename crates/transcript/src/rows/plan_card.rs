@@ -2,21 +2,21 @@
 //! the composer's place, as `questions` says.
 
 use client_core::Approval;
+use gpui_kit::assets::IconName;
 use gpui_kit::component::h_flex;
 use gpui_kit::prelude::FluentBuilder as _;
-use gpui_kit::{AnyElement, App, ClickEvent, Div, ElementId, IntoElement, ParentElement, Styled, Window, div};
-use look::Typeset as _;
+use gpui_kit::{AnyElement, App, ClickEvent, ElementId, IntoElement, ParentElement, Styled, Window};
 use protocol::capability::approvals::Asks;
 use protocol::event::EventBody;
 use protocol::model::Seq;
 
-use super::{Shared, card, empty, row};
+use super::{Shared, empty, row};
 use crate::item_key::ItemKey;
 use crate::texts::{TextAt, Written};
 
 /// The card for the request `body`, recorded at `seq`, where it asks to approve a plan, with its buttons while it's
 /// `open`. Nothing for any other request, which isn't drawn where it was asked.
-pub(super) fn plan_card(seq: Seq, body: &EventBody, open: bool, shared: &Shared, cx: &App) -> AnyElement {
+pub(super) fn plan_card(seq: Seq, body: &EventBody, open: bool, shared: &Shared) -> AnyElement {
     let (EventBody::ApprovalRequested { approval_id, .. }, Some(approval)) = (body, Approval::of(body)) else {
         return empty();
     };
@@ -41,18 +41,11 @@ pub(super) fn plan_card(seq: Seq, body: &EventBody, open: bool, shared: &Shared,
         .gap(look::Space::Small)
         .child(answer_button("approve-plan", look::ButtonKind::Main, "Approve plan", true))
         .child(answer_button("keep-planning", look::ButtonKind::Edged, "Keep planning", false));
-    row()
-        .child(
-            waiting_card(open, cx)
-                .gap(look::Space::Small)
-                .child(div().typeset(look::Type::Body).emphasis().child("Plan"))
-                .child(content)
-                .when(open, |d| d.child(buttons)),
-        )
-        .into_any_element()
-}
-
-/// A card that waits on the person. While it waits, it has an amber edge and a faint amber wash.
-fn waiting_card(open: bool, cx: &App) -> Div {
-    card::tinted(open.then(|| look::colors(cx).needs_you), cx)
+    // Amber while it waits on the person, and a card like the chat's others once it's answered.
+    let kind = if open { look::CardKind::NeedsYou } else { look::CardKind::Chat };
+    let heading = look::card_heading("Plan").mark(IconName::NotebookPen);
+    let heading = if open { heading.end("Waiting for you") } else { heading };
+    let card =
+        look::card(kind, look::CardWidth::Fills).heading(heading).child(content).when(open, |d| d.child(buttons));
+    row().child(card).into_any_element()
 }

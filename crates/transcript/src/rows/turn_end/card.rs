@@ -5,17 +5,14 @@
 
 use gpui_kit::component::{h_flex, v_flex};
 use gpui_kit::{
-    AnyElement, App, Div, InteractiveElement as _, IntoElement, ParentElement as _, Pixels, SharedString,
-    StatefulInteractiveElement as _, Styled as _, TestSupportExt as _, div, px,
+    AnyElement, App, Div, InteractiveElement as _, IntoElement, ParentElement as _, SharedString,
+    StatefulInteractiveElement as _, Styled as _, TestSupportExt as _, div,
 };
-use look::{InRegion as _, Region, Typeset as _};
+use look::Region;
 use protocol::event::TokenUsage;
 use protocol::model::{ModelName, PromptCache};
 
 use super::words::{self, Moment};
-
-/// Wide enough for what each row says to sit apart from its name.
-const MIN_WIDTH: Pixels = px(220.);
 
 /// What a finished turn's end recorded, for its card.
 pub(super) struct TurnCard {
@@ -33,7 +30,7 @@ pub(super) struct TurnCard {
 }
 
 impl TurnCard {
-    /// Raised like the app's other cards. What answered is the heading, in medium weight, with the day under it, then
+    /// A card over the rest. What answered is the heading, in medium weight, with the day under it, then
     /// a table of when the turn started and ended and how long it took, then one of what it asked of the models, then
     /// what the cache holds, each under a rule.
     pub(super) fn card(&self, cx: &App) -> AnyElement {
@@ -46,20 +43,18 @@ impl TurnCard {
         let times = times.map(|times| table(times.rows, cx));
         let counts = self.tokens.map(|tokens| table(counts(tokens), cx));
         let cache = self.cache.as_ref().and_then(|cache| super::cache::in_the_card(cache, cx));
-        look::raised(cx)
-            .region(Region::TurnCard)
-            .flex()
-            .flex_col()
-            .min_w(MIN_WIDTH)
-            .p(look::Space::Medium)
-            .gap(look::Space::XSmall)
-            .typeset(look::Type::Body)
-            .children(heading.map(|heading| div().emphasis().child(heading)))
-            .children(day.map(|day| div().whitespace_nowrap().text_color(look::colors(cx).text_muted).child(day)))
-            .children(times)
-            .children(counts)
-            .children(cache)
-            .into_any_element()
+        let card = look::card(look::CardKind::Over, look::CardWidth::Content).region(Region::TurnCard);
+        let card = match heading {
+            Some(heading) => card.heading(look::card_heading(heading)),
+            None => card,
+        };
+        let card = match day {
+            Some(day) => {
+                card.under_heading(div().whitespace_nowrap().text_color(look::colors(cx).text_muted).child(day))
+            }
+            None => card,
+        };
+        [times, counts, cache].into_iter().flatten().fold(card, |card, part| card.rule().child(part)).into_any_element()
     }
 }
 
@@ -75,17 +70,9 @@ fn counts(tokens: TokenUsage) -> Vec<(&'static str, String)> {
     counts.into_iter().map(|(name, count)| (name, look::tokens(count))).collect()
 }
 
-/// Rows under a rule, each a name and what it says.
+/// Rows, each a name and what it says.
 fn table(rows: Vec<(&'static str, String)>, cx: &App) -> Div {
-    v_flex()
-        .gap(look::Space::XSmall)
-        .child(rule(cx))
-        .children(rows.into_iter().map(|(name, said)| row(name, said, None, cx)))
-}
-
-/// The rule each part of the card starts under.
-pub(super) fn rule(cx: &App) -> Div {
-    div().my(look::Space::XSmall).h(look::EDGE).bg(look::colors(cx).edge)
+    v_flex().gap(look::Space::XSmall).children(rows.into_iter().map(|(name, said)| row(name, said, None, cx)))
 }
 
 /// A name and what it says, after `mark` if there is one, at either end of a line, said together to assistive apps.

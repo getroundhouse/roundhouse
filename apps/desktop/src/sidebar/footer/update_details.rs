@@ -1,12 +1,12 @@
 //! The info mark in the update card's corner, and what it says on hover: which versions, and what happens next.
 
-use gpui_kit::component::{Icon, IconName, v_flex};
+use gpui_kit::component::{Icon, IconName};
 use gpui_kit::{
     Anchor, AnchoredPositionMode, AnyElement, App, Entity, InteractiveElement as _, IntoElement as _,
     ParentElement as _, Pixels, Styled as _, TestSupportExt as _, anchored, deferred, div, point, px,
 };
 
-use look::{IconSizing as _, InRegion as _, Region, Typeset as _};
+use look::{IconSizing as _, Region, Typeset as _};
 
 use crate::app::{Agents, BuildLine, Updating};
 
@@ -73,17 +73,15 @@ impl Details {
             return None;
         }
         let colors = look::colors(cx);
-        let text = v_flex()
-            .gap(look::Space::XSmall)
-            .child(div().typeset(look::Type::Body).emphasis().child(format!("{} → {}", self.from, self.to)))
-            .child(div().typeset(look::Type::Detail).text_color(colors.text_muted).child(self.what_happens.clone()));
+        let what_happens =
+            div().typeset(look::Type::Detail).text_color(colors.text_muted).child(self.what_happens.clone());
+        let details = look::card(look::CardKind::Over, look::CardWidth::Fills)
+            .region(Region::UpdateDetails)
+            .heading(look::card_heading(format!("{} → {}", self.from, self.to)))
+            .under_heading(what_happens);
         // The card's edge is drawn outside where its width is measured and where its corner is, so the details reach
         // past it by an edge on each side.
-        let details = look::raised(cx)
-            .region(Region::UpdateDetails)
-            .w(shown.card_width + look::EDGE * 2.)
-            .p(look::Space::Medium)
-            .child(text);
+        let details = div().w(shown.card_width + look::EDGE * 2.).child(details);
         let above = anchored()
             .position_mode(AnchoredPositionMode::Local)
             .position(point(-look::EDGE, -(look::EDGE + GAP.size())))

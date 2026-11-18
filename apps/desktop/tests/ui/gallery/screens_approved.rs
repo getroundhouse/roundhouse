@@ -1,7 +1,7 @@
 #![cfg(test)]
 use super::screens::SCREENS;
 use super::{
-    approval_chats, approved, background_chats, baselines, button_states, cache_screens, call_screens, capture,
+    approval_chats, approved, background_chats, baselines, button_states, cache_screens, call_screens, capture, cards,
     colours, compaction_chats, component_screens, context_screens, controls, corners, dialog_widths, dictation_screens,
     diff_screens, failure_chats, failures_in_a_row, field_states, heights, home_screens, icon_sizes, key_kinds,
     kinds_of_text, mark_states, menu_rows, own_turn_chats, pull_requests, settings_screens, sidebar_screens,
@@ -114,6 +114,7 @@ fn every_screen_looks_as_approved() {
             small_things::COUNTS,
             switch_kinds::NAME,
             dialog_widths::NAME,
+            cards::NAME,
             menu_rows::NAME,
             field_states::NAME,
             heights::NAME,
@@ -291,6 +292,17 @@ fn every_width_of_dialog_looks_as_approved() {
 
     let mut problems = look_at(dialog_widths::NAME, dialog_widths::SPEC, &picture);
     problems.extend(places.look_at(dialog_widths::NAME));
+    report(&problems);
+}
+
+#[test]
+fn every_kind_and_width_of_card_looks_as_approved() {
+    let text_system: Arc<dyn PlatformTextSystem> = Arc::new(gpui_apple::AppleTextSystem::new());
+
+    let (picture, places) = cards::draw(&text_system);
+
+    let mut problems = look_at(cards::NAME, cards::SPEC, &picture);
+    problems.extend(places.look_at(cards::NAME));
     report(&problems);
 }
 

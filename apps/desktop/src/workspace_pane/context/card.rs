@@ -2,24 +2,29 @@
 //! bars' says how much of the account's limits is left, and whose account it is. Each says only what it's been
 //! told, so a part nobody has said is left out.
 
-use gpui_kit::base::ObservedElement;
 use gpui_kit::component::{h_flex, v_flex};
 use gpui_kit::{
-    AnyElement, App, Div, InteractiveElement as _, IntoElement, ParentElement, Pixels, SharedString, Stateful, Styled,
+    AnyElement, App, Div, InteractiveElement as _, IntoElement, ParentElement, SharedString, Styled,
     TestSupportExt as _, WeakEntity, div, px, relative,
 };
-use look::{HoldOpen, InRegion as _, Region, Typeset as _};
+use look::{HoldOpen, Region, Typeset as _};
 use protocol::model::{Account, ContextPart, ContextPartKind, ContextUsage};
 
 use super::moving::{self, Moves};
 use super::{Usage, words};
 use crate::workspace_pane::WorkspacePane;
 
-const WIDTH: Pixels = px(300.);
+/// A card over the rest, of a few lines.
+fn surface(region: Region) -> look::Card {
+    look::card(look::CardKind::Over, look::CardWidth::Small).region(region)
+}
 
-/// Raised like the app's other cards, with a card's room around what it holds.
-fn surface(region: Region, cx: &App) -> ObservedElement<Stateful<Div>> {
-    look::raised(cx).region(region).flex().flex_col().w(WIDTH).p(look::Space::Medium).typeset(look::Type::Body)
+/// `card`, with `part` under a rule, if there's one.
+fn under_a_rule(card: look::Card, part: Option<impl IntoElement>) -> look::Card {
+    match part {
+        Some(part) => card.rule().child(part),
+        None => card,
+    }
 }
 
 /// The ring's card: the chat's context. `usage` is given only when the bars aren't drawn, since this is then the one
@@ -37,11 +42,11 @@ pub(super) fn context_card(
     let whose = usage
         .and_then(|usage| whose(&usage.account, Plan::WithWhose, usage.moves.as_ref().map(|moves| (moves, hold)), cx));
     let compact = compacts.then(|| compact(pane, off, cx));
-    let card = surface(Region::ContextCard, cx).child(room(context, cx)).children(compact);
-    card.children(whose).into_any_element()
+    let card = under_a_rule(surface(Region::ContextCard).child(room(context, cx)), compact);
+    under_a_rule(card, whose).into_any_element()
 }
 
-/// Under a rule, what compacting does, and a button that asks the agent to now rather than when the room runs out.
+/// What compacting does, and a button that asks the agent to now rather than when the room runs out.
 fn compact(pane: &WeakEntity<WorkspacePane>, off: bool, cx: &App) -> Div {
     let colors = look::colors(cx);
     let pane = pane.clone();
@@ -56,8 +61,7 @@ fn compact(pane: &WeakEntity<WorkspacePane>, off: bool, cx: &App) -> Div {
         .typeset(look::Type::Detail)
         .text_color(colors.text_faint)
         .child("Summarize to make room");
-    let under = h_flex().justify_between().items_center().gap(look::Space::Medium).child(said).child(button);
-    v_flex().child(div().my(look::Space::Small).h(look::EDGE).bg(colors.edge)).child(under)
+    h_flex().justify_between().items_center().gap(look::Space::Medium).child(said).child(button)
 }
 
 /// The bars' card: the plan beside its heading, which is what it's `called`, how much of each limit shown is left, as a
@@ -69,7 +73,7 @@ pub(super) fn usage_card(usage: &Usage, called: SharedString, hold: &HoldOpen, c
     let plan = usage.account.plan.clone().map(SharedString::from);
     let limits = v_flex().gap(look::Space::Medium).child(heading(called, plan, cx)).children(limits);
     let whose = whose(&usage.account, Plan::BesideHeading, usage.moves.as_ref().map(|moves| (moves, hold)), cx);
-    surface(Region::UsageCard, cx).child(limits).children(whose).into_any_element()
+    under_a_rule(surface(Region::UsageCard).child(limits), whose).into_any_element()
 }
 
 /// How full the context is, as a bar with the room the agent keeps back split off its end, then how much it can
@@ -132,7 +136,7 @@ enum Plan {
     BesideHeading,
 }
 
-/// Whose account it is, under a rule: who it is, as [`crate::names::account`] says, the email, or the name the person
+/// Whose account it is: who it is, as [`crate::names::account`] says, the email, or the name the person
 /// gave an account whose login they added, then more quietly how it's logged in and who serves the model, after
 /// the plan unless it's beside a heading. Beside them, the button that `moves` the chat to another account, if there's
 /// one to move it to, with the card's hold. `None` when nothing says any of them.
@@ -153,7 +157,7 @@ fn whose(account: &Account, plan: Plan, moves: Option<(&Moves, &HoldOpen)>, cx: 
         v_flex().id("account").flex_1().min_w_0().gap(look::Space::XSmall).children(who).children(how).test_support();
     let move_button = moves.map(|(moves, hold)| moving::button(moves, hold));
     let said = h_flex().items_center().gap(look::Space::Medium).child(said).children(move_button);
-    Some(v_flex().child(div().my(look::Space::Small).h(look::EDGE).bg(colors.edge)).child(said).into_any_element())
+    Some(said.into_any_element())
 }
 
 /// A section's name, in medium weight, and what it comes to, if anything, at the far end.

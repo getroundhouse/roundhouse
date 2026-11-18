@@ -159,11 +159,42 @@ The pieces screens are built from, on the foundations in `look.md`: what each is
 - **A tooltip says a few words about what the pointer rests on,** as the owner decided, such as what a button does, and the key that does the same, if there's one, at its end. What needs more than a line or two, such as a path, what went wrong or how something works, goes on a hover card, which follows rules of its own, so a tooltip stays something read at a glance.
 - **A tooltip is raised, with a control's corners, the one thin edge and the one shadow, in a detail's text,** 8px in from its edge at each end and 4px at the top and bottom, and wraps past 320px, so a sentence that slips in stays readable. Its key is written as text, in muted text, 12px after its words, as the owner decided.
 - **Every tooltip is `look`'s,** as the owner decided, so none is drawn in the kit's own look.
-- **A hover card that says what a tooltip has no room for is raised, as the app's other cards are, 300px wide,** as the owner decided, with what it's about in body text and stronger, then what it says in muted detail text, or a path in code's type, wrapped, with the button that copies it: the file tab's path, what went wrong updating, what the version says of another hub, and where a checkout's build was made and keeps its data.
+- **A hover card that says what a tooltip has no room for is a card over the rest, of the small width,** as the owner decided, with what it's about in body text and stronger, then what it says in muted detail text, or a path in code's type, wrapped, with the button that copies it: the file tab's path, what went wrong updating, what the version says of another hub, and where a checkout's build was made and keeps its data.
 
 **Every tooltip: words, words with their key, Escape, and words that run past its widest and wrap.**
 
 ![Every tooltip](screens/tooltips.png)
+
+## Cards
+
+- **A card holds a few parts about one thing, apart from what's around it, and is drawn by where it sits,** as the owner decided, from pictures, so how a card looks says where it is: one that opens over the rest, such as a hover card, the workspace's card or a turn's, is raised with the one edge and the one shadow; one in place, such as the update card, the checkout's card or a panel in Settings, is raised with the edge and no shadow, since it covers nothing; and one in the chat, such as a plan or a failed request, is a fill of its own with no edge, as a call's block is, since the chat's other boxes are fills too. `look::CardKind` holds the kinds.
+- **A card in the chat that needs you, or where the agent stopped short, is washed in its colour, with its heading in it,** as the owner chose, from six pictures: amber for a plan waiting to be approved and red for a failed request, as `look.md` says, with no edge, and the icon and words of the heading at full strength, where the colour reads as itself rather than mixed into the pane. One of the chat's cards with nothing to say in a colour, such as the compaction's summary or a plan once it's answered, has a call's block's fill. *Unconfirmed:* the wash at 9%, a chat's card with no colour in a call's block's fill, and `Waiting for you` at a plan's heading's end.
+- **A card is 12px in from its edge, with its parts 12px apart, and what's in one part 4px apart,** as the owner decided, such as a heading and what's said under it, so the parts read as apart as the card is from what's around it. A rule between two parts is as far from each. A form set in place, such as a panel in Settings, is laid out as a dialog is, 24px in, with 16px between its parts, as the owner decided.
+- **A card's heading is in body text and stronger,** with the icon that stands for what the card is at its start, such as a failed request's, muted unless the card is in a colour, what's said of it after it, such as a badge of how many times, and what's said faint at its end, such as when a limit resets. *Unconfirmed.*
+- **A card over the rest has a width of its own, of two, and one in place or in the chat fills what it's set in,** as the owner decided, since nothing around one over the rest sets a width. A turn's card is as wide as what it holds, as the owner chose, since its rows are short and a width of its own left a gap down its middle. A width is added once a card needs one, rather than guessed at. `look::CardWidth` holds them. What's raised over the rest and isn't a card is raised the same way: the find bar and the outline's list at a card's regular width, as the owner decided, and an edit's preview and a dragged project at widths of their own.
+
+**Every kind of card, by its name.** Each is a kind in `look::CardKind`. *Unconfirmed.*
+
+| Name | For |
+|---|---|
+| `Over` | What opens over what's there, raised, with the one edge and the shadow, such as a hover card, the workspace's card, the context's or a turn's |
+| `InPlace` | What sits where it is, outside the chat, raised, with the one edge and no shadow, such as the update card, the checkout's card or a panel in Settings |
+| `Chat` | What's set in the chat's column, in a call's block's fill, with no edge, such as the compaction's summary or a plan once it's answered |
+| `NeedsYou` | In the chat, waiting on you, washed in amber, with its heading in amber, such as a plan to approve |
+| `Stopped` | In the chat, where the agent stopped short, washed in red, with its heading in red, such as a failed request |
+
+**Every width of a card, by its name.** Each is a width in `look::CardWidth`. *Unconfirmed.*
+
+| Name | Width | For |
+|---|---|---|
+| `Content` | What it holds | Short rows over the rest that say the same each time, such as a turn's card |
+| `Small` | 300px | A few lines over the rest, such as a hover card, the context's card or an account's |
+| `Regular` | 380px | More over the rest, or what runs across a line of its own, such as the workspace's card or dictation's offer |
+| `Fills` | What it's set in | A card in place or in the chat, as wide as the sidebar's foot, a page in Settings or the chat's column |
+
+**Every kind of card, with what one of it holds in the app, and a card of each width.** *Unconfirmed.*
+
+![Every kind of card, and every width](screens/card-kinds.png)
 
 ## Small things in a line
 

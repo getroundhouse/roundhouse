@@ -3,7 +3,7 @@
 //! anyone in, or reads a terminal. It's brought into sight as it opens, wherever it is on the page.
 
 use gpui_kit::base::ElementExt as _;
-use gpui_kit::component::{h_flex, v_flex};
+use gpui_kit::component::h_flex;
 use gpui_kit::{
     AnyElement, App, Div, InteractiveElement as _, IntoElement, ParentElement as _, Role, SharedString,
     StatefulInteractiveElement as _, Styled as _, TestSupportExt as _, div,
@@ -40,26 +40,20 @@ pub(super) fn panel(drawing: &Drawing<'_>, panel: &Panel, cx: &App) -> AnyElemen
         said.typeset(look::Type::Body).text_color(colors.error).child(refused).test_support()
     });
     let (kept, scroll) = (drawing.kept.clone(), drawing.scroll.clone());
-    look::raised(cx)
-        .id("accounts-panel")
-        .track_focus(&panel.focus)
-        .relative()
-        .flex()
-        .flex_col()
-        .gap(look::Space::Large)
-        .p(look::Space::XLarge)
-        .typeset(look::Type::Body)
-        .child(
-            v_flex()
-                .gap(look::Space::XSmall)
-                .child(div().emphasis().child(said.title))
-                .child(div().text_color(colors.text_muted).child(said.lead)),
-        )
+    let card = look::card(look::CardKind::InPlace, look::CardWidth::Fills)
+        .roomy()
+        .heading(look::card_heading(said.title))
+        .under_heading(div().text_color(colors.text_muted).child(said.lead))
         .children(login.map(|login| command(&login.made_with, cx)))
         .child(token)
         .children(name)
         .children(refused)
-        .child(buttons(drawing, said.act, cx))
+        .child(buttons(drawing, said.act, cx));
+    div()
+        .id("accounts-panel")
+        .track_focus(&panel.focus)
+        .relative()
+        .child(card)
         .on_prepaint(move |bounds, window, cx| kept.update(cx, |kept, _| kept.laid_out(bounds, &scroll, window)))
         .test_support()
         .into_any_element()

@@ -135,6 +135,21 @@ The app asks and tells only in these, never in the system's alert, and `tools/po
 
 What needs more than a few words, such as a path, goes on a hover card, not a tooltip. `tools/policy` refuses the kit's tooltip outside `look`.
 
+## Cards
+
+`docs/spec/components.md` has a card's kinds and widths, how its parts are spaced and what its heading holds, and `crates/look/src/cards` the code. A card's kind says its surface, edge, shadow and heading's colour, so none is drawn on `look::raised`, which is for what opens over the rest and isn't a card, such as the find bar.
+
+| To | Call |
+|---|---|
+| Make one, of where it sits and how wide it is | `look::card(kind, width)` |
+| Give it a heading, with the icon that stands for what it is, what's said after it and what's said faint at its end | `heading`, with `look::card_heading(words)` and its `mark`, `after` and `end` |
+| Say something under its heading, as part of it, such as a hover card's lines | `under_heading` |
+| Add a part, or a rule between two | `child`, `rule` |
+| Lay it out as a dialog is, for a form set in place | `roomy` |
+| Say what a test finds it by | `region`, `id` |
+
+What's done on a card as a whole, such as keeping the keyboard's focus or measuring where it's drawn, is done on what it's set in.
+
 ## Small things in a line
 
 `docs/spec/components.md` has the five kinds of small thing that sit in a line, what each is for and its kinds, and `crates/look/src/pills`, `chips`, `badges` and `counts` the code. Only a chip will open what it names, which isn't built, so none takes a handler yet.

@@ -4,10 +4,10 @@
 use std::time::Duration;
 
 use gpui_kit::assets::IconName;
-use gpui_kit::component::{Icon, h_flex, v_flex};
+use gpui_kit::component::{Icon, h_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyElement, App, Div, InteractiveElement as _, IntoElement, ParentElement, Role, StatefulInteractiveElement as _,
+    AnyElement, App, InteractiveElement as _, IntoElement, ParentElement, Role, StatefulInteractiveElement as _,
     Styled, TestSupportExt as _, div, px, relative,
 };
 use look::{Hand as _, IconSizing as _, Shaped as _, Typeset as _};
@@ -98,24 +98,18 @@ fn line(compacted: &Compacted, shared: &Shared, cx: &App) -> AnyElement {
 }
 
 /// The summary, under a heading that stays put while it scrolls. The scrollbar sits in the gap on the right.
-fn opened(seq: Seq, summary: &str, shared: &Shared, cx: &App) -> Div {
+fn opened(seq: Seq, summary: &str, shared: &Shared, cx: &App) -> look::Card {
     let (colors, key) = (look::colors(cx), ItemKey::Event(seq, 0));
     // What a compaction says isn't found. A drag from it scrolls on its area, as the wheel does.
     let area = key.element("summary-scroll");
     let written = Written::unfound(TextAt::only(seq, 0), key.element("summary"), summary).in_area(area.clone());
     let text = shared.texts.draw(&shared.selection, &written, None);
     let text = div().pr(look::Space::Medium).typeset(look::Type::Body).text_color(colors.text_muted).child(text);
-    v_flex()
-        .w_full()
-        .gap(look::Space::Small)
-        .py(look::Space::Medium)
-        .pl(look::Space::Medium)
-        .pr(look::Space::XSmall)
-        .corners(look::Corner::Card)
-        .border_1()
-        .border_color(colors.edge)
-        .child(div().typeset(look::Type::Detail).text_color(colors.text_faint).child("What the agent carries on from"))
-        .child(ScrollArea::new(area, px(SUMMARY_HEIGHT), text, &shared.selection))
+    look::card(look::CardKind::Chat, look::CardWidth::Fills)
+        .under_heading(
+            div().typeset(look::Type::Detail).text_color(colors.text_faint).child("What the agent carries on from"),
+        )
+        .under_heading(ScrollArea::new(area, px(SUMMARY_HEIGHT), text, &shared.selection))
 }
 
 /// The rule for `body`, if it's a compaction, or a line saying why it couldn't.
