@@ -30,11 +30,18 @@ fn described(agent: &AgentDescription, new_chats: bool) -> String {
         })
         .collect();
     let efforts: Vec<String> =
-        agent.efforts.iter().map(|&effort| marked(effort == agent.defaults.effort, effort_name(effort))).collect();
+        agent.efforts.iter().map(|effort| marked(effort == &agent.defaults.effort, effort_name(effort))).collect();
     let approval: Vec<String> =
         agent.modes.iter().map(|&mode| marked(mode == agent.defaults.permission_mode, mode_name(mode))).collect();
     let compacts = if agent.has(AgentFeature::Compacts) { "  compacts when asked" } else { "" };
     let new = if new_chats { "  new chats run it" } else { "" };
+    if agent.discovers_models() {
+        return format!(
+            "{}{new}{compacts}\n  models and efforts are discovered for each project\n  modes: {}\n",
+            agent.kind.as_str(),
+            approval.join(", ")
+        );
+    }
     format!(
         "{}{new}{compacts}\n  models: {}\n  efforts: {}\n  modes: {}\n",
         agent.kind.as_str(),

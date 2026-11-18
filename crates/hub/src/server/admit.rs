@@ -201,6 +201,7 @@ fn local_only(request: &ClientRequest) -> bool {
         | R::RepoAdd(..)
         | R::RepoList
         | R::RecordsList
+        | R::ModelsFor(_)
         | R::AgentList
         | R::WorkspaceCreate(..)
         | R::WorkspaceList(..)

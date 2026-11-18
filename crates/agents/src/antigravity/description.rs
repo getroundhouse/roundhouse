@@ -22,7 +22,7 @@ pub(super) const TRIAL_MODEL: &str = "gemini-3.8-flash";
 
 pub(super) fn models() -> protocol::capability::settings::Models {
     use protocol::capability::settings::{Input, ModelOffer, Models, Stage};
-    Models {
+    Models::Static {
         offered: MODELS
             .into_iter()
             .map(|(model, label, efforts, default)| ModelOffer {
@@ -30,8 +30,8 @@ pub(super) fn models() -> protocol::capability::settings::Models {
                 label: label.into(),
                 description: None,
                 model_provider: Some("Google".into()),
-                efforts: efforts.iter().copied().map(Into::into).collect(),
-                default_effort: Some(default.into()),
+                efforts: efforts.iter().cloned().map(protocol::capability::settings::EffortOffer::Id).collect(),
+                default_effort: Some(default.clone()),
                 speeds: Vec::new(),
                 inputs: vec![Input::Images],
                 context_tokens: None,
@@ -49,8 +49,9 @@ pub fn description() -> AgentDescription {
         name: "Antigravity".into(),
         usage_heading: "Antigravity usage".into(),
         models: models()
-            .offered
-            .into_iter()
+            .offered()
+            .iter()
+            .cloned()
             .map(|model| ModelChoice { model: model.model, label: model.label })
             .collect(),
         efforts: vec![Effort::Low, Effort::Medium, Effort::High, Effort::Xhigh],
@@ -84,10 +85,10 @@ mod tests {
         assert!(!agent.efforts_for(&carbon).contains(&Effort::Xhigh));
         assert_eq!(agent.efforts_for(&opus), [Effort::Low, Effort::Medium, Effort::High]);
         assert_eq!(agent.efforts_for(&sonnet), [Effort::Low, Effort::Medium, Effort::High]);
-        assert_eq!(agent.effort_when_switching(&carbon, Effort::Xhigh), Effort::Medium);
-        assert_eq!(agent.effort_when_switching(&opus, Effort::Xhigh), Effort::Medium);
-        assert_eq!(agent.effort_when_switching(&sonnet, Effort::High), Effort::High);
-        assert_eq!(agent.effort_when_switching(&hydrogen, Effort::Low), Effort::Low);
+        assert_eq!(agent.effort_for_choice(&carbon, Some(&Effort::Xhigh)), Effort::Medium);
+        assert_eq!(agent.effort_for_choice(&opus, Some(&Effort::Xhigh)), Effort::Medium);
+        assert_eq!(agent.effort_for_choice(&sonnet, Some(&Effort::High)), Effort::High);
+        assert_eq!(agent.effort_for_choice(&hydrogen, Some(&Effort::Low)), Effort::Low);
         assert!(
             agent
                 .takes(&SessionSettingsChange {

@@ -17,7 +17,7 @@ impl Hub {
     }
 
     /// `kind`'s description, or a refusal for a kind this hub doesn't run.
-    pub(in super::super) fn agent(&self, kind: AgentKind) -> Result<&AgentDescription, ApiError> {
+    pub(crate) fn agent(&self, kind: AgentKind) -> Result<&AgentDescription, ApiError> {
         let described = self.agents.iter().find(|agent| agent.kind == kind);
         described.ok_or_else(|| ApiError::new(ErrorCode::InvalidRequest, "this hub doesn't run that kind of agent"))
     }

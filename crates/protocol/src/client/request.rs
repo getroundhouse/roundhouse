@@ -42,6 +42,8 @@ pub enum ClientRequest {
     RecordsList,
     /// See [`admin::AgentList`].
     AgentList,
+    /// See [`admin::ModelsFor`].
+    ModelsFor(admin::ModelsFor),
 
     WorkspaceCreate(workspaces::WorkspaceCreate),
     WorkspaceList(workspaces::WorkspaceList),

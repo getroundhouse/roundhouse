@@ -5,3 +5,8 @@
 mod tests;
 
 mod catalog;
+mod discovery;
+mod model_lists;
+mod preflight;
+
+pub(crate) use model_lists::ModelLists;

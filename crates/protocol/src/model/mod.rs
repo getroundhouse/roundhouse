@@ -13,6 +13,7 @@ mod files;
 mod git;
 mod github_account;
 mod hub_settings;
+mod model_list;
 mod model_name;
 mod permission_mode;
 mod pr_watch;
@@ -51,6 +52,7 @@ pub use github_account::{
     UnusableLogin,
 };
 pub use hub_settings::{AccountDefault, GithubSettings, HubSettings, HubSettingsChange};
+pub use model_list::{CliVersion, ModelList, ModelListKey, ModelLookup};
 pub use model_name::{ModelName, ModelNameError};
 pub use permission_mode::PermissionMode;
 pub use prompt_line::{PromptLine, SettledAt, Settlement};

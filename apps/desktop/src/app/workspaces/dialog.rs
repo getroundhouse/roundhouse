@@ -68,7 +68,8 @@ impl AppView {
     /// agents.
     fn offer(&self) -> Offer {
         let repos = self.records.repos().iter().map(|repo| (repo.id.clone(), repo.name.clone())).collect();
-        Offer { repos, can_create: self.can_create(), agents: self.records.agents().clone() }
+        let model_lists = self.records.model_lists().cloned().collect();
+        Offer { repos, can_create: self.can_create(), agents: self.records.agents().clone(), model_lists }
     }
 
     /// Tells the dialog what the hub keeps of it, as the records change, and as the keeper catches up, which can let
@@ -84,6 +85,8 @@ impl AppView {
             let _ = handle.update(cx, |_, window, cx| {
                 dialog.update(cx, |dialog, cx| {
                     dialog.set_offer(offer, cx);
+                    // Such as the hub letting go of the list it follows, as when the default login changes.
+                    dialog.follow_models(false, cx);
                     dialog.take_kept(kept, window, cx);
                 });
             });

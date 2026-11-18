@@ -108,12 +108,12 @@ fn every_launch_has_full_access() {
 fn every_launch_names_its_model_and_effort() {
     for effort in crate::claude::description().efforts {
         let mut chosen = spec(Some("opus"), PermissionMode::FullAccess);
-        chosen.settings.effort = Some(effort.into());
+        chosen.settings.effort = Some(effort.clone());
 
         let launched = args(&chosen, true);
 
         assert_eq!(flag_value(&launched, "--model").as_deref(), Some("opus"));
-        assert_eq!(flag_value(&launched, "--effort").as_deref(), crate::claude::effort::level(effort));
+        assert_eq!(flag_value(&launched, "--effort").as_deref(), crate::claude::effort::level(&effort));
     }
 }
 

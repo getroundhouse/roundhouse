@@ -28,6 +28,7 @@ mod git_credentials;
 mod github_accounts;
 mod github_reach;
 mod hellos;
+mod model_lists;
 mod outputs;
 mod previous;
 mod prompts;

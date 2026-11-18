@@ -33,6 +33,7 @@ mod launch_flags;
 mod logins;
 mod misbehaving_worker;
 mod model_and_mode;
+mod model_discovery;
 mod moves_cut_short;
 mod new_workspace;
 mod other_builds;

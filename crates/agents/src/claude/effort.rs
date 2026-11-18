@@ -5,14 +5,20 @@ use protocol::model::Effort;
 use serde_json::Value;
 
 /// `None` for a level Claude does not offer.
-pub(super) fn level(effort: Effort) -> Option<&'static str> {
+pub(super) fn level(effort: &Effort) -> Option<&'static str> {
     match effort {
         Effort::Low => Some("low"),
         Effort::Medium => Some("medium"),
         Effort::High => Some("high"),
         Effort::Xhigh => Some("xhigh"),
         Effort::Max => Some("max"),
-        Effort::Ultra | Effort::Unknown => None,
+        Effort::Unset
+        | Effort::None
+        | Effort::Minimal
+        | Effort::Persistent
+        | Effort::Named(_)
+        | Effort::Ultra
+        | Effort::Unknown => None,
     }
 }
 
@@ -28,9 +34,9 @@ mod tests {
 
     #[test]
     fn every_level_has_the_name_the_cli_gives_it() {
-        let names: Vec<_> = Effort::ALL.into_iter().map(level).collect();
+        let names: Vec<_> = Effort::ALL.iter().map(level).collect();
 
         assert_eq!(names, [Some("low"), Some("medium"), Some("high"), Some("xhigh"), Some("max"), None]);
-        assert_eq!(level(Effort::Unknown), None);
+        assert_eq!(level(&Effort::Unknown), None);
     }
 }

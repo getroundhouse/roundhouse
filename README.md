@@ -120,7 +120,7 @@ roundhouse --help
 | | |
 |---|---|
 | **Mac** | Built, for Apple silicon. |
-| **Agents** | Claude, Codex and Antigravity, through their CLIs. Codex starts on GPT-6.1 Sol at Low effort, and Antigravity on Gemini 4 Carbon at Medium effort; both integrations are exercised on macOS. |
+| **Agents** | Claude, Codex and Antigravity, through their CLIs. Codex discovers the models and efforts available to its CLI before the first prompt. Antigravity starts on Gemini 4 Carbon at Medium effort. Both integrations are exercised on macOS. |
 | **Hub** | Runs on your machine and can be controlled from another paired desktop. Cloud providers, with workspaces in VMs or sandboxes, are designed for and not built. |
 | **iPhone** | Not built. `mobile-poc/` is a proof of concept. |
 | **Windows** | A first preview. An installer is published from every merge, for [amd64](https://f001.backblazeb2.com/file/getroundhouse-releases/Roundhouse-win-amd64-Setup.exe) and [ARM64](https://f001.backblazeb2.com/file/getroundhouse-releases/Roundhouse-win-arm64-Setup.exe). It's unsigned, so Windows warns about it, and the only checks that run on Windows are a lint and a hub starting and stopping. |

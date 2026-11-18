@@ -29,6 +29,26 @@ impl Hub {
         }
         // Sent again, the first may have taken the dialog's files to the chat, and let go of them.
         let again = self.made_earlier::<Workspace>(Some(&client_request_id)).await?.is_some();
+        if !again
+            && let (Some(agent), Some(model)) = (made_of.agent, made_of.model.as_ref())
+            && self.agent(agent)?.discovers_models()
+        {
+            let description =
+                self.agent_for(agent, protocol::client::admin::ModelTarget::Project(repo_id.clone())).await?;
+            if description.label(model).is_none() {
+                return Err(ApiError::new(
+                    ErrorCode::InvalidRequest,
+                    "the selected model is no longer offered; choose another before sending",
+                ));
+            }
+            description
+                .takes(&SessionSettingsChange {
+                    model: Some(model.clone()),
+                    effort: made_of.effort.clone(),
+                    permission_mode: None,
+                })
+                .map_err(|e| ApiError::new(ErrorCode::InvalidRequest, e.to_string()))?;
+        }
         let files = self.dialog_files(&made_of, again).await?;
         let workspace = self.workspace_create(repo_id, None, None, Some(client_request_id.clone())).await?;
         let (session, unchosen) = self.first_chat(&workspace.id, &made_of).await?;
@@ -81,7 +101,7 @@ impl Hub {
         let mode = if made_of.plan { PermissionMode::Plan } else { PermissionMode::FullAccess };
         let as_chosen = made_of.agent.is_none_or(|agent| agent == session.agent)
             && made_of.model.as_ref().is_none_or(|model| *model == session.model)
-            && made_of.effort.is_none_or(|effort| effort == session.effort)
+            && made_of.effort.clone().is_none_or(|effort| effort == session.effort)
             && session.permission_mode == mode;
         if as_chosen {
             return Ok((session, None));
@@ -95,7 +115,7 @@ impl Hub {
                 )),
             ));
         }
-        let (model, effort) = (made_of.model.clone(), made_of.effort);
+        let (model, effort) = (made_of.model.clone(), made_of.effort.clone());
         let chosen = SessionSettingsChange { model, permission_mode: Some(mode), effort };
         match self.session_configure(session.id.clone(), chosen).await {
             Ok(configured) => Ok((configured, None)),
@@ -167,7 +187,7 @@ impl Hub {
             repo_id: made_of.repo_id.clone(),
             agent: made_of.agent,
             model: made_of.model.clone(),
-            effort: made_of.effort,
+            effort: made_of.effort.clone(),
             ..NewWorkspaceDraftToKeep::default()
         };
         match self.blocking(move |store| store.replace_new_workspace_draft(&now, &emptied)).await {

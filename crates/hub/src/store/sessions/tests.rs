@@ -111,13 +111,13 @@ fn a_session_that_left_its_model_or_effort_to_the_cli_names_them_once_migrated()
 }
 
 #[test]
-fn a_level_a_newer_hub_wrote_reads_as_unknown() {
+fn a_level_a_newer_hub_wrote_keeps_its_id() {
     let dir = tempfile::tempdir().unwrap();
     let store = store_with_session(dir.path());
 
     lock(&store.writer).execute("UPDATE sessions SET effort = 'future' WHERE id = 's'", []).unwrap();
 
-    assert_eq!(effort(&store), Effort::Unknown, "the session still reads");
+    assert_eq!(effort(&store), Effort::parse("future").unwrap(), "the session retains the chosen ID");
 }
 
 #[test]

@@ -72,7 +72,7 @@ serde_json.workspace = true
 anyhow.workspace = true
 
 [dev-dependencies]
-agents.workspace = true
+agents = { workspace = true, features = ["testing"] }
 client-core = { workspace = true, features = ["testing"] }
 desktop = { workspace = true, features = ["testing"] }
 dictation = { workspace = true, features = ["testing"] }

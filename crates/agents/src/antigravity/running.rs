@@ -247,18 +247,18 @@ fn launch_settings(spec: &AgentSpec) -> Result<(ModelName, PermissionMode, setti
         Some(mode) if mode == super::claims::full_access() => PermissionMode::FullAccess,
         Some(_) => return Err(AgentError::UnknownMode),
     };
-    let effort = spec.settings.effort.unwrap_or_else(|| defaults.effort.into());
-    effort_str(effort)?;
-    ensure_model_offers_effort(&model, effort)?;
+    let effort = spec.settings.effort.clone().unwrap_or(defaults.effort);
+    effort_str(&effort)?;
+    ensure_model_offers_effort(&model, &effort)?;
     Ok((model, mode, effort))
 }
 
-pub(super) fn ensure_model_offers_effort(model: &ModelName, effort: settings::Effort) -> Result<(), AgentError> {
+pub(super) fn ensure_model_offers_effort(model: &ModelName, effort: &settings::Effort) -> Result<(), AgentError> {
     if super::description::models()
-        .offered
+        .offered()
         .iter()
         .find(|offer| offer.model == *model)
-        .is_some_and(|offer| !offer.efforts.contains(&effort))
+        .is_some_and(|offer| !offer.efforts.iter().any(|e| e.id() == effort))
     {
         return Err(AgentError::Refused("This Antigravity model does not offer that effort".into()));
     }
@@ -280,7 +280,7 @@ pub(super) fn ensure_sign_in_offers_model(options: &[acp::ConfigOption], model: 
     }))
 }
 
-pub(super) fn effort_str(effort: settings::Effort) -> Result<&'static str, AgentError> {
+pub(super) fn effort_str(effort: &settings::Effort) -> Result<&'static str, AgentError> {
     match effort {
         settings::Effort::Low => Ok("low"),
         settings::Effort::Medium => Ok("medium"),
@@ -291,6 +291,8 @@ pub(super) fn effort_str(effort: settings::Effort) -> Result<&'static str, Agent
         | settings::Effort::Max
         | settings::Effort::Ultra
         | settings::Effort::Persistent
+        | settings::Effort::Unset
+        | settings::Effort::Named(_)
         | settings::Effort::Unknown => Err(AgentError::UnknownEffort),
     }
 }

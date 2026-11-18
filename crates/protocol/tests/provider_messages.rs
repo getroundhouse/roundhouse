@@ -10,8 +10,8 @@ use protocol::client::{ApiError, ErrorCode};
 use protocol::frame;
 use protocol::provider::{
     Capabilities, Connect, Create, Destroy, Feature, Hello, HelloReply, Instance, InstanceState, Instances, Kill,
-    MakeBaseImage, ProviderCall, ProviderEvent, ProviderFrame, ProviderOutcome, ProviderRequest, ProviderResponse,
-    Size, Start, Stop, WorkerBinary, WorkerCommand,
+    MakeBaseImage, OpenPreflight, ProviderCall, ProviderEvent, ProviderFrame, ProviderOutcome, ProviderRequest,
+    ProviderResponse, Size, Start, Stop, WorkerBinary, WorkerCommand,
 };
 use serde::Serialize;
 use serde::de::DeserializeOwned;
@@ -63,6 +63,13 @@ fn every_request_keeps_its_form() {
     keeps_its_form(
         &call(ProviderRequest::Connect(Connect { instance_id: "i".into() })),
         r#"{"id":7,"request":{"method":"connect","instance_id":"i"}}"#,
+    );
+    keeps_its_form(
+        &call(ProviderRequest::OpenPreflight(OpenPreflight {
+            project: protocol::model::RepoOrigin::Checkout { path: "/repo".into() },
+            agent: protocol::model::AgentKind::Codex,
+        })),
+        r#"{"id":7,"request":{"method":"open_preflight","project":{"kind":"checkout","path":"/repo"},"agent":"codex"}}"#,
     );
     keeps_its_form(
         &call(ProviderRequest::MakeBaseImage(MakeBaseImage { instance_id: "i".into() })),

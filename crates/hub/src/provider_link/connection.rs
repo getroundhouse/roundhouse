@@ -329,6 +329,13 @@ impl Provider for AdapterProvider {
         self.call(Connect { instance_id: instance_id.clone() }).await
     }
 
+    async fn open_preflight(
+        &self,
+        launch: &providers::OpenPreflight,
+    ) -> Result<protocol::provider::Command, ProviderError> {
+        self.call(launch.clone()).await
+    }
+
     async fn make_base_image(&self, instance_id: &InstanceId) -> Result<(), ProviderError> {
         self.call(MakeBaseImage { instance_id: instance_id.clone() }).await
     }

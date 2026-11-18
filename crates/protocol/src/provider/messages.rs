@@ -2,9 +2,9 @@ use super::{hello, instances};
 use crate::client::Outcome;
 use crate::model::InstanceId;
 use hello::{Hello, HelloReply};
+use instances::{Connect, Create, Destroy, Instances, Kill, MakeBaseImage, Start, Stop};
 #[cfg(test)]
-use instances::List;
-use instances::{Connect, Create, Destroy, Instances, Kill, MakeBaseImage, Start, Stop, WorkerCommand};
+use instances::{List, WorkerCommand};
 use serde::{Deserialize, Serialize};
 
 /// The provider protocol's own version, apart from the client and worker protocols', so a break in one doesn't break
@@ -54,6 +54,7 @@ pub enum ProviderRequest {
     /// See [`List`](super::List).
     List,
     Connect(Connect),
+    OpenPreflight(super::OpenPreflight),
     MakeBaseImage(MakeBaseImage),
     /// A request from a newer hub, which the adapter refuses with `Unsupported`.
     #[serde(other)]
@@ -67,7 +68,7 @@ pub enum ProviderResponse {
     Hello(HelloReply),
     Ok,
     Instances(Instances),
-    Command(WorkerCommand),
+    Command(instances::Command),
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]

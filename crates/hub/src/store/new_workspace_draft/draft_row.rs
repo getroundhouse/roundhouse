@@ -126,8 +126,8 @@ fn keep(conn: &Connection, draft: &NewWorkspaceDraftToKeep) -> Result<(NewWorksp
 /// Whether what's kept says what `draft` does, its files in the same order.
 fn says(kept: &NewWorkspaceDraft, draft: &NewWorkspaceDraftToKeep) -> bool {
     let files = kept.files.iter().map(|file| &file.id);
-    (kept.agent, &kept.repo_id, &kept.text, &kept.model, kept.effort, kept.plan)
-        == (draft.agent, &draft.repo_id, &draft.text, &draft.model, draft.effort, draft.plan)
+    (kept.agent, &kept.repo_id, &kept.text, &kept.model, kept.effort.clone(), kept.plan)
+        == (draft.agent, &draft.repo_id, &draft.text, &draft.model, draft.effort.clone(), draft.plan)
         && files.eq(draft.files.iter())
 }
 

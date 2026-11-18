@@ -1,6 +1,6 @@
 use crate::model::{
     Account, DiffComment, FoundGithubLogin, GithubAccount, GithubApp, GithubReach, GithubSignIn, HubSettings,
-    NewWorkspaceDraft, Record, RecordKey, Repo, Rev, Session, Subagent, Terminal, Workspace,
+    ModelList, NewWorkspaceDraft, Record, RecordKey, Repo, Rev, Session, Subagent, Terminal, Workspace,
 };
 use serde::{Deserialize, Serialize};
 
@@ -27,6 +27,9 @@ pub enum HubNotice {
     /// A terminal was opened, and a hub that kept its workers learned of it again as it started. One that ended or
     /// was closed is `Removed`.
     Terminal(Terminal),
+    /// What an agent offers in one place changed, or the hub began or finished asking it. One the hub let go of is
+    /// `Removed`.
+    ModelList(ModelList),
     /// The record is gone, as of `rev`.
     Removed {
         record: RecordKey,
@@ -90,6 +93,7 @@ impl TryFrom<HubNotice> for RecordNotice {
             HubNotice::GithubApp(app) => Record::GithubApp(app),
             HubNotice::GithubReach(reach) => Record::GithubReach(reach),
             HubNotice::Terminal(terminal) => Record::Terminal(terminal),
+            HubNotice::ModelList(list) => Record::ModelList(list),
             HubNotice::Removed { record, rev } => return Ok(RecordNotice::Removed { record, rev }),
             HubNotice::Resync | HubNotice::Unknown => return Err(notice),
         };
@@ -114,6 +118,7 @@ impl From<Record> for HubNotice {
             Record::GithubApp(app) => HubNotice::GithubApp(app),
             Record::GithubReach(reach) => HubNotice::GithubReach(reach),
             Record::Terminal(terminal) => HubNotice::Terminal(terminal),
+            Record::ModelList(list) => HubNotice::ModelList(list),
         }
     }
 }

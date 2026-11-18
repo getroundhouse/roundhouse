@@ -28,7 +28,7 @@ pinned! {
     "client_calls/devices.rs" => [Pair(_), Authenticate(_), PairingStart, PairingWait(_), DeviceList, DeviceRevoke(_)],
     "client_calls/requests.rs" => [
         Hello(_), HubStatus, HubShutdown, HubShutdownIfIdle, HubRestart, HubConfigure(_), RepoAdd(_), RepoList,
-        RecordsList, AgentList, SessionSubagents(_), AccountConnect(_), AccountSetDefault(_), AccountDisconnect(_),
+        RecordsList, AgentList, ModelsFor(_), SessionSubagents(_), AccountConnect(_), AccountSetDefault(_), AccountDisconnect(_),
         GithubAccountConnect(_), GithubAccountDisconnect(_), GithubAccountSetDefault(_), GithubSignInStart(_),
         GithubSignInCancel(_), WorkspaceCreate(_), WorkspaceList(_), WorkspaceArchive(_), WorkspaceRestore(_),
         WorkspaceRename(_), WorkspaceRegenerateTitle(_), WorkspaceStatus(_), WorkspaceDiff(_), WorkspaceSetupLog(_),

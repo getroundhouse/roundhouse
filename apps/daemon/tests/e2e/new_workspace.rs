@@ -52,7 +52,7 @@ fn a_workspace_made_from_the_dialog_has_what_it_said_and_the_dialog_is_emptied()
     let session = &made.session;
     assert_eq!(session.workspace_id, made.workspace.id);
     assert_eq!(
-        (&session.model, session.effort, session.permission_mode),
+        (&session.model, session.effort.clone(), session.permission_mode),
         (&ModelName::named("sonnet"), Effort::Low, PermissionMode::Plan)
     );
     wait_until("the prompt", || !prompts(&client, &session.id).is_empty());

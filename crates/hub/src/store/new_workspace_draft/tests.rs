@@ -49,7 +49,7 @@ fn whats_kept_is_there_until_something_else_is() {
 
     assert!(changed && kept.rev > before);
     assert_eq!((kept.repo_id.as_ref(), kept.text.as_str()), (Some(&RepoId::from("r")), "fix the login"));
-    assert_eq!((kept.model.clone(), kept.effort, kept.plan), (Some(OPUS), Some(Effort::High), true));
+    assert_eq!((kept.model.clone(), kept.effort.clone(), kept.plan), (Some(OPUS), Some(Effort::High), true));
     assert!(replaced.rev > kept.rev);
     assert_eq!(store.new_workspace_draft().unwrap(), replaced);
 }

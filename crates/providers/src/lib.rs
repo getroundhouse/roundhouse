@@ -15,7 +15,9 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use protocol::model::InstanceId;
-pub use protocol::provider::{Capabilities, Feature, Instance, InstanceState, Size, WorkerBinary, WorkerCommand};
+pub use protocol::provider::{
+    Capabilities, Feature, Instance, InstanceState, OpenPreflight, Size, WorkerBinary, WorkerCommand,
+};
 
 pub use error::ProviderError;
 
@@ -48,6 +50,10 @@ pub trait Provider: Send + Sync {
     async fn list(&self) -> Result<Vec<Instance>, ProviderError>;
     /// The command whose stdin and stdout are the worker's stream, which the hub runs. Can be asked again.
     async fn connect(&self, instance_id: &InstanceId) -> Result<WorkerCommand, ProviderError>;
+    /// Opens a stream to run preflight in the prospective launch environment.
+    async fn open_preflight(&self, _launch: &OpenPreflight) -> Result<protocol::provider::Command, ProviderError> {
+        Err(ProviderError::Unsupported("open preflight"))
+    }
     /// Turns a stopped instance into a base image. Refused by a provider without [`Feature::BaseImages`].
     async fn make_base_image(&self, instance_id: &InstanceId) -> Result<(), ProviderError>;
 }

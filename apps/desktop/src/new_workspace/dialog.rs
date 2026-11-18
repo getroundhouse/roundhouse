@@ -1,6 +1,5 @@
 use super::{Request, keeping};
 use crate::attached::{Attachments, joined};
-use crate::model_picker::Picked;
 use crate::{attached, composing};
 use client_core::{Agents, FileToSend, FilesFor};
 use gpui_kit::component::input::{InputEvent, TextareaState};
@@ -18,14 +17,16 @@ use std::rc::Rc;
 /// Wide enough for a few lines of a task's description, and narrower than the transcript's column.
 const WIDTH: Pixels = px(720.);
 
-/// What the app tells the dialog: the repositories a workspace can be made in, whether one can be made now, and what the
-/// hub says of its agents, which the first chat runs one of.
+/// What the app tells the dialog: the repositories a workspace can be made in, whether one can be made now, what the
+/// hub says of its agents, which the first chat runs one of, and what those that discover their models offer.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(crate) struct Offer {
     /// Each repository's ID and name, in the sidebar's order.
     pub(crate) repos: Vec<(RepoId, String)>,
     pub(crate) can_create: bool,
     pub(crate) agents: Agents,
+    /// Every list of models the hub holds, in no order.
+    pub(crate) model_lists: Vec<protocol::model::ModelList>,
 }
 
 /// What the dialog asks of the app.
@@ -39,6 +40,7 @@ pub(crate) enum DialogEvent {
 }
 
 pub struct NewWorkspaceDialog {
+    pub(super) model_lookup: crate::model_lookup::Lookup,
     /// Where the workspace will be made.
     pub(super) repo: RepoId,
     pub(super) offer: Offer,
@@ -82,6 +84,7 @@ pub(crate) fn open(
     // After opening, which focuses the dialog itself.
     dialog.update(cx, |dialog, cx| {
         dialog.shown = true;
+        dialog.follow_models(false, cx);
         dialog.dictation.update(cx, |field, cx| field.set_enabled(true, cx));
         dialog.prompt.update(cx, |prompt, cx| prompt.focus(window, cx));
     });
@@ -156,6 +159,7 @@ impl NewWorkspaceDialog {
             repo,
             offer,
             prompt,
+            model_lookup: crate::model_lookup::Lookup::default(),
             dictation,
             shown: false,
             chosen_agent: None,
@@ -178,6 +182,7 @@ impl NewWorkspaceDialog {
     pub(crate) fn set_repo(&mut self, repo: RepoId, cx: &mut Context<Self>) {
         if repo != self.repo {
             self.repo = repo;
+            self.follow_models(false, cx);
             self.keep(true, cx);
             cx.notify();
         }
@@ -197,6 +202,7 @@ impl NewWorkspaceDialog {
 
     pub(super) fn can_create(&self) -> bool {
         self.offer.can_create
+            && self.base_agent().is_none_or(|agent| !agent.discovers_models() || self.selection_available())
     }
 
     /// Empties the dialog of what it was asked to make, and turns plan mode off, keeping the repository, model and
@@ -204,6 +210,9 @@ impl NewWorkspaceDialog {
     /// chat has it, so it's kept at once rather than emptied, and the request says once it has been. Emptying the
     /// prompt here isn't a change the hub hears of, since setting a field's text isn't typing.
     pub(crate) fn take_request(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Request {
+        if self.base_agent().is_some_and(AgentDescription::discovers_models) {
+            (self.model, self.effort) = self.to_run();
+        }
         self.keep(true, cx);
         let made_of = self.to_keep(cx);
         let kept = self.kept_once_flushed();
@@ -279,36 +288,6 @@ impl NewWorkspaceDialog {
         self.mode == PermissionMode::Plan
     }
 
-    /// What the hub says of the agent the first chat runs. `None` from a hub that doesn't describe it.
-    pub(super) fn agent(&self) -> Option<&AgentDescription> {
-        self.chosen_agent.and_then(|kind| self.offer.agents.of(kind)).or_else(|| self.offer.agents.new_chat())
-    }
-
-    pub(super) fn pick_agent(&mut self, agent: AgentKind, cx: &mut Context<Self>) {
-        if self.offer.agents.of(agent).is_none() {
-            return;
-        }
-        self.chosen_agent = Some(agent);
-        self.model = None;
-        self.effort = None;
-        self.keep(true, cx);
-        cx.notify();
-    }
-
-    /// The model and effort the first chat is to run: what was picked or kept, or else what its agent starts a chat
-    /// with. Either is `None` from a hub that doesn't say, until it's picked or kept, which leaves it to the hub.
-    pub(super) fn to_run(&self) -> (Option<ModelName>, Option<Effort>) {
-        let defaults = self.agent().map(|agent| &agent.defaults);
-        let model = self.model.clone().or_else(|| defaults.map(|defaults| defaults.model.clone()));
-        (model, self.effort.or_else(|| defaults.map(|defaults| defaults.effort)))
-    }
-
-    /// The same, when both are known, for the picker to show.
-    pub(super) fn shown(&self) -> Option<(ModelName, Effort)> {
-        let (model, effort) = self.to_run();
-        Some((model?, effort?))
-    }
-
     /// Its surface, and its edge, which the line under the repository is too: the composer's surface and a dialog's
     /// edge, or in plan mode the composer's copper, on which a dialog's own line would hardly show.
     pub(super) fn colors(&self, cx: &App) -> (Hsla, Hsla) {
@@ -318,22 +297,6 @@ impl NewWorkspaceDialog {
     /// Plan mode on or off for the first chat, as `Shift-Tab` and the `+` menu do.
     pub(super) fn toggle_plan_mode(&mut self, cx: &mut Context<Self>) {
         self.mode = if self.planning() { PermissionMode::FullAccess } else { PermissionMode::Plan };
-        self.keep(true, cx);
-        cx.notify();
-    }
-
-    /// Takes what was picked in the model picker. Closing the menu gives focus back to the prompt, so typing carries
-    /// on there.
-    pub(super) fn pick(&mut self, picked: Picked, cx: &mut Context<Self>) {
-        match picked {
-            Picked::Model(model) => {
-                self.effort = self
-                    .agent()
-                    .map(|agent| agent.effort_when_switching(&model, self.effort.unwrap_or(agent.defaults.effort)));
-                self.model = Some(model);
-            }
-            Picked::Effort(effort) => self.effort = Some(effort),
-        }
         self.keep(true, cx);
         cx.notify();
     }

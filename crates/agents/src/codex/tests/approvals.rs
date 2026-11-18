@@ -94,7 +94,7 @@ async fn an_unrepresentable_effort_cannot_silently_become_the_native_default() {
     let before = agent.shared.state.lock().settings.clone();
     let settings = protocol::capability::settings::Settings {
         model: Some(protocol::model::ModelName::named("full-model-id")),
-        effort: Some(protocol::capability::settings::Effort::Persistent),
+        effort: Some(protocol::capability::settings::Effort::Unknown),
         ..Default::default()
     };
     assert!(agent.control(&Control::Change(settings)).await.is_err());

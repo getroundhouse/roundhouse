@@ -65,10 +65,11 @@ impl WorkspacePane {
     }
 
     /// For after anything that changes which chat is showing, or what it holds, or whether it's drawn or read: what's
-    /// being dictated follows its composer, and the chat showing is read.
+    /// being dictated follows its composer, the chat showing is read, and its model picker follows its list of models.
     pub(super) fn showing_changed(&mut self, cx: &mut Context<Self>) {
         self.dictation_follows_its_composer(cx);
         self.read_showing(cx);
+        self.follow_models(false, cx);
     }
 
     /// Marks the chat showing read, when it's being read with a reply that has just come, or that the screen hasn't

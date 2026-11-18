@@ -149,6 +149,9 @@ async fn answer(provider: &dyn Provider, request: ProviderRequest) -> Result<Pro
         ProviderRequest::List => {
             return Ok(ProviderResponse::Instances(Instances { instances: provider.list().await? }));
         }
+        ProviderRequest::OpenPreflight(launch) => {
+            return Ok(ProviderResponse::Command(provider.open_preflight(&launch).await?));
+        }
         ProviderRequest::Connect(Connect { instance_id }) => {
             return Ok(ProviderResponse::Command(provider.connect(&instance_id).await?));
         }

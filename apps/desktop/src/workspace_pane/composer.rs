@@ -187,15 +187,16 @@ impl WorkspacePane {
 
     /// The model and its effort of the chat showing, and what its agent is offered.
     fn picker(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let (now_ms, agent) = (look::now_ms(cx), self.agent());
+        let (now_ms, agent) = (look::now_ms(cx), self.picker_agent());
         let model_and_effort =
-            self.session().map(|s| (s.model.clone(), s.effort, prompt_cache::switching_note(s, now_ms)));
+            self.session().map(|s| (s.model.clone(), s.effort.clone(), prompt_cache::switching_note(s, now_ms)));
         let this = cx.weak_entity();
         let models = move |picked, _: &mut Window, cx: &mut gpui_kit::App| {
             let _ = this.update(cx, |t, cx| match picked {
                 Picked::Model(model) => {
-                    let effort =
-                        t.session().and_then(|s| t.agent().map(|agent| agent.effort_when_switching(&model, s.effort)));
+                    let effort = t
+                        .session()
+                        .and_then(|s| t.picker_agent().map(|agent| agent.effort_for_choice(&model, Some(&s.effort))));
                     t.configure(Some(model), effort, cx);
                 }
                 Picked::Effort(effort) => t.configure(None, Some(effort), cx),
@@ -205,7 +206,8 @@ impl WorkspacePane {
             .flex_1()
             .min_w_0()
             // Only a chat has a model, so there's none to show while the workspace's first is being made.
-            .when_some(model_and_effort, |row, (model, effort, switching)| {
+            .children(self.models_status(cx))
+            .when_some(model_and_effort.filter(|_| !self.models_waiting()), |row, (model, effort, switching)| {
                 row.child(model_picker("model-picker", agent.as_ref(), &model, effort, switching, models))
             })
     }

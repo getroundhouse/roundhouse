@@ -2,6 +2,7 @@
 //! so on a Mac they're separate processes from day one.
 
 mod hub_role;
+mod preflight;
 mod runtime;
 mod signals;
 mod worker_role;
@@ -49,6 +50,13 @@ enum Role {
     /// release workflow writes it in the update feed, as `tools/package/publish.py` says.
     #[command(hide = true)]
     WorkerVersions,
+    /// Answer one question about the prospective launch and exit.
+    #[command(hide = true)]
+    Preflight {
+        #[arg(value_parser = preflight::parse_agent)]
+        agent: protocol::model::AgentKind,
+        checkout: PathBuf,
+    },
     /// Runs agents and git for a workspace. Started by a hub's provider.
     #[command(group(clap::ArgGroup::new("transport").required(true)))]
     Worker {
@@ -115,7 +123,7 @@ fn main() -> anyhow::Result<()> {
     let worker_timers = worker::Timers::from_env(|name| std::env::var(name).ok());
     // The command that reaches a worker runs nothing in a workspace, and passes them on to the worker it starts, which
     // forgets them itself.
-    if matches!(args.role, Role::Worker { attach: false, .. }) {
+    if matches!(args.role, Role::Worker { attach: false, .. } | Role::Preflight { .. }) {
         forget_hub_variables();
     }
     match args.role {
@@ -127,6 +135,7 @@ fn main() -> anyhow::Result<()> {
             std::io::stdout(),
             std::io::stderr(),
         )?),
+        Role::Preflight { agent, checkout } => preflight::run(agent, &checkout, claude_bin, codex_bin, antigravity_bin),
         Role::WorkerVersions => say_worker_versions(),
         Role::Delete { paths } => {
             let failed = worker::delete_trees(&paths);

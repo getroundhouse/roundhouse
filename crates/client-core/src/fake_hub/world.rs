@@ -31,6 +31,8 @@ pub const NOW_MS: i64 = START_MS + 60 * MINUTE_MS;
 
 #[derive(Default)]
 pub struct World {
+    /// As [`World::offer_models`] makes them.
+    pub model_lists: Vec<protocol::model::ModelList>,
     pub agents: Option<Vec<protocol::model::AgentDescription>>,
     pub repos: Vec<Repo>,
     pub workspaces: Vec<Workspace>,
@@ -174,6 +176,7 @@ impl World {
             github_apps: self.github_apps.clone(),
             github_reach: self.github_reach.clone(),
             terminals: self.terminals.iter().map(|(terminal, _)| terminal.clone()).collect(),
+            model_lists: self.model_lists.clone(),
             rev: Rev::default(),
         }
     }

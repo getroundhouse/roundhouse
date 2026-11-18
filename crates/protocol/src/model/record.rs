@@ -6,8 +6,9 @@ use serde::{Deserialize, Serialize};
 
 use super::{
     Account, AccountId, CommentId, DiffComment, FoundGithubLogin, GithubAccount, GithubAccountId, GithubApp,
-    GithubAppId, GithubReach, GithubSignIn, GithubSignInId, HubSettings, NewWorkspaceDraft, ProviderName, Repo, RepoId,
-    Rev, Session, SessionId, Subagent, SubagentId, Terminal, TerminalId, Workspace, WorkspaceId,
+    GithubAppId, GithubReach, GithubSignIn, GithubSignInId, HubSettings, ModelList, ModelListKey, NewWorkspaceDraft,
+    ProviderName, Repo, RepoId, Rev, Session, SessionId, Subagent, SubagentId, Terminal, TerminalId, Workspace,
+    WorkspaceId,
 };
 
 /// Which record, of which kind. A kind this build doesn't know reads as `Unknown`.
@@ -67,6 +68,8 @@ pub enum RecordKey {
     Terminal {
         id: TerminalId,
     },
+    /// Sent once the hub has let go of it, as [`ModelList`] says.
+    ModelList(ModelListKey),
     #[serde(other)]
     Unknown,
 }
@@ -89,6 +92,7 @@ pub enum Record {
     GithubApp(GithubApp),
     GithubReach(GithubReach),
     Terminal(Terminal),
+    ModelList(ModelList),
 }
 
 impl Record {
@@ -110,6 +114,7 @@ impl Record {
             Record::GithubApp(app) => RecordKey::GithubApp { id: app.id },
             Record::GithubReach(reach) => RecordKey::GithubReach { repo: reach.repo.clone() },
             Record::Terminal(terminal) => RecordKey::Terminal { id: terminal.id.clone() },
+            Record::ModelList(list) => RecordKey::ModelList(list.key.clone()),
         }
     }
 
@@ -130,6 +135,7 @@ impl Record {
             Record::GithubApp(app) => app.rev,
             Record::GithubReach(reach) => reach.rev,
             Record::Terminal(terminal) => terminal.rev,
+            Record::ModelList(list) => list.rev,
         }
     }
 }
@@ -169,6 +175,10 @@ pub struct Records {
     /// The terminals open in every workspace. Empty from a hub from before terminals.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub terminals: Vec<Terminal>,
+    /// What the agents that discover their own models offer, where the hub has been asked. Empty from a hub from
+    /// before it kept them.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub model_lists: Vec<ModelList>,
     /// The hub's newest revision when this was read. A record missing from the list is gone, unless
     /// a client holds a copy newer than this.
     pub rev: Rev,
@@ -191,6 +201,7 @@ impl Records {
             github_apps,
             github_reach,
             terminals,
+            model_lists,
             rev: _,
         } = self;
         let records = repos.into_iter().map(Record::Repo);
@@ -205,7 +216,8 @@ impl Records {
         let records = records.chain(found_github_logins.into_iter().map(Record::FoundGithubLogin));
         let records = records.chain(github_apps.into_iter().map(Record::GithubApp));
         let records = records.chain(github_reach.into_iter().map(Record::GithubReach));
-        records.chain(terminals.into_iter().map(Record::Terminal))
+        let records = records.chain(terminals.into_iter().map(Record::Terminal));
+        records.chain(model_lists.into_iter().map(Record::ModelList))
     }
 }
 

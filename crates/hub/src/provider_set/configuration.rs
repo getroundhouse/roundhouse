@@ -50,7 +50,7 @@ impl ProviderSet {
     }
 
     /// The one new workspaces go to, and its name.
-    pub(crate) fn default_provider(&self) -> Result<(&ProviderName, Arc<dyn Provider>), ApiError> {
+    pub(crate) fn for_new_workspace(&self) -> Result<(&ProviderName, Arc<dyn Provider>), ApiError> {
         let unavailable = |why: String| ApiError::new(ErrorCode::Unavailable, why);
         let name = self.default.as_ref().map_err(|why| unavailable(why.clone()))?;
         let provider = self.get(name).ok_or_else(|| unavailable(format!("provider {name} isn't set up")))?;

@@ -66,7 +66,7 @@ mod tests {
     fn every_level_offered_has_a_name_the_cli_takes_and_max_is_the_most() {
         let efforts = description().efforts;
         for effort in &efforts {
-            assert!(crate::claude::effort::level(*effort).is_some(), "{effort:?}");
+            assert!(crate::claude::effort::level(effort).is_some(), "{effort:?}");
         }
         assert_eq!(efforts.last(), Some(&Effort::Max), "{efforts:?}");
     }

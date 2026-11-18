@@ -288,11 +288,37 @@ impl LiveSession {
     /// Saved only once a running agent has agreed, so what's shown is never ahead of what's true. A running agent reports
     /// a change of mode itself, and with none running, it goes in the log here, so the log says when every change was
     /// made.
-    pub(crate) async fn configure(&self, options: SessionSettingsChange) -> Result<Session, ApiError> {
+    pub(crate) async fn configure(&self, mut options: SessionSettingsChange) -> Result<Session, ApiError> {
         let hub = self.hub()?;
+        // Before the lock, which a launch takes, since the agent may be asked what it offers, which can take a while.
+        let discovered =
+            if hub.agent(self.agent)?.discovers_models() && (options.model.is_some() || options.effort.is_some()) {
+                let target = protocol::client::admin::ModelTarget::Session(self.id.clone());
+                Some(hub.agent_for(self.agent, target).await?)
+            } else {
+                None
+            };
         let _one_at_a_time = self.configuring.lock().await;
-        let settings = self.state.lock().settings.clone().changed(options.clone());
-        hub.offered(self.agent, &settings.into())?;
+        let current = self.state.lock().settings.clone();
+        match discovered {
+            Some(description) => {
+                // Whoever asks, so a model the agent stopped offering can't be chosen as a full ID instead.
+                if let Some(model) = &options.model
+                    && description.label(model).is_none()
+                {
+                    return Err(ApiError::new(ErrorCode::InvalidRequest, "the agent doesn't offer that model here"));
+                }
+                if let Some(model) = &options.model
+                    && options.effort.is_none()
+                {
+                    options.effort = Some(description.effort_for_choice(model, Some(&current.effort)));
+                }
+                description
+                    .takes(&current.changed(options.clone()).into())
+                    .map_err(|e| ApiError::new(ErrorCode::InvalidRequest, e.to_string()))?;
+            }
+            None => hub.offered(self.agent, &current.changed(options.clone()).into())?,
+        }
         let mut agent_took_it = false;
         if let Some(link) = hub.existing_worker(&self.workspace_id) {
             let delivery = match self.askable(&link)? {

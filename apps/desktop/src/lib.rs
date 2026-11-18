@@ -31,6 +31,7 @@ mod limits;
 pub mod lost_release;
 mod manifest_flow;
 mod menus;
+mod model_lookup;
 mod model_picker;
 mod names;
 pub mod new_workspace;

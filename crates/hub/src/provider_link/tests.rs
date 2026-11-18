@@ -108,6 +108,22 @@ async fn it_answers_what_the_adapters_provider_answers() {
 }
 
 #[tokio::test]
+async fn the_provider_opens_preflight_for_a_launch_before_any_instance_exists() {
+    let dir = tempfile::tempdir().unwrap();
+    let provider = started(serving_local(dir.path())).await;
+    let checkout = dir.path().to_str().unwrap();
+    let command = provider
+        .open_preflight(&providers::OpenPreflight {
+            project: protocol::model::RepoOrigin::Checkout { path: checkout.into() },
+            agent: protocol::model::AgentKind::Codex,
+        })
+        .await
+        .unwrap();
+    assert_eq!(command.args, ["preflight", "codex", "--", checkout]);
+    assert!(provider.list().await.unwrap().is_empty());
+}
+
+#[tokio::test]
 async fn a_request_whose_adapter_exits_before_answering_is_asked_again_of_a_new_one() {
     let opens = Arc::new(AtomicUsize::new(0));
     let asked: Arc<Mutex<Vec<Value>>> = Arc::default();

@@ -16,14 +16,9 @@ use crate::title::{NAMING, read_title};
 use crate::{AgentError, AgentOptions, AgentProcess, NoTitle};
 
 pub async fn account(options: &AgentOptions, scratch_dir: &Path) -> Result<AgentAccount, AgentError> {
-    let bin = binary(options)?;
-    let (tx, mut rx) = mpsc::channel(64);
-    let reader = tokio::spawn(async move { while rx.recv().await.is_some() {} });
-    let process = running::transport(&bin, scratch_dir, &[], description().defaults, tx, options, None).await?;
+    let process = open(options, scratch_dir).await?;
     let response = process.shared.rpc.ask("account/read", json!({"refreshToken":false})).await;
     process.stop().await;
-    drop(process);
-    let _ = reader.await;
     let response = response?;
     let account = &response["account"];
     let email = account["email"].as_str().map(str::to_owned);
@@ -35,6 +30,16 @@ pub async fn account(options: &AgentOptions, scratch_dir: &Path) -> Result<Agent
         login: account["type"].as_str().map(str::to_owned),
         email,
     })
+}
+
+/// Initialize app-server without creating or resuming a thread. Unsolicited output has no session to receive it.
+pub(super) async fn open(
+    options: &AgentOptions,
+    cwd: &Path,
+) -> Result<std::sync::Arc<running::CodexProcess>, AgentError> {
+    let (tx, rx) = mpsc::channel(1);
+    drop(rx);
+    running::transport(&binary(options)?, cwd, &[], description().defaults, tx, options, None).await
 }
 
 /// A read-only conversation in an empty directory, without persistent history or worker tools.

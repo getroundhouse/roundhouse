@@ -23,7 +23,7 @@ pub(super) fn claims() -> Capabilities {
     claims.asking.plan_approval = Some(Claimed {});
     claims.asking.questions = Some(Claimed {});
     claims.settings.effort = Some(Claimed {});
-    claims.settings.models = Some(super::description::models());
+    claims.settings.models = Some(settings::Models::Discoverable);
     claims.settings.live_changes = Some(settings::LiveChanges {
         model: Some(settings::Takes::NextTurn),
         mode: Some(settings::Takes::NextTurn),

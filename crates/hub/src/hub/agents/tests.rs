@@ -111,7 +111,7 @@ async fn a_change_is_refused_for_the_settings_it_leaves_the_chat_with_as_well_as
     let mut claims = claimed();
     let only_low = serde_json::json!({ "model": "haiku", "label": "Haiku", "efforts": ["low"] });
     let offered = vec![serde_json::from_value(only_low).unwrap()];
-    claims.settings.models = Some(protocol::capability::settings::Models { offered });
+    claims.settings.models = Some(protocol::capability::settings::Models::Static { offered });
     let hub = hub_describing(dir.path(), vec![AgentDescription { capabilities: Some(claims), ..described() }]);
     ready(&hub);
     let (haiku, sonnet) = (ModelName::named("haiku"), ModelName::named("sonnet"));

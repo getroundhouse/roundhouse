@@ -80,7 +80,7 @@ fn options(session: &Session) -> String {
         "model={} mode={} effort={}",
         session.model.as_str(),
         mode_name(session.permission_mode),
-        effort_name(session.effort),
+        effort_name(&session.effort),
     )
 }
 
@@ -90,8 +90,8 @@ pub(crate) fn mode_name(mode: PermissionMode) -> &'static str {
 }
 
 /// A level from a newer hub has no name here.
-pub(crate) fn effort_name(effort: Effort) -> &'static str {
-    effort.as_str().unwrap_or("unknown")
+pub(crate) fn effort_name(effort: &Effort) -> &str {
+    if effort == &Effort::Unset { "unset" } else { effort.as_str().unwrap_or("unknown") }
 }
 
 /// A session ID or prefix, or a workspace name for that workspace's newest session.
@@ -215,7 +215,7 @@ mod tests {
 
     #[test]
     fn a_level_from_a_newer_hub_is_shown_as_unknown_rather_than_as_none() {
-        let shown = [Effort::Max, Effort::Unknown].map(effort_name);
+        let shown = [&Effort::Max, &Effort::Unknown].map(effort_name);
 
         assert_eq!(shown, ["max", "unknown"]);
     }

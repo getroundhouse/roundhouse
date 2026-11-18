@@ -72,7 +72,7 @@ async fn a_workspace_made_from_the_dialog_has_what_it_said_and_the_dialog_is_emp
     assert_eq!((made.unchosen, made.unsent), (None, None));
     assert_eq!((&session.workspace_id, &workspace.repo_id), (&workspace.id, made_of.repo_id.as_ref().unwrap()));
     assert_eq!(
-        (&session.model, session.effort, session.permission_mode),
+        (&session.model, session.effort.clone(), session.permission_mode),
         (&ModelName::named("sonnet"), Effort::Low, PermissionMode::Plan)
     );
     let [Prompt { text, files }] = prompts(&hub, &session.id).try_into().unwrap();

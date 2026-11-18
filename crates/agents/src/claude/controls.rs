@@ -4,10 +4,9 @@ use protocol::capability::{
     Control,
     approvals::{AfterDenial, Decision, Remember},
     asking::PlanContext,
-    settings,
 };
 use protocol::event::ApprovalDecision;
-use protocol::model::{Effort, PermissionMode, SessionSettingsChange};
+use protocol::model::{PermissionMode, SessionSettingsChange};
 
 use crate::{AgentError, AgentProcess};
 
@@ -26,7 +25,7 @@ pub(super) async fn apply(process: &dyn AgentProcess, control: &Control) -> Resu
                     permission_mode: settings
                         .mode
                         .map(|mode| if mode.plan { PermissionMode::Plan } else { PermissionMode::FullAccess }),
-                    effort: settings.effort.map(effort).transpose()?,
+                    effort: settings.effort.clone(),
                 })
                 .await
         }
@@ -72,21 +71,6 @@ fn decision_for_cli(decision: &Decision) -> Result<ApprovalDecision, AgentError>
         | Decision::Grant { .. }
         | Decision::Respond(_) => return Err(unsupported()),
     })
-}
-
-fn effort(effort: settings::Effort) -> Result<Effort, AgentError> {
-    match effort {
-        settings::Effort::Low => Ok(Effort::Low),
-        settings::Effort::Medium => Ok(Effort::Medium),
-        settings::Effort::High => Ok(Effort::High),
-        settings::Effort::Xhigh => Ok(Effort::Xhigh),
-        settings::Effort::Max => Ok(Effort::Max),
-        settings::Effort::None
-        | settings::Effort::Minimal
-        | settings::Effort::Ultra
-        | settings::Effort::Persistent
-        | settings::Effort::Unknown => Err(AgentError::UnknownEffort),
-    }
 }
 
 fn unsupported() -> AgentError {
