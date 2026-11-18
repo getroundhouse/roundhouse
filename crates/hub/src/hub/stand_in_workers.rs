@@ -75,9 +75,10 @@ impl Asked {
 }
 
 /// What a stand-in worker answers, which refuses nothing. Git has no name a workspace might take, so each worktree
-/// asked for is made, in `/ws`, on the branch asked for, its setup script passes, a file a prompt carries is written
-/// to it, and an agent starts there and takes what it's sent. Nobody is logged in to an agent's CLI on its machine,
-/// so the account it's asked an agent runs under is nobody's. Anything else is answered as done, with nothing to say.
+/// asked for is made, in `/ws`, on the branch asked for, with nothing in it to lose, its setup script passes, a file a
+/// prompt carries is written to it, and an agent starts there and takes what it's sent. Nobody is logged in to an
+/// agent's CLI on its machine, so the account it's asked an agent runs under is nobody's. Anything else is answered as
+/// done, with nothing to say.
 fn answer(request: WorkerRequest) -> WorkerResponse {
     if let WorkerRequest::NamesGitHas(_) = request {
         return WorkerResponse::NamesGitHas(NamesGitHasReply { names: Vec::new() });
@@ -93,6 +94,9 @@ fn answer(request: WorkerRequest) -> WorkerResponse {
     }
     if let WorkerRequest::SetupWorkspace(_) = request {
         return WorkerResponse::SetupDone(SetupDone { code: Some(0) });
+    }
+    if let WorkerRequest::GitStatus(_) = request {
+        return WorkerResponse::GitStatus(protocol::model::GitStatus::default());
     }
     if let WorkerRequest::AttachmentWrite(write) = request {
         let path = format!("{}/.context/attachments/{}", write.path, write.name);
