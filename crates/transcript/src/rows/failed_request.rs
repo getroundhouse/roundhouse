@@ -5,8 +5,7 @@
 use gpui_kit::assets::IconName;
 use gpui_kit::component::{Icon, h_flex, v_flex};
 use gpui_kit::{
-    AnyElement, App, ClickEvent, ElementId, InteractiveElement as _, IntoElement, ParentElement, Styled,
-    TestSupportExt as _, Window, div,
+    AnyElement, App, ClickEvent, ElementId, IntoElement, ParentElement, Styled, TestSupportExt as _, Window, div,
 };
 use look::{IconSizing as _, Typeset as _};
 use protocol::event::{FailureKind, RequestFailure};
@@ -14,15 +13,12 @@ use protocol::model::Seq;
 
 use super::around::{Around, Started, Tries, Try};
 use super::line::{self, Line, Part as LinePart};
-use super::{Shared, card, from_blocks, own_turn, row};
+use super::{Shared, from_blocks, own_turn, row};
 use crate::find::{FindLook, Part};
 use crate::folds::Fold;
 use crate::item_key::ItemKey;
 use crate::texts::{TextAt, Written};
 use crate::transcript::Transcript;
-
-/// How big the card's icon is, at the start of its title, which it stands for.
-const ICON: look::IconSize = look::IconSize::Large;
 
 /// The card for the failed request recorded at `seq`: what kind of failure it was, how many times in a row, when the
 /// limit that refused it starts again, for a limit, and the CLI's own words, which say what to do, with their matches,
@@ -41,14 +37,15 @@ pub(super) fn card(
     let stopped = colors.stopped;
     let tries = around.failures.card();
     let resets = failure.resets_at_ms.and_then(|at_ms| look::day_and_time(at_ms, cx));
-    let head = h_flex()
-        .gap(look::Space::Small)
-        .child(Icon::new(IconName::CircleX).flex_none().sized(ICON).text_color(stopped))
-        .child(div().typeset(look::Type::Body).emphasis().child(title(failure.kind)))
-        .children(tries.and_then(|tries| count(tries.times)))
-        .children(resets.map(|when| {
-            div().ml_auto().typeset(look::Type::Detail).text_color(colors.text_faint).child(format!("Resets {when}"))
-        }));
+    let head = look::card_heading(title(failure.kind)).mark(IconName::CircleX);
+    let head = match tries.and_then(|tries| count(tries.times)) {
+        Some(count) => head.after(count),
+        None => head,
+    };
+    let head = match resets {
+        Some(when) => head.end(format!("Resets {when}")),
+        None => head,
+    };
     let id = (ItemKey::Event(seq, 0), Part::FailedRequest);
     let words = from_blocks(&Written::found(TextAt::only(seq, 0), &id, find, &failure.message), None, shared);
     let words = div().typeset(look::Type::Body).text_color(colors.text_muted).child(words);
@@ -70,8 +67,11 @@ pub(super) fn card(
             h_flex().items_end().gap(look::Space::Large).child(div().flex_1().min_w_0().child(words)).children(retry)
         }
     };
-    let card = card::tinted(Some(stopped), cx).id(ItemKey::Event(seq, 0).element("failed-request"));
-    row().child(card.gap(look::Space::Small).child(head).child(body).test_support()).into_any_element()
+    let card = look::card(look::CardKind::Stopped, look::CardWidth::Fills)
+        .id(ItemKey::Event(seq, 0).element("failed-request"))
+        .heading(head)
+        .child(body);
+    row().child(card).into_any_element()
 }
 
 /// What the card is titled, by what would get past the failure, in words that fit any agent.

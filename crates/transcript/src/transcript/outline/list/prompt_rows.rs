@@ -13,8 +13,9 @@ use protocol::model::{CompactionLine, PromptLine};
 use std::ops::Range;
 use std::rc::Rc;
 
-/// Room for two lines of most prompts, and narrow enough to leave the chat beside the list.
-const WIDTH: Pixels = px(360.);
+/// Room for two lines of most prompts, and narrow enough to leave the chat beside the list: a card's regular width, as
+/// what opens over the chat is.
+const WIDTH: Pixels = px(380.);
 /// Around the rows, inside the edge.
 const INSET: look::Space = look::Space::XSmall;
 /// The tallest the rows get before they scroll: about eight prompts of two lines.

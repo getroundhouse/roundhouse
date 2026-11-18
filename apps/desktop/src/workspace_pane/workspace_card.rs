@@ -7,10 +7,9 @@ use gpui_kit::{
     Anchor, AnyElement, App, Div, InteractiveElement as _, IntoElement, ParentElement as _, Pixels, Role, SharedString,
     Stateful, StatefulInteractiveElement as _, StyleRefinement, Styled as _, div, px,
 };
-use look::{HoverCard, InRegion as _, Region, Typeset as _};
+use look::{HoverCard, Region, Typeset as _};
 use protocol::model::{PORTS_PER_WORKSPACE, Workspace};
 
-const WIDTH: Pixels = px(380.);
 /// As wide as the widest label, so the values line up.
 const LABEL: Pixels = px(56.);
 
@@ -58,7 +57,7 @@ impl Said {
         }
     }
 
-    /// Raised like the app's other cards: the path and the button that copies it, then under a rule, the rest.
+    /// A card over the rest: the path and the button that copies it, then under a rule, the rest.
     fn card(&self, cx: &App) -> AnyElement {
         let colors = look::colors(cx);
         let path = self.path.clone().map(|path| {
@@ -66,8 +65,7 @@ impl Said {
             let text = div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis_start();
             let text = text.typeset(look::Type::Code).child(path.clone());
             let copy = look::copy_button("copy-workspace-path", path, "Copy path", cx);
-            let row = h_flex().gap(look::Space::Small).text_color(colors.text_muted).child(text).child(copy);
-            v_flex().child(row).child(div().my(look::Space::Small).h(look::EDGE).bg(colors.edge))
+            h_flex().gap(look::Space::Small).text_color(colors.text_muted).child(text).child(copy)
         });
         let version = self.version.clone().map(|version| {
             let moving = self.moving_to.clone().map(|to| {
@@ -87,8 +85,13 @@ impl Said {
             .children(version)
             .child(row("Runs on", format!("Runs on {}", self.runs_on), div().child(self.runs_on.clone()), cx))
             .children(ports);
-        let card = look::raised(cx).region(Region::WorkspaceCard).flex().flex_col().w(WIDTH).p(look::Space::Medium);
-        card.children(path).child(rows).into_any_element()
+        let card = look::card(look::CardKind::Over, look::CardWidth::Regular).region(Region::WorkspaceCard);
+        match path {
+            Some(path) => card.child(path).rule(),
+            None => card,
+        }
+        .child(rows)
+        .into_any_element()
     }
 }
 

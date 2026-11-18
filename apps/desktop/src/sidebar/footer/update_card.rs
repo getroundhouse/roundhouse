@@ -8,7 +8,7 @@ use gpui_kit::{
     Styled as _, TestSupportExt as _, Window, div,
 };
 use look::{AppIconSize, AppIconStyle};
-use look::{Hand as _, Shaped as _, Typeset as _};
+use look::{Hand as _, Typeset as _};
 
 use super::update_details::{Details, Shown};
 use crate::app::{Agents, AppView, BuildLine, UpdateQuestion, Updating};
@@ -49,16 +49,8 @@ impl RenderOnce for UpdateCard {
         let shown = window.use_keyed_state("update-details-shown", cx, |_, _| Shown::default());
         let details = self.details.shown(shown.read(cx), cx);
         let mark = Details::mark(&shown, cx);
-        let colors = look::colors(cx);
-        v_flex()
+        let card = look::card(look::CardKind::InPlace, look::CardWidth::Fills)
             .id("update-card")
-            .w_full()
-            .p(look::Space::Medium)
-            .gap(look::Space::Medium)
-            .corners(look::Corner::Card)
-            .bg(colors.raised)
-            .border_1()
-            .border_color(colors.edge)
             .child(
                 h_flex()
                     .items_start()
@@ -68,9 +60,11 @@ impl RenderOnce for UpdateCard {
                     .child(mark),
             )
             .when_some(self.action, ParentElement::child)
-            .when_some(details, ParentElement::child)
+            .when_some(details, ParentElement::child);
+        div()
+            .w_full()
+            .child(card)
             .on_prepaint(move |bounds, _, cx| shown.update(cx, |shown, _| shown.card_width = bounds.size.width))
-            .test_support()
     }
 }
 

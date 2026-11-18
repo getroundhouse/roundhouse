@@ -1,0 +1,54 @@
+{
+  "look::CardKind": {
+    "Chat": {
+      "x": 760,
+      "y": 119,
+      "width": 1040,
+      "height": 140
+    },
+    "InPlace": {
+      "x": 64,
+      "y": 413,
+      "width": 600,
+      "height": 275
+    },
+    "NeedsYou": {
+      "x": 760,
+      "y": 362,
+      "width": 1040,
+      "height": 250
+    },
+    "Over": {
+      "x": 64,
+      "y": 119,
+      "width": 600,
+      "height": 191
+    },
+    "Stopped": {
+      "x": 760,
+      "y": 715,
+      "width": 1040,
+      "height": 250
+    }
+  },
+  "look::CardWidth": {
+    "Fills": {
+      "x": 1896,
+      "y": 691,
+      "width": 1040,
+      "height": 144
+    },
+    "Regular": {
+      "x": 1896,
+      "y": 405,
+      "width": 1040,
+      "height": 183
+    },
+    "Small": {
+      "x": 1896,
+      "y": 119,
+      "width": 1040,
+      "height": 183
+    }
+  }
+}

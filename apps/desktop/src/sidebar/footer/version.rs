@@ -8,7 +8,7 @@ use gpui_kit::{
     Anchor, AnyElement, App, Context, Hsla, InteractiveElement, IntoElement, ParentElement, Pixels, SharedString,
     StatefulInteractiveElement, StyleRefinement, Styled, TestSupportExt as _, div,
 };
-use look::{IconSizing as _, Region, Shaped as _, TaskRing, Typeset as _};
+use look::{IconSizing as _, Region, TaskRing, Typeset as _};
 use std::path::Path;
 
 /// How tall the build line is, whatever it says, so a check for updates never moves the sidebar above it: a small
@@ -115,18 +115,10 @@ fn checkout_card(checkout: &Checkout, data_dir: &Path, cx: &App) -> AnyElement {
         let text = div().id("checkout-note").typeset(look::Type::Detail).text_color(colors.text_muted).line_clamp(4);
         text.child(note.to_string()).test_support()
     });
-    let card = v_flex()
+    let card = look::card(look::CardKind::InPlace, look::CardWidth::Fills)
         .id("checkout-card")
-        .w_full()
-        .p(look::Space::Medium)
-        .gap(look::Space::XSmall)
-        .corners(look::Corner::Card)
-        .bg(colors.raised)
-        .border_1()
-        .border_color(colors.edge)
-        .child(div().typeset(look::Type::Body).emphasis().truncate().child(checkout.name()))
-        .when_some(note, ParentElement::child)
-        .test_support();
+        .heading(look::card_heading(checkout.name()))
+        .when_some(note, look::Card::under_heading);
     // Above the card, from its left edge, as wide as the sidebar's other cards' details.
     let details = move |cx: &mut App| crate::says_more::card(Region::CheckoutDetails, Some(heading), says, cx);
     let style = StyleRefinement::default().w_full();

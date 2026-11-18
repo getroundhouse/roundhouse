@@ -31,7 +31,7 @@ pub(super) fn on_the_line(cache: &IdleCache, cx: &App) -> Option<impl IntoElemen
     Some(div().id("cache").flex().items_center().h_0().aria_label(said).child(mark))
 }
 
-/// The card's part on the cache, under a rule: `Cache`, with a wedge for the share of its time it has left and how
+/// The card's part on the cache: `Cache`, with a wedge for the share of its time it has left and how
 /// long that is, or a clock and `Expired`, and under that when it expires or did, and how long it lasts. `None` for a
 /// TTL this build doesn't know.
 pub(super) fn in_the_card(cache: &PromptCache, cx: &App) -> Option<Div> {
@@ -53,7 +53,7 @@ pub(super) fn in_the_card(cache: &PromptCache, cx: &App) -> Option<Div> {
         .text_color(muted)
         .children(when)
         .child(div().whitespace_nowrap().child(format!("{} cache", ttl_words(cache.ttl)?)));
-    Some(v_flex().gap(look::Space::XSmall).child(card::rule(cx)).child(left).child(lasts))
+    Some(v_flex().gap(look::Space::XSmall).child(left).child(lasts))
 }
 
 /// How long a cache lasts, as "1h".

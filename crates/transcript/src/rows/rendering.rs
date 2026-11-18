@@ -246,7 +246,7 @@ pub(super) fn render_event(
         EventBody::TurnEnded { .. } => turn_end::line(event, around.agent.clone(), around.cache.as_ref(), find, cx),
         // A plan's card. A tool's use is asked in the composer's place too, and its call's own line is what the
         // transcript keeps of it, with what became of it after.
-        EventBody::ApprovalRequested { .. } => plan_card(seq, body, around.approval_open, shared, cx),
+        EventBody::ApprovalRequested { .. } => plan_card(seq, body, around.approval_open, shared),
         // A question's line says what became of it, and so does a denied call's, as `Closes` says.
         EventBody::ApprovalResolved { .. } if matches!(around.closes, Closes::SaidElsewhere) => empty(),
         EventBody::ApprovalResolved { decision: None, .. } => muted_line("Approval cancelled", cx),

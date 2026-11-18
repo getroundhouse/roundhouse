@@ -19,6 +19,7 @@ mod baselines;
 mod cache_screens;
 mod call_screens;
 mod capture;
+mod cards;
 mod chats;
 mod codex_screens;
 mod colours;

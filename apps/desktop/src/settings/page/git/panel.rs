@@ -3,7 +3,7 @@
 //! focus back as it goes.
 
 use gpui_kit::base::ElementExt as _;
-use gpui_kit::component::{h_flex, v_flex};
+use gpui_kit::component::h_flex;
 use gpui_kit::{
     AnyElement, App, ClickEvent, Div, InteractiveElement as _, IntoElement, ParentElement as _, Role, SharedString,
     StatefulInteractiveElement as _, Styled as _, TestSupportExt as _, Window, div,
@@ -27,24 +27,18 @@ pub(super) struct Framed {
 pub(super) fn framed(drawing: &Drawing<'_>, panel: &Panel, framed: Framed, cx: &App) -> AnyElement {
     let refused = framed.refused.map(|refused| refusal(refused, cx));
     let (kept, scroll) = (drawing.kept.clone(), drawing.scroll.clone());
-    look::raised(cx)
+    let card = look::card(look::CardKind::InPlace, look::CardWidth::Fills)
+        .roomy()
+        .heading(look::card_heading(framed.title))
+        .under_heading(said_under_the_title(framed.lead, cx))
+        .children(framed.body)
+        .children(refused)
+        .child(framed.buttons);
+    div()
         .id("git-panel")
         .track_focus(&panel.focus)
         .relative()
-        .flex()
-        .flex_col()
-        .gap(look::Space::Large)
-        .p(look::Space::XLarge)
-        .typeset(look::Type::Body)
-        .child(
-            v_flex()
-                .gap(look::Space::XSmall)
-                .child(div().emphasis().child(framed.title))
-                .child(said_under_the_title(framed.lead, cx)),
-        )
-        .children(framed.body)
-        .children(refused)
-        .child(framed.buttons)
+        .child(card)
         .on_prepaint(move |bounds, window, cx| kept.update(cx, |kept, _| kept.laid_out(bounds, &scroll, window)))
         .test_support()
         .into_any_element()

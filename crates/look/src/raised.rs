@@ -1,4 +1,5 @@
-//! What opens over the rest, such as a card or what a hover shows: raised over the pane, with a shadow under it.
+//! What opens over the rest and isn't a card, such as the find bar, the outline's list, an edit's preview or a dragged
+//! project: raised over the pane, with a shadow under it. A card is a `look::Card`, which draws on the same shadow.
 
 use gpui_kit::{App, BoxShadow, Div, Pixels, Styled as _, div, point, px};
 
@@ -17,8 +18,8 @@ struct Layer {
     strength: f32,
 }
 
-/// An empty surface for what opens over the rest, in the raised colour with the one thin edge, a card's corners and
-/// the shadow under it. Whoever fills it says how wide it is and how much room its content has.
+/// An empty surface for what opens over the rest and isn't a card, in the raised colour with the one thin edge, a
+/// card's corners and the shadow under it. Whoever fills it says how wide it is and how much room its content has.
 pub fn raised(cx: &App) -> Div {
     let colors = colors(cx);
     div()

@@ -4,7 +4,6 @@ mod alone;
 mod around;
 mod asked;
 mod cache_rule;
-mod card;
 mod column;
 pub(crate) mod compaction;
 mod failed_request;

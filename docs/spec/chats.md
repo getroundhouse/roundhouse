@@ -99,7 +99,7 @@
   ![A finished turn, a stopped one and a failed one](screens/turn-endings.png)
 
 - **How long a turn took is counted the way the working line counts it,** by the hub's clock from the turn's start to its end, so the time doesn't jump when the turn ends, and doesn't change later. A turn from a hub too old to say when it started shows the agent's own count instead.
-- **Resting the pointer on what a finished turn's line says, how long it took and when it ended, shows the turn's card, centred just above the line,** so it covers neither the line nor the composer, and it moves only as far as it must to stay in the window. It says what answered, such as "Opus 5.5 via Claude Code", with the day under it. Then rows say when the turn started and ended and how long it took, as its line does, and how many tokens the agent's own requests took: what they read fresh, what the models wrote, and what they read from the cache and wrote to it, each counted as the context's card counts, such as `412.4k`. The day is said once, so the card is only as wide as its rows, and a turn that ran past midnight says each end's whole date in its row instead, such as "Oct 31, 2026, 11:57 PM". Its subagents' requests aren't counted. The hub records all of it with the turn's end, so every client shows the same, and a turn recorded before it did shows only its agent and its times. A stopped or failed turn has no card. *Unconfirmed.*
+- **Resting the pointer on what a finished turn's line says, how long it took and when it ended, shows the turn's card, centred just above the line,** so it covers neither the line nor the composer, and it moves only as far as it must to stay in the window. It says what answered, such as "Opus 5.5 via Claude Code", with the day under it. Then rows say when the turn started and ended and how long it took, as its line does, and how many tokens the agent's own requests took: what they read fresh, what the models wrote, and what they read from the cache and wrote to it, each counted as the context's card counts, such as `412.4k`. The day is said once, under what answered, and a turn that ran past midnight says each end's whole date in its row instead, such as "Oct 31, 2026, 11:57 PM". Its subagents' requests aren't counted. The hub records all of it with the turn's end, so every client shows the same, and a turn recorded before it did shows only its agent and its times. A stopped or failed turn has no card. *Unconfirmed.*
 
   **A finished turn's card, with the pointer resting on the turn's line.** *Unconfirmed.*
 
@@ -593,7 +593,7 @@ Every call is drawn the same way, as the first rule below says, and each kind fi
 
   ![A denied command in the chat](screens/approval-denied.png)
 
-- **A plan waiting to be approved is a card in the transcript,** in amber, with the plan and its two buttons, since the plan is what's read, and it's too long for the composer's place. *Unconfirmed.*
+- **A plan waiting to be approved is a card in the transcript,** in amber, with the plan and its two buttons, since the plan is what's read, and it's too long for the composer's place. Its heading, `Plan`, says `Waiting for you` at its end until it's answered, and then the card is filled as the chat's other cards are, with no buttons, as `components.md` says. *Unconfirmed.*
 
 ## The model and plan mode
 
