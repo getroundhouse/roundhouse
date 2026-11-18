@@ -29,39 +29,46 @@ pub async fn prepare_workspace(
     if exists(&path).await {
         return Err(ApiError::new(ErrorCode::NameTaken, format!("{} already exists", path.display())));
     }
-    let base = match base_ref {
-        Some(base) => base.to_string(),
-        None => default_base(given, repo).await?,
-    };
     let mut warnings = Vec::new();
-    make_on_new_branch(given, repo, branch, &base, &path, &mut warnings).await?;
+    let base = make_on_new_branch(given, repo, branch, base_ref, &path, &mut warnings).await?;
     let branches = branches::read_now(given, &path).await.ok();
     let path = path.to_string_lossy().into_owned();
     Ok(WorkspaceReady { path, branch: branch.clone(), base_ref: base, warnings, branches })
 }
 
-/// Makes a worktree at `path` on a new branch `branch` from `base`, unless git already has a branch in the way. Takes
-/// a worktree git made anyway for made, with a warning, and deletes `branch` if git made it and failed without making
-/// the worktree.
+/// Makes a worktree at `path` on a new branch `branch` from `base`, or from the repository's default base when there's
+/// none, unless git already has a branch in the way. Takes a worktree git made anyway for made, with a warning, and
+/// deletes `branch` if git made it and failed without making the worktree. Returns the base it was made from.
 pub(super) async fn make_on_new_branch(
     given: &Environment,
     cwd: &Path,
     branch: &BranchName,
-    base: &str,
+    base: Option<&str>,
     path: &Path,
     warnings: &mut Vec<String>,
-) -> Result<(), ApiError> {
-    reject_option_like(base, "a base ref")?;
-    no_branch_in_the_way(given, cwd, branch).await?;
-    let worktrees = Worktrees::of(given, cwd).await?;
-    fetch_if_remote(&worktrees, base, warnings).await?;
+) -> Result<String, ApiError> {
+    let base = async {
+        match base {
+            Some(base) => Ok(base.to_string()),
+            None => default_base(given, cwd).await,
+        }
+    };
+    // Side by side, since none of them changes anything. Their answers are taken in this order, so which refuses
+    // doesn't depend on which git finishes first.
+    let (base, clear, worktrees) =
+        tokio::join!(base, no_branch_in_the_way(given, cwd, branch), Worktrees::of(given, cwd));
+    let base = base?;
+    reject_option_like(&base, "a base ref")?;
+    clear?;
+    let worktrees = worktrees?;
+    fetch_if_remote(&worktrees, &base, warnings).await?;
     let changing = worktrees.changing().await?;
-    let Some(commit) = commit_of(given, cwd, base).await? else {
+    let Some(commit) = commit_of(given, cwd, &base).await? else {
         return Err(ApiError::new(ErrorCode::InvalidRequest, format!("{base} isn't a branch, tag or commit here")));
     };
     // --no-track: otherwise a branch made from origin/main tracks it, and a bare `git push` or `git pull` there acts
     // on main. From `base` by name so the branch's reflog records which remote branch it started from.
-    let args = ["--no-track", "-b", branch.as_str(), &path.to_string_lossy(), base];
+    let args = ["--no-track", "-b", branch.as_str(), &path.to_string_lossy(), &base];
     let (was_there, added) = add_worktree(&changing, path, &args).await?;
     let branch_taken = added.stderr.contains("a branch named");
     let settled = finish_add(given, cwd, path, branch, was_there, added, warnings).await;
@@ -71,7 +78,7 @@ pub(super) async fn make_on_new_branch(
     if settled.is_err() && !branch_taken {
         let _ = git(given, cwd, &["update-ref", "-d", &format!("refs/heads/{branch}"), commit.as_str()]).await;
     }
-    settled
+    settled.map(|()| base)
 }
 
 /// Makes a worktree at `path` on `branch` as it is. Takes a worktree git made anyway for made, with a warning.
@@ -161,12 +168,18 @@ async fn default_base(given: &Environment, repo: &Path) -> Result<String, ApiErr
     if head.success && !head.stdout.trim().is_empty() {
         return Ok(head.stdout.trim().to_string());
     }
-    for candidate in ["origin/main", "origin/master"] {
-        if ref_exists(given, repo, candidate).await? {
+    // Without one, the rest are asked side by side, and the first of them that's there taken, in this order.
+    let (main, master, current) = tokio::join!(
+        ref_exists(given, repo, "origin/main"),
+        ref_exists(given, repo, "origin/master"),
+        git(given, repo, &["symbolic-ref", "--quiet", "--short", "HEAD"]),
+    );
+    for (candidate, there) in [("origin/main", main), ("origin/master", master)] {
+        if there? {
             return Ok(candidate.to_string());
         }
     }
-    let current = git(given, repo, &["symbolic-ref", "--quiet", "--short", "HEAD"]).await?;
+    let current = current?;
     if current.success {
         return Ok(current.stdout.trim().to_string());
     }

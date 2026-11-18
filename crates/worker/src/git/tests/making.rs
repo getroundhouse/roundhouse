@@ -42,7 +42,7 @@ impl Made {
     /// Makes the worktree `name` on a new branch from `base`, and gives what it warned of.
     async fn new_branch(&self, branch: &str, base: &str, name: &str) -> Result<Vec<String>, ApiError> {
         let (branch, mut warnings) = (BranchName::from(branch), Vec::new());
-        make_on_new_branch(&given(), &self.repo, &branch, base, &self.at(name), &mut warnings).await?;
+        make_on_new_branch(&given(), &self.repo, &branch, Some(base), &self.at(name), &mut warnings).await?;
         Ok(warnings)
     }
 
@@ -111,6 +111,12 @@ async fn what_git_can_t_make_is_refused_and_leaves_nothing_behind() {
         (
             "a base taken for an option",
             made.new_branch("cedar/start", "--upload-pack=evil", "cedar").await,
+            InvalidRequest,
+        ),
+        // Its base is refused first, though git is asked about both at once.
+        (
+            "a base taken for an option, for a new branch that's there",
+            made.new_branch("alder/start", "--upload-pack=evil", "cedar").await,
             InvalidRequest,
         ),
         ("a base that isn't here", made.new_branch("cedar/start", "no-such-ref", "cedar").await, InvalidRequest),
