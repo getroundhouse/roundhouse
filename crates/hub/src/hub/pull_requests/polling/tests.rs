@@ -12,11 +12,11 @@ use protocol::model::{GhLogin, GhLoginWorks, WaitEnd, WaitId, WorkspaceId};
 use protocol::worker::{FoundToken, GithubLoginReply, WorkerRequest, WorkerResponse};
 use tokio::time::Instant;
 
-use crate::github::{Answer, PullRequestState, PullRequests, Script, StandIn};
 use crate::hub::Hub;
 use crate::hub::tests::{hub_on_github, hub_reading_github, hub_with_worktree, pushed};
 use crate::store::tests::idle_session;
 use crate::worker_link::WorkerLink;
+use github::{Answer, PullRequestState, PullRequests, Script, StandIn};
 
 /// When a stand-in was asked what it never answers, each time.
 type Asked = Arc<Mutex<Vec<Instant>>>;

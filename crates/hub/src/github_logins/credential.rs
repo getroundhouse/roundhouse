@@ -15,7 +15,8 @@ use tracing::{error, info};
 use super::blocks::{Unusable, lost, reason};
 use super::{DefaultCredential, GithubLogin, GithubLogins};
 use crate::login_files::{Locked, Stored};
-use crate::store::{GithubProfile, StoreError};
+use crate::store::StoreError;
+use github::GithubProfile;
 
 /// Who git says it is as it gives GitHub an installation's token, as GitHub's docs give.
 const INSTALLATION_USERNAME: &str = "x-access-token";

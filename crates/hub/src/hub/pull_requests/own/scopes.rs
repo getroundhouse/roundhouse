@@ -8,8 +8,8 @@ use protocol::model::{
     GitHubRepository, GithubRepositoryName, PullRequestNumber, PullRequestSelection, PullRequestsSnapshot,
 };
 
-use crate::github::{PullRequestsAsk, Unread};
 use crate::hub::pull_requests::remote::Waited;
+use github::{PullRequestsAsk, Unread};
 
 /// Pull requests of one repository that one ask reads.
 #[derive(Debug, PartialEq, Eq)]

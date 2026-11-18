@@ -17,13 +17,13 @@ use providers::local::{LocalConfig, LocalProvider};
 use tokio::sync::oneshot;
 
 use super::{Hub, HubDirs};
-use crate::github::{Github, GithubConfig, PullRequests, Script, StandIn};
 use crate::provider_set::ProviderSet;
 use crate::session::{CarriedOver, Item, LiveSession, Starting};
 use crate::store::Store;
 use crate::store::tests::store_with_session;
 use crate::timers::Timers;
 use crate::worker_link::WorkerLink;
+use github::{Github, GithubConfig, PullRequests, Script, StandIn};
 
 /// Claude as a hub's tests describe it, which a chat nobody has chosen for runs on Sonnet at High, so a test can tell
 /// what the description gave a chat from what anything else would have, and whose token lasts [`A_TOKEN_LASTS_MS`].

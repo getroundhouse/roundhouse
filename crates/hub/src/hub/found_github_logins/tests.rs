@@ -10,10 +10,10 @@ use protocol::worker::{FoundToken, GithubLoginReply, WorkerRequest, WorkerRespon
 use tokio::sync::broadcast;
 
 use super::FOUND_WITHIN;
-use crate::github::{Answer as GithubAnswer, StandIn};
 use crate::hub::Hub;
 use crate::hub::tests::{hub_calling_github, hub_in};
 use crate::worker_link::WorkerLink;
+use github::{Answer as GithubAnswer, StandIn};
 
 type Answer = Option<Result<WorkerResponse, ApiError>>;
 

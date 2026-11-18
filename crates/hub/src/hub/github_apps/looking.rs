@@ -1,6 +1,6 @@
 //! Looking for where an app of your own is installed, connecting each installation with a token made from the app's
 //! key, and making each installation's token again before its last ends. GitHub is asked between turns at the logins'
-//! lock, never under it. What it answers is `crate::github`'s to read, and what's kept of it, and in what order, is
+//! lock, never under it. What it answers is the `github` crate's to read, and what's kept of it, and in what order, is
 //! `crate::github_logins`'s.
 
 use std::sync::Arc;
@@ -10,9 +10,9 @@ use protocol::model::{GithubApp, GithubAppId};
 use tracing::{error, warn};
 
 use super::super::{Hub, off_thread};
-use crate::github::Minted;
 use crate::github_logins::{GithubAccountChange, InstallationToken, Looked, MintDue};
 use crate::store::now_ms;
+use github::Minted;
 
 impl Hub {
     /// Looks for where the app `id` is installed, and connects each installation [`GithubLogins::installations_found`]

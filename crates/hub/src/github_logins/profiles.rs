@@ -9,8 +9,8 @@ use protocol::model::{GithubAccountId, GithubToken, GithubUserId};
 use tracing::warn;
 
 use super::{Due, GithubAccountChange, GithubLogin, GithubLogins};
-use crate::github::TokenOwner;
 use crate::login_files::{Locked, Stored};
+use github::TokenOwner;
 
 /// How long after the hub last asked GitHub who an account is it asks again, so a name or an email changed on GitHub
 /// reaches workers within a day, at a call a day for each account. One never asked, as an account an older hub

@@ -212,7 +212,7 @@ pub(super) async fn handle(
         R::GithubSignInCancel(github_accounts::GithubSignInCancel { id }) => {
             C::GithubSignIn(hub.github_sign_in_cancel(id).await?)
         }
-        R::GithubAppManifestWrite(asked) => C::GithubAppManifest(crate::github::manifest(&asked)?),
+        R::GithubAppManifestWrite(asked) => C::GithubAppManifest(github::manifest(&asked)?),
         R::GithubAppMake(github_apps::GithubAppMake { code }) => C::GithubApp(hub.github_app_make(code).await?),
         R::GithubAppInstallationsConnect(github_apps::GithubAppInstallationsConnect { id }) => {
             C::GithubApp(hub.github_app_installations_connect(id).await?)

@@ -7,8 +7,8 @@ use protocol::model::{
 
 use super::judging::{Wanted, chosen, local, wanted};
 use super::scopes::scopes;
-use crate::github::{Headed, HeadsAsk};
 use crate::hub::pull_requests::remote::Waited;
+use github::{Headed, HeadsAsk};
 
 fn name(name: &str) -> GithubRepositoryName {
     GithubRepositoryName::try_from(name.to_string()).unwrap()

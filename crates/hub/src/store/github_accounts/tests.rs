@@ -1,3 +1,4 @@
+use github::GithubProfile;
 use protocol::model::GithubSettings;
 
 use super::*;

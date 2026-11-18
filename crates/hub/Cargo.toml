@@ -8,7 +8,7 @@ license.workspace = true
 [features]
 # What tests of the hub from outside it need, such as the names it picks from, shorter timers, a stand-in for GitHub,
 # and a database every migration has run on, which is kept as tests of processes keep what they share.
-testing = ["process/testing"]
+testing = ["github/testing", "process/testing"]
 
 [dependencies]
 base64.workspace = true
@@ -18,11 +18,9 @@ socket2.workspace = true
 tokio-rustls.workspace = true
 webpki.workspace = true
 async-trait.workspace = true
-jiff.workspace = true
 fastrand.workspace = true
-http.workspace = true
+github.workspace = true
 memchr.workspace = true
-octocrab.workspace = true
 parking_lot.workspace = true
 private-files.workspace = true
 process.workspace = true
@@ -38,9 +36,9 @@ uuid.workspace = true
 
 [dev-dependencies]
 client-core = { workspace = true, features = ["testing"] }
-# For an address where nothing listens.
-fetching = { workspace = true, features = ["testing"] }
 hub = { workspace = true, features = ["testing"] }
+# For the times GitHub gives, as a stand-in for it says them.
+jiff.workspace = true
 process = { workspace = true, features = ["testing"] }
 proptest.workspace = true
 protocol = { workspace = true, features = ["testing"] }

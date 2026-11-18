@@ -1,6 +1,6 @@
 //! Who a token's and a sign-in's account commits as, from GitHub's profile of its user: as it's connected or signed in,
 //! and as a check has GitHub asked again, under the logins' lock. What GitHub's answer says is tested in
-//! `crate::github`, and asking it as the hub's check does in `crate::hub`.
+//! the `github` crate, and asking it as the hub's check does in `crate::hub`.
 
 use std::path::Path;
 
@@ -12,8 +12,8 @@ use super::credential::sent;
 use super::sign_ins::{ada_signed_in, login_ending, sign_in_kept};
 use super::*;
 use crate::login_files::LoginFile;
-use crate::store::GithubProfile;
 use crate::store::older::{BEFORE_GITHUB_PROFILES, store_from_before};
+use github::GithubProfile;
 
 /// [`PROFILE_READ_EVERY`], in milliseconds.
 fn a_day_ms() -> i64 {

@@ -13,7 +13,7 @@ use protocol::worker::{GitCredential, GitIdentity, GithubCredential};
 use super::super::*;
 use super::credential::{reason, sent};
 use super::{default_of, logins_in};
-use crate::github::{GithubAppKey, Installation, MadeApp, Minted};
+use github::{GithubAppKey, Installation, MadeApp, Minted};
 
 const APP: GithubAppId = GithubAppId::new(9);
 

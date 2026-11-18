@@ -58,7 +58,7 @@ impl Hub {
     /// Stops checking the GitHub logins, as the hub stops, and waits for `watching`, the task
     /// [`Hub::watch_github_logins`] runs on, to end, before the hub lets go of its lock. It ends at once between checks.
     /// A check under way that hasn't started its renewals starts none, and one that has ends once they have, each
-    /// within [`ASK_WITHIN`](crate::github::ASK_WITHIN), 15 s, and then its write, which waits on nothing outside the
+    /// within [`ASK_WITHIN`](github::ASK_WITHIN), 15 s, and then its write, which waits on nothing outside the
     /// hub. So the wait is at most the check's own work, a renewal's call and its write. GitHub revokes what a renewal
     /// renews as it gives the next, so a stop that dropped what GitHub gave would have the account need signing in
     /// again, where waiting makes a stop at most about 15 s longer. Making an installation's token, and looking for

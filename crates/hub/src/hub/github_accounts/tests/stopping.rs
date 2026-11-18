@@ -9,10 +9,10 @@ use protocol::model::GithubToken;
 use tokio::time::Instant;
 
 use super::renewals::{hub_signed_in, renewing};
-use crate::github::{Answer, Gate, GithubRefreshToken};
 use crate::github_logins::tests::{ada_signed_in, login_ending, sign_in_held};
 use crate::hub::tests::hub_in;
 use crate::store::now_ms;
+use github::{Answer, Gate, GithubRefreshToken};
 
 const DAY_MS: i64 = 24 * 60 * 60 * 1000;
 

@@ -7,6 +7,7 @@ members = [
     "crates/agents",
     "crates/providers",
     "crates/worker",
+    "crates/github",
     "crates/hub",
     "crates/client-core",
     "apps/daemon",
@@ -41,6 +42,7 @@ default-members = [
     "crates/agents",
     "crates/providers",
     "crates/worker",
+    "crates/github",
     "crates/hub",
     "crates/client-core",
     "apps/daemon",
@@ -78,6 +80,7 @@ protocol = { path = "crates/protocol" }
 agents = { path = "crates/agents" }
 providers = { path = "crates/providers" }
 worker = { path = "crates/worker" }
+github = { path = "crates/github" }
 hub = { path = "crates/hub" }
 client-core = { path = "crates/client-core" }
 transcript = { path = "crates/transcript" }

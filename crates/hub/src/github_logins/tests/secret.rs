@@ -8,7 +8,7 @@ fn signed_in() -> SignedIn {
     SignedIn {
         token: GithubToken::new("a-token"),
         token_ends_at_ms: Some(28_800_000),
-        refresh: Some(crate::github::GithubRefreshToken::new("a-refresh-token")),
+        refresh: Some(github::GithubRefreshToken::new("a-refresh-token")),
         refresh_ends_at_ms: None,
     }
 }
@@ -33,7 +33,7 @@ fn a_token_is_kept_as_its_text_and_a_sign_in_as_a_json_object_of_its_form_and_ea
 fn an_installations_token_and_an_apps_key_are_kept_as_json_objects_of_their_forms_and_read_back_as_they_were() {
     let token = InstallationToken { token: GithubToken::new("ghs_made_up"), token_ends_at_ms: 3_600_000 };
     let (installation, app) =
-        (GithubLogin::Installation(token), GithubLogin::App(crate::github::GithubAppKey::new("a-made-up-key")));
+        (GithubLogin::Installation(token), GithubLogin::App(github::GithubAppKey::new("a-made-up-key")));
 
     let (installation_bytes, app_bytes) = (installation.to_bytes().unwrap(), app.to_bytes().unwrap());
 

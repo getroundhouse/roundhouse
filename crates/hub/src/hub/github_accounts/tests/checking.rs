@@ -1,7 +1,7 @@
 //! The check by the wall clock, on tokio's paused clock, which doesn't count a Mac's sleep, as tokio's timers don't, so
 //! a test moves the wall clock by as long as it likes and tokio's only to the next check. Each check here is
-//! `GithubLogins::check` alone, since renewing calls GitHub, whose stand-in a paused clock races, as `crate::github`'s
-//! device flow tests say, so what a renewal comes to is tested in `renewals`, on tokio's clock as it runs.
+//! `GithubLogins::check` alone, since renewing calls GitHub, whose stand-in a paused clock races, as the `github`
+//! crate's device flow tests say, so what a renewal comes to is tested in `renewals`, on tokio's clock as it runs.
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicI64, Ordering};
@@ -13,12 +13,13 @@ use tokio::sync::{Semaphore, mpsc};
 use tokio::time::Instant;
 
 use super::*;
-use crate::github::TokenOwner;
 use crate::github_logins::tests::{ada_signed_in, login_ending};
 use crate::github_logins::{Connect, GithubLogins, RENEWED_WITH_LEFT};
+use crate::store::Store;
 use crate::store::tests::store_with_session;
-use crate::store::{GithubProfile, Store};
 use crate::timers::Timers;
+use github::GithubProfile;
+use github::TokenOwner;
 
 const ENDS_AT_MS: i64 = 1_000_000_000;
 

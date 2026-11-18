@@ -1,7 +1,8 @@
 //! Checking the GitHub logins by the wall clock, renewing each sign-in the check finds due, making each installation of
 //! an app of your own the check finds due a new token, looking for where each app is installed, and asking GitHub who
 //! each account the check finds due is again. GitHub is asked between two turns at the logins' lock, never under it.
-//! What it answers is `crate::github`'s to read, and what's kept of it, and in what order, is `crate::github_logins`'s.
+//! What it answers is the `github` crate's to read, and what's kept of it, and in what order, is
+//! `crate::github_logins`'s.
 
 use std::sync::Arc;
 

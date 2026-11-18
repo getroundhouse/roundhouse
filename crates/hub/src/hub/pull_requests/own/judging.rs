@@ -4,7 +4,7 @@
 use protocol::client::{ApiError, ErrorCode};
 use protocol::model::{Branch, BranchName, Local, PrState, PullRequest, RepoUrl, Upstream, Workspace};
 
-use crate::github::{Headed, HeadsAsk};
+use github::{Headed, HeadsAsk};
 
 /// What reading a workspace's pull request asks of GitHub.
 #[derive(Debug, PartialEq, Eq)]

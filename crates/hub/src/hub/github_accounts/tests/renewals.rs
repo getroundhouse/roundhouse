@@ -1,7 +1,7 @@
 //! Renewing as the hub's check does, against a hub that never starts a worker and a stand-in for GitHub, on tokio's
 //! clock as it runs, since a request to the stand-in races a paused clock. Which sign-ins are due, what each of
 //! GitHub's answers keeps, and what renewing one that has changed meanwhile comes to, is tested in
-//! `crate::github_logins`, and what GitHub is asked, and what its answers come to, in `crate::github`.
+//! `crate::github_logins`, and what GitHub is asked, and what its answers come to, in the `github` crate.
 
 use std::path::Path;
 use std::sync::Arc;
@@ -11,11 +11,11 @@ use protocol::worker::{GitCredential, GitIdentity, GithubCredential};
 use tokio::sync::broadcast;
 
 use super::*;
-use crate::github::{Answer, Script, StandIn};
 use crate::github_logins::tests::{ada_signed_in, login_ending};
 use crate::hub::Hub;
 use crate::hub::tests::hub_calling_github;
 use crate::store::now_ms;
+use github::{Answer, Script, StandIn};
 
 const HOUR_MS: i64 = 60 * 60 * 1000;
 

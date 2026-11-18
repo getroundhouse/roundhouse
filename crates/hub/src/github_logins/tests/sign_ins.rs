@@ -20,7 +20,7 @@ pub(super) fn approved(id: &GithubSignInId, token: &str, new_id: &str) -> Approv
     let login = SignedIn {
         token: GithubToken::new(token),
         token_ends_at_ms: Some(9000),
-        refresh: Some(crate::github::GithubRefreshToken::new(format!("{token}-refresh"))),
+        refresh: Some(github::GithubRefreshToken::new(format!("{token}-refresh"))),
         refresh_ends_at_ms: Some(90_000),
     };
     Approved { sign_in: id.clone(), login, new_id: new_id.into(), signed_in_at_ms: 1000 }
@@ -50,7 +50,7 @@ pub(crate) fn login_ending(token: &str, ends_at_ms: i64) -> SignedIn {
     SignedIn {
         token: GithubToken::new(token),
         token_ends_at_ms: Some(ends_at_ms),
-        refresh: Some(crate::github::GithubRefreshToken::new(format!("{token}-refresh"))),
+        refresh: Some(github::GithubRefreshToken::new(format!("{token}-refresh"))),
         refresh_ends_at_ms: Some(ends_at_ms + 24 * 60 * 60 * 1000),
     }
 }

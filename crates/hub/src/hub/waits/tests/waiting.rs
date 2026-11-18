@@ -1,8 +1,8 @@
 use super::super::*;
-use crate::github::PullRequestState;
 use crate::hub::tests::{hub_in, hub_on_github, hub_with_worktree, open};
 use crate::store::tests::idle_session;
 use crate::store::{SessionChange, StatusChange};
+use github::PullRequestState;
 use protocol::event::{AgentTask, EventBody, ExitReason, NoticeLevel, TaskKind};
 use protocol::model::{PullRequest, Seq, SessionStatus, Workspace};
 use protocol::worker::{

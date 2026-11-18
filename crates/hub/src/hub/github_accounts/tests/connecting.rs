@@ -1,6 +1,6 @@
 //! Connecting, disconnecting and choosing the default as a client asks, against a hub that never starts a worker, and a
 //! stand-in for GitHub. What's kept, and in what order, and what's refused, is tested in `crate::github_logins`, and
-//! what GitHub's answers come to in `crate::github`.
+//! what GitHub's answers come to in the `github` crate.
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -10,8 +10,8 @@ use protocol::worker::{GitIdentity, GithubCredential};
 use tokio::sync::broadcast::error::TryRecvError;
 
 use super::*;
-use crate::github::{Answer, StandIn};
 use crate::hub::tests::hub_calling_github;
+use github::{Answer, StandIn};
 
 fn asking(token: &str) -> GithubAccountConnect {
     GithubAccountConnect { token: GithubToken::new(token), id: None }

@@ -14,12 +14,12 @@ use protocol::worker::{
 use providers::local::{LocalConfig, LocalProvider};
 
 use super::*;
-use crate::github::{Github, PullRequestState, PullRequests, Script, StandIn};
 use crate::hub::HubDirs;
 use crate::hub::tests::{NO_GITHUB, handed_a_token, pushed, serving};
 use crate::provider_set::ProviderSet;
 use crate::store::tests::store_with_session;
 use crate::timers::Timers;
+use github::{Github, PullRequestState, PullRequests, Script, StandIn};
 
 /// A local provider whose worker is `script`.
 fn provider_running(dir: &Path, script: &str) -> Arc<dyn Provider> {
@@ -54,7 +54,7 @@ fn hub_reading(dir: &Path, provider: &Arc<dyn Provider>, api: String) -> Arc<Hub
     let address = model::RepoUrl::try_from("https://github.com/example/project".to_string()).unwrap();
     store.read_repo_url(&"r".into(), "/repo", Some(&address), None).unwrap();
     let providers = ProviderSet::only(provider.clone());
-    let github = Github::new(crate::github::GithubConfig::at(api));
+    let github = Github::new(github::GithubConfig::at(api));
     let (dirs, timers) = (HubDirs::in_dir(dir), Timers::FOR_TESTS);
     let hub = Arc::new(Hub::new(Build::UNSTAMPED, store, dirs, providers, github, Vec::new(), false, timers));
     handed_a_token(&hub);
@@ -67,7 +67,7 @@ fn hub_timed(dir: &Path, provider: &Arc<dyn Provider>, timers: Timers) -> Arc<Hu
     store.workspace_ready(&"w".into(), "/w", &"alder".into(), "main", None).unwrap();
     store.read_repo_url(&"r".into(), "/repo", None, None).unwrap();
     let providers = ProviderSet::only(provider.clone());
-    let github = Github::new(crate::github::GithubConfig::at(NO_GITHUB.to_string()));
+    let github = Github::new(github::GithubConfig::at(NO_GITHUB.to_string()));
     Arc::new(Hub::new(Build::UNSTAMPED, store, HubDirs::in_dir(dir), providers, github, Vec::new(), false, timers))
 }
 

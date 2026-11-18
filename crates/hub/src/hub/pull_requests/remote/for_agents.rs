@@ -3,9 +3,9 @@
 
 use super::WorkspaceId;
 use super::{ApiError, Arc, Asked, ErrorCode, Hub, Instant, PullRequestSelection, PullRequestsSnapshot, ReadsHeld};
-use crate::github::PullRequestsAsk;
 use crate::jobs;
 use crate::store::now_ms;
+use github::PullRequestsAsk;
 
 impl Hub {
     /// Reads `selection` of the workspace's repository on GitHub, and those open under them in their stacks, for an

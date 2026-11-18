@@ -10,9 +10,9 @@ use tracing::{error, info, warn};
 
 use super::{GithubAccountChange, GithubLogin, GithubLogins, MintDue, ProfileDue, SignedIn};
 use crate::error::internal;
-use crate::github::{GithubRefreshToken, Renewal};
 use crate::login_files::{Locked, LoginFile, Stored};
 use crate::store::later_ms;
+use github::{GithubRefreshToken, Renewal};
 
 /// How much a sign-in's token has left when the hub renews it. GitHub's last 8 hours, so it's renewed about every 7,
 /// and the check every minute tries sixty times before the token ends, so GitHub can fail to answer for an hour before

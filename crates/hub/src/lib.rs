@@ -8,7 +8,6 @@ mod calls;
 mod child_process;
 mod error;
 mod frames;
-mod github;
 mod github_logins;
 mod hub;
 mod jobs;
@@ -33,14 +32,14 @@ mod versions;
 mod worker_link;
 
 pub use crate::error::HubError;
-pub use crate::github::GithubConfig;
+pub use crate::run::{HubConfig, run};
+pub use crate::timers::Timers;
+pub use github::GithubConfig;
 #[cfg(feature = "testing")]
-pub use crate::github::{
+pub use github::{
     Answer as GithubAnswer, Gate as GithubGate, PullRequestState as GithubPullRequestState,
     PullRequests as GithubPullRequests, Script as GithubScript, StandIn as GithubStandIn,
 };
-pub use crate::run::{HubConfig, run};
-pub use crate::timers::Timers;
 
 /// The names the hub picks a new workspace's from, so a test can have git hold every one.
 #[cfg(feature = "testing")]
