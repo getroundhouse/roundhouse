@@ -1,5 +1,6 @@
-//! The hub's timers that a test of the hub from outside it would otherwise sit through, gathered so a test's hub can be
-//! given shorter ones. The hub's own tests pause tokio's clock instead, which checks each timer's rules without waiting.
+//! The hub's timers that a test of the hub from outside it would otherwise sit through, or time by the clock, gathered so
+//! a test's hub can be given shorter ones, or, for a test that something didn't wait for a time limit, a longer one.
+//! The hub's own tests pause tokio's clock instead, which checks each timer's rules without waiting.
 
 #[cfg(feature = "testing")]
 use protocol::paths::ENV_TEST_HUB_TIMERS;
@@ -20,6 +21,12 @@ pub struct Timers {
     pub shutdown_grace: Duration,
     /// How long a worker has to answer the hub's hello.
     pub hello_within: Duration,
+    /// How long a provider's adapter has to answer the hub's hello.
+    pub adapter_hello_within: Duration,
+    /// How long the hub waits for a provider as it starts, before it serves, to list its instances or say how to reach
+    /// a worker an earlier hub left running there. One that takes longer has its sessions interrupted, as if their
+    /// workers had gone, so a slow one doesn't keep every client waiting.
+    pub before_serving: Duration,
     /// How often the hub looks at a workspace whose worker is another build.
     pub look_every: Duration,
     /// How often the hub looks for a pull request to read that nobody asked for.
@@ -49,6 +56,11 @@ impl Timers {
         shutdown_grace: Duration::from_secs(15),
         // A worker on this machine answers in milliseconds. Hitting this means something is wrong with it.
         hello_within: Duration::from_secs(10),
+        // An adapter answers hello at once, since it needn't reach its provider to do so.
+        adapter_hello_within: Duration::from_secs(10),
+        // The local provider answers in milliseconds, so this is reached by a provider that's stuck, or slow enough
+        // that waiting for it would keep every client waiting.
+        before_serving: Duration::from_secs(5),
         // Two looks in a row have to find nothing at work, so a moment with nothing at work, as just before an agent
         // picks up again by itself once its work in the background is done, isn't taken for the workspace being idle.
         look_every: Duration::from_secs(5),
@@ -125,12 +137,14 @@ mod tests {
         #![proptest_config(Config { rng_seed: RngSeed::Fixed(1), failure_persistence: None, ..Config::default() })]
 
         #[test]
-        fn a_hub_takes_the_timers_a_test_gives_it(times in prop::array::uniform8(duration())) {
+        fn a_hub_takes_the_timers_a_test_gives_it(times in prop::array::uniform10(duration())) {
             let [
                 agent_spacing,
                 picks_up_within,
                 shutdown_grace,
                 hello_within,
+                adapter_hello_within,
+                before_serving,
                 look_every,
                 read_pace,
                 sign_in_pace,
@@ -141,6 +155,8 @@ mod tests {
                 picks_up_within,
                 shutdown_grace,
                 hello_within,
+                adapter_hello_within,
+                before_serving,
                 look_every,
                 read_pace,
                 sign_in_pace,

@@ -19,8 +19,6 @@ use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::sync::{Mutex as AsyncMutex, watch};
 use tracing::{info, warn};
 
-/// An adapter answers hello at once, since it needn't reach its provider to do so.
-const HELLO_TIMEOUT: Duration = Duration::from_secs(10);
 /// Far longer than a request should take, even a cloud's VM starting, so an adapter that has lost one can't keep the
 /// hub waiting for it forever.
 pub(super) const REQUEST_TIMEOUT: Duration = Duration::from_mins(10);
@@ -49,6 +47,8 @@ pub(crate) struct AdapterProvider {
     pub(super) hub_id: HubId,
     /// The hub's, which its hello tells the adapter.
     pub(super) build: Build,
+    /// How long the adapter has to answer each hello.
+    pub(super) hello_within: Duration,
     pub(super) open: Open,
     /// As the newest hello declared them.
     pub(super) capabilities: Mutex<Capabilities>,
@@ -59,11 +59,12 @@ pub(crate) struct AdapterProvider {
 
 impl AdapterProvider {
     /// Its adapter starts when it's first asked something, or told to say hello.
-    pub(crate) fn new(name: String, hub_id: HubId, build: Build, open: Open) -> Self {
+    pub(crate) fn new(name: String, hub_id: HubId, build: Build, hello_within: Duration, open: Open) -> Self {
         Self {
             name,
             hub_id,
             build,
+            hello_within,
             open,
             capabilities: Mutex::new(Capabilities::default()),
             connection: AsyncMutex::new(None),
@@ -108,8 +109,9 @@ impl AdapterProvider {
         }
         .into_request();
         let failed = |e: io::Error| ProviderError::io(format!("saying hello to provider {}", self.name), e);
+        let within = self.hello_within;
         let answer = tokio::select! {
-            answer = tokio::time::timeout(HELLO_TIMEOUT, connection.call(&hello)) => answer.map_err(|_| failed(timed_out()))?,
+            answer = tokio::time::timeout(within, connection.call(&hello)) => answer.map_err(|_| failed(timed_out()))?,
             _ = shut.wait_for(|shut| *shut) => return Err(shutting_down()),
         };
         let outcome = answer?.ok_or_else(|| failed(exited()))?;

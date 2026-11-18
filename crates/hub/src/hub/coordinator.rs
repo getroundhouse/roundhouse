@@ -28,14 +28,8 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
-use std::time::Duration;
 use tokio::sync::{Mutex as AsyncMutex, Notify, broadcast, watch};
 use tracing::warn;
-
-/// How long the hub waits for a provider as it starts, before it serves, to list its instances or say how to reach a
-/// worker an earlier hub left running there. One that takes longer has its sessions interrupted, as if their workers had
-/// gone, so a slow one doesn't keep every client waiting.
-pub(crate) const BEFORE_SERVING: Duration = Duration::from_secs(5);
 
 /// Whether a restart leaves the hub's workers running. On Windows the local provider's workers run on the hub's pipes,
 /// since there are no Unix sockets there to serve them on, so they stop with it.

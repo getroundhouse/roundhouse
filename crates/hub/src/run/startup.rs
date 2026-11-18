@@ -93,7 +93,8 @@ fn take_lock(paths: &Paths) -> Result<std::fs::File, HubError> {
     }
 }
 
-/// The local provider, and the others this hub's data directory names.
+/// The local provider, and the others this hub's data directory names, whose adapters have as long to say hello as
+/// `timers` says.
 fn load_providers(
     build: Build,
     paths: &Paths,
@@ -101,6 +102,7 @@ fn load_providers(
     shell: Option<String>,
     path: Option<String>,
     store: &Store,
+    timers: &Timers,
 ) -> Result<ProviderSet, HubError> {
     let local: Arc<dyn Provider> = Arc::new(LocalProvider::new(LocalConfig {
         worker_exe,
@@ -111,7 +113,7 @@ fn load_providers(
         path,
     }));
     let hub_id = store.hub_id().map_err(HubError::OpenDatabase)?;
-    Ok(ProviderSet::load(local, &paths.providers, &hub_id, build))
+    Ok(ProviderSet::load(local, &paths.providers, &hub_id, build, timers.adapter_hello_within))
 }
 
 /// Runs until asked to stop or signalled. Returns an error if another hub is using these paths.
@@ -128,7 +130,7 @@ pub async fn run(config: HubConfig) -> Result<(), HubError> {
     let left_at_work = LeftAtWork::read(&store).map_err(HubError::Recover)?;
     let settings = store.hub_settings().map_err(HubError::OpenDatabase)?;
 
-    let providers = load_providers(build, &paths, worker_exe, shell, path, &store)?;
+    let providers = load_providers(build, &paths, worker_exe, shell, path, &store, &timers)?;
     let github = Github::new(github);
     let mut dirs = HubDirs::of(&paths);
     dirs.network_address = network_address;

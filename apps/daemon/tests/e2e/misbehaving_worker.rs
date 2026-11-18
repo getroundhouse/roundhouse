@@ -4,13 +4,13 @@
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use client_core::Client;
 use hub::Timers;
 
 use crate::support::{
-    Stack, assistant_text, install_executable, patient_with_workers, signal, wait_for_turn_end, wait_until,
+    Stack, TIMEOUT, assistant_text, install_executable, patient_with_workers, signal, wait_for_turn_end, wait_until,
 };
 
 /// Runs the hub from a copy of its binary, so a test can replace what it starts next.
@@ -48,12 +48,14 @@ fn kill_workers(stack: &Stack, client: &Client) {
     wait_until("the hub to notice", || client.hub_status().unwrap().workers == 0);
 }
 
-fn answered_within<T: Send + 'static>(limit: Duration, call: impl FnOnce() -> T + Send + 'static) -> bool {
+/// What `call` gives, or `None` if it hasn't within [`TIMEOUT`], which only one waiting for something that never comes
+/// runs out.
+fn answer<T: Send + 'static>(call: impl FnOnce() -> T + Send + 'static) -> Option<T> {
     let (tx, rx) = std::sync::mpsc::channel();
     std::thread::spawn(move || {
         let _ = tx.send(call());
     });
-    rx.recv_timeout(limit).is_ok()
+    rx.recv_timeout(TIMEOUT).ok()
 }
 
 #[test]
@@ -83,12 +85,12 @@ cat > /dev/null"#,
     assert!(assistant_text(&wait_for_turn_end(&client, &session.id, 1)).ends_with("recovered"));
 }
 
+/// The workers' hello has a limit far longer than the test waits, so whatever waited for one fails the test, however
+/// slow the machine. That the limit is reached is the next test's.
 #[test]
-fn a_worker_that_never_answers_only_affects_its_own_workspace_and_times_out() {
-    // Long enough for every real worker this test starts, the last of them the first run of a binary just copied into
-    // place, which macOS checks first.
-    let hello = Duration::from_secs(3);
-    let mut stack = Stack::start_with(vec![Timers { hello_within: hello, ..patient_with_workers() }.env()]);
+fn a_worker_that_never_answers_holds_up_neither_the_hub_nor_another_workspace() {
+    let patient = Timers { hello_within: Duration::from_mins(10), ..patient_with_workers() };
+    let mut stack = Stack::start_with(vec![patient.env()]);
     let exe = hub_from_copy(&mut stack);
     let client = stack.client();
     let (hung, _) = stack.workspace(&client);
@@ -99,44 +101,45 @@ fn a_worker_that_never_answers_only_affects_its_own_workspace_and_times_out() {
 
     // The next workers to start never say hello.
     replace_with_script(&exe, "exec sleep 1000");
-    let started = Instant::now();
-    let blocked: Vec<_> = [hung.id.clone(), also_hung.id.clone()]
-        .into_iter()
-        .map(|id| {
-            let socket = stack.socket();
-            std::thread::spawn(move || {
-                Client::connect(&socket, "test").unwrap().workspace_status(&id).map(|_| ()).map_err(|e| e.to_string())
-            })
-        })
-        .collect();
+    for id in [hung.id.clone(), also_hung.id.clone()] {
+        let socket = stack.socket();
+        std::thread::spawn(move || Client::connect(&socket, "test").unwrap().workspace_status(&id).map(drop));
+    }
+    // Both starts are under way at once, so neither waits for the other.
     wait_until("both of them to be starting a worker, beside the one that's fine", || {
         children_of(stack.hub_pid()).len() == 3
     });
 
-    // Each before the two starts give up, since one that waited on them would answer only then.
-    let before_they_give_up = || hello.saturating_sub(started.elapsed());
     let socket = stack.socket();
-    assert!(
-        answered_within(before_they_give_up(), move || Client::connect(&socket, "test").unwrap().hub_status().unwrap()),
-        "hub status must not wait on one workspace's worker"
-    );
-    let socket = stack.socket();
-    let fine_id = fine.id.clone();
-    assert!(
-        answered_within(before_they_give_up(), move || Client::connect(&socket, "test")
-            .unwrap()
-            .workspace_status(&fine_id)
-            .unwrap()),
-        "other workspaces must not wait on it either"
-    );
+    let status = answer(move || Client::connect(&socket, "test").unwrap().hub_status().unwrap());
+    assert!(status.is_some(), "hub status waited on one workspace's worker");
+    let (socket, fine_id) = (stack.socket(), fine.id.clone());
+    let status = answer(move || Client::connect(&socket, "test").unwrap().workspace_status(&fine_id).unwrap());
+    assert!(status.is_some(), "another workspace waited on it");
+    // So the workers that never answer don't outlive the test.
+    kill_workers(&stack, &client);
+}
 
-    for attempt in blocked {
-        assert!(attempt.join().unwrap().is_err(), "a worker that never answers is an error");
-    }
-    // Each times out on its own. If one start had to wait for the other, they'd take twice as long.
-    assert!(started.elapsed() < hello * 2, "took {:?}", started.elapsed());
-    // Each is ended as its start gives up, long before the hub would end it as a worker that didn't stop.
-    wait_until("the workers that never answered to be gone", || children_of(stack.hub_pid()).len() == 1);
+#[test]
+fn a_worker_that_never_answers_its_hello_is_given_up_on_and_ended() {
+    // Long enough for every real worker this test starts, the last of them the first run of a binary just copied into
+    // place, which macOS checks first.
+    let hello = Duration::from_secs(3);
+    let mut stack = Stack::start_with(vec![Timers { hello_within: hello, ..patient_with_workers() }.env()]);
+    let exe = hub_from_copy(&mut stack);
+    let client = stack.client();
+    let (hung, _) = stack.workspace(&client);
+    kill_workers(&stack, &client);
+
+    // The next worker to start never says hello.
+    replace_with_script(&exe, "exec sleep 1000");
+    let (socket, hung_id) = (stack.socket(), hung.id.clone());
+    let status = answer(move || Client::connect(&socket, "test").unwrap().workspace_status(&hung_id).map(drop));
+
+    let err = status.expect("its start never gave up on it").unwrap_err();
+    assert!(err.to_string().contains("didn't answer within"), "{err}");
+    // It's ended as its start gives up, long before the hub would end it as a worker that didn't stop.
+    wait_until("the worker that never answered to be gone", || children_of(stack.hub_pid()).is_empty());
 
     restore_real_worker(&exe);
     client.workspace_status(&hung.id).unwrap();
