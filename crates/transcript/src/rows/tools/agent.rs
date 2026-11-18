@@ -44,7 +44,9 @@ pub(super) fn draw(
     cx: &App,
 ) -> AnyElement {
     let mut line = Line::new(ICON, call.title())
-        .part(agent::shown_kind(call.kind).map(|kind| Part::Chip(kind.to_string().into())))
+        .part(
+            agent::shown_kind(call.kind).map(|kind| Part::Chip(look::chip(look::ChipKind::Subagent, kind.to_string()))),
+        )
         .part(standing(subagent).map(|standing| Part::Note(standing.into())));
     // The tab reads the work of the subagent its call started, which only a hub that keeps it apart can, whether or not
     // its record has come, or ever will, as for one recorded before the agent said when its subagents started.

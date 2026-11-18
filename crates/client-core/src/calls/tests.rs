@@ -247,7 +247,7 @@ fn a_typed_call_of_a_file_is_read_as_its_kind_and_named_in_words() {
 
     assert!(matches!(read(&notebook), ToolCall::NotebookEdit(_)));
     assert!(matches!(read(&patch), ToolCall::Patch(_)));
-    assert!(matches!(read(&looked_at), ToolCall::Read(ReadFile { path: "/tmp/shot.png" })));
+    assert!(matches!(read(&looked_at), ToolCall::Read(ReadFile { path: "/tmp/shot.png", .. })));
     assert!(matches!(read(&made), ToolCall::MakeImage(_)));
     let said = |call| (typed::title(call), Recorded::Typed(call).summary().unwrap_or_default());
     assert_eq!(said(&notebook), ("Add a cell".into(), "plots.ipynb".into()));

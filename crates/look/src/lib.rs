@@ -14,6 +14,7 @@ mod app_icon;
 mod badges;
 mod baseline;
 mod cache;
+mod chips;
 mod clock;
 mod colors;
 mod control_sizes;
@@ -58,6 +59,7 @@ pub use app_icon::{AppIconSize, AppIconStyle, app_icon};
 pub use badges::{Badge, BadgeKind, Label, badge, label};
 pub use baseline::{LineText, Placed};
 pub use cache::{CacheMark, cache_mark, expires_in, minutes_left, next_minute_in_ms};
+pub use chips::{Chip, ChipKind, chip};
 #[cfg(feature = "testing")]
 pub use clock::hold_still;
 pub use clock::{

@@ -4,6 +4,8 @@ use protocol::capability::calls::CallOutput;
 
 pub struct ReadFile<'a> {
     pub path: &'a str,
+    /// The lines the call asked for, where it named them, rather than reading from the top.
+    pub lines: Option<&'a protocol::capability::calls::call::LineRange>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

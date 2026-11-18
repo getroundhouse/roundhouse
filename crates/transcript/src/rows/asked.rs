@@ -1,5 +1,5 @@
-//! A question the agent asked, once it's no longer waiting, drawn as a call's line: `Asked`, each question's header in
-//! an outlined chip, and what was answered, faint. Opened, a block with each question under its header, and what was
+//! A question the agent asked, once it's no longer waiting, drawn as a call's line: `Asked`, each question's header on
+//! a badge, and what was answered, faint. Opened, a block with each question under its header, and what was
 //! answered under it. While it waits it's asked in the composer's place instead, by `questions::QuestionPanel`.
 
 use gpui_kit::assets::IconName;
@@ -44,7 +44,7 @@ pub(super) fn draw(seq: Seq, asked: &Asked, shared: &Shared, cx: &App) -> AnyEle
     let title = if questions.len() > 1 { format!("Asked {} questions", questions.len()) } else { "Asked".to_string() };
     let mut line = Line::new(ICON, title);
     for header in questions.iter().filter_map(|question| question.header.clone()) {
-        line = line.part(Part::Chip(header.into()));
+        line = line.part(Part::Badge(look::badge(look::BadgeKind::Plain, header)));
     }
     // Opened, the block says what was answered, so the line doesn't say it twice.
     let said = summary(questions, &asked.settled).filter(|_| !asked.open);

@@ -15,6 +15,12 @@ use crate::folds::Fold;
 use crate::item_key::ItemKey;
 use crate::rows::shown::Gather;
 
+/// What a search looked in, by its path. The call doesn't say whether that's a folder or a file, and it's a folder more
+/// often, so it's taken for a file only where its name has an extension.
+fn looked_in(path: &str) -> look::ChipKind {
+    if file_name(path).contains('.') { look::ChipKind::File } else { look::ChipKind::Folder }
+}
+
 /// More files than are worth listing in a block.
 const LISTED_FILES: usize = 200;
 
@@ -22,7 +28,7 @@ pub(super) fn draw(search: &Search, answer: Option<&Answer>, toggle: &Toggle, cx
     let found = found(answer);
     let line = Line::new(IconName::Search, search.title())
         .part(Part::Pill(search.pattern.to_string().into(), toggle.marks(Text::Pill, search.pattern)))
-        .part(search.path.map(|path| Part::Chip(file_name(path).to_string().into())))
+        .part(search.path.map(|path| Part::Chip(look::chip(looked_in(path), path.to_string()))))
         .part(found.as_ref().map(|found| Part::Note(found.summary().into())));
     let opened = || found.and_then(|found| opened(&found, toggle, cx));
     line::drawn(line, answer, opened, toggle, cx)

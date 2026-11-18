@@ -166,7 +166,7 @@ The pieces screens are built from, on the foundations in `look.md`: what each is
 
 ## Small things in a line
 
-- **Five kinds of small thing sit in a line, each for one job,** as the owner decided, so what one is says what it does: a pill is a value as it was written, a chip a thing the app knows, which opens, a badge what's true of the thing beside it, a label a tag someone chose, and a count how many. They're told apart by their shape as well as their words: a pill is filled, a chip filled with an edge, a badge tinted and smaller, a label round, and a count bare. *Not built:* chips, which a later change adds.
+- **Five kinds of small thing sit in a line, each for one job,** as the owner decided, so what one is says what it does: a pill is a value as it was written, a chip a thing the app knows, which opens, a badge what's true of the thing beside it, a label a tag someone chose, and a count how many. They're told apart by their shape as well as their words: a pill is filled, a chip filled with an edge, a badge tinted and smaller, a label round, and a count bare.
 
 ### Pills
 
@@ -182,6 +182,25 @@ The pieces screens are built from, on the foundations in `look.md`: what each is
 **Every kind of pill, with a command and an error.** *Unconfirmed.*
 
 ![Every kind of pill](screens/pill-kinds.png)
+
+### Chips
+
+- **A chip is a thing the app knows, such as a file or a subagent, in one frame whatever its kind,** as the owner decided, so a line with different chips reads as one system: filled with the one edge for something to use, a control's corners, 20px tall, as a pill is, with its kind's mark, then its name in body text, then what's said of it. Its kind says its mark and what it shows of what it names, such as a path's last part. `look::ChipKind` holds the kinds. *Unconfirmed:* its height and room. *Not built:* a click that opens it, its card on hover and its menu, the chips for an issue, a pull request, a workspace, a branch and a commit, and a file's folder where two files in view share a name.
+- **A file's chip always has the icon for its kind, and says what more there is to say of it,** as the owner decided: the lines a call named, after its name, such as `model.rs :12–40`, and the lines a change added and removed, such as `model.rs +12 −3`. A deleted file's name is struck through.
+
+**Every kind of chip, by its name.** Each is a kind in `look::ChipKind`. *Unconfirmed.*
+
+| Name | For |
+|---|---|
+| `File` | A file, named by its path: the icon for its kind, then its name, such as a call's file |
+| `Folder` | A folder, named by its path: the folder's icon, then its name, such as where a search looked |
+| `Subagent` | A subagent, by its kind or what it's for: the robot, then its words, such as `Explore` |
+| `Server` | An MCP server a tool is from: a plug, then its name, such as `github` |
+| `Site` | A site, by its address's host: a globe, then the host, such as what a fetch read |
+
+**Every kind of chip, and a file's chip with the lines it's about, with what changed in it, and deleted.** *Unconfirmed.*
+
+![Every kind of chip](screens/chip-kinds.png)
 
 ### Badges and labels
 

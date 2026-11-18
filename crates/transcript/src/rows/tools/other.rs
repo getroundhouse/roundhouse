@@ -18,7 +18,7 @@ pub(super) fn draw(other: &Other, input: &Value, answer: Option<&Answer>, toggle
     let icon = if other.server.is_some() { IconName::Plug } else { IconName::Wrench };
     let detail = other.detail.clone().filter(|_| !toggle.open);
     let line = Line::new(icon, other.title.clone())
-        .part(other.server.clone().map(|server| Part::Chip(server.into())))
+        .part(other.server.clone().map(|server| Part::Chip(look::chip(look::ChipKind::Server, server))))
         .part(other.tool.clone().map(|tool| Part::Note(tool.into())))
         .part(detail.map(|detail| Part::Code(detail.into())))
         .shows_output(true);

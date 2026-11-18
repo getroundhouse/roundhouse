@@ -1,4 +1,5 @@
-//! The small things that sit in a line, each kind in one picture of its own: every kind of pill, every kind of badge
+//! The small things that sit in a line, each kind in one picture of its own: every kind of pill, every kind of chip,
+//! with a file's chip with the lines it's about, with what changed in it and deleted, every kind of badge
 //! beside what it's said of, with labels in four colours, and every kind of count beside what it counts, with the
 //! lines a file gained and lost, as `look` has them, at the app's scale.
 
@@ -11,7 +12,7 @@ use gpui_kit::{
     AnyElement, App, Context, Hsla, InteractiveElement as _, IntoElement, ParentElement as _, PlatformTextSystem,
     Render, Styled as _, TestSupportExt as _, Window, div, px, rgb, size,
 };
-use look::{BadgeKind, CountKind, PillKind, Type, Typeset as _};
+use look::{BadgeKind, ChipKind, CountKind, PillKind, Type, Typeset as _};
 
 use super::capture::Picture;
 use super::headless;
@@ -19,6 +20,7 @@ use super::places::{self, Places};
 
 /// The images' names, in `docs/spec/screens/`.
 pub(crate) const PILLS: &str = "pill-kinds";
+pub(crate) const CHIPS: &str = "chip-kinds";
 pub(crate) const BADGES: &str = "badge-kinds";
 pub(crate) const COUNTS: &str = "count-kinds";
 /// The spec's file that shows them.
@@ -68,6 +70,44 @@ impl Render for Pills {
                 row(name, sample, cx)
             })
             .collect();
+        v_flex().size_full().bg(colors.pane).text_color(colors.text).p(px(MARGIN)).children(rows)
+    }
+}
+
+struct Chips;
+
+impl Render for Chips {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let colors = look::colors(cx);
+        let mut rows: Vec<AnyElement> = ChipKind::ALL
+            .iter()
+            .map(|&kind| {
+                let [name] = kind.written();
+                let (words, names) = match kind {
+                    ChipKind::File => ("Read", "crates/protocol/src/model.rs"),
+                    ChipKind::Folder => ("Searched", "crates/protocol/"),
+                    ChipKind::Subagent => ("Asked", "Explore"),
+                    ChipKind::Server => ("Create issue", "github"),
+                    ChipKind::Site => ("Fetched", "docs.rs"),
+                };
+                let sample = in_a_line("look::ChipKind", &name, words, look::chip(kind, names), cx);
+                row(name, sample, cx)
+            })
+            .collect();
+        let file = || look::chip(ChipKind::File, "crates/protocol/src/model.rs");
+        let files = [
+            ("Its lines", "Read", file().lines(12, Some(40))),
+            ("What changed", "Edit", file().changed(12, 3)),
+            ("Deleted", "Delete", look::chip(ChipKind::File, "src/legacy.rs").gone(true)),
+        ];
+        rows.extend(files.map(|(name, words, chip)| {
+            let line = h_flex()
+                .gap(look::Space::Small)
+                .typeset(Type::Body)
+                .child(div().flex_none().text_color(colors.text_muted).child(words))
+                .child(chip);
+            row(name.to_string(), line.into_any_element(), cx)
+        }));
         v_flex().size_full().bg(colors.pane).text_color(colors.text).p(px(MARGIN)).children(rows)
     }
 }
@@ -157,6 +197,20 @@ pub(crate) fn pills(text_system: &Arc<dyn PlatformTextSystem>) -> (Picture, Plac
         None,
         |_| Pills,
         |window| Places::of(window, &[("look::PillKind", &names)]),
+    )
+}
+
+/// Every kind of chip, and a file's with more to say of it, with where it draws each kind.
+pub(crate) fn chips(text_system: &Arc<dyn PlatformTextSystem>) -> (Picture, Places) {
+    let mut cx = headless::app(text_system);
+    let names: Vec<String> = ChipKind::ALL.iter().map(|each| each.written()[0].clone()).collect();
+    let size = size(wide(), tall(ChipKind::ALL.len() + 3));
+    headless::draw_and_measure(
+        &mut cx,
+        size,
+        None,
+        |_| Chips,
+        |window| Places::of(window, &[("look::ChipKind", &names)]),
     )
 }
 

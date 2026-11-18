@@ -13,7 +13,7 @@ use protocol::capability::calls::call::{FilePatch, Patch, PatchChange};
 use protocol::capability::calls::output::FileOutcome;
 use protocol::event::FileChange;
 
-use super::files::{chip, edit_line, whole, write_line};
+use super::files::{edit_line, whole, write_line};
 use super::line::{Line, Part};
 use super::{Answer, Toggle, block, line, marks, numbered};
 use crate::calls::diff;
@@ -90,7 +90,8 @@ impl Patched<'_> {
             Does::Adds { lines, replaced } => {
                 write_line(self.path, lines, replaced.then(|| diff::counts(&self.sections)))
             }
-            Does::Deletes => Line::new(IconName::Trash, "Delete").part(chip(self.path)),
+            Does::Deletes => Line::new(IconName::Trash, "Delete")
+                .part(Part::Chip(look::chip(look::ChipKind::File, self.path.to_string()).gone(true))),
             Does::Changes => {
                 let title = if self.moved_to.is_some() { "Move" } else { "Edit" };
                 edit_line(title, self.path, self.moved_to.unwrap_or(self.path), &self.sections)

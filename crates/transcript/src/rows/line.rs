@@ -13,7 +13,7 @@ use gpui_kit::{
     AnyElement, AnyView, App, Div, ElementId, InteractiveElement, IntoElement, ParentElement, Pixels, Role,
     SharedString, Stateful, StatefulInteractiveElement, Styled, TestSupportExt as _, Window, div, relative,
 };
-use look::{Hand as _, IconSizing as _, LineText, Shaped as _, Typeset as _};
+use look::{Hand as _, IconSizing as _, LineText, Shaped as _};
 use protocol::event::Denied;
 
 use super::shown::Gather;
@@ -54,8 +54,10 @@ pub(super) type Preview = Rc<dyn Fn(&mut Window, &mut App) -> AnyView>;
 pub(super) enum Part {
     /// Code, such as a command, on a raised pill, with the matches in it, if it's found in.
     Pill(SharedString, Marks),
-    /// What it acted on, such as an MCP server, in an outlined chip.
-    Chip(SharedString),
+    /// What it acted on, which the app knows, such as a file or an MCP server, on a chip.
+    Chip(look::Chip),
+    /// What's true of it, in a word or two, such as a question's header, on a badge.
+    Badge(look::Badge),
     /// An input, in faint monospace.
     Code(SharedString),
     /// A quiet word or two, such as the tool's name.
@@ -175,16 +177,8 @@ impl Part {
             Part::Pill(text, marks) => {
                 look::pill(look::PillKind::Plain, find::marked(text, &marks, &[], None)).into_any_element()
             }
-            Part::Chip(text) => div()
-                .flex_none()
-                .px(look::Space::Small)
-                .corners(look::Corner::Control)
-                .border_1()
-                .border_color(colors.control_edge)
-                .typeset(look::Type::Body)
-                .text_color(colors.text_muted)
-                .child(text)
-                .into_any_element(),
+            Part::Chip(chip) => chip.into_any_element(),
+            Part::Badge(badge) => badge.into_any_element(),
             Part::Code(text) => line_text
                 .code
                 .set(div().min_w_0().overflow_hidden().text_ellipsis().text_color(colors.text_faint).child(text))
