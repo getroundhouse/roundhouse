@@ -3,7 +3,7 @@
 //! and not in the app's settings. Its field is made anew once the hub has answered, so nothing of it stays.
 
 use gpui_kit::{App, Bounds, Context, FocusHandle, Pixels, ScrollHandle, Task, Window};
-use protocol::model::{Account, AccountId, AgentKind, LoginToken, Record};
+use protocol::model::{Account, AccountId, AgentKind, LoginToken};
 
 use super::super::field::Field;
 use super::super::redraw::{RedrawAt, bring_into_sight};
@@ -20,8 +20,8 @@ pub(super) struct Kept {
     pub(super) refused_as_older: bool,
     /// Why the hub couldn't forget the login of the account under whose row it's said.
     not_disconnected: Option<(AccountId, String)>,
-    /// The hub to ask, as of the page's last frame, with client-core's copy of its records, which takes in the record
-    /// an answer carries. `None` while there's no hub to ask.
+    /// The hub to ask, as of the page's last frame, with client-core's copy of its records. `None` while there's no hub
+    /// to ask.
     pub(super) asking: Option<Asking>,
     pub(super) choosing: super::choosing::Choosing,
     /// Settings' focus, as of the page's last frame, where focus goes back to as the panel goes while it has it, so
@@ -160,7 +160,7 @@ impl Kept {
         let connecting = asking.client.start(move |client| client.account_connect(agent, &name, token, account));
         panel.connecting = Some(cx.spawn_in(window, async move |this, cx| {
             let answer = connecting.recv().await;
-            let _ = this.update_in(cx, |this, window, cx| this.answered(answer, renewing, &asking, window, cx));
+            let _ = this.update_in(cx, |this, window, cx| this.answered(answer, renewing, window, cx));
         }));
         cx.notify();
     }
@@ -172,15 +172,11 @@ impl Kept {
         &mut self,
         answer: client_core::Result<Account>,
         renewing: bool,
-        asked: &Asking,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
         match answer.map_err(|e| words::refused(&e, renewing)) {
-            Ok(account) => {
-                self.put_away_panel(window, cx);
-                asked.feed.take_reply(Record::Account(account));
-            }
+            Ok(_) => self.put_away_panel(window, cx),
             Err(Refused::OlderHub) => {
                 self.put_away_panel(window, cx);
                 self.refused_as_older = true;
@@ -236,13 +232,7 @@ impl Kept {
         cx.spawn(async move |this, cx| {
             let answer = disconnecting.recv().await;
             let _ = this.update(cx, |this, cx| {
-                match answer {
-                    Ok(account) => {
-                        this.not_disconnected = None;
-                        asking.feed.take_reply(Record::Account(account));
-                    }
-                    Err(e) => this.not_disconnected = Some((id, words::disconnect_failed(&e))),
-                }
+                this.not_disconnected = answer.err().map(|e| (id, words::disconnect_failed(&e)));
                 cx.notify();
             });
         })

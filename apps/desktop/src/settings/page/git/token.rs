@@ -3,10 +3,9 @@
 //! answered, so nothing of it stays.
 
 use gpui_kit::{App, Context, Task, Window};
-use protocol::model::{GithubAccount, GithubAccountId, GithubToken, Record};
+use protocol::model::{GithubAccount, GithubAccountId, GithubToken};
 
 use super::super::field::Field;
-use super::Asking;
 use super::kept::{Kept, Shows};
 use super::words;
 
@@ -72,25 +71,16 @@ impl Kept {
         let connecting = asking.client.start(move |client| client.github_account_connect(token, account));
         panel.connecting = Some(cx.spawn_in(window, async move |this, cx| {
             let answer = connecting.recv().await;
-            let _ = this.update_in(cx, |this, window, cx| this.answered(answer, &asking, window, cx));
+            let _ = this.update_in(cx, |this, window, cx| this.answered(answer, window, cx));
         }));
         cx.notify();
     }
 
     /// Closes the panel once the hub has connected the token, and otherwise says why it couldn't, with the token's
     /// field made anew, so what was pasted is gone. The panel is the one that asked, since the wait goes with it.
-    fn answered(
-        &mut self,
-        answer: client_core::Result<GithubAccount>,
-        asked: &Asking,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
+    fn answered(&mut self, answer: client_core::Result<GithubAccount>, window: &mut Window, cx: &mut Context<Self>) {
         match answer {
-            Ok(account) => {
-                self.put_away_panel(window, cx);
-                asked.feed.take_reply(Record::GithubAccount(account));
-            }
+            Ok(_) => self.put_away_panel(window, cx),
             Err(e) => {
                 let token = Field::token(window, cx, Kept::connect);
                 let Some(panel) = self.token_panel_mut() else { return };

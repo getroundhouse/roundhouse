@@ -6,7 +6,7 @@ use gpui_kit::{
     div, px,
 };
 use look::{InRegion as _, Region, Typeset as _};
-use protocol::model::{Record, SetupStatus};
+use protocol::model::SetupStatus;
 
 use super::{PaneEvent, WorkspacePane};
 
@@ -75,11 +75,9 @@ impl WorkspacePane {
         let id = self.workspace().id.clone();
         let starting = self.client.start(move |client| client.workspace_rerun_setup(&id));
         cx.spawn(async move |this, cx| {
-            let started = starting.recv().await;
-            let _ = this.update(cx, |t, cx| match started {
-                Ok(workspace) => t.records.take_reply(Record::Workspace(workspace)),
-                Err(e) => cx.emit(PaneEvent::Error(format!("couldn't run setup: {e}"))),
-            });
+            if let Err(e) = starting.recv().await {
+                let _ = this.update(cx, |_, cx| cx.emit(PaneEvent::Error(format!("couldn't run setup: {e}"))));
+            }
         })
         .detach();
     }

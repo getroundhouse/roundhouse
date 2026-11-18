@@ -351,7 +351,7 @@ fn a_subagent_tab_opened_before_its_record_comes_is_named_as_the_record_names_it
         ..protocol::fixtures::subagent(call)
     };
 
-    ui.view().feed().unwrap().take_reply(Record::Subagent(record));
+    ui.view().feed().unwrap().take_record(Record::Subagent(record));
 
     ui.wait("the tab, named as the record names it", |ui| {
         ui.cx.read_entity(&pane, |p, _| p.subagent_tab() == Some(&id))

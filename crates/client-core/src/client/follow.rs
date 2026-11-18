@@ -2,8 +2,8 @@
 //! own, and telling readers when it changed. When the subscription falls behind, or there's a new connection, it starts
 //! again from where it got to.
 
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Weak};
 
 use parking_lot::Mutex;
 use protocol::client::ErrorCode;
@@ -77,6 +77,27 @@ impl<H> Clone for Follow<H> {
     }
 }
 
+/// A handle on something followed that doesn't keep it, for changing it from outside for as long as it's there, such
+/// as from a connection that takes in what its replies carry.
+pub(super) struct Reach<H>(Weak<Shared<H>>);
+
+impl<H> Reach<H> {
+    /// Changes what's held, telling readers when `change` says it changed it. Returns false, changing nothing, once
+    /// every handle on it and its thread have gone.
+    pub(super) fn change(&self, change: impl FnOnce(&mut H) -> bool) -> bool {
+        let Some(shared) = self.0.upgrade() else { return false };
+        if change(&mut shared.held.lock()) {
+            shared.changed();
+        }
+        true
+    }
+
+    /// Whether this reaches what `follow` follows.
+    pub(super) fn reaches(&self, follow: &Follow<H>) -> bool {
+        std::ptr::eq(self.0.as_ptr(), Arc::as_ptr(&follow.shared))
+    }
+}
+
 impl<H: Send + 'static> Follow<H> {
     /// Starts following on a thread of its own, so this doesn't wait for the hub, with the source `source` makes there.
     pub(super) fn start<S: Source<Held = H>>(
@@ -123,6 +144,11 @@ impl<H: Send + 'static> Follow<H> {
 
     pub(super) fn teller(&self) -> Teller {
         Teller(self.shared.signal.clone())
+    }
+
+    /// A handle on what's held that doesn't keep it followed.
+    pub(super) fn reach(&self) -> Reach<H> {
+        Reach(Arc::downgrade(&self.shared))
     }
 
     /// Has the thread look at what's been asked of it.

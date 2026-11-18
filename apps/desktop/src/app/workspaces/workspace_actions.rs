@@ -12,7 +12,7 @@ use client_core::records::Snapshot;
 use gpui_kit::{App, AppContext as _, Context, PathPromptOptions, Window};
 use in_view::InView;
 use protocol::client::ErrorCode;
-use protocol::model::{Record, Repo, RepoId, WorkspaceId, WorkspaceStatus};
+use protocol::model::{Repo, RepoId, WorkspaceId, WorkspaceStatus};
 use protocol::prompt::Prompt;
 
 impl AppView {
@@ -159,13 +159,10 @@ impl AppView {
         if let (Some(made_of), Some(dialog)) = (dialog_to_empty, &self.new_workspace) {
             dialog.update(cx, |dialog, cx| dialog.made_without_the_hub(&made_of, cx));
         }
-        let made_id = workspace.as_ref().map(|workspace| workspace.id.clone());
-        let chat = session.as_ref().map(|session| session.id.clone());
-        if let Some(workspace) = workspace {
-            self.take_reply(Record::Workspace(workspace), cx);
-        }
-        if let Some(session) = session {
-            self.take_reply(Record::Session(session), cx);
+        let made_id = workspace.map(|workspace| workspace.id);
+        let chat = session.map(|session| session.id);
+        if made_id.is_some() {
+            self.read_records(cx);
         }
         let stayed = |id: &WorkspaceId| asked_from.still(&self.in_view(), id);
         if let Some(id) = made_id.clone().filter(|id| stayed(id) || unsent.is_some()) {
@@ -214,10 +211,9 @@ impl AppView {
             let Ok(Ok(Some(paths))) = picked.await else { return };
             let Some(path) = paths.into_iter().next() else { return };
             let added = client.start(move |client| client.repo_add(&path.to_string_lossy())).recv().await;
-            let _ = this.update(cx, |t, cx| match added {
-                Ok(repo) => t.take_reply(Record::Repo(repo), cx),
-                Err(e) => t.show_error(format!("couldn't add that: {e}"), cx),
-            });
+            if let Err(e) = added {
+                let _ = this.update(cx, |t, cx| t.show_error(format!("couldn't add that: {e}"), cx));
+            }
         })
         .detach();
     }
@@ -237,11 +233,9 @@ impl AppView {
         let Some(client) = self.client() else { return };
         let renaming = client.start(move |client| client.workspace_rename(&id, &title));
         cx.spawn(async move |this, cx| {
-            let renamed = renaming.recv().await;
-            let _ = this.update(cx, |t, cx| match renamed {
-                Ok(workspace) => t.take_reply(Record::Workspace(workspace), cx),
-                Err(e) => t.show_error(Renaming::Workspace.failed(&e), cx),
-            });
+            if let Err(e) = renaming.recv().await {
+                let _ = this.update(cx, |t, cx| t.show_error(Renaming::Workspace.failed(&e), cx));
+            }
         })
         .detach();
     }
@@ -261,8 +255,9 @@ impl AppView {
             let _ = this.update(cx, |t, cx| {
                 t.retitling.remove(&id);
                 t.tell_retitling(&id, cx);
+                // With the title it was given, in the same frame as what's said of it while it waited goes.
                 match retitled {
-                    Ok(workspace) => t.take_reply(Record::Workspace(workspace), cx),
+                    Ok(_) => t.read_records(cx),
                     Err(e) => t.show_error(rename::regenerating_failed(&e), cx),
                 }
             });
@@ -295,7 +290,8 @@ impl AppView {
             let _ = this.update(cx, |t, cx| {
                 t.set_busy(Busy::Free, cx);
                 match result {
-                    Ok(workspace) => t.take_reply(Record::Workspace(workspace), cx),
+                    // As it's being archived, in the same frame as the buttons that archive come back.
+                    Ok(_) => t.read_records(cx),
                     Err(ClientError::Api(e)) if e.code == ErrorCode::NeedsForce && !force => {
                         t.confirm_forced_archive(id.clone(), &e.message, cx);
                     }
@@ -340,9 +336,8 @@ impl AppView {
                 t.set_busy(Busy::Free, cx);
                 match result {
                     Ok(workspace) => {
-                        let id = workspace.id.clone();
-                        t.take_reply(Record::Workspace(workspace), cx);
-                        t.select(id, cx);
+                        t.read_records(cx);
+                        t.select(workspace.id, cx);
                     }
                     Err(e) => t.show_error(format!("couldn't restore: {e}"), cx),
                 }

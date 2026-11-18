@@ -5,17 +5,16 @@ use std::time::Duration;
 
 use client_core::RecordsFeed;
 use gpui_kit::Context;
-use protocol::model::Record;
 
 use super::AppView;
 use crate::prompt_cache;
 use crate::workspace_pane::WorkspacePane;
 
 impl AppView {
-    /// Passes on a record a reply carried, so what's shown needn't wait for the feed.
-    pub(crate) fn take_reply(&mut self, record: Record, cx: &mut Context<Self>) {
+    /// Brings what's shown up to date with client-core's copy now, rather than once the feed says it changed, for what's
+    /// done next with a record a reply carried, which client-core took in before the reply came.
+    pub(super) fn read_records(&mut self, cx: &mut Context<Self>) {
         let Some(feed) = self.feed.clone() else { return };
-        feed.take_reply(record);
         self.refresh(&feed, cx);
     }
 

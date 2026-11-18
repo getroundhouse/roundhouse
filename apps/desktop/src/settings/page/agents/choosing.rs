@@ -1,7 +1,7 @@
 //! A pending request is local UI state; the selected account comes only from the hub record.
 
 use gpui_kit::{Context, Task};
-use protocol::model::{AccountId, AgentKind, Record};
+use protocol::model::{AccountId, AgentKind};
 
 use super::kept::Kept;
 
@@ -23,9 +23,8 @@ impl Kept {
             let answer = choosing.recv().await;
             let _ = this.update(cx, |this, cx| {
                 this.choosing.pending = None;
-                match answer {
-                    Ok(settings) => asking.feed.take_reply(Record::HubSettings(settings)),
-                    Err(e) => this.choosing.error = Some(format!("Couldn't change the default: {e}")),
+                if let Err(e) = answer {
+                    this.choosing.error = Some(format!("Couldn't change the default: {e}"));
                 }
                 cx.notify();
             });

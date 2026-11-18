@@ -203,7 +203,7 @@ fn install(
     cx: &App,
 ) -> AnyElement {
     let Some(made) = made else {
-        return refusal(app_words::GONE.to_string(), cx).into_any_element();
+        return refusal(app_words::gone(), cx).into_any_element();
     };
     let (installing, checking) = (drawing.kept.clone(), drawing.kept.clone());
     let shown = made.clone();

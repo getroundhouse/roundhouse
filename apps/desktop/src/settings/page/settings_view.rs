@@ -32,8 +32,8 @@ pub(crate) struct OfHub {
     pub(crate) asking: Option<Asking>,
 }
 
-/// The hub to ask, and client-core's copy of its records, which takes in a record a reply carries, so what's shown
-/// needn't wait for the hub to say the same.
+/// The hub to ask, and client-core's copy of its records, which has taken in the record an answer carries by the time
+/// the answer comes, so what's read of it then needn't wait for the hub to say the same.
 #[derive(Clone)]
 pub(crate) struct Asking {
     pub(crate) client: Client,

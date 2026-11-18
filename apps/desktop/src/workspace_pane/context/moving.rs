@@ -81,8 +81,8 @@ impl WorkspacePane {
         let moving = self.client.start(move |client| client.session_assign_account(&id, &account, force));
         cx.spawn_in(window, async move |this, cx| {
             let moved = moving.recv().await;
-            let _ = this.update_in(cx, |t, _, cx| match moved {
-                Ok(session) => t.took_reply(session, cx),
+            let _ = this.update_in(cx, |_, _, cx| match moved {
+                Ok(_) => {}
                 Err(ClientError::Api(e)) if e.code == ErrorCode::NeedsForce && !force => {
                     let pane = cx.weak_entity();
                     cx.emit(PaneEvent::Present(std::rc::Rc::new(move |window, cx| {

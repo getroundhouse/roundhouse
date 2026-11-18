@@ -2,7 +2,7 @@
 //! sidebar.
 
 use gpui_kit::{App, Context};
-use protocol::model::{Record, Session, WorkspaceId};
+use protocol::model::{Session, WorkspaceId};
 
 use super::AppView;
 use crate::workspace_pane::{Mark, OnScreen};
@@ -72,16 +72,16 @@ impl AppView {
                 Mark::Read => client.session_mark_read(&s.id, s.reply_seq),
                 Mark::Unread => client.session_mark_unread(&s.id),
             };
-            chats.iter().map(mark_one).collect::<Result<Vec<Session>, _>>()
+            chats.iter().try_for_each(|s| mark_one(s).map(drop))
         });
         cx.spawn(async move |this, cx| {
-            let marked = marking.recv().await;
-            let _ = this.update(cx, |t, cx| match marked {
-                Ok(sessions) => sessions.into_iter().for_each(|s| t.take_reply(Record::Session(s), cx)),
-                // A hub older than this app keeps no replies, so it has none to mark.
-                Err(e) if e.is_unsupported() => {}
-                Err(e) => t.show_error(format!("couldn't mark the workspace {}: {e}", mark.word()), cx),
-            });
+            // A hub older than this app keeps no replies, so it has none to mark.
+            if let Err(e) = marking.recv().await
+                && !e.is_unsupported()
+            {
+                let said = format!("couldn't mark the workspace {}: {e}", mark.word());
+                let _ = this.update(cx, |t, cx| t.show_error(said, cx));
+            }
         })
         .detach();
     }

@@ -37,12 +37,9 @@ impl WorkspacePane {
         cx.spawn(async move |this, cx| {
             let queued = queueing.recv().await;
             let _ = this.update(cx, |t, cx| {
-                match queued {
-                    Ok(session) => t.took_reply(session, cx),
-                    Err(NotTaken { error, prompt }) => {
-                        t.give_back(Some(&session_id), prompt, cx);
-                        cx.emit(PaneEvent::Error(format!("couldn't queue that: {error}")));
-                    }
+                if let Err(NotTaken { error, prompt }) = queued {
+                    t.give_back(Some(&session_id), prompt, cx);
+                    cx.emit(PaneEvent::Error(format!("couldn't queue that: {error}")));
                 }
                 cx.notify();
             });
@@ -56,11 +53,9 @@ impl WorkspacePane {
         let Some(session_id) = self.active.clone() else { return };
         let sending = self.client.start(move |client| client.session_send_queued(&session_id, client_msg_id));
         cx.spawn(async move |this, cx| {
-            let sent = sending.recv().await;
-            let _ = this.update(cx, |t, cx| match sent {
-                Ok(session) => t.took_reply(session, cx),
-                Err(e) => cx.emit(PaneEvent::Error(format!("couldn't send that: {e}"))),
-            });
+            if let Err(e) = sending.recv().await {
+                let _ = this.update(cx, |_, cx| cx.emit(PaneEvent::Error(format!("couldn't send that: {e}"))));
+            }
         })
         .detach();
     }
@@ -69,11 +64,10 @@ impl WorkspacePane {
         let Some(session_id) = self.active.clone() else { return };
         let removing = self.client.start(move |client| client.session_unqueue(&session_id, client_msg_id));
         cx.spawn(async move |this, cx| {
-            let removed = removing.recv().await;
-            let _ = this.update(cx, |t, cx| match removed {
-                Ok(session) => t.took_reply(session, cx),
-                Err(e) => cx.emit(PaneEvent::Error(format!("couldn't take that out of the queue: {e}"))),
-            });
+            if let Err(e) = removing.recv().await {
+                let said = format!("couldn't take that out of the queue: {e}");
+                let _ = this.update(cx, |_, cx| cx.emit(PaneEvent::Error(said)));
+            }
         })
         .detach();
     }
@@ -117,11 +111,9 @@ impl WorkspacePane {
     ) {
         let changing = self.client.start(move |client| client.session_change_queued(&session_id, client_msg_id, &text));
         cx.spawn(async move |this, cx| {
-            let changed = changing.recv().await;
-            let _ = this.update(cx, |t, cx| match changed {
-                Ok(session) => t.took_reply(session, cx),
-                Err(e) => cx.emit(PaneEvent::Error(not_changed(&e))),
-            });
+            if let Err(e) = changing.recv().await {
+                let _ = this.update(cx, |_, cx| cx.emit(PaneEvent::Error(not_changed(&e))));
+            }
         })
         .detach();
     }

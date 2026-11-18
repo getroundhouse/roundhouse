@@ -1,14 +1,13 @@
 //! How a sign-in with GitHub stands, as its panel shows it, from the hub's record of it, and what the panel says of
 //! each: the code to type while it waits, and how it ended.
 
-use client_core::ClientError;
 use client_core::records::Snapshot;
+use client_core::{ClientError, refusals};
 use gpui_kit::App;
 use protocol::client::ErrorCode;
 use protocol::model::{GithubSettings, GithubSignInStatus, GithubUserCode};
 
 use super::sign_in::SignInPanel;
-use super::words;
 
 /// How the sign-in a panel shows stands.
 #[derive(Debug, PartialEq, Eq)]
@@ -128,24 +127,14 @@ pub(super) fn waiting(until: Option<&str>) -> String {
     }
 }
 
-/// What a panel says when the hub couldn't start a sign-in.
+/// What a panel says when the hub couldn't start a sign-in: what a conflict and an older hub mean for one, and
+/// otherwise why, as for anything asked.
 pub(super) fn not_started(e: &ClientError) -> String {
-    let ClientError::Api(api) = e else { return format!("Couldn't start signing in: {}", words::reason(e)) };
-    match api.code {
-        ErrorCode::Conflict => {
+    match e {
+        ClientError::Api(api) if api.code == ErrorCode::Conflict => {
             "As many sign-ins as the hub allows are waiting. Finish or cancel one, then try again.".to_string()
         }
-        ErrorCode::Unsupported => "This hub can't sign in with GitHub until it's updated. Use a token.".to_string(),
-        ErrorCode::Unauthorized
-        | ErrorCode::LocalOnly
-        | ErrorCode::InvalidRequest
-        | ErrorCode::VersionMismatch
-        | ErrorCode::NeedsForce
-        | ErrorCode::NameTaken
-        | ErrorCode::NotFound
-        | ErrorCode::Worker
-        | ErrorCode::Unavailable
-        | ErrorCode::Internal
-        | ErrorCode::Unknown => format!("Couldn't start signing in: {}", api.message),
+        e if e.is_unsupported() => "This hub can't sign in with GitHub until it's updated. Use a token.".to_string(),
+        e => refusals::couldnt("start signing in", e),
     }
 }

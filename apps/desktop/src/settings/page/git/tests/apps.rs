@@ -80,7 +80,7 @@ fn a_code_github_no_longer_takes_starts_again_and_anything_else_tries_the_same_c
     );
     assert!(again);
     assert!(app_words::not_made(&ClientError::Disconnected).1, "the hub unreachable");
-    assert_eq!(app_words::not_looked(&api(ErrorCode::NotFound)), app_words::GONE);
+    assert_eq!(app_words::not_looked(&api(ErrorCode::NotFound)), app_words::gone());
 }
 
 #[test]

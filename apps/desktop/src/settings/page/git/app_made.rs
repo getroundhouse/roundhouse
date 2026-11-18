@@ -4,7 +4,7 @@
 
 use client_core::records::Snapshot;
 use gpui_kit::{Context, Window};
-use protocol::model::{GithubAccount, GithubApp, GithubAppId, Record};
+use protocol::model::{GithubAccount, GithubApp, GithubAppId};
 
 use super::app_panel::{AppStep, OnGithub};
 use super::app_words;
@@ -32,11 +32,7 @@ impl Kept {
             // In the window it was asked in, which `update_in` would take to be whichever the page last used.
             let _ = cx.update(|window, cx| {
                 this.update(cx, |this, cx| match answer {
-                    Ok(made) => {
-                        let id = made.id;
-                        asking.feed.take_reply(Record::GithubApp(made));
-                        this.installing(id, window, cx);
-                    }
+                    Ok(made) => this.installing(made.id, window, cx),
                     Err(e) => this.not_made(&e, cx),
                 })
             });
@@ -96,13 +92,7 @@ impl Kept {
         panel.waiting = Some(cx.spawn(async move |this, cx| {
             let answer = looking.recv().await;
             let _ = this.update(cx, |this, cx| {
-                let said = match answer {
-                    Ok(app) => {
-                        asking.feed.take_reply(Record::GithubApp(app));
-                        None
-                    }
-                    Err(e) => Some(app_words::not_looked(&e)),
-                };
+                let said = answer.err().map(|e| app_words::not_looked(&e));
                 if let Some(AppStep::Installing { looking, failed, .. }) = this.app_panel_mut().map(|app| &mut app.step)
                 {
                     (*looking, *failed) = (false, said);

@@ -4,7 +4,7 @@
 
 use client_core::records::Snapshot;
 use gpui_kit::{Context, Window};
-use protocol::model::{GithubSignIn, GithubSignInId, Record};
+use protocol::model::{GithubSignIn, GithubSignInId};
 
 use super::Asking;
 use super::kept::{Kept, Shows};
@@ -42,8 +42,8 @@ impl Kept {
         self.open(Shows::SignIn(SignInPanel { id, starting: true, not_started: None, again }), cx);
     }
 
-    /// Takes in what the hub answered the start of `id` with: its record, or why it couldn't start it, which only its
-    /// own panel says. One whose panel was put away meanwhile, as when it was cancelled before the hub answered, is
+    /// Takes in what the hub answered the start of `id` with: its record, which client-core has already, or why it
+    /// couldn't start it, which only its own panel says. One whose panel was put away meanwhile, as when it was cancelled before the hub answered, is
     /// cancelled now, so the hub doesn't go on waiting for it.
     fn started(
         &mut self,
@@ -52,9 +52,6 @@ impl Kept {
         asked: &Asking,
         cx: &mut Context<Self>,
     ) {
-        if let Ok(sign_in) = &answer {
-            asked.feed.take_reply(Record::GithubSignIn(sign_in.clone()));
-        }
         if let Some(panel) = self.sign_in_panel_mut().filter(|panel| &panel.id == id) {
             panel.starting = false;
             panel.not_started = answer.err().map(|e| sign_in_words::not_started(&e));
@@ -62,7 +59,7 @@ impl Kept {
             return;
         }
         if answer.is_ok_and(|sign_in| sign_in.status.is_waiting()) && self.put_away.contains(id) {
-            cancel_at_hub(id.clone(), asked.clone(), cx);
+            cancel_at_hub(id.clone(), asked);
         }
     }
 
@@ -71,9 +68,9 @@ impl Kept {
     pub(super) fn cancel_sign_in(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(panel) = self.sign_in_panel() else { return };
         if !panel.starting
-            && let Some(asking) = self.asking.clone()
+            && let Some(asking) = &self.asking
         {
-            cancel_at_hub(panel.id.clone(), asking, cx);
+            cancel_at_hub(panel.id.clone(), asking);
         }
         self.put_away_panel(window, cx);
     }
@@ -103,14 +100,9 @@ impl Kept {
     }
 }
 
-/// Has the hub cancel the sign-in `id`, and takes in the record it answers with, which the feed brings too, whatever
-/// it says, as when GitHub approved it meanwhile.
-fn cancel_at_hub(id: GithubSignInId, asking: Asking, cx: &mut Context<Kept>) {
-    let cancelling = asking.client.start(move |client| client.github_sign_in_cancel(&id));
-    cx.spawn(async move |_, _| {
-        if let Ok(sign_in) = cancelling.recv().await {
-            asking.feed.take_reply(Record::GithubSignIn(sign_in));
-        }
-    })
-    .detach();
+/// Has the hub cancel the sign-in `id`. The record it answers with, which client-core takes in, says how it stands
+/// whatever that is, as when GitHub approved it meanwhile.
+fn cancel_at_hub(id: GithubSignInId, asking: &Asking) {
+    // Not waited for: what it says is in the records, and it runs to the end whatever the page does.
+    drop(asking.client.start(move |client| client.github_sign_in_cancel(&id)));
 }

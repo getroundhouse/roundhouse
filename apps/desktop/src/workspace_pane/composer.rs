@@ -122,11 +122,7 @@ impl WorkspacePane {
             let changed = changing.recv().await;
             let _ = this.update(cx, |t, cx| {
                 let now = match changed {
-                    Ok(session) => {
-                        let mode = session.mode;
-                        t.took_reply(session, cx);
-                        Some(mode)
-                    }
+                    Ok(session) => Some(session.mode),
                     Err(e) => {
                         cx.emit(PaneEvent::Error(format!("couldn't change that: {e}")));
                         None

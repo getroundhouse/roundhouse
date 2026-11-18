@@ -71,7 +71,8 @@ fn comment_in(feed: &RecordsFeed, id: &WorkspaceId) -> Option<String> {
 fn a_draft_a_decision_and_a_comment_being_written_are_kept_across_a_restart_and_every_client_hears_of_them() {
     let mut stack = Stack::start();
     let client = stack.client();
-    let feed = RecordsFeed::start(&client);
+    // On a connection of its own, so the replies it would take in can't bring what's kept.
+    let feed = RecordsFeed::start(&stack.client());
     let (workspace, session) = stack.workspace(&client);
     let comment =
         CommentDraft { path: "README.md".into(), side: DiffSide::New, line: 1, editing: None, text: "why?".into() };
@@ -113,7 +114,8 @@ fn a_draft_a_decision_and_a_comment_being_written_are_kept_across_a_restart_and_
 fn whats_in_the_new_workspace_dialog_is_kept_with_its_files_across_a_restart_and_every_client_hears_of_it() {
     let mut stack = Stack::start();
     let client = stack.client();
-    let feed = RecordsFeed::start(&client);
+    // On a connection of its own, so the reply it would take in can't bring what's kept.
+    let feed = RecordsFeed::start(&stack.client());
     let dialog_in = || feed.snapshot().new_workspace_draft().map(|draft| draft.text.clone());
     // So only the notice of what's kept can bring it, rather than the feed's first list.
     wait_until("client-core's first list", || dialog_in().is_some());

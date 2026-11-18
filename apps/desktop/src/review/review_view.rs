@@ -1,6 +1,6 @@
 use crate::patch;
 use crate::patch::FilePatch;
-use client_core::{Client, RecordsFeed};
+use client_core::Client;
 use gpui_kit::{AppContext as _, Context, EventEmitter};
 use protocol::model::{CommentDraft, CommentId, CommitId, DiffComment, WorkspaceId};
 use std::collections::HashSet;
@@ -20,8 +20,6 @@ pub enum ReviewEvent {
 
 pub struct Review {
     pub(super) client: Client,
-    /// Client-core's copy of the hub's records, which replies go into.
-    pub(super) records: RecordsFeed,
     pub(super) workspace_id: WorkspaceId,
     /// Every changed file, in order of path, or `None` until the diff has loaded.
     pub files: Option<Vec<FilePatch>>,
@@ -45,16 +43,9 @@ impl EventEmitter<ReviewEvent> for Review {}
 
 impl Review {
     /// Starts loading the diff, with the comments client-core holds for the workspace now.
-    pub fn new(
-        client: Client,
-        records: RecordsFeed,
-        workspace_id: WorkspaceId,
-        held: Vec<DiffComment>,
-        cx: &mut Context<Self>,
-    ) -> Self {
+    pub fn new(client: Client, workspace_id: WorkspaceId, held: Vec<DiffComment>, cx: &mut Context<Self>) -> Self {
         let mut this = Self {
             client,
-            records,
             workspace_id,
             files: None,
             base_commit: None,

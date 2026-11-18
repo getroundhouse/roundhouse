@@ -1,13 +1,13 @@
 //! What Git says of apps of your own: the way to connect one in Connect account's panel, each step of the panel that
-//! makes one, what GitHub and the hub refused there, and what an app's rows and their menus say.
+//! makes one, what GitHub and the hub refused there, as far as it's particular to an app, and what an app's rows and
+//! their menus say.
 
-use client_core::ClientError;
 use client_core::records::Snapshot;
+use client_core::{ClientError, refusals};
 use protocol::client::ErrorCode;
 use protocol::model::{GhLogin, GithubAccountId, GithubApp};
 
 use super::added::listed;
-use super::words;
 use crate::manifest_flow::{NotAnOrganization, Under};
 
 /// What Connect account's panel says of an app of your own.
@@ -43,7 +43,9 @@ pub(super) const INSTALL_SAYS: &str = "Choose the repositories on GitHub. Roundh
                                        here, and the hub looks every minute.";
 
 /// What the panel says of an app the hub no longer has, as once it's been removed elsewhere.
-pub(super) const GONE: &str = "The hub no longer has this app.";
+pub(super) fn gone() -> String {
+    refusals::gone("app")
+}
 
 /// What installing it says while the hub looks.
 pub(super) const LOOKING: &str = "Looking for it on GitHub…";
@@ -125,7 +127,7 @@ pub(super) fn not_written(e: &ClientError) -> String {
             format!("Choose another name: {}.", api.message)
         }
         e if e.is_unsupported() => "This hub can't make an app of your own until it's updated.".to_string(),
-        e => format!("Couldn't open GitHub: {}", words::reason(e)),
+        e => refusals::couldnt("open GitHub", e),
     }
 }
 
@@ -142,19 +144,19 @@ pub(super) fn not_made(e: &ClientError) -> (String, bool) {
         e => (
             format!(
                 "The hub couldn't take the app's key from GitHub: {}. GitHub takes its code for an hour, so try again.",
-                words::reason(e)
+                refusals::reason(e)
             ),
             true,
         ),
     }
 }
 
-/// What to say when the hub couldn't do `what` for an app, such as "remove it".
+/// What to say when the hub couldn't do `what` for an app, such as "remove it", or no longer has it.
 pub(super) fn couldnt(what: &str, e: &ClientError) -> String {
     if e.is_not_found() {
-        return GONE.to_string();
+        return gone();
     }
-    format!("Couldn't {what}: {}", words::reason(e))
+    refusals::couldnt(what, e)
 }
 
 /// What to say when the hub couldn't look for where an app's installed.

@@ -99,7 +99,7 @@ pub(super) enum Next {
 pub struct WorkspacePane {
     pub(super) model_lookup: crate::model_lookup::Lookup,
     pub(super) client: Client,
-    /// Client-core's copy of the hub's records, which replies go into.
+    /// Client-core's copy of the hub's records, which keeps the subagents of each chat the pane shows.
     pub(super) records: RecordsFeed,
     /// What's shown of the workspace's records, as of client-core's last change: its own, its sessions' and its
     /// comments', and through them the accounts its sessions name and their subagents.
