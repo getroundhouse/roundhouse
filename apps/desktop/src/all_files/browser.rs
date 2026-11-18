@@ -5,7 +5,7 @@ use gpui_kit::component::v_flex;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, AppContext as _, Context, EventEmitter, Hsla, IntoElement, ParentElement as _, Render, SharedString,
-    StatefulInteractiveElement as _, Styled as _, TestSupportExt as _, Window, div, uniform_list,
+    Styled as _, Window, div, uniform_list,
 };
 use listed::Listed;
 use look::Typeset as _;
@@ -278,7 +278,7 @@ impl AllFiles {
                         cx,
                     )
                     .on_click(cx.listener(move |t, _, _, cx| t.toggle_folder(&path, &names, cx)));
-                    Some(row.test_support().into_any_element())
+                    Some(row.into_any_element())
                 }
                 Row::File { index, depth } => {
                     let path = listed.paths.get(*index)?.clone();
@@ -296,7 +296,7 @@ impl AllFiles {
                                 .child(name),
                         )
                         .on_click(cx.listener(move |_, _, _, cx| cx.emit(AllFilesEvent::Open(path.clone()))));
-                    Some(row.test_support().into_any_element())
+                    Some(row.into_any_element())
                 }
             })
             .collect()
@@ -316,7 +316,7 @@ impl Render for AllFiles {
                 uniform_list("all-files", self.rows.len(), cx.processor(|t, range, _, cx| t.draw_rows(range, cx)))
                     .flex_1()
                     .w_full()
-                    .py(look::Space::XSmall)
+                    .p(look::ROWS_INSET)
                     .into_any_element()
             }
         };

@@ -62,16 +62,15 @@ colors! {
         icon_tile_top = 0x211d_1bff,
     }
     "Under the pointer, pressed or chosen" {
-        /// A row in a list under the pointer, such as Home's or a file's.
+        /// A question's option under the pointer. A list's rows are washed, as `look::ListRow` draws them.
         row_hover = 0x211e_1cff,
         /// A call's line under the pointer, and the compaction's.
         line_hover = 0x1e1b_19ff,
-        /// A menu's row under the pointer, a step above the menu, a page in Settings' sidebar, under the pointer or
-        /// open, and behind code within a line of text, which the kit draws in the grey of its menus' rows.
+        /// Behind code within a line of text, which the kit draws in its accent's grey.
         menu_hover = 0x2823_21ff,
         /// Something raised, under the pointer.
         raised_hover = 0x2b27_24ff,
-        /// Something raised, pressed, and a row of the sidebar that's selected.
+        /// Something raised, pressed, such as the hub switcher.
         raised_pressed = 0x322d_2aff,
     }
     "Edges and the shadow" {

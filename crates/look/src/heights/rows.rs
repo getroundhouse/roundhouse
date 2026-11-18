@@ -18,8 +18,8 @@ named! {
         /// Most lists, such as the places to go in a sidebar: the sidebar's own places, its projects and their
         /// workspaces, and Settings' pages.
         Regular,
-        /// A row of a table, with a line between it and the next: Home's workspaces, and the accounts in Settings' Agents
-        /// and Git.
+        /// A row of a table: Home's workspaces, and the accounts in Settings' Agents and Git, which have a line between
+        /// each and the next.
         Large,
     }
 }

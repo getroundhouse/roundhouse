@@ -6,13 +6,13 @@ use crate::workspace_order::Sort;
 use crate::{prompt_cache, reorder};
 use gpui_kit::assets::IconName as Lucide;
 use gpui_kit::component::input::{InputEvent, InputState};
-use gpui_kit::component::{h_flex, v_flex};
+use gpui_kit::component::v_flex;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, AppContext as _, Context, ElementId, Entity, InteractiveElement as _, IntoElement, ParentElement,
-    Pixels, ScrollHandle, StatefulInteractiveElement as _, Styled, Subscription, TestSupportExt as _, Window, div, px,
+    Pixels, ScrollHandle, Styled, Subscription, TestSupportExt as _, Window, div, px,
 };
-use look::{Hand as _, InRegion as _, LineText, Placed, Region, RowSize};
+use look::{InRegion as _, LineText, Placed, Region, RowSize};
 use protocol::model::{RepoId, Workspace, WorkspaceId, WorkspaceStatus};
 use std::rc::Rc;
 
@@ -202,24 +202,14 @@ pub(crate) fn page(app: &AppView, rows: Rows, cx: &mut Context<AppView>) -> impl
 /// workspace, as its row in the sidebar does, or brings an archived one back. The repository and what the row says are
 /// smaller, on the name's baseline.
 fn row(app: &AppView, workspace: &Workspace, line_text: &LineText, cx: &mut Context<AppView>) -> AnyElement {
-    let colors = look::colors(cx);
-    let (border, hover, muted) = (colors.edge, colors.row_hover, colors.text_muted);
+    let muted = look::colors(cx).text_muted;
     let Standing { signal, work, needs_a_look } = standing(app, workspace, cx);
     let repo = app.repo(&workspace.repo_id).map_or_default(|r| r.name.clone());
     let its_chats = app.records().sessions(&workspace.id).iter().filter(|_| prompt_cache::told_of(workspace));
     let expiring = prompt_cache::soonest_expiring(its_chats, look::now_ms(cx))
         .map(|left_ms| line_text.detail.set(div().flex_none().text_color(muted).child(look::expires_in(left_ms))));
     let id = workspace.id.clone();
-    h_flex()
-        .id(ElementId::Name(format!("home-{}", workspace.id).into()))
-        .w_full()
-        .h(ROW_SIZE.height())
-        .px(look::Space::Large)
-        .gap(look::Space::Medium)
-        .border_b_1()
-        .border_color(border)
-        .hover(|d| d.bg(hover))
-        .hand()
+    let row = look::list_row(ElementId::Name(format!("home-{}", workspace.id).into()), ROW_SIZE)
         .on_click(cx.listener(move |t, _, _, cx| t.open_workspace(id.clone(), cx)))
         .child(look::mark(signal, work, look::Size::Inline, cx))
         .child(
@@ -233,9 +223,9 @@ fn row(app: &AppView, workspace: &Workspace, line_text: &LineText, cx: &mut Cont
         )
         .children(expiring)
         .child(line_text.detail.set(div().flex_none().w(REPO_WIDTH).truncate().text_color(muted).child(repo)))
-        .child(row_button(app, workspace, &line_text.detail, cx))
-        .test_support()
-        .into_any_element()
+        .child(row_button(app, workspace, &line_text.detail, cx));
+    // In from the pane's edges, as a list's rows are, since the list places each row itself.
+    div().w_full().px(look::ROWS_INSET).child(row).into_any_element()
 }
 
 /// The button that archives the workspace or brings it back, or what the row says in its place while it does.

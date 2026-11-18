@@ -58,11 +58,11 @@ Each colour means one thing.
 | `prompt` | `#37281f` | A prompt's bubble |
 | `icon_tile_top` | `#211d1b` | The top of the app icon's tile |
 | **Under the pointer, pressed or chosen** | | |
-| `row_hover` | `#211e1c` | A row in a list under the pointer, such as Home's or a file's |
+| `row_hover` | `#211e1c` | A question's option under the pointer. A list's rows, such as Home's or a file's, were once this, and are now washed as a borderless button is, as `components.md` says |
 | `line_hover` | `#1e1b19` | A call's line under the pointer, and the compaction's |
-| `menu_hover` | `#282321` | A page in Settings' sidebar, under the pointer or open, and behind code within a line of text, which the kit draws in its accent's grey. A menu's row under the pointer was once this, and is now washed as a borderless button is, as `components.md` says |
+| `menu_hover` | `#282321` | Behind code within a line of text, which the kit draws in its accent's grey. A menu's row and a page in Settings' sidebar were once this, and are now washed as a borderless button is, as `components.md` says |
 | `raised_hover` | `#2b2724` | Something raised, under the pointer |
-| `raised_pressed` | `#322d2a` | Something raised, pressed, and the sidebar's selected row |
+| `raised_pressed` | `#322d2a` | Something raised, pressed, such as the hub switcher |
 | **Edges and the shadow** | | |
 | `edge` | `#2a2624` | The thin edge that separates: around a card, along a header, between rows |
 | `control_edge` | `#353130` | Something to use: the composer, a chip, a key, a field, a button that opens something, the button back down to a chat's end |
@@ -145,10 +145,10 @@ Three strengths have names of their own, since several places draw with them: wh
 
 | Name | Room | For |
 |---|---|---|
-| `XSmall` | 4px | Between a name and what's said under it, such as an account's; between the lines of one list, such as a project's row and its workspaces or Settings' pages; between the buttons on a row, such as a prompt's waiting in the queue; and around the rows in All files, in Changes and in the outline's list |
-| `Small` | 8px | Between an icon or a mark and its words, such as a sidebar row's or a file's in a tree; at a sidebar row's ends and around the sidebar's list; above and below the chat's rows; between a comment's Cancel and Save; above and below a prompt waiting in the queue or a question's option; and above a terminal's grid |
-| `Medium` | 12px | Around what's in a card, such as the update card, the workspace's card or a turn's card, and between a card's parts, as `components.md` says, or a question's; at both ends of Changes' bar, the pull request's bar and a file's path, and where a tab starts; at the sides of a call's block, and at the left of a terminal's grid; and between an icon and its words in Settings' pages and Home's rows |
-| `Large` | 16px | At the sides of the chat's column and under the composer; where the workspace's header and Home's bar start, and at both ends of an image's comparison's bar, a subagent's bar and Home's rows; around Agents' panel; and between the settings on a page and the parts of an account's row |
+| `XSmall` | 4px | Between a name and what's said under it, such as an account's; between the lines of one list, such as a project's row and its workspaces or Settings' pages; between the buttons on a row, such as a prompt's waiting in the queue; and around a list's rows, such as All files', Changes', Settings' pages', Home's and the outline's |
+| `Small` | 8px | Between an icon or a mark and its words, such as a sidebar row's, a page's in Settings or a file's in a tree; at a sidebar row's ends and around the sidebar's list; above and below the chat's rows; between a comment's Cancel and Save; above and below a prompt waiting in the queue or a question's option; and above a terminal's grid |
+| `Medium` | 12px | Around what's in a card, such as the update card, the workspace's card or a turn's card, and between a card's parts, as `components.md` says, or a question's; at both ends of Changes' bar, the pull request's bar and a file's path, and where a tab starts; at the sides of a call's block, and at the left of a terminal's grid; and at the ends of a large row, such as Home's, and between what's in it |
+| `Large` | 16px | At the sides of the chat's column and under the composer; where the workspace's header and Home's bar start, and at both ends of an image's comparison's bar and a subagent's bar; around Agents' panel; and between the settings on a page and the parts of an account's row |
 | `XLarge` | 24px | Around what's in Agents' panel, and around a picture in the file viewer or an image's comparison; under a setting; between the two sides in the bar under an image's comparison's; and the least room between the two ends of a line laid out to its ends, such as a setting's name and its switch |
 | `XXLarge` | 32px | At the sides of a Settings page, and between its lists, such as Agents' |
 
@@ -209,7 +209,7 @@ Three strengths have names of their own, since several places draw with them: wh
 |---|---|---|
 | `Small` | 28px | Used sparingly: a long list to look down, where more room would show less of it at once, such as a file in a tree, a call's line in the chat, or a page a search found, and whatever the list, the heading over it, and a line on its own, set apart from a list, such as a fold among a diff's lines or the build line under the sidebar |
 | `Regular` | 36px | Most lists, such as the places to go in a sidebar: the sidebar's own places, its projects and their workspaces, and Settings' pages |
-| `Large` | 44px | A row of a table, with a line between it and the next: Home's workspaces, and the accounts in Settings' Agents and Git |
+| `Large` | 44px | A row of a table: Home's workspaces, and the accounts in Settings' Agents and Git, which have a line between each and the next |
 
 **Every size of a bar and of a row, as the app draws them.** *Unconfirmed.*
 

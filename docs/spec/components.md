@@ -120,6 +120,16 @@ The pieces screens are built from, on the foundations in `look.md`: what each is
 
 ![Every kind of field in every state](screens/field-states.png)
 
+## A list's rows
+
+- **A list's row is washed in the text's colour under the pointer and while it's chosen, as a borderless button is,** `text` at 6% and 9%, and rounded with a control's corners, 4px in from its list's edges, as the owner chose from pictures of three ways, so every list lights the same way, as a menu's rows and a button do. Each list had its own grey, and some ran edge to edge, so a row under the pointer was filled seven ways. `look::ListRow` draws one, in All files, Changes, Settings' pages and Home. *Unconfirmed:* all of it, which the owner wants to see across the app before confirming.
+- **A row's room, at its ends and between what's in it, is by its size:** 8px in a small or a regular row, and 12px in a large one, a table's, so its parts read apart across a pane. A row in a tree is set in by its depth after its start. *Unconfirmed.*
+- **Home's rows have no line between them,** since each is washed under the pointer, apart from the next. *Unconfirmed.*
+
+**Every size of a list's row, as All files', Settings' pages and Home's are, with the first chosen and the third under the pointer.** *Unconfirmed.*
+
+![Every size of a list's row](screens/list-rows.png)
+
 ## Menus
 
 - **A menu's rows are as tall as a large control, with room to read and to aim at,** as the owner decided, from pictures of four, since menus are used all over and were among the weakest things to look at. A row's icon is a large icon, in the muted text's colour, then the row's words, in body text, and its key or a note faint at its end. A label over some rows is as tall as a row, in the muted text's colour. A thin line separates groups of rows. *Unconfirmed:* the room at each end of a row, 12px, and between its icon and its words, 8px.
