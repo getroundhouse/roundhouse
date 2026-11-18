@@ -34,10 +34,7 @@ jobs:
             target/
           key: mac-probe-none
           restore-keys: mac-5adc
-      - run: >-
-          cargo nextest run --profile mac --workspace --locked --partition slice:1/4
-          -E 'not test(/^gallery::/)' || true
       - run: |
-          for i in $(seq 20); do
-            cargo nextest run --profile mac -p hub --test network_stalls --locked --success-output final --failure-output final 2>&1 | grep -E "PROBE|FAIL|PASS \[" || true
+          for i in 1 2 3; do
+            cargo nextest run --profile mac --workspace --locked --partition slice:1/4 -E 'not test(/^gallery::/)' || true
           done

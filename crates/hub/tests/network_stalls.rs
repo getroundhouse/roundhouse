@@ -80,20 +80,31 @@ impl Peer {
 fn finishes<T: Send + 'static>(peer: Peer, call: impl FnOnce(RemoteHub) -> T + Send + 'static) -> T {
     let hub = peer.hub.clone();
     let (sent, result) = mpsc::channel();
+    let (finished, watch) = mpsc::channel::<()>();
+    let watchdog = std::thread::spawn(move || {
+        if watch.recv_timeout(Duration::from_secs(2)).is_err() {
+            eprintln!("PROBE still going at 2s; sampling");
+            for (program, args) in [
+                ("sample", vec![std::process::id().to_string(), "1".to_string()]),
+                ("sysctl", vec!["vm.swapusage".to_string(), "vm.memory_pressure".to_string()]),
+                ("vm_stat", vec![]),
+                ("memory_pressure", vec!["-Q".to_string()]),
+            ] {
+                if let Ok(out) = std::process::Command::new(program).args(args).output() {
+                    eprintln!("PROBE {program}:\n{}{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr));
+                }
+            }
+        }
+    });
     let task = std::thread::spawn(move || {
-        let _ = sent.send(call(hub));
+        let answer = call(hub);
+        let _ = finished.send(());
+        let _ = sent.send(answer);
     });
     let answer = result.recv_timeout(TEST_DEADLINE);
-    if answer.is_err() {
-        eprintln!("PROBE deadline passed; sampling");
-        let out = std::process::Command::new("sample")
-            .args([std::process::id().to_string(), "1".to_string()])
-            .output()
-            .unwrap();
-        eprintln!("{}\n{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr));
-    }
     peer.finish();
     task.join().unwrap();
+    watchdog.join().unwrap();
     answer.expect("a live TCP peer held the client beyond the deadline")
 }
 
@@ -137,8 +148,10 @@ fn a_peer_that_stops_reading_disconnects_all_pending_calls() {
         // More than the TCP and TLS buffers hold while the peer reads no application data: under 2 MB on a Mac, and up
         // to 4 MB on Linux by default. No more, since a test build encodes it slowly and the deadline counts that: 64 MB
         // took 0.9 s on an idle Mac, and held the call past the deadline on CI's Mac runners, 6 tests to 3 cores.
+        let name = "x".repeat(16 * 1024 * 1024);
+        eprintln!("PROBE repeated {:?}", t.elapsed());
         let error = client
-            .call(devices::Pair { code: PairingCode::from("test-code"), device_name: "x".repeat(16 * 1024 * 1024) })
+            .call(devices::Pair { code: PairingCode::from("test-code"), device_name: name })
             .unwrap_err();
         eprintln!("PROBE called {:?} {error}", t.elapsed());
         assert!(matches!(error, ClientError::Disconnected), "{error}");

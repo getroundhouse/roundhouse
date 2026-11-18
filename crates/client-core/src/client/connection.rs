@@ -155,13 +155,21 @@ impl Inner {
 
     /// Sends `request` as call `id`, or says there's no connection to send it on.
     fn send(&self, id: u64, request: ClientRequest) -> Result<()> {
+        let t = std::time::Instant::now();
         let line = frame::encode(&ClientFrame { id, request }).map_err(|e| ClientError::Unexpected(e.to_string()))?;
+        let encoded = t.elapsed();
         if *self.disconnected.lock() {
             return Err(ClientError::Disconnected);
         }
+        let checked = t.elapsed();
+        let mut writer = self.writer.lock();
+        if line.len() > 1 << 20 || t.elapsed() > std::time::Duration::from_millis(100) {
+            eprintln!("PROBE send {id} of {}: encoded {encoded:?}, checked {checked:?}, locked {:?}", line.len(), t.elapsed());
+        }
         // Writing to the hub only fails once it has gone, which the reader may not have found yet, so the connection
         // ends here.
-        if self.writer.lock().write_all(&line).is_err() {
+        if writer.write_all(&line).is_err() {
+            drop(writer);
             end_connection(self);
             return Err(ClientError::Disconnected);
         }
