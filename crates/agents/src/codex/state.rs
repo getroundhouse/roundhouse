@@ -87,6 +87,8 @@ pub(super) struct Conversation {
     pub(super) work: HashMap<Option<SubagentId>, Work>,
     pub(super) subagents: super::subagents::Subagents,
     pub(super) plan: Option<String>,
+    /// The agent's turn's diff as Codex last said it, which it often says again unchanged.
+    pub(super) turn_diff: Option<String>,
     pub(super) reply: Option<String>,
     pub(super) cancelling: bool,
 }
@@ -107,6 +109,7 @@ impl Conversation {
             work: HashMap::new(),
             subagents: super::subagents::Subagents::default(),
             plan: None,
+            turn_diff: None,
             reply: None,
             cancelling: false,
         }

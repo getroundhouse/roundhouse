@@ -17,6 +17,7 @@ mod subagents;
 mod supervise;
 mod terminals;
 mod turn;
+mod turn_reports;
 mod usage;
 
 pub use catalog::models_for;

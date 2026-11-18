@@ -52,7 +52,7 @@ Generate it from the CLI being qualified: fields and defaults can change between
 
 ### Code Mode and commands
 
-`item/commandExecution/outputDelta` carries transient fragments of a command's output. Roundhouse records the completed item's aggregate output rather than each fragment as an untranslated event. It drops `item/reasoning/summaryPartAdded` and `turn/diff/updated` the same way, since the finished reasoning item and the turn's file changes say them whole, and `thread/readState/changed`, `remoteControl/status/changed` and `turn/moderationMetadata`, which say what Codex's own interfaces read. Other, unrecognized notifications still keep their raw lines for later normalization.
+`item/commandExecution/outputDelta` carries transient fragments of a command's output. Roundhouse records the completed item's aggregate output rather than each fragment as an untranslated event. It doesn't use `item/reasoning/summaryPartAdded` either, since the finished reasoning item says it whole, or `thread/readState/changed`, `remoteControl/status/changed` and `turn/moderationMetadata`, which say what Codex's own interfaces read. "Notifications it doesn't use" below says how it asks Codex not to send them. Other, unrecognized notifications still keep their raw lines for later normalization.
 
 `thread/tokenUsage/updated` says what the thread's newest request held, under `last`, and its running total, under `total`. How full the context is is `last.totalTokens` of `modelContextWindow`, as Codex's own interface counts it. The window is the configuration's, which can be smaller than the model's, and the notification doesn't say which. A subagent's thread sends its own, which its record keeps. `account/rateLimits/updated` names the account's limit on every model as `codex`, with a window of 10,080 minutes seen, and can leave out what hasn't changed.
 
@@ -195,6 +195,19 @@ Read from 0.170.0 against a scripted model, with the isolation of the conformanc
 | Nothing says what to keep | Codex claims compaction that ignores what it's asked to keep, so the hub sends it none, and records none |
 
 What isn't established: whether Codex takes a steer while it's still compacting, and what it does with a compaction asked while a turn goes on, which the hub doesn't ask.
+
+## A turn's changes and its plan
+
+Read from 0.170.0 against a scripted model, as compacting was, and from its generated schema.
+
+| Observed | Roundhouse rule |
+|---|---|
+| `turn/diff/updated` says, with its `threadId` and `turnId`, everything the turn has changed so far, as one `diff` in git's form: a `diff --git` header for each file, `new file mode` for one it made, `deleted file mode` for one it removed, `rename from` and `rename to` for one it moved, then the file's hunks. A scripted turn that edited one file and made another sent it three times, twice the same | The adapter reports a root turn's diff as the turn's changes, file by file, whole, and doesn't report one the same as the last it reported in that turn. A subagent's thread's diff isn't reported, since its changes are the turn's too |
+| `turn/plan/updated` says the turn's plan, whole: an optional `explanation`, and `plan`, a list of steps, each with its `step` and a `status` of `pending`, `inProgress` or `completed`. It comes of the `update_plan` tool, which the scripted model wasn't offered in the default mode, so it wasn't seen | The adapter reports it as the chat's to-do list, with the explanation as its note, and a subagent's thread's plan not at all. A status it doesn't know is kept as unknown |
+
+### Notifications it doesn't use
+
+`initialize` takes `optOutNotificationMethods` among its `capabilities`, a list of notification methods Codex then doesn't send. 0.170.0 honored it: a scripted turn that edited a file, with the list the adapter sends, brought none of the methods on it. The adapter lists `thread/status/changed`, `thread/started`, `item/reasoning/textDelta`, `item/commandExecution/outputDelta`, `item/reasoning/summaryPartAdded`, `thread/readState/changed`, `remoteControl/status/changed`, `turn/moderationMetadata`, `thread/settings/updated` and `thread/compacted`, each of which it has no use for, as the code says beside it. It still drops any of them that comes, so a Codex that ignores the list loses nothing.
 
 ## What isn't established
 

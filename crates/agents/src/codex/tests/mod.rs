@@ -8,6 +8,7 @@ mod images;
 mod items;
 mod lifecycle;
 mod notices;
+mod reports;
 mod script;
 mod subagents;
 mod thinking;

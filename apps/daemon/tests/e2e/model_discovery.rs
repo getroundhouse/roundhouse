@@ -26,7 +26,7 @@ fn a_fresh_hub_discovers_the_model_and_effort_it_sends_on_the_first_turn() {
     assert_eq!(launch.agent, AgentKind::Codex);
     assert!(stack.instances_made().is_empty());
     let (effort, no_effort) = as_offered(&catalog, &model);
-    assert!(!probe(&stack).contains("thread/start") && !probe(&stack).contains("turn/start"));
+    assert!(requests(&stack).iter().all(|v| v["method"] != "thread/start" && v["method"] != "turn/start"));
 
     let draft = NewWorkspaceDraftToKeep {
         agent: Some(AgentKind::Codex),
@@ -93,16 +93,15 @@ fn answered(stack: &Stack, key: &ModelListKey, times: usize) -> protocol::capabi
     catalog.unwrap()
 }
 
-/// What the agent's CLI was asked in the project's checkout, where the hub asks it what it offers.
-fn probe(stack: &Stack) -> String {
-    std::fs::read_to_string(stack.repo().join("native-requests.jsonl")).unwrap_or_default()
+/// What the agent's CLI was asked in the project's checkout, where the hub asks it what it offers, each request whole.
+fn requests(stack: &Stack) -> Vec<Value> {
+    let asked = std::fs::read_to_string(stack.repo().join("native-requests.jsonl")).unwrap_or_default();
+    asked.lines().filter_map(|line| serde_json::from_str(line).ok()).collect()
 }
 
 /// How many times the agent's CLI was asked for its first page of models.
 fn lists_asked(stack: &Stack) -> usize {
-    let asked = probe(stack);
-    let requests = asked.lines().filter_map(|line| serde_json::from_str::<Value>(line).ok());
-    requests.filter(|v| v["method"] == "model/list" && v["params"]["cursor"].is_null()).count()
+    requests(stack).iter().filter(|v| v["method"] == "model/list" && v["params"]["cursor"].is_null()).count()
 }
 
 fn offer_models(stack: &Stack, model: &ModelName) {

@@ -76,7 +76,7 @@ pub(super) async fn initialize(shared: &Shared) -> Result<(), AgentError> {
             "initialize",
             json!({
                 "clientInfo":{"name":"roundhouse","version":env!("CARGO_PKG_VERSION")},
-                "capabilities":{"experimentalApi":true}
+                "capabilities":{"experimentalApi":true,"optOutNotificationMethods":super::notifications::UNUSED}
             }),
         )
         .await?;
