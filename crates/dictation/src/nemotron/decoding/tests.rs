@@ -1,9 +1,11 @@
 use super::{Decoder, Encoded, MAX_LIVE_LAG, MOST_A_STEP, Token};
 use crate::Hints;
 use crate::hints::HintGraph;
+use crate::nemotron::language::{ENGLISH, OtherAlphabets};
 use crate::nemotron::parts::Tensor;
 use crate::nemotron::stand_in::{self, ScriptedTransducer};
 use crate::nemotron::transducer::{BLANK, ENCODED};
+use crate::nemotron::vocab::Vocabulary;
 use crate::nemotron::windows::Steps;
 
 /// What an encoder made out of a window at `first`, each step's values all the step's own.
@@ -12,6 +14,9 @@ fn encoded(steps: &[f32], first: Steps) -> Encoded {
     let encoder = Tensor { values, shape: vec![1, ENCODED, steps.len()] };
     Encoded::new(encoder, &stand_in::count(steps.len()), first).unwrap()
 }
+
+/// A decoder given this leaves no piece out.
+static EVERY_ALPHABET: OtherAlphabets = OtherAlphabets::NONE;
 
 fn ids(tokens: &[Token]) -> Vec<(usize, usize)> {
     tokens.iter().map(|token| (token.id, token.at.0)).collect()
@@ -27,8 +32,9 @@ fn decoding_a_window_in_two_goes_on_from_the_tokens_so_far_as_decoding_it_whole_
     let hints = empty_hints();
     let window = encoded(&[1.0, 1.0, 3.0, 3.0, 4.0, 6.0], Steps(10));
 
-    let whole = Decoder::new().decode_all(&*parts.transducer, &hints, &window, Steps(10)..Steps(16)).unwrap();
-    let mut halves = Decoder::new();
+    let whole =
+        Decoder::new(&EVERY_ALPHABET).decode_all(&*parts.transducer, &hints, &window, Steps(10)..Steps(16)).unwrap();
+    let mut halves = Decoder::new(&EVERY_ALPHABET);
     let mut split = halves.decode_live(&*parts.transducer, &hints, &window, Steps(10)..Steps(13)).unwrap();
     split.extend(halves.decode_live(&*parts.transducer, &hints, &window, Steps(13)..Steps(16)).unwrap());
     split.extend(halves.finish_live(&hints));
@@ -43,7 +49,8 @@ fn a_step_gives_at_most_ten_tokens_and_the_next_is_decoded() {
     let hints = empty_hints();
     let window = encoded(&[0.0, 0.0], Steps(0));
 
-    let tokens = Decoder::new().decode_all(&*parts.transducer, &hints, &window, Steps(0)..Steps(2)).unwrap();
+    let tokens =
+        Decoder::new(&EVERY_ALPHABET).decode_all(&*parts.transducer, &hints, &window, Steps(0)..Steps(2)).unwrap();
 
     assert_eq!(tokens.len(), 2 * MOST_A_STEP);
     assert!(tokens[..MOST_A_STEP].iter().all(|token| token.at == Steps(0)));
@@ -99,8 +106,10 @@ fn beam_search_picks_hinted_homophone_and_rolls_back_partial_hint_matches() {
     });
     let window = encoded(&[0.0, 1.0, 2.0, 3.0], Steps(0));
 
-    let without_hints = Decoder::new().decode_all(&transducer, &empty_hints(), &window, Steps(0)..Steps(4)).unwrap();
-    let with_hints = Decoder::new().decode_all(&transducer, &hints, &window, Steps(0)..Steps(4)).unwrap();
+    let without_hints =
+        Decoder::new(&EVERY_ALPHABET).decode_all(&transducer, &empty_hints(), &window, Steps(0)..Steps(4)).unwrap();
+    let with_hints =
+        Decoder::new(&EVERY_ALPHABET).decode_all(&transducer, &hints, &window, Steps(0)..Steps(4)).unwrap();
 
     let text_of = |tokens: &[Token]| -> String {
         tokens.iter().map(|t| vocab[t.id].as_str()).collect::<String>().replace('▁', " ").trim().to_string()
@@ -110,7 +119,7 @@ fn beam_search_picks_hinted_homophone_and_rolls_back_partial_hint_matches() {
 
     // Live streaming holds back the undecided suffix until `finish_live` settles the boundary, keeping `pending_from`
     // at the earliest undecided step.
-    let mut live = Decoder::new();
+    let mut live = Decoder::new(&EVERY_ALPHABET);
     let first_half = live.decode_live(&transducer, &hints, &window, Steps(0)..Steps(2)).unwrap();
     assert_eq!(ids(&first_half), [(t_tok, 0), (ok, 0)], "only the agreed prefix '▁T' + 'ok' is emitted mid-word");
     assert_eq!(live.pending_from(), Some(Steps(1)), "step 1 still differs between 'io' and 'yo'");
@@ -136,10 +145,31 @@ fn live_lag_limit_drops_early_runner_up_token_when_best_settled_beam_stayed_sile
     let step_vals: Vec<f32> = (0..total).map(stand_in::real).collect();
     let window = encoded(&step_vals, Steps(0));
 
-    let mut live = Decoder::new();
+    let mut live = Decoder::new(&EVERY_ALPHABET);
     assert!(live.decode_live(&transducer, &hints, &window, Steps(0)..Steps(2)).unwrap().is_empty());
     assert_eq!(live.pending_from(), Some(Steps(0)), "runner-up beam holds an undecided token inside MAX_LIVE_LAG");
 
     assert!(live.decode_live(&transducer, &hints, &window, Steps(2)..Steps(total)).unwrap().is_empty());
     assert_eq!(live.pending_from(), None, "once past MAX_LIVE_LAG, the silent winning beam clears pending_from");
+}
+
+#[test]
+fn a_piece_in_another_alphabet_is_never_heard_even_when_the_model_likes_it_best() {
+    let vocabulary = Vocabulary::parse(r#"{"0": "<unk>", "1": "▁Та", "2": "▁Too"}"#).unwrap();
+    // Step 0 hears the Cyrillic piece best, by more than the acoustic beam over the Latin one, and silence is likelier
+    // than neither.
+    let transducer = ScriptedTransducer(|step, history: &[usize]| match (step, history) {
+        (0, []) => vec![(1, 5.0), (2, -6.0), (BLANK, -8.0)],
+        _ => vec![(BLANK, 10.0)],
+    });
+    let window = encoded(&[0.0, 1.0], Steps(0));
+    let english = OtherAlphabets::new(&vocabulary, &ENGLISH);
+
+    let heard = |other_alphabets| {
+        let tokens = Decoder::new(other_alphabets).decode_all(&transducer, &empty_hints(), &window, Steps(0)..Steps(2));
+        vocabulary.join(tokens.unwrap().into_iter().map(|token| token.id))
+    };
+
+    assert_eq!(heard(&EVERY_ALPHABET), " Та");
+    assert_eq!(heard(&english), " Too");
 }

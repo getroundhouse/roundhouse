@@ -11,7 +11,7 @@ pub(super) struct Live<'e> {
     engine: &'e Nemotron,
     hints: HintGraph,
     windows: Windows,
-    decoder: Decoder,
+    decoder: Decoder<'e>,
     /// The recording's audio from `kept_from`, which windows to come can still need.
     audio: Vec<f32>,
     kept_from: Samples,
@@ -22,7 +22,15 @@ impl<'e> Live<'e> {
     pub(super) fn new(engine: &'e Nemotron, hints: &Hints) -> Self {
         let (audio, kept_from, heard) = (Vec::new(), Samples(0), Samples(0));
         let hints = engine.hint_graph(hints);
-        Self { engine, hints, windows: Windows::default(), decoder: Decoder::new(), audio, kept_from, heard }
+        Self {
+            engine,
+            hints,
+            windows: Windows::default(),
+            decoder: Decoder::new(&engine.other_alphabets),
+            audio,
+            kept_from,
+            heard,
+        }
     }
 
     /// What's heard in `window`.

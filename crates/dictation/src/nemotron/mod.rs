@@ -11,6 +11,7 @@ mod coreml;
 mod decoding;
 mod engine;
 mod files;
+mod language;
 mod linear;
 mod live;
 mod mel;
