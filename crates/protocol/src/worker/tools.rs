@@ -4,10 +4,6 @@ use serde::{Deserialize, Serialize};
 
 use super::{Reply, Request, WorkerRequest, WorkerResponse};
 
-/// The worker's tool that waits on the workspace's pull request, by which an adapter tells a wait from the agent's
-/// other work in the background.
-pub const WAIT_TOOL: &str = "wait_for_pull_request";
-
 /// Serves the worker's tools to its agents, over MCP on 127.0.0.1, on `port` if it's free and on a port of the
 /// system's choosing if not, or if there's none. Replies with the port it's on, and harmless once it's serving, when it
 /// replies with the port it's already on. Each agent reaches it with the token its
@@ -46,5 +42,10 @@ crate::tokens!(
     ToolsToken,
 );
 
-/// The explicit-target wait tool; legacy calls keep `WAIT_TOOL` for resumed agents.
+/// The worker's tool that waits on explicit pull requests, by which an adapter tells a wait from the agent's other
+/// work in the background.
 pub const WAITS_TOOL: &str = "wait_for_pull_requests";
+
+/// The tool older workers served, which waited on the workspace's own pull request. A worker serves it no more, but a
+/// CLI resumed from before can still list a task it started, which is a wait all the same.
+pub const WAIT_TOOL: &str = "wait_for_pull_request";

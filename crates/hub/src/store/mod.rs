@@ -70,7 +70,6 @@ pub use reading::Reading;
 pub use repos::RepoToRead;
 pub(crate) use sessions::SessionLogin;
 pub use titles::{Retitle, Retitled};
-pub use waits::Seen;
 pub use workspaces::{BranchesSet, Ended, Move};
 
 mod database;

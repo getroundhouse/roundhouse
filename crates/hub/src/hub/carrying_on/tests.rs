@@ -7,7 +7,7 @@ use serde_json::json;
 
 use super::*;
 use crate::store::tests::store_with_session;
-use crate::store::{Seen, SessionChange, StatusChange, TurnEdge};
+use crate::store::{SessionChange, StatusChange, TurnEdge};
 
 #[test]
 fn a_session_whose_agent_has_gone_is_interrupted_as_it_is_with_the_hub_there() {
@@ -57,7 +57,7 @@ fn a_chat_that_only_waited_is_left_waiting_and_one_at_work_is_interrupted() {
         let dir = tempfile::tempdir().unwrap();
         let store = store_with_session(dir.path());
         if waited {
-            store.start_wait(&wait(), Seen::default()).unwrap();
+            store.start_wait(&wait()).unwrap();
         }
         let listed =
             EventBody::AgentTasks { tasks: status.background_tasks.clone().unwrap_or_default(), stopped: vec![] };

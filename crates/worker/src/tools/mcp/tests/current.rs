@@ -1,9 +1,8 @@
 use crate::tools::pull_requests;
 use protocol::client::{ApiError, ErrorCode};
-use protocol::model::{WaitEnd, WaitUntil};
+use protocol::model::WaitEnd;
 use protocol::worker::{
-    AskAnswer, AskOutcome, AskReply, CancelWait, PullRequestAnswer, ReadWait, StartWait, WaitAnswer, WorkerAsk,
-    WorkerFrame,
+    AskAnswer, AskOutcome, AskReply, CancelWait, PullRequestAnswer, ReadWait, WaitAnswer, WorkerAsk, WorkerFrame,
 };
 use serde_json::{Value, json};
 use tokio::sync::mpsc;
@@ -244,49 +243,14 @@ async fn a_call_the_hub_cant_answer_is_the_tools_failure_not_mcps() {
     assert_eq!(result["content"][0]["type"], "text", "{result}");
 }
 
-#[tokio::test]
-async fn a_wait_is_started_for_the_call_that_asked_and_answered_as_a_task_whose_id_is_the_waits() {
-    let (asks, mut sent) = asks();
-    let call = offering_tasks("tools/call", &json!({ "name": wait::NAME, "arguments": { "until": "checks" } }));
-    let said = headers("tools/call", Some(wait::NAME));
-    let calling = answered(&asks, &said, &call);
-    let hub = hub_answers(&asks, &mut sent, Ok(AskReply::Wait(WaitAnswer { wait: waiting(), pull_request: None })));
-
-    let (answer, asked) = tokio::join!(calling, hub);
-
-    assert_eq!(asked, WorkerAsk::StartWait(StartWait { until: WaitUntil::Checks, call: Some("toolu_1".into()) }));
-    let result = &answer.to_json()["result"];
-    assert_eq!((&result["resultType"], &result["taskId"]), (&json!("task"), &json!("w1")));
-    assert_eq!(result["status"], "working");
-}
-
-#[tokio::test]
-async fn a_wait_that_ended_as_it_started_or_couldnt_start_is_answered_at_once() {
-    let (asks, mut sent) = asks();
-    let call = offering_tasks("tools/call", &json!({ "name": wait::NAME }));
-    let said = headers("tools/call", Some(wait::NAME));
-    let no_pr = ApiError::new(ErrorCode::NotFound, "this workspace's branch has no pull request to wait on");
-
-    let merged = Ok(AskReply::Wait(WaitAnswer { wait: ended(WaitEnd::Merged), pull_request: None }));
-    let (done, _) = tokio::join!(answered(&asks, &said, &call), hub_answers(&asks, &mut sent, merged));
-    let (refused, _) = tokio::join!(answered(&asks, &said, &call), hub_answers(&asks, &mut sent, Err(no_pr)));
-
-    let done = &done.to_json()["result"];
-    assert_eq!((&done["resultType"], &done["isError"]), (&json!("complete"), &json!(false)));
-    assert!(done["content"][0]["text"].as_str().unwrap().contains("has ended: it's merged."), "{done}");
-    let refused = &refused.to_json()["result"];
-    assert_eq!((&refused["resultType"], &refused["isError"]), (&json!("complete"), &json!(true)));
-    assert!(refused["content"][0]["text"].as_str().unwrap().contains("no pull request to wait on"), "{refused}");
-}
-
 /// A wait can only be answered as a task, so the client has to offer to take one, as MCP's tasks extension says.
 #[tokio::test]
 async fn a_client_that_doesnt_take_tasks_is_told_a_wait_needs_them() {
     let (asks, _) = asks();
-    let call = request("tools/call", &json!({ "name": wait::NAME }));
+    let call = request("tools/call", &json!({ "name": pull_requests::WAIT }));
     let get = request("tasks/get", &json!({ "taskId": "w1" }));
 
-    let started = answered(&asks, &headers("tools/call", Some(wait::NAME)), &call).await;
+    let started = answered(&asks, &headers("tools/call", Some(pull_requests::WAIT)), &call).await;
     let asked = answered(&asks, &headers("tasks/get", Some("w1")), &get).await;
 
     for refused in [started, asked] {

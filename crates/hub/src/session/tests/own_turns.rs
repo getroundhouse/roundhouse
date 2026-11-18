@@ -2,7 +2,6 @@
 
 use super::super::Item;
 use crate::hub::tests::{carried_on, flushed, hub_in, stand_in_worker};
-use crate::store::Seen;
 use protocol::capability::turns::OwnTurn;
 use protocol::event::{AgentTask, EndedTask, EventBody, TaskKind, TaskOutcome};
 use protocol::model::{EndedWait, RunId, Seq, WaitEnd, WaitEnded, WaitUntil, Watching};
@@ -25,11 +24,9 @@ async fn a_turn_the_agent_started_by_itself_carries_the_hubs_record_of_each_wait
     let mut wait = protocol::fixtures::pull_request_wait("toolu_w");
     (wait.id, wait.session_id, wait.workspace_id) = ("a".into(), "s".into(), "w".into());
     let ended_at = WaitEnded { at_ms: 2, how: WaitEnd::ChecksPassed };
-    hub.blocking(move |store| {
-        store.start_wait(&wait, Seen::default()).and_then(|_| store.end_wait(&"a".into(), ended_at))
-    })
-    .await
-    .unwrap();
+    hub.blocking(move |store| store.start_wait(&wait).and_then(|_| store.end_wait(&"a".into(), ended_at)))
+        .await
+        .unwrap();
     let said = EndedWait {
         id: "made-up".into(),
         watching: Watching::Branch { number: 9, until: WaitUntil::Merged },

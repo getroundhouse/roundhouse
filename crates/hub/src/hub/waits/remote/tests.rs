@@ -42,7 +42,7 @@ async fn outages_keep_the_last_snapshot_and_access_loss_ends_with_it() {
     let dir = tempfile::tempdir().unwrap();
     let hub = hub_with_worktree(dir.path());
     let wait = pull_request_wait("a");
-    hub.store.start_wait(&wait, Seen::default()).unwrap();
+    hub.store.start_wait(&wait).unwrap();
     let change = crate::store::SessionChange {
         status: None,
         queue_held: Some(true),
@@ -90,8 +90,8 @@ async fn a_shared_reads_pr_access_failure_does_not_end_an_unrelated_wait() {
         protocol::model::PullRequestSelection::try_from(vec![PullRequestNumber::try_from(9).unwrap()]).unwrap();
     watch.snapshot.pull_requests = vec![protocol::fixtures::observed_pull_request(9)];
     let repository = a.watch.as_ref().unwrap().snapshot.repository.clone();
-    hub.store.start_wait(&a, Seen::default()).unwrap();
-    hub.store.start_wait(&b, Seen::default()).unwrap();
+    hub.store.start_wait(&a).unwrap();
+    hub.store.start_wait(&b).unwrap();
     let change = crate::store::SessionChange {
         status: None,
         queue_held: Some(true),

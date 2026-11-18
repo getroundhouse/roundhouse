@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 use super::{Answer, Ask, AskReply, WorkerAsk};
-use crate::model::{PullRequest, ToolUseId, Wait, WaitId, WaitUntil};
+use crate::model::{PullRequest, Wait, WaitId};
 
 /// The workspace's pull request, as the hub reads it for an agent.
 #[derive(Clone, Copy, Debug)]
@@ -27,24 +27,6 @@ impl Answer for PullRequestAnswer {
     fn read(reply: AskReply) -> Result<Self, AskReply> {
         let AskReply::PullRequest(answer) = reply else { return Err(reply) };
         Ok(answer)
-    }
-}
-
-/// Starts a wait on the workspace's pull request, for the agent's call `call`, from where it stands now. A branch
-/// without one is refused.
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
-pub struct StartWait {
-    #[serde(default)]
-    pub until: WaitUntil,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub call: Option<ToolUseId>,
-}
-
-impl Ask for StartWait {
-    type Answer = WaitAnswer;
-
-    fn into_ask(self) -> WorkerAsk {
-        WorkerAsk::StartWait(self)
     }
 }
 

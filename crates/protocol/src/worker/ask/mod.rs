@@ -9,7 +9,7 @@ mod pr_watch;
 mod pull_requests;
 mod worktrees;
 
-pub use pull_requests::{CancelWait, PullRequestAnswer, ReadPullRequest, ReadWait, StartWait, WaitAnswer};
+pub use pull_requests::{CancelWait, PullRequestAnswer, ReadPullRequest, ReadWait, WaitAnswer};
 pub use worktrees::{
     CreateWorktree, ListWorktrees, ListedChild, NewWorktreeOn, OwnWorktree, RemoveWorktree, WorktreeCreated,
     WorktreeRemoval, WorktreeRemoved, Worktrees, WouldLose,

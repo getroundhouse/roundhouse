@@ -12,7 +12,5 @@ mod tests;
 
 mod wait_rows;
 
-pub use wait_rows::Seen;
-
 mod remote;
 use wait_rows::{COLUMNS, wait_from_row};

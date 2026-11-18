@@ -15,7 +15,6 @@ use tokio::time::Instant;
 use crate::github::{Answer, PullRequestState, PullRequests, Script, StandIn};
 use crate::hub::Hub;
 use crate::hub::tests::{hub_on_github, hub_reading_github, hub_with_worktree, pushed};
-use crate::store::Seen;
 use crate::store::tests::idle_session;
 use crate::worker_link::WorkerLink;
 
@@ -42,7 +41,7 @@ fn waiting_in_w(dir: &std::path::Path, api: String) -> (Arc<Hub>, WaitId) {
     let hub = hub_reading_github(dir, api);
     hub.store.insert_workspace(&workspace("v"), None).unwrap();
     hub.store.workspace_ready(&v(), "/v", &"birch".into(), "main", None).unwrap();
-    let wait = hub.store.start_wait(&pull_request_wait("a"), Seen::default()).unwrap().id;
+    let wait = hub.store.start_wait(&pull_request_wait("a")).unwrap().id;
     (hub, wait)
 }
 
@@ -57,7 +56,7 @@ fn waiting_by(hub: &Hub, workspace: WorkspaceId, chat: &str) -> WaitId {
     (session.session.id, session.session.workspace_id) = (chat.into(), workspace.clone());
     hub.store.insert_session(&session, None).unwrap();
     let wait = protocol::model::Wait { workspace_id: workspace, session_id: chat.into(), ..pull_request_wait(chat) };
-    hub.store.start_wait(&wait, Seen::default()).unwrap().id
+    hub.store.start_wait(&wait).unwrap().id
 }
 
 /// `w`'s worker, which never answers what `never` picks, as one stuck doesn't, says when it was asked in `asked`, and

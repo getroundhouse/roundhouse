@@ -2,9 +2,8 @@
 
 use super::*;
 use crate::github::PullRequestState;
-pub(super) use crate::hub::tests::open;
 use crate::hub::tests::{hub_on_github, hub_with_worktree, taking_worker};
-use crate::store::{Seen, SessionChange, StatusChange};
+use crate::store::{SessionChange, StatusChange};
 use protocol::event::{AgentTask, EventBody, TaskKind};
 use protocol::model::SessionStatus;
 use protocol::worker::{CancelWait, WorkerAsk, WorkerRequest, WorkerResponse};

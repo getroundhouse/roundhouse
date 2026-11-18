@@ -71,14 +71,3 @@ fn a_wait_called_off_is_a_cancelled_task_with_no_result_that_says_who_called_it_
     assert!(said(WaitEnd::CalledOffByPerson).contains("Don't start another unless they ask."));
     assert!(said(WaitEnd::Replaced).contains("replaced by the one started after it"));
 }
-
-#[test]
-fn until_is_done_unless_it_says_checks_and_anything_else_is_for_the_agent_to_put_right() {
-    let said = |arguments: Value| until(json!({ "arguments": arguments }).as_object().unwrap());
-
-    assert_eq!(said(json!({})), Ok(WaitUntil::Done));
-    assert_eq!(said(json!({ "until": "done" })), Ok(WaitUntil::Done));
-    assert_eq!(said(json!({ "until": "checks" })), Ok(WaitUntil::Checks));
-    assert!(said(json!({ "until": "review" })).unwrap_err().contains("\"review\""));
-    assert!(until(&Map::new()).is_ok(), "a call with no arguments waits until it's done");
-}
