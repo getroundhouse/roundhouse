@@ -250,7 +250,13 @@ impl WorkspacePane {
             .flex_1()
             .min_h_0()
             .w_full()
-            .child(div().flex_1().min_h_0().w_full().when_some(transcript, ParentElement::child))
+            .child(
+                div()
+                    .flex_1()
+                    .min_h_0()
+                    .w_full()
+                    .when_some(transcript, |d, t| d.child(transcript::Transcript::drawn(&t, cx))),
+            )
             .when_some(log, |d, text| d.child(setup_log_view(text, cx)))
             .children(setup_line)
             .children(push_line)

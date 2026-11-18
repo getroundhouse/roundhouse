@@ -16,7 +16,7 @@ use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, Div, InteractiveElement as _, IntoElement, ParentElement, Styled, TestSupportExt as _, div,
 };
-use look::{LineText, Signal};
+use look::{Moving, Signal};
 use protocol::event::SessionEvent;
 use protocol::model::QueuedPrompt;
 use protocol::tail::{BlockKind, Retrying, Tail};
@@ -66,7 +66,7 @@ pub(in super::super) fn render_tail(end: &EndOfChat, shared: &Shared, by: By, cx
     let (written, placed) = still_writing(tail, alone, shared, folds.thinking_open(), cx);
     let mut after: Vec<AnyElement> = Vec::new();
     if at_work.working {
-        let line = working_line(at_work.turn_started_at_ms, tail, &shared.line_text, cx);
+        let line = working_line(at_work.turn_started_at_ms, tail, shared, cx);
         after.push(line.into_any_element());
     }
     // Left going by a turn, or started during one.
@@ -155,7 +155,8 @@ pub(super) fn clipped(text: String) -> Div {
 /// when it says, since that's the only sign a compaction is getting on. While it tries a failed request again, it says
 /// that instead, since that's why nothing comes. The time and the words are on one baseline, as a call's title and its
 /// code are.
-fn working_line(started_at_ms: Option<i64>, tail: &Tail, line_text: &LineText, cx: &App) -> impl IntoElement {
+fn working_line(started_at_ms: Option<i64>, tail: &Tail, shared: &Shared, cx: &App) -> impl IntoElement {
+    let line_text = &shared.line_text;
     let so_far = started_at_ms.map(|started| {
         let elapsed = look::now_ms(cx) - started;
         // The hub's clock can be a little ahead of this one.
@@ -163,7 +164,7 @@ fn working_line(started_at_ms: Option<i64>, tail: &Tail, line_text: &LineText, c
     });
     tail_line(cx)
         .id("working-line")
-        .child(look::chat_mark(Signal::Working, look::Size::Inline, cx))
+        .child(shared.moving.room(Moving::ChatMark(Signal::Working)))
         .children(so_far.map(|so_far| line_text.code.set(div().flex_none().child(so_far))))
         // Cut off where the line ends, rather than running past the pane.
         .children(doing(tail).map(|doing| line_text.body.set(clipped(doing).min_w_0())))

@@ -3,17 +3,15 @@
 //! and says plainly that it's at work.
 
 use gpui_kit::assets::IconName;
-use gpui_kit::component::Icon;
 use gpui_kit::{
-    App, Bounds, ContentMask, Hsla, IntoElement, ParentElement as _, Pixels, Styled as _, TransformationMatrix, Window,
-    canvas, div, point, size,
+    App, Bounds, ContentMask, Hsla, IntoElement, Pixels, TransformationMatrix, Window, canvas, point, size,
 };
 
 use crate::clock;
 use crate::colors::colors;
 use crate::fan::as_f32;
-use crate::icon_sizes::{IconSize, IconSizing as _};
-use crate::mark::{BACKGROUND_S, LIGHT, STILL_S, Size, light_on, phase};
+use crate::icon_sizes::IconSize;
+use crate::mark::{BACKGROUND_S, LIGHT, STILL_S, light_on, phase};
 
 /// How big the robot is: a call's icon on its line in the chat, since it's the icon a subagent's call has.
 const ROBOT: IconSize = IconSize::Large;
@@ -23,34 +21,35 @@ const STRIPS: usize = 16;
 
 /// The robot, as wide as a task's ring, so what follows it lines up with the other lines'.
 pub fn robot_at_work(cx: &App) -> impl IntoElement {
+    let t = clock::moving(cx).then(clock::elapsed);
+    let drawn = canvas(
+        |_, _, _| {},
+        move |bounds, (), window, cx| {
+            // Drawn again on the display's next frame, for as long as it's on screen and moving.
+            if paint_at(t, bounds, window, cx) {
+                window.request_animation_frame();
+            }
+        },
+    );
+    crate::task_ring::sized(drawn)
+}
+
+/// The robot at work, painted within `bounds`, as [`robot_at_work`] draws it. Returns whether it moves, so what paints
+/// it asks for the next frame.
+pub(crate) fn paint_robot(bounds: Bounds<Pixels>, window: &mut Window, cx: &App) -> bool {
+    paint_at(clock::moving(cx).then(clock::elapsed), bounds, window, cx)
+}
+
+/// Paints the robot, in the middle of `bounds`, with the light where it is at `t` seconds, `None` while it holds
+/// still, and returns whether it moves.
+fn paint_at(t: Option<f64>, bounds: Bounds<Pixels>, window: &mut Window, cx: &App) -> bool {
     let colors = colors(cx);
-    let (light, faint) = (colors.text, colors.text_faint);
-    let moves = clock::moving(cx);
-    let t = if moves { clock::elapsed() } else { STILL_S };
-    let width = Size::Inline.width();
-    let inset = (width - ROBOT.size()) * 0.5;
-    div()
-        .relative()
-        .flex_none()
-        .size(width)
-        .child(div().absolute().top(inset).left(inset).child(Icon::new(IconName::Bot).sized(ROBOT).text_color(faint)))
-        .child(
-            canvas(
-                |_, _, _| {},
-                move |bounds, (), window, cx| {
-                    let robot = Bounds::new(bounds.origin + point(inset, inset), size(ROBOT.size(), ROBOT.size()));
-                    lit(window, robot, light, sweep(t), cx);
-                    // Drawn again on the display's next frame, for as long as it's on screen and moving.
-                    if moves {
-                        window.request_animation_frame();
-                    }
-                },
-            )
-            .absolute()
-            .top_0()
-            .left_0()
-            .size(width),
-        )
+    let inset = (bounds.size.width - ROBOT.size()) * 0.5;
+    let robot = Bounds::new(bounds.origin + point(inset, inset), size(ROBOT.size(), ROBOT.size()));
+    // It only fails if the icon can't be read, which leaves the line without its robot, as an icon would be.
+    let _ = window.paint_svg(robot, IconName::Bot.path(), None, TransformationMatrix::unit(), colors.text_faint, cx);
+    lit(window, robot, colors.text, sweep(t.unwrap_or(STILL_S)), cx);
+    t.is_some()
 }
 
 /// Where the light is across the robot at `t` seconds, from its left edge at 0 to its right at 1. It starts and ends

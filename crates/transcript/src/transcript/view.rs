@@ -14,9 +14,9 @@ use events::TranscriptEvent;
 use find::Finding;
 use gpui_kit::{
     AnyElement, App, AppContext, Context, ElementId, Entity, EventEmitter, IntoElement, ParentElement as _, Render,
-    Task, Window,
+    Styled as _, Task, Window, div,
 };
-use look::LineText;
+use look::{LineText, MovingMarks};
 use protocol::attachment::Attachment;
 use protocol::event::SessionEvent;
 use protocol::model::{Seq, Session, SessionId, SubagentId};
@@ -58,6 +58,9 @@ pub struct Transcript {
     pub(super) finding: Option<Finding>,
     /// Workspace-wide dictation hints supplied by the host pane, such as the branch and changed files.
     pub(super) dictation_hints: Option<DictationHints>,
+    /// Where the marks that move at the end of the chat were last painted, which [`Transcript::drawn`] paints them
+    /// over, so their frames don't draw the transcript again.
+    pub(super) moving: MovingMarks,
 }
 
 impl EventEmitter<TranscriptEvent> for Transcript {}
@@ -132,7 +135,15 @@ impl Transcript {
             waiting: Vec::new(),
             finding: None,
             dictation_hints: None,
+            moving: MovingMarks::default(),
         }
+    }
+
+    /// The transcript, with the marks that move at the end of the chat painted over it, as wherever it's shown draws it,
+    /// since it leaves only room for them.
+    pub fn drawn(this: &Entity<Self>, cx: &App) -> impl IntoElement {
+        let over = this.read(cx).moving.over();
+        div().relative().size_full().child(this.clone()).child(over)
     }
 
     pub fn log(&self) -> &SessionLog {
@@ -324,6 +335,7 @@ impl Transcript {
             line_text,
             texts: self.texts.clone(),
             selection: self.selection.clone(),
+            moving: self.moving.clone(),
         };
         let tail = self.list.row_count().saturating_sub(1);
         move |ix, cx| crate::rows::render_row(&model, &log, &shared, crate::rows::Item { ix, tail }, cx)
@@ -332,6 +344,8 @@ impl Transcript {
 
 impl Render for Transcript {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        // Its rows leave room for the marks that move again as they're drawn.
+        self.moving.draw_again();
         self.keep_revealing(window);
         let wanted = self.session.clone();
         let recorded = self.log.row_count();

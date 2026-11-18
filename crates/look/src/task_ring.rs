@@ -31,25 +31,37 @@ const WATCHING: f32 = 0.75;
 /// The ring for one background task, or a piece of the app's own work, as wide as a mark beside text, so what follows
 /// lines up with the working line's.
 pub fn task_ring(ring: TaskRing, cx: &App) -> impl IntoElement {
-    let colors = colors(cx);
-    let (light, faint) = (colors.text, colors.text_faint);
-    let moves = ring == TaskRing::Running && clock::moving(cx);
-    let t = if moves { clock::elapsed() } else { STILL_S };
-    let width = Size::Inline.width();
-    canvas(
+    let t = (ring == TaskRing::Running && clock::moving(cx)).then(clock::elapsed);
+    let drawn = canvas(
         |_, _, _| {},
-        move |bounds, (), window, _| {
-            fan::in_one_layer(window, bounds, |window| {
-                paint(bounds, ring, faint, light, phase(t, BACKGROUND_S), window);
-            });
+        move |bounds, (), window, cx| {
             // Drawn again on the display's next frame, for as long as it's on screen and moving.
-            if moves {
+            if paint_at(ring, t, bounds, window, cx) {
                 window.request_animation_frame();
             }
         },
-    )
-    .flex_none()
-    .size(width)
+    );
+    sized(drawn)
+}
+
+/// A task's ring, painted within `bounds`, as [`task_ring`] draws it. Returns whether it moves, so what paints it asks
+/// for the next frame.
+pub(crate) fn paint_task_ring(ring: TaskRing, bounds: Bounds<Pixels>, window: &mut Window, cx: &App) -> bool {
+    let t = (ring == TaskRing::Running && clock::moving(cx)).then(clock::elapsed);
+    paint_at(ring, t, bounds, window, cx)
+}
+
+/// How big a ring is, for `room`, which holds it.
+pub(crate) fn sized<E: Styled>(room: E) -> E {
+    room.flex_none().size(Size::Inline.width())
+}
+
+/// Paints the ring at `t` seconds, `None` while it holds still, and returns whether it moves.
+fn paint_at(ring: TaskRing, t: Option<f64>, bounds: Bounds<Pixels>, window: &mut Window, cx: &App) -> bool {
+    let colors = colors(cx);
+    let turned = phase(t.unwrap_or(STILL_S), BACKGROUND_S);
+    fan::in_one_layer(window, bounds, |window| paint(bounds, ring, colors.text_faint, colors.text, turned, window));
+    t.is_some()
 }
 
 fn paint(bounds: Bounds<Pixels>, ring: TaskRing, color: Hsla, light: Hsla, turned: f32, window: &mut Window) {
