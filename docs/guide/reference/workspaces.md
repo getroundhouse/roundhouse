@@ -80,7 +80,7 @@ Each project's workspaces are listed last active first, or oldest first, chosen 
 
 Archiving removes the worktree and keeps the branch, following it if the agent renamed it.
 
-- **It refuses if there are uncommitted changes, or commits on no branch,** unless you say to go on.
+- **It refuses if there are uncommitted changes, or commits on no branch,** unless you say to go on, and so it does if git can't read what's in the worktree.
 - **Ignored files go with the worktree,** such as `.env` and `node_modules`.
 - **The repository's `archive` script runs,** then its agents stop.
 - **It's done as soon as the worktree is out of the way,** and the files are deleted after, so it doesn't wait for a build's output to be deleted.
