@@ -10,6 +10,7 @@
 mod tests;
 
 mod lookup;
+pub(crate) use lookup::file_icon_at;
 #[cfg(test)]
 use lookup::{FILE, FILE_EXTENSIONS, FILE_NAMES, FOLDER, ICON_SIZE, ICONS, OPEN_FOLDER, asset, file_kind};
 pub use lookup::{FILE_ICON, file_icon, file_icon_asset, folder_icon};

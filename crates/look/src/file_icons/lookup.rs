@@ -17,9 +17,14 @@ pub fn file_icon_asset(path: &str) -> Option<&'static [u8]> {
 
 /// The icon for the file at `path`: its kind's, in its own colours, or the plain file, if it has no kind of its own.
 pub fn file_icon(path: &str, cx: &App) -> AnyElement {
+    file_icon_at(path, FILE_ICON, cx)
+}
+
+/// The icon for the file at `path`, as [`file_icon`] draws it, at `size`, such as a chip's.
+pub(crate) fn file_icon_at(path: &str, size: IconSize, cx: &App) -> AnyElement {
     match file_kind(path) {
-        FILE => plain(FILE, cx).into_any_element(),
-        kind => img(asset(kind)).size(FILE_ICON.size()).flex_none().into_any_element(),
+        FILE => plain(FILE, cx).sized(size).into_any_element(),
+        kind => img(asset(kind)).size(size.size()).flex_none().into_any_element(),
     }
 }
 

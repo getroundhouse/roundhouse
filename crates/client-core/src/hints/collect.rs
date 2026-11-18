@@ -232,7 +232,7 @@ impl HintCollector {
 
     fn add_call(&mut self, call: ToolCall<'_>) {
         match call {
-            ToolCall::Read(ReadFile { path })
+            ToolCall::Read(ReadFile { path, .. })
             | ToolCall::Write(WriteFile { path, .. })
             | ToolCall::Edit(EditFile { path, .. }) => self.add_path(path),
             ToolCall::NotebookEdit(edit) => self.add_path(&edit.path),

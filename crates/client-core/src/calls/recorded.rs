@@ -128,7 +128,7 @@ impl<'a> ToolCall<'a> {
     pub fn summary(&self) -> Option<String> {
         let about = match self {
             ToolCall::Command(command) => command.summary(),
-            ToolCall::Read(ReadFile { path })
+            ToolCall::Read(ReadFile { path, .. })
             | ToolCall::Write(WriteFile { path, .. })
             | ToolCall::Edit(EditFile { path, .. }) => path,
             ToolCall::Search(search) => search.pattern,

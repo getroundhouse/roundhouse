@@ -11,7 +11,7 @@ use gpui_kit::{
     SharedString, StatefulInteractiveElement as _, Styled, TestSupportExt as _, Window, div, px,
 };
 
-use client_core::calls::files::{self, file_name};
+use client_core::calls::files;
 use client_core::calls::{EditFile, ReadFile, WriteFile, count};
 use look::{InRegion as _, Region, Typeset as _, language};
 
@@ -33,7 +33,14 @@ const PREVIEW_HEIGHT: f32 = 260.0;
 pub(super) fn read(file: &ReadFile, answer: Option<&Answer>, toggle: &Toggle, cx: &App) -> AnyElement {
     let read = Read::of(answer);
     let title = amount(read.lines.len(), read.images.len()).map_or_else(|| "Read".to_string(), |n| format!("Read {n}"));
-    let line = Line::new(IconName::FileText, title).part(chip(file.path));
+    // The lines it asked for, where it named them, as an editor writes a place in a file.
+    let named = file.lines.map(|lines| (lines.first, lines.count.map(|count| lines.first + count.saturating_sub(1))));
+    let file_chip = look::chip(look::ChipKind::File, file.path.to_string());
+    let file_chip = match named {
+        Some((first, last)) => file_chip.lines(first, last),
+        None => file_chip,
+    };
+    let line = Line::new(IconName::FileText, title).part(Part::Chip(file_chip));
     let output = |text| block::output(toggle, Text::Output, text, look::colors(cx).text_muted, cx);
     let opened = || {
         if read.lines.is_empty() && read.images.is_empty() {
@@ -117,9 +124,7 @@ pub(super) fn written(file: &WriteFile, answer: Option<&Answer>) -> Vec<Section>
 /// with what it `replaced`. Otherwise all of it is new.
 pub(super) fn write_line(path: &str, lines: usize, replaced: Option<Counts>) -> Line {
     let icon = if replaced.is_some() { IconName::FilePen } else { IconName::FilePlus };
-    Line::new(icon, format!("Write {}", count(lines, "line", "lines")))
-        .part(chip(path))
-        .part(replaced.map(Part::Counts))
+    Line::new(icon, format!("Write {}", count(lines, "line", "lines"))).part(changed(path, replaced))
 }
 
 pub(super) fn edit(file: &EditFile, answer: Option<&Answer>, toggle: &Toggle, cx: &App) -> AnyElement {
@@ -133,11 +138,11 @@ pub(super) fn edit(file: &EditFile, answer: Option<&Answer>, toggle: &Toggle, cx
 /// moved, and how many lines `sections` added and removed. Hovering it shows the diff. A change with no lines, as a
 /// file only moved has, has neither.
 pub(super) fn edit_line(title: &'static str, path: &str, named: &str, sections: &Rc<Vec<Section>>) -> Line {
-    let line = Line::new(IconName::FilePen, title).part(chip(named));
+    let line = Line::new(IconName::FilePen, title);
     if sections.iter().all(Vec::is_empty) {
-        return line;
+        return line.part(chip(named));
     }
-    line.part(Part::Counts(diff::counts(sections))).preview(preview(language(path), sections.clone()))
+    line.part(changed(named, Some(diff::counts(sections)))).preview(preview(language(path), sections.clone()))
 }
 
 /// What [`edit`] shows open, for finding.
@@ -175,8 +180,18 @@ pub(super) fn shown_lines(
     });
 }
 
+/// The file at `path`, on its chip.
 pub(super) fn chip(path: &str) -> Part {
-    Part::Chip(file_name(path).to_string().into())
+    Part::Chip(look::chip(look::ChipKind::File, path.to_string()))
+}
+
+/// The file at `path`, on its chip, with how many lines a change to it added and removed, if it changed one.
+fn changed(path: &str, counts: Option<Counts>) -> Part {
+    let file = look::chip(look::ChipKind::File, path.to_string());
+    Part::Chip(match counts {
+        Some(Counts { added, removed }) => file.changed(added, removed),
+        None => file,
+    })
 }
 
 /// A new file, all of it added, numbered from the top.

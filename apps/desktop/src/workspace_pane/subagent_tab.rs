@@ -14,7 +14,7 @@ use gpui_kit::{
     AnyElement, AppContext as _, Context, Entity, FocusHandle, InteractiveElement as _, IntoElement as _,
     ParentElement as _, Role, StatefulInteractiveElement as _, Styled, Subscription, TestSupportExt as _, div, px,
 };
-use look::{Hand as _, IconSizing as _, Shaped as _, Typeset as _};
+use look::{Hand as _, IconSizing as _, Typeset as _};
 use protocol::model::{SessionId, Subagent, SubagentId};
 use transcript::{Transcript, TranscriptEvent, shown_kind, subagent_standing};
 
@@ -255,17 +255,9 @@ fn band(
         let slash = div().flex_none().typeset(look::Type::Body).text_color(colors.text_faint).child("/");
         h_flex().flex_shrink(100.).min_w(px(56.)).gap(look::Space::Small).child(link).child(slash)
     });
-    let chip = subagent.and_then(|s| shown_kind(s.kind.as_deref())).map(|kind| {
-        div()
-            .flex_none()
-            .px(look::Space::Small)
-            .corners(look::Corner::Control)
-            .border_1()
-            .border_color(colors.control_edge)
-            .typeset(look::Type::Body)
-            .text_color(colors.text_muted)
-            .child(kind.to_string())
-    });
+    let chip = subagent
+        .and_then(|s| shown_kind(s.kind.as_deref()))
+        .map(|kind| look::chip(look::ChipKind::Subagent, kind.to_string()));
     let standing = subagent.map(subagent_standing);
     h_flex()
         .flex_none()

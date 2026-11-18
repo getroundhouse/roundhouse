@@ -21,9 +21,9 @@ pub(super) fn read(call: &Call) -> ToolCall<'_> {
             description: command.description.as_deref().map(str::trim).filter(|said| !said.is_empty()),
             only: only(command),
         }),
-        Call::Read(file) => ToolCall::Read(ReadFile { path: &file.path }),
+        Call::Read(file) => ToolCall::Read(ReadFile { path: &file.path, lines: file.lines.as_ref() }),
         // A look at an image is a read of it, which draws it.
-        Call::ViewImage(view) => ToolCall::Read(ReadFile { path: &view.path }),
+        Call::ViewImage(view) => ToolCall::Read(ReadFile { path: &view.path, lines: None }),
         Call::GenerateImage(made) => ToolCall::MakeImage(made),
         Call::Write(file) => ToolCall::Write(WriteFile { path: &file.path, content: &file.content }),
         Call::Edit(file) => ToolCall::Edit(EditFile {

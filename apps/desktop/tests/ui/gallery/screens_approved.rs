@@ -109,6 +109,7 @@ fn every_screen_looks_as_approved() {
             toggle_states::NAME,
             tooltips::NAME,
             small_things::PILLS,
+            small_things::CHIPS,
             small_things::BADGES,
             small_things::COUNTS,
             switch_kinds::NAME,
@@ -314,12 +315,13 @@ fn every_kind_of_key_looks_as_approved() {
 }
 
 #[test]
-fn every_pill_badge_and_count_looks_as_approved() {
+fn every_pill_chip_badge_and_count_looks_as_approved() {
     let text_system: Arc<dyn PlatformTextSystem> = Arc::new(gpui_apple::AppleTextSystem::new());
     let mut problems = Vec::new();
 
     for (name, (picture, places)) in [
         (small_things::PILLS, small_things::pills(&text_system)),
+        (small_things::CHIPS, small_things::chips(&text_system)),
         (small_things::BADGES, small_things::badges(&text_system)),
         (small_things::COUNTS, small_things::counts(&text_system)),
     ] {

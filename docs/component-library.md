@@ -136,10 +136,12 @@ What needs more than a few words, such as a path, goes on a hover card, not a to
 
 ## Small things in a line
 
-`docs/spec/components.md` has the five kinds of small thing that sit in a line, what each is for and its kinds, and `crates/look/src/pills`, `badges` and `counts` the code. None opens anything, so none takes a handler. *Not built:* chips, the fifth, which open.
+`docs/spec/components.md` has the five kinds of small thing that sit in a line, what each is for and its kinds, and `crates/look/src/pills`, `chips`, `badges` and `counts` the code. Only a chip will open what it names, which isn't built, so none takes a handler yet.
 
 | To | Call |
 |---|---|
+| Show a thing the app knows, such as a file or a subagent, with its kind's mark | `look::chip(kind, names)`, with a `look::ChipKind`, where `names` is a file's or a folder's path, of which it shows the last part, or the words it shows |
+| Say which of a file's lines it's about, what a change did to it, or that it's gone | `lines`, `changed`, `gone` |
 | Show a value as it was written, such as a command, or what went wrong | `look::pill(kind, value)`, with a `look::PillKind`, where `value` is its words, or its words with what a find marked |
 | Say what's true of the thing beside it, in a word or two | `look::badge(kind, words)`, with a `look::BadgeKind`, and `id` for a test to find it and an assistive app to read it |
 | Show a tag someone chose, in their colour | `look::label(words, color)` |

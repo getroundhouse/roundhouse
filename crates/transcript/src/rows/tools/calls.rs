@@ -41,7 +41,7 @@ pub(in super::super) fn call(toggle: &Toggle, recorded: Recorded<'_>, drawing: &
     let (answer, input) = (reply.result(), recorded.input());
     match ToolCall::read(recorded) {
         ToolCall::Command(command) => match only(&command, answer) {
-            Some(Only::Reads(path)) => files::read(&ReadFile { path }, answer, toggle, cx),
+            Some(Only::Reads(path)) => files::read(&ReadFile { path, lines: None }, answer, toggle, cx),
             Some(Only::Searches(search)) => search::draw(&search, answer, toggle, cx),
             None => command::draw(&command, answer, toggle, cx),
         },
@@ -68,7 +68,7 @@ pub(in super::super) fn shown(key: &ItemKey, recorded: Recorded<'_>, drawing: &B
     let (answer, input) = (reply.result(), recorded.input());
     match ToolCall::read(recorded) {
         ToolCall::Command(command) => match only(&command, answer) {
-            Some(Only::Reads(path)) => files::shown_read(&ReadFile { path }, answer, key, gather),
+            Some(Only::Reads(path)) => files::shown_read(&ReadFile { path, lines: None }, answer, key, gather),
             Some(Only::Searches(search)) => search::shown(&search, answer, key, gather),
             None => command::shown(&command, answer, key, gather),
         },
