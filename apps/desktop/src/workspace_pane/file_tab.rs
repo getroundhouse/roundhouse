@@ -3,7 +3,7 @@
 //! same tab, so reviewing a branch never leaves a trail of tabs.
 
 use gpui_kit::component::{Icon, IconName};
-use gpui_kit::{AnyElement, Context, IntoElement as _, ParentElement as _, SharedString, Styled, Window};
+use gpui_kit::{AnyElement, Context, IntoElement as _, SharedString, Window};
 use look::IconSizing as _;
 
 use super::{Showing, WorkspacePane, tab};
@@ -116,19 +116,19 @@ impl WorkspacePane {
         let (path, opened) = (self.file_tab()?, self.file_tab_opened()?);
         let name = path.rsplit('/').next().unwrap_or_default().to_string();
         let selected = self.showing() == Showing::File;
-        let muted = look::colors(cx).text_muted;
         let label = match opened {
             Opened::Diff => format!("Diff of {path}"),
             Opened::File => path.to_string(),
         };
         let close = tab::close_button("close-file-tab", "Close file tab", cx, |t, _, cx| t.close_file_tab(cx));
-        let face = tab::face("show-file-tab", selected, label)
-            // Muted whether or not it's showing, as the chats' titles are: the underline says which tab is.
-            .text_color(muted)
-            .on_click(cx.listener(|t, _, _, cx| t.show_file_tab(cx)))
-            .child(Icon::new(IconName::File).sized(look::IconSize::Large))
-            .child(tab::name().italic().child(name));
+        let tab = look::tab("show-file-tab", name, look::TabWidth::Even)
+            .label(label)
+            .mark(Icon::new(IconName::File).sized(look::IconSize::Large))
+            .replaced()
+            .showing(selected)
+            .closes(close)
+            .on_click(cx.listener(|t, _, _, cx| t.show_file_tab(cx)));
         // Two files can share a name, so the whole path is on the bar under the tab, with the button that copies it.
-        Some(tab::tab("file-tab", face, close, selected, cx).into_any_element())
+        Some(tab.into_any_element())
     }
 }

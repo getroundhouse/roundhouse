@@ -165,6 +165,22 @@ What's done on a card as a whole, such as keeping the keyboard's focus or measur
 | Show the lines a file gained and lost | `look::lines_changed(added, removed)` |
 | Set a count or lines on the baseline of the line they're in | `placed`, with the `look::LineText` part for their text |
 
+## Tabs
+
+`docs/spec/components.md` has a tab's widths, and `crates/look/src/tabs` the code. A tab draws its name, its line and its close button itself, so none is drawn on the kit's tab. The bar it's in is still the place's, until the bars are components.
+
+| To | Call |
+|---|---|
+| Make one, of a width, found by an ID | `look::tab(id, name, width)` |
+| Put what stands for what it names before its name, such as a chat's mark | `mark` |
+| Count what it shows after its name, or say something else there, such as a chat's cache about to expire | `count`, `after` |
+| Underline it as the tab showing | `showing` |
+| Make its name stronger, for what needs a look | `needs_a_look` |
+| Italicise its name, for a tab that's replaced rather than added to | `replaced` |
+| Give it a close button, shown while the pointer is over it | `closes` |
+| Do something when it's clicked, or right-clicked | `on_click`, `right_click_menu` |
+| Say more than its name, to assistive apps or while the pointer rests on it | `label`, `tooltip` |
+
 ## Toggles
 
 `docs/spec/components.md` has a toggle's states, and `crates/look/src/toggles` the code. A toggle draws whether it's on from what the place that holds the setting gives it, and says when it's flipped, so the place sets what it holds and draws it again.

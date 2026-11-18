@@ -9,7 +9,7 @@ use gpui_kit::{
     Anchor, AnyElement, App, Context, ElementId, InteractiveElement, IntoElement, ParentElement, Render,
     StatefulInteractiveElement, Styled, TestSupportExt as _, Window, div,
 };
-use look::{InRegion as _, LineText, Region, RightClickMenu as _, Typeset as _};
+use look::{InRegion as _, LineText, Region, Typeset as _};
 use protocol::model::{Session, SessionStatus};
 
 use super::setup::setup_log_view;
@@ -43,18 +43,17 @@ impl WorkspacePane {
             t.close_chat(to_close.clone(), window, cx);
         });
         let menu = Self::tab_menu(session, unread, cx);
-        let face = tab::face(ElementId::Name(format!("chat-{}", session.id).into()), selected, title.clone())
-            // Only a chat that needs a look stands out: one with a reply that hasn't been read, or a question waiting
-            // on an answer. The open chat shows in its underline, so moving between chats doesn't change how their
-            // titles look.
-            .when(!needs_a_look, |d| d.text_color(muted))
-            .when(needs_a_look, look::Typeset::emphasis)
+        // Only a chat that needs a look stands out: one with a reply that hasn't been read, or a question waiting on an
+        // answer. The open chat shows in its underline, so moving between chats doesn't change how their titles look.
+        look::tab(format!("chat-{}", session.id), title, look::TabWidth::Even)
+            .mark(look::chat_mark(mark, look::Size::Inline, cx))
+            .when_some(expiring, look::Tab::after)
+            .needs_a_look(needs_a_look)
+            .showing(selected)
+            .closes(close)
             .on_click(cx.listener(move |t, _, _, cx| t.activate(to_show.clone(), cx)))
-            .child(look::chat_mark(mark, look::Size::Inline, cx))
-            .child(tab::name().child(title))
-            .children(expiring);
-        let id = ElementId::Name(format!("tab-{}", session.id).into());
-        tab::tab(id, face, close, selected, cx).right_click_menu(menu).into_any_element()
+            .right_click_menu(menu)
+            .into_any_element()
     }
 
     /// What a right-click on a chat's tab offers. Marking it needs a reply.
