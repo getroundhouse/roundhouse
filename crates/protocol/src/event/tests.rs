@@ -1,9 +1,28 @@
 use proptest::prelude::*;
 use proptest::test_runner::{Config, RngSeed};
 
-use super::{AgentTask, EndedTask, EventBody, TaskKind, TaskOutcome};
+use super::{AgentRunState, AgentTask, EndedTask, EventBody, ExitReason, TaskKind, TaskOutcome};
 use crate::capability::turns::OwnTurn;
 use crate::model::{EndedWait, WaitEnd, WaitEnded, WaitUntil, Watching};
+
+/// What the agent runs in the background is the list it gives, and nothing once it starts or exits, since its work goes
+/// with it, whatever it listed. Anything else leaves it as it was, the turn's end and the agent's state included.
+#[test]
+fn what_runs_in_the_background_is_the_newest_list_until_the_agent_starts_or_exits() {
+    let task = AgentTask { id: "t".into(), description: None, kind: TaskKind::Command, call: None, subagent: None };
+    let listed = EventBody::AgentTasks { tasks: vec![task.clone()], stopped: Vec::new() };
+    let started =
+        EventBody::AgentStarted { pid: 1, resumed: true, build: None, previous_build: None, capabilities: None };
+    let exited =
+        EventBody::AgentExited { reason: ExitReason::Unexpected, code: None, signal: None, stderr_tail: vec![] };
+    let idle = EventBody::AgentState { state: AgentRunState::Idle };
+
+    assert_eq!(listed.sets_background(), Some([task].as_slice()));
+    assert_eq!(started.sets_background(), Some([].as_slice()));
+    assert_eq!(exited.sets_background(), Some([].as_slice()));
+    assert_eq!(idle.sets_background(), None);
+    assert_eq!(crate::fixtures::turn_ended(super::TurnOutcome::Success).sets_background(), None);
+}
 
 fn wait() -> impl Strategy<Value = EndedWait> {
     let how = prop::sample::select(vec![WaitEnd::ChecksPassed, WaitEnd::ChecksFailed, WaitEnd::CalledOffByPerson]);
