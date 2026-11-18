@@ -10,6 +10,7 @@ mod making;
 mod names;
 mod removal;
 mod repo_url;
+mod repository_variables;
 #[cfg(test)]
 pub(crate) mod tests;
 mod worktrees;
@@ -22,6 +23,7 @@ pub use names::names_git_has;
 use names::no_branch_in_the_way;
 pub use removal::remove_workspace;
 pub use repo_url::repo_url;
+pub(crate) use repository_variables::in_no_repository;
 use worktrees::{Changing, Hold, Worktrees, held};
 
 mod commands;

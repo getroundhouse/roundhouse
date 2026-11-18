@@ -82,6 +82,7 @@ fn config(dir: &Path) -> Config {
         deleter: Deleter::new("/bin/rm", ["-rf", "--"]),
         // Never run here, since nothing these start asks git for a credential.
         credential_helper: CredentialHelper::new("/bin/false", ["--"]),
+        machine: crate::testing::given(),
         refused: None,
         timers: crate::Timers::DEFAULT,
     }

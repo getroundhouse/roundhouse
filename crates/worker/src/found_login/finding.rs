@@ -20,10 +20,11 @@ const ASKED: [&str; 8] = ["auth", "status", "--active", "--hostname", "github.co
 /// [`ASKED`] without `--no-refresh`, for a `gh` older than the one that has it, which has nothing to renew.
 const ASKED_OF_AN_OLDER_GH: [&str; 7] = ["auth", "status", "--active", "--hostname", "github.com", "--json", "hosts"];
 
-/// [`FindGithubLogin`](protocol::worker::FindGithubLogin)'s answer, read in `dir`, with nothing beyond the worker's
-/// own environment, whatever git credential the hub has set, since it's the machine's own login that's found.
-pub(crate) async fn reply(dir: &Path) -> Result<WorkerResponse, ApiError> {
-    let (login, token) = find(&Environment::NONE, dir).await?;
+/// [`FindGithubLogin`](protocol::worker::FindGithubLogin)'s answer, read in `dir`, with `machine`, what the worker gives
+/// a process under the machine's own, whatever git credential the hub has set, since it's the machine's own login
+/// that's found.
+pub(crate) async fn reply(machine: &Environment, dir: &Path) -> Result<WorkerResponse, ApiError> {
+    let (login, token) = find(machine, dir).await?;
     Ok(WorkerResponse::GithubLogin(GithubLoginReply { login, token }))
 }
 

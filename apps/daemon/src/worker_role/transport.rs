@@ -62,6 +62,8 @@ pub(super) fn config(given: Given, refused: Option<String>) -> anyhow::Result<wo
         scratch_dir: std::env::temp_dir(),
         deleter: worker::Deleter::new(&exe, ["delete", "--"]),
         credential_helper: worker::CredentialHelper::new(exe, ["git-credential", "--"]),
+        // This process's own environment, as the provider started it.
+        machine: process::Environment::NONE,
         refused,
         timers: given.timers,
     })

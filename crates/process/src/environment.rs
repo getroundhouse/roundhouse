@@ -35,10 +35,13 @@ impl Environment {
         self
     }
 
-    /// Takes `name` out of what a process inherits.
+    /// Takes `name` out of what a process inherits, and out of what this gave it before, so the process has none of
+    /// it. Giving it after gives it again.
     #[must_use]
     pub fn without(mut self, name: impl Into<OsString>) -> Self {
-        self.taken_out.push(name.into());
+        let name = name.into();
+        self.set.retain(|(given, _)| *given != name);
+        self.taken_out.push(name);
         self
     }
 
@@ -116,6 +119,23 @@ mod tests {
             changes(&command),
             [(os("GH_CONFIG_DIR"), Some(os("/gh"))), (os("GH_TOKEN"), taken_out), (os("KEPT"), Some(os("kept")))]
         );
+    }
+
+    /// As code that adds to an environment it was handed takes out what that one gave, such as the worker taking git's
+    /// repository variables out of the one it was built with.
+    #[test]
+    fn what_it_takes_out_it_no_longer_gives_until_it_gives_it_again() {
+        let environment = Environment::NONE.with("GIT_DIR", "/elsewhere").with("KEPT", "kept").without("GIT_DIR");
+        let given_again = environment.clone().with("GIT_DIR", "/here");
+        let (mut command, mut again) = (Command::new("git"), Command::new("git"));
+
+        environment.apply(&mut command);
+        given_again.apply(&mut again);
+
+        let os = OsStr::new;
+        let taken_out = None;
+        assert_eq!(changes(&command), [(os("GIT_DIR"), taken_out), (os("KEPT"), Some(os("kept")))]);
+        assert_eq!(changes(&again), [(os("GIT_DIR"), Some(os("/here"))), (os("KEPT"), Some(os("kept")))]);
     }
 
     #[test]

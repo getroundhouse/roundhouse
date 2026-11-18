@@ -69,6 +69,11 @@ pub struct Config {
     /// What git runs for a credential for github.com, in every process the worker gives the git credential its hub
     /// set.
     pub credential_helper: CredentialHelper,
+    /// What every process the worker starts is given beyond what it inherits from the worker, as the machine's own,
+    /// before the git credential its hub sets: `Environment::NONE` in the product, which leaves it the worker's own
+    /// environment, and a test's own whole environment in a test. Whatever it is, the worker takes git's variables of
+    /// a repository out of it, as `git::in_no_repository` says, since each workspace is a repository of its own.
+    pub machine: process::Environment,
     /// Why this worker can't serve its instance, which is another worker serving it already. It answers every request
     /// by saying so, rather than exiting, so the hub can tell it from a worker that failed to start. The hub cleans up
     /// after one of those by ending the instance, which would end the worker serving it.
@@ -137,7 +142,7 @@ impl Worker {
         let (asking, asked) = mpsc::channel::<WorkerFrame>(QUEUED_ASKS);
         tokio::spawn(send_asks(asked, outbox.clone()));
         let asks = Arc::new(Asks::new(asking));
-        let credentials = GitCredentials::new(&config.state_dir, &config.credential_helper);
+        let credentials = GitCredentials::new(&config.state_dir, &config.credential_helper, config.machine.clone());
         // What the last worker left, if it was killed. Not a refused worker's, since the state directory is another
         // worker's, which is serving it.
         if config.refused.is_none() {
@@ -275,11 +280,13 @@ pub(super) async fn handle(
         WorkerRequest::WatchBranches(asked) => worktrees::watch_branches(state, asked.path, Whose::Own).await,
         WorkerRequest::WatchChildBranches(asked) => worktrees::watch_branches(state, asked.path, Whose::Child).await,
         // The machine's own, so not with `given`, in a directory of no project's.
-        WorkerRequest::FindGithubLogin => crate::found_login::reply(&state.config.scratch_dir).await,
+        WorkerRequest::FindGithubLogin => {
+            crate::found_login::reply(state.credentials.machine(), &state.config.scratch_dir).await
+        }
         // The machine's own too, since the git credential's rewriting of GitHub's addresses is the worker's, not the
         // checkout's, which only where it pushes is read with, whatever the credential is now.
         WorkerRequest::ReadRepoUrl(ReadRepoUrl { path }) => {
-            Ok(WorkerResponse::RepoUrl(git::repo_url(&process::Environment::NONE, Path::new(&path)).await?))
+            Ok(WorkerResponse::RepoUrl(git::repo_url(state.credentials.machine(), Path::new(&path)).await?))
         }
         WorkerRequest::SetupWorkspace(asked) => run_setup(state, &asked.source, &asked.path, &asked.env).await,
         WorkerRequest::CancelSetup => {

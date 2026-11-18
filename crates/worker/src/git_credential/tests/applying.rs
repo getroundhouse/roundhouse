@@ -8,9 +8,10 @@ use protocol::worker::GithubCredential;
 use super::super::git_version::reads_the_config;
 use super::super::{CredentialHelper, GitCredentials};
 use super::ada;
+use crate::testing::given;
 
 fn credentials(state: &Path) -> GitCredentials {
-    GitCredentials::new(state, &CredentialHelper::new("/opt/roundhoused", ["git-credential", "--"]))
+    GitCredentials::new(state, &CredentialHelper::new("/opt/roundhoused", ["git-credential", "--"]), given())
 }
 
 /// Where a process started now is told git's config is, if it's told.
