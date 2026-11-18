@@ -1,4 +1,5 @@
 #![cfg(test)]
+use crate::testing::Asking;
 use protocol::capability::asking::QuestionAnswer;
 use protocol::capability::{
     Control,
@@ -97,7 +98,7 @@ async fn full_access_auto_allows_permission_requests_and_parses_command_envelope
     ]);
     let mut full = Harness::new(&script, super::super::claims::full_access(), Start::New { conversation: None });
     let agent = full.started().await;
-    agent.send_prompt(Seq::FIRST, &Prompt::new("clean up")).await.unwrap();
+    agent.prompt(Seq::FIRST, &Prompt::new("clean up")).await.unwrap();
     let mut selected = None;
     let mut command_out = None;
     loop {
@@ -144,7 +145,7 @@ async fn plan_mode_asks_permission_and_marks_denied_call_results() {
     ]);
     let mut plan = Harness::new(&script, super::super::claims::plan(), Start::New { conversation: None });
     let agent = plan.started().await;
-    agent.send_prompt(Seq::FIRST, &Prompt::new("plan it")).await.unwrap();
+    agent.prompt(Seq::FIRST, &Prompt::new("plan it")).await.unwrap();
     let approval_id = loop {
         if let AgentOutput::Event {
             body: EventBody::ApprovalRequested { approval_id, request, tool_use_id, .. }, ..
@@ -206,7 +207,7 @@ async fn plan_mode_holds_only_post_tool_plan_text_and_preserves_tokens_when_canc
     }]);
     let mut h = Harness::new(&script, super::super::claims::plan(), Start::New { conversation: None });
     let agent = h.started().await;
-    agent.send_prompt(Seq::FIRST, &Prompt::new("make a plan")).await.unwrap();
+    agent.prompt(Seq::FIRST, &Prompt::new("make a plan")).await.unwrap();
     let held_id = loop {
         if let AgentOutput::Event { body: EventBody::ApprovalRequested { approval_id, request, .. }, .. } =
             h.next().await
@@ -215,7 +216,7 @@ async fn plan_mode_holds_only_post_tool_plan_text_and_preserves_tokens_when_canc
             break approval_id;
         }
     };
-    agent.interrupt().await.unwrap();
+    agent.cancel().await.unwrap();
     let mut resolved = false;
     let tokens = loop {
         if let AgentOutput::Event { body, .. } = h.next().await {
@@ -246,7 +247,7 @@ async fn an_approved_plans_turn_counts_what_the_plan_took_with_what_carrying_it_
     ]);
     let mut h = Harness::new(&script, super::super::claims::plan(), Start::New { conversation: None });
     let agent = h.started().await;
-    agent.send_prompt(Seq::FIRST, &Prompt::new("make a plan")).await.unwrap();
+    agent.prompt(Seq::FIRST, &Prompt::new("make a plan")).await.unwrap();
     let plan = loop {
         if let AgentOutput::Event { body: EventBody::ApprovalRequested { approval_id, .. }, .. } = h.next().await {
             break approval_id;
@@ -296,7 +297,7 @@ async fn mode_switches_swap_skip_permissions_flag_stop_background_tasks_and_keep
     let mut h = Harness::new(&script, super::super::claims::full_access(), Start::New { conversation: None });
     let agent = h.started().await;
     let first_pid = agent.pid();
-    agent.send_prompt(Seq::FIRST, &Prompt::new("start bg")).await.unwrap();
+    agent.prompt(Seq::FIRST, &Prompt::new("start bg")).await.unwrap();
     while !matches!(h.next().await, AgentOutput::Event { body: EventBody::TurnEnded { .. }, .. }) {}
 
     let to_plan = Settings { mode: Some(super::super::claims::plan()), ..Settings::default() };
@@ -316,7 +317,7 @@ async fn mode_switches_swap_skip_permissions_flag_stop_background_tasks_and_keep
     }
     assert!(saw_dropped && saw_stopped);
 
-    agent.send_prompt(Seq::new(2), &Prompt::new("write plan")).await.unwrap();
+    agent.prompt(Seq::new(2), &Prompt::new("write plan")).await.unwrap();
     while !matches!(h.next().await, AgentOutput::Delta(_)) {}
     let mid = Settings {
         effort: Some(protocol::capability::settings::Effort::Low),
@@ -341,7 +342,7 @@ async fn elicitation_reply(decision: Decision) -> Value {
         Start::New { conversation: None },
     );
     let agent = h.started().await;
-    agent.send_prompt(Seq::FIRST, &Prompt::new("ask me")).await.unwrap();
+    agent.prompt(Seq::FIRST, &Prompt::new("ask me")).await.unwrap();
     let approval_id = loop {
         if let AgentOutput::Event { body: EventBody::ApprovalRequested { approval_id, request, .. }, .. } =
             h.next().await

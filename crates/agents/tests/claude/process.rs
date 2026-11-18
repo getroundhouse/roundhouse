@@ -2,6 +2,7 @@
 
 #![cfg(test)]
 
+use agents::testing::Asking;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -117,7 +118,7 @@ async fn an_agent_starting_in_plan_mode_is_asked_into_it_before_its_first_prompt
     let agent = spawn_at(script(dir.path(), READS_TWO_LINES), in_plan_mode(dir.path()), tx, AgentOptions::default())
         .await
         .unwrap();
-    agent.send_prompt(Seq::new(1), &Prompt::new("go")).await.unwrap();
+    agent.prompt(Seq::new(1), &Prompt::new("go")).await.unwrap();
 
     asked_into_plan_mode_then_prompted(&two_lines_read(dir.path()).await);
     agent.stop().await;
@@ -137,7 +138,7 @@ async fn an_agent_relaunched_in_plan_mode_is_asked_into_it_again() {
     resumed.start = protocol::capability::conversation::Start::Resume { conversation: "s".into() };
 
     let agent = spawn_at(script(dir.path(), &body), resumed, tx, AgentOptions::default()).await.unwrap();
-    agent.send_prompt(Seq::new(1), &Prompt::new("go")).await.unwrap();
+    agent.prompt(Seq::new(1), &Prompt::new("go")).await.unwrap();
 
     asked_into_plan_mode_then_prompted(&two_lines_read(dir.path()).await);
     agent.stop().await;

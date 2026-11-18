@@ -1,5 +1,6 @@
 #![cfg(test)]
 use super::harness::Harness;
+use crate::testing::Asking;
 use crate::{AgentOutput, AgentProcess};
 use protocol::event::{EventBody, TurnOutcome};
 use protocol::model::Seq;
@@ -31,13 +32,13 @@ async fn steering_crosses_completion_in_either_order_without_losing_or_duplicati
             {"on":"turn/steer","actions":order}
         ]));
         let agent = h.started().await;
-        agent.send_prompt(Seq::FIRST, &Prompt::new("first")).await.unwrap();
+        agent.prompt(Seq::FIRST, &Prompt::new("first")).await.unwrap();
         loop {
             if matches!(h.next().await, AgentOutput::Event { body: EventBody::PromptTaken { .. }, .. }) {
                 break;
             }
         }
-        agent.send_prompt(Seq::new(2), &Prompt::new("second")).await.unwrap();
+        agent.prompt(Seq::new(2), &Prompt::new("second")).await.unwrap();
         let mut done = agent.shared.turn_done.subscribe();
         tokio::time::timeout(
             std::time::Duration::from_secs(10),
@@ -78,7 +79,7 @@ async fn a_missing_intake_reply_is_settled_after_shutdown_without_a_restartable_
         let mut h = Harness::new(&json!([{"on":"turn/start","actions":messages}]));
         let agent = h.started().await;
         let sender = agent.clone();
-        let sending = tokio::spawn(async move { sender.send_prompt(Seq::FIRST, &Prompt::new("first")).await });
+        let sending = tokio::spawn(async move { sender.prompt(Seq::FIRST, &Prompt::new("first")).await });
         let mut taken = 0;
         loop {
             match h.next().await {
@@ -129,7 +130,7 @@ async fn a_broken_input_pipe_stops_the_process_and_settles_the_prompt() {
             break;
         }
     }
-    assert!(agent.send_prompt(Seq::FIRST, &Prompt::new("undelivered")).await.is_ok());
+    assert!(agent.prompt(Seq::FIRST, &Prompt::new("undelivered")).await.is_ok());
     assert!(agent.is_gone());
     let mut dropped = 0;
     while let Some(output) = h.rx.recv().await {
@@ -154,7 +155,7 @@ async fn a_prompt_codex_failed_on_or_answered_with_nothing_stops_it_and_is_dropp
     for answer in [json!({"error":{"code":-32603,"message":"internal error"}}), json!({})] {
         let mut h = Harness::new(&json!([{"on":"turn/start","actions":[answer]}]));
         let agent = h.started().await;
-        assert!(agent.send_prompt(Seq::FIRST, &Prompt::new("first")).await.is_ok(), "the prompt isn't refused");
+        assert!(agent.prompt(Seq::FIRST, &Prompt::new("first")).await.is_ok(), "the prompt isn't refused");
         assert!(agent.is_gone(), "Codex is stopped rather than left in a state nobody knows");
         let mut dropped = 0;
         while let Some(output) = h.rx.recv().await {
@@ -182,7 +183,7 @@ async fn cancelling_as_the_turn_finishes_records_how_it_finished_and_keeps_codex
             {"on":"test/finish","actions":[finished]}
         ]));
         let agent = h.started().await;
-        agent.send_prompt(Seq::FIRST, &Prompt::new("first")).await.unwrap();
+        agent.prompt(Seq::FIRST, &Prompt::new("first")).await.unwrap();
         loop {
             if matches!(h.next().await, AgentOutput::Event { body: EventBody::PromptTaken { .. }, .. }) {
                 break;
@@ -190,7 +191,7 @@ async fn cancelling_as_the_turn_finishes_records_how_it_finished_and_keeps_codex
         }
         let interrupting = tokio::spawn({
             let agent = agent.clone();
-            async move { agent.interrupt().await }
+            async move { agent.cancel().await }
         });
         if !end_first {
             loop {
@@ -227,14 +228,14 @@ async fn an_interrupt_refused_while_the_turn_goes_on_stops_codex_at_once() {
         {"on":"turn/interrupt","actions":[refusal, completion]}
     ]));
     let agent = h.started().await;
-    agent.send_prompt(Seq::FIRST, &Prompt::new("first")).await.unwrap();
+    agent.prompt(Seq::FIRST, &Prompt::new("first")).await.unwrap();
     loop {
         if matches!(h.next().await, AgentOutput::Event { body: EventBody::PromptTaken { .. }, .. }) {
             break;
         }
     }
 
-    let interrupted = agent.interrupt().await;
+    let interrupted = agent.cancel().await;
 
     assert!(interrupted.is_err(), "the interrupt waited for the turn's end, and took it as done");
     assert!(agent.is_gone(), "a turn that may still be going is stopped with its process");
@@ -251,14 +252,14 @@ async fn a_steer_refused_while_the_turn_goes_on_is_refused_at_once() {
         {"on":"turn/steer","actions":[refusal, completion]}
     ]));
     let agent = h.started().await;
-    agent.send_prompt(Seq::FIRST, &Prompt::new("first")).await.unwrap();
+    agent.prompt(Seq::FIRST, &Prompt::new("first")).await.unwrap();
     loop {
         if matches!(h.next().await, AgentOutput::Event { body: EventBody::PromptTaken { .. }, .. }) {
             break;
         }
     }
 
-    let steered = agent.send_prompt(Seq::new(2), &Prompt::new("second")).await;
+    let steered = agent.prompt(Seq::new(2), &Prompt::new("second")).await;
 
     assert!(steered.is_err(), "the prompt waited for the turn's end, and started the next with it");
     assert!(!agent.is_gone(), "a refused prompt leaves Codex running");

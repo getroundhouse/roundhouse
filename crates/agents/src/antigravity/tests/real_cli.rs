@@ -3,6 +3,7 @@
 
 #![cfg(test)]
 
+use crate::testing::Asking;
 use std::path::Path;
 use std::time::Duration;
 
@@ -210,7 +211,7 @@ async fn real_agy_parallel_background_commands_wake_twice_and_obey_laws() {
         }
     }
     let p1 = record(None, EventBody::UserPrompt { prompt: Prompt::new("start parallel bg"), client_msg_id: None });
-    agent.send_prompt(p1, &Prompt::new("start parallel bg")).await.unwrap();
+    agent.prompt(p1, &Prompt::new("start parallel bg")).await.unwrap();
 
     let (mut turn_results, mut task_ended_turns) = (Vec::new(), 0_usize);
     while turn_results.len() < 3 {
@@ -276,7 +277,7 @@ async fn real_agy_subagent_runs_command_under_skip_permissions_and_wakes_parent(
     let server = scripted_gemini(subagent_script).await;
     let (agent, mut rx) = spawn_real_agy(room.path(), &server, super::super::claims::full_access()).await;
     while !matches!(recv_event(&mut rx).await, EventBody::AgentInit { .. }) {}
-    agent.send_prompt(Seq::FIRST, &Prompt::new("delegate")).await.unwrap();
+    agent.prompt(Seq::FIRST, &Prompt::new("delegate")).await.unwrap();
     let mut results = Vec::new();
     while results.len() < 2 {
         if let EventBody::TurnEnded { outcome, result, .. } = recv_event(&mut rx).await {
@@ -330,7 +331,7 @@ async fn real_agy_mode_switch_plan_background_mixed_wakeup_and_resumes_full_acce
     let plan_pid = agent.pid();
     assert_ne!(plan_pid, full_pid, "switching FullAccess -> Plan must restart agy without skip-permissions");
 
-    agent.send_prompt(Seq::FIRST, &Prompt::new("draft plan")).await.unwrap();
+    agent.prompt(Seq::FIRST, &Prompt::new("draft plan")).await.unwrap();
     let call1 = wait_call_approval(&mut rx).await;
     let allow = Decision::Allow { remember: Remember::Once };
     agent.control(&Control::Decide { approval: call1, decision: allow.clone() }).await.unwrap();

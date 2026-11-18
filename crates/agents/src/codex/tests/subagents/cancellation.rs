@@ -1,3 +1,4 @@
+use crate::testing::Asking;
 use protocol::event::{AgentRunState, EventBody};
 use protocol::model::Seq;
 use protocol::prompt::Prompt;
@@ -25,13 +26,13 @@ async fn cancelling_the_root_does_not_settle_child_work_or_target_its_terminals(
         {"on":"thread/backgroundTerminals/list","actions":[{"result":{"data":[],"nextCursor":null}}]}
     ]));
     let agent = h.started().await;
-    agent.send_prompt(Seq::FIRST, &Prompt::new("Delegate")).await.unwrap();
+    agent.prompt(Seq::FIRST, &Prompt::new("Delegate")).await.unwrap();
     loop {
         if matches!(h.next().await,AgentOutput::Event{body:EventBody::AgentOther{kind,..},..} if kind=="test/ready") {
             break;
         }
     }
-    agent.interrupt().await.unwrap();
+    agent.cancel().await.unwrap();
     let stopped = h.request("thread/backgroundTerminals/terminate").await;
     assert_eq!(stopped["params"], json!({"threadId":"thread","processId":"root-process"}));
     loop {

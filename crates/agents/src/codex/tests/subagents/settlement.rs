@@ -1,3 +1,4 @@
+use crate::testing::Asking;
 use protocol::capability::{
     Control,
     approvals::{Decision, Remember},
@@ -58,9 +59,9 @@ fn waiting_child() -> Vec<Value> {
 async fn cancelling_a_completed_root_with_only_a_child_approval_emits_no_second_outcome() {
     let mut h = Harness::new(&json!([{"on":"turn/start","actions":waiting_child()}]));
     let agent = h.started().await;
-    agent.send_prompt(Seq::FIRST, &Prompt::new("Delegate")).await.unwrap();
+    agent.prompt(Seq::FIRST, &Prompt::new("Delegate")).await.unwrap();
     drain_to(&mut h, "test/ready").await;
-    agent.interrupt().await.unwrap();
+    agent.cancel().await.unwrap();
     agent.shared.rpc.write(&json!({"method":"test/barrier"})).await.unwrap();
     loop {
         let output = h.next().await;
@@ -84,7 +85,7 @@ async fn resolving_a_child_approval_restores_background_state_when_the_root_is_f
             {"on":"test/resolve","actions":[{"method":"serverRequest/resolved","params":{"requestId":90}}]}
         ]));
         let agent = h.started().await;
-        agent.send_prompt(Seq::FIRST, &Prompt::new("Delegate")).await.unwrap();
+        agent.prompt(Seq::FIRST, &Prompt::new("Delegate")).await.unwrap();
         drain_to(&mut h, "test/ready").await;
         let approval = agent.shared.state.lock().waiting.keys().next().unwrap().clone();
         if native {

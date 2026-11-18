@@ -1,4 +1,5 @@
 #![cfg(test)]
+use crate::testing::Asking;
 use protocol::capability::{
     Control,
     conversation::Start,
@@ -36,7 +37,7 @@ async fn async_error_on_last_prompt_drops_it_once_ends_turn_with_error_and_keeps
         Start::New { conversation: None },
     );
     let agent = h.started().await;
-    agent.send_prompt(Seq::FIRST, &Prompt::new("first")).await.unwrap();
+    agent.prompt(Seq::FIRST, &Prompt::new("first")).await.unwrap();
 
     let mut dropped = Vec::new();
     let mut errors = Vec::new();
@@ -54,7 +55,7 @@ async fn async_error_on_last_prompt_drops_it_once_ends_turn_with_error_and_keeps
     assert_eq!(dropped, [Seq::FIRST]);
     assert!(errors.iter().any(|e| e.contains("upstream quota exceeded")), "{errors:?}");
 
-    agent.send_prompt(Seq::new(2), &Prompt::new("retry")).await.unwrap();
+    agent.prompt(Seq::new(2), &Prompt::new("retry")).await.unwrap();
     loop {
         if let AgentOutput::Event { body: EventBody::TurnEnded { outcome, result, .. }, .. } = h.next().await {
             assert_eq!(outcome, TurnOutcome::Success);
@@ -91,7 +92,7 @@ async fn mid_turn_steer_superseded_ok_completes_once_after_steer_finishes() {
         Start::New { conversation: None },
     );
     let agent = h.started().await;
-    agent.send_prompt(Seq::FIRST, &Prompt::new("first")).await.unwrap();
+    agent.prompt(Seq::FIRST, &Prompt::new("first")).await.unwrap();
     let mut taken = Vec::new();
     loop {
         if let AgentOutput::Event { body: EventBody::PromptTaken { prompt }, .. } = h.next().await {
@@ -99,7 +100,7 @@ async fn mid_turn_steer_superseded_ok_completes_once_after_steer_finishes() {
             break;
         }
     }
-    agent.send_prompt(Seq::new(2), &Prompt::new("steer")).await.unwrap();
+    agent.prompt(Seq::new(2), &Prompt::new("steer")).await.unwrap();
 
     let mut endings = Vec::new();
     let mut dropped = Vec::new();
@@ -144,11 +145,11 @@ async fn cancelling_two_untaken_prompts_drops_both_and_marks_neither_taken() {
         Start::New { conversation: None },
     );
     let agent = h.started().await;
-    agent.send_prompt(Seq::FIRST, &Prompt::new("first")).await.unwrap();
-    agent.send_prompt(Seq::new(2), &Prompt::new("second")).await.unwrap();
+    agent.prompt(Seq::FIRST, &Prompt::new("first")).await.unwrap();
+    agent.prompt(Seq::new(2), &Prompt::new("second")).await.unwrap();
     let _ = h.request("session/prompt").await;
     let _ = h.request("session/prompt").await;
-    agent.interrupt().await.unwrap();
+    agent.cancel().await.unwrap();
 
     let mut taken = Vec::new();
     let mut dropped = Vec::new();
@@ -193,14 +194,14 @@ async fn mid_turn_steer_error_drops_only_the_steer_and_keeps_original_turn_alive
         Start::New { conversation: None },
     );
     let agent = h.started().await;
-    agent.send_prompt(Seq::FIRST, &Prompt::new("first")).await.unwrap();
+    agent.prompt(Seq::FIRST, &Prompt::new("first")).await.unwrap();
     loop {
         if matches!(h.next().await, AgentOutput::Event { body: EventBody::PromptTaken { prompt }, .. } if prompt == Seq::FIRST)
         {
             break;
         }
     }
-    agent.send_prompt(Seq::new(2), &Prompt::new("steer")).await.unwrap();
+    agent.prompt(Seq::new(2), &Prompt::new("steer")).await.unwrap();
 
     let mut dropped = Vec::new();
     let mut notices = Vec::new();
@@ -348,7 +349,7 @@ async fn an_interrupt_while_the_turn_is_recorded_as_ended_waits_for_it_rather_th
 
     let interrupting = tokio::spawn({
         let agent = agent.clone();
-        async move { agent.interrupt().await }
+        async move { agent.cancel().await }
     });
     // Until the interrupt waits on the count of ends, or has finished without waiting.
     let failure = "the interrupt neither waited on the count of ends nor finished";

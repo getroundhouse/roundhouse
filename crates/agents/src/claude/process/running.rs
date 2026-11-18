@@ -258,6 +258,48 @@ impl ClaudeProcess {
     /// Changes the model, approval mode or effort of the running CLI to what `settings` name, and resolves once it
     /// has agreed. A setting they leave out is left alone. An error with [`AgentProcess::is_gone`] false is a refusal,
     /// of the first setting refused, and the ones before it may already have been taken.
+    /// Sends the prompt recorded at `seq`, as a user message carrying its files. An error means this process didn't take
+    /// it.
+    pub(in super::super) async fn send_prompt(
+        &self,
+        seq: Seq,
+        prompt: &Prompt<AttachmentFile>,
+    ) -> Result<(), AgentError> {
+        let message = if prompt.files.is_empty() {
+            user_message(prompt)
+        } else {
+            let prompt = prompt.clone();
+            match tokio::task::spawn_blocking(move || user_message(&prompt)).await {
+                Ok(message) => message,
+                // As if it had run here.
+                Err(e) => std::panic::resume_unwind(e.into_panic()),
+            }
+        };
+        send(self, seq, message, None).await
+    }
+
+    /// Asks it to compact, by typing `/compact`, with what to keep after it. `asked` is where that's recorded, which the
+    /// process names when it reports taking or dropping it, and on the compaction.
+    pub(in super::super) async fn ask_to_compact(&self, asked: Seq, keeping: Option<&str>) -> Result<(), AgentError> {
+        let text = keeping.map_or_else(|| "/compact".to_string(), |keeping| format!("/compact {keeping}"));
+        let asked_for = ToCompact { keeping: keeping.map(str::to_string) };
+        send(self, asked, user_message(&Prompt::new(text)), Some(asked_for)).await
+    }
+
+    /// Stops the turn, and drops the prompts queued for later turns.
+    pub(in super::super) async fn interrupt(&self) -> Result<(), AgentError> {
+        write_line(
+            &self.shared,
+            &json!({
+                "type": "control_request",
+                "request_id": uuid::Uuid::new_v4().to_string(),
+                // Stop means stop: messages queued for later turns go too.
+                "request": {"subtype": "interrupt", "cancel_queued": true},
+            }),
+        )
+        .await
+    }
+
     pub(crate) async fn change(&self, settings: &Settings) -> Result<(), AgentError> {
         if let Some(model) = &settings.model {
             control(&self.shared, json!({"subtype": "set_model", "model": model.as_str()})).await?;
@@ -289,40 +331,6 @@ impl AgentProcess for ClaudeProcess {
 
     fn is_gone(&self) -> bool {
         self.shared.gone.load(Ordering::SeqCst)
-    }
-
-    async fn send_prompt(&self, seq: Seq, prompt: &Prompt<AttachmentFile>) -> Result<(), AgentError> {
-        let message = if prompt.files.is_empty() {
-            user_message(prompt)
-        } else {
-            let prompt = prompt.clone();
-            match tokio::task::spawn_blocking(move || user_message(&prompt)).await {
-                Ok(message) => message,
-                // As if it had run here.
-                Err(e) => std::panic::resume_unwind(e.into_panic()),
-            }
-        };
-        send(self, seq, message, None).await
-    }
-
-    /// Claude is asked by typing `/compact`, with what to keep after it.
-    async fn compact(&self, asked: Seq, keeping: Option<&str>) -> Result<(), AgentError> {
-        let text = keeping.map_or_else(|| "/compact".to_string(), |keeping| format!("/compact {keeping}"));
-        let asked_for = ToCompact { keeping: keeping.map(str::to_string) };
-        send(self, asked, user_message(&Prompt::new(text)), Some(asked_for)).await
-    }
-
-    async fn interrupt(&self) -> Result<(), AgentError> {
-        write_line(
-            &self.shared,
-            &json!({
-                "type": "control_request",
-                "request_id": uuid::Uuid::new_v4().to_string(),
-                // Stop means stop: messages queued for later turns go too.
-                "request": {"subtype": "interrupt", "cancel_queued": true},
-            }),
-        )
-        .await
     }
 
     async fn stop(&self) {

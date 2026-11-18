@@ -1,4 +1,5 @@
 #![cfg(test)]
+use crate::testing::Asking;
 use protocol::attachment::{Attachment, AttachmentFile, MediaType};
 use protocol::capability::{
     Control,
@@ -138,25 +139,25 @@ async fn background_calls_survive_turn_end_cancel_and_async_error_until_settled_
     let mut h = Harness::new(&survival_script(), super::super::claims::plan(), Start::New { conversation: None });
     let agent = h.started().await;
 
-    agent.send_prompt(Seq::FIRST, &Prompt::new("start bg")).await.unwrap();
+    agent.prompt(Seq::FIRST, &Prompt::new("start bg")).await.unwrap();
     let allow = Decision::Allow { remember: Remember::Once };
     let approval = wait_for_approval(&mut h).await;
     agent.control(&Control::Decide { approval, decision: allow }).await.unwrap();
     let turn1 = collect_until_end(&mut h).await;
     assert_eq!(dropped_ids(&turn1), ["fg-read"], "only non-background in-progress call drops at turn end");
 
-    agent.send_prompt(Seq::new(2), &Prompt::new("unstarted cmd")).await.unwrap();
+    agent.prompt(Seq::new(2), &Prompt::new("unstarted cmd")).await.unwrap();
     let unstarted_approval = wait_for_approval(&mut h).await;
     let deny_stop = Decision::Deny { words: None, then: AfterDenial::Stop, keep: None };
     agent.control(&Control::Decide { approval: unstarted_approval, decision: deny_stop }).await.unwrap();
     let turn2 = collect_until_end(&mut h).await;
     assert_eq!(dropped_ids(&turn2), ["unstarted"], "denied unstarted call drops on cancel while bg calls stay");
 
-    agent.send_prompt(Seq::new(3), &Prompt::new("blip")).await.unwrap();
+    agent.prompt(Seq::new(3), &Prompt::new("blip")).await.unwrap();
     let turn3 = collect_until_end(&mut h).await;
     assert!(dropped_ids(&turn3).is_empty(), "async prompt RPC error must keep live bg calls open");
 
-    agent.send_prompt(Seq::new(4), &Prompt::new("check results")).await.unwrap();
+    agent.prompt(Seq::new(4), &Prompt::new("check results")).await.unwrap();
     let turn4 = collect_until_end(&mut h).await;
     assert_eq!(
         turn4,
@@ -276,13 +277,13 @@ async fn buffered_wakeup_before_user_message_chunk_stays_separate_from_turn_repl
     ]);
     let mut h = Harness::new(&script, super::super::claims::plan(), Start::New { conversation: None });
     let agent = h.started().await;
-    agent.send_prompt(Seq::FIRST, &Prompt::new("turn 1")).await.unwrap();
+    agent.prompt(Seq::FIRST, &Prompt::new("turn 1")).await.unwrap();
     let _ = collect_until_end(&mut h).await;
 
-    agent.send_prompt(Seq::new(2), &Prompt::new("turn 2")).await.unwrap();
+    agent.prompt(Seq::new(2), &Prompt::new("turn 2")).await.unwrap();
     let seen = collect_until_end(&mut h).await;
 
-    agent.send_prompt(Seq::new(3), &Prompt::new("turn 3")).await.unwrap();
+    agent.prompt(Seq::new(3), &Prompt::new("turn 3")).await.unwrap();
     let err_seen = collect_until_end(&mut h).await;
     agent.stop().await;
 
@@ -328,7 +329,7 @@ async fn buffered_wakeup_before_approved_plan_continuation_flushes_and_clears_re
     ]);
     let mut h = Harness::new(&script, super::super::claims::plan(), Start::New { conversation: None });
     let agent = h.started().await;
-    agent.send_prompt(Seq::FIRST, &Prompt::new("plan")).await.unwrap();
+    agent.prompt(Seq::FIRST, &Prompt::new("plan")).await.unwrap();
     let plan_id = wait_for_approval(&mut h).await;
 
     let approve = Decision::ApprovePlan { context: PlanContext::Kept };
@@ -377,12 +378,9 @@ async fn multi_block_prompt_with_mid_turn_steer_takes_each_prompt_on_its_own_fir
         },
         path: note_path.to_string_lossy().into_owned(),
     };
-    agent
-        .send_prompt(Seq::FIRST, &Prompt::<AttachmentFile>::new("prompt 1").with_files(vec![attachment]))
-        .await
-        .unwrap();
+    agent.prompt(Seq::FIRST, &Prompt::<AttachmentFile>::new("prompt 1").with_files(vec![attachment])).await.unwrap();
     let _ = h.request("session/prompt").await;
-    agent.send_prompt(Seq::new(2), &Prompt::new("steer")).await.unwrap();
+    agent.prompt(Seq::new(2), &Prompt::new("steer")).await.unwrap();
 
     let seen = collect_until_end(&mut h).await;
     agent.stop().await;
