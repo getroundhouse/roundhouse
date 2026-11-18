@@ -123,7 +123,9 @@ fn follows_the_match(id: ElementId, scrolls: Scrolls, handle: ScrollHandle, reve
             if to != offset {
                 handle.set_offset(to);
                 reveal.moved();
-                window.refresh();
+                // A refresh as the window paints brings no frame, so it asks for the one that draws the area where it's
+                // scrolled to.
+                window.request_animation_frame();
             }
         },
     )
