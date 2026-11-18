@@ -61,6 +61,22 @@ fn a_sentence_whose_final_text_leaves_off_its_full_stop_takes_the_live_texts() {
 }
 
 #[test]
+fn a_sentence_heard_whole_as_nothing_goes_in_as_its_live_text() {
+    let engine = FakeEngine::new(SCRIPT).hearing_nothing_whole();
+    let audio = engine.saying("fix the test. / run it");
+    let dictation = dictation(engine);
+    let (recording, updates) = dictation.record(AudioIn::Fed, crate::Hints::default());
+
+    feed(&recording, &audio);
+    recording.stop();
+
+    let rest = the_rest(&updates);
+    // As the live text had them: the first with the full stop it gave, the last with none, as it gave none at the end.
+    assert_eq!(finals(&rest), ["fix the test.", "run it"]);
+    assert_eq!(rest.last(), Some(&Update::Ended(Ending::Heard)));
+}
+
+#[test]
 fn the_last_sentence_keeps_its_own_ending_where_the_live_text_ends_none() {
     let engine = FakeEngine::new(SCRIPT).leaving_off_the_last_full_stop();
     let audio = engine.saying("fix the test. / run it again");
