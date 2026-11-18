@@ -16,7 +16,7 @@ fn audio_levels_arrive_while_the_model_is_blocked() {
         KEEP,
     )
     .unwrap();
-    let (recording, _) = dictation.record(AudioIn::Fed, Hints::default());
+    let (recording, _) = dictation.record(AudioIn::Fed, Hints::default(), crate::Language::Auto);
     let levels = recording.levels();
     reached.recv_timeout(TIMEOUT).unwrap();
 

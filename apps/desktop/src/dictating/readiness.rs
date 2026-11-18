@@ -283,11 +283,14 @@ pub(crate) fn source() -> dictation_ui::Source {
     dictation_ui::Source { ready, record, uses_microphone: hears_the_microphone, mutes_output }
 }
 
-/// Starts a recording biased toward `hints`, once dictation is ready, and gives it and what's heard of it.
+/// Starts a recording biased toward `hints`, in the language chosen, once dictation is ready, and gives it and what's
+/// heard of it.
 fn record(hints: dictation::Hints, cx: &App) -> Option<(Recording, flume::Receiver<Update>)> {
     let dictating = dictating(cx);
     match &dictating.readiness {
-        Readiness::Ready(Hearing(dictation)) => Some(dictation.record(dictating.audio, hints)),
+        Readiness::Ready(Hearing(dictation)) => {
+            Some(dictation.record(dictating.audio, hints, crate::settings::get(cx).dictation_language))
+        }
         Readiness::Off
         | Readiness::Downloading
         | Readiness::Preparing(_)

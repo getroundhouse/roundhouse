@@ -15,7 +15,7 @@ use std::sync::Arc;
 use parking_lot::Mutex;
 
 use crate::pauses::level_db;
-use crate::{Engine, EngineError, Heard, Hints, Listening, Samples};
+use crate::{Engine, EngineError, Heard, Hints, Language, Listening, Samples};
 
 /// How long each word sounds.
 const WORD: Samples = Samples::from_millis(300);
@@ -55,8 +55,8 @@ pub struct FakeEngine {
     leaves_off_the_last_full_stop: bool,
     /// Whether it hears nothing in a piece heard whole, as the model does in some short phrases said quickly.
     hears_nothing_whole: bool,
-    /// The hints the newest recording was started with, so tests can check what context a field passed.
-    last_hints: Arc<Mutex<Hints>>,
+    /// The hints and the language the newest recording was started with, so tests can check what a field passed.
+    last_asked: Arc<Mutex<(Hints, Language)>>,
 }
 
 /// A word heard in a burst.
@@ -80,13 +80,18 @@ impl FakeEngine {
             fails: false,
             leaves_off_the_last_full_stop: false,
             hears_nothing_whole: false,
-            last_hints: Arc::new(Mutex::new(Hints::default())),
+            last_asked: Arc::new(Mutex::new((Hints::default(), Language::default()))),
         }
     }
 
     /// The hints given to the latest recording this engine (or a clone of it) heard.
     pub fn last_hints(&self) -> Hints {
-        self.last_hints.lock().clone()
+        self.last_asked.lock().0.clone()
+    }
+
+    /// The language the latest recording this engine (or a clone of it) heard was heard in.
+    pub fn last_language(&self) -> Language {
+        self.last_asked.lock().1
     }
 
     /// Takes pieces no longer than `longest`.
@@ -172,13 +177,13 @@ impl Engine for FakeEngine {
         self.longest
     }
 
-    fn listen(&self, hints: &Hints) -> Box<dyn Listening + '_> {
-        *self.last_hints.lock() = hints.clone();
+    fn listen(&self, hints: &Hints, language: Language) -> Box<dyn Listening + '_> {
+        *self.last_asked.lock() = (hints.clone(), language);
         Box::new(FakeListening { engine: self, hints: hints.clone(), audio: Vec::new(), told: 0 })
     }
 
-    fn transcribe(&self, piece: &[f32], hints: &Hints) -> Result<String, EngineError> {
-        *self.last_hints.lock() = hints.clone();
+    fn transcribe(&self, piece: &[f32], hints: &Hints, language: Language) -> Result<String, EngineError> {
+        *self.last_asked.lock() = (hints.clone(), language);
         if self.fails {
             return Err(EngineError("the model's files are damaged".to_string()));
         }

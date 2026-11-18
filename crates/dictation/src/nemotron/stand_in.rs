@@ -1,6 +1,10 @@
 //! Stand-ins for the model's parts, to test what runs them without Core ML: encoders that make out a step of nothing
 //! for each 80 ms of audio, and scripted transducers for deterministic and ambiguous beam-search paths.
 
+use std::sync::Arc;
+
+use parking_lot::Mutex;
+
 use super::engine::LONGEST;
 use super::mel::HOP;
 use super::parts::{Input, Part, Parts, Tensor};
@@ -35,11 +39,22 @@ pub(super) fn never_done_parts() -> Parts {
 }
 
 pub(super) fn parts_with_transducer(transducer: impl Transducer + 'static) -> Parts {
-    Parts {
-        live: Box::new(Encoder { expected_frames: WINDOW.0 / HOP + 1 }),
-        offline: Box::new(Encoder { expected_frames: LONGEST.0 / HOP + 1 }),
+    parts_noting_prompts(transducer).0
+}
+
+/// Each prompt the encoders were given, in order, with which encoder was: `"live"` or `"offline"`.
+pub(super) type Prompts = Arc<Mutex<Vec<(&'static str, usize)>>>;
+
+/// Parts with `transducer`, and the prompts their encoders are given.
+pub(super) fn parts_noting_prompts(transducer: impl Transducer + 'static) -> (Parts, Prompts) {
+    let prompts = Prompts::default();
+    let encoder = |which, expected_frames| Box::new(Encoder { which, expected_frames, prompts: prompts.clone() });
+    let parts = Parts {
+        live: encoder("live", WINDOW.0 / HOP + 1),
+        offline: encoder("offline", LONGEST.0 / HOP + 1),
         transducer: Box::new(transducer),
-    }
+    };
+    (parts, prompts)
 }
 
 fn deterministic_parts(choose: fn(usize, usize) -> usize) -> Parts {
@@ -143,7 +158,9 @@ fn int(inputs: &[Input<'_>], wanted: &str) -> usize {
 }
 
 struct Encoder {
+    which: &'static str,
     expected_frames: usize,
+    prompts: Prompts,
 }
 
 impl Part for Encoder {
@@ -155,6 +172,7 @@ impl Part for Encoder {
         if *frames != self.expected_frames {
             return Err(EngineError(format!("mel has {frames} frames, expected {}", self.expected_frames)));
         }
+        self.prompts.lock().push((self.which, int(inputs, "prompt_id")));
         let steps = frames.div_ceil(8);
         let encoder = Tensor { values: vec![0.0; ENCODED * steps], shape: vec![1, ENCODED, steps] };
         Ok(vec![encoder, count(int(inputs, "mel_length").div_ceil(8))])

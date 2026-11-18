@@ -2,6 +2,7 @@
 
 use super::decoding::{Decoder, Token};
 use super::engine::Nemotron;
+use super::language::Prompt;
 use super::vocab::Vocabulary;
 use super::windows::{WINDOW, Window, Windows};
 use crate::hints::HintGraph;
@@ -9,6 +10,8 @@ use crate::{EngineError, Heard, Hints, Listening, Samples};
 
 pub(super) struct Live<'e> {
     engine: &'e Nemotron,
+    /// What the live encoder is told of the recording's language.
+    prompt: Prompt,
     hints: HintGraph,
     windows: Windows,
     decoder: Decoder<'e>,
@@ -19,14 +22,15 @@ pub(super) struct Live<'e> {
 }
 
 impl<'e> Live<'e> {
-    pub(super) fn new(engine: &'e Nemotron, hints: &Hints) -> Self {
+    pub(super) fn new(engine: &'e Nemotron, hints: &Hints, prompt: Prompt) -> Self {
         let (audio, kept_from, heard) = (Vec::new(), Samples(0), Samples(0));
         let hints = engine.hint_graph(hints);
         Self {
             engine,
+            decoder: Decoder::new(engine.left_out.of(&prompt)),
+            prompt,
             hints,
             windows: Windows::default(),
-            decoder: Decoder::new(&engine.other_alphabets),
             audio,
             kept_from,
             heard,
@@ -39,7 +43,8 @@ impl<'e> Live<'e> {
         let audio = &self.audio[from..from + window.audio().0];
         let mut padded = vec![0.0; WINDOW.0];
         padded[..audio.len()].copy_from_slice(audio);
-        let encoded = self.engine.encode(&*self.engine.parts.live, &padded, window.audio(), window.start)?;
+        let encoded =
+            self.engine.encode(&*self.engine.parts.live, &self.prompt, &padded, window.audio(), window.start)?;
         let steps = self.windows.decode(window, encoded.made_out());
         let tokens = self.decoder.decode_live(&*self.engine.parts.transducer, &self.hints, &encoded, steps)?;
         Ok(self.to_heard(tokens))
@@ -97,16 +102,17 @@ impl Listening for Live<'_> {
 mod tests {
     use super::Live;
     use crate::nemotron::engine::Nemotron;
+    use crate::nemotron::language::Prompt;
     use crate::nemotron::stand_in;
     use crate::nemotron::vocab::Vocabulary;
     use crate::nemotron::windows::{Steps, WINDOW};
-    use crate::{Hints, Listening as _, Samples};
+    use crate::{Hints, Language, Listening as _, Samples};
 
     #[test]
     fn each_step_is_heard_once_in_order_where_it_is_and_audio_no_window_needs_is_let_go_of() {
         let vocabulary = Vocabulary::parse(r#"{"0": "<unk>", "1": "▁a"}"#).unwrap();
         let engine = Nemotron::standing_in(stand_in::never_done_parts(), vocabulary);
-        let mut live = Live::new(&engine, &Hints::default());
+        let mut live = Live::new(&engine, &Hints::default(), Prompt::of(Language::Auto));
         let recording = Steps(89);
 
         let mut heard = Vec::new();

@@ -100,6 +100,7 @@ A key in one of the kit's menus is the kit's, from the action it's bound to, so 
 | Do something as a row is chosen | `on_choose` |
 | Find the keys rows show from where the keyboard's focus is, such as the field a menu is beside | `keys_from` |
 | Set how wide a menu is, such as as wide as what opens it | `width` |
+| Have a long menu to choose from scroll, and open on the row that's chosen | `scrolls` |
 | Know when a menu closes, such as to hold something still while it's open | `open`, then the `look::OpenMenu`'s `on_close` |
 
 ## Dialogs

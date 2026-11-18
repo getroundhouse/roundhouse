@@ -9,7 +9,7 @@ use super::buffer::Buffer;
 use super::capture::{self, Capture, Open};
 use super::hearing;
 use super::recording::{Cancelled, Recording, Update};
-use crate::{AudioIn, DictationError, Engine, EngineError, Hints};
+use crate::{AudioIn, DictationError, Engine, EngineError, Hints, Language};
 
 /// What loads the engine, each time it's needed after it was let go.
 type Load = Box<dyn FnMut() -> Result<Box<dyn Engine>, EngineError> + Send>;
@@ -32,6 +32,7 @@ enum Request {
 struct Asked {
     audio: AudioIn,
     hints: Hints,
+    language: Language,
     input: Buffer,
     updates: flume::Sender<Update>,
     cancelled: Cancelled,
@@ -60,15 +61,15 @@ impl Dictation {
         Ok(Self { requests })
     }
 
-    /// Starts a recording, which hears `audio` biased toward `hints` until it's stopped or cancelled, and what's heard
-    /// of it. Once an earlier recording has finished, the microphone is opened first, and then the engine loaded if it
-    /// isn't. Audio awaiting recognition is bounded; exceeding the buffer ends capture with [`DictationError::AudioBacklog`].
-    pub fn record(&self, audio: AudioIn, hints: Hints) -> (Recording, flume::Receiver<Update>) {
+    /// Starts a recording, which hears `audio` in `language`, biased toward `hints`, until it's stopped or cancelled,
+    /// and what's heard of it. Once an earlier recording has finished, the microphone is opened first, and then the
+    /// engine loaded if it isn't. Audio awaiting recognition is bounded; exceeding the buffer ends capture with [`DictationError::AudioBacklog`].
+    pub fn record(&self, audio: AudioIn, hints: Hints, language: Language) -> (Recording, flume::Receiver<Update>) {
         let input = Buffer::new();
         let (updates, read) = flume::unbounded();
         let cancelled = Cancelled::default();
         let recording = Recording::new(input.clone(), audio, cancelled.clone());
-        let asked = Asked { audio, hints, input, updates, cancelled };
+        let asked = Asked { audio, hints, language, input, updates, cancelled };
         if let Err(flume::SendError(Request::Record(asked))) = self.requests.send(Request::Record(asked)) {
             let _ = asked.updates.send(Update::Failed(DictationError::Engine(stopped())));
         }
@@ -122,7 +123,7 @@ fn record(
     asked: Asked,
     capture: &Open,
 ) -> Result<Option<crate::Ending>, DictationError> {
-    let Asked { audio, hints, input, updates, cancelled } = asked;
+    let Asked { audio, hints, language, input, updates, cancelled } = asked;
     if cancelled.is_set() {
         return Ok(None);
     }
@@ -137,7 +138,7 @@ fn record(
     if cancelled.is_set() {
         return Ok(None);
     }
-    hearing::hear(engine, &hints, &input, &updates, &cancelled)
+    hearing::hear(engine, &hints, language, &input, &updates, &cancelled)
 }
 
 /// The engine, loaded if it isn't. One that fails to load is tried again next time.

@@ -32,6 +32,8 @@ Finishing releases the microphone while the model works on the last words. Cance
 
 What's heard shows dimmed under what you've typed, as you say it. Each sentence goes in at the cursor, as if you'd typed it, once you've paused at its end and started the next one, and the last when you stop. Sentences said without a pause between them go in together, and pausing in the middle of a sentence leaves it showing until it ends. It can come out a little different from what showed, since the whole sentence is heard again, which gets more of it right. A short phrase said quickly is sometimes heard as nothing the second time, and then it goes in as it was first heard. It also favors names from your project, workspace, branch, changed files, recent chat and question options, so project terms, package names and proper nouns come out right when spoken.
 
+Dictation hears 25 European languages, and tells which you're speaking. If you speak one of them, choose it as **Dictation language** in Settings, under Dictation: it's heard better, and never comes out in another alphabet, as a short phrase said quickly can, such as English in Cyrillic.
+
 Nothing is sent until you press `Enter`, so you can fix what came out wrong first. Pressing `Enter` while you're still dictating stops it, and sends once the last of what you said has gone in, so none of it is lost.
 
 The first time, your Mac asks whether Roundhouse may use the microphone. Allow it, and press again. If you didn't, a message says where in System Settings to allow it.

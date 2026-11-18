@@ -1,6 +1,6 @@
-//! The Dictation row of General: Ask first, On or Off, and under it a box that says how dictation stands, and the
-//! switch under it that mutes the sound while dictating, as `docs/spec/settings.md` says. Only where `dictation::HEARS`,
-//! and the switch only where `dictation::MUTES_OUTPUT`.
+//! The Dictation row of General: Ask first, On or Off, and under it a box that says how dictation stands, the language
+//! what's dictated is heard in, and the switch that mutes the sound while dictating, as `docs/spec/settings.md` says.
+//! Only where `dictation::HEARS`, and the switch only where `dictation::MUTES_OUTPUT`.
 
 use std::rc::Rc;
 
@@ -12,6 +12,9 @@ use crate::settings::{change, get};
 
 /// The button that opens the choices.
 const CHOICE: &str = "settings-dictation";
+
+/// The button that opens the languages.
+const LANGUAGE: &str = "settings-dictation-language";
 
 pub(super) fn setting() -> Setting {
     Setting {
@@ -25,6 +28,20 @@ pub(super) fn setting() -> Setting {
             menu: Rc::new(choices),
         },
         status_box: Some(Box::new(crate::dictating::status_box)),
+    }
+}
+
+pub(super) fn language() -> Setting {
+    Setting {
+        name: "Dictation language",
+        does: "The language you dictate in. Auto tells which from what you say. Choosing yours hears it better, and \
+               never writes it in another alphabet, as Auto can a short phrase said quickly, such as English in Cyrillic.",
+        control: Control::Choice {
+            id: LANGUAGE,
+            chosen: Box::new(|cx| get(cx).dictation_language.name().into()),
+            menu: Rc::new(languages),
+        },
+        status_box: None,
     }
 }
 
@@ -49,6 +66,17 @@ fn choices(mut menu: look::Menu, _: &mut Window, cx: &mut App) -> look::Menu {
         menu = menu.row(item.on_choose(move |_, cx| change(cx, |settings| settings.dictation = choice)));
     }
     menu
+}
+
+/// Auto, then every language by name, with the one chosen ticked, in a menu that scrolls, since they're too many to
+/// fit.
+fn languages(mut menu: look::Menu, _: &mut Window, cx: &mut App) -> look::Menu {
+    let chosen = get(cx).dictation_language;
+    for language in dictation::Language::ALL {
+        let item = look::menu_row(language.name()).chosen(language == chosen);
+        menu = menu.row(item.on_choose(move |_, cx| change(cx, |settings| settings.dictation_language = language)));
+    }
+    menu.scrolls()
 }
 
 #[cfg(test)]

@@ -3,14 +3,14 @@
 use std::path::Path;
 
 use super::decoding::{Decoder, Encoded};
-use super::language::{ENGLISH, OtherAlphabets};
+use super::language::{LeftOut, Prompt};
 use super::live::Live;
 use super::mel::{MELS, Mel};
 use super::parts::{Input, Part, Parts, Tensor};
 use super::vocab::Vocabulary;
 use super::windows::Steps;
 use crate::hints::HintGraph;
-use crate::{Engine, EngineError, Hints, Listening, Samples};
+use crate::{Engine, EngineError, Hints, Language, Listening, Samples};
 
 /// Where the vocabulary is, in the directory the engine loads from.
 pub(super) const VOCABULARY: &str = "coreml/vocab.json";
@@ -45,8 +45,8 @@ pub struct Nemotron {
     pub(super) parts: Parts,
     mel: Mel,
     pub(super) vocabulary: Vocabulary,
-    /// The pieces a recording isn't heard as, since it's heard in English.
-    pub(super) other_alphabets: OtherAlphabets,
+    /// The pieces a recording isn't heard as, for each alphabet it can be heard in.
+    pub(super) left_out: LeftOut,
 }
 
 impl Nemotron {
@@ -65,19 +65,20 @@ impl Nemotron {
     }
 
     fn with(parts: Parts, vocabulary: Vocabulary) -> Self {
-        let other_alphabets = OtherAlphabets::new(&vocabulary, &ENGLISH);
-        Self { parts, mel: Mel::new(), vocabulary, other_alphabets }
+        let left_out = LeftOut::new(&vocabulary);
+        Self { parts, mel: Mel::new(), vocabulary, left_out }
     }
 
     pub(super) fn hint_graph(&self, hints: &Hints) -> HintGraph {
         HintGraph::new(self.vocabulary.pieces(), hints, HINT_BOOST)
     }
 
-    /// What `encoder` makes out of `padded`, a window that starts at `first` in the recording, whose first `audio` is
-    /// audio and the rest padding.
+    /// What `encoder`, given `prompt`, makes out of `padded`, a window that starts at `first` in the recording, whose
+    /// first `audio` is audio and the rest padding.
     pub(super) fn encode(
         &self,
         encoder: &dyn Part,
+        prompt: &Prompt,
         padded: &[f32],
         audio: Samples,
         first: Steps,
@@ -87,7 +88,7 @@ impl Nemotron {
         let inputs = [
             Input::Floats { name: "mel", values: &features.values, shape: &[1, MELS, features.frames] },
             Input::Ints { name: "mel_length", values: &[audio_frames], shape: &[1] },
-            Input::Ints { name: "prompt_id", values: &[ENGLISH.prompt], shape: &[1] },
+            Input::Ints { name: "prompt_id", values: &[prompt.number], shape: &[1] },
         ];
         let outputs = encoder.run(&inputs, &["encoder", "encoder_length"])?;
         let [made_out, length] =
@@ -101,11 +102,11 @@ impl Engine for Nemotron {
         LONGEST
     }
 
-    fn listen(&self, hints: &Hints) -> Box<dyn Listening + '_> {
-        Box::new(Live::new(self, hints))
+    fn listen(&self, hints: &Hints, language: Language) -> Box<dyn Listening + '_> {
+        Box::new(Live::new(self, hints, Prompt::of(language)))
     }
 
-    fn transcribe(&self, piece: &[f32], hints: &Hints) -> Result<String, EngineError> {
+    fn transcribe(&self, piece: &[f32], hints: &Hints, language: Language) -> Result<String, EngineError> {
         if piece.is_empty() {
             return Ok(String::new());
         }
@@ -114,9 +115,10 @@ impl Engine for Nemotron {
         }
         let mut padded = vec![0.0; LONGEST.0];
         padded[..piece.len()].copy_from_slice(piece);
-        let encoded = self.encode(&*self.parts.offline, &padded, Samples(piece.len()), Steps(0))?;
+        let prompt = Prompt::of(language);
+        let encoded = self.encode(&*self.parts.offline, &prompt, &padded, Samples(piece.len()), Steps(0))?;
         let graph = self.hint_graph(hints);
-        let tokens = Decoder::new(&self.other_alphabets).decode_all(
+        let tokens = Decoder::new(self.left_out.of(&prompt)).decode_all(
             &*self.parts.transducer,
             &graph,
             &encoded,
@@ -135,7 +137,7 @@ mod tests {
     use crate::nemotron::stand_in::{self, ScriptedTransducer};
     use crate::nemotron::transducer::BLANK;
     use crate::nemotron::vocab::Vocabulary;
-    use crate::{Engine as _, Hints, Samples};
+    use crate::{Engine as _, Hints, Language, Samples};
 
     #[test]
     fn short_piece_is_padded_to_the_offline_window_and_decoded_over_its_own_audio_steps() {
@@ -152,8 +154,35 @@ mod tests {
         let engine = Nemotron::standing_in(stand_in::parts_with_transducer(transducer), vocabulary);
         let one_second = vec![0.0; Samples::from_secs(1).0];
 
-        assert_eq!(engine.transcribe(&one_second, &Hints::default()).unwrap(), "bat");
-        assert_eq!(engine.transcribe(&one_second, &Hints::new(["cat"])).unwrap(), "cat");
+        assert_eq!(engine.transcribe(&one_second, &Hints::default(), Language::Auto).unwrap(), "bat");
+        assert_eq!(engine.transcribe(&one_second, &Hints::new(["cat"]), Language::Auto).unwrap(), "cat");
         assert!(calls.load(Ordering::Relaxed) < 100, "only the 1 s audio steps are decoded, not the 14 s of padding");
+    }
+
+    #[test]
+    fn each_encoder_is_told_the_recordings_language_and_hears_nothing_in_another_alphabet() {
+        let vocabulary = Vocabulary::parse(r#"{"0": "<unk>", "1": "▁Та", "2": "▁Too"}"#).unwrap();
+        // The Cyrillic piece sounds likeliest, by more than the acoustic beam, and silence is likelier than neither.
+        let transducer = ScriptedTransducer(|_, history: &[usize]| {
+            if history.is_empty() { vec![(1, 5.0), (2, -6.0), (BLANK, -8.0)] } else { vec![(BLANK, 10.0)] }
+        });
+        let (parts, prompts) = stand_in::parts_noting_prompts(transducer);
+        let engine = Nemotron::standing_in(parts, vocabulary);
+        let one_second = vec![0.0; Samples::from_secs(1).0];
+        let whole = |language| engine.transcribe(&one_second, &Hints::default(), language).unwrap();
+        let live = |language| {
+            let mut listening = engine.listen(&Hints::default(), language);
+            let mut heard = listening.hear(&one_second).unwrap();
+            heard.extend(listening.finish().unwrap());
+            heard.into_iter().map(|heard| heard.text).collect::<String>().trim().to_string()
+        };
+
+        assert_eq!(whole(Language::English), "Too");
+        assert_eq!(whole(Language::Auto), "Та");
+        assert_eq!(live(Language::English), "Too");
+        assert_eq!(live(Language::Russian), "Та");
+        let mut given = prompts.lock().clone();
+        given.dedup();
+        assert_eq!(given, [("offline", 0), ("offline", 127), ("live", 0), ("live", 11)]);
     }
 }
