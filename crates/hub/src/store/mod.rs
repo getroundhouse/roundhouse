@@ -58,7 +58,7 @@ pub use attachments::AddedBy;
 pub use comments::Commented;
 pub use error::{BackupError, StoreError};
 pub use events::{Initialized, Places, SessionChange, StatusChange, TurnEdge, cancelled_approval};
-pub(crate) use github_accounts::{GithubConnected, GithubConnecting, GithubProfile};
+pub(crate) use github_accounts::{GithubConnected, GithubConnecting};
 pub(crate) use github_apps::GithubAppMaking;
 pub(crate) use github_sign_ins::{GithubApproved, GithubApproving, StartedSignIn};
 pub use instances::{InstanceStage, RecordedInstance};

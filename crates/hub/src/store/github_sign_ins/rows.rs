@@ -1,8 +1,7 @@
 use super::super::github_accounts::{connect_login, signed_in_as};
-use super::super::{
-    GithubConnected, GithubConnecting, GithubProfile, Store, StoreError, current_rev, json_at, lock, rev_of,
-};
+use super::super::{GithubConnected, GithubConnecting, Store, StoreError, current_rev, json_at, lock, rev_of};
 use crate::login_files::LoginFile;
+use github::GithubProfile;
 use protocol::model::{
     GithubAccountId, GithubLoginKind, GithubSignIn, GithubSignInId, GithubSignInStatus, GithubUser, Rev,
 };

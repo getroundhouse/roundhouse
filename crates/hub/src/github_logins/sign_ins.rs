@@ -2,8 +2,8 @@ use protocol::client::ApiError;
 use protocol::model::{GithubAccountId, GithubSignIn, GithubSignInId, GithubSignInStatus};
 
 use super::{GithubAccountChange, GithubLogin, GithubLogins, SignedIn};
-use crate::github::TokenOwner;
 use crate::store::{GithubApproved, GithubApproving, GithubConnected, StoreError};
+use github::TokenOwner;
 
 /// What GitHub gave a sign-in the person approved, to keep.
 pub(crate) struct Approved {

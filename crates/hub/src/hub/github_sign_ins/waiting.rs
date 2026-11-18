@@ -5,10 +5,10 @@ use protocol::model::GithubSignInId;
 use tracing::error;
 
 use super::super::{Hub, off_thread};
-use crate::github::{ASK_WITHIN, Approval, DeviceCode, Granted};
 use crate::github_logins::{Approved, SignInEnd, SignedIn};
 use crate::jobs::{Ended, JobKind, Limits, NotStarted, step, uncut};
 use crate::store::now_ms;
+use github::{ASK_WITHIN, Approval, DeviceCode, Granted};
 
 /// How much longer than its code lasts a sign-in's job may run: an ask after its token, whose answer can come just as
 /// the code ends, and then asking GitHub whose the token is, each within [`ASK_WITHIN`], and keeping it, which waits

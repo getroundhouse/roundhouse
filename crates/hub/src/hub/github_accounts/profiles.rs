@@ -1,5 +1,5 @@
 //! Asking GitHub again who an account the check found due is, for its commit identity. What GitHub answers is
-//! `crate::github`'s to read, and what's kept of it is `crate::github_logins`'s.
+//! the `github` crate's to read, and what's kept of it is `crate::github_logins`'s.
 
 use std::sync::Arc;
 

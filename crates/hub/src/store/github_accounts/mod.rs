@@ -12,7 +12,6 @@ mod tests;
 
 mod installations;
 mod profiles;
-pub(crate) use profiles::GithubProfile;
 mod rows;
 pub(crate) use rows::{GithubConnected, GithubConnecting};
 pub(super) use rows::{connect_login, github_accounts, signed_in_as};

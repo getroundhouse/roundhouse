@@ -1,14 +1,14 @@
 //! What each of GitHub's answers, and each credential the hub can't check with, comes to. What GitHub's answers are, and
-//! the time limit, is tested in `crate::github`.
+//! the time limit, is tested in the `github` crate.
 
 use protocol::model::{GithubRepositoryName, GithubToken, InstalledApp, Reach, UnusableLogin};
 use protocol::worker::{GitCredential, GitIdentity};
 
 use super::super::reaching::{PushesTo, reach};
 use super::support::{CLI, account};
-use crate::github::{Answer, Github, GithubConfig, Script, StandIn};
 use crate::github_logins::DefaultCredential;
 use crate::hub::tests::NO_GITHUB;
+use github::{Answer, Github, GithubConfig, Script, StandIn};
 
 /// Pushes to `repository` that go through the git credential.
 fn through(repository: Option<GithubRepositoryName>) -> PushesTo {

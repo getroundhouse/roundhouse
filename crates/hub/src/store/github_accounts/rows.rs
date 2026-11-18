@@ -1,7 +1,8 @@
 use super::super::hub_settings::hub_settings;
 use super::super::{Store, StoreError, from_text, lock, rev_of, text_of};
-use super::profiles::{GithubProfile, keep_profile};
+use super::profiles::keep_profile;
 use crate::login_files::LoginFile;
+use github::GithubProfile;
 use protocol::model::{
     GithubAccount, GithubAccountId, GithubAppId, GithubInstallation, GithubInstallationId, GithubLoginKind, GithubUser,
     GithubUserId, HeldGithubLogin, HubSettings,

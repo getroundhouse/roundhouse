@@ -9,11 +9,12 @@ use protocol::model::{GithubToken, GithubUser, GithubUserId};
 use protocol::worker::{GitIdentity, GithubCredential};
 
 use super::*;
-use crate::github::{Answer, Gate, StandIn, TokenOwner};
 use crate::github_logins::Connect;
 use crate::hub::Hub;
 use crate::hub::tests::hub_calling_github;
-use crate::store::{GithubProfile, now_ms};
+use crate::store::now_ms;
+use github::GithubProfile;
+use github::{Answer, Gate, StandIn, TokenOwner};
 
 /// A hub calling `github`, whose default is ada, connected at 1000 by her token, `a-token`, as GitHub said then that
 /// she had no name and showed no email, so the first check asks again.

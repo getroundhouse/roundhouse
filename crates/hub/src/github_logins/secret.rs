@@ -3,9 +3,9 @@ use std::io;
 use protocol::model::GithubToken;
 use serde::{Deserialize, Serialize};
 
-use crate::github::{GithubAppKey, GithubRefreshToken, Granted};
 use crate::login_files::{LoginSecret, Stored};
 use crate::store::later_ms;
+use github::{GithubAppKey, GithubRefreshToken, Granted};
 
 /// The login the hub holds for a GitHub account, or the key of an app of your own, in a file of its own in the GitHub
 /// logins' directory.

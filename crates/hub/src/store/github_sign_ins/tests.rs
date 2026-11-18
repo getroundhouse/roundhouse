@@ -4,7 +4,8 @@ use super::*;
 use crate::store::older::store_from_before;
 use crate::store::schema::BEFORE_GITHUB_SIGN_INS;
 use crate::store::tests::open_in;
-use crate::store::{GithubApproving, GithubProfile, Store};
+use crate::store::{GithubApproving, Store};
+use github::GithubProfile;
 
 fn waiting() -> GithubSignInStatus {
     protocol::fixtures::github_sign_in("s").status

@@ -2640,6 +2640,25 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1033caf0b349c518623b5396bfb2cf0bddf44f0306d543a250e5743297aafd10"
 
 [[package]]
+name = "github"
+version = "0.1.0"
+dependencies = [
+ "base64 0.22.1",
+ "fetching",
+ "github",
+ "http",
+ "jiff",
+ "octocrab",
+ "parking_lot",
+ "protocol",
+ "ring",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "gl_generator"
 version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3911,13 +3930,11 @@ dependencies = [
  "base64 0.22.1",
  "client-core",
  "fastrand",
- "fetching",
- "http",
+ "github",
  "hub",
  "jiff",
  "libc",
  "memchr",
- "octocrab",
  "parking_lot",
  "private-files",
  "process",

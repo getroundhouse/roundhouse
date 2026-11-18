@@ -7,13 +7,13 @@ use protocol::model::{GithubToken, Workspace, WorkspaceId};
 use tokio::time::Instant;
 use tracing::debug;
 
-use crate::github::BRANCHES_A_QUERY;
 use crate::hub::pull_requests::own::WorkspaceRead;
 use crate::hub::pull_requests::reading::couldnt_read;
 use crate::hub::pull_requests::remote::{NoToken, ReadsAs, waited};
 use crate::hub::pull_requests::{Asked, Hub, schedule};
 use crate::jobs::{self, Ended, JobKind, Limits};
 use crate::store::{Store, now_ms};
+use github::BRANCHES_A_QUERY;
 
 /// The queries a read of workspaces' pull requests makes at most, for every [`BRANCHES_A_QUERY`] of its workspaces and
 /// of the pull requests their waits watch, each given the time the hub gives a call to GitHub: one to ask which pull

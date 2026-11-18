@@ -10,10 +10,10 @@ use tokio::sync::watch;
 
 use super::super::CHECKED_AGAIN_EVERY;
 use super::support::{CLI, account, checking, reads, reads_pushing, told, told_within};
-use crate::github::{Answer, Gate, Script, StandIn};
 use crate::github_logins::DefaultCredential;
 use crate::hub::Hub;
 use crate::hub::tests::hub_calling_github;
+use github::{Answer, Gate, Script, StandIn};
 
 fn refused_as(username: &str) -> Reach {
     let reason = "Permission to cli/cli.git denied.".into();

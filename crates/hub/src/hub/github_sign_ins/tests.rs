@@ -1,7 +1,7 @@
 //! Signing in as a client asks, against a hub that never starts a worker and a stand-in for GitHub, on tokio's clock as
-//! it runs, since a request to the stand-in races a paused clock, as `crate::github`'s device flow tests say. So the
+//! it runs, since a request to the stand-in races a paused clock, as the `github` crate's device flow tests say. So the
 //! stand-in's codes say no time between asks, and the hub asks as often as a test's hub does, so no test waits out the
-//! product's pace. How often GitHub is asked, and what its answers come to, is tested in `crate::github`, on the
+//! product's pace. How often GitHub is asked, and what its answers come to, is tested in the `github` crate, on the
 //! paused clock where it matters, and what approving keeps, and what it renews, in `crate::github_logins`.
 
 use std::time::Duration;
@@ -12,9 +12,9 @@ use protocol::worker::{GitIdentity, GithubCredential};
 use tokio::sync::broadcast;
 
 use super::*;
-use crate::github::{Answer, Script, StandIn};
 use crate::hub::Hub;
 use crate::hub::tests::hub_calling_github;
+use github::{Answer, Script, StandIn};
 
 fn start(id: &str) -> GithubSignInStart {
     GithubSignInStart { id: id.into() }

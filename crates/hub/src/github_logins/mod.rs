@@ -6,9 +6,9 @@
 //! for agents' accounts.
 
 #[cfg(test)]
-use crate::github::TokenOwner;
-#[cfg(test)]
 use crate::store::Store;
+#[cfg(test)]
+use github::TokenOwner;
 #[cfg(test)]
 use protocol::client::ErrorCode;
 #[cfg(test)]

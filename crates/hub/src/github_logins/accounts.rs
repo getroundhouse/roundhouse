@@ -12,10 +12,10 @@ use tokio::sync::watch;
 use super::blocks::Unusable;
 use super::{DefaultCredential, GithubLogin};
 use crate::error::internal;
-use crate::github::TokenOwner;
 use crate::login_files::{Locked, LoginFiles};
 use crate::pasted_token::pasted_token;
 use crate::store::{GithubConnected, GithubConnecting, Store, StoreError};
+use github::TokenOwner;
 
 /// Connects, disconnects and tidies the logins of GitHub accounts, chooses the default, and approves and ends sign-ins
 /// with GitHub, one at a time, under their files' lock, so none finds another half done, and works out after each

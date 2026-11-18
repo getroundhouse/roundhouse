@@ -13,9 +13,9 @@ use protocol::model::{
 use tracing::{info, warn};
 
 use super::{GithubAccountChange, GithubLogin, GithubLogins, InstallationToken};
-use crate::github::{GithubAppKey, Installation, Minted};
 use crate::login_files::{Locked, Stored};
 use crate::store::{GithubConnected, GithubConnecting, later_ms};
+use github::{GithubAppKey, Installation, Minted};
 
 /// How much an installation's token has left when the hub makes the next. GitHub's last an hour, so the next is made
 /// about every 40 minutes, and the check every minute tries twenty times before the token ends. Making one takes

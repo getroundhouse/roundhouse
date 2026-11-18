@@ -107,6 +107,7 @@ A single Cargo workspace in one repo, beside the copy of gpui-kit, which keeps u
 crates/
   protocol/        Client, worker and provider protocol types, event log schema, versioning. No IO
   hub/             Workspaces, sessions, event log, platform API, SQLite storage
+  github/          The hub's calls to GitHub: whose a token is, signing in through its device flow, apps of your own, pull requests and their checks, and whether a push would be taken, and a stand-in GitHub for tests
   worker/          Git, worktrees, running agents and terminals
   agents/          Claude adapter, raw event capture
   process/         Signalling a process group, recording a PID with its start time, keeping a process's own input and output from what it starts, and marking the file a process runs from
@@ -165,7 +166,7 @@ apps/desktop, transcript ──> look
 apps/desktop ──> dictation, fetching
 dictation ──> fetching, to download its model
 apps/cli ─────────────────────────────────────> client-core
-apps/daemon ──> hub ──> protocol
+apps/daemon ──> hub ──> github ──> protocol
 apps/daemon ──> providers ──> protocol
 apps/daemon ──> worker ──> agents ──> protocol
 worker, client-core, terminal-view ──> terminal-state
@@ -176,7 +177,7 @@ hub, agents, worker, client-core ──> private-files
 
 1. **Clients only talk to hubs.** They never touch git, terminals or agents directly. The hub fetches or proxies live data from the worker.
 2. **`protocol` has no IO and no UI.** Everything depends on it, so it needs to stay small and stable.
-3. **The hub and worker must build on Linux without GPUI.** Nothing under `hub`, `worker`, `agents` or `providers` may depend on GPUI or gpui-kit.
+3. **The hub and worker must build on Linux without GPUI.** Nothing under `hub`, `github`, `worker`, `agents` or `providers` may depend on GPUI or gpui-kit.
 4. **GPUI stays in `transcript`, `dictation-ui`, `terminal-view`, `look` and `apps/`.** `client-core` must stay free of it, and of any async runtime: it's blocking calls and channels, so GPUI's executor stays out, and a native mobile client remains possible if the GPUI path fails. `look` is a crate of its own because both the app and `transcript` draw with it, and `transcript` can't depend on the app. For the same reason it names the parts of the window tests find by where they're drawn, as `look::Region`, since both mark some. *Unconfirmed.* `dictation-ui` attaches dictation to an existing text field, shared by desktop and transcript so the latter need not depend on the app. The attachment owns its recording, tentative text, cancellation snapshot, visual response and tasks; the host owns its input, visibility and submission action. A single weak active-target reference arbitrates the microphone and receives key releases across dialogs. Desktop supplies recordings and owns model readiness and saved settings. Final words emit the input's normal change event, so the existing draft owner saves them and a question selects its written answer just as for typing. `dictation` stays free of GPUI, of any async runtime and of our other crates but `fetching`, which it downloads its model with under its `download` feature, since what it hears is the device's alone, and the iPhone app could hear with it too. Only a Mac hears the microphone, as `dictation::HEARS` says, and on Windows and Linux the app offers no dictation. Only a Mac mutes its sound output while it's dictated to, as `dictation::MUTES_OUTPUT` says, and elsewhere Settings doesn't offer to. *Unconfirmed.* `fetching` stays free of GPUI, of any async runtime and of our other crates, since it knows nothing of what it fetches, so the iPhone app could fetch with it too. *Unconfirmed.*
 5. **The worker and provider boundaries are real.** Even on a Mac, the worker runs as a separate process, so remote workers only change the transport. The hub reaches the local provider the way it reaches any other, through the provider protocol, to an adapter in a process of its own, so the protocol is used by every workspace and a new provider is only a new adapter. *Not built:* the hub depends on `providers`, and runs the local provider inside itself.
 6. **Exact pins for GPUI, and a copy of gpui-kit of our own.** Both are pre-1.0, so an upgrade should be deliberate and in one place. The kit is a copy, in `third_party/gpui-kit/vendor`, so that a change the app needs of it goes in with the app code that needs it, checked with the app, and is offered upstream from `third_party/gpui-kit/patches`. Only the kit is copied: GPUI comes unchanged from crates.io, and a change it needs goes to Zed.
@@ -195,8 +196,10 @@ Dependencies point inward, from handlers to operations to stores and integration
 | Handlers | Parse a request, call one operation, map its result | `hub::server`, `worker::serve` |
 | Operations | One module per area, holding its logic | `hub` |
 | Stores | All SQL, inline: a few dozen statements, with nothing to check them at compile time | `hub::store` |
-| Integrations | One module per outside system. Nothing else knows its flags, wire format or retries | `agents::claude`, `worker::git`, `hub::worker_link`, `hub::github`, `providers::local` |
+| Integrations | One module per outside system. Nothing else knows its flags, wire format or retries | `agents::claude`, `worker::git`, `hub::worker_link`, `github`, `providers::local` |
 | Edges | Configuration and telemetry, read from the environment and passed down | `main` in each app |
+
+GitHub's integration is a crate of its own, `github`, which depends on `protocol` and nothing of the hub's, so the compiler keeps the layer's line: it asks GitHub what the hub asks and answers with what GitHub said, and what the hub keeps of it, and when, stays in the hub. Only the hub depends on it, and its stand-in for GitHub is behind its `testing` feature, which the hub's turns on.
 
 Errors follow the layers:
 

@@ -15,11 +15,11 @@ use protocol::worker::GitStatus;
 use super::asking::{Asking, Plan, WorkspaceRead};
 use super::judging::{Wanted, chosen, local};
 use super::scopes::{Scope, WaitsRead, scopes};
-use crate::github::{Headed, HeadsAsk, PullRequestsAsk, RateLimit, Unread};
 use crate::hub::Hub;
 use crate::hub::pull_requests::Asked;
 use crate::hub::pull_requests::reading::{Found, couldnt_read};
 use crate::jobs;
+use github::{Headed, HeadsAsk, PullRequestsAsk, RateLimit, Unread};
 
 /// How long a read waits for a worker that's running already to say how many files are uncommitted, which it reads
 /// without asking GitHub anything.

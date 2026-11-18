@@ -12,7 +12,6 @@ use tokio::sync::Notify;
 use tokio::task::JoinHandle;
 
 use super::*;
-use crate::github::Github;
 use crate::hub::HubDirs;
 use crate::hub::tests::NO_GITHUB;
 use crate::provider_set::ProviderSet;
@@ -20,6 +19,7 @@ use crate::store::tests::store_with_session;
 use crate::store::{InstanceStage, Store};
 use crate::timers::Timers;
 use crate::worker_link::WorkerLink;
+use github::Github;
 
 /// Makes and destroys nothing, and says it has unless it's told to refuse. One that holds its first start says so on
 /// `started`, and waits for `go_on` before refusing it.
@@ -104,7 +104,7 @@ fn hub_with(dir: &Path, fake: Fake) -> (Arc<Hub>, Arc<Fake>) {
     let fake = Arc::new(fake);
     let providers = ProviderSet::only(fake.clone());
     let store = Arc::new(store_with_session(dir));
-    let github = Github::new(crate::github::GithubConfig::at(NO_GITHUB.to_string()));
+    let github = Github::new(github::GithubConfig::at(NO_GITHUB.to_string()));
     let hub =
         Hub::new(Build::UNSTAMPED, store, HubDirs::in_dir(dir), providers, github, Vec::new(), false, Timers::DEFAULT);
     (Arc::new(hub), fake)

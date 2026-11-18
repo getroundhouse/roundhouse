@@ -1,5 +1,4 @@
 use crate::error::HubError;
-use crate::github::{Github, GithubConfig};
 use crate::hub::{Hub, HubDirs, LeftAtWork};
 use crate::listener;
 use crate::listener::Listener;
@@ -7,6 +6,7 @@ use crate::provider_set::ProviderSet;
 use crate::store::{Move, RecordedInstance, Store, StoreError};
 use crate::terminate::Terminate;
 use crate::timers::Timers;
+use github::{Github, GithubConfig};
 use protocol::Build;
 use protocol::model::{AgentDescription, WorkspaceId};
 use protocol::paths::Paths;

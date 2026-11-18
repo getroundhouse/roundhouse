@@ -11,12 +11,12 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use super::{Arc, Hub};
-use crate::github::ASK_WITHIN;
-use crate::github::RateLimit;
 use crate::github_logins::DefaultCredential;
 use crate::hub::found_github_logins::FOUND_WITHIN;
 use crate::jobs::{self, Limits};
 use crate::worker_link::{STOP_GRACE, WorkerLink};
+use github::ASK_WITHIN;
+use github::RateLimit;
 
 /// Whose token a read goes as.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]

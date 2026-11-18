@@ -1,6 +1,6 @@
 use super::*;
-use crate::github::{Answer, Script, StandIn};
 use crate::hub::tests::{hub_reading_github, hub_with_worktree};
+use github::{Answer, Script, StandIn};
 use protocol::fixtures::pull_request_wait;
 use protocol::model::CheckState;
 

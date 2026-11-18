@@ -6,9 +6,9 @@ use protocol::model::{GithubAccount, GithubApp, GithubAppId, GithubUser, Rev};
 
 use super::{GithubLogin, GithubLogins};
 use crate::error::internal;
-use crate::github::{GithubAppKey, MadeApp};
 use crate::login_files::{Locked, Stored};
 use crate::store::{GithubAppMaking, StoreError};
+use github::{GithubAppKey, MadeApp};
 
 /// An app's record after keeping it, and whether that changed it, so the hub announces only what did.
 pub(crate) struct AppChange {

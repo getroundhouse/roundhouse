@@ -8,8 +8,8 @@ use protocol::model::GithubLoginKind;
 use super::sign_ins::{login_ending, sign_in_kept};
 use super::*;
 use crate::login_files::LoginFile;
-use crate::store::GithubProfile;
 use crate::store::tests::store_with_session;
+use github::GithubProfile;
 
 /// The GitHub logins of a hub whose data directory is `dir`, started at 1000, and its store.
 pub(super) fn logins_in(dir: &Path) -> (Arc<GithubLogins>, Arc<Store>) {

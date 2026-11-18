@@ -1,6 +1,6 @@
 use super::*;
-use crate::github::{Answer, Script, StandIn};
 use crate::hub::tests::hub_reading_github;
+use github::{Answer, Script, StandIn};
 use protocol::client::github_accounts::GithubAccountConnect;
 use protocol::fixtures::{observed_pull_request, pull_request_wait};
 use protocol::model::{GithubToken, PullRequestNumber, Wait};

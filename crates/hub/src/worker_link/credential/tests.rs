@@ -12,12 +12,12 @@ use protocol::worker::{GitCredential, GitCredentialSet, GitIdentity, GithubCrede
 use tokio::sync::watch;
 
 use super::{Following, SET_WITHIN};
-use crate::github::TokenOwner;
 use crate::github_logins::{Connect, DefaultCredential, GithubLogins};
 use crate::logged::Logs;
-use crate::store::GithubProfile;
 use crate::store::tests::store_with_session;
 use crate::worker_link::WorkerLink;
+use github::GithubProfile;
+use github::TokenOwner;
 
 /// A stand-in for a worker, following `credential` as an opened link does, which keeps each credential it's set, in
 /// turn, and answers each as `answer` says, or never, for `None`.

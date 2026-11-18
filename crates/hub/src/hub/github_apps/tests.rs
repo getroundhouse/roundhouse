@@ -1,7 +1,7 @@
 //! An app of your own, as a client asks and as the hub's check does, against a hub that never starts a worker and a
 //! stand-in for GitHub, on tokio's clock as it runs, since a request to the stand-in races a paused clock. Which
 //! installations are connected, forgotten and due, and what each of GitHub's answers keeps, is tested in
-//! `crate::github_logins`, and what GitHub is asked, and what its answers come to, in `crate::github`.
+//! `crate::github_logins`, and what GitHub is asked, and what its answers come to, in the `github` crate.
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -12,10 +12,10 @@ use protocol::model::{GithubApp, GithubAppId, GithubToken, RecordKey};
 use protocol::worker::{GitCredential, GitIdentity, GithubCredential};
 use tokio::sync::broadcast;
 
-use crate::github::{Answer, Gate, Script, StandIn};
 use crate::hub::Hub;
 use crate::hub::tests::hub_calling_github;
 use crate::store::now_ms;
+use github::{Answer, Gate, Script, StandIn};
 
 const APP: GithubAppId = GithubAppId::new(9);
 const MINUTE_MS: i64 = 60 * 1000;

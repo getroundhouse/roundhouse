@@ -6,8 +6,8 @@ use std::time::Duration;
 use super::credential::{as_ada, reason, sent};
 use super::sign_ins::{ada_signed_in, login_ending, sign_in_kept};
 use super::*;
-use crate::github::{GithubRefreshToken, Granted, Renewal};
 use crate::login_files::{LoginFile, Stored};
+use github::{GithubRefreshToken, Granted, Renewal};
 
 const HOUR: i64 = 60 * 60 * 1000;
 

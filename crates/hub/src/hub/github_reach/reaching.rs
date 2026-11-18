@@ -1,7 +1,7 @@
 use protocol::model::{GithubRepositoryName, Reach};
 
-use crate::github::{Github, PushAnswer};
 use crate::github_logins::DefaultCredential;
+use github::{Github, PushAnswer};
 
 /// Where a repository's pushes go, as its record and the worker that read its address say.
 #[derive(Clone, Debug, PartialEq, Eq)]

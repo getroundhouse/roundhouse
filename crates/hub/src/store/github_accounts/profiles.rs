@@ -2,21 +2,13 @@
 //! is made from. Only the hub reads it, for what it sends workers, so it's on no record, and keeping it moves no
 //! revision but for a new username, which is on the account's.
 
+use github::GithubProfile;
 use protocol::model::{GithubAccount, GithubAccountId, GithubLoginKind, GithubUser};
 use rusqlite::{Connection, OptionalExtension as _, params};
 
 use super::super::{Store, StoreError, lock, text_of};
 use super::rows::{COLUMNS, account_at, row_of};
 use crate::login_files::LoginFile;
-
-/// What GitHub's profile of a user says that its commit identity is made from, as `GET /user` gives it: the name the
-/// user goes by and the email it shows everyone, either of which GitHub gives as none, as for a user who hasn't set a
-/// name or keeps every email private.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub(crate) struct GithubProfile {
-    pub(crate) name: Option<String>,
-    pub(crate) email: Option<String>,
-}
 
 /// Keeps `profile` as what GitHub said of `account`'s user when the hub asked at `asked_at_ms`, in `conn`, unless what's
 /// kept was asked after, as when a check's answer comes once the account has been connected again. Answers whether it

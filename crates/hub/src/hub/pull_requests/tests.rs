@@ -6,12 +6,12 @@ use protocol::model::{Branches, GitFile, GitStatus, Head, Local, PrState, PullRe
 use protocol::worker::{GithubLoginReply, WorkerRequest, WorkerResponse};
 
 use super::*;
-use crate::github::PullRequestState;
 use crate::hub::tests::{hub_on_github, hub_on_github_timed, pushed};
 use crate::timers::Timers;
+use github::PullRequestState;
 
 /// The GraphQL queries the stand-in was asked.
-fn queries(github: &crate::github::StandIn) -> Vec<String> {
+fn queries(github: &github::StandIn) -> Vec<String> {
     github.asked().into_iter().filter(|asked| asked.starts_with("post /graphql ")).collect()
 }
 
