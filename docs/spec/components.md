@@ -164,6 +164,58 @@ The pieces screens are built from, on the foundations in `look.md`: what each is
 
 ![Every tooltip](screens/tooltips.png)
 
+## Small things in a line
+
+- **Five kinds of small thing sit in a line, each for one job,** as the owner decided, so what one is says what it does: a pill is a value as it was written, a chip a thing the app knows, which opens, a badge what's true of the thing beside it, a label a tag someone chose, and a count how many. They're told apart by their shape as well as their words: a pill is filled, a chip filled with an edge, a badge tinted and smaller, a label round, and a count bare. *Not built:* chips, which a later change adds.
+
+### Pills
+
+- **A pill is a value as it was written, such as a command, a search's pattern or what a web search asked,** filled, in code's type, with a control's corners, 20px tall, 8px in from each end, and cut short with an ellipsis where it has no room. It opens nothing, and is selected and copied as text. Its kind says its colours. `look::PillKind` holds the kinds. *Unconfirmed:* its height and room.
+
+**Every kind of pill, by its name.** Each is a kind in `look::PillKind`. *Unconfirmed.*
+
+| Name | For |
+|---|---|
+| `Plain` | A value as it was written, muted on the raised fill, such as a command, a search's pattern or what a web search asked |
+| `Failure` | What went wrong, as it was said, in the error's colour on a faint fill of it, such as a call's error under its line |
+
+**Every kind of pill, with a command and an error.** *Unconfirmed.*
+
+![Every kind of pill](screens/pill-kinds.png)
+
+### Badges and labels
+
+- **A badge says what's true of the thing beside it, in a word or two, such as `Default` beside an account,** tinted in its kind's tone, with no edge, in a detail's text and stronger, 18px tall, so it reads as said of the thing rather than a thing of its own. It opens nothing. `look::BadgeKind` holds the kinds. *Unconfirmed:* its height and tints.
+- **A label is a tag someone chose, such as a GitHub label, tinted in the colour they gave it,** with an edge and a fill of that hue, faint, and its words in it, as light whatever the colour, so a pale yellow and a dark red read alike. It's round, since its colour is theirs rather than the app's, and as tall as a badge. *Unconfirmed:* its tints, and how light its words are.
+
+**Every kind of badge, by its name.** Each is a kind in `look::BadgeKind`. *Unconfirmed.*
+
+| Name | For |
+|---|---|
+| `Plain` | Something that's simply so, muted on a faint wash of the text's colour, such as `Default` beside an account |
+| `Warning` | Something to watch, in the warning's colour on a faint fill of it, such as a login that ends soon |
+| `Failure` | Something that went wrong, in the colour of an agent that stopped short on a faint fill of it, such as how many times in a row a request to the model failed |
+
+**Every kind of badge, beside what it's said of, and labels in four colours.** *Unconfirmed.*
+
+![Every kind of badge, and labels](screens/badge-kinds.png)
+
+### Counts
+
+- **A count is how many, as a number in the text, never in a box,** in a detail's text, and its kind says its colour and weight. One beside text of another size, such as a tab's name, sits on its baseline. `look::CountKind` holds the kinds. *Unconfirmed.*
+- **The lines a file gained and lost are `+12 −3`, in the added and removed colours, in code's type, 4px apart,** with a minus sign rather than a hyphen, and whichever is none left out, wherever they're drawn. *Unconfirmed.*
+
+**Every kind of count, by its name.** Each is a kind in `look::CountKind`. *Unconfirmed.*
+
+| Name | For |
+|---|---|
+| `NeedsALook` | How many need a look, in the text's colour and stronger, such as a collapsed project's workspaces |
+| `HowMany` | Only how many there are, muted, such as the files Changes lists |
+
+**Every kind of count beside what it counts, and the lines a file gained and lost.** *Unconfirmed.*
+
+![Every kind of count](screens/count-kinds.png)
+
 ## The status mark
 
 Every workspace and chat has a mark: a half circle of fine dots around a turntable, like a roundhouse seen from above. It has four rows of 9, 13, 17 and 21 dots, the same distance apart along every row. Each row has four more dots than the one inside it, so the fan keeps the same pattern with any number of rows, the rows sit a little further apart than the dots in them, and every row has a dot on the middle line, so the rows line up down it. The inner row has the fewest dots that keep it at least 2/5 of the way out to the outer row, which leaves room for the turntable. Fine dots give it a texture of its own. It's 26px wide in the sidebar, where it fills the room before a workspace's name and its dots are big enough to tell apart at a glance, and 16px in chat tabs, the working line and Home. A much bigger fan, such as the brand in an empty state, has more rows rather than bigger dots, so the texture stays fine, and its turntable stays the same share of its width.

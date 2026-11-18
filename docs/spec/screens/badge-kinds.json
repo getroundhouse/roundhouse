@@ -1,0 +1,22 @@
+{
+  "look::BadgeKind": {
+    "Failure": {
+      "x": 672,
+      "y": 233,
+      "width": 98,
+      "height": 36
+    },
+    "Plain": {
+      "x": 448,
+      "y": 57,
+      "width": 114,
+      "height": 36
+    },
+    "Warning": {
+      "x": 492,
+      "y": 145,
+      "width": 196,
+      "height": 36
+    }
+  }
+}

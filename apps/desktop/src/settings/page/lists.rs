@@ -4,15 +4,15 @@
 use gpui_kit::component::{h_flex, v_flex};
 use gpui_kit::{
     AnyElement, App, Div, InteractiveElement as _, IntoElement, ParentElement as _, SharedString, Styled as _,
-    TestSupportExt as _, div, px,
+    TestSupportExt as _, div,
 };
-use look::{Shaped as _, Typeset as _};
+use look::Typeset as _;
 
 /// A list's name, with a badge after it if it has one, what it says of itself under that, and what it does at the far
 /// end, if anything.
 pub(super) fn heading(
     name: &'static str,
-    badge: Option<Div>,
+    badge: Option<look::Badge>,
     says: impl Into<SharedString>,
     action: Option<AnyElement>,
     cx: &App,
@@ -46,17 +46,7 @@ pub(super) fn said_in_the_list(id: &'static str, said: SharedString, cx: &App) -
         .test_support()
 }
 
-/// A chip that marks what's the default, such as `Default` beside an account's name.
-pub(super) fn badge(said: impl Into<SharedString>, cx: &App) -> Div {
-    let colors = look::colors(cx);
-    div()
-        .flex_none()
-        .px(look::Space::Small)
-        // A chip's own room above and below its words, rather than a space.
-        .py(px(2.))
-        .corners(look::Corner::Control)
-        .bg(colors.raised)
-        .typeset(look::Type::Body)
-        .text_color(colors.text_muted)
-        .child(said.into())
+/// The badge that marks what's the default, such as beside an account's name.
+pub(super) fn default_badge() -> look::Badge {
+    look::badge(look::BadgeKind::Plain, "Default")
 }

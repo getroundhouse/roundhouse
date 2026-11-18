@@ -8,7 +8,7 @@ use gpui_kit::{
     AnyElement, App, ClickEvent, ElementId, InteractiveElement as _, IntoElement, ParentElement, Styled,
     TestSupportExt as _, Window, div,
 };
-use look::{IconSizing as _, Shaped as _, Typeset as _};
+use look::{IconSizing as _, Typeset as _};
 use protocol::event::{FailureKind, RequestFailure};
 use protocol::model::Seq;
 
@@ -45,7 +45,7 @@ pub(super) fn card(
         .gap(look::Space::Small)
         .child(Icon::new(IconName::CircleX).flex_none().sized(ICON).text_color(stopped))
         .child(div().typeset(look::Type::Body).emphasis().child(title(failure.kind)))
-        .children(tries.and_then(|tries| count(tries.times, cx)))
+        .children(tries.and_then(|tries| count(tries.times)))
         .children(resets.map(|when| {
             div().ml_auto().typeset(look::Type::Detail).text_color(colors.text_faint).child(format!("Resets {when}"))
         }));
@@ -87,20 +87,9 @@ fn title(kind: FailureKind) -> &'static str {
     }
 }
 
-/// How many times in a row the request failed, on a chip beside the title, when it's more than once.
-fn count(times: u32, cx: &App) -> Option<AnyElement> {
-    let text = how_many(times)?;
-    let colors = look::colors(cx);
-    let chip = div()
-        .flex_none()
-        .px(look::Space::Small)
-        .corners(look::Corner::Control)
-        .border_1()
-        .border_color(colors.stopped.opacity(0.3))
-        .typeset(look::Type::Detail)
-        .text_color(colors.text_muted)
-        .child(text);
-    Some(chip.into_any_element())
+/// How many times in a row the request failed, on a badge beside the title, when it's more than once.
+fn count(times: u32) -> Option<AnyElement> {
+    Some(look::badge(look::BadgeKind::Failure, how_many(times)?).into_any_element())
 }
 
 /// How many times in a row, in words: twice reads better than a number, and once says nothing, since one card is one

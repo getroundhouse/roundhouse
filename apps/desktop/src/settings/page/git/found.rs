@@ -8,7 +8,7 @@ use gpui_kit::{AnyElement, App, Div, IntoElement, ParentElement as _, SharedStri
 use protocol::model::{FoundGithubLogin, GhLogin};
 
 use super::super::account_row::{self, Detail, Picture, Row, Tone};
-use super::super::lists::{badge, heading, list as rows_of, said_in_the_list};
+use super::super::lists::{default_badge, heading, list as rows_of, said_in_the_list};
 use super::added::failed_line;
 use super::git_page::COLUMNS;
 use super::kept::Asked;
@@ -24,8 +24,7 @@ pub(super) fn list(drawing: &Drawing<'_>, cx: &App) -> Option<Div> {
     let none = found.is_empty().then(|| said_in_the_list("git-none-found", words::NONE_FOUND.into(), cx));
     let failed = drawing.kept.read(cx).failed(&Asked::MachinesOwn).map(|said| failed_line(said, cx));
     let rows = found.iter().map(|found| found_row(found, cx));
-    let heading =
-        heading("Found", machines_own.then(|| badge("Default", cx)), words::FOUND_SAYS, make_default(drawing, cx), cx);
+    let heading = heading("Found", machines_own.then(default_badge), words::FOUND_SAYS, make_default(drawing, cx), cx);
     Some(v_flex().child(heading).children(failed).child(rows_of(cx).children(none).children(rows)))
 }
 

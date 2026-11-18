@@ -11,6 +11,7 @@
 #![warn(clippy::wildcard_enum_match_arm)]
 
 mod app_icon;
+mod badges;
 mod baseline;
 mod cache;
 mod clock;
@@ -18,6 +19,7 @@ mod colors;
 mod control_sizes;
 mod controls;
 mod copy;
+mod counts;
 mod dialogs;
 mod fan;
 mod fields;
@@ -32,6 +34,7 @@ mod mark;
 mod menus;
 pub mod motion;
 mod named;
+mod pills;
 mod plan;
 mod raised;
 mod region;
@@ -51,6 +54,7 @@ mod word_changes;
 mod work;
 
 pub use app_icon::{AppIconSize, AppIconStyle, app_icon};
+pub use badges::{Badge, BadgeKind, Label, badge, label};
 pub use baseline::{LineText, Placed};
 pub use cache::{CacheMark, cache_mark, expires_in, minutes_left, next_minute_in_ms};
 #[cfg(feature = "testing")]
@@ -64,6 +68,7 @@ pub use colors::{Colors, colors};
 pub use control_sizes::ControlSize;
 pub use controls::{Button, ButtonKind, MenuButton, Side, Sizing, button, glyph_button, icon_button};
 pub use copy::copy_button;
+pub use counts::{Count, CountKind, LinesChanged, count, lines_changed};
 #[cfg(any(test, feature = "testing"))]
 pub use dialogs::shown_dialog;
 pub use dialogs::{
@@ -82,6 +87,7 @@ pub use mark::{Signal, Size, brand, chat_mark, mark};
 #[cfg(any(test, feature = "testing"))]
 pub use menus::shown_menu;
 pub use menus::{Menu, MenuRow, NoteKind, OpenMenu, RightClickMenu, menu, menu_row};
+pub use pills::{Pill, PillKind, pill};
 pub use plan::{plan_colors, plan_texture};
 pub use raised::raised;
 pub use region::{InRegion, Region};

@@ -212,7 +212,7 @@ pub(crate) fn controls(changes: &Entity<Changes>, code: &Placed, cx: &App) -> An
         // Out past the bar's room by the room around the button's icon, so the icon lines up with the rows' marks.
         .mr(-look::ControlSize::Regular.inset())
         // On the baseline of the tabs' names beside it.
-        .child(code.set(h_flex().flex_none().gap(look::Space::Small).children(counts(added, removed, cx))))
+        .child(look::lines_changed(added, removed).placed(code))
         .child(
             look::icon_button(
                 "changes-layout",
@@ -228,19 +228,6 @@ pub(crate) fn controls(changes: &Entity<Changes>, code: &Placed, cx: &App) -> An
             }),
         )
         .into_any_element()
-}
-
-/// Lines added and removed, leaving out whichever is none.
-fn counts(added: usize, removed: usize, cx: &App) -> Vec<AnyElement> {
-    let colors = look::colors(cx);
-    let mut out = Vec::new();
-    if added > 0 {
-        out.push(div().text_color(colors.added).child(format!("+{added}")).into_any_element());
-    }
-    if removed > 0 {
-        out.push(div().text_color(colors.removed).child(format!("-{removed}")).into_any_element());
-    }
-    out
 }
 
 /// How a file changed. A modified file's is yellow, as review tools show it, and the rest are muted.
@@ -282,14 +269,13 @@ fn file_row(
         })
         .child(div().flex_shrink_0().child(name));
     let status = status_icon(file.status(), cx);
-    let counts = counts(file.added(), file.removed(), cx);
     row_frame(format!("file-{path}"), List::Changes, depth, showing, cx)
         .child(label)
         .child(
             h_flex()
                 .flex_none()
                 .gap(look::Space::Small)
-                .child(line_text.code.set(h_flex().gap(look::Space::Small).children(counts)))
+                .child(look::lines_changed(file.added(), file.removed()).placed(&line_text.code))
                 .child(status),
         )
         .on_click(cx.listener(move |_, _, _, cx| cx.emit(ChangesEvent::Open(path.clone()))))

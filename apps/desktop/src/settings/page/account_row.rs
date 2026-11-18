@@ -12,7 +12,7 @@ use gpui_kit::{
 };
 use look::{IconSizing as _, Shaped as _, Typeset as _};
 
-use super::lists::badge;
+use super::lists::default_badge;
 
 /// How wide an account page's lists are, so a row has no more room than what it says needs.
 pub(super) const COLUMN_WIDTH: Pixels = px(720.);
@@ -107,7 +107,7 @@ pub(super) fn row(row: Row, columns: Columns, cx: &App) -> AnyElement {
         .min_w_0()
         .gap(look::Space::Small)
         .child(named.child(row.name))
-        .children(row.default.then(|| default_badge(&row.id, cx)));
+        .children(row.default.then(|| default_badge_of(&row.id)));
     let detail = row.detail.map(|detail| match detail {
         Detail::Said(said, tone) => said_as(&row.id, said, tone, cx).into_any_element(),
         Detail::Drawn(drawn) => drawn,
@@ -157,8 +157,8 @@ fn with_card(id: &SharedString, said: Div, label: String, card: Card) -> AnyElem
 }
 
 /// `Default`, by the name of the default, which tests find by the row's `id` and `-default`.
-fn default_badge(id: &SharedString, cx: &App) -> impl IntoElement + use<> {
-    badge("Default", cx).id(SharedString::from(format!("{id}-default"))).test_support()
+fn default_badge_of(id: &SharedString) -> look::Badge {
+    default_badge().id(SharedString::from(format!("{id}-default")))
 }
 
 fn column(width: Pixels, cx: &App) -> Div {

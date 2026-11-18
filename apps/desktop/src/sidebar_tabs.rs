@@ -108,7 +108,7 @@ pub(crate) fn bar(
     cx: &App,
 ) -> AnyElement {
     let on_pick = Rc::new(on_pick);
-    let count = changed.filter(|n| *n > 0).map(|n| n.to_string());
+    let count = changed.filter(|n| *n > 0);
     let tabs = [(SidebarTab::AllFiles, "All files", None), (SidebarTab::Changes, "Changes", count)].into_iter().map(
         |(tab, label, count)| {
             let on_pick = on_pick.clone();
@@ -138,7 +138,7 @@ pub(crate) fn bar(
 fn tab_element(
     tab: SidebarTab,
     label: &'static str,
-    count: Option<String>,
+    count: Option<usize>,
     selected: bool,
     on_click: impl Fn(&mut Window, &mut App) + 'static,
     line_text: &LineText,
@@ -166,7 +166,9 @@ fn tab_element(
                 .on_click(move |_, window, cx| on_click(window, cx))
                 // Its count is smaller, so it's set on the name's baseline.
                 .child(line_text.body.set(div().child(label)))
-                .when_some(count, |d, count| d.child(line_text.detail.set(div().text_color(muted).child(count)))),
+                .when_some(count, |d, count| {
+                    d.child(look::count(look::CountKind::HowMany, count).placed(&line_text.detail))
+                }),
         )
         .when(selected, |d| {
             d.child(div().absolute().left_0().right_0().bottom_0().h(look::TAB_LINE).bg(colors.current))

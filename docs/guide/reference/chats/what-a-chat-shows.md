@@ -28,7 +28,7 @@ Each call is a line: what it is, and what it's about. Click it to open it.
 |---|---|---|
 | A command | What the agent said it's doing, and the command | The command, then what it printed |
 | Reading a file | The file, and how much was read, such as `Read 10 lines` | The lines, numbered and highlighted |
-| An edit | The file, and lines added and removed, such as `+5 −0` | Its diff |
+| An edit | The file, and lines added and removed, such as `+5 −2` | Its diff |
 | A patch of several files, as Codex makes | How many files, such as `Edit 2 files`, the lines added and removed, and the files' names | Each file's path, then its diff |
 | A search | Its pattern, where it looked, and how much it found | The matching lines, under their files |
 | A web search | What it looked for, and how many pages it found, where its agent says which | The pages, which open in the browser, then what was made of them |

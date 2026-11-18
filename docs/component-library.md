@@ -134,6 +134,19 @@ The app asks and tells only in these, never in the system's alert, and `tools/po
 
 What needs more than a few words, such as a path, goes on a hover card, not a tooltip. `tools/policy` refuses the kit's tooltip outside `look`.
 
+## Small things in a line
+
+`docs/spec/components.md` has the five kinds of small thing that sit in a line, what each is for and its kinds, and `crates/look/src/pills`, `badges` and `counts` the code. None opens anything, so none takes a handler. *Not built:* chips, the fifth, which open.
+
+| To | Call |
+|---|---|
+| Show a value as it was written, such as a command, or what went wrong | `look::pill(kind, value)`, with a `look::PillKind`, where `value` is its words, or its words with what a find marked |
+| Say what's true of the thing beside it, in a word or two | `look::badge(kind, words)`, with a `look::BadgeKind`, and `id` for a test to find it and an assistive app to read it |
+| Show a tag someone chose, in their colour | `look::label(words, color)` |
+| Say how many | `look::count(kind, how_many)`, with a `look::CountKind`, and `said` for what it counts, as an assistive app reads it |
+| Show the lines a file gained and lost | `look::lines_changed(added, removed)` |
+| Set a count or lines on the baseline of the line they're in | `placed`, with the `look::LineText` part for their text |
+
 ## Toggles
 
 `docs/spec/components.md` has a toggle's states, and `crates/look/src/toggles` the code. A toggle draws whether it's on from what the place that holds the setting gives it, and says when it's flipped, so the place sets what it holds and draws it again.
