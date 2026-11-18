@@ -3,6 +3,7 @@
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use protocol::capability::Report;
 use protocol::event::EventBody;
 use serde_json::{Value, json};
 use tokio::sync::mpsc;
@@ -138,7 +139,7 @@ fn report(shared: &Shared, output: &mpsc::Sender<AgentOutput>, answer: Result<Va
     if let Some(context) = context
         && watch.over != Some(Over::Exited)
     {
-        let _ = output.try_send(AgentOutput::Context(context));
+        let _ = output.try_send(AgentOutput::Report(Report::Context { context }));
     }
 }
 

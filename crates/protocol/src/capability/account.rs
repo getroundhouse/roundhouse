@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use super::Claimed;
 use super::area::area;
-use crate::model::{LoginDescription, ModelLabel};
+use crate::model::{LimitWindow, LoginDescription, ModelLabel, UsageLimit};
 
 area! { "the account";
     /// Who the agent runs as, from a one-off call that starts no conversation: the account's ID, which is the same in
@@ -43,6 +43,48 @@ pub struct Limit {
     pub name: Option<String>,
 }
 
+/// Five hours, the window of the account's shortest limit.
+const FIVE_HOURS: u32 = 5 * 60;
+/// A week, the window of the account's limit on all its models, and of each model's own.
+const A_WEEK: u32 = 7 * 24 * 60;
+
+impl Limit {
+    /// `limit`, as the account's record keeps it, by the window it counts over.
+    pub fn of(limit: &UsageLimit) -> Self {
+        let window_minutes = match limit.window {
+            LimitWindow::FiveHours => Some(FIVE_HOURS),
+            LimitWindow::SevenDays | LimitWindow::ModelSevenDays => Some(A_WEEK),
+            LimitWindow::Unknown => None,
+        };
+        Limit {
+            window_minutes,
+            model: limit.model.clone(),
+            used_percent: limit.used_percent,
+            resets_at_ms: limit.resets_at_ms,
+            name: None,
+        }
+    }
+
+    /// As the account's record keeps it, whose windows are five hours, a week of every model, and a week of one model.
+    /// Any other window is one the record has no name for.
+    pub fn usage(&self) -> UsageLimit {
+        let window = match (self.window_minutes, &self.model) {
+            (Some(FIVE_HOURS), None) => LimitWindow::FiveHours,
+            (Some(A_WEEK), None) => LimitWindow::SevenDays,
+            (Some(A_WEEK), Some(_)) => LimitWindow::ModelSevenDays,
+            _ => LimitWindow::Unknown,
+        };
+        let model = self.model.clone().filter(|_| window == LimitWindow::ModelSevenDays);
+        UsageLimit {
+            window,
+            model,
+            used_percent: self.used_percent,
+            resets_at_ms: self.resets_at_ms,
+            heard_at_ms: None,
+        }
+    }
+}
+
 /// What the account can spend past its limits.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct Credits {
@@ -67,4 +109,33 @@ pub enum CreditState {
     Unlimited,
     #[serde(other)]
     Unknown,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A limit the account's record keeps reads back as it was, whatever its window, and one counted over a window the
+    /// record has no name for is kept as one it doesn't know, rather than as another.
+    #[test]
+    fn a_limit_keeps_its_window_on_its_way_to_the_accounts_record() {
+        let limit = |window, model: Option<&str>| UsageLimit {
+            window,
+            model: model.map(ModelLabel::new),
+            used_percent: 40,
+            resets_at_ms: Some(9),
+            heard_at_ms: None,
+        };
+        for kept in [
+            limit(LimitWindow::FiveHours, None),
+            limit(LimitWindow::SevenDays, None),
+            limit(LimitWindow::ModelSevenDays, Some("Fable")),
+            limit(LimitWindow::Unknown, None),
+        ] {
+            assert_eq!(Limit::of(&kept).usage(), kept, "{:?}", kept.window);
+        }
+
+        let a_day = Limit { window_minutes: Some(24 * 60), ..Limit::of(&limit(LimitWindow::FiveHours, None)) };
+        assert_eq!(a_day.usage().window, LimitWindow::Unknown);
+    }
 }

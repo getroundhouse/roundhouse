@@ -4,6 +4,8 @@
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use protocol::capability::Report;
+use protocol::capability::account::Limit;
 use protocol::event::EventBody;
 use protocol::model::UsageLimit;
 use serde_json::json;
@@ -124,7 +126,8 @@ fn report(
     }
     let mut watch = shared.usage.lock();
     if let Some(limits) = watch.answered(answer) {
-        let _ = output.try_send(AgentOutput::Limits { limits, every_models_week });
+        let limits = limits.iter().map(Limit::of).collect();
+        let _ = output.try_send(AgentOutput::Report(Report::Limits { limits, every_models_week }));
     }
 }
 

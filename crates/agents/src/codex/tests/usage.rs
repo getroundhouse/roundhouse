@@ -26,7 +26,13 @@ async fn the_newest_request_says_how_full_the_context_is_and_the_limits_are_an_e
     let output = play(actions).await;
     let contexts: Vec<_> = output
         .iter()
-        .filter_map(|out| if let AgentOutput::Context(context) = out { Some(context) } else { None })
+        .filter_map(|out| {
+            if let AgentOutput::Report(protocol::capability::Report::Context { context }) = out {
+                Some(context)
+            } else {
+                None
+            }
+        })
         .collect();
     let context = |used_tokens| ContextUsage {
         used_tokens,

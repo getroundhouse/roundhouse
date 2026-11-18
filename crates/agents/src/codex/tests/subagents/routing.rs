@@ -108,5 +108,8 @@ async fn a_subagents_tokens_are_an_event_about_it_and_not_the_agents_own_context
 
     let child = SubagentId::from("child");
     assert!(bodies(&output).contains(&&EventBody::SubagentContext { subagent: child, tokens: 4321 }));
-    assert!(!output.iter().any(|out| matches!(out, AgentOutput::Context(_))), "the agent's own context is its own");
+    assert!(
+        !output.iter().any(|out| matches!(out, AgentOutput::Report(protocol::capability::Report::Context { .. }))),
+        "the agent's own context is its own"
+    );
 }

@@ -130,6 +130,10 @@ pub enum Report {
     /// is an event, which the log keeps.
     Limits {
         limits: Vec<Limit>,
+        /// Whether `limits` holds every model's own week the account has, as an answer that lists them all does, so
+        /// one the hub heard of earlier that isn't among them has gone, such as a model whose label changed.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        every_models_week: bool,
     },
     Credits(Credits),
     /// How full the context is, as of the agent's newest request to its model.

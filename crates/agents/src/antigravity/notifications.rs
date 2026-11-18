@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use protocol::capability::Report;
 use protocol::capability::calls::{Call, CallOutput, output::Ended};
 use protocol::event::{AgentRunState, ContentBlock, Denied, EventBody, NoticeLevel, TaskOutcome};
 use protocol::model::{ContextUsage, MaxSetBy, ToolUseId};
@@ -95,12 +96,14 @@ async fn session_update(shared: &Shared, update: SessionUpdate, raw: String) {
         }
         SessionUpdate::UsageUpdate { used, size } => {
             shared
-                .emit(AgentOutput::Context(ContextUsage {
-                    used_tokens: used,
-                    max_tokens: size,
-                    model_tokens: Some(size),
-                    max_set_by: Some(MaxSetBy::Model),
-                    parts: Vec::new(),
+                .emit(AgentOutput::Report(Report::Context {
+                    context: ContextUsage {
+                        used_tokens: used,
+                        max_tokens: size,
+                        model_tokens: Some(size),
+                        max_set_by: Some(MaxSetBy::Model),
+                        parts: Vec::new(),
+                    },
                 }))
                 .await;
         }

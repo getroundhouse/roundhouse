@@ -1,5 +1,6 @@
 //! How full a thread's context is, and how much of the account's limits is used, as Codex says while it works.
 
+use protocol::capability::Report;
 use protocol::event::EventBody;
 use protocol::model::{ContextUsage, LimitWindow, UsageLimit};
 use serde_json::Value;
@@ -22,7 +23,7 @@ pub(super) async fn tokens(shared: &Shared, params: &Value, scope: &Scope, raw: 
     let Some(max_tokens) = usage["modelContextWindow"].as_u64() else { return };
     // Codex's window is its configuration's, which can be smaller than its model's, and it doesn't say which.
     let context = ContextUsage { used_tokens, max_tokens, model_tokens: None, max_set_by: None, parts: Vec::new() };
-    shared.emit(AgentOutput::Context(context)).await;
+    shared.emit(AgentOutput::Report(Report::Context { context })).await;
 }
 
 /// `account/rateLimits/updated`: the account's limits, each window it names. An update can leave out what hasn't

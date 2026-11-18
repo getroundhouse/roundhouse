@@ -1,4 +1,5 @@
 use protocol::capability::{Capabilities, Claimed, approvals, context, conversation, output, settings, turns};
+use protocol::model::CacheTtl;
 
 pub(super) fn claims() -> Capabilities {
     let mut claims = Capabilities::default();
@@ -42,6 +43,9 @@ pub(super) fn claims() -> Capabilities {
     claims.context.compaction_tokens = Some(Claimed {});
     claims.context.compaction_progress = Some(Claimed {});
     claims.context.usage = Some(Claimed {});
+    claims.context.cache = Some(context::Cache {
+        kind: context::CacheKind::Marked { ttls: vec![CacheTtl::FiveMinutes, CacheTtl::OneHour] },
+    });
     claims.account.limits = Some(Claimed {});
     claims.background.subagents = Some(Claimed {});
     claims.background.background_commands = Some(protocol::capability::background::BackgroundCommands {
