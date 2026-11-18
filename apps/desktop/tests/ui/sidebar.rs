@@ -275,11 +275,13 @@ fn a_rows_pencil_rests_in_its_buttons_place_and_slides_aside_while_the_button_sh
     assert_eq!(ui.play(look::motion::FADE), 0, "nothing asks for another frame");
 }
 
+/// Create, at the sidebar's top, is off until there's a project to make a workspace in.
 #[gpui_kit::test]
 fn the_heading_adds_the_first_project_and_stays_to_add_another(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let mut ui = Ui::open(cx, &stack);
     assert!(ui.view().records().repos().is_empty());
+    assert!(ui.off("create"), "with no project to make a workspace in");
 
     ui.click("add-project");
     let folder = stack.repo();
@@ -287,6 +289,7 @@ fn the_heading_adds_the_first_project_and_stays_to_add_another(cx: &mut TestAppC
 
     ui.wait("the repository", |ui| ui.view().records().repos().len() == 1);
     assert!(ui.has("add-project"), "it's still there to add another");
+    assert!(ui.on("create"), "with a project to make one in");
 }
 
 #[gpui_kit::test]

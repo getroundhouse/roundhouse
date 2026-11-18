@@ -24,7 +24,7 @@
 
   ![Pairing a device, connected](screens/pair-device-paired.png)
 
-- **Home, Create and Search sit at the top, above the workspaces, with a line under them.** Home shows every workspace in place of the workspace, as `home.md` says, and Create opens the new-workspace dialog for the selected workspace's project, or for the one Home's list shows while Home shows, as `Cmd-N` does. Each is a muted icon and label, filled while what it opens is showing. *Unconfirmed.*
+- **Home, Create and Search sit at the top, above the workspaces, with a line under them.** Home shows every workspace in place of the workspace, as `home.md` says, and Create opens the new-workspace dialog for the selected workspace's project, or for the one Home's list shows while Home shows, as `Cmd-N` does. Each is a muted icon and label on a list's row, washed as a chosen row is while what it opens is showing, as `components.md` says. *Unconfirmed.*
 
   **The sidebar while Home shows, with Home filled, and a pencil on the workspace Home hides, which has something typed in it.** *Unconfirmed.*
 

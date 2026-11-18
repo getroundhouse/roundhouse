@@ -108,8 +108,6 @@ const KIT_BUTTON_ALLOWED: &[(&str, &str)] = &[
         "crates/look/src/hand.rs",
         "its tests, of the hand and greying out on the kit's own button, which keeps the arrow",
     ),
-    ("apps/desktop/src/sidebar/row.rs", "a workspace's row, drawn as a button, which the rows' component will draw"),
-    ("apps/desktop/src/sidebar/nav.rs", "the sidebar's rows that go somewhere, drawn as buttons, as a workspace's are"),
     (
         "apps/desktop/src/sidebar/hub.rs",
         "the hub switcher, a choice drawn as a field, which the fields' component will draw",

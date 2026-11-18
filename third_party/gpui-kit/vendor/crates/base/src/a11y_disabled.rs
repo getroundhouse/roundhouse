@@ -1,3 +1,4 @@
+// Changed in Roundhouse's copy of gpui-kit, as third_party/README.md lists.
 //! Disabled semantics on a control's accessibility node.
 //!
 //! GPUI has no `aria_disabled` setter, so a disabled control would reach
@@ -10,7 +11,7 @@ use gpui::{
 };
 
 /// A control's root element whose accessibility node may be marked disabled.
-pub(crate) struct A11yDisabled<E> {
+pub struct A11yDisabled<E> {
     inner: E,
     disabled: bool,
 }
@@ -25,7 +26,10 @@ impl<E> A11yDisabled<E> {
 ///
 /// Call it at the end of the control's builder chain. With `test-support`, the
 /// wrapper goes inside the observation, so its snapshot reports the flag too.
-pub(crate) trait A11yDisabledExt: Sized {
+///
+/// Public so a control drawn outside the kit, on an element of its own, can
+/// say it's disabled as the kit's own controls do.
+pub trait A11yDisabledExt: Sized {
     type Output: IntoElement;
 
     fn a11y_disabled(self, disabled: bool) -> Self::Output;

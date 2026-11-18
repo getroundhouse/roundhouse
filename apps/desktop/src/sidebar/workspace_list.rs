@@ -30,7 +30,7 @@ pub(super) const HEADING_SIZE: RowSize = RowSize::Small;
 pub(super) const ROW_PAD: look::Space = look::Space::Small;
 /// How much further in a workspace's row sets its mark than a repository's row sets its folder, so the rows read as
 /// the repository's.
-const MARK_INDENT: look::Space = look::Space::Small;
+pub(super) const MARK_INDENT: look::Space = look::Space::Small;
 /// The space between a workspace's mark and its name, between its name and what's at its row's end, and between a
 /// draft's pencil and what the agent is doing.
 pub(super) const MARK_GAP: look::Space = look::Space::Small;
@@ -272,7 +272,7 @@ pub(in super::super) fn row_icon(icon: impl IconNamed, color: Hsla) -> Icon {
 }
 
 /// How far a workspace's row sets its mark in from its edge.
-pub(super) fn row_inset() -> Pixels {
+fn row_inset() -> Pixels {
     ROW_PAD.size() + MARK_INDENT.size()
 }
 
