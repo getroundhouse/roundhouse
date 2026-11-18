@@ -99,7 +99,7 @@ fn drawn(signal: Signal, color: Hsla, hub: Hsla, width: Pixels, t: f64, moves: b
     canvas(
         |_, _, _| {},
         move |bounds, (), window, _| {
-            paint(bounds, signal, color, hub, light, t, window);
+            fan::in_one_layer(window, bounds, |window| paint(bounds, signal, color, hub, light, t, window));
             // Drawn again on the display's next frame, for as long as it's on screen and moving.
             if moves {
                 window.request_animation_frame();
