@@ -68,7 +68,7 @@ jobs:
           python3 .github/cache-probe.py "$RUNNER_TEMP/kinds" clippy="$RUNNER_TEMP/clippy.json"
           tests="$RUNNER_TEMP/test.json" doc="$RUNNER_TEMP/doc.json"
       - run: |
-          for kind in clippy-only tests-only both neither other cargo-home; do
+          for kind in clippy-only tests-only both neither old-deps other cargo-home; do
             [ -f "$RUNNER_TEMP/kinds/$kind.txt" ] || continue
             start=$(date +%s)
             bytes=$(sed '/^$/d' "$RUNNER_TEMP/kinds/$kind.txt" | gtar -cf - -P -T - 2>/dev/null | zstd -T0 --long=30 -q -c | wc -c)

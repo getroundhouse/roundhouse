@@ -1,20 +1,13 @@
-"""Splits a restored Mac cache by which of the Mac job's builds use each unit in target/debug: clippy only, the tests
-only, both, or neither, from the JSON cargo prints for each unit, fresh or not. Writes each part's paths to OUT and
-prints each part's size.
+"""Splits a restored Mac cache by which of the Mac job's builds use each unit, clippy only, the tests only, both, or
+neither, from the JSON cargo prints for each unit, fresh or not. Cargo keeps each unit in target/debug/build/PKG/HASH.
+Writes each part's paths to OUT and prints each part's size.
 
 Usage: python3 cache-probe.py OUT NAME=MESSAGES...
 """
-import collections, json, os, re, sys
+import collections, json, os, sys
 
 out, builds = sys.argv[1], [a.split("=", 1) for a in sys.argv[2:]]
 debug = os.path.abspath("target/debug")
-unit = re.compile(r"^(?:lib)?.+-([0-9a-f]{16})(?:\..*)?$")
-
-
-def hash_of(name):
-    m = unit.match(name)
-    return m.group(1) if m else None
-
 
 used = collections.defaultdict(set)
 for name, path in builds:
@@ -29,10 +22,8 @@ for name, path in builds:
                 paths.append(m[key])
         for p in paths:
             rel = os.path.relpath(os.path.abspath(p), debug).split(os.sep)
-            # deps/libfoo-HASH.rlib, build/foo-HASH/out, build/foo-HASH/build-script-build
-            h = hash_of(rel[1]) if len(rel) > 1 and rel[0] in ("deps", "build") else None
-            if h:
-                used[h].add("clippy" if name == "clippy" else "tests")
+            if len(rel) > 2 and rel[0] == "build":
+                used[(rel[1], rel[2])].add("clippy" if name == "clippy" else "tests")
 
 
 def kind(h):
@@ -65,18 +56,18 @@ def add(kind, path):
     sizes[kind] += size(path)
 
 
-for sub in ("deps", "build"):
-    d = os.path.join(debug, sub)
-    for name in sorted(os.listdir(d)) if os.path.isdir(d) else []:
-        h = hash_of(name)
-        add(kind(h) if h else "other", os.path.join(d, name))
+build = os.path.join(debug, "build")
+for pkg in sorted(os.listdir(build)):
+    for h in sorted(os.listdir(os.path.join(build, pkg))):
+        add(kind((pkg, h)), os.path.join(build, pkg, h))
 for name in os.listdir("target"):
     p = os.path.abspath(os.path.join("target", name))
     if name != "debug":
         add("other", p)
+# deps/ is where cargo kept every unit before 1.100, so nothing uses it now.
 for name in os.listdir(debug):
-    if name not in ("deps", "build"):
-        add("other", os.path.join(debug, name))
+    if name != "build":
+        add("old-deps" if name == "deps" else "other", os.path.join(debug, name))
 home = os.path.expanduser("~")
 for p in (f"{home}/.cargo/registry/index", f"{home}/.cargo/registry/cache", f"{home}/.cargo/git/db"):
     add("cargo-home", p)
