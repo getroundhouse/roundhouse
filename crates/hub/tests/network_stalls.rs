@@ -39,7 +39,7 @@ impl Peer {
                 rustls::pki_types::PrivatePkcs8KeyDer::from(key.serialize_der()).into(),
             )
             .unwrap();
-        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let listener = small_window_listener();
         let hub = RemoteHub {
             hub_name: "Silent hub".into(),
             hosts: vec![listener.local_addr().unwrap().to_string()],
@@ -75,6 +75,17 @@ impl Peer {
         let _ = self.release.send(());
         self.task.join().unwrap();
     }
+}
+
+/// A listener whose connections take little before a peer that doesn't read stops the writer: Linux holds 2.8 MB on a
+/// loopback connection by default, and 1.2 MB with this. A Mac keeps its own size, which holds at most 1.4 MB on CI's
+/// runners, as rustls writes. Set before listening, so connections take it as they're accepted.
+fn small_window_listener() -> TcpListener {
+    let socket = socket2::Socket::new(socket2::Domain::IPV4, socket2::Type::STREAM, None).unwrap();
+    socket.set_recv_buffer_size(4096).unwrap();
+    socket.bind(&std::net::SocketAddr::from(([127, 0, 0, 1], 0)).into()).unwrap();
+    socket.listen(1).unwrap();
+    socket.into()
 }
 
 fn finishes<T: Send + 'static>(peer: Peer, call: impl FnOnce(RemoteHub) -> T + Send + 'static) -> T {
@@ -124,11 +135,11 @@ fn a_peer_that_stops_reading_disconnects_all_pending_calls() {
     finishes(Peer::silent(false), |hub| {
         let client = Client::open_remote_with_timeout(&hub.hosts, &hub.fingerprint, OPERATION_TIMEOUT).unwrap();
         let waiting = client.start(Client::records_list);
-        // More than the TCP and TLS buffers hold while the peer reads no application data: under 2 MB on a Mac, and up
-        // to 4 MB on Linux by default. No more, since a test build encodes it slowly and the deadline counts that: 64 MB
-        // took 0.9 s on an idle Mac, and held the call past the deadline on CI's Mac runners, 6 tests to 3 cores.
+        // About three times what the connection holds while the peer reads no application data. No more, since the
+        // deadline counts encoding it, which a test build does slowly: on a Mac runner busy with other tests, 16 MB
+        // took 4.8 s, and on an idle Mac 0.2 s.
         let error = client
-            .call(devices::Pair { code: PairingCode::from("test-code"), device_name: "x".repeat(16 * 1024 * 1024) })
+            .call(devices::Pair { code: PairingCode::from("test-code"), device_name: "x".repeat(4 * 1024 * 1024) })
             .unwrap_err();
         assert!(matches!(error, ClientError::Disconnected), "{error}");
         assert!(client.is_disconnected());
