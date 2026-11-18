@@ -23,8 +23,7 @@ use admit::{Admit, Gate};
 
 use crate::hub::Hub;
 
-pub(crate) const DEFAULT_READ_BYTES: u64 = 4 * 1024 * 1024;
-pub(crate) const MAX_READ_EVENTS: u32 = 2000;
+/// How many events a page a subscriber is fed holds at most, up to [`protocol::client::log::ReadLimit::BYTES`].
 pub(crate) const PUMP_PAGE_EVENTS: u32 = 256;
 
 /// Bounded, so a client that stops reading holds back only its own subscriptions.

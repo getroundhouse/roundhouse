@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::convert::Infallible;
 use std::io::{BufRead as _, BufReader, Write as _};
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::Path;
@@ -6,6 +7,7 @@ use std::sync::Arc;
 
 use protocol::attachment::AttachmentBytes;
 use protocol::client::CLIENT_PROTOCOL_VERSION;
+use protocol::client::log::ReadLimit;
 use protocol::client::{
     ApiError, ClientFrame, ClientRequest, ClientResponse, ErrorCode, HelloReply, HubFrame, ReplyOutcome, admin,
     attachments, comments, drafts, files, github_accounts, github_apps, log, records, sessions, subscriptions,
@@ -146,10 +148,10 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
             let open = world.sessions.iter().rev().find(|s| s.workspace_id == workspace_id && s.is_open());
             reply(C::Session(open.cloned().ok_or_else(|| read_only("give this workspace a chat"))?))
         }
-        R::SessionRead(log::SessionRead { id, from_seq, limit, .. }) => {
+        R::SessionRead(log::SessionRead { id, from_seq, limit, max_bytes, .. }) => {
             let session = world.session(&id)?;
-            let events = world.events_from(&id, from_seq).take(usize::try_from(limit).unwrap_or(usize::MAX));
-            reply(C::Events(log::Events { events: events.cloned().collect(), last_seq: session.last_seq }))
+            let events = read(ReadLimit::asked(limit, max_bytes), world.events_from(&id, from_seq));
+            reply(C::Events(log::Events { events, last_seq: session.last_seq }))
         }
         // An older hub's build is from before prompts were listed.
         R::SessionPromptList(_) if world.hub.is_some() => {
@@ -182,14 +184,13 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
         R::SessionReadPlaces(_) | R::SessionSubscribePlaces(_) if world.reads_every_event_together => {
             Err(ApiError::new(ErrorCode::Unsupported, "an older hub doesn't read the agent's own events apart"))
         }
-        R::SessionReadPlaces(log::SessionReadPlaces { id, subagent, from_place, limit, .. }) => {
+        R::SessionReadPlaces(log::SessionReadPlaces { id, subagent, from_place, limit, max_bytes, .. }) => {
             world.session(&id)?;
             let last_place =
                 world.placed_from(&id, subagent.as_ref(), Place::new(1)).last().map_or(Place::new(0), |e| e.place);
-            let events = world
-                .placed_from(&id, subagent.as_ref(), from_place)
-                .take(usize::try_from(limit).unwrap_or(usize::MAX));
-            reply(C::PlacedEvents(log::PlacedEvents { events: events.cloned().collect(), last_place }))
+            let events =
+                read(ReadLimit::asked(limit, max_bytes), world.placed_from(&id, subagent.as_ref(), from_place));
+            reply(C::PlacedEvents(log::PlacedEvents { events, last_place }))
         }
         R::SessionSubscribePlaces(subscriptions::SessionSubscribePlaces {
             id,
@@ -331,6 +332,16 @@ fn subscribe_places(
     let tail = world.tails.get(id).map_or_default(|tail| tail.of(subagent));
     let tail = HubFrame::Tail { subscription_id, tail };
     Ok(Outcome::Reply(ClientResponse::Ok, events.chain(std::iter::once(tail)).collect()))
+}
+
+/// What a read of `events` is sent, by what each takes in a hub's log: its body as JSON, and its raw line.
+fn read<'a>(limit: ReadLimit, events: impl Iterator<Item = &'a SessionEvent>) -> Vec<SessionEvent> {
+    let sized = events.map(|event| {
+        let size = serde_json::to_string(&event.body).unwrap().len() + event.raw.as_ref().map_or(0, String::len);
+        Ok::<_, Infallible>((event.clone(), u64::try_from(size).unwrap()))
+    });
+    let Ok(sent) = limit.cut(sized);
+    sent
 }
 
 /// Each prompt in the chat as a line, oldest first, with where it was settled, which is the last event to settle it.

@@ -5,6 +5,7 @@ use super::super::sent::{Sent, note_sent};
 use super::super::subagents::note_subagents;
 use super::super::{Appended, Store, StoreError, lock, now_ms, place_column, place_of, seq_column, seq_of};
 use super::change::{SessionChange, change_session};
+use protocol::client::log::ReadLimit;
 use protocol::event::{ApprovalOutcome, EventBody, SessionEvent};
 use protocol::model::{ApprovalId, ClientMessageId, Place, RunId, Seq, SessionId, SubagentId};
 use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
@@ -191,7 +192,7 @@ impl Store {
             "SELECT {EVENT_COLUMNS}, {raw_column} FROM events WHERE session_id = ? AND seq >= ? ORDER BY seq LIMIT ?"
         ))?;
         let rows = statement.query(params![session_id.as_str(), seq_column(from_seq), limit])?;
-        events_in(session_id, rows, max_bytes)
+        events_in(session_id, rows, limit, max_bytes)
     }
 
     /// The events `places` names, with the place of the newest from the same agent or subagent, recorded after
@@ -224,7 +225,7 @@ impl Store {
                 through,
                 limit
             ])?;
-            events_in(session_id, rows, max_bytes)?
+            events_in(session_id, rows, limit, max_bytes)?
         };
         let last = last_place(&tx, session_id, subagent)?;
         tx.commit()?;
@@ -273,24 +274,15 @@ fn recorded_with(
     Ok(Some(event_in(session_id, row)?.0))
 }
 
-/// The events in `rows`, which each have [`EVENT_COLUMNS`] then the raw line, until they take `max_bytes`, and at
-/// least one if there are any.
+/// The events in `rows`, which each have [`EVENT_COLUMNS`] then the raw line, as far as a read of `limit` of them and
+/// `max_bytes` goes, as [`ReadLimit::cut`] says.
 fn events_in(
     session_id: &SessionId,
-    mut rows: rusqlite::Rows<'_>,
+    rows: rusqlite::Rows<'_>,
+    limit: u32,
     max_bytes: u64,
 ) -> Result<Vec<SessionEvent>, StoreError> {
-    let mut events = Vec::new();
-    let mut bytes = 0u64;
-    while let Some(row) = rows.next()? {
-        let (event, size) = event_in(session_id, row)?;
-        events.push(event);
-        bytes += size;
-        if bytes >= max_bytes {
-            break;
-        }
-    }
-    Ok(events)
+    ReadLimit { events: limit, bytes: max_bytes }.cut(rows.and_then(|row| event_in(session_id, row)))
 }
 
 /// What [`event_in`] reads, before the raw line or NULL.

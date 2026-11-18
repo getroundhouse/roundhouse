@@ -1,9 +1,9 @@
 //! That a client reads from the fake hub what its world holds, and is refused what would change it, and that where the
 //! fake hub works something out of its world, it does so by the rule the hub follows, as `protocol` states it.
 
-use protocol::client::ErrorCode;
+use protocol::client::{ErrorCode, log};
 use protocol::event::{EventBody, ExitReason, TaskKind};
-use protocol::model::{AgentKind, SessionStatus, SubagentId};
+use protocol::model::{AgentKind, Seq, SessionStatus, SubagentId};
 
 use super::events::{subagent_started, taken, task, user_prompt};
 use super::{World, serve};
@@ -78,6 +78,24 @@ fn a_chat_runs_in_the_background_what_its_agent_last_listed_until_it_exits() {
     assert_eq!(gone.background_tasks, [], "its work went with it");
 }
 
+/// As `ReadLimit` says: at least one event, and none after the one that brings the read to its bytes.
+#[test]
+fn a_read_is_sent_as_much_as_a_hub_sends() {
+    let mut world = World::default();
+    let repo = world.repo("aspen");
+    let workspace = world.workspace(&repo, "elm");
+    let chat = world.chat(&workspace, SessionStatus::Idle, vec![user_prompt("Fix it"), user_prompt("And the docs")]);
+    let (_dir, client) = served(world);
+    let read = |limit, max_bytes| {
+        let read = log::SessionRead { id: chat.clone(), from_seq: Seq::new(1), limit, max_bytes, include_raw: false };
+        client.call(read).unwrap().events.len()
+    };
+
+    assert_eq!(read(0, None), 1, "a read asking for none");
+    assert_eq!(read(10, Some(1)), 1, "a read stopped by its bytes");
+    assert_eq!(read(10, None), 2);
+}
+
 /// As `Session::is_open` says, so the newest chat that isn't closed.
 #[test]
 fn ensuring_a_workspace_has_a_chat_finds_its_newest_open_one() {
@@ -122,7 +140,7 @@ fn a_chat_s_prompts_are_listed_with_where_each_was_settled() {
     let mut world = World::default();
     let repo = world.repo("aspen");
     let workspace = world.workspace(&repo, "elm");
-    let events = vec![user_prompt("Fix it"), taken(protocol::model::Seq::new(1)), user_prompt("And the docs")];
+    let events = vec![user_prompt("Fix it"), taken(Seq::new(1)), user_prompt("And the docs")];
     let chat = world.chat(&workspace, SessionStatus::Running, events);
     let (_dir, client) = served(world);
 
