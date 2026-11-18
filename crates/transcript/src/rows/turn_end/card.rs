@@ -43,7 +43,7 @@ impl TurnCard {
         let times = times.map(|times| table(times.rows, cx));
         let counts = self.tokens.map(|tokens| table(counts(tokens), cx));
         let cache = self.cache.as_ref().and_then(|cache| super::cache::in_the_card(cache, cx));
-        let card = look::card(look::CardKind::Over, look::CardWidth::Small).region(Region::TurnCard);
+        let card = look::card(look::CardKind::Over, look::CardWidth::Content).region(Region::TurnCard);
         let card = match heading {
             Some(heading) => card.heading(look::card_heading(heading)),
             None => card,

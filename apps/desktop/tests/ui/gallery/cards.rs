@@ -83,7 +83,8 @@ fn of_kind(kind: CardKind, cx: &App) -> look::Card {
 /// A card of `width` over the rest, saying what it's for.
 fn of_width(width: CardWidth, cx: &App) -> look::Card {
     let said = match width {
-        CardWidth::Small => "A few lines, such as a hover card, the context's card or a turn's.",
+        CardWidth::Content => "As wide as what it holds, such as a turn's card.",
+        CardWidth::Small => "A few lines, such as a hover card or the context's card.",
         CardWidth::Regular => "More, or what runs across a line of its own, such as the workspace's card.",
         CardWidth::Fills => "As wide as what it's set in, such as the chat's column.",
     };
@@ -107,7 +108,9 @@ impl Render for Sheet {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let colors = look::colors(cx);
         let kind = |kind: CardKind, cx: &App| named(KIND, &kind.written()[0], of_kind(kind, cx), cx);
-        let width = |width: CardWidth, cx: &App| named(WIDTH, &width.written()[0], of_width(width, cx), cx);
+        // In a line, so one as wide as what it holds isn't stretched to the column, as it isn't where it opens.
+        let width =
+            |width: CardWidth, cx: &App| named(WIDTH, &width.written()[0], h_flex().child(of_width(width, cx)), cx);
         let column = |width: f32| v_flex().flex_none().w(px(width)).gap(px(BETWEEN / 2.));
         h_flex()
             .size_full()
@@ -125,6 +128,7 @@ impl Render for Sheet {
             )
             .child(
                 column(COLUMN)
+                    .child(width(CardWidth::Content, cx))
                     .child(width(CardWidth::Small, cx))
                     .child(width(CardWidth::Regular, cx))
                     .child(width(CardWidth::Fills, cx)),
@@ -137,7 +141,7 @@ pub(crate) fn draw(text_system: &Arc<dyn PlatformTextSystem>) -> (Picture, Place
     let mut cx = headless::app(text_system);
     let kinds: Vec<String> = CardKind::ALL.iter().map(|each| each.written()[0].clone()).collect();
     let widths: Vec<String> = CardWidth::ALL.iter().map(|each| each.written()[0].clone()).collect();
-    let size = size(px(MARGIN * 2. + 300. + COLUMN * 2. + BETWEEN * 2.), px(460.));
+    let size = size(px(MARGIN * 2. + 300. + COLUMN * 2. + BETWEEN * 2.), px(560.));
     headless::draw_and_measure(
         &mut cx,
         size,

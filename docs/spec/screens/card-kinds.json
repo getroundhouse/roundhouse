@@ -32,21 +32,27 @@
     }
   },
   "look::CardWidth": {
+    "Content": {
+      "x": 1896,
+      "y": 119,
+      "width": 1040,
+      "height": 144
+    },
     "Fills": {
       "x": 1896,
-      "y": 691,
+      "y": 938,
       "width": 1040,
       "height": 144
     },
     "Regular": {
       "x": 1896,
-      "y": 405,
+      "y": 652,
       "width": 1040,
       "height": 183
     },
     "Small": {
       "x": 1896,
-      "y": 119,
+      "y": 366,
       "width": 1040,
       "height": 183
     }

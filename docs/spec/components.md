@@ -171,7 +171,7 @@ The pieces screens are built from, on the foundations in `look.md`: what each is
 - **A card in the chat that needs you, or where the agent stopped short, is washed in its colour, with its heading in it,** as the owner chose, from six pictures: amber for a plan waiting to be approved and red for a failed request, as `look.md` says, with no edge, and the icon and words of the heading at full strength, where the colour reads as itself rather than mixed into the pane. One of the chat's cards with nothing to say in a colour, such as the compaction's summary or a plan once it's answered, has a call's block's fill. *Unconfirmed:* the wash at 9%, a chat's card with no colour in a call's block's fill, and `Waiting for you` at a plan's heading's end.
 - **A card is 12px in from its edge, with its parts 12px apart, and what's in one part 4px apart,** as the owner decided, such as a heading and what's said under it, so the parts read as apart as the card is from what's around it. A rule between two parts is as far from each. A form set in place, such as a panel in Settings, is laid out as a dialog is, 24px in, with 16px between its parts, as the owner decided.
 - **A card's heading is in body text and stronger,** with the icon that stands for what the card is at its start, such as a failed request's, muted unless the card is in a colour, what's said of it after it, such as a badge of how many times, and what's said faint at its end, such as when a limit resets. *Unconfirmed.*
-- **A card over the rest has a width of its own, of two, and one in place or in the chat fills what it's set in,** as the owner decided, since nothing around one over the rest sets a width. A width is added once a card needs one, rather than guessed at. `look::CardWidth` holds them. What's raised over the rest and isn't a card is raised the same way: the find bar and the outline's list at a card's regular width, as the owner decided, and an edit's preview and a dragged project at widths of their own.
+- **A card over the rest has a width of its own, of two, and one in place or in the chat fills what it's set in,** as the owner decided, since nothing around one over the rest sets a width. A turn's card is as wide as what it holds, as the owner chose, since its rows are short and a width of its own left a gap down its middle. A width is added once a card needs one, rather than guessed at. `look::CardWidth` holds them. What's raised over the rest and isn't a card is raised the same way: the find bar and the outline's list at a card's regular width, as the owner decided, and an edit's preview and a dragged project at widths of their own.
 
 **Every kind of card, by its name.** Each is a kind in `look::CardKind`. *Unconfirmed.*
 
@@ -187,7 +187,8 @@ The pieces screens are built from, on the foundations in `look.md`: what each is
 
 | Name | Width | For |
 |---|---|---|
-| `Small` | 300px | A few lines over the rest, such as a hover card, the context's card, an account's or a turn's |
+| `Content` | What it holds | Short rows over the rest that say the same each time, such as a turn's card |
+| `Small` | 300px | A few lines over the rest, such as a hover card, the context's card or an account's |
 | `Regular` | 380px | More over the rest, or what runs across a line of its own, such as the workspace's card or dictation's offer |
 | `Fills` | What it's set in | A card in place or in the chat, as wide as the sidebar's foot, a page in Settings or the chat's column |
 

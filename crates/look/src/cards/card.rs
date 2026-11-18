@@ -113,10 +113,8 @@ impl RenderOnce for Card {
             .then(|| v_flex().gap(Space::XSmall).children(heading).children(self.under).into_any_element());
         let drawn = v_flex()
             .flex_none()
-            .map(|card| match self.width.width() {
-                Some(width) => card.w(width),
-                None => card.w_full(),
-            })
+            .when_some(self.width.width(), gpui_kit::Styled::w)
+            .when(self.width == CardWidth::Fills, gpui_kit::Styled::w_full)
             .p(around)
             .gap(between)
             .corners(Corner::Card)
