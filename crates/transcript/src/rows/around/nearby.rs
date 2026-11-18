@@ -3,8 +3,9 @@
 
 use client_core::calls::Recorded;
 use client_core::session_log::{Row, SessionLog};
+use protocol::capability::approvals::ApprovalMode;
 use protocol::event::{ContentBlock, EventBody, SessionEvent};
-use protocol::model::{PermissionMode, Seq, ToolUseId};
+use protocol::model::{Seq, ToolUseId};
 
 use super::NEAR;
 
@@ -42,13 +43,13 @@ pub(super) fn loaded_before(log: &SessionLog, seq: Seq) -> impl Iterator<Item = 
 
 /// The mode the agent was in before the event at `seq`: the last one it reported, as a change or at the start of a
 /// turn. `None` if it hadn't reported one, or that part of the log isn't loaded, so it isn't guessed past what isn't.
-pub(super) fn mode_before(log: &SessionLog, seq: Seq) -> Option<PermissionMode> {
+pub(super) fn mode_before(log: &SessionLog, seq: Seq) -> Option<ApprovalMode> {
     loaded_before(log, seq).find_map(|event| {
-        if let EventBody::AgentMode { permission_mode } = &event.body {
-            return Some(*permission_mode);
+        if let EventBody::AgentMode { mode } = &event.body {
+            return Some(*mode);
         }
-        let EventBody::AgentInit { permission_mode, .. } = &event.body else { return None };
-        *permission_mode
+        let EventBody::AgentInit { mode, .. } = &event.body else { return None };
+        *mode
     })
 }
 
@@ -84,24 +85,25 @@ pub(super) fn failed_request_ending(log: &SessionLog, end: Seq) -> Option<Seq> {
 
 #[cfg(test)]
 mod tests {
+    use protocol::capability::approvals::ApprovalMode;
     use protocol::event::{EventBody, TurnOutcome};
-    use protocol::model::PermissionMode::{FullAccess, Plan};
-    use protocol::model::{PermissionMode, Seq};
+    use protocol::fixtures::{full_access, plan_mode};
+    use protocol::model::Seq;
 
     use super::{call_before, events_after, events_before, failed_request_ending, mode_before};
     use crate::fixtures::{calls, event, failed_request, log, prompt, result, turn_ended};
 
-    fn changed_to(mode: PermissionMode) -> EventBody {
-        EventBody::AgentMode { permission_mode: mode }
+    fn changed_to(mode: ApprovalMode) -> EventBody {
+        EventBody::AgentMode { mode }
     }
 
-    fn turn_started_in(mode: PermissionMode) -> EventBody {
+    fn turn_started_in(mode: ApprovalMode) -> EventBody {
         EventBody::AgentInit {
             capabilities: None,
             agent_session_id: None,
             model: None,
             cwd: None,
-            permission_mode: Some(mode),
+            mode: Some(mode),
             agent_version: None,
         }
     }
@@ -138,20 +140,20 @@ mod tests {
     #[test]
     fn the_mode_before_is_the_last_one_the_agent_reported() {
         let log = log([
-            event(Seq::new(1), turn_started_in(Plan)),
-            event(Seq::new(2), changed_to(FullAccess)),
+            event(Seq::new(1), turn_started_in(plan_mode())),
+            event(Seq::new(2), changed_to(full_access())),
             event(Seq::new(3), result("a")),
-            event(Seq::new(4), changed_to(Plan)),
+            event(Seq::new(4), changed_to(plan_mode())),
         ]);
 
         assert_eq!(mode_before(&log, Seq::new(1)), None);
-        assert_eq!(mode_before(&log, Seq::new(2)), Some(Plan), "as a turn started");
-        assert_eq!(mode_before(&log, Seq::new(4)), Some(FullAccess));
+        assert_eq!(mode_before(&log, Seq::new(2)), Some(plan_mode()), "as a turn started");
+        assert_eq!(mode_before(&log, Seq::new(4)), Some(full_access()));
     }
 
     #[test]
     fn the_mode_before_isnt_guessed_past_what_isnt_loaded() {
-        let log = log([event(Seq::new(1), changed_to(Plan)), event(Seq::new(3), changed_to(FullAccess))]);
+        let log = log([event(Seq::new(1), changed_to(plan_mode())), event(Seq::new(3), changed_to(full_access()))]);
 
         assert_eq!(mode_before(&log, Seq::new(3)), None);
     }
@@ -159,12 +161,12 @@ mod tests {
     #[test]
     fn an_agent_other_event_does_not_hide_the_mode_before_it() {
         let log = log([
-            event(Seq::new(1), changed_to(Plan)),
+            event(Seq::new(1), changed_to(plan_mode())),
             event(Seq::new(2), EventBody::AgentOther { kind: "future/event".into(), subagent: None }),
-            event(Seq::new(3), changed_to(FullAccess)),
+            event(Seq::new(3), changed_to(full_access())),
         ]);
 
-        assert_eq!(mode_before(&log, Seq::new(3)), Some(Plan));
+        assert_eq!(mode_before(&log, Seq::new(3)), Some(plan_mode()));
     }
 
     #[test]

@@ -1,6 +1,6 @@
 use crate::conformance::scenario::{Failed, Scenario};
 use protocol::capability::settings::Effort;
-use protocol::model::{AgentKind, AgentSessionId, ModelName, RunId, SessionSettings};
+use protocol::model::{AgentKind, AgentSessionId, ModelName, RunId};
 use protocol::worker::AgentSpec;
 use std::path::Path;
 
@@ -17,10 +17,7 @@ pub(super) fn spec(
     resume: bool,
     env: Vec<(String, String)>,
 ) -> Result<AgentSpec, Failed> {
-    let settings = SessionSettings { model: MODEL, permission_mode: scenario.mode, effort: Effort::Low };
-    // As the hub converts a chat's settings, against what the kind claims.
-    let claims = crate::claude::description().capabilities.unwrap_or_default();
-    let settings = settings.for_capabilities(&claims).map_err(|e| Failed(e.to_string()))?;
+    let settings = scenario.settings(&crate::claude::description(), MODEL, Effort::Low)?;
     Ok(AgentSpec {
         session_id: "conformance".into(),
         run,

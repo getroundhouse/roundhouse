@@ -121,3 +121,6 @@ pub(crate) const BEFORE_TYPED_CALLS: usize = 69;
 
 /// How many migrations there were before requests for approval, and what closed them, were typed.
 pub(crate) const BEFORE_TYPED_REQUESTS: usize = 70;
+
+/// How many migrations there were before each chat's approval mode, and each its log names, were typed.
+pub(crate) const BEFORE_TYPED_MODES: usize = 71;

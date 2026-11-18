@@ -1,11 +1,9 @@
 //! The first workspace's model choices come from the same CLI as its first turn.
 
 use crate::support::{Stack, git, wait_until};
-use protocol::capability::settings::Effort;
+use protocol::capability::settings::{Effort, Settings};
 use protocol::client::admin::{ModelTarget, ModelsFor};
-use protocol::model::{
-    AgentKind, ModelListKey, ModelLookup, ModelName, NewWorkspaceDraftToKeep, SessionSettingsChange,
-};
+use protocol::model::{AgentKind, ModelListKey, ModelLookup, ModelName, NewWorkspaceDraftToKeep};
 use serde_json::{Value, json};
 
 #[test]
@@ -52,13 +50,12 @@ fn a_fresh_hub_discovers_the_model_and_effort_it_sends_on_the_first_turn() {
     let chat = client.models_for(ModelsFor { target: ModelTarget::Session(made.session.id.clone()), ..asked.clone() });
     assert_eq!(chat.unwrap().key, first.key, "the chat's list is the dialog's");
     assert_eq!(lists_asked(&stack), 1, "the dialog's list served the checks and the first chat");
-    let obsolete = SessionSettingsChange { model: obsolete.model, ..Default::default() };
+    let obsolete = Settings { model: obsolete.model, ..Settings::default() };
     assert!(
         client.session_configure(&made.session.id, obsolete).is_err(),
         "a model no longer offered, from any client"
     );
-    let change =
-        |effort| SessionSettingsChange { model: Some(no_effort.clone()), effort: Some(effort), permission_mode: None };
+    let change = |effort| Settings { model: Some(no_effort.clone()), effort: Some(effort), ..Settings::default() };
     assert!(client.session_configure(&made.session.id, change(Effort::None)).is_err());
     assert_eq!(client.session_get(&made.session.id).unwrap().model, model);
     let cleared = client.session_configure(&made.session.id, change(Effort::Unset)).unwrap();

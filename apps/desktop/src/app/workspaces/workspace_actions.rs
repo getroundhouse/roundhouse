@@ -12,7 +12,7 @@ use client_core::records::Snapshot;
 use gpui_kit::{App, AppContext as _, Context, PathPromptOptions, Window};
 use in_view::InView;
 use protocol::client::ErrorCode;
-use protocol::model::{PermissionMode, Record, Repo, RepoId, WorkspaceId, WorkspaceStatus};
+use protocol::model::{Record, Repo, RepoId, WorkspaceId, WorkspaceStatus};
 use protocol::prompt::Prompt;
 
 impl AppView {
@@ -121,8 +121,8 @@ impl AppView {
         cx.notify();
         // Kept in case the call never finishes, which takes the files with it. Those still coming back from the hub
         // can be read back again.
-        let (typed, coming_back) = (request.prompt.text.clone(), request.coming_back.clone());
-        let permission_mode = request.permission_mode;
+        let (typed, coming_back, to_start_in) =
+            (request.prompt.text.clone(), request.coming_back.clone(), request.mode);
         let creating = client.start(move |client| Ok(made::make(client, request)));
         cx.spawn(async move |this, cx| {
             let made = creating.recv().await;
@@ -135,7 +135,7 @@ impl AppView {
                         t.show_error(format!("couldn't tell whether the workspace was made: {e}"), cx);
                         let (prompt, in_the_dialog) = (Prompt::new(typed), false);
                         let given_back = made::GivenBack { prompt, coming_back, in_the_dialog };
-                        t.give_back_to_dialog(given_back, permission_mode, cx);
+                        t.give_back_to_dialog(given_back, to_start_in, cx);
                     }
                 }
                 cx.notify();
@@ -173,12 +173,12 @@ impl AppView {
         }
         let Some(unsent) = unsent else { return };
         self.show_error(unsent.failed.failed(&unsent.error), cx);
-        let made::Unsent { given_back, permission_mode, .. } = unsent;
+        let made::Unsent { given_back, mode, .. } = unsent;
         // To the dialog if nothing was made, or if the hub still keeps it there.
         let in_the_dialog = given_back.as_ref().is_some_and(|given_back| given_back.in_the_dialog);
         let (Some(id), false) = (made_id, in_the_dialog) else {
             if let Some(given_back) = given_back {
-                self.give_back_to_dialog(given_back, permission_mode, cx);
+                self.give_back_to_dialog(given_back, mode, cx);
             }
             return;
         };
@@ -192,11 +192,11 @@ impl AppView {
                     if let Some(made::GivenBack { prompt, .. }) = given_back {
                         pane.give_back(chat.as_ref(), prompt, cx);
                     }
-                    if permission_mode == PermissionMode::Plan {
+                    if mode.is_some_and(|mode| mode.plan) {
                         pane.plan_given_back(chat.as_ref(), cx);
                     }
                 }),
-                (None, Some(given_back)) => t.give_back_to_dialog(given_back, permission_mode, cx),
+                (None, Some(given_back)) => t.give_back_to_dialog(given_back, mode, cx),
                 (None, None) => {}
             });
         });

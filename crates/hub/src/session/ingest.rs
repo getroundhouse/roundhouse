@@ -3,9 +3,10 @@
 use std::sync::Arc;
 
 use protocol::attachment::NewAttachment;
-use protocol::capability::approvals::{Asks, Decision, Remember, Request};
+use protocol::capability::approvals::{ApprovalMode, Asks, Decision, Remember, Request};
+use protocol::capability::settings::Settings;
 use protocol::event::{CompactionOutcome, EventBody, ExitReason, SessionEvent};
-use protocol::model::{ApprovalId, ContextUsage, PermissionMode, RunId, SessionSettingsChange};
+use protocol::model::{ApprovalId, ContextUsage, RunId};
 use protocol::tail::{Retrying, StreamDelta, Tail};
 use tokio::sync::mpsc;
 use tracing::{error, warn};
@@ -89,7 +90,7 @@ async fn ingest_event(
 /// The request in `body`, and its ID, if the hub allows it itself, as [`the_hub_allows`] says.
 fn allowed_by_the_hub(session: &LiveSession, body: &EventBody) -> Option<(ApprovalId, Request)> {
     let EventBody::ApprovalRequested { approval_id, request, .. } = body else { return None };
-    let mode = session.state.lock().settings.permission_mode;
+    let mode = session.state.lock().settings.mode;
     let set_to = session.hub().is_ok_and(|hub| hub.allows_asked_in_full_access());
     the_hub_allows(mode, request, set_to).then(|| (approval_id.clone(), Request::clone(request)))
 }
@@ -97,8 +98,8 @@ fn allowed_by_the_hub(session: &LiveSession, body: &EventBody) -> Option<(Approv
 /// Whether the hub allows `request` itself, in a session in `mode`, when its settings are `set_to`: a call asked about
 /// with full access, which comes whatever the mode, as Claude's CLI asks before a command it can't check. Anything
 /// else is the person's to decide whatever the settings say, and so is anything asked in plan mode.
-pub(super) fn the_hub_allows(mode: PermissionMode, request: &Request, set_to: bool) -> bool {
-    set_to && mode == PermissionMode::FullAccess && matches!(request.asks, Asks::Call { .. })
+pub(super) fn the_hub_allows(mode: ApprovalMode, request: &Request, set_to: bool) -> bool {
+    set_to && mode.is_full_access() && matches!(request.asks, Asks::Call { .. })
 }
 
 /// Records the request `asked`, which is `request`, with the hub's decision allowing it, and passes that on to the
@@ -139,7 +140,7 @@ async fn follow(session: &Arc<LiveSession>, run: RunId, current: bool, body: &Ev
                 session.launched(run);
             }
         }
-        EventBody::AgentMode { permission_mode } if current => session.note_mode(*permission_mode).await,
+        EventBody::AgentMode { mode } if current => session.note_mode(*mode).await,
         // What the cache held is no longer the conversation, and the next request writes the summary.
         EventBody::AgentCompacted { outcome: CompactionOutcome::Compacted { .. }, .. } if current => {
             session.announce_cache(None).await;
@@ -250,13 +251,13 @@ impl LiveSession {
 
     /// The agent changed mode, or confirmed a change. The next launch has to start in this one, so a chat that was
     /// planning when its agent went is still planning when it comes back.
-    async fn note_mode(&self, mode: PermissionMode) {
+    async fn note_mode(&self, mode: ApprovalMode) {
         let Ok(hub) = self.hub() else { return };
-        if self.state.lock().settings.permission_mode == mode {
+        if self.state.lock().settings.mode == mode {
             return;
         }
-        let newer = SessionSettingsChange { permission_mode: Some(mode), ..SessionSettingsChange::default() };
-        if let Err(e) = self.keep_options(&hub, newer).await {
+        let newer = Settings { mode: Some(mode), ..Settings::default() };
+        if let Err(e) = self.keep_settings(&hub, newer).await {
             error!(session = %self.id, "could not record the agent's mode: {e}");
             return;
         }

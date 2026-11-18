@@ -9,10 +9,11 @@ use client_core::calls::Recorded;
 use client_core::session_log::{PromptAt, PromptState, SessionLog};
 use client_core::{Approval, ToolUseAsked};
 use gpui_kit::SharedString;
+use protocol::capability::approvals::ApprovalMode;
 use protocol::capability::approvals::Decision;
 use protocol::capability::asking::Question;
 use protocol::event::{ContentBlock, EventBody, SessionEvent};
-use protocol::model::{ApprovalId, PermissionMode, Seq, ToolUseId};
+use protocol::model::{ApprovalId, Seq, ToolUseId};
 use reply::{Answer, Reply};
 use settled::Settled;
 use subagent::{Names, Subagent};
@@ -40,7 +41,7 @@ pub(in super::super) struct Around {
     /// card say. An older turn's say nothing of it, since only the newest can still be warm.
     pub(in super::super) cache: Option<IdleCache>,
     /// For a change of mode: the mode before it, when the log says.
-    pub(in super::super) mode_before: Option<PermissionMode>,
+    pub(in super::super) mode_before: Option<ApprovalMode>,
     /// For a compaction: whether it's open to its summary.
     pub(in super::super) open: bool,
     /// For a failed request: whether its card offers Retry, as [`retry_at`] says.

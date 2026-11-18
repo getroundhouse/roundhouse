@@ -6,7 +6,7 @@ use desktop::new_workspace::Request;
 use gpui_kit::{AppContext as _, ClipboardEntry, ClipboardItem, ExternalPaths, TestAppContext};
 use protocol::attachment::{MAX_PER_PROMPT, MediaType};
 use protocol::capability::settings::Effort;
-use protocol::model::{AgentKind, PermissionMode};
+use protocol::model::AgentKind;
 use protocol::prompt::Prompt;
 
 use super::{open_with_a_repo, prompts};
@@ -55,7 +55,7 @@ fn a_prompt_the_hub_couldnt_give_the_new_chat_whole_goes_back_to_the_dialog(cx: 
 /// Asks the app to make what `prompt` says, as Create would have, with the files it carries.
 fn create(ui: &mut Ui<'_>, prompt: Prompt<FileToSend>) {
     let chosen = (Some(CLAUDE_STARTS_WITH.0), Some(CLAUDE_STARTS_WITH.1));
-    let request = Request::new(ui.first_repo_id(), prompt, AgentKind::Claude, chosen, PermissionMode::FullAccess);
+    let request = Request::new(ui.first_repo_id(), prompt, AgentKind::Claude, chosen, None);
     let view = ui.view.clone();
     ui.cx.update_entity(&view, |v, cx| v.create_workspace(request, cx)).unwrap();
 }
@@ -139,7 +139,7 @@ fn a_prompt_the_new_chat_couldnt_be_sent_goes_to_its_composer_which_shows_though
     assert_ne!(made, first, "the new one shows");
     ui.wait("the prompt in the new chat's composer", |ui| ui.composer_text() == "say:held back");
     assert_eq!(ui.attached(), ["file-0.txt"]);
-    ui.wait("plan mode in the new chat", |ui| ui.chat_mode() == Some(PermissionMode::Plan));
+    ui.wait("plan mode in the new chat", |ui| ui.chat_mode() == Some(protocol::fixtures::plan_mode()));
     assert!(
         ui.view()
             .error

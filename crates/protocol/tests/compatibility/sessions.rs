@@ -8,7 +8,7 @@ use protocol::model::{AccountSource, MaxSetBy, OpenApproval, PromptLine, Seq, Se
 
 fn session(more: &str) -> Session {
     let notice = format!(
-        r#"{{"notice":"session","id":"s","workspace_id":"w","agent":"claude","model":"opus","permission_mode":"bypassPermissions","effort":"high","status":"idle","last_seq":4,"created_at_ms":1,"updated_at_ms":2{more}}}"#
+        r#"{{"notice":"session","id":"s","workspace_id":"w","agent":"claude","model":"opus","mode":{{"unasked":"everything","beyond":"asks"}},"effort":"high","status":"idle","last_seq":4,"created_at_ms":1,"updated_at_ms":2{more}}}"#
     );
     let notice: HubNotice = frame::decode(notice.as_bytes()).unwrap();
     let HubNotice::Session(session) = notice else { panic!("{notice:?}") };
@@ -71,7 +71,7 @@ fn which_way_a_prompt_was_settled_keeps_its_form() {
 
 #[test]
 fn a_session_from_a_hub_that_doesnt_keep_replies_reads_as_read() {
-    let line = br#"{"notice":"session","id":"s","workspace_id":"w","agent":"claude","model":"opus","permission_mode":"bypassPermissions","effort":"xhigh","status":"idle","last_seq":9,"created_at_ms":1,"updated_at_ms":2}"#;
+    let line = br#"{"notice":"session","id":"s","workspace_id":"w","agent":"claude","model":"opus","mode":{"unasked":"everything","beyond":"asks"},"effort":"xhigh","status":"idle","last_seq":9,"created_at_ms":1,"updated_at_ms":2}"#;
 
     let notice: HubNotice = frame::decode(line).unwrap();
 
@@ -82,7 +82,7 @@ fn a_session_from_a_hub_that_doesnt_keep_replies_reads_as_read() {
 
 #[test]
 fn a_running_session_from_a_hub_that_doesnt_keep_turn_starts_has_none() {
-    let line = br#"{"notice":"session","id":"s","workspace_id":"w","agent":"claude","model":"opus","permission_mode":"bypassPermissions","effort":"xhigh","status":"running","last_seq":9,"created_at_ms":1,"updated_at_ms":2}"#;
+    let line = br#"{"notice":"session","id":"s","workspace_id":"w","agent":"claude","model":"opus","mode":{"unasked":"everything","beyond":"asks"},"effort":"xhigh","status":"running","last_seq":9,"created_at_ms":1,"updated_at_ms":2}"#;
 
     let notice: HubNotice = frame::decode(line).unwrap();
 
@@ -92,12 +92,12 @@ fn a_running_session_from_a_hub_that_doesnt_keep_turn_starts_has_none() {
 
 #[test]
 fn a_session_from_a_hub_that_doesnt_keep_how_full_the_context_is_has_none_and_its_form_stays_readable() {
-    let older = br#"{"notice":"session","id":"s","workspace_id":"w","agent":"claude","model":"opus","permission_mode":"bypassPermissions","effort":"xhigh","status":"idle","last_seq":9,"created_at_ms":1,"updated_at_ms":2}"#;
+    let older = br#"{"notice":"session","id":"s","workspace_id":"w","agent":"claude","model":"opus","mode":{"unasked":"everything","beyond":"asks"},"effort":"xhigh","status":"idle","last_seq":9,"created_at_ms":1,"updated_at_ms":2}"#;
     let HubNotice::Session(session) = frame::decode::<HubNotice>(older).unwrap() else { panic!() };
     assert_eq!(session.context, None);
 
     // Spelled out, since a hub's stored rows hold this form too.
-    let said = br#"{"notice":"session","id":"s","workspace_id":"w","agent":"claude","model":"opus","permission_mode":"bypassPermissions","effort":"xhigh","status":"idle","last_seq":9,"created_at_ms":1,"updated_at_ms":2,"context":{"used_tokens":5,"max_tokens":10,"model_tokens":20,"max_set_by":"settings","parts":[{"name":"Messages","tokens":5}]}}"#;
+    let said = br#"{"notice":"session","id":"s","workspace_id":"w","agent":"claude","model":"opus","mode":{"unasked":"everything","beyond":"asks"},"effort":"xhigh","status":"idle","last_seq":9,"created_at_ms":1,"updated_at_ms":2,"context":{"used_tokens":5,"max_tokens":10,"model_tokens":20,"max_set_by":"settings","parts":[{"name":"Messages","tokens":5}]}}"#;
     let HubNotice::Session(session) = frame::decode::<HubNotice>(said).unwrap() else { panic!() };
     let context = session.context.unwrap();
     assert_eq!((context.used_tokens, context.max_tokens, context.parts.len()), (5, 10, 1));
@@ -122,4 +122,38 @@ fn a_session_from_a_hub_that_doesnt_keep_how_its_turn_ended_didnt_fail() {
     assert!(!later.turn_failed());
     assert!(serde_json::to_string(&failed).unwrap().contains(r#""reply_outcome":"error""#));
     assert!(!serde_json::to_string(&older).unwrap().contains("reply_outcome"));
+}
+
+/// A chat's record always names its model, its approval mode and its effort, each a field of its own, since it always
+/// runs with them.
+#[test]
+fn a_session_always_names_its_model_mode_and_effort() {
+    let named = session("");
+    assert_eq!((named.model.as_str(), named.effort.clone()), ("opus", protocol::capability::settings::Effort::High));
+    assert_eq!(named.mode, protocol::fixtures::full_access());
+
+    let line = r#"{"notice":"session","id":"s","workspace_id":"w","agent":"claude","model":"opus","mode":{"unasked":"everything","beyond":"asks"},"effort":"high","status":"idle","last_seq":4,"created_at_ms":1,"updated_at_ms":2}"#;
+    for (named, left) in [
+        (r#""model":"opus","#, ""),
+        (r#""mode":{"unasked":"everything","beyond":"asks"},"#, ""),
+        (r#""effort":"high","#, ""),
+        (r#""model":"opus""#, r#""model":null"#),
+        (r#""model":"opus""#, r#""model":"default""#),
+        (r#""mode":{"unasked":"everything","beyond":"asks"}"#, r#""mode":null"#),
+        (r#""mode":{"unasked":"everything","beyond":"asks"}"#, r#""permission_mode":"bypassPermissions""#),
+    ] {
+        let line = line.replace(named, left);
+        assert!(frame::decode::<HubNotice>(line.as_bytes()).is_err(), "{named} to {left:?}");
+    }
+}
+
+/// A mode from a newer build, which its agent went into by itself, still reads, as one this build doesn't know.
+#[test]
+fn a_session_in_a_mode_this_build_doesnt_know_still_reads() {
+    let newer = session("").mode;
+    let line = r#"{"notice":"session","id":"s","workspace_id":"w","agent":"claude","model":"opus","mode":{"unasked":"what_it_learned","beyond":"asks"},"effort":"high","status":"idle","last_seq":4,"created_at_ms":1,"updated_at_ms":2}"#;
+    let HubNotice::Session(session) = frame::decode(line.as_bytes()).unwrap() else { panic!("not a session") };
+
+    assert!(!session.mode.is_known());
+    assert_eq!(session.mode.beyond, newer.beyond);
 }

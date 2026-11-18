@@ -5,7 +5,7 @@ use protocol::capability::{
     settings::{Effort, Settings},
 };
 use protocol::event::{AgentRunState, EventBody, NoticeLevel, TurnOutcome};
-use protocol::model::{AgentSessionId, PermissionMode, Seq};
+use protocol::model::{AgentSessionId, Seq};
 use protocol::prompt::Prompt;
 use serde_json::json;
 
@@ -32,7 +32,7 @@ async fn async_error_on_last_prompt_drops_it_once_ends_turn_with_error_and_keeps
                 ]
             }
         ]),
-        PermissionMode::FullAccess,
+        super::super::claims::full_access(),
         Start::New { conversation: None },
     );
     let agent = h.started().await;
@@ -87,7 +87,7 @@ async fn mid_turn_steer_superseded_ok_completes_once_after_steer_finishes() {
                 ]
             }
         ]),
-        PermissionMode::FullAccess,
+        super::super::claims::full_access(),
         Start::New { conversation: None },
     );
     let agent = h.started().await;
@@ -140,7 +140,7 @@ async fn cancelling_two_untaken_prompts_drops_both_and_marks_neither_taken() {
                 ]
             }
         ]),
-        PermissionMode::FullAccess,
+        super::super::claims::full_access(),
         Start::New { conversation: None },
     );
     let agent = h.started().await;
@@ -189,7 +189,7 @@ async fn mid_turn_steer_error_drops_only_the_steer_and_keeps_original_turn_alive
                 ]
             }
         ]),
-        PermissionMode::FullAccess,
+        super::super::claims::full_access(),
         Start::New { conversation: None },
     );
     let agent = h.started().await;
@@ -254,7 +254,7 @@ async fn stale_config_option_update_from_set_mode_preserves_model_and_effort_cho
                 ]
             }
         ]),
-        PermissionMode::Plan,
+        super::super::claims::plan(),
         Start::New { conversation: None },
     );
     let agent = h.started().await;
@@ -283,7 +283,7 @@ async fn resuming_a_conversation_whose_file_is_gone_falls_back_to_session_new() 
             {"on": "session/resume", "actions": [{"error": failed_to_read("missing-id")}]},
             {"on": "session/new", "actions": [{"result": {"sessionId": "fresh-session", "configOptions": []}}]}
         ]),
-        PermissionMode::FullAccess,
+        super::super::claims::full_access(),
         Start::Resume { conversation: AgentSessionId::from("missing-id") },
     );
     let agent = h.started().await;
@@ -307,7 +307,7 @@ async fn a_conversation_agy_cant_read_but_still_has_is_kept_rather_than_started_
             {"on": "session/resume", "actions": [{"error": failed_to_read("kept-id")}]},
             {"on": "session/new", "actions": [{"result": {"sessionId": "fresh-session", "configOptions": []}}]}
         ]),
-        PermissionMode::FullAccess,
+        super::super::claims::full_access(),
         Start::Resume { conversation: AgentSessionId::from("kept-id") },
         "kept-id",
     );
@@ -326,7 +326,7 @@ async fn a_resume_that_fails_for_another_reason_fails_the_launch_even_with_the_c
             {"on": "session/resume", "actions": [{"error": {"code": -32603, "message": "Model provider unavailable"}}]},
             {"on": "session/new", "actions": [{"result": {"sessionId": "fresh-session", "configOptions": []}}]}
         ]),
-        PermissionMode::FullAccess,
+        super::super::claims::full_access(),
         Start::Resume { conversation: AgentSessionId::from("gone-id") },
     );
 
@@ -339,7 +339,7 @@ async fn a_resume_that_fails_for_another_reason_fails_the_launch_even_with_the_c
 
 #[tokio::test]
 async fn an_interrupt_while_the_turn_is_recorded_as_ended_waits_for_it_rather_than_ending_it_again() {
-    let mut h = Harness::new(&json!([]), PermissionMode::FullAccess, Start::New { conversation: None });
+    let mut h = Harness::new(&json!([]), super::super::claims::full_access(), Start::New { conversation: None });
     let agent = h.started().await;
     // Where the reader leaves a turn whose last prompt has finished, while its end is recorded. Nothing in the adapter
     // can be held there, so the test puts it there.

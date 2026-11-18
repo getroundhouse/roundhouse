@@ -101,7 +101,7 @@ fn picked_up() -> EventBody {
         agent_session_id: None,
         model: None,
         cwd: None,
-        permission_mode: None,
+        mode: None,
         agent_version: None,
     }
 }

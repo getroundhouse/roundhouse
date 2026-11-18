@@ -5,7 +5,7 @@
 
 use agents::claude::{Normalizer, Parsed};
 use protocol::event::{ContentBlock, Denied, EventBody};
-use protocol::model::{PermissionMode, SubagentId};
+use protocol::model::SubagentId;
 use serde_json::Value;
 
 const FIXTURE: &str = include_str!("../../fixtures/claude_full_access.jsonl");
@@ -26,7 +26,7 @@ fn reasons_the_cli_gave() -> Vec<String> {
 fn full_access_still_asks_about_a_removal_it_cant_rule_out_and_says_why_and_which_subagent_asks() {
     let events = events();
     let modes = events.iter().filter_map(|e| match e {
-        EventBody::AgentInit { permission_mode, .. } => Some(*permission_mode),
+        EventBody::AgentInit { mode, .. } => Some(*mode),
         _ => None,
     });
     let started: Vec<SubagentId> = events.iter().filter_map(EventBody::subagent_started).collect();
@@ -39,7 +39,7 @@ fn full_access_still_asks_about_a_removal_it_cant_rule_out_and_says_why_and_whic
         other => panic!("{other:?}"),
     };
 
-    assert_eq!(modes.collect::<Vec<_>>(), [Some(PermissionMode::FullAccess); 2], "each conversation's launch");
+    assert_eq!(modes.collect::<Vec<_>>(), [Some(protocol::fixtures::full_access()); 2], "each conversation's launch");
     let [subagent] = &started[..] else { panic!("{started:?}") };
     let [own, its] = asked[..] else { panic!("{asked:?}") };
     let [own_reason, its_reason] = &reasons_the_cli_gave()[..] else { panic!("each request says why") };

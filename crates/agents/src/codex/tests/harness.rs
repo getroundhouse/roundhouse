@@ -28,14 +28,14 @@ impl Harness {
         let bin = PROGRAM.path();
         std::fs::write(room.path().join("native-script.json"), serde_json::to_vec(rules).unwrap()).unwrap();
         let mut settings = crate::codex::description().defaults;
-        settings.model = protocol::model::ModelName::named("gpt-6-luna");
+        settings.model = Some(protocol::model::ModelName::named("gpt-6-luna"));
         let spec = AgentSpec {
             session_id: "test".into(),
             run: RunId::new(1),
             agent: AgentKind::Codex,
             cwd: room.path().to_string_lossy().into_owned(),
             start: Start::New { conversation: None },
-            settings: settings.for_capabilities(&crate::codex::claims::claims()).unwrap(),
+            settings,
             env: Vec::new(),
             tools_token: None,
             login: None,

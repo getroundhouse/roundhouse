@@ -296,7 +296,7 @@ fn agent_start(session_id: &str, cwd: &Path, tools_token: Option<ToolsToken>) ->
 /// What a Claude chat starts with, as a launch says it.
 fn claude_defaults() -> protocol::capability::settings::Settings {
     let description = agents::claude::description();
-    description.defaults.for_capabilities(description.capabilities.as_ref().unwrap()).unwrap()
+    protocol::capability::settings::Settings { mode: description.default_mode(), ..description.defaults }
 }
 
 /// Sends each request as a call, numbered from 0.

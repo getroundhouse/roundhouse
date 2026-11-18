@@ -1,6 +1,7 @@
 use protocol::attachment::{Attachment, MediaType};
 use protocol::capability::settings::Effort;
-use protocol::model::{AttachmentId, CacheTtl, ContextUsage, ModelName, PermissionMode, PromptCache};
+use protocol::capability::settings::Settings;
+use protocol::model::{AttachmentId, CacheTtl, ContextUsage, ModelName, PromptCache};
 use protocol::prompt::Prompt;
 
 use super::super::tests::{notice, store_with_session};
@@ -13,8 +14,8 @@ fn effort(store: &Store) -> Effort {
 }
 
 /// A change of effort alone.
-fn at(effort: Effort) -> SessionSettingsChange {
-    SessionSettingsChange { effort: Some(effort), ..SessionSettingsChange::default() }
+fn at(effort: Effort) -> Settings {
+    Settings { effort: Some(effort), ..Settings::default() }
 }
 
 #[test]
@@ -23,18 +24,18 @@ fn an_effort_is_kept_until_another_is_set() {
     let store = store_with_session(dir.path());
     assert_eq!(effort(&store), Effort::Xhigh);
 
-    store.set_session_options(&"s".into(), &at(Effort::Medium)).unwrap();
+    store.set_session_settings(&"s".into(), &at(Effort::Medium)).unwrap();
     assert_eq!(effort(&store), Effort::Medium);
 
-    let others = SessionSettingsChange {
+    let others = Settings {
         model: Some(ModelName::named("haiku")),
-        permission_mode: Some(PermissionMode::Plan),
-        effort: None,
+        mode: Some(protocol::fixtures::plan_mode()),
+        ..Settings::default()
     };
-    store.set_session_options(&"s".into(), &others).unwrap();
+    store.set_session_settings(&"s".into(), &others).unwrap();
     assert_eq!(effort(&store), Effort::Medium, "changing the others leaves it");
 
-    store.set_session_options(&"s".into(), &at(Effort::Low)).unwrap();
+    store.set_session_settings(&"s".into(), &at(Effort::Low)).unwrap();
     assert_eq!(effort(&store), Effort::Low);
 }
 
@@ -42,16 +43,29 @@ fn an_effort_is_kept_until_another_is_set() {
 fn a_mode_is_kept_until_another_is_set() {
     let dir = tempfile::tempdir().unwrap();
     let store = store_with_session(dir.path());
-    let mode = || store.get_session(&"s".into()).unwrap().session.permission_mode;
-    assert_eq!(mode(), PermissionMode::FullAccess);
+    let mode = || store.get_session(&"s".into()).unwrap().session.mode;
+    assert_eq!(mode(), protocol::fixtures::full_access());
 
-    for chosen in [PermissionMode::Plan, PermissionMode::FullAccess] {
-        let change = SessionSettingsChange { permission_mode: Some(chosen), ..SessionSettingsChange::default() };
-        store.set_session_options(&"s".into(), &change).unwrap();
+    for chosen in [protocol::fixtures::plan_mode(), protocol::fixtures::full_access()] {
+        let change = Settings { mode: Some(chosen), ..Settings::default() };
+        store.set_session_settings(&"s".into(), &change).unwrap();
         assert_eq!(mode(), chosen);
     }
-    store.set_session_options(&"s".into(), &at(Effort::Low)).unwrap();
-    assert_eq!(mode(), PermissionMode::FullAccess, "changing the others leaves it");
+    store.set_session_settings(&"s".into(), &at(Effort::Low)).unwrap();
+    assert_eq!(mode(), protocol::fixtures::full_access(), "changing the others leaves it");
+}
+
+/// The trigger names the column, as typing the modes left it.
+#[test]
+fn a_new_mode_moves_the_sessions_revision() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = store_with_session(dir.path());
+    let before = store.get_session(&"s".into()).unwrap().session.rev;
+
+    let planning = Settings { mode: Some(protocol::fixtures::plan_mode()), ..Settings::default() };
+    store.set_session_settings(&"s".into(), &planning).unwrap();
+
+    assert!(store.get_session(&"s".into()).unwrap().session.rev > before, "the feed has to announce it");
 }
 
 /// The trigger names the column. Setting options also sets the model, which it names already, so this sets the effort
@@ -80,7 +94,7 @@ fn a_session_from_before_effort_gets_one() {
 
     let session = store.get_session(&"s".into()).unwrap().session;
     assert_eq!((session.model, session.effort), (ModelName::named("opus"), Effort::Xhigh));
-    store.set_session_options(&"s".into(), &at(Effort::High)).unwrap();
+    store.set_session_settings(&"s".into(), &at(Effort::High)).unwrap();
     assert_eq!(effort(&store), Effort::High);
 }
 
@@ -153,7 +167,7 @@ fn how_full_the_context_is_is_kept_until_the_agent_says_otherwise_and_moves_the_
     let after = store.get_session(&"s".into()).unwrap().session;
     assert_eq!(after.context, Some(context(16_000)));
     assert!(after.rev > before.rev, "the feed has to announce it");
-    store.set_session_options(&"s".into(), &at(Effort::High)).unwrap();
+    store.set_session_settings(&"s".into(), &at(Effort::High)).unwrap();
     assert_eq!(
         store.get_session(&"s".into()).unwrap().session.context,
         Some(context(16_000)),

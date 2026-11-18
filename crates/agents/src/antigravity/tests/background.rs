@@ -11,7 +11,7 @@ use protocol::capability::{
     conversation::Start,
 };
 use protocol::event::{ContentBlock, EventBody, TurnOutcome};
-use protocol::model::{AttachmentId, PermissionMode, Seq};
+use protocol::model::{AttachmentId, Seq};
 use protocol::prompt::Prompt;
 use serde_json::{Value, json};
 
@@ -135,7 +135,7 @@ fn survival_script() -> Value {
 
 #[tokio::test]
 async fn background_calls_survive_turn_end_cancel_and_async_error_until_settled_or_process_exits() {
-    let mut h = Harness::new(&survival_script(), PermissionMode::Plan, Start::New { conversation: None });
+    let mut h = Harness::new(&survival_script(), super::super::claims::plan(), Start::New { conversation: None });
     let agent = h.started().await;
 
     agent.send_prompt(Seq::FIRST, &Prompt::new("start bg")).await.unwrap();
@@ -274,7 +274,7 @@ async fn buffered_wakeup_before_user_message_chunk_stays_separate_from_turn_repl
             ]
         }
     ]);
-    let mut h = Harness::new(&script, PermissionMode::Plan, Start::New { conversation: None });
+    let mut h = Harness::new(&script, super::super::claims::plan(), Start::New { conversation: None });
     let agent = h.started().await;
     agent.send_prompt(Seq::FIRST, &Prompt::new("turn 1")).await.unwrap();
     let _ = collect_until_end(&mut h).await;
@@ -326,7 +326,7 @@ async fn buffered_wakeup_before_approved_plan_continuation_flushes_and_clears_re
             ]
         }
     ]);
-    let mut h = Harness::new(&script, PermissionMode::Plan, Start::New { conversation: None });
+    let mut h = Harness::new(&script, super::super::claims::plan(), Start::New { conversation: None });
     let agent = h.started().await;
     agent.send_prompt(Seq::FIRST, &Prompt::new("plan")).await.unwrap();
     let plan_id = wait_for_approval(&mut h).await;
@@ -363,7 +363,7 @@ async fn multi_block_prompt_with_mid_turn_steer_takes_each_prompt_on_its_own_fir
             ]
         }
     ]);
-    let mut h = Harness::new(&script, PermissionMode::FullAccess, Start::New { conversation: None });
+    let mut h = Harness::new(&script, super::super::claims::full_access(), Start::New { conversation: None });
     let agent = h.started().await;
 
     let note_path = h.room.path().join("note.txt");

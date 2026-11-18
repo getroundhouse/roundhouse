@@ -6,8 +6,6 @@ use std::fmt;
 use std::future::Future;
 use std::pin::Pin;
 
-use protocol::model::PermissionMode;
-
 use super::driver::Driver;
 use super::trial::Trial;
 
@@ -62,8 +60,30 @@ pub struct Scenario {
     /// Names its fixtures, so it's a file name.
     pub name: &'static str,
     pub against: &'static [Against],
-    /// The chat's approval mode, which each process is launched in.
-    pub mode: PermissionMode,
+    /// Whether the chat is in plan mode, so each process is launched in its kind's, rather than in the mode a chat
+    /// starts in.
+    pub plans: bool,
     pub steps: Steps,
     pub checks: &'static [Check],
+}
+
+impl Scenario {
+    /// What a process of the kind `kind` describes is launched with for it, as the hub launches a chat: `model` at
+    /// `effort`, in the kind's plan mode if the chat plans, and otherwise in the mode a chat starts in.
+    pub fn settings(
+        &self,
+        kind: &protocol::model::AgentDescription,
+        model: protocol::model::ModelName,
+        effort: protocol::capability::settings::Effort,
+    ) -> Result<protocol::capability::settings::Settings, Failed> {
+        let mode = if self.plans { kind.plan_mode() } else { kind.default_mode() };
+        let mode = mode.ok_or_else(|| Failed(format!("{:?} offers no mode for {}", kind.kind, self.name)))?;
+        let settings = protocol::capability::settings::Settings {
+            model: Some(model),
+            mode: Some(mode),
+            effort: Some(effort),
+            ..Default::default()
+        };
+        Ok(settings)
+    }
 }

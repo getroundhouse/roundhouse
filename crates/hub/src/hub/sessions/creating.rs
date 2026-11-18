@@ -1,12 +1,11 @@
 //! Making a chat: what it runs with, as its agent offers where it runs, and its record.
 
 use super::super::{Hub, new_id};
+use crate::session::ChatSettings;
 use crate::store::{Made, StoredSession, now_ms};
+use protocol::capability::settings::Settings;
 use protocol::client::{ApiError, HubNotice};
-use protocol::model::{
-    AgentKind, ClientRequestId, Draft, Rev, Seq, Session, SessionSettings, SessionSettingsChange, SessionStatus,
-    TitleSource, WorkspaceId,
-};
+use protocol::model::{AgentKind, ClientRequestId, Draft, Rev, Seq, Session, SessionStatus, TitleSource, WorkspaceId};
 use std::sync::Arc;
 
 impl Hub {
@@ -14,13 +13,13 @@ impl Hub {
         self: &Arc<Self>,
         workspace_id: WorkspaceId,
         agent: AgentKind,
-        options: SessionSettingsChange,
+        chosen: Settings,
         client_request_id: Option<ClientRequestId>,
     ) -> Result<Session, ApiError> {
         if let Some(made) = self.made_earlier::<StoredSession>(client_request_id.as_ref()).await? {
             return Ok(made.session);
         }
-        let settings = self.initial_settings(agent, workspace_id.clone(), options).await?;
+        let settings = self.initial_settings(agent, workspace_id.clone(), chosen).await?;
         self.insert_session(workspace_id, agent, settings, client_request_id).await
     }
 
@@ -29,13 +28,13 @@ impl Hub {
         self: &Arc<Self>,
         workspace_id: WorkspaceId,
         agent: AgentKind,
-        settings: SessionSettings,
+        settings: ChatSettings,
         client_request_id: Option<ClientRequestId>,
     ) -> Result<Session, ApiError> {
         self.ready_workspace(&workspace_id).await?;
         let id = new_id();
         let now = now_ms();
-        let SessionSettings { model, permission_mode, effort } = settings;
+        let ChatSettings { model, mode, effort } = settings;
         let stored = StoredSession {
             session: Session {
                 account: None,
@@ -46,7 +45,7 @@ impl Hub {
                 workspace_id,
                 agent,
                 model,
-                permission_mode,
+                mode,
                 effort,
                 status: SessionStatus::Idle,
                 last_seq: Seq::default(),
@@ -117,7 +116,7 @@ impl Hub {
         }
         let agent = self.first_chats.lock().get(&workspace_id).copied().unwrap_or(agent);
         // Before the lock, which every workspace's first chat takes, since the agent may be asked what it offers.
-        let settings = self.initial_settings(agent, workspace_id.clone(), SessionSettingsChange::default()).await?;
+        let settings = self.initial_settings(agent, workspace_id.clone(), Settings::default()).await?;
         let _one_at_a_time = self.ensuring_session.lock().await;
         if let Some(open) = open(self.session_list(workspace_id.clone()).await?) {
             return Ok(open);

@@ -6,10 +6,11 @@
 
 use std::sync::atomic::Ordering;
 
+use protocol::capability::settings::Settings;
 use protocol::client::{ErrorCode, HubNotice};
 use protocol::event::{AgentRunState, EventBody, TurnOutcome};
 use protocol::fixtures::turn_ended;
-use protocol::model::{AgentKind, RecordKey, Seq, Session, SessionId, SessionSettingsChange, SessionStatus};
+use protocol::model::{AgentKind, RecordKey, Seq, Session, SessionId, SessionStatus};
 use protocol::prompt::Prompt;
 use tokio::sync::broadcast;
 
@@ -154,7 +155,7 @@ async fn closing_a_chat_nothing_was_sent_in_deletes_it() {
     let (hub, asked) = hub_with_stand_in_workers(dir.path());
     let (workspace, used) = a_chat(&hub).await;
     a_turn(&hub, &asked, &used.id, Prompt::new("keep me"), None).await;
-    let unchanged = SessionSettingsChange::default();
+    let unchanged = Settings::default();
     let unused = hub.session_create(workspace.id.clone(), AgentKind::Claude, unchanged, None).await.unwrap();
     let mut feed = hub.subscribe_feed();
 

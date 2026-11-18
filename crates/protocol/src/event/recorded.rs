@@ -1,9 +1,9 @@
 use super::{compaction, content, ending, failure, task, tokens};
 use crate::attachment::Attachment;
-use crate::capability::approvals::{Decision, Request};
+use crate::capability::approvals::{ApprovalMode, Decision, Request};
 use crate::model::{
-    AgentSessionId, ApprovalId, ClientMessageId, MessageId, ModelName, PermissionMode, Place, RunId, Seq, SessionId,
-    SubagentId, TaskId, ToolUseId, UsageLimit,
+    AgentSessionId, ApprovalId, ClientMessageId, MessageId, ModelName, Place, RunId, Seq, SessionId, SubagentId,
+    TaskId, ToolUseId, UsageLimit,
 };
 use crate::prompt::Prompt;
 use compaction::CompactionOutcome;
@@ -88,7 +88,9 @@ pub enum EventBody {
         /// would fail every read that reached this event. Where a model is kept as one, one that names none is dropped.
         model: Option<String>,
         cwd: Option<String>,
-        permission_mode: Option<PermissionMode>,
+        /// The approval mode it starts in, as it says.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        mode: Option<ApprovalMode>,
         agent_version: Option<String>,
     },
     AgentState {
@@ -288,7 +290,7 @@ pub enum EventBody {
     /// The agent's approval mode changed, whoever changed it. It changes by itself too: approving a plan leaves plan
     /// mode. The hub records one when the mode is changed with no agent running, for the next agent to start in.
     AgentMode {
-        permission_mode: PermissionMode,
+        mode: ApprovalMode,
     },
     /// An agent event with no normalized form. The stored raw line has the details.
     AgentOther {

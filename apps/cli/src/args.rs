@@ -5,7 +5,9 @@ use std::path::PathBuf;
 use clap::builder::{PossibleValuesParser, TypedValueParser};
 use clap::{Parser, Subcommand};
 use protocol::capability::settings::Effort;
-use protocol::model::{AgentKind, ApprovalId, ClientMessageId, ModelName, PermissionMode, Seq};
+use protocol::model::{AgentKind, ApprovalId, ClientMessageId, ModelName, Seq};
+
+use crate::modes::ModeName;
 
 #[derive(Parser)]
 #[command(name = "roundhouse", version = crate::BUILD.version(), about = "Run coding agents in parallel, each in its own worktree")]
@@ -165,7 +167,7 @@ pub(crate) enum SessionCmd {
         model: Option<ModelName>,
         /// plan, or bypassPermissions for full access, which is what leaving it out gives.
         #[arg(long, value_parser = mode())]
-        permission_mode: Option<PermissionMode>,
+        permission_mode: Option<ModeName>,
         /// How hard the agent thinks. Leave it out for what the agent starts a chat with.
         #[arg(long, value_parser = effort())]
         effort: Option<Effort>,
@@ -180,7 +182,7 @@ pub(crate) enum SessionCmd {
         model: Option<ModelName>,
         /// plan, or bypassPermissions for full access.
         #[arg(long, value_parser = mode())]
-        permission_mode: Option<PermissionMode>,
+        permission_mode: Option<ModeName>,
         #[arg(long, value_parser = effort())]
         effort: Option<Effort>,
     },
@@ -208,10 +210,11 @@ fn model() -> impl TypedValueParser<Value = ModelName> {
     clap::builder::StringValueParser::new().try_map(ModelName::try_from)
 }
 
-/// Takes the name of either mode a chat can have, and lists both in the help and in the error for another name.
-fn mode() -> impl TypedValueParser<Value = PermissionMode> {
-    PossibleValuesParser::new(PermissionMode::CHOSEN.into_iter().filter_map(PermissionMode::as_str))
-        .try_map(|name| PermissionMode::parse(&name).ok_or("not a mode a chat can have"))
+/// Takes the name of either mode a chat can be given here, and lists both in the help and in the error for another
+/// name.
+fn mode() -> impl TypedValueParser<Value = ModeName> {
+    PossibleValuesParser::new(ModeName::ALL.map(ModeName::as_str))
+        .try_map(|name| ModeName::parse(&name).ok_or("not a mode a chat can be given"))
 }
 
 /// Takes a CLI effort ID, including a level added since this build.

@@ -9,7 +9,7 @@ use protocol::capability::calls::Call;
 use protocol::capability::calls::call::Command;
 use protocol::event::{AgentRunState, AgentTask, EventBody, TaskKind, TurnOutcome};
 use protocol::fixtures::{self, ApprovalRequest, approval_request};
-use protocol::model::{MessageId, PermissionMode, Seq, TaskId, ToolUseId};
+use protocol::model::{MessageId, Seq, TaskId, ToolUseId};
 use protocol::prompt::Prompt;
 use protocol::tail::{BlockKind, Tail, TailBlock, TailMessage};
 use serde_json::json;
@@ -174,8 +174,8 @@ fn writing(message: &str, kind: BlockKind, text: &str) -> Tail {
 pub(crate) fn approval() -> Vec<EventBody> {
     let mut events = looked_around();
     for event in &mut events {
-        if let EventBody::AgentInit { permission_mode, .. } = event {
-            *permission_mode = Some(PermissionMode::Plan);
+        if let EventBody::AgentInit { mode, .. } = event {
+            *mode = Some(protocol::fixtures::plan_mode());
         }
     }
     events
@@ -291,7 +291,7 @@ pub(crate) fn looked_around() -> Vec<EventBody> {
             agent_session_id: None,
             model: Some("claude-opus".to_string()),
             cwd: Some("/workspaces/aspen".to_string()),
-            permission_mode: Some(protocol::model::PermissionMode::FullAccess),
+            mode: Some(protocol::fixtures::full_access()),
             agent_version: None,
         },
         text("msg-1", "I'll start with how the sidebar gets its records."),

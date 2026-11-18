@@ -1,14 +1,13 @@
 //! Which list of models applies where a chat would launch, and the description of its agent there.
 
-use protocol::capability::settings::ModelCatalog;
+use protocol::capability::settings::{ModelCatalog, Settings};
 use protocol::client::{ApiError, ErrorCode, admin};
-use protocol::model::{
-    AgentDescription, AgentKind, ModelList, ModelListKey, SessionSettings, SessionSettingsChange, WorkspaceId,
-};
+use protocol::model::{AgentDescription, AgentKind, ModelList, ModelListKey, WorkspaceId};
 use std::sync::Arc;
 
 use super::super::Hub;
 use super::model_lists::Lookup;
+use crate::session::ChatSettings;
 use crate::store::SessionLogin;
 
 impl Hub {
@@ -22,23 +21,22 @@ impl Hub {
         self.ensure_model_list(lookup, asked.again).await
     }
 
-    /// What a new chat in `workspace` runs with: its agent's defaults there, changed by `options`, once its agent is
-    /// offered them.
+    /// What a new chat in `workspace` runs with: its agent's defaults there, in the mode its claims give first, changed
+    /// by `chosen`, once its agent is offered them.
     pub(crate) async fn initial_settings(
         self: &Arc<Self>,
         agent: AgentKind,
         workspace: WorkspaceId,
-        options: SessionSettingsChange,
-    ) -> Result<SessionSettings, ApiError> {
+        chosen: Settings,
+    ) -> Result<ChatSettings, ApiError> {
+        ChatSettings::keeps(&chosen)?;
         let description = self.agent_for(agent, admin::ModelTarget::Workspace(workspace)).await?;
-        let mut defaults = description.defaults.clone();
-        if let Some(model) = &options.model {
-            defaults.effort = description.effort_for_choice(model, None);
+        let mut defaults = Settings { mode: description.default_mode(), ..description.defaults.clone() };
+        if let Some(model) = &chosen.model {
+            defaults.effort = Some(description.effort_for_choice(model, None));
         }
-        let settings = defaults.changed(options);
-        description
-            .takes(&settings.clone().into())
-            .map_err(|e| ApiError::new(ErrorCode::InvalidRequest, e.to_string()))?;
+        let settings = ChatSettings::named(defaults)?.changed(&chosen);
+        description.takes(&settings.settings()).map_err(|e| ApiError::new(ErrorCode::InvalidRequest, e.to_string()))?;
         Ok(settings)
     }
 

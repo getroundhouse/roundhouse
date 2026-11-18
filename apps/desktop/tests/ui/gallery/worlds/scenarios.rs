@@ -7,8 +7,8 @@ use client_core::fake_hub::{HOUR_MS, HubBuild, NOW_MS, World};
 use protocol::attachment::{Attachment, MediaType};
 use protocol::model::{
     AttachmentId, Checks, CommentId, CommitId, ContextPart, ContextPartKind, ContextUsage, DiffComment, DiffSide,
-    FileContents, GitDiff, LimitWindow, MaxSetBy, MergeState, ModelLabel, PermissionMode, PullRequest, Rev,
-    SessionStatus, SetupStatus, Title, UsageLimit, WorkspaceId, WorkspaceStatus,
+    FileContents, GitDiff, LimitWindow, MaxSetBy, MergeState, ModelLabel, PullRequest, Rev, SessionStatus, SetupStatus,
+    Title, UsageLimit, WorkspaceId, WorkspaceStatus,
 };
 
 /// The conversation, on an older hub that a client started, with chats still running on it.
@@ -145,7 +145,7 @@ pub(in super::super) fn planning() -> World {
 pub(in super::super) fn in_plan_mode(mut world: World) -> World {
     let focus = world.workspaces.iter().find(|w| w.name == FOCUS).unwrap().id.clone();
     let chat = world.sessions.iter_mut().find(|s| s.workspace_id == focus).unwrap();
-    chat.permission_mode = PermissionMode::Plan;
+    chat.mode = protocol::fixtures::plan_mode();
     world
 }
 

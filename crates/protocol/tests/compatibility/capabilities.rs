@@ -33,6 +33,22 @@ fn legacy_initialization_has_no_claims_and_new_claims_survive_the_log_shape() {
     assert_eq!(serde_json::from_value::<EventBody>(serde_json::to_value(&new).unwrap()).unwrap(), new);
 }
 
+/// The mode an agent reports it starts in, and each it goes into, which the log keeps for good.
+#[test]
+fn the_mode_an_agent_reports_keeps_its_form() {
+    let init = json!({"type":"agent_init","agent_session_id":"a","model":"opus","cwd":"/w",
+        "mode":{"unasked":"reads","beyond":"asks","plan":true},"agent_version":"2.1"});
+    let read: EventBody = serde_json::from_value(init.clone()).unwrap();
+    let EventBody::AgentInit { mode: Some(mode), .. } = read else { panic!("{read:?}") };
+    assert_eq!(mode, protocol::fixtures::plan_mode());
+    assert_eq!(serde_json::to_value(&read).unwrap(), init);
+
+    let changed = json!({"type":"agent_mode","mode":{"unasked":"everything","beyond":"asks"}});
+    let read: EventBody = serde_json::from_value(changed.clone()).unwrap();
+    assert_eq!(read, EventBody::AgentMode { mode: protocol::fixtures::full_access() });
+    assert_eq!(serde_json::to_value(&read).unwrap(), changed);
+}
+
 #[test]
 fn a_control_has_a_new_envelope_and_keeps_its_capability_requirements() {
     let request = WorkerRequest::AgentControl(AgentControl { session_id: "s".into(), control: Control::Cancel });

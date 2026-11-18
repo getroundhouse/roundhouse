@@ -39,19 +39,20 @@ fn what_a_worker_sends_again_is_taken_in_once() {
 
 #[test]
 fn the_hub_allows_only_a_tools_use_asked_about_with_full_access_and_only_when_set_to() {
+    use protocol::capability::approvals::ApprovalMode;
     use protocol::capability::approvals::{Asks, Request};
     use protocol::fixtures::{asking, plan, to_run};
-    use protocol::model::PermissionMode::{FullAccess, Plan, Unknown};
+    use protocol::fixtures::{full_access, plan_mode};
 
     let asked = |asks: Asks, always: bool| Request { asks, suggested: Vec::new(), always, why: None };
     for always in [true, false] {
-        assert!(the_hub_allows(FullAccess, &asked(to_run("ls"), always), true), "a call, asked always or not");
+        assert!(the_hub_allows(full_access(), &asked(to_run("ls"), always), true), "a call, asked always or not");
     }
-    assert!(!the_hub_allows(FullAccess, &asked(to_run("ls"), true), false), "only when set to");
-    for mode in [Plan, Unknown] {
+    assert!(!the_hub_allows(full_access(), &asked(to_run("ls"), true), false), "only when set to");
+    for mode in [plan_mode(), ApprovalMode::UNKNOWN] {
         assert!(!the_hub_allows(mode, &asked(to_run("ls"), true), true), "{mode:?} asks the person");
     }
     for asks in [asking(Vec::new()), plan("Do it"), Asks::Unknown] {
-        assert!(!the_hub_allows(FullAccess, &asked(asks.clone(), true), true), "{asks:?} is the person's to answer");
+        assert!(!the_hub_allows(full_access(), &asked(asks.clone(), true), true), "{asks:?} is the person's to answer");
     }
 }

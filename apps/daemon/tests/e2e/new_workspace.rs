@@ -8,7 +8,7 @@ use client_core::{Client, FileToSend};
 use protocol::attachment::{Attachment, MediaType};
 use protocol::capability::settings::Effort;
 use protocol::event::EventBody;
-use protocol::model::{ModelName, NewWorkspaceDraftToKeep, PermissionMode, SessionId};
+use protocol::model::{ModelName, NewWorkspaceDraftToKeep, SessionId};
 use protocol::prompt::Prompt;
 
 use crate::support::{Stack, read_all, wait_until};
@@ -25,7 +25,7 @@ fn kept_in_the_dialog(stack: &Stack, client: &Client) -> NewWorkspaceDraftToKeep
         files: vec![notes.attachment.id],
         model: Some(ModelName::named("sonnet")),
         effort: Some(Effort::Low),
-        plan: true,
+        mode: Some(protocol::fixtures::plan_mode()),
     };
     client.new_workspace_draft_keep(&draft).unwrap();
     draft
@@ -53,8 +53,8 @@ fn a_workspace_made_from_the_dialog_has_what_it_said_and_the_dialog_is_emptied()
     let session = &made.session;
     assert_eq!(session.workspace_id, made.workspace.id);
     assert_eq!(
-        (&session.model, session.effort.clone(), session.permission_mode),
-        (&ModelName::named("sonnet"), Effort::Low, PermissionMode::Plan)
+        (&session.model, session.effort.clone(), session.mode),
+        (&ModelName::named("sonnet"), Effort::Low, protocol::fixtures::plan_mode())
     );
     wait_until("the prompt", || !prompts(&client, &session.id).is_empty());
     let [Prompt { text, files }] = prompts(&client, &session.id).try_into().unwrap();
@@ -64,7 +64,7 @@ fn a_workspace_made_from_the_dialog_has_what_it_said_and_the_dialog_is_emptied()
         [(&made_of.files[0], "notes.txt")]
     );
     let kept = client.records_list().unwrap().new_workspace_draft.unwrap();
-    assert_eq!((kept.text.as_str(), kept.files.as_slice(), kept.plan), ("", [].as_slice(), false));
+    assert_eq!((kept.text.as_str(), kept.files.as_slice(), kept.mode), ("", [].as_slice(), None));
     assert_eq!(
         (kept.repo_id, kept.model, kept.effort),
         (made_of.repo_id, made_of.model, made_of.effort),

@@ -10,9 +10,7 @@ use protocol::capability::calls::output::Ended;
 use protocol::capability::calls::{Call, CallOutput};
 use protocol::event::{ContentBlock, EventBody, SessionEvent};
 use protocol::fixtures::{approval_request, cancelled, decided, deny, question as asked_as};
-use protocol::model::{
-    Lately, LatelyCall, LatelyResult, OpenApproval, PermissionMode, Place, Seq, Subagent, SubagentStatus,
-};
+use protocol::model::{Lately, LatelyCall, LatelyResult, OpenApproval, Place, Seq, Subagent, SubagentStatus};
 
 use super::{Answer, Around, Closes, Reply, Settled, block_key, retry_at};
 use crate::fixtures::{
@@ -294,15 +292,15 @@ fn a_call_the_log_says_was_dropped_has_no_result_unless_one_came_after_all() {
 
 #[test]
 fn a_change_of_mode_knows_the_mode_it_changed_from() {
-    let changed_to = |mode| EventBody::AgentMode { permission_mode: mode };
+    let changed_to = |mode| EventBody::AgentMode { mode };
     let log = log([
-        event(Seq::new(1), changed_to(PermissionMode::Plan)),
-        event(Seq::new(2), changed_to(PermissionMode::FullAccess)),
+        event(Seq::new(1), changed_to(protocol::fixtures::plan_mode())),
+        event(Seq::new(2), changed_to(protocol::fixtures::full_access())),
     ]);
 
-    let around = Around::read(&log, &Model::default(), Seq::new(2), &changed_to(PermissionMode::FullAccess));
+    let around = Around::read(&log, &Model::default(), Seq::new(2), &changed_to(protocol::fixtures::full_access()));
 
-    assert_eq!(around.mode_before, Some(PermissionMode::Plan));
+    assert_eq!(around.mode_before, Some(protocol::fixtures::plan_mode()));
 }
 
 #[test]

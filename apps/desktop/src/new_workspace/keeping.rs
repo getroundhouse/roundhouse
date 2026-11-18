@@ -7,7 +7,7 @@ use std::collections::HashSet;
 use client_core::{CameBack, Client, DraftChange, DraftKey, Drafts, FilesFor, KeptDraft, ReadBack};
 use gpui_kit::{App, Context, Window};
 use protocol::attachment::Attachment;
-use protocol::model::{AttachmentId, NewWorkspaceDraft, NewWorkspaceDraftToKeep, PermissionMode};
+use protocol::model::{AttachmentId, NewWorkspaceDraft, NewWorkspaceDraftToKeep};
 use protocol::prompt::says_or_carries;
 
 use super::{DialogEvent, NewWorkspaceDialog};
@@ -72,7 +72,7 @@ impl NewWorkspaceDialog {
             files: coming_back.chain(self.attached.ids()).collect(),
             model: self.model.clone(),
             effort: self.effort.clone(),
-            plan: self.planning(),
+            mode: self.mode,
         }
     }
 
@@ -89,7 +89,7 @@ impl NewWorkspaceDialog {
             && repo.is_none_or(|repo| *repo == self.repo)
             && kept.model.as_ref().is_none_or(|model| Some(model) == self.model.as_ref())
             && kept.effort.clone().is_none_or(|effort| Some(effort) == self.effort)
-            && kept.plan == self.planning()
+            && here.mode == kept.mode
     }
 
     fn offers(&self, repo: &protocol::model::RepoId) -> bool {
@@ -126,7 +126,7 @@ impl NewWorkspaceDialog {
         if let Some(effort) = kept.effort {
             self.effort = Some(effort);
         }
-        self.mode = if kept.plan { PermissionMode::Plan } else { PermissionMode::FullAccess };
+        self.plan(kept.mode.is_some_and(|mode| mode.plan));
         // A file it stopped naming is let go of by whoever took it out.
         let named: HashSet<AttachmentId> = kept.files.iter().map(|file| file.id.clone()).collect();
         self.attached.retain(|file| named.contains(file));

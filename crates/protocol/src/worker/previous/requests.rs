@@ -4,8 +4,10 @@ use serde::Serialize;
 
 use super::launch_identity;
 use crate::attachment::AttachmentFile;
+use crate::capability::approvals::ApprovalMode;
 use crate::capability::conversation::Start;
-use crate::model::{AgentKind, AgentLogin, RunId, Seq, SessionId, SessionSettings, SessionSettingsChange};
+use crate::capability::settings::{Effort, Settings};
+use crate::model::{AgentKind, AgentLogin, ModelName, RunId, Seq, SessionId};
 use crate::prompt::Prompt;
 use crate::worker::{TitleFor, ToolsToken};
 
@@ -48,7 +50,7 @@ pub struct AgentStart {
     #[serde(flatten, with = "launch_identity")]
     pub start: Start,
     #[serde(flatten)]
-    pub settings: SessionSettings,
+    pub settings: Kept,
     pub env: Vec<(String, String)>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tools_token: Option<ToolsToken>,
@@ -59,7 +61,7 @@ pub struct AgentStart {
 impl AgentStart {
     /// `spec` as protocol 3 has it, with the chat's settings as the hub keeps them, `settings`, in place of those it
     /// names.
-    pub fn of(spec: crate::worker::AgentSpec, settings: SessionSettings) -> Self {
+    pub fn of(spec: crate::worker::AgentSpec, settings: Kept) -> Self {
         let crate::worker::AgentSpec { session_id, run, agent, cwd, start, settings: _, env, tools_token, login } =
             spec;
         Self { session_id, run, agent, cwd, start, settings, env, tools_token, login }
@@ -101,5 +103,49 @@ pub struct AgentCompact {
 pub struct AgentConfigure {
     pub session_id: SessionId,
     #[serde(flatten)]
-    pub options: SessionSettingsChange,
+    pub options: Change,
+}
+
+/// What a chat runs with, as protocol 3 has it.
+#[derive(Serialize, Clone, Debug, PartialEq, Eq)]
+pub struct Kept {
+    pub model: ModelName,
+    #[serde(serialize_with = "named")]
+    pub permission_mode: ApprovalMode,
+    pub effort: Effort,
+}
+
+/// Settings to change, as protocol 3 has them, each a field of its own, left out where it's `None`.
+#[derive(Serialize, Clone, Debug, Default, PartialEq, Eq)]
+pub struct Change {
+    pub model: Option<ModelName>,
+    #[serde(serialize_with = "maybe_named")]
+    pub permission_mode: Option<ApprovalMode>,
+    pub effort: Option<Effort>,
+}
+
+impl Change {
+    /// What `settings` change, of those protocol 3 has. It has no others.
+    pub fn of(settings: &Settings) -> Self {
+        Change { model: settings.model.clone(), permission_mode: settings.mode, effort: settings.effort.clone() }
+    }
+}
+
+/// `mode` by the name protocol 3 has for it: `plan`, or `bypassPermissions` for full access, the only other mode a chat
+/// could be given then.
+#[expect(clippy::trivially_copy_pass_by_ref, reason = "serde's `serialize_with` gives what it saves by reference")]
+fn named<S: serde::Serializer>(mode: &ApprovalMode, serializer: S) -> Result<S::Ok, S::Error> {
+    serializer.serialize_str(if mode.plan { "plan" } else { "bypassPermissions" })
+}
+
+#[expect(
+    clippy::trivially_copy_pass_by_ref,
+    clippy::ref_option,
+    reason = "serde's `serialize_with` gives what it saves by reference"
+)]
+fn maybe_named<S: serde::Serializer>(mode: &Option<ApprovalMode>, serializer: S) -> Result<S::Ok, S::Error> {
+    match mode {
+        Some(mode) => named(mode, serializer),
+        None => serializer.serialize_none(),
+    }
 }

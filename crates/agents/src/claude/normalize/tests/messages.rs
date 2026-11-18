@@ -1,6 +1,7 @@
 use super::super::*;
+use protocol::capability::approvals::ApprovalMode;
 use protocol::event::{ContentBlock, TurnOutcome};
-use protocol::model::{PermissionMode, SubagentId};
+use protocol::model::SubagentId;
 use serde_json::json;
 
 #[test]
@@ -128,9 +129,9 @@ fn what_the_cli_shows_of_git_and_github_is_left_out() {
 #[test]
 fn a_mode_change_is_reported_as_a_mode_a_chat_can_have_or_as_unknown() {
     let line = r#"{"type":"system","subtype":"status","status":null,"permissionMode":"plan"}"#;
-    assert_eq!(parse_line(line), Parsed::Event(EventBody::AgentMode { permission_mode: PermissionMode::Plan }));
+    assert_eq!(parse_line(line), Parsed::Event(EventBody::AgentMode { mode: protocol::fixtures::plan_mode() }));
     let line = r#"{"type":"system","subtype":"status","status":null,"permissionMode":"default"}"#;
-    assert_eq!(parse_line(line), Parsed::Event(EventBody::AgentMode { permission_mode: PermissionMode::Unknown }));
+    assert_eq!(parse_line(line), Parsed::Event(EventBody::AgentMode { mode: ApprovalMode::UNKNOWN }));
 }
 
 #[test]

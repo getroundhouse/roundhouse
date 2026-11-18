@@ -18,7 +18,7 @@ async fn initialized(live: &Arc<LiveSession>, run: RunId, conversation: &str, cl
         agent_session_id: Some(conversation.into()),
         model: None,
         cwd: None,
-        permission_mode: None,
+        mode: None,
         agent_version: None,
     };
     live.send_item(Item::Event { run, body: Box::new(body), raw: None, attachments: Vec::new(), seq: None }).await;

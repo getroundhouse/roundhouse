@@ -261,7 +261,7 @@ impl fmt::Display for Report {
 mod tests {
     use protocol::capability::Capabilities;
     use protocol::event::EventBody;
-    use protocol::model::{PermissionMode, RunId, Seq};
+    use protocol::model::{RunId, Seq};
     use protocol::prompt::Prompt;
 
     use super::Trial;
@@ -280,7 +280,7 @@ mod tests {
         for _ in 0..taken {
             record(run, EventBody::PromptTaken { prompt: Seq::new(2) });
         }
-        record(run, EventBody::AgentMode { permission_mode: PermissionMode::Plan });
+        record(run, EventBody::AgentMode { mode: protocol::fixtures::plan_mode() });
         let claims = if claims_modes {
             crate::codex::description().capabilities.unwrap_or_default()
         } else {

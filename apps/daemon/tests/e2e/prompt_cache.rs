@@ -5,8 +5,9 @@
 
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use protocol::capability::settings::Settings;
 use protocol::event::EventBody;
-use protocol::model::{CacheTtl, ModelName, PromptCache, SessionSettingsChange};
+use protocol::model::{CacheTtl, ModelName, PromptCache};
 
 use crate::support::{Stack, wait_for_turn_end};
 
@@ -82,7 +83,7 @@ fn choosing_another_model_leaves_nothing_cached_and_choosing_the_same_leaves_the
     let (_, session) = stack.workspace(&client);
     client.session_prompt(&session.id, "say:hello", None).unwrap();
     wait_for_turn_end(&client, &session.id, 1);
-    let model = |model| SessionSettingsChange { model: Some(model), ..SessionSettingsChange::default() };
+    let model = |model| Settings { model: Some(model), ..Settings::default() };
 
     let same = client.session_configure(&session.id, model(session.model.clone())).unwrap();
     assert!(same.prompt_cache.is_some());

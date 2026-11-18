@@ -1,8 +1,9 @@
+use protocol::capability::settings::Settings;
 use protocol::event::{EventBody, NoticeLevel};
 use protocol::fixtures::approval_request;
 use protocol::model::{
-    ApprovalId, ClientRequestId, DiffComment, DraftToKeep, ModelName, Rev, SessionId, SessionSettingsChange,
-    SessionStatus, SetupStatus, Title, Workspace,
+    ApprovalId, ClientRequestId, DiffComment, DraftToKeep, ModelName, Rev, SessionId, SessionStatus, SetupStatus,
+    Title, Workspace,
 };
 
 use super::*;
@@ -142,8 +143,8 @@ fn data_survives_reopening_and_migrations_do_not_rerun() {
     let s = SessionId::from("s");
     store.append(&s, None, &notice("kept"), None, None, None).unwrap();
     store.set_draft(&s, &DraftToKeep::new("half a thought")).unwrap();
-    let options = SessionSettingsChange { model: Some(ModelName::named("haiku")), ..SessionSettingsChange::default() };
-    store.set_session_options(&s, &options).unwrap();
+    let options = Settings { model: Some(ModelName::named("haiku")), ..Settings::default() };
+    store.set_session_settings(&s, &options).unwrap();
     let before = store.list_records().unwrap();
     drop(store);
 
@@ -217,8 +218,8 @@ fn every_change_to_a_record_gives_it_a_newer_revision() {
     newer(status_changed, "a change of status");
     store.append(&"s".into(), None, &notice("y"), None, None, None).unwrap();
     assert_eq!(session(&store), status_changed, "an event alone isn't announced, so it leaves the revision");
-    let model = SessionSettingsChange { model: Some(ModelName::named("model")), ..SessionSettingsChange::default() };
-    store.set_session_options(&"s".into(), &model).unwrap();
+    let model = Settings { model: Some(ModelName::named("model")), ..Settings::default() };
+    store.set_session_settings(&"s".into(), &model).unwrap();
     newer(session(&store), "a model");
     let title = Title::typed("title").unwrap();
     store.retitle_session(&"s".into(), &title, Retitle::FirstLine).unwrap();

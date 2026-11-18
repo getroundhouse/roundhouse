@@ -9,8 +9,6 @@ use client_core::{Client, FileToSend};
 #[cfg(test)]
 use protocol::client::new_workspace::{NewWorkspaceMade, UnsentPrompt};
 #[cfg(test)]
-use protocol::model::PermissionMode;
-#[cfg(test)]
 use protocol::prompt::Prompt;
 
 #[cfg(test)]

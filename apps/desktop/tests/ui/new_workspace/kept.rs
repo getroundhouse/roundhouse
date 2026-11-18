@@ -6,7 +6,8 @@ use gpui_kit::{AppContext as _, ClipboardEntry, ClipboardItem, ExternalPaths, Te
 use protocol::attachment::MediaType;
 use protocol::capability::settings::Effort;
 use protocol::event::EventBody;
-use protocol::model::{ModelName, NewWorkspaceDraft, NewWorkspaceDraftToKeep, PermissionMode};
+use protocol::fixtures::plan_mode;
+use protocol::model::{ModelName, NewWorkspaceDraft, NewWorkspaceDraftToKeep};
 use protocol::prompt::Prompt;
 
 use super::open_with_a_repo;
@@ -47,7 +48,7 @@ fn whats_in_the_dialog_is_there_when_the_app_opens_again_and_is_the_first_chats(
     ui.press("escape");
     ui.wait("the hub to keep it", |_| {
         let kept = kept(&stack);
-        kept.text == "effort; attached" && kept.files.len() == 1 && kept.plan
+        kept.text == "effort; attached" && kept.files.len() == 1 && kept.mode == Some(plan_mode())
     });
 
     ui.open_again(&stack);
@@ -80,15 +81,15 @@ fn whats_in_the_dialog_is_there_when_the_app_opens_again_and_is_the_first_chats(
     });
     let chat = stack.client().session_get(&ui.active_chat()).unwrap();
     assert_eq!((chat.model, chat.effort), picked, "the first chat's model and effort");
-    assert_eq!(ui.chat_mode(), Some(PermissionMode::Plan), "the first chat plans");
+    assert_eq!(ui.chat_mode(), Some(plan_mode()), "the first chat plans");
     let launched = ui.events().into_iter().find_map(|e| match e.body {
-        EventBody::AgentInit { model, permission_mode, .. } => Some((model, permission_mode)),
+        EventBody::AgentInit { model, mode, .. } => Some((model, mode)),
         _ => None,
     });
-    assert_eq!(launched, Some((Some("sonnet".to_string()), Some(PermissionMode::Plan))), "the agent ran with them");
+    assert_eq!(launched, Some((Some("sonnet".to_string()), Some(plan_mode()))), "the agent ran with them");
     ui.wait("making it to empty what the hub keeps", |_| {
         let kept = kept(&stack);
-        kept.text.is_empty() && kept.files.is_empty() && !kept.plan
+        kept.text.is_empty() && kept.files.is_empty() && kept.mode.is_none()
     });
     assert!(ui.dialog_attached().is_empty(), "creating takes what was attached");
     ui.open_new_workspace();
@@ -112,7 +113,7 @@ fn a_change_made_to_the_dialog_elsewhere_shows_in_it(cx: &mut TestAppContext) {
         files: vec![file],
         model: Some(ModelName::named("sonnet")),
         effort: Some(Effort::High),
-        plan: true,
+        mode: Some(plan_mode()),
         ..typed_elsewhere("typed elsewhere")
     };
 
@@ -124,7 +125,7 @@ fn a_change_made_to_the_dialog_elsewhere_shows_in_it(cx: &mut TestAppContext) {
     assert_eq!(chosen(&ui), (ModelName::named("sonnet"), Effort::High));
     elsewhere.new_workspace_draft_keep(&typed_elsewhere("")).unwrap();
     ui.wait("the dialog to empty", |ui| ui.dialog_text().is_empty() && ui.dialog_attached().is_empty());
-    assert_eq!(ui.cx.read_entity(&ui.dialog(), |d, _| d.mode()), PermissionMode::FullAccess);
+    assert_eq!(ui.cx.read_entity(&ui.dialog(), |d, _| d.mode()), None);
 }
 
 /// A change made elsewhere while something from here is on its way to the hub waits for it, and then shows, though
@@ -239,6 +240,6 @@ fn a_workspace_that_cant_be_made_gives_the_prompt_back_to_the_dialog_and_the_hub
     assert!(ui.dialog_planning(), "plan mode comes back with the prompt");
     ui.wait("the hub to keep it again", |_| {
         let kept = kept(&stack);
-        kept.text == "say:never sent" && kept.plan
+        kept.text == "say:never sent" && kept.mode == Some(plan_mode())
     });
 }

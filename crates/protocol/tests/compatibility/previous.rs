@@ -4,10 +4,9 @@
 use protocol::attachment::AttachmentFile;
 use protocol::capability::conversation::Start;
 use protocol::capability::settings::Effort;
+use protocol::fixtures;
 use protocol::frame;
-use protocol::model::{
-    AgentKind, AgentLogin, LoginToken, ModelName, PermissionMode, RunId, Seq, SessionSettings, SessionSettingsChange,
-};
+use protocol::model::{AgentKind, AgentLogin, LoginToken, ModelName, RunId, Seq};
 use protocol::prompt::Prompt;
 use protocol::worker::previous::{self, AgentStart, Call, Request};
 use protocol::worker::{self, ToolsToken, WorkerResponse};
@@ -27,9 +26,9 @@ fn launch(start: Start) -> AgentStart {
         agent: AgentKind::Claude,
         cwd: "/w".into(),
         start,
-        settings: SessionSettings {
+        settings: previous::Kept {
             model: ModelName::named("opus"),
-            permission_mode: PermissionMode::FullAccess,
+            permission_mode: fixtures::full_access(),
             effort: Effort::High,
         },
         env: vec![],
@@ -81,11 +80,6 @@ fn every_request_about_an_agent_keeps_protocol_3s_form() {
         }),
         r#"{"method":"agent_compact","session_id":"s","asked":9,"keeping":"The API"}"#,
     );
-    let options = SessionSettingsChange { model: Some(ModelName::named("opus")), permission_mode: None, effort: None };
-    sent(
-        Request::AgentConfigure(previous::AgentConfigure { session_id: "s".into(), options }),
-        r#"{"method":"agent_configure","session_id":"s","model":"opus","permission_mode":null,"effort":null}"#,
-    );
     let title = worker::TitleFor {
         agent: AgentKind::Claude,
         prompt: "Fix this".into(),
@@ -95,6 +89,28 @@ fn every_request_about_an_agent_keeps_protocol_3s_form() {
     sent(
         Request::TitleUnderLogin(title),
         r#"{"method":"title_under_login","agent":"claude","prompt":"Fix this","login":{"token":"made-up"}}"#,
+    );
+}
+
+/// A change names what it leaves as `null`, and a mode by the name protocol 3 has for it.
+#[test]
+fn a_change_keeps_protocol_3s_form() {
+    let options = previous::Change { model: Some(ModelName::named("opus")), ..previous::Change::default() };
+    sent(
+        Request::AgentConfigure(previous::AgentConfigure { session_id: "s".into(), options }),
+        r#"{"method":"agent_configure","session_id":"s","model":"opus","permission_mode":null,"effort":null}"#,
+    );
+    let planning = protocol::capability::settings::Settings {
+        mode: Some(fixtures::plan_mode()),
+        effort: Some(Effort::Low),
+        ..Default::default()
+    };
+    sent(
+        Request::AgentConfigure(previous::AgentConfigure {
+            session_id: "s".into(),
+            options: previous::Change::of(&planning),
+        }),
+        r#"{"method":"agent_configure","session_id":"s","model":null,"permission_mode":"plan","effort":"low"}"#,
     );
 }
 

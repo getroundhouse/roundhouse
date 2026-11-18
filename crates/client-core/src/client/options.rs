@@ -1,7 +1,8 @@
 //! The calls that set what a session runs with.
 
+use protocol::capability::settings::Settings;
 use protocol::client::sessions;
-use protocol::model::{AgentKind, ClientRequestId, Session, SessionId, SessionSettingsChange, WorkspaceId};
+use protocol::model::{AgentKind, ClientRequestId, Session, SessionId, WorkspaceId};
 
 use super::{Client, Result};
 
@@ -12,14 +13,14 @@ impl Client {
         &self,
         workspace_id: &WorkspaceId,
         agent: AgentKind,
-        options: SessionSettingsChange,
+        settings: Settings,
         client_request_id: Option<ClientRequestId>,
     ) -> Result<Session> {
-        self.call(sessions::SessionCreate { workspace_id: workspace_id.clone(), agent, options, client_request_id })
+        self.call(sessions::SessionCreate { workspace_id: workspace_id.clone(), agent, settings, client_request_id })
     }
 
     /// See [`sessions::SessionConfigure`].
-    pub fn session_configure(&self, id: &SessionId, options: SessionSettingsChange) -> Result<Session> {
-        self.call(sessions::SessionConfigure { id: id.clone(), options })
+    pub fn session_configure(&self, id: &SessionId, change: Settings) -> Result<Session> {
+        self.call(sessions::SessionConfigure { id: id.clone(), settings: change })
     }
 }

@@ -41,6 +41,16 @@ pub struct ApprovalMode {
 }
 
 impl ApprovalMode {
+    /// A mode an agent went into by itself that its adapter has no name for, such as one its CLI added since.
+    pub const UNKNOWN: ApprovalMode =
+        ApprovalMode { unasked: Unasked::Unknown, beyond: Beyond::Unknown, sandbox: None, plan: false };
+
+    /// Whether it's full access, in which an agent does everything unasked, but for what its CLI asks about in every
+    /// mode, and doesn't plan first.
+    pub fn is_full_access(self) -> bool {
+        self.unasked == Unasked::Everything && !self.plan
+    }
+
     /// Whether it holds nothing this build doesn't know, so an adapter can tell its agent.
     pub fn is_known(self) -> bool {
         let ApprovalMode { unasked, beyond, sandbox, plan: _ } = self;

@@ -4,10 +4,11 @@
 
 use gpui_kit::test::ElementSnapshot;
 use gpui_kit::{AppContext as _, ElementId, SharedString, TestAppContext};
+use protocol::capability::approvals::ApprovalMode;
 use protocol::capability::settings::Effort;
 use protocol::event::EventBody;
-use protocol::model::PermissionMode::{FullAccess, Plan};
-use protocol::model::{ModelName, PermissionMode, SessionStatus};
+use protocol::fixtures::{full_access, plan_mode};
+use protocol::model::{ModelName, SessionStatus};
 
 use crate::support::{CLAUDE_STARTS_WITH, Stack, Ui};
 
@@ -38,7 +39,7 @@ fn shift_tab_turns_plan_mode_on_and_off_and_the_model_picker_changes_a_running_c
 
     // Plan mode, on the agent that's already running, asks before a call that writes.
     ui.press("shift-tab");
-    ui.wait("plan mode", |ui| ui.chat_mode() == Some(Plan));
+    ui.wait("plan mode", |ui| ui.chat_mode() == Some(plan_mode()));
     assert!(planning(&mut ui), "the composer shows it's planning");
     assert_eq!(ui.composer_text(), "", "Shift-Tab types nothing");
     ui.input("tool:echo two > two.txt");
@@ -49,7 +50,7 @@ fn shift_tab_turns_plan_mode_on_and_off_and_the_model_picker_changes_a_running_c
 
     // Out of plan mode, and another model, on the same agent.
     ui.press("shift-tab");
-    ui.wait("full access", |ui| ui.chat_mode() == Some(FullAccess));
+    ui.wait("full access", |ui| ui.chat_mode() == Some(full_access()));
     assert!(!planning(&mut ui));
     ui.pick_item("model-picker", "Sonnet");
     ui.wait("the model", |_| client.session_get(&chat).unwrap().model == ModelName::named("sonnet"));
@@ -64,9 +65,9 @@ fn shift_tab_turns_plan_mode_on_and_off_and_the_model_picker_changes_a_running_c
 
     // A new chat keeps the model, but plan mode belongs to the task at hand.
     ui.press("shift-tab");
-    ui.wait("plan mode again", |ui| ui.chat_mode() == Some(Plan));
+    ui.wait("plan mode again", |ui| ui.chat_mode() == Some(plan_mode()));
     ui.new_chat();
-    assert_eq!(ui.chat_mode(), Some(FullAccess));
+    assert_eq!(ui.chat_mode(), Some(full_access()));
     assert!(!planning(&mut ui));
     let pane = ui.pane().unwrap();
     assert_eq!(ui.cx.read_entity(&pane, |p, _| p.session().map(|s| s.model.clone())), Some(ModelName::named("sonnet")));
@@ -94,18 +95,18 @@ fn shift_tab_twice_at_once_leaves_plan_mode_off_and_the_add_menu_turns_it_on_and
 
     ui.press_at_once(&["shift-tab", "shift-tab"]);
 
-    let changes = |ui: &Ui<'_>| -> Vec<PermissionMode> {
+    let changes = |ui: &Ui<'_>| -> Vec<ApprovalMode> {
         ui.events()
             .into_iter()
             .filter_map(|e| match e.body {
-                EventBody::AgentMode { permission_mode } => Some(permission_mode),
+                EventBody::AgentMode { mode } => Some(mode),
                 _ => None,
             })
             .collect()
     };
     ui.wait("both presses of Shift-Tab answered", |ui| changes(ui).len() == 2);
-    assert_eq!(changes(&ui), [Plan, FullAccess], "the second press of Shift-Tab undid the first");
-    ui.wait("full access after Shift-Tab twice", |ui| ui.chat_mode() == Some(FullAccess));
+    assert_eq!(changes(&ui), [plan_mode(), full_access()], "the second press of Shift-Tab undid the first");
+    ui.wait("full access after Shift-Tab twice", |ui| ui.chat_mode() == Some(full_access()));
     assert!(!planning(&mut ui), "Shift-Tab twice leaves plan mode off");
 
     // With nothing focused, so the menu, rather than whatever had focus before it opened, is what puts it in the
@@ -114,7 +115,7 @@ fn shift_tab_twice_at_once_leaves_plan_mode_off_and_the_add_menu_turns_it_on_and
     ui.click(SharedString::from(ADD));
     assert_ne!(plan_item(&mut ui).checked(), Some(true), "the menu's plan mode is off");
     ui.click_menu_item("Plan mode");
-    ui.wait("plan mode from the menu", |ui| ui.chat_mode() == Some(Plan));
+    ui.wait("plan mode from the menu", |ui| ui.chat_mode() == Some(plan_mode()));
     assert!(planning(&mut ui), "the composer shows it's planning, from the menu");
     ui.input("next");
     assert_eq!(ui.composer_text(), "next", "focus is where the prompt is typed, after the menu");
@@ -122,7 +123,7 @@ fn shift_tab_twice_at_once_leaves_plan_mode_off_and_the_add_menu_turns_it_on_and
     ui.click(SharedString::from(ADD));
     assert_eq!(plan_item(&mut ui).checked(), Some(true), "the menu's plan mode is on");
     ui.click_menu_item("Plan mode");
-    ui.wait("full access from the menu", |ui| ui.chat_mode() == Some(FullAccess));
+    ui.wait("full access from the menu", |ui| ui.chat_mode() == Some(full_access()));
     assert!(!planning(&mut ui), "the menu turned plan mode off");
 }
 
@@ -177,21 +178,21 @@ fn a_plan_can_be_approved_or_sent_back(cx: &mut TestAppContext) {
     ui.wait("the repository", |ui| ui.view().records().repos().len() == 1);
     ui.new_workspace();
     ui.press("shift-tab");
-    ui.wait("plan mode", |ui| ui.chat_mode() == Some(Plan));
+    ui.wait("plan mode", |ui| ui.chat_mode() == Some(plan_mode()));
 
     ui.input("plan:First attempt");
     ui.press("enter");
     ui.wait("the plan", |ui| ui.session_status() == Some(SessionStatus::WaitingApproval));
     ui.keep_planning();
     ui.wait("the turn to end", |ui| ui.session_status() == Some(SessionStatus::Idle));
-    assert_eq!(ui.chat_mode(), Some(Plan), "still planning");
+    assert_eq!(ui.chat_mode(), Some(plan_mode()), "still planning");
 
     ui.input("plan:Second attempt");
     ui.press("enter");
     ui.wait("the next plan", |ui| ui.session_status() == Some(SessionStatus::WaitingApproval));
     ui.approve_plan();
     ui.wait("plan mode to end, by the agent's own report", |ui| {
-        ui.session_status() == Some(SessionStatus::Idle) && ui.chat_mode() == Some(FullAccess)
+        ui.session_status() == Some(SessionStatus::Idle) && ui.chat_mode() == Some(full_access())
     });
     assert!(!planning(&mut ui));
 }

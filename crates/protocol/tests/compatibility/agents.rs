@@ -4,11 +4,11 @@
 use protocol::capability::settings::Effort;
 use protocol::client::{ClientResponse, HubFrame, ReplyOutcome, admin};
 use protocol::frame;
-use protocol::model::{AgentFeature, AgentKind, LoginDescription, ModelName, PermissionMode};
+use protocol::model::{AgentFeature, AgentKind, LoginDescription, ModelName};
 
 #[test]
 fn what_each_kind_offers_reads_and_what_a_newer_hub_adds_reads_as_unknown() {
-    let reply = br#"{"frame":"reply","id":5,"response":{"result":"agents","agents":[{"kind":"claude","name":"Claude Code","usage_heading":"Claude usage","models":[{"model":"opus","label":"Opus"},{"model":"haiku","label":"Haiku"}],"efforts":["low","xhigh","future"],"modes":["bypassPermissions","plan"],"defaults":{"model":"opus","permission_mode":"bypassPermissions","effort":"xhigh"},"features":["compacts","flies"],"login":{"made_with":"claude setup-token","lasts_ms":31536000000,"from_a_newer_hub":true},"from_a_newer_hub":true},{"kind":"from_a_newer_hub","name":"Other","usage_heading":"Other usage","models":[],"efforts":[],"modes":[],"defaults":{"model":"other","permission_mode":"bypassPermissions","effort":"low"}}]}}"#;
+    let reply = br#"{"frame":"reply","id":5,"response":{"result":"agents","agents":[{"kind":"claude","name":"Claude Code","usage_heading":"Claude usage","models":[{"model":"opus","label":"Opus"},{"model":"haiku","label":"Haiku"}],"efforts":["low","xhigh","future"],"defaults":{"model":"opus","effort":"xhigh","from_a_newer_hub":true},"features":["compacts","flies"],"login":{"made_with":"claude setup-token","lasts_ms":31536000000,"from_a_newer_hub":true},"from_a_newer_hub":true},{"kind":"from_a_newer_hub","name":"Other","usage_heading":"Other usage","models":[],"efforts":[],"defaults":{"model":"other","effort":"low"}}]}}"#;
 
     let HubFrame::Reply { outcome: ReplyOutcome::Response(ClientResponse::Agents(admin::Agents { agents })), .. } =
         frame::decode(reply).unwrap()
@@ -23,8 +23,9 @@ fn what_each_kind_offers_reads_and_what_a_newer_hub_adds_reads_as_unknown() {
     );
     assert_eq!(claude.label(&ModelName::named("haiku")), Some("Haiku"));
     assert_eq!(claude.efforts, [Effort::Low, Effort::Xhigh, Effort::parse("future").unwrap()]);
-    assert_eq!(claude.modes, [PermissionMode::FullAccess, PermissionMode::Plan]);
-    assert_eq!((claude.defaults.model.as_str(), claude.defaults.effort.clone()), ("opus", Effort::Xhigh));
+    assert_eq!(claude.modes(), [], "a hub that says no claims offers no mode");
+    assert_eq!(claude.defaults.model, Some(ModelName::named("opus")));
+    assert_eq!(claude.defaults.effort, Some(Effort::Xhigh));
     assert_eq!(claude.features, [AgentFeature::Compacts, AgentFeature::Unknown]);
     assert_eq!(other.kind, AgentKind::Unknown);
     assert!(other.features.is_empty(), "one left out does nothing it might not");

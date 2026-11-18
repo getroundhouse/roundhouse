@@ -2,6 +2,7 @@
 
 mod agents;
 mod args;
+mod modes;
 mod phone;
 mod render;
 mod run;

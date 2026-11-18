@@ -5,7 +5,7 @@ use crate::capability::{Capabilities, Capability, approvals, asking, background,
 use crate::event::{AgentTask, TokenUsage, TurnOutcome};
 use crate::event::{CompactedBy, CompactionOutcome, ContentBlock, EventBody, TaskKind};
 use crate::fixtures::{approval_request, subagent_started, turn_ended};
-use crate::model::{PermissionMode, RunId, Seq, TaskId};
+use crate::model::{RunId, Seq, TaskId};
 
 use super::log::*;
 
@@ -111,7 +111,7 @@ fn what_the_agent_says_of_its_mode_limits_and_questions_needs_their_capabilities
     let asking = |asks| EventBody::from(approval_request("a", asks));
 
     assert_eq!(
-        needs(&EventBody::AgentMode { permission_mode: PermissionMode::Plan }),
+        needs(&EventBody::AgentMode { mode: crate::fixtures::plan_mode() }),
         [approvals::Capability::Modes.into()]
     );
     assert_eq!(

@@ -14,13 +14,14 @@ use std::time::Duration;
 use async_trait::async_trait;
 use parking_lot::Mutex;
 use protocol::capability::conversation::Start;
+use protocol::capability::settings::Settings;
 use protocol::capability::{Control, settings, turns};
 use protocol::client::ApiError;
 use protocol::event::{AgentRunState, EventBody, TurnOutcome};
 use protocol::fixtures::turn_ended;
 use protocol::model::{
     AgentAccount, AgentKind, AgentSessionId, AttachmentId, CacheRequest, InstanceId, ProviderName, RunId, Seq, Session,
-    SessionId, SessionSettingsChange, Workspace, WorkspaceId,
+    SessionId, Workspace, WorkspaceId,
 };
 use protocol::prompt::Prompt;
 use protocol::worker::{
@@ -200,7 +201,7 @@ impl Provider for WithWorkers {
 /// which nothing has been sent.
 pub(super) async fn a_chat(hub: &Arc<Hub>) -> (Workspace, Session) {
     let workspace = hub.workspace_create("r".into(), None, None, None).await.expect("a stand-in makes the worktree");
-    let unchanged = SessionSettingsChange::default();
+    let unchanged = Settings::default();
     let chat = hub.session_create(workspace.id.clone(), AgentKind::Claude, unchanged, None).await.expect("a new chat");
     (workspace, chat)
 }
@@ -303,7 +304,7 @@ fn opened(start: &Start) -> EventBody {
         agent_session_id: Some(conversation),
         model: None,
         cwd: None,
-        permission_mode: None,
+        mode: None,
         agent_version: None,
     }
 }

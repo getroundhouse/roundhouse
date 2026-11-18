@@ -87,7 +87,7 @@ fn request() -> Request {
     let here = FileToSend::checked("here.txt", MediaType::Text, b"here".to_vec()).unwrap();
     let chosen = (Some(ModelName::named("opus")), Some(Effort::Xhigh));
     let prompt = Prompt::carrying("say:hi", vec![here]);
-    let request = Request::new(RepoId::from("r"), prompt, AgentKind::Claude, chosen, PermissionMode::FullAccess);
+    let request = Request::new(RepoId::from("r"), prompt, AgentKind::Claude, chosen, None);
     let mut made_of = request.made_of.clone();
     made_of.files.insert(0, on_the_hub().id);
     Request { coming_back: vec![on_the_hub()], made_of, ..request }

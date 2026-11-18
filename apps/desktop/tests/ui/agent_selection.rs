@@ -1,6 +1,7 @@
 //! Selecting another agent changes only the new chat, and the keyboard keeps the selected chat's agent.
 
 use gpui_kit::{AppContext as _, TestAppContext};
+use protocol::capability::approvals::Sandbox;
 use protocol::capability::settings::Effort;
 use protocol::model::{AgentKind, Session};
 
@@ -89,6 +90,27 @@ fn choosing_another_agent_and_then_using_the_keyboard_keeps_each_chats_agent(cx:
         let next = client.session_get(&ui.active_chat()).unwrap();
         assert_eq!(on(&next), (agent, model, effort), "{agent:?}: the keyboard's chat keeps what was picked");
     }
+}
+
+/// Plan mode in the new-workspace dialog stays on when another agent is picked, in that agent's own plan mode, since
+/// each kind's modes are its own: Codex's sandbox keeps a plan to reading, and Claude's has none.
+#[gpui_kit::test]
+fn plan_mode_in_the_dialog_is_the_picked_agents_own(cx: &mut TestAppContext) {
+    let stack = codex_stack();
+    let mut ui = Ui::open_with_a_repository(cx, &stack);
+    let mode = |ui: &Ui<'_>| ui.cx.read_entity(&ui.dialog(), |d, _| d.mode());
+    ui.open_new_workspace();
+    ui.press("shift-tab");
+    assert_eq!(mode(&ui), Some(protocol::fixtures::plan_mode()), "Claude's");
+
+    ui.pick_item("new-workspace-agent", "Codex");
+    let codex = mode(&ui).expect("still planning");
+    assert!(codex.plan && codex.sandbox == Some(Sandbox::ReadOnly), "Codex's: {codex:?}");
+
+    ui.pick_item("new-workspace-agent", "Claude Code");
+    assert_eq!(mode(&ui), Some(protocol::fixtures::plan_mode()), "Claude's again");
+    ui.press("shift-tab");
+    assert_eq!(mode(&ui), None, "off, for the mode Claude starts a chat in");
 }
 
 /// Picks a model or an effort for the chat showing, and waits for the chat to show it, since the next shortcut reads

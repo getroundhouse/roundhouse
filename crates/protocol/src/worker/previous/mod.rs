@@ -14,4 +14,6 @@ mod launch_identity;
 mod requests;
 
 pub use approval::{AgentApproval, ApprovalDecision};
-pub use requests::{AgentCancel, AgentCompact, AgentConfigure, AgentPrompt, AgentStart, Call, Request, VERSION};
+pub use requests::{
+    AgentCancel, AgentCompact, AgentConfigure, AgentPrompt, AgentStart, Call, Change, Kept, Request, VERSION,
+};

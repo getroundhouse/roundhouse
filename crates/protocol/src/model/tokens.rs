@@ -39,10 +39,7 @@ mod tests {
     use crate::capability::settings::Effort;
     use crate::capability::settings::Settings;
     use crate::client::{ClientRequest, ClientResponse, accounts, devices, github_accounts, github_apps};
-    use crate::model::{
-        AgentKind, AgentLogin, GhLogin, GhLoginWorks, GithubToken, LoginToken, ModelName, PermissionMode, RunId,
-        SessionSettings,
-    };
+    use crate::model::{AgentKind, AgentLogin, GhLogin, GhLoginWorks, GithubToken, LoginToken, ModelName, RunId};
     use crate::pairing::{DeviceToken, Fingerprint, Pairing, PairingCode, PairingLink};
     use crate::worker::{self, GithubCredential, ToolsToken, WorkerRequest, WorkerResponse};
 
@@ -154,9 +151,9 @@ mod tests {
             login: GhLogin::LoggedIn { username: "ada".into(), works: GhLoginWorks::Yes },
             token: Some(worker::FoundToken { token: GithubToken::new(SECRET), renews: true }),
         };
-        let settings = SessionSettings {
+        let settings = worker::previous::Kept {
             model: ModelName::named("opus"),
-            permission_mode: PermissionMode::Plan,
+            permission_mode: crate::fixtures::plan_mode(),
             effort: Effort::Low,
         };
         let previous = worker::previous::AgentStart::of(launch(), settings);

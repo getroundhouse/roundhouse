@@ -5,6 +5,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::attachment::Attachment;
+use crate::capability::approvals::ApprovalMode;
 use crate::capability::settings::Effort;
 use crate::model::{ApprovalId, AttachmentId, CommentId, DiffSide, ModelName, RepoId, Rev};
 
@@ -31,9 +32,10 @@ pub struct NewWorkspaceDraft {
     pub model: Option<ModelName>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub effort: Option<Effort>,
-    /// Its first chat is to start in plan mode, rather than with full access.
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-    pub plan: bool,
+    /// The approval mode picked for its first chat, one its agent offers, or `None` for the one the agent starts a chat
+    /// in.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mode: Option<ApprovalMode>,
     #[serde(default)]
     pub rev: Rev,
 }
@@ -55,8 +57,8 @@ pub struct NewWorkspaceDraftToKeep {
     pub model: Option<ModelName>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub effort: Option<Effort>,
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-    pub plan: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mode: Option<ApprovalMode>,
 }
 
 /// What's typed and attached in a chat's composer and not sent, kept on the hub so it's there after the app restarts,

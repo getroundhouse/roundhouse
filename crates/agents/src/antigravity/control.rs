@@ -261,7 +261,7 @@ async fn change(shared: &Arc<Shared>, requested: &settings::Settings) -> Result<
             changed
         };
         if changed {
-            shared.event(EventBody::AgentMode { permission_mode: crate::registry::as_logged(perm) }, None).await;
+            shared.event(EventBody::AgentMode { mode: perm }, None).await;
         }
     }
     Ok(())
@@ -283,7 +283,7 @@ async fn swap_idle_settings(
     };
     ensure_mode_process(shared).await?;
     if changed {
-        shared.event(EventBody::AgentMode { permission_mode: crate::registry::as_logged(perm) }, None).await;
+        shared.event(EventBody::AgentMode { mode: perm }, None).await;
     }
     Ok(())
 }

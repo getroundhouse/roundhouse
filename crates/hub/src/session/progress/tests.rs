@@ -253,7 +253,7 @@ fn picks_up_by_itself() -> Vec<EventBody> {
         EventBody::AgentTasks { tasks: Vec::new(), stopped: Vec::new() },
         EventBody::AgentState { state: AgentRunState::Running },
         serde_json::from_value(json!({"type": "agent_init", "agent_session_id": null, "model": null, "cwd": null,
-            "permission_mode": null, "agent_version": null}))
+            "mode": null, "agent_version": null}))
         .unwrap(),
         other("system/status"),
         EventBody::OwnTurn(OwnTurn::TaskEnded { ended: Vec::new() }),

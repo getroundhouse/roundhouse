@@ -1,7 +1,7 @@
 use super::super::Hub;
 use protocol::capability::settings::Settings;
 use protocol::client::{ApiError, ErrorCode};
-use protocol::model::{AgentDescription, AgentFeature, AgentKind, SessionSettings, SessionSettingsChange};
+use protocol::model::{AgentDescription, AgentFeature, AgentKind};
 
 impl Hub {
     /// Every kind's description, which doesn't change while the hub runs.
@@ -23,17 +23,9 @@ impl Hub {
     }
 
     /// Refuses what a chat running `kind` can't be given, as [`AgentDescription::takes`] says.
-    pub(crate) fn offered(&self, kind: AgentKind, change: &SessionSettingsChange) -> Result<(), ApiError> {
+    pub(crate) fn offered(&self, kind: AgentKind, settings: &Settings) -> Result<(), ApiError> {
         let not_offered = |e: protocol::model::NotOffered| ApiError::new(ErrorCode::InvalidRequest, e.to_string());
-        self.agent(kind)?.takes(change).map_err(not_offered)
-    }
-
-    /// `settings`, as the hub keeps a chat's, as a launch of `kind` names them: by the modes its kind claims.
-    pub(crate) fn launch_settings(&self, kind: AgentKind, settings: &SessionSettings) -> Result<Settings, ApiError> {
-        let claims = self.agent(kind)?.capabilities.as_ref().ok_or_else(|| {
-            ApiError::new(ErrorCode::InvalidRequest, "this hub doesn't know what that kind of agent can do")
-        })?;
-        settings.for_capabilities(claims).map_err(|e| ApiError::new(ErrorCode::InvalidRequest, e.to_string()))
+        self.agent(kind)?.takes(settings).map_err(not_offered)
     }
 
     /// Refuses a compaction of an agent that doesn't compact when asked.

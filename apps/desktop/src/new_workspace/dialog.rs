@@ -9,8 +9,9 @@ use gpui_kit::{
 };
 use keeping::Keeping;
 use protocol::attachment::Attachment;
+use protocol::capability::approvals::ApprovalMode;
 use protocol::capability::settings::Effort;
-use protocol::model::{AgentDescription, AgentKind, AttachmentId, ModelName, PermissionMode, RepoId};
+use protocol::model::{AgentDescription, AgentKind, AttachmentId, ModelName, RepoId};
 use protocol::prompt::Prompt;
 use std::path::PathBuf;
 use std::rc::Rc;
@@ -53,9 +54,9 @@ pub struct NewWorkspaceDialog {
     pub(super) chosen_agent: Option<AgentKind>,
     pub(super) model: Option<ModelName>,
     pub(super) effort: Option<Effort>,
-    /// The mode the first chat starts in: full access for each new workspace, unless plan mode is turned on, since it
-    /// belongs to the task at hand.
-    pub(super) mode: PermissionMode,
+    /// The mode the first chat starts in: `None`, the one its agent starts a chat in, for each new workspace, unless plan
+    /// mode is turned on, since it belongs to the task at hand, and then its agent's plan mode.
+    pub(super) mode: Option<ApprovalMode>,
     pub(super) attached: Attachments,
     pub(super) keeping: Keeping,
     pub(super) _subscriptions: Vec<Subscription>,
@@ -154,8 +155,7 @@ impl NewWorkspaceDialog {
         });
         let live = cx.observe(&dictation, |_, _, cx| cx.notify());
         let readiness = crate::dictating::observe(cx, |_, cx| cx.notify());
-        let (model, effort, attached) = (None, None, Attachments::default());
-        let mode = PermissionMode::FullAccess;
+        let (model, effort, mode, attached) = (None, None, None, Attachments::default());
         Self {
             repo,
             offer,
@@ -220,13 +220,13 @@ impl NewWorkspaceDialog {
         let text = self.prompt.read(cx).text().to_string();
         self.prompt.update(cx, |field, cx| field.set_value("", window, cx));
         let (repo, (model, effort)) = (self.repo.clone(), self.to_run());
-        let permission_mode = std::mem::replace(&mut self.mode, PermissionMode::FullAccess);
+        let mode = self.mode.take();
         let files = self.attached.take();
         let coming_back = self.stop_bringing_back();
         cx.notify();
         let agent = self.chosen_agent.unwrap_or_else(|| self.offer.agents.for_new_chat());
         let prompt = Prompt::carrying(text, files);
-        Request { repo, prompt, coming_back, agent, model, effort, permission_mode, made_of, kept }
+        Request { repo, prompt, coming_back, agent, model, effort, mode, made_of, kept }
     }
 
     /// Puts back a prompt for a workspace that couldn't be made, before anything typed or attached since, and plan
@@ -235,13 +235,13 @@ impl NewWorkspaceDialog {
         &mut self,
         prompt: Prompt<FileToSend>,
         coming_back: Vec<Attachment>,
-        mode: PermissionMode,
+        mode: Option<ApprovalMode>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
         let Prompt { text, files } = prompt;
-        if mode == PermissionMode::Plan {
-            self.mode = mode;
+        if mode.is_some_and(|mode| mode.plan) {
+            self.plan(true);
         }
         for problem in self.attached.put_back(files) {
             cx.emit(DialogEvent::Error(problem));
@@ -286,7 +286,17 @@ impl NewWorkspaceDialog {
     }
 
     pub(super) fn planning(&self) -> bool {
-        self.mode == PermissionMode::Plan
+        self.mode.is_some_and(|mode| mode.plan)
+    }
+
+    /// Whether the first chat's agent can plan, so plan mode can be turned on.
+    pub(super) fn can_plan(&self) -> bool {
+        self.base_agent().is_some_and(|agent| agent.plan_mode().is_some())
+    }
+
+    /// Plan mode on, in the first chat's agent's plan mode, which is none for an agent that can't plan, or off.
+    pub(super) fn plan(&mut self, planning: bool) {
+        self.mode = if planning { self.base_agent().and_then(AgentDescription::plan_mode) } else { None };
     }
 
     /// Its surface, and its edge, which the line under the repository is too: the composer's surface and a dialog's
@@ -297,7 +307,7 @@ impl NewWorkspaceDialog {
 
     /// Plan mode on or off for the first chat, as `Shift-Tab` and the `+` menu do.
     pub(super) fn toggle_plan_mode(&mut self, cx: &mut Context<Self>) {
-        self.mode = if self.planning() { PermissionMode::FullAccess } else { PermissionMode::Plan };
+        self.plan(!self.planning());
         self.keep(true, cx);
         cx.notify();
     }
@@ -331,7 +341,7 @@ impl NewWorkspaceDialog {
     }
 
     /// The mode the first chat is to start in.
-    pub fn mode(&self) -> PermissionMode {
+    pub fn mode(&self) -> Option<ApprovalMode> {
         self.mode
     }
 

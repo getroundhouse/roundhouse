@@ -6,8 +6,7 @@ use client_core::records::{HubRecords, Snapshot};
 use client_core::{RecordsFeed, Subscription};
 use protocol::client::HubNotice;
 use protocol::model::{
-    AgentKind, DiffSide, Head, PullRequestFound, RecordKey, Rev, Seq, Session, SessionSettingsChange, SessionStatus,
-    WorkspaceStatus,
+    AgentKind, DiffSide, Head, PullRequestFound, RecordKey, Rev, Seq, Session, SessionStatus, WorkspaceStatus,
 };
 
 use crate::support::{Stack, next_notice_of, session_of, wait_for_setup, wait_for_turn_end, wait_until, workspace_of};
@@ -87,8 +86,9 @@ fn the_feed_reports_what_a_sidebar_shows() {
     for _ in 0..2 {
         assert!(matches!(next_notice_of(&feed, "setup", shown), HubNotice::Workspace(_)));
     }
-    let session =
-        client.session_create(&workspace.id, AgentKind::Claude, SessionSettingsChange::default(), None).unwrap();
+    let session = client
+        .session_create(&workspace.id, AgentKind::Claude, protocol::capability::settings::Settings::default(), None)
+        .unwrap();
     assert_eq!(next_notice_of(&feed, "the session", shown), HubNotice::Session(session.clone()));
     // Making a chat is doing something in its workspace, which moves up the sidebar.
     let made_a_chat = workspace_of(next_notice_of(&feed, "a chat made in it", shown));

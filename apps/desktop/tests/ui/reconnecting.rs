@@ -176,9 +176,9 @@ fn an_approval_waiting_when_the_app_opens_can_be_answered(cx: &mut TestAppContex
         .session_create(
             &workspace.id,
             protocol::model::AgentKind::Claude,
-            protocol::model::SessionSettingsChange {
-                permission_mode: Some(protocol::model::PermissionMode::Plan),
-                ..protocol::model::SessionSettingsChange::default()
+            protocol::capability::settings::Settings {
+                mode: Some(protocol::fixtures::plan_mode()),
+                ..protocol::capability::settings::Settings::default()
             },
             None,
         )

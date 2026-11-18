@@ -4,9 +4,8 @@
 use serde::{Deserialize, Serialize};
 
 use super::{ClientRequest, ClientResponse, Reply, Request};
-use crate::model::{
-    self, AccountId, AgentKind, ClientRequestId, Seq, Session, SessionId, SessionSettingsChange, WorkspaceId,
-};
+use crate::capability::settings::Settings;
+use crate::model::{self, AccountId, AgentKind, ClientRequestId, Seq, Session, SessionId, WorkspaceId};
 
 /// Sending the same `client_request_id` again returns the session it made. It's refused for a kind of agent the hub
 /// doesn't run, and for an effort or an approval mode the agent isn't offered, as
@@ -17,8 +16,8 @@ pub struct SessionCreate {
     pub agent: AgentKind,
     /// What it starts with, in place of what the agent's description says a chat runs with until another is chosen.
     /// One left out is that.
-    #[serde(flatten)]
-    pub options: SessionSettingsChange,
+    #[serde(default)]
+    pub settings: Settings,
     #[serde(default)]
     pub client_request_id: Option<ClientRequestId>,
 }
@@ -96,7 +95,7 @@ impl Request for SessionGet {
 }
 
 /// Changes the model, approval mode or effort, on the running agent too if there is one. A setting left out is left as
-/// it is. Fails if the agent refuses, saving nothing, though a running agent may already have taken the settings it was
+/// it is, and any other is refused, since a chat's record keeps only these. Fails if the agent refuses, saving nothing, though a running agent may already have taken the settings it was
 /// given before the one it refused. It's refused, changing nothing, for an effort or a mode a new chat would be
 /// refused, and, for an agent that discovers its models, for a model its [`ModelList`](crate::model::ModelList) for
 /// the chat doesn't list. With no agent running, a change of mode goes in the log as an `AgentMode`, as a running agent's report of
@@ -104,8 +103,7 @@ impl Request for SessionGet {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct SessionConfigure {
     pub id: SessionId,
-    #[serde(flatten)]
-    pub options: SessionSettingsChange,
+    pub settings: Settings,
 }
 
 impl Request for SessionConfigure {

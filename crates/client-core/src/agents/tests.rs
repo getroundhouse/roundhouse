@@ -3,7 +3,7 @@
 
 use protocol::capability::settings::Effort;
 use protocol::client::{ApiError, ClientRequest, ClientResponse, ErrorCode, ReplyOutcome, admin};
-use protocol::model::{LoginDescription, ModelName, PermissionMode, SessionSettings};
+use protocol::model::{LoginDescription, ModelName};
 
 use super::*;
 use crate::stand_in_hub::{self, Does};
@@ -17,11 +17,10 @@ fn described(kind: AgentKind) -> AgentDescription {
         usage_heading: "Agent usage".to_string(),
         models: Vec::new(),
         efforts: vec![Effort::High],
-        modes: vec![PermissionMode::FullAccess],
-        defaults: SessionSettings {
-            model: ModelName::named("opus"),
-            permission_mode: PermissionMode::FullAccess,
-            effort: Effort::High,
+        defaults: protocol::capability::settings::Settings {
+            model: Some(ModelName::named("opus")),
+            effort: Some(Effort::High),
+            ..Default::default()
         },
         features: Vec::new(),
         login: None,

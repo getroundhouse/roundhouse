@@ -274,7 +274,7 @@ async fn switch_plan_mode(shared: &Arc<Shared>, mode: ApprovalMode, prompt_text:
         changed
     };
     if changed {
-        shared.event(EventBody::AgentMode { permission_mode: crate::registry::as_logged(mode) }, None).await;
+        shared.event(EventBody::AgentMode { mode }, None).await;
     }
     control::send_prompt_rpc(shared, None, vec![json!({ "type": "text", "text": prompt_text })]).await
 }

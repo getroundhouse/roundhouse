@@ -3,8 +3,9 @@
 #![cfg(test)]
 
 use gpui_kit::{AppContext as _, SharedString};
+use protocol::capability::settings::Settings;
 use protocol::event::{AgentRunState, EventBody, SessionEvent};
-use protocol::model::{AgentKind, PermissionMode, Place, Seq, SessionId, SessionSettingsChange, SessionStatus};
+use protocol::model::{AgentKind, Place, Seq, SessionId, SessionStatus};
 
 use super::{Stack, Ui, wait_until};
 
@@ -14,7 +15,7 @@ impl Stack {
         let client = self.client();
         let repo = client.repo_add(self.repo().to_str().unwrap()).unwrap();
         let workspace = client.workspace_create(&repo.id, None, None, None).unwrap();
-        client.session_create(&workspace.id, AgentKind::Claude, SessionSettingsChange::default(), None).unwrap().id
+        client.session_create(&workspace.id, AgentKind::Claude, Settings::default(), None).unwrap().id
     }
 
     /// The event the hub recorded at `seq` in the chat.
@@ -53,9 +54,9 @@ impl Ui<'_> {
     /// step, so the command has none.
     pub(crate) fn have_the_agent_run(&mut self, command: &str) {
         self.wait("the agent to be free", |ui| ui.session_status() == Some(SessionStatus::Idle));
-        if self.chat_mode() == Some(PermissionMode::Plan) {
+        if self.chat_mode().is_some_and(|mode| mode.plan) {
             self.press("shift-tab");
-            self.wait("full access", |ui| ui.chat_mode() == Some(PermissionMode::FullAccess));
+            self.wait("full access", |ui| ui.chat_mode() == Some(protocol::fixtures::full_access()));
         }
         self.input(&format!("tool:{command}"));
         self.press("enter");

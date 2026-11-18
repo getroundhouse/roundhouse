@@ -10,8 +10,9 @@ use gpui_kit::{
     Subscription, Window, div, px,
 };
 use look::{InRegion as _, Region, Shaped as _};
-use protocol::capability::settings::Effort;
-use protocol::model::{ModelName, PermissionMode, SessionId, SessionSettingsChange};
+use protocol::capability::approvals::ApprovalMode;
+use protocol::capability::settings::{Effort, Settings};
+use protocol::model::{ModelName, SessionId};
 use protocol::prompt::Prompt;
 
 use super::dictating::Then;
@@ -103,7 +104,7 @@ impl WorkspacePane {
     /// when this comes back, and a refusal leaves it as it was.
     pub fn configure(&mut self, model: Option<ModelName>, effort: Option<Effort>, cx: &mut Context<Self>) {
         let Some(id) = self.active.clone() else { return };
-        let change = SessionSettingsChange { model, permission_mode: None, effort };
+        let change = Settings { model, effort, ..Settings::default() };
         self.configure_chat(id, change, cx, |_, _, _| {});
     }
 
@@ -112,9 +113,9 @@ impl WorkspacePane {
     fn configure_chat(
         &mut self,
         id: SessionId,
-        change: SessionSettingsChange,
+        change: Settings,
         cx: &mut Context<Self>,
-        answered: impl FnOnce(&mut Self, Option<PermissionMode>, &mut Context<Self>) + 'static,
+        answered: impl FnOnce(&mut Self, Option<ApprovalMode>, &mut Context<Self>) + 'static,
     ) {
         let changing = self.client.start(move |client| client.session_configure(&id, change));
         cx.spawn(async move |this, cx| {
@@ -122,7 +123,7 @@ impl WorkspacePane {
             let _ = this.update(cx, |t, cx| {
                 let now = match changed {
                     Ok(session) => {
-                        let mode = session.permission_mode;
+                        let mode = session.mode;
                         t.took_reply(session, cx);
                         Some(mode)
                     }
@@ -139,16 +140,25 @@ impl WorkspacePane {
 
     /// Whether the chat showing is planning. Its agent has full access otherwise.
     fn planning(&self) -> bool {
-        self.session().is_some_and(|s| s.permission_mode == PermissionMode::Plan)
+        self.session().is_some_and(|s| s.mode.plan)
     }
 
     /// Plan mode as the `+` menu shows it. Only a chat has a mode, so there's none to change while the workspace's
-    /// first is being made, or before the chat showing has loaded.
+    /// first is being made, or before the chat showing has loaded, and none in a chat whose agent can't plan.
     fn plan(&self) -> Plan {
         match self.session() {
-            Some(_) => Plan::of(self.planning()),
-            None => Plan::Unavailable,
+            Some(s) if self.mode_planning(&s.id, true).is_some() => Plan::of(self.planning()),
+            _ => Plan::Unavailable,
         }
+    }
+
+    /// The mode `session`'s agent plans in if `planning`, and otherwise the one it starts a chat in, as the hub
+    /// describes it. `None` if it has no such mode, or the hub doesn't describe it.
+    fn mode_planning(&self, session: &SessionId, planning: bool) -> Option<ApprovalMode> {
+        let agent = self.sessions().iter().find(|s| s.id == *session)?.agent;
+        let held = self.records.snapshot();
+        let described = held.agents().of(agent)?;
+        if planning { described.plan_mode() } else { described.default_mode() }
     }
 
     /// Plan mode on or off for the chat showing, as Shift-Tab does. It changes once the agent has agreed. A press while
@@ -170,11 +180,16 @@ impl WorkspacePane {
     /// Asks for plan mode on or off in `session`, and once the hub has answered, for what the presses meanwhile asked,
     /// if that's different. One at a time, so the hub takes them in the order they were pressed.
     fn ask_plan_mode(&mut self, session: SessionId, planning: bool, cx: &mut Context<Self>) {
-        let mode = if planning { PermissionMode::Plan } else { PermissionMode::FullAccess };
-        let change = SessionSettingsChange { permission_mode: Some(mode), ..SessionSettingsChange::default() };
+        let Some(mode) = self.mode_planning(&session, planning) else {
+            if let Some(chat) = self.chats.get_mut(&session) {
+                chat.plan_asked = None;
+            }
+            return;
+        };
+        let change = Settings { mode: Some(mode), ..Settings::default() };
         self.configure_chat(session.clone(), change, cx, move |t, now, cx| {
             match (now, t.chats.get(&session).and_then(|chat| chat.plan_asked)) {
-                (Some(now), Some(wanted)) if (now == PermissionMode::Plan) != wanted => {
+                (Some(now), Some(wanted)) if now.plan != wanted => {
                     t.ask_plan_mode(session, wanted, cx);
                 }
                 _ => {

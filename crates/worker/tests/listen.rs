@@ -266,5 +266,5 @@ async fn a_worker_left_without_a_hub_stops_its_agents_in_time() {
 /// What a Claude chat starts with, as a launch says it.
 fn claude_defaults() -> protocol::capability::settings::Settings {
     let description = agents::claude::description();
-    description.defaults.for_capabilities(description.capabilities.as_ref().unwrap()).unwrap()
+    protocol::capability::settings::Settings { mode: description.default_mode(), ..description.defaults }
 }

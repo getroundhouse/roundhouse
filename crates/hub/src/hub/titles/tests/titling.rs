@@ -54,7 +54,7 @@ impl Named {
 
     /// Another chat of Claude's in the workspace.
     pub(super) async fn another_chat(&self) -> Session {
-        let unchanged = protocol::model::SessionSettingsChange::default();
+        let unchanged = protocol::capability::settings::Settings::default();
         let agent = protocol::model::AgentKind::Claude;
         self.hub.session_create(self.made.id.clone(), agent, unchanged, None).await.unwrap()
     }

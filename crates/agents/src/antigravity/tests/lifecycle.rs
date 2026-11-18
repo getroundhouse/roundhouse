@@ -3,7 +3,6 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use protocol::capability::conversation::Start;
-use protocol::model::PermissionMode;
 use protocol::prompt::Prompt;
 use protocol::worker::ToolsToken;
 use serde_json::{Value, json};
@@ -85,8 +84,12 @@ async fn agent_launch_passes_roundhouse_mcp_server_in_session_new_with_bearer_he
         token: ToolsToken::new("tok-123"),
         config: room.path().join("mcp.json"),
     };
-    let mut h =
-        Harness::with_tools(&json!([]), PermissionMode::FullAccess, Start::New { conversation: None }, Some(tools));
+    let mut h = Harness::with_tools(
+        &json!([]),
+        super::super::claims::full_access(),
+        Start::New { conversation: None },
+        Some(tools),
+    );
     let agent = h.started().await;
     let session_new = h.request("session/new").await;
     assert_eq!(

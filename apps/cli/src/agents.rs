@@ -3,7 +3,8 @@
 use client_core::{Agents, Client};
 use protocol::model::{AgentDescription, AgentFeature, AgentKind};
 
-use crate::session::{effort_name, mode_name};
+use crate::modes::mode_name;
+use crate::session::effort_name;
 
 /// Prints each kind the hub describes, a few lines each, with what a chat starts with marked.
 pub(crate) fn print_agents(client: &Client) -> anyhow::Result<()> {
@@ -26,13 +27,20 @@ fn described(agent: &AgentDescription, new_chats: bool) -> String {
         .models
         .iter()
         .map(|choice| {
-            marked(choice.model == agent.defaults.model, &format!("{} ({})", choice.model.as_str(), choice.label))
+            marked(
+                Some(&choice.model) == agent.defaults.model.as_ref(),
+                &format!("{} ({})", choice.model.as_str(), choice.label),
+            )
         })
         .collect();
-    let efforts: Vec<String> =
-        agent.efforts.iter().map(|effort| marked(effort == &agent.defaults.effort, effort_name(effort))).collect();
+    let efforts: Vec<String> = agent
+        .efforts
+        .iter()
+        .map(|effort| marked(Some(effort) == agent.defaults.effort.as_ref(), effort_name(effort)))
+        .collect();
+    let default_mode = agent.default_mode();
     let approval: Vec<String> =
-        agent.modes.iter().map(|&mode| marked(mode == agent.defaults.permission_mode, mode_name(mode))).collect();
+        agent.modes().into_iter().map(|mode| marked(Some(mode) == default_mode, mode_name(mode))).collect();
     let compacts = if agent.has(AgentFeature::Compacts) { "  compacts when asked" } else { "" };
     let new = if new_chats { "  new chats run it" } else { "" };
     if agent.discovers_models() {
@@ -54,7 +62,7 @@ fn described(agent: &AgentDescription, new_chats: bool) -> String {
 #[cfg(test)]
 mod tests {
     use protocol::capability::settings::Effort;
-    use protocol::model::{ModelChoice, ModelName, PermissionMode, SessionSettings};
+    use protocol::model::{ModelChoice, ModelName};
 
     use super::*;
 
@@ -62,7 +70,7 @@ mod tests {
     fn each_kind_says_what_a_chat_can_be_given_and_marks_what_it_starts_with() {
         let opus = ModelName::named("opus");
         let agent = AgentDescription {
-            capabilities: None,
+            capabilities: Some(protocol::fixtures::claude_claims()),
             kind: AgentKind::Claude,
             name: "Claude".to_string(),
             usage_heading: "Claude usage".to_string(),
@@ -71,11 +79,10 @@ mod tests {
                 ModelChoice { model: ModelName::named("haiku"), label: "Haiku".to_string() },
             ],
             efforts: vec![Effort::High, Effort::Xhigh],
-            modes: vec![PermissionMode::FullAccess, PermissionMode::Plan],
-            defaults: SessionSettings {
-                model: opus,
-                permission_mode: PermissionMode::FullAccess,
-                effort: Effort::Xhigh,
+            defaults: protocol::capability::settings::Settings {
+                model: Some(opus),
+                effort: Some(Effort::Xhigh),
+                ..Default::default()
             },
             features: vec![AgentFeature::Compacts],
             login: None,

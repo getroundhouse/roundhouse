@@ -8,7 +8,7 @@ use protocol::capability::settings::{Effort, Settings};
 use protocol::capability::{Capabilities, Claimed, Control};
 use protocol::client::{ErrorCode, HubNotice};
 use protocol::event::EventBody;
-use protocol::model::{ModelName, PermissionMode, Rev, RunCapabilities, RunId, Seq, SessionId, SessionSettingsChange};
+use protocol::model::{ModelName, Rev, RunCapabilities, RunId, Seq, SessionId};
 use protocol::worker::{AgentStarted, Delivery, WorkerRequest, WorkerResponse};
 use serde_json::{Value, json};
 
@@ -113,7 +113,7 @@ async fn a_launch_names_the_chats_settings_by_its_kinds_claims_and_holds_the_run
         agent_session_id: Some("c".into()),
         model: None,
         cwd: None,
-        permission_mode: None,
+        mode: None,
         agent_version: None,
     };
     live.send_item(Item::Event { run, body: Box::new(init), raw: None, attachments: Vec::new(), seq: None }).await;
@@ -135,8 +135,8 @@ async fn a_launch_names_the_chats_settings_by_its_kinds_claims_and_holds_the_run
 async fn a_chat_in_a_mode_this_build_has_no_name_for_starts_its_agent_with_full_access() {
     let dir = tempfile::tempdir().unwrap();
     let hub = hub_with_worktree(dir.path());
-    let unknown = SessionSettingsChange { permission_mode: Some(PermissionMode::Unknown), ..Default::default() };
-    hub.blocking(move |store| store.set_session_options(&"s".into(), &unknown)).await.unwrap();
+    let unknown = Settings { mode: Some(protocol::capability::approvals::ApprovalMode::UNKNOWN), ..Default::default() };
+    hub.blocking(move |store| store.set_session_settings(&"s".into(), &unknown)).await.unwrap();
     let (_link, asked) = worker(&hub, None, Some(claimed()));
     let live = hub.live_session(&"s".into()).await.unwrap();
 
@@ -260,9 +260,7 @@ async fn a_worker_of_protocol_3_is_launched_and_asked_in_its_own_forms() {
     let cancelled = live.control_agent(&link, Control::Cancel).await.unwrap();
     let compact = Control::Compact { asked: Seq::new(2), keeping: Some("The API".into()) };
     let compacted = live.control_agent(&link, compact).await.unwrap();
-    live.configure(SessionSettingsChange { effort: Some(Effort::Low), ..SessionSettingsChange::default() })
-        .await
-        .unwrap();
+    live.configure(Settings { effort: Some(Effort::Low), ..Settings::default() }).await.unwrap();
 
     let launch = launch(&asked);
     let settings = json!([launch["model"], launch["permission_mode"], launch["effort"]]);
@@ -358,7 +356,7 @@ async fn a_run_of_protocol_3_found_running_has_the_claims_it_said_as_it_initiali
         agent_session_id: None,
         model: None,
         cwd: None,
-        permission_mode: None,
+        mode: None,
         agent_version: None,
     };
     let lost = EventBody::AgentExited {

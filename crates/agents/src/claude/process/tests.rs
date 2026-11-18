@@ -1,7 +1,9 @@
 use std::os::unix::fs::PermissionsExt as _;
 
+use protocol::capability::approvals::ApprovalMode;
 use protocol::capability::settings::Effort;
-use protocol::model::{AgentKind, ModelName, PermissionMode, RunId, SessionSettings};
+use protocol::capability::settings::Settings;
+use protocol::model::{AgentKind, ModelName, RunId};
 
 use super::recovery::{LaunchFailure, classify_launch_failure};
 use super::*;
@@ -49,20 +51,19 @@ fn a_file_that_cant_be_run_is_not_the_binary() {
     assert_ne!(resolve_binary(&lookup), Some(not_runnable));
 }
 
-fn spec(model: Option<&'static str>, mode: PermissionMode) -> AgentSpec {
+fn spec(model: Option<&'static str>, mode: ApprovalMode) -> AgentSpec {
     AgentSpec {
         session_id: "s".into(),
         run: RunId::new(1),
         agent: AgentKind::Claude,
         cwd: "/tmp".into(),
         start: protocol::capability::conversation::Start::New { conversation: Some("abc".into()) },
-        settings: SessionSettings {
-            model: ModelName::named(model.unwrap_or("sonnet")),
-            permission_mode: mode,
-            effort: Effort::High,
-        }
-        .for_capabilities(&crate::claude::claims::claims())
-        .unwrap(),
+        settings: Settings {
+            model: Some(ModelName::named(model.unwrap_or("sonnet"))),
+            mode: Some(mode),
+            effort: Some(Effort::High),
+            ..Settings::default()
+        },
         env: vec![],
         tools_token: None,
         login: None,
@@ -79,10 +80,10 @@ fn flag_value(args: &[String], flag: &str) -> Option<String> {
 
 #[test]
 fn first_launch_names_the_conversation_and_later_ones_resume_it() {
-    let first = args(&spec(None, PermissionMode::FullAccess), false);
+    let first = args(&spec(None, crate::claude::claims::full_access()), false);
     assert_eq!(flag_value(&first, "--session-id").as_deref(), Some("abc"));
     assert!(!first.contains(&"--resume".to_string()));
-    let later = args(&spec(None, PermissionMode::FullAccess), true);
+    let later = args(&spec(None, crate::claude::claims::full_access()), true);
     assert_eq!(flag_value(&later, "--resume").as_deref(), Some("abc"));
     assert!(!later.contains(&"--session-id".to_string()));
 }
@@ -91,12 +92,14 @@ fn first_launch_names_the_conversation_and_later_ones_resume_it() {
 /// tool, and a chat in a mode of the CLI's own, since a chat can't be given that.
 #[test]
 fn every_launch_has_full_access() {
-    let full_access = spec(None, PermissionMode::FullAccess);
+    let full_access = spec(None, crate::claude::claims::full_access());
     let left_out = AgentSpec {
         settings: protocol::capability::settings::Settings { mode: None, ..full_access.settings.clone() },
         ..full_access.clone()
     };
-    for (mode, spec) in [("full access", full_access), ("plan", spec(None, PermissionMode::Plan)), ("none", left_out)] {
+    for (mode, spec) in
+        [("full access", full_access), ("plan", spec(None, crate::claude::claims::plan())), ("none", left_out)]
+    {
         let args = args(&spec, false);
 
         assert_eq!(flag_value(&args, "--permission-mode").as_deref(), Some("bypassPermissions"), "{mode:?}");
@@ -108,7 +111,7 @@ fn every_launch_has_full_access() {
 #[test]
 fn every_launch_names_its_model_and_effort() {
     for effort in crate::claude::description().efforts {
-        let mut chosen = spec(Some("opus"), PermissionMode::FullAccess);
+        let mut chosen = spec(Some("opus"), crate::claude::claims::full_access());
         chosen.settings.effort = Some(effort.clone());
 
         let launched = args(&chosen, true);
@@ -133,7 +136,7 @@ fn the_agent_and_its_subagents_read_roundhouses_instructions_from_their_file() {
 
 #[test]
 fn a_level_this_build_cant_name_is_refused_rather_than_left_to_the_cli() {
-    let mut unknown = spec(None, PermissionMode::FullAccess);
+    let mut unknown = spec(None, crate::claude::claims::full_access());
     unknown.settings.effort = Some(protocol::capability::settings::Effort::Unknown);
 
     assert!(matches!(build_args(&unknown, false), Err(AgentError::UnknownEffort)));
@@ -141,7 +144,7 @@ fn a_level_this_build_cant_name_is_refused_rather_than_left_to_the_cli() {
 
 #[test]
 fn approvals_always_come_back_to_the_host() {
-    let args = args(&spec(None, PermissionMode::FullAccess), false);
+    let args = args(&spec(None, crate::claude::claims::full_access()), false);
     assert_eq!(flag_value(&args, "--permission-prompt-tool").as_deref(), Some("stdio"));
 }
 

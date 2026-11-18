@@ -21,7 +21,7 @@ use protocol::event::{
     TurnOutcome,
 };
 use protocol::fixtures;
-use protocol::model::{AgentSessionId, ApprovalId, PermissionMode, RunId, Seq, TaskId, ToolUseId};
+use protocol::model::{AgentSessionId, ApprovalId, RunId, Seq, TaskId, ToolUseId};
 use protocol::prompt::Prompt;
 use serde_json::{Value, json};
 
@@ -187,7 +187,8 @@ fn plain_wakeup_script() -> Value {
 
 #[tokio::test]
 async fn background_command_lists_task_drains_wakeup_into_own_turn_cancels_before_extra_call_and_obeys_laws() {
-    let mut h = Harness::new(&plain_wakeup_script(), PermissionMode::FullAccess, Start::New { conversation: None });
+    let mut h =
+        Harness::new(&plain_wakeup_script(), super::super::claims::full_access(), Start::New { conversation: None });
     let agent = h.started().await;
     let mut ledger = Ledger::new();
     let p1 = ledger.push(None, EventBody::UserPrompt { prompt: Prompt::new("run tests"), client_msg_id: None });
@@ -265,7 +266,7 @@ async fn mixed_ungated_and_gated_wakeup_batch_drains_and_holds_plan_in_plan_mode
         {"on": "session/prompt", "at": 1, "actions": [tool_event("session-1", "tool_call", "step-2", "pending", &step2_args, None), perm]},
         {"on": "", "at": 1, "actions": [tool_event("session-1", "tool_call_update", "step-2", "completed", &step2_args, Some(json!({"exit_code": 0, "output": "done\n"}))), user_chunk("session-1", "Continue"), msg_chunk("session-1", "Plan ready."), {"id": 6, "jsonrpc": "2.0", "result": {"stopReason": "end_turn"}}]}
     ]);
-    let mut plan_h = Harness::new(&plan_script, PermissionMode::Plan, Start::New { conversation: None });
+    let mut plan_h = Harness::new(&plan_script, super::super::claims::plan(), Start::New { conversation: None });
     let plan_agent = plan_h.started().await;
     let mut plan_ledger = Ledger::new();
     wait_init(&mut plan_h).await;
@@ -305,7 +306,7 @@ async fn mixed_ungated_and_question_wakeup_batch_drains_in_full_access() {
         {"on": "session/prompt", "at": 1, "actions": [question]},
         {"on": "", "at": 1, "actions": [user_chunk("session-1", "Continue"), msg_chunk("session-1", "Answered."), {"id": 6, "jsonrpc": "2.0", "result": {"stopReason": "end_turn"}}]}
     ]);
-    let mut full_h = Harness::new(&q_script, PermissionMode::FullAccess, Start::New { conversation: None });
+    let mut full_h = Harness::new(&q_script, super::super::claims::full_access(), Start::New { conversation: None });
     let full_agent = full_h.started().await;
     let mut full_ledger = Ledger::new();
     wait_init(&mut full_h).await;
@@ -332,7 +333,7 @@ async fn resumed_conversation_skips_historical_transcript_wakeups_from_before_la
     let wakeup_steps = [sys_step(), planner_step(&[])];
     let mut h = Harness::seeded(
         &script,
-        PermissionMode::FullAccess,
+        super::super::claims::full_access(),
         Start::Resume { conversation: AgentSessionId::from("kept-id") },
         |room| {
             let kept = room.join(".gemini").join("antigravity-cli").join("conversations");
@@ -365,7 +366,7 @@ async fn mid_turn_system_message_written_before_prompt_finishes_does_not_trigger
         {"on": "session/prompt", "at": 2, "actions": [msg_chunk("session-1", "Between-turn wakeup."), user_chunk("session-1", "Continue")]},
         {"on": "session/cancel", "actions": [{"id": 8, "jsonrpc": "2.0", "result": {"stopReason": "cancelled"}}]}
     ]);
-    let mut h = Harness::new(&script, PermissionMode::FullAccess, Start::New { conversation: None });
+    let mut h = Harness::new(&script, super::super::claims::full_access(), Start::New { conversation: None });
     let agent = h.started().await;
     let mut ledger = Ledger::new();
     let p1 = ledger.push(None, EventBody::UserPrompt { prompt: Prompt::new("turn 1"), client_msg_id: None });
