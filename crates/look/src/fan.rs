@@ -145,6 +145,13 @@ pub(crate) fn on_half_circle(center: Point<Pixels>, radius: Pixels, along: f32) 
     point(center.x + radius * angle.cos(), center.y + radius * angle.sin())
 }
 
+/// Paints the dots and rings `paint` lays down within `bounds` as one layer. Outside one, GPUI orders each of them by
+/// searching what's been painted under it, which for the dozens of dots in a mark cost more than painting them, on
+/// every frame of the display while it moves. Inside one they take its order, in the order they're painted.
+pub(crate) fn in_one_layer(window: &mut Window, bounds: Bounds<Pixels>, paint: impl FnOnce(&mut Window)) {
+    window.paint_layer(bounds, paint);
+}
+
 pub(crate) fn disc(window: &mut Window, center: Point<Pixels>, radius: Pixels, color: Hsla) {
     window.paint_quad(quad(
         square(center, radius),

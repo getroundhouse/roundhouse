@@ -39,7 +39,9 @@ pub fn task_ring(ring: TaskRing, cx: &App) -> impl IntoElement {
     canvas(
         |_, _, _| {},
         move |bounds, (), window, _| {
-            paint(bounds, ring, faint, light, phase(t, BACKGROUND_S), window);
+            fan::in_one_layer(window, bounds, |window| {
+                paint(bounds, ring, faint, light, phase(t, BACKGROUND_S), window);
+            });
             // Drawn again on the display's next frame, for as long as it's on screen and moving.
             if moves {
                 window.request_animation_frame();
