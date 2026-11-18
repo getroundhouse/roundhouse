@@ -53,6 +53,7 @@ impl Listening {
             deleter: Deleter::new("/bin/rm", ["-rf", "--"]),
             // Never run here, since nothing these start asks git for a credential.
             credential_helper: CredentialHelper::new("/bin/false", ["--"]),
+            machine: process::testing::git_environment().given(),
             refused: None,
             timers: worker::Timers::DEFAULT,
         };

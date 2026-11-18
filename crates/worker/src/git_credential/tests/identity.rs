@@ -2,6 +2,7 @@
 //! own commits are by.
 
 use std::path::{Path, PathBuf};
+use std::process::Command;
 
 use process::Environment;
 use process::testing::WholeEnvironment;
@@ -45,9 +46,9 @@ impl Machine {
     fn git(&self, dir: &Path, args: &[&str]) -> String {
         let mut environment = WholeEnvironment::for_a_test(self.home.path());
         environment.set("GIT_CONFIG_NOSYSTEM", "1");
-        let mut git = environment.command("git");
+        let mut git = Command::new("git");
         git.args(args).current_dir(dir);
-        self.files.environment().apply(&mut git);
+        self.files.environment(&environment.given()).apply(&mut git);
         let output = git.output().unwrap();
         assert!(output.status.success(), "git {args:?}: {}", String::from_utf8_lossy(&output.stderr));
         String::from_utf8(output.stdout).unwrap()

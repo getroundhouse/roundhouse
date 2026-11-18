@@ -1,6 +1,7 @@
-//! A worker handing the git credential its hub set to what it starts, and leaving no token behind.
+//! A worker handing what it starts the git credential its hub set, and none of git's variables of a repository, and
+//! leaving no token behind.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use protocol::client::ErrorCode;
@@ -93,10 +94,9 @@ async fn an_agent_and_a_one_off_call_are_given_the_files_only_while_the_credenti
     let mut expected = ["-p --input-format", "-p --model", "auth status"].map(|words| format!("{words} {config}"));
     expected.sort();
     assert_eq!(under_an_account, expected);
-    // MachineOwn inherits the caller's environment, which can itself come from a Roundhouse worker.
-    let inherited = std::env::var("GIT_CONFIG_VALUE_0").ok().filter(|value| !value.is_empty());
+    // The machine's own is the worker's environment, which gives no git config of its own here.
     let mut expected = expected.to_vec();
-    expected.push(format!("-p --input-format {}", inherited.as_deref().unwrap_or("none")));
+    expected.push("-p --input-format none".to_string());
     expected.sort();
     assert_eq!(all, expected);
     hub_write.shutdown().await.unwrap();
@@ -145,4 +145,62 @@ async fn a_worker_refused_the_instance_leaves_the_files_of_the_one_serving_it() 
 
     assert!(matches!(&answered, WorkerOutcome::Error(e) if e.code == ErrorCode::Conflict), "{answered:?}");
     assert!(files(dir.path()).join("credential.json").exists());
+}
+
+/// A repository at `dir` on `main`, with a commit of `file`, by its path with every link followed, as git names it.
+fn repository(dir: &Path, file: &str) -> PathBuf {
+    std::fs::create_dir_all(dir).unwrap();
+    process::testing::git(dir, &["init", "-q", "-b", "main"]);
+    std::fs::write(dir.join(file), "one\n").unwrap();
+    process::testing::git(dir, &["add", "."]);
+    process::testing::git(dir, &["commit", "-qm", "first"]);
+    dir.canonicalize().unwrap()
+}
+
+/// As for a worker started from inside a git hook in another repository, or from a shell with `GIT_DIR` exported. Its
+/// own git, and an agent's, under the machine's own and under an account, are each in the workspace's repository.
+#[tokio::test]
+async fn what_the_worker_starts_is_in_the_workspace_s_repository_whichever_its_environment_names() {
+    let dir = tempfile::tempdir().unwrap();
+    let (own, other) = (repository(&dir.path().join("own"), "a.txt"), repository(&dir.path().join("other"), "b.txt"));
+    std::fs::write(other.join("untracked.txt"), "elsewhere\n").unwrap();
+    let mut machine = process::testing::git_environment();
+    machine
+        .set("GIT_DIR", other.join(".git"))
+        .set("GIT_WORK_TREE", &other)
+        .set("GIT_INDEX_FILE", other.join(".git").join("index"));
+    // Which repository the agent's git is in, and whether it was given the other's.
+    let ran = dir.path().join("ran").display().to_string();
+    let records = format!(
+        r#"printf '%s %s\n' "$(git rev-parse --show-toplevel)" "${{GIT_DIR:-none}}" >> '{ran}'
+exec sleep 100"#
+    );
+    let config = worker::Config { machine: machine.given(), ..config(dir.path(), Some(cli(dir.path(), &records))) };
+    let Worker { read: hub_read, write: mut hub_write, running } = start_worker(config);
+    let mut frames = BufReader::new(hub_read).lines();
+    let status = WorkerRequest::GitStatus(protocol::worker::GitStatus { path: own.display().to_string() });
+
+    send(&mut hub_write, [hello(), status, WorkerRequest::AgentStart(agent_start("s1", &own, None))]).await;
+    // In whatever order they finish, since each runs on a task of its own.
+    let mut answered = std::collections::BTreeMap::new();
+    while answered.len() < 3 {
+        if let WorkerFrame::Reply { id, outcome } = next_frame(&mut frames).await {
+            answered.insert(id, outcome);
+        }
+    }
+    let status = answered.remove(&1).unwrap();
+    let under_the_machine_s_own = started(dir.path(), 1).await;
+    for (id, request) in (3..).zip([set(ada()), WorkerRequest::AgentStart(agent_start("s2", &own, None))]) {
+        hub_write.write_all(&frame::encode(&WorkerCall { id, request }).unwrap()).await.unwrap();
+    }
+    reply(&mut frames, 4).await;
+    let all = started(dir.path(), 2).await;
+
+    let WorkerOutcome::Response(WorkerResponse::GitStatus(status)) = status else { panic!("{status:?}") };
+    assert!(status.files.is_empty(), "the workspace has nothing to commit, where the other has: {:?}", status.files);
+    let in_own = format!("{} none", own.display());
+    assert_eq!(under_the_machine_s_own, std::slice::from_ref(&in_own));
+    assert_eq!(all, [in_own.clone(), in_own], "under an account too");
+    hub_write.shutdown().await.unwrap();
+    timeout(Duration::from_secs(10), running).await.expect("the worker to exit").unwrap();
 }

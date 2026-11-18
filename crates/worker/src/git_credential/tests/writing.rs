@@ -6,6 +6,7 @@ use protocol::worker::GithubCredential;
 
 use super::super::files::{Files, Handed};
 use super::{ada, files, installation};
+use crate::testing::given;
 
 fn read(path: impl AsRef<Path>) -> String {
     std::fs::read_to_string(path).unwrap()
@@ -128,9 +129,9 @@ fn a_process_given_the_files_sends_githubs_ssh_addresses_over_https() {
         // Without the person's own config, which can send GitHub over SSH, as "What still goes round it" says.
         let mut environment = WholeEnvironment::for_a_test(state.path());
         environment.set("GIT_CONFIG_NOSYSTEM", "1");
-        let mut git = environment.command("git");
+        let mut git = Command::new("git");
         git.args(["ls-remote", "--get-url", remote]);
-        files.environment().apply(&mut git);
+        files.environment(&environment.given()).apply(&mut git);
         String::from_utf8(git.output().unwrap().stdout).unwrap()
     };
 
@@ -146,7 +147,7 @@ fn a_process_given_the_files_reads_them_rather_than_any_token_it_would_inherit()
     let mut command = Command::new("gh");
     command.env("GH_TOKEN", "the-machines-own").env("GIT_CONFIG_COUNT", "2");
 
-    files.environment().apply(&mut command);
+    files.environment(&given()).apply(&mut command);
 
     let given: Vec<_> = command.get_envs().map(|(name, value)| (name.to_str().unwrap(), value)).collect();
     let dir = state.path().join("git-credential");

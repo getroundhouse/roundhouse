@@ -99,7 +99,9 @@ async fn without_a_login_the_cli_is_given_no_token_even_after_a_call_that_had_on
         reply(&mut frames, id).await;
     }
 
-    let own = |name: &str| std::env::var(name).unwrap_or_else(|_| "none".to_string());
+    // What the machine's environment, as `config` gives it, has of its own.
+    let machine = process::testing::git_environment();
+    let own = |name: &str| machine.get(name).map_or("none".to_string(), |value| value.to_string_lossy().into_owned());
     let without = format!("account {} {}", own("CLAUDE_CODE_OAUTH_TOKEN"), own("ANTHROPIC_API_KEY"));
     assert_eq!(ran(dir.path(), 2).await, ["account for-the-first none".to_string(), without]);
     hub_write.shutdown().await.unwrap();

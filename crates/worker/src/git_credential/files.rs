@@ -73,12 +73,13 @@ impl Files {
         Self { dir: state_dir.join(DIR), helper }
     }
 
-    /// What a process is given, so its `git` and `gh` read the files: the git config as an `include.path` given in
-    /// `GIT_CONFIG_*`, which replaces any of those the worker inherited, and the `gh` directory as `GH_CONFIG_DIR`.
-    pub(super) fn environment(&self) -> Environment {
+    /// What a process is given on a machine whose own is `machine`, so its `git` and `gh` read the files: the git
+    /// config as an `include.path` given in `GIT_CONFIG_*`, which replaces any of those the worker inherited, and the
+    /// `gh` directory as `GH_CONFIG_DIR`.
+    pub(super) fn environment(&self, machine: &Environment) -> Environment {
         GH_TOKENS
             .into_iter()
-            .fold(Environment::NONE, Environment::without)
+            .fold(machine.clone(), Environment::without)
             .with("GIT_CONFIG_COUNT", "1")
             .with("GIT_CONFIG_KEY_0", "include.path")
             .with("GIT_CONFIG_VALUE_0", self.dir.join(CONFIG))

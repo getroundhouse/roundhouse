@@ -19,17 +19,28 @@ const NEWER_HUB: &str = "This workspace's worker is older than Roundhouse's hub,
 
 pub(crate) struct GitCredentials {
     files: Arc<Files>,
-    /// What a process started now is given: nothing under the machine's own login, which is what a worker starts
-    /// with, and the files otherwise.
+    /// What a process is given under the machine's own login: the machine's environment, with none of git's variables
+    /// of a repository.
+    machine: Arc<Environment>,
+    /// What a process started now is given: [`Self::machine`] under the machine's own login, which is what a worker
+    /// starts with, and that with the files otherwise.
     given: watch::Sender<Arc<Environment>>,
     /// Whether this machine's git reads the files, asked once, the first time it matters.
     git: OnceCell<Result<(), String>>,
 }
 
 impl GitCredentials {
-    pub(crate) fn new(state_dir: &Path, helper: &CredentialHelper) -> Self {
+    /// For a worker on a machine whose environment is `machine`, as [`crate::Config::machine`] says.
+    pub(crate) fn new(state_dir: &Path, helper: &CredentialHelper, machine: Environment) -> Self {
         let files = Arc::new(Files::new(state_dir, helper.words()));
-        Self { files, given: watch::Sender::new(Arc::new(Environment::NONE)), git: OnceCell::new() }
+        let machine = Arc::new(crate::git::in_no_repository(machine));
+        Self { files, given: watch::Sender::new(machine.clone()), machine, git: OnceCell::new() }
+    }
+
+    /// What a process is given under the machine's own login, whatever credential the hub has set, for what reads
+    /// the machine's own, such as who its `gh` is logged in as.
+    pub(crate) fn machine(&self) -> &Environment {
+        &self.machine
     }
 
     /// What a process the worker starts now is given, for as long as it runs.
@@ -79,7 +90,7 @@ impl GitCredentials {
             let why = format!("couldn't write the git credential's files: {e}");
             return Err(ApiError::new(ErrorCode::Unavailable, why));
         }
-        self.given.send_replace(Arc::new(self.files.environment()));
+        self.given.send_replace(Arc::new(self.files.environment(&self.machine)));
         if unknown {
             return Err(ApiError::new(ErrorCode::Unsupported, "this worker doesn't know the kind of git credential"));
         }
@@ -88,7 +99,7 @@ impl GitCredentials {
 
     /// What's started from now on goes without, and so does what was started under one, once the files have gone.
     async fn machine_own(&self) -> Result<(), ApiError> {
-        self.given.send_replace(Arc::new(Environment::NONE));
+        self.given.send_replace(self.machine.clone());
         let files = self.files.clone();
         let removed = tokio::task::spawn_blocking(move || files.remove()).await.map_err(std::io::Error::other);
         removed.and_then(|removed| removed).map_err(|e| {
@@ -99,7 +110,7 @@ impl GitCredentials {
     /// Removes the files, as the worker starts and as it exits, so no snapshot of the machine keeps a token, and the
     /// last worker's are gone if it was killed. What can't be removed goes in the log.
     pub(crate) fn remove(&self) {
-        self.given.send_replace(Arc::new(Environment::NONE));
+        self.given.send_replace(self.machine.clone());
         if let Err(e) = self.files.remove() {
             warn!("couldn't remove the git credential's files: {e}");
         }
