@@ -15,9 +15,8 @@ use crate::attachment::AttachmentFile;
 use crate::model::{ApprovalId, Seq, TaskId};
 use crate::prompt::Prompt;
 
-/// A request to a running agent. What it names by a [`Seq`] is recorded first. It takes the place of the worker's
-/// `AgentPrompt`, `AgentApproval`, `AgentCancel`, `AgentCompact` and `AgentConfigure`, as one request that carries a
-/// `Control`, and a launch is `AgentSpec`, with a [`conversation::Start`] and [`Settings`].
+/// A request to a running agent, which the worker's `AgentControl` carries. What it names by a [`Seq`] is recorded
+/// first. A launch is `AgentSpec`, with a [`conversation::Start`] and [`Settings`].
 ///
 /// It has no variant for one this build doesn't know, since each new one, and every new value of one, needs a
 /// capability of its own, which no run from an older build claims, so the hub never sends one to a worker that can't
