@@ -155,7 +155,11 @@ impl Inner {
 
     /// Sends `request` as call `id`, or says there's no connection to send it on.
     fn send(&self, id: u64, request: ClientRequest) -> Result<()> {
+        let t = std::time::Instant::now();
         let line = frame::encode(&ClientFrame { id, request }).map_err(|e| ClientError::Unexpected(e.to_string()))?;
+        if line.len() > 1 << 20 {
+            eprintln!("PROBE encoded {} in {:?}", line.len(), t.elapsed());
+        }
         if *self.disconnected.lock() {
             return Err(ClientError::Disconnected);
         }
