@@ -23,8 +23,8 @@ final-status-level = "slow"
 [profile.ci.junit]
 path = "junit.xml"
 
-# How the Mac workflow runs the tests: `cargo nextest run --profile mac`, a third of them on each of three runners of 3
-# cores. The tests take all of a runner's cores there, so more at once only slows each down.
+# How the Mac workflow runs the tests: `cargo nextest run --profile mac`, a quarter of them on each of four runners of
+# 3 cores. The tests take all of a runner's cores there, so more at once only slows each down.
 [profile.mac]
 fail-fast = false
 retries = 0
