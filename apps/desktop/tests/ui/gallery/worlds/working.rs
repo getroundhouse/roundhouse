@@ -2,8 +2,8 @@
 
 use protocol::attachment::{Attachment, MediaType};
 use protocol::model::{
-    Checks, ObservedCheck, PullRequest, PullRequestFound, PullRequestNumber, PullRequestSelection, QueuedPrompt,
-    SessionStatus, Wait, WaitUntil,
+    Checks, ObservedCheck, PullRequest, PullRequestFound, PullRequestNumber, PullRequestSelection, QueueState,
+    QueuedPrompt, SessionStatus, Wait, WaitUntil,
 };
 use protocol::prompt::Prompt;
 
@@ -67,7 +67,8 @@ pub(in crate::gallery) fn waiting_on_checks() -> World {
     world
 }
 
-/// Two independent remote waits, one of them spanning a stack.
+/// Two independent remote waits: one on a stack's required checks, and one until a merge, on a pull request whose
+/// checks are running in the merge queue.
 pub(in crate::gallery) fn waiting_on_stacks() -> World {
     let mut world = World::default();
     let focus = sidebar(&mut world);
@@ -91,7 +92,10 @@ pub(in crate::gallery) fn waiting_on_stacks() -> World {
     watch.requested =
         protocol::model::PullRequestSelection::try_from(vec![protocol::model::PullRequestNumber::try_from(9).unwrap()])
             .unwrap();
-    watch.snapshot.pull_requests = vec![protocol::fixtures::observed_pull_request(9)];
+    let mut queued = protocol::fixtures::observed_pull_request(9);
+    queued.pull_request.checks = Checks { passed: 1, failed: 0, pending: 0 };
+    queued.pull_request.queue = Some(QueueState::AwaitingChecks);
+    watch.snapshot.pull_requests = vec![queued];
     world.sessions.iter_mut().filter(|session| session.id == chat).for_each(|session| {
         session.waits = Some(vec![wait.clone(), second.clone()]);
     });

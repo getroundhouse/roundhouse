@@ -33,6 +33,24 @@ fn an_open_pull_request_with_nothing_in_the_way_is_ready() {
     assert_eq!(Standing::of(None), Standing::NoPullRequest);
 }
 
+/// A wait goes by GitHub alone, so the worktree's files and commits don't stand in its way, while merged, closed and
+/// the queue still come first, as they do for the bar.
+#[test]
+fn on_github_alone_leaves_out_the_worktree() {
+    let here = Local { uncommitted: 2, ahead: 1, behind: 0 };
+    let running = Checks { passed: 1, failed: 0, pending: 2 };
+    let with = |change: fn(&mut PullRequest)| {
+        let mut pr = PullRequest { local: here, checks: running, ..open() };
+        change(&mut pr);
+        Standing::on_github_alone(&pr)
+    };
+
+    assert_eq!(with(|_| {}), Standing::ChecksRunning(running), "not the uncommitted files");
+    assert_eq!(with(|pr| pr.queue = Some(QueueState::AwaitingChecks)), Standing::Queued(QueueState::AwaitingChecks));
+    assert_eq!(with(|pr| pr.state = PrState::Merged), Standing::Merged);
+    assert_eq!(with(|pr| pr.state = PrState::Closed), Standing::Closed);
+}
+
 #[test]
 fn work_here_comes_before_what_github_says_about_an_older_commit() {
     let failing = Checks { passed: 1, failed: 2, pending: 0 };

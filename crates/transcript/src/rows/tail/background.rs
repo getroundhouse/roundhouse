@@ -108,38 +108,18 @@ pub(super) fn wait_line(wait: &Wait, shared: &Shared, cx: &App) -> Div {
 /// the hub's reading of them. A wait the singular tool started, which only a hub from before it was dropped can still
 /// have open, has no reading, so it says only what it waits on.
 fn wait_words(wait: &Wait) -> (String, &'static str) {
-    let what = format!("Waiting on {}", waits::watched(&wait.watching()));
-    if let Some(watch) = &wait.watch {
-        let pending = watch
-            .snapshot
-            .pull_requests
-            .iter()
-            .flat_map(|row| &row.checks)
-            .filter(|check| {
-                (wait.until != WaitUntil::RequiredChecks || check.required)
-                    && matches!(
-                        check.state,
-                        protocol::model::CheckState::Pending | protocol::model::CheckState::Unknown
-                    )
-            })
-            .count();
-        let said = if watch.read_error.is_some() {
-            format!("{what} \u{b7} couldn't refresh GitHub")
-        } else {
-            format!("Waiting on {}", waits::watched_running(&wait.watching(), pending))
-        };
-        return (
-            said,
-            "Until every watched pull request reaches the condition, or one needs the agent; Stop ends only this wait",
-        );
-    }
-    let pointed_at = match wait.until {
-        WaitUntil::Checks | WaitUntil::RequiredChecks | WaitUntil::AllChecks => {
+    let pointed_at = match (&wait.watch, wait.until) {
+        (Some(_), _) => {
+            "Until every watched pull request reaches the condition, or one needs the agent; Stop ends only this wait"
+        }
+        (None, WaitUntil::Checks | WaitUntil::RequiredChecks | WaitUntil::AllChecks) => {
             "Until its checks have run and none failed, or it needs the agent"
         }
-        WaitUntil::Done | WaitUntil::Merged | WaitUntil::Unknown => "Until it's merged or closed, or needs the agent",
+        (None, WaitUntil::Done | WaitUntil::Merged | WaitUntil::Unknown) => {
+            "Until it's merged or closed, or needs the agent"
+        }
     };
-    (what, pointed_at)
+    (waits::waiting(wait), pointed_at)
 }
 
 /// Calls off the wait. Its line goes as the hub records that, and the agent's CLI hears as it next asks after its task,
@@ -192,46 +172,4 @@ fn in_the_background(
 
 fn ring(ring: TaskRing, cx: &App) -> AnyElement {
     look::task_ring(ring, cx).into_any_element()
-}
-
-#[cfg(test)]
-mod tests {
-    use protocol::model::{Wait, WaitUntil};
-
-    use super::wait_words;
-
-    /// A wait the singular tool started has no reading of its pull request, so its line says only what it waits on.
-    #[test]
-    fn a_wait_with_no_reading_says_only_what_it_waits_on() {
-        let wait = Wait {
-            id: "w1".into(),
-            session_id: "s1".into(),
-            workspace_id: "ws1".into(),
-            number: 7,
-            call: None,
-            until: WaitUntil::Checks,
-            watch: None,
-            started_at_ms: 0,
-            ended: None,
-        };
-
-        assert_eq!(wait_words(&wait).0, "Waiting on #7's checks");
-        assert_eq!(wait_words(&Wait { until: WaitUntil::Done, ..wait }).0, "Waiting on #7");
-    }
-
-    /// A wait asked about pull requests names them, what for and how many of the checks it goes by are still running,
-    /// or that GitHub couldn't be read.
-    #[test]
-    fn a_waits_line_names_the_pull_requests_it_was_asked_about() {
-        let wait = protocol::fixtures::pull_request_wait("w1");
-
-        let (said, _) = wait_words(&wait);
-
-        assert_eq!(said, "Waiting on #7 \u{b7} 1 required check running");
-        let merge = Wait { until: WaitUntil::Merged, ..wait.clone() };
-        assert_eq!(wait_words(&merge).0, "Waiting on #7 to merge \u{b7} 1 check running");
-        let mut unread = wait;
-        unread.watch.as_mut().unwrap().read_error = Some("offline".into());
-        assert_eq!(wait_words(&unread).0, "Waiting on #7 for required checks \u{b7} couldn't refresh GitHub");
-    }
 }

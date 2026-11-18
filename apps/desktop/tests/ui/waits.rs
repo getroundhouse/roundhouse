@@ -4,13 +4,14 @@
 #![cfg(test)]
 
 use gpui_kit::{SharedString, TestAppContext};
-use hub::GithubPullRequestState::{Open, Passed};
+use hub::GithubPullRequestState::{Open, Queued};
 use protocol::model::SessionStatus;
 
 use crate::support::{Stack, Ui};
 
 /// The wait's line is drawn from the hub's wait, and says what it waits on and where the pull request stands on GitHub,
-/// as its checks change. Its Stop calls that wait off, and the line goes as the hub records it. The agent
+/// in the bar's words, as that changes: its checks running, then its place in the merge queue, whose checks run on the
+/// queue's commit rather than the pull request's. Its Stop calls that wait off, and the line goes as the hub records it. The agent
 /// hears that the person stopped it, in a turn of its own.
 #[gpui_kit::test]
 fn a_wait_s_line_says_where_its_pull_request_stands_and_stop_calls_it_off(cx: &mut TestAppContext) {
@@ -37,10 +38,10 @@ fn a_wait_s_line_says_where_its_pull_request_stands_and_stop_calls_it_off(cx: &m
     });
     let waits_turn = ui.reply_seq();
 
-    github.pull_requests.set(7, Passed);
+    github.pull_requests.set(7, Queued);
     ui.input(r#"mcp:get_pull_requests {"pull_requests":[7]}"#);
     ui.press("enter");
-    ui.wait("the line to follow", |ui| ui.shows_label(&text, "Waiting on #7 to merge · 0 checks running"));
+    ui.wait("the line to follow", |ui| ui.shows_label(&text, "Waiting on #7 to merge · Running checks in the queue"));
     // The agent's read moved the line, in a turn whose end is drawn above the line and moves it down as it comes. So Stop
     // is pressed once that's drawn, or the press can land where the button no longer is, and be lost. The hub reads a
     // pull request waited on by itself too, so the line can follow before the chat's record says the read's turn has
