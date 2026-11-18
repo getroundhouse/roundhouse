@@ -124,24 +124,11 @@ impl Changes {
     }
 
     /// How many comments are waiting, and the button that sends them.
-    pub(super) fn comments_bar(&self, count: usize, cx: &mut Context<Self>) -> impl IntoElement {
+    pub(super) fn comments_bar(&self, count: usize, _cx: &mut Context<Self>) -> impl IntoElement {
         let review = self.review.downgrade();
-        h_flex()
-            .flex_none()
-            .w_full()
-            .h(look::BarSize::Regular.height())
-            .px(look::Space::Medium)
-            .gap(look::Space::Small)
-            .justify_between()
-            .border_b_1()
-            .border_color(look::colors(cx).edge)
-            .child(
-                div()
-                    .typeset(look::Type::Body)
-                    .emphasis()
-                    .child(format!("{count} comment{}", if count == 1 { "" } else { "s" })),
-            )
-            .child(
+        look::bar(look::BarKind::Words, look::BarSize::Regular)
+            .child(div().emphasis().child(format!("{count} comment{}", if count == 1 { "" } else { "s" })))
+            .end(
                 look::button("send-comments", look::ButtonKind::Main, look::ControlSize::Regular, "Send to agent")
                     .on_click(move |_, _, cx| {
                         let _ = review.update(cx, Review::send_comments);

@@ -15,6 +15,7 @@
 mod approval_chats;
 mod approved;
 mod background_chats;
+mod bar_kinds;
 mod baselines;
 mod cache_screens;
 mod call_screens;
@@ -25,6 +26,7 @@ mod codex_screens;
 mod colours;
 mod compaction_chats;
 mod component_screens;
+mod components_approved;
 mod context_screens;
 mod dialog_widths;
 mod dictation_screens;

@@ -10,6 +10,7 @@ use std::sync::Arc;
 
 use client_core::records::{Changes, Snapshot, subagent_named};
 use gpui_kit::component::{Icon, IconName, h_flex, v_flex};
+use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, AppContext as _, Context, Entity, FocusHandle, InteractiveElement as _, IntoElement as _,
     ParentElement as _, Role, StatefulInteractiveElement as _, Styled, Subscription, TestSupportExt as _, div, px,
@@ -258,14 +259,7 @@ fn band(
         .and_then(|s| shown_kind(s.kind.as_deref()))
         .map(|kind| look::chip(look::ChipKind::Subagent, kind.to_string()));
     let standing = subagent.map(subagent_standing);
-    h_flex()
-        .flex_none()
-        .w_full()
-        .h(look::BarSize::Regular.height())
-        .px(look::Space::Large)
-        .gap(look::Space::Small)
-        .border_b_1()
-        .border_color(colors.edge)
+    look::bar(look::BarKind::Words, look::BarSize::Regular)
         .child(Icon::new(IconName::Bot).sized(look::IconSize::Large).text_color(colors.text_faint))
         .children(from)
         .child(
@@ -279,9 +273,8 @@ fn band(
                 .child(title),
         )
         .children(chip)
-        .child(div().flex_1())
-        .children(
-            standing.map(|s| div().flex_none().typeset(look::Type::Detail).text_color(colors.text_faint).child(s)),
-        )
+        .when_some(standing, |band, s| {
+            band.end(div().flex_none().typeset(look::Type::Detail).text_color(colors.text_faint).child(s))
+        })
         .into_any_element()
 }

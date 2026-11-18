@@ -7,5 +7,7 @@ mod tests;
 
 mod tab;
 mod widths;
+#[cfg(test)]
+pub(crate) use tab::TAB_START;
 pub use tab::{Tab, tab};
 pub use widths::TabWidth;

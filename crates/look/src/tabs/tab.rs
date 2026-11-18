@@ -18,6 +18,8 @@ use crate::shape::TAB_LINE;
 use crate::space::Space;
 use crate::typography::{Type, Typeset as _};
 
+/// How far in from a tab's start its mark or its name starts.
+pub(crate) const TAB_START: Space = Space::Medium;
 /// Each tab's, so what shows while the pointer is over a tab shows only on that tab.
 const GROUP: &str = "look-tab";
 /// How strong the line under a tab is while the pointer is over it, of the line under the tab showing, as the owner
@@ -162,7 +164,7 @@ impl RenderOnce for Tab {
             .h_full()
             .when(even, |tab| tab.w_full().justify_start())
             .gap(Space::Small)
-            .pl(Space::Medium)
+            .pl(TAB_START)
             .pr(if self.closes.is_some() { Space::Small } else { Space::Medium })
             .when(text.is_none(), |tab| tab.typeset(Type::Body).line_height(relative(1.25)))
             .map(|tab| {

@@ -1,12 +1,12 @@
 #![cfg(test)]
 use super::screens::SCREENS;
 use super::{
-    approval_chats, approved, background_chats, baselines, button_states, cache_screens, call_screens, capture, cards,
-    colours, compaction_chats, component_screens, context_screens, controls, corners, dialog_widths, dictation_screens,
-    diff_screens, failure_chats, failures_in_a_row, field_states, heights, home_screens, icon_sizes, key_kinds,
-    kinds_of_text, list_rows, mark_states, menu_rows, own_turn_chats, pull_requests, settings_screens, sidebar_screens,
-    small_things, spaces, steps, subagent_chats, switch_kinds, tab_widths, terminal_screens, toggle_states,
-    tool_screens, tooltips, turn_screens, update_screens, workspace_screens,
+    approval_chats, approved, background_chats, bar_kinds, baselines, button_states, cache_screens, call_screens,
+    capture, cards, colours, compaction_chats, component_screens, context_screens, controls, corners, dialog_widths,
+    dictation_screens, diff_screens, failure_chats, failures_in_a_row, field_states, heights, home_screens, icon_sizes,
+    key_kinds, kinds_of_text, list_rows, mark_states, menu_rows, own_turn_chats, pull_requests, settings_screens,
+    sidebar_screens, small_things, spaces, steps, subagent_chats, switch_kinds, tab_widths, terminal_screens,
+    toggle_states, tool_screens, tooltips, turn_screens, update_screens, workspace_screens,
 };
 use approved::Verdict;
 use capture::Picture;
@@ -114,6 +114,7 @@ fn every_screen_looks_as_approved() {
             small_things::COUNTS,
             switch_kinds::NAME,
             tab_widths::NAME,
+            bar_kinds::NAME,
             dialog_widths::NAME,
             cards::NAME,
             menu_rows::NAME,
@@ -174,7 +175,7 @@ fn screens() -> impl Iterator<Item = &'static steps::Screen> {
 
 /// What's wrong with a picture: its spec doesn't show it, it keeps changing, or it isn't as approved. With
 /// [`UPDATE`] set, it's accepted instead of compared. Either way it goes in `.context/gallery/` to look at.
-fn look_at(name: &str, spec: &str, picture: &Picture) -> Vec<String> {
+pub(super) fn look_at(name: &str, spec: &str, picture: &Picture) -> Vec<String> {
     let mut problems = Vec::new();
     if !approved::shown_in(name, spec) {
         problems.push(format!("docs/spec/{spec} doesn't show {name}"));
@@ -202,7 +203,7 @@ fn keep_to_look_at(name: &str, picture: &Picture) {
     picture.image.save(out.join(format!("{name}.png"))).unwrap();
 }
 
-fn report(problems: &[String]) {
+pub(super) fn report(problems: &[String]) {
     assert!(
         problems.is_empty(),
         "{}\n\nWhat each screen looks like now is in .context/gallery/. If a change is meant, {UPDATE}=1 accepts it, \
@@ -230,138 +231,6 @@ fn every_control_size_looks_as_approved() {
 
     let mut problems = look_at(controls::NAME, controls::SPEC, &picture);
     problems.extend(places.look_at(controls::NAME));
-    report(&problems);
-}
-
-#[test]
-fn every_kind_of_button_in_every_state_looks_as_approved() {
-    let text_system: Arc<dyn PlatformTextSystem> = Arc::new(gpui_apple::AppleTextSystem::new());
-
-    let (picture, places) = button_states::draw(&text_system);
-
-    let mut problems = look_at(button_states::NAME, button_states::SPEC, &picture);
-    problems.extend(places.look_at(button_states::NAME));
-    report(&problems);
-}
-
-#[test]
-fn every_kind_of_field_in_every_state_looks_as_approved() {
-    let text_system: Arc<dyn PlatformTextSystem> = Arc::new(gpui_apple::AppleTextSystem::new());
-
-    let (picture, places) = field_states::draw(&text_system);
-
-    let mut problems = look_at(field_states::NAME, field_states::SPEC, &picture);
-    problems.extend(places.look_at(field_states::NAME));
-    report(&problems);
-}
-
-#[test]
-fn every_state_of_a_toggle_looks_as_approved() {
-    let text_system: Arc<dyn PlatformTextSystem> = Arc::new(gpui_apple::AppleTextSystem::new());
-
-    let picture = toggle_states::draw(&text_system);
-
-    report(&look_at(toggle_states::NAME, toggle_states::SPEC, &picture));
-}
-
-#[test]
-fn every_kind_of_menu_row_looks_as_approved() {
-    let text_system: Arc<dyn PlatformTextSystem> = Arc::new(gpui_apple::AppleTextSystem::new());
-
-    let (picture, places) = menu_rows::draw(&text_system);
-
-    let mut problems = look_at(menu_rows::NAME, menu_rows::SPEC, &picture);
-    problems.extend(places.look_at(menu_rows::NAME));
-    report(&problems);
-}
-
-#[test]
-fn every_kind_of_switch_looks_as_approved() {
-    let text_system: Arc<dyn PlatformTextSystem> = Arc::new(gpui_apple::AppleTextSystem::new());
-
-    let (picture, places) = switch_kinds::draw(&text_system);
-
-    let mut problems = look_at(switch_kinds::NAME, switch_kinds::SPEC, &picture);
-    problems.extend(places.look_at(switch_kinds::NAME));
-    report(&problems);
-}
-
-#[test]
-fn every_width_of_dialog_looks_as_approved() {
-    let text_system: Arc<dyn PlatformTextSystem> = Arc::new(gpui_apple::AppleTextSystem::new());
-
-    let (picture, places) = dialog_widths::draw(&text_system);
-
-    let mut problems = look_at(dialog_widths::NAME, dialog_widths::SPEC, &picture);
-    problems.extend(places.look_at(dialog_widths::NAME));
-    report(&problems);
-}
-
-#[test]
-fn every_kind_and_width_of_card_looks_as_approved() {
-    let text_system: Arc<dyn PlatformTextSystem> = Arc::new(gpui_apple::AppleTextSystem::new());
-
-    let (picture, places) = cards::draw(&text_system);
-
-    let mut problems = look_at(cards::NAME, cards::SPEC, &picture);
-    problems.extend(places.look_at(cards::NAME));
-    report(&problems);
-}
-
-#[test]
-fn every_width_of_tab_looks_as_approved() {
-    let text_system: Arc<dyn PlatformTextSystem> = Arc::new(gpui_apple::AppleTextSystem::new());
-
-    let (picture, places) = tab_widths::draw(&text_system);
-
-    let mut problems = look_at(tab_widths::NAME, tab_widths::SPEC, &picture);
-    problems.extend(places.look_at(tab_widths::NAME));
-    report(&problems);
-}
-
-#[test]
-fn every_size_of_list_row_looks_as_approved() {
-    let text_system: Arc<dyn PlatformTextSystem> = Arc::new(gpui_apple::AppleTextSystem::new());
-
-    let picture = list_rows::draw(&text_system);
-
-    report(&look_at(list_rows::NAME, list_rows::SPEC, &picture));
-}
-
-#[test]
-fn every_tooltip_looks_as_approved() {
-    let text_system: Arc<dyn PlatformTextSystem> = Arc::new(gpui_apple::AppleTextSystem::new());
-
-    let picture = tooltips::draw(&text_system);
-
-    report(&look_at(tooltips::NAME, tooltips::SPEC, &picture));
-}
-
-#[test]
-fn every_kind_of_key_looks_as_approved() {
-    let text_system: Arc<dyn PlatformTextSystem> = Arc::new(gpui_apple::AppleTextSystem::new());
-
-    let (picture, places) = key_kinds::draw(&text_system);
-
-    let mut problems = look_at(key_kinds::NAME, key_kinds::SPEC, &picture);
-    problems.extend(places.look_at(key_kinds::NAME));
-    report(&problems);
-}
-
-#[test]
-fn every_pill_chip_badge_and_count_looks_as_approved() {
-    let text_system: Arc<dyn PlatformTextSystem> = Arc::new(gpui_apple::AppleTextSystem::new());
-    let mut problems = Vec::new();
-
-    for (name, (picture, places)) in [
-        (small_things::PILLS, small_things::pills(&text_system)),
-        (small_things::CHIPS, small_things::chips(&text_system)),
-        (small_things::BADGES, small_things::badges(&text_system)),
-        (small_things::COUNTS, small_things::counts(&text_system)),
-    ] {
-        problems.extend(look_at(name, small_things::SPEC, &picture));
-        problems.extend(places.look_at(name));
-    }
     report(&problems);
 }
 

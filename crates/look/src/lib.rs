@@ -12,6 +12,7 @@
 
 mod app_icon;
 mod badges;
+mod bars;
 mod baseline;
 mod cache;
 mod cards;
@@ -60,6 +61,7 @@ mod work;
 
 pub use app_icon::{AppIconSize, AppIconStyle, app_icon};
 pub use badges::{Badge, BadgeKind, Label, badge, label};
+pub use bars::{Bar, BarKind, bar};
 pub use baseline::{LineText, Placed};
 pub use cache::{CacheMark, cache_mark, expires_in, minutes_left, next_minute_in_ms};
 pub use cards::{Card, CardHeading, CardKind, CardWidth, card, card_heading};

@@ -82,17 +82,10 @@ pub fn bar(
 ) -> AnyElement {
     let work = lookup.work();
     let colors = look::colors(cx);
-    let row = h_flex()
+    let row = look::bar(look::BarKind::Words, look::BarSize::Regular)
         .id("pull-request-bar")
-        .flex_none()
-        .w_full()
-        .h(look::BarSize::Regular.height())
-        .pl(look::Space::Medium)
-        .pr(look::Space::Medium.size() + sides::clearance(AtTheTop::RightSidebar, cx).end)
-        .gap(look::Space::Small)
-        .bg(work.tint(colors))
-        .border_b_1()
-        .border_color(colors.edge);
+        .clear(gpui_kit::px(0.), sides::clearance(AtTheTop::RightSidebar, cx).end)
+        .of_work(work);
     let Some(standing) = lookup.standing() else {
         return row
             .child(div().typeset(look::Type::Body).text_color(colors.text_faint).child("Looking for its pull request…"))

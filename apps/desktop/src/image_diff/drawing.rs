@@ -5,6 +5,7 @@
 //! kind of image it is and how big, and in Difference how much changed.
 
 use gpui_kit::component::{h_flex, v_flex};
+use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, Context, Div, InteractiveElement as _, IntoElement, ParentElement as _, Pixels, Render,
     SharedString, Styled as _, TestSupportExt as _, WeakEntity, Window, div, px,
@@ -176,13 +177,13 @@ fn header(path: Option<SharedString>, choices: Option<look::Switch>, cx: &App) -
         folders = folders.min_w(FOLDERS_LEAST).child(format!("{within}/"));
     }
     folders.style().flex_shrink = Some(FOLDERS_SHRINK);
-    let copy = (!path.is_empty()).then(|| div().flex_none().pl(look::Space::Small).child(copy_path(&path, cx)));
-    bar(cx)
-        .px(look::Space::Large)
+    let copy = (!path.is_empty()).then(|| copy_path(&path, cx));
+    // The folders and the name are one path, so nothing comes between them.
+    let path = h_flex()
+        .min_w_0()
         .child(folders)
-        .child(div().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().child(name.to_string()))
-        .children(copy)
-        .children(choices.map(|choices| div().flex_none().ml_auto().pl(look::Space::Large).child(choices)))
+        .child(div().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().child(name.to_string()));
+    bar().child(path).children(copy).when_some(choices, look::Bar::end)
 }
 
 /// Side by side, Before, After and Difference, of which Before and After flip one image between the two sides.
