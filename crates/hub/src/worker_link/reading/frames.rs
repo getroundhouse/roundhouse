@@ -3,6 +3,8 @@ use crate::frames::FrameReader;
 use crate::hub::Hub;
 use crate::session::Item;
 use crate::untyped::Typing;
+use protocol::capability::Report;
+use protocol::capability::account::Limit;
 use protocol::client::{ApiError, ErrorCode, Outcome, error_chain};
 use protocol::frame;
 use protocol::model::{AgentKind, InstanceId, RunId, SessionId, WorkspaceId};
@@ -128,13 +130,14 @@ pub(in super::super) async fn route(hub: &Arc<Hub>, link: &WorkerLink, frame: Wo
         }
         WorkerFrame::AgentDelta { session_id, run, delta } => (session_id, Item::Delta { run, delta }, None),
         WorkerFrame::AgentContext { session_id, run, context, seq } => {
-            (session_id, Item::Context { run, context, seq }, seq)
+            (session_id, Item::Report { run, report: Report::Context { context }, seq }, seq)
         }
         WorkerFrame::AgentCache { session_id, run, request, seq } => {
-            (session_id, Item::Cache { run, request, seq }, seq)
+            (session_id, Item::Report { run, report: Report::Cache { request }, seq }, seq)
         }
         WorkerFrame::AgentLimits { session_id, run, limits, every_models_week, seq } => {
-            (session_id, Item::Limits { run, limits, every_models_week, seq }, seq)
+            let report = Report::Limits { limits: limits.iter().map(Limit::of).collect(), every_models_week };
+            (session_id, Item::Report { run, report, seq }, seq)
         }
         WorkerFrame::AgentTail { session_id, run, tail } => (session_id, Item::Tail { run, tail }, None),
         WorkerFrame::AgentRetrying { session_id, run, retrying } => {

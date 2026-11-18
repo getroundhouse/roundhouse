@@ -1,7 +1,8 @@
 //! What the session takes in from its agent's worker: what it tells the feed, what it has heard already, and what the
 //! hub answers for the person.
 
-use super::super::ingest::{heard_before, says_something_new, the_hub_allows};
+use super::super::ingest::{heard_before, the_hub_allows};
+use super::super::reports::says_something_new;
 use super::super::*;
 
 fn context(used_tokens: u64) -> ContextUsage {

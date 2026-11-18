@@ -15,7 +15,7 @@ use async_trait::async_trait;
 use parking_lot::Mutex;
 use protocol::capability::conversation::Start;
 use protocol::capability::settings::Settings;
-use protocol::capability::{Control, settings, turns};
+use protocol::capability::{Control, Report, settings, turns};
 use protocol::client::ApiError;
 use protocol::event::{AgentRunState, EventBody, TurnOutcome};
 use protocol::fixtures::turn_ended;
@@ -377,7 +377,7 @@ pub(super) async fn the_agent_asks_its_model(
     request: CacheRequest,
 ) {
     let run = last_started(asked, session).expect("only an agent that was started asks its model anything");
-    hub.route(session, Item::Cache { run, request, seq: None }).await;
+    hub.route(session, Item::Report { run, report: Report::Cache { request }, seq: None }).await;
     flushed(&hub.live_session(session).await.expect("a chat that's there")).await;
 }
 
