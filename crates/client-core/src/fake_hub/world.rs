@@ -9,7 +9,7 @@ use protocol::event::{EventBody, SessionEvent};
 use protocol::model::{
     Account, AttachmentId, CacheTtl, ContextUsage, DiffComment, FileContents, FoundGithubLogin, GitDiff, GithubAccount,
     GithubApp, GithubSettings, GithubSignIn, GithubSignInStatus, InstanceId, ModelName, PORTS_PER_WORKSPACE, Place,
-    PromptCache, PullRequest, Records, Repo, RepoId, RepoOrigin, Rev, Seq, Session, SessionId, SessionStatus, Subagent,
+    PromptCache, PullRequest, Repo, RepoId, RepoOrigin, Rev, Seq, Session, SessionId, SessionStatus, Subagent,
     SubagentId, Terminal, TerminalId, Title, Workspace, WorkspaceId, WorktreeFiles,
 };
 use protocol::prompt::Prompt;
@@ -148,35 +148,6 @@ impl World {
             ..protocol::fixtures::workspace(id.as_str())
         });
         id
-    }
-
-    /// Everything, as one list.
-    pub fn records(&self) -> Records {
-        Records {
-            repos: self.repos.clone(),
-            workspaces: self.workspaces.clone(),
-            sessions: self.sessions.clone(),
-            comments: self.comments.values().flatten().cloned().collect(),
-            // As a hub starts out.
-            hub_settings: (!self.keeps_no_settings).then(|| protocol::model::HubSettings {
-                account_defaults: (self.logins == LoginSupport::Defaults).then(|| self.account_defaults.clone()),
-                keep_awake: true,
-                allow_asked_in_full_access: Some(false),
-                github: self.github.clone(),
-                rev: Rev::default(),
-            }),
-            accounts: self.accounts.clone(),
-            // As from a hub that doesn't keep one, since its hub refuses to.
-            new_workspace_draft: None,
-            github_accounts: self.github_accounts.clone(),
-            github_sign_ins: self.github_sign_ins.clone(),
-            found_github_logins: self.found_github_logins.clone(),
-            github_apps: self.github_apps.clone(),
-            github_reach: self.github_reach.clone(),
-            terminals: self.terminals.iter().map(|(terminal, _)| terminal.clone()).collect(),
-            model_lists: self.model_lists.clone(),
-            rev: Rev::default(),
-        }
     }
 
     /// A terminal open in `workspace`, showing `shows`, at `size`.

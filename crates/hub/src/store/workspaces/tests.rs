@@ -1,10 +1,11 @@
 use protocol::model::{
-    BranchName, Branches, Head, PrState, PullRequest, PullRequestFound, WorkspaceId, WorkspaceStatus,
+    BranchName, Branches, DiffComment, DiffSide, Head, PrState, PullRequest, PullRequestFound, Repo, Rev, Session,
+    Workspace, WorkspaceId, WorkspaceStatus,
 };
 
-use super::super::tests::{store_with_session, workspace_w};
+use super::super::tests::{idle_session, store_with_session, workspace_w};
 use super::super::{Ended, Made, Move, now_ms};
-use super::super::{Store, older, schema};
+use super::super::{Store, StoredSession, older, schema};
 
 fn open() -> PullRequest {
     PullRequest {
@@ -189,4 +190,52 @@ fn putting_back_leaves_a_workspace_the_move_isnt_holding() {
     let left = store.end_move(&"w".into(), Move::Restore, Ended::PutBack).unwrap();
 
     assert_eq!(left.status, WorkspaceStatus::Ready, "it wasn't being restored, so it isn't put back as archived");
+}
+
+/// Each list is in the order `protocol` orders its kind of record in, which a client keeps and a fake hub lists them in,
+/// with records made in another order, and two made at the same moment, so the IDs decide.
+#[test]
+fn records_are_listed_in_the_order_protocol_orders_them() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = store_with_session(dir.path());
+    for (id, name) in [("r-b", "birch"), ("r-a", "aspen"), ("r-0", "aspen")] {
+        store.add_repo(&id.into(), name, &format!("/{id}"), 0).unwrap();
+    }
+    for (id, at) in [("w-b", 5), ("w-a", 5), ("w-c", 1)] {
+        store.insert_workspace(&Workspace { created_at_ms: at, ..protocol::fixtures::workspace(id) }, None).unwrap();
+        let session = idle_session(at);
+        let session = StoredSession { session: Session { id: format!("s-{id}").into(), ..session.session }, ..session };
+        store.insert_session(&session, None).unwrap();
+        let comment = DiffComment {
+            id: format!("c-{id}").into(),
+            workspace_id: "w".into(),
+            path: "a.rs".into(),
+            side: DiffSide::New,
+            line: 1,
+            text: "why?".into(),
+            created_at_ms: at,
+            rev: Rev::default(),
+        };
+        store.add_comment(&comment, None).unwrap();
+    }
+
+    let listed = store.list_records().unwrap();
+    let (repos, workspaces) = (store.list_repos().unwrap(), store.list_workspaces(true).unwrap());
+    let sessions = store.list_sessions(&"w".into()).unwrap();
+
+    assert_eq!(listed.repos, in_order(&listed.repos, Repo::by_name));
+    assert_eq!(repos, listed.repos);
+    assert_eq!(listed.workspaces, in_order(&listed.workspaces, Workspace::oldest_first));
+    assert_eq!(workspaces, listed.workspaces);
+    assert_eq!(listed.sessions, in_order(&listed.sessions, Session::oldest_first));
+    assert_eq!(sessions, listed.sessions);
+    assert_eq!(listed.comments, in_order(&listed.comments, DiffComment::oldest_first));
+    let ids: Vec<&str> = listed.workspaces.iter().map(|workspace| workspace.id.as_str()).collect();
+    assert_eq!(ids, ["w-c", "w-a", "w-b", "w"], "made out of order, two at once");
+}
+
+fn in_order<T: Clone>(records: &[T], order: impl Fn(&T, &T) -> std::cmp::Ordering) -> Vec<T> {
+    let mut ordered = records.to_vec();
+    ordered.sort_by(order);
+    ordered
 }

@@ -57,9 +57,10 @@ impl Store {
             .map_err(StoreError::from)
     }
 
+    /// Every repository, as [`Repo::by_name`] orders them.
     pub fn list_repos(&self) -> Result<Vec<Repo>, StoreError> {
         let conn = lock(&self.reader);
-        let mut statement = conn.prepare_cached(&format!("SELECT {REPO_COLUMNS}, rev FROM repos ORDER BY name"))?;
+        let mut statement = conn.prepare_cached(&format!("SELECT {REPO_COLUMNS}, rev FROM repos ORDER BY name, id"))?;
         let rows = statement.query_map([], repo_from_row)?;
         rows.collect::<rusqlite::Result<_>>().map_err(StoreError::from)
     }

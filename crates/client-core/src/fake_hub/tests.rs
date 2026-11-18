@@ -96,21 +96,26 @@ fn a_read_is_sent_as_much_as_a_hub_sends() {
     assert_eq!(read(10, None), 2);
 }
 
-/// As `Session::is_open` says, so the newest chat that isn't closed.
+/// As `Session::is_open` and `Session::oldest_first` say, so the newest chat that isn't closed, by when each was made,
+/// whatever order the world made them in, which is the order they're listed in too.
 #[test]
 fn ensuring_a_workspace_has_a_chat_finds_its_newest_open_one() {
     let mut world = World::default();
     let repo = world.repo("aspen");
     let workspace = world.workspace(&repo, "elm");
-    world.chat(&workspace, SessionStatus::Idle, Vec::new());
     let newest_open = world.chat(&workspace, SessionStatus::Idle, Vec::new());
+    let made_long_ago = world.chat(&workspace, SessionStatus::Idle, vec![user_prompt("Fix it")]);
+    world.idle_before(&made_long_ago, Seq::new(2), 60 * 60_000);
     let closed = world.chat(&workspace, SessionStatus::Idle, Vec::new());
     world.close(&closed, 5);
     let (_dir, client) = served(world);
 
     let ensured = client.session_ensure(&workspace, AgentKind::Claude).unwrap();
+    let listed = client.session_list(&workspace).unwrap();
 
     assert_eq!(ensured.id, newest_open);
+    let listed: Vec<_> = listed.into_iter().map(|session| session.id).collect();
+    assert_eq!(listed, [made_long_ago, newest_open, closed]);
 }
 
 /// As `EventBody::subagent_started` says: by the ID its agent gives it, or by its call in one recorded before

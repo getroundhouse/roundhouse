@@ -355,4 +355,10 @@ impl Session {
     pub fn open_waits(&self) -> &[Wait] {
         self.waits.as_deref().unwrap_or(self.wait.as_slice())
     }
+
+    /// The order a hub lists chats in, and a client shows a workspace's: oldest first, by when each was made, then by
+    /// ID. So the newest open chat, which a hub gives a workspace that's asked to have one, is the last open one.
+    pub fn oldest_first(&self, other: &Session) -> std::cmp::Ordering {
+        (self.created_at_ms, &self.id).cmp(&(other.created_at_ms, &other.id))
+    }
 }

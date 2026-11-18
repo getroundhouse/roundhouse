@@ -200,10 +200,11 @@ impl Store {
         })
     }
 
+    /// The workspace's sessions, as [`Session::oldest_first`] orders them.
     pub fn list_sessions(&self, workspace_id: &WorkspaceId) -> Result<Vec<Session>, StoreError> {
         let conn = lock(&self.reader);
         let mut statement = conn.prepare_cached(&format!(
-            "SELECT {SESSION_COLUMNS}, rev FROM sessions WHERE workspace_id = ? ORDER BY created_at_ms"
+            "SELECT {SESSION_COLUMNS}, rev FROM sessions WHERE workspace_id = ? ORDER BY created_at_ms, id"
         ))?;
         let rows = statement.query_map([workspace_id.as_str()], session_from_row)?;
         let sessions = rows.collect::<rusqlite::Result<Vec<_>>>()?;
