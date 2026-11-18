@@ -247,7 +247,12 @@ fn let_run(_file: &File) -> io::Result<()> {
 /// The daemon beside a client can be another build: one still running after an update replaced its install directory
 /// would find the new build's daemon there.
 fn check_build(file: &Path, build: &StampedBuild) -> io::Result<()> {
-    let output = waiting_out_busy(|| Command::new(file).arg("--version").stderr(Stdio::null()).output())?;
+    let mut command = Command::new(file);
+    command.arg("--version").stderr(Stdio::null());
+    // The app has no console, so without this the copy, a console program, would flash one up on Windows each time a
+    // build's copy is made, which is after every update.
+    process::without_window(&mut command);
+    let output = waiting_out_busy(|| command.output())?;
     let expected = format!("{DAEMON_NAME} {}", build.version());
     let reported = String::from_utf8_lossy(&output.stdout);
     if output.status.success() && reported.trim_end() == expected {
