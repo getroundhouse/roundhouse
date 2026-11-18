@@ -6,9 +6,10 @@ use std::sync::{
 use std::time::Duration;
 
 use parking_lot::Mutex;
+use protocol::capability::approvals::ApprovalMode;
 use protocol::capability::settings;
 use protocol::event::EventBody;
-use protocol::model::{ModelName, PermissionMode};
+use protocol::model::ModelName;
 use protocol::paths::ENV_ANTIGRAVITY_BIN;
 use protocol::worker::AgentSpec;
 use tokio::sync::{mpsc, watch};
@@ -115,8 +116,8 @@ pub(super) fn binary(options: &AgentOptions) -> Result<PathBuf, AgentError> {
     })
 }
 
-pub(super) fn mode_id(mode: PermissionMode) -> &'static str {
-    if mode == PermissionMode::Plan { "plan" } else { "accept-edits" }
+pub(super) fn mode_id(mode: ApprovalMode) -> &'static str {
+    if mode.plan { "plan" } else { "accept-edits" }
 }
 
 pub async fn spawn(
@@ -159,7 +160,9 @@ pub(super) async fn start_conversation(
     if !spec.start.allowed(&claims) || !spec.settings.allowed(&claims) {
         return Err(AgentError::Refused("Antigravity does not offer those launch settings".into()));
     }
-    let (model, mode, effort) = launch_settings(spec)?;
+    let crate::registry::Launch { model, mode, effort } = crate::registry::launch(spec)?;
+    effort_str(&effort)?;
+    ensure_model_offers_effort(&model, &effort)?;
     let args = purpose.args(mode);
     if let Some(tap) = &tap {
         let conversation = match &spec.start {
@@ -191,7 +194,7 @@ pub(super) async fn start_conversation(
 async fn transport(
     context: LaunchContext,
     args: &[&str],
-    initial: (ModelName, PermissionMode, settings::Effort, bool, bool),
+    initial: (ModelName, ApprovalMode, settings::Effort, bool, bool),
     output: mpsc::Sender<AgentOutput>,
     tap: Option<crate::tap::Tap>,
 ) -> Result<Arc<AntigravityProcess>, AgentError> {
@@ -232,25 +235,6 @@ async fn transport(
         return Err(error);
     }
     Ok(process)
-}
-
-fn launch_settings(spec: &AgentSpec) -> Result<(ModelName, PermissionMode, settings::Effort), AgentError> {
-    let defaults = super::description::description().defaults;
-    let model = spec
-        .settings
-        .model
-        .clone()
-        .ok_or_else(|| AgentError::Refused("A launch names the model its agent runs on".into()))?;
-    let mode = match spec.settings.mode {
-        None => defaults.permission_mode,
-        Some(mode) if mode == super::claims::plan() => PermissionMode::Plan,
-        Some(mode) if mode == super::claims::full_access() => PermissionMode::FullAccess,
-        Some(_) => return Err(AgentError::UnknownMode),
-    };
-    let effort = spec.settings.effort.clone().unwrap_or(defaults.effort);
-    effort_str(&effort)?;
-    ensure_model_offers_effort(&model, &effort)?;
-    Ok((model, mode, effort))
 }
 
 pub(super) fn ensure_model_offers_effort(model: &ModelName, effort: &settings::Effort) -> Result<(), AgentError> {

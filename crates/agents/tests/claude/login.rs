@@ -2,8 +2,8 @@
 
 use agents::conformance::capture::Tap;
 use agents::{AgentOptions, AgentOutput, BinaryLookup};
-use protocol::capability::settings::Effort;
-use protocol::model::{AgentKind, AgentLogin, LoginToken, RunId, Seq, SessionSettingsChange};
+use protocol::capability::settings::{Effort, Settings};
+use protocol::model::{AgentKind, AgentLogin, LoginToken, RunId, Seq};
 use protocol::prompt::Prompt;
 use protocol::worker::AgentSpec;
 use serde_json::{Value, json};
@@ -65,10 +65,8 @@ async fn a_prompt_and_a_later_effort_read_use_the_checked_login_without_capturin
         agents::claude::spawn_tapped(options.binary.explicit.clone().unwrap(), spec(dir.path()), output, options, tap)
             .await
             .unwrap();
-    agent
-        .configure(&SessionSettingsChange { effort: Some(Effort::High), ..SessionSettingsChange::default() })
-        .await
-        .unwrap();
+    let high = Settings { effort: Some(Effort::High), ..Settings::default() };
+    agent.control(&protocol::capability::Control::Change(high)).await.unwrap();
     agent.send_prompt(Seq::new(1), &Prompt::new("hello")).await.unwrap();
     tokio::time::timeout(Duration::from_secs(5), async {
         while let Some(item) = received.recv().await {

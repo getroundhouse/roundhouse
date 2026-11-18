@@ -38,24 +38,3 @@ impl SessionSettingsChange {
         Ok(settings::Settings { model: self.model.clone(), mode, effort: self.effort.clone(), ..Default::default() })
     }
 }
-
-impl SessionSettings {
-    /// What a launch's typed `settings` say, in the form an adapter that still runs its agent with these takes, with
-    /// what they leave out taken from `defaults`, its kind's. A launch names its model, so one without is refused, and
-    /// so is a mode or an effort this build has no name for here, which the adapter couldn't tell its agent. Only
-    /// `agents::registry` uses it, until the adapters take typed settings in #1274.
-    pub fn from_typed(
-        settings: &settings::Settings,
-        defaults: &SessionSettings,
-    ) -> Result<SessionSettings, NotOffered> {
-        let model = settings.model.clone().ok_or(NotOffered::Settings)?;
-        let permission_mode = match settings.mode {
-            None => defaults.permission_mode,
-            Some(mode) if !mode.is_known() => return Err(NotOffered::Mode),
-            Some(mode) if mode.plan => PermissionMode::Plan,
-            Some(_) => PermissionMode::FullAccess,
-        };
-        let effort = settings.effort.as_ref().unwrap_or(&defaults.effort).known().ok_or(NotOffered::Effort)?;
-        Ok(SessionSettings { model, permission_mode, effort })
-    }
-}

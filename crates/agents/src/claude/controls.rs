@@ -1,7 +1,6 @@
 //! The typed runtime boundary, translated into Claude's existing protocol operations.
 
 use protocol::capability::Control;
-use protocol::model::{PermissionMode, SessionSettingsChange};
 
 use super::process::ClaudeProcess;
 use crate::{AgentError, AgentProcess};
@@ -14,17 +13,7 @@ pub(super) async fn apply(process: &ClaudeProcess, control: &Control) -> Result<
         Control::Prompt { seq, prompt, .. } => process.send_prompt(*seq, prompt).await,
         Control::Cancel => process.interrupt().await,
         Control::Compact { asked, keeping } => process.compact(*asked, keeping.as_deref()).await,
-        Control::Change(settings) => {
-            process
-                .configure(&SessionSettingsChange {
-                    model: settings.model.clone(),
-                    permission_mode: settings
-                        .mode
-                        .map(|mode| if mode.plan { PermissionMode::Plan } else { PermissionMode::FullAccess }),
-                    effort: settings.effort.clone(),
-                })
-                .await
-        }
+        Control::Change(settings) => process.change(settings).await,
         Control::Decide { approval, decision } => process.decide(approval, decision).await,
         Control::Note { .. }
         | Control::Aside { .. }

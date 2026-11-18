@@ -7,9 +7,9 @@ use std::time::Duration;
 
 use agents::claude::spawn_at;
 use agents::{AgentError, AgentOptions, AgentOutput};
-use protocol::capability::settings::Effort;
+use protocol::capability::settings::{Effort, Settings};
 use protocol::event::{CompactedBy, CompactionOutcome, ContentBlock, EventBody, NoticeLevel};
-use protocol::model::{AgentKind, PermissionMode, RunId, Seq, SessionSettings, SessionSettingsChange};
+use protocol::model::{AgentKind, PermissionMode, RunId, Seq, SessionSettings};
 use protocol::prompt::Prompt;
 use protocol::worker::AgentSpec;
 use tokio::sync::mpsc;
@@ -255,7 +255,8 @@ async fn an_effort_the_cli_says_it_took_and_doesnt_report_in_use_is_refused_as_n
         let cli = script(dir.path(), &answering_with_settings(dir.path()));
         let agent = spawn_at(cli, spec(dir.path()), tx, AgentOptions::default()).await.unwrap();
 
-        let changed = agent.configure(&SessionSettingsChange { effort: Some(Effort::Max), ..Default::default() }).await;
+        let max = Settings { effort: Some(Effort::Max), ..Settings::default() };
+        let changed = agent.control(&protocol::capability::Control::Change(max)).await;
 
         let not_applied = match changed {
             Ok(()) => None,

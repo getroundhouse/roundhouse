@@ -39,7 +39,8 @@ pub(super) async fn open(
 ) -> Result<std::sync::Arc<running::CodexProcess>, AgentError> {
     let (tx, rx) = mpsc::channel(1);
     drop(rx);
-    running::transport(&binary(options)?, cwd, &[], description().defaults, tx, options, None).await
+    let settings = crate::registry::defaults(protocol::model::AgentKind::Codex)?;
+    running::transport(&binary(options)?, cwd, &[], settings, tx, options, None).await
 }
 
 /// A read-only conversation in an empty directory, without persistent history or worker tools.

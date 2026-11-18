@@ -16,10 +16,12 @@ fn native_questions_preserve_choices_open_text_and_secrets() {
 
 use super::harness::Harness;
 use super::script::{bodies, command, item, play, turn};
+use crate::codex::claims::{full_access, plan};
 use crate::{AgentOutput, AgentProcess};
+use protocol::capability::settings::Settings;
 use protocol::capability::{Control, approvals::Decision};
 use protocol::event::{ContentBlock, EventBody, TurnOutcome};
-use protocol::model::{PermissionMode, Seq, SessionSettingsChange};
+use protocol::model::Seq;
 use protocol::prompt::Prompt;
 
 #[tokio::test]
@@ -32,23 +34,20 @@ async fn keeping_a_plan_restores_read_only_even_after_settings_changed() {
             break approval_id;
         }
     };
-    agent
-        .configure(&SessionSettingsChange { permission_mode: Some(PermissionMode::FullAccess), ..Default::default() })
-        .await
-        .unwrap();
+    agent.control(&Control::Change(Settings { mode: Some(full_access()), ..Settings::default() })).await.unwrap();
     agent.control(&Control::Decide { approval: id, decision: Decision::KeepPlanning { words: None } }).await.unwrap();
     let request = h.request("turn/start").await;
     assert_eq!(request["params"]["sandboxPolicy"]["type"], "readOnly");
     assert_eq!(request["params"]["collaborationMode"]["mode"], "plan");
-    assert_eq!(agent.shared.state.lock().settings.permission_mode, PermissionMode::Plan);
+    assert_eq!(agent.shared.state.lock().settings.mode, plan());
     agent.stop().await;
 }
 
 #[tokio::test]
 async fn native_request_ids_are_private_to_one_run_and_questions_work_in_both_modes() {
     let mut former = None;
-    for mode in [PermissionMode::Plan, PermissionMode::FullAccess] {
-        let blocking = mode == PermissionMode::Plan;
+    for mode in [plan(), full_access()] {
+        let blocking = mode.plan;
         let mut h = Harness::new(&json!([{"on":"turn/start","actions":[
             {"result":{"turn":{"id":"asking"}}},
             {"method":"turn/started","params":{"turn":{"id":"asking"}}},
@@ -57,7 +56,7 @@ async fn native_request_ids_are_private_to_one_run_and_questions_work_in_both_mo
                 "questions":[{"id":"color","question":"Color?","options":[{"label":"Blue"}]}]}}
         ]}]));
         let agent = h.started().await;
-        agent.configure(&SessionSettingsChange { permission_mode: Some(mode), ..Default::default() }).await.unwrap();
+        agent.control(&Control::Change(Settings { mode: Some(mode), ..Settings::default() })).await.unwrap();
         agent.send_prompt(Seq::FIRST, &Prompt::new("Ask")).await.unwrap();
         let id = loop {
             if let AgentOutput::Event { body: EventBody::ApprovalRequested { approval_id, request, .. }, .. } =

@@ -54,9 +54,7 @@ pub(super) async fn begin(
         exited: tokio::sync::watch::channel(false).0,
         tap,
     });
-    // Converted where it's used, as `build_args` does, rather than carrying a second form of the settings through the
-    // launch, its retries and supervision, until the adapters take typed settings in #1274.
-    let mode = crate::registry::settings_of(&spec)?.permission_mode;
+    let mode = crate::registry::launch(&spec)?.mode;
     plan::start_in(mode, &shared, &mut *shared.stdin.lock().await, &output).await;
     tokio::spawn(supervise(
         bin,

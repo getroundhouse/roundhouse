@@ -1,11 +1,11 @@
 use std::sync::Arc;
 
 use protocol::capability::{
-    approvals::{AfterDenial, Asks, Decision, Remember, Request},
+    approvals::{AfterDenial, ApprovalMode, Asks, Decision, Remember, Request},
     asking::PlanContext,
 };
 use protocol::event::{AgentRunState, EventBody, NoticeLevel, TurnOutcome};
-use protocol::model::{ApprovalId, PermissionMode, ToolUseId};
+use protocol::model::{ApprovalId, ToolUseId};
 use serde_json::{Value, json};
 
 use super::{
@@ -56,7 +56,7 @@ async fn permission_requested(
         return shared.rpc().reply(native_id.clone(), acp::permission_selected(reject)).await;
     }
     notifications::ensure_own_turn_started(shared).await;
-    if mode == PermissionMode::FullAccess {
+    if mode == super::claims::full_access() {
         let allow = perm.option_for(false, true).unwrap_or("allow");
         return shared.rpc().reply(native_id.clone(), acp::permission_selected(allow)).await;
     }
@@ -218,12 +218,12 @@ pub(super) fn can_answer(native: &NativeRequest, decision: &Decision) -> bool {
 async fn answer(shared: &Arc<Shared>, waiting: &Waiting, decision: &Decision) -> Result<(), AgentError> {
     match (&waiting.native, decision) {
         (NativeRequest::Plan, Decision::ApprovePlan { context: PlanContext::Kept, .. }) => {
-            switch_plan_mode(shared, PermissionMode::FullAccess, "Implement the approved plan.").await
+            switch_plan_mode(shared, super::claims::full_access(), "Implement the approved plan.").await
         }
         (NativeRequest::Plan, Decision::KeepPlanning { words }) => {
             let text =
                 words.as_deref().filter(|w| !w.trim().is_empty()).unwrap_or("Keep planning; the plan is not approved.");
-            switch_plan_mode(shared, PermissionMode::Plan, text).await
+            switch_plan_mode(shared, super::claims::plan(), text).await
         }
         (NativeRequest::Permission { id, request }, Decision::Allow { remember }) => {
             let always = match remember {
@@ -261,7 +261,7 @@ async fn answer(shared: &Arc<Shared>, waiting: &Waiting, decision: &Decision) ->
     }
 }
 
-async fn switch_plan_mode(shared: &Arc<Shared>, mode: PermissionMode, prompt_text: &str) -> Result<(), AgentError> {
+async fn switch_plan_mode(shared: &Arc<Shared>, mode: ApprovalMode, prompt_text: &str) -> Result<(), AgentError> {
     let changed = {
         let mut state = shared.state.lock();
         if state.session_id.is_none() {
@@ -274,7 +274,7 @@ async fn switch_plan_mode(shared: &Arc<Shared>, mode: PermissionMode, prompt_tex
         changed
     };
     if changed {
-        shared.event(EventBody::AgentMode { permission_mode: mode }, None).await;
+        shared.event(EventBody::AgentMode { permission_mode: crate::registry::as_logged(mode) }, None).await;
     }
     control::send_prompt_rpc(shared, None, vec![json!({ "type": "text", "text": prompt_text })]).await
 }

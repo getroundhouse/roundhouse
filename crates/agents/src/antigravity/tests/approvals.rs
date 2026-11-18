@@ -6,6 +6,7 @@ use protocol::capability::{
     asking::PlanContext,
     calls::{CallOutput, output::Ended},
     conversation::Start,
+    settings::Settings,
 };
 use protocol::event::{ContentBlock, Denied, EventBody, TurnOutcome};
 use protocol::model::{PermissionMode, Seq, ToolUseId};
@@ -298,9 +299,8 @@ async fn mode_switches_swap_skip_permissions_flag_stop_background_tasks_and_keep
     agent.send_prompt(Seq::FIRST, &Prompt::new("start bg")).await.unwrap();
     while !matches!(h.next().await, AgentOutput::Event { body: EventBody::TurnEnded { .. }, .. }) {}
 
-    let to_plan =
-        protocol::model::SessionSettingsChange { permission_mode: Some(PermissionMode::Plan), ..Default::default() };
-    agent.configure(&to_plan).await.unwrap();
+    let to_plan = Settings { mode: Some(super::super::claims::plan()), ..Settings::default() };
+    agent.control(&Control::Change(to_plan)).await.unwrap();
     assert_ne!(agent.pid(), first_pid);
     let (mut saw_dropped, mut saw_stopped) = (false, false);
     loop {
@@ -318,12 +318,12 @@ async fn mode_switches_swap_skip_permissions_flag_stop_background_tasks_and_keep
 
     agent.send_prompt(Seq::new(2), &Prompt::new("write plan")).await.unwrap();
     while !matches!(h.next().await, AgentOutput::Delta(_)) {}
-    let mid = protocol::model::SessionSettingsChange {
+    let mid = Settings {
         effort: Some(protocol::capability::settings::Effort::Low),
-        permission_mode: Some(PermissionMode::FullAccess),
-        model: None,
+        mode: Some(super::super::claims::full_access()),
+        ..Settings::default()
     };
-    agent.configure(&mid).await.unwrap();
+    agent.control(&Control::Change(mid)).await.unwrap();
     let held = loop {
         if let AgentOutput::Event { body: EventBody::ApprovalRequested { request: req, .. }, .. } = h.next().await {
             break req.asks;

@@ -7,7 +7,6 @@ use std::time::Duration;
 
 use parking_lot::Mutex;
 use protocol::event::EventBody;
-use protocol::model::SessionSettings;
 use protocol::worker::AgentSpec;
 use tokio::sync::{mpsc, watch};
 
@@ -124,7 +123,7 @@ pub(super) async fn start_conversation(
         };
         tap.launched(conversation.is_some(), conversation, &launch::ARGS.map(str::to_owned));
     }
-    let settings = crate::registry::settings_of(spec)?;
+    let settings = crate::registry::launch(spec)?;
     let process = transport(bin, Path::new(&spec.cwd), &spec.env, settings, output, options, tap).await?;
     if let Err(error) = launch::conversation(&process.shared, spec, options, purpose).await {
         process.shared.stop().await;
@@ -137,7 +136,7 @@ pub(super) async fn transport(
     bin: &Path,
     cwd: &Path,
     env: &[(String, String)],
-    settings: SessionSettings,
+    settings: crate::registry::Launch,
     output: mpsc::Sender<AgentOutput>,
     options: &AgentOptions,
     tap: Option<crate::tap::Tap>,

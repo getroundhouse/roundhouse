@@ -1,13 +1,14 @@
 //! Swapping the underlying `agy acp` child process via `session/resume` once idle so `--dangerously-skip-permissions`
-//! is active in `FullAccess` and omitted in `Plan` mode.
+//! is active in full access and omitted in plan mode.
 
 use std::sync::{
     Arc,
     atomic::{AtomicBool, Ordering},
 };
 
+use protocol::capability::approvals::ApprovalMode;
 use protocol::event::{EventBody, NoticeLevel};
-use protocol::model::{AgentSessionId, PermissionMode};
+use protocol::model::AgentSessionId;
 use tokio::sync::watch;
 
 use super::running::{ChildSlot, STOP_GRACE, Shared};
@@ -53,7 +54,7 @@ async fn stop_current_for_swap(shared: &Shared) {
 async fn spawn_swapped_child(
     shared: &Arc<Shared>,
     session_id: &AgentSessionId,
-    target_mode: PermissionMode,
+    target_mode: ApprovalMode,
 ) -> Result<(), AgentError> {
     let args = shared.context.purpose.args(target_mode);
     if let Some(tap) = &shared.tap {

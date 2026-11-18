@@ -2,7 +2,7 @@ use super::*;
 use crate::capability::approvals::{ApprovalMode, Beyond, Unasked};
 use crate::capability::settings;
 use crate::client::{ClientRequest, sessions};
-use crate::model::{NotOffered, Session};
+use crate::model::Session;
 use crate::worker::WorkerRequest;
 
 const OPUS: ModelName = ModelName::named("opus");
@@ -83,33 +83,6 @@ fn a_model_that_would_leave_the_choice_to_the_cli_doesnt_read() {
             assert!(!decodes(&line), "{line}");
         }
     }
-}
-
-#[test]
-fn an_adapter_runs_a_launch_with_its_model_and_only_settings_it_can_name() {
-    let defaults = SessionSettings { model: OPUS, permission_mode: PermissionMode::Plan, effort: Effort::Low };
-    let typed = settings::Settings {
-        model: Some(OPUS),
-        mode: Some(FULL_ACCESS),
-        effort: Some(settings::Effort::Max),
-        ..settings::Settings::default()
-    };
-    let named = SessionSettings { model: OPUS, permission_mode: PermissionMode::FullAccess, effort: Effort::Max };
-    assert_eq!(SessionSettings::from_typed(&typed, &defaults), Ok(named));
-    let planning = settings::Settings { mode: Some(ApprovalMode { plan: true, ..FULL_ACCESS }), ..typed.clone() };
-    assert_eq!(SessionSettings::from_typed(&planning, &defaults).unwrap().permission_mode, PermissionMode::Plan);
-    let only_a_model = settings::Settings { model: Some(OPUS), ..settings::Settings::default() };
-    assert_eq!(SessionSettings::from_typed(&only_a_model, &defaults), Ok(defaults.clone()), "the rest is the kind's");
-
-    let unnamed = settings::Settings { model: None, ..typed.clone() };
-    assert_eq!(SessionSettings::from_typed(&unnamed, &defaults), Err(NotOffered::Settings));
-    let newer_effort = settings::Settings { effort: Some(settings::Effort::Unknown), ..typed.clone() };
-    assert_eq!(SessionSettings::from_typed(&newer_effort, &defaults), Err(NotOffered::Effort));
-    let unnamed_effort = settings::Settings { effort: Some(settings::Effort::Persistent), ..typed.clone() };
-    assert_eq!(SessionSettings::from_typed(&unnamed_effort, &defaults).unwrap().effort, Effort::Persistent);
-    let newer_mode =
-        settings::Settings { mode: Some(ApprovalMode { unasked: Unasked::Unknown, ..FULL_ACCESS }), ..typed };
-    assert_eq!(SessionSettings::from_typed(&newer_mode, &defaults), Err(NotOffered::Mode));
 }
 
 #[test]
