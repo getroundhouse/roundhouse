@@ -5,7 +5,7 @@
 use std::collections::BTreeMap;
 
 use protocol::event::{ContentBlock, EventBody, SessionEvent};
-use protocol::model::{Lately, LatelyCall, LatelyResult, ModelName, Rev, Said, Subagent, SubagentId, SubagentStatus};
+use protocol::model::{Lately, ModelName, Rev, Subagent, SubagentId, SubagentStatus};
 
 /// The records of the subagents in `log`, by subagent.
 #[expect(clippy::too_many_lines, reason = "a short arm for each event that changes a record, and the rest by name")]
@@ -53,8 +53,11 @@ pub(super) fn records_of(log: &[SessionEvent]) -> Vec<Subagent> {
                 {
                     subagent.model = Some(model);
                 }
-                for block in blocks {
-                    note(subagent, block);
+                subagent.calls +=
+                    u32::try_from(blocks.iter().filter(|b| matches!(b, ContentBlock::Call { .. })).count()).unwrap();
+                if subagent.status == SubagentStatus::Working {
+                    let wrote = matches!(event.body, EventBody::Assistant { .. });
+                    subagent.lately.get_or_insert_default().add(blocks, wrote);
                 }
                 subagent.rev = rev;
             }
@@ -99,41 +102,4 @@ pub(super) fn records_of(log: &[SessionEvent]) -> Vec<Subagent> {
     let kept =
         |subagent: Subagent| Subagent { lately: subagent.lately.filter(|work| *work != Lately::default()), ..subagent };
     held.into_values().map(kept).collect()
-}
-
-/// What one of a subagent's blocks adds to its record: its calls, and while it works, what it's done lately, as the hub
-/// keeps them, but for cutting a long text short, which no world's texts are long enough to need.
-fn note(subagent: &mut Subagent, block: &ContentBlock) {
-    if let ContentBlock::Call { .. } = block {
-        subagent.calls += 1;
-    }
-    if subagent.status == SubagentStatus::Working {
-        note_lately(subagent.lately.get_or_insert_default(), block);
-    }
-}
-
-/// What one of a subagent's blocks adds to what it's done lately.
-fn note_lately(work: &mut Lately, block: &ContentBlock) {
-    match block {
-        ContentBlock::Text { text, .. } => {
-            let text = match work.since.take() {
-                Some(since) => format!("{}\n\n{text}", since.text),
-                None => text.clone(),
-            };
-            work.since = Some(Said { text, cut: false });
-        }
-        ContentBlock::Call { id, call } => {
-            work.calls.push(LatelyCall { before: work.since.take(), id: id.clone(), call: call.clone(), result: None });
-            if work.calls.len() > 3 {
-                work.calls.remove(0);
-            }
-        }
-        ContentBlock::CallResult { tool_use_id, output, is_error, denied, images } => {
-            if let Some(made) = work.calls.iter_mut().find(|made| made.id == *tool_use_id) {
-                let (output, is_error, images, denied) = (output.clone(), *is_error, images.clone(), denied.clone());
-                made.result = Some(LatelyResult { output, is_error, cut: false, images, denied });
-            }
-        }
-        ContentBlock::Thinking { .. } | ContentBlock::Image { .. } | ContentBlock::Unknown => {}
-    }
 }

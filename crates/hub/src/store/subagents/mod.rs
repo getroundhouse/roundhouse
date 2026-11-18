@@ -1,4 +1,5 @@
-//! Each subagent's record, changed in the transaction that records the event that changes it.
+//! Each subagent's record, changed in the transaction that records the event that changes it. What it's done lately is
+//! kept as `protocol`'s `Lately::add` says.
 
 #[cfg(test)]
 use super::Store;
@@ -6,8 +7,6 @@ use super::Store;
 use protocol::event::{ContentBlock, EventBody, SessionEvent};
 #[cfg(test)]
 use protocol::model::{Rev, Subagent, SubagentId, SubagentStatus};
-
-mod lately;
 
 #[cfg(test)]
 mod tests;

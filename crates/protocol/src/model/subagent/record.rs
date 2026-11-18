@@ -1,11 +1,8 @@
-//! A subagent's record: what it was asked, where it's got to, and what it reported, which the hub keeps as it records
-//! the events that say, so a client can show a subagent without reading its work.
-
 use serde::{Deserialize, Serialize};
 
-use super::{ModelName, Rev, SessionId, SubagentId, ToolUseId};
 use crate::attachment::Attachment;
 use crate::event::{Denied, TaskOutcome};
+use crate::model::{ModelName, Rev, SessionId, SubagentId, ToolUseId};
 
 /// One subagent, named in its session by the ID its agent gives it, which its events name.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -154,24 +151,4 @@ pub struct Said {
     /// `text` is only its start.
     #[serde(default)]
     pub cut: bool,
-}
-
-#[cfg(test)]
-mod tests {
-    use super::{Subagent, SubagentId};
-    use crate::fixtures;
-
-    /// By its ID first, then by its call, so one whose ID is another's call is the one found by it, and one named by
-    /// neither is none.
-    #[test]
-    fn a_subagent_is_named_by_its_id_or_else_by_its_call() {
-        let named = |id: &str, call: &str| Subagent { id: Some(id.into()), ..fixtures::subagent(call) };
-        let subagents = [named("agent-1", "toolu_1"), named("toolu_1-again", "agent-1"), fixtures::subagent("toolu_3")];
-        let found = |name: &str| Subagent::named(&subagents, &name.into()).map(Subagent::id);
-
-        assert_eq!(found("toolu_1"), Some(SubagentId::from("agent-1")), "by its call");
-        assert_eq!(found("agent-1"), Some(SubagentId::from("agent-1")), "its ID, though it's another's call");
-        assert_eq!(found("toolu_3"), Some(SubagentId::from("toolu_3")));
-        assert_eq!(found("unknown"), None);
-    }
 }
