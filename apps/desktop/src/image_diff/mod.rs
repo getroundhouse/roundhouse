@@ -15,4 +15,4 @@ mod comparison;
 #[cfg(test)]
 use comparison::side;
 pub use comparison::{Comparison, ImageDiff, KEY_CONTEXT, Shown, comparison};
-use comparison::{Outcome, Side, choose};
+use comparison::{Outcome, Side};

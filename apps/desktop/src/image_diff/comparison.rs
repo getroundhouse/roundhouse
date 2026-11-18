@@ -3,9 +3,10 @@ use crate::file_image;
 use crate::file_image::FileImage;
 use crate::file_view::{Read, Unshown, hash, what_it_gives};
 use crate::review::{Review, ReviewEvent};
+use crate::shared_choice::{Chosen, chosen};
 use client_core::ClientError;
 use difference::Difference;
-use gpui_kit::{App, AppContext as _, Context, Entity, Global, SharedString, Subscription, Task};
+use gpui_kit::{App, AppContext as _, Context, Entity, SharedString, Subscription, Task};
 use protocol::model::{CommitId, FileContents};
 use std::rc::Rc;
 
@@ -51,16 +52,8 @@ pub(super) struct Compared {
 }
 
 /// The comparison chosen, which every workspace shares until the app quits, as the layout of the changes is.
-struct Chosen(pub(super) Comparison);
-
-impl Global for Chosen {}
-
 pub fn comparison(cx: &App) -> Comparison {
-    cx.try_global::<Chosen>().map_or_default(|chosen| chosen.0)
-}
-
-pub(super) fn choose(comparison: Comparison, cx: &mut App) {
-    cx.set_global(Chosen(comparison));
+    chosen(cx)
 }
 
 /// One side of the change.
@@ -119,7 +112,7 @@ impl ImageDiff {
         });
         // Chosen here or in another workspace, which this one shows too. Comparing waits until it's drawn, so a
         // workspace that isn't shown doesn't.
-        let choosing = cx.observe_global::<Chosen>(|_, cx| cx.notify());
+        let choosing = cx.observe_global::<Chosen<Comparison>>(|_, cx| cx.notify());
         let releasing = cx.on_release(|t, cx| {
             t.forget_difference(cx);
             t.before.set(Side::Absent, cx);

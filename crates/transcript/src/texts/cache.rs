@@ -6,9 +6,11 @@ use crate::selection::Selection;
 use at::{Among, Of, Place, TextAt};
 use client_core::session_log::{Row, SessionLog};
 use element::ProseElement;
+use gpui_kit::base::text::editor_host::FlowPosition;
 use gpui_kit::{AnyElement, App, ElementId, IntoElement, SharedString, Task};
 use moves::Places;
 use parse::{ImagesAre, Parsed};
+use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::ops::RangeInclusive;
@@ -63,8 +65,9 @@ pub(super) enum Text {
     /// when it's next drawn.
     Read { leaves: Arc<[String]> },
     /// Being parsed from `source` on another thread, by a task that's dropped, and stops, with this. It's drawn as what
-    /// it was parsed as before, `was`, if it was, until it's in.
-    Parsing { source: String, was: Option<Rc<Parsed>>, _task: Task<()> },
+    /// it was parsed as before, `was`, if it was, until it's in, and a copy has that, or what it was read ahead as
+    /// showing, `read`, if it wasn't, as a document's block out of sight is.
+    Parsing { source: String, was: Option<Rc<Parsed>>, read: Option<Arc<[String]>>, _task: Task<()> },
     /// Plain text, which isn't parsed: what it says, as find searches it.
     Plain { said: SharedString },
 }
@@ -84,9 +87,11 @@ impl Text {
             Text::Parsed { parsed, .. } | Text::Parsing { was: Some(parsed), .. } => {
                 Some(Leaves::Markdown(parsed.leaves.clone()))
             }
-            Text::Read { leaves } => Some(Leaves::Markdown(leaves.clone())),
+            Text::Read { leaves } | Text::Parsing { was: None, read: Some(leaves), .. } => {
+                Some(Leaves::Markdown(leaves.clone()))
+            }
             Text::Plain { said } => Some(Leaves::Plain(said.clone())),
-            Text::Parsing { was: None, .. } => None,
+            Text::Parsing { was: None, read: None, .. } => None,
         }
     }
 
@@ -141,6 +146,12 @@ pub(crate) struct Written<'a> {
     pub(crate) text: &'a str,
     pub(crate) area: Option<ElementId>,
     pub(crate) style: super::Style,
+    /// Where it stands among the blocks of a text it's one of, which decides the gaps the kit leaves around it, if it
+    /// is one, as a document's are.
+    pub(crate) flow: Option<FlowPosition>,
+    /// How many of its bytes are its own, which it draws, if what's after them is only read, as the definitions a
+    /// document's block refers to are.
+    pub(crate) shown: Option<usize>,
 }
 
 impl<'a> Written<'a> {
@@ -153,12 +164,29 @@ impl<'a> Written<'a> {
             text,
             area: None,
             style: super::Style::for_part(id.1),
+            flow: None,
+            shown: None,
         }
     }
 
     /// A text find doesn't look in, such as a plan, whose element is known as `element`.
     pub(crate) fn unfound(at: TextAt, element: ElementId, text: &'a str) -> Self {
-        Self { at: Place::At(at), element, found: None, text, area: None, style: super::Style::Markdown }
+        Self {
+            at: Place::At(at),
+            element,
+            found: None,
+            text,
+            area: None,
+            style: super::Style::Markdown,
+            flow: None,
+            shown: None,
+        }
+    }
+
+    /// One block of a text, standing where `flow` says among the others, whose own text is its first `shown` bytes.
+    pub(crate) fn block_of_a_text(mut self, flow: Option<FlowPosition>, shown: usize) -> Self {
+        (self.flow, self.shown) = (flow, Some(shown));
+        self
     }
 
     /// In the area `area`, which scrolls it, and scrolls on under a drag that starts in it.
@@ -247,15 +275,21 @@ impl Texts {
     pub(crate) fn draw(&self, selection: &Selection, written: &Written<'_>, images: Option<Images>) -> AnyElement {
         let known = TextKey(written.element.clone());
         let at = self.0.borrow_mut().noted(&known, written.at);
-        let source = images_apart(written.text);
+        // Only its own text has its images apart, since only that's drawn.
+        let (source, shown) = match written.shown.map(|shown| (shown, images_apart(&written.text[..shown]))) {
+            Some((shown, Cow::Borrowed(_))) => (Cow::Borrowed(written.text), Some(shown)),
+            Some((shown, Cow::Owned(own))) => (Cow::Owned(format!("{own}{}", &written.text[shown..])), Some(own.len())),
+            None => (images_apart(written.text), None),
+        };
         let whose = ImagesAre::of(&source, images.is_some());
-        let (parsed, apart) = self.parsed(&known, &source, at.of, whose);
+        let (parsed, apart) = self.parsed(&known, &source, at.of, whose, shown);
         let marks = (parsed.as_ref().zip(written.found))
             .map_or_default(|(parsed, (id, find))| find.marks_in_leaves(id, &parsed.leaves));
         let (texts, selection) = (self.clone(), selection.clone());
         let area = written.area.clone();
-        let style = written.style;
-        ProseElement { known, at, area, style, text: parsed, apart, marks, images, texts, selection }.into_any_element()
+        let (style, flow) = (written.style, written.flow);
+        ProseElement { known, at, area, style, flow, text: parsed, apart, marks, images, texts, selection }
+            .into_any_element()
     }
 
     /// What the texts from `from` to `to`, both in, show, leaf by leaf, in order, as far as they've been parsed, but
@@ -286,7 +320,7 @@ impl Texts {
     pub(crate) fn let_go(&self, log: &SessionLog, selected: Option<&RangeInclusive<TextAt>>) {
         let loaded = |at: &TextAt| match at.of {
             Of::Event(seq) => log.row_of(seq).is_some_and(|row| matches!(log.row(row), Row::Event(_))),
-            Of::Head | Of::Tail | Of::Foot => true,
+            Of::Head | Of::Tail | Of::Foot | Of::Document(_) => true,
         };
         let held = |at: &TextAt| selected.is_some_and(|selected| selected.contains(at));
         let mut store = self.0.borrow_mut();
@@ -319,6 +353,19 @@ impl Texts {
                 Text::Read { .. } | Text::Parsing { .. } | Text::Plain { .. } => None,
             })
             .collect()
+    }
+}
+
+impl Texts {
+    /// Places the text known as `element` at `at`, showing `leaves`, unless it's known, so a copy has it before it's
+    /// drawn, as a document's blocks out of sight are. It's parsed when it's drawn.
+    pub(crate) fn read_ahead(&self, element: ElementId, at: TextAt, leaves: Arc<[String]>) {
+        let known = TextKey(element);
+        let mut store = self.0.borrow_mut();
+        store.texts.entry(known.clone()).or_insert(Text::Read { leaves });
+        if store.places.of(&known).is_none() {
+            store.placed(&known, at);
+        }
     }
 }
 

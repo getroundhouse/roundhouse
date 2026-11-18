@@ -31,6 +31,16 @@ All files, the sidebar on the right's list of every file in a workspace's worktr
   ![A file opened from All files](screens/file-opened.png)
 
 - **Its lines are numbered and highlighted for its language, as a diff's are,** and scroll both ways, so a long line can be read to its end. A big file shows plain at once and in colour once it's highlighted, and one over 1 MB stays plain, since highlighting it would take seconds. *Unconfirmed.*
+- **A Markdown file shows rendered, in the chat's column, as the chat draws Markdown,** so a README or a doc the agent wrote reads as it will where it's published, and selects and copies as a reply does, each block a blank line apart. A switch at the right end of the bar above it, where a diff keeps its views, shows its source instead, its lines as any file's, and every workspace shares the choice until the app quits, as it does a diff's. A file is Markdown by its name, ending `.md` or `.markdown`. A link in it opens as one in a reply does, and an image it points to shows nothing. *Not built:* showing the worktree's images, and opening a link to another of its files in the file tab, which meanwhile is handed to the system as it's written, as one in a reply is. *Unconfirmed:* everything else in this rule.
+
+  **A Markdown file opened from All files, rendered.** *Unconfirmed.*
+
+  ![A Markdown file rendered](screens/markdown-opened.png)
+
+  **The same file's source, with the switch on Source.** *Unconfirmed.*
+
+  ![A Markdown file's source](screens/markdown-source.png)
+
 - **A file shown is read again when a turn ends,** keeping where it's scrolled to, and its colours until the new ones are ready, so it shows what the agent changed. *Unconfirmed.*
 - **An image shows as itself, as big as it is or smaller to fit the tab, never bigger,** with what kind it is, how many pixels it has and how big a file it is at the other end of its path, so a screenshot an agent saved can be looked at without leaving the app. What it is goes by what the file starts with, not its name, as an attachment's does. It's sent whole up to 64 MB, since half an image is no use, where text stops at 4 MB. It sits on a checkerboard, so what's clear in it shows as clear, inside a thin edge, so one the colour of the pane still shows where it ends. A GIF holds still on its first frame, so an idle window draws nothing. *Unconfirmed.*
 

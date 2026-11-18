@@ -185,14 +185,14 @@ impl Selection {
     }
 
     /// The button's come up, or the list it was pressed in has gone, so the drag's over, and what it selected stays.
-    pub(crate) fn release(&self) {
+    pub(super) fn release(&self) {
         self.inner.borrow_mut().drag = None;
     }
 
     /// Moves the far end of what's being dragged to the place under the pointer, or the nearest in the window to it
     /// if it's past the window's edge, as the texts drawn in this frame have it. Says whether that changed what's
     /// selected.
-    pub(crate) fn follow(&self, bounds: Bounds<Pixels>) -> bool {
+    pub(super) fn follow(&self, bounds: Bounds<Pixels>) -> bool {
         let (pointer, unit, chosen) = {
             let selecting = self.inner.borrow();
             let Some(drag) = selecting.drag.as_ref() else { return false };

@@ -3,12 +3,13 @@ use super::super::{AT_ONCE, ImagesAre, Of, Parsed, Text, TextKey, Texts, parse};
 use gpui_kit::App;
 use std::rc::Rc;
 
-/// How a text is to be parsed on another thread: `source` whole, with its images `images` to draw, or again from where
-/// `again` says, as it goes on from `was`, which is what it was parsed as before, if it was, and what it's drawn as
-/// until it's in.
+/// How a text is to be parsed on another thread: `source` whole, with its images `images` to draw, and only its first
+/// `shown` bytes drawn, if it says, or again from where `again` says, as it goes on from `was`, which is what it was
+/// parsed as before, if it was, and what it's drawn as until it's in.
 pub(in super::super) struct Apart {
     pub(super) source: String,
     pub(super) images: ImagesAre,
+    pub(super) shown: Option<usize>,
     pub(super) was: Option<Rc<Parsed>>,
     pub(super) again: Option<Again>,
 }
@@ -27,13 +28,15 @@ impl Texts {
     /// anywhere else, one joined from such parses is parsed whole, once, as a reply is the first time it's drawn in
     /// the row of its record, so it's drawn there as it will be whenever it's parsed afresh, such as when its chat is
     /// next opened. So is one that says more there than it was parsed as, and one whose images are `images` to draw
-    /// where they weren't, as a reply's are in the row of its record, and not while it's written.
+    /// where they weren't, as a reply's are in the row of its record, and not while it's written. Only the first
+    /// `shown` bytes of one that says are drawn, as [`parse::parse_shown`] says.
     pub(in super::super) fn parsed(
         &self,
         id: &TextKey,
         source: &str,
         of: Of,
         images: ImagesAre,
+        shown: Option<usize>,
     ) -> (Option<Rc<Parsed>>, Option<Apart>) {
         let can_go_on = of.can_go_on();
         let mut store = self.0.borrow_mut();
@@ -52,11 +55,11 @@ impl Texts {
         let goes_on = |was: &&Parsed| can_go_on && was.images == images && source.starts_with(was.source.as_str());
         let again = was.as_deref().filter(goes_on).and_then(|was| parse::again(was, source));
         if again.map_or(source.len(), |again| source.len() - again.byte) > AT_ONCE {
-            return (was.clone(), Some(Apart { source: source.to_owned(), images, was, again }));
+            return (was.clone(), Some(Apart { source: source.to_owned(), images, shown, was, again }));
         }
         let parsed = Rc::new(match (was, again) {
             (Some(was), Some(again)) => parse::gone_on(&was, again, source.to_owned()),
-            _ => parse::parse(source.to_owned(), images),
+            _ => parse::parse_shown(source.to_owned(), images, shown),
         });
         store.texts.insert(id.clone(), Text::Parsed { parsed: parsed.clone() });
         store.parsed_one();
@@ -67,7 +70,7 @@ impl Texts {
     /// parsed of it, and measures the row it's in then again once it's in. It says what it said, so there's nothing
     /// new to find in it.
     pub(in super::super) fn parse_apart(&self, id: TextKey, apart: Apart, cx: &mut App) {
-        let Apart { source, images, was, again } = apart;
+        let Apart { source, images, shown, was, again } = apart;
         let mut store = self.0.borrow_mut();
         if store.texts.get(&id).is_some_and(|text| text.parsing().is_some_and(|parsing| source.starts_with(parsing))) {
             return;
@@ -85,7 +88,7 @@ impl Texts {
             };
             let parsed = match (from, rest) {
                 (Some((was, again)), Some(rest)) => parse::joined(&was, again, given, rest),
-                _ => background.spawn(async move { parse::parse(given, images) }).await,
+                _ => background.spawn(async move { parse::parse_shown(given, images, shown) }).await,
             };
             let Some(cell) = weak.upgrade() else { return };
             // What it replaces holds this task, which goes once it's done.
@@ -101,6 +104,11 @@ impl Texts {
                 cx.update(|cx| redrawn(at.of, cx));
             }
         });
-        store.texts.insert(id, Text::Parsing { source, was, _task: parsing });
+        let read = match store.texts.get(&id) {
+            Some(Text::Read { leaves }) => Some(leaves.clone()),
+            Some(Text::Parsing { read, .. }) => read.clone(),
+            _ => None,
+        };
+        store.texts.insert(id, Text::Parsing { source, was, read, _task: parsing });
     }
 }

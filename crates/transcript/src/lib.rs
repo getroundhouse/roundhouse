@@ -7,6 +7,7 @@
 
 mod attachments;
 mod calls;
+mod document;
 mod find;
 #[cfg(test)]
 mod fixtures;
@@ -29,6 +30,7 @@ mod transcript;
 
 pub use attachments::{file_card, image_format};
 pub use client_core::calls::agent::shown_kind;
+pub use document::Document;
 pub use list::{Place, TranscriptList};
 pub use questions::QuestionPanel;
 pub use rows::{ABOVE_THE_COMPOSER, around_column, in_column, subagent_standing};

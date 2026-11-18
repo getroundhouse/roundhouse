@@ -12,6 +12,7 @@ use protocol::client::ErrorCode;
 use protocol::model::FileContents;
 
 use super::lines::Lines;
+use super::markdown::is_markdown;
 use super::{Contents, FileView};
 use crate::file_image::FileImage;
 
@@ -126,6 +127,14 @@ async fn show_text(
     // Read again and the same as it was, so what's shown, colours and all, still is.
     if shown == Some(hash) {
         return;
+    }
+    if is_markdown(path) {
+        let (name, rendered) = (path.clone(), SharedString::from(text.clone()));
+        let _ = this.update(cx, |t, cx| {
+            if t.reads == read {
+                t.document.update(cx, |document, cx| document.show(name, rendered, cx));
+            }
+        });
     }
     let language = (text.len() <= HIGHLIGHT_UP_TO).then(|| look::language(path).to_string());
     // A big file is shown plain first, the first time, rather than left loading while it's highlighted. Read again,

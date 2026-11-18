@@ -5,6 +5,8 @@
 
 #![cfg(test)]
 
+use std::fmt::Write as _;
+
 use client_core::Client;
 use client_core::fake_hub::World;
 use desktop::app::Connection;
@@ -79,11 +81,14 @@ fn browsing_on_a_fake_hub(cx: &mut TestAppContext) -> (FakeHub, Ui<'_>, Workspac
         let diff = GitDiff { base_commit: None, patch: PATCH.to_string(), truncated: false };
         world.diffs.insert(workspace.clone(), diff);
     }
-    world.worktree = listed(&[".gitignore", "a.txt", "src/app/view.rs", "src/lib.rs"], &["build"]);
+    world.worktree =
+        listed(&[".gitignore", "a.txt", "long.md", "notes.md", "src/app/view.rs", "src/lib.rs"], &["build"]);
     world.worktree_folders.insert("build".to_string(), listed(&[], &["build/out"]));
     world.worktree_folders.insert("build/out".to_string(), listed(&["build/out/app.txt"], &[]));
-    for (path, text) in [("src/lib.rs", "mod app;\n"), ("build/out/app.txt", "built\n")] {
-        world.worktree_files.insert(path.to_string(), FileContents::Text { text: text.to_string() });
+    let files = [("src/lib.rs", "mod app;\n".to_string()), ("build/out/app.txt", "built\n".to_string())];
+    let files = files.into_iter().chain([("notes.md", NOTES.to_string()), ("long.md", paragraphs(LONG))]);
+    for (path, text) in files {
+        world.worktree_files.insert(path.to_string(), FileContents::Text { text });
     }
     let fake = FakeHub::holding(world);
     let mut ui = Ui::open_on(cx, &fake);
@@ -92,6 +97,20 @@ fn browsing_on_a_fake_hub(cx: &mut TestAppContext) -> (FakeHub, Ui<'_>, Workspac
     let other = workspaces.into_iter().find(|w| *w != showing).unwrap();
     show_all_files(&mut ui);
     (fake, ui, other)
+}
+
+/// A Markdown file in the fake hub's worktree.
+const NOTES: &str = "# Notes\n\nThe **sidebar** lists them.\n";
+
+/// How many paragraphs the fake hub's `long.md` has, far more than the window shows.
+const LONG: usize = 300;
+
+/// `count` paragraphs of Markdown, each saying which it is.
+fn paragraphs(count: usize) -> String {
+    (1..=count).fold(String::new(), |mut text, ix| {
+        _ = write!(text, "Paragraph **{ix}**.\n\n");
+        text
+    })
 }
 
 fn show_all_files(ui: &mut Ui<'_>) {
@@ -281,4 +300,39 @@ fn what_s_opened_as_the_hub_goes_shows_once_it_s_back(cx: &mut TestAppContext) {
     ui.click("try-hub-again");
     ui.wait("what's in the folder", |ui| ui.has("all-folder-build/out"));
     ui.wait("the file", |ui| shown_text(ui).as_deref() == Some("mod app;"));
+}
+
+/// A Markdown file opens rendered, as the chat draws Markdown, so a copy has its words and not its marks, and Source
+/// shows its lines as any file's, until Preview is chosen again.
+#[gpui_kit::test]
+fn a_markdown_file_opens_rendered_and_source_shows_its_lines(cx: &mut TestAppContext) {
+    let (_fake, mut ui, _) = browsing_on_a_fake_hub(cx);
+
+    ui.click("all-file-notes.md");
+    ui.wait("the file, rendered", |ui| rendered(ui).as_deref() == Some("Notes\n\nThe sidebar lists them."));
+    ui.click("markdown-source");
+
+    assert_eq!(rendered(&ui), None);
+    assert_eq!(shown_text(&ui).as_deref(), Some("# Notes\n\nThe **sidebar** lists them."));
+    ui.click("markdown-preview");
+    ui.wait("the file, rendered again", |ui| rendered(ui).is_some());
+}
+
+/// A long Markdown file is drawn as far as the window shows, and a copy of all of it has the blocks it hasn't drawn
+/// too.
+#[gpui_kit::test]
+fn a_long_markdown_file_draws_what_s_in_sight_and_copies_all_of_it(cx: &mut TestAppContext) {
+    let (_fake, mut ui, _) = browsing_on_a_fake_hub(cx);
+
+    ui.click("all-file-long.md");
+
+    let copied = (1..=LONG).map(|ix| format!("Paragraph {ix}.")).collect::<Vec<_>>().join("\n\n");
+    ui.wait("the file, rendered", |ui| rendered(ui).is_some_and(|rendered| rendered == copied));
+    let shown = ui.texts_shown();
+    assert!(shown.contains("Paragraph 1. | Paragraph 2."), "{shown}");
+    assert!(!shown.contains(&format!("Paragraph {LONG}.")), "{shown}");
+}
+
+fn rendered(ui: &Ui<'_>) -> Option<String> {
+    ui.cx.read_entity(&viewer(ui), FileView::rendered)
 }

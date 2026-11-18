@@ -16,6 +16,7 @@
 //! It's the mouse's: a press, a drag and a release. The kit's selection also takes a touch screen's long press and
 //! handles, which a transcript on a phone will need here.
 
+mod frames;
 mod geometry;
 mod pieces;
 mod places;

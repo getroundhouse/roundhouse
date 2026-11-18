@@ -2,11 +2,12 @@ use super::rows;
 use crate::file_tree::{List, Row, chain, folder_row, row_frame, split};
 use crate::patch::{FilePatch, FileStatus};
 use crate::review::Review;
+use crate::shared_choice::{choose, chosen};
 use gpui_kit::assets::IconName as Lucide;
 use gpui_kit::component::{Icon, IconName, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyElement, App, Context, Entity, EventEmitter, Global, IntoElement, ParentElement, Render, SharedString,
+    AnyElement, App, Context, Entity, EventEmitter, IntoElement, ParentElement, Render, SharedString,
     StatefulInteractiveElement, Styled, Subscription, TestSupportExt as _, Window, div, uniform_list,
 };
 use look::{IconSizing as _, LineText, Placed, Typeset as _};
@@ -21,12 +22,8 @@ pub enum ChangesEvent {
 }
 
 /// The layout chosen, which every workspace shares until the app quits.
-struct Chosen(pub(super) Layout);
-
-impl Global for Chosen {}
-
 fn layout(cx: &App) -> Layout {
-    cx.try_global::<Chosen>().map_or_default(|chosen| chosen.0)
+    chosen(cx)
 }
 
 fn toggle_layout(cx: &mut App) {
@@ -34,7 +31,7 @@ fn toggle_layout(cx: &mut App) {
         Layout::List => Layout::Tree,
         Layout::Tree => Layout::List,
     };
-    cx.set_global(Chosen(next));
+    choose(next, cx);
 }
 
 pub struct Changes {

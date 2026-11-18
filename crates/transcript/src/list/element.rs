@@ -156,24 +156,19 @@ impl Element for ListElement {
         window: &mut Window,
         cx: &mut App,
     ) -> (Vec<AnyElement>, Hitbox) {
-        // A drag of the scrollbar's thumb, or one selecting text, ends when the button comes up, which the scrollbar,
-        // and the list, only hear while they're drawn. If the list wasn't drawn in the last frame, such as when
-        // another workspace was shown mid-drag, that drag is over.
-        let drawn_last_frame =
-            id.is_some_and(|id| window.with_element_state(id, |was: Option<()>, _| (was, ())).is_some());
-        if !drawn_last_frame {
+        self.selection.new_frame();
+        let started = self.selection.frame_started(id, bounds, window, cx);
+        // A drag of the scrollbar's thumb ends when the button comes up, which the scrollbar only hears while it's
+        // drawn, as a selection's does.
+        if !started.drawn_last_frame {
             self.state.borrow_mut().end_drag();
-            self.selection.release();
         }
         // What the rest of the transcript was drawn from in this frame: its button back to the latest row, which
         // shows while the list is scrolled up, and the row its outline marks a prompt by, which it goes by only then.
         let read = |state: &State| state.is_scrolled_up().then(|| state.bottom_row());
         let before = read(&self.state.borrow());
-        self.selection.new_frame();
-        // A pointer held past the top or bottom with the button down scrolls on, for as long as it's held there.
-        if let Some(by) = self.selection.scroll_past_edge(bounds, cx.background_executor().now()) {
+        if let Some(by) = started.scroll_by {
             self.state.borrow_mut().scroll_by(-by);
-            window.request_animation_frame();
         }
         let layout = self.lay_out(bounds, window, cx);
         self.measure_out_of_sight(bounds.size.width, window, cx);
@@ -191,11 +186,7 @@ impl Element for ListElement {
                 }
             }
         });
-        // What the rows drew says where the text under the pointer is now, so a drag's end follows it as the list
-        // moves under a pointer held still.
-        if self.selection.follow(bounds) {
-            window.request_animation_frame();
-        }
+        self.selection.texts_laid_out(bounds, window);
         (rows, hitbox)
     }
 

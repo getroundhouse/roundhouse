@@ -45,6 +45,7 @@ mod right_click;
 mod saving;
 mod says_more;
 mod settings;
+pub mod shared_choice;
 mod sidebar;
 pub mod sidebar_tabs;
 mod sides;

@@ -6,7 +6,7 @@ use proptest::test_runner::{Config, RngSeed};
 use gpui_kit::base::text::editor_host::BlockNode;
 
 use super::ImagesAre::{self, TheKits, TheTranscripts};
-use super::{ATOM, Parsed, again, gone_on, leaves, parse};
+use super::{ATOM, Parsed, again, gone_on, leaves, parse, parse_shown, top_blocks};
 use crate::linked_images;
 
 /// Bits of Markdown whose blocks a text that goes on can change: a paragraph a line of `=` makes a heading, lists,
@@ -155,6 +155,81 @@ proptest! {
         let text = bits.concat();
         prop_assert_eq!(parse(text.clone(), TheTranscripts).leaves, parse(text.clone(), TheKits).leaves, "{:?}", text);
     }
+
+    /// A document copies a block out of sight from what the whole text's parse says it shows, and draws it from its
+    /// own parse, so each block alone shows what it shows in the whole text, and together they show all of it, for a
+    /// text whose blocks are a blank line apart, as a written document's are. `top_blocks` says where they differ.
+    #[test]
+    fn a_text_cut_into_its_top_blocks_shows_in_them_what_it_shows_whole(blocks in vec(select(BLOCKS), 1..24)) {
+        shown_in_top_blocks_as_whole(&blocks.concat())?;
+    }
+}
+
+/// Whole blocks, each with a blank line after it, as a document's are: one of each kind, a definition and what refers
+/// to it, footnotes and their marks, which may come in any order, one defined in a quote, which has the text drawn
+/// whole, and a fence left open, which takes in what's after it.
+const BLOCKS: &[&str] = &[
+    "# A heading\n\n",
+    "Some **bold** and `code` text,\nand Café, naïve and ✓\n\n",
+    "- one\n- two\n  - nested\n\n",
+    "1. first\n2. second\n\n",
+    "```rust\nlet x = 1;\n```\n\n",
+    "  ```sh\n  indented fence\n  ```\n\n",
+    "    indented code\n\n",
+    "| a | b |\n|---|---|\n| c | d |\n\n",
+    "> quoted\n>\n> > nested\n\n",
+    "See [the docs][docs].\n\n",
+    "[docs]: https://example.com\n\n",
+    "A note[^1].\n\n",
+    "[^1]: The note, with **bold**.\n\n",
+    "- A named one[^named], in a list\n\n",
+    "[^named]: Its note.\n\n    Its second paragraph.\n\n",
+    "> [^quoted]: One in a quote[^1].\n\n",
+    "Its mark[^quoted].\n\n",
+    "```md\n[^shown]: One in code.\n```\n\n",
+    "---\n\n",
+    "![a picture](a.png)\n\n",
+    "<div>\nhtml\n</div>\n\n",
+    "```sh\nleft open\n",
+];
+
+/// A text with footnotes is cut into its blocks like any other, so a long one draws only what's in sight, but for one
+/// defined in a list or a quote, which is drawn as part of it.
+#[test]
+fn a_text_is_cut_into_its_blocks_with_footnotes_defined_at_its_top() {
+    let defined = |at: &str| format!("A note[^1].\n\nMore.\n\n{at}[^1]: The note.\n");
+    let blocks = top_blocks(&defined(""));
+    let drawn: Vec<_> =
+        blocks.iter().map(|block| parse_shown(block.source.clone(), TheKits, Some(block.shown))).collect();
+    assert_eq!(
+        drawn.iter().map(|parsed| &*parsed.leaves).collect::<Vec<_>>(),
+        [&["A note[1].".to_string()][..], &["More.".to_string()], &["[1]: The note.".to_string()],]
+    );
+    assert_eq!(top_blocks(&defined("> ")).len(), 1, "one in a quote is drawn whole");
+    assert_eq!(top_blocks(&defined("- ")).len(), 1, "as is one in a list");
+    let shown = "How to write one:\n\n```md\nA note[^1].\n\n[^1]: The note.\n```\n\nThat's all.\n";
+    assert_eq!(top_blocks(shown).len(), 3, "but one in code is only words");
+}
+
+/// A block is parsed with only the definitions it refers to, since a text such as a changelog can define hundreds.
+#[test]
+fn a_block_is_parsed_with_only_the_definitions_it_refers_to() {
+    let text = "See [the docs][Docs].\n\n[docs]: https://example.com/docs\n\n[other]: https://example.com/other\n";
+    let sources: Vec<_> = top_blocks(text).into_iter().map(|block| block.source).collect();
+    assert_eq!(sources, ["See [the docs][Docs].\n\n[docs]: https://example.com/docs"]);
+}
+
+/// That each of `text`'s blocks at its top shows alone what it shows in the whole text, and together they show all of
+/// it.
+fn shown_in_top_blocks_as_whole(text: &str) -> Result<(), TestCaseError> {
+    let blocks = top_blocks(text);
+    for block in &blocks {
+        let drawn = parse_shown(block.source.clone(), TheKits, Some(block.shown)).leaves;
+        prop_assert_eq!(&drawn, &block.leaves, "{:?} in {:?}", block.source, text);
+    }
+    let all: Vec<String> = blocks.iter().flat_map(|block| block.leaves.iter().cloned()).collect();
+    prop_assert_eq!(all.as_slice(), &*leaves(text), "{:?}", text);
+    Ok(())
 }
 
 /// What `bits`, together, are drawn as when they come in cut where `cuts` say, parsed again from near the end each time

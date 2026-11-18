@@ -9,6 +9,7 @@ use std::fmt::Write as _;
 
 use client_core::fake_hub::World;
 use desktop::file_diff::{DiffView, FileDiff};
+use desktop::shared_choice::OnASwitch as _;
 use gpui_kit::test::{TestEventExt as _, TestWindowExt as _};
 use gpui_kit::{AppContext as _, ElementId, MouseButton, ScrollDelta, SharedString, TestAppContext, point, px};
 use protocol::model::{CommitId, FileContents, GitDiff, SessionStatus, WorkspaceId};

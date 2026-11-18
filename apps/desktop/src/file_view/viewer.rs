@@ -1,10 +1,12 @@
+use super::markdown::{MarkdownView, is_markdown};
 use super::{lines, reading};
 use crate::file_header::file_header;
 use crate::file_image::{FileImage, Placed, fitted};
+use crate::shared_choice::{Chosen, chosen, switch};
 use client_core::Client;
 use gpui_kit::component::{h_flex, v_flex};
 use gpui_kit::{
-    AnyElement, App, Context, FocusHandle, Focusable, InteractiveElement as _, IntoElement,
+    AnyElement, App, AppContext as _, Context, Entity, FocusHandle, Focusable, InteractiveElement as _, IntoElement,
     ListHorizontalSizingBehavior, ParentElement as _, Pixels, Render, SharedString, Styled as _, StyledText,
     Subscription, UniformListScrollHandle, Window, div, px, uniform_list,
 };
@@ -12,6 +14,7 @@ use lines::Lines;
 use look::Typeset as _;
 use protocol::model::WorkspaceId;
 use reading::Unshown;
+use transcript::Document;
 
 /// The height of a line of a file, and of a line of a diff, so the two read alike.
 pub(crate) const LINE_HEIGHT: Pixels = px(20.);
@@ -38,7 +41,10 @@ pub struct FileView {
     /// A hash of the bytes what's shown was made from, its lines or its image, so a file read again that hasn't changed
     /// is left as it is.
     pub(super) shown: Option<u64>,
+    /// A Markdown file, rendered, which shows in place of its lines while the file tab's switch says so.
+    pub(super) document: Entity<Document>,
     pub(super) _releasing: Subscription,
+    _choosing: Subscription,
 }
 
 impl Focusable for FileView {
@@ -63,7 +69,9 @@ impl FileView {
             focus: cx.focus_handle(),
             reads: 0,
             shown: None,
+            document: cx.new(Document::new),
             _releasing: releasing,
+            _choosing: cx.observe_global::<Chosen<MarkdownView>>(|_, cx| cx.notify()),
         }
     }
 
@@ -86,6 +94,12 @@ impl FileView {
     pub fn shown_text(&self) -> Option<String> {
         let Contents::Lines(lines) = &self.contents else { return None };
         Some(lines.lines.iter().map(|line| line.text.as_ref()).collect::<Vec<_>>().join("\n"))
+    }
+
+    /// What a copy of the whole of a Markdown file has, while it shows it rendered, or `None` while it doesn't.
+    #[cfg(feature = "testing")]
+    pub fn rendered(&self, cx: &App) -> Option<String> {
+        self.shows_rendered(cx).then(|| self.document.read(cx).copied_whole())
     }
 
     /// What it says of the image it shows, or `None` while it shows something in its place.
@@ -167,9 +181,17 @@ impl FileView {
             Contents::Image(image) => Some(
                 div().flex_none().text_color(look::colors(cx).text_muted).child(image.describe()).into_any_element(),
             ),
+            Contents::Lines(_) if is_markdown(path) => Some(switch::<MarkdownView>(cx)),
             _ => None,
         };
         Some(file_header(path, None, about, cx))
+    }
+}
+
+impl FileView {
+    /// Whether it shows a Markdown file rendered, rather than its lines.
+    fn shows_rendered(&self, cx: &App) -> bool {
+        self.path.as_deref().is_some_and(is_markdown) && chosen::<MarkdownView>(cx) == MarkdownView::Preview
     }
 }
 
@@ -186,6 +208,7 @@ impl Render for FileView {
             Contents::Loading => placeholder("Loading…".into(), cx),
             Contents::Image(image) => picture(image),
             Contents::Instead(why) => placeholder(why.said().into(), cx),
+            Contents::Lines(_) if self.shows_rendered(cx) => self.document.clone().into_any_element(),
             Contents::Lines(lines) => {
                 uniform_list("file-lines", lines.lines.len(), cx.processor(|t, range, _, cx| t.draw_lines(range, cx)))
                     .track_scroll(&self.scroll)

@@ -48,6 +48,6 @@ A changed image shows as Before and After, rather than as text. The bar above it
 
 ## Read the code around a change
 
-The sidebar's other tab, All files, lists every file in the worktree, ignored ones too. Click one to read it in the file tab, highlighted for its language. An image opens as itself.
+The sidebar's other tab, All files, lists every file in the worktree, ignored ones too. Click one to read it in the file tab, highlighted for its language. An image opens as itself, and a Markdown file rendered, with a switch to its source.
 
 [The diff](../reference/the-diff.md) has every rule.
