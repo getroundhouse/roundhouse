@@ -132,7 +132,7 @@ impl AppView {
                     Ok(made) => t.made(made, &asked_from, cx),
                     // Making it stopped partway, so it may have been made.
                     Err(e) => {
-                        t.show_error(format!("couldn't tell whether the workspace was made: {e}"), cx);
+                        t.show_error(client_core::refusals::couldnt("tell whether the workspace was made", &e), cx);
                         let (prompt, in_the_dialog) = (Prompt::new(typed), false);
                         let given_back = made::GivenBack { prompt, coming_back, in_the_dialog };
                         t.give_back_to_dialog(given_back, to_start_in, cx);
@@ -212,7 +212,7 @@ impl AppView {
             let Some(path) = paths.into_iter().next() else { return };
             let added = client.start(move |client| client.repo_add(&path.to_string_lossy())).recv().await;
             if let Err(e) = added {
-                let _ = this.update(cx, |t, cx| t.show_error(format!("couldn't add that: {e}"), cx));
+                let _ = this.update(cx, |t, cx| t.show_error(client_core::refusals::couldnt("add that", &e), cx));
             }
         })
         .detach();
@@ -295,7 +295,7 @@ impl AppView {
                     Err(ClientError::Api(e)) if e.code == ErrorCode::NeedsForce && !force => {
                         t.confirm_forced_archive(id.clone(), &e.message, cx);
                     }
-                    Err(e) => t.show_error(format!("couldn't archive: {e}"), cx),
+                    Err(e) => t.show_error(client_core::refusals::couldnt("archive", &e), cx),
                 }
                 cx.notify();
             });
@@ -339,7 +339,7 @@ impl AppView {
                         t.read_records(cx);
                         t.select(workspace.id, cx);
                     }
-                    Err(e) => t.show_error(format!("couldn't restore: {e}"), cx),
+                    Err(e) => t.show_error(client_core::refusals::couldnt("restore", &e), cx),
                 }
                 cx.notify();
             });

@@ -112,7 +112,7 @@ fn the_cards_button_and_typing_compact_ask_the_agent_to_compact_except_while_it_
     ui.press("enter");
 
     ui.wait("it to come back", |ui| ui.composer_text() == "/compact");
-    assert!(ui.view().error.as_deref().is_some_and(|error| error.starts_with("couldn't compact")));
+    assert!(ui.view().error.as_deref().is_some_and(|error| error.starts_with("Couldn't compact")));
     ui.hover("context");
     ui.wait_out_a_tooltip();
     assert!(ui.off("context-compact"), "the card's button is off while the agent is on a turn");

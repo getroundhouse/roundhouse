@@ -65,7 +65,7 @@ pub struct NotAttached {
 
 impl std::fmt::Display for NotAttached {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "couldn't attach {}: {}", self.name, self.why)
+        write!(f, "Couldn't attach {}: {}", self.name, self.why)
     }
 }
 

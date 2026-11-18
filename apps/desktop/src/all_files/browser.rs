@@ -177,7 +177,7 @@ impl AllFiles {
                         t.open.remove(&path);
                         // One that's gone since it was listed goes from the list when it's listed again.
                         if !matches!(&e, ClientError::Api(api) if api.code == ErrorCode::NotFound) {
-                            cx.emit(AllFilesEvent::Error(format!("couldn't open {path}: {e}")));
+                            cx.emit(AllFilesEvent::Error(client_core::refusals::couldnt(&format!("open {path}"), &e)));
                         }
                     }
                 }

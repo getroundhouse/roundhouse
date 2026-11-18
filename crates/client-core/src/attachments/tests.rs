@@ -25,8 +25,8 @@ fn a_folder_an_empty_file_or_a_missing_one_says_why_it_cant_go() {
     let empty = FileToSend::read(&dir.path().join("empty.log")).unwrap_err();
     let missing = FileToSend::read(&dir.path().join("gone.log")).unwrap_err();
 
-    assert_eq!(folder.to_string(), "couldn't attach notes: a folder can't be attached");
-    assert_eq!(empty.to_string(), "couldn't attach empty.log: the file is empty");
+    assert_eq!(folder.to_string(), "Couldn't attach notes: a folder can't be attached");
+    assert_eq!(empty.to_string(), "Couldn't attach empty.log: the file is empty");
     assert_eq!(missing.name, "gone.log");
 }
 
@@ -39,5 +39,5 @@ fn a_file_over_the_limit_is_refused_without_being_read() {
 
     let refused = FileToSend::read(&huge).unwrap_err();
 
-    assert_eq!(refused.to_string(), "couldn't attach huge.bin: a file can be at most 100 MB");
+    assert_eq!(refused.to_string(), "Couldn't attach huge.bin: a file can be at most 100 MB");
 }

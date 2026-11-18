@@ -39,7 +39,7 @@ impl WorkspacePane {
             let _ = this.update(cx, |t, cx| {
                 if let Err(NotTaken { error, prompt }) = queued {
                     t.give_back(Some(&session_id), prompt, cx);
-                    cx.emit(PaneEvent::Error(format!("couldn't queue that: {error}")));
+                    cx.emit(PaneEvent::Error(client_core::refusals::couldnt("queue that", &error)));
                 }
                 cx.notify();
             });
@@ -54,7 +54,8 @@ impl WorkspacePane {
         let sending = self.client.start(move |client| client.session_send_queued(&session_id, client_msg_id));
         cx.spawn(async move |this, cx| {
             if let Err(e) = sending.recv().await {
-                let _ = this.update(cx, |_, cx| cx.emit(PaneEvent::Error(format!("couldn't send that: {e}"))));
+                let _ =
+                    this.update(cx, |_, cx| cx.emit(PaneEvent::Error(client_core::refusals::couldnt("send that", &e))));
             }
         })
         .detach();
@@ -65,7 +66,7 @@ impl WorkspacePane {
         let removing = self.client.start(move |client| client.session_unqueue(&session_id, client_msg_id));
         cx.spawn(async move |this, cx| {
             if let Err(e) = removing.recv().await {
-                let said = format!("couldn't take that out of the queue: {e}");
+                let said = client_core::refusals::couldnt("take that out of the queue", &e);
                 let _ = this.update(cx, |_, cx| cx.emit(PaneEvent::Error(said)));
             }
         })
@@ -150,6 +151,6 @@ fn not_changed(error: &ClientError) -> String {
         ClientError::Api(e) if e.code == ErrorCode::NotFound => {
             "That was taken out of the queue before the change was saved.".into()
         }
-        _ => format!("couldn't change that: {error}"),
+        _ => client_core::refusals::couldnt("change that", error),
     }
 }

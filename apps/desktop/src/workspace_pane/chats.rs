@@ -88,7 +88,7 @@ impl WorkspacePane {
         self.creating_chat = false;
         match created {
             Ok(session) => self.show_chat_once_open(session.id, cx),
-            Err(e) => cx.emit(PaneEvent::Error(format!("couldn't start a chat: {e}"))),
+            Err(e) => cx.emit(PaneEvent::Error(client_core::refusals::couldnt("start a chat", &e))),
         }
         if let Some(agent) = self.chats_asked_for.pop_front() {
             self.new_chat_with(agent, cx);
@@ -264,7 +264,7 @@ impl WorkspacePane {
             let _ = this.update(cx, |_, cx| match closed {
                 // Deleted already, because nothing was sent in it, so closing it again has nothing left to do.
                 Ok(_) | Err(ClientError::Api(ApiError { code: ErrorCode::NotFound, .. })) => {}
-                Err(e) => cx.emit(PaneEvent::Error(format!("couldn't close the chat: {e}"))),
+                Err(e) => cx.emit(PaneEvent::Error(client_core::refusals::couldnt("close the chat", &e))),
             });
         })
         .detach();
@@ -276,7 +276,7 @@ impl WorkspacePane {
             let reopened = reopening.recv().await;
             let _ = this.update(cx, |t, cx| match reopened {
                 Ok(session) => t.show_chat_once_open(session.id, cx),
-                Err(e) => cx.emit(PaneEvent::Error(format!("couldn't reopen the chat: {e}"))),
+                Err(e) => cx.emit(PaneEvent::Error(client_core::refusals::couldnt("reopen the chat", &e))),
             });
         })
         .detach();

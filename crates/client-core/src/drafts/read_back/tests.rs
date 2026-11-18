@@ -61,7 +61,7 @@ fn one_the_hub_doesnt_have_is_said_by_name_and_the_rest_come_back_in_order() {
     assert_eq!(named(&came_back), [("chat.txt", "the chat's".to_string())]);
     let unread: Vec<String> = came_back.unread.iter().map(ToString::to_string).collect();
     assert_eq!(unread.len(), 1);
-    assert!(unread[0].starts_with("couldn't bring back gone.txt: "), "{unread:?}");
+    assert!(unread[0].starts_with("Couldn't bring back gone.txt: "), "{unread:?}");
 }
 
 /// Such as one a change made elsewhere stopped naming, or one a newer read is on its way for.

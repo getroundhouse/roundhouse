@@ -90,7 +90,7 @@ impl WorkspacePane {
                             pane.update(cx, |_, cx| Self::confirm_forced_move(session.clone(), to.clone(), window, cx));
                     })));
                 }
-                Err(e) => cx.emit(PaneEvent::Error(crate::failed::couldnt("move the chat", &e))),
+                Err(e) => cx.emit(PaneEvent::Error(client_core::refusals::couldnt("move the chat", &e))),
             });
         })
         .detach();

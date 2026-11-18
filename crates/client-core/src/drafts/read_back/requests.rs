@@ -24,7 +24,7 @@ pub struct NotReadBack {
 
 impl std::fmt::Display for NotReadBack {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "couldn't bring back {}: {}", self.name, self.error)
+        write!(f, "Couldn't bring back {}: {}", self.name, self.error)
     }
 }
 

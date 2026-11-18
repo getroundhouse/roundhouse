@@ -124,7 +124,7 @@ impl WorkspacePane {
                 let now = match changed {
                     Ok(session) => Some(session.mode),
                     Err(e) => {
-                        cx.emit(PaneEvent::Error(format!("couldn't change that: {e}")));
+                        cx.emit(PaneEvent::Error(client_core::refusals::couldnt("change that", &e)));
                         None
                     }
                 };

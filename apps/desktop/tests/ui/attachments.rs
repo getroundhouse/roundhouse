@@ -109,7 +109,7 @@ fn copied_files_of_any_kind_attach_by_name_and_a_folder_says_why_it_cant(cx: &mu
     ui.paste(ClipboardItem::from(ClipboardEntry::ExternalPaths(copied)));
 
     ui.wait("the refusal", |ui| ui.view().error.is_some());
-    assert!(ui.view().error.clone().unwrap().contains("couldn't attach notes: a folder can't be attached"));
+    assert!(ui.view().error.clone().unwrap().contains("Couldn't attach notes: a folder can't be attached"));
     assert_eq!(ui.attached(), ["build.log", "blob.bin"]);
     ui.input("attached");
     ui.press("enter");
@@ -152,7 +152,7 @@ fn a_prompt_that_couldnt_be_sent_comes_back_to_its_own_chat(cx: &mut TestAppCont
     let first_transcript = ui.transcript().unwrap();
     let second = ui.new_chat();
     let not_sent = |text: &str| TranscriptEvent::NotSent {
-        message: "couldn't send that: the connection to the hub was lost".to_string(),
+        message: "Couldn't send that: the connection to the hub was lost".to_string(),
         prompt: Prompt::carrying(
             text,
             vec![FileToSend::checked("build.log", MediaType::Text, b"error at line 42\n".to_vec()).unwrap()],
@@ -163,7 +163,7 @@ fn a_prompt_that_couldnt_be_sent_comes_back_to_its_own_chat(cx: &mut TestAppCont
     first_transcript.update(ui.cx, |_, cx| cx.emit(not_sent("why does this fail?")));
     ui.frame();
     assert!(ui.attached().is_empty(), "the chat showing gets nothing");
-    assert_eq!(ui.view().error.as_deref(), Some("couldn't send that: the connection to the hub was lost"));
+    assert_eq!(ui.view().error.as_deref(), Some("Couldn't send that: the connection to the hub was lost"));
     ui.show_chat(&first);
     ui.wait("the prompt back in its chat", |ui| ui.attached() == ["build.log"]);
     assert_eq!(ui.composer_text(), "why does this fail?");

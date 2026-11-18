@@ -79,7 +79,7 @@ impl AppView {
             if let Err(e) = marking.recv().await
                 && !e.is_unsupported()
             {
-                let said = format!("couldn't mark the workspace {}: {e}", mark.word());
+                let said = client_core::refusals::couldnt(&format!("mark the workspace {}", mark.word()), &e);
                 let _ = this.update(cx, |t, cx| t.show_error(said, cx));
             }
         })

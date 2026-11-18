@@ -47,7 +47,7 @@ fn a_prompt_the_hub_couldnt_give_the_new_chat_whole_goes_back_to_the_dialog(cx: 
 
     ui.wait_for_a_new_workspace(before);
     ui.wait("the dialog again", |ui| ui.has_dialog() && ui.dialog_text() == "say:with notes");
-    assert!(ui.view().error.clone().unwrap().contains("couldn't send that"));
+    assert!(ui.view().error.clone().unwrap().contains("Couldn't send that"));
     assert_eq!(ui.dialog_attached(), ["file-0.txt"]);
     assert_eq!(ui.composer_text(), "", "nothing went to the new chat's composer");
 }
@@ -145,7 +145,7 @@ fn a_prompt_the_new_chat_couldnt_be_sent_goes_to_its_composer_which_shows_though
             .error
             .clone()
             .unwrap_or_default()
-            .contains("couldn't give the chat the model, effort and mode chosen")
+            .contains("Couldn't give the chat the model, effort and mode chosen")
     );
     assert!(prompts(&ui).is_empty(), "nothing was sent without the effort chosen");
 }
