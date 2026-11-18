@@ -7,15 +7,19 @@ use protocol::model::{GithubToken, Workspace, WorkspaceId};
 use tokio::time::Instant;
 use tracing::debug;
 
-use crate::hub::pull_requests::remote::{NoToken, ReadsAs};
+use crate::github::BRANCHES_A_QUERY;
+use crate::hub::pull_requests::own::WorkspaceRead;
+use crate::hub::pull_requests::reading::couldnt_read;
+use crate::hub::pull_requests::remote::{NoToken, ReadsAs, waited};
 use crate::hub::pull_requests::{Asked, Hub, schedule};
-use crate::jobs::{self, Ended, JobKind};
+use crate::jobs::{self, Ended, JobKind, Limits};
 use crate::store::{Store, now_ms};
 
-/// The queries a read of workspaces' pull requests makes at most, for every query of branches its first round makes:
-/// that one, and then as many as a read of waits makes for each query its first round makes, since the pull
-/// requests taken are read the same way.
-const QUERIES_AT_MOST: u32 = 1 + crate::hub::pull_requests::remote::QUERIES_AT_MOST;
+/// The queries a read of workspaces' pull requests makes at most, for every [`BRANCHES_A_QUERY`] of its workspaces and
+/// of the pull requests their waits watch, each given the time the hub gives a call to GitHub: one to ask which pull
+/// requests their branches have, then two rounds for most, and as many again for pages and for what's under them in
+/// their stacks, read again twice for pull requests that moved as they were read.
+const QUERIES_AT_MOST: u32 = 13;
 
 impl Hub {
     /// Starts reading the pull requests nobody asks for, as jobs, every one that's due as one token together, as
@@ -26,8 +30,6 @@ impl Hub {
         let pace = self.timers.read_pace;
         loop {
             tokio::time::sleep(pace).await;
-            // A wait's first, since an agent waits on it.
-            self.start_due_wait_reads().await;
             self.start_due_own_reads().await;
         }
     }
@@ -47,6 +49,13 @@ impl Hub {
         workspaces.retain(|workspace| seen || waited.contains(&workspace.id));
         let due = schedule::due(&workspaces, &self.pull_requests.schedules.lock(), &waited, Instant::now());
         due.into_iter().cloned().collect()
+    }
+
+    /// How many pull requests the waits in `workspaces` watch, as they're asked of GitHub.
+    async fn waited_in(&self, workspaces: &[Workspace]) -> usize {
+        let mut waited = waited(self.blocking(Store::remote_waits).await.unwrap_or_default());
+        let mut theirs = workspaces.iter().filter_map(|workspace| waited.remove(&workspace.id));
+        theirs.by_ref().flatten().map(|waited| waited.selection.numbers().len()).sum()
     }
 
     /// Starts reading the workspaces that are due, a job for each token they're read as, but for a token whose read
@@ -78,12 +87,13 @@ impl Hub {
     }
 
     /// Starts reading `workspaces`, as they were at `listed_at`, as `reads_as`, as a job, within the limits of a read
-    /// that makes [`QUERIES_AT_MOST`] for each query of branches it makes, and may start the first workspace's worker
-    /// for its machines' `gh`'s token. Once it ends, however it ended, each one it didn't finish waits longer for its
-    /// next, and a worker it took is let go of, unless another read holds it.
+    /// that makes [`QUERIES_AT_MOST`], as it says, and may start the first workspace's worker for its machines' `gh`'s
+    /// token. Once it ends, however it ended, each one it didn't finish waits longer for its next, and says so on its
+    /// waits, and a worker it took is let go of, unless another read holds it.
     async fn start_own_read(self: &Arc<Self>, reads_as: ReadsAs, workspaces: Vec<Workspace>, listed_at: Instant) {
         let Some(first) = workspaces.first().map(|workspace| workspace.id.clone()) else { return };
-        let queries = u32::try_from(workspaces.len().div_ceil(crate::github::BRANCHES_A_QUERY)).unwrap_or(u32::MAX);
+        let looks = workspaces.len().saturating_add(self.waited_in(&workspaces).await);
+        let queries = u32::try_from(looks.div_ceil(BRANCHES_A_QUERY)).unwrap_or(u32::MAX);
         let limits = self.read_limits(&first, queries.saturating_mul(QUERIES_AT_MOST)).await;
         let before: Vec<_> = {
             let schedules = self.pull_requests.schedules.lock();
@@ -95,9 +105,10 @@ impl Hub {
         let hub = self.clone();
         let after = move |ended: Ended| async move {
             // So those it didn't finish don't come up again soon, ahead of the rest.
-            if !ended.finished_or_ran_uncut() {
+            if let Some(error) = unfinished(&ended, limits) {
                 for (id, before) in before {
                     hub.pull_requests.wait_longer_than(&id, before);
+                    hub.remote_waits_failed(&id, None, &error, &[]).await;
                 }
             }
             if took_worker.load(Ordering::Relaxed) {
@@ -156,7 +167,7 @@ impl Hub {
             Some(Ok(token)) => {
                 let read = self.read_own(&token, asking, Asked::InTurn).await;
                 self.github_said(reads_as, read.rate_limit, read.refused);
-                read
+                read.found
             }
             Some(Err(e)) => {
                 debug!(%reads_as, "no token to read workspaces' pull requests with: {}", e.message);
@@ -166,11 +177,11 @@ impl Hub {
             // holds every workspace's turn.
             None => asking.settled(),
         };
-        let mut found: HashMap<_, _> = read.found.into_iter().collect();
+        let mut found: HashMap<_, _> = read.into_iter().collect();
         let hub = self.clone();
         jobs::uncut(async move {
             for (workspace, held) in reading {
-                let answer = found.remove(&workspace.id).unwrap_or_else(|| Err(super::super::reading::couldnt_read()));
+                let answer = found.remove(&workspace.id).unwrap_or_else(|| WorkspaceRead::unread(couldnt_read()));
                 let last = last.get(&workspace.id).copied().flatten();
                 if let Err(e) = hub.clone().take_answer(workspace, answer, last, read_at, Asked::InTurn, held).await {
                     debug!("recording a workspace's pull request read in turn: {}", e.message);
@@ -207,4 +218,19 @@ impl Hub {
 /// A read of waits takes the same as one that may work later instead, so the waits go on waiting.
 pub(in crate::hub::pull_requests) fn no_login(error: &ApiError) -> ApiError {
     ApiError::new(ErrorCode::Unavailable, error.message.clone())
+}
+
+/// What a read that didn't finish is recorded as on its workspaces' waits, like a read that failed, or `None` for one
+/// that did, or that got as far as recording what it read. Their agents read it, so it says what happened in their
+/// terms, and the log says where the read had got to.
+fn unfinished(ended: &Ended, limits: Limits) -> Option<ApiError> {
+    if ended.finished_or_ran_uncut() {
+        return None;
+    }
+    let message = if let Ended::Panicked { .. } = ended {
+        "reading the pull requests failed in the hub".to_string()
+    } else {
+        format!("reading the pull requests took longer than {} s, so it was stopped", limits.work.as_secs())
+    };
+    Some(ApiError::new(ErrorCode::Worker, message))
 }

@@ -205,15 +205,14 @@ async fn a_read_of_waits_github_fails_says_so_on_them_and_backs_off() {
 
     let watching = tokio::spawn(hub.clone().watch_pull_requests());
     soon("the wait saying it wasn't read", || read_error(&hub, &wait).is_some()).await;
-    // Which is scheduled just after.
-    soon("its next read being put off", || hub.pull_requests.remote.lock().values().any(|s| s.failures > 0)).await;
+    // Which is scheduled as it's recorded.
+    let schedule = || hub.pull_requests.schedules.lock().get(&WorkspaceId::from("w")).copied();
+    soon("its next read being put off", || schedule().is_some_and(|schedule| !schedule.found)).await;
     watching.abort();
 
     assert_eq!(ended(&hub, &wait), None);
-    let schedules = hub.pull_requests.remote.lock();
-    let [schedule] = &schedules.values().collect::<Vec<_>>()[..] else { panic!("one group") };
-    assert_eq!(schedule.failures, 1);
-    assert!(schedule.next > Instant::now() + Duration::from_mins(3), "twice the two minutes between reads that worked");
+    let due_at = schedule().unwrap().due_at_soonest();
+    assert!(due_at > Instant::now() + Duration::from_mins(3), "twice the two minutes between reads that worked");
 }
 
 /// The machine's own `gh` handed the hub no token, and `w`'s worker never hands one over, as one stuck doesn't, so the

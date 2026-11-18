@@ -61,13 +61,6 @@ impl Leaving {
     }
 }
 
-/// The queries a read of `asks` makes in its first round, which looks at each pull request asked for,
-/// [`PARTS_A_QUERY`] to a query: what it costs at the least, before GitHub says what it cost.
-pub(crate) fn first_queries(asks: &[PullRequestsAsk]) -> u32 {
-    let looks: usize = asks.iter().map(|ask| ask.selection.numbers().len()).sum();
-    u32::try_from(looks.div_ceil(PARTS_A_QUERY).max(1)).unwrap_or(u32::MAX)
-}
-
 impl Github {
     /// Reads each of `asks` as `token`, together, each to its own answer, so one that fails, such as for a pull
     /// request that isn't there, fails no other. Stops asking once GitHub's limit for the token is down to what

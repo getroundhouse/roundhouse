@@ -154,8 +154,7 @@ impl Store {
     /// Every workspace with a wait that hasn't ended, whose pull request is read at the soonest.
     pub fn workspaces_waited_on(&self) -> Result<HashSet<WorkspaceId>, StoreError> {
         let conn = lock(&self.reader);
-        let mut query =
-            conn.prepare_cached("SELECT DISTINCT workspace_id FROM waits WHERE ended_at_ms IS NULL AND watch IS NULL")?;
+        let mut query = conn.prepare_cached("SELECT DISTINCT workspace_id FROM waits WHERE ended_at_ms IS NULL")?;
         let ids = query.query_map([], |row| row.get::<_, String>(0))?;
         Ok(ids.map(|id| id.map(WorkspaceId::from)).collect::<rusqlite::Result<_>>()?)
     }

@@ -38,15 +38,6 @@ pub(in crate::hub) enum NoToken {
     NoLogin(ApiError),
 }
 
-impl NoToken {
-    /// What it says, for a read that takes either as one that may work later, as a wait's does.
-    pub(in crate::hub) fn into_error(self) -> ApiError {
-        match self {
-            Self::NotYet(error) | Self::NoLogin(error) => error,
-        }
-    }
-}
-
 impl std::fmt::Display for ReadsAs {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {

@@ -1,17 +1,20 @@
-//! Overlapping scopes share one read. Disjoint scopes keep separate retries, so one failing PR cannot starve them.
+//! Overlapping scopes share one ask. Disjoint scopes are asked apart, so one failing PR cannot fail the others.
 
 use protocol::model::{GitHubRepository, PullRequestNumber, PullRequestSelection, Wait, WorkspaceId};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeSet, HashMap};
 
-pub(in crate::hub::pull_requests) type GroupKey = (WorkspaceId, String, Vec<PullRequestNumber>);
-#[derive(Clone)]
-pub(super) struct Group {
-    pub(super) repository: GitHubRepository,
-    pub(super) selection: PullRequestSelection,
+/// The pull requests of one repository that some of a workspace's waits watch, every wait whose scope meets another's
+/// together.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(in crate::hub::pull_requests) struct Waited {
+    /// The repository they're pinned to, as GitHub named it as they started.
+    pub(in crate::hub::pull_requests) repository: GitHubRepository,
+    pub(in crate::hub::pull_requests) selection: PullRequestSelection,
 }
 
-pub(super) fn groups(waits: Vec<Wait>) -> BTreeMap<GroupKey, Group> {
-    let mut groups: Vec<(WorkspaceId, GitHubRepository, BTreeSet<PullRequestNumber>)> = Vec::new();
+/// What each workspace's `waits` watch: what each asked for, and what it last saw under that in its stack.
+pub(in crate::hub::pull_requests) fn waited(waits: Vec<Wait>) -> HashMap<WorkspaceId, Vec<Waited>> {
+    let mut groups: HashMap<WorkspaceId, Vec<(GitHubRepository, BTreeSet<PullRequestNumber>)>> = HashMap::new();
     for wait in waits {
         let Some(watch) = wait.watch else { continue };
         let mut numbers: BTreeSet<_> = watch.requested.numbers().iter().copied().collect();
@@ -22,28 +25,23 @@ pub(super) fn groups(waits: Vec<Wait>) -> BTreeMap<GroupKey, Group> {
                 .iter()
                 .filter_map(|pr| PullRequestNumber::try_from(pr.pull_request.number).ok()),
         );
+        let theirs = groups.entry(wait.workspace_id).or_default();
         // Revisit after each union: a wait can join two formerly independent groups through a shared dependency.
         let mut index = 0;
-        while index < groups.len() {
-            let (workspace, repository, existing) = &groups[index];
-            if *workspace == wait.workspace_id
-                && *repository == watch.snapshot.repository
-                && !numbers.is_disjoint(existing)
-            {
-                numbers.extend(groups.swap_remove(index).2);
+        while index < theirs.len() {
+            let (repository, existing) = &theirs[index];
+            if *repository == watch.snapshot.repository && !numbers.is_disjoint(existing) {
+                numbers.extend(theirs.swap_remove(index).1);
                 index = 0;
             } else {
                 index += 1;
             }
         }
-        groups.push((wait.workspace_id, watch.snapshot.repository, numbers));
+        theirs.push((watch.snapshot.repository, numbers));
     }
-    groups
-        .into_iter()
-        .filter_map(|(workspace, repository, numbers)| {
-            let numbers: Vec<_> = numbers.into_iter().collect();
-            let selection = PullRequestSelection::try_from(numbers.clone()).ok()?;
-            Some(((workspace, repository.url.clone(), numbers), Group { repository, selection }))
-        })
-        .collect()
+    let waited = |(repository, numbers): (GitHubRepository, BTreeSet<_>)| {
+        let selection = PullRequestSelection::try_from(numbers.into_iter().collect::<Vec<_>>()).ok()?;
+        Some(Waited { repository, selection })
+    };
+    groups.into_iter().map(|(id, theirs)| (id, theirs.into_iter().filter_map(waited).collect())).collect()
 }

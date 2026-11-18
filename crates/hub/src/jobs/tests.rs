@@ -125,9 +125,9 @@ async fn a_job_about_a_busy_key_or_past_what_its_kind_may_run_at_once_isnt_start
         jobs.start(KIND, key.clone(), LIMITS, async move { drop(finished.recv().await) }, telling(&ends)).unwrap();
     }
 
-    let same_key = jobs.start(JobKind::ReadWaitedPullRequests, "w".into(), LIMITS, async {}, telling(&ends));
+    let same_key = jobs.start(JobKind::LookUpModels, "w".into(), LIMITS, async {}, telling(&ends));
     let same_kind = jobs.start(KIND, "v".into(), LIMITS, async {}, telling(&ends));
-    let other_kind = jobs.start(JobKind::ReadWaitedPullRequests, "v".into(), LIMITS, async {}, telling(&ends));
+    let other_kind = jobs.start(JobKind::LookUpModels, "v".into(), LIMITS, async {}, telling(&ends));
 
     assert_eq!(same_key, Err(NotStarted::KeyBusy));
     assert_eq!(same_kind, Err(NotStarted::KindBusy));
@@ -156,7 +156,7 @@ async fn a_job_that_panics_ends_alone_and_its_after_step_still_runs() {
         telling(&ends),
     )
     .unwrap();
-    jobs.start(JobKind::ReadWaitedPullRequests, "v", LIMITS, async {}, telling(&ends)).unwrap();
+    jobs.start(JobKind::LookUpModels, "v", LIMITS, async {}, telling(&ends)).unwrap();
 
     let mut how = [next(&mut ended).await, next(&mut ended).await];
     how.sort_by_key(|ended| matches!(ended, Ended::Finished));
@@ -244,7 +244,7 @@ async fn a_job_called_off_ends_where_it_is_and_its_after_step_runs_once_what_it_
         assert!(seen.load(Ordering::SeqCst), "{ended:?} ran before what was uncut ended");
         tell(ended)
     };
-    jobs.start(JobKind::ReadWaitedPullRequests, "v", LIMITS, keeping, after).unwrap();
+    jobs.start(JobKind::LookUpModels, "v", LIMITS, keeping, after).unwrap();
     reached(at_its_step, "the job never got to its step").await;
 
     jobs.call_off(&"w");

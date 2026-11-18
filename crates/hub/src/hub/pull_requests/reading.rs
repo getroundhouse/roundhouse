@@ -1,7 +1,8 @@
 use super::super::Hub;
+use super::own::{WaitsRead, WorkspaceRead};
 use super::schedule;
 use super::token_limits::TokenLimits;
-use crate::github::Leaving;
+use crate::github::{Leaving, Unread};
 use crate::jobs;
 use crate::store::now_ms;
 use parking_lot::Mutex;
@@ -95,7 +96,6 @@ pub(in super::super) struct Reading {
     /// no worker, and so don't wait behind one stuck in `gh`.
     pub(super) agent_gates: Mutex<HashMap<WorkspaceId, Arc<AsyncMutex<()>>>>,
     pub(super) remote_read_at: Mutex<HashMap<WorkspaceId, Instant>>,
-    pub(super) remote: Mutex<HashMap<super::remote::GroupKey, super::remote::RemoteSchedule>>,
 }
 
 impl Reading {
@@ -106,7 +106,6 @@ impl Reading {
             limits: TokenLimits::default(),
             agent_gates: Mutex::new(HashMap::new()),
             remote_read_at: Mutex::new(HashMap::new()),
-            remote: Mutex::new(HashMap::new()),
         }
     }
 
@@ -227,12 +226,12 @@ impl Hub {
                         self.pull_requests.schedules.lock().insert(id.clone(), Schedule::starting(read_at));
                         let read = self.read_own(&token, asking, asked).await;
                         self.github_said(&reads_as, read.rate_limit, read.refused);
-                        read
+                        read.found
                     }
                 }
             }
         };
-        let read = read.found.into_iter().next().map_or_else(|| Err(couldnt_read()), |(_, found)| found);
+        let read = read.into_iter().next().map_or_else(|| WorkspaceRead::unread(couldnt_read()), |(_, read)| read);
         // However the job this is in goes on, so what's recorded and what's said of it agree.
         let (hub, took_worker) = (self.clone(), took_worker.into_inner());
         jobs::uncut(async move {
@@ -247,11 +246,11 @@ impl Hub {
     }
 
     /// What a read does once GitHub has answered: records what it found, schedules the next read, judges the waits on
-    /// it and says what changed.
+    /// what it read and says what changed, its waits first, so no client sees the bar move on while a wait goes on.
     pub(super) async fn take_answer(
         self: Arc<Self>,
         workspace: Workspace,
-        read: Result<Found, ApiError>,
+        WorkspaceRead { own: read, waits }: WorkspaceRead,
         last: Option<Schedule>,
         read_at: Instant,
         asked: Asked,
@@ -259,7 +258,10 @@ impl Hub {
     ) -> Result<(Answer, ReadsHeld), ApiError> {
         let (id, known) = (&workspace.id, workspace.pull_request.clone());
         let (recorded, changed) = self.record(&workspace, &read).await?;
+        // Pull requests that moved while they were read were read all the same, so that's no sign GitHub can't be.
+        let waits_failed = waits.iter().any(|w| w.read.as_ref().is_err_and(|u| u.error.code != ErrorCode::Conflict));
         let went = match &read {
+            Ok(_) if waits_failed => Went::Failed,
             Ok(_) if changed.is_some() => Went::Changed,
             Ok(Found { found, .. }) => Went::Same(found.pull_request.as_ref()),
             Err(e) => {
@@ -271,6 +273,14 @@ impl Hub {
         self.pull_requests.schedules.lock().insert(id.clone(), next);
         if let Ok(Found { found, .. }) = &read {
             self.end_waits(id, found).await;
+        }
+        for WaitsRead { repository, read } in waits {
+            match read {
+                Ok(snapshot) => self.observe_remote_waits(id, &snapshot).await,
+                Err(Unread { error, affected }) => {
+                    self.remote_waits_failed(id, Some(&repository), &error, &affected).await;
+                }
+            }
         }
         if let Some(workspace) = changed {
             self.notify(HubNotice::Workspace(workspace));
@@ -292,9 +302,9 @@ impl Hub {
         let Found { found, on } = match read {
             Ok(found) => found.clone(),
             // On the branch it was found on, which it still is, since nothing new was found.
-            Err(e) if e.code == ErrorCode::Unavailable => Found {
-                found: workspace.pull_request.clone().unwrap_or(PullRequestFound { pull_request: None }),
-                on: workspace.pull_request_branch.clone(),
+            Err(e) if e.code == ErrorCode::Unavailable => match workspace.pull_request.clone() {
+                Some(found) => Found { found, on: workspace.pull_request_branch.clone() },
+                None => Found::nothing(workspace.pull_request_branch.clone()),
             },
             Err(_) => return Ok((None, None)),
         };
@@ -337,6 +347,13 @@ impl Hub {
 pub(super) struct Found {
     pub(super) found: PullRequestFound,
     pub(super) on: Option<BranchName>,
+}
+
+impl Found {
+    /// None, on `on`, as for a branch pushed nowhere.
+    pub(super) fn nothing(on: Option<BranchName>) -> Self {
+        Self { found: PullRequestFound { pull_request: None }, on }
+    }
 }
 
 fn limit_used_up() -> ApiError {

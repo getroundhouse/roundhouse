@@ -1,12 +1,14 @@
 use protocol::client::ErrorCode;
 use protocol::fixtures::workspace;
 use protocol::model::{
-    Apart, Branch, BranchName, Branches, CommitId, GithubRepositoryName, Head, Local, PrState, PullRequestNumber,
-    RemoteName, RepoUrl, Upstream, Workspace,
+    Apart, Branch, BranchName, Branches, CommitId, GitHubRepository, GithubRepositoryName, Head, Local, PrState,
+    PullRequestNumber, PullRequestSelection, RemoteName, RepoUrl, Upstream, Workspace,
 };
 
 use super::judging::{Wanted, chosen, local, wanted};
+use super::scopes::scopes;
 use crate::github::{Headed, HeadsAsk};
+use crate::hub::pull_requests::remote::Waited;
 
 fn name(name: &str) -> GithubRepositoryName {
     GithubRepositoryName::try_from(name.to_string()).unwrap()
@@ -138,4 +140,35 @@ fn the_worktree_stands_against_its_upstream_once_the_pull_requests_head_is_there
     assert_eq!(counts(local(&CommitId::from("tip"), &branch, 2)), (2, 0, 0));
     assert_eq!(counts(local(&CommitId::from("pushed"), &branch, 0)), (0, 1, 0));
     assert_eq!(counts(local(&CommitId::from("someone-elses"), &branch, 0)), (0, 1, 1), "a commit not fetched");
+}
+
+/// What waits watch of example/project, on `host`.
+fn waited(host: &str, numbers: &[u64]) -> Waited {
+    let numbers: Vec<_> = numbers.iter().map(|n| PullRequestNumber::try_from(*n).unwrap()).collect();
+    let url = format!("https://{host}/example/project");
+    let repository = GitHubRepository { url, name_with_owner: "example/project".to_string() };
+    Waited { repository, selection: PullRequestSelection::try_from(numbers).unwrap() }
+}
+
+/// The workspace's own #7 is read in the ask of the waits that watch it, however its name is written, so the bar and
+/// those waits go by one reading of it, and the waits on #9, and those of a repository elsewhere, go apart.
+#[test]
+fn the_workspaces_own_pull_request_is_read_with_the_waits_that_watch_it() {
+    let seven = PullRequestNumber::try_from(7).unwrap();
+    let stack = waited("github.com", &[6, 7]);
+    let other = waited("github.com", &[9]);
+    let elsewhere = waited("ghe.example.com", &[7]);
+
+    let (asked, unreadable) =
+        scopes(Some((name("Example/Project"), seven)), vec![stack.clone(), other.clone(), elsewhere.clone()]);
+
+    let asks: Vec<_> =
+        asked.iter().map(|scope| (scope.ask.selection.numbers().len(), scope.own, scope.waited.clone())).collect();
+    assert_eq!(asks, [(2, Some(seven), Some(stack.repository)), (1, None, Some(other.repository.clone()))]);
+    assert_eq!(unreadable.iter().map(|read| read.repository.clone()).collect::<Vec<_>>(), [elsewhere.repository]);
+    let (alone, _) = scopes(Some((name("example/project"), seven)), vec![other]);
+    assert_eq!(
+        alone.iter().map(|scope| (scope.own, scope.waited.is_some())).collect::<Vec<_>>(),
+        [(None, true), (Some(seven), false)]
+    );
 }

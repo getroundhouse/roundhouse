@@ -44,9 +44,11 @@ impl Schedule {
         self.read_at + self.every
     }
 
-    /// When one an agent waits on is due, which is always at the soonest.
-    pub(super) fn due_at_soonest(self) -> Instant {
-        self.read_at + SOONEST
+    /// When one an agent waits on is due, which is at the soonest however long it has come back the same, but for one
+    /// that failed, which waits longer each time, as any does, since reading again at once won't help while GitHub
+    /// can't be reached.
+    pub(in super::super) fn due_at_soonest(self) -> Instant {
+        self.read_at + if self.found { SOONEST } else { self.every }
     }
 }
 
