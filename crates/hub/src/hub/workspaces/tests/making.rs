@@ -106,8 +106,8 @@ async fn a_request_sent_again_gets_what_it_made_however_things_have_changed_sinc
 ///
 /// Then its worker is dealt with as the workspace now is: an archived one's is asked to stop, and a ready one's to
 /// watch the worktree's branches, as one the hub carries on with is, and to stop once nothing is at work in it, if
-/// it's another build's. A restore that put the worktree back has it watch them as it's recorded, as one that wasn't
-/// cut short does, and again once it's settled.
+/// it's another build's. Each is asked once: a restore that put the worktree back has it watch them as it's recorded,
+/// as one that wasn't cut short does, and not again once it's settled.
 #[tokio::test]
 async fn a_move_cut_short_is_settled_by_whether_its_worker_says_the_worktree_is_there() {
     use WorkspaceStatus::{Archived, Ready};
@@ -120,7 +120,7 @@ async fn a_move_cut_short_is_settled_by_whether_its_worker_says_the_worktree_is_
     let cases = [
         ("an archive that left the worktree", Move::Archive, there(true), ours, (Ready, made_on, false), watched),
         ("an archive that removed it", Move::Archive, there(false), ours, (Archived, seen_on, false), stopped),
-        ("a restore that put it back", Move::Restore, there(true), ours, (Ready, made_on, true), &[WATCH, WATCH]),
+        ("a restore that put it back", Move::Restore, there(true), ours, (Ready, made_on, true), watched),
         ("a restore that didn't", Move::Restore, there(false), ours, (Archived, made_on, false), stopped),
         ("an archive the worker can't say of", Move::Archive, cant_say, ours, (Ready, made_on, false), watched),
         ("an archive another build left", Move::Archive, there(true), another, (Ready, made_on, false), replaced),

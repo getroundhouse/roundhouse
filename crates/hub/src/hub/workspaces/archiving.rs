@@ -222,14 +222,16 @@ impl Hub {
                     self.put_back(&id, moving, e).await;
                 }
             }
-            self.worker_once_settled(&id).await;
+            self.worker_once_settled(&id, moving).await;
         }
     }
 
     /// What becomes of the worker the workspace was settled with, which the hub kept as it started, or started to
     /// ask: an archived workspace has none, and a ready one's is as any the hub carries on with, its branches watched
-    /// from now, and replaced once it's idle if it's another build.
-    async fn worker_once_settled(self: &Arc<Self>, id: &WorkspaceId) {
+    /// from now, and replaced once it's idle if it's another build. A restore ends ready only by being recorded as done,
+    /// which has the worker watch the branches as it's recorded, as one that wasn't cut short does, so it isn't asked
+    /// again here.
+    async fn worker_once_settled(self: &Arc<Self>, id: &WorkspaceId, moving: Move) {
         let Some(link) = self.existing_worker(id) else { return };
         let workspace = match self.workspace(id).await {
             Ok(workspace) => workspace,
@@ -237,7 +239,10 @@ impl Hub {
         };
         match ReadyWorkspace::new(workspace.clone()) {
             Ok(ready) => {
-                self.watch_branches(&ready, &link).await;
+                match moving {
+                    Move::Archive => self.watch_branches(&ready, &link).await,
+                    Move::Restore => {}
+                }
                 // One with a session carried on is being replaced already.
                 let carried_on = self.sessions.lock().live.values().any(|session| session.workspace_id == *id);
                 if !carried_on && link.is_another_build(self.build) {
