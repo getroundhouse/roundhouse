@@ -282,14 +282,14 @@ fn pointing_at_a_background_tasks_line_says_whether_its_running_or_watching(cx: 
     let mut ui = Ui::open_on(cx, &fake);
     let line = |call: &str| SharedString::from(format!("background-task-{call}"));
     ui.wait("their lines", |ui| ui.has(line("toolu-1")) && ui.has(line("toolu-2")));
-    assert!(!ui.has("background-pointed-at"));
+    assert!(!ui.has("tooltip-words"));
 
     for (call, said) in [("toolu-1", "Running in the background"), ("toolu-2", "Watching in the background")] {
         // The pointer is put on the line each time round, since the line can move as the rest of the chat is drawn.
         ui.wait(said, |ui| {
             ui.hover(line(call));
             ui.wait_out_a_tooltip();
-            ui.shows_label("background-pointed-at", said)
+            ui.shows_label("tooltip-words", said)
         });
     }
 }

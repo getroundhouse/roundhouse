@@ -1,3 +1,4 @@
+// Changed in Roundhouse's copy of gpui-kit, as third_party/README.md lists.
 use gpui::{
     Action, AsKeystroke, FocusHandle, Half, InteractiveElement as _, IntoElement, KeyBinding,
     KeyContext, Keystroke, ParentElement as _, RenderOnce, StyleRefinement, Styled, Window, div,
@@ -45,6 +46,11 @@ impl Kbd {
     }
 
     /// Set the appearance of the keybinding, default is `true`.
+    /// The keystroke it names.
+    pub fn stroke(&self) -> &Keystroke {
+        &self.stroke
+    }
+
     pub fn appearance(mut self, appearance: bool) -> Self {
         self.appearance = appearance;
         self

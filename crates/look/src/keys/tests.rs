@@ -34,6 +34,16 @@ fn a_key_pressed_is_one_part_after_each_held() {
     assert_eq!(Key::parts("enter", OperatingSystem::Mac), ["⏎"]);
 }
 
+/// Escape is written in words everywhere, since the Mac's symbol for it reads as undo.
+#[test]
+fn escape_is_written_esc() {
+    let os = if cfg!(target_os = "macos") { OperatingSystem::Mac } else { OperatingSystem::Linux };
+    assert_eq!(Key::parts("escape", os), ["Esc"]);
+    if cfg!(target_os = "macos") {
+        assert_eq!(Key::parts("shift-escape", os), ["⇧", "Esc"]);
+    }
+}
+
 #[test]
 fn what_isnt_a_key_has_no_parts() {
     assert!(Key::parts("not-a-key-at-all-", OperatingSystem::Mac).is_empty());

@@ -45,6 +45,7 @@ mod task_ring;
 mod theme;
 mod toggles;
 mod tokens;
+mod tooltips;
 mod typography;
 mod word_changes;
 mod work;
@@ -92,6 +93,9 @@ pub use task_ring::{TaskRing, task_ring};
 pub use theme::apply;
 pub use toggles::{Toggle, toggle};
 pub use tokens::tokens;
+#[cfg(any(test, feature = "testing"))]
+pub use tooltips::shown_tooltip;
+pub use tooltips::tooltip;
 pub use typography::{Type, Typeset};
 pub use word_changes::{LineChange, word_changes};
 pub use work::Work;

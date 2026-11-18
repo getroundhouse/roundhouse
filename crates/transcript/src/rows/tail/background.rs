@@ -4,7 +4,6 @@
 
 use client_core::session_log::By;
 use client_core::waits;
-use gpui_kit::component::tooltip::Tooltip;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, Div, ElementId, InteractiveElement as _, IntoElement, ParentElement,
@@ -60,7 +59,7 @@ fn several(group: TaskGroup, tasks: &[&AgentTask], open: bool, shared: &Shared, 
     };
     opening(group.key().element("several"), count.clone().into(), open, set_open, cx)
         .text_color(colors.text_muted)
-        .tooltip(move |window, cx| Tooltip::element(move |_, _| said(pointed_at)).build(window, cx))
+        .tooltip(look::tooltip(pointed_at))
         .child(lead(mark, look::Size::Inline.width(), open, cx))
         .child(div().flex_none().child(count))
         .when(!open, |line| line.child(clipped(what_for(tasks)).min_w_0().text_color(colors.text_faint)))
@@ -190,18 +189,13 @@ fn in_the_background(
                 .aria_label(text)
                 .test_support(),
         )
-        .tooltip(move |window, cx| Tooltip::element(move |_, _| said(pointed_at)).build(window, cx))
+        .tooltip(look::tooltip(pointed_at))
         .test_support();
     tail_line(cx).child(described).when_some(button, |line, button| line.child(div().flex_none().child(button)))
 }
 
 fn ring(ring: TaskRing, cx: &App) -> AnyElement {
     look::task_ring(ring, cx).into_any_element()
-}
-
-/// What pointing at a background task's line says.
-fn said(words: &'static str) -> impl IntoElement {
-    div().id("background-pointed-at").aria_label(words).child(words).test_support()
 }
 
 #[cfg(test)]

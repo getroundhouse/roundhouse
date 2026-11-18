@@ -1,7 +1,6 @@
 use std::rc::Rc;
 
 use gpui_kit::component::menu::PopupMenuItem;
-use gpui_kit::component::tooltip::Tooltip;
 use gpui_kit::component::{Icon, h_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
@@ -125,7 +124,7 @@ fn drawn(
         .aria_label(label)
         .when_some(tooltip.cloned(), |row, tooltip| {
             let described = tooltip.clone();
-            row.aria_description(described).tooltip(move |window, cx| Tooltip::new(tooltip.clone()).build(window, cx))
+            row.aria_description(described).tooltip(crate::tooltip(tooltip))
         })
         .child(div().flex_1().min_w_0().truncate().child(words.clone()))
         .when_some(note.cloned(), |row, (note, kind)| {

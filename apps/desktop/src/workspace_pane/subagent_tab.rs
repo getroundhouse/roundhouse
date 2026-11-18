@@ -9,7 +9,6 @@
 use std::sync::Arc;
 
 use client_core::records::{Changes, Snapshot, subagent_named};
-use gpui_kit::component::tooltip::Tooltip;
 use gpui_kit::component::{Icon, IconName, h_flex, v_flex};
 use gpui_kit::{
     AnyElement, AppContext as _, Context, Entity, FocusHandle, InteractiveElement as _, IntoElement as _,
@@ -198,7 +197,7 @@ impl WorkspacePane {
             tab::close_button("close-subagent-tab", "Close subagent tab", cx, |t, _, cx| t.close_subagent_tab(cx));
         let whole = title.clone();
         let face = tab::face("show-subagent-tab", selected, format!("Subagent: {title}"))
-            .tooltip(move |window, cx| Tooltip::new(whole.clone()).build(window, cx))
+            .tooltip(look::tooltip(whole))
             .text_color(muted)
             .on_click(cx.listener(|t, _, _, cx| t.bring_to_front(Showing::Subagent, cx)))
             .child(Icon::new(IconName::Bot).sized(look::IconSize::Large))

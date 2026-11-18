@@ -7,5 +7,7 @@ mod tests;
 
 mod key;
 mod kinds;
+#[cfg(any(test, feature = "testing"))]
+pub(crate) use key::kit_key;
 pub use key::{Key, key};
 pub use kinds::KeyKind;

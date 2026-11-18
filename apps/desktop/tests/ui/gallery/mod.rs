@@ -76,6 +76,7 @@ mod controls;
 mod key_kinds;
 
 mod toggle_states;
+mod tooltips;
 
 mod switch_kinds;
 

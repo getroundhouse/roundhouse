@@ -2,7 +2,6 @@
 //! clicked in Changes, and the file itself when it's clicked in All files. Clicking another file shows that one in the
 //! same tab, so reviewing a branch never leaves a trail of tabs.
 
-use gpui_kit::component::tooltip::Tooltip;
 use gpui_kit::component::{Icon, IconName};
 use gpui_kit::{
     AnyElement, Context, IntoElement as _, ParentElement as _, SharedString, StatefulInteractiveElement as _, Styled,
@@ -128,7 +127,7 @@ impl WorkspacePane {
         let close = tab::close_button("close-file-tab", "Close file tab", cx, |t, _, cx| t.close_file_tab(cx));
         let face = tab::face("show-file-tab", selected, label)
             // Two files can share a name, so the whole path is a hover away.
-            .tooltip(move |window, cx| Tooltip::new(path.clone()).build(window, cx))
+            .tooltip(look::tooltip(path))
             // Muted whether or not it's showing, as the chats' titles are: the underline says which tab is.
             .text_color(muted)
             .on_click(cx.listener(|t, _, _, cx| t.show_file_tab(cx)))

@@ -2,7 +2,6 @@ use super::{controls, update_card};
 use crate::app::{AppView, BuildLine};
 use crate::checkout::Checkout;
 use crate::updates::{Answer, Kind, Said};
-use gpui_kit::component::tooltip::Tooltip;
 use gpui_kit::component::{Icon, IconName, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
@@ -33,7 +32,7 @@ fn in_the_versions_place(
         .text_color(color)
         .child(h_flex().flex_none().w(look::Size::Inline.width()).justify_center().child(icon))
         .child(div().min_w_0().truncate().child(words.into()))
-        .tooltip(move |window, cx| Tooltip::new(hover.clone()).build(window, cx))
+        .tooltip(look::tooltip(hover))
         .test_support()
         .into_any_element()
 }
@@ -82,10 +81,7 @@ fn version(line: &BuildLine, cx: &App) -> AnyElement {
         "The hub is {hub}, and this app is {app}. The app leaves a hub someone started themselves for them to update, \
          and never restarts a newer one."
     );
-    text.child(format!("{app} · hub {hub}"))
-        .tooltip(move |window, cx| Tooltip::new(detail.clone()).build(window, cx))
-        .test_support()
-        .into_any_element()
+    text.child(format!("{app} · hub {hub}")).tooltip(look::tooltip(detail)).test_support().into_any_element()
 }
 
 /// Which checkout this build is from, and why it's open, so that several open at once can be told apart. Where it was
@@ -109,7 +105,7 @@ fn checkout_card(checkout: &Checkout, data_dir: &Path, cx: &App) -> AnyElement {
         .border_color(colors.edge)
         .child(div().typeset(look::Type::Body).emphasis().truncate().child(checkout.name()))
         .when_some(note, ParentElement::child)
-        .tooltip(move |window, cx| Tooltip::new(hover.clone()).build(window, cx))
+        .tooltip(look::tooltip(hover))
         .test_support()
         .into_any_element()
 }

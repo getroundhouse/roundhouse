@@ -1,3 +1,4 @@
+// Changed in Roundhouse's copy of gpui-kit, as third_party/README.md lists.
 use crate::root::WindowState;
 use std::{
     cell::RefCell,
@@ -7,9 +8,9 @@ use std::{
 
 use gpui::{
     Action, AnyElement, AnyView, App, AppContext, AvailableSpace, Bounds, Context, ElementId,
-    GlobalElementId, IntoElement, MouseButton, ParentElement, Pixels, Render, SharedString, Size,
-    StatefulInteractiveElement, StyleRefinement, Styled, Window, div, prelude::FluentBuilder, px,
-    size,
+    Global, GlobalElementId, IntoElement, Keystroke, MouseButton, ParentElement, Pixels, Render,
+    SharedString, Size, StatefulInteractiveElement, StyleRefinement, Styled, Window, div,
+    prelude::FluentBuilder, px, size,
 };
 pub use gpui_base::TooltipDefaults;
 use gpui_base::{
@@ -29,6 +30,21 @@ pub(crate) fn init(_cx: &mut App) {
 }
 
 // ── Tooltip view (unchanged API) ────────────────────────────────────────────
+
+/// How a key is drawn in a tooltip, from the keystroke it names.
+pub type TooltipKey = Rc<dyn Fn(&Keystroke, &mut Window, &mut App) -> AnyElement>;
+
+/// How every tooltip is drawn, set once for the app as a global: a style laid over the tooltip's own, before what
+/// each tooltip is given, and how a key in it is drawn. Each keeps the tooltip's own where it's `None`.
+#[derive(Clone, Default)]
+pub struct TooltipStyle {
+    /// Laid over the tooltip's own style, such as its text, room, corners, shadow or greatest width.
+    pub style: Option<StyleRefinement>,
+    /// Draws the key that does the same as what the tooltip is on, in place of the kit's key.
+    pub key: Option<TooltipKey>,
+}
+
+impl Global for TooltipStyle {}
 
 enum TooltipContext {
     Text(Text),
@@ -97,6 +113,7 @@ impl Styled for Tooltip {
 }
 impl Render for Tooltip {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let global = cx.try_global::<TooltipStyle>().cloned().unwrap_or_default();
         let key_binding = if let Some(key_binding) = &self.key_binding {
             Some(key_binding.clone())
         } else {
@@ -129,6 +146,7 @@ impl Render for Tooltip {
                 .px_2()
                 .text_sm()
                 .gap_3()
+                .when_some(global.style, |this, style| this.refine_style(&style))
                 .refine_style(&self.style)
                 .map(|this| {
                     this.child(
@@ -149,7 +167,10 @@ impl Render for Tooltip {
                             .text_xs()
                             .flex_shrink_0()
                             .text_color(cx.theme().muted_foreground)
-                            .child(kbd.appearance(false)),
+                            .map(|this| match &global.key {
+                                Some(draw) => this.child(draw(kbd.stroke(), window, cx)),
+                                None => this.child(kbd.appearance(false)),
+                            }),
                     )
                 }),
         )
