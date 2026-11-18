@@ -204,7 +204,7 @@ impl World {
     }
 
     /// A chat holding these events. Its title is the start of the first prompt, and what's running in the background
-    /// is the newest list, as the hub makes them.
+    /// is what the newest event to say so says, as the hub makes them.
     pub fn chat(&mut self, workspace: &WorkspaceId, status: SessionStatus, events: Vec<EventBody>) -> SessionId {
         let id = SessionId::from(format!("chat-{}", self.sessions.len() + 1));
         let created_at_ms = self.next_time();
@@ -215,14 +215,8 @@ impl World {
         let log = log_of(&id, created_at_ms, events);
         self.subagents.insert(id.clone(), records_of(&log));
         let last_seq = log.last().map_or(Seq::default(), |event| event.seq);
-        let background_tasks = log
-            .iter()
-            .rev()
-            .find_map(|event| {
-                let EventBody::AgentTasks { tasks, .. } = &event.body else { return None };
-                Some(tasks.clone())
-            })
-            .unwrap_or_default();
+        let background_tasks =
+            log.iter().rev().find_map(|event| event.body.sets_background()).unwrap_or_default().to_vec();
         // With the settings the hub gives a chat that names none.
         self.sessions.push(Session {
             workspace_id: workspace.clone(),

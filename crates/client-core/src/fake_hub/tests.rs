@@ -2,7 +2,7 @@
 //! fake hub works something out of its world, it does so by the rule the hub follows, as `protocol` states it.
 
 use protocol::client::ErrorCode;
-use protocol::event::{EventBody, TaskKind};
+use protocol::event::{EventBody, ExitReason, TaskKind};
 use protocol::model::{AgentKind, SessionStatus, SubagentId};
 
 use super::events::{subagent_started, taken, task, user_prompt};
@@ -55,6 +55,27 @@ fn the_hub_s_status_counts_the_chats_running_as_the_hub_does() {
     let status = client.hub_status().unwrap();
 
     assert_eq!(status.running_sessions, 3, "all but the one waiting on its waits, the idle one and the stopped one");
+}
+
+/// As `EventBody::sets_background` says: the newest list, until the agent exits and takes its work with it.
+#[test]
+fn a_chat_runs_in_the_background_what_its_agent_last_listed_until_it_exits() {
+    let mut world = World::default();
+    let repo = world.repo("aspen");
+    let workspace = world.workspace(&repo, "elm");
+    let listed =
+        EventBody::AgentTasks { tasks: vec![task(TaskKind::Command, "toolu_1", "Watch")], stopped: Vec::new() };
+    let exited =
+        EventBody::AgentExited { reason: ExitReason::Unexpected, code: None, signal: None, stderr_tail: vec![] };
+    let running = world.chat(&workspace, SessionStatus::Background, vec![listed.clone()]);
+    let gone = world.chat(&workspace, SessionStatus::Interrupted, vec![listed, exited]);
+    let (_dir, client) = served(world);
+
+    let running = client.session_get(&running).unwrap();
+    let gone = client.session_get(&gone).unwrap();
+
+    assert_eq!(running.background_tasks.len(), 1);
+    assert_eq!(gone.background_tasks, [], "its work went with it");
 }
 
 /// As `Session::is_open` says, so the newest chat that isn't closed.
