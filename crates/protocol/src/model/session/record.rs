@@ -3,6 +3,7 @@ use super::super::{
     PromptCache, QueuedPrompt, Rev, Seq, SessionId, Title, TitleSource, Wait, WorkspaceId,
 };
 use crate::capability::approvals::ApprovalMode;
+use crate::capability::output::TodoList;
 use crate::capability::settings::{Effort, Settings};
 use crate::event::{AgentTask, TaskKind, TurnOutcome};
 use serde::{Deserialize, Serialize};
@@ -203,6 +204,11 @@ pub struct Session {
     /// gone, since the cache doesn't go with it.
     #[serde(default)]
     pub prompt_cache: Option<PromptCache>,
+    /// The agent's to-do list, as its newest report said, for an agent that reports one, as
+    /// [`output::Capability::Todos`](crate::capability::output::Capability::Todos) says. `None` until it has said, and
+    /// from a hub that doesn't keep it. It stays once the agent has gone, since the conversation it resumes holds it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub todos: Option<TodoList>,
     /// The account the chat's agent runs under, and the record of it says who that is and what's left of its limits.
     /// For a chat on a login the hub holds, as `account_source` says, it's the account the chat is on, which every
     /// launch runs under, from the launch that put it there or the move to it, so a moved chat names it before its

@@ -380,4 +380,6 @@ pub(in super::super) const MIGRATIONS: &[Migration] = &[
     // Each session's events of each kind in the order they were recorded, so reading one kind reads only its events,
     // in `event_kinds`.
     Sql(super::event_kinds::IN_ORDER),
+    // The newest to-do list each chat's agent reported, which its record shows, in `todos`.
+    Sql(super::todos::TODOS),
 ];

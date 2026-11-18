@@ -63,6 +63,7 @@ impl Hub {
                 waits: Some(Vec::new()),
                 context: None,
                 prompt_cache: None,
+                todos: None,
                 queued: Vec::new(),
                 queue_held: false,
                 draft: Draft::default(),

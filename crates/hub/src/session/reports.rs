@@ -4,10 +4,13 @@ use std::sync::Arc;
 
 use protocol::capability::Report;
 use protocol::capability::account::Limit;
-use protocol::model::{ContextUsage, RunId};
+use protocol::capability::output::TodoList;
+use protocol::model::{ContextUsage, RunId, SessionId};
 use tracing::{debug, error};
 
 use super::LiveSession;
+use super::live::LiveState;
+use crate::store::{Store, StoreError};
 
 impl LiveSession {
     /// Keeps what the agent of `run` reported, unless it's `held_to_claims` and the run doesn't claim what it needs.
@@ -19,7 +22,16 @@ impl LiveSession {
             return;
         }
         match report {
-            Report::Context { context } => self.note_context(run, context).await,
+            Report::Context { context } => {
+                let write =
+                    |store: &Store, id: &SessionId, context: &ContextUsage| store.set_session_context(id, context);
+                self.keep_on_record(run, context, |state| &mut state.context, write, "how full the agent's context is")
+                    .await;
+            }
+            Report::Todos(todos) => {
+                let write = |store: &Store, id: &SessionId, todos: &TodoList| store.set_session_todos(id, todos);
+                self.keep_on_record(run, todos, |state| &mut state.todos, write, "the agent's to-do list").await;
+            }
             // Sent when the hub took it, by the hub's clock, less how long the model took to start answering.
             Report::Cache { request } => self.note_cache(run, request, crate::store::now_ms()).await,
             // Heard when the hub took it, by the hub's clock, as an event the agent said it in is timed.
@@ -35,7 +47,6 @@ impl LiveSession {
             | Report::Speed { .. }
             | Report::Aside { .. }
             | Report::ThinkingProgress { .. }
-            | Report::Todos(_)
             | Report::TurnChanges { .. }
             | Report::Rerouted(_)
             | Report::Retrying(_)
@@ -65,36 +76,44 @@ impl LiveSession {
         }
     }
 
-    /// The agent said how full its context is. Only the current run speaks for the session, and only a change is kept
-    /// and announced, so the feed isn't told what it knows.
-    async fn note_context(&self, run: RunId, context: ContextUsage) {
+    /// Keeps `said`, which the agent of `run` reported, on the session's record, where `kept` finds it in the session's
+    /// state and `write` records it, and announces it. Only the current run speaks for the session, and only a change is
+    /// kept and announced, so the feed isn't told what it knows.
+    async fn keep_on_record<T: PartialEq + Clone + Send + Sync + 'static>(
+        &self,
+        run: RunId,
+        said: T,
+        kept: impl Fn(&mut LiveState) -> &mut Option<T>,
+        write: impl FnOnce(&Store, &SessionId, &T) -> Result<(), StoreError> + Send + 'static,
+        what: &str,
+    ) {
         let Ok(hub) = self.hub() else { return };
         {
-            let state = self.state.lock();
+            let mut state = self.state.lock();
             let current = state.agent.map(|agent| agent.run);
-            if !says_something_new(current, state.context.as_ref(), run, &context) {
+            if !says_something_new(current, kept(&mut state).as_ref(), run, &said) {
                 return;
             }
         }
-        let (id, kept) = (self.id.clone(), context.clone());
-        if let Err(e) = hub.blocking(move |store| store.set_session_context(&id, &kept)).await {
-            error!(session = %self.id, "could not record how full the agent's context is: {e}");
+        let (id, recorded) = (self.id.clone(), said.clone());
+        if let Err(e) = hub.blocking(move |store| write(store, &id, &recorded)).await {
+            error!(session = %self.id, "could not record {what}: {e}");
             return;
         }
-        self.state.lock().context = Some(context);
+        *kept(&mut self.state.lock()) = Some(said);
         if let Err(e) = self.announce(&hub).await {
-            error!(session = %self.id, "could not announce how full the agent's context is: {e}");
+            error!(session = %self.id, "could not announce {what}: {e}");
         }
     }
 }
 
-/// Whether what `run` said of its context changes what the session's record says. A run that isn't the one going is
-/// one that's been replaced or has exited, and what it says is of a conversation the session has moved on from.
-pub(super) fn says_something_new(
+/// Whether what `run` said changes what the session's record says. A run that isn't the one going is one that's been
+/// replaced or has exited, and what it says is of a conversation the session has moved on from.
+pub(super) fn says_something_new<T: PartialEq>(
     current: Option<RunId>,
-    known: Option<&ContextUsage>,
+    known: Option<&T>,
     run: RunId,
-    said: &ContextUsage,
+    said: &T,
 ) -> bool {
     current == Some(run) && known != Some(said)
 }

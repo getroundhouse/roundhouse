@@ -87,3 +87,39 @@ async fn a_report_its_run_doesnt_claim_is_dropped_but_from_a_worker_of_protocol_
     held(usage);
     assert_eq!(reported(3, true).await, Some(3), "a run that claims it");
 }
+
+/// The newest to-do list the run reports is kept on the session's record, which a hub that starts again reads, and the
+/// same list again leaves the record as it was.
+#[tokio::test]
+async fn the_agents_to_do_list_is_kept_on_the_sessions_record_and_only_a_change_moves_it() {
+    use crate::hub::tests::{carried_on, flushed, hub_in, stand_in_worker};
+    use protocol::capability::output::{Todo, TodoList, TodoStatus};
+    use protocol::capability::{Capabilities, Claimed, Report};
+    use protocol::model::RunCapabilities;
+
+    let dir = tempfile::tempdir().unwrap();
+    let hub = hub_in(dir.path());
+    let link = stand_in_worker(&hub);
+    let run = RunId::new(2);
+    let live = carried_on(&hub, &link, run);
+    let mut claims = Capabilities::default();
+    claims.output.todos = Some(Claimed {});
+    live.state.lock().capabilities = Some(RunCapabilities::new(run, claims));
+    let todos = |status| {
+        let todo = Todo { id: None, text: "Write it".into(), status, doing: None, priority: None, after: Vec::new() };
+        TodoList { items: vec![todo], note: Some("One step".into()) }
+    };
+    let recorded = async |said: TodoList| {
+        live.send_item(Item::Report { run, report: Report::Todos(said), seq: None, held_to_claims: true }).await;
+        flushed(&live).await;
+        let id = live.id.clone();
+        hub.blocking(move |store| store.get_session(&id)).await.unwrap().session
+    };
+
+    let first = recorded(todos(TodoStatus::InProgress)).await;
+    assert_eq!(first.todos, Some(todos(TodoStatus::InProgress)));
+    assert_eq!(recorded(todos(TodoStatus::InProgress)).await.rev, first.rev, "the same list again");
+    let done = recorded(todos(TodoStatus::Done)).await;
+    assert_eq!(done.todos, Some(todos(TodoStatus::Done)));
+    assert_ne!(done.rev, first.rev, "a change moves the record");
+}

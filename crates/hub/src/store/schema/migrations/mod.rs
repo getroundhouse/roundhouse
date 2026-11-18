@@ -21,6 +21,7 @@ mod replies;
 mod repos;
 mod session_accounts;
 mod subagents;
+mod todos;
 mod tools;
 mod typed_calls;
 mod typed_modes;
