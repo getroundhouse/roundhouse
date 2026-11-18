@@ -12,7 +12,7 @@ use super::screens::FOCUS;
 use super::steps::{Screen, Step, Target};
 use super::worlds::{
     context, context_capped, context_held_login, context_in_reserve, context_placed_automatically, context_to_move,
-    context_with_a_models_limit, context_without_limits,
+    context_with_a_models_limit, context_without_limits, every_account_out, needs_an_account,
 };
 
 /// The screens about the context and the account.
@@ -131,5 +131,19 @@ pub(crate) const SCREENS: &[Screen] = &[
         world: Some(context_in_reserve),
         frame: Frame::Around(Part::Region(Region::ReserveLine), &[Part::Region(Region::Composer), Part::Menu]),
         steps: &[Step::Select(FOCUS), Step::WaitFor("usage"), Step::Click("reserve-move")],
+    },
+    Screen {
+        name: "chat-needs-an-account",
+        spec: "chats.md",
+        world: Some(needs_an_account),
+        frame: Frame::Around(Part::Region(Region::AccountWait), &[Part::Region(Region::Composer)]),
+        steps: &[Step::Select(FOCUS)],
+    },
+    Screen {
+        name: "chat-needs-an-account-every-one-out",
+        spec: "chats.md",
+        world: Some(every_account_out),
+        frame: Frame::Around(Part::Region(Region::AccountWait), &[Part::Region(Region::Composer)]),
+        steps: &[Step::Select(FOCUS)],
     },
 ];

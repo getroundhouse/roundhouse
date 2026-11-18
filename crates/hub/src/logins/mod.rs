@@ -22,5 +22,6 @@ mod accounts;
 mod automatic;
 mod reserves;
 mod targets;
+pub(crate) use targets::{Launching, NO_ACCOUNT_TO_SPARE};
 
 pub(crate) use accounts::{AccountChange, Connect, Handed, Logins};

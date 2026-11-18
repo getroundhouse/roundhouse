@@ -12,7 +12,7 @@ use tracing::{error, warn};
 
 use super::super::{AgentRun, Command, LiveSession, Origin};
 use crate::hub::Hub;
-use crate::logins::Handed;
+use crate::logins::{Handed, Launching, NO_ACCOUNT_TO_SPARE};
 use crate::store::Store;
 use crate::worker_link::WorkerLink;
 
@@ -20,7 +20,7 @@ use crate::worker_link::WorkerLink;
 struct Launch {
     cwd: String,
     env: Vec<(String, String)>,
-    /// The login the hub gives it, as [`Hub::login_for`] chose, or `None` to run it under its machine's own.
+    /// The login the hub gives it, as [`Hub::launching`] chose, or `None` to run it under its machine's own.
     login: Option<Handed>,
 }
 
@@ -46,9 +46,27 @@ impl LiveSession {
             return Err(ApiError::new(ErrorCode::Conflict, "this chat is closed"));
         }
         let on = self.state.lock().login.clone();
-        let login = hub.login_for(self.agent, on).await?;
+        let login = match hub.launching(self.agent, on).await? {
+            Launching::Handed(handed) => Some(handed),
+            Launching::Ambient => None,
+            Launching::NoAccountToSpare => {
+                self.needs_an_account(&hub).await?;
+                return Err(ApiError::new(ErrorCode::Conflict, NO_ACCOUNT_TO_SPARE));
+            }
+        };
         self.start_agent(&hub, &link, Launch { cwd, env, login }).await?;
         Ok(link)
+    }
+
+    /// Records that the chat couldn't start, since Automatic found no account with usage to spare, and tells every
+    /// client, so it says so until the chat is on an account.
+    async fn needs_an_account(&self, hub: &Hub) -> Result<(), ApiError> {
+        let _in_order = self.recording.lock().await;
+        let id = self.id.clone();
+        if hub.blocking(move |store| store.needs_an_account(&id)).await? {
+            self.announce(hub).await?;
+        }
+        Ok(())
     }
 
     /// Has the agent started, if it's waiting on nothing but a wait, once what's asked of the session before this is

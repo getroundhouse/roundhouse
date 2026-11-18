@@ -102,6 +102,19 @@ impl WorkspacePane {
         .detach();
     }
 
+    /// Puts `session`, a chat on none, on `account`, as moving it does.
+    pub(in super::super) fn put_on(
+        &mut self,
+        session: SessionId,
+        account: &Account,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let called = crate::names::called(account).into();
+        let to = Choice { id: account.id.clone(), called, works: true, week: None };
+        self.move_chat(session, to, false, window, cx);
+    }
+
     /// Asks the person whether to stop the agent of `session`, which is working, to move the chat to the account `to`.
     fn confirm_forced_move(session: SessionId, to: Choice, window: &mut Window, cx: &mut Context<Self>) {
         let called = &to.called;

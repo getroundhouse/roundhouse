@@ -313,3 +313,23 @@ fn a_chat_automatic_put_on_an_account_says_so_until_its_moved() {
     assert!(after_later, "a later launch leaves it");
     assert!(!placed(&store), "a move ends it");
 }
+
+/// A chat that needed an account no longer does once a launch is given one, as when it's sent again after an account
+/// has usage to spare, and only a chat on none is marked as needing one.
+#[test]
+fn a_chat_that_needed_an_account_doesnt_once_a_launch_is_given_one() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = store_with_a_login(dir.path());
+    let s = SessionId::from("s");
+    let needs = |store: &Store| store.get_session(&s).unwrap().session.needs_an_account;
+
+    let marked = store.needs_an_account(&s).unwrap();
+    let again = store.needs_an_account(&s).unwrap();
+    let after_marking = needs(&store);
+    let given = store.record_run_login(&s, RunId::new(1), &"given".into(), Placed::Automatically).unwrap();
+    let on_an_account = store.needs_an_account(&s).unwrap();
+
+    assert!(marked && !again && after_marking);
+    assert!(given.session_changed && !needs(&store), "a launch given a login puts it on an account");
+    assert!(!on_an_account && !needs(&store), "a chat on an account doesn't need one");
+}

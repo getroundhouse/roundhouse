@@ -1,5 +1,5 @@
 use super::super::{Hub, off_thread};
-use crate::logins::{AccountChange, Connect, Handed, Logins};
+use crate::logins::{AccountChange, Connect, Handed, Launching, Logins};
 use crate::store::{SessionLogin, now_ms};
 use protocol::client::accounts::{AccountConnect, AccountSetAutomatic, AccountSetDefault, AccountSetReserve};
 use protocol::client::sessions::SessionAssignAccount;
@@ -52,6 +52,11 @@ impl Hub {
             error!("couldn't make the logins' files and the accounts agree: {}", e.message);
         }
         self.tidy_github_logins().await;
+    }
+
+    /// The login a launch of a chat of `agent`'s kind that's `on` a login runs under, as [`Logins::to_launch`] says.
+    pub(crate) async fn launching(&self, agent: AgentKind, on: SessionLogin) -> Result<Launching, ApiError> {
+        self.on_logins(move |logins| logins.to_launch(agent, &on, now_ms())).await
     }
 
     /// The login a launch of a chat of `agent`'s kind that's `on` a login is handed, as [`Logins::to_hand`] says: the

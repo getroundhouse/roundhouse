@@ -131,3 +131,29 @@ fn the_menu_beside_whose_account_it_is_moves_the_chat_and_back_and_a_lost_login_
 fn failed_to_start(body: &EventBody) -> bool {
     matches!(body, EventBody::AgentExited { reason: ExitReason::StartFailed, .. })
 }
+
+/// A new chat that Automatic finds no account to spare for says so in a card, without starting, and `Start on` puts it
+/// on the account, where what's sent again goes.
+#[gpui_kit::test]
+fn a_chat_with_no_account_to_spare_says_so_until_its_started_on_one(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let work = connected(&stack, "Work", "work-token");
+    for account in [&work, &connected(&stack, "Personal", "personal-token")] {
+        stack.client().account_set_reserve(account, Some(protocol::model::Reserve::ALL)).unwrap();
+    }
+    stack.client().account_set_automatic(AgentKind::Claude).unwrap();
+    let mut ui = Ui::open_with_a_repository(cx, &stack);
+    ui.new_workspace();
+    ui.input("say:hello");
+    ui.press("enter");
+    let start_on_work = format!("start-on-{work}");
+
+    ui.wait("the card", |ui| ui.has(start_on_work.clone()));
+    assert_eq!(on(&ui), None);
+    ui.click(start_on_work.clone());
+    ui.wait("the chat to be on Work", |ui| on(ui).as_ref() == Some(&work));
+    ui.wait("the card to go", |ui| !ui.has(start_on_work.clone()));
+    ui.input("say:again");
+    ui.press("enter");
+    ui.wait_idle_with("a turn under Work", |text| text.contains("again"));
+}

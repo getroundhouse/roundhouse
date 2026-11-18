@@ -65,8 +65,10 @@ impl Store {
                         "UPDATE sessions SET account_source = 'hub' WHERE id = ? AND account_source IS NOT 'hub'",
                         [session.as_str()],
                     )? > 0;
+                    // On an account now, so it no longer needs one.
                     let automatically = tx.execute(
-                        "UPDATE sessions SET placed_automatically = ?2 WHERE id = ?1 AND placed_automatically != ?2",
+                        "UPDATE sessions SET placed_automatically = ?2, needs_an_account = 0
+                             WHERE id = ?1 AND (placed_automatically != ?2 OR needs_an_account)",
                         params![session.as_str(), placed == Placed::Automatically],
                     )? > 0;
                     let named = name_account(tx, session, Some(account))?;
@@ -78,6 +80,19 @@ impl Store {
             // The run's row, just inserted, names the session's, which it can't outlive.
             let on = session_login_of(tx, session)?.ok_or(rusqlite::Error::QueryReturnedNoRows)?;
             Ok(Recorded { on, session_changed, forgot_cache, account_changed })
+        })
+    }
+
+    /// Records that `session`, on none, couldn't start, since Automatic found no account with usage to spare, and
+    /// returns whether that changed its record. Only while it's on none, since one on an account doesn't need one, and
+    /// only where it changes, since the revision moves on whatever sets it.
+    pub(crate) fn needs_an_account(&self, session: &SessionId) -> Result<bool, StoreError> {
+        self.lasting(|tx| {
+            if session_login_of(tx, session)? != Some(SessionLogin::NoneYet) {
+                return Ok(false);
+            }
+            let set = "UPDATE sessions SET needs_an_account = 1 WHERE id = ? AND NOT needs_an_account";
+            Ok(tx.execute(set, [session.as_str()])? > 0)
         })
     }
 

@@ -390,4 +390,6 @@ pub(in super::super) const MIGRATIONS: &[Migration] = &[
     Sql(super::account_defaults::AUTOMATIC),
     // Whether Automatic chose the account each chat is on, in `session_accounts`.
     Sql(super::session_accounts::PLACED_AUTOMATICALLY),
+    // Whether each chat couldn't start since Automatic found no account to spare, in `session_accounts`.
+    Sql(super::session_accounts::NEEDS_AN_ACCOUNT),
 ];

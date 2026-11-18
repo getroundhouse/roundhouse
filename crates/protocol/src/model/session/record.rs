@@ -247,6 +247,11 @@ pub struct Session {
     /// person moving it.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub placed_automatically: bool,
+    /// Whether the chat couldn't start on an account, since Automatic found none with usage to spare as its agent was
+    /// to start, so what was sent was dropped. Until it's on an account, by a move or a launch that's given one, as
+    /// [`AccountSetAutomatic`](crate::client::accounts::AccountSetAutomatic) says.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub needs_an_account: bool,
     /// What's typed and attached in the chat's composer and not sent, as [`Draft`] says. Empty from a hub that doesn't
     /// keep it, and once the chat is closed.
     #[serde(default, skip_serializing_if = "Draft::is_empty")]

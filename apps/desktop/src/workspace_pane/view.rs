@@ -241,12 +241,14 @@ impl WorkspacePane {
     fn chat(&self, cx: &mut Context<Self>) -> AnyElement {
         let colors = look::colors(cx);
         let (muted, faint) = (colors.text_muted, colors.text_faint);
-        let interrupted = self.session().is_some_and(|s| s.status == SessionStatus::Interrupted);
+        // A chat that needs an account says so in its card, which says what to do instead.
+        let interrupted = self.session().is_some_and(|s| s.status == SessionStatus::Interrupted && !s.needs_an_account);
         let cache_expired = self.session().and_then(|s| prompt_cache::expired_line(s, look::now_ms(cx)));
         let setup_line = self.setup_line(cx);
         let push_line = self.push_line(cx);
         let usage = self.usage(cx);
         let reserve_line = reserving::reserve_line(usage.as_ref(), cx);
+        let account_wait = self.account_wait(cx);
         let composer = self.composer_row(cx).into_any_element();
         let log = self.setup_log.clone();
         let transcript = self.transcript();
@@ -263,6 +265,7 @@ impl WorkspacePane {
             )
             .when_some(log, |d, text| d.child(setup_log_view(text, cx)))
             .children(setup_line)
+            .children(account_wait)
             .children(push_line)
             .children(reserve_line)
             // In the transcript's column, so it starts where the rows above it do.
