@@ -44,9 +44,12 @@ Clicking a file shows it in the workspace's file tab: its diff from Changes, or 
 - **Arrows on that row show 20 more lines at a time,** or all of them when there are no more than 20.
 - **Lines added and removed are tinted green and red,** and the words that changed more strongly.
 - **A switch at the right end of the bar** shows the diff in one column, side by side, or as the whole file.
+- **A Markdown file's diff can show rendered,** the fourth choice on the switch: what the change removed is struck through on red, and what it added is on green, each where it was. A paragraph that changed shows as it was, then as it is.
 - **What you've opened stays open** when the diff is read again, such as at the end of a turn.
 
 ![A file's diff side by side](../../spec/screens/diff-split.png)
+
+![A Markdown file's diff rendered](../../spec/screens/diff-rendered.png)
 
 ## Comments
 

@@ -34,6 +34,18 @@ pub(crate) struct TopBlock {
 /// it, and the kit draws one in a list or a quote as part of that, so it can't go with each block as one at the top
 /// does.
 pub(crate) fn top_blocks(source: &str) -> Vec<TopBlock> {
+    cut(source, false)
+}
+
+/// `source`'s blocks at its top, as [`top_blocks`] cuts them, but with each list cut into its items, each a list of
+/// its own, so what changed in a list can be told item by item. An ordered one's item keeps its number, which it's
+/// written with, and items are as tight as the list's: no gap between them, which a list spread out has.
+pub(crate) fn top_blocks_and_items(source: &str) -> Vec<TopBlock> {
+    cut(source, true)
+}
+
+/// `source`'s blocks at its top, with each list cut into its items if `items`.
+fn cut(source: &str, items: bool) -> Vec<TopBlock> {
     let whole = || {
         vec![TopBlock { source: source.to_string(), shown: source.len(), flow: None, leaves: super::leaves(source) }]
     };
@@ -54,22 +66,38 @@ pub(crate) fn top_blocks(source: &str) -> Vec<TopBlock> {
     let definitions = definitions(&blocks, &spans, source);
     let all: Vec<&BlockNode> = blocks.iter().collect();
     let last = all.iter().rposition(|block| draws(block)).unwrap_or(0);
+    let block = |block: &BlockNode, span: Range<usize>, flow: FlowPosition| {
+        let mut leaves = Vec::new();
+        keyed(block.clone(), &mut leaves);
+        let own = &source[span];
+        // Not after a code block, which refers to nothing, and one left open would take them in as code.
+        let referred = if matches!(block, BlockNode::CodeBlock(_)) { "" } else { &referred_to(own, &definitions) };
+        TopBlock { source: format!("{own}{referred}"), shown: own.len(), flow: Some(flow), leaves: leaves.into() }
+    };
     (blocks.iter().zip(spans).enumerate())
         .filter(|(_, (block, _))| draws(block))
-        .map(|(ix, (block, span))| {
-            let mut leaves = Vec::new();
-            keyed(block.clone(), &mut leaves);
-            let own = &source[span];
-            // Not after a code block, which refers to nothing, and one left open would take them in as code.
-            let referred = if matches!(block, BlockNode::CodeBlock(_)) { "" } else { &referred_to(own, &definitions) };
-            TopBlock {
-                source: format!("{own}{referred}"),
-                shown: own.len(),
-                flow: Some(FlowPosition::at(&all, ix, ix == last)),
-                leaves: leaves.into(),
+        .flat_map(|(ix, (top, span))| {
+            let flow = FlowPosition::at(&all, ix, ix == last);
+            match listed(top).filter(|_| items) {
+                Some(listed) => {
+                    let count = listed.len();
+                    let item = |(at, (item, span)): (usize, (&BlockNode, Range<usize>))| {
+                        let flow = if at == 0 { flow } else { flow.first(true) };
+                        let flow = if at + 1 == count { flow } else { flow.last(true) };
+                        block(item, span, flow)
+                    };
+                    listed.into_iter().enumerate().map(item).collect()
+                }
+                None => vec![block(top, span, flow)],
             }
         })
         .collect()
+}
+
+/// A list's items, each with its bytes of the text, if `block` is a list whose items all say where they are.
+fn listed(block: &BlockNode) -> Option<Vec<(&BlockNode, Range<usize>)>> {
+    let BlockNode::List { children, .. } = block else { return None };
+    children.iter().map(|item| Some((item, item.span().map(|span| span.start..span.end)?))).collect()
 }
 
 /// Whether `block` holds a footnote's definition in a list or a quote, as a paragraph the kit's parser made of it.

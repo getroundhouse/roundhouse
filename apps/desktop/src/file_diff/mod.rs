@@ -17,6 +17,7 @@ mod draw;
 mod layout;
 mod list;
 mod opened;
+mod rendered;
 mod selection;
 mod shown;
 mod sides;

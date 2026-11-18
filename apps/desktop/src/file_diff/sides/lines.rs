@@ -4,6 +4,7 @@ use gpui_kit::SharedString;
 use protocol::model::PageLine;
 use std::collections::HashMap;
 use std::ops::Range;
+use std::sync::Arc;
 
 #[derive(Clone, Debug, Default)]
 pub(in super::super) struct Sides {
@@ -12,6 +13,15 @@ pub(in super::super) struct Sides {
     pub(in super::super) extent: Extent,
     /// How many characters the longest line has, which sets how far the code scrolls sideways.
     pub(in super::super) widest: usize,
+    /// The file as it was and as it is, as they're written, when the sides are whole.
+    pub(in super::super) versions: Option<Arc<Versions>>,
+}
+
+/// A changed file whole, as it was and as it is, as they're written, with their tabs.
+#[derive(Debug, PartialEq, Eq)]
+pub(in super::super) struct Versions {
+    pub(in super::super) was: SharedString,
+    pub(in super::super) is: SharedString,
 }
 
 /// How much of the file as it was the sides have.
@@ -188,7 +198,14 @@ impl Sides {
             (_, None) => Extent::Whole(file.hunks().last().map_or(0, |hunk| hunk.old_end() - 1)),
             _ => Extent::Hunks,
         };
-        Self::sized(old, new, extent)
+        // A file the change adds or removes is all in its hunk, so as it was or as it is, it's the hunk's lines.
+        let whole = |kept: LineKind| {
+            let lines = file.hunks().iter().flat_map(Hunk::lines);
+            SharedString::from(joined(lines.filter(|line| line.kind == kept || line.kind == LineKind::Same)))
+        };
+        let versions = matches!(extent, Extent::Whole(_))
+            .then(|| Arc::new(Versions { was: whole(LineKind::Removed), is: whole(LineKind::Added) }));
+        Self { versions, ..Self::sized(old, new, extent) }
     }
 
     /// From `base`, the file as it was, and the hunks, which make the file as it is. When the hunks don't match it, as
@@ -197,8 +214,9 @@ impl Sides {
         let Some(new) = changed_into(base, file.hunks()) else { return Self::from_patch(file, language) };
         let language = language.filter(|_| base.len().max(new.len()) <= HIGHLIGHT_UP_TO);
         let length = u32::try_from(base.lines().count()).unwrap_or(u32::MAX);
+        let versions = Some(Arc::new(Versions { was: base.to_string().into(), is: new.clone().into() }));
         let (old, new) = (Side::new([(1, base.to_string())], language), Side::new([(1, new)], language));
-        Self::sized(old, new, Extent::Whole(length)).marked(file)
+        Self { versions, ..Self::sized(old, new, Extent::Whole(length)) }.marked(file)
     }
 
     /// From the hunks, coloured as `language` if it's given, for a file as it was that has `lines` lines and is too big
@@ -233,7 +251,7 @@ impl Sides {
 
     pub(super) fn sized(old: Side, new: Side, extent: Extent) -> Self {
         let widest = old.widest().max(new.widest());
-        Self { old, new, extent, widest }
+        Self { old, new, extent, widest, versions: None }
     }
 
     /// With the words that changed within the hunks' lines marked, as `look::word_changes` finds them in their text as

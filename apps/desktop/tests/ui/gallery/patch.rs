@@ -188,10 +188,30 @@ diff --git a/docs/spec/sidebar.md b/docs/spec/sidebar.md
 index 79cc84d..c76e03e 100644
 --- a/docs/spec/sidebar.md
 +++ b/docs/spec/sidebar.md
-@@ -1,4 +1,4 @@
+@@ -1,7 +1,7 @@
  # Sidebar
  
  - **A workspace's mark speaks for its open chat that most needs attention,** so a chat waiting on approval is visible from anywhere.
 -- **The sidebar shows every workspace's pull request.** Only a workspace that's open knows its pull request.
 +- **The sidebar shows every workspace's pull request,** as the hub last saw it, whether or not the workspace is open.
+ 
+ ## Order
+ 
 "##;
+
+/// The spec the branch changes, as it was in the diff's commit, which the screen of its diff rendered shows.
+pub(crate) const SPEC: &str = "docs/spec/sidebar.md";
+pub(crate) const SPEC_BEFORE: &str = "# Sidebar
+
+- **A workspace's mark speaks for its open chat that most needs attention,** so a chat waiting on approval is visible from anywhere.
+- **The sidebar shows every workspace's pull request.** Only a workspace that's open knows its pull request.
+
+## Order
+
+Workspaces show newest first, and the order is the hub's, so every client shows the same.
+
+| Key | What it does |
+| --- | --- |
+| `⌘1` – `⌘9` | Opens the workspace at that place |
+| `⌘⇧[` `⌘⇧]` | Opens the one above or below |
+";

@@ -11,4 +11,4 @@ mod top_blocks;
 pub(super) use markdown::parse;
 pub(crate) use markdown::{ATOM, Parsed, leaves};
 pub(super) use markdown::{Again, ImagesAre, again, gone_on, joined, parse_shown, rest};
-pub(crate) use top_blocks::{TopBlock, top_blocks};
+pub(crate) use top_blocks::{TopBlock, top_blocks, top_blocks_and_items};

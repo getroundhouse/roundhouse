@@ -290,3 +290,45 @@ fn a_long_line_scrolls_sideways_under_its_numbers(cx: &mut TestAppContext) {
     ui.open_diff_of(&diff, "also-wide.txt");
     assert_eq!(across(&ui), px(0.), "another file starts at the start of its lines");
 }
+
+/// What git says of a change to a paragraph of `notes.md`, and of one that adds `new.md`.
+const MARKDOWN: &str = "diff --git a/notes.md b/notes.md
+index 1a2b3c4..5d6e7f8 100644
+--- a/notes.md
++++ b/notes.md
+@@ -1,5 +1,5 @@
+ # Notes
+ 
+-One.
++One, changed.
+ 
+ The end.
+diff --git a/new.md b/new.md
+new file mode 100644
+index 0000000..9d8c7b6
+--- /dev/null
++++ b/new.md
+@@ -0,0 +1 @@
++A new file.
+";
+
+/// A changed Markdown file can show rendered, with what it removed and then what it added where they were, one it adds
+/// as all added, and another file, which has no such view, shows its lines while it's chosen.
+#[gpui_kit::test]
+fn a_markdown_file_s_diff_shows_rendered_and_another_file_its_lines(cx: &mut TestAppContext) {
+    let notes = "# Notes\n\nOne.\n\nThe end.\n".to_string();
+    let (_hub, mut ui, diff, _) =
+        changed_on_a_fake_hub(cx, &format!("{MARKDOWN}{PATCH}"), &[("notes.md", notes), ("a.txt", "one\n".into())]);
+    let rendered = |ui: &Ui<'_>| ui.cx.read_entity(&diff.file, FileDiff::rendered);
+    ui.open_diff_of(&diff, "notes.md");
+    ui.click(DiffView::Rendered.id());
+    ui.wait("the diff, rendered", |ui| rendered(ui).as_deref() == Some("Notes\n\nOne.\n\nOne, changed.\n\nThe end."));
+
+    ui.open_diff_of(&diff, "new.md");
+    ui.wait("the file it adds, rendered", |ui| rendered(ui).as_deref() == Some("A new file."));
+
+    ui.open_diff_of(&diff, "a.txt");
+    ui.wait("a file that isn't Markdown", |ui| ui.cx.read_entity(&diff.file, |file, _| file.shows_line(2).is_some()));
+    assert!(!ui.has(DiffView::Rendered.id()), "with no view rendered to choose");
+    assert_eq!(rendered(&ui), None);
+}
