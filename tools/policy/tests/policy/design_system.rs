@@ -75,6 +75,13 @@ const KIT_OPEN_DIALOG: KitPart = KitPart {
 /// as the owner decided. A prompt to the system takes how urgent it is, so that's what names it.
 const SYSTEM_ALERT: KitPart = KitPart { named: "PromptLevel", instead: "crate::asking::ask", allowed: &[] };
 
+/// The kit's tooltip, which `look` styles for every one, and `look::tooltip` makes for what isn't a component of its own.
+const KIT_TOOLTIP: KitPart = KitPart {
+    named: "component::tooltip",
+    instead: "look::tooltip",
+    allowed: &[("crates/look/src/tooltips/", "the component library's tooltips, which style the kit's and make them")],
+};
+
 /// The kit's menu, which `look::Menu` fills, and which opens from a `look::Button` or a right-click through `look`.
 const KIT_MENU: KitPart = KitPart {
     named: "component::menu",
@@ -190,6 +197,11 @@ fn only_the_component_library_uses_the_kits_dialog() {
 #[test]
 fn nothing_asks_or_tells_in_the_systems_alert() {
     only_the_component_library_uses(&SYSTEM_ALERT);
+}
+
+#[test]
+fn only_the_component_library_uses_the_kits_tooltip() {
+    only_the_component_library_uses(&KIT_TOOLTIP);
 }
 
 #[test]

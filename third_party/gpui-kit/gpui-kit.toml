@@ -26,4 +26,5 @@ patches = [
     "input-placeholder-color",
     "switch-thumb-unchecked",
     "popup-menu-style",
+    "tooltip-style",
 ]

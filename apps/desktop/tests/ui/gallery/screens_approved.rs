@@ -5,8 +5,8 @@ use super::{
     colours, compaction_chats, component_screens, context_screens, controls, corners, dialog_widths, dictation_screens,
     diff_screens, failure_chats, failures_in_a_row, field_states, heights, home_screens, icon_sizes, key_kinds,
     kinds_of_text, mark_states, menu_rows, own_turn_chats, pull_requests, settings_screens, sidebar_screens, spaces,
-    steps, subagent_chats, switch_kinds, terminal_screens, toggle_states, tool_screens, turn_screens, update_screens,
-    workspace_screens,
+    steps, subagent_chats, switch_kinds, terminal_screens, toggle_states, tool_screens, tooltips, turn_screens,
+    update_screens, workspace_screens,
 };
 use approved::Verdict;
 use capture::Picture;
@@ -107,6 +107,7 @@ fn every_screen_looks_as_approved() {
             controls::NAME,
             key_kinds::NAME,
             toggle_states::NAME,
+            tooltips::NAME,
             switch_kinds::NAME,
             dialog_widths::NAME,
             menu_rows::NAME,
@@ -287,6 +288,15 @@ fn every_width_of_dialog_looks_as_approved() {
     let mut problems = look_at(dialog_widths::NAME, dialog_widths::SPEC, &picture);
     problems.extend(places.look_at(dialog_widths::NAME));
     report(&problems);
+}
+
+#[test]
+fn every_tooltip_looks_as_approved() {
+    let text_system: Arc<dyn PlatformTextSystem> = Arc::new(gpui_apple::AppleTextSystem::new());
+
+    let picture = tooltips::draw(&text_system);
+
+    report(&look_at(tooltips::NAME, tooltips::SPEC, &picture));
 }
 
 #[test]

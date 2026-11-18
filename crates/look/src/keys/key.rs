@@ -32,7 +32,9 @@ impl Key {
     /// a key has none.
     pub fn parts(binding: &str, os: OperatingSystem) -> Vec<String> {
         let Ok(keystroke) = Keystroke::parse_with_os(binding, os) else { return Vec::new() };
-        let said = Kbd::format(&keystroke);
+        // Escape in words, as it's written elsewhere, since the Mac's symbol for it, a circle with an arrow, reads as
+        // undo.
+        let said = Kbd::format(&keystroke).replace('⎋', "Esc");
         if !cfg!(target_os = "macos") {
             return vec![said];
         }
@@ -75,4 +77,10 @@ impl RenderOnce for Key {
             }
         }
     }
+}
+
+/// The kit's key for `binding`, as a tooltip shown for a sheet is given it, or none where it isn't a key.
+#[cfg(any(test, feature = "testing"))]
+pub(crate) fn kit_key(binding: &'static str) -> Option<Kbd> {
+    Keystroke::parse(binding).ok().map(Kbd::new)
 }

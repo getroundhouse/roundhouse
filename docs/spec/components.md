@@ -49,7 +49,7 @@ The pieces screens are built from, on the foundations in `look.md`: what each is
 
 ## Keys
 
-- **A key to press is shown where it's pressed, as the system it's on writes keys,** so the same key reads the same everywhere: Cmd on a Mac and Ctrl elsewhere, Return as `⏎`. A key on its own, beside what it does, is on a small raised key, such as `⌘ F` at the end of Settings' search. A key after a button's words is written as text, in the button's colour, such as Return after Create and after a comment's Comment and Save. `look::KeyKind` holds the kinds. The keys in the kit's menus and tooltips are the kit's own, written as text. *Unconfirmed.*
+- **A key to press is shown where it's pressed, as the system it's on writes keys,** so the same key reads the same everywhere: Cmd on a Mac and Ctrl elsewhere, Return as `⏎`, and Escape as `Esc` everywhere, as the owner decided, since the Mac's symbol for it reads as undo. A key on its own, beside what it does, is on a small raised key, such as `⌘ F` at the end of Settings' search. A key after a button's words is written as text, in the button's colour, such as Return after Create and after a comment's Comment and Save. `look::KeyKind` holds the kinds. A tooltip's key is `Plain`, in muted text. The keys in the kit's menus are the kit's own, written as text. *Unconfirmed.*
 
 **Every kind of key, by its name.** Each is a kind in `look::KeyKind`. *Unconfirmed.*
 
@@ -152,6 +152,16 @@ The pieces screens are built from, on the foundations in `look.md`: what each is
 **Every width of dialog, with a dialog of each: a question, one whose answer removes, and sharing the hub's link.** *Unconfirmed.*
 
 ![Every width of dialog](screens/dialog-widths.png)
+
+## Tooltips
+
+- **A tooltip says a few words about what the pointer rests on,** as the owner decided, such as what a button does, and the key that does the same, if there's one, at its end. What needs more than a line or two, such as a path, what went wrong or how something works, goes on a hover card, which follows rules of its own, so a tooltip stays something read at a glance. *Not built:* the file tab's path, what went wrong with an update, the checkout card's paths and what the version says of another hub are still tooltips.
+- **A tooltip is raised, with a control's corners, the one thin edge and the one shadow, in a detail's text,** 8px in from its edge at each end and 4px at the top and bottom, and wraps past 320px, so a sentence that slips in stays readable. Its key is written as text, in muted text, 12px after its words. *Unconfirmed.*
+- **Every tooltip is `look`'s,** so none is drawn in the kit's own look. *Unconfirmed.*
+
+**Every tooltip: words, words with their key, Escape, and words that run past its widest and wrap.** *Unconfirmed.*
+
+![Every tooltip](screens/tooltips.png)
 
 ## The status mark
 

@@ -24,6 +24,8 @@ pub fn apply(cx: &mut App) {
     Theme::change(ThemeMode::Dark, None, cx);
     let menus = crate::menus::style(crate::colors::colors(cx));
     cx.set_global(menus);
+    let tooltips = crate::tooltips::style(crate::colors::colors(cx));
+    cx.set_global(tooltips);
     // The kit can't tell a code font chosen to be the same as its own default from no choice, and swaps either for
     // one it finds installed. It finds that once for the whole process, from whichever app asks first, and in a test
     // that can be one that lists no fonts, which would leave every later picture with code in the system font. The

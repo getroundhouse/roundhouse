@@ -1,6 +1,5 @@
 use crate::ago;
 use crate::ago::ago;
-use gpui_kit::component::tooltip::Tooltip;
 use gpui_kit::{
     ElementId, Hsla, InteractiveElement as _, IntoElement, ParentElement as _, StatefulInteractiveElement as _,
     Styled as _, div,
@@ -42,7 +41,7 @@ pub(crate) fn clock(id: impl Into<ElementId>, left_ms: i64, color: Hsla) -> impl
         .id(id)
         .flex_none()
         .aria_label(said.clone())
-        .tooltip(move |window, cx| Tooltip::new(said.clone()).build(window, cx))
+        .tooltip(look::tooltip(said))
         .child(look::cache_mark(CacheMark::Clock, color))
 }
 

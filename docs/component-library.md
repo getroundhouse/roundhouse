@@ -69,7 +69,7 @@ A button's hand is its own: it has the hand while a press does something, and th
 | Show a key to press, as a binding names it, such as `secondary-f` or `enter`, written as the system it's drawn on writes keys | `look::key(kind, binding)` |
 | Show it after a button's words | the button's `after`, with a `Plain` key |
 
-A key in one of the kit's menus or tooltips is the kit's, from the action it's bound to, so it isn't made with `look::key`.
+A key in one of the kit's menus is the kit's, from the action it's bound to, so it isn't made with `look::key`. A tooltip's key comes from its action too, and is drawn as a `Plain` key.
 
 ## Fields
 
@@ -122,6 +122,17 @@ A key in one of the kit's menus or tooltips is the kit's, from the action it's b
 | Put a plain one in the middle of the window, have a click on it close it, or do something on Enter or once it's closed | `centered`, `click_closes`, `on_confirm`, `on_close` |
 
 The app asks and tells only in these, never in the system's alert, and `tools/policy` refuses the kit's dialog outside `look`, and the system's alert anywhere.
+
+## Tooltips
+
+`docs/spec/components.md` has how a tooltip looks and what it holds, and `crates/look/src/tooltips` the code. The kit draws a tooltip under the pointer, in the style `look::apply` sets once for the whole app, so each looks the same.
+
+| To | Call |
+|---|---|
+| Say a few words while the pointer rests on something | `.tooltip(look::tooltip(words))`, on what's pointed at |
+| Say what a button or a menu's row does, with the key that does the same | the button's `tooltip` or `tooltip_with_action`, and the row's `tooltip` |
+
+What needs more than a few words, such as a path, goes on a hover card, not a tooltip. `tools/policy` refuses the kit's tooltip outside `look`.
 
 ## Toggles
 
