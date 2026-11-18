@@ -20,14 +20,11 @@ impl LiveSession {
         self.state.lock().run_claims().cloned()
     }
 
-    /// How the session's run, on `link`, is asked anything. A run of this protocol says its claims as it launches, so
-    /// one with none said isn't asked, and with no run current, none is running.
-    pub(super) fn askable(&self, link: &WorkerLink) -> Result<Askable, ApiError> {
+    /// How the session's run is asked anything. A run says its claims as it launches, so one with none said isn't
+    /// asked, and with no run current, none is running.
+    pub(super) fn askable(&self) -> Result<Askable, ApiError> {
         if let Some(claims) = self.run_claims() {
             return Ok(Askable::Claimed(Box::new(claims)));
-        }
-        if link.speaks_previous() {
-            return Ok(Askable::Unclaimed);
         }
         if self.agent_running() {
             return Err(ApiError::new(ErrorCode::Unsupported, "the agent's run hasn't said what it can do"));
@@ -37,9 +34,8 @@ impl LiveSession {
 
     /// Asks the session's run to do what `control` says, if it claims it can.
     pub(super) async fn control_agent(&self, link: &WorkerLink, control: Control) -> Result<Delivery, ApiError> {
-        match self.askable(link)? {
+        match self.askable()? {
             Askable::Claimed(claims) => self.control_claimed(link, control, &claims).await,
-            Askable::Unclaimed => self.control_unclaimed(link, control).await,
             Askable::NotRunning => Ok(Delivery::AgentNotRunning),
         }
     }
@@ -62,8 +58,6 @@ impl LiveSession {
 pub(super) enum Askable {
     /// By the claims it said.
     Claimed(Box<Capabilities>),
-    /// As a run of protocol 3 that hasn't said them is, as [`LiveSession::control_unclaimed`] says.
-    Unclaimed,
     /// It isn't, since none is running.
     NotRunning,
 }

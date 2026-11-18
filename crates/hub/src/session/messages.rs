@@ -45,6 +45,9 @@ pub(crate) enum Item {
         report: Report,
         /// Its number among what the agent's worker sent, for a hub that asked the worker to keep running without it.
         seq: Option<u64>,
+        /// Whether it's dropped unless its run claims what it needs, as it is but from a worker of protocol 4, which
+        /// sent each of its reports as a frame of its own, from before a run had to claim what a report needs.
+        held_to_claims: bool,
     },
     /// The agent on the worker connection `link` has gone, unless a newer one has replaced it, as when the connection
     /// ends. Everything it sent has been queued ahead of this.

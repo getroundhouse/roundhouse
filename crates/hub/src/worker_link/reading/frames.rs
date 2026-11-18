@@ -3,8 +3,6 @@ use crate::frames::FrameReader;
 use crate::hub::Hub;
 use crate::session::Item;
 use crate::untyped::Typing;
-use protocol::capability::Report;
-use protocol::capability::account::Limit;
 use protocol::client::{ApiError, ErrorCode, Outcome, error_chain};
 use protocol::frame;
 use protocol::model::{AgentKind, InstanceId, RunId, SessionId, WorkspaceId};
@@ -67,7 +65,8 @@ pub(in super::super) async fn read_frames(
             Some(session) => hub.live_session(&session).await.map_or(AgentKind::Unknown, |session| session.agent()),
             None => AgentKind::Unknown,
         };
-        let parsed = match untyped.frame(bytes, kind) {
+        // A worker of protocol 4 sends what its agents report as frames that protocol has of its own.
+        let parsed = match untyped.frame(bytes, kind).or_else(|e| link.previous_frame(bytes).ok_or(e)) {
             Ok(parsed) => parsed,
             Err(e) => {
                 // A reply from a newer worker, as after a rollback, ends its call rather than leaving it to wait until
@@ -129,15 +128,11 @@ pub(in super::super) async fn route(hub: &Arc<Hub>, link: &WorkerLink, frame: Wo
             (session_id, Item::Event { run, body: Box::new(body), raw, attachments, seq }, seq)
         }
         WorkerFrame::AgentDelta { session_id, run, delta } => (session_id, Item::Delta { run, delta }, None),
-        WorkerFrame::AgentContext { session_id, run, context, seq } => {
-            (session_id, Item::Report { run, report: Report::Context { context }, seq }, seq)
-        }
-        WorkerFrame::AgentCache { session_id, run, request, seq } => {
-            (session_id, Item::Report { run, report: Report::Cache { request }, seq }, seq)
-        }
-        WorkerFrame::AgentLimits { session_id, run, limits, every_models_week, seq } => {
-            let report = Report::Limits { limits: limits.iter().map(Limit::of).collect(), every_models_week };
-            (session_id, Item::Report { run, report, seq }, seq)
+        WorkerFrame::AgentReport { session_id, run, report, seq } => {
+            // A worker of protocol 4 sent each of its reports as a frame of its own, from before a run had to claim
+            // what a report needs, as Claude's didn't claim the cache.
+            let held_to_claims = !link.speaks_previous();
+            (session_id, Item::Report { run, report, seq, held_to_claims }, seq)
         }
         WorkerFrame::AgentTail { session_id, run, tail } => (session_id, Item::Tail { run, tail }, None),
         WorkerFrame::AgentRetrying { session_id, run, retrying } => {
@@ -172,9 +167,7 @@ fn agent_of(frame: &WorkerFrame) -> Option<(SessionId, RunId)> {
         | WorkerFrame::Terminal { .. } => None,
         WorkerFrame::AgentEvent { session_id, run, .. }
         | WorkerFrame::AgentDelta { session_id, run, .. }
-        | WorkerFrame::AgentContext { session_id, run, .. }
-        | WorkerFrame::AgentCache { session_id, run, .. }
-        | WorkerFrame::AgentLimits { session_id, run, .. }
+        | WorkerFrame::AgentReport { session_id, run, .. }
         | WorkerFrame::AgentTail { session_id, run, .. }
         | WorkerFrame::AgentRetrying { session_id, run, .. } => Some((session_id.clone(), *run)),
     }

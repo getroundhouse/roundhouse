@@ -7,10 +7,10 @@ use protocol::capability::conversation::Start;
 use protocol::client::{ApiError, ErrorCode, HubNotice};
 use protocol::event::{EventBody, ExitReason};
 use protocol::model::{RunCapabilities, RunId};
-use protocol::worker::{AgentSpec, AgentStarted, AgentStop, previous};
+use protocol::worker::{AgentSpec, AgentStarted, AgentStop};
 use tracing::{error, warn};
 
-use super::super::{AgentRun, ChatSettings, Command, LiveSession, Origin};
+use super::super::{AgentRun, Command, LiveSession, Origin};
 use crate::hub::Hub;
 use crate::logins::Handed;
 use crate::store::Store;
@@ -129,7 +129,7 @@ impl LiveSession {
         let spec = AgentSpec { session_id, run: asked, agent, cwd, start, settings, env, tools_token, login };
         let starting = AgentRun { link: link.id, run: asked };
         self.state.lock().agent = Some(starting);
-        let launched = self.launch(hub, link, spec, kept).await;
+        let launched = self.launch(link, spec).await;
         let (AgentStarted { pid, run, already_running, .. }, claims) = launched.inspect_err(|_| {
             let mut state = self.state.lock();
             if state.agent == Some(starting) {
@@ -201,31 +201,15 @@ impl LiveSession {
         Ok(())
     }
 
-    /// Sends the launch, in the form its worker's protocol has, with the chat's settings as the hub keeps them, `kept`,
-    /// to a worker of protocol 3, and returns the worker's reply with what the run claims, unless they're claims it
-    /// can't be held to. A run of protocol 3 says them as it initializes, so only one found running has them, from the
-    /// log.
+    /// Sends the launch, and returns the worker's reply with what the run claims, unless they're claims it can't be
+    /// held to.
     async fn launch(
         &self,
-        hub: &Hub,
         link: &WorkerLink,
         spec: AgentSpec,
-        kept: ChatSettings,
     ) -> Result<(AgentStarted, Option<Capabilities>), ApiError> {
-        let started = if link.speaks_previous() {
-            let ChatSettings { model, mode, effort } = kept;
-            let kept = previous::Kept { model, permission_mode: mode, effort };
-            link.call_previous(previous::AgentStart::of(spec, kept).into_request()).await?
-        } else {
-            link.call(spec).await?
-        };
-        let claims = match started.capabilities.as_deref() {
-            Some(claims) => Some(claims.clone()),
-            None if started.already_running && link.speaks_previous() => {
-                self.claims_said_before(hub, started.run).await
-            }
-            None => None,
-        };
+        let started = link.call(spec).await?;
+        let claims = started.capabilities.as_deref().cloned();
         self.held_to(link, claims.as_ref()).await?;
         Ok((started, claims))
     }

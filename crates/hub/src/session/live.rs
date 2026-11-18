@@ -323,11 +323,10 @@ impl LiveSession {
         }
         let mut agent_took_it = false;
         if let Some(link) = hub.existing_worker(&self.workspace_id) {
-            let delivery = match self.askable(&link)? {
+            let delivery = match self.askable()? {
                 Askable::Claimed(claims) => {
                     self.control_claimed(&link, protocol::capability::Control::Change(change.clone()), &claims).await?
                 }
-                Askable::Unclaimed => self.configure_previous(&link, &change).await?,
                 Askable::NotRunning => Delivery::AgentNotRunning,
             };
             agent_took_it = delivery == Delivery::Delivered;

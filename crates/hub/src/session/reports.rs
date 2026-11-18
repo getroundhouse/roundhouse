@@ -10,9 +10,14 @@ use tracing::{debug, error};
 use super::LiveSession;
 
 impl LiveSession {
-    /// Keeps what the agent of `run` reported. Only the run going speaks for the session, as each report's own
-    /// handling checks. One this hub has nowhere to keep yet is dropped, as one it doesn't know is.
-    pub(super) async fn take_report(self: &Arc<Self>, run: RunId, report: Report) {
+    /// Keeps what the agent of `run` reported, unless it's `held_to_claims` and the run doesn't claim what it needs.
+    /// Only the run going speaks for the session, as each report's own handling checks. One this hub has nowhere to
+    /// keep yet is dropped, as one it doesn't know is.
+    pub(super) async fn take_report(self: &Arc<Self>, run: RunId, report: Report, held_to_claims: bool) {
+        if held_to_claims && !self.state.lock().run_claims().is_some_and(|claims| report.allowed(claims)) {
+            debug!(session = %self.id, %run, "dropping a report its run doesn't claim: {report:?}");
+            return;
+        }
         match report {
             Report::Context { context } => self.note_context(run, context).await,
             // Sent when the hub took it, by the hub's clock, less how long the model took to start answering.

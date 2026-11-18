@@ -369,8 +369,6 @@ fn a_runs_claims_leave_the_record_with_its_exit() {
     store.clear_claims_but(&[]).unwrap();
     assert_eq!(on_record(), None);
 
-    assert_eq!(store.claims_said(&id, RunId::new(2)).unwrap(), Some(claims), "the log keeps them");
-    assert_eq!(store.claims_said(&id, RunId::new(1)).unwrap(), None, "they're the run's that said them");
     store.set_claims(&id, &claimed).unwrap();
     assert_eq!(on_record(), Some(claimed), "a run found running has them put back");
 }

@@ -1,9 +1,10 @@
 //! What lets a worker outlive its hub, which a hub and a worker from either side of it have to read alike: a hub from
 //! before it says nothing of it, and one from after has to tell whether its worker or its hub does.
 
+use protocol::capability::Report;
 use protocol::client::{ClientFrame, ClientRequest, HubStatus};
 use protocol::frame;
-use protocol::model::{LimitWindow, ModelLabel, RunId};
+use protocol::model::{ModelLabel, RunId};
 use protocol::tail::Tail;
 use protocol::worker::{
     Received, RunningAgent, RunningAgentsReply, WorkerCall, WorkerFrame, WorkerRequest, WorkerResponse,
@@ -33,35 +34,45 @@ fn what_a_hub_asks_of_a_worker_it_reconnects_to_keeps_its_form() {
 /// numbering still reads.
 #[test]
 fn what_a_worker_sends_keeps_its_form_numbered_and_not() {
-    let numbered = WorkerFrame::AgentLimits {
-        session_id: "s".into(),
-        run: RunId::new(4),
-        limits: vec![],
-        every_models_week: false,
-        seq: Some(9),
-    };
-    let line = br#"{"frame":"agent_limits","session_id":"s","run":4,"limits":[],"seq":9}"#;
+    let report = Report::Limits { limits: vec![], every_models_week: false };
+    let numbered = WorkerFrame::AgentReport { session_id: "s".into(), run: RunId::new(4), report, seq: Some(9) };
+    let line = br#"{"frame":"agent_report","session_id":"s","run":4,"report":{"report":"limits","limits":[]},"seq":9}"#;
     assert_eq!(frame::encode(&numbered).unwrap(), [&line[..], b"\n"].concat());
 
     let unnumbered: WorkerFrame =
-        frame::decode(br#"{"frame":"agent_limits","session_id":"s","run":4,"limits":[]}"#).unwrap();
-    let WorkerFrame::AgentLimits { seq, every_models_week, .. } = unnumbered else { panic!("{unnumbered:?}") };
-    assert_eq!((seq, every_models_week), (None, false), "a worker from before says nothing of models' weeks");
+        frame::decode(br#"{"frame":"agent_report","session_id":"s","run":4,"report":{"report":"limits","limits":[]}}"#)
+            .unwrap();
+    let WorkerFrame::AgentReport { seq, .. } = unnumbered else { panic!("{unnumbered:?}") };
+    assert_eq!(seq, None);
 }
 
-/// A worker that lists every model's week says so, with each by its model.
+/// A worker that lists every model's week says so, with each by its model and the minutes it counts over.
 #[test]
 fn a_worker_that_lists_every_models_week_says_so_and_keeps_its_form() {
-    let line = br#"{"frame":"agent_limits","session_id":"s","run":4,"limits":[{"window":"model_seven_days","model":"Fable","used_percent":88,"resets_at_ms":9,"heard_at_ms":null}],"every_models_week":true}"#;
+    let line = br#"{"frame":"agent_report","session_id":"s","run":4,"report":{"report":"limits","limits":[{"window_minutes":10080,"model":"Fable","used_percent":88,"resets_at_ms":9}],"every_models_week":true}}"#;
     let frame: WorkerFrame = frame::decode(line).unwrap();
 
-    let WorkerFrame::AgentLimits { limits, every_models_week, .. } = &frame else { panic!("{frame:?}") };
+    let WorkerFrame::AgentReport { report: Report::Limits { limits, every_models_week }, .. } = &frame else {
+        panic!("{frame:?}")
+    };
     assert!(every_models_week);
     assert_eq!(
-        limits.iter().map(|limit| (limit.window, limit.model.clone(), limit.used_percent)).collect::<Vec<_>>(),
-        [(LimitWindow::ModelSevenDays, Some(ModelLabel::new("Fable")), 88)]
+        limits.iter().map(|limit| (limit.window_minutes, limit.model.clone(), limit.used_percent)).collect::<Vec<_>>(),
+        [(Some(10_080), Some(ModelLabel::new("Fable")), 88)]
     );
     assert_eq!(frame::encode(&frame).unwrap(), [&line[..], b"\n"].concat());
+}
+
+/// A report a newer worker sends that this build has no kind for still reads, as one it doesn't know, which the hub
+/// drops, rather than failing the frame.
+#[test]
+fn a_report_this_build_doesnt_know_reads_as_unknown() {
+    let line =
+        br#"{"frame":"agent_report","session_id":"s","run":4,"report":{"report":"weather","sky":"blue"},"seq":2}"#;
+    let frame: WorkerFrame = frame::decode(line).unwrap();
+
+    let WorkerFrame::AgentReport { report, seq, .. } = frame else { panic!("{frame:?}") };
+    assert_eq!((report, seq), (Report::Unknown, Some(2)));
 }
 
 /// What an agent is writing, as a worker sends it to a hub that connects.
