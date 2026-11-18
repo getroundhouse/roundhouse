@@ -1,4 +1,4 @@
-use super::super::{BEFORE_SERVING, Hub};
+use super::super::Hub;
 use crate::error::provider_failed;
 use crate::session::{CarriedOver, Item, LiveSession, Progress, Starting};
 use crate::store::{Store, StoreError, cancelled_approval};
@@ -77,12 +77,12 @@ impl Hub {
         for workspace in workspaces {
             by_provider.entry(&workspace.provider).or_default().push(workspace);
         }
-        let mut running = Vec::new();
+        let (within, mut running) = (self.timers.before_serving, Vec::new());
         for (name, workspaces) in by_provider {
             let listed = match self.provider(name) {
-                Ok(provider) => match tokio::time::timeout(BEFORE_SERVING, provider.list()).await {
+                Ok(provider) => match tokio::time::timeout(within, provider.list()).await {
                     Ok(listed) => listed.map_err(|e| provider_failed(&e)),
-                    Err(_) => Err(ApiError::new(ErrorCode::Worker, format!("no answer within {BEFORE_SERVING:?}"))),
+                    Err(_) => Err(ApiError::new(ErrorCode::Worker, format!("no answer within {within:?}"))),
                 },
                 Err(e) => Err(e),
             };

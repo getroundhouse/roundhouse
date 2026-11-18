@@ -6,6 +6,7 @@ use providers::local::{LocalConfig, LocalProvider};
 use providers::{Capabilities, ProviderError};
 
 use super::*;
+use crate::Timers;
 
 fn local(dir: &Path) -> Arc<dyn Provider> {
     Arc::new(LocalProvider::new(LocalConfig {
@@ -39,7 +40,7 @@ fn loaded(dir: &Path, file: Option<String>) -> ProviderSet {
     if let Some(file) = file {
         std::fs::write(&path, file).unwrap();
     }
-    ProviderSet::load(local(dir), &path, &"h".into(), Build::UNSTAMPED)
+    ProviderSet::load(local(dir), &path, &"h".into(), Build::UNSTAMPED, Timers::DEFAULT.adapter_hello_within)
 }
 
 fn default_name(set: &ProviderSet) -> Result<String, ApiError> {

@@ -79,7 +79,8 @@ impl WorkerLink {
         log: &std::path::Path,
         opening: Opening,
     ) -> Result<Arc<WorkerLink>, ApiError> {
-        let Spawned { process, reader, writer } = reach(provider.as_ref(), &instance_id, log, opening).await?;
+        let Spawned { process, reader, writer } =
+            reach(provider.as_ref(), &instance_id, log, opening, hub.timers.before_serving).await?;
         let link = Arc::new(WorkerLink {
             id: NEXT_LINK_ID.fetch_add(1, Ordering::Relaxed),
             calls: Calls::new(writer),

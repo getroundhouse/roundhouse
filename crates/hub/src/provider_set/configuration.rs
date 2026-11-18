@@ -9,6 +9,7 @@ use std::collections::HashMap;
 use std::io;
 use std::path::Path;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::task::JoinSet;
 use tracing::{error, info, warn};
 
@@ -57,10 +58,17 @@ impl ProviderSet {
         Ok((name, provider))
     }
 
-    /// `local`, and each provider `file` names, whose adapters start when they're first needed. One that can't be
-    /// read or doesn't parse leaves only `local`, and no provider for new workspaces, so they fail with why rather
-    /// than quietly go somewhere else. Neither keeps the hub from starting.
-    pub(crate) fn load(local: Arc<dyn Provider>, file: &Path, hub_id: &HubId, build: Build) -> Self {
+    /// `local`, and each provider `file` names, whose adapters start when they're first needed and have
+    /// `adapter_hello_within` to answer each hello. One that can't be read or doesn't parse leaves only `local`, and
+    /// no provider for new workspaces, so they fail with why rather than quietly go somewhere else. Neither keeps the
+    /// hub from starting.
+    pub(crate) fn load(
+        local: Arc<dyn Provider>,
+        file: &Path,
+        hub_id: &HubId,
+        build: Build,
+        adapter_hello_within: Duration,
+    ) -> Self {
         let mut set = Self::only(local);
         let parsed = match std::fs::read(file) {
             Ok(bytes) => serde_json::from_slice::<ProvidersFile>(&bytes).map_err(|e| format!("it didn't parse: {e}")),
@@ -81,7 +89,8 @@ impl ProviderSet {
                 continue;
             }
             let open = provider_link::process(AdapterCommand { program: entry.program, args: entry.args });
-            let adapter = Arc::new(AdapterProvider::new(entry.name.to_string(), hub_id.clone(), build, open));
+            let (name, hub_id) = (entry.name.to_string(), hub_id.clone());
+            let adapter = Arc::new(AdapterProvider::new(name, hub_id, build, adapter_hello_within, open));
             set.by_name.insert(entry.name, adapter.clone());
             set.adapters.push(adapter);
         }
