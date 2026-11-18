@@ -32,33 +32,6 @@ pub(super) fn patch(changes: Vec<Change>) -> (Call, CallOutput) {
     (Call::Patch(Patch { files }), CallOutput::Changed { files: outcomes })
 }
 
-/// Each file a diff in git's form changes, as Codex's turn's diff has them: a file it made as made, one it changed with
-/// its hunks, one it moved with where to, and one it deleted with nothing said of its change, since nothing says that.
-pub(in crate::codex) fn turn_changes(diff: &str) -> Vec<FileOutcome> {
-    diff.split("\ndiff --git ").filter(|file| !file.trim().is_empty()).filter_map(file_outcome).collect()
-}
-
-fn file_outcome(file: &str) -> Option<FileOutcome> {
-    let header = |prefix: &str| file.lines().find_map(|line| line.strip_prefix(prefix)).map(unquoted);
-    let (from, to) =
-        (header("--- a/").or_else(|| header("rename from ")), header("+++ b/").or_else(|| header("rename to ")));
-    let path = from.clone().or_else(|| to.clone())?;
-    let change = if file.lines().any(|line| line.starts_with("new file mode")) {
-        Some(FileChange::Created)
-    } else if file.lines().any(|line| line.starts_with("deleted file mode")) {
-        None
-    } else {
-        Some(FileChange::Changed { hunks: hunks(file) })
-    };
-    let moved_to = to.filter(|to| from.as_ref().is_some_and(|from| from != to));
-    Some(FileOutcome { path, change, moved_to, diagnostics: Vec::new() })
-}
-
-/// A path as git writes it, in quotes when it has a character git escapes, which leaves it as it's written within them.
-fn unquoted(path: &str) -> String {
-    path.trim_end_matches('\t').trim_matches('"').to_owned()
-}
-
 fn hunks(diff: &str) -> Vec<Hunk> {
     let mut hunks: Vec<Hunk> = Vec::new();
     for line in diff.lines() {
