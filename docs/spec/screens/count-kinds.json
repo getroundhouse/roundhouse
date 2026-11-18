@@ -1,0 +1,16 @@
+{
+  "look::CountKind": {
+    "HowMany": {
+      "x": 382,
+      "y": 143,
+      "width": 26,
+      "height": 39
+    },
+    "NeedsALook": {
+      "x": 404,
+      "y": 55,
+      "width": 16,
+      "height": 39
+    }
+  }
+}

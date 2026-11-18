@@ -4,9 +4,9 @@ use super::{
     approval_chats, approved, background_chats, baselines, button_states, cache_screens, call_screens, capture,
     colours, compaction_chats, component_screens, context_screens, controls, corners, dialog_widths, dictation_screens,
     diff_screens, failure_chats, failures_in_a_row, field_states, heights, home_screens, icon_sizes, key_kinds,
-    kinds_of_text, mark_states, menu_rows, own_turn_chats, pull_requests, settings_screens, sidebar_screens, spaces,
-    steps, subagent_chats, switch_kinds, terminal_screens, toggle_states, tool_screens, tooltips, turn_screens,
-    update_screens, workspace_screens,
+    kinds_of_text, mark_states, menu_rows, own_turn_chats, pull_requests, settings_screens, sidebar_screens,
+    small_things, spaces, steps, subagent_chats, switch_kinds, terminal_screens, toggle_states, tool_screens, tooltips,
+    turn_screens, update_screens, workspace_screens,
 };
 use approved::Verdict;
 use capture::Picture;
@@ -108,6 +108,9 @@ fn every_screen_looks_as_approved() {
             key_kinds::NAME,
             toggle_states::NAME,
             tooltips::NAME,
+            small_things::PILLS,
+            small_things::BADGES,
+            small_things::COUNTS,
             switch_kinds::NAME,
             dialog_widths::NAME,
             menu_rows::NAME,
@@ -307,6 +310,22 @@ fn every_kind_of_key_looks_as_approved() {
 
     let mut problems = look_at(key_kinds::NAME, key_kinds::SPEC, &picture);
     problems.extend(places.look_at(key_kinds::NAME));
+    report(&problems);
+}
+
+#[test]
+fn every_pill_badge_and_count_looks_as_approved() {
+    let text_system: Arc<dyn PlatformTextSystem> = Arc::new(gpui_apple::AppleTextSystem::new());
+    let mut problems = Vec::new();
+
+    for (name, (picture, places)) in [
+        (small_things::PILLS, small_things::pills(&text_system)),
+        (small_things::BADGES, small_things::badges(&text_system)),
+        (small_things::COUNTS, small_things::counts(&text_system)),
+    ] {
+        problems.extend(look_at(name, small_things::SPEC, &picture));
+        problems.extend(places.look_at(name));
+    }
     report(&problems);
 }
 

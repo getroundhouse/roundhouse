@@ -7,8 +7,8 @@ use std::f32::consts::FRAC_PI_2;
 use gpui_kit::component::{Icon, IconName, h_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyElement, App, AppContext as _, Context, Div, ElementId, Hsla, InteractiveElement as _, IntoElement,
-    ParentElement, Role, SharedString, StatefulInteractiveElement as _, Styled, TestSupportExt as _, div, radians,
+    AnyElement, AppContext as _, Context, Div, ElementId, Hsla, InteractiveElement as _, IntoElement, ParentElement,
+    Role, SharedString, StatefulInteractiveElement as _, Styled, TestSupportExt as _, div, radians,
 };
 use look::{Hand as _, IconSizing as _, Typeset as _};
 use protocol::model::{Repo, RepoId, WorkspaceId};
@@ -35,7 +35,7 @@ pub(super) fn row(app: &AppView, repo: &Repo, collapsed: bool, out: f32, cx: &mu
     let to_look_at = if collapsed { its.filter(|w| needs_a_look(app, w, cx)).count() } else { 0 };
     let name_color = if to_look_at > 0 { text } else { muted };
     let name = div().min_w_0().truncate().typeset(look::Type::Body).emphasis().text_color(name_color);
-    let to_look_at = (to_look_at > 0).then(|| needing_a_look(&repo.id, to_look_at, cx));
+    let to_look_at = (to_look_at > 0).then(|| needing_a_look(&repo.id, to_look_at));
     let (dragged, this) = (Dragged(repo.id.clone()), cx.weak_entity());
     h_flex()
         .id(ElementId::Name(group.clone()))
@@ -90,18 +90,10 @@ fn new_workspace(app: &AppView, repo: &Repo, cx: &mut Context<AppView>) -> look:
 
 /// How many of a collapsed project's workspaces need a look, before its button for a new workspace, at the brightness
 /// of a name that needs one.
-fn needing_a_look(repo: &RepoId, count: usize, cx: &App) -> impl IntoElement {
+fn needing_a_look(repo: &RepoId, count: usize) -> look::Count {
     let says = if count == 1 { "1 workspace needs a look".into() } else { format!("{count} workspaces need a look") };
-    div()
-        .id(ElementId::Name(format!("project-needs-a-look-{repo}").into()))
-        .role(Role::Status)
-        .aria_label(says)
-        .flex_none()
-        .typeset(look::Type::Detail)
-        .emphasis()
-        .text_color(look::colors(cx).text)
-        .child(count.to_string())
-        .test_support()
+    look::count(look::CountKind::NeedsALook, count)
+        .said(ElementId::Name(format!("project-needs-a-look-{repo}").into()), says)
 }
 
 /// A chevron after the project's name, which shows while the pointer is on the project's row, so it's plain that a
@@ -150,7 +142,7 @@ impl AppView {
 
     /// The projects' order as the settings have it, which a drag saves once it's let go.
     #[cfg(feature = "testing")]
-    pub fn saved_project_order(cx: &App) -> Vec<RepoId> {
+    pub fn saved_project_order(cx: &gpui_kit::App) -> Vec<RepoId> {
         crate::settings::get(cx).project_order
     }
 }

@@ -8,8 +8,8 @@ use gpui_kit::component::button::{Button, ButtonCustomVariant, ButtonVariants as
 use gpui_kit::component::h_flex;
 use gpui_kit::component::menu::DropdownMenu as _;
 use gpui_kit::{
-    Anchor, AnyElement, App, Context, Entity, Hsla, InteractiveElement as _, IntoElement, ParentElement as _, Role,
-    SharedString, StatefulInteractiveElement as _, Styled as _, TestSupportExt as _, WeakEntity, Window, div, px,
+    Anchor, AnyElement, App, Context, Entity, Hsla, IntoElement, ParentElement as _, SharedString, Styled as _,
+    WeakEntity, Window, div, px,
 };
 use look::{Hand as _, IconSizing as _, Shaped as _, Typeset};
 use protocol::pairing::Fingerprint;
@@ -105,16 +105,8 @@ fn switcher_trailing(
         }
         Connection::Ready(_) | Connection::Connecting if background_attention > 0 => {
             let says = attention_words(background_attention);
-            let badge = div()
-                .id("hub-switcher-needs-a-look")
-                .role(Role::Status)
-                .aria_label(says.clone())
-                .flex_none()
-                .typeset(look::Type::Detail)
-                .emphasis()
-                .text_color(colors.text)
-                .child(background_attention.to_string())
-                .test_support()
+            let badge = look::count(look::CountKind::NeedsALook, background_attention)
+                .said("hub-switcher-needs-a-look", says.clone())
                 .into_any_element();
             (Some(says), Some(badge))
         }

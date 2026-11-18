@@ -10,8 +10,8 @@ use gpui_kit::assets::IconName;
 use gpui_kit::component::{Icon, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyElement, AnyView, App, Div, ElementId, Hsla, InteractiveElement, IntoElement, ParentElement, Pixels, Role,
-    SharedString, Stateful, StatefulInteractiveElement, Styled, TestSupportExt as _, Window, div, px, relative,
+    AnyElement, AnyView, App, Div, ElementId, InteractiveElement, IntoElement, ParentElement, Pixels, Role,
+    SharedString, Stateful, StatefulInteractiveElement, Styled, TestSupportExt as _, Window, div, relative,
 };
 use look::{Hand as _, IconSizing as _, LineText, Shaped as _, Typeset as _};
 use protocol::event::Denied;
@@ -172,7 +172,9 @@ impl Part {
     fn render(self, line_text: &LineText, cx: &App) -> AnyElement {
         let colors = look::colors(cx);
         match self {
-            Part::Pill(text, marks) => pill(text, &marks, colors.text_muted, colors.raised),
+            Part::Pill(text, marks) => {
+                look::pill(look::PillKind::Plain, find::marked(text, &marks, &[], None)).into_any_element()
+            }
             Part::Chip(text) => div()
                 .flex_none()
                 .px(look::Space::Small)
@@ -194,16 +196,9 @@ impl Part {
                 .body
                 .set(div().min_w_0().overflow_hidden().text_ellipsis().text_color(colors.text_faint).child(text))
                 .into_any_element(),
-            Part::Counts(Counts { added, removed }) => line_text
-                .code
-                .set(
-                    h_flex()
-                        .flex_none()
-                        .gap(look::Space::XSmall)
-                        .child(div().text_color(colors.added).child(format!("+{added}")))
-                        .child(div().text_color(colors.removed).child(format!("−{removed}"))),
-                )
-                .into_any_element(),
+            Part::Counts(Counts { added, removed }) => {
+                look::lines_changed(added, removed).placed(&line_text.code).into_any_element()
+            }
         }
     }
 }
@@ -260,23 +255,6 @@ fn glyph(kind: IconName, cx: &App) -> Icon {
     Icon::new(kind).sized(ICON).text_color(look::colors(cx).text_faint)
 }
 
-/// Code on a pill, cut off with an ellipsis when it doesn't fit, with its matches.
-fn pill(text: SharedString, marks: &Marks, color: Hsla, background: Hsla) -> AnyElement {
-    div()
-        .min_w_0()
-        .px(look::Space::Small)
-        // A pill's own room above and below its words, so it sits in the line, rather than a space.
-        .py(px(1.))
-        .corners(look::Corner::Control)
-        .bg(background)
-        .overflow_hidden()
-        .text_ellipsis()
-        .typeset(look::Type::Code)
-        .text_color(color)
-        .child(find::marked(text, marks, &[], None))
-        .into_any_element()
-}
-
 /// A call's line, then a line saying it failed if its result says so, or that the person denied it, then what `opened`
 /// makes of what it opens to, which it's asked only while the call's open. That's made after what went wrong, as it's
 /// shown after it, since a call nested in another's row has its texts placed in the order they're made.
@@ -321,12 +299,7 @@ fn failure(failure: &Failure, cx: &App) -> AnyElement {
         .child(Icon::new(IconName::CircleX).flex_none().sized(ICON).text_color(error_colour))
         .child(div().flex_none().text_color(error_colour).child(failure.label()))
         .when(!failure.message.is_empty(), |d| {
-            d.child(pill(
-                failure.message.to_string().into(),
-                &Marks::default(),
-                error_colour,
-                error_colour.opacity(0.09),
-            ))
+            d.child(look::pill(look::PillKind::Failure, failure.message.to_string()))
         })
         .into_any_element()
 }
