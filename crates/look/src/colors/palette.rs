@@ -62,7 +62,7 @@ colors! {
         icon_tile_top = 0x211d_1bff,
     }
     "Under the pointer, pressed or chosen" {
-        /// A question's option under the pointer. A list's rows are washed, as `look::ListRow` draws them.
+        /// The kit's list's row under the pointer. A list's rows are washed, as `look::ListRow` draws them.
         row_hover = 0x211e_1cff,
         /// A call's line under the pointer, and the compaction's.
         line_hover = 0x1e1b_19ff,

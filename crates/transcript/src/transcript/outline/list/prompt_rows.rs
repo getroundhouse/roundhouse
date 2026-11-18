@@ -8,7 +8,7 @@ use gpui_kit::{
     ListState, ParentElement, Pixels, Role, SharedString, StatefulInteractiveElement, Styled, TestSupportExt as _,
     Window, div, list, px,
 };
-use look::{Hand as _, IconSizing as _, LineText, Shaped as _};
+use look::{IconSizing as _, LineText};
 use protocol::model::{CompactionLine, PromptLine};
 use std::ops::Range;
 use std::rc::Rc;
@@ -17,10 +17,12 @@ use std::rc::Rc;
 /// what opens over the chat is.
 const WIDTH: Pixels = px(380.);
 /// Around the rows, inside the edge.
-const INSET: look::Space = look::Space::XSmall;
+const INSET: look::Space = look::ROWS_INSET;
 /// The tallest the rows get before they scroll: about eight prompts of two lines.
 const TALLEST: Pixels = px(420.);
 const GAP: look::Space = look::Space::XSmall;
+/// A row's size: its room, and the least it's as tall as.
+const ROW_SIZE: look::RowSize = look::RowSize::Regular;
 /// Room for a prompt's number, up to four digits.
 const NUMBER_WIDTH: Pixels = px(28.);
 /// How far past the list's window rows are laid out, so one is ready before it scrolls in.
@@ -76,7 +78,7 @@ pub(super) fn changed(was: &[Line], now: &[Line]) -> (Range<usize>, usize) {
     (start..was.len() - end, now.len() - start - end)
 }
 
-/// The list, with the prompt at `being_read` lit, as a hovered row is. It's as tall as its rows, up to [`TALLEST`],
+/// The list, with the prompt at `being_read` chosen. It's as tall as its rows, up to [`TALLEST`],
 /// and only the rows in view are drawn. The wheel over it scrolls only the list.
 pub(in super::super) fn draw(
     lines: Rc<[Line]>,
@@ -89,7 +91,9 @@ pub(in super::super) fn draw(
 ) -> AnyElement {
     let count = lines.len();
     let rows = list(rows.state.clone(), move |ix, _, cx| {
+        // As wide as a row, which the list doesn't yet know when it measures one.
         div()
+            .w(row_width())
             .when(ix + 1 < count, |d| d.pb(GAP))
             .child(match &lines[ix].kind {
                 Kind::Prompt { line, number } => {
@@ -123,53 +127,35 @@ pub(in super::super) fn draw(
 }
 
 /// The prompt drawn in the chat's `row`: its number, smaller, on the baseline of its first line, and up to two lines
-/// of it, quieter than the one being read.
+/// of it, chosen while it's the one being read.
 fn row(
     row: usize,
     prompt: &PromptLine,
     number: usize,
-    lit: bool,
+    being_read: bool,
     jumps: &Jumps,
     line_text: &LineText,
     cx: &App,
 ) -> AnyElement {
     let colors = look::colors(cx);
-    let fill = colors.raised_hover;
     let label = label(prompt);
     let number = div().w(NUMBER_WIDTH).flex_none().text_right().text_color(colors.text_faint).child(number.to_string());
     let number = line_text.detail.set(number);
-    let text = div()
-        .flex_1()
-        .min_w_0()
-        .line_clamp(2)
-        .text_ellipsis()
-        .text_color(if lit { colors.text } else { colors.text_muted })
-        .child(label.clone());
+    let text =
+        div().flex_1().min_w_0().line_clamp(2).text_ellipsis().text_color(colors.text_muted).child(label.clone());
     let text = line_text.body.set(text);
-    div()
-        .id(ElementId::Name(format!("outline-prompt/{row}").into()))
-        .role(Role::ListBoxOption)
-        .aria_label(label)
-        .aria_selected(lit)
-        .w(row_width())
-        .flex()
-        .gap(look::Space::Medium)
-        .pl(look::Space::XSmall)
-        .pr(look::Space::Medium)
-        .py(look::Space::Small)
-        .corners(look::Corner::Control)
-        .hand()
-        .when(lit, |d| d.bg(fill))
-        .hover(move |d| d.bg(fill))
+    look::list_row(ElementId::Name(format!("outline-prompt/{row}").into()), ROW_SIZE)
+        .wraps()
+        .chosen(being_read)
+        .listed(label)
         .on_click(jumps.to(row))
         .child(number)
         .child(text)
-        .test_support()
         .into_any_element()
 }
 
 /// The compaction drawn in the chat's `row`: its icon where a prompt's number goes, then what its rule in the chat says,
-/// faint and on one line, so it reads as a mark between the prompts rather than one of them. It's never lit, since
+/// faint and on one line, so it reads as a mark between the prompts rather than one of them. It's never chosen, since
 /// it's never the one being read.
 fn compaction_row(
     row: usize,
@@ -179,7 +165,6 @@ fn compaction_row(
     cx: &App,
 ) -> AnyElement {
     let colors = look::colors(cx);
-    let fill = colors.raised_hover;
     let said = |to, between| -> SharedString {
         let freed = compaction::freed(compaction.before_tokens, compaction.after_tokens, to);
         let who = compaction::who(compaction.by);
@@ -192,24 +177,11 @@ fn compaction_row(
     let icon = div().w(NUMBER_WIDTH).flex_none().flex().justify_end().items_center().child(icon);
     let text = div().flex_1().min_w_0().truncate().text_color(colors.text_faint).child(said);
     let text = line_text.detail.set(text);
-    div()
-        .id(ElementId::Name(format!("outline-compaction/{row}").into()))
-        .role(Role::ListBoxOption)
-        .aria_label(label)
-        .w(row_width())
-        .flex()
-        .items_center()
-        .gap(look::Space::Medium)
-        .pl(look::Space::XSmall)
-        .pr(look::Space::Medium)
-        .py(look::Space::Small)
-        .corners(look::Corner::Control)
-        .hand()
-        .hover(move |d| d.bg(fill))
+    look::list_row(ElementId::Name(format!("outline-compaction/{row}").into()), ROW_SIZE)
+        .listed(label)
         .on_click(jumps.to(row))
         .child(icon)
         .child(text)
-        .test_support()
         .into_any_element()
 }
 

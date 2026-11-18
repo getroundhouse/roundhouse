@@ -1,8 +1,8 @@
-//! The question's options, one numbered row each, and the row under them for typing another answer. A chosen row is
-//! lit, and where several can be chosen, it has a check.
+//! The question's options, one numbered row each, and the row under them for typing another answer, each a list's row
+//! that wraps. A chosen row is washed as a list's chosen row is, and where several can be chosen, it has a check.
 
 use gpui_kit::component::input::{Escape, Input, Textarea};
-use gpui_kit::component::{Icon, IconName, Sizable as _, h_flex, v_flex};
+use gpui_kit::component::{Icon, IconName, Sizable as _, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, Context, ElementId, Hsla, InteractiveElement as _, IntoElement, ParentElement,
@@ -16,13 +16,14 @@ use super::QuestionPanel;
 /// About seven options with a line of description each. A longer list scrolls, so the transcript keeps its room.
 const OPTIONS_MOST_HEIGHT: f32 = 360.;
 
+/// A row's size: its room, and the least it's as tall as.
+const ROW_SIZE: look::RowSize = look::RowSize::Regular;
+
 /// The colours a row is drawn in.
 #[derive(Clone, Copy)]
 struct Colors {
     foreground: Hsla,
     muted: Hsla,
-    chosen: Hsla,
-    hovered: Hsla,
 }
 
 pub(super) fn list(
@@ -32,14 +33,7 @@ pub(super) fn list(
     cx: &mut Context<QuestionPanel>,
 ) -> AnyElement {
     let app = look::colors(cx);
-    let colors = Colors {
-        foreground: app.text,
-        muted: app.text_muted,
-        // The kit keeps its own colour for a list's chosen row faint, so this takes a raised surface's hover, the
-        // nearest opaque step above the pane.
-        chosen: app.raised_hover,
-        hovered: app.row_hover,
-    };
+    let colors = Colors { foreground: app.text, muted: app.text_muted };
     let choice = panel.asked.get(panel.showing).map_or_default(|asked| asked.choice.clone());
     let rows: Vec<AnyElement> = question
         .options
@@ -86,18 +80,13 @@ fn number(n: usize, muted: Hsla) -> impl IntoElement {
         .child(n.to_string())
 }
 
-fn row(id: ElementId, chosen: bool, colors: Colors) -> gpui_kit::Stateful<gpui_kit::Div> {
-    h_flex()
-        .id(id)
-        .w_full()
-        .items_start()
-        .gap(look::Space::Medium)
-        .p(look::Space::Small)
-        .corners(look::Corner::Control)
-        .typeset(look::Type::Body)
-        .line_height(px(LINE))
-        .hand()
-        .map(|d| if chosen { d.bg(colors.chosen) } else { d.hover(move |style| style.bg(colors.hovered)) })
+fn row(id: impl Into<ElementId>, chosen: bool) -> look::ListRow {
+    look::list_row(id, ROW_SIZE).wraps().chosen(chosen)
+}
+
+/// What a row says, beside its number, on lines as tall as its number's.
+fn words() -> gpui_kit::Div {
+    v_flex().flex_1().min_w_0().line_height(px(LINE))
 }
 
 fn check(muted: Hsla) -> impl IntoElement {
@@ -123,12 +112,11 @@ fn option_row(
             .text_color(colors.muted)
             .child(description)
     });
-    row(ElementId::Name(format!("question-answer-{o}").into()), chosen, colors)
+    row(ElementId::Name(format!("question-answer-{o}").into()), chosen)
         .on_click(cx.listener(move |this, _, window, cx| this.pick(o, window, cx)))
         .child(number(o + 1, colors.muted))
-        .child(v_flex().flex_1().min_w_0().child(option.label.clone()).children(description))
+        .child(words().child(option.label.clone()).children(description))
         .when(multiple && chosen, |d| d.child(check(colors.muted)))
-        .test_support()
         .into_any_element()
 }
 
@@ -160,18 +148,12 @@ fn other_row(
         }))
         .when(chosen, |d| d.child(Icon::new(IconName::Check).sized(look::IconSize::Small)))
         .test_support();
-    let row = row("question-other".into(), chosen, colors)
+    let row = row("question-other", chosen)
         .on_click(cx.listener(|this, _, window, cx| this.type_other(window, cx)))
-        .on_action(cx.listener(|this, _: &Escape, window, cx| {
-            let showing = this.showing;
-            this.show(showing, window, cx);
-        }))
         .child(number(0, colors.muted))
         // Its smallest size has the least padding, which leaves its text where the options' labels start.
         .child(
-            v_flex()
-                .flex_1()
-                .min_w_0()
+            words()
                 .ml(px(-TYPING_INSET))
                 .child(match other {
                     super::typing::Field::Text(input) => {
@@ -185,12 +167,19 @@ fn other_row(
                     dictation.and_then(|field| field.read(cx).live_line(cx)).map(|line| line.pl(px(TYPING_INSET))),
                 ),
         )
-        .when(multiple, |d| d.child(checkbox))
+        .when(multiple, |d| d.child(checkbox));
+    // Escape and dictation's keys come up from the text to what holds the row, which the line that says it's
+    // listening is drawn over.
+    let holder = div()
         .relative()
-        .children(dictation.map(|field| field.read(cx).edge()))
-        .test_support();
+        .on_action(cx.listener(|this, _: &Escape, window, cx| {
+            let showing = this.showing;
+            this.show(showing, window, cx);
+        }))
+        .child(row)
+        .children(dictation.map(|field| field.read(cx).edge()));
     match dictation {
-        Some(field) => dictation_ui::Field::keys(row, field).into_any_element(),
-        None => row.into_any_element(),
+        Some(field) => dictation_ui::Field::keys(holder, field).into_any_element(),
+        None => holder.into_any_element(),
     }
 }

@@ -6,13 +6,11 @@
 use client_core::calls::web::{Link, Results, site};
 use client_core::calls::{Fetch, WebSearch};
 use gpui_kit::assets::IconName;
-use gpui_kit::component::h_flex;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyElement, App, Div, ElementId, InteractiveElement as _, IntoElement, ParentElement, Role, SharedString,
-    StatefulInteractiveElement as _, Styled, div,
+    AnyElement, App, Div, ElementId, InteractiveElement as _, IntoElement, ParentElement, SharedString, Styled, div,
 };
-use look::{Hand as _, LineText, Typeset as _};
+use look::{LineText, Typeset as _};
 
 use super::line::{Line, Part};
 use super::{Answer, Toggle, block, line};
@@ -106,7 +104,7 @@ fn pages(results: &Results, toggle: &Toggle, cx: &App) -> AnyElement {
             toggle.find,
             &toggle.shared.selection,
             &id,
-            div().id(id.clone()).py(look::Space::XSmall).children(links),
+            div().id(id.clone()).p(look::ROWS_INSET).children(links),
         ))
     });
     frame
@@ -127,16 +125,8 @@ fn results(answer: Option<&Answer>) -> Option<Results<'_>> {
 fn link_row(id: ElementId, link: &Link, marks: &Marks, area: &ElementId, line_text: &LineText, cx: &App) -> AnyElement {
     let colors = look::colors(cx);
     let (url, title): (SharedString, SharedString) = (link.url.clone().into(), link.title.clone().into());
-    let hover = colors.text_muted.opacity(0.12);
-    h_flex()
-        .id(id)
-        .role(Role::Link)
-        .aria_label(title.clone())
-        .h(look::RowSize::Small.height())
-        .px(look::Space::Medium)
-        .gap(look::Space::Small)
-        .hand()
-        .hover(move |d| d.bg(hover))
+    look::list_row(id, look::RowSize::Small)
+        .link(title.clone())
         .on_click(move |_, _, cx| cx.open_url(&url))
         .child(line_text.body.set(
             div().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().child(find::marked(
