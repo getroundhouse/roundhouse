@@ -9,10 +9,15 @@ pub(in super::super) fn hub_settings(conn: &Connection) -> rusqlite::Result<HubS
     let columns = "keep_awake, allow_asked_in_full_access, rev, github_account_id, github_sent";
     conn.query_row(&format!("SELECT {columns} FROM hub_settings"), [], |row| {
         // The outer SELECT remains active while the defaults are read, keeping one SQLite snapshot.
-        let mut defaults = conn.prepare_cached("SELECT agent, account_id FROM account_defaults ORDER BY agent")?;
+        let mut defaults =
+            conn.prepare_cached("SELECT agent, account_id, automatic FROM account_defaults ORDER BY agent")?;
         let account_defaults = defaults
             .query_map([], |row| {
-                Ok(AccountDefault { agent: from_text(row.get(0)?)?, account: row.get::<_, String>(1)?.into() })
+                Ok(AccountDefault {
+                    agent: from_text(row.get(0)?)?,
+                    account: row.get::<_, String>(1)?.into(),
+                    automatic: row.get(2)?,
+                })
             })?
             .collect::<rusqlite::Result<Vec<_>>>()?;
         Ok(HubSettings {
@@ -29,16 +34,34 @@ pub(in super::super) fn hub_settings(conn: &Connection) -> rusqlite::Result<HubS
 }
 
 impl Store {
-    /// Called with the logins lock held, after checking the account and its token.
+    /// Called with the logins lock held, after checking the account and its token. It ends Automatic for the kind.
     pub(crate) fn set_account_default(&self, agent: AgentKind, account: &AccountId) -> Result<HubSettings, StoreError> {
         self.lasting(|tx| {
             tx.execute(
                 "INSERT INTO account_defaults (agent, account_id) VALUES (?1, ?2)
-                ON CONFLICT (agent) DO UPDATE SET account_id = excluded.account_id
-                WHERE account_id != excluded.account_id",
+                ON CONFLICT (agent) DO UPDATE SET account_id = excluded.account_id, automatic = 0
+                WHERE account_id != excluded.account_id OR automatic",
                 params![text_of(&agent), account.as_str()],
             )?;
             hub_settings(tx)
+        })
+    }
+
+    /// Puts `agent`'s chats on accounts automatically, keeping the account chosen for it, and answers with the settings,
+    /// or `None` when no account has been chosen for it, as before any login for it was added. Called with the logins
+    /// lock held.
+    pub(crate) fn set_automatic(&self, agent: AgentKind) -> Result<Option<HubSettings>, StoreError> {
+        self.lasting(|tx| {
+            let chosen = tx.execute(
+                "UPDATE account_defaults SET automatic = 1 WHERE agent = ? AND NOT automatic",
+                [text_of(&agent)],
+            )? > 0
+                || tx.query_row(
+                    "SELECT EXISTS (SELECT 1 FROM account_defaults WHERE agent = ?)",
+                    [text_of(&agent)],
+                    |row| row.get::<_, bool>(0),
+                )?;
+            chosen.then(|| hub_settings(tx)).transpose()
         })
     }
 

@@ -91,6 +91,29 @@ fn choosing_a_default_updates_the_hub_and_other_clients_and_the_badge_moves_with
 }
 
 #[gpui_kit::test]
+fn choosing_automatic_takes_the_badge_away_until_an_account_is_chosen_again(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let work = connected(&stack, "Work", TOKEN);
+    let mut ui = in_agents(cx, &stack);
+    let automatic =
+        |ui: &Ui<'_>| ui.view().records().hub_settings().unwrap().account_defaults.as_ref().unwrap()[0].automatic;
+    let badge = format!("{}-default", id("account", &work));
+
+    ui.click("account-default-claude");
+    ui.click_menu_item("Automatic, Most to spare");
+
+    ui.wait("Automatic", |ui| automatic(ui));
+    assert!(stack.client().records_list().unwrap().hub_settings.unwrap().account_defaults.unwrap()[0].automatic);
+    ui.wait("the badge to go", |ui| !ui.has(badge.clone()));
+
+    ui.click("account-default-claude");
+    ui.click_menu_item("Work");
+
+    ui.wait("Work again", |ui| !automatic(ui));
+    ui.wait("the badge to come back", |ui| ui.has(badge.clone()));
+}
+
+#[gpui_kit::test]
 fn reserving_part_of_a_week_waits_for_save_then_the_hub_and_the_app_have_it(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let work = connected(&stack, "Work", TOKEN);

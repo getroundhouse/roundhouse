@@ -172,6 +172,14 @@ impl Account {
             .filter(|week| week.resets_at_ms.is_none_or(|at_ms| at_ms > now_ms))
     }
 
+    /// Its limits that are used up at `now_ms`, as an agent under it last heard them, and haven't started again since,
+    /// so nothing can run under it until each has. The one rule for it, which the hub places chats by and every client
+    /// says it by.
+    pub fn used_up(&self, now_ms: i64) -> impl Iterator<Item = &UsageLimit> {
+        let current = move |limit: &&UsageLimit| limit.resets_at_ms.is_none_or(|at_ms| at_ms > now_ms);
+        self.limits.iter().filter(current).filter(|limit| limit.left_percent() == 0)
+    }
+
     /// Whether what's left of its week at `now_ms` is down to what it reserves, so a chat on it is spending what the
     /// person kept for themselves. Never, for an account that reserves none, or whose week nobody has heard.
     pub fn in_reserve(&self, now_ms: i64) -> bool {

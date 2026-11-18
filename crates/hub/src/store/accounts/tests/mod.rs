@@ -5,5 +5,7 @@ use protocol::model::RunId;
 
 mod used;
 
+mod at_work;
+
 mod recording;
 use recording::{limit, logged_in, named};

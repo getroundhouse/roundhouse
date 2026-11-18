@@ -11,8 +11,8 @@ use super::frame::{CONTEXT, Frame, Part};
 use super::screens::FOCUS;
 use super::steps::{Screen, Step, Target};
 use super::worlds::{
-    context, context_capped, context_held_login, context_in_reserve, context_to_move, context_with_a_models_limit,
-    context_without_limits,
+    context, context_capped, context_held_login, context_in_reserve, context_placed_automatically, context_to_move,
+    context_with_a_models_limit, context_without_limits,
 };
 
 /// The screens about the context and the account.
@@ -98,6 +98,17 @@ pub(crate) const SCREENS: &[Screen] = &[
             Step::WaitFor("usage"),
             Step::Hover { on: Target::Id("usage"), shows: Region::UsageCard.id() },
             Step::Click("account-move"),
+        ],
+    },
+    Screen {
+        name: "usage-chosen-automatically",
+        spec: "chats.md",
+        world: Some(context_placed_automatically),
+        frame: Frame::Around(Part::Region(Region::Composer), &[Part::Region(Region::UsageCard)]),
+        steps: &[
+            Step::Select(FOCUS),
+            Step::WaitFor("usage"),
+            Step::Hover { on: Target::Id("usage"), shows: Region::UsageCard.id() },
         ],
     },
     Screen {

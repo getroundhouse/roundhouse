@@ -6,7 +6,7 @@ use super::launch_rows::Recorded;
 use super::*;
 use crate::login_files::LoginFile;
 use crate::store::tests::{idle_session, store_with_session};
-use crate::store::{Connecting, SessionLogin, now_ms};
+use crate::store::{Connecting, Placed, SessionLogin, now_ms};
 
 /// The account the session `s` names.
 fn account_of_s(store: &Store) -> Option<AccountId> {
@@ -48,7 +48,7 @@ fn a_run_given_no_login_stops_a_chat_on_none_naming_a_held_logins_account_but_no
 
     let on_none = store.file_run_login(&s, RunId::new(1)).unwrap();
     let named_on_none = account_of_s(&store);
-    store.record_run_login(&s, RunId::new(2), &"given".into()).unwrap();
+    store.record_run_login(&s, RunId::new(2), &"given".into(), Placed::ByDefault).unwrap();
     let filed = store.file_run_login(&s, RunId::new(2)).unwrap();
     let on_it = store.file_run_login(&s, RunId::new(3)).unwrap();
 
@@ -67,7 +67,7 @@ fn a_launch_given_a_login_after_the_person_sent_its_agent_something_is_when_the_
     let s = SessionId::from("s");
     let sent = store.append(&s, None, &crate::store::events::tests::prompt("go", 0), None, None, None).unwrap();
 
-    let recorded = store.record_run_login(&s, RunId::new(1), &"given".into()).unwrap();
+    let recorded = store.record_run_login(&s, RunId::new(1), &"given".into(), Placed::ByDefault).unwrap();
 
     assert_eq!(recorded.account_changed.and_then(|account| account.used_at_ms), Some(sent.event.ts_ms));
 }
@@ -80,7 +80,7 @@ fn a_run_given_a_login_its_account_was_used_after_in_another_chat_leaves_that_la
     store.append(&s, None, &crate::store::events::tests::prompt("go", 0), None, None, None).unwrap();
     lock(&store.writer).execute("UPDATE accounts SET used_at_ms = ?", [i64::MAX]).unwrap();
 
-    let recorded = store.record_run_login(&s, RunId::new(1), &"given".into()).unwrap();
+    let recorded = store.record_run_login(&s, RunId::new(1), &"given".into(), Placed::ByDefault).unwrap();
 
     assert_eq!(recorded.account_changed, None);
     assert_eq!(store.account(&"given".into()).unwrap().unwrap().used_at_ms, Some(i64::MAX));
@@ -108,9 +108,9 @@ fn once_a_worker_says_which_run_is_going_the_logins_the_chats_other_runs_were_gi
     (other.session.id, other.agent_session_id) = ("t".into(), Some("t".into()));
     store.insert_session(&other, None).unwrap();
     for run in 1..=3 {
-        store.record_run_login(&"s".into(), RunId::new(run), &"given".into()).unwrap();
+        store.record_run_login(&"s".into(), RunId::new(run), &"given".into(), Placed::ByDefault).unwrap();
     }
-    store.record_run_login(&"t".into(), RunId::new(4), &"given".into()).unwrap();
+    store.record_run_login(&"t".into(), RunId::new(4), &"given".into(), Placed::ByDefault).unwrap();
 
     store.forget_other_run_logins(&"s".into(), RunId::new(2)).unwrap();
 
@@ -122,7 +122,7 @@ fn once_a_worker_says_which_run_is_going_the_logins_the_chats_other_runs_were_gi
 fn the_logins_a_chats_runs_were_given_go_with_the_chat() {
     let dir = tempfile::tempdir().unwrap();
     let store = store_with_a_login(dir.path());
-    store.record_run_login(&"s".into(), RunId::new(1), &"given".into()).unwrap();
+    store.record_run_login(&"s".into(), RunId::new(1), &"given".into(), Placed::ByDefault).unwrap();
 
     let deleted = store.delete_unused_session(&"s".into()).unwrap();
 
@@ -142,9 +142,9 @@ fn a_chats_first_launch_under_a_held_login_puts_it_on_the_hubs_for_that_account_
     let s = SessionId::from("s");
     let before = store.get_session(&s).unwrap().session;
 
-    let first = store.record_run_login(&s, RunId::new(1), &"given".into()).unwrap();
+    let first = store.record_run_login(&s, RunId::new(1), &"given".into(), Placed::ByDefault).unwrap();
     let after = store.get_session(&s).unwrap().session;
-    let later = store.record_run_login(&s, RunId::new(2), &"other".into()).unwrap();
+    let later = store.record_run_login(&s, RunId::new(2), &"other".into(), Placed::ByDefault).unwrap();
 
     let on_given = SessionLogin::Hub("given".into());
     assert_eq!((before.account_source, before.account), (None, None));
@@ -170,7 +170,7 @@ fn a_chats_first_launch_under_a_held_login_forgets_another_accounts_cache_as_a_m
         let s = SessionId::from("s");
         lock(&store.writer).execute("UPDATE sessions SET account_id = ? WHERE id = 's'", [named]).unwrap();
         store.set_session_cache(&s, Some(&cache)).unwrap();
-        let recorded = store.record_run_login(&s, RunId::new(1), &"given".into()).unwrap();
+        let recorded = store.record_run_login(&s, RunId::new(1), &"given".into(), Placed::ByDefault).unwrap();
         (recorded.forgot_cache, store.get_session(&s).unwrap().session.prompt_cache)
     };
 
@@ -189,8 +189,8 @@ fn filing_a_run_under_another_login_leaves_a_chat_on_the_hubs_on_its_account() {
     let file = LoginFile::new();
     store.connect_login(&connecting(&"other".into(), "Personal", &file)).unwrap();
     let s = SessionId::from("s");
-    store.record_run_login(&s, RunId::new(1), &"given".into()).unwrap();
-    store.record_run_login(&s, RunId::new(2), &"other".into()).unwrap();
+    store.record_run_login(&s, RunId::new(1), &"given".into(), Placed::ByDefault).unwrap();
+    store.record_run_login(&s, RunId::new(2), &"other".into(), Placed::ByDefault).unwrap();
     let before = store.get_session(&s).unwrap().session;
     let ambient = AgentAccount { id: Some("claude-0123456789abcdef".into()), logged_in: true, ..Default::default() };
 
@@ -221,13 +221,13 @@ fn a_chat_is_put_on_the_ambient_login_once_its_worker_says_whose_it_is_until_its
     let put = store.launched_under(&s, &ambient).unwrap();
     let after = store.get_session(&s).unwrap().session;
     let again = store.launched_under(&s, &ambient).unwrap();
-    let given = store.record_run_login(&s, RunId::new(1), &"given".into()).unwrap();
+    let given = store.record_run_login(&s, RunId::new(1), &"given".into(), Placed::ByDefault).unwrap();
     let still = store.get_session(&s).unwrap().session;
     store.move_session(&s, &"given".into()).unwrap();
     let moved = store.get_session(&s).unwrap().session;
     let nobody = store.launched_under(&t, &AgentAccount::default()).unwrap();
     let unnamed = store.get_session(&t).unwrap().session;
-    let given_after_nobody = store.record_run_login(&t, RunId::new(2), &"given".into()).unwrap();
+    let given_after_nobody = store.record_run_login(&t, RunId::new(2), &"given".into(), Placed::ByDefault).unwrap();
 
     assert!(put.ambient && put.session && !again.ambient && !again.session);
     assert_eq!((after.account_source, &after.account), (Some(AccountSource::Ambient), &ambient.id));
@@ -255,7 +255,7 @@ fn a_chat_whose_record_says_the_hubs_but_names_no_account_is_put_on_its_next_lau
 
     let ambient = AgentAccount { id: Some("claude-0123456789abcdef".into()), logged_in: true, ..Default::default() };
 
-    let given = store.record_run_login(&s, RunId::new(1), &"given".into()).unwrap();
+    let given = store.record_run_login(&s, RunId::new(1), &"given".into(), Placed::ByDefault).unwrap();
     let given_none = other.launched_under(&s, &ambient).unwrap();
 
     assert_eq!((given.on, account_of_s(&store)), (SessionLogin::Hub("given".into()), Some("given".into())));
@@ -274,7 +274,7 @@ fn a_moved_chat_is_on_its_account_and_names_it_and_forgets_another_accounts_cach
     store.connect_login(&connecting(&"other".into(), "Personal", &file)).unwrap();
     let (s, cache) =
         (SessionId::from("s"), PromptCache { used_at_ms: 5, ttl: CacheTtl::OneHour, model: None, tokens: 9 });
-    store.record_run_login(&s, RunId::new(1), &"given".into()).unwrap();
+    store.record_run_login(&s, RunId::new(1), &"given".into(), Placed::ByDefault).unwrap();
     store.file_run_login(&s, RunId::new(1)).unwrap();
     store.set_session_cache(&s, Some(&cache)).unwrap();
     fresh.set_session_cache(&s, Some(&cache)).unwrap();
@@ -292,4 +292,24 @@ fn a_moved_chat_is_on_its_account_and_names_it_and_forgets_another_accounts_cach
     let other = Some(AccountId::from("other"));
     assert_eq!((after.account_source, after.account, after.prompt_cache), (Some(AccountSource::Hub), other, None));
     assert!(fresh_moved.forgot_cache, "a record that named no account can't say whose cache it was");
+}
+
+/// A chat's first launch on the account Automatic chose says so on its record, which a later launch leaves, and a move
+/// ends, since the person chose the account then.
+#[test]
+fn a_chat_automatic_put_on_an_account_says_so_until_its_moved() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = store_with_a_login(dir.path());
+    let s = SessionId::from("s");
+    let placed = |store: &Store| store.get_session(&s).unwrap().session.placed_automatically;
+
+    let first = store.record_run_login(&s, RunId::new(1), &"given".into(), Placed::Automatically).unwrap();
+    let after_first = placed(&store);
+    store.record_run_login(&s, RunId::new(2), &"given".into(), Placed::ByDefault).unwrap();
+    let after_later = placed(&store);
+    store.move_session(&s, &"given".into()).unwrap();
+
+    assert!(first.session_changed && after_first);
+    assert!(after_later, "a later launch leaves it");
+    assert!(!placed(&store), "a move ends it");
 }

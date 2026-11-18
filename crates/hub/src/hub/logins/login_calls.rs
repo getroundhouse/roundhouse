@@ -1,7 +1,7 @@
 use super::super::{Hub, off_thread};
 use crate::logins::{AccountChange, Connect, Handed, Logins};
 use crate::store::{SessionLogin, now_ms};
-use protocol::client::accounts::{AccountConnect, AccountSetDefault, AccountSetReserve};
+use protocol::client::accounts::{AccountConnect, AccountSetAutomatic, AccountSetDefault, AccountSetReserve};
 use protocol::client::sessions::SessionAssignAccount;
 use protocol::client::{ApiError, ErrorCode, HubNotice};
 use protocol::model::{Account, AccountId, AgentKind, HubSettings, LoginDescription, Session};
@@ -83,6 +83,17 @@ impl Hub {
         let agent = asked.agent;
         let settings = self.on_logins(move |logins| logins.set_default(asked.agent, &asked.account, now_ms())).await?;
         // A launch that names no account is handed another login now, so its lists of models no longer apply.
+        self.forget_model_lists(|key| key.agent == agent).await;
+        self.notify(HubNotice::HubSettings(settings.clone()));
+        Ok(settings)
+    }
+
+    /// Puts the kind's chats on accounts automatically, as `AccountSetAutomatic` says, and tells every client.
+    pub(crate) async fn account_set_automatic(&self, asked: AccountSetAutomatic) -> Result<HubSettings, ApiError> {
+        let agent = asked.agent;
+        self.login_of(agent)?;
+        let settings = self.on_logins(move |logins| logins.set_automatic(agent)).await?;
+        // A launch that names no account may be handed another login now, so its lists of models no longer apply.
         self.forget_model_lists(|key| key.agent == agent).await;
         self.notify(HubNotice::HubSettings(settings.clone()));
         Ok(settings)

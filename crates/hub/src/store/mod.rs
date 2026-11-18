@@ -69,6 +69,7 @@ pub use proposals::{AnswerToKeep, Answering};
 pub use queue::{Changed, Queued, Queuing, Unqueued};
 pub use reading::Reading;
 pub use repos::RepoToRead;
+pub(crate) use run_logins::Placed;
 pub(crate) use sessions::SessionLogin;
 pub use titles::{Retitle, Retitled};
 pub use workspaces::{BranchesSet, Ended, Move};

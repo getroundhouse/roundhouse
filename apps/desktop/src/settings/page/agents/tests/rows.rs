@@ -2,8 +2,8 @@
 //! badge, the order the lists are in, what's said under a row, and when the rows are drawn again.
 
 use gpui_kit::{AppContext as _, ScrollHandle, TestAppContext};
-use protocol::fixtures::account;
-use protocol::model::{Account, AccountDefault, AccountId, AgentKind, HeldLogin, LimitWindow};
+use protocol::fixtures::{account, claude_default};
+use protocol::model::{Account, AccountId, HeldLogin, LimitWindow};
 
 use super::super::super::account_row::Tone;
 use super::super::kept::Kept;
@@ -81,7 +81,7 @@ fn the_default_is_the_account_the_hubs_settings_name_for_its_kind(cx: &mut TestA
     let kept = cx.new(|_| Kept::default());
     let agents = Agents::new(vec![claude(None)]);
     let scroll = ScrollHandle::new();
-    let chosen = [AccountDefault { agent: AgentKind::Claude, account: "a2".into() }];
+    let chosen = [claude_default(&"a2".into())];
     let drawing = |defaults| Drawing { kept: &kept, agents: &agents, scroll: &scroll, now_ms: NOW_MS, defaults };
 
     assert!(drawing(Some(&chosen)).is_default(&added("a2", "Personal")));

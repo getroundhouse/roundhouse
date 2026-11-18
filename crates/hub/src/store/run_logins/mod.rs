@@ -10,5 +10,6 @@ use protocol::model::{AccountId, RunId, SessionId};
 mod tests;
 
 mod launch_rows;
+pub(crate) use launch_rows::Placed;
 #[cfg(test)]
 pub(crate) use launch_rows::RunLogin;

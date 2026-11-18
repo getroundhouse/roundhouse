@@ -42,9 +42,11 @@ pub(super) struct Drawing<'a> {
 }
 
 impl Drawing<'_> {
-    /// Whether `account` is the default for its kind, as the hub's settings say.
+    /// Whether `account` is the default for its kind, as the hub's settings say. While Automatic chooses for the kind,
+    /// no account is, though the hub keeps the one chosen before.
     pub(super) fn is_default(&self, account: &Account) -> bool {
-        self.defaults.is_some_and(|defaults| defaults.iter().any(|choice| choice.account == account.id))
+        let chosen = |choice: &AccountDefault| !choice.automatic && choice.account == account.id;
+        self.defaults.is_some_and(|defaults| defaults.iter().any(chosen))
     }
 }
 

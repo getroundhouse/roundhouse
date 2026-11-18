@@ -7,9 +7,9 @@
 use client_core::fake_hub::events::{finished_turn, taken, text, thought, user_prompt};
 use client_core::fake_hub::{NOW_MS, World};
 use gpui_kit::TestAppContext;
-use protocol::fixtures::{account, github_account};
+use protocol::fixtures::{account, claude_default, github_account};
 use protocol::model::{
-    Account, AccountDefault, AgentKind, GithubAccount, GithubSettings, HeldLogin, SentCredential, Seq, SessionStatus,
+    Account, AgentKind, GithubAccount, GithubSettings, HeldLogin, SentCredential, Seq, SessionStatus,
 };
 
 use super::agents::to_agents;
@@ -56,7 +56,7 @@ pub(super) fn added(id: &str, name: &str, ends_in_ms: i64) -> Account {
 /// A hub holding `accounts`, the first Claude's default.
 pub(super) fn holding_logins(accounts: Vec<Account>) -> World {
     let mut world = World::default();
-    world.account_defaults = vec![AccountDefault { agent: AgentKind::Claude, account: accounts[0].id.clone() }];
+    world.account_defaults = vec![claude_default(&accounts[0].id)];
     world.accounts = accounts;
     world
 }

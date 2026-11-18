@@ -242,6 +242,11 @@ pub struct Session {
     /// The queue waits for the person, as [`QueuedPrompt`] says.
     #[serde(default)]
     pub queue_held: bool,
+    /// Whether Automatic chose the account the chat is on, as its first launch put it there, as
+    /// [`AccountSetAutomatic`](crate::client::accounts::AccountSetAutomatic) says, rather than a default account or the
+    /// person moving it.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub placed_automatically: bool,
     /// What's typed and attached in the chat's composer and not sent, as [`Draft`] says. Empty from a hub that doesn't
     /// keep it, and once the chat is closed.
     #[serde(default, skip_serializing_if = "Draft::is_empty")]

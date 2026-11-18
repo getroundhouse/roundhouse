@@ -19,9 +19,9 @@ pub use typed::{
 
 mod builders;
 pub use builders::{
-    ApprovalRequest, account, allow_once, approval_request, approve_plan, asking, cancelled, child_worktree, decided,
-    deny, event, found_github_login, github_account, github_app, github_reach, github_sign_in, plan, question,
-    request_failed, session, subagent, subagent_started, to_run, turn_ended, workspace,
+    ApprovalRequest, account, allow_once, approval_request, approve_plan, asking, cancelled, child_worktree,
+    claude_default, decided, deny, event, found_github_login, github_account, github_app, github_reach, github_sign_in,
+    plan, question, request_failed, session, subagent, subagent_started, to_run, turn_ended, workspace,
 };
 
 mod decisions;

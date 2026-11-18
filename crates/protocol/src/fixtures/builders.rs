@@ -3,11 +3,11 @@ use crate::capability::asking::{Choose, PlanContext, Question, QuestionOption, T
 use crate::capability::settings::Effort;
 use crate::event::{EventBody, FailureKind, RequestFailure, SessionEvent, TurnOutcome};
 use crate::model::{
-    Account, AgentKind, ApprovalId, BranchName, ChildStatus, ChildWorktree, Draft, FoundGithubLogin, GhLogin,
-    GhLoginWorks, GithubAccount, GithubApp, GithubAppId, GithubLoginKind, GithubReach, GithubRepositoryName,
-    GithubSignIn, GithubSignInStatus, GithubUser, GithubUserId, HeldGithubLogin, MadeBy, ModelName, Place, Reach, Rev,
-    Seq, Session, SessionStatus, SetupStatus, Subagent, SubagentId, SubagentStatus, TitleSource, ToolUseId, Workspace,
-    WorkspaceStatus,
+    Account, AccountDefault, AccountId, AgentKind, ApprovalId, BranchName, ChildStatus, ChildWorktree, Draft,
+    FoundGithubLogin, GhLogin, GhLoginWorks, GithubAccount, GithubApp, GithubAppId, GithubLoginKind, GithubReach,
+    GithubRepositoryName, GithubSignIn, GithubSignInStatus, GithubUser, GithubUserId, HeldGithubLogin, MadeBy,
+    ModelName, Place, Reach, Rev, Seq, Session, SessionStatus, SetupStatus, Subagent, SubagentId, SubagentStatus,
+    TitleSource, ToolUseId, Workspace, WorkspaceStatus,
 };
 
 /// The session `id`, in the workspace `w`, idle with nothing in its log. Its agent is Claude, running Opus with full
@@ -44,6 +44,7 @@ pub fn session(id: &str) -> Session {
         account_source: None,
         queued: Vec::new(),
         queue_held: false,
+        placed_automatically: false,
         draft: Draft::default(),
         decision_draft: None,
         open_approvals: None,
@@ -117,6 +118,11 @@ pub fn account(id: &str) -> Account {
         reserve: None,
         rev: Rev::default(),
     }
+}
+
+/// `account`, the person's choice for Claude's chats on none, rather than Automatic.
+pub fn claude_default(account: &AccountId) -> AccountDefault {
+    AccountDefault { agent: AgentKind::Claude, account: account.clone(), automatic: false }
 }
 
 /// The GitHub account `id` of the user `ada`, whose number is 1, holding a token connected at 0 that doesn't end.

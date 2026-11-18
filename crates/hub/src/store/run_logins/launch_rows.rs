@@ -13,6 +13,15 @@ pub(crate) struct RunLogin {
     pub(crate) session_changed: bool,
 }
 
+/// What put a session on none yet on the account a launch is given the login of.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Placed {
+    /// Its kind's default account, or none: it's on an account already.
+    ByDefault,
+    /// Automatic, which its record says from here.
+    Automatically,
+}
+
 /// What recording the login a launch is given found, and left.
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) struct Recorded {
@@ -32,7 +41,8 @@ pub(crate) struct Recorded {
 impl Store {
     /// Records that `session`'s run `run` launches under the login the hub holds for `account`, and puts the session on
     /// the hub's login for `account` if it's on none yet, as its first launch does, so its record names `account` from
-    /// here, and another account's cache is forgotten, as a move forgets it. Made before the launch is sent, and on
+    /// here, and says whether Automatic `placed` it there, and another account's cache is forgotten, as a move forgets
+    /// it. Made before the launch is sent, and on
     /// disk before this returns, so no agent runs under a login the hub gave it without the hub's record of whose it
     /// is, whatever stops the hub or the machine. A launch that then fails leaves the session on `account`, without
     /// another's cache, as one that starts does.
@@ -41,6 +51,7 @@ impl Store {
         session: &SessionId,
         run: RunId,
         account: &AccountId,
+        placed: Placed,
     ) -> Result<Recorded, StoreError> {
         self.lasting(|tx| {
             tx.execute(
@@ -54,9 +65,13 @@ impl Store {
                         "UPDATE sessions SET account_source = 'hub' WHERE id = ? AND account_source IS NOT 'hub'",
                         [session.as_str()],
                     )? > 0;
+                    let automatically = tx.execute(
+                        "UPDATE sessions SET placed_automatically = ?2 WHERE id = ?1 AND placed_automatically != ?2",
+                        params![session.as_str(), placed == Placed::Automatically],
+                    )? > 0;
                     let named = name_account(tx, session, Some(account))?;
                     let forgot_cache = forget_cache_unless_under(tx, session, named.before.as_ref(), account)?;
-                    (put || named.session || forgot_cache, forgot_cache, named.account)
+                    (put || automatically || named.session || forgot_cache, forgot_cache, named.account)
                 } else {
                     (false, false, None)
                 };

@@ -282,6 +282,7 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
         | R::SessionRename(_)
         | R::AccountConnect(_)
         | R::AccountSetDefault(_)
+        | R::AccountSetAutomatic(_)
         | R::SessionAssignAccount(_)
         | R::AccountDisconnect(_)
         | R::AccountSetReserve(_)

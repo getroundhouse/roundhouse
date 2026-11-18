@@ -243,6 +243,7 @@ fn local_only(request: &ClientRequest) -> bool {
         | R::SessionAssignAccount(..)
         | R::AccountConnect(..)
         | R::AccountSetDefault(..)
+        | R::AccountSetAutomatic(..)
         | R::AccountDisconnect(..)
         | R::AccountSetReserve(..)
         | R::GithubAccountConnect(..)

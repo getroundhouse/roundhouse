@@ -17,6 +17,12 @@ impl Client {
         self.call(accounts::AccountSetDefault { agent, account: account.clone() })
     }
 
+    /// Puts chats of this agent kind on accounts automatically, by how much of its week each has to spare. See
+    /// [`accounts::AccountSetAutomatic`]. A hub older than this refuses it, as `is_unsupported` says.
+    pub fn account_set_automatic(&self, agent: AgentKind) -> Result<HubSettings> {
+        self.call(accounts::AccountSetAutomatic { agent })
+    }
+
     /// Gives the hub a login for agents of `agent`'s kind, as a new account called `name`, or in place of the login of
     /// `account`, as renewing it does, and answers with the account's record. See [`accounts::AccountConnect`]. A hub
     /// older than this refuses it, as `is_unsupported` says.

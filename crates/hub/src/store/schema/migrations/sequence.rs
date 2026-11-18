@@ -386,4 +386,8 @@ pub(in super::super) const MIGRATIONS: &[Migration] = &[
     Sql(super::proposals::PROPOSALS),
     // How much of each account's week the person keeps for themselves, in `accounts`.
     Sql(accounts::RESERVES),
+    // Whether each kind's chats are put on accounts automatically, in `account_defaults`.
+    Sql(super::account_defaults::AUTOMATIC),
+    // Whether Automatic chose the account each chat is on, in `session_accounts`.
+    Sql(super::session_accounts::PLACED_AUTOMATICALLY),
 ];

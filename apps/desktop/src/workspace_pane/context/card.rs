@@ -8,9 +8,10 @@ use gpui_kit::{
     TestSupportExt as _, WeakEntity, div, px, relative,
 };
 use look::{HoldOpen, Region, Typeset as _};
-use protocol::model::{Account, ContextPart, ContextPartKind, ContextUsage};
+use protocol::model::{ContextPart, ContextPartKind, ContextUsage};
 
-use super::moving::{self, Moves};
+use super::moving;
+use super::usage::Chosen;
 use super::{Usage, words};
 use crate::workspace_pane::WorkspacePane;
 
@@ -39,8 +40,7 @@ pub(super) fn context_card(
     off: bool,
     cx: &App,
 ) -> AnyElement {
-    let whose = usage
-        .and_then(|usage| whose(&usage.account, Plan::WithWhose, usage.moves.as_ref().map(|moves| (moves, hold)), cx));
+    let whose = usage.and_then(|usage| whose(usage, Plan::WithWhose, hold, cx));
     let compact = compacts.then(|| compact(pane, off, cx));
     let card = under_a_rule(surface(Region::ContextCard).child(room(context, cx)), compact);
     under_a_rule(card, whose).into_any_element()
@@ -74,7 +74,7 @@ pub(super) fn usage_card(usage: &Usage, called: SharedString, hold: &HoldOpen, c
     });
     let plan = usage.account.plan.clone().map(SharedString::from);
     let limits = v_flex().gap(look::Space::Medium).child(heading(called, plan, cx)).children(limits);
-    let whose = whose(&usage.account, Plan::BesideHeading, usage.moves.as_ref().map(|moves| (moves, hold)), cx);
+    let whose = whose(usage, Plan::BesideHeading, hold, cx);
     under_a_rule(surface(Region::UsageCard).child(limits), whose).into_any_element()
 }
 
@@ -138,16 +138,18 @@ enum Plan {
     BesideHeading,
 }
 
-/// Whose account it is: who it is, as [`crate::names::account`] says, the email, or the name the person
-/// gave an account whose login they added, then more quietly how it's logged in and who serves the model, after
-/// the plan unless it's beside a heading. Beside them, the button that `moves` the chat to another account, if there's
-/// one to move it to, with the card's hold. `None` when nothing says any of them.
-fn whose(account: &Account, plan: Plan, moves: Option<(&Moves, &HoldOpen)>, cx: &App) -> Option<AnyElement> {
+/// Whose account `usage` is under: who it is, as [`crate::names::account`] says, the email, or the name the person
+/// gave an account whose login they added, then more quietly how it's logged in, who serves the model and whether
+/// Automatic chose it, after the plan unless it's beside a heading. Beside them, the button that moves the chat to
+/// another account, if there's one to move it to, with the card's `hold`. `None` when nothing says any of them.
+fn whose(usage: &Usage, plan: Plan, hold: &HoldOpen, cx: &App) -> Option<AnyElement> {
     let colors = look::colors(cx);
+    let account = &usage.account;
     let who = crate::names::account(account);
     let plan = account.plan.clone().filter(|_| plan == Plan::WithWhose);
+    let chosen = (usage.chosen == Chosen::Automatically).then(|| "Chosen automatically".to_string());
     let how: Vec<String> =
-        [plan, account.login.clone(), account.model_provider.clone()].into_iter().flatten().collect();
+        [plan, account.login.clone(), account.model_provider.clone(), chosen].into_iter().flatten().collect();
     if who.is_none() && how.is_empty() {
         return None;
     }
@@ -157,7 +159,7 @@ fn whose(account: &Account, plan: Plan, moves: Option<(&Moves, &HoldOpen)>, cx: 
         .then(|| div().truncate().typeset(look::Type::Detail).text_color(colors.text_faint).child(how.join(" · ")));
     let said =
         v_flex().id("account").flex_1().min_w_0().gap(look::Space::XSmall).children(who).children(how).test_support();
-    let move_button = moves.map(|(moves, hold)| moving::button(moves, hold));
+    let move_button = usage.moves.as_ref().map(|moves| moving::button(moves, hold));
     let said = h_flex().items_center().gap(look::Space::Medium).child(said).children(move_button);
     Some(said.into_any_element())
 }
