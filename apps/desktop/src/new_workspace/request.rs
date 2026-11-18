@@ -2,7 +2,8 @@
 
 use client_core::FileToSend;
 use protocol::attachment::Attachment;
-use protocol::model::{AgentKind, Effort, ModelName, NewWorkspaceDraftToKeep, PermissionMode, RepoId};
+use protocol::capability::settings::Effort;
+use protocol::model::{AgentKind, ModelName, NewWorkspaceDraftToKeep, PermissionMode, RepoId};
 use protocol::prompt::{Prompt, says_or_carries};
 
 /// What Create asks the app to make.

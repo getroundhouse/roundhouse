@@ -6,8 +6,9 @@ use async_trait::async_trait;
 use parking_lot::Mutex;
 use protocol::{
     capability::conversation::Start,
+    capability::settings::Effort,
     event::EventBody,
-    model::{AgentKind, AgentSessionId, Effort, ModelName, RunId},
+    model::{AgentKind, AgentSessionId, ModelName, RunId},
     worker::AgentSpec,
 };
 use serde_json::{Value, json};

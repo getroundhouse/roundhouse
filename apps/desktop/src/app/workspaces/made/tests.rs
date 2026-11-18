@@ -5,9 +5,10 @@ use std::time::Duration;
 
 use client_core::stand_in_hub::{self, Does};
 use protocol::attachment::{Attachment, AttachmentBytes, MediaType};
+use protocol::capability::settings::Effort;
 use protocol::client::{ApiError, ClientRequest, ClientResponse, ErrorCode, ReplyOutcome, agent, attachments, drafts};
 use protocol::fixtures;
-use protocol::model::{AgentKind, AttachmentId, Draft, Effort, ModelName, RepoId, Seq};
+use protocol::model::{AgentKind, AttachmentId, Draft, ModelName, RepoId, Seq};
 
 use super::*;
 

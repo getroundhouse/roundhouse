@@ -36,7 +36,7 @@ impl Binding for Codex {
         };
         let mut settings = crate::codex::description().defaults;
         settings.model = protocol::model::ModelName::named("gpt-6-luna");
-        settings.effort = protocol::model::Effort::Low;
+        settings.effort = protocol::capability::settings::Effort::Low;
         settings.permission_mode = launch.scenario.mode;
         // As the hub converts a chat's settings, against what the kind claims.
         let claims = crate::codex::description().capabilities.unwrap_or_default();

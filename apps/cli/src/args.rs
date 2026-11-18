@@ -4,7 +4,8 @@ use std::path::PathBuf;
 
 use clap::builder::{PossibleValuesParser, TypedValueParser};
 use clap::{Parser, Subcommand};
-use protocol::model::{AgentKind, ApprovalId, ClientMessageId, Effort, ModelName, PermissionMode, Seq};
+use protocol::capability::settings::Effort;
+use protocol::model::{AgentKind, ApprovalId, ClientMessageId, ModelName, PermissionMode, Seq};
 
 #[derive(Parser)]
 #[command(name = "roundhouse", version = crate::BUILD.version(), about = "Run coding agents in parallel, each in its own worktree")]

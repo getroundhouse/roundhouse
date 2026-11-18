@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 /// It reads from any string, so a level this build can't take, such as one whose name isn't an [`EffortId`], reads as
 /// `Unknown` rather than failing the frame or the row it's in.
 ///
-/// [`EffortId`]: crate::capability::settings::EffortId
+/// [`EffortId`]: super::EffortId
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
 #[serde(rename_all = "lowercase", from = "String")]
 pub enum Effort {
@@ -26,7 +26,7 @@ pub enum Effort {
     Unset,
     Unknown,
     #[serde(untagged)]
-    Named(crate::capability::settings::EffortId),
+    Named(super::EffortId),
 }
 
 impl Effort {
@@ -95,8 +95,7 @@ impl Effort {
 
 impl From<String> for Effort {
     fn from(name: String) -> Self {
-        Self::fixed(&name)
-            .unwrap_or_else(|| crate::capability::settings::EffortId::try_from(name).map_or(Self::Unknown, Self::Named))
+        Self::fixed(&name).unwrap_or_else(|| super::EffortId::try_from(name).map_or(Self::Unknown, Self::Named))
     }
 }
 

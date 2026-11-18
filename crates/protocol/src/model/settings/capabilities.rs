@@ -1,7 +1,8 @@
 //! The settings older clients and stored chats use, translated once at the capability boundary.
 
+use crate::capability::settings::Effort;
 use crate::capability::{Capabilities, settings};
-use crate::model::{Effort, NotOffered, PermissionMode, SessionSettings, SessionSettingsChange};
+use crate::model::{NotOffered, PermissionMode, SessionSettings, SessionSettingsChange};
 
 impl SessionSettings {
     pub fn for_capabilities(&self, claims: &Capabilities) -> Result<settings::Settings, NotOffered> {

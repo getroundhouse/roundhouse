@@ -8,7 +8,6 @@ mod compaction_line;
 mod context;
 mod counters;
 mod draft;
-mod effort;
 mod files;
 mod git;
 mod github_account;
@@ -43,7 +42,6 @@ pub use draft::{
     AnswerSoFar, CommentDraft, DecisionDraft, Draft, DraftToKeep, NewWorkspaceDraft, NewWorkspaceDraftToKeep, SoFar,
     UseChoice,
 };
-pub use effort::Effort;
 pub use files::{FileContents, FileOpened, FilePage, FilePages, OpenedText, PageLine, WorktreeFiles};
 pub use git::{GitDiff, GitFile, GitStatus};
 pub use github_account::{

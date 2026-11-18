@@ -1,9 +1,10 @@
 //! How a hub answers a client asking what each kind of agent it runs offers, which a client of any later version has to
 //! read, so it can offer what an older hub's agents take. How the client asks is in `client_calls`.
 
+use protocol::capability::settings::Effort;
 use protocol::client::{ClientResponse, HubFrame, ReplyOutcome, admin};
 use protocol::frame;
-use protocol::model::{AgentFeature, AgentKind, Effort, LoginDescription, ModelName, PermissionMode};
+use protocol::model::{AgentFeature, AgentKind, LoginDescription, ModelName, PermissionMode};
 
 #[test]
 fn what_each_kind_offers_reads_and_what_a_newer_hub_adds_reads_as_unknown() {

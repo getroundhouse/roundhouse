@@ -1,9 +1,10 @@
 //! Every message about a list of models, spelled out, since a client and its hub can each be a different build, and
 //! an agent's description says whether its models are discovered in a form a client from before reads.
 
+use protocol::capability::settings::Effort;
 use protocol::capability::settings::{EffortOffer, ModelCatalog, ModelOffer, Models, Stage};
 use protocol::client::{ClientResponse, HubFrame, HubNotice, ReplyOutcome};
-use protocol::model::{Effort, ModelList, ModelListKey, ModelLookup, ModelName, RecordKey, Records, Rev};
+use protocol::model::{ModelList, ModelListKey, ModelLookup, ModelName, RecordKey, Records, Rev};
 
 use crate::keeps_its_form;
 

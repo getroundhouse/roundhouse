@@ -1,4 +1,5 @@
-use protocol::model::{AgentDescription, AgentKind, Effort, ModelChoice, ModelName, PermissionMode, SessionSettings};
+use protocol::capability::settings::Effort;
+use protocol::model::{AgentDescription, AgentKind, ModelChoice, ModelName, PermissionMode, SessionSettings};
 
 // A compiled snapshot of `agy` 1.5.9's native catalog: the Gemini models it offers under both Google OAuth and
 // `gemini-api-key`, then the Claude models it offers only under Google OAuth. Refresh it with the CLI observations in

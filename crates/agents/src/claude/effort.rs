@@ -1,7 +1,7 @@
 //! What the CLI calls each level of effort: what `--effort` and `apply_flag_settings`'s `effortLevel` take, and what
 //! `get_settings` reports as `applied.effort`. `docs/claude-cli.md` has how it behaves.
 
-use protocol::model::Effort;
+use protocol::capability::settings::Effort;
 use serde_json::Value;
 
 /// `None` for a level Claude does not offer.

@@ -3,7 +3,8 @@ use super::screens::FOCUS;
 use super::steps::{Screen, Step};
 use client_core::fake_hub::World;
 
-use protocol::model::{AgentKind, Effort, ModelName};
+use protocol::capability::settings::Effort;
+use protocol::model::{AgentKind, ModelName};
 
 const MODELS: [(&str, &str, Effort, bool); 8] = [
     ("gpt-6.1-sol", "GPT-6.1 Sol", Effort::Low, true),

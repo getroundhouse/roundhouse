@@ -5,7 +5,8 @@ use client_core::FileToSend;
 use desktop::new_workspace::Request;
 use gpui_kit::{AppContext as _, ClipboardEntry, ClipboardItem, ExternalPaths, TestAppContext};
 use protocol::attachment::{MAX_PER_PROMPT, MediaType};
-use protocol::model::{AgentKind, Effort, PermissionMode};
+use protocol::capability::settings::Effort;
+use protocol::model::{AgentKind, PermissionMode};
 use protocol::prompt::Prompt;
 
 use super::{open_with_a_repo, prompts};

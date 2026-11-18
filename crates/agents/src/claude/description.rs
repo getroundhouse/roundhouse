@@ -1,7 +1,8 @@
 //! What Claude is called and offers, for the hub to tell clients.
 
+use protocol::capability::settings::Effort;
 use protocol::model::{
-    AgentDescription, AgentFeature, AgentKind, Effort, LoginDescription, ModelChoice, ModelName, PermissionMode,
+    AgentDescription, AgentFeature, AgentKind, LoginDescription, ModelChoice, ModelName, PermissionMode,
     SessionSettings,
 };
 

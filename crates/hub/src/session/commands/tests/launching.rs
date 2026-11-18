@@ -8,10 +8,7 @@ use protocol::capability::settings::{Effort, Settings};
 use protocol::capability::{Capabilities, Claimed, Control};
 use protocol::client::{ErrorCode, HubNotice};
 use protocol::event::EventBody;
-use protocol::model::{
-    Effort as ModelEffort, ModelName, PermissionMode, Rev, RunCapabilities, RunId, Seq, SessionId,
-    SessionSettingsChange,
-};
+use protocol::model::{ModelName, PermissionMode, Rev, RunCapabilities, RunId, Seq, SessionId, SessionSettingsChange};
 use protocol::worker::{AgentStarted, Delivery, WorkerRequest, WorkerResponse};
 use serde_json::{Value, json};
 
@@ -263,7 +260,7 @@ async fn a_worker_of_protocol_3_is_launched_and_asked_in_its_own_forms() {
     let cancelled = live.control_agent(&link, Control::Cancel).await.unwrap();
     let compact = Control::Compact { asked: Seq::new(2), keeping: Some("The API".into()) };
     let compacted = live.control_agent(&link, compact).await.unwrap();
-    live.configure(SessionSettingsChange { effort: Some(ModelEffort::Low), ..SessionSettingsChange::default() })
+    live.configure(SessionSettingsChange { effort: Some(Effort::Low), ..SessionSettingsChange::default() })
         .await
         .unwrap();
 

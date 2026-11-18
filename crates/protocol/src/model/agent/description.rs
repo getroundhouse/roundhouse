@@ -1,4 +1,5 @@
-use super::super::{AgentKind, Effort, ModelName, PermissionMode, SessionSettings, SessionSettingsChange};
+use super::super::{AgentKind, ModelName, PermissionMode, SessionSettings, SessionSettingsChange};
+use crate::capability::settings::Effort;
 use crate::capability::settings::EffortOffer;
 use serde::{Deserialize, Serialize};
 

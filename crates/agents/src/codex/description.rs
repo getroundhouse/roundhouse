@@ -1,4 +1,5 @@
-use protocol::model::{AgentDescription, AgentKind, Effort, ModelName, PermissionMode, SessionSettings};
+use protocol::capability::settings::Effort;
+use protocol::model::{AgentDescription, AgentKind, ModelName, PermissionMode, SessionSettings};
 
 pub fn description() -> AgentDescription {
     AgentDescription {

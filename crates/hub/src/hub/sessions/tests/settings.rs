@@ -5,12 +5,12 @@
 //! CLI's words.
 
 use protocol::capability::Control;
+use protocol::capability::settings::Effort;
 use protocol::capability::settings::{Effort as Level, Settings};
 use protocol::client::{ApiError, ErrorCode, HubNotice};
 use protocol::event::{EventBody, ExitReason};
 use protocol::model::{
-    AgentKind, Effort, ModelName, PermissionMode, Seq, Session, SessionId, SessionSettings, SessionSettingsChange,
-    SetupStatus,
+    AgentKind, ModelName, PermissionMode, Seq, Session, SessionId, SessionSettings, SessionSettingsChange, SetupStatus,
 };
 use protocol::prompt::Prompt;
 use protocol::worker::{SetupDone, WorkerRequest, WorkerResponse};

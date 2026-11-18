@@ -1,8 +1,9 @@
 use crate::capability::approvals::{AfterDenial, Asks, Decision, Remember, Request};
 use crate::capability::asking::{Choose, PlanContext, Question, QuestionOption, TypedAnswer};
+use crate::capability::settings::Effort;
 use crate::event::{EventBody, FailureKind, RequestFailure, SessionEvent, TurnOutcome};
 use crate::model::{
-    Account, AgentKind, ApprovalId, BranchName, ChildStatus, ChildWorktree, Draft, Effort, FoundGithubLogin, GhLogin,
+    Account, AgentKind, ApprovalId, BranchName, ChildStatus, ChildWorktree, Draft, FoundGithubLogin, GhLogin,
     GhLoginWorks, GithubAccount, GithubApp, GithubAppId, GithubLoginKind, GithubReach, GithubRepositoryName,
     GithubSignIn, GithubSignInStatus, GithubUser, GithubUserId, HeldGithubLogin, MadeBy, ModelName, PermissionMode,
     Place, Reach, Rev, Seq, Session, SessionStatus, SetupStatus, Subagent, SubagentId, SubagentStatus, TitleSource,

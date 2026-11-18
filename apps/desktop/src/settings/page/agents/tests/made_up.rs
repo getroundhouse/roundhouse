@@ -1,9 +1,10 @@
 //! What the page's unit tests are drawn from: a moment held still, logins, accounts and how a hub describes Claude,
 //! each plainly made up.
 
+use protocol::capability::settings::Effort;
 use protocol::fixtures::account;
 use protocol::model::{
-    Account, AgentDescription, AgentKind, Effort, HeldLogin, LimitWindow, LoginDescription, ModelName, PermissionMode,
+    Account, AgentDescription, AgentKind, HeldLogin, LimitWindow, LoginDescription, ModelName, PermissionMode,
     SessionSettings, UsageLimit,
 };
 

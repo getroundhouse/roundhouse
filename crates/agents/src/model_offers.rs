@@ -1,6 +1,7 @@
 //! One model catalog supplies the capability offers and older clients' model picker.
+use protocol::capability::settings::Effort;
 use protocol::capability::settings::{Input, ModelOffer, Models, Stage};
-use protocol::model::{Effort, ModelName};
+use protocol::model::ModelName;
 
 pub(crate) fn models(models: &[(ModelName, &str)], efforts: &[Effort], default: &Effort) -> Models {
     Models::Static {

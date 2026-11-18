@@ -1,5 +1,6 @@
 use protocol::attachment::MediaType;
-use protocol::model::{AgentKind, Effort, ModelName, RepoId};
+use protocol::capability::settings::Effort;
+use protocol::model::{AgentKind, ModelName, RepoId};
 
 const OPUS: ModelName = ModelName::named("opus");
 

@@ -7,6 +7,7 @@ use std::path::Path;
 use std::time::Duration;
 
 use hyper::StatusCode;
+use protocol::capability::settings::Effort;
 use protocol::capability::{
     Control,
     approvals::{Asks, Decision, Remember},
@@ -17,7 +18,7 @@ use protocol::capability::{
 };
 use protocol::event::{AgentRunState, EventBody, ExitReason, SessionEvent, TurnOutcome};
 use protocol::fixtures;
-use protocol::model::{AgentKind, ApprovalId, Effort, ModelName, PermissionMode, RunId, Seq, SessionSettingsChange};
+use protocol::model::{AgentKind, ApprovalId, ModelName, PermissionMode, RunId, Seq, SessionSettingsChange};
 use protocol::prompt::Prompt;
 use protocol::worker::AgentSpec;
 use serde_json::{Value, json};
