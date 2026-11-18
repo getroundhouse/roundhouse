@@ -1,6 +1,6 @@
 //! Every kind of bar, in one picture, as `look::BarKind` has them, stacked as the sidebar of changes stacks them: the
-//! pull request's bar, a row of tabs, and the bar over Changes' comments, so what's in each starts where the tabs'
-//! names do.
+//! pull request's bar before there's a pull request, a row of tabs, and the bar over Changes' comments, so what's in
+//! each starts where the tabs' names do.
 
 #![cfg(test)]
 
@@ -34,10 +34,11 @@ fn named(kind: BarKind, bar: look::Bar) -> AnyElement {
 
 fn bars(cx: &App) -> AnyElement {
     let colors = look::colors(cx);
+    // The pull request's bar as it is before there's a pull request, as the app draws it.
     let words = look::bar(BarKind::Words, BarSize::Regular)
-        .of_work(look::Work::Open)
-        .child(div().emphasis().text_color(look::Work::Open.text(colors)).child("#1879 Draw every tab"))
-        .end(look::button("merge", ButtonKind::Edged, ControlSize::Regular, "Merge"));
+        .of_work(look::Work::NoPr)
+        .child(div().flex_1().emphasis().text_color(colors.text_muted).child("No pull request"))
+        .child(look::button("create-pr", ButtonKind::Main, ControlSize::Regular, "Create PR"));
     let tabs = look::bar(BarKind::Tabs, BarSize::Regular)
         .child(look::tab("all-files", "All files", TabWidth::Fits))
         .child(look::tab("changes", "Changes", TabWidth::Fits).count(8).showing(true));
