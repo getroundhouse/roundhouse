@@ -6,7 +6,7 @@ use protocol::attachment::NewAttachment;
 use protocol::capability::approvals::{ApprovalMode, Asks, Decision, Remember, Request};
 use protocol::capability::settings::Settings;
 use protocol::event::{CompactionOutcome, EventBody, ExitReason, SessionEvent};
-use protocol::model::{ApprovalId, ContextUsage, RunId};
+use protocol::model::{ApprovalId, RunId};
 use protocol::tail::{Retrying, StreamDelta, Tail};
 use tokio::sync::mpsc;
 use tracing::{error, warn};
@@ -17,24 +17,14 @@ use crate::store::cancelled_approval;
 pub(crate) async fn run_ingest(session: Arc<LiveSession>, mut items: mpsc::Receiver<Item>) {
     while let Some(item) = items.recv().await {
         match item {
-            Item::Event { run, seq, .. }
-            | Item::Context { run, seq, .. }
-            | Item::Cache { run, seq, .. }
-            | Item::Limits { run, seq, .. }
-                if session.recorded_already(run, seq) => {}
+            Item::Event { run, seq, .. } | Item::Report { run, seq, .. } if session.recorded_already(run, seq) => {}
             Item::Event { run, body, raw, attachments, seq } => {
                 ingest_event(&session, run, *body, raw, attachments, seq).await;
             }
             Item::Delta { run, delta } => session.apply_delta(run, delta),
             Item::Tail { run, tail } => session.take_tail(run, tail),
             Item::Retrying { run, retrying } => session.retrying(run, retrying),
-            Item::Context { run, context, .. } => session.note_context(run, context).await,
-            // Sent when the hub took it, by the hub's clock, less how long the model took to start answering.
-            Item::Cache { run, request, .. } => session.note_cache(run, request, crate::store::now_ms()).await,
-            // Heard when the hub took it, by the hub's clock, as an event the agent said it in is timed.
-            Item::Limits { run, limits, every_models_week, .. } => {
-                session.heard_limits(run, limits, every_models_week, crate::store::now_ms());
-            }
+            Item::Report { run, report, .. } => session.take_report(run, report).await,
             Item::AgentLost { link, reason } => session.agent_lost(link, reason).await,
             Item::PickupDue { wait } => session.no_pickup(wait).await,
             Item::Flush(done) => {
@@ -181,17 +171,6 @@ async fn follow(session: &Arc<LiveSession>, run: RunId, current: bool, body: &Ev
     }
 }
 
-/// Whether what `run` said of its context changes what the session's record says. A run that isn't the one going is
-/// one that's been replaced or has exited, and what it says is of a conversation the session has moved on from.
-pub(super) fn says_something_new(
-    current: Option<RunId>,
-    known: Option<&ContextUsage>,
-    run: RunId,
-    said: &ContextUsage,
-) -> bool {
-    current == Some(run) && known != Some(said)
-}
-
 impl LiveSession {
     /// Only the current run's live output reaches anyone. A replaced agent's is dropped here, so it
     /// can't appear beside its replacement's.
@@ -225,28 +204,6 @@ impl LiveSession {
         }
         state.tail.retrying(run, retrying);
         publish(&mut state, LiveItem::Rewritten);
-    }
-
-    /// The agent said how full its context is. Only the current run speaks for the session, and only a change is kept
-    /// and announced, so the feed isn't told what it knows.
-    async fn note_context(&self, run: RunId, context: ContextUsage) {
-        let Ok(hub) = self.hub() else { return };
-        {
-            let state = self.state.lock();
-            let current = state.agent.map(|agent| agent.run);
-            if !says_something_new(current, state.context.as_ref(), run, &context) {
-                return;
-            }
-        }
-        let (id, kept) = (self.id.clone(), context.clone());
-        if let Err(e) = hub.blocking(move |store| store.set_session_context(&id, &kept)).await {
-            error!(session = %self.id, "could not record how full the agent's context is: {e}");
-            return;
-        }
-        self.state.lock().context = Some(context);
-        if let Err(e) = self.announce(&hub).await {
-            error!(session = %self.id, "could not announce how full the agent's context is: {e}");
-        }
     }
 
     /// The agent changed mode, or confirmed a change. The next launch has to start in this one, so a chat that was

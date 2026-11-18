@@ -24,6 +24,7 @@ mod previous;
 mod progress;
 mod queue;
 mod record;
+mod reports;
 mod starting;
 mod status;
 #[cfg(test)]

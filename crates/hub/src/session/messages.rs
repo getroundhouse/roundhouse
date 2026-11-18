@@ -1,12 +1,11 @@
 //! What a session is sent: what arrives from its agent's worker, and what clients ask of it.
 
 use protocol::attachment::NewAttachment;
+use protocol::capability::Report;
 use protocol::capability::approvals::Decision;
 use protocol::client::ApiError;
 use protocol::event::{EventBody, ExitReason};
-use protocol::model::{
-    ApprovalId, AttachmentId, CacheRequest, ClientMessageId, ContextUsage, RunId, Seq, Session, UsageLimit,
-};
+use protocol::model::{ApprovalId, AttachmentId, ClientMessageId, RunId, Seq, Session};
 use protocol::prompt::Prompt;
 use protocol::tail::{Retrying, StreamDelta, Tail};
 use tokio::sync::oneshot;
@@ -38,29 +37,12 @@ pub(crate) enum Item {
         run: RunId,
         tail: Tail,
     },
-    /// How full the agent's context is now. It comes in the queue with the agent's events, so it's never taken for
-    /// a later run's, or kept after the run has gone.
-    Context {
+    /// What the agent of `run` reported that isn't an event, which the session keeps where the report's keeper says. It
+    /// comes in the queue with the agent's events, so it's never taken for a later run's, or kept after the run has
+    /// gone, and so that a request to the model that found the cache expired is recorded before what the agent wrote.
+    Report {
         run: RunId,
-        context: ContextUsage,
-        /// Its number among what the agent's worker sent, for a hub that asked the worker to keep running without it.
-        seq: Option<u64>,
-    },
-    /// One of the agent's own requests to its model, as it began. It comes in the queue with the agent's events for
-    /// the same reason, and so that a request that found the cache expired is recorded before what the agent wrote.
-    Cache {
-        run: RunId,
-        request: CacheRequest,
-        /// Its number among what the agent's worker sent, for a hub that asked the worker to keep running without it.
-        seq: Option<u64>,
-    },
-    /// What's used of the account's limits, as the agent answered when its worker asked. It comes in the queue with
-    /// the agent's events for the same reason.
-    Limits {
-        run: RunId,
-        limits: Vec<UsageLimit>,
-        /// Whether `limits` holds every model's own week the account has.
-        every_models_week: bool,
+        report: Report,
         /// Its number among what the agent's worker sent, for a hub that asked the worker to keep running without it.
         seq: Option<u64>,
     },
