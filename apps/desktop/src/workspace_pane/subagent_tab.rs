@@ -192,17 +192,16 @@ impl WorkspacePane {
     pub(super) fn subagent_tab_element(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
         let title = self.subagents.title(self.shown.all())?;
         let selected = self.showing() == Showing::Subagent;
-        let muted = look::colors(cx).text_muted;
         let close =
             tab::close_button("close-subagent-tab", "Close subagent tab", cx, |t, _, cx| t.close_subagent_tab(cx));
-        let whole = title.clone();
-        let face = tab::face("show-subagent-tab", selected, format!("Subagent: {title}"))
-            .tooltip(look::tooltip(whole))
-            .text_color(muted)
-            .on_click(cx.listener(|t, _, _, cx| t.bring_to_front(Showing::Subagent, cx)))
-            .child(Icon::new(IconName::Bot).sized(look::IconSize::Large))
-            .child(tab::name().italic().child(title));
-        let tab = tab::tab("subagent-tab", face, close, selected, cx);
+        let tab = look::tab("show-subagent-tab", title.clone(), look::TabWidth::Even)
+            .label(format!("Subagent: {title}"))
+            .tooltip(title)
+            .mark(Icon::new(IconName::Bot).sized(look::IconSize::Large))
+            .replaced()
+            .showing(selected)
+            .closes(close)
+            .on_click(cx.listener(|t, _, _, cx| t.bring_to_front(Showing::Subagent, cx)));
         Some(tab.into_any_element())
     }
 

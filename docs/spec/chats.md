@@ -796,7 +796,7 @@ The API keeps what an agent's requests read and write for a while, so the next r
 ## Tabs
 
 - **The chat showing is underlined, not filled.** A 2px pale copper line runs under its tab, over the bar's bottom edge, and its title looks as it does when it isn't showing, as `look.md` says for lists. A fill would make the tab one more raised thing on the pane.
-- **A tab's close button shows only while the pointer is over the tab,** the one showing included, so the row reads as a row of titles. `Cmd-W` closes the chat showing without it.
+- **A tab's close button shows only while the pointer is over the tab,** the one showing included, so the row reads as a row of titles. `Cmd-W` closes the chat showing without it. The pointer over a tab that isn't showing also draws its line, faint, as `components.md` says of every tab.
 
   **Three chats, with the pointer over one that isn't showing.** *Unconfirmed.*
 

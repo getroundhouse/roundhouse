@@ -85,6 +85,24 @@ The pieces screens are built from, on the foundations in `look.md`: what each is
 
 ![Every kind of switch](screens/switch-kinds.png)
 
+## Tabs
+
+- **A tab names one of what its bar can show, and the one showing is underlined,** with a 2px line in the paled copper over the bar's bottom edge, rather than filled, so its bar stays a row of names, as `chats.md` says of the chat tabs. Its name is muted whether or not it's showing, and stronger, in the text's colour, only when what it names needs a look, such as a reply not yet read. `look::tab` makes one, the workspace's tabs and the sidebar's All files and Changes alike.
+- **The pointer over a tab that isn't showing draws its line, faint,** the paled copper at 35%, as the owner chose from pictures of five ways, over a fill, which made the tab under the pointer look more chosen than the one showing, a box, or a brighter name, which a tab that needs a look has. *Unconfirmed:* 35%.
+- **A tab's close button shows only while the pointer is over it,** at its end, hidden rather than left out, so the name doesn't move when it shows. A tab that closes has 8px at its end, where the button sits, and one that doesn't has 12px, as at its start. *Unconfirmed.*
+- **A tab that's replaced rather than added to has its name in italics,** such as the file tab and the subagent tab. *Unconfirmed.*
+
+**Every width of a tab, by its name.** Each is a width in `look::TabWidth`. *Unconfirmed.*
+
+| Name | Width | For |
+|---|---|---|
+| `Even` | 200px | Every tab the same, with as much of its name as fits, so the row doesn't shift when one gets its name, such as the workspace's chats, terminals, file and subagent |
+| `Fits` | Its name's | A few tabs whose names don't change, such as the sidebar's All files and Changes |
+
+**Every width of tab: the workspace's, with a chat showing, one under the pointer, one that needs a look and a terminal, and the sidebar's, with Changes showing and All files under the pointer.** *Unconfirmed.*
+
+![Every width of tab](screens/tab-widths.png)
+
 ## Fields
 
 - **A field on its own is boxed, and one in what frames it is bare,** as the owner decided. A boxed field has the edge of something to use, a faint fill and a copper ring while it's typed in, such as the rename dialog's, a setting's and Settings' search. A bare field is set in something that frames it already, such as Home's search in its bar and the find bar's, so it has none of them. `look::FieldKind` holds the kinds. *Unconfirmed:* the fill, `control_edge` at 30%, and the edge turning copper with the ring.

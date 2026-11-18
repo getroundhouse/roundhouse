@@ -178,13 +178,11 @@ impl WorkspacePane {
         let close = tab::close_button(close_id, "Close terminal", cx, move |t, _, cx| {
             t.close_terminal(to_close.clone(), cx);
         });
-        let muted = look::colors(cx).text_muted;
-        let face = tab::face(ElementId::Name(format!("terminal-{id}").into()), selected, name.clone())
-            // Muted whether or not it's showing, as the chats' titles are: the underline says which tab is.
-            .text_color(muted)
+        look::tab(format!("terminal-{id}"), name, look::TabWidth::Even)
+            .mark(Icon::new(Lucide::Terminal).sized(look::IconSize::Large))
+            .showing(selected)
+            .closes(close)
             .on_click(cx.listener(move |t, _, _, cx| t.show_terminal(to_show.clone(), cx)))
-            .child(Icon::new(Lucide::Terminal).sized(look::IconSize::Large))
-            .child(tab::name().child(name));
-        tab::tab(ElementId::Name(format!("terminal-tab-{id}").into()), face, close, selected, cx).into_any_element()
+            .into_any_element()
     }
 }

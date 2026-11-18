@@ -4,11 +4,10 @@
 
 use std::rc::Rc;
 
-use gpui_kit::base::{Tab, Tabs};
+use gpui_kit::base::Tabs;
 use gpui_kit::component::h_flex;
 use gpui_kit::prelude::FluentBuilder as _;
-use gpui_kit::{AnyElement, App, IntoElement as _, ParentElement as _, SharedString, Styled as _, Window, div};
-use look::{Hand as _, LineText};
+use gpui_kit::{AnyElement, App, IntoElement as _, ParentElement as _, Styled as _, Window, div};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SidebarTab {
@@ -104,7 +103,6 @@ pub(crate) fn bar(
     changed: Option<usize>,
     controls: Option<AnyElement>,
     on_pick: impl Fn(&SidebarTab, &mut Window, &mut App) + 'static,
-    line_text: &LineText,
     cx: &App,
 ) -> AnyElement {
     let on_pick = Rc::new(on_pick);
@@ -113,7 +111,7 @@ pub(crate) fn bar(
         |(tab, label, count)| {
             let on_pick = on_pick.clone();
             let on_click = move |window: &mut Window, cx: &mut App| on_pick(&tab, window, cx);
-            tab_element(tab, label, count, chosen == Some(tab), on_click, line_text, cx)
+            tab_element(tab, label, count, chosen == Some(tab), on_click)
         },
     );
     h_flex()
@@ -141,38 +139,16 @@ fn tab_element(
     count: Option<usize>,
     selected: bool,
     on_click: impl Fn(&mut Window, &mut App) + 'static,
-    line_text: &LineText,
-    cx: &App,
 ) -> AnyElement {
-    let colors = look::colors(cx);
-    let muted = colors.text_muted;
-    let id: SharedString = match tab {
-        SidebarTab::Changes => "sidebar-tab-changes".into(),
-        SidebarTab::AllFiles => "sidebar-tab-all-files".into(),
+    let id = match tab {
+        SidebarTab::Changes => "sidebar-tab-changes",
+        SidebarTab::AllFiles => "sidebar-tab-all-files",
     };
-    div()
-        .relative()
-        .flex_none()
-        .h_full()
-        .child(
-            Tab::new(id)
-                .hand()
-                .selected(selected)
-                .accessibility_label(label)
-                .h_full()
-                .px(look::Space::Medium)
-                .gap(look::Space::Small)
-                .when(!selected, |d| d.text_color(muted))
-                .on_click(move |_, window, cx| on_click(window, cx))
-                // Its count is smaller, so it's set on the name's baseline.
-                .child(line_text.body.set(div().child(label)))
-                .when_some(count, |d, count| {
-                    d.child(look::count(look::CountKind::HowMany, count).placed(&line_text.detail))
-                }),
-        )
-        .when(selected, |d| {
-            d.child(div().absolute().left_0().right_0().bottom_0().h(look::TAB_LINE).bg(colors.current))
-        })
+    // Muted whether or not it's showing, as the chat tabs' titles are: the underline says which tab is.
+    look::tab(id, label, look::TabWidth::Fits)
+        .when_some(count, look::Tab::count)
+        .showing(selected)
+        .on_click(move |_, window, cx| on_click(window, cx))
         .into_any_element()
 }
 

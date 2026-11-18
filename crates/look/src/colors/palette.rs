@@ -107,8 +107,8 @@ colors! {
         /// The brand's copper: empty states, the app icon, keyboard focus, the caret, the edge of a comment being
         /// written, and, quieter, a composer that's planning. Never a status.
         brand = 0xd08a_5cff,
-        /// The brand's copper paled toward the text, which marks the chat showing, as the line under its tab, and,
-        /// faint, what's found.
+        /// The brand's copper paled toward the text, which marks the tab showing, as the line under it, and, faint, the
+        /// tab the pointer's over and what's found.
         current = 0xd8c2_b3ff,
         /// A link in text.
         link = 0xdba2_7cff,

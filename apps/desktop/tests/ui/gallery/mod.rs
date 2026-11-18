@@ -81,6 +81,7 @@ mod toggle_states;
 mod tooltips;
 
 mod switch_kinds;
+mod tab_widths;
 
 mod menu_rows;
 

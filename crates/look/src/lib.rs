@@ -47,6 +47,7 @@ mod space;
 #[cfg(test)]
 mod spec_table;
 mod switches;
+mod tabs;
 mod task_ring;
 mod theme;
 mod toggles;
@@ -101,6 +102,7 @@ pub use robot::robot_at_work;
 pub use shape::{Corner, EDGE, QUOTE_RULE, Shaped, TAB_LINE};
 pub use space::Space;
 pub use switches::{Switch, SwitchKind, switch};
+pub use tabs::{Tab, TabWidth, tab};
 pub use task_ring::{TaskRing, task_ring};
 pub use theme::apply;
 pub use toggles::{Toggle, toggle};

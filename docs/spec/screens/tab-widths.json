@@ -1,0 +1,16 @@
+{
+  "look::TabWidth": {
+    "Even": {
+      "x": 64,
+      "y": 119,
+      "width": 1680,
+      "height": 80
+    },
+    "Fits": {
+      "x": 64,
+      "y": 310,
+      "width": 1680,
+      "height": 80
+    }
+  }
+}

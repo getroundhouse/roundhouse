@@ -79,7 +79,7 @@ Each colour means one thing.
 | `on_main` | `#1d1a18` | What's on the main action, and on any other light fill |
 | **The brand** | | |
 | `brand` | `#d08a5c` | Copper: empty states, the icon, keyboard focus, the caret, a comment being written, a composer that's planning |
-| `current` | `#d8c2b3` | Pale copper: the chat showing, and, faint, what's found |
+| `current` | `#d8c2b3` | Pale copper: the line under the tab showing, and, faint, under a tab the pointer's over, and what's found |
 | `link` | `#dba27c` | A link |
 | `link_hover` | `#e8b896` | A link under the pointer |
 | **What happened** | | |
