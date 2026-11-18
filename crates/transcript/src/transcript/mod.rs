@@ -7,13 +7,11 @@ mod events;
 mod find;
 mod model;
 mod outline;
-mod pull_request;
 mod record;
 mod sending;
 #[cfg(feature = "testing")]
 mod testing;
 
-pub use pull_request::PullRequestStanding;
 pub(crate) use record::{AtWork, IdleCache};
 
 mod view;

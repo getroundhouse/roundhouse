@@ -1,6 +1,5 @@
 //! What the transcript knows beyond the session's log, which every row is drawn with.
 
-use super::pull_request::PullRequestStanding;
 use super::record::AtWork;
 use crate::attachments::Picture;
 use crate::find::FindLook;
@@ -32,9 +31,6 @@ pub(crate) struct Model {
     pub at_work: AtWork,
     /// The failed request whose card offers Retry, as [`crate::rows::retry_at`] says, as of the last look.
     pub retry_at: Option<Seq>,
-    /// Where the workspace's pull request stands on GitHub, which a line for a wait on it says. `None` until it's
-    /// known, and while there's none or nothing to say of it.
-    pub pull_request: Option<PullRequestStanding>,
     /// The approvals the session's record says its agent is waiting on, which a plan's card and the panel follow.
     /// None from a hub that doesn't say, whose are found among what's loaded.
     pub approvals: Option<RecordedApprovals>,
@@ -74,7 +70,6 @@ impl Model {
             subagent_calls: RefCell::default(),
             at_work,
             retry_at: None,
-            pull_request: None,
             approvals: None,
             subagents: SubagentRecords::default(),
             subagent_rows: RefCell::default(),

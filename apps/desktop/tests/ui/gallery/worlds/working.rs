@@ -1,7 +1,10 @@
 //! The screen's chat at work: writing a reply, thinking, working in the background, steered, and with prompts queued.
 
 use protocol::attachment::{Attachment, MediaType};
-use protocol::model::{Checks, PullRequest, PullRequestFound, QueuedPrompt, SessionStatus, Wait, WaitUntil};
+use protocol::model::{
+    Checks, ObservedCheck, PullRequest, PullRequestFound, PullRequestNumber, PullRequestSelection, QueuedPrompt,
+    SessionStatus, Wait, WaitUntil,
+};
 use protocol::prompt::Prompt;
 
 use super::{chat_world, sidebar};
@@ -36,32 +39,30 @@ pub(in crate::gallery) fn working_background() -> World {
     world
 }
 
-/// A turn that's over, with the agent waiting on its pull request's checks in the background, two of them still
-/// running. The pull request is on the workspace's record, so the app knows it before it makes the chat, which starts
-/// out with where it stands.
+/// A turn that's over, with the agent waiting on its pull request's required checks in the background, two of them
+/// still running, as the hub last read them.
 pub(in crate::gallery) fn waiting_on_checks() -> World {
     let mut world = World::default();
     let focus = sidebar(&mut world);
     let chat = world.chat(&focus, SessionStatus::Background, chats::waiting());
-    let wait = Wait {
-        id: "w1".into(),
-        session_id: chat.clone(),
-        workspace_id: focus.clone(),
-        number: 182,
-        call: Some("toolu-1".into()),
-        until: WaitUntil::Checks,
-        watch: None,
-        started_at_ms: 0,
-        ended: None,
-    };
-    world
-        .sessions
-        .iter_mut()
-        .filter(|session| session.id == chat)
-        .for_each(|session| session.wait = Some(wait.clone()));
     let checks = Checks { passed: 7, failed: 0, pending: 2 };
     let opened =
         PullRequest { number: 182, title: "Show PR state in the sidebar".to_string(), checks, ..pull_requests::open() };
+    let mut wait = protocol::fixtures::pull_request_wait("w1");
+    wait.session_id = chat.clone();
+    wait.workspace_id = focus.clone();
+    wait.call = Some("toolu-1".into());
+    wait.number = 182;
+    let watch = wait.watch.as_mut().unwrap();
+    watch.requested = PullRequestSelection::try_from(vec![PullRequestNumber::try_from(182).unwrap()]).unwrap();
+    let mut observed = protocol::fixtures::observed_pull_request(182);
+    observed.pull_request = opened.clone();
+    let running = observed.checks[0].clone();
+    observed.checks.push(ObservedCheck { name: "lint".into(), ..running });
+    watch.snapshot.pull_requests = vec![observed];
+    world.sessions.iter_mut().filter(|session| session.id == chat).for_each(|session| {
+        session.waits = Some(vec![wait.clone()]);
+    });
     world.workspace_mut(&focus).pull_request = Some(PullRequestFound { pull_request: Some(opened) });
     world
 }

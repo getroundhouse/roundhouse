@@ -85,7 +85,7 @@ pub(crate) fn waiting() -> Vec<EventBody> {
                  they pass.";
     let wait = AgentTask {
         id: TaskId::from("w1"),
-        description: Some("roundhouse/wait_for_pull_request".to_string()),
+        description: Some("roundhouse/wait_for_pull_requests".to_string()),
         kind: TaskKind::Wait,
         call: Some("toolu-1".into()),
         subagent: None,
@@ -93,7 +93,13 @@ pub(crate) fn waiting() -> Vec<EventBody> {
     vec![
         user_prompt("Open a PR for this, and queue it once its checks pass."),
         taken(Seq::new(1)),
-        mcp("msg-1", "toolu-1", "roundhouse", "wait_for_pull_request", json!({ "until": "checks" })),
+        mcp(
+            "msg-1",
+            "toolu-1",
+            "roundhouse",
+            "wait_for_pull_requests",
+            json!({ "pull_requests": [182], "until": "required_checks" }),
+        ),
         EventBody::AgentTasks { tasks: vec![wait], stopped: Vec::new() },
         mcp_said("toolu-1", "The task w1 was moved to the background.", false),
         text("msg-2", reply),
