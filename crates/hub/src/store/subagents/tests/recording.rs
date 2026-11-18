@@ -144,17 +144,22 @@ fn a_subagent_that_starts_again_after_it_ended_works_again_under_the_call_that_f
 }
 
 /// A subagent its agent gives an ID of its own is kept by that ID, which its events and its end name, with the call that
-/// started it beside it. It's found by either, since a client from before subagents had IDs names each by its call.
+/// started it beside it. It's found by either, since a client from before subagents had IDs names each by its call, as
+/// `Subagent::named` says, which a fake hub finds one by, so the store finds each as it does, and one whose ID is
+/// another's call by its ID.
 #[test]
 fn a_subagent_named_by_its_agent_is_kept_by_that_name_and_found_by_its_call_too() {
     let dir = tempfile::tempdir().unwrap();
     let store = store_with_session(dir.path());
-    let mut start = started("toolu_9");
-    if let EventBody::SubagentStarted { subagent, .. } = &mut start {
-        *subagent = Some("thread-1".into());
-    }
+    let start = |call: &str, id: &str| {
+        let mut start = started(call);
+        if let EventBody::SubagentStarted { subagent, .. } = &mut start {
+            *subagent = Some(id.into());
+        }
+        start
+    };
 
-    assert_eq!(record(&store, &start).1, ["thread-1"]);
+    assert_eq!(record(&store, &start("toolu_9", "thread-1")).1, ["thread-1"]);
     assert_eq!(record(&store, &message(Some("thread-1"), vec![reading("read")])).1, ["thread-1"]);
     assert_eq!(record(&store, &message(Some("toolu_9"), vec![reading("x")])).1, Vec::<String>::new(), "by its call");
     record(&store, &ended("thread-1", TaskOutcome::Finished, Some("Done.")));
@@ -165,6 +170,13 @@ fn a_subagent_named_by_its_agent_is_kept_by_that_name_and_found_by_its_call_too(
     let named = |name: &str| store.subagent_named(&"s".into(), &name.into()).unwrap();
     assert_eq!((named("thread-1"), named("toolu_9")), ("thread-1".into(), "thread-1".into()));
     assert_eq!(named("unknown"), "unknown".into(), "one it doesn't know is taken as it is");
+    record(&store, &start("toolu_10", "toolu_9"));
+    let (listed, _) = store.list_subagents(&"s".into()).unwrap();
+    for name in ["thread-1", "toolu_9", "toolu_10", "unknown"] {
+        let recorded = store.recorded_subagent(&"s".into(), &name.into()).unwrap();
+        assert_eq!(recorded, Subagent::named(&listed, &name.into()).map(Subagent::id), "named {name}");
+    }
+    assert_eq!(named("toolu_9"), "toolu_9".into(), "by its ID, though it's another's call");
 }
 
 #[test]

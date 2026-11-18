@@ -173,6 +173,7 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
         R::SessionFind(log::SessionFind { id, subagent, query }) => {
             world.session(&id)?;
             let needle = Needle::new(&query).map_err(|e| ApiError::new(ErrorCode::InvalidRequest, e.to_string()))?;
+            let subagent = world.subagent_named(&id, subagent.as_ref());
             let theirs: Vec<&SessionEvent> = world.placed_from(&id, subagent.as_ref(), Place::new(1)).collect();
             let places = theirs.iter().filter(|event| needle.is_in_event(&event.body)).map(|event| event.place);
             let through = theirs.last().map_or(Place::new(0), |event| event.place);
@@ -186,6 +187,7 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
         }
         R::SessionReadPlaces(log::SessionReadPlaces { id, subagent, from_place, limit, max_bytes, .. }) => {
             world.session(&id)?;
+            let subagent = world.subagent_named(&id, subagent.as_ref());
             let last_place =
                 world.placed_from(&id, subagent.as_ref(), Place::new(1)).last().map_or(Place::new(0), |e| e.place);
             let events =
@@ -197,7 +199,10 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
             subagent,
             from_place,
             subscription_id,
-        }) => subscribe_places(world, &id, subagent.as_ref(), from_place, subscription_id),
+        }) => {
+            let subagent = world.subagent_named(&id, subagent.as_ref());
+            subscribe_places(world, &id, subagent.as_ref(), from_place, subscription_id)
+        }
         R::SessionSubagents(records::SessionSubagents { id }) => {
             world.session(&id)?;
             reply(C::Subagents(records::Subagents { subagents: world.subagents_of(&id), rev: Rev::default() }))

@@ -343,6 +343,14 @@ impl World {
         self.subagents.get(id).cloned().unwrap_or_default()
     }
 
+    /// The subagent `named` names in the chat `id`, as [`Subagent::named`] finds it, or else `named` as it is, which
+    /// reads no events, as a hub takes it.
+    pub(super) fn subagent_named(&self, id: &SessionId, named: Option<&SubagentId>) -> Option<SubagentId> {
+        let named = named?;
+        let found = self.subagents.get(id).and_then(|subagents| Subagent::named(subagents, named));
+        Some(found.map_or_else(|| named.clone(), Subagent::id))
+    }
+
     fn next_time(&mut self) -> i64 {
         self.records += 1;
         START_MS + RECORD_GAP_MS * self.records
