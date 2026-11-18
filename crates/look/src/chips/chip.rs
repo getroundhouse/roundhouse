@@ -6,6 +6,7 @@ use gpui_kit::{
 };
 
 use super::ChipKind;
+use crate::baseline::LineText;
 use crate::colors::colors;
 use crate::counts::lines_changed;
 use crate::file_icons::{file_icon_at, folder_icon};
@@ -15,7 +16,10 @@ use crate::space::Space;
 use crate::typography::{Type, Typeset as _};
 
 /// How tall a chip is: as tall as a pill, so the two sit in one line.
-const HEIGHT: Pixels = px(20.);
+const HEIGHT: Pixels = crate::pills::HEIGHT;
+/// The room at a chip's start and between its parts, a chip's own rather than a space, as the owner chose from
+/// pictures: more than the smallest space, which crowded its mark and its name, and less than the next.
+const INSIDE: Pixels = px(6.);
 /// Its mark's size, a regular icon, since it sits beside body text.
 const MARK: IconSize = IconSize::Regular;
 
@@ -91,33 +95,44 @@ impl Chip {
 }
 
 impl RenderOnce for Chip {
-    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let colors = colors(cx);
         let (name, lines, mark) = (self.name(), self.lines_written(), self.mark(cx));
+        // What's after the name is in code's type, which would ride higher than the name if each were centred, so
+        // both go on body text's baseline. Worked out only for a chip that has something after its name.
+        let text = (lines.is_some() || self.changed.is_some()).then(|| LineText::new(window, cx));
         let name = div()
             .min_w_0()
             .truncate()
             .when(self.gone, |name| name.line_through().text_color(colors.text_muted))
             .child(name);
+        let name = match &text {
+            Some(text) => text.body.set(name.relative()),
+            None => name.typeset(Type::Body),
+        };
+        let lines = lines.zip(text.as_ref()).map(|(lines, text)| {
+            text.code.set(div().relative().flex_none().text_color(colors.text_muted).child(lines))
+        });
+        let changed = self
+            .changed
+            .zip(text.as_ref())
+            .map(|((added, removed), text)| lines_changed(added, removed).placed(&text.code));
         h_flex()
             .flex_none()
             .min_w_0()
             .h(HEIGHT)
-            .gap(Space::XSmall)
-            .pl(Space::XSmall)
+            .gap(INSIDE)
+            .pl(INSIDE)
             .pr(Space::Small)
             .corners(Corner::Control)
             .border_1()
             .border_color(colors.control_edge)
             .bg(colors.raised)
-            .typeset(Type::Body)
             .text_color(colors.text)
             .whitespace_nowrap()
             .child(mark)
             .child(name)
-            .when_some(lines, |chip, lines| {
-                chip.child(div().flex_none().typeset(Type::Code).text_color(colors.text_muted).child(lines))
-            })
-            .when_some(self.changed, |chip, (added, removed)| chip.child(lines_changed(added, removed)))
+            .children(lines)
+            .children(changed)
     }
 }

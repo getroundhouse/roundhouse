@@ -2,15 +2,15 @@
   "look::PillKind": {
     "Failure": {
       "x": 344,
-      "y": 143,
+      "y": 139,
       "width": 480,
-      "height": 40
+      "height": 48
     },
     "Plain": {
       "x": 318,
-      "y": 55,
+      "y": 51,
       "width": 350,
-      "height": 40
+      "height": 48
     }
   }
 }
