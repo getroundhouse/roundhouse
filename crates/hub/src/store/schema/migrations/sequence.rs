@@ -377,4 +377,7 @@ pub(in super::super) const MIGRATIONS: &[Migration] = &[
     // Typing each chat's approval mode, which `sessions.mode` holds now, each one its log names, and the
     // new-workspace dialog's, in `typed_modes`.
     Rust(super::typed_modes::typed_modes),
+    // Each session's events of each kind in the order they were recorded, so reading one kind reads only its events,
+    // in `event_kinds`.
+    Sql(super::event_kinds::IN_ORDER),
 ];

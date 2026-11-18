@@ -332,7 +332,8 @@ fn a_migrated_log_keeps_each_events_time_id_run_and_line_and_its_indexes() {
     assert!(again.duplicate, "sending again what was sent before the migration adds nothing");
     assert_eq!(again.event, SessionEvent { raw: None, ..events[0].clone() });
     let has = indexes(&schema::open_connection(&dir.path().join("hub.db")).unwrap());
-    let lost: Vec<_> = had.iter().filter(|index| !has.contains(index)).collect();
+    // By name, since a later migration can define one again, as `event_kinds` did the index of kinds.
+    let lost: Vec<_> = had.iter().filter(|(name, _)| !has.iter().any(|(kept, _)| kept == name)).collect();
     assert!(lost.is_empty(), "lost {lost:?}, and has {has:?}");
     assert!(has.iter().any(|(name, _)| name == "events_by_subagent"), "{has:?}");
 }

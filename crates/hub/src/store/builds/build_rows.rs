@@ -2,6 +2,10 @@ use super::super::{Store, StoreError, lock};
 use protocol::model::{SessionId, Workspace, WorkspaceId};
 use rusqlite::{OptionalExtension, params};
 
+/// The build named by a chat's newest `AgentStarted`.
+pub(in crate::store) const NEWEST_START: &str = "SELECT json_extract(body, '$.build') FROM events WHERE session_id = ? AND kind = 'agent_started' \
+     ORDER BY seq DESC LIMIT 1";
+
 impl Store {
     /// Records which build the workspace's worker is, `None` once it's the hub's own. Returns the workspace only when
     /// that changed it, as [`Store::set_workspace_branches`] does, so saying the same again announces nothing.
@@ -28,9 +32,7 @@ impl Store {
     /// The build the session's agent last started on, as its newest `AgentStarted` says. `None` before its first, and
     /// when that didn't say, as from a hub from before it recorded builds.
     pub fn last_agent_build(&self, id: &SessionId) -> Result<Option<String>, StoreError> {
-        let select = "SELECT json_extract(body, '$.build') FROM events \
-                      WHERE session_id = ? AND kind = 'agent_started' ORDER BY seq DESC LIMIT 1";
-        let build = lock(&self.reader).query_row(select, [id.as_str()], |row| row.get(0)).optional()?;
+        let build = lock(&self.reader).query_row(NEWEST_START, [id.as_str()], |row| row.get(0)).optional()?;
         Ok(build.flatten())
     }
 }

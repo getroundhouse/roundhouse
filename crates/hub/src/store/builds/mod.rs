@@ -5,3 +5,5 @@
 mod tests;
 
 mod build_rows;
+#[cfg(test)]
+pub(in crate::store) use build_rows::NEWEST_START;

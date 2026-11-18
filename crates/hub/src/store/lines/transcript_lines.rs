@@ -5,16 +5,36 @@ use rusqlite::types::ValueRef;
 use serde_json::Value;
 use std::collections::HashMap;
 
+/// A chat's prompts, oldest first: each one's `seq`, text, how many files it carries, and place.
+pub(in crate::store) const PROMPTS: &str = "SELECT seq, json_extract(body, '$.text'), \
+     json_array_length(body, '$.attachments'), place FROM events \
+     WHERE session_id = ? AND kind = 'user_prompt' ORDER BY seq";
+
+/// The compactions of a chat's own conversation that compacted, oldest first: each one's `seq`, place, who started it,
+/// and the tokens before and after.
+pub(in crate::store) const COMPACTIONS: &str = "SELECT seq, place, json_extract(body, '$.outcome.by'), \
+     json_extract(body, '$.outcome.before_tokens'), json_extract(body, '$.outcome.after_tokens') FROM events \
+     WHERE session_id = ? AND kind = 'agent_compacted' AND subagent IS NULL \
+     AND json_extract(body, '$.outcome.result') = 'compacted' ORDER BY seq";
+
+/// The events that took or dropped a prompt, oldest first: the prompt each names, and its own `seq`, place and kind.
+/// One kind at a time, so each is read in order from the index of kinds and the two are merged, where `kind IN` would
+/// have SQLite read every event of the session in order instead.
+pub(in crate::store) const SETTLEMENTS: &str = "\
+     SELECT json_extract(body, '$.prompt'), seq, place, kind FROM events \
+     WHERE session_id = ?1 AND kind = 'prompt_taken' AND json_extract(body, '$.prompt') IS NOT NULL \
+     UNION ALL \
+     SELECT json_extract(body, '$.prompt'), seq, place, kind FROM events \
+     WHERE session_id = ?1 AND kind = 'prompt_dropped' AND json_extract(body, '$.prompt') IS NOT NULL \
+     ORDER BY seq";
+
 impl Store {
     /// Every prompt recorded in the session, oldest first, each as one line, with where it was settled. It reads only
     /// prompts and the events that settle them, by their kind, and of each prompt only its text and how many files it
     /// carries, so a long session costs no more than its prompts' text.
     pub fn prompt_lines(&self, session_id: &SessionId) -> Result<Vec<PromptLine>, StoreError> {
         let conn = lock(&self.reader);
-        let mut statement = conn.prepare_cached(
-            "SELECT seq, json_extract(body, '$.text'), json_array_length(body, '$.attachments'), place FROM events \
-             WHERE session_id = ? AND kind = 'user_prompt' ORDER BY seq",
-        )?;
+        let mut statement = conn.prepare_cached(PROMPTS)?;
         let lines = lines_of(statement.query([session_id.as_str()])?)?;
         let settled = settled_prompts(&conn, session_id)?;
         Ok(lines
@@ -30,12 +50,7 @@ impl Store {
     /// compactions, by their kind, and of each only what its line says, so it leaves out the summary, which is long.
     pub fn compaction_lines(&self, session_id: &SessionId) -> Result<Vec<CompactionLine>, StoreError> {
         let conn = lock(&self.reader);
-        let mut statement = conn.prepare_cached(
-            "SELECT seq, place, json_extract(body, '$.outcome.by'), json_extract(body, '$.outcome.before_tokens'), \
-             json_extract(body, '$.outcome.after_tokens') FROM events \
-             WHERE session_id = ? AND kind = 'agent_compacted' AND subagent IS NULL \
-             AND json_extract(body, '$.outcome.result') = 'compacted' ORDER BY seq",
-        )?;
+        let mut statement = conn.prepare_cached(COMPACTIONS)?;
         let mut rows = statement.query([session_id.as_str()])?;
         let mut lines = Vec::new();
         while let Some(row) = rows.next()? {
@@ -71,11 +86,7 @@ impl Store {
 /// [`SettledAt`] says. It reads only those events, by their kind, and of each only which prompt it names and where it
 /// is.
 fn settled_prompts(conn: &Connection, session_id: &SessionId) -> Result<HashMap<Seq, SettledAt>, StoreError> {
-    let mut statement = conn.prepare_cached(
-        "SELECT json_extract(body, '$.prompt'), seq, place, kind FROM events \
-         WHERE session_id = ? AND kind IN ('prompt_taken', 'prompt_dropped') \
-         AND json_extract(body, '$.prompt') IS NOT NULL ORDER BY seq",
-    )?;
+    let mut statement = conn.prepare_cached(SETTLEMENTS)?;
     let mut rows = statement.query([session_id.as_str()])?;
     let mut settled = HashMap::new();
     while let Some(row) = rows.next()? {
