@@ -2,6 +2,7 @@ use super::super::Hub;
 use crate::error::internal;
 use crate::session::{Command, LiveSession};
 use crate::store::{Places, Reading, Store, StoreError};
+use protocol::client::log::ReadLimit;
 use protocol::client::{ApiError, ErrorCode, HubNotice, log, records};
 use protocol::event::{ApprovalDecision, SessionEvent};
 use protocol::find::{Found, Needle};
@@ -61,11 +62,10 @@ impl Hub {
         max_bytes: Option<u64>,
         include_raw: bool,
     ) -> Result<log::Events, ApiError> {
-        let max_bytes = max_bytes.unwrap_or(crate::server::DEFAULT_READ_BYTES);
-        let limit = limit.clamp(1, crate::server::MAX_READ_EVENTS);
+        let read = ReadLimit::asked(limit, max_bytes);
         self.blocking(move |store| {
             let last_seq = store.get_session(&id)?.session.last_seq;
-            let events = store.read_events(&id, from_seq, limit, max_bytes, include_raw)?;
+            let events = store.read_events(&id, from_seq, read.events, read.bytes, include_raw)?;
             Ok(log::Events { events, last_seq })
         })
         .await
@@ -126,8 +126,7 @@ impl Hub {
     ) -> Result<Vec<SessionEvent>, ApiError> {
         let limit = u32::try_from(through.get() - from_seq.get() + 1)
             .map_or(crate::server::PUMP_PAGE_EVENTS, |n| n.min(crate::server::PUMP_PAGE_EVENTS));
-        self.blocking(move |store| store.read_events(&id, from_seq, limit, crate::server::DEFAULT_READ_BYTES, false))
-            .await
+        self.blocking(move |store| store.read_events(&id, from_seq, limit, ReadLimit::BYTES, false)).await
     }
 
     /// Reads the agent's own events, or the subagent `subagent`'s, by place, as [`Hub::session_read`] reads every event
@@ -141,13 +140,12 @@ impl Hub {
         max_bytes: Option<u64>,
         include_raw: bool,
     ) -> Result<log::PlacedEvents, ApiError> {
-        let max_bytes = max_bytes.unwrap_or(crate::server::DEFAULT_READ_BYTES);
-        let limit = limit.clamp(1, crate::server::MAX_READ_EVENTS);
+        let read = ReadLimit::asked(limit, max_bytes);
         self.blocking(move |store| {
             store.get_session(&id)?;
             let subagent = subagent.map(|named| store.subagent_named(&id, &named)).transpose()?;
             let places = Places { subagent: subagent.as_ref(), from: from_place, through: None };
-            let (events, last_place) = store.read_places(&id, places, limit, max_bytes, include_raw)?;
+            let (events, last_place) = store.read_places(&id, places, read.events, read.bytes, include_raw)?;
             Ok(log::PlacedEvents { events, last_place })
         })
         .await
@@ -164,7 +162,7 @@ impl Hub {
         self.blocking(move |store| {
             let places = Places { subagent: subagent.as_ref(), from, through: Some(through) };
             let limit = crate::server::PUMP_PAGE_EVENTS;
-            Ok(store.read_places(&id, places, limit, crate::server::DEFAULT_READ_BYTES, false)?.0)
+            Ok(store.read_places(&id, places, limit, ReadLimit::BYTES, false)?.0)
         })
         .await
     }
