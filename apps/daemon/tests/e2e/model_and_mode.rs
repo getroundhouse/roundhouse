@@ -53,7 +53,7 @@ fn a_change_of_model_mode_and_effort_reaches_the_running_agent_and_the_next_laun
     let mut stack = Stack::start();
     let client = stack.client();
     let (workspace, session) = stack.workspace_planning(&client);
-    let defaults = agents::claude::description().defaults;
+    let defaults = agents::claude::description().defaults();
     assert_eq!(session.settings(), Settings { mode: Some(plan_mode()), ..defaults.clone() });
     client.session_prompt(&session.id, "tool:echo first > first.txt", None).unwrap();
     let approval = wait_for_approval(&client, &session.id);

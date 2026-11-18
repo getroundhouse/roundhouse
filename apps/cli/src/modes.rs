@@ -64,15 +64,10 @@ mod tests {
         let mut claims = protocol::fixtures::claude_claims();
         claims.approvals.modes = Some(modes);
         AgentDescription {
-            capabilities: Some(claims),
+            capabilities: claims,
             kind: AgentKind::Codex,
             name: "Codex".to_string(),
-            usage_heading: String::new(),
-            models: Vec::new(),
-            efforts: Vec::new(),
-            defaults: protocol::capability::settings::Settings::default(),
-            features: Vec::new(),
-            login: None,
+            ..protocol::fixtures::claude()
         }
     }
 

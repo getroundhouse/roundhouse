@@ -20,9 +20,8 @@ pub async fn spawn(
     output: mpsc::Sender<AgentOutput>,
     options: AgentOptions,
 ) -> Result<Arc<dyn AgentProcess>, AgentError> {
-    let description = described(spec.agent)?;
-    let claims = description.capabilities.as_ref().ok_or(AgentError::UnknownKind)?;
-    if !spec.start.allowed(claims) || !spec.settings.allowed(claims) {
+    let claims = described(spec.agent)?.capabilities;
+    if !spec.start.allowed(&claims) || !spec.settings.allowed(&claims) {
         return Err(AgentError::Refused("The agent does not offer these launch settings".into()));
     }
     match spec.agent {
@@ -42,24 +41,25 @@ pub(crate) struct Launch {
 }
 
 /// What `spec` runs its agent with: the model it names, which every launch does, and the mode and effort it names, or
-/// its kind's, where it leaves them out, as a one-off call does. A mode or an effort this build doesn't know is
-/// refused, since the adapter couldn't tell its agent. Which mode the kind offers the hub checked, as `spawn` does.
+/// what its kind's claims start a chat in and that model at, where it leaves them out, as a one-off call does. A mode or
+/// an effort this build doesn't know is refused, since the adapter couldn't tell its agent. Which mode the kind offers
+/// the hub checked, as `spawn` does.
 pub(crate) fn launch(spec: &AgentSpec) -> Result<Launch, AgentError> {
     launching(&described(spec.agent)?, &spec.settings)
 }
 
-/// What `kind` runs with where nothing names a setting, as a connection to its CLI that starts no conversation does.
-pub(crate) fn defaults(kind: AgentKind) -> Result<Launch, AgentError> {
-    let description = described(kind)?;
-    launching(&description, &description.defaults)
+/// What `kind` runs `model` with where nothing else names a setting, as a connection to its CLI that starts no
+/// conversation does.
+pub(crate) fn on(kind: AgentKind, model: ModelName) -> Result<Launch, AgentError> {
+    launching(&described(kind)?, &Settings { model: Some(model), ..Settings::default() })
 }
 
 fn launching(description: &AgentDescription, settings: &Settings) -> Result<Launch, AgentError> {
     let model = settings.model.clone().ok_or_else(|| AgentError::Refused("A launch names its model".into()))?;
     let mode = settings.mode.or_else(|| description.default_mode());
     let mode = mode.filter(|mode| mode.is_known()).ok_or(AgentError::UnknownMode)?;
-    let effort = settings.effort.as_ref().or(description.defaults.effort.as_ref()).ok_or(AgentError::UnknownEffort)?;
-    Ok(Launch { model, mode, effort: effort.known().ok_or(AgentError::UnknownEffort)? })
+    let effort = settings.effort.clone().unwrap_or_else(|| description.effort_for_choice(&model, None));
+    Ok(Launch { effort: effort.known().ok_or(AgentError::UnknownEffort)?, model, mode })
 }
 
 fn described(kind: AgentKind) -> Result<AgentDescription, AgentError> {
@@ -121,7 +121,7 @@ mod tests {
     fn a_launch_runs_with_its_model_and_what_it_names_or_the_kinds() {
         let opus = ModelName::named("opus");
         let claude = super::descriptions().into_iter().find(|d| d.kind == AgentKind::Claude).unwrap();
-        let modes = claude.capabilities.as_ref().unwrap().approvals.modes.clone().unwrap();
+        let modes = claude.capabilities.approvals.modes.clone().unwrap();
         let planning = modes.others[0];
         let named = Settings {
             model: Some(opus.clone()),
@@ -133,7 +133,7 @@ mod tests {
         let launch = super::launch(&launching(named.clone())).unwrap();
         assert_eq!((launch.model, launch.mode, launch.effort), (opus.clone(), planning, Effort::Max));
         let only_a_model = super::launch(&launching(Settings { model: Some(opus), ..Settings::default() })).unwrap();
-        let kinds = (modes.default, claude.defaults.effort.unwrap());
+        let kinds = (modes.default, claude.defaults().effort.unwrap());
         assert_eq!((only_a_model.mode, only_a_model.effort), kinds, "the kind's");
         let unnamed = Settings { effort: Some(Effort::Persistent), ..named.clone() };
         assert_eq!(super::launch(&launching(unnamed)).unwrap().effort, Effort::Persistent, "one it has no level for");
@@ -147,27 +147,26 @@ mod tests {
     #[test]
     fn every_kind_claims_only_what_it_can_be_held_to() {
         for description in super::descriptions() {
-            let claims = description.capabilities.unwrap_or_default();
+            let claims = description.capabilities;
             assert_eq!(claims.unmet_needs(), [], "{:?}", description.kind);
         }
     }
 
-    /// A kind claims its modes and either offers its defaults or gets its model choices from the launch, and its
-    /// defaults name a model and an effort and leave the mode to its claims.
+    /// A kind claims its modes, and either the models it offers, with the one a chat starts on at an effort it's
+    /// offered, or that it discovers them where a chat would launch.
     #[test]
-    fn a_kind_declares_its_choices_or_gets_its_catalog_at_launch() {
+    fn a_kind_claims_what_a_chat_starts_with_or_discovers_its_models() {
         for agent in super::descriptions() {
-            let model = agent.defaults.model.clone().unwrap();
-            let effort = agent.defaults.effort.clone().unwrap();
-
+            let defaults = agent.defaults();
             if agent.discovers_models() {
-                assert!(agent.models.is_empty() && agent.efforts.is_empty(), "{:?} discovers both", agent.kind);
+                assert!(agent.models().is_empty(), "{:?} discovers its models", agent.kind);
+                assert_eq!((defaults.model, defaults.effort), (None, None), "{:?} names none", agent.kind);
             } else {
+                let model = defaults.model.unwrap();
                 assert!(agent.label(&model).is_some(), "{:?}'s model", agent.kind);
-                assert!(agent.efforts_for(&model).contains(&effort), "{:?}'s effort", agent.kind);
+                assert!(agent.efforts_for(&model).contains(&defaults.effort.unwrap()), "{:?}'s effort", agent.kind);
             }
-            assert!(agent.default_mode().is_some_and(ApprovalMode::is_known), "{:?}'s mode", agent.kind);
-            assert_eq!(agent.defaults.mode, None, "{:?}'s mode is its claims'", agent.kind);
+            assert!(defaults.mode.is_some_and(ApprovalMode::is_known), "{:?}'s mode", agent.kind);
         }
     }
 }

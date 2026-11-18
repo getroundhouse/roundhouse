@@ -91,13 +91,11 @@ impl Hub {
         agent: AgentKind,
         id: &str,
     ) -> Result<Option<protocol::model::AgentSessionId>, ApiError> {
-        let claims = self.agent(agent)?.capabilities.as_ref();
-        let named = claims.map_or(agent == AgentKind::Claude, |claims| {
-            matches!(
-                claims.conversation.resume.as_ref().map(|resume| &resume.ids),
-                Some(protocol::capability::conversation::ConversationIds::Given)
-            )
-        });
+        let claims = &self.agent(agent)?.capabilities;
+        let named = matches!(
+            claims.conversation.resume.as_ref().map(|resume| &resume.ids),
+            Some(protocol::capability::conversation::ConversationIds::Given)
+        );
         Ok(named.then(|| id.into()))
     }
 

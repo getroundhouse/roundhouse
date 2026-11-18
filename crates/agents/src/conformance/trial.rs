@@ -281,11 +281,7 @@ mod tests {
             record(run, EventBody::PromptTaken { prompt: Seq::new(2) });
         }
         record(run, EventBody::AgentMode { mode: protocol::fixtures::plan_mode() });
-        let claims = if claims_modes {
-            crate::codex::description().capabilities.unwrap_or_default()
-        } else {
-            Capabilities::default()
-        };
+        let claims = if claims_modes { crate::codex::description().capabilities } else { Capabilities::default() };
         Trial { log, claims: vec![(RunId::new(1), claims)], ..Trial::default() }
     }
 

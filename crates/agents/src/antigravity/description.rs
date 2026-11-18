@@ -1,6 +1,7 @@
 use protocol::capability::settings::Effort;
+#[cfg(test)]
 use protocol::capability::settings::Settings;
-use protocol::model::{AgentDescription, AgentKind, ModelChoice, ModelName};
+use protocol::model::{AgentDescription, AgentKind, ModelName};
 
 // A compiled snapshot of `agy` 1.5.9's native catalog: the Gemini models it offers under both Google OAuth and
 // `gemini-api-key`, then the Claude models it offers only under Google OAuth. Refresh it with the CLI observations in
@@ -23,8 +24,10 @@ const MODELS: [(&str, &str, &[Effort], Effort); 6] = [
 pub(super) const TRIAL_MODEL: &str = "gemini-3.8-flash";
 
 pub(super) fn models() -> protocol::capability::settings::Models {
-    use protocol::capability::settings::{Input, ModelOffer, Models, Stage};
-    Models::Static {
+    use protocol::capability::settings::{Input, ModelCatalog, ModelOffer, Models, Stage};
+    Models::Static(ModelCatalog {
+        // Its own default, the first it lists.
+        default_model: Some(ModelName::named(MODELS[0].0)),
         offered: MODELS
             .into_iter()
             .map(|(model, label, efforts, default)| ModelOffer {
@@ -41,28 +44,15 @@ pub(super) fn models() -> protocol::capability::settings::Models {
                 stage: Stage::Current,
             })
             .collect(),
-    }
+    })
 }
 
 pub fn description() -> AgentDescription {
     AgentDescription {
         kind: AgentKind::Antigravity,
-        capabilities: Some(super::claims::claims()),
+        capabilities: super::claims::claims(),
         name: "Antigravity".into(),
         usage_heading: "Antigravity usage".into(),
-        models: models()
-            .offered()
-            .iter()
-            .cloned()
-            .map(|model| ModelChoice { model: model.model, label: model.label })
-            .collect(),
-        efforts: vec![Effort::Low, Effort::Medium, Effort::High, Effort::Xhigh],
-        defaults: Settings {
-            model: Some(ModelName::named("gemini-4-carbon")),
-            effort: Some(Effort::Medium),
-            ..Settings::default()
-        },
-        features: Vec::new(),
         // The native CLI owns and refreshes this machine's login. It is never read or copied by Roundhouse.
         login: None,
     }
@@ -75,8 +65,8 @@ mod tests {
     #[test]
     fn the_catalog_keeps_each_models_efforts_and_defaults() {
         let agent = description();
-        assert_eq!(agent.defaults.model, Some(ModelName::named("gemini-4-carbon")));
-        assert_eq!(agent.defaults.effort, Some(Effort::Medium));
+        assert_eq!(agent.defaults().model, Some(ModelName::named("gemini-4-carbon")));
+        assert_eq!(agent.defaults().effort, Some(Effort::Medium));
         let hydrogen = ModelName::named("gemini-4-hydrogen");
         let carbon = ModelName::named("gemini-4-carbon");
         let opus = ModelName::named("claude-opus-5-5");

@@ -64,7 +64,7 @@ impl Harness {
         seed(room.path());
         let bin = PROGRAM.path();
         std::fs::write(room.path().join("native-script.json"), serde_json::to_vec(rules).unwrap()).unwrap();
-        let mut settings = crate::antigravity::description().defaults;
+        let mut settings = crate::antigravity::description().defaults();
         settings.mode = Some(mode);
         if let Some(model) = model {
             settings.model = Some(model);

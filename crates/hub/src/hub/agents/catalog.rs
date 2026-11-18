@@ -1,7 +1,7 @@
 use super::super::Hub;
 use protocol::capability::settings::Settings;
 use protocol::client::{ApiError, ErrorCode};
-use protocol::model::{AgentDescription, AgentFeature, AgentKind};
+use protocol::model::{AgentDescription, AgentKind};
 
 impl Hub {
     /// Every kind's description, which doesn't change while the hub runs.
@@ -30,7 +30,7 @@ impl Hub {
 
     /// Refuses a compaction of an agent that doesn't compact when asked.
     pub(in super::super) fn compacts(&self, kind: AgentKind) -> Result<(), ApiError> {
-        if self.agent(kind)?.has(AgentFeature::Compacts) {
+        if self.agent(kind)?.compacts() {
             Ok(())
         } else {
             Err(ApiError::new(ErrorCode::InvalidRequest, "this agent doesn't compact when asked"))

@@ -3,7 +3,7 @@
 
 use gpui_kit::{AnyElement, Context};
 use protocol::client::admin::ModelTarget;
-use protocol::model::{AgentDescription, AgentFeature, AgentKind};
+use protocol::model::{AgentDescription, AgentKind};
 
 use super::WorkspacePane;
 
@@ -57,7 +57,7 @@ impl WorkspacePane {
     /// One the hub doesn't describe isn't asked, since it may not.
     pub(super) fn compacts(&self) -> bool {
         self.session().and_then(|s| s.agent_capabilities.as_ref()).map_or_else(
-            || self.agent().is_some_and(|agent| agent.has(AgentFeature::Compacts)),
+            || self.agent().is_some_and(|agent| agent.compacts()),
             |run| run.claims.context.compaction.is_some(),
         )
     }

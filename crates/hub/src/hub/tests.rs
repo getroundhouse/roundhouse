@@ -8,9 +8,8 @@ use protocol::capability::Capabilities;
 use protocol::capability::settings::Effort;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::model::{
-    AgentDescription, AgentFeature, AgentKind, Apart, Branch, BranchName, Branches, Checks, CommitId, Head, Local,
-    LoginDescription, MergeState, ModelChoice, ModelName, PrState, PullRequest, RemoteName, RepoUrl, Review, RunId,
-    SessionId, Upstream,
+    AgentDescription, AgentKind, Apart, Branch, BranchName, Branches, Checks, CommitId, Head, Local, LoginDescription,
+    MergeState, PrState, PullRequest, RemoteName, RepoUrl, Review, RunId, SessionId, Upstream,
 };
 use protocol::tail::{DeltaChange, StreamDelta, Tail};
 use providers::Provider;
@@ -28,21 +27,13 @@ use crate::worker_link::WorkerLink;
 
 /// Claude as a hub's tests describe it, which a chat nobody has chosen for runs on Sonnet at High, so a test can tell
 /// what the description gave a chat from what anything else would have, and whose token lasts [`A_TOKEN_LASTS_MS`].
-/// Its claims say what its lists do: full access and plan mode, an effort, and compacting when asked.
+/// Its claims say the rest: Sonnet at Low or High, full access and plan mode, and compacting when asked.
 pub(super) fn described() -> AgentDescription {
     AgentDescription {
-        capabilities: Some(claimed()),
+        capabilities: claimed(),
         kind: AgentKind::Claude,
         name: "Claude".to_string(),
         usage_heading: "Claude usage".to_string(),
-        models: vec![ModelChoice { model: ModelName::named("sonnet"), label: "Sonnet".to_string() }],
-        efforts: vec![Effort::Low, Effort::High],
-        defaults: protocol::capability::settings::Settings {
-            model: Some(ModelName::named("sonnet")),
-            effort: Some(Effort::High),
-            ..Default::default()
-        },
-        features: vec![AgentFeature::Compacts],
         login: Some(LoginDescription {
             made_with: "claude make-a-token".to_string(),
             lasts_ms: Some(A_TOKEN_LASTS_MS),
@@ -56,9 +47,11 @@ pub(crate) fn claimed() -> Capabilities {
     use protocol::capability::{Claimed, context, settings};
     let modes = protocol::fixtures::modes();
     let compaction = context::Compaction { keeping: context::Keeping::Read };
+    let sonnet = protocol::fixtures::offer("sonnet", "Sonnet", &[Effort::Low, Effort::High], Effort::High);
+    let offered = settings::Models::Static(settings::ModelCatalog { offered: vec![sonnet], default_model: None });
     Capabilities {
         approvals: approvals::Claims { modes: Some(modes), ..approvals::Claims::default() },
-        settings: settings::Claims { effort: Some(Claimed {}), ..settings::Claims::default() },
+        settings: settings::Claims { models: Some(offered), effort: Some(Claimed {}), ..settings::Claims::default() },
         context: context::Claims { compaction: Some(compaction), ..context::Claims::default() },
         ..Capabilities::default()
     }

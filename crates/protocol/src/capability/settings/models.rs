@@ -9,7 +9,16 @@ use crate::model::ModelName;
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq, Eq)]
 pub struct ModelCatalog {
     pub offered: Vec<ModelOffer>,
+    /// The one a chat starts on, or `None` for the first offered.
     pub default_model: Option<ModelName>,
+}
+
+impl ModelCatalog {
+    /// The model a chat starts on: the default, if it's offered, or else the first offered.
+    pub fn initial(&self) -> Option<&ModelOffer> {
+        let default = self.default_model.as_ref().and_then(|id| self.offered.iter().find(|offer| offer.model == *id));
+        default.or_else(|| self.offered.first())
+    }
 }
 
 /// The adapter's level, with its display name when different from its usual label.

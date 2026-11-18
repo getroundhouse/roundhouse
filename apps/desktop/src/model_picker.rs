@@ -46,7 +46,7 @@ impl Offered {
                     .collect(),
             };
         };
-        let models = agent.models.iter().map(|choice| (choice.model.clone(), choice.label.clone().into())).collect();
+        let models = agent.models().iter().map(|offer| (offer.model.clone(), offer.label.clone().into())).collect();
         Offered { models, efforts: agent.effort_offers(model) }
     }
 }
@@ -148,27 +148,22 @@ fn picks(row: look::MenuRow, picked: Picked, on_pick: &OnPick) -> look::MenuRow 
 
 #[cfg(test)]
 mod tests {
-    use protocol::capability::settings::Settings;
-    use protocol::model::{AgentKind, ModelChoice};
+    use protocol::capability::settings::{ModelCatalog, Models};
+    use protocol::fixtures::offer;
 
     use super::*;
 
     const OPUS: ModelName = ModelName::named("opus");
 
-    /// An agent offered Opus and Fable, at two levels this build can name and one it can't.
+    /// An agent offered Opus, at two levels this build can name and one it can't, and Fable.
     fn agent() -> AgentDescription {
-        let offered = |model, label: &str| ModelChoice { model, label: label.to_string() };
-        AgentDescription {
-            capabilities: None,
-            kind: AgentKind::Claude,
-            name: "Claude Code".to_string(),
-            usage_heading: "Claude usage".to_string(),
-            models: vec![offered(OPUS, "Opus"), offered(ModelName::named("fable"), "Fable")],
-            efforts: vec![Effort::High, Effort::Unknown, Effort::Max],
-            defaults: Settings { model: Some(OPUS), effort: Some(Effort::High), ..Settings::default() },
-            features: Vec::new(),
-            login: None,
-        }
+        let mut agent = protocol::fixtures::claude();
+        let offered = vec![
+            offer("opus", "Opus", &[Effort::High, Effort::Unknown, Effort::Max], Effort::High),
+            offer("fable", "Fable", &[Effort::High], Effort::High),
+        ];
+        agent.capabilities.settings.models = Some(Models::Static(ModelCatalog { offered, default_model: Some(OPUS) }));
+        agent
     }
 
     #[test]

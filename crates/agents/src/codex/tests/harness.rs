@@ -27,8 +27,11 @@ impl Harness {
         let room = tempfile::tempdir().unwrap();
         let bin = PROGRAM.path();
         std::fs::write(room.path().join("native-script.json"), serde_json::to_vec(rules).unwrap()).unwrap();
-        let mut settings = crate::codex::description().defaults;
-        settings.model = Some(protocol::model::ModelName::named("gpt-6-luna"));
+        let settings = protocol::capability::settings::Settings {
+            model: Some(protocol::model::ModelName::named("gpt-6-luna")),
+            effort: Some(protocol::capability::settings::Effort::Low),
+            ..crate::codex::description().defaults()
+        };
         let spec = AgentSpec {
             session_id: "test".into(),
             run: RunId::new(1),

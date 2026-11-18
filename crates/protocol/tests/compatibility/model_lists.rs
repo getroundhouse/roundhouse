@@ -75,5 +75,7 @@ fn a_list_of_records_reads_without_them_and_a_newer_state_reads_as_unknown() {
 #[test]
 fn an_agents_models_say_whether_theyre_discovered_in_a_form_a_client_from_before_reads() {
     keeps_its_form(&Models::Discoverable, r#"{"discoverable":true,"offered":[]}"#);
-    keeps_its_form(&Models::Static { offered: Vec::new() }, r#"{"offered":[]}"#);
+    keeps_its_form(&Models::Static(ModelCatalog::default()), r#"{"offered":[]}"#);
+    let starting = ModelCatalog { offered: Vec::new(), default_model: Some(ModelName::named("opus")) };
+    keeps_its_form(&Models::Static(starting), r#"{"offered":[],"default_model":"opus"}"#);
 }
