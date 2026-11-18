@@ -1,11 +1,13 @@
 //! How few of a long session's rows a frame draws: the ones that show, and a few more whose heights are out of date.
 
+use client_core::fake_hub::events::{taken, text, user_prompt};
 use desktop::workspace_pane::WorkspacePane;
 use gpui_kit::test::TestWindowExt as _;
 use gpui_kit::{AppContext as _, ScrollDelta, TestAppContext, point, px};
+use protocol::model::{Seq, SessionStatus};
 
 use super::{A_FRAME, long_reply, open_on_a_chat_saying, session_saying, wait_for_the_list_to_settle};
-use crate::support::{Stack, Ui};
+use crate::support::{Stack, Ui, one_chat, open_on_the_chat};
 
 /// A change of the chat's width puts every row's height out of date. Only the rows in the window, and a few to a
 /// frame of those out of sight, are measured again, where every row once was in that one frame.
@@ -110,4 +112,32 @@ fn a_row_the_agent_adds_puts_no_other_rows_height_out_of_date(cx: &mut TestAppCo
 
     // Each new row is drawn as it comes, since the transcript keeps to the latest row.
     assert_eq!(to_measure(&ui), 0, "rows put out of date by what the agent added");
+}
+
+/// A working chat's marks move on every frame of the display, and they're painted over its transcript, which is
+/// cached, so those frames draw none of its rows. It's drawn again as the time so far goes on, every tenth of a second.
+#[gpui_kit::test]
+fn a_working_chats_marks_move_without_drawing_its_rows_again(cx: &mut TestAppContext) {
+    /// Frames of the display, over which the time so far goes on twice.
+    const FRAMES: u32 = 12;
+    let events = vec![user_prompt("Keep the ledger."), taken(Seq::new(1)), text("msg-0", "Reading the ledger.")];
+    let (mut world, chat) = one_chat(SessionStatus::Running, events);
+    world.working_for(&chat, 31_600);
+    let (_fake, mut ui) = open_on_the_chat(cx, world, &chat);
+    let transcript = ui.transcript().unwrap();
+    let to_measure = |ui: &Ui<'_>| ui.cx.read_entity(&transcript, |t, _| t.list().rows_to_measure());
+    ui.wait("every row measured", |ui| to_measure(ui) == 0);
+    ui.allow_motion();
+    ui.play(A_FRAME);
+    let drawn = |ui: &Ui<'_>| ui.cx.read_entity(&transcript, |t, _| t.list().rows_drawn());
+
+    let mut drawing_rows = 0;
+    for _ in 0..FRAMES {
+        let before = drawn(&ui);
+        assert!(ui.play(A_FRAME) > 0, "the marks hold still");
+        drawing_rows += u32::from(drawn(&ui) > before);
+    }
+
+    let ticks = (A_FRAME * FRAMES).as_millis().div_ceil(100);
+    assert!(drawing_rows <= u32::try_from(ticks).unwrap(), "{drawing_rows} of {FRAMES} frames drew rows");
 }
