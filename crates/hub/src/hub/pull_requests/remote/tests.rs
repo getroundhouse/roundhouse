@@ -3,7 +3,8 @@ use crate::github::{Answer, Script, StandIn};
 use crate::hub::tests::hub_reading_github;
 use protocol::client::github_accounts::GithubAccountConnect;
 use protocol::fixtures::{observed_pull_request, pull_request_wait};
-use protocol::model::{GithubToken, Wait};
+use protocol::model::{GithubToken, PullRequestNumber, Wait};
+use std::time::Duration;
 
 fn wait(id: &str, numbers: &[u64]) -> Wait {
     let mut wait = pull_request_wait(id);
@@ -16,37 +17,18 @@ fn wait(id: &str, numbers: &[u64]) -> Wait {
     wait
 }
 
+/// `c` joins `a` and `b` through what each shares with it, and `d` shares nothing, so it's asked apart, as is `e`, in
+/// another workspace.
 #[test]
-fn overlapping_scopes_coalesce_transitively_and_unrelated_waits_have_separate_backoff() {
-    let groups = groups(vec![wait("a", &[1, 2]), wait("b", &[3]), wait("c", &[2, 3]), wait("d", &[9])]);
-    assert_eq!(groups.len(), 2);
-    let now = Instant::now();
-    let mut schedules = HashMap::new();
-    let failing = groups.keys().find(|key| key.2.len() == 3).unwrap().clone();
-    schedules.insert(failing, RemoteSchedule { next: now + BACKOFF_MAX, failures: 4 });
+fn overlapping_scopes_coalesce_transitively_and_unrelated_ones_stay_apart() {
+    let elsewhere = Wait { workspace_id: "v".into(), ..wait("e", &[1]) };
+    let mut waited = waited(vec![wait("a", &[1, 2]), wait("b", &[3]), wait("c", &[2, 3]), wait("d", &[9]), elsewhere]);
 
-    let due = due(groups, &schedules, now);
-
-    let [(_, group)] = &due[..] else { panic!("one due") };
-    assert_eq!(group.selection.numbers(), [PullRequestNumber::try_from(9).unwrap()]);
-}
-
-#[test]
-fn the_oldest_due_group_precedes_an_earlier_repository_key() {
-    let groups = groups(vec![wait("a", &[1]), wait("b", &[9])]);
-    let now = Instant::now();
-    let schedules = groups
-        .keys()
-        .map(|key| {
-            let overdue = if key.2[0].get() == 9 { Duration::from_secs(30) } else { Duration::from_secs(1) };
-            (key.clone(), RemoteSchedule { next: now.checked_sub(overdue).unwrap(), failures: 0 })
-        })
-        .collect();
-
-    let due = due(groups, &schedules, now);
-
-    let numbers: Vec<_> = due.iter().map(|(_, group)| group.selection.numbers()[0].get()).collect();
-    assert_eq!(numbers, [9, 1], "the one due longest first");
+    let numbers = |waited: &Waited| waited.selection.numbers().iter().map(|n| n.get()).collect::<Vec<_>>();
+    let mut ws: Vec<_> = waited.remove(&"w".into()).unwrap().iter().map(numbers).collect();
+    ws.sort();
+    assert_eq!(ws, [vec![1, 2, 3], vec![9]]);
+    assert_eq!(waited.remove(&"v".into()).unwrap().iter().map(numbers).collect::<Vec<_>>(), [vec![1]]);
 }
 
 /// What `asked` says a stand-in for GitHub was asked to read with, a token for each query.

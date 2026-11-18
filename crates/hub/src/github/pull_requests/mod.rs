@@ -11,7 +11,7 @@ mod parse;
 mod query;
 mod reading;
 mod rounds;
-pub(crate) use rounds::{Leaving, first_queries};
+pub(crate) use rounds::Leaving;
 mod said;
 pub(crate) use said::RateLimit;
 #[cfg(test)]

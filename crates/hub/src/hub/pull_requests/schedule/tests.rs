@@ -62,6 +62,21 @@ fn one_an_agent_waits_on_is_due_at_the_soonest_however_long_it_has_come_back_the
     assert_eq!(due(&workspaces, &schedules, &waited, now).first().map(|w| w.id.as_str()), Some("waited"));
 }
 
+/// One an agent waits on that GitHub couldn't be reached for waits longer each time, as any does.
+#[test]
+fn one_an_agent_waits_on_that_failed_waits_longer_each_time() {
+    let now = Instant::now();
+    let workspaces = [workspace("waited", WorkspaceStatus::Ready, Some(PrState::Open))];
+    let read_at = now.checked_sub(SOONEST).unwrap();
+    let failed = Schedule::after(Some(Schedule::starting(read_at)), read_at, Asked::InTurn, Went::Failed);
+    let schedules = HashMap::from([(WorkspaceId::from("waited"), failed)]);
+    let waited = HashSet::from([WorkspaceId::from("waited")]);
+
+    assert_eq!(due(&workspaces, &schedules, &waited, now).first(), None, "not yet");
+    let later = read_at + SOONEST * 2;
+    assert_eq!(due(&workspaces, &schedules, &waited, later).first().map(|w| w.id.as_str()), Some("waited"));
+}
+
 /// As when a read records it merged between a wait's start reading it and the wait being kept, so the read didn't end
 /// it.
 #[test]

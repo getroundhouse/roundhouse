@@ -13,7 +13,6 @@ impl Hub {
         let read = self.read_remote_for_agent(id, asked.pull_requests);
         let (snapshot, _held) = tokio::time::timeout(START_WITHIN, read).await.map_err(|_| too_long())??;
         self.observe_remote_waits(id, &snapshot).await;
-        self.remote_was_read(id, &snapshot);
         Ok(snapshot)
     }
 
@@ -70,7 +69,6 @@ impl Hub {
         };
         remote_rules::judge(&mut wait, at_ms);
         let wait = self.blocking(move |store| store.start_wait(&wait, Seen::default())).await?;
-        self.remote_was_read(id, &snapshot);
         self.announce_chat_of(&wait).await;
         self.with_pull_request(wait).await
     }
@@ -94,15 +92,18 @@ impl Hub {
         }
     }
 
+    /// Records on the workspace's waits that what they watch in `repository`, or in any repository, couldn't be read,
+    /// as `error` says, of `affected`, or of every pull request when that's empty. One that may work later leaves them
+    /// waiting, and one that says they're gone ends them.
     pub(in crate::hub) async fn remote_waits_failed(
         self: &Arc<Self>,
         id: &WorkspaceId,
-        repository: &GitHubRepository,
+        repository: Option<&GitHubRepository>,
         error: &ApiError,
         affected: &[PullRequestNumber],
     ) {
         let affected = affected.to_vec();
-        let (id, repository, error, at_ms) = (id.clone(), repository.clone(), error.clone(), now_ms());
+        let (id, repository, error, at_ms) = (id.clone(), repository.cloned(), error.clone(), now_ms());
         let changed = self
             .blocking(move |store| {
                 store.revise_remote_waits(Some(&id), |wait| {
@@ -111,7 +112,7 @@ impl Hub {
                         return;
                     }
                     let Some(watch) = &mut wait.watch else { return };
-                    if watch.snapshot.repository != repository {
+                    if repository.as_ref().is_some_and(|repository| watch.snapshot.repository != *repository) {
                         return;
                     }
                     let ours: Vec<_> =

@@ -270,3 +270,56 @@ async fn a_pull_request_whose_branch_github_deleted_as_it_merged_is_still_the_wo
 
     assert_eq!(merged.map(|pr| (pr.number, pr.state)), Some((7, PrState::Merged)));
 }
+
+/// An agent's wait on `numbers` of `w`'s repository until they've merged, started as the tool starts one.
+async fn waiting_until_merged(hub: &std::sync::Arc<Hub>, numbers: &[u64]) -> protocol::model::WaitId {
+    use protocol::worker::{PullRequestWaitUntil, StartPullRequestWait};
+    let numbers: Vec<_> = numbers.iter().map(|n| protocol::model::PullRequestNumber::try_from(*n).unwrap()).collect();
+    let asked = StartPullRequestWait {
+        pull_requests: protocol::model::PullRequestSelection::try_from(numbers).unwrap(),
+        until: PullRequestWaitUntil::Merged,
+        timeout_seconds: None,
+        call: Some("call".into()),
+    };
+    let started = hub.start_remote_wait(&"w".into(), "s".into(), asked).await.unwrap();
+    assert_eq!(started.wait.ended, None);
+    started.wait.id
+}
+
+fn ended(hub: &Hub, wait: &protocol::model::WaitId) -> Option<protocol::model::WaitEnd> {
+    hub.store.wait(wait).unwrap().ended.map(|ended| ended.how)
+}
+
+/// The read of `w`'s own #7, for its bar, is the read of what the wait on it watches, so it ends as the bar shows #7
+/// merged, rather than at a read of its own minutes later.
+#[tokio::test]
+async fn a_wait_on_the_workspaces_own_pull_request_ends_as_its_read_finds_it_merged() {
+    let dir = tempfile::tempdir().unwrap();
+    let (hub, pull_requests, github) = hub_on_github(dir.path()).await;
+    pull_requests.set(7, PullRequestState::Open);
+    let wait = waiting_until_merged(&hub, &[7]).await;
+    pull_requests.set(7, PullRequestState::Merged);
+    let before = queries(&github).len();
+
+    let merged = hub.workspace_pull_request("w".into()).await.unwrap();
+
+    assert_eq!(merged.map(|pr| pr.state), Some(PrState::Merged));
+    assert_eq!(ended(&hub, &wait), Some(protocol::model::WaitEnd::Merged));
+    assert_eq!(queries(&github).len() - before, 3, "which branches have which, then one read of #7 for both");
+}
+
+/// A wait on #6, below `w`'s own #7 in its stack and merged already, as well as #7: the read of #7 for the bar takes in
+/// #6 too, so the wait can tell that #6 merged rather than left the stack, and ends with the bar.
+#[tokio::test]
+async fn a_wait_on_a_stack_under_the_workspaces_pull_request_ends_with_its_read() {
+    let dir = tempfile::tempdir().unwrap();
+    let (hub, pull_requests, _github) = hub_on_github(dir.path()).await;
+    pull_requests.set_from(6, PullRequestState::Merged, "lower");
+    pull_requests.set(7, PullRequestState::Open);
+    let wait = waiting_until_merged(&hub, &[6, 7]).await;
+    pull_requests.set(7, PullRequestState::Merged);
+
+    hub.workspace_pull_request("w".into()).await.unwrap();
+
+    assert_eq!(ended(&hub, &wait), Some(protocol::model::WaitEnd::Merged));
+}

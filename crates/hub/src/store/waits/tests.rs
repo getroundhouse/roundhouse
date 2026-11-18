@@ -55,6 +55,8 @@ fn a_wait_is_kept_as_it_was_asked_for_and_ends_once() {
     assert_eq!(again, None, "it ended once");
     assert_eq!(how(&store, "a"), Some(merged));
     assert!(store.workspaces_waited_on().unwrap().is_empty());
+    store.start_wait(&protocol::fixtures::pull_request_wait("b"), Seen::default()).unwrap();
+    assert_eq!(store.workspaces_waited_on().unwrap(), HashSet::from(["w".into()]), "one on explicit pull requests too");
 }
 
 #[test]

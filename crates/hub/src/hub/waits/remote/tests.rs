@@ -66,11 +66,12 @@ async fn outages_keep_the_last_snapshot_and_access_loss_ends_with_it() {
         .unwrap();
     let repository = wait.watch.as_ref().unwrap().snapshot.repository.clone();
 
-    hub.remote_waits_failed(&"w".into(), &repository, &ApiError::new(ErrorCode::Worker, "offline"), &[]).await;
+    hub.remote_waits_failed(&"w".into(), Some(&repository), &ApiError::new(ErrorCode::Worker, "offline"), &[]).await;
     let pending = hub.store.wait(&wait.id).unwrap();
     assert_eq!(pending.ended, None);
     assert_eq!(pending.watch.as_ref().unwrap().snapshot, wait.watch.as_ref().unwrap().snapshot);
-    hub.remote_waits_failed(&"w".into(), &repository, &ApiError::new(ErrorCode::Unavailable, "access lost"), &[]).await;
+    hub.remote_waits_failed(&"w".into(), Some(&repository), &ApiError::new(ErrorCode::Unavailable, "access lost"), &[])
+        .await;
 
     let ended = hub.store.wait(&wait.id).unwrap();
     assert_eq!(ended.ended.unwrap().how, WaitEnd::Unavailable);
@@ -115,7 +116,7 @@ async fn a_shared_reads_pr_access_failure_does_not_end_an_unrelated_wait() {
 
     hub.remote_waits_failed(
         &"w".into(),
-        &repository,
+        Some(&repository),
         &ApiError::new(ErrorCode::Unavailable, "PR inaccessible"),
         &[PullRequestNumber::try_from(7).unwrap()],
     )

@@ -94,8 +94,6 @@ pub(crate) struct Hub {
     /// The reads of workspaces' own pull requests nobody asked for that are running now, by whose token each reads
     /// as.
     pub(super) own_reads: Jobs<pull_requests::ReadsAs>,
-    /// The reads of the pull requests waits watch that are running now, by whose token each reads as.
-    pub(super) wait_reads: Jobs<pull_requests::ReadsAs>,
     /// The sign-ins with GitHub the hub is asking GitHub after, a job for each, as `Hub::wait_for_sign_in` says.
     pub(super) sign_ins: Jobs<GithubSignInId>,
     /// Whether the hub has stopped checking its GitHub logins, as it does as it stops, so no check, and no renewal,
@@ -200,7 +198,6 @@ impl Hub {
             model_lists: ModelLists::default(),
             pull_requests: pull_requests::Reading::new(),
             own_reads: Jobs::new(),
-            wait_reads: Jobs::new(),
             sign_ins: Jobs::new(),
             github_checks_stopped: watch::Sender::new(false),
             awake: Arc::default(),
@@ -240,7 +237,6 @@ impl Hub {
     /// lists of models aren't kept.
     pub(crate) fn stop_jobs(&self) {
         self.own_reads.stop();
-        self.wait_reads.stop();
         self.sign_ins.stop();
         self.model_lists.stop();
     }
