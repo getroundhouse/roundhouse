@@ -140,6 +140,7 @@ pub async fn run(config: HubConfig) -> Result<(), HubError> {
     // Before carrying on with the agents an earlier hub left, since what they asked meanwhile comes in as soon as
     // their workers are connected again, and is answered as the settings say.
     hub.carry_out(&settings);
+    hub.call_off_unwatched_waits().await;
     hub.carry_on(left_at_work).await;
     hub.tidy_draft_files().await;
     let awake = hub.keep_awake();

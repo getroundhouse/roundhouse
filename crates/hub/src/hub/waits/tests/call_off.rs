@@ -11,7 +11,7 @@ fn kept_across_a_restart(hub: &Hub, wait: &Wait) -> Session {
 
 /// The same, with its queue held or not as `held` says, or as it was.
 fn kept_with_its_queue(hub: &Hub, wait: &Wait, held: Option<bool>) -> Session {
-    hub.store.start_wait(wait, Seen::default()).unwrap();
+    hub.store.start_wait(wait).unwrap();
     let task = AgentTask { id: "t".into(), description: None, kind: TaskKind::Wait, call: None, subagent: None };
     let listed = EventBody::AgentTasks { tasks: vec![task.clone()], stopped: vec![] };
     let status = StatusChange { background_tasks: Some(vec![task]), ..SessionStatus::Background.into() };
@@ -31,7 +31,7 @@ fn at_rest(session: &Session) -> (SessionStatus, usize) {
 async fn calling_off_the_wait_of_a_chat_with_no_agent_running_leaves_it_idle() {
     let dir = tempfile::tempdir().unwrap();
     let hub = hub_with_worktree(dir.path());
-    kept_across_a_restart(&hub, &wait(WaitUntil::Done));
+    kept_across_a_restart(&hub, &wait());
 
     let called_off = hub.session_call_off_wait("s".into(), "a".into()).await.unwrap();
     let again = hub.session_call_off_wait("s".into(), "a".into()).await.unwrap();
@@ -47,7 +47,7 @@ async fn calling_off_the_wait_of_a_chat_with_no_agent_running_leaves_it_idle() {
 async fn calling_off_a_wait_that_has_ended_still_takes_it_off_the_list() {
     let dir = tempfile::tempdir().unwrap();
     let hub = hub_with_worktree(dir.path());
-    kept_across_a_restart(&hub, &wait(WaitUntil::Done));
+    kept_across_a_restart(&hub, &wait());
     hub.store.end_wait(&"a".into(), WaitEnded { at_ms: 2, how: WaitEnd::Merged }).unwrap();
 
     let called_off = hub.session_call_off_wait("s".into(), "a".into()).await.unwrap();
@@ -62,7 +62,7 @@ async fn calling_off_a_wait_that_has_ended_still_takes_it_off_the_list() {
 async fn calling_off_a_wait_that_isnt_open_leaves_the_one_that_is() {
     let dir = tempfile::tempdir().unwrap();
     let hub = hub_with_worktree(dir.path());
-    kept_across_a_restart(&hub, &wait(WaitUntil::Done));
+    kept_across_a_restart(&hub, &wait());
 
     let called_off = hub.session_call_off_wait("s".into(), "an older one".into()).await.unwrap();
 
@@ -79,7 +79,7 @@ async fn a_wait_that_ends_with_nobody_to_hear_until_the_next_prompt_comes_off_th
     let (hub, pull_requests, _github) = hub_on_github(dir.path()).await;
     pull_requests.set(7, PullRequestState::Open);
     taking_worker(&hub);
-    kept_with_its_queue(&hub, &wait(WaitUntil::Done), Some(true));
+    kept_with_its_queue(&hub, &wait(), Some(true));
     let session = hub.live_session(&"s".into()).await.unwrap();
 
     pull_requests.set(7, PullRequestState::Merged);
@@ -99,7 +99,7 @@ async fn a_chat_with_no_agent_running_goes_idle_as_closing_it_or_archiving_its_w
         let dir = tempfile::tempdir().unwrap();
         let hub = hub_with_worktree(dir.path());
         taking_worker(&hub);
-        kept_across_a_restart(&hub, &wait(WaitUntil::Done));
+        kept_across_a_restart(&hub, &wait());
         hub.live_session(&"s".into()).await.unwrap();
 
         if archiving {

@@ -3,8 +3,8 @@ use crate::worker_link::WorkerLink;
 use protocol::client::{ApiError, ErrorCode, error_chain};
 use protocol::model::{SessionId, WorkspaceId};
 use protocol::worker::{
-    AskReply, CancelWait, CreateWorktree, PullRequestAnswer, ReadWait, RemoveWorktree, ServeTools, StartWait,
-    ToolsServing, ToolsToken, WorkerAsk,
+    AskReply, CancelWait, CreateWorktree, PullRequestAnswer, ReadWait, RemoveWorktree, ServeTools, ToolsServing,
+    ToolsToken, WorkerAsk,
 };
 use std::sync::Arc;
 use std::time::Duration;
@@ -82,9 +82,6 @@ impl Hub {
             }
             WorkerAsk::StartPullRequestWait(asked) => {
                 self.start_remote_wait(workspace_id, session_id, asked).await.map(AskReply::Wait)
-            }
-            WorkerAsk::StartWait(StartWait { until, call }) => {
-                self.start_wait(workspace_id, session_id, until, call).await.map(AskReply::Wait)
             }
             WorkerAsk::Wait(ReadWait { wait }) => self.wait_of(&session_id, wait).await.map(AskReply::Wait),
             WorkerAsk::CancelWait(CancelWait { wait }) => self.cancel_wait(&session_id, wait).await.map(AskReply::Wait),

@@ -5,7 +5,7 @@ use protocol::model::{Wait, WaitEnd, WaitEnded, WaitUntil};
 use protocol::worker::Request as _;
 use protocol::worker::{
     AskAnswer, AskId, AskOutcome, AskReply, CancelWait, PrepareWorkspace, PullRequestAnswer, ReadWait, RepoSource,
-    RestoreWorkspace, ServeTools, StartWait, ToWorker, ToolsServing, WaitAnswer, WorkerAsk, WorkerCall, WorkerFrame,
+    RestoreWorkspace, ServeTools, ToWorker, ToolsServing, WaitAnswer, WorkerAsk, WorkerCall, WorkerFrame,
     WorkerOutcome, WorkerRequest, WorkerResponse, WorkspaceReady, WorktreeThere, WorktreeThereReply,
 };
 
@@ -69,14 +69,10 @@ fn what_a_worker_asks_of_a_wait_and_its_hubs_answer_keep_their_form() {
         assert_eq!(serde_json::to_string(&ask).unwrap(), wire);
         assert_eq!(serde_json::from_str::<WorkerAsk>(wire).unwrap(), ask);
     };
-    keeps_its_form(
-        WorkerAsk::StartWait(StartWait { until: WaitUntil::Checks, call: Some("toolu_1".into()) }),
-        r#"{"method":"start_wait","until":"checks","call":"toolu_1"}"#,
-    );
-    let until_done = WorkerAsk::StartWait(StartWait { until: WaitUntil::Done, call: None });
-    keeps_its_form(until_done.clone(), r#"{"method":"start_wait","until":"done"}"#);
-    let unsaid: WorkerAsk = serde_json::from_str(r#"{"method":"start_wait"}"#).unwrap();
-    assert_eq!(unsaid, until_done, "until the pull request is done");
+    // An older worker's wait on the workspace's own pull request, which a hub of this build refuses as unsupported.
+    let older: WorkerAsk =
+        serde_json::from_str(r#"{"method":"start_wait","until":"checks","call":"toolu_1"}"#).unwrap();
+    assert_eq!(older, WorkerAsk::Unknown);
     keeps_its_form(WorkerAsk::Wait(ReadWait { wait: "w".into() }), r#"{"method":"wait","wait":"w"}"#);
     keeps_its_form(WorkerAsk::CancelWait(CancelWait { wait: "w".into() }), r#"{"method":"cancel_wait","wait":"w"}"#);
 

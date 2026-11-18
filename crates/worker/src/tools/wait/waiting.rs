@@ -3,41 +3,10 @@ use super::super::pull_request;
 use crate::asks::Asks;
 use jiff::Timestamp;
 use protocol::client::{ApiError, ErrorCode};
-use protocol::model::{PullRequest, SessionId, Standing, ToolUseId, Wait, WaitEnd, WaitUntil};
-use protocol::worker::{CancelWait, ReadWait, StartWait, WaitAnswer};
-use serde_json::{Map, Value, json};
+use protocol::model::{PullRequest, SessionId, Standing, Wait, WaitEnd};
+use protocol::worker::{CancelWait, ReadWait, WaitAnswer};
+use serde_json::{Value, json};
 use std::time::Duration;
-
-pub(in super::super) const NAME: &str = protocol::worker::WAIT_TOOL;
-
-/// Where the Claude CLI names the agent's call, in a call's `_meta`.
-const CALL_KEY: &str = "claudecode/toolUseId";
-
-/// Starts a wait, answered as a task the CLI asks after every `wait_poll`. One that ended as it started, such as on a
-/// pull request that's merged already, is answered at once, and so is one that couldn't start, with why.
-pub(in super::super) async fn call(
-    asks: &Asks,
-    wait_poll: Duration,
-    session_id: &SessionId,
-    params: &Map<String, Value>,
-) -> Value {
-    let until = match until(params) {
-        Ok(until) => until,
-        Err(wrong) => return Called::failed(wrong).to_json(),
-    };
-    let call = params.get("_meta").and_then(|meta| meta.get(CALL_KEY)).and_then(Value::as_str).map(ToolUseId::from);
-    match asks.ask(session_id.clone(), StartWait { until, call }).await {
-        Ok(WaitAnswer { wait, pull_request }) => match wait.ended {
-            None => {
-                let mut started = task(&wait, pull_request.as_ref(), wait_poll);
-                started["resultType"] = "task".into();
-                started
-            }
-            Some(ended) => Called::text(ended_text(&wait, ended.how, pull_request.as_ref())).to_json(),
-        },
-        Err(e) => Called::failed(format!("Roundhouse couldn't start the wait: {}", e.message)).to_json(),
-    }
-}
 
 /// `tasks/get`: how the wait stands, with how it ended once it has.
 pub(in super::super) async fn get(
@@ -55,16 +24,6 @@ pub(in super::super) async fn get(
 pub(in super::super) async fn cancel(asks: &Asks, session_id: &SessionId, task_id: &str) -> Result<Value, RpcError> {
     asks.ask(session_id.clone(), CancelWait { wait: task_id.into() }).await.map_err(|e| not_said(&e))?;
     Ok(json!({ "resultType": "complete" }))
-}
-
-/// What `until` says, which the agent wrote, so a wrong one is the tool's failure, for the agent to put right.
-pub(super) fn until(params: &Map<String, Value>) -> Result<WaitUntil, String> {
-    match params.get("arguments").and_then(|arguments| arguments.get("until")) {
-        None | Some(Value::Null) => Ok(WaitUntil::Done),
-        Some(Value::String(until)) if until == "done" => Ok(WaitUntil::Done),
-        Some(Value::String(until)) if until == "checks" => Ok(WaitUntil::Checks),
-        Some(other) => Err(format!("`until` is `done` or `checks`, not {other}.")),
-    }
 }
 
 /// The error MCP has for a task that isn't the agent's or doesn't exist, or for the hub not saying how a wait stands,

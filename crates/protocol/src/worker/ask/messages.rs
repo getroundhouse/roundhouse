@@ -6,7 +6,7 @@ use crate::frame;
 use crate::frame::Call;
 #[cfg(test)]
 use pull_requests::ReadPullRequest;
-use pull_requests::{CancelWait, PullRequestAnswer, ReadWait, StartWait, WaitAnswer};
+use pull_requests::{CancelWait, PullRequestAnswer, ReadWait, WaitAnswer};
 use serde::de::IgnoredAny;
 use serde::{Deserialize, Serialize};
 #[cfg(test)]
@@ -102,7 +102,6 @@ pub trait Answer: Sized {
 pub enum WorkerAsk {
     /// See [`ReadPullRequest`](super::ReadPullRequest).
     PullRequest,
-    StartWait(StartWait),
     PullRequests(ReadPullRequests),
     StartPullRequestWait(StartPullRequestWait),
     Wait(ReadWait),

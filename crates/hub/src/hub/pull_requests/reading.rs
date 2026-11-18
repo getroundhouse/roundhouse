@@ -153,41 +153,20 @@ impl Hub {
         self.read_pull_request(id, Asked::Agent, When::Always).await?.read()
     }
 
-    /// Reads it for an agent starting a wait, as [`Hub::pull_request_for_agent`] does, and holds the workspace's next
-    /// read back until what it returns goes, so the wait is recorded before another read can judge the waits.
-    pub(in super::super) async fn pull_request_to_wait_on(
-        self: &Arc<Self>,
-        id: &WorkspaceId,
-    ) -> Result<(Option<PullRequest>, ReadsHeld), ApiError> {
-        let (answer, held) = self.read_holding(id, Asked::Agent, When::Always).await?;
-        Ok((answer.read()?, held))
-    }
-
-    /// Reads it as [`Hub::read_holding`] does, and lets the next read go.
-    pub(super) async fn read_pull_request(
-        self: &Arc<Self>,
-        id: &WorkspaceId,
-        asked: Asked,
-        when: When,
-    ) -> Result<Answer, ApiError> {
-        Ok(self.read_holding(id, asked, when).await?.0)
-    }
-
     /// Reads it from GitHub and records what it finds, one read at a time for each workspace, so an older answer can't
     /// land after a newer one. A read asked for while another waited shares the answer of the one that began after it
     /// was asked.
     ///
     /// Says what was known when it can't read: when GitHub's limit for its token can't spare it, or GitHub can't be
     /// reached. Where it can't be read at all, such as with no login to read it as, what's known is kept, and with
-    /// nothing known it's recorded as none, so the app offers to create one rather than looking for ever. A read that
-    /// finds it judges the waits on it. Returns the workspace's reads held back, for whoever has more to do before the
-    /// next.
-    pub(super) async fn read_holding(
+    /// nothing known it's recorded as none, so the app offers to create one rather than looking for ever. It reads what
+    /// the workspace's waits watch too, and they judge what it finds.
+    pub(super) async fn read_pull_request(
         self: &Arc<Self>,
         id: &WorkspaceId,
         asked: Asked,
         when: When,
-    ) -> Result<(Answer, ReadsHeld), ApiError> {
+    ) -> Result<Answer, ApiError> {
         let asked_at = Instant::now();
         if asked == Asked::Agent {
             self.pull_requests.space_out(id, self.timers.agent_spacing).await;
@@ -203,11 +182,11 @@ impl Hub {
                 Some(found) if last.found => Answer::Read(found.pull_request),
                 known => Answer::Known(known, couldnt_read()),
             };
-            return Ok((answer, held));
+            return Ok(answer);
         }
         // What's known is the branch's own, found since the worktree checked it out.
         if when == When::OnAnotherBranch && !workspace.pull_request_found_on_another_branch() {
-            return Ok((Answer::Read(known.and_then(|found| found.pull_request)), held));
+            return Ok(Answer::Read(known.and_then(|found| found.pull_request)));
         }
         let read_at = Instant::now();
         // One whose branch needs nothing of GitHub, such as one pushed nowhere yet, needs no token.
@@ -218,7 +197,7 @@ impl Hub {
             Err(e) => asking.failed(&super::polling::no_login(&e)),
             Ok(reads_as) => {
                 if self.pull_requests.limits.allows(&reads_as, asked, now_ms()).is_err() {
-                    return Ok((Answer::Known(known, limit_used_up()), held));
+                    return Ok(Answer::Known(known, limit_used_up()));
                 }
                 match self.token_for_own_reads(&reads_as, id, &took_worker).await {
                     Err(e) => asking.failed(&e),
@@ -254,8 +233,8 @@ impl Hub {
         last: Option<Schedule>,
         read_at: Instant,
         asked: Asked,
-        held: ReadsHeld,
-    ) -> Result<(Answer, ReadsHeld), ApiError> {
+        _held: ReadsHeld,
+    ) -> Result<Answer, ApiError> {
         let (id, known) = (&workspace.id, workspace.pull_request.clone());
         let (recorded, changed) = self.record(&workspace, &read).await?;
         // Pull requests that moved while they were read were read all the same, so that's no sign GitHub can't be.
@@ -271,9 +250,6 @@ impl Hub {
         };
         let next = Schedule::after(last, read_at, asked, went);
         self.pull_requests.schedules.lock().insert(id.clone(), next);
-        if let Ok(Found { found, .. }) = &read {
-            self.end_waits(id, found).await;
-        }
         for WaitsRead { repository, read } in waits {
             match read {
                 Ok(snapshot) => self.observe_remote_waits(id, &snapshot).await,
@@ -289,7 +265,7 @@ impl Hub {
             Ok(Found { found, .. }) => Answer::Read(found.pull_request),
             Err(e) => Answer::Known(recorded.or(known), e),
         };
-        Ok((answer, held))
+        Ok(answer)
     }
 
     /// Records what a read found, with the branch it found it on, and where it can't be read at all, what's known, or

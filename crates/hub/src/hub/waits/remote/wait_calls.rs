@@ -1,7 +1,7 @@
 use super::{
     ApiError, Arc, Duration, ErrorCode, GitHubRepository, HashSet, Hub, PullRequestNumber, PullRequestWaitUntil,
-    PullRequestWatch, PullRequestsSnapshot, ReadPullRequests, START_WITHIN, Seen, SessionId, StartPullRequestWait,
-    Wait, WaitAnswer, WaitEnd, WaitEnded, WaitUntil, WorkspaceId, new_id, now_ms, remote_rules,
+    PullRequestWatch, PullRequestsSnapshot, ReadPullRequests, START_WITHIN, SessionId, StartPullRequestWait, Wait,
+    WaitAnswer, WaitEnd, WaitEnded, WaitUntil, WorkspaceId, new_id, now_ms, remote_rules,
 };
 
 impl Hub {
@@ -68,7 +68,7 @@ impl Hub {
             })),
         };
         remote_rules::judge(&mut wait, at_ms);
-        let wait = self.blocking(move |store| store.start_wait(&wait, Seen::default())).await?;
+        let wait = self.blocking(move |store| store.start_wait(&wait)).await?;
         self.announce_chat_of(&wait).await;
         self.with_pull_request(wait).await
     }

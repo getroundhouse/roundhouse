@@ -1,4 +1,3 @@
-use crate::store::Seen;
 use crate::store::tests::store_with_session;
 use protocol::fixtures::pull_request_wait;
 use protocol::model::{WaitEnd, WaitEnded};
@@ -8,7 +7,7 @@ fn observations_move_the_session_and_cancellation_freezes_the_result_across_reop
     let dir = tempfile::tempdir().unwrap();
     let store = store_with_session(dir.path());
     let wait = pull_request_wait("a");
-    store.start_wait(&wait, Seen::default()).unwrap();
+    store.start_wait(&wait).unwrap();
     let before = store.get_session(&"s".into()).unwrap().session.rev;
     store
         .revise_remote_waits(None, |wait| {
@@ -40,8 +39,8 @@ fn deadlines_cancel_only_due_waits_and_preserve_the_last_observation() {
     let store = store_with_session(dir.path());
     let mut first = pull_request_wait("a");
     first.watch.as_mut().unwrap().deadline_at_ms = Some(10);
-    store.start_wait(&first, Seen::default()).unwrap();
-    store.start_wait(&pull_request_wait("b"), Seen::default()).unwrap();
+    store.start_wait(&first).unwrap();
+    store.start_wait(&pull_request_wait("b")).unwrap();
 
     assert!(store.expire_remote_waits(9).unwrap().is_empty());
     let ended = store.expire_remote_waits(10).unwrap();
@@ -63,7 +62,7 @@ fn concurrent_retries_insert_one_wait_and_reuse_it_after_it_ends() {
             let mut wait = pull_request_wait(id);
             wait.call = Some("same".into());
             barrier.wait();
-            store.start_wait(&wait, Seen::default()).unwrap()
+            store.start_wait(&wait).unwrap()
         };
         let a = scope.spawn(move || start("a"));
         let b = scope.spawn(move || start("b"));
@@ -73,7 +72,7 @@ fn concurrent_retries_insert_one_wait_and_reuse_it_after_it_ends() {
     assert_eq!(waits[0], waits[1]);
     assert_eq!(store.remote_waits().unwrap().len(), 1);
     store.end_wait(&waits[0].id, WaitEnded { at_ms: 2, how: WaitEnd::Cancelled }).unwrap();
-    let retry = store.start_wait(&waits[1], Seen::default()).unwrap();
+    let retry = store.start_wait(&waits[1]).unwrap();
     assert_eq!(retry.ended.unwrap().how, WaitEnd::Cancelled);
     assert!(store.remote_waits().unwrap().is_empty());
 }

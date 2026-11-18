@@ -6,19 +6,9 @@ use std::collections::HashSet;
 pub(super) const COLUMNS: &str =
     "id, session_id, workspace_id, number, call, until, started_at_ms, ended_at_ms, ended, watch";
 
-/// What GitHub had recorded of the pull request when a wait started, by GitHub's own clock, so a wait ends only on what
-/// it records after.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct Seen {
-    /// When it last left the merge queue without merging.
-    pub left_queue_at_ms: Option<i64>,
-    /// When a review last asked for changes.
-    pub changes_requested_at_ms: Option<i64>,
-}
-
 impl Store {
     /// Starts an independent wait in an open chat. Retrying a tool call returns its original wait, even after it ends.
-    pub fn start_wait(&self, wait: &Wait, seen: Seen) -> Result<Wait, StoreError> {
+    pub fn start_wait(&self, wait: &Wait) -> Result<Wait, StoreError> {
         let mut conn = lock(&self.writer);
         let tx = conn.transaction()?;
         if let Some(call) = &wait.call {
@@ -39,24 +29,20 @@ impl Store {
                 id: wait.session_id.to_string(),
             });
         }
-        tx.prepare_cached(&format!(
-            "INSERT INTO waits ({COLUMNS}, seen_left_queue_at_ms, seen_changes_requested_at_ms)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-        ))?
-        .execute(params![
-            wait.id.as_str(),
-            wait.session_id.as_str(),
-            wait.workspace_id.as_str(),
-            wait.number,
-            wait.call.as_ref().map(ToolUseId::as_str),
-            text_of(&wait.until),
-            wait.started_at_ms,
-            wait.ended.map(|ended| ended.at_ms),
-            wait.ended.map(|ended| text_of(&ended.how)),
-            wait.watch.as_ref().map(serde_json::to_string).transpose()?,
-            seen.left_queue_at_ms,
-            seen.changes_requested_at_ms,
-        ])?;
+        tx.prepare_cached(&format!("INSERT INTO waits ({COLUMNS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"))?.execute(
+            params![
+                wait.id.as_str(),
+                wait.session_id.as_str(),
+                wait.workspace_id.as_str(),
+                wait.number,
+                wait.call.as_ref().map(ToolUseId::as_str),
+                text_of(&wait.until),
+                wait.started_at_ms,
+                wait.ended.map(|ended| ended.at_ms),
+                wait.ended.map(|ended| text_of(&ended.how)),
+                wait.watch.as_ref().map(serde_json::to_string).transpose()?,
+            ],
+        )?;
         tx.commit()?;
         Ok(wait.clone())
     }
@@ -104,43 +90,16 @@ impl Store {
         Ok(update.query_row(params![ended.at_ms, text_of(&ended.how), id.as_str()], wait_from_row).optional()?)
     }
 
-    /// After a read of the workspace's pull request: ends each of its open waits that `ends` says the read ends, from
-    /// the wait and what was seen as it started, at `at_ms`, all at once. Returns those it ended.
-    pub fn judge_waits(
-        &self,
-        id: &WorkspaceId,
-        at_ms: i64,
-        mut ends: impl FnMut(&Wait, Seen) -> Option<WaitEnd>,
-    ) -> Result<Vec<Wait>, StoreError> {
-        let mut conn = lock(&self.writer);
-        let tx = conn.transaction()?;
-        let open = tx
-            .prepare_cached(&format!(
-                "SELECT {COLUMNS}, seen_left_queue_at_ms, seen_changes_requested_at_ms FROM waits
-                     WHERE workspace_id = ? AND ended_at_ms IS NULL ORDER BY started_at_ms, id"
-            ))?
-            .query_map([id.as_str()], |row| {
-                let seen = Seen { left_queue_at_ms: row.get(10)?, changes_requested_at_ms: row.get(11)? };
-                Ok((wait_from_row(row)?, seen))
-            })?
-            .collect::<rusqlite::Result<Vec<_>>>()?;
-        let mut ended = Vec::new();
-        for (mut wait, seen) in open {
-            if wait.watch.is_some() {
-                continue;
-            }
-            let Some(how) = ends(&wait, seen) else { continue };
-            let how = WaitEnded { at_ms, how };
-            tx.prepare_cached("UPDATE waits SET ended_at_ms = ?, ended = ? WHERE id = ?")?.execute(params![
-                how.at_ms,
-                text_of(&how.how),
-                wait.id.as_str()
-            ])?;
-            wait.ended = Some(how);
-            ended.push(wait);
-        }
-        tx.commit()?;
-        Ok(ended)
+    /// Ends every open wait on the workspace's own pull request, which an older worker's `wait_for_pull_request`
+    /// started, as called off, at `at_ms`, since nothing judges one now, and returns those it ended. An agent still
+    /// asking after one hears so, and starts another on explicit pull requests if it still needs one.
+    pub fn call_off_unwatched_waits(&self, at_ms: i64) -> Result<Vec<Wait>, StoreError> {
+        let conn = lock(&self.writer);
+        let mut update = conn.prepare_cached(&format!(
+            "UPDATE waits SET ended_at_ms = ?, ended = ? WHERE ended_at_ms IS NULL AND watch IS NULL RETURNING {COLUMNS}"
+        ))?;
+        let ended = update.query_map(params![at_ms, text_of(&WaitEnd::Cancelled)], wait_from_row)?;
+        Ok(ended.collect::<rusqlite::Result<_>>()?)
     }
 
     /// Every session with a wait that hasn't ended.

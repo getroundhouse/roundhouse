@@ -1,9 +1,6 @@
-use super::super::{Hub, new_id, now_ms};
-use super::rules;
+use super::super::{Hub, now_ms};
 use protocol::client::{ApiError, ErrorCode, HubNotice};
-use protocol::model::{
-    PullRequestFound, Session, SessionId, ToolUseId, Wait, WaitEnd, WaitEnded, WaitId, WaitUntil, WorkspaceId,
-};
+use protocol::model::{Session, SessionId, ToolUseId, Wait, WaitEnd, WaitEnded, WaitId, WorkspaceId};
 use protocol::worker::WaitAnswer;
 use std::sync::Arc;
 use std::time::Duration;
@@ -14,53 +11,6 @@ use tracing::{error, info, warn};
 pub(super) const START_WITHIN: Duration = Duration::from_secs(40);
 
 impl Hub {
-    /// Starts an independent legacy wait on the workspace's branch from a fresh read. A missing PR, unpushed
-    /// commits or a read that fails or exceeds `START_WITHIN` refuses the start. A repeated tool-call ID reuses its wait.
-    pub(crate) async fn start_wait(
-        self: &Arc<Self>,
-        workspace_id: &WorkspaceId,
-        session_id: SessionId,
-        until: WaitUntil,
-        call: Option<ToolUseId>,
-    ) -> Result<WaitAnswer, ApiError> {
-        if let Some(started) = self.started_by(&session_id, call.as_ref()).await? {
-            return self.with_pull_request(started).await;
-        }
-        let reading = tokio::time::timeout(START_WITHIN, self.pull_request_to_wait_on(workspace_id));
-        let (pull_request, reads_held) = reading.await.map_err(|_| {
-            ApiError::new(ErrorCode::Unavailable, format!("the pull request couldn't be read within {START_WITHIN:?}"))
-        })??;
-        let Some(pull_request) = pull_request else {
-            return Err(ApiError::new(ErrorCode::NotFound, "this workspace's branch has no pull request to wait on"));
-        };
-        let started_at_ms = now_ms();
-        let mut wait = Wait {
-            id: new_id().into(),
-            session_id,
-            workspace_id: workspace_id.clone(),
-            number: pull_request.number,
-            call,
-            until,
-            started_at_ms,
-            ended: None,
-            watch: None,
-        };
-        let seen = rules::seen_in(&pull_request);
-        wait.ended = rules::ended(&wait, seen, Some(&pull_request)).map(|how| WaitEnded { at_ms: started_at_ms, how });
-        if wait.ended.is_none()
-            && let Some(why) = rules::not_yet(&pull_request)
-        {
-            return Err(ApiError::new(ErrorCode::Conflict, why));
-        }
-        let stored = wait.clone();
-        let wait = self.blocking(move |store| store.start_wait(&stored, seen)).await?;
-        // Only once it's recorded, so the next read judges it.
-        drop(reads_held);
-        info!(wait = %wait.id, session = %wait.session_id, ended = ?wait.ended, "an agent started a wait");
-        self.announce_chat_of(&wait).await;
-        Ok(WaitAnswer { wait, pull_request: Some(pull_request) })
-    }
-
     /// The wait `call` started in the session, if it started one.
     pub(crate) async fn started_by(
         &self,
@@ -117,6 +67,21 @@ impl Hub {
         Ok(())
     }
 
+    /// Calls off the waits on a workspace's own pull request that an older worker's `wait_for_pull_request` started and
+    /// that are still open, as the hub starts, since nothing judges one now.
+    pub(crate) async fn call_off_unwatched_waits(&self) {
+        let at_ms = now_ms();
+        match self.blocking(move |store| store.call_off_unwatched_waits(at_ms)).await {
+            Ok(called_off) => {
+                for wait in called_off {
+                    info!(wait = %wait.id, "a wait from an older worker's tool was called off");
+                    self.announce_chat_of(&wait).await;
+                }
+            }
+            Err(e) => warn!("couldn't call off the waits from an older worker's tool: {}", e.message),
+        }
+    }
+
     pub(super) async fn own_wait(&self, session_id: &SessionId, id: WaitId) -> Result<Wait, ApiError> {
         let wait = self.blocking(move |store| store.wait(&id)).await?;
         if wait.session_id != *session_id {
@@ -152,27 +117,6 @@ impl Hub {
         match self.live_session(&wait.session_id).await {
             Ok(session) => session.wake_agent(),
             Err(e) => warn!(session = %wait.session_id, "couldn't wake the agent whose wait ended: {}", e.message),
-        }
-    }
-
-    /// Ends the workspace's waits that a read of its pull request ends, from what it found. Only for a read that
-    /// worked, since one that failed says nothing of the pull request.
-    pub(in super::super) async fn end_waits(self: &Arc<Self>, id: &WorkspaceId, found: &PullRequestFound) {
-        let (owned, now, at_ms) = (id.clone(), found.pull_request.clone(), now_ms());
-        let judged = self
-            .blocking(move |store| {
-                store.judge_waits(&owned, at_ms, |wait, seen| rules::ended(wait, seen, now.as_ref()))
-            })
-            .await;
-        match judged {
-            Ok(ended) => {
-                for wait in ended {
-                    info!(wait = %wait.id, how = ?wait.ended.map(|ended| ended.how), "a wait ended");
-                    self.announce_chat_of(&wait).await;
-                    self.wake_for(&wait).await;
-                }
-            }
-            Err(e) => warn!(%id, "couldn't judge the workspace's waits after reading its pull request: {}", e.message),
         }
     }
 }

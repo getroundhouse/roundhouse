@@ -310,11 +310,10 @@ async fn call(
     };
     match Tool::named(name) {
         Some(Tool::PullRequests) => Ok(pull_requests::read(asks, session_id, params).await),
-        Some(Tool::Waits | Tool::Wait) if !takes_tasks(params) => Err(RpcError::needs_tasks()),
+        // A wait is answered with a task, which a client that didn't offer to take one can't be given.
+        Some(Tool::Waits) if !takes_tasks(params) => Err(RpcError::needs_tasks()),
         Some(Tool::Waits) => Ok(pull_requests::start(asks, wait_poll, session_id, params).await),
         Some(Tool::PullRequest) => Ok(pull_request::call(asks, session_id).await.to_json()),
-        // A wait is answered with a task, which a client that didn't offer to take one can't be given.
-        Some(Tool::Wait) => Ok(wait::call(asks, wait_poll, session_id, params).await),
         None => Err(RpcError::new(Code::InvalidParams, format!("there's no tool called {name}"))),
     }
 }
@@ -323,7 +322,6 @@ async fn call(
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum Tool {
     PullRequest,
-    Wait,
     PullRequests,
     Waits,
 }
@@ -334,7 +332,6 @@ impl Tool {
             pull_requests::READ => Some(Tool::PullRequests),
             pull_requests::WAIT => Some(Tool::Waits),
             pull_request::NAME => Some(Tool::PullRequest),
-            wait::NAME => Some(Tool::Wait),
             _ => None,
         }
     }

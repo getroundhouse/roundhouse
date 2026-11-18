@@ -1,7 +1,6 @@
 //! Starts and advances explicit-target waits through the same persisted tasks and wake/cancel paths as older waits.
 
 use super::{Hub, START_WITHIN, new_id, now_ms, remote_rules};
-use crate::store::Seen;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::model::{
     GitHubRepository, PullRequestNumber, PullRequestWatch, PullRequestsSnapshot, SessionId, Wait, WaitEnd, WaitEnded,

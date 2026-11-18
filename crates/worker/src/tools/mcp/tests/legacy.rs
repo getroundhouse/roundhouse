@@ -61,7 +61,11 @@ async fn a_legacy_call_uses_the_same_hub_ask_and_legacy_result() {
 async fn a_legacy_client_cannot_start_or_manipulate_tasks() {
     let (asks, mut sent) = asks();
     for (method, params, expected) in [
-        ("tools/call", json!({"name":wait::NAME,"arguments":{"until":"checks"}}), Code::InvalidParams),
+        (
+            "tools/call",
+            json!({"name":pull_requests::WAIT,"arguments":{"pull_requests":[7],"until":"merged"}}),
+            Code::InvalidParams,
+        ),
         ("tasks/get", json!({"taskId":"w"}), Code::MethodNotFound),
         ("tasks/cancel", json!({"taskId":"w"}), Code::MethodNotFound),
     ] {

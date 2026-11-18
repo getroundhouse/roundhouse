@@ -2,7 +2,7 @@
 //! initializes and offers ordinary tools. Both use the same authenticated HTTP endpoint and hub asks.
 
 #[cfg(test)]
-use super::{pull_request, wait};
+use super::{pull_request, pull_requests};
 #[cfg(test)]
 use crate::asks::Asks;
 #[cfg(test)]
