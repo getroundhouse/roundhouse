@@ -84,6 +84,14 @@ fn finishes<T: Send + 'static>(peer: Peer, call: impl FnOnce(RemoteHub) -> T + S
         let _ = sent.send(call(hub));
     });
     let answer = result.recv_timeout(TEST_DEADLINE);
+    if answer.is_err() {
+        eprintln!("PROBE deadline passed; sampling");
+        let out = std::process::Command::new("sample")
+            .args([std::process::id().to_string(), "1".to_string()])
+            .output()
+            .unwrap();
+        eprintln!("{}\n{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr));
+    }
     peer.finish();
     task.join().unwrap();
     answer.expect("a live TCP peer held the client beyond the deadline")
@@ -122,7 +130,9 @@ fn pairing_cannot_wait_forever_after_tls_succeeds() {
 #[test]
 fn a_peer_that_stops_reading_disconnects_all_pending_calls() {
     finishes(Peer::silent(false), |hub| {
+        let t = std::time::Instant::now();
         let client = Client::open_remote_with_timeout(&hub.hosts, &hub.fingerprint, OPERATION_TIMEOUT).unwrap();
+        eprintln!("PROBE opened {:?}", t.elapsed());
         let waiting = client.start(Client::records_list);
         // More than the TCP and TLS buffers hold while the peer reads no application data: under 2 MB on a Mac, and up
         // to 4 MB on Linux by default. No more, since a test build encodes it slowly and the deadline counts that: 64 MB
@@ -130,9 +140,12 @@ fn a_peer_that_stops_reading_disconnects_all_pending_calls() {
         let error = client
             .call(devices::Pair { code: PairingCode::from("test-code"), device_name: "x".repeat(16 * 1024 * 1024) })
             .unwrap_err();
+        eprintln!("PROBE called {:?} {error}", t.elapsed());
         assert!(matches!(error, ClientError::Disconnected), "{error}");
         assert!(client.is_disconnected());
         assert!(tokio::runtime::Runtime::new().unwrap().block_on(waiting.recv()).is_err());
+        eprintln!("PROBE waited {:?}", t.elapsed());
         assert!(client.records_list().is_err());
+        eprintln!("PROBE done {:?}", t.elapsed());
     });
 }

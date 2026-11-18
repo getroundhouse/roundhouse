@@ -97,8 +97,14 @@ impl Read for Until<'_> {
 
 impl Write for Until<'_> {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        self.tcp.set_write_timeout(Some(time_left(self.deadline)?))?;
-        timed_out_if_blocked(self.tcp.write(buf))
+        let left = time_left(self.deadline)?;
+        self.tcp.set_write_timeout(Some(left))?;
+        let t = Instant::now();
+        let r = timed_out_if_blocked(self.tcp.write(buf));
+        if t.elapsed() > left + Duration::from_millis(100) {
+            eprintln!("PROBE tcp write of {} with {left:?} left took {:?}: {r:?}", buf.len(), t.elapsed());
+        }
+        r
     }
 
     fn flush(&mut self) -> io::Result<()> {
@@ -206,12 +212,34 @@ impl Write for TlsWriter {
         self.shared.send_ready(&mut tls, Instant::now() + self.shared.write_timeout)
     }
 
-    fn write_all(&mut self, mut buf: &[u8]) -> io::Result<()> {
+    fn write_all(&mut self, buf: &[u8]) -> io::Result<()> {
+        let start = Instant::now();
+        let len = buf.len();
+        let result = self.write_all_probe(buf);
+        if len > 1 << 20 || start.elapsed() > Duration::from_millis(300) {
+            eprintln!("PROBE write_all of {len} took {:?}: {result:?}", start.elapsed());
+        }
+        result
+    }
+}
+
+impl TlsWriter {
+    fn write_all_probe(&mut self, mut buf: &[u8]) -> io::Result<()> {
+        let locking = Instant::now();
         let deadline = Instant::now() + self.shared.write_timeout;
         let mut tls = self.shared.tls.lock();
+        if locking.elapsed() > Duration::from_millis(50) {
+            eprintln!("PROBE tls lock took {:?}", locking.elapsed());
+        }
         while !buf.is_empty() {
+            let t = Instant::now();
             let written = tls.writer().write(buf)?;
-            self.shared.send_ready(&mut tls, deadline)?;
+            let encrypted = t.elapsed();
+            let r = self.shared.send_ready(&mut tls, deadline);
+            if t.elapsed() > Duration::from_millis(250) || r.is_err() {
+                eprintln!("PROBE chunk {written}: encrypt {encrypted:?}, send {:?} {r:?}, left {}", t.elapsed(), buf.len());
+            }
+            r?;
             if written == 0 {
                 return Err(io::ErrorKind::WriteZero.into());
             }

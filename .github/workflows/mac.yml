@@ -1,16 +1,43 @@
-# A probe of the Mac runner's loopback buffers, run by hand from this branch. Not for main.
+# A probe of #1921 on Mac runners, run by hand from this branch. Not for main.
 name: Mac
 on:
   workflow_dispatch:
 permissions:
   contents: read
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_PROFILE_DEV_DEBUG: line-tables-only
+  NEXTEST_VERSION: 0.9.151
 jobs:
   probe:
     strategy:
+      fail-fast: false
       matrix:
-        part: [1, 2, 3]
+        runner: [1, 2, 3, 4]
     runs-on: macos-26
-    timeout-minutes: 10
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - run: sw_vers; sysctl hw.ncpu hw.memsize; python3 -I .github/probe/sndtimeo.py; python3 -I .github/probe/sndtimeo.py
+      - run: git config --global user.name ci && git config --global user.email ci@example.com
+      - uses: ./.github/actions/zig
+        with:
+          cache-name: mac
+      - uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
+        with:
+          tool: cargo-nextest@${{ env.NEXTEST_VERSION }}
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: mac-probe-none
+          restore-keys: mac-5adc
+      - run: >-
+          cargo nextest run --profile mac --workspace --locked --partition slice:1/4
+          -E 'not test(/^gallery::/)' || true
+      - run: |
+          for i in $(seq 20); do
+            cargo nextest run --profile mac -p hub --test network_stalls --locked --success-output final --failure-output final 2>&1 | grep -E "PROBE|FAIL|PASS \[" || true
+          done
