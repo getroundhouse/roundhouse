@@ -69,20 +69,6 @@ impl AgentProcess for AntigravityProcess {
         }
     }
 
-    async fn send_prompt(&self, seq: Seq, prompt: &Prompt<AttachmentFile>) -> Result<(), AgentError> {
-        self.control(&Control::Prompt {
-            seq,
-            prompt: prompt.clone(),
-            extras: protocol::capability::prompts::Extras::default(),
-        })
-        .await
-    }
-    async fn interrupt(&self) -> Result<(), AgentError> {
-        self.control(&Control::Cancel).await
-    }
-    async fn compact(&self, _asked: Seq, _keeping: Option<&str>) -> Result<(), AgentError> {
-        Err(AgentError::UnknownRequest("Antigravity compaction is not offered by this adapter".into()))
-    }
     async fn stop(&self) {
         self.shared.stop().await;
     }

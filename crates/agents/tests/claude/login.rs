@@ -1,6 +1,7 @@
 //! A held login is pinned and checked in the process that receives the prompt, without leaking it to captures.
 
 use agents::conformance::capture::Tap;
+use agents::testing::Asking;
 use agents::{AgentOptions, AgentOutput, BinaryLookup};
 use protocol::capability::settings::{Effort, Settings};
 use protocol::model::{AgentKind, AgentLogin, LoginToken, RunId, Seq};
@@ -64,7 +65,7 @@ async fn a_prompt_and_a_later_effort_read_use_the_checked_login_without_capturin
             .unwrap();
     let high = Settings { effort: Some(Effort::High), ..Settings::default() };
     agent.control(&protocol::capability::Control::Change(high)).await.unwrap();
-    agent.send_prompt(Seq::new(1), &Prompt::new("hello")).await.unwrap();
+    agent.prompt(Seq::new(1), &Prompt::new("hello")).await.unwrap();
     tokio::time::timeout(Duration::from_secs(5), async {
         while let Some(item) = received.recv().await {
             if matches!(item, AgentOutput::Event { body: protocol::event::EventBody::AgentInit { .. }, .. }) {
@@ -127,7 +128,7 @@ async fn a_corrected_launch_is_checked_again_and_startup_output_survives_the_che
         mode(dir.path(), scenario);
         let (output, mut received) = mpsc::channel(32);
         let agent = agents::claude::spawn(spec(dir.path()), output, options).await.unwrap();
-        agent.send_prompt(Seq::new(1), &Prompt::new("hello")).await.unwrap();
+        agent.prompt(Seq::new(1), &Prompt::new("hello")).await.unwrap();
         let mut seen = Vec::new();
         tokio::time::timeout(Duration::from_secs(5), async {
             while let Some(item) = received.recv().await {
@@ -157,7 +158,7 @@ async fn stopping_during_replacement_verification_cancels_it_without_replaying_t
     mode(dir.path(), "retry-stop");
     let (output, _received) = mpsc::channel(32);
     let agent = agents::claude::spawn(spec(dir.path()), output, options).await.unwrap();
-    agent.send_prompt(Seq::new(1), &Prompt::new("hello")).await.unwrap();
+    agent.prompt(Seq::new(1), &Prompt::new("hello")).await.unwrap();
     ready(&dir.path().join("guard-ready")).await;
     tokio::time::timeout(Duration::from_secs(5), agent.stop()).await.expect("stop reaches the unverified replacement");
     let input = std::fs::read_to_string(dir.path().join("received")).unwrap();

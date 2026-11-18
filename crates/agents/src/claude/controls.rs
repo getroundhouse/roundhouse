@@ -12,7 +12,7 @@ pub(super) async fn apply(process: &ClaudeProcess, control: &Control) -> Result<
     match control {
         Control::Prompt { seq, prompt, .. } => process.send_prompt(*seq, prompt).await,
         Control::Cancel => process.interrupt().await,
-        Control::Compact { asked, keeping } => process.compact(*asked, keeping.as_deref()).await,
+        Control::Compact { asked, keeping } => process.ask_to_compact(*asked, keeping.as_deref()).await,
         Control::Change(settings) => process.change(settings).await,
         Control::Decide { approval, decision } => process.decide(approval, decision).await,
         Control::Note { .. }

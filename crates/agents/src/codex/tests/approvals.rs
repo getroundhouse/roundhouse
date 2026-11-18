@@ -1,4 +1,5 @@
 #![cfg(test)]
+use crate::testing::Asking;
 use protocol::capability::asking::TypedAnswer;
 use serde_json::json;
 
@@ -57,7 +58,7 @@ async fn native_request_ids_are_private_to_one_run_and_questions_work_in_both_mo
         ]}]));
         let agent = h.started().await;
         agent.control(&Control::Change(Settings { mode: Some(mode), ..Settings::default() })).await.unwrap();
-        agent.send_prompt(Seq::FIRST, &Prompt::new("Ask")).await.unwrap();
+        agent.prompt(Seq::FIRST, &Prompt::new("Ask")).await.unwrap();
         let id = loop {
             if let AgentOutput::Event { body: EventBody::ApprovalRequested { approval_id, request, .. }, .. } =
                 h.next().await
@@ -139,7 +140,7 @@ async fn codex_hears(decision: Decision) -> Option<serde_json::Value> {
         ]}}
     ]}]));
     let agent = h.started().await;
-    agent.send_prompt(Seq::FIRST, &Prompt::new("Ask")).await.unwrap();
+    agent.prompt(Seq::FIRST, &Prompt::new("Ask")).await.unwrap();
     let id = loop {
         if let AgentOutput::Event { body: EventBody::ApprovalRequested { approval_id, request, .. }, .. } =
             h.next().await

@@ -1,6 +1,7 @@
 //! Codex's messages, as a test scripts them for the fake app server to send, and playing them to the adapter, for
 //! every test of what the adapter makes of them.
 
+use crate::testing::Asking;
 use protocol::event::EventBody;
 use protocol::model::Seq;
 use protocol::prompt::Prompt;
@@ -53,7 +54,7 @@ pub(super) async fn play(mut actions: Vec<Value>) -> Vec<AgentOutput> {
     actions.push(json!({"method":"test/finished","params":{}}));
     let mut h = Harness::new(&json!([{"on":"turn/start","actions":actions}]));
     let agent = h.started().await;
-    agent.send_prompt(Seq::FIRST, &Prompt::new("Delegate some work")).await.unwrap();
+    agent.prompt(Seq::FIRST, &Prompt::new("Delegate some work")).await.unwrap();
     let mut output = Vec::new();
     loop {
         let next = h.next().await;

@@ -7,6 +7,7 @@ use std::time::Instant;
 use async_trait::async_trait;
 use protocol::capability::approvals::{AfterDenial, Asks, Decision, Remember, Request};
 use protocol::capability::asking::PlanContext;
+use protocol::capability::prompts::Extras;
 use protocol::capability::{Capabilities, Control};
 use protocol::event::{EventBody, SessionEvent};
 use protocol::model::{RunId, Seq};
@@ -118,13 +119,14 @@ impl Driver {
     /// Records the prompt, as a hub does before it sends one, and sends it with where it's recorded.
     pub async fn prompt(&mut self, text: &str) -> Result<(), Failed> {
         let seq = self.record(None, EventBody::UserPrompt { client_msg_id: None, prompt: Prompt::new(text) });
-        self.agent()?.send_prompt(seq, &Prompt::new(text)).await.map_err(|e| Failed(format!("prompting: {e}")))
+        let control = Control::Prompt { seq, prompt: Prompt::new(text), extras: Extras::default() };
+        self.agent()?.control(&control).await.map_err(|e| Failed(format!("prompting: {e}")))
     }
 
     /// Interrupts the turn, marking when as [`INTERRUPTED`].
     pub async fn interrupt(&mut self) -> Result<(), Failed> {
         self.mark(INTERRUPTED);
-        self.agent()?.interrupt().await.map_err(|e| Failed(format!("interrupting: {e}")))
+        self.agent()?.control(&Control::Cancel).await.map_err(|e| Failed(format!("interrupting: {e}")))
     }
 
     /// Notes when something happened, for a check to compare, such as how soon a turn ended after an interrupt.

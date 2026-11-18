@@ -1,3 +1,4 @@
+use crate::testing::Asking;
 use protocol::event::{ContentBlock, EventBody};
 use protocol::model::Seq;
 use protocol::prompt::Prompt;
@@ -20,7 +21,7 @@ async fn thinking_is_requested_from_codex_and_preserved_as_summary_text() {
     let agent = h.started().await;
     let launch = h.request("thread/start").await;
     assert_eq!(launch["params"]["config"]["model_reasoning_summary"], "auto");
-    agent.send_prompt(Seq::FIRST, &Prompt::new("Think it through")).await.unwrap();
+    agent.prompt(Seq::FIRST, &Prompt::new("Think it through")).await.unwrap();
     let start = h.request("turn/start").await;
     assert_eq!(start["params"]["summary"], "auto");
     let mut streamed = false;
