@@ -15,37 +15,6 @@ fn reports(output: &[AgentOutput]) -> Vec<&Report> {
     output.iter().filter_map(|out| if let AgentOutput::Report(report) = out { Some(report) } else { None }).collect()
 }
 
-fn diff_updated(thread: &str, diff: &str) -> Value {
-    json!({"method":"turn/diff/updated","params":{"threadId":thread,"turnId":"root-turn","diff":diff}})
-}
-
-/// Codex says the turn's diff again with every change, often the same, which is reported once.
-#[tokio::test]
-async fn a_turns_changes_are_reported_whole_once_each_time_they_change() {
-    let made = "diff --git a/hello.txt b/hello.txt\nnew file mode 100644\n--- /dev/null\n+++ b/hello.txt\n@@ -0,0 +1 @@\n+hello\n";
-    let more = format!(
-        "{made}diff --git a/bye.txt b/bye.txt\nnew file mode 100644\n--- /dev/null\n+++ b/bye.txt\n@@ -0,0 +1 @@\n+bye\n"
-    );
-
-    let output = play(vec![
-        turn("thread", "root-turn", "inProgress"),
-        diff_updated("thread", made),
-        diff_updated("thread", made),
-        diff_updated("thread", &more),
-        turn("thread", "root-turn", "completed"),
-    ])
-    .await;
-
-    let changed: Vec<Vec<&str>> = reports(&output)
-        .into_iter()
-        .map(|report| {
-            let Report::TurnChanges { files } = report else { panic!("{report:?}") };
-            files.iter().map(|file| file.path.as_str()).collect()
-        })
-        .collect();
-    assert_eq!(changed, [vec!["hello.txt"], vec!["hello.txt", "bye.txt"]]);
-}
-
 #[tokio::test]
 async fn codexs_plan_is_reported_as_its_to_do_list() {
     let plan = json!({"method":"turn/plan/updated","params":{"threadId":"thread","turnId":"root-turn",

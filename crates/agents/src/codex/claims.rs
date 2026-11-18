@@ -12,7 +12,6 @@ pub(super) fn claims() -> Capabilities {
     });
     claims.output.stream_thinking = Some(Claimed {});
     claims.output.todos = Some(Claimed {});
-    claims.output.turn_changes = Some(Claimed {});
     claims.background.subagents = Some(Claimed {});
     claims.context.usage = Some(Claimed {});
     claims.context.auto_compaction = Some(Claimed {});

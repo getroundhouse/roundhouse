@@ -69,7 +69,7 @@ async fn notification(shared: &Shared, value: &Value, raw: String) -> Result<(),
 
 /// What Codex says that the adapter has no use for, which it asks Codex not to send as it initializes, rather than
 /// dropping each as it comes.
-pub(super) const UNUSED: [&str; 10] = [
+pub(super) const UNUSED: [&str; 11] = [
     // Idle can precede turn/completed. Only the normalized outcome makes Roundhouse idle.
     "thread/status/changed",
     "thread/started",
@@ -78,6 +78,8 @@ pub(super) const UNUSED: [&str; 10] = [
     "item/reasoning/textDelta",
     "item/commandExecution/outputDelta",
     "item/reasoning/summaryPartAdded",
+    // The turn's diff, which its file changes and the worktree hold.
+    "turn/diff/updated",
     // State Codex keeps for its own interfaces: which of a thread's turns its app has read, whether its remote
     // control is connected, and how its moderation classified the turn.
     "thread/readState/changed",
@@ -107,7 +109,6 @@ async fn dispatch(
                 state.turn = Some(id.clone());
                 state.reply = None;
                 state.plan = None;
-                state.turn_diff = None;
                 // The turn Codex compacts in, which takes the compaction asked for, as the person's message takes a
                 // prompt.
                 state.compaction.as_mut().filter(|asked| asked.turn.is_none()).map(|asked| {
@@ -139,7 +140,6 @@ async fn dispatch(
         "warning" => notices::warning(shared, params, scope, raw).await,
         "mcpServer/startupStatus/updated" => notices::mcp_server(shared, params, scope, raw).await,
         "error" => notices::error(shared, params, scope, raw).await,
-        "turn/diff/updated" => turn_reports::changes(shared, params, scope).await,
         "turn/plan/updated" => turn_reports::plan(shared, params, scope).await?,
         // From a Codex that sends them though it was asked not to.
         method if UNUSED.contains(&method) => {}
