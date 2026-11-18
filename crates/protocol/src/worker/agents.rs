@@ -49,10 +49,8 @@ pub struct AgentStarted {
     pub pid: u32,
     pub run: RunId,
     pub already_running: bool,
-    /// What the run claims, as its adapter says, which the hub holds it to. `None` from a worker of protocol 3, whose
-    /// runs say it as they initialize.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub capabilities: Option<Box<Capabilities>>,
+    /// What the run claims, as its adapter says, which the hub holds it to.
+    pub capabilities: Box<Capabilities>,
 }
 
 impl Reply for AgentStarted {

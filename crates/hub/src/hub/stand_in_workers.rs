@@ -108,7 +108,7 @@ fn answer(request: WorkerRequest) -> WorkerResponse {
         return WorkerResponse::Account(AgentAccount { logged_in: false, ..AgentAccount::default() });
     }
     if let WorkerRequest::AgentStart(spec) = request {
-        let capabilities = Some(Box::new(claims()));
+        let capabilities = Box::new(claims());
         return WorkerResponse::AgentStarted(AgentStarted {
             pid: 7,
             run: spec.run,

@@ -28,7 +28,7 @@ async fn a_chat_whose_prompt_its_running_agent_never_had_isnt_left_at_work() {
             pid: 7,
             run: spec.run,
             already_running: false,
-            capabilities: Some(Box::new(claimed())),
+            capabilities: Box::new(claimed()),
         })))
     });
     serving(&hub, &link);
@@ -63,7 +63,7 @@ async fn a_prompt_an_agent_that_has_gone_wasnt_given_goes_to_the_next_one() {
                 pid: 7,
                 run: spec.run,
                 already_running: false,
-                capabilities: Some(Box::new(claimed())),
+                capabilities: Box::new(claimed()),
             })))
         }
     });

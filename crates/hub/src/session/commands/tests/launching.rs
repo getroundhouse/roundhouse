@@ -19,9 +19,9 @@ use crate::worker_link::WorkerLink;
 /// What a stand-in for a worker has been asked, as JSON, in order.
 pub(super) type Asked = Arc<Mutex<Vec<Value>>>;
 
-/// A stand-in for `w`'s worker, of this protocol, whose launch claims `claims`, and finds `found` running if it's
-/// given, and which takes everything else it's asked.
-fn worker(hub: &Hub, found: Option<RunId>, claims: Option<Capabilities>) -> (Arc<WorkerLink>, Asked) {
+/// A stand-in for `w`'s worker, whose launch claims `claims`, and finds `found` running if it's given, and which takes
+/// everything else it's asked.
+fn worker(hub: &Hub, found: Option<RunId>, claims: Capabilities) -> (Arc<WorkerLink>, Asked) {
     let asked = Asked::default();
     let kept = asked.clone();
     let link = WorkerLink::answering(move |request| {
@@ -31,7 +31,7 @@ fn worker(hub: &Hub, found: Option<RunId>, claims: Option<Capabilities>) -> (Arc
             pid: 7,
             run: found.unwrap_or(spec.run),
             already_running: found.is_some(),
-            capabilities: claims.clone().map(Box::new),
+            capabilities: Box::new(claims.clone()),
         })))
     });
     serving(hub, &link);
@@ -68,7 +68,7 @@ fn current_run(live: &LiveSession) -> RunId {
 async fn a_launch_names_the_chats_settings_by_its_kinds_claims_and_holds_the_run_to_what_its_worker_says() {
     let dir = tempfile::tempdir().unwrap();
     let hub = hub_with_worktree(dir.path());
-    let (link, asked) = worker(&hub, None, Some(claimed()));
+    let (link, asked) = worker(&hub, None, claimed());
     let live = hub.live_session(&"s".into()).await.unwrap();
 
     live.ensure_agent().await.unwrap();
@@ -114,7 +114,7 @@ async fn a_chat_in_a_mode_this_build_has_no_name_for_starts_its_agent_with_full_
     let hub = hub_with_worktree(dir.path());
     let unknown = Settings { mode: Some(protocol::capability::approvals::ApprovalMode::UNKNOWN), ..Default::default() };
     hub.blocking(move |store| store.set_session_settings(&"s".into(), &unknown)).await.unwrap();
-    let (_link, asked) = worker(&hub, None, Some(claimed()));
+    let (_link, asked) = worker(&hub, None, claimed());
     let live = hub.live_session(&"s".into()).await.unwrap();
 
     live.ensure_agent().await.unwrap();
@@ -132,7 +132,7 @@ async fn a_run_its_worker_finds_running_has_its_claims_put_back_on_the_record_an
     for held in [false, true] {
         let dir = tempfile::tempdir().unwrap();
         let hub = hub_with_worktree(dir.path());
-        let (_link, asked) = worker(&hub, Some(found), Some(claimed()));
+        let (_link, asked) = worker(&hub, Some(found), claimed());
         if held {
             let kept = kept.clone();
             hub.blocking(move |store| store.set_claims(&"s".into(), &kept)).await.unwrap();
@@ -170,7 +170,7 @@ async fn a_run_that_claims_what_needs_a_claim_it_doesnt_make_is_stopped_and_its_
     let hub = hub_with_worktree(dir.path());
     let mut forks = claimed();
     forks.conversation.fork = Some(Claimed {});
-    let (_link, asked) = worker(&hub, None, Some(forks));
+    let (_link, asked) = worker(&hub, None, forks);
     let live = hub.live_session(&"s".into()).await.unwrap();
 
     let Err(refused) = live.ensure_agent().await else { panic!("the launch went ahead") };
@@ -188,7 +188,7 @@ async fn a_run_that_claims_what_needs_a_claim_it_doesnt_make_is_stopped_and_its_
 async fn a_closed_chats_agent_is_never_launched() {
     let dir = tempfile::tempdir().unwrap();
     let hub = hub_with_worktree(dir.path());
-    let (_link, asked) = worker(&hub, None, Some(claimed()));
+    let (_link, asked) = worker(&hub, None, claimed());
     let live = hub.live_session(&"s".into()).await.unwrap();
     live.close().await.unwrap();
 
@@ -200,14 +200,17 @@ async fn a_closed_chats_agent_is_never_launched() {
 }
 
 #[tokio::test]
-async fn a_run_of_this_protocol_that_hasnt_said_what_it_claims_is_asked_nothing() {
+async fn a_run_whose_claims_the_session_doesnt_have_is_asked_nothing() {
     let dir = tempfile::tempdir().unwrap();
     let hub = hub_with_worktree(dir.path());
-    let (link, asked) = worker(&hub, None, None);
+    let (link, asked) = worker(&hub, None, claimed());
     let live = hub.live_session(&"s".into()).await.unwrap();
 
     let none_running = live.control_agent(&link, Control::Cancel).await.unwrap();
     live.ensure_agent().await.unwrap();
+    // As for a run its worker said had gone, carried on with before its exit is taken in, whose claims the record
+    // didn't keep.
+    live.state.lock().capabilities = None;
     let prompt = Control::Prompt {
         seq: Seq::new(1),
         prompt: protocol::prompt::Prompt::new("x"),
@@ -224,7 +227,7 @@ async fn a_run_of_this_protocol_that_hasnt_said_what_it_claims_is_asked_nothing(
 async fn a_runs_exit_that_takes_its_claims_off_the_record_is_announced_though_the_session_had_moved_on() {
     let dir = tempfile::tempdir().unwrap();
     let hub = hub_with_worktree(dir.path());
-    let (link, _asked) = worker(&hub, None, Some(claimed()));
+    let (link, _asked) = worker(&hub, None, claimed());
     let live = hub.live_session(&"s".into()).await.unwrap();
     live.ensure_agent().await.unwrap();
     let run = current_run(&live);
@@ -248,7 +251,7 @@ async fn a_runs_exit_that_takes_its_claims_off_the_record_is_announced_though_th
 async fn a_start_recorded_after_its_runs_exit_puts_no_claims_on_the_record() {
     let dir = tempfile::tempdir().unwrap();
     let hub = hub_with_worktree(dir.path());
-    let (_link, _asked) = worker(&hub, None, Some(claimed()));
+    let (_link, _asked) = worker(&hub, None, claimed());
     let live = hub.live_session(&"s".into()).await.unwrap();
     live.ensure_agent().await.unwrap();
     let run = current_run(&live);
@@ -269,7 +272,7 @@ async fn a_run_found_running_that_has_exited_since_gets_no_claims_on_the_record(
     let dir = tempfile::tempdir().unwrap();
     let hub = hub_with_worktree(dir.path());
     let found = RunId::new(1);
-    let (_link, _asked) = worker(&hub, Some(found), Some(claimed()));
+    let (_link, _asked) = worker(&hub, Some(found), claimed());
     let live = hub.live_session(&"s".into()).await.unwrap();
     live.ensure_agent().await.unwrap();
     let id = SessionId::from("s");

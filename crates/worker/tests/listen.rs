@@ -176,7 +176,8 @@ async fn a_worker_asked_to_keep_running_carries_on_without_its_hub_and_sends_the
     let (mut second, _, agents) = Hub::greet(&worker.socket, true).await;
     assert_eq!(agents.len(), 1, "it outlived the first hub: {agents:?}");
     assert_eq!((&agents[0].session_id, agents[0].run), (&"s".into(), RunId::new(4)));
-    assert!(agents[0].capabilities.is_some(), "it says what the run claims, for a hub that didn't hear it start");
+    let claude = agents::claude::description().capabilities;
+    assert_eq!(*agents[0].capabilities, claude, "it says what the run claims, for a hub that didn't hear it start");
     std::fs::write(worker.dir.path().join("done"), "").unwrap();
     // Never recorded, since this hub goes without saying so.
     let missed = second.until_exited().await;

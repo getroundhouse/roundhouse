@@ -239,7 +239,7 @@ fn a_request_with_no_fields_reads_with_fields_it_doesnt_know() {
 fn every_reply_about_the_connection_and_the_workspace_keeps_its_form() {
     let hello = WorkerResponse::Hello(worker::HelloReply { protocol_version: 4, build: Some("0.1.9".into()) });
     answered(hello, r#"{"result":"hello","protocol_version":4,"build":"0.1.9"}"#);
-    let running = vec![RunningAgent { session_id: "s".into(), run: RunId::new(4), capabilities: Some(steers()) }];
+    let running = vec![RunningAgent { session_id: "s".into(), run: RunId::new(4), capabilities: steers() }];
     answered(
         WorkerResponse::RunningAgents(worker::RunningAgentsReply { agents: running }),
         r#"{"result":"running_agents","agents":[{"session_id":"s","run":4,"capabilities":{"conversation":{},"prompts":{"steer":{}},"output":{},"calls":{},"approvals":{},"asking":{},"settings":{},"turns":{},"context":{},"account":{},"background":{},"setup":{}}}]}"#,
@@ -304,8 +304,8 @@ fn every_reply_about_the_worktree_keeps_its_form() {
 
 #[test]
 fn every_reply_about_an_agent_keeps_its_form() {
-    let claims = Some(steers());
-    let started = worker::AgentStarted { pid: 4242, run: RunId::new(4), already_running: false, capabilities: claims };
+    let started =
+        worker::AgentStarted { pid: 4242, run: RunId::new(4), already_running: false, capabilities: steers() };
     answered(
         WorkerResponse::AgentStarted(started),
         r#"{"result":"agent_started","pid":4242,"run":4,"already_running":false,"capabilities":{"conversation":{},"prompts":{"steer":{}},"output":{},"calls":{},"approvals":{},"asking":{},"settings":{},"turns":{},"context":{},"account":{},"background":{},"setup":{}}}"#,

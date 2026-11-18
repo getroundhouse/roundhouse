@@ -377,7 +377,7 @@ async fn a_worker_lists_the_agents_it_is_running() {
     }
 
     assert!(matches!(answered[1], WorkerOutcome::Response(WorkerResponse::AgentStarted(_))), "{answered:?}");
-    let capabilities = Some(Box::new(agents::claude::description().capabilities));
+    let capabilities = Box::new(agents::claude::description().capabilities);
     let agent = protocol::worker::RunningAgent { session_id: "s".into(), run: RunId::new(4), capabilities };
     assert_eq!(
         answered[2],
