@@ -155,7 +155,7 @@ A repository set up for Conductor works here unchanged, because Roundhouse reads
 - **A workspace made before its branches went in a folder names a new branch beside its own, as `euston--try-the-parser`,** while git still has its branch `euston`, or its worktree has had it, since git can't have `euston/…` beside `euston`. Its worktrees go in the same folder of `.children/` either way. *Not built.* *Unconfirmed.*
 - **Ignored files are copied into a new one as setup copies them,** since copying is quick. *Not built.*
 - **The setup script runs in a new one only when the agent asks for it,** since a subagent that doesn't build shouldn't wait for setup. *Not built.*
-- **Archiving refuses if any of a workspace's other worktrees has uncommitted changes or commits on no branch, naming which, as it does for the workspace's own, unless forced.** Then it removes them all, and keeps every branch, since squashed merges leave no way to tell that a branch's work has landed. *Not built.*
+- **Archiving refuses if any of a workspace's other worktrees has uncommitted changes or commits on no branch, or a status that can't be read, naming which, as it does for the workspace's own, unless forced.** Then it removes them all, and keeps every branch, since squashed merges leave no way to tell that a branch's work has landed. *Not built.*
 - **Restoring brings back only the workspace's own worktree.** The others' branches are kept, and a worktree can be made on one again. *Not built.*
 
 ## Pushing to GitHub

@@ -2,8 +2,8 @@
 //! Each keeps its branch and its record.
 
 use protocol::client::{ApiError, ErrorCode};
-use protocol::model::{ChildWorktree, Repo, WorkspaceId};
-use protocol::worker::{RemoveWorkspace, WorktreeRemoval, WorktreeRemoved, WouldLose};
+use protocol::model::{ChildWorktree, GitStatus, Repo, WorkspaceId};
+use protocol::worker::{self, RemoveWorkspace, WorktreeRemoval, WorktreeRemoved, WouldLose};
 use tracing::warn;
 
 use super::git_status;
@@ -101,13 +101,27 @@ fn within(child: &ChildWorktree, said: &str) -> String {
     format!("In {}: {said}", child.path)
 }
 
-/// What archiving the workspace would lose in `children`, its other worktrees, in words for a person, naming each.
+/// What archiving the workspace would lose in `children`, its other worktrees, in words for a person, naming each, as
+/// [`archive_would_lose`] says.
 pub(in crate::hub) async fn would_lose(link: &WorkerLink, children: &[ChildWorktree]) -> Vec<String> {
     let mut losses = Vec::new();
     for child in children {
-        if let Some(loss) = git_status(link, &child.path).await.and_then(|status| status.loss_if_removed()) {
+        let status = link.call(worker::GitStatus { path: child.path.clone() }).await;
+        if let Some(loss) = archive_would_lose(&status) {
             losses.push(within(child, &loss));
         }
     }
     losses
+}
+
+/// What archiving a worktree whose status is `status` would lose, in words for a person, or `None` for nothing. A
+/// status that couldn't be read can't say nothing would be lost, so it says that instead, and why.
+pub(in crate::hub) fn archive_would_lose(status: &Result<GitStatus, ApiError>) -> Option<String> {
+    match status {
+        Ok(status) => status.loss_if_removed(),
+        Err(e) => Some(format!(
+            "Whether archiving would lose work couldn't be read ({}). Archive with force to remove it anyway",
+            e.message
+        )),
+    }
 }
