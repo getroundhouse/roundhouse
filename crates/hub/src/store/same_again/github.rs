@@ -1,9 +1,11 @@
-//! The rule's rows for what the hub keeps of GitHub: its accounts, the logins found on each provider's machines, the
-//! apps of the person's own, and what each repository's account reaches.
+//! The rule's rows for what the hub keeps of GitHub: its accounts, the sign-ins to them, the logins found on each
+//! provider's machines, the apps of the person's own, and what each repository's account reaches.
 
 use protocol::client::github_apps::GithubManifestCode;
+use protocol::fixtures;
 use protocol::model::{
-    GhLogin, GithubAccountId, GithubAppId, GithubLoginKind, GithubRepositoryName, GithubUser, GithubUserId, Reach, Rev,
+    GhLogin, GithubAccountId, GithubAppId, GithubLoginKind, GithubRepositoryName, GithubSignInStatus, GithubUser,
+    GithubUserId, Reach, Rev,
 };
 
 use super::super::{GithubAppMaking, GithubConnecting, Store};
@@ -49,6 +51,18 @@ pub(super) fn needs(store: &Store) -> Said {
 
 fn ada() -> GithubUser {
     GithubUser { id: GithubUserId::new(7), name: "ada".into() }
+}
+
+pub(super) fn sign_in(store: &Store) -> Rev {
+    store.github_sign_in(&"i".into()).unwrap().unwrap().rev
+}
+
+pub(super) fn waiting(store: &Store) {
+    store.start_github_sign_in(&"i".into(), &fixtures::github_sign_in("i").status).unwrap();
+}
+
+pub(super) fn refused(store: &Store) -> Said {
+    Said::record(&store.set_github_sign_in(&"i".into(), &GithubSignInStatus::Refused).unwrap())
 }
 
 pub(super) fn found_rev(store: &Store) -> Rev {

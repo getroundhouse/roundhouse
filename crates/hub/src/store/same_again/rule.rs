@@ -50,15 +50,16 @@ impl Said {
 }
 
 /// Tables whose records have a revision, and no write that leaves it when it holds what the record holds, with why.
-const NONE_REPEATED: &[(&str, &str)] = &[
-    ("diff_comments", "a comment is made and removed, and an edit is written whatever its text"),
-    ("github_sign_ins", "a sign-in is started, and where it's got to is written whatever it was"),
-];
+const NONE_REPEATED: &[(&str, &str)] = &[];
 
 const ROWS: &[Row] = &[
     row("repos", "its address, read", nothing, workspaces::read_address, workspaces::repo),
     row("workspaces", "another build", nothing, workspaces::older_build, workspaces::workspace),
     row("workspaces", "the hub's build", workspaces::on_older_build, workspaces::own_build, workspaces::workspace),
+    row("workspaces", "its setup", nothing, workspaces::setup, workspaces::workspace),
+    row("workspaces", "its branch", nothing, workspaces::branch, workspaces::workspace),
+    row("diff_comments", "its text, edited", workspaces::commented, workspaces::edit, workspaces::comment),
+    row("sessions", "its run's claims", nothing, sessions::claims, sessions::session),
     row("sessions", "read through", sessions::replied, sessions::read, sessions::session),
     row("sessions", "marked unread", sessions::replied_and_read, sessions::unread, sessions::session),
     row("sessions", "a draft", nothing, sessions::draft, sessions::session),
@@ -76,6 +77,7 @@ const ROWS: &[Row] = &[
     row("child_worktrees", "its branches", workspaces::made_child, workspaces::branches, workspaces::child),
     row("github_accounts", "its login cleared", github::by_token, github::clear, github::account),
     row("github_accounts", "signing in again", github::signed_in, github::needs, github::account),
+    row("github_sign_ins", "where it's got to", github::waiting, github::refused, github::sign_in),
     row("found_github_logins", "a login found", nothing, github::found, github::found_rev),
     row("github_apps", "its bot", github::made_app, github::bot, github::app),
     row("github_reach", "what it reaches", nothing, github::reach, github::reach_rev),

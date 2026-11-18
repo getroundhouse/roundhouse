@@ -76,17 +76,17 @@ impl Store {
         rows.collect::<rusqlite::Result<_>>().map_err(StoreError::from)
     }
 
-    /// Replaces a comment's text, and returns it as stored, with its new revision. The comment being written goes with
-    /// it, if it changes this comment and says what's saved, as adding one does.
+    /// Replaces a comment's text, and returns it as stored: with a newer revision, or as it was if it held that text
+    /// already. The comment being written goes with it, if it changes this comment and says what's saved, as adding one
+    /// does.
     pub fn edit_comment(&self, id: &CommentId, text: &str) -> Result<Commented<DiffComment>, StoreError> {
         let mut conn = lock(&self.writer);
         let tx = conn.transaction()?;
-        let changed = tx.execute("UPDATE diff_comments SET text = ? WHERE id = ?", params![text, id.as_str()])?;
-        if changed == 0 {
-            return Err(StoreError::NotFound { kind: "comment", id: id.to_string() });
-        }
+        let update = "UPDATE diff_comments SET text = ?1 WHERE id = ?2 AND text IS NOT ?1";
+        tx.execute(update, params![text, id.as_str()])?;
         let query = format!("SELECT {COMMENT_COLUMNS}, rev FROM diff_comments WHERE id = ?");
-        let edited = tx.query_row(&query, [id.as_str()], comment_from_row)?;
+        let edited = tx.query_row(&query, [id.as_str()], comment_from_row).optional()?;
+        let Some(edited) = edited else { return Err(StoreError::NotFound { kind: "comment", id: id.to_string() }) };
         let saves = |writing: &CommentDraft| writing.editing.as_ref() == Some(id) && writing.text == text;
         let workspace = change_writing(&tx, &edited.workspace_id, |writing| (!saves(&writing)).then_some(writing))?;
         tx.commit()?;

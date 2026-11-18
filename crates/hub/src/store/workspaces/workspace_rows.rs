@@ -298,9 +298,11 @@ impl Store {
         Ok(BranchesSet { before, workspace: if changed { Some(self.get_workspace(id)?) } else { None } })
     }
 
+    /// Records where the workspace's setup has got to, and returns the workspace, as it was if its setup had got there
+    /// already.
     pub fn set_workspace_setup(&self, id: &WorkspaceId, setup: SetupStatus) -> Result<Workspace, StoreError> {
         lock(&self.writer).execute(
-            "UPDATE workspaces SET setup = ? WHERE id = ?",
+            "UPDATE workspaces SET setup = ?1 WHERE id = ?2 AND setup IS NOT ?1",
             params![serde_json::to_string(&setup)?, id.as_str()],
         )?;
         self.get_workspace(id)
@@ -324,10 +326,10 @@ impl Store {
         Ok(())
     }
 
-    pub fn set_workspace_branch(&self, id: &WorkspaceId, branch: &BranchName) -> Result<(), StoreError> {
-        let update = "UPDATE workspaces SET branch = ? WHERE id = ?";
-        lock(&self.writer).execute(update, params![branch.as_str(), id.as_str()])?;
-        Ok(())
+    /// Records the branch the workspace is on. Returns whether it was on another.
+    pub fn set_workspace_branch(&self, id: &WorkspaceId, branch: &BranchName) -> Result<bool, StoreError> {
+        let update = "UPDATE workspaces SET branch = ?1 WHERE id = ?2 AND branch IS NOT ?1";
+        Ok(lock(&self.writer).execute(update, params![branch.as_str(), id.as_str()])? > 0)
     }
 
     pub fn get_workspace(&self, id: &WorkspaceId) -> Result<Workspace, StoreError> {

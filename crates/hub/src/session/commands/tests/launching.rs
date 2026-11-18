@@ -9,7 +9,8 @@ use protocol::capability::{Capabilities, Claimed, Control};
 use protocol::client::{ErrorCode, HubNotice};
 use protocol::event::EventBody;
 use protocol::model::{
-    Effort as ModelEffort, ModelName, PermissionMode, RunCapabilities, RunId, Seq, SessionId, SessionSettingsChange,
+    Effort as ModelEffort, ModelName, PermissionMode, Rev, RunCapabilities, RunId, Seq, SessionId,
+    SessionSettingsChange,
 };
 use protocol::worker::{AgentStarted, Delivery, WorkerRequest, WorkerResponse};
 use serde_json::{Value, json};
@@ -81,6 +82,10 @@ async fn on_record(hub: &Arc<Hub>) -> Option<RunCapabilities> {
     hub.blocking(move |store| store.get_session(&id)).await.unwrap().session.agent_capabilities
 }
 
+async fn session_rev(hub: &Arc<Hub>) -> Rev {
+    hub.blocking(|store| store.get_session(&"s".into())).await.unwrap().session.rev
+}
+
 fn current_run(live: &LiveSession) -> RunId {
     live.state.lock().agent.expect("a run is current").run
 }
@@ -144,20 +149,45 @@ async fn a_chat_in_a_mode_this_build_has_no_name_for_starts_its_agent_with_full_
     assert_eq!(settings.mode, Some(claimed().approvals.modes.unwrap().default));
 }
 
+/// Whether the record held them already or not, as when a hub carried on with the run and put them back itself, which
+/// is then told to nobody, since the record is as it was.
 #[tokio::test]
-async fn a_run_its_worker_finds_running_has_its_claims_put_back_on_the_record() {
-    let dir = tempfile::tempdir().unwrap();
-    let hub = hub_with_worktree(dir.path());
+async fn a_run_its_worker_finds_running_has_its_claims_put_back_on_the_record_and_told_if_that_changed_it() {
     let found = RunId::new(1);
-    let (_link, asked) = worker(&hub, Some(found), Some(claimed()));
-    let live = hub.live_session(&"s".into()).await.unwrap();
+    let kept = RunCapabilities { run: found, claims: Box::new(claimed()) };
+    for held in [false, true] {
+        let dir = tempfile::tempdir().unwrap();
+        let hub = hub_with_worktree(dir.path());
+        let (_link, asked) = worker(&hub, Some(found), Some(claimed()));
+        if held {
+            let kept = kept.clone();
+            hub.blocking(move |store| store.set_claims(&"s".into(), &kept)).await.unwrap();
+        }
+        let rev = session_rev(&hub).await;
+        let live = hub.live_session(&"s".into()).await.unwrap();
+        let mut feed = hub.subscribe_feed();
 
-    live.ensure_agent().await.unwrap();
+        live.ensure_agent().await.unwrap();
 
-    assert_eq!(current_run(&live), found);
-    assert_eq!(live.run_claims(), Some(claimed()));
-    assert_eq!(on_record(&hub).await, Some(RunCapabilities { run: found, claims: Box::new(claimed()) }));
-    assert_eq!(methods(&asked), ["agent_start"]);
+        assert_eq!(current_run(&live), found);
+        assert_eq!(live.run_claims(), Some(claimed()));
+        assert_eq!(on_record(&hub).await, Some(kept.clone()));
+        assert_eq!(methods(&asked), ["agent_start"]);
+        let mut told = Vec::new();
+        while let Ok(notice) = feed.try_recv() {
+            if let HubNotice::Session(session) = notice {
+                told.push(session.agent_capabilities);
+            }
+        }
+        let moved = session_rev(&hub).await != rev;
+        if held {
+            assert!(!moved, "the record held them already, so its revision stays");
+            assert_eq!(told, [], "nothing of the record changed, so nobody is told");
+        } else {
+            assert!(moved, "putting them on the record is a change");
+            assert_eq!(told, [Some(kept.clone())], "every client hears what the run claims");
+        }
+    }
 }
 
 #[tokio::test]
