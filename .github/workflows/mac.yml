@@ -42,6 +42,8 @@ jobs:
   # Clippy on a runner of its own, with a cache of what only it builds, so the tests' runners restore none of that and a
   # lint fails within minutes. Mac runners cost nothing on a public repo.
   lint:
+    # Apart from ci.yml's lint, which is named the same.
+    name: mac lint
     runs-on: macos-26
     timeout-minutes: 60
     steps:
