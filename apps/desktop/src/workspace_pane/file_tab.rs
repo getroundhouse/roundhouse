@@ -3,10 +3,8 @@
 //! same tab, so reviewing a branch never leaves a trail of tabs.
 
 use gpui_kit::component::{Icon, IconName};
-use gpui_kit::{
-    Anchor, AnyElement, Context, IntoElement as _, ParentElement as _, SharedString, StyleRefinement, Styled, Window,
-};
-use look::{IconSizing as _, Region};
+use gpui_kit::{AnyElement, Context, IntoElement as _, ParentElement as _, SharedString, Styled, Window};
+use look::IconSizing as _;
 
 use super::{Showing, WorkspacePane, tab};
 use crate::file_diff::FileDiff;
@@ -130,16 +128,7 @@ impl WorkspacePane {
             .on_click(cx.listener(|t, _, _, cx| t.show_file_tab(cx)))
             .child(Icon::new(IconName::File).sized(look::IconSize::Large))
             .child(tab::name().italic().child(name));
-        let tab = tab::tab("file-tab", face, close, selected, cx);
-        // Two files can share a name, so the whole path is a hover away, under the tab, with the button that copies it.
-        let path = path.to_string();
-        let tab = crate::says_more::on_hover(
-            look::hover_card_with_a_button("file-path-hover"),
-            tab,
-            Anchor::TopLeft,
-            StyleRefinement::default().flex_none().h_full(),
-            move |cx| crate::says_more::path_card(Region::FilePathCard, path, "copy-file-path", cx),
-        );
-        Some(tab.into_any_element())
+        // Two files can share a name, so the whole path is on the bar under the tab, with the button that copies it.
+        Some(tab::tab("file-tab", face, close, selected, cx).into_any_element())
     }
 }

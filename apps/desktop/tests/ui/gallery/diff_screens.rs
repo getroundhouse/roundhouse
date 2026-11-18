@@ -8,7 +8,7 @@ use look::Region;
 use super::frame::{CHANGES, FILE, Frame, Part, TABS};
 use super::image_files::{CHANGED, changed_images};
 use super::screens::FOCUS;
-use super::steps::{Screen, Step, Target};
+use super::steps::{Screen, Step};
 use super::worktree;
 use super::worlds::{conversation, diff, own_hub};
 
@@ -57,14 +57,14 @@ pub(crate) const DIFF_SCREENS: &[Screen] = &[
         steps: &[Step::Select(FOCUS), Step::OpenFile("crates/protocol/src/model.rs"), Step::MoveAway],
     },
     Screen {
-        name: "file-tab-path",
+        name: "file-path-copy",
         spec: "diff.md",
         world: Some(diff),
-        frame: Frame::Around(Part::Region(Region::TabBar), &[Part::Region(Region::FilePathCard)]),
+        frame: Frame::Around(Part::Region(Region::TabBar), &[Part::Region(Region::FileBar)]),
         steps: &[
             Step::Select(FOCUS),
             Step::OpenFile("crates/protocol/src/model.rs"),
-            Step::Hover { on: Target::Id("show-file-tab"), shows: Region::FilePathCard.id() },
+            Step::Point(Region::FileBar.id()),
         ],
     },
     Screen {

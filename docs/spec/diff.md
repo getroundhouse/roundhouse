@@ -36,14 +36,14 @@ A workspace's changes against its base, listed in a sidebar on the right, each f
 
   ![The file tab beside a chat's tab](screens/file-tab.png)
 
-- **Resting the pointer on the file tab shows the file's whole path on a card under it, with the button that copies it,** since two files can share a name, as the owner decided.
-
-  **The file tab's path, on the card under it.**
-
-  ![The file tab's path](screens/file-tab-path.png)
-
 - **The file tab's name is in italics,** as a tab that's replaced rather than added to usually is. *Unconfirmed.*
 - **A bar along the top of the file tab names the file, with its path on a raised pill,** its folders muted before its name, as the sidebar shows them, and a renamed file says what it was renamed from. A file opened from All files has the same bar. *Unconfirmed.*
+- **The file's path is copied from the bar, with the button after its path, which shows only while the pointer is on the bar,** as the owner decided, rather than from a card on the file tab, since the bar already shows the path. The button keeps its room while it's hidden, so nothing on the bar moves when it shows. A changed image's bar has it too.
+
+  **The button that copies the path, on the bar the pointer is on.** *Unconfirmed.*
+
+  ![The button that copies the path](screens/file-path-copy.png)
+
 - **A file's changes show with git's three lines either side, and the lines between fold into a row that says how many there are,** rather than git's `@@` lines. The row is on the code blocks' surface, `#1e1b19`, so it stands out from the lines either side without looking raised. Arrows in the row's line numbers show 20 more at a time, up from the change below or down from the change above, or all of them at once when there are no more than 20 between two changes, so the code around a change can be read without leaving the diff. Each arrow says what it shows when it's hovered. *Unconfirmed.*
 
   **A file's diff in the file tab, with a comment on a changed line, and the lines far from the change folded.** *Unconfirmed.*
@@ -81,7 +81,7 @@ A workspace's changes against its base, listed in a sidebar on the right, each f
 - **A saved comment shows where it was written, its text where it was typed,** on the same band, with Edit, Delete and Add to chat on its right. Edit opens it in the box again, and saving keeps it in its place. *Unconfirmed:* how Edit works.
 - **Add to chat puts a comment in the chat's composer, after what's typed there,** so you can say more with it. The comment stays on the diff until it's deleted, as every comment does, and Send to agent sends every comment at once.
 - **A changed file that isn't text shows what it was and what it is, rather than git's line saying they differ.** An image shows as it was in the commit the diff was taken from, as Before, and as it is in the worktree, as After. A file the branch adds shows only After, and one it removes only Before. Any other file says it isn't text, as All files does. It has no lines, so it takes no comments. It's read again with the diff, and an image that hasn't changed stays as it's drawn. *Unconfirmed.*
-- **A changed image is compared side by side, one side at a time in one place, or as what changed, all from one bar above it.** The bar has its path, and Side by side, Before, After and Difference at its right end, and nothing else, so neither is ever squeezed. The choice holds in every workspace until the app quits, as the choice of list or folders does, but a file opened while Before is chosen starts at After. Both sides are drawn at one scale from their top left, never bigger than they are, so a pixel is in the same place in each and an image that grew looks bigger. *Unconfirmed.*
+- **A changed image is compared side by side, one side at a time in one place, or as what changed, all from one bar above it.** The bar has its path, the button that copies it, and Side by side, Before, After and Difference at its right end, and nothing else, so neither is ever squeezed. The choice holds in every workspace until the app quits, as the choice of list or folders does, but a file opened while Before is chosen starts at After. Both sides are drawn at one scale from their top left, never bigger than they are, so a pixel is in the same place in each and an image that grew looks bigger. *Unconfirmed.*
 
   **A changed image, side by side.** *Unconfirmed.*
 
