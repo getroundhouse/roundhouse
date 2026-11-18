@@ -34,6 +34,7 @@ Where each kind of test goes, and what a test runs in: its hub, its clocks and i
 
 ## Timers
 
+- **A test doesn't wait out one of the product's timers,** which it would on every run. One in the product's own process moves a test clock: tokio's, paused, or GPUI's, with `advance_clock`. One that starts a process has it take shorter timers, as below. Only a dependency's timer that a test can neither move nor shorten is waited out.
 - **A real hub and its workers take their timers from the environment,** as `hub::Timers` and `worker::Timers` say, only in a build with the `testing` feature. A timer a test would otherwise sit through goes in one of them.
 - **Tests shorten the timers that only make them wait, and keep the product's time limits,** which `FOR_TESTS` does for every e2e and UI test's hub. A limit guards against a slow process, which one on a busy runner is.
 - **Only a test about a limit changes it.** To see the limit hold, it shortens it, through `Stack::start_with`. To see that something didn't wait for the limit, it lengthens it far past its own wait, as `patient_with_workers` does, rather than timing the product's value.
