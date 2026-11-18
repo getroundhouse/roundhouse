@@ -127,8 +127,12 @@ pub(crate) fn signal_group(leader: u32, signal: Signal) {
 
 /// A console of its own with no window, without this process's own input and output.
 pub(crate) fn detach(command: &mut Command) {
-    command.creation_flags(CREATE_NO_WINDOW);
+    without_window(command);
     keep_stdio_from_children();
+}
+
+pub(crate) fn without_window(command: &mut Command) {
+    command.creation_flags(CREATE_NO_WINDOW);
 }
 
 pub(crate) fn keep_stdio_from_children() {

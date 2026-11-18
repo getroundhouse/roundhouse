@@ -19,6 +19,9 @@ pub(crate) fn own_group(command: &mut Command) {
     command.process_group(0);
 }
 
+/// Nothing, since a Unix program has no window unless it opens one.
+pub(crate) fn without_window(_command: &mut Command) {}
+
 /// In a session of its own.
 pub(crate) fn detach(command: &mut Command) {
     // SAFETY: setsid is async-signal-safe, which is all pre_exec requires.
