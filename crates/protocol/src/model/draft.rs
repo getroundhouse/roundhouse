@@ -111,31 +111,83 @@ pub struct CommentDraft {
     pub text: String,
 }
 
-/// What's chosen and typed in answer to the question a chat's agent is waiting on, and not sent, kept on the hub so
-/// it's there after the app restarts, and in every client. Like a chat's draft, it's the person's. A client keeps one
-/// for a request to use a tool too, which it asks as one question whose answers are `client_core::ToolUseAnswer`'s,
-/// in their order, so one chosen in one client is the same one in every other.
+/// What's chosen and typed in answer to the request a chat's agent is waiting on, and not sent, kept on the hub so it's
+/// there after the app restarts, and in every client. Like a chat's draft, it's the person's.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
-pub struct AnswerDraft {
-    /// The question it answers, so what was typed for one that's gone is never taken for the next.
+pub struct DecisionDraft {
+    /// The request it answers, so what was typed for one that's gone is never taken for the next.
     pub approval_id: ApprovalId,
-    /// What's chosen and typed on each of the questions asked together, in the order they were asked.
-    #[serde(default)]
-    pub answers: Vec<AnswerSoFar>,
+    pub so_far: SoFar,
 }
 
-impl AnswerDraft {
-    /// Whether anything's chosen or typed, since an answer with nothing is the same as none.
+impl DecisionDraft {
+    /// Whether anything's chosen or typed, since a draft with nothing is the same as none.
     pub fn says_anything(&self) -> bool {
-        self.answers.iter().any(|so_far| !so_far.picked.is_empty() || !so_far.typed.is_empty())
+        match &self.so_far {
+            SoFar::Use { chosen, words, writing: _ } => chosen.is_some() || !words.is_empty(),
+            SoFar::Answers { answers } => {
+                answers.iter().any(|so_far| !so_far.picked.is_empty() || !so_far.typed.is_empty())
+            }
+            SoFar::Unknown => false,
+        }
     }
+}
+
+impl DecisionDraft {
+    /// It with what's typed for each of `request`'s secret questions taken out, as the hub keeps it, since a secret
+    /// answer reaches the agent and nothing else.
+    #[must_use]
+    pub fn without_secrets(&self, request: &crate::capability::approvals::Request) -> DecisionDraft {
+        let mut draft = self.clone();
+        if let SoFar::Answers { answers } = &mut draft.so_far {
+            for at in request.secret_questions() {
+                if let Some(answer) = answers.get_mut(at) {
+                    *answer = AnswerSoFar::default();
+                }
+            }
+        }
+        draft
+    }
+}
+
+/// What's chosen and typed so far, for the kind of request it answers.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[serde(tag = "drafts", rename_all = "snake_case")]
+pub enum SoFar {
+    /// Whether to allow a use the agent asks to make, such as a call, and the words to deny it in.
+    Use {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        chosen: Option<UseChoice>,
+        /// What's typed to deny it in the person's own words.
+        #[serde(default, skip_serializing_if = "String::is_empty")]
+        words: String,
+        /// Whether the words are the answer, rather than what's chosen, as they are once the person starts typing.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        writing: bool,
+    },
+    /// What's chosen and typed on each of the questions asked together, in the order they were asked.
+    Answers {
+        #[serde(default)]
+        answers: Vec<AnswerSoFar>,
+    },
+    #[serde(other)]
+    Unknown,
+}
+
+/// Whether a use is allowed or denied.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum UseChoice {
+    Allow,
+    Deny,
+    #[serde(other)]
+    Unknown,
 }
 
 /// What's chosen and typed on one question.
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq, Eq)]
 pub struct AnswerSoFar {
-    /// The options chosen, by their place among the question's options. For a request to use a tool, `0` allows it and
-    /// `1` denies it, which a hub keeps for good, so those never change, and an answer added later goes after them.
+    /// The options chosen, by their place among the question's options.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub picked: Vec<u32>,
     /// What's typed in the row for another answer.

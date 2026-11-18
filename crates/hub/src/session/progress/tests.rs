@@ -5,8 +5,8 @@ use std::collections::HashMap;
 
 use protocol::capability::turns::OwnTurn;
 use protocol::event::{
-    Again, AgentRunState, AgentTask, ApprovalOutcome, ContentBlock, ExitReason, FailureKind, NoticeLevel, TaskChange,
-    TaskKind, TaskOutcome, TurnOutcome,
+    Again, AgentRunState, AgentTask, ContentBlock, ExitReason, FailureKind, NoticeLevel, TaskChange, TaskKind,
+    TaskOutcome, TurnOutcome,
 };
 use protocol::model::ApprovalId;
 use protocol::prompt::Prompt;
@@ -40,8 +40,7 @@ fn current(run: u64) -> Origin {
 }
 
 fn asked(id: &str) -> EventBody {
-    serde_json::from_value(json!({"type": "approval_requested", "approval_id": id, "tool_name": "Bash", "input": {}}))
-        .unwrap()
+    protocol::fixtures::approval_request(id, protocol::fixtures::to_run("ls")).into()
 }
 
 fn ended(started_at_ms: Option<i64>) -> EventBody {
@@ -142,13 +141,7 @@ fn an_approval_is_open_from_its_asking_until_its_answer() {
     let Step { change, next, .. } = progress.step(current(2), asked("a"), true);
     progress.take(next, Seq::new(5), 5, None);
     assert_eq!(change.status.map(|status| status.status), Some(SessionStatus::WaitingApproval));
-    let answered = EventBody::ApprovalResolved {
-        approval_id: "a".into(),
-        outcome: ApprovalOutcome::Allowed,
-        answers_by_text: None,
-        answers_by_position: None,
-        by_setting: false,
-    };
+    let answered = protocol::fixtures::decided("a", protocol::fixtures::allow_once());
     let Step { change, next, .. } = progress.step(Origin::Hub, answered, true);
     progress.take(next, Seq::new(6), 6, None);
 

@@ -3,7 +3,8 @@
 
 use std::collections::HashSet;
 
-use protocol::event::{ContentBlock, EventBody, Question};
+use protocol::capability::asking::Question;
+use protocol::event::{ContentBlock, EventBody};
 
 use super::english::{all_common_english, is_boilerplate};
 use crate::calls::{EditFile, ReadFile, Recorded, ToSubagents, ToolCall, WriteFile};

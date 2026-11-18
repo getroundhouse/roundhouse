@@ -9,8 +9,9 @@ use own_turns::OwnTurns;
 use pending::PendingCalls;
 use prompt::PromptProgress;
 use protocol::attachment::NewAttachment;
-use protocol::event::{AgentRunState, ApprovalOutcome, EventBody, TurnOutcome};
-use protocol::model::{CacheRequest, MessageId, SubagentId, ToolUseId};
+use protocol::capability::approvals::Asks;
+use protocol::event::{AgentRunState, EventBody, TurnOutcome};
+use protocol::model::{CacheRequest, MessageId, PermissionMode, SubagentId, ToolUseId};
 use protocol::tail::{BlockKind, DeltaChange, Retrying, StreamDelta};
 use said::FailedRequests;
 use serde_json::Value;
@@ -80,6 +81,8 @@ pub struct Normalizer {
     pub(super) compactions: Compactions,
     pub(super) failed: FailedRequests,
     pub(super) own_turns: OwnTurns,
+    /// The mode the CLI last said it's in, in which it asks to make a call only when it asks whatever the mode.
+    pub(super) mode: Option<PermissionMode>,
 }
 
 impl Normalizer {
@@ -114,9 +117,7 @@ impl Normalizer {
             denied::say(body, &value, &answered);
             typed::say(body, &answered, &value);
         }
-        if let Parsed::Event(EventBody::ApprovalRequested { asked_by, .. }) = &mut parsed {
-            *asked_by = Subagents::asked_by(&value);
-        }
+        self.asking(&mut parsed, &value);
         if let Parsed::Delta(delta) = &parsed {
             self.streamed(delta);
         }
@@ -160,6 +161,26 @@ impl Normalizer {
         }
     }
 
+    /// Notes the mode the CLI says it's in, and says of a request in `parsed`, the line `value`, which subagent asks
+    /// it, and whether it's asked whatever the mode.
+    fn asking(&mut self, parsed: &mut Parsed, value: &Value) {
+        if let Parsed::Event(
+            EventBody::AgentInit { permission_mode: Some(mode), .. } | EventBody::AgentMode { permission_mode: mode },
+        ) = parsed
+        {
+            self.mode = Some(*mode);
+        }
+        if let Parsed::Event(EventBody::ApprovalRequested { asked_by, request, .. }) = parsed {
+            *asked_by = Subagents::asked_by(value);
+            // With full access, the CLI asks to make a call only where it asks whatever the mode, as its check of a
+            // removal does, which a CLI from before it said so doesn't mark.
+            if self.mode == Some(PermissionMode::FullAccess) && matches!(request.asks, Asks::Call { .. }) {
+                request.always = true;
+                request.suggested.clear();
+            }
+        }
+    }
+
     /// Gives a list of background tasks what the lines before it said of them.
     pub(super) fn list(&mut self, body: &mut EventBody) {
         if let EventBody::AgentTasks { tasks, stopped } = body {
@@ -200,13 +221,10 @@ fn parse_value(value: &Value, subagents: &Subagents) -> Parsed {
         "stream_event" => stream_event(value, from),
         "control_request" => control_request(value),
         "control_cancel_request" => match str_of(value, "request_id") {
-            Some(id) => Parsed::Event(EventBody::ApprovalResolved {
-                approval_id: id.into(),
-                outcome: ApprovalOutcome::Cancelled,
-                answers_by_text: None,
-                answers_by_position: None,
-                by_setting: false,
-            }),
+            // Nobody decided it.
+            Some(id) => {
+                Parsed::Event(EventBody::ApprovalResolved { approval_id: id.into(), decision: None, by_setting: false })
+            }
             None => other(kind),
         },
         // Replies to the adapter's own requests, such as an interrupt.
@@ -322,18 +340,12 @@ fn control_request(value: &Value) -> Parsed {
     if subtype != "can_use_tool" {
         return Parsed::UnsupportedControl { request_id, subtype: subtype.to_string() };
     }
-    let tool_name = string_of(request, "tool_name").unwrap_or_default();
+    let tool = string_of(request, "tool_name").unwrap_or_default();
     let input = request.get("input").cloned().unwrap_or(Value::Null);
     Parsed::Event(EventBody::ApprovalRequested {
-        request: None,
         approval_id: request_id.into(),
-        asking: Some(Box::new(super::super::approvals::asking(&tool_name, &input))),
-        tool_name,
+        request: Box::new(super::super::approvals::request(&tool, &input, request)),
         tool_use_id: id_of(request, "tool_use_id"),
-        input,
-        description: string_of(request, "description"),
-        suggestions: Box::new(request.get("permission_suggestions").cloned().unwrap_or(Value::Null)),
-        reason: string_of(request, "decision_reason").filter(|reason| !reason.trim().is_empty()),
         // A Normalizer knows it from the subagents it's heard start.
         asked_by: None,
     })

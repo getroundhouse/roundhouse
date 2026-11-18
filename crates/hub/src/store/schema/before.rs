@@ -118,3 +118,6 @@ pub(crate) const BEFORE_PUSH_ROUTES: usize = 67;
 
 /// How many migrations there were before Claude's calls were typed.
 pub(crate) const BEFORE_TYPED_CALLS: usize = 69;
+
+/// How many migrations there were before requests for approval, and what closed them, were typed.
+pub(crate) const BEFORE_TYPED_REQUESTS: usize = 70;

@@ -1,8 +1,8 @@
-//! What's chosen and typed in the panel and not sent, which the hub keeps until what's asked is answered, so it's
-//! there when the app opens again and in any other client.
+//! What's chosen and typed in the panel and not sent, which the hub keeps as a draft of the decision until what's
+//! asked is decided, so it's there when the app opens again and in any other client.
 
 use gpui_kit::{App, Context, Window};
-use protocol::model::{AnswerDraft, AnswerSoFar};
+use protocol::model::{AnswerSoFar, DecisionDraft};
 
 use super::QuestionPanel;
 use crate::questions::choice::Choice;
@@ -14,10 +14,9 @@ impl QuestionPanel {
         self.asked.iter().any(|asked| !asked.typed(cx).trim().is_empty())
     }
 
-    /// What's chosen and typed so far, as the hub keeps it, or `None` with nothing, or once it's answered. Options are
-    /// kept by their places, which for a tool's use are those of `client_core::ToolUseAnswer::ALL`, so each client
-    /// reads them alike.
-    pub fn so_far(&self, cx: &App) -> Option<AnswerDraft> {
+    /// What's chosen and typed so far, as the hub keeps it, or `None` with nothing, or once it's answered. A tool's use
+    /// keeps the answer chosen by name, as `client_core::ToolUseAnswer` says, so each client reads it alike.
+    pub fn so_far(&self, cx: &App) -> Option<DecisionDraft> {
         if self.answered {
             return None;
         }
@@ -34,7 +33,7 @@ impl QuestionPanel {
                 AnswerSoFar { picked, typed: asked.typed(cx), other }
             })
             .collect();
-        let draft = AnswerDraft { approval_id: self.approval_id.clone(), answers };
+        let draft = DecisionDraft { approval_id: self.approval_id.clone(), so_far: self.asks.drafted(answers) };
         draft.says_anything().then_some(draft)
     }
 
@@ -42,12 +41,13 @@ impl QuestionPanel {
     /// place of what's here, or clears it for `None`. The hub has it already, so it isn't kept again, and the focus
     /// stays where it is. A choice that changes ignores keys for the half second the panel does when it's just come,
     /// so an Enter meant for what was chosen here can't send what was chosen elsewhere.
-    pub fn take_so_far(&mut self, kept: Option<&AnswerDraft>, window: &mut Window, cx: &mut Context<Self>) {
+    pub fn take_so_far(&mut self, kept: Option<&DecisionDraft>, window: &mut Window, cx: &mut Context<Self>) {
+        let kept = kept.map_or_default(|kept| self.asks.answers_drafted(&kept.so_far));
         for q in 0..self.asked.len() {
             if self.asks.secret(q) {
                 continue;
             }
-            let so_far = kept.and_then(|kept| kept.answers.get(q)).cloned().unwrap_or_default();
+            let so_far = kept.get(q).cloned().unwrap_or_default();
             let Some(asked) = self.asked.get_mut(q) else { continue };
             let picked = so_far.picked.iter().filter_map(|&option| usize::try_from(option).ok());
             let choice = Choice::from_kept(picked, so_far.other, asked.question.options.len());

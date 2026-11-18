@@ -1,8 +1,8 @@
 use protocol::attachment::{Attachment, MAX_PER_PROMPT, MediaType};
 use protocol::event::EventBody;
 use protocol::model::{
-    AnswerDraft, AnswerSoFar, AttachmentId, CommentDraft, DiffSide, Draft, DraftToKeep, QueuedPrompt, SessionId,
-    WorkspaceId,
+    AnswerSoFar, AttachmentId, CommentDraft, DecisionDraft, DiffSide, Draft, DraftToKeep, QueuedPrompt, SessionId,
+    SoFar, WorkspaceId,
 };
 use protocol::prompt::Prompt;
 
@@ -166,9 +166,10 @@ fn closing_a_session_takes_its_draft_and_lets_go_of_the_files_only_the_draft_nam
     assert_eq!(store.get_session(&id()).unwrap().session.draft, Draft::default());
 }
 
-fn answer(typed: &str) -> AnswerDraft {
+/// Answers to the request `q`'s two questions, with `typed` for the first, being written.
+fn answer(typed: &str) -> DecisionDraft {
     let so_far = AnswerSoFar { picked: vec![1], typed: typed.to_string(), other: true };
-    AnswerDraft { approval_id: "q".into(), answers: vec![so_far, AnswerSoFar::default()] }
+    DecisionDraft { approval_id: "q".into(), so_far: SoFar::Answers { answers: vec![so_far, AnswerSoFar::default()] } }
 }
 
 fn comment(text: &str) -> CommentDraft {
@@ -176,13 +177,13 @@ fn comment(text: &str) -> CommentDraft {
 }
 
 #[test]
-fn an_answer_being_typed_is_kept_until_another_replaces_it_and_none_clears_it() {
+fn a_decision_being_drafted_is_kept_until_another_replaces_it_and_none_clears_it() {
     let dir = tempfile::tempdir().unwrap();
     let store = store_with_session(dir.path());
-    assert_eq!(store.get_session(&id()).unwrap().session.answer_draft, None, "nothing's typed yet");
+    assert_eq!(store.get_session(&id()).unwrap().session.decision_draft, None, "nothing's typed yet");
     let before = store.get_session(&id()).unwrap().session.rev;
 
-    let kept = store.set_answer_draft(&id(), Some(&answer("half"))).unwrap();
+    let kept = store.set_decision_draft(&id(), Some(&answer("half"))).unwrap();
 
     assert!(kept.changed);
     assert!(
@@ -190,60 +191,63 @@ fn an_answer_being_typed_is_kept_until_another_replaces_it_and_none_clears_it() 
         "clients follow records by revision, so the feed would miss it otherwise"
     );
     assert_eq!(kept.session.session, store.get_session(&id()).unwrap().session, "it comes back as stored");
-    assert_eq!(kept.session.session.answer_draft, Some(answer("half")));
-    store.set_answer_draft(&id(), Some(&answer("half an answer"))).unwrap();
-    let again = store.set_answer_draft(&id(), Some(&answer("half an answer"))).unwrap();
+    assert_eq!(kept.session.session.decision_draft, Some(answer("half")));
+    store.set_decision_draft(&id(), Some(&answer("half an answer"))).unwrap();
+    let again = store.set_decision_draft(&id(), Some(&answer("half an answer"))).unwrap();
     assert!(!again.changed, "nothing changed, so nothing is announced");
-    assert_eq!(again.session.session.answer_draft, Some(answer("half an answer")));
-    let cleared = [None, None].map(|draft| store.set_answer_draft(&id(), draft).unwrap().changed);
+    assert_eq!(again.session.session.decision_draft, Some(answer("half an answer")));
+    let cleared = [None, None].map(|draft| store.set_decision_draft(&id(), draft).unwrap().changed);
     assert_eq!(cleared, [true, false]);
-    assert_eq!(store.get_session(&id()).unwrap().session.answer_draft, None);
+    assert_eq!(store.get_session(&id()).unwrap().session.decision_draft, None);
 }
 
 #[test]
-fn closing_a_chat_lets_go_of_the_answer_being_typed_and_it_keeps_none_after() {
+fn closing_a_chat_lets_go_of_the_decision_being_drafted_and_it_keeps_none_after() {
     let dir = tempfile::tempdir().unwrap();
     let store = store_with_session(dir.path());
-    store.set_answer_draft(&id(), Some(&answer("half"))).unwrap();
+    store.set_decision_draft(&id(), Some(&answer("half"))).unwrap();
 
     store.set_session_closed(&id(), Some(1)).unwrap();
 
-    assert_eq!(store.get_session(&id()).unwrap().session.answer_draft, None);
-    let typed_late = store.set_answer_draft(&id(), Some(&answer("typed as it closed"))).unwrap();
+    assert_eq!(store.get_session(&id()).unwrap().session.decision_draft, None);
+    let typed_late = store.set_decision_draft(&id(), Some(&answer("typed as it closed"))).unwrap();
     assert!(!typed_late.changed, "a closed session keeps none");
 }
 
 #[test]
-fn answering_a_question_takes_the_answer_being_typed_to_it_and_none_is_kept_for_it_after() {
+fn deciding_a_request_takes_the_draft_of_it_and_none_is_kept_for_it_after() {
     let dir = tempfile::tempdir().unwrap();
     let store = store_with_session(dir.path());
-    store.set_answer_draft(&id(), Some(&answer("half"))).unwrap();
+    store.set_decision_draft(&id(), Some(&answer("half"))).unwrap();
     store.append(&id(), None, &cancelled_approval("another".into()), None, None, None).unwrap();
-    let answer_draft = || store.get_session(&id()).unwrap().session.answer_draft;
-    assert_eq!(answer_draft(), Some(answer("half")), "another question's answer isn't this one's");
+    let decision_draft = || store.get_session(&id()).unwrap().session.decision_draft;
+    assert_eq!(decision_draft(), Some(answer("half")), "another question's answer isn't this one's");
 
     store.append(&id(), None, &cancelled_approval("q".into()), None, None, None).unwrap();
 
-    assert_eq!(answer_draft(), None);
-    let typed_late = store.set_answer_draft(&id(), Some(&answer("typed elsewhere as it was answered"))).unwrap();
+    assert_eq!(decision_draft(), None);
+    let typed_late = store.set_decision_draft(&id(), Some(&answer("typed elsewhere as it was answered"))).unwrap();
     assert!(!typed_late.changed, "nobody can send it now");
-    let next = AnswerDraft { approval_id: "next".into(), ..answer("for the next question") };
-    assert!(store.set_answer_draft(&id(), Some(&next)).unwrap().changed);
+    let next = DecisionDraft { approval_id: "next".into(), ..answer("for the next question") };
+    assert!(store.set_decision_draft(&id(), Some(&next)).unwrap().changed);
 }
 
 #[test]
-fn an_answer_with_nothing_chosen_or_typed_is_kept_as_none() {
+fn a_draft_with_nothing_chosen_or_typed_is_kept_as_none() {
     let dir = tempfile::tempdir().unwrap();
     let store = store_with_session(dir.path());
-    store.set_answer_draft(&id(), Some(&answer("half"))).unwrap();
+    store.set_decision_draft(&id(), Some(&answer("half"))).unwrap();
     let other = AnswerSoFar { other: true, ..AnswerSoFar::default() };
-    let nothing = AnswerDraft { approval_id: "q".into(), answers: vec![other, AnswerSoFar::default()] };
+    let nothing = DecisionDraft {
+        approval_id: "q".into(),
+        so_far: SoFar::Answers { answers: vec![other, AnswerSoFar::default()] },
+    };
 
-    let kept = store.set_answer_draft(&id(), Some(&nothing)).unwrap();
+    let kept = store.set_decision_draft(&id(), Some(&nothing)).unwrap();
 
     assert!(kept.changed);
-    assert_eq!(kept.session.session.answer_draft, None);
-    assert!(!store.set_answer_draft(&id(), None).unwrap().changed, "it's the same as none");
+    assert_eq!(kept.session.session.decision_draft, None);
+    assert!(!store.set_decision_draft(&id(), None).unwrap().changed, "it's the same as none");
 }
 
 #[test]
@@ -294,8 +298,9 @@ fn secret_answers_never_reach_the_shared_draft_or_recorded_decision() {
     store.append(&id(), None, &request, None, None, None).unwrap();
     let secret = AnswerSoFar { typed: "synthetic-secret".into(), other: true, picked: Vec::new() };
     let public = AnswerSoFar { typed: "public".into(), other: true, picked: Vec::new() };
-    let draft = AnswerDraft { approval_id: "q".into(), answers: vec![secret, public.clone()] };
-    store.set_answer_draft(&id(), Some(&draft)).unwrap();
-    let kept = store.get_session(&id()).unwrap().session.answer_draft.unwrap();
-    assert_eq!(kept.answers, [AnswerSoFar::default(), public]);
+    let draft =
+        DecisionDraft { approval_id: "q".into(), so_far: SoFar::Answers { answers: vec![secret, public.clone()] } };
+    store.set_decision_draft(&id(), Some(&draft)).unwrap();
+    let kept = store.get_session(&id()).unwrap().session.decision_draft.unwrap();
+    assert_eq!(kept.so_far, SoFar::Answers { answers: vec![AnswerSoFar::default(), public] });
 }

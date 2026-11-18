@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::event::{HunkLine, LineMark};
+use crate::event::HunkLine;
 use crate::model::ids;
 
 ids!(
@@ -87,19 +87,6 @@ pub enum PatchChange {
     },
     #[serde(other)]
     Unknown,
-}
-
-impl PatchChange {
-    /// Whether it holds nothing this build doesn't know.
-    pub fn is_known(&self) -> bool {
-        match self {
-            PatchChange::Add { .. } | PatchChange::Delete => true,
-            PatchChange::Update { move_to: _, hunks } => {
-                hunks.iter().flat_map(|hunk| &hunk.lines).all(|line| line.mark != LineMark::Unknown)
-            }
-            PatchChange::Unknown => false,
-        }
-    }
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]

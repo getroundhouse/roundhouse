@@ -4,7 +4,7 @@ use client_core::session_log::Row;
 use dictation::fake::FakeEngine;
 use gpui_kit::{AppContext as _, TestAppContext};
 use protocol::event::{ContentBlock, EventBody};
-use protocol::model::SessionStatus;
+use protocol::model::{DecisionDraft, SessionStatus, SoFar};
 
 use super::support::{hearing, hold_option_space, let_go, ready_with, say};
 use crate::support::{Stack, Ui};
@@ -75,9 +75,15 @@ fn composer_dialog_and_question_answers_pass_their_surrounding_terms_as_hints(cx
     ui.wait("question answer with both SQLite and Tokio hinted", |ui| {
         ui.cx
             .read_entity(&transcript, |t, cx| t.question().and_then(|p| p.read(cx).so_far(cx)))
-            .is_some_and(|draft| draft.answers[0].typed == "Use SQLite in Tokio.")
+            .is_some_and(|draft| typed_first(&draft) == Some("Use SQLite in Tokio."))
     });
     assert!(engine.last_hints().words().iter().any(|h| h == "Postgres"));
+}
+
+/// What's typed in answer to the first question in `draft`, if it's a draft of answers.
+fn typed_first(draft: &DecisionDraft) -> Option<&str> {
+    let SoFar::Answers { answers } = &draft.so_far else { return None };
+    answers.first().map(|answer| answer.typed.as_str())
 }
 
 /// Whether it's the agent's reply naming `Tokio`.

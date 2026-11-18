@@ -8,7 +8,7 @@ use crate::folds::Folds;
 use crate::rows::SubagentCalls;
 use client_core::session_log::RecordedApprovals;
 use gpui_kit::SharedString;
-use protocol::model::{AttachmentId, Seq, Subagent, SubagentId, ToolUseId};
+use protocol::model::{AttachmentId, RunId, Seq, Subagent, SubagentId, ToolUseId};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -18,7 +18,11 @@ pub(crate) struct Model {
     /// What the agent the chat runs is called, as the hub describes it. `None` until it has, and from a hub that
     /// doesn't.
     pub agent: Option<SharedString>,
+    /// What the run going claims, as the session's record says.
     pub claims: Option<protocol::model::RunCapabilities>,
+    /// What a run of the chat's kind claims unless it says otherwise, as the hub describes it. `None` until it has,
+    /// and from a hub from before claims.
+    pub kind_claims: Option<protocol::capability::Capabilities>,
     pub folds: Folds,
     /// The images prompts carry, by attachment, from the first time a row drew each.
     pub pictures: HashMap<AttachmentId, Picture>,
@@ -54,11 +58,17 @@ impl Model {
         self.claims.as_ref().is_none_or(|run| run.claims.background.subagents.is_some())
     }
 
+    /// What `run`, the run that asked a request, claims, as [`client_core::claims_of_the_asker`] says.
+    pub(crate) fn claims_of(&self, run: Option<RunId>) -> Option<&protocol::capability::Capabilities> {
+        client_core::claims_of_the_asker(self.claims.as_ref(), run, self.kind_claims.as_ref())
+    }
+
     /// One that's drawn nothing yet, for a chat or for its subagent tab.
     pub(super) fn with(at_work: AtWork) -> Self {
         Model {
             agent: None,
             claims: None,
+            kind_claims: None,
             folds: Folds::default(),
             pictures: HashMap::new(),
             subagent_calls: RefCell::default(),

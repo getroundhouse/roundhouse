@@ -56,7 +56,6 @@ mod tests {
 
     use protocol::capability::approvals::{Asks, Request};
     use protocol::capability::asking::{Choose, Question, TypedAnswer};
-    use serde_json::Value;
 
     use super::*;
 
@@ -77,14 +76,8 @@ mod tests {
         };
         let asked = EventBody::ApprovalRequested {
             approval_id: "title-1".into(),
-            request: Some(Box::new(request)),
-            tool_name: String::new(),
+            request: Box::new(request),
             tool_use_id: None,
-            input: Value::Null,
-            description: None,
-            suggestions: Box::new(Value::Null),
-            asking: None,
-            reason: None,
             asked_by: None,
         };
         let (tx, mut rx) = mpsc::channel(4);

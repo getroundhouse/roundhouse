@@ -10,7 +10,7 @@ use parking_lot::Mutex;
 use process::{Signal, signal_group};
 use prompt::user_message;
 use protocol::attachment::AttachmentFile;
-use protocol::event::ApprovalDecision;
+use protocol::capability::approvals::Decision;
 use protocol::model::{ApprovalId, Effort, Seq, SessionSettingsChange};
 use protocol::prompt::Prompt;
 use protocol::worker::AgentSpec;
@@ -230,6 +230,31 @@ async fn send(
     }
 }
 
+impl ClaudeProcess {
+    /// Tells the CLI what the person decided of the request `approval_id`, in its own form. One the CLI has no form
+    /// for is refused, and the request stays open.
+    pub(in super::super) async fn decide(
+        &self,
+        approval_id: &ApprovalId,
+        decision: &Decision,
+    ) -> Result<(), AgentError> {
+        let response = {
+            let mut waiting = self.shared.waiting.lock();
+            let response = super::super::approvals::response(decision, waiting.get(approval_id))
+                .ok_or_else(|| AgentError::UnknownRequest("Claude's CLI can't take that decision".into()))?;
+            waiting.remove(approval_id);
+            response
+        };
+        write_line(
+            &self.shared,
+            &json!({"type":"control_response","response":{
+                "subtype":"success","request_id":approval_id,"response":response,
+            }}),
+        )
+        .await
+    }
+}
+
 #[async_trait]
 impl AgentProcess for ClaudeProcess {
     fn capabilities(&self) -> protocol::capability::Capabilities {
@@ -267,18 +292,6 @@ impl AgentProcess for ClaudeProcess {
         let text = keeping.map_or_else(|| "/compact".to_string(), |keeping| format!("/compact {keeping}"));
         let asked_for = ToCompact { keeping: keeping.map(str::to_string) };
         send(self, asked, user_message(&Prompt::new(text)), Some(asked_for)).await
-    }
-
-    async fn resolve_approval(&self, approval_id: &ApprovalId, decision: &ApprovalDecision) -> Result<(), AgentError> {
-        let waiting = self.shared.waiting.lock().remove(approval_id);
-        let response = super::super::approvals::response(decision, waiting);
-        write_line(
-            &self.shared,
-            &json!({"type":"control_response","response":{
-                "subtype":"success","request_id":approval_id,"response":response,
-            }}),
-        )
-        .await
     }
 
     async fn configure(&self, options: &SessionSettingsChange) -> Result<(), AgentError> {

@@ -6,10 +6,13 @@
 use super::LiveSession;
 use crate::hub::Hub;
 use crate::worker_link::WorkerLink;
+use protocol::capability::approvals::{self, Decision};
 use protocol::capability::{Capabilities, Control};
 use protocol::client::{ApiError, ErrorCode};
-use protocol::model::{AgentKind, RunId, SessionId, SessionSettingsChange};
-use protocol::worker::previous::{AgentCancel, AgentCompact, AgentConfigure, AgentPrompt, Request};
+use protocol::model::{AgentKind, ApprovalId, RunId, SessionId, SessionSettingsChange};
+use protocol::worker::previous::{
+    AgentApproval, AgentCancel, AgentCompact, AgentConfigure, AgentPrompt, ApprovalDecision, Request,
+};
 use protocol::worker::{AgentControl, Delivery};
 use tracing::warn;
 
@@ -29,6 +32,21 @@ impl LiveSession {
         let request = before_controls(self.id.clone(), control)
             .ok_or_else(|| ApiError::new(ErrorCode::Unsupported, "this run does not offer that operation"))?;
         link.call_previous(request).await
+    }
+
+    /// Passes `decision` on the request `asked` to a run of protocol 3 that hasn't said what it claims, in that
+    /// protocol's form, if [`unclaimed_takes`] says it takes it.
+    pub(super) async fn decide_unclaimed(
+        &self,
+        link: &WorkerLink,
+        approval_id: ApprovalId,
+        decision: &Decision,
+        asked: &approvals::Request,
+    ) -> Result<Delivery, ApiError> {
+        // The decision was refused as it was recorded if this run can't take it, as `unclaimed_takes` says.
+        let approval = AgentApproval::of(self.id.clone(), approval_id, decision, asked)
+            .ok_or_else(|| ApiError::new(ErrorCode::Unsupported, "this run does not offer that operation"))?;
+        link.call_previous(Request::AgentApproval(approval)).await
     }
 
     /// Changes the settings of a run of protocol 3 that hasn't said what it claims, with the request that came before
@@ -54,6 +72,12 @@ impl LiveSession {
             }
         }
     }
+}
+
+/// Whether a run of `agent`, of protocol 3, that hasn't said what it claims takes `decision` on the request `asked`:
+/// only a Claude run of a build from before claims takes one, and only in a form protocol 3 has.
+pub(super) fn unclaimed_takes(agent: AgentKind, decision: &Decision, asked: &approvals::Request) -> bool {
+    agent == AgentKind::Claude && ApprovalDecision::of(decision, asked).is_some()
 }
 
 /// `control` as the request that came before controls, for a run that hasn't said what it claims, if there was one.

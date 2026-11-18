@@ -1,9 +1,11 @@
 //! Answering the agent: its questions and its requests to use a tool, asked in the composer's place by a
 //! `QuestionPanel`, and its plans, on their cards in the transcript.
 
+use client_core::Approval;
 use client_core::session_log::RecordedApprovals;
 use gpui_kit::{AppContext as _, Context, Entity, Focusable as _};
-use protocol::event::{ApprovalDecision, EventBody};
+use protocol::capability::approvals::Decision;
+use protocol::event::EventBody;
 use protocol::model::{ApprovalId, Seq, Session, SubagentId};
 
 use super::{Model, Transcript, TranscriptEvent};
@@ -98,17 +100,34 @@ impl Transcript {
                 let EventBody::ApprovalRequested { approval_id, .. } = &event.body else { return None };
                 let (seq, approval_id) = (event.seq, approval_id.clone());
                 let asked_by = Asks::asked_by(&event.body).cloned();
-                let claims =
-                    m.claims.as_ref().filter(|claims| Some(claims.run) == event.run).map(|claims| &*claims.claims);
-                Some(Waiting { seq, approval_id, asks: Asks::of(&event.body, claims)?, asked_by })
+                Some(Waiting { seq, approval_id, asks: Asks::of(&event.body, m.claims_of(event.run))?, asked_by })
             })
             .collect()
     }
 
-    pub fn answer_approval(&mut self, approval_id: ApprovalId, decision: ApprovalDecision, cx: &mut Context<Self>) {
+    /// Approves the plan that waits under `approval_id`, or keeps planning, as `approve` says.
+    pub(crate) fn answer_plan(&mut self, approval_id: ApprovalId, approve: bool, cx: &mut Context<Self>) {
+        let decision = {
+            let m = self.model.borrow();
+            let open = self.log.open_approvals(m.approvals.as_ref());
+            let asked = open.iter().find(
+                |event| matches!(&event.body, EventBody::ApprovalRequested { approval_id: id, .. } if *id == approval_id),
+            );
+            let Some(approval) = asked.and_then(|event| Approval::of(&event.body)) else { return };
+            if approve { approval.approve() } else { Some(approval.refuse(None)) }
+        };
+        match decision {
+            Some(decision) => self.answer_approval(approval_id, decision, cx),
+            None => {
+                cx.emit(TranscriptEvent::Error("couldn't approve that: it asks for more than a yes".into()));
+            }
+        }
+    }
+
+    pub fn answer_approval(&mut self, approval_id: ApprovalId, decision: Decision, cx: &mut Context<Self>) {
         let id = self.session_id.clone();
         let answering_id = approval_id.clone();
-        let answering = self.client.start(move |client| client.session_approve(&id, &approval_id, decision));
+        let answering = self.client.start(move |client| client.session_decide(&id, &approval_id, decision));
         cx.spawn(async move |this, cx| {
             if let Err(e) = answering.recv().await {
                 let _ = this.update(cx, |t, cx| {

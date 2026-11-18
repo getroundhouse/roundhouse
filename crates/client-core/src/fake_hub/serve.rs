@@ -108,10 +108,10 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
             reply(C::Sessions(sessions::Sessions { sessions: world.sessions_listed(&workspace_id) }))
         }
         // A draft is taken as a hub that keeps it would, though it's left out of the world's records, which don't
-        // change. So is an answer being typed.
+        // change. So is a decision being drafted.
         R::SessionGet(sessions::SessionGet { id })
         | R::SessionDraft(drafts::SessionDraft { id, .. })
-        | R::SessionAnswerDraft(drafts::SessionAnswerDraft { id, .. }) => {
+        | R::SessionDecisionDraft(drafts::SessionDecisionDraft { id, .. }) => {
             reply(C::Session(world.session(&id)?.clone()))
         }
         // As an older hub refuses it. Agents asks none, since such a hub says nothing of what makes a login, so the
@@ -251,7 +251,7 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
         | R::SessionChangeQueued(_)
         | R::SessionUnqueue(_)
         | R::SessionSendQueued(_)
-        | R::SessionApprove(_)
+        | R::SessionDecide(_)
         | R::SessionCancel(_)
         | R::SessionCompact(_)
         | R::SessionConfigure(_)

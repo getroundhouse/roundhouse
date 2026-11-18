@@ -63,7 +63,7 @@ async fn native_request_ids_are_private_to_one_run_and_questions_work_in_both_mo
             if let AgentOutput::Event { body: EventBody::ApprovalRequested { approval_id, request, .. }, .. } =
                 h.next().await
             {
-                let protocol::capability::approvals::Asks::Questions { questions } = request.unwrap().asks else {
+                let protocol::capability::approvals::Asks::Questions { questions } = request.asks else {
                     panic!("not questions")
                 };
                 assert_eq!(questions[0].typed, TypedAnswer::No);
@@ -113,7 +113,7 @@ async fn codex_refusing_the_turn_after_an_approved_plan_ends_the_plans_turn_and_
             break approval_id;
         }
     };
-    let decision = Decision::ApprovePlan { then: crate::codex::claims::full_access(), context: PlanContext::Kept };
+    let decision = Decision::ApprovePlan { context: PlanContext::Kept };
     assert!(agent.control(&Control::Decide { approval: id, decision }).await.is_err());
     assert!(!agent.is_gone(), "a refusal proves nothing was started, so there's nothing to stop");
     agent.stop().await;
@@ -126,10 +126,10 @@ async fn codex_refusing_the_turn_after_an_approved_plan_ends_the_plans_turn_and_
     assert_eq!(ends, [(TurnOutcome::Error, vec!["busy".to_owned()])], "the plan's turn ends, with why");
 }
 
-#[tokio::test]
-async fn codex_hears_only_the_answers_each_question_allows() {
+/// What Codex is told of its two questions, a color to choose and a name that can be typed, once they're decided
+/// with `decision`.
+async fn codex_hears(decision: Decision) -> Option<serde_json::Value> {
     use protocol::capability::asking::Choose;
-    use protocol::capability::asking::QuestionAnswer;
     let mut h = Harness::new(&json!([{"on":"turn/start","actions":[
         {"result":{"turn":{"id":"asking"}}},
         {"method":"turn/started","params":{"turn":{"id":"asking"}}},
@@ -145,19 +145,14 @@ async fn codex_hears_only_the_answers_each_question_allows() {
         if let AgentOutput::Event { body: EventBody::ApprovalRequested { approval_id, request, .. }, .. } =
             h.next().await
         {
-            let protocol::capability::approvals::Asks::Questions { questions } = request.unwrap().asks else {
+            let protocol::capability::approvals::Asks::Questions { questions } = request.asks else {
                 panic!("not questions")
             };
             assert!(questions.iter().all(|question| question.choose == Choose::One));
             break approval_id;
         }
     };
-    // Typed words for a question with only choices, and a second pick where one is asked for, go nowhere.
-    let answers = vec![
-        QuestionAnswer { picked: vec![1, 0], typed: Some("Green".into()) },
-        QuestionAnswer { picked: Vec::new(), typed: Some("Bo".into()) },
-    ];
-    agent.control(&Control::Decide { approval: id, decision: Decision::Answer { answers } }).await.unwrap();
+    agent.control(&Control::Decide { approval: id, decision }).await.unwrap();
     agent.shared.rpc.write(&json!({"method":"test/barrier"})).await.unwrap();
     let mut answered = None;
     loop {
@@ -173,8 +168,34 @@ async fn codex_hears_only_the_answers_each_question_allows() {
             }
         }
     }
-    assert_eq!(answered, Some(json!({"color":{"answers":["Red"]},"name":{"answers":["Bo"]}})));
     agent.stop().await;
+    answered
+}
+
+#[tokio::test]
+async fn codex_hears_only_the_answers_each_question_allows() {
+    use protocol::capability::asking::QuestionAnswer;
+    // Typed words for a question with only choices, and a second pick where one is asked for, go nowhere.
+    let answers = vec![
+        QuestionAnswer { picked: vec![1, 0], typed: Some("Green".into()) },
+        QuestionAnswer { picked: Vec::new(), typed: Some("Bo".into()) },
+    ];
+
+    let answered = codex_hears(Decision::Answer { answers }).await;
+
+    assert_eq!(answered, Some(json!({"color":{"answers":["Red"]},"name":{"answers":["Bo"]}})));
+}
+
+/// Codex has no way to be told the person chose not to answer, so it's told no answer to each question, as a skip
+/// says it.
+#[tokio::test]
+async fn questions_the_person_chose_not_to_answer_reach_codex_as_no_answers() {
+    use protocol::capability::asking::QuestionAnswer;
+    let skipped = Decision::Answer { answers: vec![QuestionAnswer::default(), QuestionAnswer::default()] };
+
+    let answered = codex_hears(skipped).await;
+
+    assert_eq!(answered, Some(json!({"color":{"answers":[]},"name":{"answers":[]}})));
 }
 
 /// A request to make a call names the call, as Claude's do, so a client ties what the call's result says to it, such as

@@ -2,7 +2,7 @@ use super::keeper;
 use crate::{Client, FileToSend};
 use parking_lot::Mutex;
 use protocol::model::{
-    AnswerDraft, AttachmentId, CommentDraft, Draft, DraftToKeep, NewWorkspaceDraft, NewWorkspaceDraftToKeep, Rev,
+    AttachmentId, CommentDraft, DecisionDraft, Draft, DraftToKeep, NewWorkspaceDraft, NewWorkspaceDraftToKeep, Rev,
     Session, SessionId, Workspace, WorkspaceId,
 };
 use std::collections::HashMap;
@@ -13,12 +13,13 @@ use std::time::Duration;
 /// app that stops without quitting loses at most this much of it.
 pub(crate) const PAUSE: Duration = Duration::from_millis(500);
 
-/// Which draft: what's typed in a chat's composer, its answer to its question, the comment being written on a
-/// workspace's diff, or what's in the new-workspace dialog, which a person has one of. Each is kept apart from the rest.
+/// Which draft: what's typed in a chat's composer, what's decided so far on the request its agent waits on, the comment
+/// being written on a workspace's diff, or what's in the new-workspace dialog, which a person has one of. Each is kept
+/// apart from the rest.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum DraftKey {
     Composer(SessionId),
-    Answer(SessionId),
+    Decision(SessionId),
     Comment(WorkspaceId),
     NewWorkspace,
 }
@@ -41,12 +42,12 @@ impl FilesFor {
     }
 }
 
-/// What a draft says now, for the hub to keep in place of what it said: `None` for an answer or a comment with nothing
+/// What a draft says now, for the hub to keep in place of what it said: `None` for a decision or a comment with nothing
 /// in it.
 #[derive(Clone, Debug, PartialEq)]
 pub enum DraftChange {
     Composer(SessionId, DraftToKeep),
-    Answer(SessionId, Option<AnswerDraft>),
+    Decision(SessionId, Option<DecisionDraft>),
     Comment(WorkspaceId, Option<CommentDraft>),
     NewWorkspace(NewWorkspaceDraftToKeep),
 }
@@ -55,7 +56,7 @@ impl DraftChange {
     pub(crate) fn key(&self) -> DraftKey {
         match self {
             Self::Composer(id, _) => DraftKey::Composer(id.clone()),
-            Self::Answer(id, _) => DraftKey::Answer(id.clone()),
+            Self::Decision(id, _) => DraftKey::Decision(id.clone()),
             Self::Comment(id, _) => DraftKey::Comment(id.clone()),
             Self::NewWorkspace(_) => DraftKey::NewWorkspace,
         }
@@ -77,10 +78,10 @@ impl KeptDraft {
         Self { key: DraftKey::Composer(session.id.clone()), copy }
     }
 
-    /// What's chosen and typed in answer to the chat's question, as its record says.
-    pub fn answer(session: &Session) -> Self {
-        let copy = Agreed { rev: session.rev, said: Said::Answer(session.answer_draft.clone()) };
-        Self { key: DraftKey::Answer(session.id.clone()), copy }
+    /// What's decided so far on the request the chat's agent waits on, as its record says.
+    pub fn decision(session: &Session) -> Self {
+        let copy = Agreed { rev: session.rev, said: Said::Decision(session.decision_draft.clone()) };
+        Self { key: DraftKey::Decision(session.id.clone()), copy }
     }
 
     /// The comment being written on the workspace's diff, as its record says.
@@ -126,7 +127,7 @@ pub(super) struct Agreed {
 #[derive(Clone, PartialEq)]
 pub(super) enum Said {
     Composer(Draft),
-    Answer(Option<AnswerDraft>),
+    Decision(Option<DecisionDraft>),
     Comment(Option<CommentDraft>),
     /// With no revision, which is the record's rather than what it says.
     NewWorkspace(NewWorkspaceDraft),
@@ -141,7 +142,7 @@ impl Said {
     pub(super) fn nothing(key: &DraftKey) -> Self {
         match key {
             DraftKey::Composer(_) => Self::Composer(Draft::default()),
-            DraftKey::Answer(_) => Self::Answer(None),
+            DraftKey::Decision(_) => Self::Decision(None),
             DraftKey::Comment(_) => Self::Comment(None),
             DraftKey::NewWorkspace => Self::NewWorkspace(NewWorkspaceDraft::default()),
         }
@@ -238,8 +239,8 @@ impl Drafts {
     }
 
     /// Says that a draft now has nothing on its way to the hub, so a change made elsewhere that
-    /// [`Drafts::from_elsewhere`] held back meanwhile can be shown. It holds one signal at a time, so signals nobody has
-    /// looked at yet gather into one, and each goes to one receiver, so one reader listens.
+    /// [`Drafts::from_elsewhere`] held back meanwhile can be shown. It holds one signal at a time, so signals nobody
+    /// has looked at yet gather into one, and each goes to one receiver, so one reader listens.
     pub fn caught_up(&self) -> &flume::Receiver<()> {
         &self.caught_up
     }

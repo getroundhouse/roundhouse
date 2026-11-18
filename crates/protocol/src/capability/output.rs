@@ -89,16 +89,6 @@ pub struct TodoList {
     pub note: Option<String>,
 }
 
-impl TodoList {
-    /// Whether it holds nothing this build doesn't know.
-    pub fn is_known(&self) -> bool {
-        let TodoList { items, note: _ } = self;
-        items.iter().all(|Todo { id: _, text: _, status, doing: _, priority, after: _ }| {
-            *status != TodoStatus::Unknown && *priority != Some(Priority::Unknown)
-        })
-    }
-}
-
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct Todo {
     /// The agent's own ID for it, where its list has them, which [`Todo::after`] names.

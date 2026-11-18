@@ -2,10 +2,11 @@
 
 use std::sync::atomic::Ordering;
 
+use protocol::capability::approvals::Decision;
 use protocol::client::{
     HubStatus, Request, admin, agent, comments, log, records, sessions, subscriptions, waits, workspaces,
 };
-use protocol::event::{ApprovalDecision, SessionEvent};
+use protocol::event::SessionEvent;
 use protocol::find::Found;
 use protocol::model::{
     AgentKind, ApprovalId, AttachmentId, ClientMessageId, ClientRequestId, CommentId, DiffComment, DiffSide, GitDiff,
@@ -176,6 +177,15 @@ impl Client {
         Ok((events, last_seq))
     }
 
+    /// The request waiting in `session` under `approval`, as its record says, read from the log, or `None` where none
+    /// waits under it, as for one decided already.
+    pub fn waiting_request(&self, session: &Session, approval: &ApprovalId) -> Result<Option<SessionEvent>> {
+        let open = session.open_approvals.as_deref().unwrap_or_default();
+        let Some(waiting) = open.iter().find(|waiting| waiting.approval_id == *approval) else { return Ok(None) };
+        let (events, _) = self.session_read(&session.id, waiting.seq, 1, false)?;
+        Ok(events.into_iter().find(|event| event.seq == waiting.seq))
+    }
+
     pub fn session_subscribe(&self, id: &SessionId, from_seq: Seq) -> Result<Subscription> {
         self.subscribe(|subscription_id| subscriptions::SessionSubscribe { id: id.clone(), from_seq, subscription_id })
     }
@@ -208,8 +218,9 @@ impl Client {
         Ok(Subscription { id: subscription_id, items, connection: self.inner.clone() })
     }
 
-    pub fn session_approve(&self, id: &SessionId, approval_id: &ApprovalId, decision: ApprovalDecision) -> Result<()> {
-        self.call(agent::SessionApprove { id: id.clone(), approval_id: approval_id.clone(), decision })
+    /// See [`agent::SessionDecide`]. A hub older than this refuses it, as `is_unsupported` says.
+    pub fn session_decide(&self, id: &SessionId, approval_id: &ApprovalId, decision: Decision) -> Result<()> {
+        self.call(agent::SessionDecide { id: id.clone(), approval_id: approval_id.clone(), decision })
     }
 
     pub fn session_close(&self, id: &SessionId) -> Result<Session> {

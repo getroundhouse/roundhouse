@@ -1,9 +1,8 @@
 //! Typed calls and what came back for them, as an adapter that types its calls records them.
 
-use serde_json::Value;
-
+use super::{ApprovalRequest, approval_request};
 use crate::attachment::{Attachment, MediaType};
-use crate::capability::approvals::{Asks, Request};
+use crate::capability::approvals::Asks;
 use crate::capability::calls::call::{Command, Runs, StartSubagent};
 use crate::capability::calls::output::{CommandOutput, Ended};
 use crate::capability::calls::{Call, CallOutput};
@@ -62,23 +61,10 @@ pub fn command_output(printed: &str, exit_code: Option<i32>, ended: Ended) -> Ca
     CallOutput::Command(CommandOutput { output: printed.into(), exit_code, ended, took_ms: None, truncated: None })
 }
 
-/// The agent asking, under the approval `id`, to make the typed call `call`, whose ID is `call_id`, as an adapter that
-/// types its calls asks: naming the call, but with none of what else a request from before typed calls says beside
-/// it, and no reason.
+/// The agent asking, under the approval `id`, to make the typed call `call`, whose ID is `call_id`, suggesting nothing,
+/// and with no reason.
 pub fn typed_request(id: &str, call_id: &str, call: Call) -> EventBody {
-    let request = Request { asks: Asks::Call { call }, suggested: Vec::new(), always: false, why: None };
-    EventBody::ApprovalRequested {
-        approval_id: id.into(),
-        request: Some(Box::new(request)),
-        tool_name: String::new(),
-        tool_use_id: Some(call_id.into()),
-        input: Value::Null,
-        description: None,
-        suggestions: Box::new(Value::Null),
-        asking: None,
-        reason: None,
-        asked_by: None,
-    }
+    ApprovalRequest { tool_use_id: Some(call_id.into()), ..approval_request(id, Asks::Call { call }) }.into()
 }
 
 /// A picture the hub keeps as the attachment `id`, as one a tool sent back is.

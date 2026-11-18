@@ -197,10 +197,10 @@ impl Keeper {
                 .client
                 .session_draft(id, draft)
                 .map(|session| Agreed { rev: session.rev, said: Said::Composer(session.draft) }),
-            DraftChange::Answer(id, draft) => self
+            DraftChange::Decision(id, draft) => self
                 .client
-                .session_answer_draft(id, draft.as_ref())
-                .map(|session| Agreed { rev: session.rev, said: Said::Answer(session.answer_draft) }),
+                .session_decision_draft(id, draft.as_ref())
+                .map(|session| Agreed { rev: session.rev, said: Said::Decision(session.decision_draft) }),
             DraftChange::Comment(id, draft) => self
                 .client
                 .workspace_comment_draft(id, draft.as_ref())

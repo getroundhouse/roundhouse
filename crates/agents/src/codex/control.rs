@@ -3,8 +3,8 @@ use std::sync::atomic::Ordering;
 use async_trait::async_trait;
 use protocol::attachment::AttachmentFile;
 use protocol::capability::Control;
-use protocol::event::{AgentRunState, ApprovalDecision, ApprovalOutcome, EventBody, TurnOutcome};
-use protocol::model::{ApprovalId, PermissionMode, Seq, SessionSettingsChange};
+use protocol::event::{AgentRunState, EventBody, TurnOutcome};
+use protocol::model::{PermissionMode, Seq, SessionSettingsChange};
 use protocol::prompt::Prompt;
 use serde_json::{Value, json};
 
@@ -67,10 +67,6 @@ impl AgentProcess for CodexProcess {
             extras: protocol::capability::prompts::Extras::default(),
         })
         .await
-    }
-    async fn resolve_approval(&self, id: &ApprovalId, decision: &ApprovalDecision) -> Result<(), AgentError> {
-        let decision = approvals::legacy(&self.shared, id, decision)?;
-        self.control(&Control::Decide { approval: id.clone(), decision }).await
     }
     async fn interrupt(&self) -> Result<(), AgentError> {
         self.control(&Control::Cancel).await
@@ -252,18 +248,7 @@ pub(super) async fn settle(shared: &Shared, parent: Option<&protocol::model::Sub
         shared.event(EventBody::PromptDropped { prompt }, None).await;
     }
     for approval_id in requests {
-        shared
-            .event(
-                EventBody::ApprovalResolved {
-                    approval_id,
-                    outcome: ApprovalOutcome::Cancelled,
-                    answers_by_text: None,
-                    answers_by_position: None,
-                    by_setting: false,
-                },
-                None,
-            )
-            .await;
+        shared.event(EventBody::ApprovalResolved { approval_id, decision: None, by_setting: false }, None).await;
     }
     // SubagentEnded ends a child's unfinished work. ToolCallDropped is a root-only event, used when the
     // agent went on without a call; inventing child results here would claim output the CLI never supplied.

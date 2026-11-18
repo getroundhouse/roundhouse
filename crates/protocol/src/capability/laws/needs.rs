@@ -1,7 +1,7 @@
 //! The capabilities each event needs its run to claim.
 
-use crate::capability::{Capability, approvals, asking, background, context, output, turns};
-use crate::event::{Asking, CompactedBy, CompactionOutcome, ContentBlock, EventBody, TaskKind};
+use crate::capability::{Capability, approvals, background, context, output, turns};
+use crate::event::{CompactedBy, CompactionOutcome, ContentBlock, EventBody, TaskKind};
 
 /// The capabilities an event needs its run to claim. Most need none, since every agent says them.
 pub fn needs(body: &EventBody) -> Vec<Capability> {
@@ -24,9 +24,7 @@ pub fn needs(body: &EventBody) -> Vec<Capability> {
         .into_iter()
         .flatten()
         .collect(),
-        EventBody::ApprovalRequested { asking, request, .. } => {
-            request.as_ref().map_or_else(|| vec![asking_needs(asking.as_deref())], |request| request.needs())
-        }
+        EventBody::ApprovalRequested { request, .. } => request.needs(),
         EventBody::AgentMode { .. } => vec![approvals::Capability::Modes.into()],
         EventBody::AgentCompacting { written_chars, .. } => {
             written_chars.map(|_| context::Capability::CompactionProgress.into()).into_iter().collect()
@@ -58,14 +56,6 @@ fn task_needs(kind: TaskKind) -> Capability {
         TaskKind::Subagent => background::Capability::Subagents.into(),
         TaskKind::Monitor | TaskKind::Command => background::Capability::BackgroundCommands.into(),
         TaskKind::Wait => background::Capability::ToolTasks.into(),
-    }
-}
-
-fn asking_needs(asking: Option<&Asking>) -> Capability {
-    match asking {
-        Some(Asking::Questions { .. }) => asking::Capability::Questions.into(),
-        Some(Asking::Plan { .. }) => asking::Capability::PlanApproval.into(),
-        Some(Asking::ToolUse { .. } | Asking::Unknown) | None => approvals::Capability::Requests.into(),
     }
 }
 

@@ -3,11 +3,11 @@
 use serde::{Deserialize, Serialize};
 
 use super::{Capability, Rule};
-use crate::capability::asking::{Question, ServerRequest};
+use crate::capability::asking::{Question, ServerRequest, TypedAnswer};
 use crate::capability::calls::Call;
 
-/// A request for approval, as the agent made it. It takes the place of `ApprovalRequested`'s `tool_name`, `input`,
-/// `suggestions`, `asking` and `reason`.
+/// A request for approval, as the agent made it, in the agent's own words where it has some, as its adapter read
+/// them.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct Request {
     pub asks: Asks,
@@ -34,6 +34,29 @@ impl Request {
             needs.push(Capability::AlwaysAsks.into());
         }
         needs
+    }
+}
+
+impl Request {
+    /// Whether `rule` is one it suggests, kept wherever it's kept, as a decision on a call keeps only those, so none
+    /// keeps a rule wider than the agent asked for.
+    pub fn suggests(&self, rule: &Rule) -> bool {
+        let same = |suggested: &&Rule| {
+            (suggested.covers, &suggested.matching, suggested.effect) == (rule.covers, &rule.matching, rule.effect)
+        };
+        self.suggested.iter().any(|suggested| same(&suggested))
+    }
+
+    /// One that asks what this build doesn't know, and says nothing more.
+    pub fn unknown() -> Box<Request> {
+        Box::new(Request { asks: Asks::Unknown, suggested: Vec::new(), always: false, why: None })
+    }
+
+    /// Where each question whose answer is a secret is among its questions, as
+    /// [`Questions`](crate::capability::asking::Capability::Questions) says, which reaches the agent and nothing else.
+    pub fn secret_questions(&self) -> impl Iterator<Item = usize> {
+        let questions = if let Asks::Questions { questions } = &self.asks { questions.as_slice() } else { &[] };
+        questions.iter().enumerate().filter(|(_, q)| q.typed == TypedAnswer::Secret).map(|(at, _)| at)
     }
 }
 

@@ -24,7 +24,7 @@ pub(crate) struct Moved {
 /// What a session's row holds, as it's written.
 macro_rules! session_row_columns {
     () => {
-        "id, workspace_id, agent, model, permission_mode, status, last_seq, created_at_ms, updated_at_ms, agent_session_id, agent_opened, title, closed_at_ms, reply_seq, read_seq, background_tasks, title_source, queued, queue_held, turn_started_at_ms, effort, context, account_id, user_active_at_ms, prompt_cache, draft, answer_draft, untaken, open_approvals, reply_outcome, agent_capabilities, account_source"
+        "id, workspace_id, agent, model, permission_mode, status, last_seq, created_at_ms, updated_at_ms, agent_session_id, agent_opened, title, closed_at_ms, reply_seq, read_seq, background_tasks, title_source, queued, queue_held, turn_started_at_ms, effort, context, account_id, user_active_at_ms, prompt_cache, draft, decision_draft, untaken, open_approvals, reply_outcome, agent_capabilities, account_source"
     };
 }
 
@@ -92,7 +92,7 @@ pub(in super::super) fn session_from_row(row: &Row) -> rusqlite::Result<StoredSe
             // Written only by this hub, as JSON. One it can't read is as good as nothing typed.
             draft: json_at(row, 25)?.unwrap_or_default(),
             // The same.
-            answer_draft: json_at(row, 26)?,
+            decision_draft: json_at(row, 26)?,
             // Written only by this hub, as JSON. One it can't read says nothing, which leaves a client to look in the
             // log, as one from an older hub does.
             untaken: json_at(row, 27)?,
@@ -157,7 +157,7 @@ impl Store {
                 session.user_active_at_ms,
                 session.prompt_cache.as_ref().map(serde_json::to_string).transpose()?,
                 draft_column(&session.draft)?,
-                session.answer_draft.as_ref().map(serde_json::to_string).transpose()?,
+                session.decision_draft.as_ref().map(serde_json::to_string).transpose()?,
                 serde_json::to_string(session.untaken.as_deref().unwrap_or_default())?,
                 serde_json::to_string(session.open_approvals.as_deref().unwrap_or_default())?,
                 session.reply_outcome.as_ref().map(text_of),

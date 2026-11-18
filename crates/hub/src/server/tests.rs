@@ -113,8 +113,8 @@ fn cases() -> Vec<(&'static str, Vec<Step>)> {
     let past = mismatch(&format!("protocols {} to {}", ours + 1, ours + 2));
     let unsupported = || Then::Refuses(ErrorCode::Unsupported, String::new());
     let repos = r#"{"method":"repo_list"}"#;
-    // As a newer client's known request would be, with a value this hub doesn't know: here, a kind of decision.
-    let approve = r#"{"method":"session_approve","id":"s","approval_id":"a","decision":{"decision":"allow_always"}}"#;
+    // As a request this hub doesn't know: here, the answer a client sent before decisions were typed.
+    let approve = r#"{"method":"session_approve","id":"s","approval_id":"a","decision":{"decision":"allow"}}"#;
     vec![
         ("a hello at this version", calls(vec![(&hello_ours, Then::Greets(ours)), (STATUS, Then::ShowsStatus)])),
         (

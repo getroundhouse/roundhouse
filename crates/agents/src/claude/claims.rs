@@ -24,10 +24,8 @@ pub(super) fn claims() -> Capabilities {
     };
     let plan = approvals::ApprovalMode { unasked: approvals::Unasked::Reads, plan: true, ..full };
     claims.approvals.modes = Some(approvals::Modes { default: full, others: vec![plan] });
-    claims.approvals.requests = Some(approvals::Requests {
-        parts: vec![approvals::DecisionPart::Words, approvals::DecisionPart::Stop],
-        kept: Vec::new(),
-    });
+    claims.approvals.requests = Some(requests());
+    claims.approvals.suggested_rules = Some(Claimed {});
     claims.approvals.always_asks = Some(Claimed {});
     claims.approvals.denials = Some(Claimed {});
     claims.asking.questions = Some(Claimed {});
@@ -57,4 +55,18 @@ pub(super) fn claims() -> Capabilities {
     });
     claims.background.tool_tasks = Some(Claimed {});
     claims
+}
+
+/// What a decision on a request can say: a rule it suggests can be kept wherever the CLI keeps one, and a refusal can
+/// say what to do instead, and stop the turn.
+fn requests() -> approvals::Requests {
+    approvals::Requests {
+        parts: vec![approvals::DecisionPart::KeepAllow, approvals::DecisionPart::Words, approvals::DecisionPart::Stop],
+        kept: vec![
+            approvals::Kept::Conversation,
+            approvals::Kept::Worktree,
+            approvals::Kept::Project,
+            approvals::Kept::User,
+        ],
+    }
 }

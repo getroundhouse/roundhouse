@@ -37,7 +37,7 @@ fn a_request_from_a_newer_hub_still_decodes_with_its_id() {
 /// Such as a known request with a value this build doesn't know, which comes back with its `id` to be refused.
 #[test]
 fn a_request_that_doesnt_decode_still_names_its_call() {
-    let line = br#"{"id":7,"request":{"method":"session_approve","id":"s","approval_id":"a","decision":{"decision":"allow_always"}}}"#;
+    let line = br#"{"id":7,"request":{"method":"session_decide","id":"s","approval_id":"a","decision":{"decision":"allow","remember":"for_the_project"}}}"#;
 
     let call = frame::read_call::<ClientRequest>(line).unwrap();
 

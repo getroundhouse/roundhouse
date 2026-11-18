@@ -2,7 +2,7 @@ use protocol::capability::{
     approvals::{AfterDenial, Asks, Decision, Remember, Request},
     asking::{Choose, PlanContext, Question, QuestionOption, TypedAnswer},
 };
-use protocol::event::{AgentRunState, ApprovalDecision, ApprovalOutcome, EventBody, NoticeLevel, TurnOutcome};
+use protocol::event::{AgentRunState, EventBody, NoticeLevel, TurnOutcome};
 use protocol::model::{ApprovalId, PermissionMode, ToolUseId};
 use serde_json::{Value, json};
 
@@ -82,14 +82,8 @@ async fn ask(shared: &Shared, id: ApprovalId, waiting: Waiting, call: Option<Too
         .event(
             EventBody::ApprovalRequested {
                 approval_id: id,
-                request: Some(Box::new(request)),
-                tool_name: String::new(),
+                request: Box::new(request),
                 tool_use_id: call,
-                input: Value::Null,
-                description: None,
-                suggestions: Box::new(Value::Null),
-                asking: None,
-                reason: None,
                 asked_by: parent,
             },
             raw,
@@ -133,13 +127,13 @@ pub(super) async fn decide(shared: &Shared, id: &ApprovalId, decision: &Decision
     Ok(())
 }
 
-fn can_answer(native: &NativeRequest, decision: &Decision) -> bool {
+pub(super) fn can_answer(native: &NativeRequest, decision: &Decision) -> bool {
     matches!(
         (native, decision),
         (NativeRequest::Plan, Decision::ApprovePlan { context: PlanContext::Kept, .. } | Decision::KeepPlanning { .. })
             | (
                 NativeRequest::Command(_) | NativeRequest::File(_),
-                Decision::Allow { edited: None, remember: Remember::Once | Remember::Conversation }
+                Decision::Allow { remember: Remember::Once | Remember::Conversation }
                     | Decision::Deny { words: None, keep: None, then: AfterDenial::Continue | AfterDenial::Stop }
             )
             | (NativeRequest::Questions { .. }, Decision::Answer { .. })
@@ -159,7 +153,7 @@ async fn answer(shared: &Shared, waiting: &Waiting, decision: &Decision) -> Resu
             shared.event(EventBody::AgentMode { permission_mode: PermissionMode::Plan }, None).await;
             control::turn(shared, vec![json!({"type":"text","text":words.as_deref().unwrap_or("Keep planning; the plan is not approved."),"text_elements":[]})]).await
         }
-        (NativeRequest::Command(id) | NativeRequest::File(id), Decision::Allow { edited: None, remember }) => {
+        (NativeRequest::Command(id) | NativeRequest::File(id), Decision::Allow { remember }) => {
             let decision = match remember {
                 Remember::Once => "accept",
                 Remember::Conversation => "acceptForSession",
@@ -197,31 +191,6 @@ fn words<'a>(question: &'a Question, answer: &'a protocol::capability::asking::Q
     picked.map(|option| option.label.as_str()).chain(typed).collect()
 }
 
-pub(super) fn legacy(shared: &Shared, id: &ApprovalId, decision: &ApprovalDecision) -> Result<Decision, AgentError> {
-    let state = shared.state.lock();
-    let waiting =
-        state.waiting.get(id).ok_or_else(|| AgentError::Refused("That Codex request is no longer open".into()))?;
-    match decision {
-        ApprovalDecision::Allow { updated_input: None, updated_permissions: None } => {
-            Ok(if matches!(waiting.native, NativeRequest::Plan) {
-                Decision::ApprovePlan { then: super::claims::full_access(), context: PlanContext::Kept }
-            } else {
-                Decision::Allow { edited: None, remember: Remember::Once }
-            })
-        }
-        ApprovalDecision::Deny { message, interrupt: false } if matches!(waiting.native, NativeRequest::Plan) => {
-            Ok(Decision::KeepPlanning { words: message.clone() })
-        }
-        ApprovalDecision::Deny { message, interrupt } => Ok(Decision::Deny {
-            words: message.clone(),
-            then: if *interrupt { AfterDenial::Stop } else { AfterDenial::Continue },
-            keep: None,
-        }),
-        ApprovalDecision::AnswerByPosition { answers } => Ok(Decision::Answer { answers: answers.clone() }),
-        ApprovalDecision::Allow { .. } | ApprovalDecision::AnswerByText { .. } => Err(unsupported_decision()),
-    }
-}
-
 pub(super) async fn resolved(shared: &Shared, native: &Value) {
     let id = {
         let mut state = shared.state.lock();
@@ -233,18 +202,7 @@ pub(super) async fn resolved(shared: &Shared, native: &Value) {
         id
     };
     if let Some(id) = id {
-        shared
-            .event(
-                EventBody::ApprovalResolved {
-                    approval_id: id,
-                    outcome: ApprovalOutcome::Cancelled,
-                    answers_by_text: None,
-                    answers_by_position: None,
-                    by_setting: false,
-                },
-                None,
-            )
-            .await;
+        shared.event(EventBody::ApprovalResolved { approval_id: id, decision: None, by_setting: false }, None).await;
         control::report_state(shared).await;
     }
 }

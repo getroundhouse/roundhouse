@@ -20,9 +20,9 @@ use protocol::model::{RunId, SessionId};
 use protocol::paths::AGENTS_DIR;
 use protocol::prompt::Prompt;
 use protocol::worker::{
-    AccountFor, AgentApproval, AgentStop, AttachmentWrite, AttachmentWritten, FileOpenAt, FilePages, FileRead,
-    FileReadAt, FolderRead, GitDiff, GitStatus, ReadRepoUrl, Received, RunningAgentsReply, ServeTools, SetupLog,
-    SetupLogReply, TerminalShow, TerminalStop, TitleFor, ToolsServing, WorkerFrame, WorkerRequest, WorkerResponse,
+    AccountFor, AgentStop, AttachmentWrite, AttachmentWritten, FileOpenAt, FilePages, FileRead, FileReadAt, FolderRead,
+    GitDiff, GitStatus, ReadRepoUrl, Received, RunningAgentsReply, ServeTools, SetupLog, SetupLogReply, TerminalShow,
+    TerminalStop, TitleFor, ToolsServing, WorkerFrame, WorkerRequest, WorkerResponse,
 };
 use scripts::{Setup, run_archive_script, run_setup, stop_setup_script};
 use std::collections::HashMap;
@@ -345,13 +345,6 @@ pub(super) async fn handle(
             }
         }
         WorkerRequest::AgentStart(spec) => start_agent(state, forwarders, spec).await,
-        WorkerRequest::AgentApproval(AgentApproval { session_id, approval_id, decision }) => {
-            let agent = state.live_agent(&session_id);
-            Ok(delivery(match agent {
-                Some(agent) => agent.resolve_approval(&approval_id, &decision).await.is_ok(),
-                None => false,
-            }))
-        }
         WorkerRequest::AgentStop(AgentStop { session_id }) => stop_agent(state, &session_id).await,
         WorkerRequest::TitleFor(TitleFor { agent, prompt, images, login }) => {
             title_for(state, agent, &Prompt::carrying(prompt, images), login).await
@@ -374,8 +367,4 @@ fn running_agents(state: &State) -> WorkerResponse {
     };
     let agents = running.map(listed);
     WorkerResponse::RunningAgents(RunningAgentsReply { agents: agents.collect() })
-}
-
-fn delivery(delivered: bool) -> WorkerResponse {
-    if delivered { WorkerResponse::Ok } else { WorkerResponse::AgentNotRunning }
 }

@@ -1,9 +1,15 @@
 //! Run initialization is durable, and a replaced run cannot choose the conversation the next launch resumes.
+use super::super::decisions::refusal;
 use super::super::{CarriedOver, Item, LiveSession, Starting};
 use crate::hub::tests::{carried_on, flushed, hub_in, stand_in_worker, taking_worker};
+use protocol::capability::approvals::{AfterDenial, Covers, Decision, Kept, Request, Requests, Rule, RuleEffect};
+use protocol::capability::asking::{Question, QuestionAnswer, TypedAnswer};
+use protocol::capability::calls::CallKind;
 use protocol::capability::{Capabilities, Claimed};
+use protocol::client::ErrorCode;
 use protocol::event::EventBody;
-use protocol::model::{RunCapabilities, RunId};
+use protocol::fixtures::{approval_request, asking, deny, question, to_run};
+use protocol::model::{AgentKind, RunCapabilities, RunId};
 use std::sync::Arc;
 
 async fn initialized(live: &Arc<LiveSession>, run: RunId, conversation: &str, claims: Capabilities) {
@@ -72,8 +78,6 @@ async fn only_the_current_run_can_choose_the_resume_id_and_its_claims_survive_re
 
 #[tokio::test]
 async fn a_secret_answer_goes_to_the_agent_and_not_the_log() {
-    use protocol::capability::asking::QuestionAnswer;
-    use protocol::event::ApprovalDecision;
     let dir = tempfile::tempdir().unwrap();
     let hub = hub_in(dir.path());
     let (link, asked) = taking_worker(&hub);
@@ -82,88 +86,72 @@ async fn a_secret_answer_goes_to_the_agent_and_not_the_log() {
     let mut claims = Capabilities::default();
     claims.asking.questions = Some(Claimed {});
     initialized(&live, run, "c", claims).await;
-    let by_position = ApprovalDecision::AnswerByPosition {
-        answers: vec![
-            QuestionAnswer { typed: Some("synthetic-secret-1".into()), picked: Vec::new() },
-            QuestionAnswer { typed: Some("public-1".into()), picked: Vec::new() },
-        ],
-    };
-    let by_text = ApprovalDecision::AnswerByText {
-        answers: [("Secret?".into(), "synthetic-secret-2".into()), ("Public?".into(), "public-2".into())].into(),
-    };
-    for (id, decision) in [("q1", by_position), ("q2", by_text)] {
-        let request: EventBody = serde_json::from_value(serde_json::json!({
-            "type":"approval_requested","approval_id":id,
-            "request":{"asks":{"asks":"questions","questions":[
-                {"text":"Secret?","typed":"secret"},{"text":"Public?","typed":"yes"}
-            ]}}
-        }))
-        .unwrap();
-        live.send_item(Item::Event { run, body: Box::new(request), raw: None, attachments: Vec::new(), seq: None })
-            .await;
-        flushed(&live).await;
-        hub.session_approve(live.id.clone(), id.into(), decision).await.unwrap();
-    }
+    let typed = |typed: &str| QuestionAnswer { typed: Some(typed.into()), picked: Vec::new() };
+    let answers = Decision::Answer { answers: vec![typed("synthetic-secret"), typed("public")] };
+    let secret = Question { typed: TypedAnswer::Secret, ..question("Secret?", &[], false) };
+    let request = approval_request("q", asking(vec![secret, question("Public?", &[], false)]));
+    live.send_item(Item::Event { run, body: Box::new(request.into()), raw: None, attachments: Vec::new(), seq: None })
+        .await;
+    flushed(&live).await;
+    hub.session_decide(live.id.clone(), "q".into(), answers).await.unwrap();
 
     let id = live.id.clone();
     let log = hub.blocking(move |store| store.read_events(&id, protocol::model::Seq::FIRST, 100, u64::MAX, true));
     let log = serde_json::to_string(&log.await.unwrap()).unwrap();
     let sent = asked.lock().join("\n");
-    for n in [1, 2] {
-        assert!(log.contains(&format!("public-{n}")), "the rest of the answer is recorded");
-        assert!(!log.contains(&format!("synthetic-secret-{n}")), "the log keeps no secret");
-        assert!(sent.contains(&format!("synthetic-secret-{n}")), "the agent gets it");
-    }
+    assert!(log.contains("public"), "the rest of the answer is recorded");
+    assert!(!log.contains("synthetic-secret"), "the log keeps no secret");
+    assert!(sent.contains("synthetic-secret"), "the agent gets it");
 }
 
+/// A run that says what it claims takes what they allow. One that says nothing is a Claude run of protocol 3 from a
+/// build before claims, which takes a decision in that protocol's form, and nothing else.
 #[test]
-fn typed_approval_replies_require_the_runs_claims_even_when_the_answer_is_empty() {
-    let request: EventBody = serde_json::from_value(serde_json::json!({
-        "type":"approval_requested","approval_id":"q",
-        "request":{"asks":{"asks":"questions","questions":[{"text":"Which?","typed":"yes"}]}}
-    }))
-    .unwrap();
-    let skipped = protocol::event::ApprovalDecision::Deny { message: None, interrupt: false };
-    let mut claims = protocol::capability::Capabilities::default();
-
-    let absent = super::super::decisions::control(&request, "q".into(), &skipped, None);
-    let unclaimed = super::super::decisions::control(&request, "q".into(), &skipped, Some(&claims));
-    claims.asking.questions = Some(protocol::capability::Claimed {});
-    let allowed = super::super::decisions::control(&request, "q".into(), &skipped, Some(&claims)).unwrap();
-
-    assert_eq!(absent.unwrap_err().code, protocol::client::ErrorCode::Unsupported);
-    assert_eq!(unclaimed.unwrap_err().code, protocol::client::ErrorCode::Unsupported);
-    assert!(
-        matches!(allowed, Some(protocol::capability::Control::Decide {
-        decision: protocol::capability::approvals::Decision::Answer { answers }, ..
-    }) if answers.len() == 1 && answers[0].is_empty()),
-        "each question left unanswered"
-    );
-}
-
-#[test]
-fn a_typed_reply_that_doesnt_answer_what_was_asked_is_refused() {
-    use protocol::capability::asking::QuestionAnswer;
-    use protocol::event::ApprovalDecision;
-    let request: EventBody = serde_json::from_value(serde_json::json!({
-        "type":"approval_requested","approval_id":"q",
-        "request":{"asks":{"asks":"questions","questions":[{"text":"Which?","options":[{"label":"A"}],"typed":"no"}]}}
-    }))
-    .unwrap();
-    let mut claims = protocol::capability::Capabilities::default();
-    claims.asking.questions = Some(protocol::capability::Claimed {});
-    let decide = |decision| super::super::decisions::control(&request, "q".into(), &decision, Some(&claims));
-    let answering = |picked, typed: Option<&str>| ApprovalDecision::AnswerByPosition {
-        answers: vec![QuestionAnswer { picked, typed: typed.map(str::to_string) }],
+fn a_decision_goes_only_to_a_run_that_takes_it() {
+    let rule = Rule {
+        covers: Covers::Calls { call: CallKind::Command },
+        matching: "Bash".into(),
+        effect: RuleEffect::Deny,
+        kept: Kept::Project,
+        described: None,
     };
+    let request = Request { suggested: vec![rule.clone()], ..approval_request("c", to_run("ls")).request };
+    let denied = deny(None);
+    let refused = |decision: &Decision, claims: Option<&Capabilities>, agent| {
+        refusal(&request, decision, claims, agent).map(|e| e.code)
+    };
+    let mut claims = Capabilities::default();
 
-    assert!(decide(answering(vec![0], None)).unwrap().is_some());
+    assert_eq!(refused(&denied, Some(&claims), AgentKind::Claude), Some(ErrorCode::Unsupported), "none claimed");
+    claims.approvals.requests = Some(Requests { parts: Vec::new(), kept: Vec::new() });
+    assert_eq!(refused(&denied, Some(&claims), AgentKind::Claude), None);
+    assert_eq!(refused(&denied, None, AgentKind::Claude), None, "protocol 3 has a form for it");
+    assert_eq!(refused(&denied, None, AgentKind::Codex), Some(ErrorCode::Unsupported), "only Claude's said none");
+    let newer = Decision::Unknown;
+    assert_eq!(refused(&newer, Some(&claims), AgentKind::Claude), Some(ErrorCode::Unsupported), "from a newer client");
+    let stopping = Decision::Deny { words: None, then: AfterDenial::Stop, keep: None };
+    assert_eq!(refused(&stopping, Some(&claims), AgentKind::Claude), Some(ErrorCode::Unsupported), "a part unclaimed");
+    let keeping = Decision::Deny { words: None, then: AfterDenial::Continue, keep: Some(rule) };
+    assert!(keeping.answers(&request));
+    assert_eq!(refused(&keeping, None, AgentKind::Claude), Some(ErrorCode::Unsupported));
+}
+
+#[test]
+fn a_decision_that_doesnt_answer_what_was_asked_is_refused() {
+    let only_an_option = Question { typed: TypedAnswer::No, ..question("Which?", &["A"], false) };
+    let request = approval_request("q", asking(vec![only_an_option])).request;
+    let mut claims = Capabilities::default();
+    claims.asking.questions = Some(Claimed {});
+    let decide = |answers| refusal(&request, &Decision::Answer { answers }, Some(&claims), AgentKind::Claude);
+    let answering = |picked, typed: Option<&str>| vec![QuestionAnswer { picked, typed: typed.map(str::to_string) }];
+
+    assert!(decide(answering(vec![0], None)).is_none());
     for (refused, why) in [
         (answering(vec![1], None), "an option it doesn't offer"),
         (answering(vec![], Some("Mine")), "typed where only an option can be chosen"),
-        (ApprovalDecision::AnswerByPosition { answers: vec![] }, "no answer for its question"),
+        (vec![], "no answer for its question"),
     ] {
-        assert_eq!(decide(refused).unwrap_err().code, protocol::client::ErrorCode::InvalidRequest, "{why}");
+        assert_eq!(decide(refused).unwrap().code, ErrorCode::InvalidRequest, "{why}");
     }
 }
 
@@ -179,11 +167,7 @@ async fn an_answer_once_the_agent_that_asked_has_exited_is_refused_as_too_late()
     let mut claims = Capabilities::default();
     claims.asking.questions = Some(Claimed {});
     initialized(&live, run, "c", claims).await;
-    let request: EventBody = serde_json::from_value(serde_json::json!({
-        "type":"approval_requested","approval_id":"q",
-        "request":{"asks":{"asks":"questions","questions":[{"text":"Which?","typed":"yes"}]}}
-    }))
-    .unwrap();
+    let request = approval_request("q", asking(vec![question("Which?", &[], false)])).into();
     let exited = EventBody::AgentExited {
         reason: protocol::event::ExitReason::Unexpected,
         code: None,
@@ -195,10 +179,9 @@ async fn an_answer_once_the_agent_that_asked_has_exited_is_refused_as_too_late()
     }
     flushed(&live).await;
 
-    let skipped = protocol::event::ApprovalDecision::Deny { message: None, interrupt: false };
-    let refused = hub.session_approve(live.id.clone(), "q".into(), skipped).await.unwrap_err();
+    let refused = hub.session_decide(live.id.clone(), "q".into(), deny(None)).await.unwrap_err();
 
-    assert_eq!(refused.code, protocol::client::ErrorCode::Conflict, "{}", refused.message);
+    assert_eq!(refused.code, ErrorCode::Conflict, "{}", refused.message);
 }
 
 #[tokio::test]

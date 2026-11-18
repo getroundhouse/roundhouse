@@ -1,11 +1,11 @@
 //! Made-up events and logs, for tests that read the log the way drawing does.
 
 use client_core::session_log::SessionLog;
-use protocol::capability::asking::QuestionAnswer;
+use protocol::capability::approvals::Asks;
 use protocol::capability::calls::{Call, CallOutput};
-use protocol::event::{ApprovalOutcome, Asking, EventBody, Question, SessionEvent, TurnOutcome};
+use protocol::event::{EventBody, SessionEvent, TurnOutcome};
+use protocol::fixtures;
 pub(crate) use protocol::fixtures::event;
-use protocol::fixtures::{self, ApprovalRequest};
 use protocol::model::{Rev, Seq, Subagent, SubagentStatus};
 use protocol::prompt::Prompt;
 
@@ -64,44 +64,19 @@ pub(crate) fn result(id: &str) -> EventBody {
     EventBody::AgentUser { subagent: None, blocks: vec![block] }
 }
 
-/// The agent asking the person whether to go on, under the approval `id`, as its adapter says.
+/// The agent asking the person whether to go on, under the approval `id`.
 pub(crate) fn asked_a_question(id: &str) -> EventBody {
-    let question = Question { text: "Go on?".into(), header: None, options: Vec::new(), multiple: false };
-    asking(id, Asking::Questions { questions: vec![question] })
+    asking(id, fixtures::asking(vec![fixtures::question("Go on?", &[], false)]))
 }
 
-/// The agent asking to run a command, under the approval `id`, as its adapter says.
+/// The agent asking to run a command, under the approval `id`.
 pub(crate) fn asked_to_use(id: &str) -> EventBody {
-    asking(id, Asking::ToolUse { typed: Some(Call::Command(fixtures::typed_command("ls"))) })
+    asking(id, fixtures::to_run("ls"))
 }
 
-/// The agent asking `asking` under the approval `id`, as its adapter says, with a tool no client knows.
-pub(crate) fn asking(id: &str, asking: Asking) -> EventBody {
-    ApprovalRequest { asking: Some(asking), ..fixtures::approval_request(id, "Ask") }.into()
-}
-
-/// The approval `id` closed with `outcome`, and with `answers` by the question's text, if any were recorded.
-pub(crate) fn closed(id: &str, outcome: ApprovalOutcome, answers: Option<&[(&str, &str)]>) -> EventBody {
-    let answers = answers.map(|pairs| pairs.iter().map(|(q, a)| ((*q).to_string(), (*a).to_string())).collect());
-    EventBody::ApprovalResolved {
-        approval_id: id.into(),
-        outcome,
-        answers_by_text: answers,
-        answers_by_position: None,
-        by_setting: false,
-    }
-}
-
-/// The approval `id` allowed with `answers` by position.
-pub(crate) fn closed_by_position(id: &str, answers: Vec<QuestionAnswer>) -> EventBody {
-    let outcome = ApprovalOutcome::Allowed;
-    EventBody::ApprovalResolved {
-        approval_id: id.into(),
-        outcome,
-        answers_by_text: None,
-        answers_by_position: Some(answers),
-        by_setting: false,
-    }
+/// The agent asking `asks` under the approval `id`.
+pub(crate) fn asking(id: &str, asks: Asks) -> EventBody {
+    fixtures::approval_request(id, asks).into()
 }
 
 /// The person's prompt, as the hub recorded it.

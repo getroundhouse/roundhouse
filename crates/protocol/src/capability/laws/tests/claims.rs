@@ -3,8 +3,8 @@ use crate::capability::Claimed;
 use crate::capability::output::{Thinking, ThinkingForm};
 use crate::capability::{Capabilities, Capability, approvals, asking, background, context, turns};
 use crate::event::{AgentTask, TokenUsage, TurnOutcome};
-use crate::event::{Asking, CompactedBy, CompactionOutcome, ContentBlock, EventBody, TaskKind};
-use crate::fixtures::{subagent_started, turn_ended};
+use crate::event::{CompactedBy, CompactionOutcome, ContentBlock, EventBody, TaskKind};
+use crate::fixtures::{approval_request, subagent_started, turn_ended};
 use crate::model::{PermissionMode, RunId, Seq, TaskId};
 
 use super::log::*;
@@ -108,35 +108,7 @@ fn a_compaction_needs_what_it_reports() {
 
 #[test]
 fn what_the_agent_says_of_its_mode_limits_and_questions_needs_their_capabilities() {
-    let asking = |asking| {
-        let EventBody::ApprovalRequested {
-            request: None,
-            approval_id,
-            tool_name,
-            tool_use_id,
-            input,
-            description,
-            suggestions,
-            reason,
-            asked_by,
-            ..
-        } = asked("a")
-        else {
-            unreachable!()
-        };
-        EventBody::ApprovalRequested {
-            request: None,
-            approval_id,
-            tool_name,
-            tool_use_id,
-            input,
-            description,
-            suggestions,
-            asking: Some(Box::new(asking)),
-            reason,
-            asked_by,
-        }
-    };
+    let asking = |asks| EventBody::from(approval_request("a", asks));
 
     assert_eq!(
         needs(&EventBody::AgentMode { permission_mode: PermissionMode::Plan }),
@@ -146,12 +118,12 @@ fn what_the_agent_says_of_its_mode_limits_and_questions_needs_their_capabilities
         needs(&EventBody::AgentLimits { limits: vec![] }),
         [crate::capability::account::Capability::Limits.into()]
     );
-    assert_eq!(needs(&asking(Asking::Plan { plan: "1.".into() })), [asking::Capability::PlanApproval.into()]);
-    assert_eq!(needs(&asking(Asking::Questions { questions: vec![] })), [asking::Capability::Questions.into()]);
+    let plan = approvals::Asks::Plan { plan: "1.".into(), file: None };
+    assert_eq!(needs(&asking(plan)), [asking::Capability::PlanApproval.into()]);
+    let questions = approvals::Asks::Questions { questions: vec![] };
+    assert_eq!(needs(&asking(questions)), [asking::Capability::Questions.into()]);
     assert_eq!(needs(&asked("a")), [approvals::Capability::Requests.into()]);
-    let tool_use = Asking::ToolUse { typed: Some(crate::capability::calls::Call::Advisor) };
-    assert_eq!(needs(&asking(tool_use)), [approvals::Capability::Requests.into()]);
-    assert_eq!(needs(&asking(Asking::Unknown)), [approvals::Capability::Requests.into()]);
+    assert_eq!(needs(&asking(approvals::Asks::Unknown)), [approvals::Capability::Requests.into()]);
 }
 
 #[test]
@@ -165,14 +137,7 @@ fn what_the_agent_says_of_its_subagents_needs_them() {
 
 #[test]
 fn typed_requests_need_their_own_capabilities() {
-    let mut body = asked("q");
-    let EventBody::ApprovalRequested { request, .. } = &mut body else { unreachable!() };
-    *request = Some(Box::new(approvals::Request {
-        asks: approvals::Asks::Questions { questions: Vec::new() },
-        suggested: Vec::new(),
-        always: false,
-        why: None,
-    }));
+    let body = approval_request("q", approvals::Asks::Questions { questions: Vec::new() }).into();
     let log = [from_run(1, 1, body)];
     let mut claims = Capabilities::default();
     claims.approvals.requests = Some(approvals::Requests { parts: Vec::new(), kept: Vec::new() });

@@ -6,7 +6,7 @@ use super::super::subagents::note_subagents;
 use super::super::{Appended, Store, StoreError, lock, now_ms, place_column, place_of, seq_column, seq_of};
 use super::change::{SessionChange, change_session};
 use protocol::client::log::ReadLimit;
-use protocol::event::{ApprovalOutcome, EventBody, SessionEvent};
+use protocol::event::{EventBody, SessionEvent};
 use protocol::model::{ApprovalId, ClientMessageId, Place, RunId, Seq, SessionId, SubagentId};
 use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
 
@@ -38,12 +38,12 @@ pub struct Places<'a> {
     pub through: Option<Seq>,
 }
 
-/// For a question answered or cancelled, lets go of what was being typed in answer to it, whoever answered it, since
-/// nobody can send it now.
-fn clear_answer(conn: &Connection, session_id: &SessionId, body: &EventBody) -> Result<(), StoreError> {
+/// For a request decided or cancelled, lets go of what was being drafted on it, whoever decided it, since nobody can
+/// send it now.
+fn clear_decision_draft(conn: &Connection, session_id: &SessionId, body: &EventBody) -> Result<(), StoreError> {
     let EventBody::ApprovalResolved { approval_id, .. } = body else { return Ok(()) };
     conn.execute(
-        "UPDATE sessions SET answer_draft = NULL WHERE id = ?1 AND json_extract(answer_draft, '$.approval_id') = ?2",
+        "UPDATE sessions SET decision_draft = NULL WHERE id = ?1 AND json_extract(decision_draft, '$.approval_id') = ?2",
         params![session_id.as_str(), approval_id.as_str()],
     )?;
     Ok(())
@@ -51,13 +51,7 @@ fn clear_answer(conn: &Connection, session_id: &SessionId, body: &EventBody) -> 
 
 /// The event that closes an unanswered approval when nobody can answer it any more.
 pub fn cancelled_approval(approval_id: ApprovalId) -> EventBody {
-    EventBody::ApprovalResolved {
-        approval_id,
-        outcome: ApprovalOutcome::Cancelled,
-        answers_by_text: None,
-        answers_by_position: None,
-        by_setting: false,
-    }
+    EventBody::ApprovalResolved { approval_id, decision: None, by_setting: false }
 }
 
 /// An event to record, from the agent of `run` or from the hub, with what it changes on its session's record.
@@ -116,7 +110,7 @@ fn append_in(tx: &Connection, session_id: &SessionId, recording: Recording<'_>) 
         raw: None,
     };
     let subagents = note_subagents(tx, &event)?;
-    clear_answer(tx, session_id, body)?;
+    clear_decision_draft(tx, session_id, body)?;
     let claims_taken_off = clear_claims(tx, session_id, run, body)?;
     Ok(Appended {
         event,

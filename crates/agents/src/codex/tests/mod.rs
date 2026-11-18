@@ -1,6 +1,7 @@
 #![cfg(test)]
 mod approvals;
 mod commands;
+mod decisions;
 mod harness;
 mod images;
 mod items;

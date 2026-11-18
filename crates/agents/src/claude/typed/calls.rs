@@ -2,11 +2,11 @@
 //! the CLI's names for its tools or the shape of their inputs. One whose input isn't what its kind takes is recorded as
 //! any other tool's, with its name and input, rather than dropped.
 
-use protocol::capability::calls::Call;
 use protocol::capability::calls::call::{
     CellEdit, Command, Edit, Fetch, FindFiles, LineRange, Monitor, NotebookEdit, Read, Replace, Replaces, Runs, Search,
     Shows, StartSubagent, UseSkill, WebSearch, Write,
 };
+use protocol::capability::calls::{Call, CallKind};
 use protocol::capability::output::{Todo, TodoList, TodoStatus};
 use protocol::capability::setup::ServerName;
 use serde_json::Value;
@@ -57,6 +57,30 @@ pub(in super::super) fn call(tool: &str, input: &Value) -> Call {
         _ => mcp(tool, input),
     };
     read.unwrap_or_else(|| Call::Other { tool: tool.to_owned(), input: input.clone() })
+}
+
+/// The kind of call `tool` makes, by its name alone, as a rule the CLI keeps names a tool.
+pub(in super::super) fn kind(tool: &str) -> CallKind {
+    match tool {
+        "Bash" => CallKind::Command,
+        "Read" => CallKind::Read,
+        "Write" => CallKind::Write,
+        "Edit" | "MultiEdit" => CallKind::Edit,
+        "NotebookEdit" => CallKind::NotebookEdit,
+        "Grep" => CallKind::Search,
+        "Glob" => CallKind::FindFiles,
+        "WebFetch" => CallKind::Fetch,
+        "WebSearch" => CallKind::WebSearch,
+        "Agent" | "Task" => CallKind::Subagent,
+        "TodoWrite" => CallKind::Todos,
+        "Skill" => CallKind::Skill,
+        "Monitor" => CallKind::Monitor,
+        "advisor" => CallKind::Advisor,
+        QUESTIONS => CallKind::Questions,
+        PLAN => CallKind::Plan,
+        _ if tool.strip_prefix(MCP_PREFIX).is_some_and(|rest| rest.contains(MCP_SEPARATOR)) => CallKind::Mcp,
+        _ => CallKind::Other,
+    }
 }
 
 fn search(input: &Value) -> Option<Call> {

@@ -18,7 +18,10 @@ fn a_chat_opened_while_a_request_from_long_before_waits_fetches_that_request() {
     let socket = dir.path().join("hub.sock");
     let heard = start_hub_answering(&socket, |request| {
         if matches!(request, ClientRequest::SessionRead(log::SessionRead { from_seq: ASKED_AT, limit: 1, .. })) {
-            let asked = protocol::fixtures::event(ASKED_AT, protocol::fixtures::approval_request("z", "Bash").into());
+            let asked = protocol::fixtures::event(
+                ASKED_AT,
+                protocol::fixtures::approval_request("z", protocol::fixtures::to_run("ls")).into(),
+            );
             Some(ReplyOutcome::Response(ClientResponse::Events(log::Events {
                 events: vec![asked],
                 last_seq: LAST_SEQ,

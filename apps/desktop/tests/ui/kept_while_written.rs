@@ -5,10 +5,12 @@
 
 use client_core::fake_hub::events::{taken, typed_call, user_prompt};
 use gpui_kit::{AppContext as _, TestAppContext};
+use protocol::capability::asking::Question;
 use protocol::capability::calls::Call;
-use protocol::event::{Asking, Question, QuestionOption};
-use protocol::fixtures::{ApprovalRequest, approval_request};
-use protocol::model::{AnswerDraft, AnswerSoFar, CommentDraft, DiffSide, Seq, SessionStatus, WorkspaceId};
+use protocol::fixtures::{ApprovalRequest, approval_request, asking, question};
+use protocol::model::{
+    AnswerSoFar, CommentDraft, DecisionDraft, DiffSide, Seq, SessionStatus, SoFar, UseChoice, WorkspaceId,
+};
 
 use crate::support::{Diff, Stack, Ui, id, one_chat, open_on_the_chat};
 
@@ -33,13 +35,23 @@ fn open_a_diff(ui: &mut Ui<'_>) -> Diff {
 }
 
 /// What's chosen and typed in answer to the question showing.
-fn so_far(ui: &Ui<'_>) -> Option<AnswerDraft> {
+fn so_far(ui: &Ui<'_>) -> Option<DecisionDraft> {
     let transcript = ui.transcript()?;
     ui.cx.read_entity(&transcript, |t, cx| t.question().and_then(|panel| panel.read(cx).so_far(cx)))
 }
 
-fn typed_in_answer(draft: Option<&AnswerDraft>) -> Option<&str> {
-    Some(draft?.answers.first()?.typed.as_str())
+/// What's typed in answer to the first question, or in the words to deny a tool's use in.
+fn typed_in_answer(draft: Option<&DecisionDraft>) -> Option<&str> {
+    match &draft?.so_far {
+        SoFar::Answers { answers } => Some(answers.first()?.typed.as_str()),
+        SoFar::Use { words, .. } => Some(words),
+        SoFar::Unknown => None,
+    }
+}
+
+/// Answers to the request `approval`'s one question, as a draft keeps them.
+fn answering(approval: &protocol::model::ApprovalId, so_far: AnswerSoFar) -> DecisionDraft {
+    DecisionDraft { approval_id: approval.clone(), so_far: SoFar::Answers { answers: vec![so_far] } }
 }
 
 /// Has the agent ask a question with two options and a row to type another answer.
@@ -75,7 +87,7 @@ fn whats_typed_in_answer_is_there_when_the_app_opens_again_until_its_sent(cx: &m
     ui.ask(A_QUESTION);
     ui.click(id("question-other"));
     ui.input("Friday");
-    let kept = || stack.client().session_get(&chat).unwrap().answer_draft;
+    let kept = || stack.client().session_get(&chat).unwrap().decision_draft;
     ui.wait("the hub to keep it", |_| typed_in_answer(kept().as_ref()) == Some("Friday"));
 
     ui.open_again(&stack);
@@ -91,20 +103,15 @@ fn whats_typed_in_answer_is_there_when_the_app_opens_again_until_its_sent(cx: &m
 /// often do, so a fake hub's, which never change, leave it to the asking to bring it back.
 #[gpui_kit::test]
 fn whats_kept_in_answer_is_taken_as_the_question_is_asked_though_no_record_changes_after(cx: &mut TestAppContext) {
-    let options = ["Monday", "Tuesday"].map(|label| QuestionOption { label: label.into(), description: None });
-    let asked =
-        Question { text: "Which day?".into(), header: Some("Day".into()), options: options.into(), multiple: false };
-    let request = ApprovalRequest {
-        tool_use_id: Some("toolu-1".into()),
-        asking: Some(Asking::Questions { questions: vec![asked] }),
-        ..approval_request("approval-1", "AskUserQuestion")
-    };
+    let asked = Question { header: Some("Day".into()), ..question("Which day?", &["Monday", "Tuesday"], false) };
+    let request =
+        ApprovalRequest { tool_use_id: Some("toolu-1".into()), ..approval_request("approval-1", asking(vec![asked])) };
     let asking = typed_call("msg-1", "toolu-1", Call::Questions);
     let events = vec![user_prompt("Ask me"), taken(Seq::new(1)), asking, request.into()];
     let (mut world, chat) = one_chat(SessionStatus::WaitingApproval, events);
     let typed = AnswerSoFar { picked: Vec::new(), typed: "Friday".to_string(), other: true };
-    let kept = AnswerDraft { approval_id: "approval-1".into(), answers: vec![typed] };
-    world.sessions.last_mut().unwrap().answer_draft = Some(kept.clone());
+    let kept = answering(&"approval-1".into(), typed);
+    world.sessions.last_mut().unwrap().decision_draft = Some(kept.clone());
 
     let (_fake, mut ui) = open_on_the_chat(cx, world, &chat);
 
@@ -210,36 +217,38 @@ fn an_answer_changed_elsewhere_shows_in_the_question_and_going_to_the_typing_row
     ui.click(id("question-other"));
 
     let elsewhere = AnswerSoFar { picked: vec![1], typed: String::new(), other: false };
-    let chosen = AnswerDraft { approval_id: question.clone(), answers: vec![elsewhere] };
-    stack.client().session_answer_draft(&chat, Some(&chosen)).unwrap();
+    let chosen = answering(&question, elsewhere);
+    stack.client().session_decision_draft(&chat, Some(&chosen)).unwrap();
 
     ui.wait("what was chosen elsewhere", |ui| so_far(ui).as_ref() == Some(&chosen));
     ui.view().drafts().unwrap().flushed().recv().unwrap();
-    let kept = stack.client().session_get(&chat).unwrap().answer_draft;
+    let kept = stack.client().session_get(&chat).unwrap().decision_draft;
     assert_eq!(kept.as_ref(), Some(&chosen), "nothing from here replaced it");
 
     ui.click(id("question-answer-0"));
     ui.view().drafts().unwrap().flushed().recv().unwrap();
     let elsewhere = AnswerSoFar { picked: Vec::new(), typed: "Friday".to_string(), other: true };
-    let typed = AnswerDraft { approval_id: question, answers: vec![elsewhere] };
-    stack.client().session_answer_draft(&chat, Some(&typed)).unwrap();
+    let typed = answering(&question, elsewhere);
+    stack.client().session_decision_draft(&chat, Some(&typed)).unwrap();
 
     ui.wait("what was typed elsewhere", |ui| so_far(ui).as_ref() == Some(&typed));
 }
 
 /// A tool's use is asked as a question whose rows are `client_core::ToolUseAnswer::ALL`, in the order every client
-/// shows them, so the row chosen is kept by its place there, as a question's option is, and means the same elsewhere.
+/// shows them, and the row chosen is kept by name, so it means the same elsewhere.
 #[gpui_kit::test]
 fn whats_chosen_and_typed_for_a_tools_use_is_kept_and_shows_wherever_its_asked(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let mut ui = Ui::open_with_a_repository(cx, &stack);
     ui.new_workspace();
     let chat = ui.active_chat();
-    let kept = |stack: &Stack| stack.client().session_get(&chat).unwrap().answer_draft;
+    let kept = |stack: &Stack| stack.client().session_get(&chat).unwrap().decision_draft;
     ui.ask(r#"tool:rm -rf "$(cat nothing-here)""#);
 
     ui.click(id("question-answer-0"));
-    ui.wait("Allow to be kept", |_| kept(&stack).is_some_and(|draft| draft.answers[0].picked == [0]));
+    let chose =
+        |draft: &DecisionDraft, choice| matches!(draft.so_far, SoFar::Use { chosen, .. } if chosen == Some(choice));
+    ui.wait("Allow to be kept", |_| kept(&stack).is_some_and(|draft| chose(&draft, UseChoice::Allow)));
 
     ui.click(id("question-other"));
     ui.input("Use its full path");
@@ -248,15 +257,15 @@ fn whats_chosen_and_typed_for_a_tools_use_is_kept_and_shows_wherever_its_asked(c
     // Chosen elsewhere, it's chosen here, and an Enter as it comes, meant for what was chosen here, sends nothing.
     ui.press("escape");
     let approval_id = kept(&stack).unwrap().approval_id;
-    let deny = AnswerSoFar { picked: vec![1], typed: String::new(), other: false };
-    let denied_elsewhere = AnswerDraft { approval_id, answers: vec![deny] };
-    stack.client().session_answer_draft(&chat, Some(&denied_elsewhere)).unwrap();
+    let deny = SoFar::Use { chosen: Some(UseChoice::Deny), words: String::new(), writing: false };
+    let denied_elsewhere = DecisionDraft { approval_id, so_far: deny };
+    stack.client().session_decision_draft(&chat, Some(&denied_elsewhere)).unwrap();
     ui.wait("Deny to be chosen here", |ui| so_far(ui).as_ref() == Some(&denied_elsewhere));
     ui.press("enter");
     ui.frame();
     assert_eq!(ui.session_status(), Some(SessionStatus::WaitingApproval), "nothing was sent");
 
     // Cleared elsewhere, it goes here too.
-    stack.client().session_answer_draft(&chat, None).unwrap();
+    stack.client().session_decision_draft(&chat, None).unwrap();
     ui.wait("it to go here", |ui| so_far(ui).is_none());
 }

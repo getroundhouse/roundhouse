@@ -4,7 +4,9 @@ use super::super::sessions::draft_column;
 use super::super::workspaces::workspace_on;
 use super::super::{Reading, Store, StoreError, lock};
 use crate::attachment_files::FileFor;
-use protocol::model::{AnswerDraft, AttachmentId, CommentDraft, Draft, DraftToKeep, SessionId, Workspace, WorkspaceId};
+use protocol::model::{
+    AttachmentId, CommentDraft, DecisionDraft, Draft, DraftToKeep, SessionId, Workspace, WorkspaceId,
+};
 use rusqlite::{Connection, params};
 
 impl Store {
@@ -23,27 +25,24 @@ impl Store {
         Ok(Reading { session: session_on(&conn, id)?, changed })
     }
 
-    /// Keeps `draft` as what's chosen and typed in answer to the question the session's agent is waiting on, in place
-    /// of what was, or clears it with `None`, as one with nothing chosen or typed does. A closed session keeps none,
-    /// since its question went with it, and nor does a question that's been answered or cancelled, as one typed in
-    /// another client as it was can arrive after. Keeping what's kept already changes nothing, so the session's
-    /// revision only moves when the draft does.
-    pub fn set_answer_draft(&self, id: &SessionId, draft: Option<&AnswerDraft>) -> Result<Reading, StoreError> {
+    /// Keeps `draft` as what's decided so far on the request the session's agent is waiting on, in place of what was,
+    /// or clears it with `None`, as one that says nothing does. What's typed in answer to a question whose answer is
+    /// secret isn't kept, as `DecisionDraft::without_secrets` says. A closed session keeps none, since its request went
+    /// with it, and nor does a request that's been decided or cancelled, as one typed in another client as it was can
+    /// arrive after. Keeping what's kept already changes nothing, so the session's revision only moves when the draft
+    /// does.
+    pub fn set_decision_draft(&self, id: &SessionId, draft: Option<&DecisionDraft>) -> Result<Reading, StoreError> {
         let conn = lock(&self.writer);
         let mut draft = draft.cloned();
-        if let Some(draft) = &mut draft
-            && let Some(request) = super::super::approvals::request_on(&conn, id, &draft.approval_id)?
+        if let Some(kept) = &draft
+            && let Some(request) = super::super::approvals::request_on(&conn, id, &kept.approval_id)?
         {
-            for (index, _) in protocol::event::secret_questions(&request) {
-                if let Some(answer) = draft.answers.get_mut(index) {
-                    *answer = protocol::model::AnswerSoFar::default();
-                }
-            }
+            draft = draft.map(|draft| draft.without_secrets(&request));
         }
         let draft = draft.as_ref().filter(|draft| draft.says_anything());
         let json = draft.map(serde_json::to_string).transpose()?;
         let changed = conn.execute(
-            "UPDATE sessions SET answer_draft = ?1 WHERE id = ?2 AND closed_at_ms IS NULL AND answer_draft IS NOT ?1
+            "UPDATE sessions SET decision_draft = ?1 WHERE id = ?2 AND closed_at_ms IS NULL AND decision_draft IS NOT ?1
                  AND NOT EXISTS (
                      SELECT 1 FROM events WHERE session_id = ?2 AND kind = 'approval_resolved'
                          AND json_extract(body, '$.approval_id') = ?3)",
@@ -77,7 +76,7 @@ impl Store {
 }
 
 /// For a session being closed, inside the change that closes it: lets go of each file its draft named, as [`let_go`]
-/// says, once the draft has gone with its composer, and of any answer being typed to its question. Returns the files
+/// says, once the draft has gone with its composer, and of any decision being drafted on its request. Returns the files
 /// let go of.
 pub(in super::super) fn forget_drafts(conn: &Connection, id: &SessionId) -> Result<Vec<AttachmentId>, StoreError> {
     let mut named = conn.prepare(
@@ -88,7 +87,7 @@ pub(in super::super) fn forget_drafts(conn: &Connection, id: &SessionId) -> Resu
         .query_map([id.as_str()], |row| row.get::<_, String>(0))?
         .map(|file| file.map(Into::into))
         .collect::<Result<_, _>>()?;
-    conn.execute("UPDATE sessions SET draft = NULL, answer_draft = NULL WHERE id = ?", [id.as_str()])?;
+    conn.execute("UPDATE sessions SET draft = NULL, decision_draft = NULL WHERE id = ?", [id.as_str()])?;
     let mut let_go_of = Vec::new();
     for file in files {
         if let_go(conn, id, &file)? {

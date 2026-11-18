@@ -9,7 +9,7 @@ use gpui_kit::{
     StatefulInteractiveElement as _, Styled, TestSupportExt as _, div, px,
 };
 use look::{Hand as _, IconSizing as _, Shaped as _, Typeset as _};
-use protocol::event::{Question, QuestionOption};
+use protocol::capability::asking::{Question, QuestionOption};
 
 use super::QuestionPanel;
 
@@ -45,7 +45,7 @@ pub(super) fn list(
         .options
         .iter()
         .enumerate()
-        .map(|(o, option)| option_row(o, option, choice.has(o), question.multiple, colors, cx))
+        .map(|(o, option)| option_row(o, option, choice.has(o), question.several(), colors, cx))
         .collect();
     v_flex()
         .id("question-options")
@@ -55,7 +55,7 @@ pub(super) fn list(
         .gap(look::Space::XSmall)
         .children(rows)
         .when(panel.asks.can_type(panel.showing), |d| {
-            d.child(other_row(other, choice.other(), question.multiple, colors, panel.dictation(), cx))
+            d.child(other_row(other, choice.other(), question.several(), colors, panel.dictation(), cx))
         })
         .into_any_element()
 }

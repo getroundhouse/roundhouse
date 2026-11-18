@@ -76,8 +76,8 @@ Wherever a command takes a session, give it one of:
 | `roundhouse log <session>` | Prints a range of a session's events and exits. Takes `--from`, `--limit` and `--raw` |
 | `roundhouse cancel <session>` | Stops the agent's current turn. The session stays usable |
 | `roundhouse compact <session>` | Asks the agent to compact now. `--keep` says what to keep |
-| `roundhouse approve <session> <approval-id>` | Allows what the agent is waiting on. `--deny <message>` refuses, with a message to the agent |
-| `roundhouse answer <session> <approval-id> <question> <answer>` | Answers a question the agent asked |
+| `roundhouse approve <session> <approval-id>` | Allows the tool's use the agent is waiting on, once, or approves its plan. `--deny <message>` refuses either, with a message to the agent, and a plan refused goes on being planned. Questions are answered with `answer` |
+| `roundhouse answer <session> <approval-id> <question> <answer>` | Answers a question the agent asked, by its text. An answer that's an option's label chooses that option, and where several can be chosen, labels separated by a comma and a space choose each. Anything else is typed as the answer, where the question takes one |
 
 ## The hub
 

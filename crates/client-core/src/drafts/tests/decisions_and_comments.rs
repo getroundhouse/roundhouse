@@ -1,13 +1,16 @@
-//! Keeping what's typed in answer to a chat's question, and the comment being written on a workspace's diff, each apart
-//! from the chat's draft.
+//! Keeping what's decided so far on the request a chat's agent waits on, and the comment being written on a workspace's
+//! diff, each apart from the chat's draft.
 
-use protocol::model::{AnswerSoFar, DiffSide};
+use protocol::model::{DiffSide, SoFar};
 
 use super::*;
 
-fn answer(typed: &str) -> AnswerDraft {
-    let so_far = AnswerSoFar { picked: Vec::new(), typed: typed.to_string(), other: true };
-    AnswerDraft { approval_id: "q".into(), answers: vec![so_far] }
+/// Denying the request `q` in the words `typed`, being written.
+fn denying(typed: &str) -> DecisionDraft {
+    DecisionDraft {
+        approval_id: "q".into(),
+        so_far: SoFar::Use { chosen: None, words: typed.to_string(), writing: true },
+    }
 }
 
 fn comment(text: &str) -> CommentDraft {
@@ -25,7 +28,7 @@ fn sorted(mut said: Vec<(String, String)>) -> Vec<(String, String)> {
 }
 
 #[test]
-fn an_answer_and_a_comment_are_each_kept_apart_from_the_chats_draft() {
+fn a_decision_and_a_comment_are_each_kept_apart_from_the_chats_draft() {
     let dir = tempfile::tempdir().unwrap();
     let (client, heard) = hub(&dir.path().join("hub.sock"), Answer::Answered);
     let drafts = Drafts::start(&client);
@@ -33,15 +36,15 @@ fn an_answer_and_a_comment_are_each_kept_apart_from_the_chats_draft() {
     kept(&drafts, &heard);
 
     drafts.typed(DraftChange::Composer(chat("a"), DraftToKeep::new("typed")));
-    drafts.typed(DraftChange::Answer(chat("a"), Some(answer("half"))));
-    drafts.typed(DraftChange::Answer(chat("a"), Some(answer("half an answer"))));
+    drafts.typed(DraftChange::Decision(chat("a"), Some(denying("half"))));
+    drafts.typed(DraftChange::Decision(chat("a"), Some(denying("half an answer"))));
     drafts.typed(DraftChange::Comment(workspace("w"), Some(comment("why?"))));
 
-    assert!(drafts.unkept(&DraftKey::Answer(chat("a"))));
+    assert!(drafts.unkept(&DraftKey::Decision(chat("a"))));
     assert!(drafts.unkept(&DraftKey::Comment(workspace("w"))));
-    let said = pairs(&[("a", "answer half an answer"), ("a", "typed"), ("w", "comment why?")]);
+    let said = pairs(&[("a", "decision half an answer"), ("a", "typed"), ("w", "comment why?")]);
     assert_eq!(sorted(kept(&drafts, &heard)), said, "only the newest of each");
-    let keys = [DraftKey::Composer(chat("a")), DraftKey::Answer(chat("a")), DraftKey::Comment(workspace("w"))];
+    let keys = [DraftKey::Composer(chat("a")), DraftKey::Decision(chat("a")), DraftKey::Comment(workspace("w"))];
     assert!(keys.iter().all(|key| !drafts.unkept(key)));
 }
 
@@ -50,20 +53,20 @@ fn what_a_hub_that_keeps_only_chats_drafts_refuses_waits_for_the_next_connection
     let dir = tempfile::tempdir().unwrap();
     let (older, heard) = hub(&dir.path().join("older.sock"), Answer::KeepsOnlyChatsDrafts);
     let drafts = Drafts::start(&older);
-    drafts.set(DraftChange::Answer(chat("a"), Some(answer("half"))));
+    drafts.set(DraftChange::Decision(chat("a"), Some(denying("half"))));
     drafts.set(DraftChange::Comment(workspace("w"), Some(comment("why?"))));
     let refused = kept(&drafts, &heard);
-    assert_eq!(refused, pairs(&[("a", "refused answer half"), ("w", "refused comment why?")]));
+    assert_eq!(refused, pairs(&[("a", "refused decision half"), ("w", "refused comment why?")]));
 
     drafts.set(DraftChange::Composer(chat("a"), DraftToKeep::new("typed")));
 
     assert_eq!(kept(&drafts, &heard), pairs(&[("a", "typed")]), "the rest goes on, and the hub isn't asked again");
-    assert!(drafts.unkept(&DraftKey::Answer(chat("a"))), "it would be lost if the app stopped now");
+    assert!(drafts.unkept(&DraftKey::Decision(chat("a"))), "it would be lost if the app stopped now");
     assert!(drafts.unkept(&DraftKey::Comment(workspace("w"))));
     let (client, heard) = hub(&dir.path().join("hub.sock"), Answer::Answered);
     drafts.reconnect(&client);
-    assert_eq!(sorted(kept(&drafts, &heard)), pairs(&[("a", "answer half"), ("w", "comment why?")]));
-    assert!(!drafts.unkept(&DraftKey::Answer(chat("a"))));
+    assert_eq!(sorted(kept(&drafts, &heard)), pairs(&[("a", "decision half"), ("w", "comment why?")]));
+    assert!(!drafts.unkept(&DraftKey::Decision(chat("a"))));
 }
 
 /// What's held for the next connection is kept all at once on it, so a hub that refuses one kind of draft is asked
@@ -74,7 +77,7 @@ fn a_hub_that_refuses_a_kind_of_draft_is_asked_about_it_once_a_connection() {
     let (gone, _) = hub(&dir.path().join("gone.sock"), Answer::HangsUp);
     let drafts = Drafts::start(&gone);
     for (chat_id, workspace_id) in [("a", "w"), ("b", "x")] {
-        drafts.set(DraftChange::Answer(chat(chat_id), Some(answer("half"))));
+        drafts.set(DraftChange::Decision(chat(chat_id), Some(denying("half"))));
         drafts.set(DraftChange::Comment(workspace(workspace_id), Some(comment("why?"))));
     }
     drafts.flushed().recv_timeout(TIMEOUT).unwrap();
@@ -84,12 +87,12 @@ fn a_hub_that_refuses_a_kind_of_draft_is_asked_about_it_once_a_connection() {
 
     let asked = kept(&drafts, &heard);
     let refused = |kind: &str| asked.iter().filter(|(_, what)| what.starts_with(&format!("refused {kind}"))).count();
-    assert_eq!((refused("answer"), refused("comment")), (1, 1), "{asked:?}");
+    assert_eq!((refused("decision"), refused("comment")), (1, 1), "{asked:?}");
 }
 
-/// The chat's record at `rev`, with `typed` in answer to its question.
-fn answered(rev: u64, typed: &str) -> Session {
-    Session { answer_draft: Some(answer(typed)), ..told("a", rev, "") }
+/// The chat's record at `rev`, with its request denied in the words `typed`, being written.
+fn drafted(rev: u64, typed: &str) -> Session {
+    Session { decision_draft: Some(denying(typed)), ..told("a", rev, "") }
 }
 
 #[test]
@@ -97,18 +100,18 @@ fn each_draft_tells_what_was_made_elsewhere_by_its_own_copy() {
     let dir = tempfile::tempdir().unwrap();
     let drafts = Drafts::start(&keeping_hub(&dir.path().join("hub.sock"), 5));
 
-    drafts.set(DraftChange::Answer(chat("a"), Some(answer("half"))));
+    drafts.set(DraftChange::Decision(chat("a"), Some(denying("half"))));
     drafts.flushed().recv_timeout(TIMEOUT).unwrap();
     drafts.set(DraftChange::Comment(workspace("w"), Some(comment("why?"))));
     drafts.flushed().recv_timeout(TIMEOUT).unwrap();
 
     assert!(
-        !drafts.from_elsewhere(&KeptDraft::answer(&answered(5, "half"))),
+        !drafts.from_elsewhere(&KeptDraft::decision(&drafted(5, "half"))),
         "the record the hub kept it in is this client's"
     );
-    assert!(!drafts.from_elsewhere(&KeptDraft::answer(&answered(7, "half"))), "and one newer for something else");
-    assert!(drafts.from_elsewhere(&KeptDraft::answer(&answered(8, "half an answer"))));
-    let typed_elsewhere = Session { answer_draft: Some(answer("half")), ..told("a", 5, "typed elsewhere") };
+    assert!(!drafts.from_elsewhere(&KeptDraft::decision(&drafted(7, "half"))), "and one newer for something else");
+    assert!(drafts.from_elsewhere(&KeptDraft::decision(&drafted(8, "half an answer"))));
+    let typed_elsewhere = Session { decision_draft: Some(denying("half")), ..told("a", 5, "typed elsewhere") };
     assert!(
         drafts.from_elsewhere(&KeptDraft::composer(&typed_elsewhere)),
         "nothing was typed in the chat's composer here"
@@ -118,16 +121,16 @@ fn each_draft_tells_what_was_made_elsewhere_by_its_own_copy() {
 }
 
 #[test]
-fn an_answer_or_a_comment_taken_from_a_record_isnt_from_elsewhere_until_another_is_made_there() {
+fn a_decision_or_a_comment_taken_from_a_record_isnt_from_elsewhere_until_another_is_made_there() {
     let dir = tempfile::tempdir().unwrap();
     let (client, _) = hub(&dir.path().join("hub.sock"), Answer::Answered);
     let drafts = Drafts::start(&client);
 
-    drafts.took(KeptDraft::answer(&answered(3, "half")));
+    drafts.took(KeptDraft::decision(&drafted(3, "half")));
     drafts.took(KeptDraft::comment(&writing("w", 3, Some(comment("why?")))));
 
-    assert!(!drafts.from_elsewhere(&KeptDraft::answer(&answered(4, "half"))));
-    assert!(drafts.from_elsewhere(&KeptDraft::answer(&answered(5, "half an answer"))));
+    assert!(!drafts.from_elsewhere(&KeptDraft::decision(&drafted(4, "half"))));
+    assert!(drafts.from_elsewhere(&KeptDraft::decision(&drafted(5, "half an answer"))));
     assert!(!drafts.from_elsewhere(&KeptDraft::comment(&writing("w", 4, Some(comment("why?"))))));
     assert!(drafts.from_elsewhere(&KeptDraft::comment(&writing("w", 5, None))));
 }

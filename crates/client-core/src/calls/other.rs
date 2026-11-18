@@ -30,12 +30,6 @@ impl Other {
         self.tool.as_deref().unwrap_or(&self.title)
     }
 
-    /// A call to the tool the agent calls `name`, named as the agent names it, as a request for approval this build
-    /// can't read is asked about.
-    pub(super) fn named_by(name: &str, input: &Value) -> Self {
-        Self::named(None, readable(name), input)
-    }
-
     /// A call to `tool`, from the MCP server `server` if it's one's, as its agent typed it. A tool with no name, which
     /// an agent shouldn't send, is named as one this build doesn't know.
     pub(super) fn typed(server: Option<&str>, tool: &str, input: &Value) -> Self {
@@ -182,15 +176,5 @@ mod tests {
             ("List open PR", None, Some("signals"))
         );
         assert_eq!(read(&Call::Other { tool: " ".into(), input: json!({}) }).title, "Unknown tool");
-    }
-
-    /// A request for approval this build can't read is asked about by the tool it names, as the agent names it.
-    #[test]
-    fn a_request_this_build_cant_read_is_named_as_the_agent_names_its_tool() {
-        let input = json!({ "script": "ls" });
-        let ToolCall::Other(other) = ToolCall::read(Recorded::Named { name: "run_script", input: &input }) else {
-            panic!("read as another kind")
-        };
-        assert_eq!((other.title.as_str(), other.server), ("Run script", None));
     }
 }

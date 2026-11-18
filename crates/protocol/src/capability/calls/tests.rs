@@ -141,36 +141,6 @@ fn every_kind_of_call_reads_back_as_it_was_written() {
 }
 
 #[test]
-fn a_call_is_known_unless_it_holds_something_this_build_doesnt_know() {
-    let calls: Vec<Call> = [files(), commands(), web_and_subagents(), others()].concat();
-    // The call of `kind` with its value at `pointer` one only a newer build would send.
-    let holding = |kind: CallKind, pointer: &str| {
-        let mut value = serde_json::to_value(calls.iter().find(|call| call.kind() == kind).unwrap()).unwrap();
-        *value.pointer_mut(pointer).unwrap() = json!("from_a_newer_build");
-        serde_json::from_value::<Call>(value).unwrap()
-    };
-
-    assert!(calls.iter().all(Call::is_known));
-    assert!(!Call::Unknown.is_known());
-    assert!(holding(CallKind::Subagent, "/effort").is_known(), "an effort ID from a newer CLI is preserved");
-    for (kind, pointer) in [
-        (CallKind::Command, "/runs"),
-        (CallKind::Edit, "/edits/0/replaces"),
-        (CallKind::Patch, "/files/0/change/change"),
-        (CallKind::Patch, "/files/0/change/hunks/0/lines/0/mark"),
-        (CallKind::NotebookEdit, "/does"),
-        (CallKind::Search, "/shows"),
-        (CallKind::Todos, "/items/0/status"),
-        (CallKind::Subagent, "/runs"),
-        (CallKind::Lsp, "/asks"),
-        (CallKind::Schedule, "/when/when"),
-    ] {
-        let call = holding(kind, pointer);
-        assert!(!call.is_known(), "{pointer} of {call:?}");
-    }
-}
-
-#[test]
 fn every_kind_of_output_reads_back_as_it_was_written() {
     let file = FileOutcome {
         path: "a".into(),

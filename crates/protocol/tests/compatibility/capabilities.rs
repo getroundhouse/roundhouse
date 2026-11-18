@@ -59,36 +59,12 @@ fn current_calls_keep_typed_input_once_and_old_calls_dont_fail_their_event() {
     assert_eq!(unknown, ContentBlock::Unknown);
 }
 
-/// Older clients know the event variant but require its legacy fields, even when a typed adapter has no native input.
-#[test]
-fn typed_approvals_keep_the_fields_an_older_reader_requires() {
-    #[derive(serde::Deserialize)]
-    #[serde(tag = "type", rename_all = "snake_case")]
-    enum BeforeTypedRequests {
-        ApprovalRequested { tool_name: String, input: Value },
-    }
-
-    let current: EventBody = serde_json::from_value(json!({
-        "type": "approval_requested", "approval_id": "public",
-        "request": {"asks": {"asks": "plan", "plan": "Read the file"}},
-        "tool_name": "", "input": null
-    }))
-    .unwrap();
-    let sent = serde_json::to_value(&current).unwrap();
-    let old: BeforeTypedRequests = serde_json::from_value(sent.clone()).unwrap();
-    let BeforeTypedRequests::ApprovalRequested { tool_name, input } = old;
-    assert_eq!(tool_name, "");
-    assert!(input.is_null());
-    assert_eq!(sent.get("input"), Some(&Value::Null));
-    assert_eq!(serde_json::from_value::<EventBody>(sent).unwrap(), current);
-}
-
 /// Each control a run of this build claims, as a hub sends it to a worker of protocol 4, spelled out, since a worker of
 /// this build has to read what any later hub sends it, and these types are what a hub sends it until the protocol
 /// breaks.
 #[test]
 fn every_control_a_run_of_this_build_claims_keeps_its_form() {
-    use protocol::capability::approvals::{AfterDenial, ApprovalMode, Beyond, Decision, Remember, Unasked};
+    use protocol::capability::approvals::{AfterDenial, Decision, Remember};
     use protocol::capability::asking::PlanContext;
     use protocol::capability::asking::QuestionAnswer;
     use protocol::capability::prompts::Extras;
@@ -96,7 +72,6 @@ fn every_control_a_run_of_this_build_claims_keeps_its_form() {
     use protocol::model::{ModelName, Seq};
     use protocol::prompt::Prompt;
 
-    let full = ApprovalMode { unasked: Unasked::Everything, beyond: Beyond::Asks, sandbox: None, plan: false };
     let decide = |decision| Control::Decide { approval: "a".into(), decision };
     let controls = [
         (
@@ -118,7 +93,7 @@ fn every_control_a_run_of_this_build_claims_keeps_its_form() {
                 "persona":null,"style":null,"verbosity":null,"advisor":null,"budget":null}),
         ),
         (
-            decide(Decision::Allow { edited: None, remember: Remember::Once }),
+            decide(Decision::Allow { remember: Remember::Once }),
             json!({"control":"decide","approval":"a","decision":{"decision":"allow","remember":{"remember":"once"}}}),
         ),
         (
@@ -130,9 +105,8 @@ fn every_control_a_run_of_this_build_claims_keeps_its_form() {
             json!({"control":"decide","approval":"a","decision":{"decision":"answer","answers":[{"picked":[1],"typed":"Bo"}]}}),
         ),
         (
-            decide(Decision::ApprovePlan { then: full, context: PlanContext::Kept }),
-            json!({"control":"decide","approval":"a","decision":{"decision":"approve_plan",
-                "then":{"unasked":"everything","beyond":"asks"},"context":"kept"}}),
+            decide(Decision::ApprovePlan { context: PlanContext::Kept }),
+            json!({"control":"decide","approval":"a","decision":{"decision":"approve_plan","context":"kept"}}),
         ),
         (
             decide(Decision::KeepPlanning { words: Some("Smaller".into()) }),
@@ -171,7 +145,7 @@ fn a_decision_or_a_part_of_one_this_build_doesnt_know_reads_as_unknown() {
     assert_eq!(read(json!({"decision":"overrule","why":"Tested"})), Decision::Unknown);
     assert_eq!(
         read(json!({"decision":"allow","remember":{"remember":"for_the_project"}})),
-        Decision::Allow { edited: None, remember: Remember::Unknown }
+        Decision::Allow { remember: Remember::Unknown }
     );
     assert_eq!(
         read(json!({"decision":"deny","then":"rewind"})),

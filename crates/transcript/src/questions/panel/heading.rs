@@ -6,7 +6,7 @@ use gpui_kit::{
     StatefulInteractiveElement as _, Styled, TestSupportExt as _, div, px,
 };
 use look::Typeset as _;
-use protocol::event::Question;
+use protocol::capability::asking::Question;
 
 use super::QuestionPanel;
 

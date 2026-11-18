@@ -9,7 +9,9 @@
 //! What a worker of protocol 3 sends the hub is read with this protocol's types, so until protocol 3 goes, a change
 //! can't take away a form such a worker sends, such as `AgentInit`'s claims, without keeping a way to read it.
 
+mod approval;
 mod launch_identity;
 mod requests;
 
+pub use approval::{AgentApproval, ApprovalDecision};
 pub use requests::{AgentCancel, AgentCompact, AgentConfigure, AgentPrompt, AgentStart, Call, Request, VERSION};

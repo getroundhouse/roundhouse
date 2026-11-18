@@ -1,12 +1,10 @@
-use serde_json::{Value, json};
-
 use super::super::*;
 use crate::capability::calls::{Call, CallOutput};
 use crate::capability::{Capabilities, approvals};
 use crate::capability::{Claimed, approvals as approval_claims, background as background_claims};
-use crate::event::{ApprovalOutcome, ExitReason, TaskOutcome};
 use crate::event::{ContentBlock, EventBody, SessionEvent};
-use crate::fixtures::{event, typed_call, typed_command, typed_result};
+use crate::event::{ExitReason, TaskOutcome};
+use crate::fixtures::{allow_once, approval_request, decided, event, typed_call, typed_command, typed_result};
 use crate::model::{RunId, Seq};
 use crate::prompt::Prompt;
 
@@ -51,28 +49,11 @@ pub(super) fn sent_back(blocks: Vec<ContentBlock>) -> EventBody {
 }
 
 pub(super) fn asked(id: &str) -> EventBody {
-    EventBody::ApprovalRequested {
-        request: None,
-        approval_id: id.into(),
-        tool_name: "Bash".into(),
-        tool_use_id: None,
-        input: json!({"command": "ls"}),
-        description: None,
-        suggestions: Box::new(Value::Null),
-        asking: None,
-        reason: None,
-        asked_by: None,
-    }
+    approval_request(id, approvals::Asks::Call { call: Call::Command(typed_command("ls")) }).into()
 }
 
 pub(super) fn resolved(id: &str) -> EventBody {
-    EventBody::ApprovalResolved {
-        approval_id: id.into(),
-        outcome: ApprovalOutcome::Allowed,
-        answers_by_text: None,
-        answers_by_position: None,
-        by_setting: false,
-    }
+    decided(id, allow_once())
 }
 
 pub(super) fn subagent_ended(call: &str) -> EventBody {

@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use protocol::event::{AgentRunState, ApprovalOutcome, EventBody, NoticeLevel, TokenUsage, TurnOutcome};
+use protocol::event::{AgentRunState, EventBody, NoticeLevel, TokenUsage, TurnOutcome};
 use protocol::model::{PermissionMode, Seq};
 use serde_json::Value;
 
@@ -250,18 +250,7 @@ pub(super) async fn settle_turn(shared: &Shared) {
         (requests, calls, surviving_tasks)
     };
     for approval_id in requests {
-        shared
-            .event(
-                EventBody::ApprovalResolved {
-                    approval_id,
-                    outcome: ApprovalOutcome::Cancelled,
-                    answers_by_text: None,
-                    answers_by_position: None,
-                    by_setting: false,
-                },
-                None,
-            )
-            .await;
+        shared.event(EventBody::ApprovalResolved { approval_id, decision: None, by_setting: false }, None).await;
     }
     for tool_use_id in calls {
         shared.event(EventBody::ToolCallDropped { tool_use_id }, None).await;

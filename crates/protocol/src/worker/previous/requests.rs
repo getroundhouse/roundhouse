@@ -25,6 +25,7 @@ pub enum Request {
     AgentCancel(AgentCancel),
     AgentCompact(AgentCompact),
     AgentConfigure(AgentConfigure),
+    AgentApproval(super::AgentApproval),
     /// As `AgentStartUnderLogin`, for a title.
     TitleUnderLogin(TitleFor),
 }

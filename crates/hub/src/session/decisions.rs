@@ -1,18 +1,15 @@
-//! Translate clients' existing approval replies into the capability decision the run takes.
+//! Checking a decision on a request for approval before it's recorded and passed on to the agent that asked.
 
 use super::LiveSession;
-use protocol::capability::asking::QuestionAnswer;
-use protocol::capability::{
-    Capabilities, Control,
-    approvals::{AfterDenial, Asks, Decision, Remember},
-    asking::PlanContext,
-};
+use super::previous::unclaimed_takes;
+use protocol::capability::Capabilities;
+use protocol::capability::approvals::{Decision, Request};
 use protocol::client::{ApiError, ErrorCode};
-use protocol::event::{ApprovalDecision, EventBody};
-use protocol::model::ApprovalId;
+use protocol::model::{AgentKind, ApprovalId};
 
 impl LiveSession {
-    pub(super) async fn approval_request(&self, approval: &ApprovalId) -> Result<EventBody, ApiError> {
+    /// What the request `approval` asks, as the log has it.
+    pub(super) async fn approval_request(&self, approval: &ApprovalId) -> Result<Request, ApiError> {
         let (id, asked) = (self.id.clone(), approval.clone());
         self.hub()?.blocking(move |store| store.approval_request(&id, &asked)).await?.ok_or_else(|| {
             ApiError::new(ErrorCode::Conflict, format!("no approval {approval} was asked for in this chat"))
@@ -20,83 +17,24 @@ impl LiveSession {
     }
 }
 
-pub(super) fn control(
-    body: &EventBody,
-    approval: ApprovalId,
-    decision: &ApprovalDecision,
+/// Why `decision` on `request` is refused, if it is: it's of a kind this build doesn't know, which a newer client sent,
+/// it doesn't answer what was asked, as `Decision::answers` says, or the run of `agent` that asked, which claims
+/// `claims`, can't take it. A run that claims nothing takes what [`unclaimed_takes`] says.
+pub(super) fn refusal(
+    request: &Request,
+    decision: &Decision,
     claims: Option<&Capabilities>,
-) -> Result<Option<Control>, ApiError> {
-    let EventBody::ApprovalRequested { request, .. } = body else { return Err(unsupported()) };
-    // Legacy requests keep their native decision envelope: translating it can lose edited input, permission
-    // updates or the distinction between skipping questions and answering none. Typed requests use run claims.
-    let Some(request) = request else { return Ok(None) };
-    let claims = claims.ok_or_else(unsupported)?;
-    let plan = matches!(request.asks, Asks::Plan { .. });
-    let questions = matches!(request.asks, Asks::Questions { .. });
-    let decision = match decision {
-        ApprovalDecision::Deny { interrupt: false, .. } if questions => {
-            let Asks::Questions { questions } = &request.asks else { return Err(unsupported()) };
-            Decision::Answer { answers: vec![QuestionAnswer::default(); questions.len()] }
-        }
-        ApprovalDecision::Allow { updated_input: None, updated_permissions: None } if plan => {
-            let modes = claims.approvals.modes.as_ref().ok_or_else(unsupported)?;
-            let then = std::iter::once(modes.default)
-                .chain(modes.others.iter().copied())
-                .find(|m| !m.plan)
-                .ok_or_else(unsupported)?;
-            Decision::ApprovePlan { then, context: PlanContext::Kept }
-        }
-        ApprovalDecision::Allow { updated_input: None, updated_permissions: None } => {
-            Decision::Allow { edited: None, remember: Remember::Once }
-        }
-        ApprovalDecision::Deny { message, interrupt: false } if plan => {
-            Decision::KeepPlanning { words: message.clone() }
-        }
-        ApprovalDecision::Deny { message, interrupt } => Decision::Deny {
-            words: message.clone(),
-            then: if *interrupt { AfterDenial::Stop } else { AfterDenial::Continue },
-            keep: None,
-        },
-        ApprovalDecision::AnswerByPosition { answers } => Decision::Answer { answers: answers.clone() },
-        ApprovalDecision::AnswerByText { answers } => {
-            let Asks::Questions { questions } = &request.asks else { return Err(unsupported()) };
-            Decision::Answer {
-                answers: questions
-                    .iter()
-                    .map(|q| QuestionAnswer { picked: Vec::new(), typed: answers.get(&q.text).cloned() })
-                    .collect(),
-            }
-        }
-        ApprovalDecision::Allow { .. } => return Err(unsupported()),
-    };
+    agent: AgentKind,
+) -> Option<ApiError> {
+    if *decision == Decision::Unknown {
+        return Some(ApiError::new(ErrorCode::Unsupported, "this hub doesn't know that kind of decision"));
+    }
     if !decision.answers(request) {
-        return Err(ApiError::new(ErrorCode::InvalidRequest, "that doesn't answer what the agent asked"));
+        return Some(ApiError::new(ErrorCode::InvalidRequest, "that doesn't answer what the agent asked"));
     }
-    let control = Control::Decide { approval, decision };
-    if !control.allowed(claims) {
-        return Err(unsupported());
-    }
-    Ok(Some(control))
-}
-
-pub(super) fn redacted(body: &EventBody, decision: &ApprovalDecision) -> ApprovalDecision {
-    let mut decision = decision.clone();
-    for (index, question) in protocol::event::secret_questions(body) {
-        match &mut decision {
-            ApprovalDecision::AnswerByPosition { answers } => {
-                if let Some(answer) = answers.get_mut(index) {
-                    *answer = QuestionAnswer::default();
-                }
-            }
-            ApprovalDecision::AnswerByText { answers } => {
-                answers.remove(question);
-            }
-            ApprovalDecision::Allow { .. } | ApprovalDecision::Deny { .. } => {}
-        }
-    }
-    decision
-}
-
-fn unsupported() -> ApiError {
-    ApiError::new(ErrorCode::Unsupported, "the run cannot take that form of decision")
+    let takes = match claims {
+        Some(claims) => decision.allowed(claims),
+        None => unclaimed_takes(agent, decision, request),
+    };
+    (!takes).then(|| ApiError::new(ErrorCode::Unsupported, "the agent that asked can't take that decision"))
 }

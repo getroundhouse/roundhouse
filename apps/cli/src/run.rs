@@ -3,9 +3,10 @@
 use std::path::PathBuf;
 
 use anyhow::Context;
-use client_core::{Client, Daemon, FileToSend, HubAdmin, Written};
-use protocol::event::ApprovalDecision;
-use protocol::model::{Repo, RepoOrigin};
+use client_core::{Approval, Client, Daemon, FileToSend, HubAdmin, Written};
+use protocol::capability::approvals::Decision;
+use protocol::event::SessionEvent;
+use protocol::model::{ApprovalId, Repo, RepoOrigin, Session};
 use protocol::paths::Paths;
 use protocol::prompt::Prompt;
 use protocol::versions::Versions;
@@ -56,16 +57,17 @@ pub(crate) fn run(args: Args) -> anyhow::Result<()> {
         Cmd::Log { session, from, limit, raw } => print_log(&client, &session, from, limit, raw)?,
         Cmd::Approve { session, approval_id, deny } => {
             let session = find_session(&client, &session)?;
-            let decision = match deny {
-                Some(message) => ApprovalDecision::Deny { message: Some(message), interrupt: false },
-                None => ApprovalDecision::Allow { updated_input: None, updated_permissions: None },
-            };
-            client.session_approve(&session.id, &approval_id, decision)?;
+            let decision = approving(&client, &session, &approval_id, deny)?;
+            client.session_decide(&session.id, &approval_id, decision)?;
         }
         Cmd::Answer { session, approval_id, question, answer } => {
             let session = find_session(&client, &session)?;
-            let decision = ApprovalDecision::AnswerByText { answers: std::iter::once((question, answer)).collect() };
-            client.session_approve(&session.id, &approval_id, decision)?;
+            let asked = waiting(&client, &session, &approval_id)?;
+            let approval = Approval::of(&asked.body).context("not a request")?;
+            let decision = approval
+                .answered_in_words(&question, &answer)
+                .with_context(|| format!("approval {approval_id} asks no question {question:?}"))?;
+            client.session_decide(&session.id, &approval_id, decision)?;
         }
         Cmd::Cancel { session } => {
             let session = find_session(&client, &session)?;
@@ -77,6 +79,30 @@ pub(crate) fn run(args: Args) -> anyhow::Result<()> {
         }
     }
     Ok(())
+}
+
+/// The request waiting in `session` under `approval`.
+fn waiting(client: &Client, session: &Session, approval: &ApprovalId) -> anyhow::Result<SessionEvent> {
+    client.waiting_request(session, approval)?.with_context(|| format!("no approval {approval} is waiting"))
+}
+
+/// What `roundhouse approve` decides of the request waiting under `approval`: a call allowed this once, or a plan
+/// approved, or either refused in the words `deny`.
+fn approving(
+    client: &Client,
+    session: &Session,
+    approval: &ApprovalId,
+    deny: Option<String>,
+) -> anyhow::Result<Decision> {
+    let asked = waiting(client, session, approval)?;
+    let request = Approval::of(&asked.body).context("not a request")?;
+    if request.questions().is_some() {
+        anyhow::bail!("approval {approval} asks questions: answer them with answer");
+    }
+    if deny.is_some() {
+        return Ok(request.refuse(deny));
+    }
+    request.approve().with_context(|| format!("approval {approval} asks for more than a yes"))
 }
 
 fn repo_command(client: &Client, command: RepoCmd) -> anyhow::Result<()> {

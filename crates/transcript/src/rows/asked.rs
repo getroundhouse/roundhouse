@@ -11,7 +11,7 @@ use gpui_kit::{
     TestSupportExt as _, div, px,
 };
 use look::{IconSizing as _, Typeset as _};
-use protocol::event::Question;
+use protocol::capability::asking::Question;
 use protocol::model::Seq;
 
 use super::around::{AnswerTo, Asked, Settled};
@@ -153,18 +153,15 @@ fn text(toggle: &Toggle, part: Text, id: ElementId, text: &str, color: Hsla, are
 #[cfg(test)]
 mod tests {
     use client_core::Answered;
-    use protocol::capability::asking::QuestionAnswer;
-    use protocol::event::{Question, QuestionOption};
+    use protocol::capability::asking::{Question, QuestionAnswer};
+    use protocol::fixtures::question;
 
     use super::{Settled, summary};
 
     fn two_questions() -> Vec<Question> {
-        let option = |label: &str| QuestionOption { label: label.into(), description: None };
-        let colors = vec![option("Red"), option("Blue")];
-        let days = vec![option("Monday"), option("Wednesday"), option("Friday")];
         vec![
-            Question { text: "Red or blue?".into(), header: Some("Color".into()), options: colors, multiple: false },
-            Question { text: "Which days?".into(), header: Some("Days".into()), options: days, multiple: true },
+            question("Red or blue?", &["Red", "Blue"], false),
+            question("Which days?", &["Monday", "Wednesday", "Friday"], true),
         ]
     }
 
@@ -173,18 +170,14 @@ mod tests {
     }
 
     fn by_position(answers: Vec<QuestionAnswer>) -> Settled {
-        Settled::Answered(Answered::ByPosition(answers))
+        Settled::Answered(Answered(answers))
     }
 
     #[test]
     fn the_line_says_what_was_answered_in_the_questions_order() {
         let answered = by_position(vec![answer(&[1], None), answer(&[0, 2], None)]);
-        let by_text = Settled::Answered(Answered::ByText(
-            [("Which days?".into(), "Monday, Friday".into()), ("Red or blue?".into(), "Blue".into())].into(),
-        ));
 
         assert_eq!(summary(&two_questions(), &answered).as_deref(), Some("Blue · Monday, Friday"));
-        assert_eq!(summary(&two_questions(), &by_text).as_deref(), Some("Blue · Monday, Friday"), "as a client before");
     }
 
     #[test]

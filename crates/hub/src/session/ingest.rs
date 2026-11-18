@@ -3,9 +3,8 @@
 use std::sync::Arc;
 
 use protocol::attachment::NewAttachment;
-use protocol::event::{
-    ApprovalDecision, ApprovalOutcome, Asking, CompactionOutcome, EventBody, ExitReason, SessionEvent,
-};
+use protocol::capability::approvals::{Asks, Decision, Remember, Request};
+use protocol::event::{CompactionOutcome, EventBody, ExitReason, SessionEvent};
 use protocol::model::{ApprovalId, ContextUsage, PermissionMode, RunId, SessionSettingsChange};
 use protocol::tail::{Retrying, StreamDelta, Tail};
 use tokio::sync::mpsc;
@@ -62,8 +61,8 @@ async fn ingest_event(
     follow(session, run, current, &body).await;
     let body = session.with_waits(body).await;
     let origin = Origin::Run { run, current, numbered };
-    if current && let Some(approval_id) = allowed_by_the_hub(session, &body) {
-        allow(session, origin, (body, raw), approval_id).await;
+    if current && let Some((approval_id, request)) = allowed_by_the_hub(session, &body) {
+        allow(session, origin, (body, raw), approval_id, request).await;
         return;
     }
     let stale_approval = if let EventBody::ApprovalRequested { approval_id, .. } = &body
@@ -87,46 +86,36 @@ async fn ingest_event(
     }
 }
 
-/// The request in `body`, if the hub allows it itself, as [`the_hub_allows`] says.
-fn allowed_by_the_hub(session: &LiveSession, body: &EventBody) -> Option<ApprovalId> {
-    let EventBody::ApprovalRequested { approval_id, .. } = body else { return None };
+/// The request in `body`, and its ID, if the hub allows it itself, as [`the_hub_allows`] says.
+fn allowed_by_the_hub(session: &LiveSession, body: &EventBody) -> Option<(ApprovalId, Request)> {
+    let EventBody::ApprovalRequested { approval_id, request, .. } = body else { return None };
     let mode = session.state.lock().settings.permission_mode;
     let set_to = session.hub().is_ok_and(|hub| hub.allows_asked_in_full_access());
-    the_hub_allows(mode, body, set_to).then(|| approval_id.clone())
+    the_hub_allows(mode, request, set_to).then(|| (approval_id.clone(), Request::clone(request)))
 }
 
-/// Whether the hub allows the request `body` itself, in a session in `mode`, when its settings are `set_to`: a tool's
-/// use asked about with full access, which comes whatever the mode, as Claude's CLI asks before a command it can't
-/// check. Questions and a plan are the person's to answer whatever the settings say, and so is anything asked in plan
-/// mode, and a request from an adapter from before requests said what they ask, since the hub can't tell what it asks.
-pub(super) fn the_hub_allows(mode: PermissionMode, body: &EventBody, set_to: bool) -> bool {
-    set_to && mode == PermissionMode::FullAccess && asks_to_use_a_tool(body)
+/// Whether the hub allows `request` itself, in a session in `mode`, when its settings are `set_to`: a call asked about
+/// with full access, which comes whatever the mode, as Claude's CLI asks before a command it can't check. Anything
+/// else is the person's to decide whatever the settings say, and so is anything asked in plan mode.
+pub(super) fn the_hub_allows(mode: PermissionMode, request: &Request, set_to: bool) -> bool {
+    set_to && mode == PermissionMode::FullAccess && matches!(request.asks, Asks::Call { .. })
 }
 
-/// Whether `body` asks to use a tool, as a typed request says, or for one from an adapter from before them, as what
-/// it asks says.
-fn asks_to_use_a_tool(body: &EventBody) -> bool {
-    let EventBody::ApprovalRequested { asking, request, .. } = body else { return false };
-    match request {
-        Some(request) => matches!(request.asks, protocol::capability::approvals::Asks::Call { .. }),
-        None => matches!(asking.as_deref(), Some(Asking::ToolUse { .. })),
-    }
-}
-
-/// Records the request `asked`, with the hub's answer allowing it, and passes that on to the agent. It's passed on
-/// from a task of its own, since the agent's worker replies on the connection whose events this task takes in, and
-/// waits for this task when there are many, so waiting for the reply here could leave each waiting on the other.
+/// Records the request `asked`, which is `request`, with the hub's decision allowing it, and passes that on to the
+/// agent. It's passed on from a task of its own, since the agent's worker replies on the connection whose events this
+/// task takes in, and waits for this task when there are many, so waiting for the reply here could leave each waiting
+/// on the other.
 async fn allow(
     session: &Arc<LiveSession>,
     origin: Origin,
     asked: (EventBody, Option<String>),
     approval_id: ApprovalId,
+    request: Request,
 ) {
+    let allowed = Decision::Allow { remember: Remember::Once };
     let answer = EventBody::ApprovalResolved {
         approval_id: approval_id.clone(),
-        outcome: ApprovalOutcome::Allowed,
-        answers_by_text: None,
-        answers_by_position: None,
+        decision: Some(Box::new(allowed.clone())),
         by_setting: true,
     };
     if let Err(e) = session.record_answered(origin, asked, answer).await {
@@ -135,8 +124,7 @@ async fn allow(
     }
     let session = session.clone();
     tokio::spawn(async move {
-        let allowed = ApprovalDecision::Allow { updated_input: None, updated_permissions: None };
-        if let Err(e) = session.pass_on(approval_id, allowed).await {
+        if let Err(e) = session.pass_on(approval_id, allowed, &request).await {
             warn!(session = %session.id, "could not pass on a tool's use the hub allowed: {e}");
         }
     });

@@ -4,11 +4,12 @@
 
 #![cfg(test)]
 
+use protocol::capability::approvals::Asks;
 use protocol::capability::calls::Call;
 use protocol::capability::calls::call::{Command, Edit, Replace, Replaces, Runs};
-use protocol::event::{ApprovalOutcome, Asking, EventBody};
-use protocol::fixtures::{ApprovalRequest, approval_request, typed_command, typed_request};
-use protocol::model::{Seq, SessionStatus};
+use protocol::event::EventBody;
+use protocol::fixtures::{ApprovalRequest, approval_request, decided, deny, typed_command, typed_request};
+use protocol::model::{AgentKind, Seq, SessionStatus};
 
 use super::chats::{self, looked_around};
 use super::frame::{CHAT, QUESTION};
@@ -16,6 +17,7 @@ use super::screens::FOCUS;
 use super::steps::{Screen, Step};
 use super::typed_chats;
 use super::worlds::{chat_world, in_plan_mode};
+use client_core::fake_hub::World;
 use client_core::fake_hub::events::{
     command, denied as denied_with, launched, replied, subagent, subagent_started, subagents_listed, taken, text,
     typed_call, user_prompt, within,
@@ -65,11 +67,22 @@ pub(crate) const SCREENS: &[Screen] = &[
     Screen {
         name: "approval-patch",
         spec: "chats.md",
-        world: Some(|| chat_world(SessionStatus::WaitingApproval, patched())),
+        world: Some(codex_patching),
         frame: QUESTION,
         steps: &[Step::Select(FOCUS)],
     },
 ];
+
+/// A Codex chat waiting to be allowed [`patched`], on a hub that describes its agents as the app's own does, so the
+/// request is asked as Codex takes an answer, which is without words.
+fn codex_patching() -> World {
+    let mut world = chat_world(SessionStatus::WaitingApproval, patched());
+    world.agents = Some(agents::descriptions());
+    for chat in &mut world.sessions {
+        chat.agent = AgentKind::Codex;
+    }
+    world
+}
 
 /// Waiting to be allowed a patch of two files, as Codex's adapter asks: adding `may_pass` to the signal, and a depot
 /// that uses it, with nothing said of what it's for.
@@ -98,8 +111,7 @@ fn edit() -> Vec<EventBody> {
     events.push(typed_call("msg-4", "toolu-3", edit.clone()));
     let request = ApprovalRequest {
         tool_use_id: Some("toolu-3".into()),
-        asking: Some(Asking::ToolUse { typed: Some(edit) }),
-        ..approval_request("approval-1", "Edit")
+        ..approval_request("approval-1", Asks::Call { call: edit })
     };
     events.push(request.into());
     events
@@ -110,13 +122,7 @@ fn denied() -> Vec<EventBody> {
     let reply = "I'll leave the tests, then, and go by what the code says.";
     let instead = "Not yet. Read how the sidebar gets its records first";
     let mut events = chats::approval();
-    events.push(EventBody::ApprovalResolved {
-        approval_id: "approval-1".into(),
-        outcome: ApprovalOutcome::Denied,
-        answers_by_text: None,
-        answers_by_position: None,
-        by_setting: false,
-    });
+    events.push(decided("approval-1", deny(Some(instead))));
     events.push(denied_with("toolu-3", instead, Some(instead)));
     events.push(text("msg-5", reply));
     events.push(replied(reply, 41, 0.12));
@@ -164,12 +170,10 @@ fn removal(asking: usize) -> Vec<EventBody> {
         let typed = Call::Command(Command { description: Some(described.to_string()), ..typed_command(COMMAND) });
         let request = ApprovalRequest {
             tool_use_id: Some(run.as_str().into()),
-            description: Some(described.to_string()),
-            asking: Some(Asking::ToolUse { typed: Some(typed) }),
-            reason: Some(WHY.to_string()),
             asked_by: Some((*call).into()),
-            ..approval_request(&approval, "Bash")
+            ..approval_request(&approval, Asks::Call { call: typed })
         };
+        let request = request.because(WHY);
         events.push(request.into());
     }
     events

@@ -2,13 +2,14 @@ use super::super::Hub;
 use crate::error::internal;
 use crate::session::{Command, LiveSession};
 use crate::store::{Places, Reading, Store, StoreError};
+use protocol::capability::approvals::Decision;
 use protocol::client::log::ReadLimit;
 use protocol::client::{ApiError, ErrorCode, HubNotice, log, records};
-use protocol::event::{ApprovalDecision, SessionEvent};
+use protocol::event::SessionEvent;
 use protocol::find::{Found, Needle};
 use protocol::model::{
-    AnswerDraft, ApprovalId, AttachmentId, ClientMessageId, CompactionLine, DraftToKeep, Place, PromptLine, RecordKey,
-    Seq, Session, SessionId, SessionSettingsChange, SubagentId, WorkspaceId,
+    ApprovalId, AttachmentId, ClientMessageId, CompactionLine, DecisionDraft, DraftToKeep, Place, PromptLine,
+    RecordKey, Seq, Session, SessionId, SessionSettingsChange, SubagentId, WorkspaceId,
 };
 use protocol::prompt::Prompt;
 use std::collections::{HashMap, HashSet};
@@ -190,15 +191,15 @@ impl Hub {
         recorded.await.map_err(|_| internal("the session has stopped"))?
     }
 
-    pub(crate) async fn session_approve(
+    pub(crate) async fn session_decide(
         self: &Arc<Self>,
         id: SessionId,
         approval_id: ApprovalId,
-        decision: ApprovalDecision,
+        decision: Decision,
     ) -> Result<(), ApiError> {
         let session = self.live_session(&id).await?;
         let (reply, done) = oneshot::channel();
-        session.command(Command::Approve { approval_id, decision, reply }).await?;
+        session.command(Command::Decide { approval_id, decision, reply }).await?;
         done.await.map_err(|_| internal("the session has stopped"))?
     }
 
@@ -250,12 +251,12 @@ impl Hub {
         self.change_session(move |store| store.set_draft(&id, &draft)).await
     }
 
-    pub(crate) async fn session_answer_draft(
+    pub(crate) async fn session_decision_draft(
         &self,
         id: SessionId,
-        draft: Option<AnswerDraft>,
+        draft: Option<DecisionDraft>,
     ) -> Result<Session, ApiError> {
-        self.change_session(move |store| store.set_answer_draft(&id, draft.as_ref())).await
+        self.change_session(move |store| store.set_decision_draft(&id, draft.as_ref())).await
     }
 
     /// Changes something kept on a session that its agent doesn't need to hear of, such as how far it's read. Only

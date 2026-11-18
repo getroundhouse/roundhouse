@@ -1,63 +1,113 @@
-use protocol::capability::asking::QuestionAnswer;
-use protocol::event::{ApprovalDecision, Asking, EventBody, Question, QuestionOption};
-use protocol::fixtures::{ApprovalRequest, approval_request};
-use serde_json::{Value, json};
+use protocol::capability::asking::{PlanContext, QuestionAnswer, TypedAnswer};
+use protocol::capability::{Capabilities, approvals::Decision};
+use protocol::event::EventBody;
+use protocol::fixtures::{allow_once, approval_request, asking, cancelled, decided, deny, plan, question, to_run};
+use protocol::model::{RunCapabilities, RunId};
 
-use super::{Answered, Approval};
-
-fn requested(tool: &str, input: Value, asking: Option<Asking>) -> EventBody {
-    ApprovalRequest { input, asking, ..approval_request("a", tool) }.into()
-}
-
-fn question(text: &str, labels: &[&str], multiple: bool) -> Question {
-    let options = labels.iter().map(|label| QuestionOption { label: (*label).into(), description: None }).collect();
-    Question { text: text.into(), header: None, options, multiple }
-}
+use super::{Answered, Approval, claims_of_the_asker};
 
 fn answer(picked: &[u32], typed: Option<&str>) -> QuestionAnswer {
     QuestionAnswer { picked: picked.to_vec(), typed: typed.map(str::to_string) }
 }
 
 #[test]
-fn a_request_that_says_what_it_asks_is_answered_by_position_and_refused_in_the_adapters_words() {
-    let asking = Asking::Questions { questions: vec![question("Red or blue?", &["Red", "Blue"], false)] };
-    // Its input says otherwise, which a newer adapter is free to do, and it's what it says it asks that counts.
-    let body = requested("AskUserQuestion", json!({}), Some(asking.clone()));
+fn questions_are_answered_by_position_and_refused_as_an_empty_answer_to_each() {
+    let asks = asking(vec![question("Red or blue?", &["Red", "Blue"], false), question("Why?", &[], false)]);
+    let body: EventBody = approval_request("a", asks.clone()).into();
     let approval = Approval::of(&body).unwrap();
 
-    assert_eq!(approval.asking(), &asking);
-    let answers = vec![answer(&[1], None)];
-    assert_eq!(approval.answered(answers.clone()), ApprovalDecision::AnswerByPosition { answers });
-    assert_eq!(approval.refused(), ApprovalDecision::Deny { message: None, interrupt: false });
-}
-
-/// As a hub from before it typed what Claude's requests asked sends one recorded before they said.
-#[test]
-fn a_request_that_says_nothing_of_what_it_asks_is_asked_about_as_a_tool_this_build_cant_read() {
-    let bash = requested("Bash", json!({"command": "ls"}), None);
-
-    assert_eq!(Approval::of(&bash).unwrap().asking(), &Asking::Unknown);
-    assert_eq!(Approval::of(&bash).unwrap().questions(), None);
+    assert_eq!(approval.asks(), &asks);
+    let answers = vec![answer(&[1], None), QuestionAnswer::default()];
+    assert_eq!(approval.answered(answers.clone()), Decision::Answer { answers });
+    let none_answered = Decision::Answer { answers: vec![QuestionAnswer::default(); 2] };
+    assert_eq!(approval.refuse(None), none_answered);
+    assert_eq!(approval.refuse(Some("Not now".into())), none_answered, "which takes no words");
+    assert_eq!(approval.approve(), None, "a yes answers no question");
     assert_eq!(Approval::of(&EventBody::Unknown), None, "only a request asks");
 }
 
 #[test]
-fn what_was_answered_is_read_from_the_record_in_whichever_form_it_came() {
-    let closed = |by_text, by_position| EventBody::ApprovalResolved {
-        approval_id: "a".into(),
-        outcome: protocol::event::ApprovalOutcome::Allowed,
-        answers_by_text: by_text,
-        answers_by_position: by_position,
-        by_setting: false,
-    };
+fn a_call_is_approved_this_once_or_refused_in_the_persons_words_or_the_adapters() {
+    let body: EventBody = approval_request("a", to_run("ls")).into();
+    let approval = Approval::of(&body).unwrap();
+
+    assert_eq!(approval.approve(), Some(allow_once()));
+    assert_eq!(approval.refuse(None), deny(None));
+    assert_eq!(approval.refuse(Some("Use -la".into())), deny(Some("Use -la")));
+}
+
+#[test]
+fn a_question_takes_a_typed_answer_where_it_says_and_keeps_a_secret_one_to_the_agent() {
+    let typed = |typed| protocol::capability::asking::Question { typed, ..question("Token?", &[], false) };
+    let asks = asking(vec![typed(TypedAnswer::Yes), typed(TypedAnswer::Secret), typed(TypedAnswer::No)]);
+    let body: EventBody = approval_request("a", asks).into();
+    let approval = Approval::of(&body).unwrap();
+
+    assert_eq!((0..4).map(|at| approval.can_type(at)).collect::<Vec<_>>(), [true, true, false, false]);
+    assert_eq!((0..4).map(|at| approval.secret(at)).collect::<Vec<_>>(), [false, true, false, false]);
+}
+
+#[test]
+fn a_plan_is_approved_in_the_conversation_it_was_planned_in_or_kept_to() {
+    let body: EventBody = approval_request("a", plan("1. Read")).into();
+    let approval = Approval::of(&body).unwrap();
+
+    assert_eq!(approval.approve(), Some(Decision::ApprovePlan { context: PlanContext::Kept }));
+    assert_eq!(approval.refuse(None), Decision::KeepPlanning { words: None });
+    assert_eq!(approval.refuse(Some("Smaller".into())), Decision::KeepPlanning { words: Some("Smaller".into()) });
+}
+
+/// The run that asked is the one going, whose claims the session's record has, or one that's gone, whose kind's are as
+/// near as anything says.
+#[test]
+fn a_decision_goes_by_the_claims_of_the_run_that_asked_or_else_its_kinds() {
+    let running = RunCapabilities { run: RunId::new(2), claims: Box::new(Capabilities::default()) };
+    let mut kind = Capabilities::default();
+    kind.asking.questions = Some(protocol::capability::Claimed {});
+
+    assert_eq!(claims_of_the_asker(Some(&running), Some(RunId::new(2)), Some(&kind)), Some(&*running.claims));
+    assert_eq!(claims_of_the_asker(Some(&running), Some(RunId::new(1)), Some(&kind)), Some(&kind), "one that's gone");
+    assert_eq!(claims_of_the_asker(None, Some(RunId::new(2)), Some(&kind)), Some(&kind), "with none running");
+    assert_eq!(claims_of_the_asker(Some(&running), None, None), None, "neither known");
+}
+
+#[test]
+fn what_was_answered_is_read_from_the_decision_that_closed_it() {
     let days = question("Which days?", &["Monday", "Friday"], true);
 
-    let by_position = Answered::of(&closed(None, Some(vec![answer(&[1, 0], None)]))).unwrap();
-    let by_text = Answered::of(&closed(Some([("Which days?".into(), "Friday".into())].into()), None)).unwrap();
+    let answered = Answered::of(&decided("a", Decision::Answer { answers: vec![answer(&[1, 0], None)] })).unwrap();
 
-    assert_eq!(by_position.to(0, &days).as_deref(), Some("Friday, Monday"), "in the order it was picked");
-    assert_eq!(by_position.to(1, &days), None, "a question past the answers wasn't answered");
-    assert_eq!(by_text.to(0, &days).as_deref(), Some("Friday"));
-    assert_eq!(by_text.to(0, &question("Why?", &[], false)), None);
-    assert_eq!(Answered::of(&closed(None, None)), None, "a record from before the hub kept answers");
+    assert_eq!(answered.to(0, &days).as_deref(), Some("Friday, Monday"), "in the order it was picked");
+    assert_eq!(answered.to(1, &days), None, "a question past the answers wasn't answered");
+    assert_eq!(Answered::of(&decided("a", allow_once())), None, "a decision that answers nothing");
+    assert_eq!(Answered::of(&cancelled("a")), None, "nor does nobody deciding");
+}
+
+#[test]
+fn an_answer_in_words_chooses_the_options_it_names_and_is_otherwise_what_was_typed() {
+    let asks = asking(vec![
+        question("Red or blue?", &["Red", "Blue"], false),
+        question("Which days?", &["Monday", "Wednesday", "Friday"], true),
+    ]);
+    let body: EventBody = approval_request("a", asks).into();
+    let approval = Approval::of(&body).unwrap();
+    let answers = |answers| Some(Decision::Answer { answers });
+    let left = QuestionAnswer::default;
+
+    assert_eq!(approval.answered_in_words("Red or blue?", "Blue"), answers(vec![answer(&[1], None), left()]));
+    assert_eq!(
+        approval.answered_in_words("Which days?", "Monday, Friday"),
+        answers(vec![left(), answer(&[0, 2], None)])
+    );
+    assert_eq!(
+        approval.answered_in_words("Which days?", "Monday, Sunday"),
+        answers(vec![left(), answer(&[], Some("Monday, Sunday"))]),
+        "words that name something it doesn't offer"
+    );
+    assert_eq!(
+        approval.answered_in_words("Red or blue?", "Red, Blue"),
+        answers(vec![answer(&[], Some("Red, Blue")), left()]),
+        "only one of these"
+    );
+    assert_eq!(approval.answered_in_words("Why?", "Because"), None, "a question it doesn't ask");
 }

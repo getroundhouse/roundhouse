@@ -4,7 +4,7 @@ use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
 use crate::claude::login_check::Output;
-use protocol::event::{Asking, EventBody};
+use protocol::event::EventBody;
 use protocol::model::CacheRequest;
 use serde_json::json;
 use tokio::sync::mpsc;
@@ -55,7 +55,7 @@ pub(super) async fn read_stdout(mut stdout: Output, shared: Arc<Shared>, output:
                 if !plan::passed_on(&shared, &output, &body).await {
                     continue;
                 }
-                note(&shared, &mut body);
+                note(&shared, &mut body, &line);
                 answering.note(&body);
                 let opened = matches!(body, EventBody::AgentInit { .. });
                 // Not of a launch that hasn't opened, which may be about to be replaced by another.
@@ -175,17 +175,20 @@ async fn refuse_control(shared: &Shared, request_id: &str, subtype: &str) {
 
 /// Keeps what the adapter needs of an event before it goes on, and adds what only the adapter knows: which prompt
 /// asked for a compaction.
-fn note(shared: &Shared, body: &mut EventBody) {
+fn note(shared: &Shared, body: &mut EventBody, line: &str) {
     shared.compacts.lock().answer(body);
-    track_approval(shared, body);
+    track_approval(shared, body, line);
 }
 
-/// Keeps each open approval's input, which is what answering it sends back, and what it asks, which answering it goes by.
-fn track_approval(shared: &Shared, body: &EventBody) {
+/// Keeps each open approval's input, which is what allowing it sends back, from the CLI's `line`, and what it asks,
+/// which answering it goes by.
+fn track_approval(shared: &Shared, body: &EventBody, line: &str) {
     match body {
-        EventBody::ApprovalRequested { approval_id, input, asking, .. } => {
-            let asking = asking.as_deref().cloned().unwrap_or(Asking::Unknown);
-            shared.waiting.lock().insert(approval_id.clone(), Waiting { input: input.clone(), asking });
+        EventBody::ApprovalRequested { approval_id, request, .. } => {
+            let asked = serde_json::from_str::<serde_json::Value>(line).unwrap_or_default();
+            let asked = &asked["request"];
+            let waiting = Waiting { input: asked["input"].clone(), asks: request.asks.clone() };
+            shared.waiting.lock().insert(approval_id.clone(), waiting);
         }
         EventBody::ApprovalResolved { approval_id, .. } => {
             shared.waiting.lock().remove(approval_id);

@@ -126,7 +126,7 @@ fn raw_lines_are_kept_and_only_returned_when_asked_for() {
 fn open_approvals_are_those_requested_and_not_resolved() {
     let dir = tempfile::tempdir().unwrap();
     let store = store_with_session(dir.path());
-    let requested = |id: &str| EventBody::from(approval_request(id, "Bash"));
+    let requested = |id: &str| EventBody::from(approval_request(id, protocol::fixtures::to_run("ls")));
     store.append(&"s".into(), None, &requested("a"), None, None, None).unwrap();
     store.append(&"s".into(), None, &requested("b"), None, None, None).unwrap();
     store.append(&"s".into(), None, &cancelled_approval("a".into()), None, None, None).unwrap();

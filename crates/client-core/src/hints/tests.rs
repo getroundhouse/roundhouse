@@ -1,6 +1,7 @@
+use protocol::capability::asking::{Choose, Question, QuestionOption, TypedAnswer};
 use protocol::capability::calls::Call;
 use protocol::capability::calls::call::Read;
-use protocol::event::{ContentBlock, EventBody, Question, QuestionOption};
+use protocol::event::{ContentBlock, EventBody};
 use protocol::fixtures;
 use protocol::model::{Records, Repo, Rev, Seq};
 
@@ -59,10 +60,15 @@ fn collects_jargon_and_proper_nouns_across_tool_heavy_turns_while_skipping_commo
         text: "Should `WorkspacePane` use SQLite or Postgres?".into(),
         header: Some("Database".into()),
         options: vec![
-            QuestionOption { label: "(Recommended) Postgres".into(), description: Some("Uses `sqlx`.".into()) },
-            QuestionOption { label: "Redis".into(), description: None },
+            QuestionOption {
+                label: "(Recommended) Postgres".into(),
+                description: Some("Uses `sqlx`.".into()),
+                preview: None,
+            },
+            QuestionOption { label: "Redis".into(), description: None, preview: None },
         ],
-        multiple: false,
+        choose: Choose::One,
+        typed: TypedAnswer::Yes,
     };
 
     let mut collector = HintCollector::new();

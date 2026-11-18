@@ -5,7 +5,6 @@ use protocol::attachment::{Attachment, AttachmentBytes, MediaType, NewAttachment
 use protocol::capability::approvals::{ApprovalMode, Beyond, Unasked};
 use protocol::capability::settings::{Effort, Settings};
 use protocol::capability::{Capabilities, Claimed};
-use protocol::event::ApprovalDecision;
 use protocol::frame;
 use protocol::model::{
     AgentAccount, AgentKind, AgentLogin, Branches, FileContents, FileOpened, FilePage, FilePages, GitDiff, GitStatus,
@@ -191,16 +190,6 @@ fn every_request_about_an_agent_keeps_its_form() {
     asked(
         WorkerRequest::AgentStart(under_a_login),
         r#"{"method":"agent_start","session_id":"s","run":4,"agent":"claude","cwd":"/w","start":"new","settings":{"model":"opus","mode":null,"effort":null,"speed":null,"thinking":null,"persona":null,"style":null,"verbosity":null,"advisor":null,"budget":null},"env":[],"login":{"token":"made-up"}}"#,
-    );
-    let decision = ApprovalDecision::Deny { message: None, interrupt: true };
-    let approval = WorkerRequest::AgentApproval(worker::AgentApproval {
-        session_id: "s".into(),
-        approval_id: "a".into(),
-        decision,
-    });
-    asked(
-        approval,
-        r#"{"method":"agent_approval","session_id":"s","approval_id":"a","decision":{"decision":"deny","interrupt":true}}"#,
     );
     asked(
         WorkerRequest::AgentStop(worker::AgentStop { session_id: "s".into() }),

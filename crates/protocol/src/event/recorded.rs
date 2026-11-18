@@ -1,20 +1,16 @@
-use super::{approval, asking, compaction, content, ending, failure, task, tokens};
+use super::{compaction, content, ending, failure, task, tokens};
 use crate::attachment::Attachment;
-use crate::capability::asking::QuestionAnswer;
+use crate::capability::approvals::{Decision, Request};
 use crate::model::{
     AgentSessionId, ApprovalId, ClientMessageId, MessageId, ModelName, PermissionMode, Place, RunId, Seq, SessionId,
     SubagentId, TaskId, ToolUseId, UsageLimit,
 };
 use crate::prompt::Prompt;
-use approval::ApprovalOutcome;
-use asking::Asking;
 use compaction::CompactionOutcome;
 use content::ContentBlock;
 use ending::{ExitReason, TaskOutcome, TurnOutcome};
 use failure::{Again, RequestFailure};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
-use std::collections::BTreeMap;
 use task::{AgentTask, TaskChange};
 use tokens::TokenUsage;
 
@@ -246,51 +242,29 @@ pub enum EventBody {
     },
     ApprovalRequested {
         approval_id: ApprovalId,
-        /// The current request. The fields below it but `tool_use_id` and `asked_by` are read compatibility for earlier
-        /// adapters; a current adapter leaves their content empty instead of recording the native input a second time.
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        request: Option<Box<crate::capability::approvals::Request>>,
-        // Earlier readers require these legacy fields even when a typed request leaves them empty.
-        #[serde(default)]
-        tool_name: String,
+        /// What the agent asks, as its adapter read it. Boxed, since few events are approvals, and every event takes
+        /// the room of the largest. One a hub from before typed requests sends says none, and reads as asking what
+        /// this build doesn't know, rather than failing the event.
+        #[serde(default = "Request::unknown")]
+        request: Box<Request>,
         /// The call it asks to make, when it asks to make one, which a typed request doesn't name, so every adapter
         /// says it here: the call's result then says whether the person denied it.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
         tool_use_id: Option<ToolUseId>,
-        #[serde(default)]
-        input: Value,
-        description: Option<String>,
-        /// Agent-defined options for remembering the decision. Passed back unchanged. Boxed, as `asking` is, since a
-        /// request says more than any other event, and every event takes the room of the largest.
-        #[serde(default)]
-        suggestions: Box<Value>,
-        /// What it asks of the person, as the agent's adapter read it from the tool and its input. `None` in one
-        /// recorded before adapters said, which a client reads from the tool and input as Claude's adapter sent them.
-        /// Boxed, since few events are approvals, and every event takes the room of the largest.
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        asking: Option<Box<Asking>>,
-        /// Why the agent asks, in its own words, when it says: a check it makes whatever the approval mode, such as
-        /// Claude's for a removal it can't rule out, says so here. `None` from an agent that doesn't say, and in one
-        /// recorded before it was kept.
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        reason: Option<String>,
-        /// The subagent that asks, or `None` for the agent itself, and in one recorded before adapters said. The
-        /// request is among the agent's own events whichever asks, as [`EventBody::subagent`] says, since it waits on
-        /// the person, and a chat reads the agent's own.
+        /// The subagent that asks, or `None` for the agent itself. The request is among the agent's own events
+        /// whichever asks, as [`EventBody::subagent`] says, since it waits on the person, and a chat reads the agent's
+        /// own.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         asked_by: Option<SubagentId>,
     },
     ApprovalResolved {
         approval_id: ApprovalId,
-        outcome: ApprovalOutcome,
-        /// What the person answered the agent's questions, by their text as [`ApprovalDecision::AnswerByText`](super::ApprovalDecision::AnswerByText) gave it,
-        /// or by position as [`ApprovalDecision::AnswerByPosition`](super::ApprovalDecision::AnswerByPosition) did, so the transcript can say what was decided.
-        /// Each is `None` for any other decision, and both are in a record from before the hub kept answers.
-        #[serde(rename = "answers", default, skip_serializing_if = "Option::is_none")]
-        answers_by_text: Option<BTreeMap<String, String>>,
+        /// What was decided, with any secret answer taken out, as [`Decision::without_secrets`] says. `None` where
+        /// nobody decided, since the request was cancelled: by a stop, the agent's going, or the agent itself.
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        answers_by_position: Option<Vec<QuestionAnswer>>,
-        /// The hub allowed it itself, as its settings have it allow what an agent with full access still asks about,
-        /// rather than the person deciding. False for everything else, and in a record from before the hub could.
+        decision: Option<Box<Decision>>,
+        /// The hub decided itself, as its settings have it allow what an agent with full access still asks about,
+        /// rather than the person deciding.
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         by_setting: bool,
     },

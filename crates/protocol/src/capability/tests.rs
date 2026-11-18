@@ -19,14 +19,14 @@ fn mode(unasked: Unasked, plan: bool) -> ApprovalMode {
     ApprovalMode { unasked, beyond: Beyond::Asks, sandbox: None, plan }
 }
 
-/// A run that asks before tools, taking an edited allow and a denial that stops, keeping rules for the
+/// A run that asks before tools, taking a denial that stops, keeping rules for the
 /// conversation, runs asking first or in plan mode, compacts with what to keep, and takes a change of mode at once.
 fn claimed() -> Capabilities {
     Capabilities {
         approvals: approvals::Claims {
             modes: Some(Modes { default: mode(Unasked::Reads, false), others: vec![mode(Unasked::Reads, true)] }),
             requests: Some(Requests {
-                parts: vec![DecisionPart::Edited, DecisionPart::Stop, DecisionPart::KeepAllow],
+                parts: vec![DecisionPart::Stop, DecisionPart::KeepAllow],
                 kept: vec![Kept::Conversation],
             }),
             ..approvals::Claims::default()
@@ -99,40 +99,38 @@ fn rule(kept: Kept) -> Rule {
 
 #[test]
 fn a_decision_has_every_part_it_uses_and_needs_what_it_answers() {
-    let allow = |edited: bool, remember| Decision::Allow { edited: edited.then_some(calls::Call::Advisor), remember };
+    let allow = |remember| Decision::Allow { remember };
     let parts = |decision: Decision| decision.parts();
 
-    assert_eq!(parts(allow(false, Remember::Once)), []);
-    assert_eq!(parts(allow(true, Remember::Conversation)), [DecisionPart::Edited, DecisionPart::ForConversation]);
-    assert_eq!(parts(allow(true, Remember::Rule(rule(Kept::User)))), [DecisionPart::Edited, DecisionPart::KeepAllow]);
+    assert_eq!(parts(allow(Remember::Once)), []);
+    assert_eq!(parts(allow(Remember::Conversation)), [DecisionPart::ForConversation]);
+    assert_eq!(parts(allow(Remember::Rule(rule(Kept::User)))), [DecisionPart::KeepAllow]);
     assert_eq!(parts(deny(None, AfterDenial::Continue, None)), []);
     assert_eq!(parts(deny(Some("no"), AfterDenial::Stop, None)), [DecisionPart::Words, DecisionPart::Stop]);
     assert_eq!(parts(deny(None, AfterDenial::Continue, Some(rule(Kept::User)))), [DecisionPart::KeepDeny]);
     assert_eq!(Decision::Answer { answers: vec![] }.needs(), [asking::Capability::Questions.into()]);
     assert_eq!(
-        Decision::ApprovePlan { then: mode(Unasked::Edits, false), context: PlanContext::Fresh }.needs(),
+        Decision::ApprovePlan { context: PlanContext::Fresh }.needs(),
         [Capability::from(asking::Capability::PlanApproval), asking::Capability::FreshPlan.into()]
     );
 }
 
 #[test]
-fn a_decision_is_sent_only_when_the_run_takes_every_part_and_rule_and_mode_it_has() {
+fn a_decision_is_sent_only_when_the_run_takes_every_part_and_rule_it_has() {
     let decide = |decision| Control::Decide { approval: ApprovalId::from("a"), decision };
-    let approve = |then, context| decide(Decision::ApprovePlan { then, context });
+    let approve = |context| decide(Decision::ApprovePlan { context });
     let claims = claimed();
 
     assert!(!decide(deny(Some("no"), AfterDenial::Stop, None)).allowed(&claims), "words the run doesn't take");
     assert!(decide(deny(None, AfterDenial::Stop, None)).allowed(&claims));
-    let keep = |kept| decide(Decision::Allow { edited: None, remember: Remember::Rule(rule(kept)) });
+    let keep = |kept| decide(Decision::Allow { remember: Remember::Rule(rule(kept)) });
     assert!(keep(Kept::Conversation).allowed(&claims));
     assert!(!keep(Kept::Project).allowed(&claims), "a rule kept where the run keeps none");
     let refusing = Rule { effect: RuleEffect::Deny, ..rule(Kept::Conversation) };
-    let keeps_refusing = decide(Decision::Allow { edited: None, remember: Remember::Rule(refusing) });
+    let keeps_refusing = decide(Decision::Allow { remember: Remember::Rule(refusing) });
     assert!(!keeps_refusing.allowed(&claims), "an allow that keeps a rule that refuses");
-    assert!(approve(mode(Unasked::Reads, false), PlanContext::Kept).allowed(&claims));
-    assert!(!approve(mode(Unasked::Everything, false), PlanContext::Kept).allowed(&claims), "a mode not offered");
-    assert!(!approve(mode(Unasked::Reads, true), PlanContext::Kept).allowed(&claims), "a plan mode, though offered");
-    assert!(!approve(mode(Unasked::Reads, false), PlanContext::Fresh).allowed(&claims), "fresh isn't claimed");
+    assert!(approve(PlanContext::Kept).allowed(&claims));
+    assert!(!approve(PlanContext::Fresh).allowed(&claims), "fresh isn't claimed");
     assert!(!decide(Decision::Answer { answers: vec![] }).allowed(&claims), "questions aren't claimed");
 }
 
@@ -239,21 +237,11 @@ fn a_decision_with_something_this_build_doesnt_know_is_never_sent() {
         ..claimed()
     };
 
-    let unknown_mode = ApprovalMode { unasked: Unasked::Unknown, ..mode(Unasked::Reads, false) };
-    let mut offers_unknown = claimed();
-    offers_unknown.approvals.modes.as_mut().unwrap().others.push(unknown_mode);
-    let edit = |edited| decide(Decision::Allow { edited: Some(edited), remember: Remember::Once });
-    let lsp = |asks| calls::Call::Lsp(calls::call::Lsp { asks, path: "a.rs".into(), at: None });
-    let keep = |rule| decide(Decision::Allow { edited: None, remember: Remember::Rule(rule) });
+    let keep = |rule| decide(Decision::Allow { remember: Remember::Rule(rule) });
 
-    assert!(!decide(Decision::ApprovePlan { then: mode(Unasked::Reads, false), context: PlanContext::Unknown }));
-    let into_unknown = Decision::ApprovePlan { then: unknown_mode, context: PlanContext::Kept };
-    assert!(!into_unknown.allowed(&offers_unknown), "a mode it doesn't know, though another it doesn't is offered");
+    assert!(!decide(Decision::ApprovePlan { context: PlanContext::Unknown }));
     assert!(Decision::Grant { access: vec![Access::Network], lasts: Lasts::Turn }.allowed(&grants));
     assert!(!grant(vec![Access::Network, Access::Unknown]).allowed(&grants));
-    assert!(edit(lsp(calls::call::LspQuestion::Hover)));
-    assert!(!edit(calls::Call::Unknown), "a call it doesn't know");
-    assert!(!edit(lsp(calls::call::LspQuestion::Unknown)), "a call that holds something it doesn't know");
     assert!(keep(rule(Kept::Conversation)));
     assert!(!keep(Rule { covers: Covers::Unknown, ..rule(Kept::Conversation) }), "a rule for what it doesn't know");
 }

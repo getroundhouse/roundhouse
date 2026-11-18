@@ -94,7 +94,7 @@ impl QuestionPanel {
             InputEvent::Change | InputEvent::Focus => {
                 let chosen = self.asked.get_mut(q).is_some_and(|asked| {
                     let before = asked.choice.clone();
-                    asked.choice.typed(has_text, asked.question.multiple);
+                    asked.choice.typed(has_text, asked.question.several());
                     asked.choice != before
                 });
                 if chosen || matches!(event, InputEvent::Change) {

@@ -2,7 +2,7 @@
 //! comes out of, and when the person last sent the agent something, which is when they last did something in its
 //! workspace too.
 
-use protocol::event::{ApprovalOutcome, EventBody};
+use protocol::event::EventBody;
 use protocol::model::{Account, ClientMessageId, RunId, SessionId};
 use rusqlite::{Connection, params};
 
@@ -16,12 +16,7 @@ use super::queue::take_out_recorded;
 fn sent_by_the_person(body: &EventBody) -> bool {
     matches!(
         body,
-        EventBody::UserPrompt { .. }
-            | EventBody::ApprovalResolved {
-                outcome: ApprovalOutcome::Allowed | ApprovalOutcome::Denied,
-                by_setting: false,
-                ..
-            }
+        EventBody::UserPrompt { .. } | EventBody::ApprovalResolved { decision: Some(_), by_setting: false, .. }
     )
 }
 

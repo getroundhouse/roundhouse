@@ -7,8 +7,7 @@ use super::{Reply, Request, ToolsToken, WorkerRequest, WorkerResponse};
 use crate::capability::Capabilities;
 use crate::capability::conversation::Start;
 use crate::capability::settings::Settings;
-use crate::event::ApprovalDecision;
-use crate::model::{AgentKind, AgentLogin, ApprovalId, RunId, SessionId};
+use crate::model::{AgentKind, AgentLogin, RunId, SessionId};
 
 /// Starts the session's agent, unless it's running already.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
@@ -76,21 +75,6 @@ impl Request for AgentControl {
 
     fn into_request(self) -> WorkerRequest {
         WorkerRequest::AgentControl(self)
-    }
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
-pub struct AgentApproval {
-    pub session_id: SessionId,
-    pub approval_id: ApprovalId,
-    pub decision: ApprovalDecision,
-}
-
-impl Request for AgentApproval {
-    type Reply = Delivery;
-
-    fn into_request(self) -> WorkerRequest {
-        WorkerRequest::AgentApproval(self)
     }
 }
 

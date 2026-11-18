@@ -1,4 +1,4 @@
-use protocol::event::{AgentRunState, AgentTask, ApprovalOutcome, ExitReason, TaskChange, TaskKind, TurnOutcome};
+use protocol::event::{AgentRunState, AgentTask, ExitReason, TaskChange, TaskKind, TurnOutcome};
 use protocol::prompt::Prompt;
 
 use super::super::status::{Known, Open, after_background, next_status, turn_edge, works_unattended};
@@ -72,13 +72,7 @@ fn after(from: SessionStatus, events: &[(EventBody, Open)]) -> SessionStatus {
 }
 
 fn resolved() -> EventBody {
-    EventBody::ApprovalResolved {
-        approval_id: "a".into(),
-        outcome: ApprovalOutcome::Allowed,
-        answers_by_text: None,
-        answers_by_position: None,
-        by_setting: false,
-    }
+    protocol::fixtures::decided("a", protocol::fixtures::allow_once())
 }
 
 use SessionStatus::*;

@@ -8,10 +8,9 @@ use client_core::fake_hub::events::{self, said, text, typed_call};
 use gpui_kit::test::TestWindowExt as _;
 use gpui_kit::{AppContext as _, Bounds, Pixels, SharedString, TestAppContext};
 use protocol::capability::calls::Call;
-use protocol::event::{ApprovalOutcome, Asking, ContentBlock, EventBody};
-use protocol::fixtures::{ApprovalRequest, approval_request};
+use protocol::event::{ContentBlock, EventBody};
+use protocol::fixtures::{ApprovalRequest, approval_request, approve_plan, decided, plan as asking_for};
 use protocol::model::ToolUseId;
-use serde_json::json;
 
 use super::super::{turns, wait_for_the_list_to_settle};
 use super::made_up::{advice, command, compacted, open_on_chats_of, show, subagent};
@@ -169,19 +168,9 @@ fn asked(script: &str, name: &str, mut did: Vec<EventBody>) -> Vec<EventBody> {
 /// agent's scripts.
 fn planned() -> Vec<EventBody> {
     let (call, approval) = ("toolu-plan", "approval-plan");
-    let request = ApprovalRequest {
-        tool_use_id: Some(ToolUseId::from(call)),
-        input: json!({ "plan": PLAN }),
-        asking: Some(Asking::Plan { plan: PLAN.to_owned() }),
-        ..approval_request(approval, "ExitPlanMode")
-    };
-    let approved = EventBody::ApprovalResolved {
-        approval_id: approval.into(),
-        outcome: ApprovalOutcome::Allowed,
-        answers_by_text: None,
-        answers_by_position: None,
-        by_setting: false,
-    };
+    let request =
+        ApprovalRequest { tool_use_id: Some(ToolUseId::from(call)), ..approval_request(approval, asking_for(PLAN)) };
+    let approved = decided(approval, approve_plan());
     let planning = vec![
         typed_call("msg-plan", call, Call::Plan),
         request.into(),

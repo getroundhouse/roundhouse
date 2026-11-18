@@ -8,8 +8,8 @@ use gpui_kit::{
     Styled, WeakEntity, Window, div,
 };
 use look::{InRegion as _, Region, Shaped as _};
-use protocol::capability::asking::QuestionAnswer;
-use protocol::event::{ApprovalDecision, Question};
+use protocol::capability::approvals::Decision;
+use protocol::capability::asking::{Question, QuestionAnswer};
 use protocol::model::{ApprovalId, SubagentId};
 use std::time::{Duration, Instant};
 use typing::Other;
@@ -129,7 +129,7 @@ impl QuestionPanel {
         if option >= asked.question.options.len() {
             return;
         }
-        let multiple = asked.question.multiple;
+        let multiple = asked.question.several();
         asked.choice.pick(option, multiple);
         self.answering(true, cx);
         let next = if multiple { None } else { next_unanswered(&self.answers_so_far(cx), self.showing) };
@@ -194,7 +194,7 @@ impl QuestionPanel {
         }
     }
 
-    pub(super) fn answer(&mut self, decision: ApprovalDecision, cx: &mut Context<Self>) {
+    pub(super) fn answer(&mut self, decision: Decision, cx: &mut Context<Self>) {
         self.end_dictation(cx);
         self.answered = true;
         self.set_dictation_enabled(self.dictation_enabled, cx);

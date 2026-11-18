@@ -4,7 +4,9 @@ use crate::store::{older, schema};
 use proptest::prelude::*;
 use proptest::test_runner::{Config, RngSeed};
 use protocol::attachment::{Attachment, MediaType};
+use protocol::capability::approvals::Decision;
 use protocol::event::ContentBlock;
+use protocol::fixtures::{allow_once, deny, to_run};
 use protocol::model::SessionStatus::{Idle, Running, WaitingApproval};
 use protocol::model::{AttachmentId, Session, SessionStatus};
 use protocol::prompt::Prompt;
@@ -39,20 +41,18 @@ fn a_turn_starts_when_the_event_that_starts_it_was_recorded() {
 fn a_prompt_or_an_answer_from_the_person_is_when_they_were_last_active_and_nothing_else_is() {
     let dir = tempfile::tempdir().unwrap();
     let store = store_with_session(dir.path());
-    let answer = |outcome, by_setting| EventBody::ApprovalResolved {
+    let answer = |decision: Option<Decision>, by_setting| EventBody::ApprovalResolved {
         approval_id: "a".into(),
-        outcome,
-        answers_by_text: None,
-        answers_by_position: None,
+        decision: decision.map(Box::new),
         by_setting,
     };
     let sent = [
         (None, prompt("go", 0), true),
-        (None, answer(ApprovalOutcome::Allowed, false), true),
-        (None, answer(ApprovalOutcome::Denied, false), true),
-        (None, answer(ApprovalOutcome::Cancelled, false), false),
-        (None, answer(ApprovalOutcome::Allowed, true), false),
-        (Some(RunId::new(1)), answer(ApprovalOutcome::Allowed, false), false),
+        (None, answer(Some(allow_once()), false), true),
+        (None, answer(Some(deny(None)), false), true),
+        (None, answer(None, false), false),
+        (None, answer(Some(allow_once()), true), false),
+        (Some(RunId::new(1)), answer(Some(allow_once()), false), false),
         (None, notice("x"), false),
     ];
     for (run, body, by_the_person) in sent {
@@ -78,12 +78,10 @@ fn a_prompt_or_an_answer_from_the_person_is_when_they_were_last_active_and_nothi
 fn a_request_and_the_hubs_answer_are_recorded_one_after_the_other_and_leave_the_record_as_it_was() {
     let dir = tempfile::tempdir().unwrap();
     let store = store_with_session(dir.path());
-    let request: EventBody = protocol::fixtures::approval_request("a", "Bash").into();
+    let request: EventBody = protocol::fixtures::approval_request("a", to_run("ls")).into();
     let answer = EventBody::ApprovalResolved {
         approval_id: "a".into(),
-        outcome: ApprovalOutcome::Allowed,
-        answers_by_text: None,
-        answers_by_position: None,
+        decision: Some(Box::new(allow_once())),
         by_setting: true,
     };
     // Earlier than any clock could say, so a change can't land on the same moment.

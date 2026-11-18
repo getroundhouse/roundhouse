@@ -110,3 +110,57 @@ fn what_a_worker_of_protocol_3_answers_reads_as_claiming_nothing() {
     let WorkerResponse::RunningAgents(worker::RunningAgentsReply { agents }) = running else { panic!("{running:?}") };
     assert_eq!(agents[0].capabilities, None);
 }
+
+/// A Claude run of protocol 3 that never said what it claims takes the person's answer in the form from before
+/// decisions, with answers by each question's text, which every Claude adapter of protocol 3 reads.
+#[test]
+fn an_answer_goes_to_a_run_of_protocol_3_in_the_form_it_takes() {
+    use protocol::capability::approvals::{AfterDenial, Asks, Decision, Remember, Request as Asked};
+    use protocol::capability::asking::{Choose, Question, QuestionAnswer, QuestionOption, TypedAnswer};
+    use protocol::capability::calls::Call;
+
+    let ask = |asks| Asked { asks, suggested: vec![], always: false, why: None };
+    let option = |label: &str| QuestionOption { label: label.into(), description: None, preview: None };
+    let question = |text: &str, options| Question {
+        text: text.into(),
+        header: None,
+        options,
+        choose: Choose::Several,
+        typed: TypedAnswer::Yes,
+    };
+    let questions = ask(Asks::Questions {
+        questions: vec![question("Colors?", vec![option("Red"), option("Blue")]), question("Why?", vec![])],
+    });
+    let call = ask(Asks::Call { call: Call::Advisor });
+    let answer = |decision: &Decision, request: &Asked| {
+        previous::AgentApproval::of("s".into(), "a".into(), decision, request).map(previous::Request::AgentApproval)
+    };
+    let picked = QuestionAnswer { picked: vec![0, 1], typed: Some("Teal".into()) };
+    let answered = Decision::Answer { answers: vec![picked, QuestionAnswer::default()] };
+    let stopped = Decision::Deny { words: Some("No".into()), then: AfterDenial::Stop, keep: None };
+
+    sent(
+        answer(&Decision::Allow { remember: Remember::Once }, &call).unwrap(),
+        r#"{"method":"agent_approval","session_id":"s","approval_id":"a","decision":{"decision":"allow"}}"#,
+    );
+    sent(
+        answer(&stopped, &call).unwrap(),
+        r#"{"method":"agent_approval","session_id":"s","approval_id":"a","decision":{"decision":"deny","message":"No","interrupt":true}}"#,
+    );
+    sent(
+        answer(&answered, &questions).unwrap(),
+        r#"{"method":"agent_approval","session_id":"s","approval_id":"a","decision":{"decision":"answer","answers":{"Colors?":"Red, Blue, Teal"}}}"#,
+    );
+    // Questions the person chose not to answer, which protocol 3 says as a denial.
+    let skipped = Decision::Answer { answers: vec![QuestionAnswer::default(), QuestionAnswer::default()] };
+    sent(
+        answer(&skipped, &questions).unwrap(),
+        r#"{"method":"agent_approval","session_id":"s","approval_id":"a","decision":{"decision":"deny","interrupt":false}}"#,
+    );
+    let for_the_conversation = Decision::Allow { remember: Remember::Conversation };
+    assert_eq!(
+        answer(&for_the_conversation, &call),
+        None,
+        "a use allowed for the conversation, which it has no form for"
+    );
+}

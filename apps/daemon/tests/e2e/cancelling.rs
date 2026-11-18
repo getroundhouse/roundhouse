@@ -2,7 +2,7 @@
 
 #![cfg(test)]
 
-use protocol::event::{ApprovalOutcome, EventBody, TurnOutcome};
+use protocol::event::{EventBody, TurnOutcome};
 
 use crate::support::{
     Stack, assistant_text, pending_approval, read_all, wait_for_approval, wait_for_turn_end, wait_until,
@@ -37,7 +37,7 @@ fn cancelling_closes_an_open_approval() {
     let events = wait_for_turn_end(&client, &session.id, 1);
     assert!(events.iter().any(|e| matches!(
         &e.body,
-        EventBody::ApprovalResolved { approval_id: id, outcome: ApprovalOutcome::Cancelled, .. } if *id == approval_id
+        EventBody::ApprovalResolved { approval_id: id, decision: None, .. } if *id == approval_id
     )));
     assert_eq!(pending_approval(&events), None);
 }

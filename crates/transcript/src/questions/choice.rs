@@ -86,19 +86,12 @@ mod tests {
     use proptest::collection::vec;
     use proptest::prelude::*;
     use proptest::test_runner::{Config, RngSeed};
-    use protocol::capability::asking::QuestionAnswer;
-    use protocol::event::{Question, QuestionOption};
+    use protocol::capability::asking::{Question, QuestionAnswer};
 
     use super::{Choice, next_unanswered};
 
     fn colors() -> Question {
-        let option = |label: &str| QuestionOption { label: label.into(), description: None };
-        Question {
-            text: "Colors?".into(),
-            header: None,
-            options: vec![option("Red"), option("Green"), option("Blue")],
-            multiple: true,
-        }
+        protocol::fixtures::question("Colors?", &["Red", "Green", "Blue"], true)
     }
 
     /// What `choice` answers, in words, as the transcript says it once it's sent.

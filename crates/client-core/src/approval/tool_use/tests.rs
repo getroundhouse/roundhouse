@@ -1,8 +1,10 @@
+use protocol::capability::approvals::Asks;
 use protocol::capability::asking::QuestionAnswer;
 use protocol::capability::calls::Call;
 use protocol::capability::calls::call::{Command, Edit, Fetch, Replace, Replaces, Write};
-use protocol::event::{ApprovalDecision, Asking, EventBody};
-use protocol::fixtures::{self, ApprovalRequest, approval_request};
+use protocol::event::EventBody;
+use protocol::fixtures::{self, ApprovalRequest, allow_once, approval_request, asking, deny, plan};
+use protocol::model::UseChoice;
 use serde_json::json;
 
 use super::{Given, ToolUseAnswer, ToolUseAsked};
@@ -11,14 +13,9 @@ use crate::calls::{EditFile, WriteFile};
 
 const COMMAND: &str = "rm -rf \"$(cat path)\"\necho done";
 
-/// A request to make `call`, which the request says is for `description`, if it says, in the form Claude's adapter
-/// asks in.
-fn request(tool: &str, call: Call, description: Option<&str>) -> ApprovalRequest {
-    ApprovalRequest {
-        description: description.map(str::to_string),
-        asking: Some(Asking::ToolUse { typed: Some(call) }),
-        ..approval_request("a", tool)
-    }
+/// A request to make `call`.
+fn request(call: Call) -> ApprovalRequest {
+    approval_request("a", Asks::Call { call })
 }
 
 /// Running `command`, which the agent said is for `described`, if it said.
@@ -28,12 +25,10 @@ fn command(command: &str, described: Option<&str>) -> Call {
 
 #[test]
 fn a_command_says_what_its_for_itself_whole_why_and_which_subagent_asks() {
-    let body: EventBody = ApprovalRequest {
-        reason: Some("Its target is only known once it runs".into()),
-        asked_by: Some("toolu_agent".into()),
-        ..request("Bash", command(COMMAND, None), Some("Remove the scratch directory"))
-    }
-    .into();
+    let mut asked = request(command(COMMAND, Some("Remove the scratch directory")));
+    asked.request.why = Some("Its target is only known once it runs".into());
+    asked.asked_by = Some("toolu_agent".into());
+    let body: EventBody = asked.into();
 
     let asked = ToolUseAsked::of(&body).unwrap();
 
@@ -45,14 +40,11 @@ fn a_command_says_what_its_for_itself_whole_why_and_which_subagent_asks() {
 }
 
 #[test]
-fn a_command_is_for_what_its_agent_said_when_the_request_says_nothing_or_only_space() {
-    let described = || command("ls", Some("List what's here"));
-    let said_by_its_agent: EventBody = request("Bash", described(), None).into();
-    let blank: EventBody = request("Bash", described(), Some("  ")).into();
-    let nothing_said: EventBody = request("Bash", command("ls", None), None).into();
+fn a_command_is_for_what_its_agent_said_unless_that_was_only_space() {
+    let blank: EventBody = request(command("ls", Some("  "))).into();
+    let nothing_said: EventBody = request(command("ls", None)).into();
 
-    assert_eq!(ToolUseAsked::of(&said_by_its_agent).unwrap().about, Some("List what's here"));
-    assert_eq!(ToolUseAsked::of(&blank).unwrap().about, Some("List what's here"));
+    assert_eq!(ToolUseAsked::of(&blank).unwrap().about, None);
     let nothing_said = ToolUseAsked::of(&nothing_said).unwrap();
     assert_eq!((nothing_said.about, nothing_said.reason, nothing_said.asked_by), (None, None, None));
 }
@@ -60,17 +52,14 @@ fn a_command_is_for_what_its_agent_said_when_the_request_says_nothing_or_only_sp
 #[test]
 fn an_edit_or_a_write_is_given_what_it_would_change_and_another_tool_its_main_input() {
     let replace = Replace { old: "a".into(), new: "b".into(), replaces: Replaces::One };
-    let edit = Call::Edit(Edit { path: "src/lib.rs".into(), edits: vec![replace] });
-    let edit: EventBody = request("Edit", edit, Some("Fix the typo")).into();
-    let write = Call::Write(Write { path: "notes.md".into(), content: "# Notes\n".into() });
-    let write: EventBody = request("Write", write, None).into();
-    let fetch = Call::Fetch(Fetch { url: "https://example.com".into(), asking: None });
-    let fetch: EventBody = request("WebFetch", fetch, None).into();
+    let edit: EventBody = request(Call::Edit(Edit { path: "src/lib.rs".into(), edits: vec![replace] })).into();
+    let write: EventBody = request(Call::Write(Write { path: "notes.md".into(), content: "# Notes\n".into() })).into();
+    let fetch: EventBody = request(Call::Fetch(Fetch { url: "https://example.com".into(), asking: None })).into();
 
     let edit = ToolUseAsked::of(&edit).unwrap();
     let write = ToolUseAsked::of(&write).unwrap();
 
-    assert_eq!((edit.tool.as_str(), edit.about), ("Edit", Some("Fix the typo")));
+    assert_eq!((edit.tool.as_str(), edit.about), ("Edit", None));
     assert_eq!(edit.given, Some(Given::Edit(EditFile { path: "src/lib.rs", edits: vec![("a", "b")] })));
     assert_eq!(write.given, Some(Given::Write(WriteFile { path: "notes.md", content: "# Notes\n" })));
     assert_eq!((edit.given.unwrap().path(), write.given.unwrap().path()), (Some("src/lib.rs"), Some("notes.md")));
@@ -79,49 +68,49 @@ fn an_edit_or_a_write_is_given_what_it_would_change_and_another_tool_its_main_in
 }
 
 #[test]
-fn a_tool_with_no_kind_of_its_own_has_a_readable_name_and_doesnt_say_whats_said_twice() {
-    let post = |input| Call::Mcp { server: "team".into(), tool: "post_message".into(), input };
-    let input = json!({ "channel": "general", "description": "Tell the team" });
-    let described_only: EventBody = request("mcp__team__post_message", post(input), Some("Tell the team")).into();
-    let with_a_path = json!({ "path": "notes.md" });
-    let with_an_input: EventBody = request("mcp__team__post_message", post(with_a_path), None).into();
+fn a_tool_with_no_kind_of_its_own_has_a_readable_name_and_its_main_input() {
+    let post = Call::Mcp { server: "team".into(), tool: "post_message".into(), input: json!({ "path": "notes.md" }) };
+    let body: EventBody = request(post).into();
 
-    let described_only = ToolUseAsked::of(&described_only).unwrap();
-    let with_an_input = ToolUseAsked::of(&with_an_input).unwrap();
+    let asked = ToolUseAsked::of(&body).unwrap();
 
-    assert_eq!(described_only.tool, "Post message");
-    assert_eq!((described_only.about, described_only.given), (Some("Tell the team"), None));
-    assert_eq!((with_an_input.about, with_an_input.given), (None, Some(Given::MainInput("notes.md".into()))));
+    assert_eq!(asked.tool, "Post message");
+    assert_eq!((asked.about, asked.given), (None, Some(Given::MainInput("notes.md".into()))));
 }
 
 #[test]
-fn a_request_this_build_doesnt_know_is_a_tools_use_and_questions_a_plan_and_other_events_arent() {
-    let asking =
-        |asking: Asking| -> EventBody { ApprovalRequest { asking: Some(asking), ..approval_request("a", "X") }.into() };
+fn only_a_call_is_a_tools_use() {
+    let asks = |asks: Asks| -> EventBody { approval_request("a", asks).into() };
 
-    assert!(ToolUseAsked::of(&asking(Asking::Unknown)).is_some());
-    assert!(ToolUseAsked::of(&asking(Asking::Questions { questions: Vec::new() })).is_none());
-    assert!(ToolUseAsked::of(&asking(Asking::Plan { plan: String::new() })).is_none());
+    assert!(ToolUseAsked::of(&asks(Asks::Unknown)).is_none(), "what this build can't read");
+    assert!(ToolUseAsked::of(&asks(asking(Vec::new()))).is_none());
+    assert!(ToolUseAsked::of(&asks(plan(""))).is_none());
     assert!(ToolUseAsked::of(&EventBody::Unknown).is_none());
 }
 
 #[test]
 fn an_answer_allows_or_denies_by_its_place_and_whats_typed_denies_in_those_words() {
-    let body: EventBody = request("Bash", command("ls", None), None).into();
+    let body: EventBody = request(command("ls", None)).into();
     let approval = Approval::of(&body).unwrap();
     let picked = |rows: &[u32]| QuestionAnswer { picked: rows.to_vec(), typed: None };
     let typed = QuestionAnswer { picked: vec![0], typed: Some("Use the full path".into()) };
 
     assert_eq!(ToolUseAnswer::ALL, [ToolUseAnswer::Allow, ToolUseAnswer::Deny], "the order every client shows");
-    let allow = ApprovalDecision::Allow { updated_input: None, updated_permissions: None };
-    assert_eq!(approval.deciding_tool_use(&picked(&[0])), Some(allow));
-    let deny = ApprovalDecision::Deny { message: None, interrupt: false };
-    assert_eq!(approval.deciding_tool_use(&picked(&[1])), Some(deny), "with the words left to the adapter");
-    let instead = ApprovalDecision::Deny { message: Some("Use the full path".into()), interrupt: false };
-    assert_eq!(approval.deciding_tool_use(&typed), Some(instead), "whatever row came with it");
+    assert_eq!(approval.deciding_tool_use(&picked(&[0])), Some(allow_once()));
+    assert_eq!(approval.deciding_tool_use(&picked(&[1])), Some(deny(None)), "with the words left to the adapter");
+    assert_eq!(approval.deciding_tool_use(&typed), Some(deny(Some("Use the full path"))), "whatever row came with it");
     for neither in [picked(&[]), picked(&[7]), picked(&[0, 1])] {
         assert_eq!(approval.deciding_tool_use(&neither), None, "{neither:?}");
     }
+}
+
+#[test]
+fn a_draft_keeps_an_answer_by_name() {
+    for answer in ToolUseAnswer::ALL {
+        assert_eq!(ToolUseAnswer::of(answer.chosen()), Some(answer));
+        assert_eq!(ToolUseAnswer::at(answer.place()), Some(answer));
+    }
+    assert_eq!(ToolUseAnswer::of(UseChoice::Unknown), None, "one this build doesn't know");
 }
 
 /// What's asked of a command is whether to run it, so one that only reads a file, which the chat draws as reading it,

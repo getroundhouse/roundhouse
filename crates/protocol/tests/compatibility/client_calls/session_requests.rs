@@ -2,14 +2,14 @@
 //! files and drafts, with the new-workspace dialog's, and making a workspace from it.
 
 use protocol::attachment::{AttachmentBytes, MediaType};
+use protocol::capability::approvals::{AfterDenial, Decision};
 use protocol::client::{
     ClientRequest, agent, attachments, drafts, log, new_workspace, queue, sessions, subscriptions, waits,
 };
-use protocol::event::ApprovalDecision;
 use protocol::frame;
 use protocol::model::{
-    AgentKind, AnswerDraft, AnswerSoFar, DraftToKeep, Effort, ModelName, NewWorkspaceDraftToKeep, PermissionMode,
-    Place, Seq, SessionSettingsChange,
+    AgentKind, AnswerSoFar, DecisionDraft, DraftToKeep, Effort, ModelName, NewWorkspaceDraftToKeep, PermissionMode,
+    Place, Seq, SessionSettingsChange, SoFar, UseChoice,
 };
 use protocol::prompt::Prompt;
 
@@ -189,10 +189,10 @@ fn every_request_for_a_sessions_agent_keeps_its_form() {
         prompt: Prompt::new("go"),
     });
     asked(prompt, r#"{"method":"session_prompt","id":"s","client_msg_id":"m","text":"go"}"#);
-    let decision = ApprovalDecision::Deny { message: None, interrupt: true };
+    let decision = Decision::Deny { words: None, then: AfterDenial::Stop, keep: None };
     asked(
-        ClientRequest::SessionApprove(agent::SessionApprove { id: "s".into(), approval_id: "a".into(), decision }),
-        r#"{"method":"session_approve","id":"s","approval_id":"a","decision":{"decision":"deny","interrupt":true}}"#,
+        ClientRequest::SessionDecide(agent::SessionDecide { id: "s".into(), approval_id: "a".into(), decision }),
+        r#"{"method":"session_decide","id":"s","approval_id":"a","decision":{"decision":"deny","then":"stop"}}"#,
     );
     asked(
         ClientRequest::SessionCancel(agent::SessionCancel { id: "s".into() }),
@@ -252,15 +252,23 @@ fn every_request_about_files_and_drafts_keeps_its_form() {
         ClientRequest::SessionDraft(drafts::SessionDraft { id: "s".into(), draft: DraftToKeep::new("half") }),
         r#"{"method":"session_draft","id":"s","draft":{"text":"half"}}"#,
     );
-    let answer =
-        AnswerDraft { approval_id: "a".into(), answers: vec![AnswerSoFar { picked: vec![1], ..Default::default() }] };
+    let answers = SoFar::Answers { answers: vec![AnswerSoFar { picked: vec![1], ..Default::default() }] };
+    let draft = |so_far| drafts::SessionDecisionDraft {
+        id: "s".into(),
+        draft: Some(DecisionDraft { approval_id: "a".into(), so_far }),
+    };
     asked(
-        ClientRequest::SessionAnswerDraft(drafts::SessionAnswerDraft { id: "s".into(), draft: Some(answer) }),
-        r#"{"method":"session_answer_draft","id":"s","draft":{"approval_id":"a","answers":[{"picked":[1]}]}}"#,
+        ClientRequest::SessionDecisionDraft(draft(answers)),
+        r#"{"method":"session_decision_draft","id":"s","draft":{"approval_id":"a","so_far":{"drafts":"answers","answers":[{"picked":[1]}]}}}"#,
+    );
+    let denying = SoFar::Use { chosen: Some(UseChoice::Deny), words: "Not that".into(), writing: true };
+    asked(
+        ClientRequest::SessionDecisionDraft(draft(denying)),
+        r#"{"method":"session_decision_draft","id":"s","draft":{"approval_id":"a","so_far":{"drafts":"use","chosen":"deny","words":"Not that","writing":true}}}"#,
     );
     asked(
-        ClientRequest::SessionAnswerDraft(drafts::SessionAnswerDraft { id: "s".into(), draft: None }),
-        r#"{"method":"session_answer_draft","id":"s","draft":null}"#,
+        ClientRequest::SessionDecisionDraft(drafts::SessionDecisionDraft { id: "s".into(), draft: None }),
+        r#"{"method":"session_decision_draft","id":"s","draft":null}"#,
     );
 }
 

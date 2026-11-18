@@ -1,8 +1,9 @@
 use client_core::calls::{Recorded, Returned, first_line};
 use protocol::attachment::Attachment;
+use protocol::capability::asking::Question;
 use protocol::capability::turns::OwnTurn;
 use protocol::event::{
-    AgentTask, CompactionOutcome, ContentBlock, Denied, EventBody, Question, SessionEvent, TaskOutcome, TurnOutcome,
+    AgentTask, CompactionOutcome, ContentBlock, Denied, EventBody, SessionEvent, TaskOutcome, TurnOutcome,
 };
 use protocol::model::{ApprovalId, MessageId, PermissionMode, Seq, SubagentId, TaskId};
 use protocol::tail::{DeltaChange, StreamDelta, Tail};
@@ -274,10 +275,8 @@ pub(super) fn denial(denied: &Denied) -> String {
 
 /// A call, by the agent's name for its tool, with what it's about, as every client says it, if it says anything.
 pub(super) fn called(call: Recorded<'_>) -> String {
-    let name = match call {
-        Recorded::Named { name, .. } => name.to_string(),
-        Recorded::Typed(call) => client_core::calls::typed::title(call),
-    };
+    let Recorded::Typed(typed) = call;
+    let name = client_core::calls::typed::title(typed);
     about(&name, call.summary())
 }
 
