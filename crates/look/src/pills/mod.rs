@@ -7,4 +7,5 @@ mod tests;
 mod kinds;
 mod pill;
 pub use kinds::PillKind;
+pub(crate) use pill::HEIGHT;
 pub use pill::{Pill, pill};

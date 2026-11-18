@@ -2,33 +2,33 @@
   "look::ChipKind": {
     "File": {
       "x": 334,
-      "y": 55,
-      "width": 178,
-      "height": 40
+      "y": 51,
+      "width": 186,
+      "height": 48
     },
     "Folder": {
       "x": 392,
-      "y": 143,
-      "width": 172,
-      "height": 40
+      "y": 139,
+      "width": 180,
+      "height": 48
     },
     "Server": {
       "x": 430,
-      "y": 319,
-      "width": 148,
-      "height": 40
+      "y": 315,
+      "width": 156,
+      "height": 48
     },
     "Site": {
       "x": 374,
-      "y": 407,
-      "width": 160,
-      "height": 40
+      "y": 403,
+      "width": 168,
+      "height": 48
     },
     "Subagent": {
       "x": 348,
-      "y": 231,
-      "width": 162,
-      "height": 40
+      "y": 227,
+      "width": 170,
+      "height": 48
     }
   }
 }

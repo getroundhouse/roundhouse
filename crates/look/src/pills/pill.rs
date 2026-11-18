@@ -6,8 +6,9 @@ use crate::shape::{Corner, Shaped as _};
 use crate::space::Space;
 use crate::typography::{Type, Typeset as _};
 
-/// How tall a pill is, which sits in a line of body text with a pixel or two above and below its words.
-pub(crate) const HEIGHT: Pixels = px(20.);
+/// How tall a pill is, which sits in a line of body text with a little room above and below its words, as tall as a
+/// small control.
+pub(crate) const HEIGHT: Pixels = px(24.);
 
 /// A pill of `kind` that shows `value`, which is its words, or its words with what's marked in them, such as what a
 /// find matched. It's cut short with an ellipsis where it has no room.

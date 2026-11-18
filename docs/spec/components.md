@@ -171,7 +171,7 @@ The pieces screens are built from, on the foundations in `look.md`: what each is
 
 ### Pills
 
-- **A pill is a value as it was written, such as a command, a search's pattern or what a web search asked,** filled, in code's type, with a control's corners, 20px tall, 8px in from each end, and cut short with an ellipsis where it has no room. It opens nothing, and is selected and copied as text. Its kind says its colours. `look::PillKind` holds the kinds. *Unconfirmed:* its height and room.
+- **A pill is a value as it was written, such as a command, a search's pattern or what a web search asked,** filled, in code's type, with a control's corners, 24px tall, as a chip is, 8px in from each end, and cut short with an ellipsis where it has no room. It opens nothing, and is selected and copied as text. Its kind says its colours. `look::PillKind` holds the kinds. *Unconfirmed:* its room.
 
 **Every kind of pill, by its name.** Each is a kind in `look::PillKind`. *Unconfirmed.*
 
@@ -186,7 +186,7 @@ The pieces screens are built from, on the foundations in `look.md`: what each is
 
 ### Chips
 
-- **A chip is a thing the app knows, such as a file or a subagent, in one frame whatever its kind,** as the owner decided, so a line with different chips reads as one system: filled with the one edge for something to use, a control's corners, 20px tall, as a pill is, with its kind's mark, then its name in body text, then what's said of it. Its kind says its mark and what it shows of what it names, such as a path's last part. `look::ChipKind` holds the kinds. *Unconfirmed:* its height and room. *Not built:* a click that opens it, its card on hover and its menu, the chips for an issue, a pull request, a workspace, a branch and a commit, and a file's folder where two files in view share a name.
+- **A chip is a thing the app knows, such as a file or a subagent, in one frame whatever its kind,** as the owner decided, so a line with different chips reads as one system: filled with the one edge for something to use, a control's corners, with its kind's mark, then its name in body text, then what's said of it, in code's type on the name's baseline, so the two sizes of text read as one line. It's 24px tall, as a small control is, with 6px at its start and between its parts, as the owner decided, from pictures of six, so its words have room above and below them and its parts don't crowd. The 6px is a chip's own, rather than a space, since the smallest space crowded the mark and the name and the next was looser than it needs. A pill is as tall, so the two sit in one line. Its kind says its mark and what it shows of what it names, such as a path's last part. `look::ChipKind` holds the kinds. *Unconfirmed:* 8px at its end. *Not built:* a click that opens it, its card on hover and its menu, the chips for an issue, a pull request, a workspace, a branch and a commit, and a file's folder where two files in view share a name.
 - **A file's chip always has the icon for its kind, and says what more there is to say of it,** as the owner decided: the lines a call named, after its name, such as `model.rs :12–40`, and the lines a change added and removed, such as `model.rs +12 −3`. A deleted file's name is struck through.
 
 **Every kind of chip, by its name.** Each is a kind in `look::ChipKind`. *Unconfirmed.*
