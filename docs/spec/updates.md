@@ -13,7 +13,7 @@ What someone using the desktop app sees when it or its hub updates, or when ther
 - **A workspace stays on screen while the app connects to a hub again,** whether the app is restarting the hub or the hub went away. What's typed meanwhile is kept, since that's often the moment someone starts their next prompt. Send and Enter wait until the hub is back, and what's typed stays in the composer, because a hub that's being stopped would take the prompt and then cut its agent off. The app only says "Connecting…" when there's nothing to show yet. *Unconfirmed:* that Enter waits, rather than sending once the hub is back.
 - **An older hub keeps working.** The app hides or disables what it doesn't support, and only a real protocol break stops it.
 - **A hub someone runs themselves is left alone,** even on the same Mac. The app says when it's older, and only its admins stop it.
-- **A problem updating says so in the version's place at the bottom of the sidebar,** with all of what it says and the detail on hover, since a long one is cut short before the buttons, until a later check works. A feed or package that isn't the one the release workflow signed says "Update refused" at once. Not reaching the update server only shows once it has lasted a day, since being offline for a while is ordinary, unless you check for updates yourself. An app that can't replace itself where it is says so when it opens, and one that macOS runs from where it was downloaded asks to be moved to Applications. *Unconfirmed.*
+- **A problem updating says so in the version's place at the bottom of the sidebar,** with all of what it says and the detail on a card above it on hover, since a long one is cut short before the buttons, until a later check works. A feed or package that isn't the one the release workflow signed says "Update refused" at once. Not reaching the update server only shows once it has lasted a day, since being offline for a while is ordinary, unless you check for updates yourself. An app that can't replace itself where it is says so when it opens, and one that macOS runs from where it was downloaded asks to be moved to Applications. *Unconfirmed.*
 
   **An app that macOS runs from where it was downloaded, asking to be moved to Applications. Its words are cut short before the buttons, and all of them show on hover.** *Unconfirmed.*
 
@@ -70,17 +70,25 @@ The bottom of the sidebar shows which build is running, faint, and only brings u
 
   ![Asking before restarting now](screens/finish-update-question.png)
 
-- **A hub someone runs themselves is another build.** The version says so, as "1.0.0 · hub 0.9.0", and the app leaves it alone.
+- **A hub someone runs themselves is another build.** The version says so, as "1.0.0 · hub 0.9.0", and the app leaves it alone. Resting the pointer on it shows a card above it that says which is the hub's and which the app's, and that the app leaves the hub for whoever started it to update.
 
   **The build line with a hub someone runs themselves, on another version.** *Unconfirmed.*
 
   ![A hub someone runs themselves](screens/own-hub.png)
+
+  **What the version says of a hub someone runs themselves, on the card above it.**
+
+  ![What the version says of another hub](screens/own-hub-card.png)
 
 - **A problem updating** shows in the version's place, muted, as the rule above says. A download that isn't what the release workflow signed is red, since it may be someone tampering with the update.
 
   **Not reaching the update server, in the version's place.** *Unconfirmed.*
 
   ![A problem updating](screens/update-problem.png)
+
+  **What went wrong, on the card above it.**
+
+  ![What went wrong updating](screens/update-problem-card.png)
 
 ## A chat on a new version
 

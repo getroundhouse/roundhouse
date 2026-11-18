@@ -73,11 +73,32 @@ pub(crate) const UPDATE_SCREENS: &[Screen] = &[
     },
     Screen { name: "own-hub", spec: "updates.md", world: Some(own_hub), frame: SIDEBAR, steps: &[Step::Select(FOCUS)] },
     Screen {
+        name: "own-hub-card",
+        spec: "updates.md",
+        world: Some(own_hub),
+        frame: BUILD_LINE_CARD,
+        steps: &[Step::Select(FOCUS), Step::Hover { on: Target::Id("version"), shows: Region::BuildLineCard.id() }],
+    },
+    Screen {
         name: "update-problem",
         spec: "updates.md",
         world: Some(conversation),
         frame: SIDEBAR,
         steps: &[Step::Select(FOCUS), Step::UpdateProblem(Kind::Unreachable, "connection refused")],
+    },
+    Screen {
+        name: "update-problem-card",
+        spec: "updates.md",
+        world: Some(conversation),
+        frame: BUILD_LINE_CARD,
+        steps: &[
+            Step::Select(FOCUS),
+            Step::UpdateProblem(
+                Kind::Unreachable,
+                "error sending request for url (https://updates.example.com/releases.json): connection refused",
+            ),
+            Step::Hover { on: Target::Id("update-problem"), shows: Region::BuildLineCard.id() },
+        ],
     },
     Screen {
         name: "update-refused",
@@ -133,6 +154,9 @@ pub(crate) const UPDATE_SCREENS: &[Screen] = &[
         steps: &[Step::Select(FOCUS), Step::Hover { on: Target::Id(TITLE), shows: Region::WorkspaceCard.id() }],
     },
 ];
+
+/// The sidebar, and the card the build line's version or what's said in its place opens.
+const BUILD_LINE_CARD: Frame = Frame::Around(Part::Region(Region::LeftSidebar), &[Part::Region(Region::BuildLineCard)]);
 
 /// The workspace's name in its header, which the card opens from.
 const TITLE: &str = "workspace-title";

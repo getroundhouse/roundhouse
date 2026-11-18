@@ -55,6 +55,12 @@ pub enum Region {
     WorkspaceCard,
     /// What an account's row in Settings has no room for, shown from the row.
     AccountCard,
+    /// The whole path of the file the file tab shows, shown from the tab.
+    FilePathCard,
+    /// What the version's place says in full, such as what went wrong updating, shown from it.
+    BuildLineCard,
+    /// Where a build from a checkout was made and keeps its data, shown from its card in the sidebar.
+    CheckoutDetails,
 }
 
 impl Region {
@@ -86,6 +92,9 @@ impl Region {
             Region::UpdateDetails => "update-details-card",
             Region::WorkspaceCard => "workspace-card",
             Region::AccountCard => "account-card",
+            Region::FilePathCard => "file-path-card",
+            Region::BuildLineCard => "build-line-card",
+            Region::CheckoutDetails => "checkout-details-card",
         }
     }
 }

@@ -313,7 +313,8 @@ impl RenderOnce for HoverCard {
         });
         let anchor = if self.flips { fitting(self.anchor, trigger_at.get(), window) } else { self.anchor };
         let on_trigger = window.listener_for(&shown, |shown, on: &bool, window, cx| shown.on_trigger(*on, window, cx));
-        let trigger = div().id("trigger").children(self.trigger).on_hover(on_trigger);
+        // As big as the box `trigger_style` lays out, so what it's for can fill that, as a tab fills its bar's height.
+        let trigger = div().id("trigger").size_full().children(self.trigger).on_hover(on_trigger);
         // Measured only for a card that flips, so every other is laid out as it was.
         let trigger = if self.flips { trigger.relative().child(measuring(trigger_at)) } else { trigger };
         let trigger = match (focus, self.on_focus) {

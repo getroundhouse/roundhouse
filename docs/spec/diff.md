@@ -36,6 +36,12 @@ A workspace's changes against its base, listed in a sidebar on the right, each f
 
   ![The file tab beside a chat's tab](screens/file-tab.png)
 
+- **Resting the pointer on the file tab shows the file's whole path on a card under it, with the button that copies it,** since two files can share a name, as the owner decided.
+
+  **The file tab's path, on the card under it.**
+
+  ![The file tab's path](screens/file-tab-path.png)
+
 - **The file tab's name is in italics,** as a tab that's replaced rather than added to usually is. *Unconfirmed.*
 - **A bar along the top of the file tab names the file, with its path on a raised pill,** its folders muted before its name, as the sidebar shows them, and a renamed file says what it was renamed from. A file opened from All files has the same bar. *Unconfirmed.*
 - **A file's changes show with git's three lines either side, and the lines between fold into a row that says how many there are,** rather than git's `@@` lines. The row is on the code blocks' surface, `#1e1b19`, so it stands out from the lines either side without looking raised. Arrows in the row's line numbers show 20 more at a time, up from the change below or down from the change above, or all of them at once when there are no more than 20 between two changes, so the code around a change can be read without leaving the diff. Each arrow says what it shows when it's hovered. *Unconfirmed.*

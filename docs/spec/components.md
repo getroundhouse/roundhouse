@@ -155,9 +155,10 @@ The pieces screens are built from, on the foundations in `look.md`: what each is
 
 ## Tooltips
 
-- **A tooltip says a few words about what the pointer rests on,** as the owner decided, such as what a button does, and the key that does the same, if there's one, at its end. What needs more than a line or two, such as a path, what went wrong or how something works, goes on a hover card, which follows rules of its own, so a tooltip stays something read at a glance. *Not built:* the file tab's path, what went wrong with an update, the checkout card's paths and what the version says of another hub are still tooltips.
+- **A tooltip says a few words about what the pointer rests on,** as the owner decided, such as what a button does, and the key that does the same, if there's one, at its end. What needs more than a line or two, such as a path, what went wrong or how something works, goes on a hover card, which follows rules of its own, so a tooltip stays something read at a glance.
 - **A tooltip is raised, with a control's corners, the one thin edge and the one shadow, in a detail's text,** 8px in from its edge at each end and 4px at the top and bottom, and wraps past 320px, so a sentence that slips in stays readable. Its key is written as text, in muted text, 12px after its words, as the owner decided.
 - **Every tooltip is `look`'s,** as the owner decided, so none is drawn in the kit's own look.
+- **A hover card that says what a tooltip has no room for is raised, as the app's other cards are, 300px wide,** as the owner decided, with what it's about in body text and stronger, then what it says in muted detail text, or a path in code's type, wrapped, with the button that copies it: the file tab's path, what went wrong updating, what the version says of another hub, and where a checkout's build was made and keeps its data.
 
 **Every tooltip: words, words with their key, Escape, and words that run past its widest and wrap.**
 

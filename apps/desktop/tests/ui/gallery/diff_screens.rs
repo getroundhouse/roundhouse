@@ -3,10 +3,12 @@
 
 #![cfg(test)]
 
-use super::frame::{CHANGES, FILE, Frame, TABS};
+use look::Region;
+
+use super::frame::{CHANGES, FILE, Frame, Part, TABS};
 use super::image_files::{CHANGED, changed_images};
 use super::screens::FOCUS;
-use super::steps::{Screen, Step};
+use super::steps::{Screen, Step, Target};
 use super::worktree;
 use super::worlds::{conversation, diff, own_hub};
 
@@ -53,6 +55,17 @@ pub(crate) const DIFF_SCREENS: &[Screen] = &[
         world: Some(diff),
         frame: TABS,
         steps: &[Step::Select(FOCUS), Step::OpenFile("crates/protocol/src/model.rs"), Step::MoveAway],
+    },
+    Screen {
+        name: "file-tab-path",
+        spec: "diff.md",
+        world: Some(diff),
+        frame: Frame::Around(Part::Region(Region::TabBar), &[Part::Region(Region::FilePathCard)]),
+        steps: &[
+            Step::Select(FOCUS),
+            Step::OpenFile("crates/protocol/src/model.rs"),
+            Step::Hover { on: Target::Id("show-file-tab"), shows: Region::FilePathCard.id() },
+        ],
     },
     Screen {
         name: "writing-a-comment",
