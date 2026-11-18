@@ -11,7 +11,6 @@ pub mod events;
 mod model_lists;
 mod serve;
 mod stand_in;
-mod subagent_records;
 mod terminals;
 #[cfg(test)]
 mod tests;

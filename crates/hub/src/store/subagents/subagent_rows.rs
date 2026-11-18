@@ -71,10 +71,11 @@ const CONTEXT: &str = "UPDATE subagents SET context_tokens = ?1
      WHERE session_id = ?2 AND id = ?3 AND status = ?4 AND context_tokens IS NOT ?1";
 
 /// Changes the records of the subagents `event` says something about, in the transaction that records it, and says
-/// which. A subagent's record starts with the agent's word that it started, ends with its word that it ended, or with
-/// the agent, which takes its subagents with it, works again if the agent says it started again, and counts the calls in between from the subagent's own events,
-/// which also say what it's done lately, and its replies the model it runs on. How many tokens its conversation
-/// holds is the agent's word too, as it works and as it ends.
+/// which, as `protocol`'s `Subagent::recorded_from` makes the records of a log, which `tests::as_recorded` holds this
+/// to. A subagent's record starts with the agent's word that it started, ends with its word that it ended, or with the
+/// agent, which takes its subagents with it, works again if the agent says it started again, and counts the calls in
+/// between from the subagent's own events, which also say what it's done lately, and its replies the model it runs on.
+/// How many tokens its conversation holds is the agent's word too, as it works and as it ends.
 pub(in super::super) fn note_subagents(tx: &Connection, event: &SessionEvent) -> Result<Vec<SubagentId>, StoreError> {
     let (session, at) = (event.session_id.as_str(), event.ts_ms);
     let working = text_of(&SubagentStatus::Working);

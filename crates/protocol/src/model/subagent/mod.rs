@@ -3,6 +3,8 @@
 
 mod lately;
 mod record;
+#[cfg(feature = "testing")]
+mod recorded;
 #[cfg(test)]
 mod tests;
 

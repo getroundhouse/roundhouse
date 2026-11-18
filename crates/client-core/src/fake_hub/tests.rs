@@ -3,9 +3,9 @@
 
 use protocol::client::{ErrorCode, log};
 use protocol::event::{ContentBlock, EventBody, ExitReason, TaskKind};
-use protocol::model::{AgentKind, Place, Seq, SessionStatus, SubagentId};
+use protocol::model::{AgentKind, Place, Seq, SessionStatus, SubagentId, SubagentStatus};
 
-use super::events::{subagent_started, taken, task, text, user_prompt, within};
+use super::events::{subagent_ended, subagent_started, taken, task, text, user_prompt, within};
 use super::{World, serve};
 use crate::{Client, ClientError};
 
@@ -114,24 +114,34 @@ fn ensuring_a_workspace_has_a_chat_finds_its_newest_open_one() {
 }
 
 /// As `EventBody::subagent_started` says: by the ID its agent gives it, or by its call in one recorded before
-/// subagents had IDs of their own.
+/// subagents had IDs of their own. And as `Subagent::recorded_from` says, one that starts again after it ended works
+/// again, and they're listed by when each last started.
 #[test]
 fn a_chat_s_subagents_go_by_the_id_their_agent_gives_or_by_their_call() {
     let mut world = World::default();
     let repo = world.repo("aspen");
     let workspace = world.workspace(&repo, "elm");
-    let mut named = subagent_started("toolu_2", "explore", "Look", "Look around");
-    if let EventBody::SubagentStarted { subagent, .. } = &mut named {
-        *subagent = Some("agent-7".into());
-    }
-    let events = vec![subagent_started("toolu_1", "explore", "Read", "Read the docs"), named];
+    let named = |call: &str| {
+        let mut named = subagent_started(call, "explore", "Look", "Look around");
+        if let EventBody::SubagentStarted { subagent, .. } = &mut named {
+            *subagent = Some("agent-7".into());
+        }
+        named
+    };
+    let events = vec![
+        named("toolu_2"),
+        subagent_started("toolu_1", "explore", "Read", "Read the docs"),
+        subagent_ended("agent-7", "Looked.", 1_000),
+        named("toolu_3"),
+    ];
     let chat = world.chat(&workspace, SessionStatus::Running, events);
     let (_dir, client) = served(world);
 
     let (subagents, _) = client.session_subagents(&chat).unwrap();
 
-    let ids: Vec<_> = subagents.iter().map(protocol::model::Subagent::id).collect();
-    assert_eq!(ids, [SubagentId::from("agent-7"), SubagentId::of_call(&"toolu_1".into())]);
+    let ids: Vec<_> = subagents.iter().map(|subagent| (subagent.id(), subagent.status)).collect();
+    let working = SubagentStatus::Working;
+    assert_eq!(ids, [(SubagentId::of_call(&"toolu_1".into()), working), (SubagentId::from("agent-7"), working)]);
 }
 
 /// As `Lately::add` says: what a subagent wrote, and not what was written to it, cut short.
