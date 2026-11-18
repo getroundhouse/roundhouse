@@ -18,7 +18,7 @@ Click a file to see its diff in the workspace's file tab, the leftmost tab. Clic
 
 - **Lines far from a change are folded** into a row that says how many there are. Its arrows show 20 more at a time.
 - **The words that changed are marked more strongly** than the rest of their line, so a small edit to a long line stands out.
-- **A switch at the right end of the bar** shows the diff in one column, side by side, or as the whole file with its changes where they are.
+- **A switch at the right end of the bar** shows the diff in one column, side by side, or as the whole file with its changes where they are. A Markdown file's diff can show rendered too, with what was removed struck through on red and what was added on green.
 
 `Cmd-W` closes the file tab, and clicking a chat's tab goes back to the chat with the file still open behind it.
 

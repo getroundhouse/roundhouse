@@ -4,6 +4,7 @@
 //! say, since the file tab is the pane's.
 
 pub(crate) use lines::{Line, Lines, TAB};
+pub(crate) use markdown::is_markdown;
 pub(crate) use reading::{HIGHLIGHT_UP_TO, Read, Unshown, hash, what_it_gives};
 
 mod lines;

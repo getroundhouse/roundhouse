@@ -4,7 +4,7 @@ use crate::file_view::LINE_HEIGHT;
 use crate::image_diff::ImageDiff;
 use crate::patch::FilePatch;
 use crate::review::{Review, ReviewEvent};
-use crate::shared_choice::{Chosen, chosen, switch};
+use crate::shared_choice::{Chosen, chosen, switch_of};
 use crate::{FlipImage, image_diff};
 use draft::Draft;
 use draw::{Drawing, FOLD_HEIGHT, SIGN, gutter};
@@ -21,10 +21,12 @@ use opened::Opened;
 use protocol::model::CommentDraft;
 use selection::{DrawnLines, KEY_CONTEXT, Selection};
 use shown::{Making, Shown};
-use sides::Extent;
+use sides::{Extent, Versions};
 use std::collections::HashMap;
 use std::ops::Range;
 use std::rc::Rc;
+use std::sync::Arc;
+use transcript::Document;
 use view::DiffView;
 
 #[derive(Clone, Debug)]
@@ -51,6 +53,9 @@ pub struct FileDiff {
     pub(super) dictation_enabled: bool,
     /// What shows in place of the lines for a file that isn't text, which has none.
     pub image: Entity<ImageDiff>,
+    /// What shows in place of the lines for a Markdown file rendered, and the versions of the file it was given last.
+    pub(super) document: Entity<Document>,
+    pub(super) rendered: Option<Arc<Versions>>,
     /// What's been opened of each file that's shown, by path, which stays open while other files show, until the file
     /// tab closes.
     pub(super) opened: HashMap<SharedString, Opened>,
@@ -95,6 +100,8 @@ impl FileDiff {
             draft: None,
             dictation_enabled: false,
             image,
+            document: cx.new(Document::new),
+            rendered: None,
             opened: HashMap::new(),
             list: DiffList::new(cx),
             rows: Rc::from([]),
@@ -157,6 +164,11 @@ impl FileDiff {
         chosen::<DiffView>(cx)
     }
 
+    /// How the file it shows shows, as chosen last in any workspace.
+    pub(super) fn view(&self, cx: &App) -> DiffView {
+        chosen::<DiffView>(cx).of(self.path.as_deref().unwrap_or_default())
+    }
+
     /// Opens `lines` of the file that shows, by their numbers on the old side.
     pub(super) fn open(&mut self, lines: Range<u32>, cx: &mut Context<Self>) {
         let Some(path) = self.path.clone() else { return };
@@ -178,7 +190,7 @@ impl FileDiff {
             return self.rows.clone();
         }
         let Some(shown) = &self.shown else { return Rc::from([]) };
-        let (view, notes, commit) = (chosen::<DiffView>(cx), self.notes(cx), self.review.read(cx).base_commit.clone());
+        let (view, notes, commit) = (self.view(cx), self.notes(cx), self.review.read(cx).base_commit.clone());
         let none = Opened::default();
         let opened = self.path.as_ref().and_then(|path| self.opened.get(path)).unwrap_or(&none);
         let known = shown.sides.known().unwrap_or_default();
@@ -232,7 +244,7 @@ impl FileDiff {
             return placeholder("Nothing in this file's lines changed", look::colors(cx).text_muted);
         }
         let (mono, size) = (look::Type::Code.family(cx), look::Type::Code.size(window.rem_size()));
-        let split = chosen::<DiffView>(cx).split();
+        let split = self.view(cx).split();
         let highest = usize::try_from(highest(&shown.file, shown.sides.extent.lines())).unwrap_or(usize::MAX);
         let (numbers, gutter) = gutter(highest, split);
         let advance = window.text_system().advance(window.text_system().resolve_font(&font(mono)), size, 'm');
@@ -307,7 +319,7 @@ fn highest(file: &FilePatch, whole: Option<u32>) -> u32 {
     last.0.max(last.1) + after
 }
 
-fn placeholder(text: &'static str, color: Hsla) -> AnyElement {
+pub(super) fn placeholder(text: &'static str, color: Hsla) -> AnyElement {
     div().size_full().flex().items_center().justify_center().text_color(color).child(text).into_any_element()
 }
 
@@ -335,10 +347,13 @@ impl Render for FileDiff {
             Some(_) if binary => self.image.clone().into_any_element(),
             Some(file) if self.shown.is_some() => {
                 let renamed = file.old_path().filter(|old| *old != file.path()).map(|old| format!("from {old}"));
+                let view = self.view(cx);
+                let choices = switch_of(DiffView::for_file(file.path()), view);
+                let body = if view == DiffView::Rendered { self.rendered_file(cx) } else { self.lines(window, cx) };
                 v_flex()
                     .size_full()
-                    .child(file_header(file.path(), renamed, Some(switch::<DiffView>(cx)), cx))
-                    .child(div().flex_1().min_h_0().child(self.lines(window, cx)))
+                    .child(file_header(file.path(), renamed, Some(choices), cx))
+                    .child(div().flex_1().min_h_0().child(body))
                     .into_any_element()
             }
             None if loaded => placeholder("This file has no changes now", muted),

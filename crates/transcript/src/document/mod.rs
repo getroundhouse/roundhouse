@@ -3,6 +3,7 @@
 //! and it selects, copies and reads as a reply does. It keeps texts of its own, apart from any chat's, and scrolls
 //! them in the chat's column. `docs/ui.md` has why the chat's Markdown is drawn this way.
 
+mod changes;
 mod frames;
 #[cfg(test)]
 mod tests;

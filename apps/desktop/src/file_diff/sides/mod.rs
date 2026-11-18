@@ -16,4 +16,4 @@ mod tests;
 mod lines;
 #[cfg(test)]
 pub(super) use lines::Side;
-pub(super) use lines::{Extent, Run, Sides};
+pub(super) use lines::{Extent, Run, Sides, Versions};

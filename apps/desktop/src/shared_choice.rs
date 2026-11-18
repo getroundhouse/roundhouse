@@ -36,8 +36,12 @@ pub trait OnASwitch: Copy + Default + PartialEq + 'static {
 
 /// The choices of a `T`, as one switch on a track, with the one chosen on.
 pub(crate) fn switch<T: OnASwitch>(cx: &App) -> AnyElement {
-    let showing = chosen::<T>(cx);
-    (T::ALL.iter().copied())
+    switch_of(T::ALL, chosen::<T>(cx))
+}
+
+/// `choices`, some of a `T`'s, as one switch on a track, with `showing` on, for what can show only some of them.
+pub(crate) fn switch_of<T: OnASwitch>(choices: &[T], showing: T) -> AnyElement {
+    (choices.iter().copied())
         .fold(look::switch(look::SwitchKind::Tracked), |switch, choice| {
             switch.icon(choice.id(), choice.icon(), choice.name(), choice == showing, move |_, cx| choose(choice, cx))
         })

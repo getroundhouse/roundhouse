@@ -223,7 +223,6 @@ impl FileDiff {
 
     /// Whether the file shows as it will, in colour, and with the file as it was if that could be opened, so what git
     /// left out can be opened.
-    #[cfg(feature = "testing")]
     pub fn is_ready(&self) -> bool {
         self.making.from.is_none() && self.shown.as_ref().is_some_and(|shown| shown.settled)
     }

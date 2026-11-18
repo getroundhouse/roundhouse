@@ -9,8 +9,8 @@ use super::frame::{CHANGES, FILE, Frame, Part, TABS};
 use super::image_files::{CHANGED, changed_images};
 use super::screens::FOCUS;
 use super::steps::{Screen, Step};
-use super::worktree;
 use super::worlds::{conversation, diff, own_hub};
+use super::{patch, worktree};
 
 pub(crate) const DIFF_SCREENS: &[Screen] = &[
     Screen { name: "changes", spec: "diff.md", world: Some(diff), frame: CHANGES, steps: &[Step::Select(FOCUS)] },
@@ -48,6 +48,13 @@ pub(crate) const DIFF_SCREENS: &[Screen] = &[
         world: Some(diff),
         frame: FILE,
         steps: &[Step::Select(FOCUS), Step::OpenFile("crates/protocol/src/model.rs"), Step::Click("diff-whole-file")],
+    },
+    Screen {
+        name: "diff-rendered",
+        spec: "diff.md",
+        world: Some(diff),
+        frame: FILE,
+        steps: &[Step::Select(FOCUS), Step::OpenFile(patch::SPEC), Step::Click("diff-rendered"), Step::MoveAway],
     },
     Screen {
         name: "file-tab",

@@ -340,6 +340,8 @@ pub(in super::super) fn diff() -> World {
     );
     // So the lines git left out of the file the screens open can be shown.
     world.base_files.insert(worktree::OPENED.to_string(), FileContents::Text { text: worktree::MODEL.to_string() });
+    // And the spec it changes, rendered.
+    world.base_files.insert(patch::SPEC.to_string(), FileContents::Text { text: patch::SPEC_BEFORE.to_string() });
     world.comments.insert(
         focus.clone(),
         vec![DiffComment {

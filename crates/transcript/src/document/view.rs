@@ -1,10 +1,12 @@
 use std::rc::Rc;
 
+use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, AppContext as _, Context, ElementId, FocusHandle, Focusable, IntoElement, ListAlignment,
     ListState, ParentElement as _, Render, SharedString, Styled as _, Task, Window, div, list, px,
 };
 
+use super::changes::{Change, changed};
 use super::frames::Frames;
 use crate::rows::in_column;
 use crate::selection::Selection;
@@ -26,10 +28,11 @@ pub struct Document {
     cutting: Option<Task<()>>,
 }
 
-/// The text a document shows, by its blocks, and what it's known by, such as a file's path.
+/// The text a document shows, by its blocks, each with how it changed if it shows a change, and what it's known by,
+/// such as a file's path.
 struct Shown {
     name: SharedString,
-    blocks: Rc<[TopBlock]>,
+    blocks: Rc<[(TopBlock, Change)]>,
 }
 
 impl Focusable for Document {
@@ -50,22 +53,39 @@ impl Document {
     /// name starts it at its top, and the same one, read again, keeps where it's scrolled to. What was selected goes,
     /// since the blocks it was in may not be there now.
     pub fn show(&mut self, name: SharedString, text: SharedString, cx: &mut Context<Self>) {
+        self.cut(name, cx, move || top_blocks(&text).into_iter().map(|block| (block, Change::Kept)).collect());
+    }
+
+    /// Shows what changed from `was` to `is`, two versions of the text known as `name`, as [`show`](Self::show) shows
+    /// one: the blocks both have, and each that only one has, where it has it, with what was removed struck through
+    /// on red, and what was added on green. A block that changed shows as it was, then as it is.
+    pub fn show_changes(&mut self, name: SharedString, was: SharedString, is: SharedString, cx: &mut Context<Self>) {
+        self.cut(name, cx, move || changed(&was, &is));
+    }
+
+    /// Shows the blocks `cut` makes on another thread, known as `name`, once it's made them.
+    fn cut(
+        &mut self,
+        name: SharedString,
+        cx: &mut Context<Self>,
+        cut: impl FnOnce() -> Vec<(TopBlock, Change)> + Send + 'static,
+    ) {
         // Another's blocks aren't shown under its name while it's cut.
         if self.shown.as_ref().is_some_and(|shown| shown.name != name) {
             self.shown = None;
             self.list.reset(0);
             cx.notify();
         }
-        let cutting = cx.background_spawn(async move { top_blocks(&text) });
+        let cutting = cx.background_spawn(async move { cut() });
         self.cutting = Some(cx.spawn(async move |this, cx| {
-            let blocks: Rc<[TopBlock]> = cutting.await.into();
+            let blocks: Rc<[(TopBlock, Change)]> = cutting.await.into();
             let _ = this.update(cx, |this, cx| this.shown(name, blocks, cx));
         }));
     }
 
-    fn shown(&mut self, name: SharedString, blocks: Rc<[TopBlock]>, cx: &mut Context<Self>) {
+    fn shown(&mut self, name: SharedString, blocks: Rc<[(TopBlock, Change)]>, cx: &mut Context<Self>) {
         let (texts, selection) = texts(&self.focus, cx);
-        for (ix, block) in blocks.iter().enumerate() {
+        for (ix, (block, _)) in blocks.iter().enumerate() {
             texts.read_ahead(element(&name, ix), at(ix), block.leaves.clone());
         }
         (self.texts, self.selection) = (texts, selection);
@@ -85,14 +105,19 @@ impl Document {
         self.selection.all_as_copied()
     }
 
-    /// The `ix`th block, in the chat's column, with room above the first and below the last.
-    fn block(&self, ix: usize) -> AnyElement {
+    /// The `ix`th block, in the chat's column, marked with how it changed, with room above the first and below the
+    /// last.
+    fn block(&self, ix: usize, cx: &App) -> AnyElement {
         let Some(shown) = &self.shown else { return div().into_any_element() };
-        let Some(block) = shown.blocks.get(ix) else { return div().into_any_element() };
+        let Some((block, change)) = shown.blocks.get(ix) else { return div().into_any_element() };
+        // One marked has no gap above or below it, which would be tinted, and its marks keep it apart.
+        let flow =
+            if *change == Change::Kept { block.flow } else { block.flow.map(|flow| flow.first(true).last(true)) };
         let written =
-            Written::unfound(at(ix), element(&shown.name, ix), &block.source).block_of_a_text(block.flow, block.shown);
+            Written::unfound(at(ix), element(&shown.name, ix), &block.source).block_of_a_text(flow, block.shown);
         let text = self.texts.drawing(Of::Document(ix), || self.texts.draw(&self.selection, &written, None));
-        let column = in_column(text);
+        let kept_next = shown.blocks.get(ix + 1).is_some_and(|(_, next)| *next == Change::Kept);
+        let column = in_column(marked(text, *change, kept_next, cx));
         let column = if ix == 0 { column.pt(look::Space::XLarge) } else { column };
         let last = ix + 1 == shown.blocks.len();
         if last { column.pb(look::Space::XLarge) } else { column }.into_any_element()
@@ -103,11 +128,35 @@ impl Render for Document {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         // Before the blocks are drawn, so the texts and the selection forget what the last frame drew.
         self.selection.new_frame();
-        let blocks = list(self.list.clone(), cx.processor(|this, ix, _, _| this.block(ix))).size_full();
+        let blocks = list(self.list.clone(), cx.processor(|this, ix, _, cx| this.block(ix, cx))).size_full();
         let frames =
             Frames { scrolled: blocks.into_any_element(), list: self.list.clone(), selection: self.selection.clone() };
         self.selection.with_keys(div().size_full().child(frames))
     }
+}
+
+/// A block, marked with how it changed: one removed struck through on red, and one added on green, each with a bar
+/// down its left edge, and a paragraph's gap below if `kept_next`, a block that didn't change, is after it.
+fn marked(text: AnyElement, change: Change, kept_next: bool, cx: &App) -> AnyElement {
+    let (colors, struck) = match change {
+        Change::Kept => return text,
+        Change::Removed => (look::colors(cx), true),
+        Change::Added => (look::colors(cx), false),
+    };
+    let tint = if struck { colors.removed } else { colors.added };
+    let block = div()
+        .w_full()
+        .my(px(2.))
+        .pl(look::Space::Medium)
+        .pr(look::Space::Small)
+        .py(look::Space::XSmall)
+        .border_l(px(2.))
+        .border_color(tint)
+        .bg(tint.opacity(0.12))
+        .rounded_r(px(4.))
+        .when(kept_next, |block| block.mb(look::Space::Medium));
+    let block = if struck { block.text_color(colors.text_muted).line_through() } else { block };
+    block.child(text).into_any_element()
 }
 
 /// Texts of a document's own, and their selection, which takes the keys while `focus` has them.
