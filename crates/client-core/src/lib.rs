@@ -16,6 +16,7 @@ pub mod file_text;
 pub mod hints;
 pub mod records;
 pub mod session_log;
+pub mod standing;
 pub mod waits;
 
 mod agents;

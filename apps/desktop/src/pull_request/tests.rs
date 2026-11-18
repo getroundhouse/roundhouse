@@ -1,23 +1,8 @@
 use look::Work;
 use protocol::model::{Checks, Local, MergeState, PrState, PullRequest, QueueState, Review, Standing};
 
-use super::words::{action, title, work};
+use super::words::{action, work};
 use super::{Action, Ask, Lookup};
-
-#[test]
-fn the_bar_says_how_many_and_of_what() {
-    let failing = Checks { passed: 6, failed: 2, pending: 1 };
-
-    assert_eq!(title(Standing::ChecksFailed(failing), Some("main")), "2 checks failed");
-    assert_eq!(
-        title(Standing::ChecksRunning(Checks { pending: 1, ..Checks::default() }), Some("main")),
-        "1 check running"
-    );
-    assert_eq!(title(Standing::Unpushed(3), Some("main")), "3 commits to push");
-    assert_eq!(title(Standing::Uncommitted(1), Some("main")), "1 uncommitted file");
-    assert_eq!(title(Standing::Conflicts, Some("trunk")), "Conflicts with trunk");
-    assert_eq!(title(Standing::Conflicts, None), "Conflicts with its base");
-}
 
 #[test]
 fn what_waits_on_someone_else_offers_nothing_to_do() {

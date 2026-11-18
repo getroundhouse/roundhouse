@@ -99,7 +99,7 @@ pub fn bar(
             .into_any_element();
     };
     let pr = lookup.pull_request();
-    let title = words::title(standing, pr.and_then(|pr| pr.base.as_ref()).map(BranchName::as_str));
+    let title = client_core::standing::title(standing, pr.and_then(|pr| pr.base.as_ref()).map(BranchName::as_str));
     let text = if pr.is_some() { work.text(colors) } else { colors.text_muted };
     let title = div()
         .flex_1()

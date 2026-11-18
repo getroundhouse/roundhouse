@@ -187,16 +187,10 @@ impl Standing {
     /// problems it can't merge with before what it waits on.
     pub fn of(pull_request: Option<&PullRequest>) -> Self {
         let Some(pr) = pull_request else { return Standing::NoPullRequest };
+        if let Some(done_or_queued) = Self::done_or_queued(pr) {
+            return done_or_queued;
+        }
         let local = pr.local;
-        match pr.state {
-            PrState::Merged => return Standing::Merged,
-            PrState::Closed => return Standing::Closed,
-            PrState::Unknown => return Standing::Unknown,
-            PrState::Open => {}
-        }
-        if let Some(queue) = pr.queue {
-            return Standing::Queued(queue);
-        }
         if local.uncommitted > 0 {
             return Standing::Uncommitted(local.uncommitted);
         }
@@ -207,6 +201,21 @@ impl Standing {
             _ => return Standing::Diverged,
         }
         Self::on_github(pr)
+    }
+
+    /// Where it stands by what GitHub says alone, leaving out the worktree, which a wait on it goes by.
+    pub fn on_github_alone(pr: &PullRequest) -> Self {
+        Self::done_or_queued(pr).unwrap_or_else(|| Self::on_github(pr))
+    }
+
+    fn done_or_queued(pr: &PullRequest) -> Option<Self> {
+        match pr.state {
+            PrState::Merged => return Some(Standing::Merged),
+            PrState::Closed => return Some(Standing::Closed),
+            PrState::Unknown => return Some(Standing::Unknown),
+            PrState::Open => {}
+        }
+        pr.queue.map(Standing::Queued)
     }
 
     pub(super) fn on_github(pr: &PullRequest) -> Self {

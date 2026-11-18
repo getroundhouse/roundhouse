@@ -1,7 +1,7 @@
 //! What the bar says for each standing, its colour, and the one thing it offers to do about it.
 
 use look::Work;
-use protocol::model::{Checks, QueueState, Standing};
+use protocol::model::Standing;
 
 /// The bar's main action.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -50,49 +50,6 @@ pub(crate) fn work(standing: Standing) -> Work {
         | Standing::Blocked
         | Standing::Checking => Work::Open,
     }
-}
-
-/// What the bar says. `base` is the branch it merges into, if the hub says.
-pub(crate) fn title(standing: Standing, base: Option<&str>) -> String {
-    match standing {
-        Standing::NoPullRequest => "No pull request".to_string(),
-        Standing::Merged => "Merged".to_string(),
-        Standing::Closed => "Closed".to_string(),
-        Standing::Queued(queue) => queued(queue).to_string(),
-        Standing::Uncommitted(files) => count(files, "uncommitted file"),
-        Standing::Diverged => "Diverged from GitHub".to_string(),
-        Standing::Behind(commits) => format!("{} to pull", count(commits, "commit")),
-        Standing::Unpushed(commits) => format!("{} to push", count(commits, "commit")),
-        Standing::Conflicts => format!("Conflicts with {}", base.unwrap_or("its base")),
-        Standing::ChangesRequested => "Changes requested".to_string(),
-        Standing::Draft => "Draft".to_string(),
-        Standing::ChecksFailed(checks) => failed(checks),
-        Standing::ChecksRunning(checks) => format!("{} running", count(checks.pending, "check")),
-        Standing::ReviewRequired => "Review required".to_string(),
-        Standing::Blocked => "Blocked from merging".to_string(),
-        Standing::Checking => "Checking whether it can merge".to_string(),
-        Standing::Ready => "Ready to merge".to_string(),
-        // The number beside it opens it there.
-        Standing::Unknown => "See it on GitHub".to_string(),
-    }
-}
-
-fn queued(queue: QueueState) -> &'static str {
-    match queue {
-        QueueState::AwaitingChecks => "Running checks in the queue",
-        QueueState::Locked => "Merge queue locked",
-        QueueState::Unmergeable => "Failed in the merge queue",
-        QueueState::Mergeable | QueueState::Queued | QueueState::Unknown => "Queued to merge",
-    }
-}
-
-/// Only how many failed, which is what there is to do, so it fits beside the action.
-fn failed(checks: Checks) -> String {
-    format!("{} failed", count(checks.failed, "check"))
-}
-
-fn count(n: u32, thing: &str) -> String {
-    if n == 1 { format!("1 {thing}") } else { format!("{n} {thing}s") }
 }
 
 /// What there is to do, if anything is ours to do. What waits on GitHub or on someone else offers nothing, and so
