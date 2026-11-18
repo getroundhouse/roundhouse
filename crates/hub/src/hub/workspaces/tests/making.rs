@@ -1,13 +1,20 @@
 //! Making a workspace, with a stand-in for its worker, and settling one an earlier hub left part way through being
 //! archived or restored.
 
-use protocol::client::{ApiError, ErrorCode, HubNotice};
-use protocol::model::{AgentKind, ClientRequestId, RecordKey, SessionSettingsChange, WorkspaceId, WorkspaceStatus};
-use protocol::worker::{PrepareWorkspace, RepoSource, WorkerRequest, WorkerResponse, WorktreeThereReply};
+use std::sync::Arc;
 
-use crate::hub::stand_in_workers::{hub_whose_stand_ins_answer_first, hub_with_stand_in_workers};
-use crate::hub::tests::{hub_in, serving};
+use parking_lot::Mutex;
+use protocol::client::{ApiError, ErrorCode, HubNotice};
+use protocol::model::{
+    AgentKind, Branch, Branches, ClientRequestId, Head, RecordKey, SessionSettingsChange, SetupStatus, WorkspaceId,
+    WorkspaceStatus,
+};
+use protocol::worker::{PrepareWorkspace, RepoSource, SetupDone, WorkerRequest, WorkerResponse, WorktreeThereReply};
+
+use crate::hub::stand_in_workers::{TIMEOUT, hub_whose_stand_ins_answer_first, hub_with_stand_in_workers};
+use crate::hub::tests::{hub_looking_often, serving};
 use crate::store::{Ended, Move};
+use crate::timers::Timers;
 use crate::worker_link::WorkerLink;
 
 /// The worktree a worker was asked to make.
@@ -96,28 +103,33 @@ async fn a_request_sent_again_gets_what_it_made_however_things_have_changed_sinc
 /// didn't put it back, got no further than that, so the workspace is as it was. An archive that removed it is done, on
 /// the branch the worktree was last seen on, and a restore that put it back is done, and sets the worktree up again,
 /// as one that wasn't cut short does. One the worker can't say of is put back as it was.
+///
+/// Then its worker is dealt with as the workspace now is: an archived one's is asked to stop, and a ready one's to
+/// watch the worktree's branches, as one the hub carries on with is, and to stop once nothing is at work in it, if
+/// it's another build's. A restore that put the worktree back has it watch them as it's recorded, as one that wasn't
+/// cut short does, and again once it's settled.
 #[tokio::test]
 async fn a_move_cut_short_is_settled_by_whether_its_worker_says_the_worktree_is_there() {
     use WorkspaceStatus::{Archived, Ready};
-    use protocol::model::{Branch, Branches, Head, SetupStatus};
-    use protocol::worker::SetupDone;
     let there = |there| Ok(WorkerResponse::WorktreeThere(WorktreeThereReply { there }));
     let cant_say = Err(ApiError::new(ErrorCode::Worker, "a worker that doesn't know the question"));
-    let (seen_on, made_on) = ("fix-the-login-bug", "alder");
+    let (seen_on, made_on, ours, another) = ("fix-the-login-bug", "alder", None, Some("0.9.0"));
     let last_seen = Branch { name: seen_on.into(), tip: "c1".into(), upstream: None };
     let last_seen = Branches { head: Head::Branch { name: seen_on.into() }, had: vec![last_seen] };
+    let (watched, stopped, replaced) = (&[WATCH][..], &[STOP][..], &[WATCH, STOP][..]);
     let cases = [
-        ("an archive that left the worktree", Move::Archive, there(true), (Ready, made_on, false)),
-        ("an archive that removed it", Move::Archive, there(false), (Archived, seen_on, false)),
-        ("a restore that put it back", Move::Restore, there(true), (Ready, made_on, true)),
-        ("a restore that didn't", Move::Restore, there(false), (Archived, made_on, false)),
-        ("an archive the worker can't say of", Move::Archive, cant_say, (Ready, made_on, false)),
+        ("an archive that left the worktree", Move::Archive, there(true), ours, (Ready, made_on, false), watched),
+        ("an archive that removed it", Move::Archive, there(false), ours, (Archived, seen_on, false), stopped),
+        ("a restore that put it back", Move::Restore, there(true), ours, (Ready, made_on, true), &[WATCH, WATCH]),
+        ("a restore that didn't", Move::Restore, there(false), ours, (Archived, made_on, false), stopped),
+        ("an archive the worker can't say of", Move::Archive, cant_say, ours, (Ready, made_on, false), watched),
+        ("an archive another build left", Move::Archive, there(true), another, (Ready, made_on, false), replaced),
     ];
 
-    let mut wrong = Vec::new();
-    for (name, moving, said, settled) in cases {
+    let (mut wrong, mut settled_by) = (Vec::new(), Vec::new());
+    for (name, moving, said, build, settled, dealt_with) in cases {
         let dir = tempfile::tempdir().unwrap();
-        let hub = hub_in(dir.path());
+        let hub = hub_looking_often(dir.path());
         let id = WorkspaceId::from("w");
         let worktree = dir.path().join("ws/alder");
         std::fs::create_dir_all(&worktree).unwrap();
@@ -128,17 +140,8 @@ async fn a_move_cut_short_is_settled_by_whether_its_worker_says_the_worktree_is_
             hub.store.end_move(&id, Move::Archive, Ended::Done).unwrap();
             hub.store.start_move(&id, Move::Restore).unwrap();
         }
-        // Its setup script passes, and it does whatever else it's asked.
-        let link = WorkerLink::answering(move |request| {
-            Some(if let WorkerRequest::WorktreeThere(_) = request {
-                said.clone()
-            } else if let WorkerRequest::SetupWorkspace(_) = request {
-                Ok(WorkerResponse::SetupDone(SetupDone { code: Some(0) }))
-            } else {
-                Ok(WorkerResponse::Ok)
-            })
-        });
-        serving(&hub, &link);
+        let (link, asked) = worker_saying(said);
+        serving(&hub, &build.map_or(link.clone(), |build| link.of_build(build)));
 
         hub.clone().settle_moves(vec![(id.clone(), moving)]).await;
 
@@ -148,6 +151,46 @@ async fn a_move_cut_short_is_settled_by_whether_its_worker_says_the_worktree_is_
         if got != settled {
             wrong.push(format!("{name}: {got:?}, not {settled:?}"));
         }
+        if waiting::task::up_to(TIMEOUT, || *asked.lock() == dealt_with).await {
+            settled_by.push((name, dir, hub, asked, dealt_with));
+        } else {
+            wrong.push(format!("{name}: its worker was asked {:?}, not {dealt_with:?}", asked.lock()));
+        }
     }
-    assert!(wrong.is_empty(), "status, branch and whether it was set up again, as each was settled: {wrong:#?}");
+    // Nothing says a worker won't be replaced, so each hub is given a few looks to replace one it mustn't.
+    waiting::task::for_what_mustnt_happen(Timers::FOR_TESTS.look_every * 5).await;
+    for (name, _, _, asked, dealt_with) in &settled_by {
+        if *asked.lock() != *dealt_with {
+            wrong.push(format!("{name}: its worker was then asked {:?}, not only {dealt_with:?}", asked.lock()));
+        }
+    }
+    assert!(wrong.is_empty(), "status, branch, whether it was set up again, and what its worker was asked: {wrong:#?}");
+}
+
+/// One of what a worker is asked that says what becomes of it: to watch the worktree's branches.
+const WATCH: &str = "watch the branches";
+/// The other: to stop.
+const STOP: &str = "stop";
+
+/// A stand-in for a worker that says `said` of whether the worktree is there, passes its setup script, and does
+/// whatever else it's asked, and which of [`WATCH`] and [`STOP`] it was asked, in order.
+fn worker_saying(said: Result<WorkerResponse, ApiError>) -> (Arc<WorkerLink>, Arc<Mutex<Vec<&'static str>>>) {
+    let asked = Arc::new(Mutex::new(Vec::new()));
+    let kept = asked.clone();
+    let link = WorkerLink::answering(move |request| {
+        if let WorkerRequest::WatchBranches(_) = request {
+            kept.lock().push(WATCH);
+        }
+        if let WorkerRequest::Stop = request {
+            kept.lock().push(STOP);
+        }
+        Some(if let WorkerRequest::WorktreeThere(_) = request {
+            said.clone()
+        } else if let WorkerRequest::SetupWorkspace(_) = request {
+            Ok(WorkerResponse::SetupDone(SetupDone { code: Some(0) }))
+        } else {
+            Ok(WorkerResponse::Ok)
+        })
+    });
+    (link, asked)
 }
