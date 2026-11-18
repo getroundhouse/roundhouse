@@ -336,11 +336,12 @@ impl Store {
         workspace_on(&lock(&self.reader), id)
     }
 
+    /// Every workspace, but for those archived unless `include_archived`, as [`Workspace::oldest_first`] orders them.
     pub fn list_workspaces(&self, include_archived: bool) -> Result<Vec<Workspace>, StoreError> {
         let conn = lock(&self.reader);
         let filter = if include_archived { "" } else { "WHERE status != 'archived'" };
         let mut statement = conn.prepare_cached(&format!(
-            "SELECT {WORKSPACE_COLUMNS}, rev FROM workspaces {filter} ORDER BY created_at_ms"
+            "SELECT {WORKSPACE_COLUMNS}, rev FROM workspaces {filter} ORDER BY created_at_ms, id"
         ))?;
         let rows = statement.query_map([], workspace_from_row)?;
         rows.collect::<rusqlite::Result<_>>().map_err(StoreError::from)

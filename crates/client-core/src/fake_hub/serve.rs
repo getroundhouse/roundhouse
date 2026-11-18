@@ -17,8 +17,8 @@ use protocol::event::SessionEvent;
 use protocol::find::{Found, Needle};
 use protocol::frame;
 use protocol::model::{
-    CompactionLine, GitDiff, GitStatus, GithubSignIn, Place, PromptLine, Rev, Seq, SessionId, SettledAt, SubagentId,
-    WorkspaceStatus,
+    CompactionLine, GitDiff, GitStatus, GithubSignIn, Place, PromptLine, Rev, Seq, Session, SessionId, SettledAt,
+    SubagentId,
 };
 
 use super::base_pages::{opened, paged};
@@ -80,7 +80,7 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
             hub_version: version(world).to_string(),
         })),
         R::HubStatus => reply(C::HubStatus(status(world))),
-        R::RepoList => reply(C::Repos(records::Repos { repos: world.repos.clone() })),
+        R::RepoList => reply(C::Repos(records::Repos { repos: world.repos_listed() })),
         R::RecordsList => reply(C::Records(world.records())),
         R::ModelsFor(asked) => reply(C::ModelList(world.model_list_for(&asked)?)),
         // As the app's own hub describes its agent, even as an older hub, so a screen of one draws the agent as it
@@ -89,14 +89,7 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
             reply(C::Agents(admin::Agents { agents: world.agents.clone().unwrap_or_else(|| vec![claude(world)]) }))
         }
         R::WorkspaceList(workspaces::WorkspaceList { include_archived }) => {
-            reply(C::Workspaces(workspaces::Workspaces {
-                workspaces: world
-                    .workspaces
-                    .iter()
-                    .filter(|w| include_archived || w.status != WorkspaceStatus::Archived)
-                    .cloned()
-                    .collect(),
-            }))
+            reply(C::Workspaces(workspaces::Workspaces { workspaces: world.workspaces_listed(include_archived) }))
         }
         R::WorkspaceStatus(_) => reply(C::GitStatus(GitStatus::default())),
         R::WorkspaceDiff(workspaces::WorkspaceDiff { id }) => {
@@ -108,12 +101,12 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
         R::WorkspacePullRequest(workspaces::WorkspacePullRequest { id }) => {
             reply(C::PullRequest(workspaces::PullRequestReply { pull_request: world.pull_requests.get(&id).cloned() }))
         }
-        R::CommentList(comments::CommentList { workspace_id }) => reply(C::Comments(comments::Comments {
-            comments: world.comments.get(&workspace_id).cloned().unwrap_or_default(),
-        })),
-        R::SessionList(sessions::SessionList { workspace_id }) => reply(C::Sessions(sessions::Sessions {
-            sessions: world.sessions.iter().filter(|s| s.workspace_id == workspace_id).cloned().collect(),
-        })),
+        R::CommentList(comments::CommentList { workspace_id }) => {
+            reply(C::Comments(comments::Comments { comments: world.comments_listed(&workspace_id) }))
+        }
+        R::SessionList(sessions::SessionList { workspace_id }) => {
+            reply(C::Sessions(sessions::Sessions { sessions: world.sessions_listed(&workspace_id) }))
+        }
         // A draft is taken as a hub that keeps it would, though it's left out of the world's records, which don't
         // change. So is an answer being typed.
         R::SessionGet(sessions::SessionGet { id })
@@ -145,8 +138,8 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
             Err(ApiError::new(ErrorCode::Unsupported, "a fake hub doesn't keep what's in the new-workspace dialog"))
         }
         R::SessionEnsure(sessions::SessionEnsure { workspace_id, .. }) => {
-            let open = world.sessions.iter().rev().find(|s| s.workspace_id == workspace_id && s.is_open());
-            reply(C::Session(open.cloned().ok_or_else(|| read_only("give this workspace a chat"))?))
+            let open = world.sessions_listed(&workspace_id).into_iter().rfind(Session::is_open);
+            reply(C::Session(open.ok_or_else(|| read_only("give this workspace a chat"))?))
         }
         R::SessionRead(log::SessionRead { id, from_seq, limit, max_bytes, .. }) => {
             let session = world.session(&id)?;

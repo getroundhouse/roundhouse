@@ -111,6 +111,11 @@ impl Workspace {
     pub fn last_active_at_ms(&self) -> i64 {
         self.user_active_at_ms.map_or(self.created_at_ms, |at| at.max(self.created_at_ms))
     }
+
+    /// The order a hub lists workspaces in, and a client keeps them: oldest first, by when each was made, then by ID.
+    pub fn oldest_first(&self, other: &Workspace) -> std::cmp::Ordering {
+        (self.created_at_ms, &self.id).cmp(&(other.created_at_ms, &other.id))
+    }
 }
 
 /// Where a workspace's setup has got to. Copying local files counts, even with no script to run.

@@ -114,23 +114,22 @@ impl Listed {
             }
         }
         listed.github.order();
-        listed.repos.sort_by(|a, b| (&a.name, &a.id).cmp(&(&b.name, &b.id)));
+        listed.repos.sort_by(Repo::by_name);
         listed.repo_at = listed.repos.iter().enumerate().map(|(at, repo)| (repo.id.clone(), at)).collect();
-        workspaces.sort_by(|(a, _), (b, _)| (a.created_at_ms, &a.id).cmp(&(b.created_at_ms, &b.id)));
+        workspaces.sort_by(|(a, _), (b, _)| a.oldest_first(b));
         listed.workspace_at = workspaces
             .iter()
             .enumerate()
             .map(|(at, (workspace, taken))| (workspace.id.clone(), (at, *taken)))
             .collect();
         listed.workspaces = workspaces.into_iter().map(|(workspace, _)| workspace).collect();
-        let oldest_first = |a: &Session, b: &Session| (a.created_at_ms, &a.id).cmp(&(b.created_at_ms, &b.id));
-        listed.sessions = sessions.into_iter().map(|(id, its)| (id, Group::of(its, oldest_first))).collect();
+        listed.sessions = sessions.into_iter().map(|(id, its)| (id, Group::of(its, Session::oldest_first))).collect();
         for (workspace, its) in &listed.sessions {
             let at = its.items.iter().enumerate().map(|(at, session)| (session.id.clone(), (workspace.clone(), at)));
             listed.session_at.extend(at);
         }
-        let oldest_first = |a: &DiffComment, b: &DiffComment| (a.created_at_ms, &a.id).cmp(&(b.created_at_ms, &b.id));
-        listed.comments = comments.into_iter().map(|(id, its)| (id, Group::of(its, oldest_first))).collect();
+        listed.comments =
+            comments.into_iter().map(|(id, its)| (id, Group::of(its, DiffComment::oldest_first))).collect();
         let first_opened_first = |a: &Terminal, b: &Terminal| (a.opened_at_ms, &a.id).cmp(&(b.opened_at_ms, &b.id));
         listed.terminals = terminals.into_iter().map(|(id, its)| (id, Group::of(its, first_opened_first))).collect();
         listed

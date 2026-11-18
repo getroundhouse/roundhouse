@@ -23,3 +23,11 @@ pub struct DiffComment {
     #[serde(default)]
     pub rev: Rev,
 }
+
+impl DiffComment {
+    /// The order a hub lists comments in, and a client shows a workspace's: oldest first, by when each was made, then
+    /// by ID.
+    pub fn oldest_first(&self, other: &DiffComment) -> std::cmp::Ordering {
+        (self.created_at_ms, &self.id).cmp(&(other.created_at_ms, &other.id))
+    }
+}

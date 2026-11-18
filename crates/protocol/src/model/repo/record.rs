@@ -14,6 +14,13 @@ pub struct Repo {
     pub rev: Rev,
 }
 
+impl Repo {
+    /// The order a hub lists repositories in, and a client shows them: by name, then by ID.
+    pub fn by_name(&self, other: &Repo) -> std::cmp::Ordering {
+        (&self.name, &self.id).cmp(&(&other.name, &other.id))
+    }
+}
+
 /// How a repository goes on the wire: its [`Repo::origin`] as `origin`, and its checkout as `path` beside it, for the
 /// clients from before `origin`, which read only `path`.
 #[derive(Serialize, Deserialize)]

@@ -18,19 +18,23 @@ use super::workspaces::{WORKSPACE_COLUMNS, workspace_from_row};
 use super::{Store, StoreError, current_rev, lock};
 
 impl Store {
-    /// Read in one transaction, so it's everything as of one revision.
+    /// Read in one transaction, so it's everything as of one revision. Repositories, workspaces, sessions and comments
+    /// are each in the order `protocol` lists them in, as [`Repo::by_name`] and the `oldest_first` of each of the others
+    /// say.
+    ///
+    /// [`Repo::by_name`]: protocol::model::Repo::by_name
     pub fn list_records(&self) -> Result<Records, StoreError> {
         let mut conn = lock(&self.reader);
         let tx = conn.transaction()?;
         let sessions =
-            rows(&tx, &format!("SELECT {SESSION_COLUMNS}, rev FROM sessions ORDER BY created_at_ms"), |row| {
+            rows(&tx, &format!("SELECT {SESSION_COLUMNS}, rev FROM sessions ORDER BY created_at_ms, id"), |row| {
                 session_from_row(row).map(|stored| stored.session)
             })?;
         let records = Records {
-            repos: rows(&tx, &format!("SELECT {REPO_COLUMNS}, rev FROM repos ORDER BY name"), repo_from_row)?,
+            repos: rows(&tx, &format!("SELECT {REPO_COLUMNS}, rev FROM repos ORDER BY name, id"), repo_from_row)?,
             workspaces: rows(
                 &tx,
-                &format!("SELECT {WORKSPACE_COLUMNS}, rev FROM workspaces ORDER BY created_at_ms"),
+                &format!("SELECT {WORKSPACE_COLUMNS}, rev FROM workspaces ORDER BY created_at_ms, id"),
                 workspace_from_row,
             )?,
             sessions,
