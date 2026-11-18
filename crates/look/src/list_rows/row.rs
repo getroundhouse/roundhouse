@@ -24,8 +24,9 @@ pub fn list_row(id: impl Into<ElementId>, size: RowSize) -> ListRow {
         id: id.into(),
         size,
         chosen: false,
+        wraps: false,
         indent: px(0.),
-        listed: None,
+        role: None,
         tooltip: None,
         on_click: None,
         children: Vec::new(),
@@ -41,8 +42,9 @@ pub struct ListRow {
     id: ElementId,
     size: RowSize,
     chosen: bool,
+    wraps: bool,
     indent: Pixels,
-    listed: Option<SharedString>,
+    role: Option<(Role, SharedString)>,
     tooltip: Option<SharedString>,
     on_click: Option<OnClick>,
     children: Vec<AnyElement>,
@@ -55,6 +57,13 @@ impl ListRow {
         self
     }
 
+    /// As tall as what it holds, at least its size's height, with its room above and below what it holds as well as
+    /// at its ends, and what it holds at its top, such as a prompt of two lines in the outline.
+    pub fn wraps(mut self) -> Self {
+        self.wraps = true;
+        self
+    }
+
     /// Set in by `indent` after its start, such as a file in a folder.
     pub fn indent(mut self, indent: Pixels) -> Self {
         self.indent = indent;
@@ -64,7 +73,13 @@ impl ListRow {
     /// One option of a list to choose from, called `label` to assistive apps, which say whether it's chosen, such as a
     /// page of Settings.
     pub fn listed(mut self, label: impl Into<SharedString>) -> Self {
-        self.listed = Some(label.into());
+        self.role = Some((Role::ListBoxOption, label.into()));
+        self
+    }
+
+    /// A link, called `label` to assistive apps, such as a page a web search found.
+    pub fn link(mut self, label: impl Into<SharedString>) -> Self {
+        self.role = Some((Role::Link, label.into()));
         self
     }
 
@@ -106,7 +121,13 @@ impl RenderOnce for ListRow {
             .relative()
             .flex_none()
             .w_full()
-            .h(self.size.height())
+            .map(|row| {
+                if self.wraps {
+                    row.min_h(self.size.height()).py(room).items_start()
+                } else {
+                    row.h(self.size.height())
+                }
+            })
             .pl(room.size() + self.indent)
             .pr(room)
             .gap(room)
@@ -115,8 +136,9 @@ impl RenderOnce for ListRow {
             .hand()
             .when(self.chosen, |row| row.bg(colors.text.opacity(CHOSEN)))
             .when(!self.chosen, |row| row.hover(|row| row.bg(colors.text.opacity(UNDER_POINTER))))
-            .when_some(self.listed, |row, label| {
-                row.role(Role::ListBoxOption).aria_label(label).aria_selected(self.chosen)
+            .when_some(self.role, |row, (role, label)| {
+                let row = row.role(role).aria_label(label);
+                if role == Role::ListBoxOption { row.aria_selected(self.chosen) } else { row }
             })
             .when_some(self.tooltip, |row, words| row.tooltip(crate::tooltip(words)))
             .when_some(self.on_click, |row, on_click| {

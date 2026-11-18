@@ -94,7 +94,9 @@ A key in one of the kit's menus is the kit's, from the action it's bound to, so 
 | Put what it holds in it, in a line from its start | `child`, `children` |
 | Wash it as chosen, such as the file showing | `chosen` |
 | Set it in after its start, such as a file in a folder | `indent` |
+| Let it grow to what it holds, such as a prompt of two lines | `wraps` |
 | Make it an option of a list to choose from, which assistive apps say is chosen, such as a page of Settings | `listed` |
+| Make it a link, such as a page a web search found | `link` |
 | Do something when it's clicked, or say more while the pointer rests on it | `on_click`, `tooltip` |
 
 ## Menus
