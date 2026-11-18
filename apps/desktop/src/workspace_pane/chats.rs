@@ -6,8 +6,8 @@ use client_core::ClientError;
 use client_core::records::InWorkspace;
 use gpui_kit::{AppContext, Context, Result, Window};
 use protocol::capability::settings::Settings;
-use protocol::client::ErrorCode;
-use protocol::model::{Record, Session, SessionId, TerminalId};
+use protocol::client::{ApiError, ErrorCode};
+use protocol::model::{Session, SessionId, TerminalId};
 use transcript::{Transcript, TranscriptEvent};
 
 use super::attaching::Composed;
@@ -87,7 +87,7 @@ impl WorkspacePane {
     fn chat_created(&mut self, created: Result<Session, client_core::ClientError>, cx: &mut Context<Self>) {
         self.creating_chat = false;
         match created {
-            Ok(session) => self.took_chat_to_show(session, cx),
+            Ok(session) => self.show_chat_once_open(session.id, cx),
             Err(e) => cx.emit(PaneEvent::Error(format!("couldn't start a chat: {e}"))),
         }
         if let Some(agent) = self.chats_asked_for.pop_front() {
@@ -259,10 +259,9 @@ impl WorkspacePane {
         let closing = self.client.start(move |client| client.session_close(&id));
         cx.spawn(async move |this, cx| {
             let closed = closing.recv().await;
-            let _ = this.update(cx, |t, cx| match closed {
-                Ok(session) => t.took_reply(session, cx),
+            let _ = this.update(cx, |_, cx| match closed {
                 // Deleted already, because nothing was sent in it, so closing it again has nothing left to do.
-                Err(ClientError::Api(e)) if e.code == ErrorCode::NotFound => {}
+                Ok(_) | Err(ClientError::Api(ApiError { code: ErrorCode::NotFound, .. })) => {}
                 Err(e) => cx.emit(PaneEvent::Error(format!("couldn't close the chat: {e}"))),
             });
         })
@@ -274,7 +273,7 @@ impl WorkspacePane {
         cx.spawn(async move |this, cx| {
             let reopened = reopening.recv().await;
             let _ = this.update(cx, |t, cx| match reopened {
-                Ok(session) => t.took_chat_to_show(session, cx),
+                Ok(session) => t.show_chat_once_open(session.id, cx),
                 Err(e) => cx.emit(PaneEvent::Error(format!("couldn't reopen the chat: {e}"))),
             });
         })
@@ -293,25 +292,18 @@ impl WorkspacePane {
         let renaming = self.client.start(move |client| client.session_rename(&id, &title));
         cx.spawn(async move |this, cx| {
             let renamed = renaming.recv().await;
-            let _ = this.update(cx, |t, cx| match renamed {
-                Ok(session) => t.took_reply(session, cx),
-                Err(e) => cx.emit(PaneEvent::Error(Renaming::Chat.failed(&e))),
-            });
+            if let Err(e) = renamed {
+                let _ = this.update(cx, |_, cx| cx.emit(PaneEvent::Error(Renaming::Chat.failed(&e))));
+            }
         })
         .detach();
     }
 
-    /// Passes on a session a reply carried, for client-core's copy, which this then shows like any other
-    /// change.
-    pub fn took_reply(&mut self, session: Session, cx: &mut Context<Self>) {
-        self.records.take_reply(Record::Session(session));
+    /// Shows the chat `id` once what the pane shows of the records has it open, which it may already, since client-core
+    /// takes in the record a reply carries before the reply comes.
+    fn show_chat_once_open(&mut self, id: SessionId, cx: &mut Context<Self>) {
+        self.showing_next = Some(Next::Chat(id));
         self.show_next(cx);
-    }
-
-    /// The same, and the chat becomes the one showing once client-core's copy has it open.
-    fn took_chat_to_show(&mut self, session: Session, cx: &mut Context<Self>) {
-        self.showing_next = Some(Next::Chat(session.id.clone()));
-        self.took_reply(session, cx);
     }
 
     /// The workspace's sessions have changed since `earlier`, which the pane showed before.

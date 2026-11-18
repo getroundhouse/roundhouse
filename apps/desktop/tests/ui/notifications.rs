@@ -112,7 +112,7 @@ fn reading_a_chat_takes_its_notification_back(cx: &mut TestAppContext) {
 
 /// One that waits on you isn't read, so nothing on its record changes as it shows, and showing it in its workspace is
 /// what takes its notification back. Which chat is read is the app's, so a fake hub will do, and the chat's coming to
-/// wait is handed to client-core as a reply would hand it, since what a fake hub holds never changes.
+/// wait is handed to client-core as the feed would hand it, since what a fake hub holds never changes.
 #[gpui_kit::test]
 fn showing_a_chat_that_waits_on_you_takes_its_notification_back(cx: &mut TestAppContext) {
     let mut world = World::default();
@@ -129,7 +129,7 @@ fn showing_a_chat_that_waits_on_you_takes_its_notification_back(cx: &mut TestApp
     ui.show_chat(&reading);
     let mut waiting = ui.view().records().session(&asking).unwrap().clone();
     waiting.status = SessionStatus::WaitingApproval;
-    ui.view().feed().unwrap().take_reply(Record::Session(waiting));
+    ui.view().feed().unwrap().take_record(Record::Session(waiting));
     let note = told_of_saying(&mut ui, &workspace, "Waiting on you");
 
     ui.show_chat(&asking);

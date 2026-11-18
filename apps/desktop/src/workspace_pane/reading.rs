@@ -126,11 +126,11 @@ impl WorkspacePane {
                 {
                     chat.marking = None;
                 }
-                match marked {
-                    Ok(session) => t.took_reply(session, cx),
-                    // A hub older than this app keeps no replies, so it has none to mark.
-                    Err(e) if e.is_unsupported() => {}
-                    Err(e) => cx.emit(PaneEvent::Error(format!("couldn't mark the chat {}: {e}", mark.word()))),
+                // A hub older than this app keeps no replies, so it has none to mark.
+                if let Err(e) = marked
+                    && !e.is_unsupported()
+                {
+                    cx.emit(PaneEvent::Error(format!("couldn't mark the chat {}: {e}", mark.word())));
                 }
                 cx.notify();
             });

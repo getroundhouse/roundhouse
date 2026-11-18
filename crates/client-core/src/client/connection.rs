@@ -1,3 +1,4 @@
+use super::feed::Folding;
 use super::transport::{Closer, Transport};
 use super::{commands, lines, queueing};
 use parking_lot::Mutex;
@@ -137,6 +138,7 @@ pub(super) struct Inner {
     pub(super) given: Mutex<HashSet<(SessionId, AttachmentId)>>,
     /// Each chat's prompts being queued from here that the hub hasn't answered for yet.
     pub(super) queueing: Arc<queueing::Queueing>,
+    pub(super) folding: Folding,
 }
 
 impl Inner {
@@ -226,6 +228,7 @@ impl Client {
             lines: Arc::default(),
             given: Mutex::default(),
             queueing: Arc::default(),
+            folding: Folding::default(),
         });
         let for_reader = inner.clone();
         std::thread::Builder::new()
@@ -246,13 +249,14 @@ impl Client {
     }
 
     /// Sends `request` and waits for its reply, read as what the request names. A reply of any other kind fails it, with
-    /// [`ClientError::Unexpected`].
+    /// [`ClientError::Unexpected`]. Each feed following this connection has taken in any record it carries by then.
     pub fn call<R: Request>(&self, request: R) -> Result<R::Reply> {
         self.call_until(request, None)
     }
 
     pub(super) fn call_until<R: Request>(&self, request: R, deadline: Option<Instant>) -> Result<R::Reply> {
         let response = self.exchange_until(request.into_request(), deadline)?;
+        self.inner.folding.fold(&response);
         R::Reply::read(response).map_err(|response| ClientError::Unexpected(format!("{response:?}")))
     }
 

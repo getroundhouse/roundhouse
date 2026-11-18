@@ -131,7 +131,8 @@ fn the_feed_reports_what_a_sidebar_shows() {
 fn a_client_copy_of_the_records_keeps_up_with_the_hub() {
     let stack = Stack::start();
     let client = stack.client();
-    let feed = RecordsFeed::start(&client);
+    // On a connection of its own, so only the feed, and not the replies it would take in, can bring the changes.
+    let feed = RecordsFeed::start(&stack.client());
 
     let (workspace, session) = stack.workspace(&client);
     client.session_prompt(&session.id, "say:hello", None).unwrap();

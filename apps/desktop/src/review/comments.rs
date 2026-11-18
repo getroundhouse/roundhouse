@@ -4,7 +4,7 @@
 use std::fmt::Write as _;
 
 use gpui_kit::Context;
-use protocol::model::{CommentDraft, CommentId, DiffComment, DiffSide, Record};
+use protocol::model::{CommentDraft, CommentId, DiffComment, DiffSide};
 
 use super::{Review, ReviewEvent};
 
@@ -71,12 +71,9 @@ impl Review {
         });
         cx.spawn(async move |this, cx| {
             let saved = saved.recv().await;
-            let _ = this.update(cx, |t, cx| {
+            let _ = this.update(cx, |_, cx| {
                 match saved {
-                    Ok(comment) => {
-                        t.records.take_reply(Record::Comment(comment));
-                        cx.emit(ReviewEvent::Saved);
-                    }
+                    Ok(_) => cx.emit(ReviewEvent::Saved),
                     Err(e) => {
                         cx.emit(ReviewEvent::Error(format!("couldn't save that comment: {e}")));
                         cx.emit(ReviewEvent::NotSaved(saving));

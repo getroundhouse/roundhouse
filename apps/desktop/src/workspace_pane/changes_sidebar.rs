@@ -124,9 +124,9 @@ impl WorkspacePane {
 
     /// Makes the diff, and the views of the worktree, of which the diff's start loading it.
     fn make_diff(&mut self, cx: &mut Context<Self>) {
-        let (client, records, id) = (self.client.clone(), self.records.clone(), self.workspace().id.clone());
+        let (client, id) = (self.client.clone(), self.workspace().id.clone());
         let comments = self.shown.comments().to_vec();
-        let review = cx.new(|cx| Review::new(client.clone(), records, id.clone(), comments, cx));
+        let review = cx.new(|cx| Review::new(client.clone(), id.clone(), comments, cx));
         let file = cx.new(|cx| FileDiff::new(review.clone(), cx));
         let viewer = cx.new(|cx| FileView::new(client.clone(), id.clone(), cx));
         let changes = cx.new(|cx| Changes::new(review.clone(), cx));

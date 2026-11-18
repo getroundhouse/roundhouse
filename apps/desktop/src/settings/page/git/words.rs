@@ -1,11 +1,10 @@
 //! What Git says in words: what each list says of itself, how an added account's login stands, what a machine's own
-//! login is, what disconnecting asks, and what the hub's refusals mean. What stops a default being used is the hub's
-//! to say, in its own words. How a sign-in goes is in `sign_in_words`, and what's said of apps of your own in
-//! `app_words`.
+//! login is, what disconnecting asks, and what the hub not doing what was asked of an account means, with why it
+//! refused as client-core's `refusals` says it. What stops a default being used is the hub's to say, in its own words.
+//! How a sign-in goes is in `sign_in_words`, and what's said of apps of your own in `app_words`.
 
-use client_core::ClientError;
+use client_core::{ClientError, refusals};
 use gpui_kit::App;
-use protocol::client::ErrorCode;
 use protocol::model::{
     GhLogin, GhLoginWorks, GithubLoginKind, HeldGithubLogin, ProviderName, SentCredential, UnusableLogin,
 };
@@ -189,30 +188,10 @@ pub(super) fn disconnect_says(default: bool) -> &'static str {
     }
 }
 
-/// What to say when the hub couldn't do `what` for an account, such as "disconnect it".
+/// What to say when the hub couldn't do `what` for an account, such as "disconnect it", or no longer has it.
 pub(super) fn couldnt(what: &str, e: &ClientError) -> String {
     if e.is_not_found() {
-        return "The hub no longer has this account.".to_string();
+        return refusals::gone("account");
     }
-    format!("Couldn't {what}: {}", reason(e))
-}
-
-/// Why the hub refused, as the hub says it for a person, or as the app says what went wrong on the way.
-pub(super) fn reason(e: &ClientError) -> String {
-    let ClientError::Api(api) = e else { return e.to_string() };
-    match api.code {
-        ErrorCode::Unsupported => "this hub can't do that until it's updated".to_string(),
-        ErrorCode::Unauthorized
-        | ErrorCode::LocalOnly
-        | ErrorCode::InvalidRequest
-        | ErrorCode::VersionMismatch
-        | ErrorCode::NeedsForce
-        | ErrorCode::NameTaken
-        | ErrorCode::NotFound
-        | ErrorCode::Conflict
-        | ErrorCode::Worker
-        | ErrorCode::Unavailable
-        | ErrorCode::Internal
-        | ErrorCode::Unknown => api.message.clone(),
-    }
+    refusals::couldnt(what, e)
 }

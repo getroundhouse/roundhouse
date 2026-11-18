@@ -4,7 +4,7 @@ use crate::Agents;
 use crate::records::{HubRecords, Snapshot};
 use parking_lot::Mutex;
 use protocol::client::HubNotice;
-use protocol::model::{Record, Records, SessionId};
+use protocol::model::{Records, SessionId};
 
 /// One hub's records, kept current until every clone of this has gone. It carries on from a new connection
 /// given to [`RecordsFeed::reconnect`].
@@ -16,8 +16,13 @@ pub struct RecordsFeed {
 impl RecordsFeed {
     /// Starts following, on a thread of its own: subscribes, then lists, so nothing can change in between
     /// unseen.
+    ///
+    /// Every record a reply on `client` carries is taken in too, as it comes, so whoever made the call needn't hand it
+    /// on, and what's shown needn't wait for the feed to say the same.
     pub fn start(client: &Client) -> RecordsFeed {
-        RecordsFeed { follow: Follow::start(client, HubRecords::default(), || RecordsSource) }
+        let feed = RecordsFeed { follow: Follow::start(client, HubRecords::default(), || RecordsSource) };
+        client.inner.folding.reach(&feed.follow);
+        feed
     }
 
     /// Says that something changed: the records, the connection, or an error to hear about. It holds one
@@ -46,13 +51,16 @@ impl RecordsFeed {
         self.follow.update(|records| records.subagents_mut().forget(session));
     }
 
-    /// Takes in a record a reply carried, so what's shown needn't wait for the feed to say the same.
-    pub fn take_reply(&self, record: Record) {
+    /// Takes in `record` as though the hub had told of it, for a test whose fake hub holds what never changes.
+    #[cfg(any(test, feature = "testing"))]
+    pub fn take_record(&self, record: protocol::model::Record) {
         self.follow.update(|records| records.apply_record(record));
     }
 
-    /// Carries on on a new connection, listing again to catch up.
+    /// Carries on on a new connection, listing again to catch up, and taking in what replies on it carry, as
+    /// [`RecordsFeed::start`] says.
     pub fn reconnect(&self, client: &Client) {
+        client.inner.folding.reach(&self.follow);
         self.follow.reconnect(client);
     }
 

@@ -6,7 +6,7 @@ use std::collections::HashSet;
 
 use client_core::records::Snapshot;
 use gpui_kit::{Bounds, Context, FocusHandle, Pixels, ScrollHandle, Task, Window};
-use protocol::model::{GithubAccountId, GithubAppId, GithubSignInId, Record};
+use protocol::model::{GithubAccountId, GithubAppId, GithubSignInId};
 
 use super::super::redraw::{RedrawAt, bring_into_sight};
 use super::Asking;
@@ -20,8 +20,8 @@ use crate::asking::{self, Question};
 /// hub answers.
 #[derive(Default)]
 pub(super) struct Kept {
-    /// The hub to ask, as of the page's last frame, with client-core's copy of its records, which takes in the record
-    /// an answer carries. `None` while there's no hub to ask.
+    /// The hub to ask, as of the page's last frame, with client-core's copy of its records. `None` while there's no hub
+    /// to ask.
     pub(super) asking: Option<Asking>,
     /// Settings' focus, as of the page's last frame, where focus goes back to as a panel goes while it has it, so keys
     /// still reach Settings.
@@ -165,9 +165,8 @@ impl Kept {
             let answer = choosing.recv().await;
             let _ = this.update(cx, |this, cx| {
                 this.choosing = None;
-                match answer {
-                    Ok(settings) => asking.feed.take_reply(Record::HubSettings(settings)),
-                    Err(e) => this.failed = Some((at, words::couldnt("make it the default", &e))),
+                if let Err(e) = answer {
+                    this.failed = Some((at, words::couldnt("make it the default", &e)));
                 }
                 cx.notify();
             });
@@ -213,9 +212,8 @@ impl Kept {
         cx.spawn(async move |this, cx| {
             let answer = disconnecting.recv().await;
             let _ = this.update(cx, |this, cx| {
-                match answer {
-                    Ok(account) => asking.feed.take_reply(Record::GithubAccount(account)),
-                    Err(e) => this.failed = Some((Asked::Account(id), words::couldnt("disconnect it", &e))),
+                if let Err(e) = answer {
+                    this.failed = Some((Asked::Account(id), words::couldnt("disconnect it", &e)));
                 }
                 cx.notify();
             });

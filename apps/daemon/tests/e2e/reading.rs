@@ -18,7 +18,8 @@ fn unread_in(feed: &RecordsFeed, id: &SessionId) -> bool {
 fn a_reply_stays_unread_until_someone_reads_it() {
     let stack = Stack::start();
     let client = stack.client();
-    let feed = RecordsFeed::start(&client);
+    // On a connection of its own, so only the feed, and not the replies it would take in, can say it's read.
+    let feed = RecordsFeed::start(&stack.client());
     let (_, session) = stack.workspace(&client);
     let (prompt, _) = client.session_prompt(&session.id, "say:hello", None).unwrap();
 

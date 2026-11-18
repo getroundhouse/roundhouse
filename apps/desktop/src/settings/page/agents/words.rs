@@ -1,8 +1,9 @@
 //! What Agents says in words: what each list says of itself, how an account's login was made and how it stands, what
 //! else its row says, when its card says it was last used and its login ends, how long a token lasts, what
-//! disconnecting asks, and what the hub's refusals mean.
+//! disconnecting asks, and what the hub's refusals mean for a login, with why it refused otherwise as client-core's
+//! `refusals` says it.
 
-use client_core::{Agents, ClientError};
+use client_core::{Agents, ClientError, refusals};
 use gpui_kit::{App, SharedString};
 use protocol::client::ErrorCode;
 use protocol::model::{Account, HeldLogin};
@@ -211,31 +212,23 @@ pub(super) enum Refused {
 /// What to say of the hub's refusal to connect a login, as a new account or, when `renewing`, in place of an account's.
 /// Its message is said where it's meant for a person, as one for a name or a token it can't take is.
 pub(super) fn refused(e: &ClientError, renewing: bool) -> Refused {
-    let ClientError::Api(api) = e else { return Refused::Said(format!("Couldn't connect it: {e}")) };
-    Refused::Said(match api.code {
-        ErrorCode::Unsupported => return Refused::OlderHub,
-        ErrorCode::Conflict if renewing => {
+    let conflict = matches!(e, ClientError::Api(api) if api.code == ErrorCode::Conflict);
+    Refused::Said(match e {
+        e if e.is_unsupported() => return Refused::OlderHub,
+        _ if conflict && renewing => {
             "Another account holds this token already. Make a new one for this account.".to_string()
         }
-        ErrorCode::Conflict => "This token is connected already, under another name.".to_string(),
-        ErrorCode::NotFound => "The hub no longer has this account.".to_string(),
-        ErrorCode::InvalidRequest
-        | ErrorCode::VersionMismatch
-        | ErrorCode::NeedsForce
-        | ErrorCode::NameTaken
-        | ErrorCode::Worker
-        | ErrorCode::Unavailable
-        | ErrorCode::Unauthorized
-        | ErrorCode::LocalOnly
-        | ErrorCode::Internal
-        | ErrorCode::Unknown => format!("Couldn't connect it: {}", api.message),
+        _ if conflict => "This token is connected already, under another name.".to_string(),
+        e if e.is_not_found() => refusals::gone("account"),
+        e => refusals::couldnt("connect it", e),
     })
 }
 
-/// What to say when the hub couldn't forget an account's login.
+/// What to say when the hub couldn't forget an account's login. Any refusal but its not having the account is said in
+/// the hub's own words, an older hub's too, rather than as [`refusals::reason`] says it.
 pub(super) fn disconnect_failed(e: &ClientError) -> String {
     if e.is_not_found() {
-        return "The hub no longer has this account.".to_string();
+        return refusals::gone("account");
     }
     format!("Couldn't disconnect it: {e}")
 }

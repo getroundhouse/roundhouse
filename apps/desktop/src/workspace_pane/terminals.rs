@@ -12,7 +12,7 @@ use gpui_kit::{
     Styled, Window, div,
 };
 use look::{IconSizing as _, InRegion as _, Region};
-use protocol::model::{Record, Terminal, TerminalId};
+use protocol::model::{Terminal, TerminalId};
 use protocol::terminal::TerminalSize;
 use terminal_view::TerminalView;
 
@@ -65,12 +65,9 @@ impl WorkspacePane {
             let _ = this.update(cx, |t, cx| {
                 t.terminals.opening = false;
                 match opened {
-                    Ok(terminal) => {
-                        // As a new chat's is, so it shows once client-core's copy has it, from the reply or the feed,
-                        // whichever comes first.
-                        t.records.take_reply(Record::Terminal(terminal.clone()));
-                        t.show_terminal(terminal.id, cx);
-                    }
+                    // As a new chat's is, so it shows once what the pane shows of the records has it, which client-core
+                    // took in from the reply before it came.
+                    Ok(terminal) => t.show_terminal(terminal.id, cx),
                     Err(e) => cx.emit(PaneEvent::Error(format!("Couldn't open a terminal: {e}"))),
                 }
             });
