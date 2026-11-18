@@ -133,7 +133,8 @@ mod tests {
     use protocol::model::AgentKind;
     #[test]
     fn next_turn_settings_do_not_turn_a_reply_into_a_plan_or_release_a_plan() {
-        let mut state = Conversation::new(crate::registry::defaults(AgentKind::Codex).unwrap());
+        let mut state =
+            Conversation::new(crate::registry::on(AgentKind::Codex, super::super::one_off::ONE_OFF_MODEL).unwrap());
         state.turn_mode = Some(full_access());
         state.settings.mode = plan();
         state.reply = Some("Done".into());

@@ -2,11 +2,9 @@
 
 #[cfg(test)]
 use super::{AgentKind, ModelName};
-#[cfg(test)]
-use crate::capability::settings::{Effort, Settings};
 
 #[cfg(test)]
 mod tests;
 
 mod description;
-pub use description::{AgentDescription, AgentFeature, LoginDescription, ModelChoice, NotOffered, RunCapabilities};
+pub use description::{AgentDescription, LoginDescription, NotOffered, RunCapabilities};

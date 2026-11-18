@@ -24,10 +24,11 @@ pub(super) fn claims() -> Capabilities {
     claims.asking.questions = Some(Claimed {});
     claims.asking.plan_approval = Some(Claimed {});
     claims.settings.effort = Some(Claimed {});
+    // Every level, since the CLI names each, as `effort` says.
     claims.settings.models = Some(crate::model_offers::models(
         &super::description::MODELS,
         &super::description::EFFORTS,
-        &protocol::capability::settings::Effort::Xhigh,
+        &super::description::STARTS_ON,
     ));
     claims.settings.live_changes = Some(settings::LiveChanges {
         model: Some(settings::Takes::NextTurn),

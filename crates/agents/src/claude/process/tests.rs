@@ -110,7 +110,7 @@ fn every_launch_has_full_access() {
 
 #[test]
 fn every_launch_names_its_model_and_effort() {
-    for effort in crate::claude::description().efforts {
+    for effort in crate::claude::description().efforts_for(&crate::claude::description::STARTS_ON.0) {
         let mut chosen = spec(Some("opus"), crate::claude::claims::full_access());
         chosen.settings.effort = Some(effort.clone());
 

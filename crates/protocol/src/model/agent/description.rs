@@ -1,6 +1,7 @@
 use super::super::{AgentKind, ModelName};
+use crate::capability::Capabilities;
 use crate::capability::approvals::ApprovalMode;
-use crate::capability::settings::{Effort, EffortOffer, Settings};
+use crate::capability::settings::{Effort, EffortOffer, ModelCatalog, ModelOffer, Models, Settings};
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
@@ -15,32 +16,18 @@ impl RunCapabilities {
     }
 }
 
-/// A kind of agent, as its adapter describes it: what the interface calls it, the models and efforts a chat can be
-/// given, what a chat runs with until another is chosen, what it does that not every agent does, and what
-/// login a hub can hold for it. The hub serves one for each kind it runs, so a client offers what the agent takes rather
-/// than holding a list of its own.
+/// A kind of agent, as its adapter describes it: what the interface calls it, what login a hub can hold for it, and
+/// what a run of it claims, which say what a chat can be given and what it runs with until another is chosen. The hub
+/// serves one for each kind it runs, so a client offers what the agent takes rather than holding a list of its own.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct AgentDescription {
     pub kind: AgentKind,
-    /// What a run of this kind claims unless it says otherwise as it launches. `None` from a hub from before claims.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub capabilities: Option<crate::capability::Capabilities>,
+    /// What a run of this kind claims unless it says otherwise as it launches.
+    pub capabilities: Capabilities,
     /// What answered a turn, as its card says, such as "Opus 5.5 via Claude Code".
     pub name: String,
     /// What the heading over the limits of the account it runs under says, such as "Claude usage".
     pub usage_heading: String,
-    /// The models a chat is offered, in the order they're listed. A chat can run another, such as one named by its
-    /// full ID, since what a name means is the agent's CLI's to say.
-    pub models: Vec<ModelChoice>,
-    /// Kind-wide effort choices for clients reading an older catalog. A resolved catalog gives each model its own levels.
-    pub efforts: Vec<Effort>,
-    /// What a chat runs with until another is chosen, which the hub gives one that names none of them: a model and its
-    /// effort, each one of those offered. Its approval mode is the one its claims give first, as
-    /// [`AgentDescription::default_mode`] says.
-    pub defaults: Settings,
-    /// What it does that not every agent does. Whatever a hub leaves out, the agent doesn't do.
-    #[serde(default)]
-    pub features: Vec<AgentFeature>,
     /// The login a hub can hold for an account of this kind and hand to the workers it launches agents on. `None` for a
     /// kind a hub can hold none for, whose agents run under the login on their worker's machine, and from a hub older
     /// than this. It describes the kind's login, and doesn't say this hub keeps logins: one that doesn't refuses
@@ -63,24 +50,6 @@ pub struct LoginDescription {
     pub lasts_ms: Option<i64>,
 }
 
-/// A model a chat is offered, by the name the agent's CLI takes, such as an alias, and what the interface calls it.
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
-pub struct ModelChoice {
-    pub model: ModelName,
-    pub label: String,
-}
-
-/// Something an agent does that not every agent does.
-#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum AgentFeature {
-    /// It compacts its conversation when asked, as `session_compact` asks, as well as by itself as its context fills.
-    Compacts,
-    /// One from a newer hub, which this build can't act on.
-    #[serde(other)]
-    Unknown,
-}
-
 /// Why a chat can't be given a change to its settings.
 #[derive(thiserror::Error, Clone, Copy, Debug, PartialEq, Eq)]
 pub enum NotOffered {
@@ -93,56 +62,55 @@ pub enum NotOffered {
 }
 
 impl AgentDescription {
+    /// Whether it says what it offers only where a chat would launch, which the hub asks it, as
+    /// [`Models::Discoverable`] says, rather than offering the same everywhere.
     pub fn discovers_models(&self) -> bool {
-        matches!(
-            self.capabilities.as_ref().and_then(|c| c.settings.models.as_ref()),
-            Some(crate::capability::settings::Models::Discoverable)
-        )
+        matches!(self.capabilities.settings.models, Some(Models::Discoverable))
     }
 
-    /// The description where `catalog` applies, with its models and their efforts in place of the kind's, and its
-    /// default model and that model's default effort as what a chat there starts with.
+    /// The models a chat is offered, in the order they're listed. None for a kind that discovers its own, until
+    /// [`AgentDescription::with_catalog`] gives it what it offers where a chat would launch. A chat can run another,
+    /// such as one named by its full ID, since what a name means is the agent's CLI's to say.
+    pub fn models(&self) -> &[ModelOffer] {
+        self.capabilities.settings.models.as_ref().map_or(&[], Models::offered)
+    }
+
+    /// The description where `catalog` applies, with its models in place of the kind's, and its default model as the
+    /// one a chat there starts on.
     #[must_use]
-    pub fn with_catalog(mut self, catalog: crate::capability::settings::ModelCatalog) -> Self {
-        let initial = catalog
-            .default_model
-            .as_ref()
-            .and_then(|id| catalog.offered.iter().find(|m| &m.model == id))
-            .or_else(|| catalog.offered.first());
-        if let Some(initial) = initial {
-            self.defaults.model = Some(initial.model.clone());
-            let effort = initial.default_effort.as_ref().or_else(|| initial.efforts.first().map(EffortOffer::id));
-            self.defaults.effort = Some(effort.cloned().unwrap_or(Effort::Unset));
-        }
-        self.models =
-            catalog.offered.iter().map(|m| ModelChoice { model: m.model.clone(), label: m.label.clone() }).collect();
-        self.efforts.clear();
-        for level in catalog.offered.iter().flat_map(|m| &m.efforts).map(EffortOffer::id) {
-            if !self.efforts.contains(level) {
-                self.efforts.push(level.clone());
-            }
-        }
-        if let Some(claims) = &mut self.capabilities {
-            claims.settings.models = Some(crate::capability::settings::Models::Static { offered: catalog.offered });
-        }
+    pub fn with_catalog(mut self, catalog: ModelCatalog) -> Self {
+        self.capabilities.settings.models = Some(Models::Static(catalog));
         self
     }
 
-    /// The selected model's levels when its catalog says, otherwise the kind's legacy levels.
+    /// What a chat runs with until another is chosen, which the hub gives one that names none of them: the model its
+    /// claims start a chat on, at that model's default effort, in the mode they give first. Only the mode, for a kind
+    /// that discovers its models, until [`AgentDescription::with_catalog`] says them.
+    pub fn defaults(&self) -> Settings {
+        let catalog = self.capabilities.settings.models.as_ref().and_then(Models::catalog);
+        let model = catalog.and_then(ModelCatalog::initial).map(|offer| offer.model.clone());
+        let effort = model.as_ref().map(|model| self.effort_for_choice(model, None));
+        Settings { model, mode: self.default_mode(), effort, ..Settings::default() }
+    }
+
+    /// The levels a model offered takes, least first, or for one that isn't offered, every level an offered one takes,
+    /// since what an unlisted model takes is the agent's CLI's to say.
     pub fn efforts_for(&self, model: &ModelName) -> Vec<Effort> {
         self.effort_offers(model).into_iter().map(|e| e.id().clone()).collect()
     }
 
-    pub fn effort_offers(&self, model: &ModelName) -> Vec<crate::capability::settings::EffortOffer> {
-        if let Some(offer) = self
-            .capabilities
-            .as_ref()
-            .and_then(|c| c.settings.models.as_ref())
-            .and_then(|m| m.offered().iter().find(|offer| &offer.model == model))
-        {
+    /// The levels [`AgentDescription::efforts_for`] says, each with what the agent calls it.
+    pub fn effort_offers(&self, model: &ModelName) -> Vec<EffortOffer> {
+        if let Some(offer) = self.offer(model) {
             return offer.efforts.clone();
         }
-        self.efforts.iter().filter_map(Effort::known).map(EffortOffer::Id).collect()
+        let mut every: Vec<EffortOffer> = Vec::new();
+        for level in self.models().iter().flat_map(|offer| &offer.efforts) {
+            if level.id().known().is_some() && !every.iter().any(|seen| seen.id() == level.id()) {
+                every.push(EffortOffer::Id(level.id().clone()));
+            }
+        }
+        every
     }
 
     pub fn offers_effort(&self, model: &ModelName, effort: &Effort) -> bool {
@@ -150,15 +118,16 @@ impl AgentDescription {
         if levels.is_empty() { effort == &Effort::Unset } else { effort.as_str().is_some() && levels.contains(effort) }
     }
 
-    /// Keep a previously chosen effort if available, otherwise use the selected model's default.
+    /// Keep a previously chosen effort if available, otherwise use the selected model's default, or for a model that
+    /// isn't offered, the default of the one a chat starts on.
     pub fn effort_for_choice(&self, model: &ModelName, previous: Option<&Effort>) -> Effort {
         let levels = self.efforts_for(model);
-        let offer = self
-            .capabilities
-            .as_ref()
-            .and_then(|claims| claims.settings.models.as_ref())
-            .and_then(|models| models.offered().iter().find(|offer| offer.model == *model));
-        let default = offer.map_or(self.defaults.effort.as_ref(), |offer| offer.default_effort.as_ref());
+        let starts_on = || {
+            let catalog = self.capabilities.settings.models.as_ref().and_then(Models::catalog)?;
+            catalog.initial()
+        };
+        let offer = self.offer(model).or_else(starts_on);
+        let default = offer.and_then(|offer| offer.default_effort.as_ref());
         previous
             .filter(|e| levels.contains(e))
             .or_else(|| default.filter(|e| levels.contains(e)))
@@ -167,30 +136,28 @@ impl AgentDescription {
             .unwrap_or(Effort::Unset)
     }
 
-    pub fn has(&self, feature: AgentFeature) -> bool {
-        if let Some(claims) = &self.capabilities {
-            return match feature {
-                AgentFeature::Compacts => claims.context.compaction.is_some(),
-                AgentFeature::Unknown => false,
-            };
-        }
-        self.features.contains(&feature)
+    /// Whether it compacts its conversation when asked, as `session_compact` asks, as well as by itself as its context
+    /// fills.
+    pub fn compacts(&self) -> bool {
+        self.capabilities.context.compaction.is_some()
     }
 
     /// What the interface calls `model`, if it's one offered.
     pub fn label(&self, model: &ModelName) -> Option<&str> {
-        self.models.iter().find(|choice| choice.model == *model).map(|choice| choice.label.as_str())
+        self.offer(model).map(|offer| offer.label.as_str())
     }
 
-    /// The approval modes a chat can be given, as its claims say, the one it starts in first. None from a hub from
-    /// before claims.
+    fn offer(&self, model: &ModelName) -> Option<&ModelOffer> {
+        self.models().iter().find(|offer| offer.model == *model)
+    }
+
+    /// The approval modes a chat can be given, as its claims say, the one it starts in first.
     pub fn modes(&self) -> Vec<ApprovalMode> {
-        let modes = self.capabilities.as_ref().and_then(|claims| claims.approvals.modes.as_ref());
+        let modes = self.capabilities.approvals.modes.as_ref();
         modes.map_or_else(Vec::new, |modes| [modes.default].into_iter().chain(modes.others.iter().copied()).collect())
     }
 
-    /// The approval mode a chat starts in until another is chosen, as its claims say. `None` from a hub from before
-    /// claims.
+    /// The approval mode a chat starts in until another is chosen, as its claims say, if they offer any.
     pub fn default_mode(&self) -> Option<ApprovalMode> {
         self.modes().first().copied()
     }
@@ -213,15 +180,16 @@ impl AgentDescription {
         {
             let allowed = match &settings.model {
                 Some(model) => self.offers_effort(model, effort),
-                None => effort.as_str().is_some() && self.efforts.contains(effort),
+                None => {
+                    effort.as_str().is_some()
+                        && self.models().iter().any(|offer| offer.efforts.iter().any(|e| e.id() == effort))
+                }
             };
             if !allowed {
                 return Err(NotOffered::Effort);
             }
         }
-        if let Some(claims) = &self.capabilities
-            && !settings.allowed(claims)
-        {
+        if !settings.allowed(&self.capabilities) {
             return Err(NotOffered::Settings);
         }
         Ok(())

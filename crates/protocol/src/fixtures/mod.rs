@@ -26,4 +26,4 @@ mod decisions;
 pub use decisions::passed_decisions;
 
 mod modes;
-pub use modes::{claude_claims, full_access, modes, plan_mode};
+pub use modes::{claude, claude_claims, claude_models, full_access, modes, offer, plan_mode};

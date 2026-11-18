@@ -4,9 +4,8 @@
 use std::path::Path;
 use std::time::Duration;
 
-use protocol::capability::settings::Effort;
 use protocol::client::{ApiError, ClientRequest, ClientResponse, ErrorCode, ReplyOutcome, admin};
-use protocol::model::{AgentDescription, AgentKind, ModelName, Rev};
+use protocol::model::{AgentDescription, AgentKind, Rev};
 
 use super::*;
 use crate::stand_in_hub::{self, Does};
@@ -14,21 +13,7 @@ use crate::stand_in_hub::{self, Does};
 const TIMEOUT: Duration = Duration::from_secs(10);
 
 fn claude() -> AgentDescription {
-    AgentDescription {
-        capabilities: None,
-        kind: AgentKind::Claude,
-        name: "Claude".to_string(),
-        usage_heading: "Claude usage".to_string(),
-        models: Vec::new(),
-        efforts: vec![Effort::High],
-        defaults: protocol::capability::settings::Settings {
-            model: Some(ModelName::named("opus")),
-            effort: Some(Effort::High),
-            ..Default::default()
-        },
-        features: Vec::new(),
-        login: None,
-    }
+    protocol::fixtures::claude()
 }
 
 /// Follows a stand-in hub with one workspace, which answers asking for its agents with `agents`, and waits until the

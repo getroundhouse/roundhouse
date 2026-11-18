@@ -4,16 +4,19 @@ use std::time::Duration;
 use protocol::attachment::{AttachmentFile, NewAttachment};
 use protocol::capability::conversation::Start;
 use protocol::capability::settings::Settings;
-use protocol::model::{AgentAccount, AgentKind, RunId, Title};
+use protocol::model::{AgentAccount, AgentKind, ModelName, RunId, Title};
 use protocol::prompt::Prompt;
 use protocol::worker::AgentSpec;
 use serde_json::json;
 use tokio::sync::mpsc;
 
 use super::launch::Purpose;
-use super::{description, running};
+use super::running;
 use crate::title::{NAMING, read_title};
 use crate::{AgentError, AgentOptions, AgentProcess, NoTitle};
+
+/// What a one-off call runs, which starts no chat, so it's none a chat is offered: a small model, at a low effort.
+pub(super) const ONE_OFF_MODEL: ModelName = ModelName::named("gpt-6-luna");
 
 pub async fn account(options: &AgentOptions, scratch_dir: &Path) -> Result<AgentAccount, AgentError> {
     let process = open(options, scratch_dir).await?;
@@ -39,7 +42,7 @@ pub(super) async fn open(
 ) -> Result<std::sync::Arc<running::CodexProcess>, AgentError> {
     let (tx, rx) = mpsc::channel(1);
     drop(rx);
-    let settings = crate::registry::defaults(protocol::model::AgentKind::Codex)?;
+    let settings = crate::registry::on(AgentKind::Codex, ONE_OFF_MODEL)?;
     running::transport(&binary(options)?, cwd, &[], settings, tx, options, None).await
 }
 
@@ -66,7 +69,7 @@ pub async fn title_for(
         agent: AgentKind::Codex,
         cwd: room.path().to_string_lossy().into_owned(),
         start: Start::New { conversation: None },
-        settings: Settings { model: description().defaults.model, ..Settings::default() },
+        settings: Settings { model: Some(ONE_OFF_MODEL), ..Settings::default() },
         env: Vec::new(),
         tools_token: None,
         login: None,
@@ -87,7 +90,7 @@ pub async fn title_for(
             .ask(
                 "turn/start",
                 json!({"threadId":thread,"input":input,
-            "model":"gpt-6-luna","effort":"low","approvalPolicy":"never",
+            "model":ONE_OFF_MODEL.as_str(),"effort":"low","approvalPolicy":"never",
             "sandboxPolicy":{"type":"readOnly"}}),
             )
             .await?;

@@ -1,9 +1,8 @@
 // Against a stand-in hub on a Unix socket.
 #![cfg(unix)]
 
-use protocol::capability::settings::Effort;
 use protocol::client::{ApiError, ClientRequest, ClientResponse, ErrorCode, ReplyOutcome, admin};
-use protocol::model::{LoginDescription, ModelName};
+use protocol::model::LoginDescription;
 
 use super::*;
 use crate::stand_in_hub::{self, Does};
@@ -11,19 +10,10 @@ use crate::stand_in_hub::{self, Does};
 /// A kind of agent as a hub describes it.
 fn described(kind: AgentKind) -> AgentDescription {
     AgentDescription {
-        capabilities: None,
         kind,
         name: "Agent".to_string(),
         usage_heading: "Agent usage".to_string(),
-        models: Vec::new(),
-        efforts: vec![Effort::High],
-        defaults: protocol::capability::settings::Settings {
-            model: Some(ModelName::named("opus")),
-            effort: Some(Effort::High),
-            ..Default::default()
-        },
-        features: Vec::new(),
-        login: None,
+        ..protocol::fixtures::claude()
     }
 }
 

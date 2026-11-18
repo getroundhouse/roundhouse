@@ -1,6 +1,5 @@
-use protocol::capability::settings::{Effort, Settings};
 use protocol::client::{CLIENT_PROTOCOL_VERSION, HubStatus};
-use protocol::model::{AgentDescription, AgentFeature, AgentKind, LoginDescription, ModelChoice, ModelName};
+use protocol::model::{AgentDescription, LoginDescription};
 use protocol::pairing::{Pairing, PairingCode, PairingLink};
 
 use super::world::{LoginSupport, NOW_MS, World};
@@ -14,30 +13,12 @@ pub const BUILD_NUMBER: u64 = 2;
 /// Claude as the app's own hub describes it, so the picker, the context's cards, a turn's card and Agents say what
 /// they would, or as a hub from before hubs kept logins does, which says nothing of what makes one.
 pub(super) fn claude(world: &World) -> AgentDescription {
-    let offered =
-        |model: &'static str, label: &str| ModelChoice { model: ModelName::named(model), label: label.into() };
     AgentDescription {
-        capabilities: Some(protocol::fixtures::claude_claims()),
-        kind: AgentKind::Claude,
-        name: "Claude Code".into(),
-        usage_heading: "Claude usage".into(),
-        models: vec![
-            offered("fable", "Fable"),
-            offered("opus", "Opus"),
-            offered("sonnet", "Sonnet"),
-            offered("haiku", "Haiku"),
-        ],
-        efforts: Effort::ALL.into_iter().filter(|effort| *effort != Effort::Ultra).collect(),
-        defaults: Settings {
-            model: Some(ModelName::named("opus")),
-            effort: Some(Effort::Xhigh),
-            ..Settings::default()
-        },
-        features: vec![AgentFeature::Compacts],
         login: (world.logins != LoginSupport::None).then(|| LoginDescription {
             made_with: "claude setup-token".into(),
             lasts_ms: Some(365 * 24 * 60 * 60 * 1000),
         }),
+        ..protocol::fixtures::claude()
     }
 }
 

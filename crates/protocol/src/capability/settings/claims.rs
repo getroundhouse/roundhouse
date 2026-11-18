@@ -2,13 +2,15 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::{Budgets, LiveChanges, ModelOffer};
+use super::{Budgets, LiveChanges, ModelCatalog, ModelOffer};
 use crate::capability::Claimed;
 use crate::capability::area::area;
+use crate::model::ModelName;
 
 area! { "a chat's settings";
     /// The models [`Models::offered`] lists can be chosen, each saying what it takes, and a model named by its full ID
-    /// can be too, which the agent says whether it knows. Every chat names a model, so this is only what's offered.
+    /// can be too, which the agent says whether it knows. Every chat names a model, so this is only what's offered,
+    /// and which a chat starts on.
     Models => models: Models,
     /// A running agent can send a replacement catalog with [`Report::Models`](crate::capability::Report::Models)
     /// and answer [`Control::ListModels`](crate::capability::Control::ListModels). Pre-session discovery is
@@ -48,8 +50,8 @@ pub enum Models {
     /// The agent says what it offers where a chat would launch, before any chat there starts, which the hub asks it
     /// and keeps as a [`ModelList`](crate::model::ModelList).
     Discoverable,
-    /// In the order they are listed. This reads the original static wire shape.
-    Static { offered: Vec<ModelOffer> },
+    /// The same everywhere, in the order they're listed, with the one a chat starts on.
+    Static(ModelCatalog),
 }
 
 // Older peers read the offered field of both forms, including an empty list before discovery.
@@ -58,28 +60,38 @@ struct CatalogSource {
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     discoverable: bool,
     offered: Vec<ModelOffer>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    default_model: Option<ModelName>,
 }
 
 impl From<CatalogSource> for Models {
     fn from(source: CatalogSource) -> Self {
-        if source.discoverable { Self::Discoverable } else { Self::Static { offered: source.offered } }
+        let CatalogSource { discoverable, offered, default_model } = source;
+        if discoverable { Self::Discoverable } else { Self::Static(ModelCatalog { offered, default_model }) }
     }
 }
 
 impl From<Models> for CatalogSource {
     fn from(models: Models) -> Self {
         match models {
-            Models::Static { offered } => Self { discoverable: false, offered },
-            Models::Discoverable => Self { discoverable: true, offered: Vec::new() },
+            Models::Static(ModelCatalog { offered, default_model }) => {
+                Self { discoverable: false, offered, default_model }
+            }
+            Models::Discoverable => Self { discoverable: true, offered: Vec::new(), default_model: None },
         }
     }
 }
 
 impl Models {
     pub fn offered(&self) -> &[ModelOffer] {
+        self.catalog().map_or(&[], |catalog| &catalog.offered)
+    }
+
+    /// What's offered, and what a chat starts on, unless the agent says only where a chat would launch.
+    pub fn catalog(&self) -> Option<&ModelCatalog> {
         match self {
-            Self::Static { offered } => offered,
-            Self::Discoverable => &[],
+            Self::Static(catalog) => Some(catalog),
+            Self::Discoverable => None,
         }
     }
 }

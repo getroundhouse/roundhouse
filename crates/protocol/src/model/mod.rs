@@ -30,7 +30,7 @@ pub use account::{
     Account, AccountSource, AgentAccount, AgentLogin, HeldLogin, LimitWindow, LoginToken, ModelLabel, SessionAccount,
     UsageLimit,
 };
-pub use agent::{AgentDescription, AgentFeature, LoginDescription, ModelChoice, NotOffered, RunCapabilities};
+pub use agent::{AgentDescription, LoginDescription, NotOffered, RunCapabilities};
 pub use branches::{Apart, Branch, Branches, Head, Upstream};
 pub use cache::{CACHE_WORTH_TELLING_TOKENS, CacheRequest, CacheState, CacheTtl, PromptCache};
 pub use compaction_line::CompactionLine;

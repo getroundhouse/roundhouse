@@ -2,26 +2,30 @@ use serde_json::json;
 
 use super::*;
 use crate::capability::approvals::{ApprovalMode, Unasked};
+use crate::capability::settings::{Effort, ModelCatalog, Models, Settings};
+use crate::fixtures::offer;
 
 const OPUS: ModelName = ModelName::named("opus");
+const HAIKU: ModelName = ModelName::named("haiku");
 
-/// An agent offered two models, two levels and plan mode as well as full access, which compacts when asked.
+/// An agent offered Opus at two levels and Haiku at one, starting a chat on Opus at High, with plan mode as well as
+/// full access, which compacts when asked.
 fn described() -> AgentDescription {
     let mut claims = crate::capability::Capabilities::default();
     claims.approvals.modes = Some(crate::fixtures::modes());
     claims.settings.effort = Some(crate::capability::Claimed {});
+    let offered = vec![
+        offer("opus", "Opus", &[Effort::Low, Effort::High], Effort::High),
+        offer("haiku", "Haiku", &[Effort::Low], Effort::Low),
+    ];
+    claims.settings.models = Some(Models::Static(ModelCatalog { offered, default_model: Some(OPUS) }));
+    claims.context.compaction =
+        Some(crate::capability::context::Compaction { keeping: crate::capability::context::Keeping::Read });
     AgentDescription {
-        capabilities: Some(claims),
+        capabilities: claims,
         kind: AgentKind::Claude,
         name: "Agent".to_string(),
         usage_heading: "Agent usage".to_string(),
-        models: vec![
-            ModelChoice { model: OPUS, label: "Opus".to_string() },
-            ModelChoice { model: ModelName::named("haiku"), label: "Haiku".to_string() },
-        ],
-        efforts: vec![Effort::Low, Effort::High],
-        defaults: Settings { model: Some(OPUS), effort: Some(Effort::High), ..Settings::default() },
-        features: vec![AgentFeature::Compacts],
         login: None,
     }
 }
@@ -39,10 +43,12 @@ fn a_chat_is_given_only_an_effort_and_a_mode_its_agent_is_offered_and_any_model(
     assert_eq!(agent.takes(&Settings::default()), Ok(()), "nothing to change");
     assert_eq!(agent.takes(&setting(Some(Effort::Max), None)), Err(NotOffered::Effort));
     assert_eq!(agent.takes(&setting(Some(Effort::Unknown), None)), Err(NotOffered::Effort));
+    let haiku_high = Settings { model: Some(HAIKU), effort: Some(Effort::High), ..Settings::default() };
+    assert_eq!(agent.takes(&haiku_high), Err(NotOffered::Effort), "a level only another model is offered");
     let asks_first = ApprovalMode { unasked: Unasked::Reads, plan: false, ..plan };
     assert_eq!(agent.takes(&setting(None, Some(asks_first))), Err(NotOffered::Mode), "one it doesn't offer");
     let mut planless = described();
-    planless.capabilities.as_mut().unwrap().approvals.modes.as_mut().unwrap().others.clear();
+    planless.capabilities.approvals.modes.as_mut().unwrap().others.clear();
     assert_eq!(planless.takes(&setting(None, Some(plan))), Err(NotOffered::Mode));
     assert_eq!(planless.modes(), [crate::fixtures::full_access()]);
     assert_eq!(described().default_mode(), Some(crate::fixtures::full_access()));
@@ -53,9 +59,14 @@ fn a_chat_is_given_only_an_effort_and_a_mode_its_agent_is_offered_and_any_model(
 #[test]
 fn a_level_or_a_mode_from_a_newer_peer_is_never_taken_even_if_offered() {
     let newer_mode = ApprovalMode { unasked: Unasked::Unknown, ..crate::fixtures::full_access() };
-    let mut newer = AgentDescription { efforts: vec![Effort::Unknown], ..described() };
-    newer.capabilities.as_mut().unwrap().approvals.modes.as_mut().unwrap().others.push(newer_mode);
+    let mut newer = described();
+    newer.capabilities.approvals.modes.as_mut().unwrap().others.push(newer_mode);
+    let newer_level = offer("opus", "Opus", &[Effort::Unknown], Effort::Unknown);
+    newer.capabilities.settings.models =
+        Some(Models::Static(ModelCatalog { offered: vec![newer_level], default_model: None }));
 
+    let opus = Settings { model: Some(OPUS), effort: Some(Effort::Unknown), ..Settings::default() };
+    assert_eq!(newer.takes(&opus), Err(NotOffered::Effort));
     assert_eq!(newer.takes(&setting(Some(Effort::Unknown), None)), Err(NotOffered::Effort));
     assert_eq!(newer.takes(&setting(None, Some(newer_mode))), Err(NotOffered::Mode));
 }
@@ -64,8 +75,73 @@ fn a_level_or_a_mode_from_a_newer_peer_is_never_taken_even_if_offered() {
 fn a_model_offered_is_called_by_its_label_and_any_other_has_none() {
     let agent = described();
 
-    assert_eq!(agent.label(&ModelName::named("haiku")), Some("Haiku"));
+    assert_eq!(agent.label(&HAIKU), Some("Haiku"));
     assert_eq!(agent.label(&ModelName::named("claude-opus-5-5")), None);
+}
+
+/// A chat starts on the model the claims name, at its own default, in the first mode, or on the first model offered
+/// when they name none.
+#[test]
+fn a_chat_starts_on_the_model_its_claims_name_at_its_default_effort() {
+    let agent = described();
+    let starts = Settings {
+        model: Some(OPUS),
+        mode: Some(crate::fixtures::full_access()),
+        effort: Some(Effort::High),
+        ..Settings::default()
+    };
+    assert_eq!(agent.defaults(), starts);
+
+    let mut unnamed = described();
+    let Some(Models::Static(catalog)) = &mut unnamed.capabilities.settings.models else { panic!("static") };
+    catalog.default_model = Some(ModelName::named("not-offered"));
+    catalog.offered.reverse();
+    assert_eq!((unnamed.defaults().model, unnamed.defaults().effort), (Some(HAIKU), Some(Effort::Low)), "the first");
+}
+
+/// One that discovers its models starts a chat only in its first mode until they're said, and then on the catalog's
+/// default.
+#[test]
+fn a_kind_that_discovers_its_models_starts_a_chat_on_the_catalogs_default() {
+    let mut discovers = described();
+    discovers.capabilities.settings.models = Some(Models::Discoverable);
+    assert!(discovers.models().is_empty());
+    assert_eq!(discovers.defaults(), Settings { mode: Some(crate::fixtures::full_access()), ..Settings::default() });
+
+    let offered = vec![
+        offer("orchard", "Orchard", &[Effort::Low], Effort::Low),
+        offer("meadow", "Meadow", &[Effort::Medium], Effort::Medium),
+    ];
+    let catalog = ModelCatalog { offered, default_model: Some(ModelName::named("meadow")) };
+    let there = discovers.with_catalog(catalog);
+
+    assert!(!there.discovers_models());
+    assert_eq!(
+        (there.defaults().model, there.defaults().effort),
+        (Some(ModelName::named("meadow")), Some(Effort::Medium))
+    );
+}
+
+/// A model named by its full ID takes any level an offered one takes, and starts at the default of the model a chat
+/// starts on, since what it takes is the agent's CLI's to say.
+#[test]
+fn a_model_that_isnt_offered_takes_every_level_an_offered_one_does() {
+    let agent = described();
+    let full_id = ModelName::named("claude-opus-5-5");
+
+    assert_eq!(agent.efforts_for(&full_id), [Effort::Low, Effort::High]);
+    assert_eq!(agent.effort_for_choice(&full_id, None), Effort::High);
+    assert_eq!(agent.efforts_for(&HAIKU), [Effort::Low], "an offered one takes its own");
+}
+
+#[test]
+fn it_compacts_when_asked_only_if_its_claims_say() {
+    let mut agent = described();
+    assert!(agent.compacts());
+
+    agent.capabilities.context.compaction = None;
+
+    assert!(!agent.compacts());
 }
 
 /// What a newer hub adds is in the compatibility tests.
@@ -75,27 +151,10 @@ fn on_the_wire_it_reads_as_it_was_written() {
     let wire = serde_json::to_value(&agent).unwrap();
     assert_eq!(
         wire,
-        json!({
-            "kind": "claude", "name": "Agent", "usage_heading": "Agent usage",
-            "models": [{ "model": "opus", "label": "Opus" }, { "model": "haiku", "label": "Haiku" }],
-            "capabilities": wire["capabilities"],
-            "efforts": ["low", "high"],
-            "defaults": { "model": "opus", "mode": null, "effort": "high", "speed": null, "thinking": null,
-                "persona": null, "style": null, "verbosity": null, "advisor": null, "budget": null },
-            "features": ["compacts"],
-        })
+        json!({ "kind": "claude", "name": "Agent", "usage_heading": "Agent usage", "capabilities": wire["capabilities"] })
     );
+    assert_eq!(wire["capabilities"]["settings"]["models"]["default_model"], "opus");
     assert_eq!(serde_json::from_value::<AgentDescription>(wire).unwrap(), agent);
-}
-
-#[test]
-fn a_feature_left_out_is_one_the_agent_doesnt_have() {
-    let mut wire = serde_json::to_value(described()).unwrap();
-    wire.as_object_mut().unwrap().remove("features");
-
-    let read: AgentDescription = serde_json::from_value(wire).unwrap();
-
-    assert!(!read.has(AgentFeature::Compacts));
 }
 
 #[test]

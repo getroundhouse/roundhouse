@@ -31,7 +31,7 @@ impl Hub {
     ) -> Result<ChatSettings, ApiError> {
         ChatSettings::keeps(&chosen)?;
         let description = self.agent_for(agent, admin::ModelTarget::Workspace(workspace)).await?;
-        let mut defaults = Settings { mode: description.default_mode(), ..description.defaults.clone() };
+        let mut defaults = description.defaults();
         if let Some(model) = &chosen.model {
             defaults.effort = Some(description.effort_for_choice(model, None));
         }

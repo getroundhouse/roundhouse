@@ -31,7 +31,7 @@ async fn a_new_chat_runs_what_its_agents_description_says_unless_it_names_someth
     let chosen = Settings { effort: Some(Effort::Low), ..Settings::default() };
     let low = hub.session_create(W.into(), AgentKind::Claude, chosen, None).await.unwrap();
 
-    let defaults = described().defaults;
+    let defaults = described().defaults();
     let (model, effort) = (defaults.model.unwrap(), defaults.effort.unwrap());
     let given = ChatSettings { model, mode: protocol::fixtures::full_access(), effort };
     assert_eq!(ChatSettings::of(&made), given, "its kind's defaults, in the mode its claims give first");
@@ -113,10 +113,11 @@ async fn an_effort_or_a_mode_the_agent_isnt_offered_is_refused_for_a_new_chat_an
 async fn a_change_is_refused_for_the_settings_it_leaves_the_chat_with_as_well_as_for_what_it_names() {
     let dir = tempfile::tempdir().unwrap();
     let mut claims = claimed();
-    let only_low = serde_json::json!({ "model": "haiku", "label": "Haiku", "efforts": ["low"] });
-    let offered = vec![serde_json::from_value(only_low).unwrap()];
-    claims.settings.models = Some(protocol::capability::settings::Models::Static { offered });
-    let hub = hub_describing(dir.path(), vec![AgentDescription { capabilities: Some(claims), ..described() }]);
+    let Some(protocol::capability::settings::Models::Static(catalog)) = &mut claims.settings.models else {
+        panic!("its models are claimed")
+    };
+    catalog.offered.push(protocol::fixtures::offer("haiku", "Haiku", &[Effort::Low], Effort::Low));
+    let hub = hub_describing(dir.path(), vec![AgentDescription { capabilities: claims, ..described() }]);
     ready(&hub);
     let (haiku, sonnet) = (ModelName::named("haiku"), ModelName::named("sonnet"));
     let on = |model: &ModelName, effort| Settings {
@@ -146,7 +147,7 @@ async fn only_an_agent_that_compacts_when_asked_is_asked_to() {
     let dir = tempfile::tempdir().unwrap();
     let mut claims = claimed();
     claims.context.compaction = None;
-    let doesnt = AgentDescription { features: Vec::new(), capabilities: Some(claims), ..described() };
+    let doesnt = AgentDescription { capabilities: claims, ..described() };
     let doesnt = hub_describing(dir.path(), vec![doesnt]);
     ready(&doesnt);
 

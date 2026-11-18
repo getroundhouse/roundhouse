@@ -34,8 +34,7 @@ fn can_wait(kind: AgentKind) -> bool {
     agents::descriptions()
         .into_iter()
         .find(|description| description.kind == kind)
-        .and_then(|description| description.capabilities)
-        .is_some_and(|claims| claims.background.tool_tasks.is_some())
+        .is_some_and(|description| description.capabilities.background.tool_tasks.is_some())
 }
 
 #[cfg(test)]

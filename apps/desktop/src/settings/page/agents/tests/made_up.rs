@@ -1,11 +1,8 @@
 //! What the page's unit tests are drawn from: a moment held still, logins, accounts and how a hub describes Claude,
 //! each plainly made up.
 
-use protocol::capability::settings::{Effort, Settings};
 use protocol::fixtures::account;
-use protocol::model::{
-    Account, AgentDescription, AgentKind, HeldLogin, LimitWindow, LoginDescription, ModelName, UsageLimit,
-};
+use protocol::model::{Account, AgentDescription, AgentKind, HeldLogin, LimitWindow, LoginDescription, UsageLimit};
 
 /// Sunday 1 November 2026, at 3 PM in UTC, which held still is the local time zone.
 pub(super) const NOW_MS: i64 = 1_793_545_200_000;
@@ -29,21 +26,7 @@ pub(super) fn limit(window: LimitWindow, used_percent: u8, resets_at_ms: i64) ->
 
 /// Claude as a hub describes it, with what makes a token for it, as `login` says, if anything.
 pub(super) fn claude(login: Option<LoginDescription>) -> AgentDescription {
-    AgentDescription {
-        capabilities: None,
-        kind: AgentKind::Claude,
-        name: "Claude Code".to_string(),
-        usage_heading: "Claude usage".to_string(),
-        models: Vec::new(),
-        efforts: Vec::new(),
-        defaults: Settings {
-            model: Some(ModelName::named("opus")),
-            effort: Some(Effort::Xhigh),
-            ..Settings::default()
-        },
-        features: Vec::new(),
-        login,
-    }
+    AgentDescription { login, ..protocol::fixtures::claude() }
 }
 
 pub(super) fn setup_token() -> LoginDescription {

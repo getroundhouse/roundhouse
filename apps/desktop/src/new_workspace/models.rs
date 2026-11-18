@@ -60,7 +60,7 @@ impl NewWorkspaceDialog {
     /// with. Either is `None` from a hub that doesn't say, until it's picked or kept, which leaves it to the hub.
     pub(super) fn to_run(&self) -> (Option<ModelName>, Option<Effort>) {
         let agent = self.agent();
-        let model = self.model.clone().or_else(|| agent.as_ref().and_then(|a| a.defaults.model.clone()));
+        let model = self.model.clone().or_else(|| agent.as_ref().and_then(|a| a.defaults().model));
         let effort = self
             .effort
             .clone()

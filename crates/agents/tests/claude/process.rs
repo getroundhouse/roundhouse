@@ -30,7 +30,7 @@ pub(crate) fn spec(dir: &Path) -> AgentSpec {
         agent: AgentKind::Claude,
         cwd: dir.to_string_lossy().into_owned(),
         start: protocol::capability::conversation::Start::New { conversation: Some("s".into()) },
-        settings: agents::claude::description().defaults,
+        settings: agents::claude::description().defaults(),
         env: vec![],
         tools_token: None,
         login: None,
@@ -90,7 +90,7 @@ printf '{"type":"assistant","message":{"id":"m","content":[{"type":"text","text"
 }
 
 fn in_plan_mode(dir: &Path) -> AgentSpec {
-    let defaults = agents::claude::description().defaults;
+    let defaults = agents::claude::description().defaults();
     AgentSpec { settings: Settings { mode: Some(fixtures::plan_mode()), ..defaults }, ..spec(dir) }
 }
 

@@ -1,7 +1,8 @@
 //! What each kind of agent the hub runs is called and offers, as its adapter describes it.
 
 use client_core::{Agents, Client};
-use protocol::model::{AgentDescription, AgentFeature, AgentKind};
+use protocol::capability::settings::{Effort, ModelOffer};
+use protocol::model::{AgentDescription, AgentKind};
 
 use crate::modes::mode_name;
 use crate::session::effort_name;
@@ -23,25 +24,21 @@ pub(crate) fn print_agents(client: &Client) -> anyhow::Result<()> {
 /// command line takes. `*` marks what a chat starts with.
 fn described(agent: &AgentDescription, new_chats: bool) -> String {
     let marked = |is: bool, name: &str| if is { format!("{name}*") } else { name.to_string() };
+    let defaults = agent.defaults();
+    let starts_on = |offer: &ModelOffer| Some(&offer.model) == defaults.model.as_ref();
     let models: Vec<String> = agent
-        .models
+        .models()
         .iter()
-        .map(|choice| {
-            marked(
-                Some(&choice.model) == agent.defaults.model.as_ref(),
-                &format!("{} ({})", choice.model.as_str(), choice.label),
-            )
-        })
+        .map(|offer| marked(starts_on(offer), &format!("{} ({})", offer.model.as_str(), offer.label)))
         .collect();
-    let efforts: Vec<String> = agent
-        .efforts
-        .iter()
-        .map(|effort| marked(Some(effort) == agent.defaults.effort.as_ref(), effort_name(effort)))
-        .collect();
-    let default_mode = agent.default_mode();
+    // Those of the model a chat starts on.
+    let at = |effort: &Effort| Some(effort) == defaults.effort.as_ref();
+    let efforts: Vec<String> = defaults.model.as_ref().map_or_else(Vec::new, |model| {
+        agent.efforts_for(model).iter().map(|effort| marked(at(effort), effort_name(effort))).collect()
+    });
     let approval: Vec<String> =
-        agent.modes().into_iter().map(|mode| marked(Some(mode) == default_mode, mode_name(mode))).collect();
-    let compacts = if agent.has(AgentFeature::Compacts) { "  compacts when asked" } else { "" };
+        agent.modes().into_iter().map(|mode| marked(Some(mode) == defaults.mode, mode_name(mode))).collect();
+    let compacts = if agent.compacts() { "  compacts when asked" } else { "" };
     let new = if new_chats { "  new chats run it" } else { "" };
     if agent.discovers_models() {
         return format!(
@@ -61,32 +58,21 @@ fn described(agent: &AgentDescription, new_chats: bool) -> String {
 
 #[cfg(test)]
 mod tests {
-    use protocol::capability::settings::Effort;
-    use protocol::model::{ModelChoice, ModelName};
+    use protocol::capability::settings::{ModelCatalog, Models};
+    use protocol::fixtures::offer;
+    use protocol::model::ModelName;
 
     use super::*;
 
     #[test]
     fn each_kind_says_what_a_chat_can_be_given_and_marks_what_it_starts_with() {
-        let opus = ModelName::named("opus");
-        let agent = AgentDescription {
-            capabilities: Some(protocol::fixtures::claude_claims()),
-            kind: AgentKind::Claude,
-            name: "Claude".to_string(),
-            usage_heading: "Claude usage".to_string(),
-            models: vec![
-                ModelChoice { model: opus.clone(), label: "Opus".to_string() },
-                ModelChoice { model: ModelName::named("haiku"), label: "Haiku".to_string() },
-            ],
-            efforts: vec![Effort::High, Effort::Xhigh],
-            defaults: protocol::capability::settings::Settings {
-                model: Some(opus),
-                effort: Some(Effort::Xhigh),
-                ..Default::default()
-            },
-            features: vec![AgentFeature::Compacts],
-            login: None,
-        };
+        let mut agent = protocol::fixtures::claude();
+        let offered = vec![
+            offer("opus", "Opus", &[Effort::High, Effort::Xhigh], Effort::Xhigh),
+            offer("haiku", "Haiku", &[Effort::High], Effort::High),
+        ];
+        let catalog = ModelCatalog { offered, default_model: Some(ModelName::named("opus")) };
+        agent.capabilities.settings.models = Some(Models::Static(catalog));
 
         let said = described(&agent, true);
 
