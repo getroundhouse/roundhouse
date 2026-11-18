@@ -16,8 +16,6 @@ use protocol::prompt::Prompt;
 use protocol::tail::Tail;
 use protocol::terminal::{TerminalScreen, TerminalSize};
 
-use super::subagent_records::records_of;
-
 /// When the first record was made: 1 November 2026, at 2 PM in UTC, which pictures show times in. Each one after it is
 /// a minute later, and each event a second.
 const START_MS: i64 = 1_793_541_600_000;
@@ -40,7 +38,7 @@ pub struct World {
     /// Each session's events, with `seq` from 1 and no gaps, as the protocol promises, and each its place among the
     /// events from the same agent or subagent.
     logs: HashMap<SessionId, Vec<SessionEvent>>,
-    /// Each session's subagents, made from its events.
+    /// Each session's subagents, made from its events as [`Subagent::recorded_from`] says, so they agree with them.
     subagents: HashMap<SessionId, Vec<Subagent>>,
     /// What's still streaming, for a chat caught mid-reply.
     pub tails: HashMap<SessionId, Tail>,
@@ -213,7 +211,7 @@ impl World {
             Title::from_first_line(text)
         });
         let log = log_of(&id, created_at_ms, events);
-        self.subagents.insert(id.clone(), records_of(&log));
+        self.subagents.insert(id.clone(), Subagent::recorded_from(&log));
         let last_seq = log.last().map_or(Seq::default(), |event| event.seq);
         let background_tasks =
             log.iter().rev().find_map(|event| event.body.sets_background()).unwrap_or_default().to_vec();
