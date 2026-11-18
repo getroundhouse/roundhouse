@@ -2,8 +2,8 @@
 
 use std::path::{Path, PathBuf};
 
-use crate::StampedBuild;
 use crate::client::{ApiError, ErrorCode};
+pub use crate::hub_copies::{hub_copy_files, is_hub_copy_dir, linking_hub_prefix};
 
 /// A debug build keeps its data apart from a release build's, so one run from a checkout can't reach the
 /// installed app's hub, or migrate its database.
@@ -28,7 +28,7 @@ pub const DAEMON_NAME: &str = "roundhoused";
 
 /// What a stamped build's copy of the daemon is called, and so what its hub and the workers that hub starts are called
 /// wherever a process is named for its file. "Updating the app" in `docs/architecture.md` says why it's a plain file.
-const HUB_COPY_NAME: &str = "Roundhouse Hub";
+pub(crate) const HUB_COPY_NAME: &str = "Roundhouse Hub";
 
 /// The directory in the data directory where the hub keeps the token of each login it holds for an agent's account,
 /// as [`Paths::logins_dir`].
@@ -79,7 +79,7 @@ pub fn daemon_file() -> String {
 }
 
 /// A program's file, which on Windows has the extension a program there needs.
-fn program_file(name: &str) -> String {
+pub(crate) fn program_file(name: &str) -> String {
     format!("{name}{}", std::env::consts::EXE_SUFFIX)
 }
 
@@ -133,26 +133,6 @@ pub struct Paths {
     /// A copy of the daemon for each stamped build that has started a hub here. See [`Paths::hub_copy`].
     pub daemons_dir: PathBuf,
     pub workspaces_root: PathBuf,
-}
-
-impl Paths {
-    /// The copy of the daemon that `build`'s hubs run from, called `Roundhouse Hub`, in a directory named for the build.
-    pub fn hub_copy(&self, build: &StampedBuild) -> PathBuf {
-        self.daemons_dir.join(format!("{}-{}", build.version(), build.number())).join(program_file(HUB_COPY_NAME))
-    }
-}
-
-/// Each name a build's copy can have in its directory: the one [`Paths::hub_copy`] gives it, and the daemon's, which
-/// builds from before copies were called `Roundhouse Hub` gave theirs.
-pub fn hub_copy_files() -> [String; 2] {
-    [program_file(HUB_COPY_NAME), daemon_file()]
-}
-
-/// Whether `name` is one [`Paths::hub_copy`] gives a build's directory in [`Paths::daemons_dir`].
-pub fn is_hub_copy_dir(name: &str) -> bool {
-    name.rsplit_once('-').is_some_and(|(version, number)| {
-        !version.is_empty() && number.parse::<u64>().is_ok_and(|parsed| parsed.to_string() == number)
-    })
 }
 
 /// macOS limits a socket path to 103 bytes.
@@ -339,30 +319,6 @@ mod tests {
         assert_eq!(dir_name(false), "roundhouse");
         assert_eq!(dir_name(true), "roundhouse-dev");
         assert_eq!(DIR_NAME, dir_name(cfg!(debug_assertions)));
-    }
-
-    #[test]
-    fn a_hub_copy_is_called_roundhouse_hub_in_a_directory_named_for_its_build() {
-        let (home, data) = (whole("/h"), whole("/d"));
-        let paths = resolve(env_of(&[(HOME_VAR, &home), (ENV_HOME, &data)])).unwrap();
-
-        let copy = paths.hub_copy(&StampedBuild::new("abc123", 7).unwrap());
-
-        let file = format!("Roundhouse Hub{}", std::env::consts::EXE_SUFFIX);
-        assert_eq!(copy, Path::new(&data).join("daemons/abc123-7").join(file));
-    }
-
-    #[test]
-    fn a_hub_copy_s_directory_is_told_from_any_other_name() {
-        let (home, data) = (whole("/h"), whole("/d"));
-        let paths = resolve(env_of(&[(HOME_VAR, &home), (ENV_HOME, &data)])).unwrap();
-        let copy = paths.hub_copy(&StampedBuild::new("0.1.371", 1_794_519_400).unwrap());
-        let dir = copy.parent().unwrap().file_name().unwrap().to_str().unwrap();
-
-        assert!(is_hub_copy_dir(dir));
-        for other in ["notes", "abc123-new", "-7", "abc123-07", "abc123-+7"] {
-            assert!(!is_hub_copy_dir(other), "{other}");
-        }
     }
 
     /// Only where the hub is on a socket, which has a path.

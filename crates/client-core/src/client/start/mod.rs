@@ -1,8 +1,11 @@
 //! Starting a hub when there's none, which a client does so its user never has to: which daemon it runs, and running
 //! it apart from this client. A stamped build's hubs run from its own copy of the daemon, for the reason "Updating
-//! the app" in `docs/architecture.md` gives, and any other build starts the daemon where it is. Starting one is also
+//! the app" in `docs/architecture.md` gives, and any other build starts the daemon where it is. On Windows a stamped build's hub
+//! runs from a second name for its copy that's the same for every build, as `fixed` says. Starting one is also
 //! when the copies that nothing runs from anymore are removed.
 
+#[cfg(any(windows, test))]
+mod fixed;
 mod old_copies;
 
 #[cfg(test)]
