@@ -34,9 +34,19 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   CARGO_PROFILE_DEV_DEBUG: line-tables-only
+  # The test runner, which Renovate raises, as in ci.yml.
+  # renovate: datasource=crate depName=cargo-nextest
+  NEXTEST_VERSION: 0.9.151
 
 jobs:
+  # A third of the tests on each of three runners, since the tests take all of a runner's 3 cores: on one, they ran for 9
+  # to 15 minutes, and on three, for 2.5 to 5 each. Each runner compiles them itself. The first also lints, runs the doc
+  # tests and saves the caches.
   mac:
+    strategy:
+      fail-fast: false
+      matrix:
+        part: [1, 2, 3]
     runs-on: macos-26
     timeout-minutes: 60
     steps:
@@ -47,6 +57,9 @@ jobs:
         uses: ./.github/actions/zig
         with:
           cache-name: mac
+      - uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
+        with:
+          tool: cargo-nextest@${{ env.NEXTEST_VERSION }}
       - id: cache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -57,13 +70,19 @@ jobs:
             target/
           key: mac-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock', '**/Cargo.toml') }}
           restore-keys: mac-
-      - run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - if: matrix.part == 1
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
       # The gallery's images match the Mac that approved them, pixel for pixel.
-      - run: cargo test --workspace --locked -- --skip 'gallery::'
+      - run: >-
+          cargo nextest run --profile mac --workspace --locked --partition slice:${{ matrix.part }}/3
+          -E 'not test(/^gallery::/)'
+      # nextest skips doc tests, as in ci.yml.
+      - if: matrix.part == 1
+        run: cargo test --workspace --doc --locked
       # Only the dependencies are worth keeping, as in ci.yml.
-      - if: github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true'
+      - if: matrix.part == 1 && github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true'
         run: cargo clean --workspace
-      - if: github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true'
+      - if: matrix.part == 1 && github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
@@ -75,7 +94,7 @@ jobs:
       # Zig's global cache, once Zig has built something, which it hasn't when target/ held Ghostty's build. What it
       # built is then listed in h/.
       - if: >-
-          github.ref == 'refs/heads/main' && steps.zig.outputs.cache-hit != 'true' &&
+          matrix.part == 1 && github.ref == 'refs/heads/main' && steps.zig.outputs.cache-hit != 'true' &&
           hashFiles('.zig-cache/h/**') != ''
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:

@@ -1,4 +1,5 @@
-# How CI runs the tests: `cargo nextest run --profile ci`. Locally they run under `cargo test`, as docs/rust.md says.
+# How CI runs the tests on Linux: `cargo nextest run --profile ci`, and on a Mac with the mac profile below. Locally they
+# run under `cargo test`, as docs/rust.md says.
 [profile.ci]
 # Every test runs, so one failure doesn't hide another behind it.
 fail-fast = false
@@ -21,3 +22,17 @@ final-status-level = "slow"
 # How long each test took, in target/nextest/ci/junit.xml, which .github/tests-over-limit.py reads.
 [profile.ci.junit]
 path = "junit.xml"
+
+# How the Mac workflow runs the tests: `cargo nextest run --profile mac`, a third of them on each of three runners of 3
+# cores. The tests take all of a runner's cores there, so more at once only slows each down.
+[profile.mac]
+fail-fast = false
+retries = 0
+# Two at once per core, as on CI's runner. On one Mac runner, 6 at once ran the tests in 567s, 3 in 759s and 9 in
+# 685s, with a test failing at 9.
+test-threads = 6
+# A UI test takes up to about 35s on a Mac runner at 6 at once, and CI's limit is for its own runner, so the log marks
+# only a test that takes longer than 30s. One still running after 2 minutes has hung, and is stopped and fails, as in
+# the ci profile.
+slow-timeout = { period = "30s", terminate-after = 4 }
+final-status-level = "slow"
