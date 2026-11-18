@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use std::ops::Range;
 use std::rc::Rc;
 
+use super::super::language::OtherAlphabets;
 use super::super::transducer::{BLANK, PredState, Transducer, VOCAB_SIZE};
 use super::super::windows::Steps;
 use super::Encoded;
@@ -52,17 +53,19 @@ struct Candidate {
     settled: f32,
 }
 
-/// Carries active beams and cached prediction states across windows of a recording.
-pub(in super::super) struct Decoder {
+/// Carries active beams and cached prediction states across windows of a recording, which is never heard as a piece
+/// in another alphabet than its language's.
+pub(in super::super) struct Decoder<'a> {
+    other_alphabets: &'a OtherAlphabets,
     beams: Vec<Beam>,
     cache: HashMap<(u32, usize), (u32, Rc<PredState>)>,
     next_state_id: u32,
     emitted: usize,
 }
 
-impl Decoder {
-    pub(in super::super) fn new() -> Self {
-        Self { beams: Vec::new(), cache: HashMap::new(), next_state_id: 1, emitted: 0 }
+impl<'a> Decoder<'a> {
+    pub(in super::super) fn new(other_alphabets: &'a OtherAlphabets) -> Self {
+        Self { other_alphabets, beams: Vec::new(), cache: HashMap::new(), next_state_id: 1, emitted: 0 }
     }
 
     /// Decodes a whole piece from start to end, settling hint boundaries at the end and returning the winning tokens.
@@ -186,6 +189,10 @@ impl Decoder {
         let states: Vec<&PredState> = expanding.iter().map(|b| &*b.pred).collect();
         let mut lps = vec![0.0_f32; states.len() * VOCAB_SIZE];
         transducer.log_probs(enc_proj, &states, &mut lps)?;
+        // Before the cutoff below, which is then measured from the likeliest piece that's left.
+        for row in lps.as_chunks_mut::<VOCAB_SIZE>().0 {
+            self.other_alphabets.leave_out(row);
+        }
         for (beam, row) in expanding.iter().zip(lps.as_chunks::<VOCAB_SIZE>().0) {
             finished.push(Beam { score: beam.score + row[BLANK], ..beam.clone() });
         }

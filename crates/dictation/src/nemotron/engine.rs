@@ -3,6 +3,7 @@
 use std::path::Path;
 
 use super::decoding::{Decoder, Encoded};
+use super::language::{ENGLISH, OtherAlphabets};
 use super::live::Live;
 use super::mel::{MELS, Mel};
 use super::parts::{Input, Part, Parts, Tensor};
@@ -13,9 +14,6 @@ use crate::{Engine, EngineError, Hints, Listening, Samples};
 
 /// Where the vocabulary is, in the directory the engine loads from.
 pub(super) const VOCABULARY: &str = "coreml/vocab.json";
-
-/// The language the encoders are told they'll hear: English, the first of the model's prompts. *Unconfirmed.*
-const ENGLISH: i32 = 0;
 
 /// The longest piece the offline encoder takes: 15 s, as it was exported.
 pub(super) const LONGEST: Samples = Samples::from_secs(15);
@@ -47,6 +45,8 @@ pub struct Nemotron {
     pub(super) parts: Parts,
     mel: Mel,
     pub(super) vocabulary: Vocabulary,
+    /// The pieces a recording isn't heard as, since it's heard in English.
+    pub(super) other_alphabets: OtherAlphabets,
 }
 
 impl Nemotron {
@@ -55,14 +55,18 @@ impl Nemotron {
     /// memory while it does. Core ML keeps what it compiled, so later loads take a fraction of a second, until it
     /// compiles them again.
     pub fn load(dir: &Path) -> Result<Self, EngineError> {
-        let vocabulary = Vocabulary::read(&dir.join(VOCABULARY))?;
-        Ok(Self { parts: Parts::load(dir)?, mel: Mel::new(), vocabulary })
+        Ok(Self::with(Parts::load(dir)?, Vocabulary::read(&dir.join(VOCABULARY))?))
     }
 
     /// The engine, with stand-ins for its parts.
     #[cfg(test)]
     pub(super) fn standing_in(parts: Parts, vocabulary: Vocabulary) -> Self {
-        Self { parts, mel: Mel::new(), vocabulary }
+        Self::with(parts, vocabulary)
+    }
+
+    fn with(parts: Parts, vocabulary: Vocabulary) -> Self {
+        let other_alphabets = OtherAlphabets::new(&vocabulary, &ENGLISH);
+        Self { parts, mel: Mel::new(), vocabulary, other_alphabets }
     }
 
     pub(super) fn hint_graph(&self, hints: &Hints) -> HintGraph {
@@ -83,7 +87,7 @@ impl Nemotron {
         let inputs = [
             Input::Floats { name: "mel", values: &features.values, shape: &[1, MELS, features.frames] },
             Input::Ints { name: "mel_length", values: &[audio_frames], shape: &[1] },
-            Input::Ints { name: "prompt_id", values: &[ENGLISH], shape: &[1] },
+            Input::Ints { name: "prompt_id", values: &[ENGLISH.prompt], shape: &[1] },
         ];
         let outputs = encoder.run(&inputs, &["encoder", "encoder_length"])?;
         let [made_out, length] =
@@ -112,8 +116,12 @@ impl Engine for Nemotron {
         padded[..piece.len()].copy_from_slice(piece);
         let encoded = self.encode(&*self.parts.offline, &padded, Samples(piece.len()), Steps(0))?;
         let graph = self.hint_graph(hints);
-        let tokens =
-            Decoder::new().decode_all(&*self.parts.transducer, &graph, &encoded, Steps(0)..encoded.made_out())?;
+        let tokens = Decoder::new(&self.other_alphabets).decode_all(
+            &*self.parts.transducer,
+            &graph,
+            &encoded,
+            Steps(0)..encoded.made_out(),
+        )?;
         Ok(self.vocabulary.join(tokens.into_iter().map(|token| token.id)).trim().to_string())
     }
 }
