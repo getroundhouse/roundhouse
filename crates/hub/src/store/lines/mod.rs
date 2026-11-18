@@ -10,3 +10,5 @@ use protocol::model::{CompactionLine, PromptLine, Seq};
 mod tests;
 
 mod transcript_lines;
+#[cfg(test)]
+pub(in crate::store) use transcript_lines::{COMPACTIONS, PROMPTS, SETTLEMENTS};

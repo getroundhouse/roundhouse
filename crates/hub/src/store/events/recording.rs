@@ -229,10 +229,7 @@ impl Store {
     /// The agent's own newest failed request, a subagent's left out, if it has had one.
     pub fn newest_own_failure(&self, session_id: &SessionId) -> Result<Option<SessionEvent>, StoreError> {
         let conn = lock(&self.reader);
-        let mut statement = conn.prepare_cached(&format!(
-            "SELECT {EVENT_COLUMNS}, NULL FROM events
-             WHERE session_id = ? AND kind = 'request_failed' AND subagent IS NULL ORDER BY seq DESC LIMIT 1"
-        ))?;
+        let mut statement = conn.prepare_cached(&newest_own_failure())?;
         let mut rows = statement.query(params![session_id.as_str()])?;
         let Some(row) = rows.next()? else { return Ok(None) };
         Ok(Some(event_in(session_id, row)?.0))
@@ -243,6 +240,14 @@ impl Store {
     pub fn next_run(&self) -> Result<RunId, StoreError> {
         self.bump("run").map(RunId::new)
     }
+}
+
+/// The agent's own newest failed request, as [`EVENT_COLUMNS`] then a NULL raw line.
+pub(super) fn newest_own_failure() -> String {
+    format!(
+        "SELECT {EVENT_COLUMNS}, NULL FROM events
+         WHERE session_id = ? AND kind = 'request_failed' AND subagent IS NULL ORDER BY seq DESC LIMIT 1"
+    )
 }
 
 /// The place of the newest event from the agent itself, or from the subagent `subagent`, or 0 if there's none.

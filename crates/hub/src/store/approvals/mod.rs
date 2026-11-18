@@ -9,4 +9,6 @@ use protocol::model::Seq;
 mod tests;
 
 mod approval_rows;
+#[cfg(test)]
+pub(in crate::store) use approval_rows::REQUEST;
 pub(super) use approval_rows::{note_approvals, request_on};

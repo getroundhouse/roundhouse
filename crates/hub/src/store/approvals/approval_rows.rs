@@ -51,6 +51,11 @@ impl Store {
     }
 }
 
+/// The body of a chat's newest request for approval with an ID.
+pub(in crate::store) const REQUEST: &str = "SELECT body FROM events \
+     WHERE session_id = ? AND kind = 'approval_requested' AND json_extract(body, '$.approval_id') = ? \
+     ORDER BY seq DESC LIMIT 1";
+
 /// What the newest request bearing this ID asks, including one just answered, whose decision still has to reach its
 /// agent.
 pub(in super::super) fn request_on(
@@ -58,9 +63,8 @@ pub(in super::super) fn request_on(
     session: &SessionId,
     approval: &ApprovalId,
 ) -> Result<Option<Request>, StoreError> {
-    let body: Option<String> = conn.query_row(
-        "SELECT body FROM events WHERE session_id = ? AND kind = 'approval_requested' AND json_extract(body, '$.approval_id') = ? ORDER BY seq DESC LIMIT 1",
-        params![session.as_str(), approval.as_str()], |row| row.get(0)).optional()?;
+    let params = params![session.as_str(), approval.as_str()];
+    let body: Option<String> = conn.query_row(REQUEST, params, |row| row.get(0)).optional()?;
     let Some(body) = body else { return Ok(None) };
     let EventBody::ApprovalRequested { request, .. } = serde_json::from_str(&body)? else { return Ok(None) };
     Ok(Some(*request))
