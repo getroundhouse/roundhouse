@@ -1,3 +1,4 @@
+// Changed in Roundhouse's copy of gpui-kit, as third_party/README.md lists.
 //! Behavior and infrastructure foundations for GPUI applications.
 //!
 //! Primitives deliberately avoid presentation styles. Layout, positioning,
@@ -90,6 +91,7 @@ mod tree;
 mod undo_history;
 mod virtual_list;
 
+pub use a11y_disabled::{A11yDisabled, A11yDisabledExt};
 pub use accordion::{Accordion, AccordionHeader, AccordionItem, AccordionPanel, AccordionTrigger};
 pub use alert_dialog::{
     AlertDialog, AlertDialogAction, AlertDialogBackdrop, AlertDialogCancel, AlertDialogClose,

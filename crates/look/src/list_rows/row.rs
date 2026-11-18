@@ -1,17 +1,20 @@
 use std::rc::Rc;
 
+use gpui_kit::base::A11yDisabledExt as _;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyElement, App, ClickEvent, ElementId, InteractiveElement as _, IntoElement, ParentElement, Pixels, RenderOnce,
-    Role, SharedString, StatefulInteractiveElement as _, Styled as _, TestSupportExt as _, Window, px,
+    AnyElement, App, ClickEvent, ElementId, InteractiveElement as _, IntoElement, MouseButton, MouseDownEvent,
+    MouseUpEvent, ParentElement, Pixels, RenderOnce, Role, SharedString, StatefulInteractiveElement as _, Styled as _,
+    TestSupportExt as _, Window, div, px,
 };
 
 use crate::colors::colors;
 use crate::hand::Hand as _;
 use crate::heights::RowSize;
+use crate::menus::{Menu, RightClickMenu as _};
 use crate::shape::{Corner, Shaped as _};
 use crate::space::Space;
-use crate::theme::{CHOSEN, UNDER_POINTER};
+use crate::theme::{CHOSEN, PRESSED, UNDER_POINTER};
 use crate::typography::{Type, Typeset as _};
 use gpui_kit::component::h_flex;
 
@@ -24,16 +27,26 @@ pub fn list_row(id: impl Into<ElementId>, size: RowSize) -> ListRow {
         id: id.into(),
         size,
         chosen: false,
+        off: false,
         wraps: false,
         indent: px(0.),
         role: None,
         tooltip: None,
         on_click: None,
+        on_hover: None,
+        on_press: None,
+        on_let_go: None,
+        on_let_go_outside: None,
+        menu: None,
         children: Vec::new(),
     }
 }
 
 type OnClick = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>;
+type OnHover = Box<dyn Fn(&bool, &mut Window, &mut App)>;
+type OnPress = Box<dyn Fn(&MouseDownEvent, &mut Window, &mut App)>;
+type OnLetGo = Box<dyn Fn(&MouseUpEvent, &mut Window, &mut App)>;
+type BuildMenu = Rc<dyn Fn(Menu, &mut Window, &mut App) -> Menu>;
 
 /// One of what a list holds, which [`list_row`] makes. What's put in it is laid out in a line, from its start.
 #[derive(IntoElement)]
@@ -42,11 +55,17 @@ pub struct ListRow {
     id: ElementId,
     size: RowSize,
     chosen: bool,
+    off: bool,
     wraps: bool,
     indent: Pixels,
     role: Option<(Role, SharedString)>,
     tooltip: Option<SharedString>,
     on_click: Option<OnClick>,
+    on_hover: Option<OnHover>,
+    on_press: Option<OnPress>,
+    on_let_go: Option<OnLetGo>,
+    on_let_go_outside: Option<OnLetGo>,
+    menu: Option<BuildMenu>,
     children: Vec<AnyElement>,
 }
 
@@ -54,6 +73,13 @@ impl ListRow {
     /// Washed as what's chosen, such as the file showing or the page of Settings that's open.
     pub fn chosen(mut self, chosen: bool) -> Self {
         self.chosen = chosen;
+        self
+    }
+
+    /// Can't be pressed for now, such as Create while there's no project to create in: it isn't washed under the
+    /// pointer, has the arrow, a click on it does nothing, and assistive apps say it's off.
+    pub fn off(mut self, off: bool) -> Self {
+        self.off = off;
         self
     }
 
@@ -83,6 +109,12 @@ impl ListRow {
         self
     }
 
+    /// A button, called `label` to assistive apps, such as a workspace in the sidebar, which opens it.
+    pub fn button(mut self, label: impl Into<SharedString>) -> Self {
+        self.role = Some((Role::Button, label.into()));
+        self
+    }
+
     /// What it names, while the pointer rests on it, where its words are cut short.
     pub fn tooltip(mut self, words: impl Into<SharedString>) -> Self {
         self.tooltip = Some(words.into());
@@ -92,6 +124,37 @@ impl ListRow {
     /// What a click on it does.
     pub fn on_click(mut self, on_click: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static) -> Self {
         self.on_click = Some(Rc::new(on_click));
+        self
+    }
+
+    /// What the pointer coming onto it, `true`, and leaving it, `false`, does, such as showing a button that's there
+    /// only under the pointer.
+    pub fn on_hover(mut self, on_hover: impl Fn(&bool, &mut Window, &mut App) + 'static) -> Self {
+        self.on_hover = Some(Box::new(on_hover));
+        self
+    }
+
+    /// What a left press on it does as it goes down, before it's let go.
+    pub fn on_press(mut self, on_press: impl Fn(&MouseDownEvent, &mut Window, &mut App) + 'static) -> Self {
+        self.on_press = Some(Box::new(on_press));
+        self
+    }
+
+    /// What letting a left press go over it does, wherever the press started.
+    pub fn on_let_go(mut self, on_let_go: impl Fn(&MouseUpEvent, &mut Window, &mut App) + 'static) -> Self {
+        self.on_let_go = Some(Box::new(on_let_go));
+        self
+    }
+
+    /// What letting a left press go anywhere but over it does, such as forgetting a press that started on it.
+    pub fn on_let_go_outside(mut self, on_let_go: impl Fn(&MouseUpEvent, &mut Window, &mut App) + 'static) -> Self {
+        self.on_let_go_outside = Some(Box::new(on_let_go));
+        self
+    }
+
+    /// The menu `build` fills, where it's right-clicked.
+    pub fn right_click_menu(mut self, build: impl Fn(Menu, &mut Window, &mut App) -> Menu + 'static) -> Self {
+        self.menu = Some(Rc::new(build));
         self
     }
 }
@@ -115,7 +178,8 @@ impl RenderOnce for ListRow {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let colors = colors(cx);
         let room = room(self.size);
-        h_flex()
+        let (on, clickable) = (!self.off, self.on_click.is_some() && !self.off);
+        let drawn = h_flex()
             .id(self.id)
             .test_support()
             .relative()
@@ -133,17 +197,34 @@ impl RenderOnce for ListRow {
             .gap(room)
             .corners(Corner::Control)
             .typeset(Type::Body)
-            .hand()
+            .hand_while(clickable)
             .when(self.chosen, |row| row.bg(colors.text.opacity(CHOSEN)))
-            .when(!self.chosen, |row| row.hover(|row| row.bg(colors.text.opacity(UNDER_POINTER))))
+            .when(!self.chosen && on, |row| row.hover(|row| row.bg(colors.text.opacity(UNDER_POINTER))))
+            .when(clickable, |row| row.active(|row| row.bg(colors.text.opacity(PRESSED))))
             .when_some(self.role, |row, (role, label)| {
                 let row = row.role(role).aria_label(label);
                 if role == Role::ListBoxOption { row.aria_selected(self.chosen) } else { row }
             })
             .when_some(self.tooltip, |row, words| row.tooltip(crate::tooltip(words)))
-            .when_some(self.on_click, |row, on_click| {
+            .when_some(self.on_click.filter(|_| on), |row, on_click| {
                 row.on_click(move |event, window, cx| on_click(event, window, cx))
             })
+            .when_some(self.on_hover, |row, on_hover| row.on_hover(on_hover))
+            .when_some(self.on_press, |row, on_press| row.on_mouse_down(MouseButton::Left, on_press))
+            .when_some(self.on_let_go, |row, on_let_go| row.on_mouse_up(MouseButton::Left, on_let_go))
+            .when_some(self.on_let_go_outside, |row, on_let_go| row.on_mouse_up_out(MouseButton::Left, on_let_go))
             .children(self.children)
+            .a11y_disabled(self.off);
+        // On what holds the row, since the menu is a child of what it's on, set apart from the rest, and the row's
+        // gap would count it as one of what's in the row.
+        match self.menu {
+            Some(build) => div()
+                .flex_none()
+                .w_full()
+                .child(drawn)
+                .right_click_menu(move |menu, window, cx| build(menu, window, cx))
+                .into_any_element(),
+            None => drawn.into_any_element(),
+        }
     }
 }

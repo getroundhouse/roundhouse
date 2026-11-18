@@ -28,7 +28,7 @@ Each component follows the same pattern, so one that's learned reads like the ot
 - **Each of a component's tables in `docs/spec/components.md` is held to its names in `look`** by a test, through `written`, as the foundations' tables are.
 - **Each component has a sheet in the gallery of every kind in every state,** drawn with the same calls the app makes. A state the pointer brings, such as under the pointer or pressed, is drawn by pointing at each one or pressing it, for real, one at a time, and the sheet takes its pixels from that picture, with `headless::draw_pointing`. The design system's page shows each kind beside its name, cut from the sheet.
 - **A test in `look` holds what's built in,** such as which buttons have the hand.
-- **`tools/policy`'s `design_system.rs` refuses each of the kit's parts that a component holds outside `look`,** with a test for each, such as `only_the_component_library_uses_the_kits_button`, but in the places its list names, each with why: what a later component will draw, such as the sidebar's rows, and the few buttons with a look of their own.
+- **`tools/policy`'s `design_system.rs` refuses each of the kit's parts that a component holds outside `look`,** with a test for each, such as `only_the_component_library_uses_the_kits_button`, but in the places its list names, each with why: what a later component will draw, such as the hub switcher, and the few buttons with a look of their own.
 
 ## Adding a component, or a kind
 
@@ -97,7 +97,11 @@ A key in one of the kit's menus is the kit's, from the action it's bound to, so 
 | Let it grow to what it holds, such as a prompt of two lines | `wraps` |
 | Make it an option of a list to choose from, which assistive apps say is chosen, such as a page of Settings | `listed` |
 | Make it a link, such as a page a web search found | `link` |
+| Make it a button, such as a workspace in the sidebar | `button` |
+| Turn it off for now, which assistive apps say, such as Create with no project | `off` |
 | Do something when it's clicked, or say more while the pointer rests on it | `on_click`, `tooltip` |
+| Follow the pointer coming and going, or a left press going down and let go, over it or elsewhere | `on_hover`, `on_press`, `on_let_go`, `on_let_go_outside` |
+| Open a menu where it's right-clicked | `right_click_menu` |
 
 ## Menus
 

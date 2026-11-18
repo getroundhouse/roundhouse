@@ -15,4 +15,4 @@ use applying::config;
 pub(crate) use applying::hex;
 #[cfg(test)]
 pub(crate) use applying::kit_colors;
-pub(crate) use applying::{CHOSEN, UNDER_POINTER};
+pub(crate) use applying::{CHOSEN, PRESSED, UNDER_POINTER};

@@ -6,17 +6,16 @@ use std::rc::Rc;
 
 use gpui_kit::assets::IconName as Lucide;
 use gpui_kit::base::motion::transition;
-use gpui_kit::component::button::{Button, ButtonVariants as _};
-use gpui_kit::component::{Icon, Selectable as _, h_flex};
+use gpui_kit::component::{Icon, h_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    Action, AnyElement, App, Context, ElementId, InteractiveElement as _, IntoElement, MouseButton, ParentElement,
-    Pixels, Role, StatefulInteractiveElement as _, Styled, TestSupportExt as _, Window, div, px,
+    Action, AnyElement, App, Context, ElementId, InteractiveElement as _, IntoElement, ParentElement, Pixels, Role,
+    StatefulInteractiveElement as _, Styled, TestSupportExt as _, Window, div, px,
 };
-use look::{Hand as _, IconSizing as _, LineText, Placed, RightClickMenu as _, Typeset as _};
+use look::{IconSizing as _, LineText, Placed};
 use protocol::model::{Workspace, WorkspaceId};
 
-use super::{MARK_GAP, ROW_PAD, ROW_SIZE, Standing, row_inset, standing};
+use super::{MARK_GAP, MARK_INDENT, ROW_SIZE, Standing, standing};
 use crate::app::AppView;
 use crate::{ArchiveWorkspace, MarkWorkspace};
 use crate::{prompt_cache, right_click};
@@ -55,22 +54,16 @@ pub(super) fn workspace_row(
     let expiring = prompt_cache::soonest_expiring(its_chats, look::now_ms(cx));
     let end = End { drafted, expiring, pointing, waiting };
     let end = right_end(app, workspace, end, &line_text.detail, window, cx);
-    let row = Button::new(ElementId::Name(format!("workspace-{}", workspace.id).into()));
+    let row = look::list_row(ElementId::Name(format!("workspace-{}", workspace.id).into()), ROW_SIZE);
     let row = follows_the_pointer(row, &workspace.id, cx)
-        .hand()
-        .accessibility_label(label.clone())
-        .ghost()
-        .w_full()
-        .h(ROW_SIZE.height())
-        .pl(row_inset())
-        .pr(ROW_PAD)
-        .selected(selected)
+        .button(label.clone())
+        .indent(MARK_INDENT.size())
+        .chosen(selected)
         .on_click(cx.listener(move |t, _, _, cx| t.open_workspace(id.clone(), cx)))
         .child(
             h_flex()
                 .w_full()
                 .gap(MARK_GAP)
-                .typeset(look::Type::Body)
                 .when(needs_a_look, look::Typeset::emphasis)
                 // Rows with nothing to look at recede, so those with a reply or a question stand out. Selecting a row
                 // only changes its background: font smoothing thickens brighter text, so a name that brightened would
@@ -95,7 +88,7 @@ pub(super) fn workspace_row(
 }
 
 /// Has the row say when the pointer is over it, which is when it shows its archive button.
-fn follows_the_pointer(row: Button, id: &WorkspaceId, cx: &mut Context<AppView>) -> Button {
+fn follows_the_pointer(row: look::ListRow, id: &WorkspaceId, cx: &mut Context<AppView>) -> look::ListRow {
     let (pointed, pressed, let_go) = (id.clone(), id.clone(), id.clone());
     row.on_hover(cx.listener(move |t, hovered: &bool, _, cx| {
         // Leaving one row and coming onto the next can be heard in either order.
@@ -111,21 +104,18 @@ fn follows_the_pointer(row: Button, id: &WorkspaceId, cx: &mut Context<AppView>)
     // A pressed row says the pointer has left at the first move, which the listener above then leaves alone, so
     // the button and what made room for it don't go and come back around a click. Let go over the row, GPUI says
     // again where the pointer is. Let go anywhere else, nothing does, so the pointer is taken to have left.
-    .on_mouse_down(MouseButton::Left, cx.listener(move |t, _, _, _| t.sidebar.pressed = Some(pressed.clone())))
-    .on_mouse_up(MouseButton::Left, cx.listener(|t, _, _, _| t.sidebar.pressed = None))
-    .on_mouse_up_out(
-        MouseButton::Left,
-        cx.listener(move |t, _, _, cx| {
-            if t.sidebar.pressed.as_ref() != Some(&let_go) {
-                return;
-            }
-            t.sidebar.pressed = None;
-            if t.pointing_at.as_ref() == Some(&let_go) {
-                t.pointing_at = None;
-                cx.notify();
-            }
-        }),
-    )
+    .on_press(cx.listener(move |t, _, _, _| t.sidebar.pressed = Some(pressed.clone())))
+    .on_let_go(cx.listener(|t, _, _, _| t.sidebar.pressed = None))
+    .on_let_go_outside(cx.listener(move |t, _, _, cx| {
+        if t.sidebar.pressed.as_ref() != Some(&let_go) {
+            return;
+        }
+        t.sidebar.pressed = None;
+        if t.pointing_at.as_ref() == Some(&let_go) {
+            t.pointing_at = None;
+            cx.notify();
+        }
+    }))
 }
 
 /// What a row has at its right end.

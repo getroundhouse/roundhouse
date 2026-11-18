@@ -22,6 +22,6 @@ mod workspace_list;
 use workspace_list::places;
 pub(super) use workspace_list::row_icon;
 use workspace_list::{
-    GROUP_GAP, HEADING_SIZE, LIST_PAD, Line, LineId, MARK_GAP, ROW_PAD, ROW_SIZE, has_line, row_inset,
+    GROUP_GAP, HEADING_SIZE, LIST_PAD, Line, LineId, MARK_GAP, MARK_INDENT, ROW_PAD, ROW_SIZE, has_line,
 };
 pub(crate) use workspace_list::{SORTS, arrange, listed, lists, render, shown};
