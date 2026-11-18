@@ -63,6 +63,16 @@ impl Subagent {
     pub fn id(&self) -> SubagentId {
         self.id.clone().unwrap_or_else(|| SubagentId::of_call(&self.call))
     }
+
+    /// The one of `subagents` that `named` names: the one with that ID, or else the one the call it names started,
+    /// since a client from before subagents had IDs of their own names each by its call. A read, a subscription or a
+    /// search names a subagent so, and the hub finds it as this says, with SQL of its own, which its store's tests hold
+    /// to this. A fake hub finds one by it. Only they use it, so it's behind `testing`.
+    #[cfg(feature = "testing")]
+    pub fn named<'a>(subagents: &'a [Subagent], named: &SubagentId) -> Option<&'a Subagent> {
+        let by_call = || subagents.iter().find(|subagent| SubagentId::of_call(&subagent.call) == *named);
+        subagents.iter().find(|subagent| subagent.id() == *named).or_else(by_call)
+    }
 }
 
 /// Where a subagent has got to. One this build doesn't know reads as `Unknown`.
@@ -144,4 +154,24 @@ pub struct Said {
     /// `text` is only its start.
     #[serde(default)]
     pub cut: bool,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Subagent, SubagentId};
+    use crate::fixtures;
+
+    /// By its ID first, then by its call, so one whose ID is another's call is the one found by it, and one named by
+    /// neither is none.
+    #[test]
+    fn a_subagent_is_named_by_its_id_or_else_by_its_call() {
+        let named = |id: &str, call: &str| Subagent { id: Some(id.into()), ..fixtures::subagent(call) };
+        let subagents = [named("agent-1", "toolu_1"), named("toolu_1-again", "agent-1"), fixtures::subagent("toolu_3")];
+        let found = |name: &str| Subagent::named(&subagents, &name.into()).map(Subagent::id);
+
+        assert_eq!(found("toolu_1"), Some(SubagentId::from("agent-1")), "by its call");
+        assert_eq!(found("agent-1"), Some(SubagentId::from("agent-1")), "its ID, though it's another's call");
+        assert_eq!(found("toolu_3"), Some(SubagentId::from("toolu_3")));
+        assert_eq!(found("unknown"), None);
+    }
 }

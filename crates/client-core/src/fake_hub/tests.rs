@@ -3,9 +3,9 @@
 
 use protocol::client::{ErrorCode, log};
 use protocol::event::{EventBody, ExitReason, TaskKind};
-use protocol::model::{AgentKind, Seq, SessionStatus, SubagentId};
+use protocol::model::{AgentKind, Place, Seq, SessionStatus, SubagentId};
 
-use super::events::{subagent_started, taken, task, user_prompt};
+use super::events::{subagent_started, taken, task, text, user_prompt, within};
 use super::{World, serve};
 use crate::{Client, ClientError};
 
@@ -132,6 +132,29 @@ fn a_chat_s_subagents_go_by_the_id_their_agent_gives_or_by_their_call() {
 
     let ids: Vec<_> = subagents.iter().map(protocol::model::Subagent::id).collect();
     assert_eq!(ids, [SubagentId::from("agent-7"), SubagentId::of_call(&"toolu_1".into())]);
+}
+
+/// As `Subagent::named` says: a subagent its agent gave an ID is read, followed and searched by its call as by that ID.
+#[test]
+fn a_subagent_asked_for_by_its_call_is_the_one_its_call_started() {
+    let mut world = World::default();
+    let repo = world.repo("aspen");
+    let workspace = world.workspace(&repo, "elm");
+    let mut named = subagent_started("toolu_2", "explore", "Look", "Look around");
+    if let EventBody::SubagentStarted { subagent, .. } = &mut named {
+        *subagent = Some("agent-7".into());
+    }
+    let chat = world.chat(&workspace, SessionStatus::Running, vec![named, within("agent-7", text("m1", "Found it"))]);
+    let (_dir, client) = served(world);
+    let by = |name: &str| {
+        let name = SubagentId::from(name);
+        let (read, last) = client.session_read_places(&chat, Some(&name), Place::new(1), 10).unwrap();
+        let found = client.session_find(&chat, Some(&name), "Found").unwrap();
+        (read.len(), last, found.places)
+    };
+
+    assert_eq!(by("toolu_2"), by("agent-7"));
+    assert_eq!(by("agent-7"), (1, Place::new(1), vec![Place::new(1)]));
 }
 
 /// As `SettledAt::of` says: where the last event that took or dropped it is.
