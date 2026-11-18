@@ -102,6 +102,10 @@ impl Hub {
         Ok(named.then(|| id.into()))
     }
 
+    /// The workspace's open chat, or else a new one of `agent`'s, unless the workspace is being made for a chat of
+    /// another's, as `Hub::first_chats` says. So a client that asks as it shows a workspace being made from the
+    /// new-workspace dialog, which it can once the workspace is ready, before the hub has made its chat, makes the one
+    /// chosen there rather than one of its own choosing, which the hub would then find.
     pub(crate) async fn session_ensure(
         self: &Arc<Self>,
         workspace_id: WorkspaceId,
@@ -111,12 +115,15 @@ impl Hub {
         if let Some(open) = open(self.session_list(workspace_id.clone()).await?) {
             return Ok(open);
         }
+        let agent = self.first_chats.lock().get(&workspace_id).copied().unwrap_or(agent);
         // Before the lock, which every workspace's first chat takes, since the agent may be asked what it offers.
         let settings = self.initial_settings(agent, workspace_id.clone(), SessionSettingsChange::default()).await?;
         let _one_at_a_time = self.ensuring_session.lock().await;
-        match open(self.session_list(workspace_id.clone()).await?) {
-            Some(open) => Ok(open),
-            None => self.insert_session(workspace_id, agent, settings, None).await,
+        if let Some(open) = open(self.session_list(workspace_id.clone()).await?) {
+            return Ok(open);
         }
+        let made = self.insert_session(workspace_id.clone(), agent, settings, None).await?;
+        self.first_chats.lock().remove(&workspace_id);
+        Ok(made)
     }
 }

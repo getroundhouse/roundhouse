@@ -127,9 +127,9 @@ fn hub_on(
     Hub::new(Build::UNSTAMPED, store, HubDirs::in_dir(dir), providers, github, agents, false, timers)
 }
 
-/// A hub as [`hub_in`] makes one, before anything shares it, whose workspaces are all `provider`'s.
-pub(super) fn hub_provided_by(dir: &Path, provider: Arc<dyn Provider>) -> Hub {
-    hub_on(dir, provider, vec![described()], Github::new(GithubConfig::at(NO_GITHUB.to_string())), Timers::DEFAULT)
+/// A hub as [`hub_describing`] makes one, before anything shares it, whose workspaces are all `provider`'s.
+pub(super) fn hub_provided_by(dir: &Path, provider: Arc<dyn Provider>, agents: Vec<AgentDescription>) -> Hub {
+    hub_on(dir, provider, agents, Github::new(GithubConfig::at(NO_GITHUB.to_string())), Timers::DEFAULT)
 }
 
 /// A stand-in for `w`'s worker, which fails every call, as `hub`'s worker.

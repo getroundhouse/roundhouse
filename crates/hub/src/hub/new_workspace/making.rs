@@ -50,7 +50,9 @@ impl Hub {
                 .map_err(|e| ApiError::new(ErrorCode::InvalidRequest, e.to_string()))?;
         }
         let files = self.dialog_files(&made_of, again).await?;
-        let workspace = self.workspace_create(repo_id, None, None, Some(client_request_id.clone())).await?;
+        // Its first chat is the one chosen, even if a client showing the workspace asks for it first.
+        let first_chat = Some(made_of.agent.unwrap_or_else(|| self.new_chat_kind()));
+        let workspace = self.make_workspace(repo_id, None, None, Some(client_request_id.clone()), first_chat).await?;
         let (session, unchosen) = self.first_chat(&workspace.id, &made_of).await?;
         let first = self.first_prompt(session, unchosen.clone(), &made_of, &files, &client_request_id);
         let (session, unsent, taken) = first.await;
