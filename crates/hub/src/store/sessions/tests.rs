@@ -1,5 +1,6 @@
 use protocol::attachment::{Attachment, MediaType};
-use protocol::model::{AttachmentId, CacheTtl, ContextUsage, Effort, ModelName, PermissionMode, PromptCache};
+use protocol::capability::settings::Effort;
+use protocol::model::{AttachmentId, CacheTtl, ContextUsage, ModelName, PermissionMode, PromptCache};
 use protocol::prompt::Prompt;
 
 use super::super::tests::{notice, store_with_session};

@@ -1,5 +1,6 @@
 use crate::conformance::scenario::{Failed, Scenario};
-use protocol::model::{AgentKind, AgentSessionId, Effort, ModelName, RunId, SessionSettings};
+use protocol::capability::settings::Effort;
+use protocol::model::{AgentKind, AgentSessionId, ModelName, RunId, SessionSettings};
 use protocol::worker::AgentSpec;
 use std::path::Path;
 

@@ -375,8 +375,10 @@ async fn mid_turn_system_message_written_before_prompt_finishes_does_not_trigger
         }
     }
     append_transcript(h.room.path(), "session-1", &[sys_step(), planner_step(&[])]);
-    let low =
-        protocol::model::SessionSettingsChange { effort: Some(protocol::model::Effort::Low), ..Default::default() };
+    let low = protocol::model::SessionSettingsChange {
+        effort: Some(protocol::capability::settings::Effort::Low),
+        ..Default::default()
+    };
     agent.configure(&low).await.unwrap();
     let _ = ledger.collect_turn(&mut h).await;
 

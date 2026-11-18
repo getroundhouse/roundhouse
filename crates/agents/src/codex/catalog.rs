@@ -3,8 +3,9 @@
 use std::collections::HashSet;
 use std::path::Path;
 
+use protocol::capability::settings::Effort;
 use protocol::capability::settings::{EffortOffer, Input, ModelCatalog, ModelOffer, Stage};
-use protocol::model::{Effort, ModelName};
+use protocol::model::ModelName;
 use serde::Deserialize;
 use serde_json::json;
 

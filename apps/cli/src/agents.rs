@@ -53,7 +53,8 @@ fn described(agent: &AgentDescription, new_chats: bool) -> String {
 
 #[cfg(test)]
 mod tests {
-    use protocol::model::{Effort, ModelChoice, ModelName, PermissionMode, SessionSettings};
+    use protocol::capability::settings::Effort;
+    use protocol::model::{ModelChoice, ModelName, PermissionMode, SessionSettings};
 
     use super::*;
 

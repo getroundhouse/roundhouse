@@ -3,10 +3,10 @@
 
 use protocol::attachment::AttachmentFile;
 use protocol::capability::conversation::Start;
+use protocol::capability::settings::Effort;
 use protocol::frame;
 use protocol::model::{
-    AgentKind, AgentLogin, Effort, LoginToken, ModelName, PermissionMode, RunId, Seq, SessionSettings,
-    SessionSettingsChange,
+    AgentKind, AgentLogin, LoginToken, ModelName, PermissionMode, RunId, Seq, SessionSettings, SessionSettingsChange,
 };
 use protocol::prompt::Prompt;
 use protocol::worker::previous::{self, AgentStart, Call, Request};

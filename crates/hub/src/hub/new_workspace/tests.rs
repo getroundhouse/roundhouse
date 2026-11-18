@@ -1,9 +1,10 @@
 use protocol::attachment::{Attachment, AttachmentBytes, MediaType};
+use protocol::capability::settings::Effort;
 use protocol::client::ErrorCode;
 use protocol::event::EventBody;
 use protocol::model::{
-    AgentDescription, AgentKind, AttachmentId, Effort, ModelName, NewWorkspaceDraft, NewWorkspaceDraftToKeep,
-    PermissionMode, RepoId, Seq, SessionId,
+    AgentDescription, AgentKind, AttachmentId, ModelName, NewWorkspaceDraft, NewWorkspaceDraftToKeep, PermissionMode,
+    RepoId, Seq, SessionId,
 };
 use protocol::prompt::Prompt;
 use protocol::worker::WorkerRequest;

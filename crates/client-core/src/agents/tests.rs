@@ -1,8 +1,9 @@
 // Against a stand-in hub on a Unix socket.
 #![cfg(unix)]
 
+use protocol::capability::settings::Effort;
 use protocol::client::{ApiError, ClientRequest, ClientResponse, ErrorCode, ReplyOutcome, admin};
-use protocol::model::{Effort, LoginDescription, ModelName, PermissionMode, SessionSettings};
+use protocol::model::{LoginDescription, ModelName, PermissionMode, SessionSettings};
 
 use super::*;
 use crate::stand_in_hub::{self, Does};

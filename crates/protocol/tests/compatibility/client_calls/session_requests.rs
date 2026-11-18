@@ -3,13 +3,14 @@
 
 use protocol::attachment::{AttachmentBytes, MediaType};
 use protocol::capability::approvals::{AfterDenial, Decision};
+use protocol::capability::settings::Effort;
 use protocol::client::{
     ClientRequest, agent, attachments, drafts, log, new_workspace, queue, sessions, subscriptions, waits,
 };
 use protocol::frame;
 use protocol::model::{
-    AgentKind, AnswerSoFar, DecisionDraft, DraftToKeep, Effort, ModelName, NewWorkspaceDraftToKeep, PermissionMode,
-    Place, Seq, SessionSettingsChange, SoFar, UseChoice,
+    AgentKind, AnswerSoFar, DecisionDraft, DraftToKeep, ModelName, NewWorkspaceDraftToKeep, PermissionMode, Place, Seq,
+    SessionSettingsChange, SoFar, UseChoice,
 };
 use protocol::prompt::Prompt;
 

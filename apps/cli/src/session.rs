@@ -4,8 +4,9 @@ use std::io::Write;
 
 use anyhow::bail;
 use client_core::{Agents, Client, Ended, SubscriptionItem};
+use protocol::capability::settings::Effort;
 use protocol::event::EventBody;
-use protocol::model::{Effort, PermissionMode, Seq, Session, SessionId, SessionSettingsChange};
+use protocol::model::{PermissionMode, Seq, Session, SessionId, SessionSettingsChange};
 
 use crate::args::SessionCmd;
 use crate::render;

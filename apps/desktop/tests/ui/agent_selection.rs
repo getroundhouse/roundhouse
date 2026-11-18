@@ -1,7 +1,8 @@
 //! Selecting another agent changes only the new chat, and the keyboard keeps the selected chat's agent.
 
 use gpui_kit::{AppContext as _, TestAppContext};
-use protocol::model::{AgentKind, Effort, Session};
+use protocol::capability::settings::Effort;
+use protocol::model::{AgentKind, Session};
 
 use crate::support::{Stack, Ui, git};
 use crate::tools::in_a_new_workspace;

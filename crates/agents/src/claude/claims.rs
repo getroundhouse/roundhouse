@@ -34,7 +34,7 @@ pub(super) fn claims() -> Capabilities {
     claims.settings.models = Some(crate::model_offers::models(
         &super::description::MODELS,
         &super::description::EFFORTS,
-        &protocol::model::Effort::Xhigh,
+        &protocol::capability::settings::Effort::Xhigh,
     ));
     claims.settings.live_changes = Some(settings::LiveChanges {
         model: Some(settings::Takes::NextTurn),

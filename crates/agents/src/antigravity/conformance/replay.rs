@@ -5,7 +5,8 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use protocol::{
     capability::conversation::Start,
-    model::{AgentKind, Effort, ModelName},
+    capability::settings::Effort,
+    model::{AgentKind, ModelName},
     worker::AgentSpec,
 };
 use tokio::sync::mpsc;

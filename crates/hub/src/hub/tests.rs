@@ -5,11 +5,12 @@ use std::sync::Arc;
 
 use protocol::Build;
 use protocol::capability::Capabilities;
+use protocol::capability::settings::Effort;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::model::{
-    AgentDescription, AgentFeature, AgentKind, Apart, Branch, BranchName, Branches, Checks, CommitId, Effort, Head,
-    Local, LoginDescription, MergeState, ModelChoice, ModelName, PermissionMode, PrState, PullRequest, RemoteName,
-    RepoUrl, Review, RunId, SessionId, SessionSettings, Upstream,
+    AgentDescription, AgentFeature, AgentKind, Apart, Branch, BranchName, Branches, Checks, CommitId, Head, Local,
+    LoginDescription, MergeState, ModelChoice, ModelName, PermissionMode, PrState, PullRequest, RemoteName, RepoUrl,
+    Review, RunId, SessionId, SessionSettings, Upstream,
 };
 use protocol::tail::{DeltaChange, StreamDelta, Tail};
 use providers::Provider;

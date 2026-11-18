@@ -6,8 +6,9 @@
 
 use client_core::{Client, FileToSend};
 use protocol::attachment::{Attachment, MediaType};
+use protocol::capability::settings::Effort;
 use protocol::event::EventBody;
-use protocol::model::{Effort, ModelName, NewWorkspaceDraftToKeep, PermissionMode, SessionId};
+use protocol::model::{ModelName, NewWorkspaceDraftToKeep, PermissionMode, SessionId};
 use protocol::prompt::Prompt;
 
 use crate::support::{Stack, read_all, wait_until};

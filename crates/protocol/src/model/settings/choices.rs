@@ -1,4 +1,5 @@
-use super::super::{Effort, ModelName, PermissionMode};
+use super::super::{ModelName, PermissionMode};
+use crate::capability::settings::Effort;
 use serde::{Deserialize, Serialize};
 
 /// What a session runs with. It names a model, an approval mode, and the effort when the model takes one. What a session runs with until another is chosen is its agent's to say, as

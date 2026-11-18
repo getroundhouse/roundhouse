@@ -3,8 +3,9 @@
 use super::NewWorkspaceDialog;
 use crate::model_picker::Picked;
 use gpui_kit::{AnyElement, Context};
+use protocol::capability::settings::Effort;
 use protocol::client::admin::ModelTarget;
-use protocol::model::{AgentDescription, AgentKind, Effort, ModelList, ModelName};
+use protocol::model::{AgentDescription, AgentKind, ModelList, ModelName};
 
 impl NewWorkspaceDialog {
     /// What the hub says of the agent the first chat runs, with what it offers in the dialog's project for one that

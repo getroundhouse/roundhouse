@@ -13,7 +13,8 @@ use gpui_kit::{
 };
 use process::testing::WholeEnvironment;
 pub(crate) use process::testing::git;
-use protocol::model::{Effort, ModelName, PermissionMode, Seq};
+use protocol::capability::settings::Effort;
+use protocol::model::{ModelName, PermissionMode, Seq};
 use std::path::PathBuf;
 use std::time::Duration;
 use tempfile::TempDir;

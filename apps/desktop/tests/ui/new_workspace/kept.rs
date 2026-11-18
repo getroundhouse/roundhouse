@@ -4,8 +4,9 @@
 use client_core::{FileToSend, FilesFor};
 use gpui_kit::{AppContext as _, ClipboardEntry, ClipboardItem, ExternalPaths, TestAppContext};
 use protocol::attachment::MediaType;
+use protocol::capability::settings::Effort;
 use protocol::event::EventBody;
-use protocol::model::{Effort, ModelName, NewWorkspaceDraft, NewWorkspaceDraftToKeep, PermissionMode};
+use protocol::model::{ModelName, NewWorkspaceDraft, NewWorkspaceDraftToKeep, PermissionMode};
 use protocol::prompt::Prompt;
 
 use super::open_with_a_repo;

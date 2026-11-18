@@ -1,6 +1,7 @@
 use std::os::unix::fs::PermissionsExt as _;
 
-use protocol::model::{AgentKind, Effort, ModelName, PermissionMode, RunId, SessionSettings};
+use protocol::capability::settings::Effort;
+use protocol::model::{AgentKind, ModelName, PermissionMode, RunId, SessionSettings};
 
 use super::recovery::{LaunchFailure, classify_launch_failure};
 use super::*;

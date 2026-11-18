@@ -8,9 +8,9 @@ use std::path::PathBuf;
 
 use client_core::ClientError;
 use protocol::capability::approvals::Asks;
+use protocol::capability::settings::Effort::{self, Medium};
 use protocol::client::ErrorCode;
 use protocol::event::EventBody;
-use protocol::model::Effort::{self, Medium};
 use protocol::model::PermissionMode::{FullAccess, Plan};
 use protocol::model::{ModelName, PermissionMode, SessionSettings, SessionSettingsChange};
 

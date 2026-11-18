@@ -5,7 +5,8 @@ use std::rc::Rc;
 
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{Anchor, App, IntoElement, ParentElement as _, RenderOnce, SharedString, Styled as _, Window, div};
-use protocol::model::{AgentDescription, Effort, ModelName};
+use protocol::capability::settings::Effort;
+use protocol::model::{AgentDescription, ModelName};
 
 /// What was picked in the model picker's menu.
 #[derive(Clone, Debug, PartialEq, Eq)]

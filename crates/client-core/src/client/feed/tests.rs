@@ -4,8 +4,9 @@
 use std::path::Path;
 use std::time::Duration;
 
+use protocol::capability::settings::Effort;
 use protocol::client::{ApiError, ClientRequest, ClientResponse, ErrorCode, ReplyOutcome, admin};
-use protocol::model::{AgentDescription, AgentKind, Effort, ModelName, PermissionMode, Rev, SessionSettings};
+use protocol::model::{AgentDescription, AgentKind, ModelName, PermissionMode, Rev, SessionSettings};
 
 use super::*;
 use crate::stand_in_hub::{self, Does};

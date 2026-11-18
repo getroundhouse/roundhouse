@@ -1,9 +1,10 @@
 //! The first workspace's model choices come from the same CLI as its first turn.
 
 use crate::support::{Stack, git, wait_until};
+use protocol::capability::settings::Effort;
 use protocol::client::admin::{ModelTarget, ModelsFor};
 use protocol::model::{
-    AgentKind, Effort, ModelListKey, ModelLookup, ModelName, NewWorkspaceDraftToKeep, SessionSettingsChange,
+    AgentKind, ModelListKey, ModelLookup, ModelName, NewWorkspaceDraftToKeep, SessionSettingsChange,
 };
 use serde_json::{Value, json};
 

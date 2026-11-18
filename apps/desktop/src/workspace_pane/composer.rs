@@ -10,7 +10,8 @@ use gpui_kit::{
     Subscription, Window, div, px,
 };
 use look::{InRegion as _, Region, Shaped as _};
-use protocol::model::{Effort, ModelName, PermissionMode, SessionId, SessionSettingsChange};
+use protocol::capability::settings::Effort;
+use protocol::model::{ModelName, PermissionMode, SessionId, SessionSettingsChange};
 use protocol::prompt::Prompt;
 
 use super::dictating::Then;

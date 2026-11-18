@@ -2,7 +2,8 @@
 
 use agents::conformance::capture::Tap;
 use agents::{AgentOptions, AgentOutput, BinaryLookup};
-use protocol::model::{AgentKind, AgentLogin, Effort, LoginToken, RunId, Seq, SessionSettingsChange};
+use protocol::capability::settings::Effort;
+use protocol::model::{AgentKind, AgentLogin, LoginToken, RunId, Seq, SessionSettingsChange};
 use protocol::prompt::Prompt;
 use protocol::worker::AgentSpec;
 use serde_json::{Value, json};

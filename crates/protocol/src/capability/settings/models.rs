@@ -2,7 +2,8 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::model::{Effort, ModelName};
+use super::Effort;
+use crate::model::ModelName;
 
 /// All models offered in one launch context. Reading the catalog never starts a turn.
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq, Eq)]

@@ -5,7 +5,8 @@
 use serde::{Deserialize, Serialize};
 
 use crate::attachment::Attachment;
-use crate::model::{ApprovalId, AttachmentId, CommentId, DiffSide, Effort, ModelName, RepoId, Rev};
+use crate::capability::settings::Effort;
+use crate::model::{ApprovalId, AttachmentId, CommentId, DiffSide, ModelName, RepoId, Rev};
 
 /// What's in the new-workspace dialog and not made yet: where the workspace is to be made, what's typed and attached
 /// for its first chat, and how that chat is to run. Kept on the hub, so it's there after the app restarts, and in

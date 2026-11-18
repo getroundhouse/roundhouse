@@ -319,7 +319,7 @@ async fn mode_switches_swap_skip_permissions_flag_stop_background_tasks_and_keep
     agent.send_prompt(Seq::new(2), &Prompt::new("write plan")).await.unwrap();
     while !matches!(h.next().await, AgentOutput::Delta(_)) {}
     let mid = protocol::model::SessionSettingsChange {
-        effort: Some(protocol::model::Effort::Low),
+        effort: Some(protocol::capability::settings::Effort::Low),
         permission_mode: Some(PermissionMode::FullAccess),
         model: None,
     };

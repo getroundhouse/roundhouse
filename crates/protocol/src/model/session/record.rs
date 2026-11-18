@@ -1,8 +1,9 @@
 use super::super::{
-    AccountId, AccountSource, ApprovalId, CACHE_WORTH_TELLING_TOKENS, ContextUsage, DecisionDraft, Draft, Effort,
-    ModelName, PermissionMode, PromptCache, QueuedPrompt, Rev, Seq, SessionId, SessionSettings, Title, TitleSource,
-    Wait, WorkspaceId,
+    AccountId, AccountSource, ApprovalId, CACHE_WORTH_TELLING_TOKENS, ContextUsage, DecisionDraft, Draft, ModelName,
+    PermissionMode, PromptCache, QueuedPrompt, Rev, Seq, SessionId, SessionSettings, Title, TitleSource, Wait,
+    WorkspaceId,
 };
+use crate::capability::settings::Effort;
 use crate::event::{AgentTask, TaskKind, TurnOutcome};
 use serde::{Deserialize, Serialize};
 

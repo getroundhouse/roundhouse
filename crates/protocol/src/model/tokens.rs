@@ -36,11 +36,12 @@ mod tests {
     use serde::Serialize;
 
     use crate::capability::conversation::Start;
+    use crate::capability::settings::Effort;
     use crate::capability::settings::Settings;
     use crate::client::{ClientRequest, ClientResponse, accounts, devices, github_accounts, github_apps};
     use crate::model::{
-        AgentKind, AgentLogin, Effort, GhLogin, GhLoginWorks, GithubToken, LoginToken, ModelName, PermissionMode,
-        RunId, SessionSettings,
+        AgentKind, AgentLogin, GhLogin, GhLoginWorks, GithubToken, LoginToken, ModelName, PermissionMode, RunId,
+        SessionSettings,
     };
     use crate::pairing::{DeviceToken, Fingerprint, Pairing, PairingCode, PairingLink};
     use crate::worker::{self, GithubCredential, ToolsToken, WorkerRequest, WorkerResponse};

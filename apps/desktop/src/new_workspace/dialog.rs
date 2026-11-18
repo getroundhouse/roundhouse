@@ -9,7 +9,8 @@ use gpui_kit::{
 };
 use keeping::Keeping;
 use protocol::attachment::Attachment;
-use protocol::model::{AgentDescription, AgentKind, AttachmentId, Effort, ModelName, PermissionMode, RepoId};
+use protocol::capability::settings::Effort;
+use protocol::model::{AgentDescription, AgentKind, AttachmentId, ModelName, PermissionMode, RepoId};
 use protocol::prompt::Prompt;
 use std::path::PathBuf;
 use std::rc::Rc;

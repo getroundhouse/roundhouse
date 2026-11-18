@@ -7,8 +7,9 @@ use std::time::Duration;
 
 use agents::claude::spawn_at;
 use agents::{AgentError, AgentOptions, AgentOutput};
+use protocol::capability::settings::Effort;
 use protocol::event::{CompactedBy, CompactionOutcome, ContentBlock, EventBody, NoticeLevel};
-use protocol::model::{AgentKind, Effort, PermissionMode, RunId, Seq, SessionSettings, SessionSettingsChange};
+use protocol::model::{AgentKind, PermissionMode, RunId, Seq, SessionSettings, SessionSettingsChange};
 use protocol::prompt::Prompt;
 use protocol::worker::AgentSpec;
 use tokio::sync::mpsc;

@@ -2,7 +2,9 @@
 //! flatten them, so on the wire each setting is a field of its own.
 
 #[cfg(test)]
-use super::{Effort, ModelName, PermissionMode};
+use super::{ModelName, PermissionMode};
+#[cfg(test)]
+use crate::capability::settings::Effort;
 
 #[cfg(test)]
 mod tests;

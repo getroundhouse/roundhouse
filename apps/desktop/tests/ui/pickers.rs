@@ -4,9 +4,10 @@
 
 use gpui_kit::test::ElementSnapshot;
 use gpui_kit::{AppContext as _, ElementId, SharedString, TestAppContext};
+use protocol::capability::settings::Effort;
 use protocol::event::EventBody;
 use protocol::model::PermissionMode::{FullAccess, Plan};
-use protocol::model::{Effort, ModelName, PermissionMode, SessionStatus};
+use protocol::model::{ModelName, PermissionMode, SessionStatus};
 
 use crate::support::{CLAUDE_STARTS_WITH, Stack, Ui};
 

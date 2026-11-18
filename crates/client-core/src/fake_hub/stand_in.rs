@@ -1,6 +1,7 @@
+use protocol::capability::settings::Effort;
 use protocol::client::{CLIENT_PROTOCOL_VERSION, HubStatus};
 use protocol::model::{
-    AgentDescription, AgentFeature, AgentKind, Effort, LoginDescription, ModelChoice, ModelName, PermissionMode,
+    AgentDescription, AgentFeature, AgentKind, LoginDescription, ModelChoice, ModelName, PermissionMode,
     SessionSettings,
 };
 use protocol::pairing::{Pairing, PairingCode, PairingLink};

@@ -1,9 +1,10 @@
 //! What the hub does with its agents' descriptions, against a hub that never starts a worker: what a new chat runs,
 //! what a chat is refused, and whether the agent is asked to compact.
 
+use protocol::capability::settings::Effort;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::model::{
-    AgentDescription, AgentKind, Effort, ModelName, PermissionMode, SessionSettings, SessionSettingsChange, WorkspaceId,
+    AgentDescription, AgentKind, ModelName, PermissionMode, SessionSettings, SessionSettingsChange, WorkspaceId,
 };
 
 use crate::hub::tests::{claimed, described, hub_describing, hub_in};
