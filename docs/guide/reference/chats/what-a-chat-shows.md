@@ -81,7 +81,7 @@ With more than four, each kind with several has one line, such as `6 subagents`,
 
 - **The mark shows something is running:** a slower light on its inner row, or the light still sweeping the whole fan while a subagent is going.
 - **Each wait on pull requests has its own line,** listing the PRs, what it waits for and its progress. `Stop` calls off only that wait. A stack wait includes its lower PRs, and several waits can run together.
-- **The agent picks up again by itself** when the work finishes, and the chat says what it picked up after: a line for each task that ended, with how it ended and when, before what the agent did about it. A wait's line says which pull requests it waited on and why it ended, such as `Waited on #7: required checks`, then `Checks passed`. A turn started by what a monitor watches for happening has no line, since nothing says why until the turn is over.
+- **The agent picks up again by itself** when the work finishes, and the chat says what it picked up after: a line for each task that ended, with how it ended and when, before what the agent did about it. A wait's line says which pull requests it waited on and why it ended, such as `Waited on #7 for required checks`, then `Checks passed`. A turn started by what a monitor watches for happening has no line, since nothing says why until the turn is over.
 - **Closing the chat asks first,** while something is running.
 
 ![The agent picking up by itself, after a subagent finished and after a wait ended](../../../spec/screens/picked-up-by-itself.png)
