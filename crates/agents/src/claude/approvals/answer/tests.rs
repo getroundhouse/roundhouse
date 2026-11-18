@@ -1,4 +1,5 @@
-use protocol::event::{ApprovalDecision, QuestionAnswer};
+use protocol::capability::asking::QuestionAnswer;
+use protocol::event::ApprovalDecision;
 use serde_json::{Value, json};
 
 use super::{DENIED, KEEP_PLANNING, NOT_ANSWERED, Waiting, response};

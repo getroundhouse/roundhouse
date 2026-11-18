@@ -1,7 +1,8 @@
 use client_core::{Answered, Approval};
+use protocol::capability::asking::QuestionAnswer;
 use protocol::capability::calls::Call;
 use protocol::capability::calls::call::{Edit, FilePatch, Patch, PatchChange, PatchHunk, Replace, Replaces};
-use protocol::event::{ApprovalOutcome, Asking, Question, QuestionAnswer, QuestionOption, SessionEvent};
+use protocol::event::{ApprovalOutcome, Asking, Question, QuestionOption, SessionEvent};
 use protocol::event::{HunkLine, LineMark};
 use protocol::fixtures::{ApprovalRequest, approval_request, typed_command, typed_request};
 use protocol::model::Seq;

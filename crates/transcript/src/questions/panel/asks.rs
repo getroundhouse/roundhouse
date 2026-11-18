@@ -3,7 +3,8 @@
 
 use client_core::Approval;
 use gpui_kit::{AnyElement, App};
-use protocol::event::{ApprovalDecision, EventBody, Question, QuestionAnswer};
+use protocol::capability::asking::QuestionAnswer;
+use protocol::event::{ApprovalDecision, EventBody, Question};
 use protocol::model::SubagentId;
 
 use super::tool_use::{self, ToolUse};

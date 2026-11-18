@@ -1,6 +1,7 @@
+use protocol::capability::asking::QuestionAnswer;
 use protocol::capability::calls::Call;
 use protocol::capability::calls::call::{Command, Edit, Fetch, Replace, Replaces, Write};
-use protocol::event::{ApprovalDecision, Asking, EventBody, QuestionAnswer};
+use protocol::event::{ApprovalDecision, Asking, EventBody};
 use protocol::fixtures::{self, ApprovalRequest, approval_request};
 use serde_json::json;
 

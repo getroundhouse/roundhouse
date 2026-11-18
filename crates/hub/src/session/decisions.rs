@@ -1,13 +1,14 @@
 //! Translate clients' existing approval replies into the capability decision the run takes.
 
 use super::LiveSession;
+use protocol::capability::asking::QuestionAnswer;
 use protocol::capability::{
     Capabilities, Control,
     approvals::{AfterDenial, Asks, Decision, Remember},
     asking::PlanContext,
 };
 use protocol::client::{ApiError, ErrorCode};
-use protocol::event::{ApprovalDecision, EventBody, QuestionAnswer};
+use protocol::event::{ApprovalDecision, EventBody};
 use protocol::model::ApprovalId;
 
 impl LiveSession {
@@ -33,7 +34,10 @@ pub(super) fn control(
     let plan = matches!(request.asks, Asks::Plan { .. });
     let questions = matches!(request.asks, Asks::Questions { .. });
     let decision = match decision {
-        ApprovalDecision::Deny { interrupt: false, .. } if questions => Decision::Answer { answers: Vec::new() },
+        ApprovalDecision::Deny { interrupt: false, .. } if questions => {
+            let Asks::Questions { questions } = &request.asks else { return Err(unsupported()) };
+            Decision::Answer { answers: vec![QuestionAnswer::default(); questions.len()] }
+        }
         ApprovalDecision::Allow { updated_input: None, updated_permissions: None } if plan => {
             let modes = claims.approvals.modes.as_ref().ok_or_else(unsupported)?;
             let then = std::iter::once(modes.default)
@@ -65,6 +69,9 @@ pub(super) fn control(
         }
         ApprovalDecision::Allow { .. } => return Err(unsupported()),
     };
+    if !decision.answers(request) {
+        return Err(ApiError::new(ErrorCode::InvalidRequest, "that doesn't answer what the agent asked"));
+    }
     let control = Control::Decide { approval, decision };
     if !control.allowed(claims) {
         return Err(unsupported());

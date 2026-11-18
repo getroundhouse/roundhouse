@@ -60,7 +60,7 @@ fn decision_for_cli(decision: &Decision) -> Result<ApprovalDecision, AgentError>
         | Decision::ApprovePlan { context: PlanContext::Kept, .. } => {
             ApprovalDecision::Allow { updated_input: None, updated_permissions: None }
         }
-        Decision::Deny { words, then, keep: None } => {
+        Decision::Deny { words, then: then @ (AfterDenial::Continue | AfterDenial::Stop), keep: None } => {
             ApprovalDecision::Deny { message: words.clone(), interrupt: *then == AfterDenial::Stop }
         }
         Decision::KeepPlanning { words } => ApprovalDecision::Deny { message: words.clone(), interrupt: false },
@@ -69,7 +69,8 @@ fn decision_for_cli(decision: &Decision) -> Result<ApprovalDecision, AgentError>
         | Decision::Deny { .. }
         | Decision::ApprovePlan { .. }
         | Decision::Grant { .. }
-        | Decision::Respond(_) => return Err(unsupported()),
+        | Decision::Respond(_)
+        | Decision::Unknown => return Err(unsupported()),
     })
 }
 

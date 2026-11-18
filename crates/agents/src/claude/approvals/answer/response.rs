@@ -1,4 +1,5 @@
-use protocol::event::{ApprovalDecision, Asking, Question, QuestionAnswer};
+use protocol::capability::asking::QuestionAnswer;
+use protocol::event::{ApprovalDecision, Asking, Question};
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
 

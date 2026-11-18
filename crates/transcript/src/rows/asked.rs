@@ -153,7 +153,8 @@ fn text(toggle: &Toggle, part: Text, id: ElementId, text: &str, color: Hsla, are
 #[cfg(test)]
 mod tests {
     use client_core::Answered;
-    use protocol::event::{Question, QuestionAnswer, QuestionOption};
+    use protocol::capability::asking::QuestionAnswer;
+    use protocol::event::{Question, QuestionOption};
 
     use super::{Settled, summary};
 

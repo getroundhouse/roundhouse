@@ -72,7 +72,8 @@ async fn only_the_current_run_can_choose_the_resume_id_and_its_claims_survive_re
 
 #[tokio::test]
 async fn a_secret_answer_goes_to_the_agent_and_not_the_log() {
-    use protocol::event::{ApprovalDecision, QuestionAnswer};
+    use protocol::capability::asking::QuestionAnswer;
+    use protocol::event::ApprovalDecision;
     let dir = tempfile::tempdir().unwrap();
     let hub = hub_in(dir.path());
     let (link, asked) = taking_worker(&hub);
@@ -132,9 +133,38 @@ fn typed_approval_replies_require_the_runs_claims_even_when_the_answer_is_empty(
 
     assert_eq!(absent.unwrap_err().code, protocol::client::ErrorCode::Unsupported);
     assert_eq!(unclaimed.unwrap_err().code, protocol::client::ErrorCode::Unsupported);
-    assert!(matches!(allowed, Some(protocol::capability::Control::Decide {
+    assert!(
+        matches!(allowed, Some(protocol::capability::Control::Decide {
         decision: protocol::capability::approvals::Decision::Answer { answers }, ..
-    }) if answers.is_empty()));
+    }) if answers.len() == 1 && answers[0].is_empty()),
+        "each question left unanswered"
+    );
+}
+
+#[test]
+fn a_typed_reply_that_doesnt_answer_what_was_asked_is_refused() {
+    use protocol::capability::asking::QuestionAnswer;
+    use protocol::event::ApprovalDecision;
+    let request: EventBody = serde_json::from_value(serde_json::json!({
+        "type":"approval_requested","approval_id":"q",
+        "request":{"asks":{"asks":"questions","questions":[{"text":"Which?","options":[{"label":"A"}],"typed":"no"}]}}
+    }))
+    .unwrap();
+    let mut claims = protocol::capability::Capabilities::default();
+    claims.asking.questions = Some(protocol::capability::Claimed {});
+    let decide = |decision| super::super::decisions::control(&request, "q".into(), &decision, Some(&claims));
+    let answering = |picked, typed: Option<&str>| ApprovalDecision::AnswerByPosition {
+        answers: vec![QuestionAnswer { picked, typed: typed.map(str::to_string) }],
+    };
+
+    assert!(decide(answering(vec![0], None)).unwrap().is_some());
+    for (refused, why) in [
+        (answering(vec![1], None), "an option it doesn't offer"),
+        (answering(vec![], Some("Mine")), "typed where only an option can be chosen"),
+        (ApprovalDecision::AnswerByPosition { answers: vec![] }, "no answer for its question"),
+    ] {
+        assert_eq!(decide(refused).unwrap_err().code, protocol::client::ErrorCode::InvalidRequest, "{why}");
+    }
 }
 
 /// Once the agent that asked has exited, an answer to what it asked is refused as too late, even to a request that

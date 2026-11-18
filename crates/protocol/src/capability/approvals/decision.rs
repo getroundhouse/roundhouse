@@ -2,11 +2,11 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::{Access, ApprovalMode, Capability, Rule, RuleEffect};
+use super::{Access, ApprovalMode, Asks, Capability, Request, Rule, RuleEffect};
+use crate::capability::asking::QuestionAnswer;
 use crate::capability::asking::{self, PlanContext, ServerAnswer};
 use crate::capability::calls::Call;
 use crate::capability::{Capabilities, Capability as Any};
-use crate::event::QuestionAnswer;
 
 /// What a decision can do besides allowing a use once or refusing it, which every request takes. A request takes a
 /// decision only when it takes every part the decision has.
@@ -61,6 +61,10 @@ pub enum Decision {
     Grant { access: Vec<Access>, lasts: Lasts },
     /// The answer to a tool server's request.
     Respond(ServerAnswer),
+    /// One this build doesn't know, from the log, which a client shows as answered without saying how, and which is
+    /// never sent on.
+    #[serde(other)]
+    Unknown,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
@@ -69,6 +73,15 @@ pub enum Remember {
     Once,
     Conversation,
     Rule(Rule),
+    #[serde(other)]
+    Unknown,
+}
+
+impl Remember {
+    /// The rule it keeps, if it keeps one.
+    pub fn rule(&self) -> Option<&Rule> {
+        if let Remember::Rule(rule) = self { Some(rule) } else { None }
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
@@ -78,6 +91,8 @@ pub enum AfterDenial {
     Continue,
     /// The turn stops.
     Stop,
+    #[serde(other)]
+    Unknown,
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
@@ -85,6 +100,8 @@ pub enum AfterDenial {
 pub enum Lasts {
     Turn,
     Conversation,
+    #[serde(other)]
+    Unknown,
 }
 
 impl Decision {
@@ -101,6 +118,7 @@ impl Decision {
             }
             Decision::Grant { .. } => vec![Capability::AccessRequests.into()],
             Decision::Respond(_) => vec![asking::Capability::ServerRequests.into()],
+            Decision::Unknown => Vec::new(),
         }
     }
 
@@ -113,11 +131,16 @@ impl Decision {
                 Remember::Once => None,
                 Remember::Conversation => Some(DecisionPart::ForConversation),
                 Remember::Rule(_) => Some(DecisionPart::KeepAllow),
+                Remember::Unknown => Some(DecisionPart::Unknown),
             });
         }
         if let Decision::Deny { words, then, keep } = self {
             parts.extend(words.as_ref().map(|_| DecisionPart::Words));
-            parts.extend(matches!(then, AfterDenial::Stop).then_some(DecisionPart::Stop));
+            parts.extend(match then {
+                AfterDenial::Continue => None,
+                AfterDenial::Stop => Some(DecisionPart::Stop),
+                AfterDenial::Unknown => Some(DecisionPart::Unknown),
+            });
             parts.extend(keep.as_ref().map(|_| DecisionPart::KeepDeny));
         }
         parts
@@ -136,12 +159,44 @@ impl Decision {
         let known = match self {
             Decision::Allow { edited, .. } => edited.as_ref().is_none_or(Call::is_known),
             Decision::ApprovePlan { then, context } => offers(*then) && !then.plan && *context != PlanContext::Unknown,
-            Decision::Grant { access, .. } => !access.contains(&Access::Unknown),
-            Decision::Deny { .. } | Decision::Answer { .. } | Decision::KeepPlanning { .. } | Decision::Respond(_) => {
-                true
-            }
+            Decision::Grant { access, lasts } => !access.contains(&Access::Unknown) && *lasts != Lasts::Unknown,
+            Decision::Respond(answer) => *answer != ServerAnswer::Unknown,
+            Decision::Deny { .. } | Decision::Answer { .. } | Decision::KeepPlanning { .. } => true,
+            Decision::Unknown => false,
         };
         claims.has_all(self.needs()) && parts && kept && known
+    }
+
+    /// Whether it answers `request`, as a decision of a kind the request takes: a call allowed, with its call edited
+    /// into another of the same kind, or refused; each question answered as [`Question::takes`] says, one answer to
+    /// each, which is left empty for one the person chose not to answer, so that's said one way, which every adapter
+    /// takes; a plan approved or not; a host reached or not; access granted, of what was asked, or refused; or a tool
+    /// server answered. A request that comes whatever the mode keeps no rule, and one this build doesn't know can only
+    /// be refused.
+    ///
+    /// [`Question::takes`]: crate::capability::asking::Question::takes
+    pub fn answers(&self, request: &Request) -> bool {
+        let keeps_none = |rule: Option<&Rule>| rule.is_none() || !request.always;
+        match (&request.asks, self) {
+            (Asks::Call { call }, Decision::Allow { edited, remember }) => {
+                let edited = edited.as_ref().is_none_or(|edited| edited.kind() == call.kind());
+                edited && keeps_none(remember.rule())
+            }
+            (Asks::Network { .. }, Decision::Allow { edited: None, remember }) => keeps_none(remember.rule()),
+            (Asks::Questions { questions }, Decision::Answer { answers }) => {
+                answers.len() == questions.len() && questions.iter().zip(answers).all(|(q, a)| q.takes(a))
+            }
+            (Asks::Access { access: asked }, Decision::Grant { access, .. }) => {
+                access.iter().all(|granted| asked.contains(granted))
+            }
+            (Asks::Call { .. } | Asks::Network { .. } | Asks::Access { .. }, Decision::Deny { keep, .. }) => {
+                keeps_none(keep.as_ref())
+            }
+            (Asks::Plan { .. }, Decision::ApprovePlan { .. } | Decision::KeepPlanning { .. })
+            | (Asks::Server(_), Decision::Respond(_))
+            | (Asks::Unknown, Decision::Deny { keep: None, .. }) => true,
+            _ => false,
+        }
     }
 
     /// The rule it keeps, if it keeps one, and the effect the rule has to have.
@@ -155,7 +210,8 @@ impl Decision {
             | Decision::ApprovePlan { .. }
             | Decision::KeepPlanning { .. }
             | Decision::Grant { .. }
-            | Decision::Respond(_) => None,
+            | Decision::Respond(_)
+            | Decision::Unknown => None,
         }
     }
 }

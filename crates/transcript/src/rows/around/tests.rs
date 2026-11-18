@@ -3,10 +3,11 @@ use std::sync::Arc;
 use client_core::Answered;
 use client_core::session_log::{RecordedApprovals, SessionLog};
 use protocol::attachment::{Attachment, MediaType};
+use protocol::capability::asking::QuestionAnswer;
 use protocol::capability::calls::call::Read;
 use protocol::capability::calls::output::Ended;
 use protocol::capability::calls::{Call, CallOutput};
-use protocol::event::{ApprovalOutcome, Asking, ContentBlock, EventBody, Question, QuestionAnswer, SessionEvent};
+use protocol::event::{ApprovalOutcome, Asking, ContentBlock, EventBody, Question, SessionEvent};
 use protocol::fixtures::{ApprovalRequest, approval_request};
 use protocol::model::{
     Lately, LatelyCall, LatelyResult, OpenApproval, PermissionMode, Place, Seq, Subagent, SubagentStatus,

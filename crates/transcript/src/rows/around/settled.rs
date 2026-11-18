@@ -59,7 +59,8 @@ pub(in crate::rows) enum AnswerTo<'a> {
 #[cfg(test)]
 mod tests {
     use client_core::Answered;
-    use protocol::event::{ApprovalOutcome, EventBody, Question, QuestionAnswer};
+    use protocol::capability::asking::QuestionAnswer;
+    use protocol::event::{ApprovalOutcome, EventBody, Question};
 
     use super::{AnswerTo, Seq, Settled};
     use crate::fixtures::{asked_a_question as asked, closed, closed_by_position, event, log};

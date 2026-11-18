@@ -66,6 +66,21 @@ fn a_request_is_resolved_after_it_was_made_by_the_hub_before_the_agent_and_by_ea
     assert_eq!(breaches(&log, &claims()), expected);
 }
 
+#[test]
+fn a_turn_ends_with_every_request_resolved_whoever_resolves_it() {
+    let log = [
+        from_run(1, 1, asked("a")),
+        from_run(1, 2, turn_ended(TurnOutcome::Success)),
+        from_hub(3, resolved("a")),
+        from_run(1, 4, turn_ended(TurnOutcome::Success)),
+        from_run(1, 5, asked("b")),
+        from_run(1, 6, resolved("b")),
+        from_run(1, 7, turn_ended(TurnOutcome::Cancelled)),
+    ];
+
+    assert_eq!(breaches(&log, &claims()), [(Law::NoRequestOpenAtTurnEnd, 2)]);
+}
+
 /// Each time it starts, as one given more work starts again once it's ended.
 #[test]
 fn a_subagent_ends_after_it_started_by_the_hub_before_the_agent_and_by_each_once() {

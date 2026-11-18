@@ -9,6 +9,8 @@ mod decision;
 mod modes;
 mod request;
 mod rules;
+#[cfg(test)]
+mod tests;
 mod verdicts;
 
 pub use claims::{Capability, Claims, Requests};

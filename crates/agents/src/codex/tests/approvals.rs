@@ -129,7 +129,7 @@ async fn codex_refusing_the_turn_after_an_approved_plan_ends_the_plans_turn_and_
 #[tokio::test]
 async fn codex_hears_only_the_answers_each_question_allows() {
     use protocol::capability::asking::Choose;
-    use protocol::event::QuestionAnswer;
+    use protocol::capability::asking::QuestionAnswer;
     let mut h = Harness::new(&json!([{"on":"turn/start","actions":[
         {"result":{"turn":{"id":"asking"}}},
         {"method":"turn/started","params":{"turn":{"id":"asking"}}},

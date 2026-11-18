@@ -1,12 +1,13 @@
 use super::{approval, asking, compaction, content, ending, failure, task, tokens};
 use crate::attachment::Attachment;
+use crate::capability::asking::QuestionAnswer;
 use crate::model::{
     AgentSessionId, ApprovalId, ClientMessageId, MessageId, ModelName, PermissionMode, Place, RunId, Seq, SessionId,
     SubagentId, TaskId, ToolUseId, UsageLimit,
 };
 use crate::prompt::Prompt;
 use approval::ApprovalOutcome;
-use asking::{Asking, QuestionAnswer};
+use asking::Asking;
 use compaction::CompactionOutcome;
 use content::ContentBlock;
 use ending::{ExitReason, TaskOutcome, TurnOutcome};

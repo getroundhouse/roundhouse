@@ -1,5 +1,5 @@
+use protocol::capability::asking::QuestionAnswer;
 use protocol::capability::asking::{Choose, Question, QuestionOption, TypedAnswer};
-use protocol::event::QuestionAnswer;
 use serde::Deserialize;
 use serde_json::{Map, Value, json};
 
