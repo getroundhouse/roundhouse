@@ -56,6 +56,17 @@ pub(super) struct Ended {
     pub(super) raw: String,
 }
 
+/// A compaction someone asked for, which Codex carries out in a turn of its own, with no message of the person's, so
+/// its turn starting is what takes it.
+pub(super) struct AskedCompaction {
+    /// Where it's recorded.
+    pub(super) asked: Seq,
+    /// The turn Codex compacts in, once it has started.
+    pub(super) turn: Option<TurnId>,
+    /// The turn's compaction has come.
+    pub(super) answered: bool,
+}
+
 pub(super) struct Conversation {
     pub(super) thread: Option<ThreadId>,
     pub(super) turn: Option<TurnId>,
@@ -68,6 +79,8 @@ pub(super) struct Conversation {
     /// Settings accepted while working belong to the next turn, not the one finishing.
     pub(super) turn_mode: Option<ApprovalMode>,
     pub(super) untaken: VecDeque<Seq>,
+    /// The compaction asked for, from when it's sent until the turn Codex compacts in ends.
+    pub(super) compaction: Option<AskedCompaction>,
     /// A native intake call can cross a turn boundary; the old turn cannot settle this prompt.
     pub(super) sending: Option<Seq>,
     pub(super) waiting: HashMap<ApprovalId, Waiting>,
@@ -88,6 +101,7 @@ impl Conversation {
             settings,
             turn_mode: None,
             untaken: VecDeque::new(),
+            compaction: None,
             sending: None,
             waiting: HashMap::new(),
             work: HashMap::new(),

@@ -727,7 +727,7 @@ Every call is drawn the same way, as the first rule below says, and each kind fi
 
   ![A compaction opened to its summary](screens/compacted-summary.png)
 
-- **Typing `/compact` asks the hub to compact, as `Compact now` does, rather than sending a prompt,** with what follows it as what to keep. So a compaction asked for either way is drawn as its rule alone, with no prompt, and so is the end of the turn that was only it, since the rule says how long it took. What it was told to keep is quoted under the rule, as it was typed. Typed while the agent is on a turn, it's refused, and stays typed, with what the hub said.
+- **Typing `/compact` asks the hub to compact, as `Compact now` does, rather than sending a prompt,** with what follows it as what to keep. So a compaction asked for either way is drawn as its rule alone, with no prompt, and so is the end of the turn that was only it, since the rule says how long it took. What it was told to keep is quoted under the rule, as it was typed. An agent that doesn't read what to keep, as Codex doesn't, is asked without it, and nothing is quoted. Typed while the agent is on a turn, it's refused, and stays typed, with what the hub said. *Unconfirmed:* asking an agent that doesn't read what to keep without it.
 
   **A compaction asked for with what to keep.**
 

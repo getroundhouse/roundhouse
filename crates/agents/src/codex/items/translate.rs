@@ -5,7 +5,7 @@ use protocol::capability::calls::{
     output::{CommandOutput, Ended, McpContent},
 };
 use protocol::event::{CompactedBy, CompactionOutcome, ContentBlock, Denied, EventBody};
-use protocol::model::ToolUseId;
+use protocol::model::{Seq, ToolUseId};
 use protocol::tail::{BlockKind, DeltaChange, StreamDelta};
 use serde_json::Value;
 
@@ -76,7 +76,7 @@ impl Reader<'_> {
             // a subagent's.
             Item::ContextCompaction { started_at_ms, completed_at_ms } if self.scope.parent.is_none() => {
                 let took_ms = completed_at_ms.zip(started_at_ms).map(|(ended, began)| ended.saturating_sub(began));
-                self.shared.event(compaction(completed, took_ms), Some(raw)).await;
+                self.compacted(completed, took_ms, raw).await;
             }
             Item::ContextCompaction { .. } | Item::Unknown => {
                 let kind = value["type"].as_str().unwrap_or("item").into();
@@ -84,6 +84,21 @@ impl Reader<'_> {
             }
         }
         Ok(())
+    }
+
+    /// Codex compacting the agent's context, or having compacted it, in `took_ms`. The turn Codex compacts in when
+    /// asked holds the compaction, which names the request.
+    async fn compacted(&self, completed: bool, took_ms: Option<u64>, raw: String) {
+        let asked = completed.then(|| self.answered_compaction()).flatten();
+        self.shared.event(compaction(completed, took_ms, asked), Some(raw)).await;
+    }
+
+    /// The request the compaction answers, if it's the one asked for, whose turn has started.
+    fn answered_compaction(&self) -> Option<Seq> {
+        let mut state = self.shared.state.lock();
+        let asked = state.compaction.as_mut().filter(|asked| asked.turn.is_some() && !asked.answered)?;
+        asked.answered = true;
+        Some(asked.asked)
     }
 
     fn note_reply(&self, text: &str, plan: bool) {
@@ -268,20 +283,15 @@ impl Reader<'_> {
     }
 }
 
-/// Codex compacting the agent's context as it fills, or, once it has, how long that took. It says nothing of the
-/// tokens before or after, or the summary.
-fn compaction(completed: bool, took_ms: Option<u64>) -> EventBody {
+/// Codex compacting the agent's context, by itself as it fills or as `asked`, or, once it has, how long that took. It
+/// says nothing of the tokens before or after, or the summary.
+fn compaction(completed: bool, took_ms: Option<u64>, asked: Option<Seq>) -> EventBody {
     if !completed {
         return EventBody::AgentCompacting { written_chars: None };
     }
-    let outcome = CompactionOutcome::Compacted {
-        by: CompactedBy::Agent,
-        before_tokens: None,
-        after_tokens: None,
-        took_ms,
-        summary: None,
-    };
-    EventBody::AgentCompacted { asked: None, keeping: None, outcome }
+    let by = if asked.is_some() { CompactedBy::Asked } else { CompactedBy::Agent };
+    let outcome = CompactionOutcome::Compacted { by, before_tokens: None, after_tokens: None, took_ms, summary: None };
+    EventBody::AgentCompacted { asked, keeping: None, outcome }
 }
 
 pub(super) fn mcp_result(result: &Value) -> CallOutput {

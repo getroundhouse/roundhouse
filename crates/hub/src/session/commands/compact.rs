@@ -1,6 +1,8 @@
 //! Asking the agent to compact its conversation: refused when it can't be, and otherwise recorded, then passed on
 //! as a prompt is.
 
+use protocol::capability::Capabilities;
+use protocol::capability::context::Keeping;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::event::EventBody;
 use protocol::model::{Seq, SessionStatus};
@@ -31,7 +33,8 @@ impl LiveSession {
     /// Where the request is recorded, and what it says to keep.
     async fn record_compaction(&self, hub: &Hub, keeping: Option<String>) -> Result<(Seq, Option<String>), ApiError> {
         self.can_be_asked(hub).await?;
-        let keeping = keeping.as_deref().and_then(said);
+        let claims = self.run_claims().or_else(|| hub.agent(self.agent).ok().map(|kind| kind.capabilities.clone()));
+        let keeping = to_keep(keeping.as_deref(), claims.as_ref());
         let asked = EventBody::CompactionAsked { keeping: keeping.clone() };
         let refused = |state: &LiveState| {
             refused_compaction(state.progress.status, state.progress.queue.idle_is_stale(), state.agent_opened)
@@ -56,6 +59,14 @@ fn refused_compaction(status: SessionStatus, untaken: bool, opened: bool) -> Opt
     Some(ApiError::new(ErrorCode::Conflict, why))
 }
 
+/// What to keep, said in words, for an agent that reads it, as its run's claims say, or its kind's with none running.
+/// One that doesn't, such as Codex, is sent nothing to keep, and the request records none, rather than its being
+/// refused, as the agent's claims would have it.
+fn to_keep(keeping: Option<&str>, claims: Option<&Capabilities>) -> Option<String> {
+    let reads = claims.and_then(|claims| claims.context.compaction.as_ref());
+    keeping.and_then(said).filter(|_| reads.is_some_and(|compaction| compaction.keeping == Keeping::Read))
+}
+
 /// What to keep, said in words, so nothing but space is the same as saying nothing.
 fn said(keeping: &str) -> Option<String> {
     let keeping = keeping.trim();
@@ -66,12 +77,29 @@ fn said(keeping: &str) -> Option<String> {
 mod tests {
     use protocol::model::SessionStatus;
 
-    use super::{refused_compaction, said};
+    use protocol::capability::context::Compaction;
+
+    use super::{Capabilities, Keeping, refused_compaction, said, to_keep};
 
     #[test]
     fn what_to_keep_is_its_words_and_only_space_is_nothing() {
         assert_eq!(said("  Keep the API design\n").as_deref(), Some("Keep the API design"));
         assert_eq!((said(""), said(" \n ")), (None, None));
+    }
+
+    #[test]
+    fn what_to_keep_goes_only_to_an_agent_that_reads_it() {
+        let compacts = |keeping| {
+            let mut claims = Capabilities::default();
+            claims.context.compaction = Some(Compaction { keeping });
+            claims
+        };
+        let kept = |claims: &Capabilities| to_keep(Some("Keep the API design"), Some(claims));
+
+        assert_eq!(kept(&compacts(Keeping::Read)).as_deref(), Some("Keep the API design"));
+        assert_eq!(kept(&compacts(Keeping::Ignored)), None, "as Codex doesn't");
+        assert_eq!(kept(&compacts(Keeping::Unknown)), None, "from a newer peer");
+        assert_eq!(kept(&Capabilities::default()), None);
     }
 
     #[test]
