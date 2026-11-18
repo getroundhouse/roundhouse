@@ -83,21 +83,31 @@ impl AtWork {
 }
 
 impl Transcript {
-    /// Takes what the hub says of the agent the chat runs, which a turn's card names, and draws every row again if that
-    /// changed, which only a new connection does.
+    /// Takes what the hub says of the agent the chat runs, which a turn's card names, and what a run of its kind
+    /// claims, which rows are drawn by, and draws every row again if either changed, which only a new connection does.
     pub fn set_agent(&mut self, agent: Option<&AgentDescription>, cx: &mut Context<Self>) {
-        self.model.borrow_mut().kind_claims = agent.map(|agent| agent.capabilities.clone());
         let named = agent.map(|agent| SharedString::from(agent.name.clone()));
-        if std::mem::replace(&mut self.model.borrow_mut().agent, named.clone()) != named {
-            let rows = self.list.row_count();
-            self.list.out_of_date(0..rows);
+        let claims = agent.map(|agent| agent.capabilities.clone());
+        let changed = {
+            let mut m = self.model.borrow_mut();
+            let renamed = std::mem::replace(&mut m.agent, named) != m.agent;
+            let claims_changed = std::mem::replace(&mut m.kind_claims, claims) != m.kind_claims;
+            renamed || claims_changed
+        };
+        if changed {
+            self.list.all_out_of_date();
             cx.notify();
         }
     }
 
     /// Follows the session's record.
     pub fn set_session(&mut self, session: &Session, cx: &mut Context<Self>) {
-        self.model.borrow_mut().claims.clone_from(&session.agent_capabilities);
+        // What the run claims, which rows are drawn by, changes as a run starts.
+        if self.model.borrow().claims != session.agent_capabilities {
+            self.model.borrow_mut().claims.clone_from(&session.agent_capabilities);
+            self.list.all_out_of_date();
+            cx.notify();
+        }
         self.follow_approvals(session, cx);
         self.follow_question(cx);
         let at_work = AtWork::of(session);

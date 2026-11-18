@@ -14,7 +14,7 @@ use events::TranscriptEvent;
 use find::Finding;
 use gpui_kit::{
     AnyElement, App, AppContext, Context, ElementId, Entity, EventEmitter, IntoElement, ParentElement as _, Render,
-    Styled as _, Task, Window, div,
+    StyleRefinement, Styled as _, Task, Window, div,
 };
 use look::{LineText, MovingMarks};
 use protocol::attachment::Attachment;
@@ -139,11 +139,13 @@ impl Transcript {
         }
     }
 
-    /// The transcript, with the marks that move at the end of the chat painted over it, as wherever it's shown draws it,
-    /// since it leaves only room for them.
+    /// The transcript, as wherever it's shown draws it: cached, so it's drawn again only when it changes, rather than
+    /// whenever anything around it does, with the marks that move at the end of the chat painted over it, which it
+    /// leaves only room for.
     pub fn drawn(this: &Entity<Self>, cx: &App) -> impl IntoElement {
         let over = this.read(cx).moving.over();
-        div().relative().size_full().child(this.clone()).child(over)
+        let cached = this.clone().cached(StyleRefinement::default().size_full());
+        div().relative().size_full().child(cached).child(over)
     }
 
     pub fn log(&self) -> &SessionLog {
@@ -174,7 +176,8 @@ impl Transcript {
         self.session.reconnect(client);
         self.client = client.clone();
         self.find_on_new_connection();
-        // Asked for again the next time they're drawn, in case the connection was what failed.
+        // Asked for again the next time they're drawn, in case the connection was what failed. The session says it
+        // changed once it has caught up on the new connection, or lost it, and the transcript is drawn again then.
         self.model.borrow_mut().pictures.retain(|_, picture| !matches!(picture, Picture::Unreadable));
         self.linked.reconnect(client);
     }
