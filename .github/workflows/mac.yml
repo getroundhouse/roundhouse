@@ -13,4 +13,4 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - run: sw_vers; sysctl hw.ncpu hw.memsize; python3 -I .github/probe/sockbuf.py
+      - run: sw_vers; sysctl hw.ncpu hw.memsize; python3 -I .github/probe/sndtimeo.py; python3 -I .github/probe/sndtimeo.py
