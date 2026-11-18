@@ -53,6 +53,8 @@ pub struct FakeEngine {
     fails: bool,
     /// Whether its final text leaves off the full stop at its end, as the model's sometimes does.
     leaves_off_the_last_full_stop: bool,
+    /// Whether it hears nothing in a piece heard whole, as the model does in some short phrases said quickly.
+    hears_nothing_whole: bool,
     /// The hints the newest recording was started with, so tests can check what context a field passed.
     last_hints: Arc<Mutex<Hints>>,
 }
@@ -77,6 +79,7 @@ impl FakeEngine {
             held_back: HELD_BACK,
             fails: false,
             leaves_off_the_last_full_stop: false,
+            hears_nothing_whole: false,
             last_hints: Arc::new(Mutex::new(Hints::default())),
         }
     }
@@ -109,6 +112,13 @@ impl FakeEngine {
     #[must_use]
     pub fn leaving_off_the_last_full_stop(self) -> Self {
         Self { leaves_off_the_last_full_stop: true, ..self }
+    }
+
+    /// Hears nothing in every piece heard whole, while hearing its words live, as the model does in some short
+    /// phrases said quickly.
+    #[must_use]
+    pub fn hearing_nothing_whole(self) -> Self {
+        Self { hears_nothing_whole: true, ..self }
     }
 
     /// Audio of someone saying `said`: words of the script, between spaces, a full stop after a word that ends a
@@ -175,6 +185,9 @@ impl Engine for FakeEngine {
         // As the model can't take more than it was made for.
         if piece.len() > self.longest.0 {
             return Err(EngineError(format!("a piece of {} samples is longer than {}", piece.len(), self.longest.0)));
+        }
+        if self.hears_nothing_whole {
+            return Ok(String::new());
         }
         let mut text = String::new();
         let mut sentence_begins = true;

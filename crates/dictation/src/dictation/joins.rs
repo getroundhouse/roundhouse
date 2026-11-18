@@ -93,9 +93,12 @@ pub(super) fn final_text(text: &str, carries_on: bool, ends: Ends) -> Option<(St
 
 /// `text`, unless it's no more than marks.
 fn words(text: String, carries_on: bool) -> Option<(String, bool)> {
-    text.chars()
-        .any(|c| !(c.is_whitespace() || ENDS_A_SENTENCE.contains(&c) || JOINS.contains(&c)))
-        .then_some((text, carries_on))
+    has_words(&text).then_some((text, carries_on))
+}
+
+/// Whether `text` has more in it than marks and spaces.
+pub(super) fn has_words(text: &str) -> bool {
+    text.chars().any(|c| !(c.is_whitespace() || ENDS_A_SENTENCE.contains(&c) || JOINS.contains(&c)))
 }
 
 /// `text` with its first letter in lower case, unless its first word has another capital, as `API` and `GitHub` do.

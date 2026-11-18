@@ -233,9 +233,13 @@ impl Hearing<'_> {
 
     /// Hears `pieces` whole, as one sentence, and sends its final text, which ends as `ends` says. Pieces between them
     /// that nothing was said in have let go of their audio, so a long pause takes none of the room the engine has.
+    /// Heard whole as nothing, as the model hears some short phrases said quickly, it's what the live text heard.
     fn finish_sentence(&mut self, pieces: Vec<Ended>, ends: Ends) -> Result<(), DictationError> {
+        let words = pieces.iter().flat_map(|piece| &piece.live).skip_while(|heard| is_mark(heard));
+        let live: String = words.map(|heard| heard.text.as_str()).collect();
         let audio: Vec<f32> = pieces.into_iter().flat_map(|piece| piece.audio).collect();
-        let text = self.engine.transcribe(&audio, self.hints)?;
+        let heard = self.engine.transcribe(&audio, self.hints)?;
+        let text = if joins::has_words(&heard) { heard } else { live };
         let carries_on = std::mem::take(&mut self.carries_on);
         if let Some((text, next_carries_on)) = joins::final_text(&text, carries_on, ends) {
             self.carries_on = next_carries_on;
