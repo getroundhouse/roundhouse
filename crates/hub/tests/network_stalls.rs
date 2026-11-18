@@ -124,9 +124,11 @@ fn a_peer_that_stops_reading_disconnects_all_pending_calls() {
     finishes(Peer::silent(false), |hub| {
         let client = Client::open_remote_with_timeout(&hub.hosts, &hub.fingerprint, OPERATION_TIMEOUT).unwrap();
         let waiting = client.start(Client::records_list);
-        // Exceeds TCP and TLS buffers even on hosts with a large send window. The peer never reads application data.
+        // More than the TCP and TLS buffers hold while the peer reads no application data: under 2 MB on a Mac, and up
+        // to 4 MB on Linux by default. No more, since a test build encodes it slowly and the deadline counts that: 64 MB
+        // took 0.9 s on an idle Mac, and held the call past the deadline on CI's Mac runners, 6 tests to 3 cores.
         let error = client
-            .call(devices::Pair { code: PairingCode::from("test-code"), device_name: "x".repeat(64 * 1024 * 1024) })
+            .call(devices::Pair { code: PairingCode::from("test-code"), device_name: "x".repeat(16 * 1024 * 1024) })
             .unwrap_err();
         assert!(matches!(error, ClientError::Disconnected), "{error}");
         assert!(client.is_disconnected());
