@@ -117,8 +117,8 @@ async fn a_starting_hub_takes_the_claims_off_every_chat_whose_agent_it_didnt_fin
     assert!(hub.store.get_session(&id).unwrap().session.agent_capabilities.is_none());
 }
 
-/// Its worker, of this protocol, says what the run it kept claims, which the record holds from then on, whatever it held
-/// before. One of protocol 3 doesn't, and the record keeps what the run said as it initialized.
+/// Its worker says what the run it kept claims, which the record holds from then on, whatever it held before. It says
+/// none of a run that has gone since, and the record keeps what it held.
 #[tokio::test]
 async fn a_starting_hub_holds_a_run_it_carries_on_with_to_what_its_worker_says_it_claims() {
     use crate::hub::tests::{claimed, hub_in, stand_in_worker};
@@ -135,7 +135,7 @@ async fn a_starting_hub_holds_a_run_it_carries_on_with_to_what_its_worker_says_i
     hub.store.set_claims(&id, &initialized).unwrap();
 
     hub.carry_on_session(&id, link.id, run, Vec::new(), None).await;
-    assert_eq!(on_record(), Some(initialized), "a worker of protocol 3 says nothing, and the record keeps them");
+    assert_eq!(on_record(), Some(initialized), "a run that has gone since, which its worker says nothing of");
     hub.carry_on_session(&id, link.id, run, Vec::new(), Some(said.clone())).await;
     assert_eq!(on_record(), Some(said));
 }

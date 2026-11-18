@@ -88,7 +88,7 @@ pub(crate) async fn start_agent(
             pid: agent.process.pid(),
             run: agent.run,
             already_running: true,
-            capabilities: Some(Box::new(agent.process.capabilities())),
+            capabilities: Box::new(agent.process.capabilities()),
         }));
     }
     let (tx, rx) = mpsc::channel(1024);
@@ -107,7 +107,7 @@ pub(crate) async fn start_agent(
         environment: (*state.credentials.given()).clone(),
     };
     let process = agents::spawn(spec, tx, options).await?;
-    let (pid, capabilities) = (process.pid(), Some(Box::new(process.capabilities())));
+    let (pid, capabilities) = (process.pid(), Box::new(process.capabilities()));
     info!(pid, %session_id, %run, "started agent");
     // Replaces an entry whose process has gone. Its forwarder finishes delivering its last output.
     state.agents.lock().insert(session_id.clone(), RunningAgent { process, run });

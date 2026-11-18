@@ -133,7 +133,7 @@ impl Hub {
                 if running_agent.is_none() {
                     gone.push(id.clone());
                 }
-                let claims = running_agent.and_then(RunningAgent::claims);
+                let claims = running_agent.map(RunningAgent::claims);
                 self.carry_on_session(id, link.id, run, take(id), claims).await;
             } else {
                 let (id, prompts) = (id.clone(), take(id));
@@ -142,7 +142,8 @@ impl Hub {
         }
         // An agent idle as the earlier hub went is still running too.
         for agent in running.iter().filter(|agent| !at_work.contains(&agent.session_id)) {
-            self.carry_on_session(&agent.session_id, link.id, agent.run, take(&agent.session_id), agent.claims()).await;
+            let claims = Some(agent.claims());
+            self.carry_on_session(&agent.session_id, link.id, agent.run, take(&agent.session_id), claims).await;
         }
         link.release(&self).await;
         let terminals = self.carry_on_terminals(&workspace_id, &link).await;
@@ -174,8 +175,8 @@ impl Hub {
         }
     }
 
-    /// `claims` are what the agent's worker says its run claims, which a worker of protocol 3 doesn't, whose run said
-    /// them as it initialized, and the record kept them, since a hub that stops records no exit.
+    /// `claims` are what the agent's worker says its run claims, while it's running. One that has gone since says none,
+    /// and the record keeps what it held, since a hub that stops records no exit.
     pub(super) async fn carry_on_session(
         self: &Arc<Self>,
         id: &SessionId,

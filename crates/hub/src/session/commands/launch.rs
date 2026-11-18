@@ -130,13 +130,13 @@ impl LiveSession {
         let starting = AgentRun { link: link.id, run: asked };
         self.state.lock().agent = Some(starting);
         let launched = self.launch(link, spec).await;
-        let (AgentStarted { pid, run, already_running, .. }, claims) = launched.inspect_err(|_| {
+        let AgentStarted { pid, run, already_running, capabilities } = launched.inspect_err(|_| {
             let mut state = self.state.lock();
             if state.agent == Some(starting) {
                 state.agent = None;
             }
         })?;
-        let claims = claims.map(|claims| RunCapabilities::new(run, claims));
+        let claims = RunCapabilities { run, claims: capabilities };
         let current = {
             let mut state = self.state.lock();
             // An agent that was already running keeps the run it started with. A new one can exit before
@@ -146,9 +146,7 @@ impl LiveSession {
             if current {
                 state.agent = Some(AgentRun { link: link.id, run });
                 // With it, so nothing is asked of it that its claims don't allow.
-                if claims.is_some() {
-                    state.capabilities.clone_from(&claims);
-                }
+                state.capabilities = Some(claims.clone());
             }
             current
         };
@@ -156,13 +154,11 @@ impl LiveSession {
         if already_running {
             // Its start, which recorded them, may be from before the record let go of them, as when its worker's
             // connection dropped.
-            if let Some(claims) = claims {
-                self.keep_claims(hub, claims).await;
-            }
+            self.keep_claims(hub, claims).await;
         } else {
             // Whatever is still open was asked by a process that no longer exists.
             self.cancel_approvals(None).await;
-            let capabilities = claims.map(|claims| claims.claims);
+            let capabilities = Some(claims.claims);
             let started = EventBody::AgentStarted { pid, resumed: resume, build, previous_build, capabilities };
             self.record_or_log(Origin::Run { run, current, numbered: None }, started).await;
         }
@@ -201,17 +197,11 @@ impl LiveSession {
         Ok(())
     }
 
-    /// Sends the launch, and returns the worker's reply with what the run claims, unless they're claims it can't be
-    /// held to.
-    async fn launch(
-        &self,
-        link: &WorkerLink,
-        spec: AgentSpec,
-    ) -> Result<(AgentStarted, Option<Capabilities>), ApiError> {
-        let started = link.call(spec).await?;
-        let claims = started.capabilities.as_deref().cloned();
-        self.held_to(link, claims.as_ref()).await?;
-        Ok((started, claims))
+    /// Sends the launch, and returns the worker's reply, unless its run claims what it can't be held to.
+    async fn launch(&self, link: &WorkerLink, spec: AgentSpec) -> Result<AgentStarted, ApiError> {
+        let started: AgentStarted = link.call(spec).await?;
+        self.held_to(link, &started.capabilities).await?;
+        Ok(started)
     }
 
     /// The worker has said which run the session's agent is, so the logins other runs were given are never asked
@@ -227,8 +217,8 @@ impl LiveSession {
 
     /// Refuses a run whose claims it can't be held to, since a claim that needs another without it means nothing, as
     /// [`Capabilities::unmet_needs`] says, and stops it, so nothing is asked of it or recorded as its.
-    async fn held_to(&self, link: &WorkerLink, claims: Option<&Capabilities>) -> Result<(), ApiError> {
-        let unmet = claims.map_or_else(Vec::new, Capabilities::unmet_needs);
+    async fn held_to(&self, link: &WorkerLink, claims: &Capabilities) -> Result<(), ApiError> {
+        let unmet = claims.unmet_needs();
         if unmet.is_empty() {
             return Ok(());
         }

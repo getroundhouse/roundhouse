@@ -363,7 +363,7 @@ fn running_agents(state: &State) -> WorkerResponse {
     let listed = |(session_id, agent): (&SessionId, &RunningAgent)| protocol::worker::RunningAgent {
         session_id: session_id.clone(),
         run: agent.run,
-        capabilities: Some(Box::new(agent.process.capabilities())),
+        capabilities: Box::new(agent.process.capabilities()),
     };
     let agents = running.map(listed);
     WorkerResponse::RunningAgents(RunningAgentsReply { agents: agents.collect() })

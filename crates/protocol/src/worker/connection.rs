@@ -89,17 +89,14 @@ impl Reply for RunningAgentsReply {
 pub struct RunningAgent {
     pub session_id: SessionId,
     pub run: RunId,
-    /// What the run claims, as its launch's reply said, so a hub that carries on with it holds it to them. `None` from
-    /// a worker of protocol 3.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub capabilities: Option<Box<crate::capability::Capabilities>>,
+    /// What the run claims, as its launch's reply said, so a hub that carries on with it holds it to them.
+    pub capabilities: Box<crate::capability::Capabilities>,
 }
 
 impl RunningAgent {
-    /// What its run claims, as a session's record holds them, if its worker said.
-    pub fn claims(&self) -> Option<crate::model::RunCapabilities> {
-        let claims = self.capabilities.as_deref()?;
-        Some(crate::model::RunCapabilities::new(self.run, claims.clone()))
+    /// What its run claims, as a session's record holds them.
+    pub fn claims(&self) -> crate::model::RunCapabilities {
+        crate::model::RunCapabilities::new(self.run, (*self.capabilities).clone())
     }
 }
 
