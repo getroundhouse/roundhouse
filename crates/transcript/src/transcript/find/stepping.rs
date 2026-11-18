@@ -109,8 +109,9 @@ impl Transcript {
     }
 
     /// Scrolls the list toward the match being shown, from where it was last drawn, until it's in view below the bar,
-    /// a frame at a time.
-    pub(crate) fn keep_revealing(&mut self, cx: &mut Context<Self>) {
+    /// a frame at a time. It runs as the transcript renders, where a notify brings no frame, so it asks the window for
+    /// the next one for as long as there's more to do, and for none once the match is in view or it has given up.
+    pub(crate) fn keep_revealing(&mut self, window: &Window) {
         let Some(finding) = &mut self.finding else { return };
         let mut visible = self.list.viewport();
         let under = bar::bottom().min(visible.size.height / 2.);
@@ -126,14 +127,16 @@ impl Transcript {
         let Some(drawn) = reveal.drawn() else {
             if revealing.frames == 0 {
                 reveal.done();
+            } else {
+                window.request_animation_frame();
             }
-            return cx.notify();
+            return;
         };
         match reveal::scroll_by(visible, drawn.bounds) {
             Some(by) if revealing.frames > 0 => {
                 self.list.scroll_down(by);
                 reveal.moved();
-                cx.notify();
+                window.request_animation_frame();
             }
             Some(_) | None => reveal.done(),
         }

@@ -332,7 +332,7 @@ impl Transcript {
 
 impl Render for Transcript {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        self.keep_revealing(cx);
+        self.keep_revealing(window);
         let wanted = self.session.clone();
         let recorded = self.log.row_count();
         let line_text = LineText::new(window, cx);

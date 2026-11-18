@@ -23,6 +23,8 @@ use crate::support::{FakeHub, Ui};
 
 /// Longer than the bar waits for typing to pause.
 const PAUSE: Duration = Duration::from_secs(1);
+/// A display's frame, at 60 a second.
+const FRAME: Duration = Duration::from_millis(16);
 /// A command with no description, whose line says it runs something.
 const COMMAND_LINE: &str = "Run";
 /// What the subagent is for, which its call's line says.
@@ -79,18 +81,18 @@ fn find(ui: &mut Ui<'_>, query: &str) {
     ui.cx.executor().advance_clock(PAUSE);
 }
 
-/// Waits for the match being shown to be drawn in view below the bar. The transcript scrolls toward it as it draws, a
-/// step a frame, and what draws the step after the first is the next frame, which the list asks for as it measures the
-/// rows of a page that has just loaded. A display brings that frame and a test has none, so the wait brings it, or a
-/// match that has to be scrolled to would wait for ever under the bar.
+/// Plays only the frames the app asks for, until it asks for none, and checks the match being shown is then in view
+/// below the bar. The transcript scrolls toward it as it draws, a step a frame, so it asks for each next frame itself
+/// until it's there, and then for none, so the window goes idle.
 #[track_caller]
-fn wait_for_the_match_in_view(ui: &mut Ui<'_>) {
+fn settle_with_the_match_in_view(ui: &mut Ui<'_>) {
     let transcript = ui.transcript().unwrap();
-    ui.wait("the match to come into view below the bar", |ui| {
-        ui.bring_the_next_frame();
-        ui.frame();
-        ui.cx.read_entity(&transcript, |t, _| t.match_in_view()) == Some(true)
-    });
+    ui.settle(FRAME);
+    assert_eq!(
+        ui.cx.read_entity(&transcript, |t, _| t.match_in_view()),
+        Some(true),
+        "the frames the transcript asked for bring the match into view below the bar"
+    );
 }
 
 #[gpui_kit::test]
@@ -131,7 +133,7 @@ fn cmd_f_finds_in_the_whole_chat_and_opens_what_a_match_is_in(cx: &mut TestAppCo
     assert_eq!(found_row(&ui), Some(call_row), "the command, in its call");
     ui.wait("the call to load", |ui| ui.cx.read_entity(&transcript, |t, _| t.event_at(call_row).is_some()));
     ui.wait("the call to open", |ui| command_open(ui) == Some(true));
-    wait_for_the_match_in_view(&mut ui);
+    settle_with_the_match_in_view(&mut ui);
 
     ui.press("secondary-shift-g");
     assert_eq!(says(&ui).as_deref(), Some("1 of 5"), "and back");
@@ -175,7 +177,32 @@ fn a_match_in_a_reply_far_up_the_chat_is_brought_into_view_below_the_bar(cx: &mu
     };
     ui.wait("the reply to load", |ui| ui.cx.read_entity(&transcript, |t, _| t.event_at(row).is_some()));
     assert!(in_a_reply(&ui), "the second is in the reply");
-    wait_for_the_match_in_view(&mut ui);
+    settle_with_the_match_in_view(&mut ui);
+}
+
+/// A reply taller than the window says the text at its start and at its end. With the first match in view, the second
+/// is below the window, in a row the list already shows, and once everything is counted and drawn nothing else in the
+/// window asks for a frame, so the frames that scroll the second into view are only the ones the transcript asks for.
+#[gpui_kit::test]
+fn a_match_below_the_window_in_a_row_it_shows_is_brought_into_view_with_frames_of_its_own(cx: &mut TestAppContext) {
+    let mut events = Vec::new();
+    let between = Vec::from_fn(60, |part| format!("Part {part}.")).join("\n\n");
+    turn(&mut events, "Where are they?", [text("found", &format!("A needle here.\n\n{between}\n\nA needle there."))]);
+    let (world, _) = chat_of(events, 0);
+    let (_hub, mut ui) = open(cx, world);
+    let transcript = ui.transcript().unwrap();
+    find(&mut ui, "needle");
+    ui.wait("the matches to be counted", |ui| says(ui).as_deref() == Some("1 of 2"));
+    settle_with_the_match_in_view(&mut ui);
+    let row = found_row(&ui);
+
+    ui.press("enter");
+
+    assert_eq!(says(&ui).as_deref(), Some("2 of 2"));
+    assert_eq!(found_row(&ui), row, "in the same reply");
+    let in_view = ui.cx.read_entity(&transcript, |t, _| t.match_in_view());
+    assert_eq!(in_view, Some(false), "drawn, at its end, below the window");
+    settle_with_the_match_in_view(&mut ui);
 }
 
 /// As Windows and Linux apps have them, besides Ctrl-G and Ctrl-Shift-G.
@@ -285,7 +312,7 @@ fn the_wheel_over_the_bar_scrolls_the_chat(cx: &mut TestAppContext) {
     let before = top(&ui);
 
     ui.scroll("find-says", ScrollDelta::Pixels(point(px(0.), px(300.))));
-    ui.settle(Duration::from_millis(16));
+    ui.settle(FRAME);
 
     assert_ne!(top(&ui), before, "it scrolled");
 }
