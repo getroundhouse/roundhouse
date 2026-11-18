@@ -5,6 +5,7 @@ use super::super::{
     Store, StoreError, StoredSession, current_rev, from_text, json_at, lock, rev_of, seq_column, seq_of, text_of,
 };
 use protocol::capability::approvals::ApprovalMode;
+use protocol::capability::output::TodoList;
 use protocol::capability::settings::Settings;
 use protocol::model::{
     Account, AccountId, AccountSource, AgentKind, AttachmentId, ClientRequestId, ContextUsage, Draft, ModelName,
@@ -25,7 +26,7 @@ pub(crate) struct Moved {
 /// What a session's row holds, as it's written.
 macro_rules! session_row_columns {
     () => {
-        "id, workspace_id, agent, model, mode, status, last_seq, created_at_ms, updated_at_ms, agent_session_id, agent_opened, title, closed_at_ms, reply_seq, read_seq, background_tasks, title_source, queued, queue_held, turn_started_at_ms, effort, context, account_id, user_active_at_ms, prompt_cache, draft, decision_draft, untaken, open_approvals, reply_outcome, agent_capabilities, account_source"
+        "id, workspace_id, agent, model, mode, status, last_seq, created_at_ms, updated_at_ms, agent_session_id, agent_opened, title, closed_at_ms, reply_seq, read_seq, background_tasks, title_source, queued, queue_held, turn_started_at_ms, effort, context, account_id, user_active_at_ms, prompt_cache, draft, decision_draft, untaken, open_approvals, reply_outcome, agent_capabilities, account_source, todos"
     };
 }
 
@@ -62,7 +63,7 @@ pub(in super::super) fn draft_column(draft: &Draft) -> serde_json::Result<Option
 }
 
 pub(in super::super) fn session_from_row(row: &Row) -> rusqlite::Result<StoredSession> {
-    let waits = waits_from(&row.get::<_, String>(32)?)?;
+    let waits = waits_from(&row.get::<_, String>(33)?)?;
     let account: Option<AccountId> = row.get::<_, Option<String>>(22)?.map(Into::into);
     let account_source: Option<AccountSource> = row.get::<_, Option<String>>(31)?.map(from_text).transpose()?;
     Ok(StoredSession {
@@ -96,6 +97,8 @@ pub(in super::super) fn session_from_row(row: &Row) -> rusqlite::Result<StoredSe
             user_active_at_ms: row.get(23)?,
             // Written only by this hub, as JSON. One it can't read is as good as none, until the agent next asks.
             prompt_cache: json_at(row, 24)?,
+            // Written only by this hub, as JSON. One it can't read is as good as none, until the agent next says.
+            todos: json_at(row, 32)?,
             // Written only by this hub, as JSON. One it can't read is as good as nothing typed.
             draft: json_at(row, 25)?.unwrap_or_default(),
             // The same.
@@ -109,7 +112,7 @@ pub(in super::super) fn session_from_row(row: &Row) -> rusqlite::Result<StoredSe
             // Written by the query, from the waits table, so one it can't read is a query that doesn't match `Wait`.
             wait: waits.first().cloned(),
             waits: Some(waits),
-            rev: rev_of(row, 33)?,
+            rev: rev_of(row, 34)?,
         },
         agent_session_id: row.get::<_, Option<String>>(9)?.map(Into::into),
         agent_opened: row.get(10)?,
@@ -135,7 +138,7 @@ impl Store {
                 "INSERT INTO sessions (",
                 session_row_columns!(),
                 ", client_request_id)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
             ),
             params![
                 session.id.as_str(),
@@ -170,6 +173,7 @@ impl Store {
                 session.reply_outcome.as_ref().map(text_of),
                 session.agent_capabilities.as_ref().map(serde_json::to_string).transpose()?,
                 session.account_source.as_ref().map(text_of),
+                session.todos.as_ref().map(serde_json::to_string).transpose()?,
                 client_request_id.map(ClientRequestId::as_str),
             ],
         )?;
@@ -240,6 +244,15 @@ impl Store {
         lock(&self.writer).execute(
             "UPDATE sessions SET context = ? WHERE id = ?",
             params![serde_json::to_string(context)?, id.as_str()],
+        )?;
+        Ok(())
+    }
+
+    /// The session's agent's to-do list from here on.
+    pub fn set_session_todos(&self, id: &SessionId, todos: &TodoList) -> Result<(), StoreError> {
+        lock(&self.writer).execute(
+            "UPDATE sessions SET todos = ? WHERE id = ?",
+            params![serde_json::to_string(todos)?, id.as_str()],
         )?;
         Ok(())
     }
