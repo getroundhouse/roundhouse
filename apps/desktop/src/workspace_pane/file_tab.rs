@@ -4,10 +4,9 @@
 
 use gpui_kit::component::{Icon, IconName};
 use gpui_kit::{
-    AnyElement, Context, IntoElement as _, ParentElement as _, SharedString, StatefulInteractiveElement as _, Styled,
-    Window,
+    Anchor, AnyElement, Context, IntoElement as _, ParentElement as _, SharedString, StyleRefinement, Styled, Window,
 };
-use look::IconSizing as _;
+use look::{IconSizing as _, Region};
 
 use super::{Showing, WorkspacePane, tab};
 use crate::file_diff::FileDiff;
@@ -126,14 +125,21 @@ impl WorkspacePane {
         };
         let close = tab::close_button("close-file-tab", "Close file tab", cx, |t, _, cx| t.close_file_tab(cx));
         let face = tab::face("show-file-tab", selected, label)
-            // Two files can share a name, so the whole path is a hover away.
-            .tooltip(look::tooltip(path))
             // Muted whether or not it's showing, as the chats' titles are: the underline says which tab is.
             .text_color(muted)
             .on_click(cx.listener(|t, _, _, cx| t.show_file_tab(cx)))
             .child(Icon::new(IconName::File).sized(look::IconSize::Large))
             .child(tab::name().italic().child(name));
         let tab = tab::tab("file-tab", face, close, selected, cx);
+        // Two files can share a name, so the whole path is a hover away, under the tab, with the button that copies it.
+        let path = path.to_string();
+        let tab = crate::says_more::on_hover(
+            look::hover_card_with_a_button("file-path-hover"),
+            tab,
+            Anchor::TopLeft,
+            StyleRefinement::default().flex_none().h_full(),
+            move |cx| crate::says_more::path_card(Region::FilePathCard, path, "copy-file-path", cx),
+        );
         Some(tab.into_any_element())
     }
 }

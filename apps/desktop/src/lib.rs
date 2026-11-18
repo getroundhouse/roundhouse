@@ -43,6 +43,7 @@ mod reorder;
 pub mod review;
 mod right_click;
 mod saving;
+mod says_more;
 mod settings;
 mod sidebar;
 pub mod sidebar_tabs;
