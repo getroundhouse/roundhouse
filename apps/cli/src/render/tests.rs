@@ -145,7 +145,7 @@ fn a_turn_the_agent_started_by_itself_says_which_tasks_it_heard_had_ended() {
     let mut kept = fixtures::pull_request_wait("k3");
     kept.ended = Some(WaitEnded { at_ms: 2, how: WaitEnd::CalledOffByPerson });
     wait.wait = Some(EndedWait::from(&kept));
-    let as_the_app_says = "the agent picked up by itself, after: waited on #7: required checks (Stopped)";
+    let as_the_app_says = "the agent picked up by itself, after: waited on #7 for required checks (Stopped)";
     assert_eq!(own_turn(&[wait]), as_the_app_says, "from the hub's record, not the agent's word");
     assert_eq!(own_turn(&[]), "the agent picked up by itself");
 }

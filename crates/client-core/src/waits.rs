@@ -3,24 +3,50 @@
 
 use protocol::model::{WaitEnd, WaitUntil, Watching};
 
-/// Which pull requests a wait watches, and until what, as "Waiting on" and "Waited on" go on to say: "#7, #8: required
-/// checks", or for one on the branch's pull request, "#7's checks" or "#7".
+/// Which pull requests a wait watches, and until what, as "Waiting on" and "Waited on" go on to say: "#7, #8 for
+/// required checks", "#7 to merge", or for one on the branch's pull request, "#7's checks" or "#7".
 pub fn watched(watching: &Watching) -> String {
     match watching {
-        Watching::PullRequests { numbers, until } => {
-            let numbers: Vec<String> = numbers.iter().map(|number| format!("#{number}")).collect();
-            let what = match until {
-                WaitUntil::RequiredChecks => "required checks",
-                WaitUntil::AllChecks | WaitUntil::Checks => "checks",
-                WaitUntil::Merged | WaitUntil::Done | WaitUntil::Unknown => "merge",
-            };
-            format!("{}: {what}", numbers.join(", "))
-        }
+        Watching::PullRequests { numbers, until } => format!("{} {}", numbers_of(numbers), until_what(*until)),
         Watching::Branch { number, until } => match until {
             WaitUntil::Checks | WaitUntil::RequiredChecks | WaitUntil::AllChecks => format!("#{number}'s checks"),
             WaitUntil::Done | WaitUntil::Merged | WaitUntil::Unknown => format!("#{number}"),
         },
         Watching::Unknown => "a pull request".to_string(),
+    }
+}
+
+/// What "Waiting on" goes on to say while `running` of the checks a wait goes by are still running: which pull
+/// requests, and a count that ends as the bar's does, "N checks running". A wait until checks says what it's for once,
+/// in the count, as "#6, #7 · 2 required checks running", since only those count, and the bar counts every check. A
+/// wait until a merge says it after the numbers, as "#9 to merge · 1 check running".
+pub fn watched_running(watching: &Watching, running: usize) -> String {
+    let count = |checks: &str| {
+        let checks = if running == 1 { checks.strip_suffix('s').unwrap_or(checks) } else { checks };
+        format!("{running} {checks} running")
+    };
+    match watching {
+        Watching::PullRequests { numbers, until: WaitUntil::RequiredChecks } => {
+            format!("{} \u{b7} {}", numbers_of(numbers), count("required checks"))
+        }
+        Watching::PullRequests { numbers, until: WaitUntil::AllChecks | WaitUntil::Checks } => {
+            format!("{} \u{b7} {}", numbers_of(numbers), count("checks"))
+        }
+        Watching::PullRequests { until: WaitUntil::Merged | WaitUntil::Done | WaitUntil::Unknown, .. }
+        | Watching::Branch { .. }
+        | Watching::Unknown => format!("{} \u{b7} {}", watched(watching), count("checks")),
+    }
+}
+
+fn numbers_of(numbers: &[u64]) -> String {
+    numbers.iter().map(|number| format!("#{number}")).collect::<Vec<_>>().join(", ")
+}
+
+fn until_what(until: WaitUntil) -> &'static str {
+    match until {
+        WaitUntil::RequiredChecks => "for required checks",
+        WaitUntil::AllChecks | WaitUntil::Checks => "for checks",
+        WaitUntil::Merged | WaitUntil::Done | WaitUntil::Unknown => "to merge",
     }
 }
 
@@ -51,7 +77,7 @@ pub fn why_it_ended(how: WaitEnd) -> &'static str {
 mod tests {
     use protocol::model::{WaitUntil, Watching};
 
-    use super::watched;
+    use super::{watched, watched_running};
 
     /// A wait asked about pull requests names them, and what for. One on the branch's names it as the branch's.
     #[test]
@@ -59,10 +85,23 @@ mod tests {
         let asked = |until| Watching::PullRequests { numbers: vec![6, 7], until };
         let branch = |until| Watching::Branch { number: 7, until };
 
-        assert_eq!(watched(&asked(WaitUntil::RequiredChecks)), "#6, #7: required checks");
-        assert_eq!(watched(&asked(WaitUntil::Merged)), "#6, #7: merge");
+        assert_eq!(watched(&asked(WaitUntil::RequiredChecks)), "#6, #7 for required checks");
+        assert_eq!(watched(&asked(WaitUntil::AllChecks)), "#6, #7 for checks");
+        assert_eq!(watched(&asked(WaitUntil::Merged)), "#6, #7 to merge");
         assert_eq!(watched(&branch(WaitUntil::Checks)), "#7's checks");
         assert_eq!(watched(&branch(WaitUntil::Done)), "#7");
         assert_eq!(watched(&Watching::Unknown), "a pull request", "one a newer hub knows");
+    }
+
+    /// Every count ends as the bar's does, and says what the wait is for only once: a wait until checks in the count,
+    /// naming required ones, which the bar doesn't count alone, and a wait until a merge after the numbers.
+    #[test]
+    fn a_waits_count_names_what_it_counts_once() {
+        let asked = |until| Watching::PullRequests { numbers: vec![6, 7], until };
+
+        assert_eq!(watched_running(&asked(WaitUntil::RequiredChecks), 1), "#6, #7 \u{b7} 1 required check running");
+        assert_eq!(watched_running(&asked(WaitUntil::RequiredChecks), 2), "#6, #7 \u{b7} 2 required checks running");
+        assert_eq!(watched_running(&asked(WaitUntil::AllChecks), 0), "#6, #7 \u{b7} 0 checks running");
+        assert_eq!(watched_running(&asked(WaitUntil::Merged), 1), "#6, #7 to merge \u{b7} 1 check running");
     }
 }

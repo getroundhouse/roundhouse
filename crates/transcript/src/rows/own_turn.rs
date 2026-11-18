@@ -123,7 +123,7 @@ mod tests {
         wait.ended = Some(WaitEnded { at_ms: 2, how: WaitEnd::ChecksFailed });
         task.wait = Some(EndedWait::from(&wait));
         let (_, title, how) = words(&task);
-        assert_eq!((title.as_str(), how), ("Waited on #7: required checks", "A check failed"));
+        assert_eq!((title.as_str(), how), ("Waited on #7 for required checks", "A check failed"));
 
         wait.ended = None;
         task.wait = Some(EndedWait::from(&wait));

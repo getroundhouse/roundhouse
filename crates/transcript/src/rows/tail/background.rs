@@ -122,13 +122,13 @@ fn wait_words(wait: &Wait, standing: Option<&PullRequestStanding>) -> (String, &
                     )
             })
             .count();
-        let status = if watch.read_error.is_some() {
-            "couldn't refresh GitHub".to_owned()
+        let said = if watch.read_error.is_some() {
+            format!("{what} \u{b7} couldn't refresh GitHub")
         } else {
-            format!("{pending} {} running", if pending == 1 { "check" } else { "checks" })
+            format!("Waiting on {}", waits::watched_running(&wait.watching(), pending))
         };
         return (
-            format!("{what} · {status}"),
+            said,
             "Until every watched pull request reaches the condition, or one needs the agent; Stop ends only this wait",
         );
     }
@@ -229,14 +229,19 @@ mod tests {
         assert_eq!(said(&done, Some(&standing(7))), "Waiting on #7 \u{b7} 2 checks running");
     }
 
-    /// A wait asked about pull requests names them and what for, and how many of their checks are still running.
+    /// A wait asked about pull requests names them, what for and how many of the checks it goes by are still running,
+    /// or that GitHub couldn't be read.
     #[test]
     fn a_waits_line_names_the_pull_requests_it_was_asked_about() {
         let wait = protocol::fixtures::pull_request_wait("w1");
 
         let (said, _) = wait_words(&wait, None);
 
-        assert!(said.starts_with("Waiting on #7: required checks \u{b7} "), "{said}");
-        assert!(said.ends_with(" running"), "{said}");
+        assert_eq!(said, "Waiting on #7 \u{b7} 1 required check running");
+        let merge = Wait { until: WaitUntil::Merged, ..wait.clone() };
+        assert_eq!(wait_words(&merge, None).0, "Waiting on #7 to merge \u{b7} 1 check running");
+        let mut unread = wait;
+        unread.watch.as_mut().unwrap().read_error = Some("offline".into());
+        assert_eq!(wait_words(&unread, None).0, "Waiting on #7 for required checks \u{b7} couldn't refresh GitHub");
     }
 }
