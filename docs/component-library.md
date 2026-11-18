@@ -178,6 +178,19 @@ What's done on a card as a whole, such as keeping the keyboard's focus or measur
 | Show the lines a file gained and lost | `look::lines_changed(added, removed)` |
 | Set a count or lines on the baseline of the line they're in | `placed`, with the `look::LineText` part for their text |
 
+## Bars
+
+`docs/spec/components.md` has a bar's kinds, and `crates/look/src/bars` the code. A bar sets how far in what it holds starts and ends, and how far apart it is, by its kind, and draws its edge, so a place puts in only what the bar says and does.
+
+| To | Call |
+|---|---|
+| Make one, of a kind and a size | `look::bar(kind, size)` |
+| Put what it says in it, from its start, and what's done about it at its end | `child`, `children`, `end` |
+| Keep what it holds clear of what's over its ends, such as the window's buttons | `clear` |
+| Tint it in a pull request's colour, as the pull request's bar is | `of_work` |
+| Have a button show only while the pointer's on it | `group`, with the button's `shown_while_over` |
+| Find it in a test | `region`, `id` |
+
 ## Tabs
 
 `docs/spec/components.md` has a tab's widths, and `crates/look/src/tabs` the code. A tab draws its name, its line and its close button itself, so none is drawn on the kit's tab. The bar it's in is still the place's, until the bars are components.

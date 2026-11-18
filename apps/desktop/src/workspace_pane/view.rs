@@ -84,7 +84,6 @@ impl WorkspacePane {
     /// to usually are, then one tab for each open chat and each open terminal, and a menu that starts another of
     /// either. At the far end are any closed chats to go back to.
     fn tab_row(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let border = look::colors(cx).edge;
         let mut tabs: Vec<AnyElement> = self.file_tab_element(cx).into_iter().collect();
         tabs.extend(self.subagent_tab_element(cx));
         for session in self.open_sessions() {
@@ -92,27 +91,12 @@ impl WorkspacePane {
         }
         tabs.extend(self.terminal_tabs(cx));
         let closed = self.closed_chats(cx);
-        div()
+        look::bar(look::BarKind::Tabs, look::BarSize::Regular)
             .region(Region::TabBar)
-            .relative()
-            .flex_none()
-            .w_full()
-            .h(look::BarSize::Regular.height())
-            // The bar's bottom edge, drawn under the tabs rather than as a border, so the line under the chat showing
-            // can cover it. GPUI draws a border over what's inside it.
-            .child(div().absolute().left_0().right_0().bottom_0().h(look::EDGE).bg(border))
-            .child(
-                h_flex()
-                    .size_full()
-                    .pl(look::Space::XSmall)
-                    .pr(look::Space::Medium)
-                    .gap(look::Space::XSmall)
-                    .child(Tabs::new("chat-tabs").flex().h_full().min_w_0().overflow_x_scroll().children(tabs))
-                    .child(self.new_tab_menu(cx))
-                    // Kept to the end of the row, so it stays put as chats open and close.
-                    .child(div().flex_1())
-                    .children(closed),
-            )
+            .child(Tabs::new("chat-tabs").flex().h_full().min_w_0().overflow_x_scroll().children(tabs))
+            .child(self.new_tab_menu(cx))
+            // Kept to the end of the row, so it stays put as chats open and close.
+            .when_some(closed, look::Bar::end)
     }
 
     /// The `+` after the tabs, and its menu: a new chat, or one with each agent when the hub has more than one, and a
@@ -142,7 +126,6 @@ impl WorkspacePane {
     /// Over the chat, beside the sidebar of changes. While the sidebar is hidden, it shows the pull request's number and
     /// its bar's action instead. It's in the strip along the window's top, clear of the window's buttons at both ends.
     fn header(&self, sidebar: Sidebar, line_text: &LineText, cx: &mut Context<Self>) -> impl IntoElement {
-        let border = look::colors(cx).edge;
         let clear = sides::clearance(AtTheTop::Header, cx);
         let controls = match sidebar {
             Sidebar::Open => None,
@@ -152,16 +135,9 @@ impl WorkspacePane {
                 crate::pull_request::controls(&self.pull_request, &self.busy, doing, on_action)
             }
         };
-        h_flex()
+        look::bar(look::BarKind::Words, look::BarSize::Regular)
             .region(Region::Header)
-            .flex_none()
-            .w_full()
-            .h(look::BarSize::Regular.height())
-            .pl(look::Space::Large.size() + clear.start)
-            .pr(look::Space::Medium.size() + clear.end)
-            .gap(look::Space::Small)
-            .border_b_1()
-            .border_color(border)
+            .clear(clear.start, clear.end)
             .child(self.heading(line_text, cx))
             .children(controls)
             .child(

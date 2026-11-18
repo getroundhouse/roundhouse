@@ -5,9 +5,8 @@
 use std::rc::Rc;
 
 use gpui_kit::base::Tabs;
-use gpui_kit::component::h_flex;
 use gpui_kit::prelude::FluentBuilder as _;
-use gpui_kit::{AnyElement, App, IntoElement as _, ParentElement as _, Styled as _, Window, div};
+use gpui_kit::{AnyElement, App, IntoElement as _, ParentElement as _, Styled as _, Window};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SidebarTab {
@@ -103,7 +102,7 @@ pub(crate) fn bar(
     changed: Option<usize>,
     controls: Option<AnyElement>,
     on_pick: impl Fn(&SidebarTab, &mut Window, &mut App) + 'static,
-    cx: &App,
+    _cx: &App,
 ) -> AnyElement {
     let on_pick = Rc::new(on_pick);
     let count = changed.filter(|n| *n > 0);
@@ -114,22 +113,10 @@ pub(crate) fn bar(
             tab_element(tab, label, count, chosen == Some(tab), on_click)
         },
     );
-    h_flex()
-        .relative()
-        .flex_none()
-        .w_full()
-        // A regular bar's, as the chat tabs are, so the two rows of tabs line up across the window.
-        .h(look::BarSize::Regular.height())
-        .pl(look::Space::XSmall)
-        // As far in as the rows under it, so what's at its right end lines up with what's at theirs.
-        .pr(look::Space::Medium)
-        .gap(look::Space::Small)
-        // The bar's bottom edge, under the tabs rather than a border, so the line under the tab chosen can cover it,
-        // as it does under the chat tabs.
-        .child(div().absolute().left_0().right_0().bottom_0().h(look::EDGE).bg(look::colors(cx).edge))
+    // A regular bar's, as the chat tabs are, so the two rows of tabs line up across the window.
+    look::bar(look::BarKind::Tabs, look::BarSize::Regular)
         .child(Tabs::new("sidebar-tabs").flex().h_full().children(tabs))
-        .child(div().flex_1())
-        .children(controls)
+        .when_some(controls, look::Bar::end)
         .into_any_element()
 }
 

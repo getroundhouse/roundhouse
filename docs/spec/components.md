@@ -85,6 +85,22 @@ The pieces screens are built from, on the foundations in `look.md`: what each is
 
 ![Every kind of switch](screens/switch-kinds.png)
 
+## Bars
+
+- **What's in a bar starts 16px in, where a tab's name starts, and ends 12px in,** as the owner chose from pictures of two ways, so the bars over and under a row of tabs line up with its names: the workspace's header and a subagent's band over the chat's tabs, and the pull request's bar and Changes' comments over and under the sidebar's. The pull request's bar, the comments and a file's path started 12px in, 4px short of the tabs' names. A row of tabs is a bar too, 4px in, so each tab's name starts 16px in. `look::bar` draws one, and moves what's in it further in where the window's buttons are over its ends. *Unconfirmed:* the 12px at the end, and what's in a bar 8px apart, and a row of tabs' 4px.
+- **A row of tabs has its edge under the tabs,** rather than as a border, so the line under the one showing covers it. *Unconfirmed.*
+
+**Every kind of bar, by its name.** Each is a kind in `look::BarKind`. *Unconfirmed.*
+
+| Name | Starts | Ends | For |
+|---|---|---|---|
+| `Words` | 16px | 12px | What's said of what's under it and what's done about it, such as the workspace's header, the pull request's bar, Changes' comments, a file's path, a subagent's band and Home's bar |
+| `Tabs` | 4px | 12px | A row of tabs, such as the chat's and the sidebar's |
+
+**Every kind of bar, as the sidebar of changes stacks them: the pull request's bar, its tabs and Changes' comments.** *Unconfirmed.*
+
+![Every kind of bar](screens/bar-kinds.png)
+
 ## Tabs
 
 - **A tab names one of what its bar can show, and the one showing is underlined,** with a 2px line in the paled copper over the bar's bottom edge, rather than filled, so its bar stays a row of names, as `chats.md` says of the chat tabs. Its name is muted whether or not it's showing, and stronger, in the text's colour, only when what it names needs a look, such as a reply not yet read. `look::tab` makes one, the workspace's tabs and the sidebar's All files and Changes alike.

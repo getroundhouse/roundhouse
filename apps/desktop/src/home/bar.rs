@@ -10,18 +10,24 @@ use crate::sides::{self, AtTheTop};
 
 /// In the strip, clear of the window's buttons at both ends as the workspace's header is.
 pub(super) fn bar(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement {
-    let colors = look::colors(cx);
-    let border = colors.edge;
     let clear = sides::clearance(AtTheTop::Header, cx);
-    h_flex()
+    // The choices of what the list shows and Create are one group, closer together than the bar sets what's in it.
+    let choices = h_flex()
         .flex_none()
-        .w_full()
-        .h(look::BarSize::Regular.height())
-        .pl(look::Space::Large.size() + clear.start)
-        .pr(look::Space::Small.size() + clear.end)
         .gap(look::Space::XSmall)
-        .border_b_1()
-        .border_color(border)
+        .child(repos(app, cx))
+        .child(archived(app, cx))
+        .child(sort(app, cx))
+        .child(
+            look::button("home-create", look::ButtonKind::Main, look::ControlSize::Regular, "Create")
+                .icon(IconName::Plus)
+                // In the repository the list shows, as `current_repo` says. The dialog opens while another workspace
+                // is being made, and its Create waits.
+                .off(app.current_repo().is_none())
+                .on_click(cx.listener(|t, _, window, cx| t.new_workspace_here(window, cx))),
+        );
+    look::bar(look::BarKind::Words, look::BarSize::Regular)
+        .clear(clear.start, clear.end)
         .child(
             // In a box of its own, so a test can see where the search starts. It hides the strip it's in from the
             // pointer, so on Windows a press here is an ordinary one in the window rather than one on a title bar,
@@ -33,17 +39,7 @@ pub(super) fn bar(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement 
                     .icon(IconName::Search),
             ),
         )
-        .child(repos(app, cx))
-        .child(archived(app, cx))
-        .child(sort(app, cx))
-        .child(
-            look::button("home-create", look::ButtonKind::Main, look::ControlSize::Regular, "Create")
-                .icon(IconName::Plus)
-                // In the repository the list shows, as `current_repo` says. The dialog opens while another workspace
-                // is being made, and its Create waits.
-                .off(app.current_repo().is_none())
-                .on_click(cx.listener(|t, _, window, cx| t.new_workspace_here(window, cx))),
-        )
+        .child(choices)
 }
 
 /// A filter: borderless, muted, with what it's set to and a menu to change it.
