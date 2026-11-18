@@ -1,18 +1,23 @@
 //! What the CLI calls each approval mode: what `--permission-mode` and `set_permission_mode` take, and what `init` and
 //! `status` report. `docs/claude-cli.md` has how it behaves.
 
+use protocol::capability::approvals::ApprovalMode;
 use protocol::model::PermissionMode;
+
+use super::claims;
 
 /// Full access.
 pub(super) const FULL_ACCESS: &str = "bypassPermissions";
 const PLAN: &str = "plan";
 
-/// `None` for a mode there's no name for here.
-pub(super) fn name(mode: PermissionMode) -> Option<&'static str> {
-    match mode {
-        PermissionMode::FullAccess => Some(FULL_ACCESS),
-        PermissionMode::Plan => Some(PLAN),
-        PermissionMode::Unknown => None,
+/// What the CLI calls `mode`, one this adapter claims. `None` for any other, which the CLI couldn't be asked into.
+pub(super) fn name(mode: ApprovalMode) -> Option<&'static str> {
+    if mode == claims::full_access() {
+        Some(FULL_ACCESS)
+    } else if mode == claims::plan() {
+        Some(PLAN)
+    } else {
+        None
     }
 }
 
@@ -32,10 +37,11 @@ mod tests {
 
     #[test]
     fn each_mode_a_chat_can_have_is_called_by_its_own_name() {
-        for chat_mode in [PermissionMode::FullAccess, PermissionMode::Plan] {
-            assert_eq!(name(chat_mode).map(mode), Some(chat_mode));
-        }
-        assert_eq!(name(PermissionMode::Unknown), None);
+        assert_eq!(name(claims::full_access()).map(mode), Some(PermissionMode::FullAccess));
+        assert_eq!(name(claims::plan()).map(mode), Some(PermissionMode::Plan));
+        let asks_first =
+            ApprovalMode { unasked: protocol::capability::approvals::Unasked::Reads, ..claims::full_access() };
+        assert_eq!(name(asks_first), None, "one it doesn't claim");
     }
 
     #[test]

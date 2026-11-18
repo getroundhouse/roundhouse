@@ -4,9 +4,10 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use protocol::attachment::AttachmentFile;
+use protocol::capability::approvals::ApprovalMode;
 use protocol::capability::{Control, settings};
 use protocol::event::{EventBody, NoticeLevel, TurnOutcome};
-use protocol::model::{AgentSessionId, ModelName, PermissionMode, Seq, SessionSettingsChange};
+use protocol::model::{AgentSessionId, ModelName, Seq};
 use protocol::prompt::Prompt;
 use serde_json::{Value, json};
 
@@ -81,11 +82,6 @@ impl AgentProcess for AntigravityProcess {
     }
     async fn compact(&self, _asked: Seq, _keeping: Option<&str>) -> Result<(), AgentError> {
         Err(AgentError::UnknownRequest("Antigravity compaction is not offered by this adapter".into()))
-    }
-    async fn configure(&self, options: &SessionSettingsChange) -> Result<(), AgentError> {
-        let settings =
-            options.for_capabilities(&self.capabilities()).map_err(|error| AgentError::Refused(error.to_string()))?;
-        self.control(&Control::Change(settings)).await
     }
     async fn stop(&self) {
         self.shared.stop().await;
@@ -229,8 +225,7 @@ async fn change(shared: &Arc<Shared>, requested: &settings::Settings) -> Result<
     }
     let next_perm = match requested.mode {
         None => None,
-        Some(mode) if mode == super::claims::plan() => Some(PermissionMode::Plan),
-        Some(mode) if mode == super::claims::full_access() => Some(PermissionMode::FullAccess),
+        Some(mode) if mode == super::claims::plan() || mode == super::claims::full_access() => Some(mode),
         Some(_) => return Err(AgentError::UnknownMode),
     };
     if let Some(perm) = next_perm
@@ -266,7 +261,7 @@ async fn change(shared: &Arc<Shared>, requested: &settings::Settings) -> Result<
             changed
         };
         if changed {
-            shared.event(EventBody::AgentMode { permission_mode: perm }, None).await;
+            shared.event(EventBody::AgentMode { permission_mode: crate::registry::as_logged(perm) }, None).await;
         }
     }
     Ok(())
@@ -276,7 +271,7 @@ async fn swap_idle_settings(
     shared: &Arc<Shared>,
     model: &ModelName,
     effort: settings::Effort,
-    perm: PermissionMode,
+    perm: ApprovalMode,
 ) -> Result<(), AgentError> {
     let changed = {
         let mut state = shared.state.lock();
@@ -288,7 +283,7 @@ async fn swap_idle_settings(
     };
     ensure_mode_process(shared).await?;
     if changed {
-        shared.event(EventBody::AgentMode { permission_mode: perm }, None).await;
+        shared.event(EventBody::AgentMode { permission_mode: crate::registry::as_logged(perm) }, None).await;
     }
     Ok(())
 }

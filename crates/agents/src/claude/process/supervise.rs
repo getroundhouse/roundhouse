@@ -6,8 +6,8 @@ use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
 use crate::claude::login_check::Output;
+use protocol::capability::approvals::ApprovalMode;
 use protocol::event::EventBody;
-use protocol::model::PermissionMode;
 use protocol::worker::AgentSpec;
 use tokio::process::{Child, ChildStdin};
 use tokio::sync::mpsc;
@@ -25,7 +25,7 @@ use crate::{AgentOptions, AgentOutput};
 pub(super) async fn supervise(
     bin: PathBuf,
     spec: AgentSpec,
-    mode: protocol::model::PermissionMode,
+    mode: ApprovalMode,
     options: AgentOptions,
     files: RunFiles,
     mut recovery: super::recovery::Recovery,
@@ -102,7 +102,7 @@ pub(super) async fn supervise(
 
 /// Reestablishes the permission mode before replaying prompts the previous process never took.
 async fn replay(
-    mode: PermissionMode,
+    mode: ApprovalMode,
     shared: &Arc<Shared>,
     stdin: &mut Option<ChildStdin>,
     output: &mpsc::Sender<AgentOutput>,

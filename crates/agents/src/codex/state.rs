@@ -1,9 +1,11 @@
 use std::collections::{HashMap, VecDeque};
 
-use protocol::capability::approvals::Request;
-use protocol::model::{ApprovalId, Seq, SessionSettings, SubagentId, ToolUseId};
+use protocol::capability::approvals::{ApprovalMode, Request};
+use protocol::model::{ApprovalId, Seq, SubagentId, ToolUseId};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+
+use crate::registry::Launch;
 
 #[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq, Hash)]
 #[serde(transparent)]
@@ -62,9 +64,9 @@ pub(super) struct Conversation {
     pub(super) last_ended: Option<TurnId>,
     /// The end of the turn a cancel is waiting for, which the cancel records.
     pub(super) held_end: Option<Ended>,
-    pub(super) settings: SessionSettings,
+    pub(super) settings: Launch,
     /// Settings accepted while working belong to the next turn, not the one finishing.
-    pub(super) turn_mode: Option<protocol::model::PermissionMode>,
+    pub(super) turn_mode: Option<ApprovalMode>,
     pub(super) untaken: VecDeque<Seq>,
     /// A native intake call can cross a turn boundary; the old turn cannot settle this prompt.
     pub(super) sending: Option<Seq>,
@@ -77,7 +79,7 @@ pub(super) struct Conversation {
 }
 
 impl Conversation {
-    pub(super) fn new(settings: SessionSettings) -> Self {
+    pub(super) fn new(settings: Launch) -> Self {
         Self {
             thread: None,
             turn: None,
@@ -106,7 +108,7 @@ impl Conversation {
     pub(super) fn take_plan(&mut self) -> Option<String> {
         let mode = self.turn_mode.take();
         self.plan.take().or_else(|| {
-            (mode == Some(protocol::model::PermissionMode::Plan))
+            mode.is_some_and(|mode| mode.plan)
                 .then(|| self.reply.take())
                 .flatten()
                 .filter(|text| !text.trim().is_empty())
@@ -127,17 +129,18 @@ fn plan_text(reply: String) -> String {
 #[cfg(test)]
 mod tests {
     use super::Conversation;
-    use protocol::model::PermissionMode;
+    use crate::codex::claims::{full_access, plan};
+    use protocol::model::AgentKind;
     #[test]
     fn next_turn_settings_do_not_turn_a_reply_into_a_plan_or_release_a_plan() {
-        let mut state = Conversation::new(crate::codex::description().defaults);
-        state.turn_mode = Some(PermissionMode::FullAccess);
-        state.settings.permission_mode = PermissionMode::Plan;
+        let mut state = Conversation::new(crate::registry::defaults(AgentKind::Codex).unwrap());
+        state.turn_mode = Some(full_access());
+        state.settings.mode = plan();
         state.reply = Some("Done".into());
         assert!(state.take_plan().is_none());
         assert_eq!(state.reply.as_deref(), Some("Done"));
-        state.turn_mode = Some(PermissionMode::Plan);
-        state.settings.permission_mode = PermissionMode::FullAccess;
+        state.turn_mode = Some(plan());
+        state.settings.mode = full_access();
         state.reply = Some("<proposed_plan>Do this</proposed_plan> Please approve".into());
         assert_eq!(state.take_plan().as_deref(), Some("Do this"));
     }

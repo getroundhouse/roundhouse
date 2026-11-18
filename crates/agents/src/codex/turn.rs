@@ -1,6 +1,5 @@
 use std::time::Duration;
 
-use protocol::model::PermissionMode;
 use serde_json::{Value, json};
 
 use super::{running::Shared, state::TurnId};
@@ -42,10 +41,10 @@ async fn start(shared: &Shared, input: Vec<Value>) -> Result<(), AgentError> {
         if state.asking() {
             return Err(AgentError::Refused("Answer Codex's open request before sending another prompt".into()));
         }
-        state.turn_mode = Some(state.settings.permission_mode);
+        state.turn_mode = Some(state.settings.mode);
         (state.thread.clone().ok_or(AgentError::Exited)?, state.settings.clone())
     };
-    let plan = settings.permission_mode == PermissionMode::Plan;
+    let plan = settings.mode.plan;
     let response = shared.rpc.ask("turn/start", json!({
         "threadId":thread,"input":input,"model":settings.model.as_str(),"effort":settings.effort.as_str(),"summary":"auto",
         "approvalPolicy":if plan {"on-request"} else {"never"},

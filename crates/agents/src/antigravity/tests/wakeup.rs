@@ -13,6 +13,7 @@ use protocol::capability::{
     },
     conversation::Start,
     laws,
+    settings::Settings,
     turns::OwnTurn,
 };
 use protocol::event::{
@@ -375,11 +376,8 @@ async fn mid_turn_system_message_written_before_prompt_finishes_does_not_trigger
         }
     }
     append_transcript(h.room.path(), "session-1", &[sys_step(), planner_step(&[])]);
-    let low = protocol::model::SessionSettingsChange {
-        effort: Some(protocol::capability::settings::Effort::Low),
-        ..Default::default()
-    };
-    agent.configure(&low).await.unwrap();
+    let low = Settings { effort: Some(protocol::capability::settings::Effort::Low), ..Settings::default() };
+    agent.control(&Control::Change(low)).await.unwrap();
     let _ = ledger.collect_turn(&mut h).await;
 
     append_transcript(h.room.path(), "session-1", &[sys_step(), planner_step(&[])]);

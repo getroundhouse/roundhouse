@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use protocol::attachment::AttachmentFile;
 use protocol::capability::Control;
 use protocol::event::{AgentRunState, EventBody, TurnOutcome};
-use protocol::model::{PermissionMode, Seq, SessionSettingsChange};
+use protocol::model::Seq;
 use protocol::prompt::Prompt;
 use serde_json::{Value, json};
 
@@ -74,11 +74,6 @@ impl AgentProcess for CodexProcess {
     async fn compact(&self, _asked: Seq, _keeping: Option<&str>) -> Result<(), AgentError> {
         Err(AgentError::UnknownRequest("Codex compaction is not offered by this adapter".into()))
     }
-    async fn configure(&self, options: &SessionSettingsChange) -> Result<(), AgentError> {
-        let settings =
-            options.for_capabilities(&self.capabilities()).map_err(|error| AgentError::Refused(error.to_string()))?;
-        self.control(&Control::Change(settings)).await
-    }
     async fn stop(&self) {
         self.shared.stop().await;
     }
@@ -93,14 +88,10 @@ async fn change(shared: &Shared, settings: &protocol::capability::settings::Sett
         if let Some(model) = &settings.model {
             state.settings.model.clone_from(model);
         }
-        settings.mode.map(|mode| {
-            let mode = if mode.plan { PermissionMode::Plan } else { PermissionMode::FullAccess };
-            state.settings.permission_mode = mode;
-            mode
-        })
+        settings.mode.inspect(|&mode| state.settings.mode = mode)
     };
-    if let Some(permission_mode) = mode {
-        shared.event(EventBody::AgentMode { permission_mode }, None).await;
+    if let Some(mode) = mode {
+        shared.event(EventBody::AgentMode { permission_mode: crate::registry::as_logged(mode) }, None).await;
     }
     Ok(())
 }

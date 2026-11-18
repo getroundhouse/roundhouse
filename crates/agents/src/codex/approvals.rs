@@ -143,13 +143,13 @@ pub(super) fn can_answer(native: &NativeRequest, decision: &Decision) -> bool {
 async fn answer(shared: &Shared, waiting: &Waiting, decision: &Decision) -> Result<(), AgentError> {
     match (&waiting.native, decision) {
         (NativeRequest::Plan, Decision::ApprovePlan { context: PlanContext::Kept, .. }) => {
-            shared.state.lock().settings.permission_mode = PermissionMode::FullAccess;
+            shared.state.lock().settings.mode = super::claims::full_access();
             shared.event(EventBody::AgentMode { permission_mode: PermissionMode::FullAccess }, None).await;
             control::turn(shared, vec![json!({"type":"text","text":"Implement the approved plan.","text_elements":[]})])
                 .await
         }
         (NativeRequest::Plan, Decision::KeepPlanning { words }) => {
-            shared.state.lock().settings.permission_mode = PermissionMode::Plan;
+            shared.state.lock().settings.mode = super::claims::plan();
             shared.event(EventBody::AgentMode { permission_mode: PermissionMode::Plan }, None).await;
             control::turn(shared, vec![json!({"type":"text","text":words.as_deref().unwrap_or("Keep planning; the plan is not approved."),"text_elements":[]})]).await
         }

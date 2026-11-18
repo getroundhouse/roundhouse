@@ -16,14 +16,7 @@ pub(super) fn claims() -> Capabilities {
     claims.turns.tokens = Some(Claimed {});
     claims.turns.cost = Some(Claimed {});
     claims.turns.own_turns = Some(Claimed {});
-    let full = approvals::ApprovalMode {
-        unasked: approvals::Unasked::Everything,
-        beyond: approvals::Beyond::Asks,
-        sandbox: None,
-        plan: false,
-    };
-    let plan = approvals::ApprovalMode { unasked: approvals::Unasked::Reads, plan: true, ..full };
-    claims.approvals.modes = Some(approvals::Modes { default: full, others: vec![plan] });
+    claims.approvals.modes = Some(approvals::Modes { default: full_access(), others: vec![plan()] });
     claims.approvals.requests = Some(requests());
     claims.approvals.suggested_rules = Some(Claimed {});
     claims.approvals.always_asks = Some(Claimed {});
@@ -69,4 +62,19 @@ fn requests() -> approvals::Requests {
             approvals::Kept::User,
         ],
     }
+}
+
+/// Full access, the CLI's `bypassPermissions`: it does everything unasked, but for what it asks about in any mode.
+pub(super) fn full_access() -> approvals::ApprovalMode {
+    approvals::ApprovalMode {
+        unasked: approvals::Unasked::Everything,
+        beyond: approvals::Beyond::Asks,
+        sandbox: None,
+        plan: false,
+    }
+}
+
+/// Plan mode, the CLI's `plan`: it reads unasked, and asks about the rest until its plan is approved.
+pub(super) fn plan() -> approvals::ApprovalMode {
+    approvals::ApprovalMode { unasked: approvals::Unasked::Reads, plan: true, ..full_access() }
 }

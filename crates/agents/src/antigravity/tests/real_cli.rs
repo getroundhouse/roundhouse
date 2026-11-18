@@ -14,11 +14,12 @@ use protocol::capability::{
     asking::PlanContext,
     conversation::Start,
     laws,
+    settings::Settings,
     turns::OwnTurn,
 };
 use protocol::event::{AgentRunState, EventBody, ExitReason, SessionEvent, TurnOutcome};
 use protocol::fixtures;
-use protocol::model::{AgentKind, ApprovalId, ModelName, PermissionMode, RunId, Seq, SessionSettingsChange};
+use protocol::model::{AgentKind, ApprovalId, ModelName, PermissionMode, RunId, Seq};
 use protocol::prompt::Prompt;
 use protocol::worker::AgentSpec;
 use serde_json::{Value, json};
@@ -323,10 +324,8 @@ async fn real_agy_mode_switch_plan_background_mixed_wakeup_and_resumes_full_acce
     while !matches!(recv_event(&mut rx).await, EventBody::AgentInit { .. }) {}
     let full_pid = agent.pid();
 
-    agent
-        .configure(&SessionSettingsChange { permission_mode: Some(PermissionMode::Plan), ..Default::default() })
-        .await
-        .unwrap();
+    let to_plan = Settings { mode: Some(super::super::claims::plan()), ..Settings::default() };
+    agent.control(&Control::Change(to_plan)).await.unwrap();
     let plan_pid = agent.pid();
     assert_ne!(plan_pid, full_pid, "switching FullAccess -> Plan must restart agy without skip-permissions");
 

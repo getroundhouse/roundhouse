@@ -11,8 +11,8 @@ use process::{Signal, signal_group};
 use prompt::user_message;
 use protocol::attachment::AttachmentFile;
 use protocol::capability::approvals::Decision;
-use protocol::capability::settings::Effort;
-use protocol::model::{ApprovalId, Seq, SessionSettingsChange};
+use protocol::capability::settings::{Effort, Settings};
+use protocol::model::{ApprovalId, Seq};
 use protocol::prompt::Prompt;
 use protocol::worker::AgentSpec;
 use serde_json::{Value, json};
@@ -254,6 +254,23 @@ impl ClaudeProcess {
         )
         .await
     }
+
+    /// Changes the model, approval mode or effort of the running CLI to what `settings` name, and resolves once it
+    /// has agreed. A setting they leave out is left alone. An error with [`AgentProcess::is_gone`] false is a refusal,
+    /// of the first setting refused, and the ones before it may already have been taken.
+    pub(crate) async fn change(&self, settings: &Settings) -> Result<(), AgentError> {
+        if let Some(model) = &settings.model {
+            control(&self.shared, json!({"subtype": "set_model", "model": model.as_str()})).await?;
+        }
+        if let Some(mode) = settings.mode {
+            let mode = super::super::mode::name(mode).ok_or(AgentError::UnknownMode)?;
+            control(&self.shared, json!({"subtype": "set_permission_mode", "mode": mode})).await?;
+        }
+        if let Some(effort) = settings.effort.clone() {
+            set_effort(&self.shared, effort).await?;
+        }
+        Ok(())
+    }
 }
 
 #[async_trait]
@@ -293,20 +310,6 @@ impl AgentProcess for ClaudeProcess {
         let text = keeping.map_or_else(|| "/compact".to_string(), |keeping| format!("/compact {keeping}"));
         let asked_for = ToCompact { keeping: keeping.map(str::to_string) };
         send(self, asked, user_message(&Prompt::new(text)), Some(asked_for)).await
-    }
-
-    async fn configure(&self, options: &SessionSettingsChange) -> Result<(), AgentError> {
-        if let Some(model) = &options.model {
-            control(&self.shared, json!({"subtype": "set_model", "model": model.as_str()})).await?;
-        }
-        if let Some(mode) = options.permission_mode {
-            let mode = super::super::mode::name(mode).ok_or(AgentError::UnknownMode)?;
-            control(&self.shared, json!({"subtype": "set_permission_mode", "mode": mode})).await?;
-        }
-        if let Some(effort) = options.effort.clone() {
-            set_effort(&self.shared, effort).await?;
-        }
-        Ok(())
     }
 
     async fn interrupt(&self) -> Result<(), AgentError> {

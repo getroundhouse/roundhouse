@@ -7,6 +7,7 @@ use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
 use process::{Signal, signal_group};
+use protocol::capability::approvals::ApprovalMode;
 use protocol::event::{EventBody, NoticeLevel};
 use protocol::model::PermissionMode;
 use serde_json::json;
@@ -23,12 +24,12 @@ use crate::claude::mode;
 /// else is written there, so no prompt can reach it first. One that has gone already can't take a prompt either, and a
 /// relaunch asks again.
 pub(super) async fn start_in(
-    chat_mode: PermissionMode,
+    chat_mode: ApprovalMode,
     shared: &Arc<Shared>,
     stdin: &mut Option<ChildStdin>,
     output: &mpsc::Sender<AgentOutput>,
 ) {
-    if chat_mode != PermissionMode::Plan {
+    if !chat_mode.plan {
         return;
     }
     let asked = ask(shared, &json!({"subtype": "set_permission_mode", "mode": mode::name(chat_mode)}));

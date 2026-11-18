@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use protocol::capability::calls::{Call, CallOutput, output::Ended};
 use protocol::event::{AgentRunState, ContentBlock, Denied, EventBody, NoticeLevel, TaskOutcome};
-use protocol::model::{ContextUsage, MaxSetBy, PermissionMode, ToolUseId};
+use protocol::model::{ContextUsage, MaxSetBy, ToolUseId};
 use protocol::tail::{BlockKind, DeltaChange, StreamDelta};
 use serde_json::{Value, json};
 use tokio::sync::mpsc;
@@ -336,9 +336,9 @@ fn task_outcome_of(output: &CallOutput, is_error: bool) -> TaskOutcome {
 
 async fn on_mode(shared: &Shared, mode_id: &str, raw: String) {
     let mode = match mode_id {
-        "plan" => PermissionMode::Plan,
-        "accept-edits" | "yolo" => PermissionMode::FullAccess,
-        _ => PermissionMode::Unknown,
+        "plan" => super::claims::plan(),
+        "accept-edits" | "yolo" => super::claims::full_access(),
+        _ => super::claims::unknown(),
     };
     let changed = {
         let mut state = shared.state.lock();
@@ -352,6 +352,6 @@ async fn on_mode(shared: &Shared, mode_id: &str, raw: String) {
         }
     };
     if changed {
-        shared.event(EventBody::AgentMode { permission_mode: mode }, Some(raw)).await;
+        shared.event(EventBody::AgentMode { permission_mode: crate::registry::as_logged(mode) }, Some(raw)).await;
     }
 }

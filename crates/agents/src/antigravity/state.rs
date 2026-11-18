@@ -1,9 +1,10 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::PathBuf;
 
+use protocol::capability::approvals::ApprovalMode;
 use protocol::capability::{calls::Call, settings, turns::OwnTurn};
 use protocol::event::{AgentTask, EndedTask, TaskKind, TaskOutcome, TokenUsage};
-use protocol::model::{AgentSessionId, ApprovalId, ModelName, PermissionMode, Seq, TaskId, ToolUseId};
+use protocol::model::{AgentSessionId, ApprovalId, ModelName, Seq, TaskId, ToolUseId};
 use serde_json::Value;
 
 use crate::acp::{ConfigOption, FieldSpec, PermissionRequest};
@@ -14,9 +15,9 @@ pub(super) struct Conversation {
     pub(super) transcript: Option<(PathBuf, u64)>,
     pub(super) model: ModelName,
     /// The mode the session is set to; when changed mid-turn, takes effect once idle on the next child launch.
-    pub(super) mode: PermissionMode,
+    pub(super) mode: ApprovalMode,
     /// The mode the currently running `agy acp` child process was launched for.
-    pub(super) process_mode: PermissionMode,
+    pub(super) process_mode: ApprovalMode,
     /// Whether the currently running `agy acp` child was launched with `--dangerously-skip-permissions`.
     pub(super) skip_permissions: bool,
     pub(super) effort: settings::Effort,
@@ -137,7 +138,7 @@ pub(super) enum NativeRequest {
 impl Conversation {
     pub(super) fn new(
         model: ModelName,
-        mode: PermissionMode,
+        mode: ApprovalMode,
         effort: settings::Effort,
         hold_plans: bool,
         skip_permissions: bool,
@@ -346,7 +347,7 @@ mod tests {
     fn drain_cancels_when_idle_and_stays_open_while_background_tasks_or_subagents_remain() {
         let mut conv = Conversation::new(
             ModelName::named("gemini-4-carbon"),
-            PermissionMode::FullAccess,
+            super::super::claims::full_access(),
             settings::Effort::Medium,
             true,
             true,

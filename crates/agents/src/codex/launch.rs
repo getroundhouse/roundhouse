@@ -3,7 +3,6 @@ use std::process::Stdio;
 
 use protocol::capability::conversation::Start;
 use protocol::event::EventBody;
-use protocol::model::{PermissionMode, SessionSettings};
 use protocol::worker::AgentSpec;
 use serde_json::{Value, json};
 use tokio::process::{Child, ChildStderr, ChildStdin, ChildStdout, Command};
@@ -11,6 +10,7 @@ use tracing::warn;
 
 use super::running::Shared;
 use super::state::ThreadId;
+use crate::registry::Launch;
 use crate::{AgentError, AgentOptions};
 
 pub(super) const ARGS: [&str; 10] = [
@@ -142,7 +142,7 @@ pub(super) async fn conversation(
                 agent_session_id: Some(id.into()),
                 model: response["model"].as_str().map(str::to_owned),
                 cwd: Some(spec.cwd.clone()),
-                permission_mode: Some(settings.permission_mode),
+                permission_mode: Some(crate::registry::as_logged(settings.mode)),
                 agent_version: None,
             },
             None,
@@ -152,13 +152,8 @@ pub(super) async fn conversation(
 }
 
 /// A thread's parameters, told `instructions` as its developer's.
-fn configuration(
-    spec: &AgentSpec,
-    settings: &SessionSettings,
-    options: &AgentOptions,
-    instructions: Option<&str>,
-) -> Value {
-    let plan = settings.permission_mode == PermissionMode::Plan;
+fn configuration(spec: &AgentSpec, settings: &Launch, options: &AgentOptions, instructions: Option<&str>) -> Value {
+    let plan = settings.mode.plan;
     let mut config = json!({"features.memories":false,"features.goals":false,"features.default_mode_request_user_input":true,
         "model_reasoning_summary":"auto"});
     if let Some(level) = settings.effort.as_str() {

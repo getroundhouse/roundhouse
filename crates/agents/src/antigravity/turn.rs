@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use protocol::event::{AgentRunState, EventBody, NoticeLevel, TokenUsage, TurnOutcome};
-use protocol::model::{PermissionMode, Seq};
+use protocol::model::Seq;
 use serde_json::Value;
 
 use super::state::{Ending, InFlightPrompt};
@@ -122,7 +122,7 @@ async fn finish_last_ok(shared: &Arc<Shared>, entry: &InFlightPrompt, result: &V
     let held_plan = if !cancelled && ended_normally {
         let mut state = shared.state.lock();
         let plan = if state.hold_plans
-            && state.process_mode == PermissionMode::Plan
+            && state.process_mode.plan
             && state.waiting.is_empty()
             && !state.awaiting_background_work()
         {

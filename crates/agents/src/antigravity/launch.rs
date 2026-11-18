@@ -1,9 +1,10 @@
 use std::path::Path;
 use std::process::Stdio;
 
+use protocol::capability::approvals::ApprovalMode;
 use protocol::capability::conversation::Start;
 use protocol::event::{EventBody, NoticeLevel};
-use protocol::model::{AgentSessionId, PermissionMode};
+use protocol::model::AgentSessionId;
 use protocol::worker::AgentSpec;
 use serde_json::{Value, json};
 use tokio::process::{Child, ChildStderr, ChildStdin, ChildStdout, Command};
@@ -24,16 +25,16 @@ pub(super) enum Purpose {
 }
 
 impl Purpose {
-    pub(super) fn args(self, mode: PermissionMode) -> &'static [&'static str] {
+    pub(super) fn args(self, mode: ApprovalMode) -> &'static [&'static str] {
         match self {
-            Purpose::Agent if mode == PermissionMode::FullAccess => &FULL_ACCESS_ARGS,
+            Purpose::Agent if mode == super::claims::full_access() => &FULL_ACCESS_ARGS,
             Purpose::Agent => &PLAN_ARGS,
             Purpose::Title(_) => &TITLE_ARGS,
         }
     }
 
-    pub(super) fn skips_permissions(self, mode: PermissionMode) -> bool {
-        matches!(self, Purpose::Agent) && mode == PermissionMode::FullAccess
+    pub(super) fn skips_permissions(self, mode: ApprovalMode) -> bool {
+        matches!(self, Purpose::Agent) && mode == super::claims::full_access()
     }
 }
 
@@ -124,7 +125,7 @@ pub(super) async fn conversation(
                 agent_session_id: Some(id),
                 model: Some(model),
                 cwd: Some(spec.cwd.clone()),
-                permission_mode: Some(mode),
+                permission_mode: Some(crate::registry::as_logged(mode)),
                 agent_version: None,
             },
             None,
@@ -136,7 +137,7 @@ pub(super) async fn conversation(
 pub(super) async fn resume_after_swap(
     shared: &Shared,
     id: &AgentSessionId,
-    mode: PermissionMode,
+    mode: ApprovalMode,
 ) -> Result<(), AgentError> {
     let purpose = shared.context.purpose;
     let options = &shared.context.options;

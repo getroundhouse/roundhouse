@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use std::process::Stdio;
 
 use process::{Environment, ProcessRecord};
-use protocol::model::{AgentLogin, SessionSettings};
+use protocol::model::AgentLogin;
 use protocol::worker::AgentSpec;
 use tokio::process::{Child, ChildStderr, ChildStdin, ChildStdout, Command};
 use tracing::warn;
@@ -35,9 +35,8 @@ pub const SCRUBBED_ENV: &[&str] = &[
 /// CLI.
 pub fn build_args(spec: &AgentSpec, resume: bool) -> Result<Vec<String>, AgentError> {
     // Every launch has full access, even one for a chat that's planning, which `plan` asks into plan mode once it's
-    // running, or one for a chat in a mode of the CLI's own, which can't be chosen. Converted here, where it's used,
-    // as the start does, until the adapters take typed settings in #1274.
-    let SessionSettings { model, permission_mode: _, effort } = crate::registry::settings_of(spec)?;
+    // running.
+    let crate::registry::Launch { model, mode: _, effort } = crate::registry::launch(spec)?;
     let level = crate::claude::effort::level(&effort).ok_or(AgentError::UnknownEffort)?;
     let mut args: Vec<String> = [
         "-p",
