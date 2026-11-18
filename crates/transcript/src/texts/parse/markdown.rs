@@ -1,4 +1,5 @@
 use crate::linked_images;
+use crate::parser_panics::unless_it_panics;
 use gpui_kit::SharedString;
 use gpui_kit::base::text::editor_host::{BlockNode, InlineNode, LinkMark, Paragraph, Table, parse_markdown};
 use gpui_kit::component::text::MarkdownExtensions;
@@ -194,12 +195,10 @@ fn made(
 }
 
 /// `source`'s blocks, as the kit's parser reads them, if it can, on any thread, where `source` starts at byte `from` of
-/// the text it's the end of, and its images are `images` to draw. The `markdown` crate it parses with
-/// panics on some texts, such as `"a\n===\n---\nb\n==="`, which the agent can write, and which would end the app, so a
-/// text it panics on is one it can't read. Rust's default hook still says so on stderr each time, which a short text
-/// drawn again after its blocks were put away, or counted by find, is.
+/// the text it's the end of, and its images are `images` to draw. A text it panics on is one it can't read, as
+/// `crate::parser_panics` says.
 pub(in super::super) fn read(source: &str, from: usize, images: ImagesAre) -> Option<Vec<BlockNode>> {
-    std::panic::catch_unwind(|| parse_markdown(source, images.read_with(from))).ok()?.ok()
+    unless_it_panics(|| parse_markdown(source, images.read_with(from)))
 }
 
 /// Adds where each reference link defined in `blocks` goes to `links`, unless it's there. As the Markdown standard has

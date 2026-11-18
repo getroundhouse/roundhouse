@@ -25,7 +25,8 @@ pub(super) fn of(text: &str) -> Vec<String> {
     //
     // The parser panics on some texts, such as `"a\n===\n---\nb\n==="`, which the agent can write. `super::keep_in`
     // would carry on past a panic, but send the event without any of its images, so a text it panics on is one it
-    // can't read, which points to none, and the event's other texts keep theirs.
+    // can't read, which points to none, and the event's other texts keep theirs. This is the worker's one parse, so
+    // its one catch. The transcript has its own, in `parser_panics`, since neither crate depends on the other.
     let Ok(Ok(root)) = std::panic::catch_unwind(|| markdown::to_mdast(text, &ParseOptions::gfm())) else {
         return Vec::new();
     };

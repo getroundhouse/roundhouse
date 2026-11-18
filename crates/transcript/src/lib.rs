@@ -18,6 +18,7 @@ mod linked_images;
 mod list;
 mod log_block;
 mod model_names;
+mod parser_panics;
 mod questions;
 mod rows;
 mod scroll_area;

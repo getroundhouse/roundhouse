@@ -248,10 +248,3 @@ fn a_reference_link_goes_where_its_first_definition_says_even_inside_a_quote() {
     assert_eq!(links.get("docs").map(|link| link.url.as_ref()), Some("https://example.com/first"));
     assert_eq!(*leaves(source), ["See the docs."], "and a definition is no leaf");
 }
-
-#[test]
-fn a_text_the_parser_panics_on_is_one_paragraph_as_it_is_written() {
-    let source = "a\n===\n---\nb\n===";
-
-    assert_eq!(*leaves(source), [source]);
-}

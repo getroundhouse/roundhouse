@@ -4,6 +4,8 @@ use markdown::unist::Point;
 use std::borrow::Cow;
 use std::ops::Range;
 
+use crate::parser_panics::unless_it_panics;
+
 /// How many columns apart Markdown's tab stops are.
 const TAB_STOP: usize = 4;
 
@@ -15,8 +17,8 @@ pub(crate) fn images_apart(text: &str) -> Cow<'_, str> {
     if !an_image_may_follow_another(text) {
         return Cow::Borrowed(text);
     }
-    // The parser panics on some texts, as `crate::texts::parse` says, and one it can't read is left as it is.
-    let Ok(Ok(root)) = std::panic::catch_unwind(|| markdown::to_mdast(text, &ParseOptions::gfm())) else {
+    // One the parser can't read, as `crate::parser_panics` says, is left as it is.
+    let Some(root) = unless_it_panics(|| markdown::to_mdast(text, &ParseOptions::gfm())) else {
         return Cow::Borrowed(text);
     };
     let mut gaps = Vec::new();

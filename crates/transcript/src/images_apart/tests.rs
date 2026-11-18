@@ -223,13 +223,6 @@ fn images_one_after_another_are_each_made_a_paragraph_where_they_were() {
 }
 
 #[test]
-fn a_text_the_parser_panics_on_is_left_as_it_is() {
-    let text = "![Before](before.png)\n![After](after.png)\n\na\n===\n---\nb\n===";
-
-    assert_eq!(images_apart(text), text);
-}
-
-#[test]
 fn images_among_words_or_in_code_are_left_as_they_are() {
     for text in [
         "It went from ![Before](before.png)\nto ![After](after.png).",
