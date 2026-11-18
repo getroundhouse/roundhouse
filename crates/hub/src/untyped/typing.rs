@@ -61,7 +61,7 @@ impl Typing {
     /// A worker's frame, `bytes`, as [`frame::decode`] reads it, but with what an agent's event holds in the older
     /// forms typed, as a worker of a build from before they were sends it, and a mode by the kind of the chat it's
     /// from, `kind`, which [`naming_a_mode`] finds. Only a frame that may hold one is read as JSON first, since every
-    /// frame is read here.
+    /// frame from such a worker is read here.
     pub(crate) fn frame(&mut self, bytes: &[u8], kind: AgentKind) -> serde_json::Result<WorkerFrame> {
         if !OLDER.iter().any(|older| memmem::find(bytes, older.as_bytes()).is_some()) {
             return frame::decode(bytes);

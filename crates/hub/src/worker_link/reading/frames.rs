@@ -50,7 +50,7 @@ pub(in super::super) async fn read_frames(
     reader: Box<dyn tokio::io::AsyncRead + Send + Unpin>,
 ) {
     let mut incoming = FrameReader::new(reader);
-    // A worker of a build from before Claude's adapter typed its calls still sends them untyped.
+    // What a worker of protocol 4 sends of its agents' calls, which may be untyped.
     let mut untyped = Typing::default();
     loop {
         let bytes = match incoming.next().await {
@@ -61,12 +61,8 @@ pub(in super::super) async fn read_frames(
                 break;
             }
         };
-        let kind = match crate::untyped::naming_a_mode(bytes) {
-            Some(session) => hub.live_session(&session).await.map_or(AgentKind::Unknown, |session| session.agent()),
-            None => AgentKind::Unknown,
-        };
-        // A worker of protocol 4 sends what its agents report as frames that protocol has of its own.
-        let parsed = match untyped.frame(bytes, kind).or_else(|e| link.previous_frame(bytes).ok_or(e)) {
+        let kind_of = async |session| hub.live_session(&session).await.map_or(AgentKind::Unknown, |s| s.agent());
+        let parsed = match link.read_frame(bytes, &mut untyped, kind_of).await {
             Ok(parsed) => parsed,
             Err(e) => {
                 // A reply from a newer worker, as after a rollback, ends its call rather than leaving it to wait until
