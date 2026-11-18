@@ -7,8 +7,8 @@ use gpui_kit::assets::IconName as Lucide;
 use gpui_kit::component::{Icon, IconName, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyElement, App, Context, Entity, EventEmitter, IntoElement, ParentElement, Render, SharedString,
-    StatefulInteractiveElement, Styled, Subscription, TestSupportExt as _, Window, div, uniform_list,
+    AnyElement, App, Context, Entity, EventEmitter, IntoElement, ParentElement, Render, SharedString, Styled,
+    Subscription, Window, div, uniform_list,
 };
 use look::{IconSizing as _, LineText, Placed, Typeset as _};
 use rows::Layout;
@@ -112,7 +112,6 @@ impl Changes {
                         cx,
                     )
                     .on_click(cx.listener(move |t, _, _, cx| t.toggle_folder(&path, &names, cx)))
-                    .test_support()
                     .into_any_element(),
                 ),
                 Row::File { depth, .. } => {
@@ -174,7 +173,7 @@ impl Render for Changes {
             )
             .flex_1()
             .w_full()
-            .py(look::Space::XSmall)
+            .p(look::ROWS_INSET)
             .into_any_element(),
         };
         v_flex()
@@ -276,7 +275,6 @@ fn file_row(
                 .child(status),
         )
         .on_click(cx.listener(move |_, _, _, cx| cx.emit(ChangesEvent::Open(path.clone()))))
-        .test_support()
         .into_any_element()
 }
 

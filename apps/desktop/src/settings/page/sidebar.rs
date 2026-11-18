@@ -2,13 +2,11 @@
 
 use gpui_kit::component::input::InputState;
 use gpui_kit::component::scroll::ScrollableElement as _;
-use gpui_kit::component::{Icon, IconName, h_flex, v_flex};
-use gpui_kit::prelude::FluentBuilder as _;
+use gpui_kit::component::{Icon, IconName, v_flex};
 use gpui_kit::{
-    App, Entity, InteractiveElement as _, IntoElement, ParentElement as _, Pixels, Role,
-    StatefulInteractiveElement as _, Styled as _, TestSupportExt as _, Window, div,
+    App, Entity, InteractiveElement as _, IntoElement, ParentElement as _, Pixels, Styled as _, Window, div,
 };
-use look::{Hand as _, IconSizing as _, Shaped as _, Typeset as _};
+use look::{IconSizing as _, Typeset as _};
 
 use super::{FIND_KEY, Page, PageId, Section};
 use crate::app::TOP_STRIP_HEIGHT;
@@ -66,27 +64,13 @@ fn search_field(search: &Entity<InputState>) -> impl IntoElement {
         .accessibility_label(SEARCH_SAYS)
 }
 
-/// A page's row: its icon and name, filled a little lighter than the sidebar while it's the page showing, and while
-/// the pointer is on it. It tells assistive apps which page is showing, as a list's selected item.
+/// A page's row: its icon and name, chosen while it's the page showing. It tells assistive apps which page is showing,
+/// as a list's selected item.
 fn page_row(page: &Page, showing: bool, chosen: &Entity<Option<PageId>>, cx: &App) -> impl IntoElement {
-    let colors = look::colors(cx);
-    let fill = colors.menu_hover;
     let (id, chosen) = (page.id, chosen.clone());
-    h_flex()
-        .id(id.row_id())
-        .role(Role::ListBoxOption)
-        .aria_label(page.name)
-        .aria_selected(showing)
-        .w_full()
-        .h(look::RowSize::Regular.height())
-        .px(ROW_INSET)
-        .gap(look::Space::Medium)
-        .corners(look::Corner::Control)
-        .typeset(look::Type::Body)
-        .text_color(colors.text)
-        .hand()
-        .when(showing, |row| row.bg(fill))
-        .hover(move |row| row.bg(fill))
+    look::list_row(id.row_id(), look::RowSize::Regular)
+        .listed(page.name)
+        .chosen(showing)
         .on_click(move |_, _, cx| {
             chosen.update(cx, |chosen, cx| {
                 *chosen = Some(id);
@@ -94,6 +78,5 @@ fn page_row(page: &Page, showing: bool, chosen: &Entity<Option<PageId>>, cx: &Ap
             });
         })
         .child(Icon::new(page.icon).sized(look::IconSize::Large))
-        .child(page.name)
-        .test_support()
+        .child(div().text_color(look::colors(cx).text).child(page.name))
 }

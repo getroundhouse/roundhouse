@@ -84,6 +84,19 @@ A key in one of the kit's menus is the kit's, from the action it's bound to, so 
 | Share a row, rather than fill the width it's in | `grows` |
 
 
+## A list's rows
+
+`docs/spec/components.md` has how a list's row looks, and `crates/look/src/list_rows` the code. A row draws its wash under the pointer and while it's chosen, its corners and its room itself, by its size, so a list sets only how far in its rows are, with `look::ROWS_INSET` around them.
+
+| To | Call |
+|---|---|
+| Make one, of a size, found by an ID | `look::list_row(id, size)` |
+| Put what it holds in it, in a line from its start | `child`, `children` |
+| Wash it as chosen, such as the file showing | `chosen` |
+| Set it in after its start, such as a file in a folder | `indent` |
+| Make it an option of a list to choose from, which assistive apps say is chosen, such as a page of Settings | `listed` |
+| Do something when it's clicked, or say more while the pointer rests on it | `on_click`, `tooltip` |
+
 ## Menus
 
 `docs/spec/components.md` has how a menu looks and a note's kinds, and `crates/look/src/menus` the code. A menu is filled each time it opens, with `look`'s rows, so none draws a row of its own, and the kit's menu draws them in the style `look::apply` sets once for the whole app.

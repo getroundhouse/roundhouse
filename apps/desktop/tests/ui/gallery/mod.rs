@@ -76,6 +76,7 @@ mod button_states;
 mod controls;
 
 mod key_kinds;
+mod list_rows;
 
 mod toggle_states;
 mod tooltips;
