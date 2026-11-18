@@ -34,6 +34,12 @@ impl WorkerLink {
         })
     }
 
+    /// The same link, as one whose hello named `build`, so a hub of another build takes it for another's worker.
+    pub(crate) fn of_build(self: Arc<Self>, build: &str) -> Arc<Self> {
+        self.build.set(Some(build.to_string())).expect("a stand-in says no hello");
+        self
+    }
+
     /// The same, for a worker that chose protocol 3, whose requests `answer` reads as JSON, since this one's types
     /// can't read every one of them.
     pub(crate) fn answering_previous(

@@ -89,6 +89,13 @@ pub(crate) fn hub_calling_github(dir: &Path, api: String) -> Arc<Hub> {
     hub_timed(dir, vec![described()], Github::new(GithubConfig::at(api)), timers)
 }
 
+/// The same as [`hub_in`], which looks at a worker of another build as often as a test's hub does, as
+/// [`Timers::FOR_TESTS`] has it, so a test sees it replaced within a few looks rather than seconds.
+pub(crate) fn hub_looking_often(dir: &Path) -> Arc<Hub> {
+    let timers = Timers { look_every: Timers::FOR_TESTS.look_every, ..Timers::DEFAULT };
+    hub_timed(dir, vec![described()], Github::new(GithubConfig::at(NO_GITHUB.to_string())), timers)
+}
+
 /// Where a test's hub that isn't about GitHub has GitHub's API, which nothing serves, so a call that reaches it fails
 /// at once.
 pub(crate) const NO_GITHUB: &str = "http://127.0.0.1:9";

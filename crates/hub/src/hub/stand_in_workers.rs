@@ -7,6 +7,7 @@
 //! hub never asks it to start a worker, or how to reach one.
 
 use std::path::Path;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 
@@ -54,9 +55,10 @@ pub(super) fn hub_whose_stand_ins_answer_first(
     (hub, asked)
 }
 
-/// What a hub's stand-ins for its workspaces' workers have been asked.
+/// What a hub's stand-ins for its workspaces' workers have been asked, and how often their provider was asked to start
+/// one, which a hub does for a workspace whose stand-in it no longer has.
 #[derive(Default)]
-pub(super) struct Asked(Mutex<Vec<WorkerRequest>>);
+pub(super) struct Asked(Mutex<Vec<WorkerRequest>>, AtomicUsize);
 
 impl Asked {
     /// What `picked` makes of each request it picks, in the order each worker took them, which is the order the hub
@@ -64,6 +66,11 @@ impl Asked {
     /// such as an agent's launch, it takes some time after, so a test waits for it.
     pub(super) fn requests<T>(&self, picked: impl Fn(&WorkerRequest) -> Option<T>) -> Vec<T> {
         self.0.lock().iter().filter_map(picked).collect()
+    }
+
+    /// How often the provider was asked to start a worker.
+    pub(super) fn workers_started(&self) -> usize {
+        self.1.load(Ordering::SeqCst)
     }
 }
 
@@ -154,6 +161,7 @@ impl Provider for WithWorkers {
     }
 
     async fn start(&self, _: &InstanceId, _: &[WorkerBinary]) -> Result<(), ProviderError> {
+        self.asked.1.fetch_add(1, Ordering::SeqCst);
         Ok(())
     }
 
