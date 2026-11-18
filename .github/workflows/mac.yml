@@ -36,10 +36,10 @@ env:
   CARGO_PROFILE_DEV_DEBUG: line-tables-only
 
 jobs:
-  # Probe: what the Mac cache holds, by kind, raw and compressed as actions/cache compresses it.
+  # Probe: which of the Mac job's builds use what the Mac cache holds, raw and compressed as actions/cache compresses it.
   mac:
     runs-on: macos-26
-    timeout-minutes: 30
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - id: cache
@@ -57,14 +57,19 @@ jobs:
         with:
           cache-name: mac
       - run: git config --global user.name ci && git config --global user.email ci@example.com
-      # Every unit the Mac job builds, fresh or not, as JSON.
+      # Every unit each of the Mac job's builds uses, fresh or not, as JSON. nextest builds what `cargo test --no-run`
+      # does.
       - run: cargo clippy --workspace --all-targets --locked --message-format=json > "$RUNNER_TEMP/clippy.json"
       - run: cargo test --workspace --locked --no-run --message-format=json > "$RUNNER_TEMP/test.json"
+      - run: cargo test --workspace --doc --locked --message-format=json > "$RUNNER_TEMP/doc.json"
       # Our crates aren't kept, as `cargo clean --workspace` says, so they're left out of what's measured.
       - run: cargo clean --workspace
-      - run: python3 .github/cache-probe.py "$RUNNER_TEMP/kinds" "$RUNNER_TEMP/clippy.json" "$RUNNER_TEMP/test.json"
+      - run: >-
+          python3 .github/cache-probe.py "$RUNNER_TEMP/kinds" clippy="$RUNNER_TEMP/clippy.json"
+          tests="$RUNNER_TEMP/test.json" doc="$RUNNER_TEMP/doc.json"
       - run: |
-          for kind in build-used build-unused target-other cargo-home; do
+          for kind in clippy-only tests-only both neither other cargo-home; do
+            [ -f "$RUNNER_TEMP/kinds/$kind.txt" ] || continue
             start=$(date +%s)
             bytes=$(sed '/^$/d' "$RUNNER_TEMP/kinds/$kind.txt" | gtar -cf - -P -T - 2>/dev/null | zstd -T0 --long=30 -q -c | wc -c)
             echo "$(( bytes / 1000000 )) MB compressed, $(( $(date +%s) - start ))s to pack: $kind"
