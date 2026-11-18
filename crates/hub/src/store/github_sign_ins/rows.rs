@@ -62,8 +62,10 @@ fn row_of(conn: &Connection, id: &GithubSignInId) -> rusqlite::Result<Option<Git
     conn.query_row(&format!("SELECT {COLUMNS} WHERE id = ?"), [id.as_str()], sign_in_at).optional()
 }
 
+/// Returns the sign-in as it is then, which is as it was if it had got to `status` already.
 fn set_status(conn: &Connection, id: &GithubSignInId, status: &str) -> rusqlite::Result<GithubSignIn> {
-    conn.execute("UPDATE github_sign_ins SET status = ? WHERE id = ?", params![status, id.as_str()])?;
+    let update = "UPDATE github_sign_ins SET status = ?1 WHERE id = ?2 AND status IS NOT ?1";
+    conn.execute(update, params![status, id.as_str()])?;
     row_of(conn, id)?.ok_or(rusqlite::Error::QueryReturnedNoRows)
 }
 
@@ -96,7 +98,8 @@ impl Store {
         Ok(StartedSignIn { sign_in, made: true, removed })
     }
 
-    /// Records where the sign-in `id` has got to. Refused when there's no such sign-in.
+    /// Records where the sign-in `id` has got to, and returns it, as it was if it had got there already. Refused when
+    /// there's no such sign-in.
     pub(crate) fn set_github_sign_in(
         &self,
         id: &GithubSignInId,

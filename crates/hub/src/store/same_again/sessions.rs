@@ -1,8 +1,9 @@
 //! The rule's rows for a session, and for its subagents.
 
+use protocol::capability::Capabilities;
 use protocol::event::{ContentBlock, EventBody};
 use protocol::fixtures;
-use protocol::model::{DraftToKeep, QueuedPrompt, Rev, Seq, SessionStatus};
+use protocol::model::{DraftToKeep, QueuedPrompt, Rev, RunCapabilities, RunId, Seq, SessionStatus};
 use protocol::prompt::Prompt;
 
 use super::super::tests::notice;
@@ -61,6 +62,12 @@ pub(super) fn queued(store: &Store) {
 
 pub(super) fn unqueue(store: &Store) -> Said {
     Said::Changed(store.unqueue_prompt(&"s".into(), &"a".into()).unwrap().changed)
+}
+
+/// As a hub carrying on with a run puts them back, and again as the run's next launch finds it running.
+pub(super) fn claims(store: &Store) -> Said {
+    let claims = RunCapabilities::new(RunId::new(1), Capabilities::default());
+    Said::Changed(store.set_claims(&"s".into(), &claims).unwrap())
 }
 
 pub(super) fn subagent(store: &Store) -> Rev {

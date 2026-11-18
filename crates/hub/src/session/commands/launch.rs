@@ -253,18 +253,24 @@ impl LiveSession {
         Err(ApiError::new(ErrorCode::Worker, message))
     }
 
-    /// Puts `claims` on the session's record, and tells everyone, for a run found running, unless it has exited since,
-    /// in order with what's recorded, so its exit finds them to take off. One that can't be recorded is only said: the
-    /// run is held to them all the same, and a client offers what its kind claims until the next launch says them.
+    /// Puts `claims` on the session's record, and tells everyone if it didn't hold them already, for a run found
+    /// running, unless it has exited since, in order with what's recorded, so its exit finds them to take off. One that
+    /// can't be recorded is only said: the run is held to them all the same, and a client offers what its kind claims
+    /// until the next launch says them.
     pub(super) async fn keep_claims(&self, hub: &Hub, claims: RunCapabilities) {
         let _in_order = self.recording.lock().await;
         if self.state.lock().agent.is_none_or(|agent| agent.run != claims.run) {
             return;
         }
         let id = self.id.clone();
-        if let Err(e) = hub.blocking(move |store| store.set_claims(&id, &claims)).await {
-            warn!(session = %self.id, "couldn't record what a run found running claims: {}", e.message);
-            return;
+        match hub.blocking(move |store| store.set_claims(&id, &claims)).await {
+            Ok(true) => {}
+            // The record held them already, as when a hub carried on with the run.
+            Ok(false) => return,
+            Err(e) => {
+                warn!(session = %self.id, "couldn't record what a run found running claims: {}", e.message);
+                return;
+            }
         }
         if let Err(e) = self.announce(hub).await {
             warn!(session = %self.id, "couldn't say what a run found running claims: {}", e.message);

@@ -32,22 +32,24 @@ pub(super) fn clear_claims(
     Ok(Some(RunId::new(held.cast_unsigned())))
 }
 
-/// Puts `claims` on the session's record, as those of the run that's running.
+/// Puts `claims` on the session's record, as those of the run that's running. Returns whether the record didn't hold
+/// them already.
 pub(super) fn set_claims(
     conn: &Connection,
     session_id: &SessionId,
     claims: &RunCapabilities,
-) -> Result<(), StoreError> {
-    conn.execute(
-        "UPDATE sessions SET agent_capabilities = ? WHERE id = ?",
+) -> Result<bool, StoreError> {
+    let changed = conn.execute(
+        "UPDATE sessions SET agent_capabilities = ?1 WHERE id = ?2 AND agent_capabilities IS NOT ?1",
         params![serde_json::to_string(claims)?, session_id.as_str()],
     )?;
-    Ok(())
+    Ok(changed > 0)
 }
 
 impl Store {
-    /// Puts `claims` on the session's record, for a run that's found running without a start to record them with.
-    pub fn set_claims(&self, session_id: &SessionId, claims: &RunCapabilities) -> Result<(), StoreError> {
+    /// Puts `claims` on the session's record, for a run that's found running without a start to record them with,
+    /// such as one a hub carries on with. Returns whether the record didn't hold them already.
+    pub fn set_claims(&self, session_id: &SessionId, claims: &RunCapabilities) -> Result<bool, StoreError> {
         set_claims(&lock(&self.writer), session_id, claims)
     }
 
