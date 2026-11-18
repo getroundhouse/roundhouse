@@ -233,12 +233,20 @@ fn parse_status(output: &str) -> GitStatus {
 /// Everything the branch changes against its base, including uncommitted and untracked files.
 pub async fn diff(given: &Environment, worktree_path: &str, base_ref: Option<&str>) -> Result<GitDiff, ApiError> {
     let worktree = Path::new(worktree_path);
-    let base = diff_base(given, worktree, base_ref).await?;
-    // With no commit at HEAD, git refuses to diff from it, and so there's no diff.
-    let from = base.as_ref().map_or("HEAD", CommitId::as_str);
-    let mut patch = git_ok(given, worktree, &["diff", "--no-color", "--no-ext-diff", from]).await?;
+    let tracked = async {
+        let base = diff_base(given, worktree, base_ref).await?;
+        // With no commit at HEAD, git refuses to diff from it, and so there's no diff.
+        let from = base.as_ref().map_or("HEAD", CommitId::as_str);
+        let patch = git_ok(given, worktree, &["diff", "--no-color", "--no-ext-diff", from]).await?;
+        Ok::<_, ApiError>((base, patch))
+    };
+    // Beside the diff of what git tracks, since neither changes anything. Its failure is taken first, whichever
+    // finishes first.
+    let untracked = git_ok(given, worktree, &["ls-files", "--others", "--exclude-standard", "-z"]);
+    let (tracked, untracked) = tokio::join!(tracked, untracked);
+    let (base, mut patch) = tracked?;
+    let untracked = untracked?;
 
-    let untracked = git_ok(given, worktree, &["ls-files", "--others", "--exclude-standard", "-z"]).await?;
     let mut truncated = false;
     for (i, file) in untracked.split('\0').filter(|f| !f.is_empty()).enumerate() {
         if i >= MAX_UNTRACKED_FILES || patch.len() > MAX_UNTRACKED_BYTES {

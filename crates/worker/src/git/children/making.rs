@@ -45,7 +45,9 @@ pub(crate) async fn add_child_worktree(
             && had.as_ref() == Some(branch)
             && ref_exists(given, own, &format!("refs/heads/{branch}")).await?;
         match if reuse_branch { &its_own } else { on } {
-            ChildBranch::New { branch, base } => make_on_new_branch(given, own, branch, base, path, warnings).await?,
+            ChildBranch::New { branch, base } => {
+                make_on_new_branch(given, own, branch, Some(base.as_str()), path, warnings).await?;
+            }
             ChildBranch::Existing { branch } => make_on_branch(given, own, branch, path, warnings).await?,
         }
     }

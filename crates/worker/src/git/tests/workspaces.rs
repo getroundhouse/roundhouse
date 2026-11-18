@@ -10,17 +10,35 @@ use protocol::client::ErrorCode;
 use protocol::model::CommitId;
 use std::path::Path;
 
-/// From the branch checked out in a repository with no remote, as the branches it reads back say.
+/// From the branch checked out in a repository with no remote, as the branches it reads back say. With no base asked
+/// for, from `origin`'s default branch, else `origin/main`, else `origin/master`, else the branch checked out, else the
+/// commit that is.
 #[tokio::test]
-async fn creates_a_worktree_on_a_new_branch_from_the_current_branch() {
+async fn creates_a_worktree_on_a_new_branch_from_the_current_branch_unless_origin_has_one() {
     let dir = tempfile::tempdir().unwrap();
     let repo = new_repo(dir.path());
     let root = dir.path().join("ws");
     let prepared = prepare(&root, &repo, "alder", None).await.unwrap();
+    let base = async |name| prepare(&root, &repo, name, None).await.unwrap().base_ref;
+    let head = run(&repo, &["rev-parse", "HEAD"]);
+
+    run(&repo, &["checkout", "-q", "--detach"]);
+    let detached = base("birch").await;
+    run(&repo, &["checkout", "-q", "main"]);
+    run(&repo, &["update-ref", "refs/remotes/origin/master", &head]);
+    let with_master = base("cedar").await;
+    run(&repo, &["update-ref", "refs/remotes/origin/main", &head]);
+    let with_main = base("dogwood").await;
+    run(&repo, &["update-ref", "refs/remotes/origin/trunk", &head]);
+    run(&repo, &["symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/trunk"]);
+    let with_a_default = base("elm").await;
+
     assert_eq!(prepared.base_ref, "main");
     assert_eq!(run(Path::new(&prepared.path), &["branch", "--show-current"]), "alder/start");
     assert!(Path::new(&prepared.path).join("a.txt").exists());
     assert_eq!(prepared.branches.as_ref().and_then(|b| b.checked_out()).map(|b| b.name.as_str()), Some("alder/start"));
+    let bases = [detached, with_master, with_main, with_a_default];
+    assert_eq!(bases, ["HEAD", "origin/master", "origin/main", "origin/trunk"]);
 }
 
 /// From `origin`'s default branch, where there's a remote, as fetched.

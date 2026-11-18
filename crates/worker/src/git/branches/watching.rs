@@ -68,18 +68,27 @@ pub(crate) async fn checked_out(given: &Environment, worktree: &Path) -> Option<
 }
 
 pub(crate) async fn read(given: &Environment, worktree: &Path, places: &Places) -> Result<Read, ApiError> {
-    let head = head(given, worktree).await?;
+    let format = format!("--format={LOCAL_FORMAT}");
+    let listing = ["for-each-ref", &format, "refs/heads/"];
+    // Side by side, since none of them changes anything, and taken in this order, so which fails doesn't depend on
+    // which git finishes first.
+    let (head, reflog, rebasing, listed) = tokio::join!(
+        head(given, worktree),
+        git(given, worktree, &["reflog", "show", "--format=%gs", "HEAD", "--"]),
+        rebasing(places),
+        git_ok(given, worktree, &listing),
+    );
+    let head = head?;
     // Empty when the repository keeps no reflogs, and then only the branch checked out is known. So it is when git
     // can't read HEAD's reflog, as on a branch with no commits yet, which `git switch --orphan` makes, rather than
     // nothing being known.
-    let reflog = git(given, worktree, &["reflog", "show", "--format=%gs", "HEAD", "--"]).await?;
+    let reflog = reflog?;
     let mut names = if reflog.success { left(&reflog.stdout) } else { BTreeSet::new() };
     if let Head::Branch { name } = &head {
         names.insert(name.clone());
     }
-    names.extend(rebasing(places).await);
-    let format = format!("--format={LOCAL_FORMAT}");
-    let listed = git_ok(given, worktree, &["for-each-ref", &format, "refs/heads/"]).await?;
+    names.extend(rebasing);
+    let listed = listed?;
     let had_it = |fields: &Vec<String>| {
         let name = fields.first().and_then(|name| name.strip_prefix("refs/heads/"));
         name.is_some_and(|name| names.contains(&BranchName::from(name)))
@@ -87,8 +96,10 @@ pub(crate) async fn read(given: &Environment, worktree: &Path, places: &Places) 
     let local: Vec<Vec<String>> = fields(&listed).filter(had_it).collect();
     let upstreams: Vec<&str> =
         local.iter().filter_map(|fields| fields.get(2)).map(String::as_str).filter(|name| !name.is_empty()).collect();
-    let tips = upstream_tips(given, worktree, &upstreams).await?;
-    let addresses = addresses(given, worktree, local.iter().filter_map(|fields| fields.get(3))).await?;
+    let remotes = local.iter().filter_map(|fields| fields.get(3));
+    let (tips, addresses) =
+        tokio::join!(upstream_tips(given, worktree, &upstreams), addresses(given, worktree, remotes));
+    let (tips, addresses) = (tips?, addresses?);
     let each = local.iter().filter_map(|fields| branch(fields, &tips, &addresses)).collect();
     let refs = local.iter().filter_map(|fields| fields.first()).map(String::as_str).chain(upstreams);
     // A part at a time, since `/` doesn't part a path that starts `\\?\`, as one on Windows does once its links are

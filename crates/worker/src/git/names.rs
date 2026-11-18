@@ -21,12 +21,15 @@ pub async fn names_git_has(
     repo_name: &str,
     repo: &Path,
 ) -> Result<Vec<String>, ApiError> {
-    let listed = refs(given, repo, &[BRANCHES, ORIGIN_BRANCHES]).await?;
+    // Side by side, since neither changes anything.
+    let (listed, remotes) =
+        tokio::join!(refs(given, repo, &[BRANCHES, ORIGIN_BRANCHES]), git_ok(given, repo, &["remote"]));
+    let listed = listed?;
     let branches =
         listed.iter().filter_map(|name| name.strip_prefix(BRANCHES).or_else(|| name.strip_prefix(ORIGIN_BRANCHES)));
     let mut names: BTreeSet<String> = branches.filter_map(|name| name.split('/').next()).map(str::to_string).collect();
     // A branch in a folder named after a remote, as `origin/main` would be, is found before the remote's own.
-    let remotes = git_ok(given, repo, &["remote"]).await?;
+    let remotes = remotes?;
     names.extend(remotes.lines().map(str::to_string));
     if !remotes.trim().is_empty() {
         // Each remote has a `HEAD`, or gets one at a later fetch, which is no branch but takes the name all the same:
