@@ -23,6 +23,13 @@ pub(super) fn menu(drawing: &Drawing<'_>, account: &Account, agent: AgentKind, c
             }
         };
         let connect = if account.held_login.is_some() { "Renew" } else { "Connect again" };
+        let reserve = {
+            let (kept, account) = (kept.clone(), account.clone());
+            look::menu_row("Reserve usage…").on_choose(move |_, cx| {
+                kept.update(cx, |kept, cx| kept.open_reserving(&account, cx));
+            })
+        };
+        let menu = menu.row(reserve).separator();
         let menu = menu.row(look::menu_row(connect).off(!makes_a_token).on_choose(move |window, cx| open(window, cx)));
         if account.held_login.is_none() {
             return menu;

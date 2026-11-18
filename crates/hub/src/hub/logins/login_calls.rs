@@ -1,7 +1,7 @@
 use super::super::{Hub, off_thread};
 use crate::logins::{AccountChange, Connect, Handed, Logins};
 use crate::store::{SessionLogin, now_ms};
-use protocol::client::accounts::{AccountConnect, AccountSetDefault};
+use protocol::client::accounts::{AccountConnect, AccountSetDefault, AccountSetReserve};
 use protocol::client::sessions::SessionAssignAccount;
 use protocol::client::{ApiError, ErrorCode, HubNotice};
 use protocol::model::{Account, AccountId, AgentKind, HubSettings, LoginDescription, Session};
@@ -25,6 +25,14 @@ impl Hub {
         let gone = id.clone();
         let change = self.on_logins(move |logins| logins.disconnect(&id)).await?;
         self.forget_model_lists(|key| key.account.as_ref() == Some(&gone)).await;
+        Ok(self.announce_account(change))
+    }
+
+    /// Sets how much of the account's week the person keeps for themselves, as `AccountSetReserve` says, and tells
+    /// every client when that changed the account's record.
+    pub(crate) async fn account_set_reserve(&self, asked: AccountSetReserve) -> Result<Account, ApiError> {
+        let AccountSetReserve { account, reserve } = asked;
+        let change = self.on_logins(move |logins| logins.set_reserve(&account, reserve)).await?;
         Ok(self.announce_account(change))
     }
 

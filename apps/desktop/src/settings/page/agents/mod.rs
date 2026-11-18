@@ -13,6 +13,7 @@ mod choosing;
 mod defaults;
 mod kept;
 mod panel;
+mod reserving;
 mod row;
 #[cfg(test)]
 mod tests;

@@ -5,7 +5,7 @@
 use serde::{Deserialize, Serialize};
 
 use super::{ClientRequest, ClientResponse, Reply, Request};
-use crate::model::{Account, AccountId, AgentKind, HubSettings, LoginToken};
+use crate::model::{Account, AccountId, AgentKind, HubSettings, LoginToken, Reserve};
 
 /// Gives the hub a login for agents of `agent`'s kind to run under, which it keeps and hands to the workers it launches
 /// them on, for the chats on the account, as [`Session::account_source`](crate::model::Session::account_source) says,
@@ -87,5 +87,24 @@ impl Request for AccountSetDefault {
 
     fn into_request(self) -> ClientRequest {
         ClientRequest::AccountSetDefault(self)
+    }
+}
+
+/// Sets how much of the account's week the person keeps for themselves, as [`Reserve`] says, or keeps none back with
+/// `None`, and answers with the account's record. Only an account whose login a person added can reserve, since only
+/// those are put on automatically. Refused with `NotFound` when there's no such account, and with `InvalidRequest`
+/// for one whose login was found where agents ran. Setting what it reserves already changes nothing.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct AccountSetReserve {
+    pub account: AccountId,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reserve: Option<Reserve>,
+}
+
+impl Request for AccountSetReserve {
+    type Reply = Account;
+
+    fn into_request(self) -> ClientRequest {
+        ClientRequest::AccountSetReserve(self)
     }
 }

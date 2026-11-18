@@ -14,7 +14,7 @@ use protocol::fixtures;
 use protocol::model::{
     Account, CompactionLine, DiffComment, DiffSide, FileContents, FileOpened, FilePages, GitDiff, GitStatus,
     GithubAccount, GithubLoginKind, GithubSettings, GithubSignIn, GithubUser, GithubUserId, HeldGithubLogin,
-    HubSettings, NewWorkspaceDraft, Place, PromptLine, Records, Repo, Rev, Seq, SessionAccount, WorktreeFiles,
+    HubSettings, NewWorkspaceDraft, Place, PromptLine, Records, Repo, Reserve, Rev, Seq, SessionAccount, WorktreeFiles,
 };
 
 use super::answered;
@@ -111,11 +111,12 @@ fn every_reply_of_the_hub_itself_or_listing_its_records_keeps_its_form() {
         limits: vec![],
         held_login: None,
         used_at_ms: Some(5),
+        reserve: Reserve::new(30),
         rev: Rev::new(2),
     };
     answered(
         ClientResponse::Account(account),
-        r#"{"result":"account","id":"claude-1","model_provider":null,"plan":null,"login":null,"email":null,"name":"Work","login_agent":null,"limits":[],"held_login":null,"used_at_ms":5,"rev":2}"#,
+        r#"{"result":"account","id":"claude-1","model_provider":null,"plan":null,"login":null,"email":null,"name":"Work","login_agent":null,"limits":[],"held_login":null,"used_at_ms":5,"reserve":30,"rev":2}"#,
     );
     let repo = Repo { created_at_ms: 1, rev: Rev::new(2), ..fixtures::repo("r") };
     answered(

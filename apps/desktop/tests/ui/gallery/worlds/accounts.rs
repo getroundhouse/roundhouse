@@ -3,7 +3,7 @@
 //! so none is here.
 
 use protocol::fixtures::account;
-use protocol::model::{Account, AccountSource, AgentKind, HeldLogin, LimitWindow, UsageLimit};
+use protocol::model::{Account, AccountSource, AgentKind, HeldLogin, LimitWindow, Reserve, UsageLimit};
 
 use super::{context, conversation};
 use client_core::fake_hub::{HOUR_MS, LoginSupport, NOW_MS, World};
@@ -120,4 +120,40 @@ fn added(id: &str, name: &str) -> Account {
 /// A limit `used_percent` used, which starts again `resets_in_ms` from now, as an account's record has it.
 fn limit(window: LimitWindow, used_percent: u8, resets_in_ms: i64) -> UsageLimit {
     UsageLimit { window, model: None, used_percent, resets_at_ms: Some(NOW_MS + resets_in_ms), heard_at_ms: None }
+}
+
+/// Claude Code's own login, and the logins the person gave the hub, with Work reserving a quarter of its week, which
+/// has most of it left, and Personal half, which it's down to.
+pub(in crate::gallery) fn reserves() -> World {
+    let mut world = conversation();
+    world.accounts = vec![found(), work_reserving(), personal_reserving(), side_project(), contractor()];
+    world.account_defaults = vec![protocol::model::AccountDefault { agent: AgentKind::Claude, account: work().id }];
+    world
+}
+
+/// The context's world, with the chat on Personal, which is down to the half of its week it reserves, and Work, which
+/// the chat could move to.
+pub(in crate::gallery) fn context_in_reserve() -> World {
+    let mut world = context();
+    let chat = world.sessions.last_mut().unwrap();
+    (chat.account, chat.account_source) = (Some(personal().id), Some(AccountSource::Hub));
+    world.accounts = vec![work_reserving(), personal_reserving()];
+    world.account_defaults = vec![protocol::model::AccountDefault { agent: AgentKind::Claude, account: work().id }];
+    world
+}
+
+/// Work, reserving a quarter of its week.
+fn work_reserving() -> Account {
+    Account { reserve: Reserve::new(25), ..work() }
+}
+
+/// Personal, a login the hub holds, reserving half its week, which it's down to.
+fn personal_reserving() -> Account {
+    Account {
+        limits: vec![limit(LimitWindow::FiveHours, 10, 3 * HOUR_MS), limit(LimitWindow::SevenDays, 59, 60 * HOUR_MS)],
+        held_login: Some(held(NOW_MS - 40 * DAY_MS)),
+        used_at_ms: Some(NOW_MS - 2 * HOUR_MS),
+        reserve: Reserve::new(50),
+        ..added("claude-login-0002", "Personal")
+    }
 }

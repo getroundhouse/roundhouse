@@ -64,13 +64,16 @@ fn otherwise_a_row_says_whats_left_of_its_limits_or_that_none_has_been_heard(cx:
     let far_off = Account { held_login: Some(ending(NOW_MS + 300 * DAY_MS)), ..added("a", "Work") };
     let found = limited(account("f"));
 
-    let left = Says::Limits(vec![("5h".into(), 71), ("7d".into(), 96)]);
+    let left = Says::Limits(vec![("5h".into(), 71, None), ("7d".into(), 96, None)]);
     assert_eq!(says(cx, &found), left, "a login found where agents ran");
     assert_eq!(says(cx, &limited(far_off.clone())), left, "and one held that ends after it warns");
     assert_eq!(says(cx, &far_off), Says::NoLimitsYet);
     let started_again = Account { limits: vec![limit(LimitWindow::FiveHours, 29, NOW_MS)], ..far_off };
     assert_eq!(says(cx, &started_again), Says::Nothing, "every limit heard has started again");
-    assert_eq!(words::limits_left(&[("5h".into(), 71), ("7d".into(), 96)]), "5h limit, 71% left, 7d limit, 96% left");
+    assert_eq!(
+        words::limits_left(&[("5h".into(), 71, None), ("7d".into(), 96, None)]),
+        "5h limit, 71% left, 7d limit, 96% left"
+    );
 }
 
 #[gpui_kit::test]

@@ -284,6 +284,7 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
         | R::AccountSetDefault(_)
         | R::SessionAssignAccount(_)
         | R::AccountDisconnect(_)
+        | R::AccountSetReserve(_)
         | R::GithubAccountConnect(_)
         | R::GithubAccountDisconnect(_)
         | R::GithubAccountSetDefault(_)

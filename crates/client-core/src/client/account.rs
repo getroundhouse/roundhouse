@@ -1,12 +1,12 @@
 //! The calls about the accounts agents run under: connecting a login the hub holds for one, disconnecting it, choosing
-//! a kind's default, and moving a chat to another. Asking whose account a session's agent runs under, as clients did
-//! before accounts were records, is left only to tests, to show a hub still answers it, so only the `testing` feature
-//! builds that one.
+//! a kind's default, reserving part of one's week, and moving a chat to another. Asking whose account a session's
+//! agent runs under, as clients did before accounts were records, is left only to tests, to show a hub still answers
+//! it, so only the `testing` feature builds that one.
 
 use protocol::client::{accounts, sessions};
 #[cfg(feature = "testing")]
 use protocol::model::SessionAccount;
-use protocol::model::{Account, AccountId, AgentKind, HubSettings, LoginToken, Session, SessionId};
+use protocol::model::{Account, AccountId, AgentKind, HubSettings, LoginToken, Reserve, Session, SessionId};
 
 use super::{Client, Result};
 
@@ -34,6 +34,12 @@ impl Client {
     /// [`accounts::AccountDisconnect`]. A hub older than this refuses it, as `is_unsupported` says.
     pub fn account_disconnect(&self, id: &AccountId) -> Result<Account> {
         self.call(accounts::AccountDisconnect { id: id.clone() })
+    }
+
+    /// Sets how much of `account`'s week the person keeps for themselves, or none, and answers with its record. See
+    /// [`accounts::AccountSetReserve`]. A hub older than this refuses it, as `is_unsupported` says.
+    pub fn account_set_reserve(&self, account: &AccountId, reserve: Option<Reserve>) -> Result<Account> {
+        self.call(accounts::AccountSetReserve { account: account.clone(), reserve })
     }
 
     /// Moves the chat `id` to `account`, and answers with its record. With `force`, an agent that counts as running

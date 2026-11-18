@@ -6,7 +6,7 @@
 use client_core::{Agents, ClientError, refusals};
 use gpui_kit::{App, SharedString};
 use protocol::client::ErrorCode;
-use protocol::model::{Account, HeldLogin};
+use protocol::model::{Account, HeldLogin, Reserve};
 
 use super::super::account_row::Tone;
 
@@ -113,8 +113,9 @@ pub(super) enum Says {
     /// How the login the person added stands, as loudly as the tone says: that it ends soon or has ended, or that it
     /// was disconnected.
     Standing(String, Tone),
-    /// How much is left of each limit there's something true to say of, by its window, such as `5h`, as a percentage.
-    Limits(Vec<(SharedString, u8)>),
+    /// How much is left of each limit there's something true to say of, by its window, such as `5h`, as a percentage,
+    /// with how much of it the account keeps back, for its week.
+    Limits(Vec<(SharedString, u8, Option<Reserve>)>),
     /// That no agent under it has heard a limit yet, faintly.
     NoLimitsYet,
     /// Nothing, since every limit heard has started again.
@@ -138,13 +139,20 @@ pub(super) fn says(account: &Account, standing: Option<&Standing>, now_ms: i64) 
     if shown.is_empty() {
         return Says::Nothing;
     }
-    Says::Limits(shown.into_iter().map(|(window, limit)| (window, limit.left_percent())).collect())
+    let each = shown.into_iter().map(|(window, limit)| {
+        let reserve = crate::limits::reserve_for(account, &limit);
+        (window, limit.left_percent(), reserve)
+    });
+    Says::Limits(each.collect())
 }
 
 /// What's said for `limits`, each by its window and how much of it is left, as `Says::Limits` holds them, to assistive
 /// apps, which can't see the bars: `5h limit, 71% left, 7d limit, 96% left`.
-pub(super) fn limits_left(limits: &[(SharedString, u8)]) -> String {
-    let each = limits.iter().map(|(window, left)| format!("{window} limit, {left}% left"));
+pub(super) fn limits_left(limits: &[(SharedString, u8, Option<Reserve>)]) -> String {
+    let each = limits.iter().map(|(window, left, reserve)| match reserve {
+        Some(reserve) => format!("{window} limit, {left}% left, {}% reserved", reserve.percent()),
+        None => format!("{window} limit, {left}% left"),
+    });
     each.collect::<Vec<_>>().join(", ")
 }
 

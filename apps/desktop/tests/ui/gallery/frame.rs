@@ -148,6 +148,7 @@ fn region_in_the_column(region: Region) -> bool {
         | Region::Proposal
         | Region::SetupLog
         | Region::PushLine
+        | Region::ReserveLine
         | Region::Transcript
         | Region::Outline
         | Region::FindBar

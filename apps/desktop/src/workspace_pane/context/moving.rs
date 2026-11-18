@@ -12,6 +12,9 @@ use super::super::composer::Hub;
 use super::super::{PaneEvent, WorkspacePane};
 use crate::asking::{self, Question};
 
+/// How wide the menu is, so what's left of each account's week fits beside its name.
+const MENU_WIDTH: gpui_kit::Pixels = gpui_kit::px(240.);
+
 /// What the menu offers for the chat showing, worked out each time the pane is drawn.
 #[derive(Clone)]
 pub(in super::super) struct Moves {
@@ -34,6 +37,8 @@ struct Choice {
     called: SharedString,
     /// Whether its login works, so the chat could run under it. One that doesn't is offered off.
     works: bool,
+    /// How much of its week is left, as the menu says beside it, so moving can go by it.
+    week: Option<SharedString>,
 }
 
 /// What the menu offers a chat of `agent`'s kind that's `on` an account, of `accounts` at `now_ms`, in order of what
@@ -51,6 +56,7 @@ fn offered<'a>(
             id: account.id.clone(),
             called: crate::names::called(account).into(),
             works: account.works_for(agent, now_ms),
+            week: account.week(now_ms).map(|week| format!("{}% of 7d", week.left_percent()).into()),
         })
         .filter(|choice| choice.works || on == Some(&choice.id))
         .collect();
@@ -131,20 +137,34 @@ pub(super) fn button(moves: &Moves, hold: &HoldOpen) -> AnyElement {
         .into_any_element()
 }
 
-/// The accounts, with a check on the one the chat is on. One whose login doesn't work is off, since the hub would
-/// refuse it.
+/// `Move`, for a line above the composer, which opens the same menu above it. It stands out past its own room on the
+/// right, so the line's words end as far in as they start, as the push line's button does.
+pub(in super::super) fn line_button(moves: &Moves) -> AnyElement {
+    let moves = moves.clone();
+    look::button("reserve-move", look::ButtonKind::Borderless, look::ControlSize::Small, "Move")
+        .stands_out(&[look::Side::Right])
+        .off(moves.off)
+        .menu(Anchor::BottomRight, move |menu, _, _| menu_of(&moves, menu))
+        .into_any_element()
+}
+
+/// The accounts, each with how much of its week is left, and a check on the one the chat is on. One whose login
+/// doesn't work is off, since the hub would refuse it.
 fn menu_of(moves: &Moves, menu: look::Menu) -> look::Menu {
-    moves.accounts.iter().fold(menu, |menu, choice| {
+    moves.accounts.iter().fold(menu.width(MENU_WIDTH), |menu, choice| {
         let (pane, session, to) = (moves.pane.clone(), moves.session.clone(), choice.clone());
         let chosen = moves.on.as_ref() == Some(&choice.id);
-        menu.row(look::menu_row(choice.called.clone()).chosen(chosen).off(!choice.works).on_choose(
-            move |window, cx| {
-                if !chosen {
-                    let to = to.clone();
-                    let _ = pane.update(cx, |pane, cx| pane.move_chat(session.clone(), to, false, window, cx));
-                }
-            },
-        ))
+        let row = look::menu_row(choice.called.clone()).chosen(chosen).off(!choice.works);
+        let row = match &choice.week {
+            Some(week) => row.note(week.clone(), look::NoteKind::Detail),
+            None => row,
+        };
+        menu.row(row.on_choose(move |window, cx| {
+            if !chosen {
+                let to = to.clone();
+                let _ = pane.update(cx, |pane, cx| pane.move_chat(session.clone(), to, false, window, cx));
+            }
+        }))
     })
 }
 

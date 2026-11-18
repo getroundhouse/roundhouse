@@ -85,12 +85,18 @@ If the hub couldn't take the app's key, as when GitHub didn't answer, **Try agai
 
 The installation is a row in **Added**, by its bot's name, which you make the default from its **…** menu, as you would an account. An app installed nowhere yet has a row of its own, saying `Not installed`, with **Install on GitHub** in its menu. **Remove app**, in either menu, has the hub forget the app's key and its installation's login, and asks first. It deletes nothing on GitHub, so delete the app there to be rid of it.
 
+### Reserve part of an account's week
+
+**Reserve usage…**, in an added account's **…** menu, sets how much of its week you keep for yourself: none, 10%, 25%, 50% or all of its 7d limit. Choose one in the panel that opens under the row, and **Save**. What's reserved is split off the start of the week's bar, which turns amber once the account is down to it. It doesn't stop a chat already on the account, and use outside Roundhouse can spend it too, so a chat says when it's [using the reserve](../guides/watch-context-and-limits.md#when-an-account-uses-its-reserve).
+
+![Reserving a quarter of an account's week, in a panel under its row](../../spec/screens/settings-agents-reserving.png)
+
 ### Renew and disconnect
 
 - **A login warns a month before it ends,** in amber, and in red once it has. Choose **Renew** in the row's **…** menu, run `claude setup-token` again for the same account, and paste the new token in the panel that opens under it. The account keeps its name, its limits and its chats.
 - **Disconnect,** in the same menu, has the hub forget the token, and asks first. The account stays, with **Connect again** in its menu, which takes pasting a token again. It doesn't revoke the token, which still works wherever else you've kept it.
 
-![An account's menu, with Renew and Disconnect](../../spec/screens/settings-agents-menu.png)
+![An account's menu, with Reserve usage…, Renew and Disconnect](../../spec/screens/settings-agents-menu.png)
 
 ![Renewing a login that ends in nine days](../../spec/screens/settings-agents-renewing.png)
 

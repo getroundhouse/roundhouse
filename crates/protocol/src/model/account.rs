@@ -85,9 +85,60 @@ pub struct Account {
     /// names it. `None` until they have, and from a hub from before it kept it.
     #[serde(default)]
     pub used_at_ms: Option<i64>,
+    /// How much of the account's week the person keeps for themselves, as [`Reserve`] says. `None` keeps none back.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reserve: Option<Reserve>,
     #[serde(default)]
     pub rev: Rev,
 }
+
+/// How much of an account's week, its [`LimitWindow::SevenDays`] limit, the person keeps for themselves, from 1 to 100
+/// percent. Automatic puts no new chat on the account once no more than this is left. It's the hub's rule of where it
+/// puts chats, not a reservation the provider knows of, so chats already on the account, and use outside Roundhouse,
+/// can still spend it. 100 keeps the account out of Automatic.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[serde(try_from = "u8", into = "u8")]
+pub struct Reserve(u8);
+
+impl Reserve {
+    /// All of the week, which keeps the account out of Automatic.
+    pub const ALL: Reserve = Reserve(100);
+
+    /// `percent` of the week, or `None` for none, or more than all of it.
+    pub const fn new(percent: u8) -> Option<Reserve> {
+        if percent >= 1 && percent <= 100 { Some(Reserve(percent)) } else { None }
+    }
+
+    /// From 1 to 100.
+    pub fn percent(self) -> u8 {
+        self.0
+    }
+
+    /// Whether a week with `left_percent` left is down to it, so what's spent from here is what's reserved. The one
+    /// rule for it, which the hub places chats by and every client warns by, so they agree.
+    pub fn reached_at(self, left_percent: u8) -> bool {
+        left_percent <= self.0
+    }
+}
+
+impl TryFrom<u8> for Reserve {
+    type Error = ReserveOutOfRange;
+
+    fn try_from(percent: u8) -> Result<Self, Self::Error> {
+        Reserve::new(percent).ok_or(ReserveOutOfRange(percent))
+    }
+}
+
+impl From<Reserve> for u8 {
+    fn from(reserve: Reserve) -> u8 {
+        reserve.0
+    }
+}
+
+/// A reserve of none of a week, or more than all of it, which isn't one.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
+#[error("a reserve is from 1 to 100 percent of the week, not {0}")]
+pub struct ReserveOutOfRange(pub u8);
 
 /// What an [`Account`]'s record says of the login the hub holds for it. It never carries the token, which only the
 /// hub and the workers it hands it to have.
@@ -112,6 +163,24 @@ impl HeldLogin {
 }
 
 impl Account {
+    /// What any agent under it last heard of its week, its [`LimitWindow::SevenDays`] limit, while that's so at
+    /// `now_ms`: `None` until one has heard it, and once the week has started again since, by the clock of whoever asks.
+    pub fn week(&self, now_ms: i64) -> Option<&UsageLimit> {
+        self.limits
+            .iter()
+            .find(|limit| limit.window == LimitWindow::SevenDays)
+            .filter(|week| week.resets_at_ms.is_none_or(|at_ms| at_ms > now_ms))
+    }
+
+    /// Whether what's left of its week at `now_ms` is down to what it reserves, so a chat on it is spending what the
+    /// person kept for themselves. Never, for an account that reserves none, or whose week nobody has heard.
+    pub fn in_reserve(&self, now_ms: i64) -> bool {
+        match (self.reserve, self.week(now_ms)) {
+            (Some(reserve), Some(week)) => reserve.reached_at(week.left_percent()),
+            _ => false,
+        }
+    }
+
     /// Whether it's a login added for `kind` that still works at `now_ms`, as [`HeldLogin::works_at`] says, so it can
     /// be chosen as that kind's default, or a chat of that kind moved to it. The hub also needs the login's token,
     /// which a client can't see, so it can still refuse one.
@@ -247,6 +316,29 @@ mod tests {
         assert_eq!(limit(4).left_percent(), 96);
         assert_eq!(limit(100).left_percent(), 0);
         assert_eq!(limit(140).left_percent(), 0);
+    }
+
+    #[test]
+    fn a_reserve_is_from_one_to_all_of_the_week_and_an_account_is_in_it_once_its_week_is_down_to_it() {
+        let week = |used_percent, resets_at_ms| UsageLimit {
+            window: LimitWindow::SevenDays,
+            model: None,
+            used_percent,
+            resets_at_ms,
+            heard_at_ms: None,
+        };
+        let reserving = |reserve, limits| Account { limits, reserve, ..crate::fixtures::account("a") };
+
+        assert_eq!([0, 1, 100, 101].map(Reserve::new), [None, Reserve::new(1), Some(Reserve::ALL), None]);
+        assert!(serde_json::from_str::<Reserve>("0").is_err());
+        assert!(serde_json::from_str::<Reserve>("101").is_err());
+        assert_eq!(serde_json::to_string(&Reserve::new(25)).unwrap(), "25");
+        let in_reserve = |reserve, limits| reserving(Reserve::new(reserve), limits).in_reserve(1_000);
+        assert!(!in_reserve(25, vec![week(74, Some(2_000))]), "26% left of a quarter reserved");
+        assert!(in_reserve(25, vec![week(75, Some(2_000))]), "down to it");
+        assert!(!in_reserve(25, vec![week(90, Some(1_000))]), "a week that has started again since");
+        assert!(!in_reserve(25, Vec::new()), "a week nobody has heard");
+        assert!(!reserving(None, vec![week(100, None)]).in_reserve(1_000), "none reserved");
     }
 
     #[test]

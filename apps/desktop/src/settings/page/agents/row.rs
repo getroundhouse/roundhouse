@@ -10,11 +10,11 @@ use gpui_kit::{
     StatefulInteractiveElement as _, Styled as _, TestSupportExt as _, div, px,
 };
 use look::Typeset as _;
-use protocol::model::Account;
+use protocol::model::{Account, Reserve};
 
 use super::super::account_row::{self, Columns, Detail, Picture, Row, Tone};
 use super::words::{self, Says, Standing};
-use super::{Drawing, account_menu, card, panel};
+use super::{Drawing, account_menu, card, panel, reserving};
 
 /// How wide a row's middle columns are: how its login was made, such as `Max · Claude account`, and what else there is
 /// to say, which is as long as `Ends in 30 days, on Dec 1, 2026` after its warning sign.
@@ -54,7 +54,7 @@ pub(super) fn row(drawing: &Drawing<'_>, account: &Account, cx: &App) -> AnyElem
         menu: account.login_agent.map(|agent| account_menu::menu(drawing, account, agent, &called, cx)),
         card: card::card(account, standing.as_ref(), drawing.now_ms, cx),
         name: called,
-        under: not_disconnected.into_iter().chain(panel).collect(),
+        under: not_disconnected.into_iter().chain(panel).chain(reserving::panel(drawing, account, cx)).collect(),
     };
     account_row::row(shown, COLUMNS, cx)
 }
@@ -62,15 +62,19 @@ pub(super) fn row(drawing: &Drawing<'_>, account: &Account, cx: &App) -> AnyElem
 /// How much is left of each of `limits`: its window, a bar that empties as it's used, as the chat's card of them has,
 /// and how much is left, said in words too, as one label, for assistive apps, which can't see the bars. Tests find it
 /// by the row's `id` and `-says`, as they find what else a row says in words.
-fn limits_left(id: &SharedString, limits: &[(SharedString, u8)], cx: &App) -> AnyElement {
-    let muted = look::colors(cx).text_muted;
-    let each = limits.iter().map(|(window, left)| {
+fn limits_left(id: &SharedString, limits: &[(SharedString, u8, Option<Reserve>)], cx: &App) -> AnyElement {
+    let colors = look::colors(cx);
+    let muted = colors.text_muted;
+    let each = limits.iter().map(|(window, left, reserve)| {
+        let bar = crate::limits::bar(*left, *reserve, BAR, cx);
+        let in_reserve = reserve.is_some_and(|reserve| reserve.reached_at(*left));
+        let left = div().child(format!("{left}%"));
         h_flex()
             .flex_none()
             .gap(look::Space::Small)
             .child(window.clone())
-            .child(div().flex_none().w(BAR_WIDTH).child(crate::limits::bar(*left, BAR, cx)))
-            .child(format!("{left}%"))
+            .child(div().flex_none().w(BAR_WIDTH).child(bar))
+            .child(if in_reserve { left.text_color(colors.warning) } else { left })
     });
     h_flex()
         .id(SharedString::from(format!("{id}-says")))

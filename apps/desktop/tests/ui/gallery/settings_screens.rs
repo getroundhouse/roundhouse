@@ -9,7 +9,7 @@ use look::Region;
 use super::frame::Frame;
 use super::screens::FOCUS;
 use super::steps::{Screen, Step, Target};
-use super::worlds::{accounts, conversation, logins_unkept, none_found, own_hub};
+use super::worlds::{accounts, conversation, logins_unkept, none_found, own_hub, reserves};
 use client_core::fake_hub::{LoginSupport, World};
 
 /// What puts the cursor in Settings' search.
@@ -136,6 +136,32 @@ pub(crate) const SCREENS: &[Screen] = &[
             Step::Click("account-more-claude-login-0002"),
             Step::ClickItem("Renew"),
             Step::Type(TOKEN),
+        ],
+    },
+    Screen {
+        name: "settings-agents-reserving",
+        spec: "settings.md",
+        world: Some(reserves),
+        frame: Frame::Layout,
+        steps: &[
+            Step::Select(FOCUS),
+            Step::OpenSettings,
+            AGENTS,
+            Step::Click("account-more-claude-login-0001"),
+            Step::ClickItem("Reserve usage…"),
+            Step::WaitFor("reserve-panel"),
+        ],
+    },
+    Screen {
+        name: "settings-agents-in-reserve",
+        spec: "settings.md",
+        world: Some(reserves),
+        frame: Frame::Layout,
+        steps: &[
+            Step::Select(FOCUS),
+            Step::OpenSettings,
+            AGENTS,
+            Step::Hover { on: Target::Id("account-claude-login-0002"), shows: Region::AccountCard.id() },
         ],
     },
     Screen {

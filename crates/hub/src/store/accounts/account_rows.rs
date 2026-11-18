@@ -1,7 +1,7 @@
 use super::super::logins::{IdFrom, LOGIN_COLUMNS, login_at};
 use super::super::sessions::on_the_hubs;
 use super::super::{Store, StoreError, from_text, lock, rev_of, text_of};
-use protocol::model::{Account, AccountId, AgentAccount, LimitWindow, ModelLabel, Rev, SessionId, UsageLimit};
+use protocol::model::{Account, AccountId, AgentAccount, LimitWindow, ModelLabel, Reserve, Rev, SessionId, UsageLimit};
 use rusqlite::{Connection, OptionalExtension as _, params};
 
 /// What filing a launch's account changed, so the hub announces only what did.
@@ -31,12 +31,13 @@ pub(in super::super) fn account(conn: &Connection, id: &AccountId) -> rusqlite::
     let Some(mut account) = conn
         .query_row(
             &format!(
-                "SELECT id, model_provider, plan, login, email, rev, name, used_at_ms, {LOGIN_COLUMNS} FROM accounts
+                "SELECT id, model_provider, plan, login, email, rev, name, used_at_ms, reserve_percent, {LOGIN_COLUMNS}
+                     FROM accounts
                      WHERE id = ?"
             ),
             [id.as_str()],
             |row| {
-                let (id_from, held) = login_at(row, 8)?;
+                let (id_from, held) = login_at(row, 9)?;
                 Ok(Account {
                     id: row.get::<_, String>(0)?.into(),
                     model_provider: row.get(1)?,
@@ -51,6 +52,11 @@ pub(in super::super) fn account(conn: &Connection, id: &AccountId) -> rusqlite::
                     limits: Vec::new(),
                     held_login: held.map(|(_, held)| held),
                     used_at_ms: row.get(7)?,
+                    // Only a reserve the hub took is kept, so one it can't read is as good as none.
+                    reserve: row
+                        .get::<_, Option<i64>>(8)?
+                        .and_then(|percent| u8::try_from(percent).ok())
+                        .and_then(Reserve::new),
                     rev: rev_of(row, 5)?,
                 })
             },

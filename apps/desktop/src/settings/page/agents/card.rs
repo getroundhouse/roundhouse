@@ -10,7 +10,7 @@ use gpui_kit::{
     Stateful, StatefulInteractiveElement as _, Styled as _, TestSupportExt as _, div,
 };
 use look::Region;
-use protocol::model::{Account, UsageLimit};
+use protocol::model::{Account, Reserve, UsageLimit};
 
 use super::super::account_row::Card;
 use super::words::{self, Standing};
@@ -21,28 +21,41 @@ use super::words::{self, Standing};
 pub(super) fn card(account: &Account, standing: Option<&Standing>, now_ms: i64, cx: &App) -> Option<Card> {
     let ends = standing.and_then(words::ends).map(str::to_string);
     let lines: Vec<String> = [words::last_used(account, now_ms, cx), ends].into_iter().flatten().collect();
-    let limits = crate::limits::shown(&account.limits, now_ms);
+    let limits: Vec<Limit> = crate::limits::shown(&account.limits, now_ms)
+        .into_iter()
+        .map(|(name, limit)| {
+            let reserve = crate::limits::reserve_for(account, &limit);
+            (name, limit, reserve)
+        })
+        .collect();
     let none_heard = account.limits.is_empty();
     if lines.is_empty() && limits.is_empty() && !none_heard {
         return None;
     }
-    let limits_said = limits.iter().map(|(name, limit)| crate::limits::said_in_a_card(name, limit, cx));
+    let limits_said =
+        limits.iter().map(|(name, limit, reserve)| crate::limits::said_in_a_card(name, limit, *reserve, cx));
     let none_said = none_heard.then(|| words::NO_LIMITS_YET.to_string());
     let said: Vec<String> =
         lines.iter().cloned().chain(limits_said).chain(none_said).map(|line| format!("{line}.")).collect();
     Some(Card { said: said.join(" "), shown: Box::new(move |cx| shown(&lines, &limits, none_heard, cx)) })
 }
 
+/// A limit shown, by what it's called, with what the account reserves of it.
+type Limit = (SharedString, UsageLimit, Option<Reserve>);
+
 /// A card over the rest, as wide as the chat's card of the account's limits, which says them the same way: each of `lines`, then under a rule, each of `limits`, as the chat's card of them
 /// says them, or that none has been heard of yet, faintly, while `none_heard`. Each says itself to assistive apps as a
 /// label.
-fn shown(lines: &[String], limits: &[(SharedString, UsageLimit)], none_heard: bool, cx: &App) -> AnyElement {
+fn shown(lines: &[String], limits: &[Limit], none_heard: bool, cx: &App) -> AnyElement {
     let colors = look::colors(cx);
     let lines = (!lines.is_empty()).then(|| {
         let each = lines.iter().enumerate().map(|(at, line)| said(("line", at), line.clone()));
         v_flex().gap(look::Space::XSmall).text_color(colors.text_muted).children(each)
     });
-    let each = limits.iter().enumerate().map(|(at, (name, limit))| crate::limits::in_a_card(at, name, limit, cx));
+    let each = limits
+        .iter()
+        .enumerate()
+        .map(|(at, (name, limit, reserve))| crate::limits::in_a_card(at, name, limit, *reserve, cx));
     let none = none_heard.then(|| said("no-limits", words::NO_LIMITS_YET.to_string()).text_color(colors.text_faint));
     let any_below = !limits.is_empty() || none_heard;
     let below = any_below.then(|| v_flex().gap(look::Space::Medium).children(each).children(none));

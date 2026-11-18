@@ -28,6 +28,7 @@ mod pull_request;
 mod pushing;
 mod queue;
 mod reading;
+mod reserving;
 mod setup;
 mod subagent_tab;
 mod tab;

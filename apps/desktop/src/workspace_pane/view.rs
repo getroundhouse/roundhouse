@@ -14,7 +14,7 @@ use protocol::model::{Session, SessionStatus};
 
 use super::setup::setup_log_view;
 use super::workspace_card;
-use super::{Mark, Opened, PaneEvent, Showing, WorkspacePane, tab};
+use super::{Mark, Opened, PaneEvent, Showing, WorkspacePane, reserving, tab};
 use crate::sides::{self, AtTheTop, Side, Sidebar};
 use crate::{NewChat, NewTerminal, prompt_cache, right_click};
 
@@ -245,6 +245,8 @@ impl WorkspacePane {
         let cache_expired = self.session().and_then(|s| prompt_cache::expired_line(s, look::now_ms(cx)));
         let setup_line = self.setup_line(cx);
         let push_line = self.push_line(cx);
+        let usage = self.usage(cx);
+        let reserve_line = reserving::reserve_line(usage.as_ref(), cx);
         let composer = self.composer_row(cx).into_any_element();
         let log = self.setup_log.clone();
         let transcript = self.transcript();
@@ -262,6 +264,7 @@ impl WorkspacePane {
             .when_some(log, |d, text| d.child(setup_log_view(text, cx)))
             .children(setup_line)
             .children(push_line)
+            .children(reserve_line)
             // In the transcript's column, so it starts where the rows above it do.
             .when(interrupted, |d| {
                 d.child(

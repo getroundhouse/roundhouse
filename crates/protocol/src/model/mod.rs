@@ -29,8 +29,8 @@ mod worktrees;
 
 pub use crate::prompt::PromptFrom;
 pub use account::{
-    Account, AccountSource, AgentAccount, AgentLogin, HeldLogin, LimitWindow, LoginToken, ModelLabel, SessionAccount,
-    UsageLimit,
+    Account, AccountSource, AgentAccount, AgentLogin, HeldLogin, LimitWindow, LoginToken, ModelLabel, Reserve,
+    ReserveOutOfRange, SessionAccount, UsageLimit,
 };
 pub use agent::{AgentDescription, LoginDescription, NotOffered, RunCapabilities};
 pub use branches::{Apart, Branch, Branches, Head, Upstream};
