@@ -88,9 +88,7 @@ async fn a_missing_intake_reply_is_settled_after_shutdown_without_a_restartable_
                 AgentOutput::Event { .. }
                 | AgentOutput::Delta(_)
                 | AgentOutput::Retrying(_)
-                | AgentOutput::Context(_)
-                | AgentOutput::Cache(_)
-                | AgentOutput::Limits { .. }
+                | AgentOutput::Report(_)
                 | AgentOutput::Exited { .. } => {}
             }
         }
@@ -107,9 +105,7 @@ async fn a_missing_intake_reply_is_settled_after_shutdown_without_a_restartable_
                 AgentOutput::Event { .. }
                 | AgentOutput::Delta(_)
                 | AgentOutput::Retrying(_)
-                | AgentOutput::Context(_)
-                | AgentOutput::Cache(_)
-                | AgentOutput::Limits { .. }
+                | AgentOutput::Report(_)
                 | AgentOutput::Exited { .. } => {}
             }
         }
@@ -140,9 +136,7 @@ async fn a_broken_input_pipe_stops_the_process_and_settles_the_prompt() {
             AgentOutput::Event { .. }
             | AgentOutput::Delta(_)
             | AgentOutput::Retrying(_)
-            | AgentOutput::Context(_)
-            | AgentOutput::Cache(_)
-            | AgentOutput::Limits { .. }
+            | AgentOutput::Report(_)
             | AgentOutput::Exited { .. } => {}
         }
     }

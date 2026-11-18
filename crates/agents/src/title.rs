@@ -39,12 +39,7 @@ pub(crate) async fn read_title(rx: &mut mpsc::Receiver<AgentOutput>) -> Result<T
                 return Err(NoTitle::NoResult.into());
             }
             AgentOutput::Event { body: EventBody::ApprovalRequested { .. }, .. } => return Err(NoTitle::Asked.into()),
-            AgentOutput::Event { .. }
-            | AgentOutput::Delta(_)
-            | AgentOutput::Retrying(_)
-            | AgentOutput::Context(_)
-            | AgentOutput::Cache(_)
-            | AgentOutput::Limits { .. } => {}
+            AgentOutput::Event { .. } | AgentOutput::Delta(_) | AgentOutput::Retrying(_) | AgentOutput::Report(_) => {}
         }
     }
     Err(AgentError::Exited)

@@ -1,6 +1,6 @@
 use protocol::attachment::NewAttachment;
+use protocol::capability::Report;
 use protocol::event::{EventBody, ExitReason};
-use protocol::model::{CacheRequest, ContextUsage, UsageLimit};
 use protocol::tail::{Retrying, StreamDelta};
 
 #[derive(Debug)]
@@ -15,19 +15,9 @@ pub enum AgentOutput {
     /// The agent is trying a failed request to its model again. Only the newest matters, and only until the agent
     /// writes again, so it's live, as a delta is.
     Retrying(Retrying),
-    /// How full the agent's context is now. It answers the adapter's own question rather than being something the
-    /// agent said, and only the newest matters, so it isn't an event.
-    Context(ContextUsage),
-    /// One of the agent's own requests to its model, as the model started to answer it. It isn't an event, since a
-    /// turn makes many, but each matters, since the hub compares each with the one before.
-    Cache(CacheRequest),
-    /// What's used of each of the account's limits now, shortest window first, when the adapter asked rather than
-    /// the agent saying so by itself, and whether that's every model's own week the account has, as an answer that
-    /// lists them all is. It answers the adapter's own question, so it isn't an event, as `Context` isn't.
-    Limits {
-        limits: Vec<UsageLimit>,
-        every_models_week: bool,
-    },
+    /// What the agent says that isn't an event, which says who keeps it, such as how full its context is now, one of
+    /// its own requests to its model, or what the adapter's own asking found of the account's limits.
+    Report(Report),
     /// Always the last thing sent.
     Exited {
         code: Option<i32>,
@@ -56,11 +46,7 @@ impl AgentOutput {
             AgentOutput::Exited { code, signal, stderr_tail, requested } => {
                 Some(Self::exit_event(*code, *signal, stderr_tail.clone(), *requested))
             }
-            AgentOutput::Delta(_)
-            | AgentOutput::Retrying(_)
-            | AgentOutput::Context(_)
-            | AgentOutput::Cache(_)
-            | AgentOutput::Limits { .. } => None,
+            AgentOutput::Delta(_) | AgentOutput::Retrying(_) | AgentOutput::Report(_) => None,
         }
     }
 }

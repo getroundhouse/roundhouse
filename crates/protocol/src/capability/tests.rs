@@ -184,7 +184,7 @@ fn a_report_needs_what_it_reports_and_one_this_build_doesnt_know_needs_nothing_a
     assert_eq!(would.needs(), Some(conversation::Capability::PreviewRestoreFiles.into()));
     assert_eq!(Report::FilesRestored { files: vec![] }.keeper(), Keeper::Log);
     assert_eq!(would.keeper(), Keeper::Answer);
-    assert_eq!(Report::Limits { limits: vec![] }.keeper(), Keeper::Account);
+    assert_eq!(Report::Limits { limits: vec![], every_models_week: false }.keeper(), Keeper::Account);
     assert_eq!(unknown, Report::Unknown);
     assert_eq!((unknown.needs(), unknown.keeper()), (None, Keeper::Answer));
 }

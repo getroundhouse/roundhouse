@@ -4,6 +4,7 @@ use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
 use crate::claude::login_check::Output;
+use protocol::capability::Report;
 use protocol::event::EventBody;
 use protocol::model::CacheRequest;
 use serde_json::json;
@@ -45,7 +46,7 @@ pub(super) async fn read_stdout(mut stdout: Output, shared: Arc<Shared>, output:
                 AgentOutput::Event { body, raw: Some(raw), attachments: images }
             }
             Parsed::Prompt { uuid, progress } => answering.took(prompt_progress(&shared, &uuid, progress), line),
-            Parsed::Request(request) => AgentOutput::Cache(answering.name(request)),
+            Parsed::Request(request) => AgentOutput::Report(Report::Cache { request: answering.name(request) }),
             Parsed::UnsupportedControl { request_id, subtype } => {
                 refuse_control(&shared, &request_id, &subtype).await;
                 let kind = format!("control_request/{subtype}");
