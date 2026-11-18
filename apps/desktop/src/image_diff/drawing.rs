@@ -12,6 +12,7 @@ use gpui_kit::{
 use look::{Shaped as _, Typeset as _};
 
 use super::{Comparison, ImageDiff, Outcome, Shown, Side, choose, comparison, stacked};
+use crate::file_header::{bar, copy_path};
 use crate::file_image::{FileImage, Placed, fitted};
 use crate::file_view::placeholder;
 
@@ -160,10 +161,10 @@ const FOLDERS_SHRINK: f32 = 1000.;
 /// Room for `…/`, the least of the folders that's shown.
 const FOLDERS_LEAST: Pixels = px(16.);
 
-/// Its path, as its folders, muted, and its name, and the choices of what to show, while there are two images.
-fn header(path: Option<SharedString>, choices: Option<look::Switch>, cx: &App) -> Div {
-    let colors = look::colors(cx);
-    let muted = colors.text_muted;
+/// Its path, as its folders, muted, and its name, the button that copies it, and the choices of what to show, while
+/// there are two images.
+fn header(path: Option<SharedString>, choices: Option<look::Switch>, cx: &App) -> impl IntoElement {
+    let muted = look::colors(cx).text_muted;
     let path = path.unwrap_or_default();
     let (within, name) = path.rsplit_once('/').map_or(("", path.as_ref()), |(within, name)| (within, name));
     // Cut from the start, so the folder it's in shows longest, and never to less than `…/`, which a sliver of `…` would
@@ -174,16 +175,12 @@ fn header(path: Option<SharedString>, choices: Option<look::Switch>, cx: &App) -
         folders = folders.min_w(FOLDERS_LEAST).child(format!("{within}/"));
     }
     folders.style().flex_shrink = Some(FOLDERS_SHRINK);
-    h_flex()
-        .flex_none()
-        .w_full()
-        .h(look::BarSize::Regular.height())
+    let copy = (!path.is_empty()).then(|| div().flex_none().pl(look::Space::Small).child(copy_path(&path, cx)));
+    bar(cx)
         .px(look::Space::Large)
-        .border_b_1()
-        .border_color(colors.edge)
-        .typeset(look::Type::Body)
         .child(folders)
         .child(div().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().child(name.to_string()))
+        .children(copy)
         .children(choices.map(|choices| div().flex_none().ml_auto().pl(look::Space::Large).child(choices)))
 }
 

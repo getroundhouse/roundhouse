@@ -141,6 +141,7 @@ fn region_in_the_column(region: Region) -> bool {
         | Region::Header
         | Region::TabBar
         | Region::OpenFile
+        | Region::FileBar
         | Region::Terminal
         | Region::SetupLog
         | Region::PushLine
@@ -151,7 +152,6 @@ fn region_in_the_column(region: Region) -> bool {
         | Region::UpdateDetails
         | Region::WorkspaceCard
         | Region::AccountCard
-        | Region::FilePathCard
         | Region::BuildLineCard
         | Region::CheckoutDetails => false,
     }

@@ -3,7 +3,6 @@
 //! cards are, as wide as its context card, and shows once the pointer has rested on what it's for as long as before a
 //! tooltip.
 
-use gpui_kit::component::h_flex;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{Anchor, AnyElement, App, IntoElement, ParentElement as _, StyleRefinement, Styled as _, div};
 use look::{HoverCard, Region, Typeset as _};
@@ -30,15 +29,6 @@ pub(crate) fn card(region: Region, heading: Option<String>, says: Vec<String>, c
             card.under_heading(div().typeset(look::Type::Detail).text_color(colors.text_muted).child(said))
         })
         .into_any_element()
-}
-
-/// The card for a path, in code's type so it reads as one, wrapped where it's longer than the card, with the button
-/// that copies it.
-pub(crate) fn path_card(region: Region, path: String, copy_id: &'static str, cx: &App) -> AnyElement {
-    let colors = look::colors(cx);
-    let text = div().flex_1().min_w_0().typeset(look::Type::Code).text_color(colors.text_muted).child(path.clone());
-    let copy = look::copy_button(copy_id, path, "Copy path", cx);
-    surface(region).child(h_flex().items_start().gap(look::Space::Small).child(text).child(copy)).into_any_element()
 }
 
 /// A card over the rest, as wide as the chat's context card.

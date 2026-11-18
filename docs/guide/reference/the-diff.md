@@ -36,6 +36,7 @@ Clicking a file shows it in the workspace's file tab: its diff from Changes, or 
 - **A workspace has one file tab, always the leftmost.** Clicking another file shows that one in the same tab.
 - **It covers the chat until a chat's tab is clicked,** and stays open behind the chats until it's closed.
 - **`Cmd-W` closes it while it shows,** and `Ctrl-Tab` comes to it after the last chat.
+- **The bar at its top has the file's path,** and a button after it that copies the path while the pointer is on the bar.
 
 ## A file's diff
 

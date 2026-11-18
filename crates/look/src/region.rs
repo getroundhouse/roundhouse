@@ -17,6 +17,8 @@ pub enum Region {
     TabBar,
     /// What the file tab shows, in the chat's place.
     OpenFile,
+    /// The bar along the top of what the file tab shows, with the file's path.
+    FileBar,
     /// The terminal in front, in the chat's place.
     Terminal,
     /// Where a prompt is written.
@@ -55,8 +57,6 @@ pub enum Region {
     WorkspaceCard,
     /// What an account's row in Settings has no room for, shown from the row.
     AccountCard,
-    /// The whole path of the file the file tab shows, shown from the tab.
-    FilePathCard,
     /// What the version's place says in full, such as what went wrong updating, shown from it.
     BuildLineCard,
     /// Where a build from a checkout was made and keeps its data, shown from its card in the sidebar.
@@ -73,6 +73,7 @@ impl Region {
             Region::Header => "workspace-header",
             Region::TabBar => "tab-bar",
             Region::OpenFile => "open-file",
+            Region::FileBar => "file-bar",
             Region::Terminal => "terminal",
             Region::Composer => "composer",
             Region::Queue => "queue",
@@ -92,7 +93,6 @@ impl Region {
             Region::UpdateDetails => "update-details-card",
             Region::WorkspaceCard => "workspace-card",
             Region::AccountCard => "account-card",
-            Region::FilePathCard => "file-path-card",
             Region::BuildLineCard => "build-line-card",
             Region::CheckoutDetails => "checkout-details-card",
         }
