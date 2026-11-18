@@ -2,15 +2,16 @@ use protocol::attachment::{Attachment, AttachmentBytes, MediaType};
 use protocol::client::ErrorCode;
 use protocol::event::EventBody;
 use protocol::model::{
-    AttachmentId, Effort, ModelName, NewWorkspaceDraft, NewWorkspaceDraftToKeep, PermissionMode, RepoId, Seq, SessionId,
+    AgentDescription, AgentKind, AttachmentId, Effort, ModelName, NewWorkspaceDraft, NewWorkspaceDraftToKeep,
+    PermissionMode, RepoId, Seq, SessionId,
 };
 use protocol::prompt::Prompt;
 use protocol::worker::WorkerRequest;
 
 use crate::attachment_files::FileFor;
 use crate::hub::Hub;
-use crate::hub::stand_in_workers::{TIMEOUT, hub_with_stand_in_workers};
-use crate::hub::tests::hub_in;
+use crate::hub::stand_in_workers::{TIMEOUT, hub_whose_stand_ins_answer_first, hub_with_stand_in_workers};
+use crate::hub::tests::{described, hub_in};
 use crate::store::AddedBy;
 
 fn in_the_repo(files: &[&str]) -> NewWorkspaceDraftToKeep {
@@ -241,4 +242,24 @@ async fn the_dialogs_files_wait_as_long_again_once_a_workspace_is_made_from_them
 
     let let_go_of = hub.blocking(|store| store.let_go_of_unnamed_new_workspace_draft_files(1)).await;
     assert_eq!(let_go_of.unwrap(), Vec::<AttachmentId>::new(), "added before it was asked for, and renewed since");
+}
+
+/// Such as by a client showing the workspace once it's ready, before the hub has made the chat itself, which it then
+/// finds, as it would one of the agent asked for.
+#[tokio::test]
+async fn a_first_chat_asked_for_as_the_workspace_is_made_is_the_one_chosen() {
+    let dir = tempfile::tempdir().unwrap();
+    let other = AgentDescription { kind: AgentKind::Codex, name: "Codex".to_string(), ..described() };
+    let (hub, _asked) = hub_whose_stand_ins_answer_first(dir.path(), vec![described(), other], |_| None);
+    let workspace = hub.make_workspace("r".into(), None, None, None, Some(AgentKind::Codex)).await.unwrap();
+
+    let asked_for = hub.session_ensure(workspace.id.clone(), AgentKind::Claude).await.unwrap();
+
+    assert_eq!(asked_for.agent, AgentKind::Codex);
+    let made_of = NewWorkspaceDraftToKeep { agent: Some(AgentKind::Codex), ..in_the_repo(&[]) };
+    let (first, unchosen) = hub.first_chat(&workspace.id, &made_of).await.unwrap();
+    assert_eq!((first.id, unchosen), (asked_for.id, None), "the hub's is the one asked for");
+    let next = hub.make_workspace("r".into(), None, None, None, None).await.unwrap();
+    let anyones = hub.session_ensure(next.id, AgentKind::Claude).await.unwrap();
+    assert_eq!(anyones.agent, AgentKind::Claude, "a workspace made otherwise runs what's asked for");
 }

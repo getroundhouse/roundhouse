@@ -12,7 +12,7 @@ use protocol::model::{
 use protocol::worker::{PrepareWorkspace, RepoSource, SetupDone, WorkerRequest, WorkerResponse, WorktreeThereReply};
 
 use crate::hub::stand_in_workers::{TIMEOUT, hub_whose_stand_ins_answer_first, hub_with_stand_in_workers};
-use crate::hub::tests::{hub_looking_often, serving};
+use crate::hub::tests::{described, hub_looking_often, serving};
 use crate::store::{Ended, Move};
 use crate::timers::Timers;
 use crate::worker_link::WorkerLink;
@@ -52,7 +52,7 @@ async fn a_workspace_is_ready_where_its_worker_made_the_worktree_it_was_asked_fo
 #[tokio::test]
 async fn a_workspace_that_cant_be_made_is_announced_on_its_way_and_then_removed() {
     let dir = tempfile::tempdir().unwrap();
-    let (hub, _) = hub_whose_stand_ins_answer_first(dir.path(), |request| {
+    let (hub, _) = hub_whose_stand_ins_answer_first(dir.path(), vec![described()], |request| {
         let WorkerRequest::PrepareWorkspace(_) = request else { return None };
         Some(Err(ApiError::new(ErrorCode::Worker, "the repository has gone")))
     });

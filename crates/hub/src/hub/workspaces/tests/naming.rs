@@ -7,6 +7,7 @@ use protocol::model::WorkspaceId;
 use protocol::worker::{NamesGitHasReply, WorkerRequest, WorkerResponse};
 
 use crate::hub::stand_in_workers::hub_whose_stand_ins_answer_first;
+use crate::hub::tests::described;
 
 /// A name that could leave the workspaces' directory, or one another workspace has, is refused, and so is one git has
 /// as a branch, or as a folder of them, as the worker says, and none of them leaves anything behind. A name the hub
@@ -14,7 +15,7 @@ use crate::hub::stand_in_workers::hub_whose_stand_ins_answer_first;
 #[tokio::test]
 async fn a_name_that_could_escape_or_that_a_workspace_or_git_has_is_refused_leaving_nothing() {
     let dir = tempfile::tempdir().unwrap();
-    let (hub, _) = hub_whose_stand_ins_answer_first(dir.path(), |request| {
+    let (hub, _) = hub_whose_stand_ins_answer_first(dir.path(), vec![described()], |request| {
         let WorkerRequest::NamesGitHas(_) = request else { return None };
         let names = vec!["taken".to_string(), "folder".to_string()];
         Some(Ok(WorkerResponse::NamesGitHas(NamesGitHasReply { names })))

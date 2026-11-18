@@ -19,7 +19,8 @@ use parking_lot::Mutex;
 use protocol::Build;
 use protocol::client::{ApiError, ErrorCode, HubNotice, HubStatus};
 use protocol::model::{
-    AgentDescription, ClientRequestId, GithubSignInId, ProviderName, Records, SessionId, Workspace, WorkspaceId,
+    AgentDescription, AgentKind, ClientRequestId, GithubSignInId, ProviderName, Records, SessionId, Workspace,
+    WorkspaceId,
 };
 use protocol::paths::Paths;
 use providers::Provider;
@@ -79,6 +80,10 @@ pub(crate) struct Hub {
     pub(super) child_gates: Mutex<HashMap<WorkspaceId, Arc<tokio::sync::RwLock<()>>>>,
     /// Held while finding or making a workspace's first session.
     pub(super) ensuring_session: AsyncMutex<()>,
+    /// The kind of agent each workspace being made from the new-workspace dialog is to run its first chat on, from the
+    /// moment it's recorded until that chat is made, so a first chat asked for meanwhile, such as by a client showing
+    /// the workspace once it's ready, is that one, whoever asks first.
+    pub(super) first_chats: Mutex<HashMap<WorkspaceId, AgentKind>>,
     pub(super) sessions: Mutex<Sessions>,
     /// Workspaces whose setup is running. Removed as it finishes, which also wakes anyone waiting.
     pub(super) setup_gates: Mutex<HashMap<WorkspaceId, SetupGate>>,
@@ -188,6 +193,7 @@ impl Hub {
             worker_gates: Mutex::new(HashMap::new()),
             child_gates: Mutex::new(HashMap::new()),
             ensuring_session: AsyncMutex::new(()),
+            first_chats: Mutex::new(HashMap::new()),
             sessions: Mutex::new(Sessions::default()),
             setup_gates: Mutex::new(HashMap::new()),
             terminals: Terminals::default(),

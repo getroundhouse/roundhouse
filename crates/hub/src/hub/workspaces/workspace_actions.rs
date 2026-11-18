@@ -7,8 +7,8 @@ use crate::store::{Made, Store, now_ms};
 use naming::{Names, name_taken};
 use protocol::client::{ApiError, ErrorCode, HubNotice};
 use protocol::model::{
-    BranchName, ClientRequestId, ProviderName, RecordKey, Repo, RepoId, Rev, SetupStatus, TitleSource, Workspace,
-    WorkspaceId, WorkspaceStatus,
+    AgentKind, BranchName, ClientRequestId, ProviderName, RecordKey, Repo, RepoId, Rev, SetupStatus, TitleSource,
+    Workspace, WorkspaceId, WorkspaceStatus,
 };
 use protocol::worker::{PrepareWorkspace, WorkspaceReady};
 use providers::Provider;
@@ -43,6 +43,19 @@ impl Hub {
         base_ref: Option<String>,
         client_request_id: Option<ClientRequestId>,
     ) -> Result<Workspace, ApiError> {
+        self.make_workspace(repo_id, name, base_ref, client_request_id, None).await
+    }
+
+    /// Makes a workspace, as `WorkspaceCreate` asks, whose first chat runs `first_chat`, if it names one, whoever asks
+    /// for that chat.
+    pub(crate) async fn make_workspace(
+        self: &Arc<Self>,
+        repo_id: RepoId,
+        name: Option<String>,
+        base_ref: Option<String>,
+        client_request_id: Option<ClientRequestId>,
+        first_chat: Option<AgentKind>,
+    ) -> Result<Workspace, ApiError> {
         if let Some(made) = self.made_earlier(client_request_id.as_ref()).await? {
             return Ok(made);
         }
@@ -57,7 +70,8 @@ impl Hub {
         }
         let (provider_name, provider) = self.providers.for_new_workspace()?;
         let mut names = Names::new(name);
-        let workspace = match self.record_new_workspace(&repo, provider_name, &mut names, client_request_id).await? {
+        let recorded = self.record_new_workspace(&repo, provider_name, &mut names, client_request_id, first_chat);
+        let workspace = match recorded.await? {
             Made::New(workspace) => workspace,
             // Sent again while the first was making it.
             Made::Earlier(made) => return Ok(made),
@@ -72,13 +86,15 @@ impl Hub {
     /// Records a workspace in `repo`, being made, by the first of `names` that no other workspace there has, and
     /// announces it at once, before the fetch, which can take a while. So every client can show it on its way, where
     /// it will be, rather than working out from the list which new workspace is the one it asked for. One that can't
-    /// be made is removed, which is announced too.
+    /// be made is removed, which is announced too. Before it's announced, the hub takes `first_chat` as what its first
+    /// chat runs.
     pub(super) async fn record_new_workspace(
         &self,
         repo: &Repo,
         provider_name: &ProviderName,
         names: &mut Names,
         client_request_id: Option<ClientRequestId>,
+        first_chat: Option<AgentKind>,
     ) -> Result<Made<Workspace>, ApiError> {
         let id = WorkspaceId::from(new_id());
         let now = now_ms();
@@ -113,6 +129,9 @@ impl Hub {
             let (record, request) = (workspace.clone(), client_request_id.clone());
             match self.blocking(move |store| store.insert_workspace(&record, request.as_ref())).await? {
                 Some(Made::New(made)) => {
+                    if let Some(agent) = first_chat {
+                        self.first_chats.lock().insert(made.id.clone(), agent);
+                    }
                     self.notify(HubNotice::Workspace(made.clone()));
                     return Ok(Made::New(made));
                 }
@@ -196,6 +215,7 @@ impl Hub {
 
     pub(super) async fn discard_workspace(&self, workspace: &Workspace, provider: &dyn Provider) {
         let id = &workspace.id;
+        self.first_chats.lock().remove(id);
         if let Err(e) = self.unmake_instance(workspace, provider).await {
             warn!(%id, "cleaning up a failed workspace: {e}");
         }
