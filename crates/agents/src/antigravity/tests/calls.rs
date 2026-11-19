@@ -1,10 +1,11 @@
 #![cfg(test)]
 use protocol::capability::calls::{
     Call, CallOutput,
-    call::{Command, CommandPart, MessageSubagent, Replaces, StopSubagent},
+    call::{Command, CommandPart, MessageSubagent, Replaces, StartSubagent, StopSubagent},
     output::{Ended, Lines},
 };
 use protocol::capability::setup::ServerName;
+use protocol::model::ModelName;
 use serde_json::json;
 
 use crate::acp::{ToolCallWire, ToolKindWire, ToolStatusWire};
@@ -217,4 +218,24 @@ fn stopped_commands_distinguish_kills_and_cancels_from_exits_denials_and_spawn_e
         (json_err.ended, json_err.exit_code, json_err.output.as_str()),
         (Ended::Exited, None, "{\"error\":\"invalid arguments\"}")
     );
+}
+
+#[test]
+fn invoke_subagent_populates_explicit_model_and_leaves_inherit_or_absent_unset() {
+    let model_of = |args: serde_json::Value| {
+        let call = translate_call(&ToolCallWire {
+            tool_call_id: "s".into(),
+            name: Some("invoke_subagent".into()),
+            args: Some(args),
+            ..ToolCallWire::default()
+        });
+        let Call::Subagent(StartSubagent { model, .. }) = call else { panic!("{call:?}") };
+        model
+    };
+
+    assert_eq!(model_of(json!({ "Prompt": "go", "Model": "flash" })), Some(ModelName::named("flash")));
+    assert_eq!(model_of(json!({ "Prompt": "go", "Model": "pro" })), Some(ModelName::named("pro")));
+    assert_eq!(model_of(json!({ "Prompt": "go", "Model": "inherit" })), None);
+    assert_eq!(model_of(json!({ "Prompt": "go", "Model": "" })), None);
+    assert_eq!(model_of(json!({ "Prompt": "go" })), None);
 }

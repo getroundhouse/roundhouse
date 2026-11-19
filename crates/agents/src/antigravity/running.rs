@@ -183,8 +183,9 @@ pub(super) async fn start_conversation(
     };
     let hold_plans = matches!(purpose, launch::Purpose::Agent);
     let skip_permissions = purpose.skips_permissions(mode);
-    let process = transport(context, args, (model, mode, effort, hold_plans, skip_permissions), output, tap).await?;
-    if let Err(error) = launch::conversation(&process.shared, spec, options, purpose).await {
+    let (process, agent_version) =
+        transport(context, args, (model, mode, effort, hold_plans, skip_permissions), output, tap).await?;
+    if let Err(error) = launch::conversation(&process.shared, spec, options, purpose, agent_version).await {
         process.shared.stop().await;
         return Err(error);
     }
@@ -197,7 +198,7 @@ async fn transport(
     initial: (ModelName, ApprovalMode, settings::Effort, bool, bool),
     output: mpsc::Sender<AgentOutput>,
     tap: Option<crate::tap::Tap>,
-) -> Result<Arc<AntigravityProcess>, AgentError> {
+) -> Result<(Arc<AntigravityProcess>, Option<String>), AgentError> {
     let launched = launch::launch(&context.bin, args, &context.cwd, &context.env, &context.options)?;
     let rpc = Arc::new(Rpc::new(launched.stdin, Dialect::JsonRpc2, "Antigravity", tap.clone()));
     let replacing = Arc::new(AtomicBool::new(false));
@@ -230,11 +231,14 @@ async fn transport(
         shared.clone(),
     ));
     let process = Arc::new(AntigravityProcess { shared });
-    if let Err(error) = launch::initialize(&process.shared).await {
-        process.shared.stop().await;
-        return Err(error);
-    }
-    Ok(process)
+    let agent_version = match launch::initialize(&process.shared).await {
+        Ok(version) => version,
+        Err(error) => {
+            process.shared.stop().await;
+            return Err(error);
+        }
+    };
+    Ok((process, agent_version))
 }
 
 pub(super) fn ensure_model_offers_effort(model: &ModelName, effort: &settings::Effort) -> Result<(), AgentError> {

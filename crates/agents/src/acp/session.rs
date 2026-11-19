@@ -34,6 +34,29 @@ pub(crate) fn mcp_http_server(name: &str, tools: &ToolServer) -> Value {
 
 #[derive(Clone, Debug, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
+struct InitializeResponse {
+    #[serde(default)]
+    agent_info: Option<AgentInfo>,
+}
+
+#[derive(Clone, Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AgentInfo {
+    #[serde(default)]
+    version: Option<String>,
+}
+
+/// Reads `agentInfo.version` from an ACP `initialize` response when present and non-empty.
+pub(crate) fn parse_agent_version(value: &Value) -> Option<String> {
+    serde_json::from_value::<InitializeResponse>(value.clone())
+        .ok()
+        .and_then(|response| response.agent_info)
+        .and_then(|info| info.version)
+        .filter(|version| !version.is_empty())
+}
+
+#[derive(Clone, Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub(crate) struct SessionResponse {
     #[serde(default)]
     pub(crate) session_id: String,

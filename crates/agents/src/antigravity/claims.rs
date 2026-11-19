@@ -1,4 +1,6 @@
-use protocol::capability::{Capabilities, Claimed, approvals, background, conversation, output, settings, turns};
+use protocol::capability::{
+    Capabilities, Claimed, approvals, background, context, conversation, output, settings, turns,
+};
 
 pub(super) fn claims() -> Capabilities {
     let mut claims = Capabilities::default();
@@ -30,6 +32,7 @@ pub(super) fn claims() -> Capabilities {
         ..Default::default()
     });
     claims.context.usage = Some(Claimed {});
+    claims.context.compaction = Some(context::Compaction { keeping: context::Keeping::Ignored });
     claims
 }
 

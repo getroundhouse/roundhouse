@@ -10,21 +10,16 @@ use crate::acp::{self, StopReason};
 use crate::jsonrpc::RpcReply;
 
 pub(super) async fn prompt_finished(shared: &Arc<Shared>, rpc_id: u64, reply: RpcReply, raw: String) {
-    let transcript_path = shared.state.lock().transcript.as_ref().map(|(path, _)| path.clone());
-    let settled_len = match transcript_path {
-        Some(path) => tokio::fs::metadata(path).await.ok().map(|meta| meta.len()),
-        None => None,
-    };
+    let transcript = read_turn_transcript(shared).await;
     let (entry, has_remaining, was_cancelling) = {
-        let mut state = shared.state.lock();
+        let mut guard = shared.state.lock();
+        let state = &mut *guard;
         let Some(pos) = state.prompts.iter().position(|p| p.rpc_id == rpc_id) else { return };
         let entry = state.prompts.remove(pos);
         let has_remaining = !state.prompts.is_empty();
         if !has_remaining {
             state.ending = Ending::Recording;
-            if let (Some((_, floor)), Some(len)) = (&mut state.transcript, settled_len) {
-                *floor = (*floor).max(len);
-            }
+            apply_turn_transcript(state, transcript);
         }
         (entry, has_remaining, state.cancelling)
     };
@@ -58,8 +53,73 @@ pub(super) async fn prompt_finished(shared: &Arc<Shared>, rpc_id: u64, reply: Rp
                 )
                 .await;
         }
-        (Err(error), false) => finish_last_err(shared, &entry, &error, raw).await,
-        (Ok(result), false) => finish_last_ok(shared, &entry, &result, raw).await,
+        (reply, false) => finish_last(shared, &entry, reply, raw).await,
+    }
+}
+
+async fn finish_last(shared: &Arc<Shared>, entry: &InFlightPrompt, reply: RpcReply, raw: String) {
+    match (reply, entry.origin) {
+        (Err(error), super::state::PromptOrigin::Compact { asked, .. }) => {
+            super::compact::finish_err(shared, asked, &error, raw).await;
+        }
+        (Ok(result), super::state::PromptOrigin::Compact { asked, started_at }) => {
+            super::compact::finish_ok(shared, asked, started_at, &result, raw).await;
+        }
+        (Err(error), super::state::PromptOrigin::Prompt(_) | super::state::PromptOrigin::WakeupDrain { .. }) => {
+            finish_last_err(shared, entry, &error, raw).await;
+        }
+        (Ok(result), super::state::PromptOrigin::Prompt(_) | super::state::PromptOrigin::WakeupDrain { .. }) => {
+            finish_last_ok(shared, entry, &result, raw).await;
+        }
+    }
+}
+
+enum TurnTranscript {
+    None,
+    /// Bytes read starting at `from` while live subagents exist; only complete lines advance the cursors.
+    Read {
+        from: u64,
+        bytes: Vec<u8>,
+    },
+    /// No live subagents: advance both cursors to the file's settled length.
+    AdvanceTo(u64),
+}
+
+async fn read_turn_transcript(shared: &Shared) -> TurnTranscript {
+    let scan = {
+        let state = shared.state.lock();
+        state
+            .transcript
+            .as_ref()
+            .map(|cursor| (cursor.path.clone(), cursor.async_agents_offset, state.async_agents.has_live_subagents()))
+    };
+    match scan {
+        Some((path, from, true)) => {
+            let bytes = super::wakeup::read_since(&path, from).await.unwrap_or_default();
+            TurnTranscript::Read { from, bytes }
+        }
+        Some((path, _, false)) => tokio::fs::metadata(path)
+            .await
+            .ok()
+            .map_or(TurnTranscript::None, |meta| TurnTranscript::AdvanceTo(meta.len())),
+        None => TurnTranscript::None,
+    }
+}
+
+fn apply_turn_transcript(state: &mut super::state::Conversation, transcript: TurnTranscript) {
+    let Some(cursor) = state.transcript.as_mut() else { return };
+    match transcript {
+        TurnTranscript::Read { from, bytes } => {
+            let skip = usize::try_from(cursor.async_agents_offset.saturating_sub(from)).unwrap_or(bytes.len());
+            let slice = bytes.get(skip..).unwrap_or_default();
+            let consumed = state.async_agents.on_transcript_bytes(slice);
+            let next = from
+                .saturating_add(u64::try_from(skip).unwrap_or(u64::MAX))
+                .saturating_add(u64::try_from(consumed).unwrap_or(u64::MAX));
+            cursor.advance_both(next);
+        }
+        TurnTranscript::AdvanceTo(len) => cursor.advance_both(len),
+        TurnTranscript::None => {}
     }
 }
 
@@ -161,6 +221,17 @@ pub(super) async fn record_end(
     tokens: Option<TokenUsage>,
     raw: Option<String>,
 ) {
+    record_compacted_end(shared, outcome, error, tokens, false, raw).await;
+}
+
+pub(super) async fn record_compacted_end(
+    shared: &Arc<Shared>,
+    outcome: TurnOutcome,
+    error: Option<String>,
+    tokens: Option<TokenUsage>,
+    only_compacted: bool,
+    raw: Option<String>,
+) {
     let (reply, model, tokens) = {
         let mut state = shared.state.lock();
         state.add_tokens(tokens);
@@ -179,7 +250,7 @@ pub(super) async fn record_end(
                 started_at_ms: None,
                 models,
                 tokens,
-                only_compacted: false,
+                only_compacted,
                 request_failed: false,
             },
             raw,
@@ -243,9 +314,7 @@ pub(super) async fn settle_turn(shared: &Shared) {
             }
         });
         state.denied_calls.retain(|id| state.calls.contains_key(id));
-        if state.async_agents == super::state::AsyncAgents::SpawnedThisTurn {
-            state.async_agents = super::state::AsyncAgents::Active;
-        }
+        state.async_agents.on_turn_settled();
         let surviving_tasks = state.list_surviving_commands();
         (requests, calls, surviving_tasks)
     };

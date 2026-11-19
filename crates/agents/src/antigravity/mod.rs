@@ -1,8 +1,10 @@
 //! Drives the user's installed `agy` CLI over ACP 1.0 (`agy acp --disable-telemetry`). See `docs/antigravity-cli.md`.
 
 mod approvals;
+mod async_agents;
 mod calls;
 mod claims;
+mod compact;
 mod control;
 mod description;
 mod files;

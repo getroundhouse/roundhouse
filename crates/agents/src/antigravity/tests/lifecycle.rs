@@ -3,12 +3,13 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use protocol::capability::conversation::Start;
+use protocol::event::EventBody;
 use protocol::prompt::Prompt;
 use protocol::worker::ToolsToken;
 use serde_json::{Value, json};
 
 use super::harness::{Harness, PROGRAM};
-use crate::{AgentOptions, AgentProcess, BinaryLookup, ToolServer};
+use crate::{AgentOptions, AgentOutput, AgentProcess, BinaryLookup, ToolServer};
 
 #[tokio::test]
 async fn title_for_returns_title_in_plan_mode_without_asking_and_cleans_up_session_files() {
@@ -85,7 +86,9 @@ async fn agent_launch_passes_roundhouse_mcp_server_in_session_new_with_bearer_he
         config: room.path().join("mcp.json"),
     };
     let mut h = Harness::with_tools(
-        &json!([]),
+        &json!([
+            {"on": "initialize", "actions": [{"result": {"agentInfo": {"name": "Antigravity ACP Server", "version": "1.5.12"}}}]}
+        ]),
         super::super::claims::full_access(),
         Start::New { conversation: None },
         Some(tools),
@@ -101,6 +104,12 @@ async fn agent_launch_passes_roundhouse_mcp_server_in_session_new_with_bearer_he
             "headers": [{"name": "Authorization", "value": "Bearer tok-123"}]
         }])
     );
+    let init_version = loop {
+        if let AgentOutput::Event { body: EventBody::AgentInit { agent_version, .. }, .. } = h.next().await {
+            break agent_version;
+        }
+    };
+    assert_eq!(init_version.as_deref(), Some("1.5.12"));
     agent.stop().await;
 }
 

@@ -44,10 +44,11 @@ impl AgentProcess for AntigravityProcess {
             Control::Cancel => cancel(&self.shared).await,
             Control::Decide { approval, decision } => approvals::decide(&self.shared, approval, decision).await,
             Control::Change(settings) => change(&self.shared, settings).await,
+            // Antigravity reads nothing to keep, which its claims say, so none is sent.
+            Control::Compact { asked, .. } => super::compact::request(&self.shared, *asked).await,
             Control::Note { .. }
             | Control::Aside { .. }
             | Control::Overrule { .. }
-            | Control::Compact { .. }
             | Control::Rewind { .. }
             | Control::UndoRewind
             | Control::RestoreFiles { .. }
@@ -89,13 +90,26 @@ pub(super) async fn send_prompt_rpc(
     seq: Option<Seq>,
     blocks: Vec<Value>,
 ) -> Result<(), AgentError> {
-    if seq.is_some() && !shared.state.lock().waiting.is_empty() {
-        return Err(AgentError::Refused("Answer Antigravity's open request before sending another prompt".into()));
+    {
+        let state = shared.state.lock();
+        if state.is_compacting() {
+            return Err(AgentError::Refused(
+                "Wait for Antigravity to finish compacting before sending another prompt".into(),
+            ));
+        }
+        if seq.is_some() && !state.waiting.is_empty() {
+            return Err(AgentError::Refused("Answer Antigravity's open request before sending another prompt".into()));
+        }
     }
     ensure_mode_process(shared).await?;
     let user_chunks = non_empty_text_chunks(&blocks);
     let rpc = shared.rpc();
     let ((session_id, rpc_id), _) = between_endings(shared, |state| {
+        if state.is_compacting() {
+            return Err(AgentError::Refused(
+                "Wait for Antigravity to finish compacting before sending another prompt".into(),
+            ));
+        }
         if seq.is_some() && !state.waiting.is_empty() {
             return Err(AgentError::Refused("Answer Antigravity's open request before sending another prompt".into()));
         }
@@ -152,7 +166,7 @@ fn non_empty_text_chunks(blocks: &[Value]) -> usize {
         .count()
 }
 
-async fn write_prompt_request(
+pub(super) async fn write_prompt_request(
     shared: &Shared,
     rpc: &crate::jsonrpc::Rpc,
     rpc_id: u64,
@@ -173,7 +187,7 @@ async fn write_prompt_request(
 /// Runs `act` on the conversation once no turn is part way through being recorded as ended, under the lock that saw
 /// none was, so a turn's last prompt can't finish between the check and `act`. Returns what `act` returned, and
 /// `Shared::turn_done` as it was then, for a wait on the next end. A turn still ending after `END_WAIT` stops `agy`.
-async fn between_endings<T>(
+pub(super) async fn between_endings<T>(
     shared: &Shared,
     mut act: impl FnMut(&mut Conversation) -> Result<T, AgentError>,
 ) -> Result<(T, u64), AgentError> {

@@ -25,7 +25,7 @@ Compacting swaps what the agent holds for a summary, and the agent carries on fr
 
 - **The agent compacts by itself** as its context fills.
 - **`Compact now`** on the ring's card compacts straight away.
-- **`/compact`** typed in the composer does the same, with what follows it as what to keep, for an agent that reads it, as Claude does. Codex compacts without it.
+- **`/compact`** typed in the composer does the same, with what follows it as what to keep, for an agent that reads it, as Claude does. Codex and Antigravity compact without it.
 
 A compaction is a rule across the chat: `Compacted`, or `Compacted automatically`, then how many tokens the context went from and to, such as `226.9k → 9.0k tokens`, and how long it took. Click it for the summary the agent carries on from.
 

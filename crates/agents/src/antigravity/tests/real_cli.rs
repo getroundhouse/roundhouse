@@ -31,7 +31,7 @@ use crate::conformance::http::{self, Server, json_response};
 use crate::{AgentOptions, AgentOutput, AgentProcess, BinaryLookup};
 use protocol::prompt::PromptFrom;
 
-const RUN: RunId = RunId::new(1);
+pub(super) const RUN: RunId = RunId::new(1);
 
 fn find_agy() -> std::path::PathBuf {
     let lookup =
@@ -39,7 +39,7 @@ fn find_agy() -> std::path::PathBuf {
     crate::binary::resolve_binary("agy", &[], &lookup).expect("expected `agy` on PATH")
 }
 
-fn text_sse(text: &str) -> Value {
+pub(super) fn text_sse(text: &str) -> Value {
     json!({
         "candidates": [{ "content": { "role": "model", "parts": [{ "text": text }] }, "finishReason": "STOP" }],
         "usageMetadata": { "promptTokenCount": 80, "candidatesTokenCount": 12, "totalTokenCount": 92 }
@@ -59,7 +59,7 @@ fn cmd_call(cmd: &str, summary: &str, wait_ms: u64) -> (&'static str, Value) {
     ("run_command", json!({ "CommandLine": cmd, "toolSummary": summary, "WaitMsBeforeAsync": wait_ms }))
 }
 
-async fn scripted_gemini(script: impl Fn(&Value) -> Vec<Value> + Send + Sync + 'static) -> Server {
+pub(super) async fn scripted_gemini(script: impl Fn(&Value) -> Vec<Value> + Send + Sync + 'static) -> Server {
     Server::start(move |path, req, made| {
         if !path.contains(":streamGenerateContent") {
             return json_response(StatusCode::NOT_FOUND, &json!({ "error": "not scripted" }));
@@ -73,7 +73,7 @@ async fn scripted_gemini(script: impl Fn(&Value) -> Vec<Value> + Send + Sync + '
     .unwrap()
 }
 
-async fn spawn_real_agy(
+pub(super) async fn spawn_real_agy(
     room: &Path,
     server: &Server,
     mode: ApprovalMode,
@@ -115,7 +115,7 @@ async fn spawn_real_agy(
     (agent, rx)
 }
 
-async fn recv_event(rx: &mut mpsc::Receiver<AgentOutput>) -> EventBody {
+pub(super) async fn recv_event(rx: &mut mpsc::Receiver<AgentOutput>) -> EventBody {
     loop {
         let item = tokio::time::timeout(Duration::from_secs(20), rx.recv())
             .await
@@ -127,7 +127,7 @@ async fn recv_event(rx: &mut mpsc::Receiver<AgentOutput>) -> EventBody {
     }
 }
 
-fn all_text(request: &Value) -> String {
+pub(super) fn all_text(request: &Value) -> String {
     request["contents"]
         .as_array()
         .into_iter()

@@ -6,7 +6,7 @@ Which model a chat runs, how hard it thinks, and whether it asks before changing
 
 The new-workspace dialog offers Claude, Codex and Antigravity. In an existing workspace, the `+` beside the chat tabs offers a new chat for each agent. A chat keeps its agent; choose another by opening another chat.
 
-Codex looks up models and their supported effort levels under your CLI sign-in and the selected project, even for your first workspace. Roundhouse asks your CLI once and shares the list across the project's chats and the new-workspace dialog. It asks again when the list is an hour old, so a model your CLI gained since shows up, or straight away when you choose Retry, which also appears if the lookup fails. Antigravity uses the catalog in this Roundhouse build and starts with Gemini 4 Carbon at Medium effort. Switching models keeps your effort when the model supports it, otherwise it selects the model’s default.
+Codex looks up models and their supported effort levels under your CLI sign-in and the selected project, even for your first workspace. Roundhouse asks your CLI once and shares the list across the project's chats and the new-workspace dialog. It asks again when the list is an hour old, so a model your CLI gained since shows up, or straight away when you choose Retry, which also appears if the lookup fails. Antigravity uses the catalog in this Roundhouse build and starts with Gemini 4 Neon at High effort. Switching models keeps your effort when the model supports it, otherwise it selects the model’s default.
 
 ## The model and its effort
 
