@@ -48,5 +48,65 @@
       "width": 170,
       "height": 48
     }
+  },
+  "look::ChipSize": {
+    "Regular": {
+      "x": 252,
+      "y": 1107,
+      "width": 720,
+      "height": 48
+    },
+    "Small": {
+      "x": 410,
+      "y": 1199,
+      "width": 428,
+      "height": 40
+    }
+  },
+  "look::IssueState": {
+    "Done": {
+      "x": 514,
+      "y": 579,
+      "width": 154,
+      "height": 48
+    },
+    "NotPlanned": {
+      "x": 676,
+      "y": 579,
+      "width": 154,
+      "height": 48
+    },
+    "Open": {
+      "x": 356,
+      "y": 579,
+      "width": 150,
+      "height": 48
+    }
+  },
+  "look::PullRequestState": {
+    "Closed": {
+      "x": 750,
+      "y": 667,
+      "width": 154,
+      "height": 48
+    },
+    "Draft": {
+      "x": 426,
+      "y": 667,
+      "width": 154,
+      "height": 48
+    },
+    "Merged": {
+      "x": 588,
+      "y": 667,
+      "width": 154,
+      "height": 48
+    },
+    "Open": {
+      "x": 268,
+      "y": 667,
+      "width": 150,
+      "height": 48
+    }
   }
 }
