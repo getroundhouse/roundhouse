@@ -85,34 +85,29 @@ async fn prompt_to(shared: &Arc<Shared>, seq: Seq, prompt: &Prompt<AttachmentFil
     send_prompt_rpc(shared, Some(seq), blocks).await
 }
 
+fn ensure_prompt_ready(state: &Conversation, seq: Option<Seq>) -> Result<(), AgentError> {
+    if state.is_compacting() {
+        return Err(AgentError::Refused(
+            "Wait for Antigravity to finish compacting before sending another prompt".into(),
+        ));
+    }
+    if seq.is_some() && !state.waiting.is_empty() {
+        return Err(AgentError::Refused("Answer Antigravity's open request before sending another prompt".into()));
+    }
+    Ok(())
+}
+
 pub(super) async fn send_prompt_rpc(
     shared: &Arc<Shared>,
     seq: Option<Seq>,
     blocks: Vec<Value>,
 ) -> Result<(), AgentError> {
-    {
-        let state = shared.state.lock();
-        if state.is_compacting() {
-            return Err(AgentError::Refused(
-                "Wait for Antigravity to finish compacting before sending another prompt".into(),
-            ));
-        }
-        if seq.is_some() && !state.waiting.is_empty() {
-            return Err(AgentError::Refused("Answer Antigravity's open request before sending another prompt".into()));
-        }
-    }
+    between_endings(shared, |state| ensure_prompt_ready(state, seq)).await?;
     ensure_mode_process(shared).await?;
     let user_chunks = non_empty_text_chunks(&blocks);
     let rpc = shared.rpc();
     let ((session_id, rpc_id), _) = between_endings(shared, |state| {
-        if state.is_compacting() {
-            return Err(AgentError::Refused(
-                "Wait for Antigravity to finish compacting before sending another prompt".into(),
-            ));
-        }
-        if seq.is_some() && !state.waiting.is_empty() {
-            return Err(AgentError::Refused("Answer Antigravity's open request before sending another prompt".into()));
-        }
+        ensure_prompt_ready(state, seq)?;
         let session_id = state.session_id.clone().ok_or(AgentError::Exited)?;
         if state.prompts.is_empty() && state.ending != Ending::HeldForPlan {
             state.reply = None;
@@ -350,18 +345,29 @@ async fn apply_effort(
 
 async fn cancel(shared: &Arc<Shared>) -> Result<(), AgentError> {
     let (open, before) = between_endings(shared, |state| {
-        if state.prompts.is_empty() && state.ending == Ending::Not && state.waiting.is_empty() {
+        let active_idle = state.idle_own_turn == super::wakeup::IdleOwnTurn::Active;
+        if state.prompts.is_empty() && state.ending == Ending::Not && state.waiting.is_empty() && !active_idle {
             return Ok(None);
         }
-        state.cancelling = !state.prompts.is_empty();
-        Ok(Some((state.session_id.clone(), !state.prompts.is_empty())))
+        let has_prompts = !state.prompts.is_empty();
+        state.cancelling = has_prompts || active_idle;
+        Ok(Some((state.session_id.clone(), has_prompts, active_idle)))
     })
     .await?;
-    let Some((session_id, has_prompts)) = open else { return Ok(()) };
+    let Some((session_id, has_prompts, active_idle)) = open else { return Ok(()) };
     // Waits on a count, and the turn may have ended already, which `wait_for` sees in the count before it waits.
     let mut done = shared.turn_done.subscribe();
     approvals::cancel_native_waiters(shared).await;
     if !has_prompts {
+        if active_idle {
+            if let Some(session_id) = session_id {
+                let _ = shared.rpc().notify("session/cancel", json!({ "sessionId": session_id })).await;
+            }
+            advance_transcript_floor(shared).await;
+            let mut state = shared.state.lock();
+            state.idle_own_turn = super::wakeup::IdleOwnTurn::None;
+            state.cancelling = false;
+        }
         notifications::flush_streams(shared).await;
         turn::settle_turn(shared).await;
         turn::record_end(shared, TurnOutcome::Cancelled, None, None, None).await;
@@ -378,4 +384,14 @@ async fn cancel(shared: &Arc<Shared>) -> Result<(), AgentError> {
         return Err(AgentError::NoAnswer);
     }
     Ok(())
+}
+
+async fn advance_transcript_floor(shared: &Shared) {
+    let path = shared.state.lock().transcript.as_ref().map(|cursor| cursor.path.clone());
+    if let Some(path) = path
+        && let Ok(meta) = tokio::fs::metadata(path).await
+        && let Some(cursor) = shared.state.lock().transcript.as_mut()
+    {
+        cursor.wakeup_floor = cursor.wakeup_floor.max(meta.len());
+    }
 }

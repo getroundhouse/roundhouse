@@ -199,3 +199,39 @@ fn drain_cancels_when_idle_and_stays_open_while_background_tasks_or_subagents_re
     conv.prompts.push_back(drain_prompt(5));
     assert_eq!(conv.accept_user_chunk(), UserChunk::CancelDrain { session_id: AgentSessionId::from("s-1") });
 }
+
+#[tokio::test]
+async fn prompt_sent_during_recording_waits_and_runs_pending_mode_swap_before_prompting() {
+    use std::time::Duration;
+
+    use super::super::state::Ending;
+
+    let script = json!([{
+        "on": "session/prompt", "at": 1,
+        "actions": [msg_chunk("In plan mode."), {"result": {"stopReason": "end_turn"}}]
+    }]);
+    let mut h = Harness::new(&script, super::super::claims::full_access(), Start::New { conversation: None });
+    let agent = h.started().await;
+    let first_pid = agent.pid();
+    {
+        let mut state = agent.shared.state.lock();
+        state.mode = super::super::claims::plan();
+        state.ending = Ending::Recording;
+    }
+    let watching = agent.shared.turn_done.receiver_count();
+
+    let sending = tokio::spawn({
+        let agent = agent.clone();
+        async move { agent.prompt(Seq::FIRST, &Prompt::new("plan now")).await }
+    });
+    waiting::task::until(Duration::from_secs(5), "prompt should wait on Ending::Recording", || {
+        sending.is_finished() || agent.shared.turn_done.receiver_count() != watching
+    })
+    .await;
+    assert!(!sending.is_finished(), "send_prompt_rpc must wait out Ending::Recording before ensure_mode_process");
+    agent.shared.count_end(&mut agent.shared.state.lock(), Ending::Not);
+    tokio::time::timeout(Duration::from_secs(5), sending).await.unwrap().unwrap().unwrap();
+
+    assert_ne!(agent.pid(), first_pid, "pending mode swap must run before sending the prompt");
+    agent.stop().await;
+}

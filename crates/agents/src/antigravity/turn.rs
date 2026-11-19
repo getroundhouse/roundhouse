@@ -179,24 +179,8 @@ async fn finish_last_ok(shared: &Arc<Shared>, entry: &InFlightPrompt, result: &V
         return;
     }
     let ended_normally = self_cancelled || parsed.stop_reason == StopReason::EndTurn;
-    let held_plan = if !cancelled && ended_normally {
-        let mut state = shared.state.lock();
-        let plan = if state.hold_plans
-            && state.process_mode.plan
-            && state.waiting.is_empty()
-            && !state.awaiting_background_work()
-        {
-            state.reply.take().filter(|text| !text.trim().is_empty())
-        } else {
-            None
-        };
-        if plan.is_some() {
-            state.add_tokens(parsed.tokens);
-        }
-        plan
-    } else {
-        None
-    };
+    let held_plan =
+        if !cancelled && ended_normally { take_held_plan(&mut shared.state.lock(), parsed.tokens) } else { None };
     if let Some(plan) = held_plan {
         approvals::ask_plan(shared, plan).await;
         shared.count_end(&mut shared.state.lock(), Ending::HeldForPlan);
@@ -212,6 +196,54 @@ async fn finish_last_ok(shared: &Arc<Shared>, entry: &InFlightPrompt, result: &V
     };
     let end_raw = (!self_cancelled).then_some(raw);
     record_end(shared, outcome, None, parsed.tokens, end_raw).await;
+}
+
+/// Settles a between-turn idle `OwnTurn` streamed natively by `agy` 1.5.12+ once `transcript.jsonl` records its final
+/// `PLANNER_RESPONSE` or `ERROR_MESSAGE`. Returns `true` when the wakeup was consumed so the watcher returns to `Idle`.
+pub(super) async fn settle_idle_wakeup(shared: &Arc<Shared>, outcome: TurnOutcome, watch_offset: u64) -> bool {
+    let _ordered = shared.controls.lock().await;
+    let active = {
+        let mut state = shared.state.lock();
+        if !state.prompts.is_empty() || state.ending != Ending::Not || !state.waiting.is_empty() {
+            return false;
+        }
+        if let Some(cursor) = state.transcript.as_mut() {
+            cursor.wakeup_floor = cursor.wakeup_floor.max(watch_offset);
+        }
+        let active = state.idle_own_turn == super::wakeup::IdleOwnTurn::Active;
+        if active {
+            state.idle_own_turn = super::wakeup::IdleOwnTurn::None;
+            state.ending = Ending::Recording;
+        }
+        active
+    };
+    if !active {
+        return true;
+    }
+    notifications::flush_streams(shared).await;
+    let held_plan = (outcome == TurnOutcome::Success).then(|| take_held_plan(&mut shared.state.lock(), None)).flatten();
+    if let Some(plan) = held_plan {
+        approvals::ask_plan(shared, plan).await;
+        shared.count_end(&mut shared.state.lock(), Ending::HeldForPlan);
+        return true;
+    }
+    settle_turn(shared).await;
+    record_end(shared, outcome, None, None, None).await;
+    true
+}
+
+fn take_held_plan(state: &mut super::state::Conversation, tokens: Option<TokenUsage>) -> Option<String> {
+    let plan =
+        if state.hold_plans && state.process_mode.plan && state.waiting.is_empty() && !state.awaiting_background_work()
+        {
+            state.reply.take().map(|text| text.trim().to_owned()).filter(|text| !text.is_empty())
+        } else {
+            None
+        };
+    if plan.is_some() {
+        state.add_tokens(tokens);
+    }
+    plan
 }
 
 pub(super) async fn record_end(
@@ -234,6 +266,7 @@ pub(super) async fn record_compacted_end(
 ) {
     let (reply, model, tokens) = {
         let mut state = shared.state.lock();
+        state.idle_own_turn = super::wakeup::IdleOwnTurn::None;
         state.add_tokens(tokens);
         (state.reply.take(), state.model.clone(), state.earlier_tokens.take())
     };
@@ -288,6 +321,7 @@ pub(super) async fn settle_replaced_child(shared: &Shared) {
 pub(super) async fn settle_all(shared: &Shared) {
     let prompts: Vec<Seq> = {
         let mut state = shared.state.lock();
+        state.idle_own_turn = super::wakeup::IdleOwnTurn::None;
         for open in state.calls.values_mut() {
             open.outlives_turn = false;
         }
