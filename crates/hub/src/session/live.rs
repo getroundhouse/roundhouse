@@ -1,12 +1,12 @@
 use super::ChatSettings;
 use super::controls::Askable;
-use super::{Starting, commands, ingest, limits, messages, progress};
+use super::{Origin, Starting, commands, ingest, limits, messages, progress};
 use crate::attachment_files::FileFor;
 use crate::error::internal;
 use crate::hub::Hub;
 use crate::store;
 use crate::store::SessionLogin;
-use commands::run_commands;
+use commands::{Sendable, run_commands};
 use ingest::run_ingest;
 use messages::{Command, Item};
 use parking_lot::Mutex;
@@ -56,34 +56,6 @@ pub(crate) struct Snapshot {
     pub last_seq: Seq,
     pub tail: Tail,
     pub version: u64,
-}
-
-/// Where an event comes from, which decides what it may change.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum Origin {
-    /// Something the hub knows itself.
-    Hub,
-    /// One launch of the agent, from it or about it. `current` is false for a leftover from one that's
-    /// been replaced, which mustn't change the status of the session its replacement is now running. `numbered` is its
-    /// number among what the agent's worker sent, which the session keeps with it, so a hub that connects to the
-    /// worker again drops what the worker sends it again.
-    Run { run: RunId, current: bool, numbered: Option<u64> },
-}
-
-impl Origin {
-    pub(super) fn run(self) -> Option<RunId> {
-        match self {
-            Origin::Hub => None,
-            Origin::Run { run, .. } => Some(run),
-        }
-    }
-
-    pub(super) fn speaks_for_session(self) -> bool {
-        match self {
-            Origin::Hub => true,
-            Origin::Run { current, .. } => current,
-        }
-    }
 }
 
 /// One launch of an agent, on one connection to a worker.
@@ -137,6 +109,10 @@ pub(super) struct LiveState {
     /// of it runs under is, which puts it on that.
     pub(super) login: SessionLogin,
     pub(super) closed_at_ms: Option<i64>,
+    /// Prompts recorded for the agent that it's sent once its turn ends, oldest first, as
+    /// [`super::commands::Sendable`]'s module says. Only this hub has them, so a hub that goes before the turn ends
+    /// loses them, and they stay untaken.
+    pub(super) after_the_turn: Vec<Sendable>,
     /// Only exists while someone is subscribed. It's a large buffer, and most sessions a long-running
     /// hub has touched have nobody watching.
     pub(super) live: Option<broadcast::Sender<Live>>,
@@ -223,6 +199,7 @@ impl LiveSession {
                 settings: ChatSettings::of(&stored.session),
                 login: SessionLogin::of_record(&stored.session),
                 closed_at_ms: stored.session.closed_at_ms,
+                after_the_turn: Vec::new(),
                 live: None,
             }),
             recording: tokio::sync::Mutex::new(()),

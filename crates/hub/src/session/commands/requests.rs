@@ -1,6 +1,7 @@
 use super::super::controls::Askable;
 use super::super::decisions::refusal;
 use super::super::{Command, LiveSession, LiveState, Origin};
+use super::after_the_turn::Sendable;
 use crate::hub::Hub;
 use protocol::attachment::Attachment;
 use protocol::capability::Control;
@@ -18,6 +19,13 @@ use tracing::warn;
 pub(super) enum Asking {
     Prompt(Prompt<Attachment>),
     Compact { keeping: Option<String> },
+}
+
+/// What the agent's run did with what it was sent.
+pub(super) enum Sent {
+    Took,
+    /// It won't take a prompt while its turn runs, so it took nothing, as [`Delivery::AfterTheTurn`] says.
+    AfterTheTurn,
 }
 
 pub(crate) async fn run_commands(session: Arc<LiveSession>, mut commands: mpsc::Receiver<Command>) {
@@ -39,6 +47,7 @@ pub(crate) async fn run_commands(session: Arc<LiveSession>, mut commands: mpsc::
             Command::SendQueued => session.send_queued().await,
             Command::SendQueuedNow { client_msg_id, reply } => session.send_queued_now(client_msg_id, reply).await,
             Command::WakeAgent => session.handle_wake_agent().await,
+            Command::SendAfterTheTurn => session.after_the_turn().await,
             Command::End => break,
         }
     }
@@ -52,19 +61,26 @@ impl LiveSession {
                 let placed = self.hub()?.place_attachments(&self.id, &self.workspace_id, &prompt.files).await?;
                 let prompt = prompt.with_files(placed);
                 let extras = protocol::capability::prompts::Extras::default();
-                self.send_to_agent(Control::Prompt { seq, prompt, extras }).await
+                self.send_prompt(Sendable { seq, prompt, extras }).await
             }
-            Asking::Compact { keeping } => self.send_to_agent(Control::Compact { asked: seq, keeping }).await,
+            Asking::Compact { keeping } => match self.send_to_agent(Control::Compact { asked: seq, keeping }).await? {
+                Sent::Took => Ok(()),
+                Sent::AfterTheTurn => {
+                    Err(ApiError::new(ErrorCode::Worker, "the agent won't compact while its turn runs"))
+                }
+            },
         }
     }
 
-    /// Sends what was recorded to the agent, starting one if it has to.
-    pub(super) async fn send_to_agent(&self, control: Control) -> Result<(), ApiError> {
+    /// Sends what was recorded to the agent, starting one if it has to, and says what its run did with it.
+    pub(super) async fn send_to_agent(&self, control: Control) -> Result<Sent, ApiError> {
         // Twice, because the agent can exit between checking on it and sending to it.
         for _ in 0..2 {
             let link = self.ensure_agent().await?;
-            if self.control_agent(&link, control.clone()).await? == Delivery::Delivered {
-                return Ok(());
+            match self.control_agent(&link, control.clone()).await? {
+                Delivery::Delivered => return Ok(Sent::Took),
+                Delivery::AfterTheTurn => return Ok(Sent::AfterTheTurn),
+                Delivery::AgentNotRunning => {}
             }
             let mut state = self.state.lock();
             if state.agent.is_some_and(|agent| agent.link == link.id) {
@@ -158,20 +174,25 @@ impl LiveSession {
         }
         self.warn_if_setup_failed(hub).await;
         if let Err(e) = self.forward(seq, asking).await {
-            self.record_or_log(Origin::Hub, dropped).await;
-            if self.is_closed() {
-                return;
-            }
-            warn!(session = %self.id, "could not deliver what was asked of the agent: {e}");
-            if self.agent_running() {
-                self.record_or_log(
-                    Origin::Hub,
-                    EventBody::Notice { level: NoticeLevel::Error, message: e.message, subagent: None },
-                )
-                .await;
-            } else {
-                self.record_start_failed(&e).await;
-            }
+            self.not_delivered(seq, e).await;
+        }
+    }
+
+    /// Says in the log that what was recorded at `seq` never reached an agent, and why, `e`.
+    pub(super) async fn not_delivered(&self, seq: Seq, e: ApiError) {
+        self.record_or_log(Origin::Hub, EventBody::PromptDropped { prompt: seq }).await;
+        if self.is_closed() {
+            return;
+        }
+        warn!(session = %self.id, "could not deliver what was asked of the agent: {e}");
+        if self.agent_running() {
+            self.record_or_log(
+                Origin::Hub,
+                EventBody::Notice { level: NoticeLevel::Error, message: e.message, subagent: None },
+            )
+            .await;
+        } else {
+            self.record_start_failed(&e).await;
         }
     }
 

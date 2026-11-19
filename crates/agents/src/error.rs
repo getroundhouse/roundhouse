@@ -24,6 +24,10 @@ pub enum AgentError {
     /// The agent understood the request and said no. This is its own wording.
     #[error("{0}")]
     Refused(String),
+    /// The agent won't take a prompt while its turn runs, as when the turn can't be steered, and took nothing, so the
+    /// prompt can go once the turn ends.
+    #[error("the agent won't take a prompt while its turn runs")]
+    AfterTheTurn,
     /// The agent took the request and failed on it, or answered it with nothing, so what it did is unknown. This is its
     /// own wording, or the adapter's when it said nothing.
     #[error("{0}")]

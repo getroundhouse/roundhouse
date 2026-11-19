@@ -20,9 +20,11 @@ area! { "a prompt";
     /// The hub sends a prompt while a turn runs, and the agent takes it into that turn at its next chance, such as once
     /// a running tool finishes, rather than waiting for the turn to end. Its `PromptTaken` comes as it enters the
     /// conversation, which can be as the next turn's when it comes as the turn ends, and a cancel before then drops
-    /// it. When the agent won't take one at all, as Codex won't during a review, the adapter refuses it rather than
-    /// keeping it, and the hub keeps it untaken and sends it again, under the same `seq`, once the turn ends, so only
-    /// the hub holds a prompt nothing has taken.
+    /// it. When the agent won't take one at all, as Codex won't during a review, the worker answers
+    /// [`AfterTheTurn`](crate::worker::Delivery::AfterTheTurn) rather than keeping it, and the hub keeps it untaken and
+    /// sends it again, under the same `seq`, once the turn ends, with any prompt recorded after it, so only the hub
+    /// holds a prompt nothing has taken. A stopped or failed turn drops them, as it does a prompt the agent hadn't
+    /// taken.
     /// Without this, the hub holds every prompt until the turn ends.
     Steer => steer: Claimed,
     /// A prompt can be added to the conversation without starting a turn, for the agent to read with the next prompt

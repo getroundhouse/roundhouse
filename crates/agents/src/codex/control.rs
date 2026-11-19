@@ -83,6 +83,12 @@ async fn change(shared: &Shared, settings: &protocol::capability::settings::Sett
     Ok(())
 }
 
+/// Whether Codex said it took nothing of a prompt: it refused it, or it takes it only once the turn ends, so the hub can
+/// send it again.
+fn took_nothing(error: &AgentError) -> bool {
+    super::rpc::refused(error) || matches!(error, AgentError::AfterTheTurn)
+}
+
 async fn prompt_to(shared: &Shared, seq: Seq, prompt: &Prompt<AttachmentFile>) -> Result<(), AgentError> {
     let mut input = vec![json!({"type":"text","text":prompt.text,"text_elements":[]})];
     for file in &prompt.files {
@@ -104,7 +110,7 @@ async fn prompt_to(shared: &Shared, seq: Seq, prompt: &Prompt<AttachmentFile>) -
     {
         let mut state = shared.state.lock();
         state.sending = None;
-        if result.as_ref().is_err_and(super::rpc::refused) {
+        if result.as_ref().is_err_and(took_nothing) {
             state.untaken.retain(|pending| *pending != seq);
         }
     }
@@ -123,7 +129,7 @@ async fn prompt_to(shared: &Shared, seq: Seq, prompt: &Prompt<AttachmentFile>) -
             }
             Ok(())
         }
-        Err(error) if super::rpc::refused(&error) => Err(error),
+        Err(error) if took_nothing(&error) => Err(error),
         Err(error) => {
             // A failed write or missing reply does not prove nonacceptance. Stop and drain native observations;
             // supervision settles this delivery once, instead of telling the hub it is safe to send again.
