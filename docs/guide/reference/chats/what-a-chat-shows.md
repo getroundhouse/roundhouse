@@ -82,10 +82,10 @@ When an agent needs you to decide something too large for a question, such as wh
 
 ![A proposal in the proposal tab](../../../spec/screens/proposal-tab.png)
 
-The agent can revise a proposal, such as when you ask in the chat for something its options don't have, whether or not you've answered it.
+The agent can revise a proposal, such as when you ask for another round, or ask in the chat for something its options don't have, whether or not you've answered it.
 
 - **The tab shows the newest revision,** with what changed since the one before at the top. Options the agent kept keep their letters, so dropping B leaves C as C.
-- **The call that revised it has a line of its own,** `Revised`, and each line says which revision its call wrote and what became of it: what you chose, or that the next revision replaced it.
+- **The call that revised it has a line of its own,** `Revised`, and each line says which revision its call wrote and what became of it: what you chose, that you asked for another round, or that the next revision replaced it.
 - **If it's revised while you're choosing,** what you'd chosen and written goes, since its options may have changed.
 
 ![A revised proposal in the proposal tab](../../../spec/screens/proposal-revised.png)
@@ -100,6 +100,14 @@ To answer, click `Choose` on the option you want for each question, add a note i
 ![Choosing an option in the proposal tab](../../../spec/screens/proposal-choosing.png)
 
 ![An answered proposal in the chat](../../../spec/screens/proposal-answered.png)
+
+If none of the options will do, say in the note what to change, and click `Another round` instead of choosing.
+
+- **The agent is told you asked for another round,** and reads your note with its tools, as it reads a note with an answer. It needs the note to know what to change, so `Another round` waits until you've written one.
+- **The tab says the next revision comes there,** and shows it in place of this one once the agent writes it, waiting for you to choose.
+- **Your request is drawn in the chat as a line,** `Replied`, as an answer's is.
+
+![Another round asked for in the proposal tab](../../../spec/screens/proposal-another-round.png)
 
 ## Work in the background
 

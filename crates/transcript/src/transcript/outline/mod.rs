@@ -14,6 +14,6 @@ mod tests;
 
 mod ticks;
 pub(super) use ticks::Outline;
-use ticks::{Jumps, Kind, Line, answered};
+use ticks::{Jumps, Kind, Line};
 #[cfg(test)]
 use ticks::{MOST_TICKS, Tick, being_read, look, shown};

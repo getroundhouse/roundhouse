@@ -9,7 +9,7 @@ A chat has an outline at its right: a short tick for each prompt, top to bottom,
 - **Rest the pointer on the ticks** for a numbered list of the prompts, with up to two lines of each.
 - **Click a prompt** to put it at the bottom of the chat, with what came before it above.
 - **A dot marks each compaction,** in its place among the ticks.
-- **A dot marks each answer you gave to a proposal too,** since the chat draws it as the proposal's line, not as a prompt of yours. In the list it says `Answered` and the proposal's title.
+- **A dot marks each answer you gave to a proposal too,** since the chat draws it as the proposal's line, not as a prompt of yours. In the list it says `Answered` and the proposal's title, or `Replied` when you asked for another round.
 - **It has every prompt, however long the chat,** including those too far back for the app to have loaded.
 
 ![The outline's list, open over its ticks](../../../spec/screens/outline-list.png)

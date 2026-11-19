@@ -51,8 +51,8 @@ fn a_proposal_is_answered_once_with_its_prompt_queued_in_its_chat() {
     let dir = tempfile::tempdir().unwrap();
     let store = store_with_session(dir.path());
     let (proposed, _) = made(store.insert_proposal(&fixtures::proposal("p"), &"k".into()).unwrap());
-    let answered = Choice { chosen: vec![OptionPlace(1)], note: "Keep it small".into(), at_ms: 5 };
-    let told = |_: &Proposal, _: &Choice| Prompt::new("I chose B");
+    let answered = Response::Chose(Choice { chosen: vec![OptionPlace(1)], note: "Keep it small".into(), at_ms: 5 });
+    let told = |_: &Proposal, _: &Response| Prompt::new("I chose B");
     let queue = || -> Vec<(String, PromptFrom)> {
         let session = store.get_session(&"s".into()).unwrap().session;
         session.queued.iter().map(|queued| (queued.client_msg_id.to_string(), queued.from.clone())).collect()
@@ -64,7 +64,7 @@ fn a_proposal_is_answered_once_with_its_prompt_queued_in_its_chat() {
     let answering = |request: &str, message: &str| {
         let request = ClientRequestId::from(request);
         let (answered, request, message, told) = (&answered, &request, message.into(), &told);
-        let keep = AnswerToKeep { revision: RevisionNumber::FIRST, choice: answered, request, message, told };
+        let keep = AnswerToKeep { revision: RevisionNumber::FIRST, response: answered, request, message, told };
         match store.answer_proposal(&"p".into(), keep).unwrap() {
             Answering::Kept { proposal, .. } => (proposal, "new"),
             Answering::Again(proposal) => (proposal, "again"),
@@ -79,13 +79,14 @@ fn a_proposal_is_answered_once_with_its_prompt_queued_in_its_chat() {
     let (otherwise, other) = answering("r2", "m3");
 
     assert_eq!((new, same, other), ("new", "again", "otherwise"), "it's answered once");
-    assert_eq!(kept.current.choice(), Some(&answered));
+    assert_eq!(kept.current.response.as_ref(), Some(&answered));
     assert_eq!((again, otherwise), (kept.clone(), kept.clone()), "another answer leaves the first");
     assert!(kept.rev > proposed.rev, "the feed tells clients of it");
     assert_eq!(queue(), told_of_p(), "its prompt queued once, by the hub's ID for it, from the proposal's answer");
     let request = ClientRequestId::from("r3");
     let (answered, request, told) = (&answered, &request, &told);
-    let keep = AnswerToKeep { revision: RevisionNumber::FIRST, choice: answered, request, message: "m4".into(), told };
+    let keep =
+        AnswerToKeep { revision: RevisionNumber::FIRST, response: answered, request, message: "m4".into(), told };
     assert!(store.answer_proposal(&"nothing".into(), keep).is_err());
     assert_eq!(queue(), told_of_p());
 }
@@ -99,12 +100,12 @@ fn an_answer_whose_prompt_is_taken_out_of_the_queue_is_taken_back() {
     let store = store_with_session(dir.path());
     store.insert_proposal(&fixtures::proposal("p"), &"k".into()).unwrap();
     revise_to(&store, 2);
-    let answered = Choice { chosen: vec![OptionPlace(1)], ..answered() };
-    let told = |_: &Proposal, _: &Choice| Prompt::new("I chose B");
+    let answered = Response::Chose(Choice { chosen: vec![OptionPlace(1)], ..answered() });
+    let told = |_: &Proposal, _: &Response| Prompt::new("I chose B");
     let request = ClientRequestId::from("r1");
     let answer = |message: &str| AnswerToKeep {
         revision: RevisionNumber(2),
-        choice: &answered,
+        response: &answered,
         request: &request,
         message: message.into(),
         told: &told,
@@ -158,10 +159,10 @@ fn only_the_newest_revision_can_be_answered() {
     let store = store_with_session(dir.path());
     store.insert_proposal(&fixtures::proposal("p"), &"k".into()).unwrap();
     revise_to(&store, 2);
-    let answered = Choice { chosen: vec![OptionPlace(1)], ..answered() };
-    let (request, told) = (ClientRequestId::from("r1"), |_: &Proposal, _: &Choice| Prompt::new("I chose B"));
+    let answered = Response::Chose(Choice { chosen: vec![OptionPlace(1)], ..answered() });
+    let (request, told) = (ClientRequestId::from("r1"), |_: &Proposal, _: &Response| Prompt::new("I chose B"));
     let answer = |revision| {
-        let keep = AnswerToKeep { revision, choice: &answered, request: &request, message: "m1".into(), told: &told };
+        let keep = AnswerToKeep { revision, response: &answered, request: &request, message: "m1".into(), told: &told };
         store.answer_proposal(&"p".into(), keep)
     };
 
@@ -172,7 +173,7 @@ fn only_the_newest_revision_can_be_answered() {
     assert!(matches!(revised, Answering::Revised(_)), "the revision before isn't answered");
     assert!(matches!(unwritten, Err(StoreError::NotFound { .. })));
     let Answering::Kept { proposal, .. } = kept else { panic!("the newest is answered") };
-    assert_eq!(proposal.current.choice(), Some(&answered));
+    assert_eq!(proposal.current.response.as_ref(), Some(&answered));
     let (revisions, _) = store.proposal_revisions(&"p".into(), RevisionNumber::FIRST, 8).unwrap();
     assert_eq!(revisions[0].response, None, "the one before is left as it was");
     let queued = store.get_session(&"s".into()).unwrap().session.queued;
@@ -191,12 +192,12 @@ fn an_answer_that_doesnt_fit_the_revision_is_refused_and_nothing_is_kept() {
     let dir = tempfile::tempdir().unwrap();
     let store = store_with_session(dir.path());
     store.insert_proposal(&fixtures::proposal("p"), &"k".into()).unwrap();
-    let unfit = Choice { chosen: vec![OptionPlace(1), OptionPlace(0)], ..answered() };
+    let unfit = Response::Chose(Choice { chosen: vec![OptionPlace(1), OptionPlace(0)], ..answered() });
     let request = ClientRequestId::from("r1");
-    let told = |_: &Proposal, _: &Choice| Prompt::new("I chose B, and A");
+    let told = |_: &Proposal, _: &Response| Prompt::new("I chose B, and A");
     let keep = AnswerToKeep {
         revision: RevisionNumber::FIRST,
-        choice: &unfit,
+        response: &unfit,
         request: &request,
         message: "m1".into(),
         told: &told,
@@ -221,12 +222,12 @@ fn a_response_this_build_cant_read_is_still_a_response() {
             [],
         )
         .unwrap();
-    let choice = Choice { chosen: vec![OptionPlace(1)], ..answered() };
+    let choice = Response::Chose(Choice { chosen: vec![OptionPlace(1)], ..answered() });
     let request = ClientRequestId::from("r1");
-    let told = |_: &Proposal, _: &Choice| Prompt::new("I chose B");
+    let told = |_: &Proposal, _: &Response| Prompt::new("I chose B");
     let keep = AnswerToKeep {
         revision: RevisionNumber::FIRST,
-        choice: &choice,
+        response: &choice,
         request: &request,
         message: "m1".into(),
         told: &told,

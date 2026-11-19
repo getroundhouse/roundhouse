@@ -164,10 +164,10 @@ fn queued_buttons(
     buttons.group_hover(group, Styled::visible).when(written, |b| b.child(edit)).child(remove).child(send)
 }
 
-/// What a queued answer to a proposal says: `Answered`, its title in a chip, and what was chosen, as its line in the
-/// chat says it once it's sent, or that it answers a proposal, until its record has come.
+/// What a queued answer to a proposal says: `Answered`, or `Replied` for another round, its title in a chip, and what
+/// was said, as its line in the chat says it once it's sent, or that it answers a proposal, until its record has come.
 fn answer_line(proposal: Option<&Proposal>, revision: RevisionNumber, text: Hsla, muted: Hsla) -> impl IntoElement {
-    let (title, chosen) = transcript::proposal_answered_parts(proposal, revision);
+    let transcript::ProposalResponseLine { verb, title, said } = transcript::proposal_response_line(proposal, revision);
     let title = title.map(|title| look::chip(look::ChipKind::Proposal, look::ChipSize::Regular, title));
     h_flex()
         .flex_1()
@@ -176,9 +176,9 @@ fn answer_line(proposal: Option<&Proposal>, revision: RevisionNumber, text: Hsla
         .items_center()
         .typeset(look::Type::Body)
         .child(Icon::new(transcript::PROPOSAL_ICON).sized(look::IconSize::Regular).flex_none().text_color(muted))
-        .child(div().flex_none().text_color(text).child("Answered"))
+        .child(div().flex_none().text_color(text).child(verb))
         .children(title)
-        .child(div().min_w_0().truncate().text_color(muted).child(chosen))
+        .child(div().min_w_0().truncate().text_color(muted).child(said))
 }
 
 /// The editor in place of the prompt's text, with what it carries still beside it, since a change keeps that.

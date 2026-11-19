@@ -13,6 +13,6 @@ mod written;
 
 pub use checks::{MAX_HEADER_CHARS, MAX_OPTIONS, MAX_PROPOSAL_BYTES, MAX_QUESTIONS, MIN_OPTIONS, ProposalProblem};
 pub use record::{Proposal, ProposalRevision, RevisionNumber};
-pub use response::{AnswerProblem, Choice, MAX_NOTE_BYTES, Response, RevisionStanding};
+pub use response::{AnswerProblem, Choice, MAX_NOTE_BYTES, Response, RevisionStanding, Round};
 pub use summary::{ChosenOption, NOTE_START_CHARS, ResponseSummary, RevisionSummary, chosen_in_words};
 pub use written::{OptionLetter, OptionPlace, ProposalOption, ProposalQuestion, Proposed, Recommendation};

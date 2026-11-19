@@ -4,7 +4,7 @@ use super::super::{Store, StoreError, current_rev, json_at, lock, rev_of};
 use protocol::attachment::Attachment;
 use protocol::event::LinkedImage;
 use protocol::model::{
-    AnswerProblem, AskKey, Choice, ClientMessageId, ClientRequestId, Proposal, ProposalId, ProposalRevision, Proposed,
+    AnswerProblem, AskKey, ClientMessageId, ClientRequestId, Proposal, ProposalId, ProposalRevision, Proposed,
     QueuedPrompt, Response, Rev, RevisionNumber, RevisionSummary, SessionId, ToolUseId,
 };
 use protocol::prompt::{Prompt, PromptFrom};
@@ -27,22 +27,23 @@ pub enum Answering {
     Otherwise(Proposal),
     /// The agent has revised it since the revision answered, so it's left as it was.
     Revised(Proposal),
-    /// The answer doesn't fit the revision, as [`Proposed::check_answer`](protocol::model::Proposed::check_answer)
+    /// The answer doesn't fit the revision, as [`Proposed::check_response`](protocol::model::Proposed::check_response)
     /// says, so it's left as it was.
     Refused(AnswerProblem),
 }
 
-/// The answer the hub keeps for a proposal's revision, from a request, with the prompt that tells its agent.
+/// The answer the hub keeps for a proposal's revision, from a request, with the prompt that tells its agent: a choice,
+/// or a request for another round.
 pub struct AnswerToKeep<'a> {
     /// The revision the person answered.
     pub revision: RevisionNumber,
-    pub choice: &'a Choice,
+    pub response: &'a Response,
     /// The request that gave it, which the same request sent again is known by.
     pub request: &'a ClientRequestId,
     /// The ID the hub gave the prompt, which keeps it from queued to recorded.
     pub message: ClientMessageId,
     /// What the prompt says, written from the proposal as the commit that keeps the answer reads it.
-    pub told: &'a dyn Fn(&Proposal, &Choice) -> Prompt<Attachment>,
+    pub told: &'a dyn Fn(&Proposal, &Response) -> Prompt<Attachment>,
 }
 
 /// A revision the agent wrote of a proposal it made, which the store numbers, one past the newest.
@@ -112,7 +113,7 @@ fn summary_from_row(row: &Row<'_>) -> rusqlite::Result<RevisionSummary> {
     let response = response_at(row, 3)?;
     let chosen = match &response {
         Some(Response::Chose(choice)) => proposed_at(row, 4)?.chosen(choice),
-        Some(Response::Unknown) | None => Vec::new(),
+        Some(Response::AnotherRound(_) | Response::Unknown) | None => Vec::new(),
     };
     Ok(RevisionSummary {
         number: RevisionNumber(row.get(0)?),
@@ -256,18 +257,13 @@ impl Store {
         if earlier.current.response.is_some() {
             return Ok(Answering::Otherwise(earlier));
         }
-        if let Err(problem) = earlier.current.proposed.check_answer(&answer.choice.chosen, &answer.choice.note) {
+        if let Err(problem) = earlier.current.proposed.check_response(answer.response) {
             return Ok(Answering::Refused(problem));
         }
-        let told = (answer.told)(&earlier, answer.choice);
+        let told = (answer.told)(&earlier, answer.response);
         tx.execute(
             "UPDATE proposal_revisions SET response = ?, response_request = ? WHERE proposal_id = ? AND number = ?",
-            params![
-                serde_json::to_string(&Response::Chose(answer.choice.clone()))?,
-                answer.request.as_str(),
-                id.as_str(),
-                answer.revision.0
-            ],
+            params![serde_json::to_string(answer.response)?, answer.request.as_str(), id.as_str(), answer.revision.0],
         )?;
         let proposal = proposal_on(&tx, id)?;
         let from = PromptFrom::ProposalResponse { proposal: id.clone(), revision: answer.revision };

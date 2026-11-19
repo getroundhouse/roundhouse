@@ -264,6 +264,7 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
         | R::SessionCreate(_)
         | R::SessionPrompt(_)
         | R::ProposalAnswer(_)
+        | R::ProposalAnotherRound(_)
         | R::AttachmentAdd(_)
         | R::AttachmentRemove(_)
         | R::SessionQueue(_)

@@ -20,8 +20,8 @@ const PROPOSE_DESCRIPTION: &str = "Asks the person to decide something too large
     Markdown that says what it is and what it costs. Draw a diagram in Mermaid, in a code block whose language is \
     `mermaid`. To show another picture, such as a screenshot, save it in the worktree and point to it with a Markdown \
     image: Roundhouse keeps a copy with the proposal, as the file is when you propose. Recommend one, and say why, \
-    when you have a view. It returns at once: the person answers later, and their answer comes to you as a prompt. \
-    Don't ask them the same in the chat, or wait or poll for the answer: carry on with other work, or end your turn.";
+    when you have a view. It returns at once: the person answers later, and their answer, or their request for \
+    another round, which you answer with revise_proposal, comes to you as a prompt. Don't ask them the same in the chat, or wait or poll for the answer: carry on with other work, or end your turn.";
 
 /// When to revise a proposal, and how. *Unconfirmed.*
 const REVISE_DESCRIPTION: &str = "Writes a new revision of a proposal you made in this chat with the propose tool, \
@@ -33,8 +33,8 @@ const REVISE_DESCRIPTION: &str = "Writes a new revision of a proposal you made i
 
 const GET_DESCRIPTION: &str = "Reads one of the proposals you made in this chat with the propose tool, by its ID, \
     which propose's result gives: its context, each question with its options and what you recommended, and the \
-    person's answer once they've given it, with the note they wrote. It reads the newest revision, or the one you \
-    name, such as the one the person's answer names.";
+    person's answer, or request for another round, once they've given it, with the note they wrote. It reads the \
+    newest revision, or the one you name, such as the one the person's answer names.";
 
 pub(in crate::tools) fn definitions() -> Vec<Value> {
     let get = json!({

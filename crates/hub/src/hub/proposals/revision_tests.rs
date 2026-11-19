@@ -108,9 +108,10 @@ async fn the_answer_to_a_revision_names_it() {
     let made = hub.propose(&"w".into(), "s".into(), asking("k")).await.unwrap().proposal;
     let mut revised = hub.revise(&"s".into(), revising(&made.id, "toolu_2")).await.unwrap().proposal;
     let choice = protocol::model::Choice { chosen: vec![OptionPlace(1)], note: String::new(), at_ms: 0 };
-    revised.current.response = Some(protocol::model::Response::Chose(choice.clone()));
+    let response = protocol::model::Response::Chose(choice);
+    revised.current.response = Some(response.clone());
 
-    let said = told(&revised, &choice);
+    let said = told(&revised, &response);
 
     assert_eq!(said, format!("I chose C, In each client, in revision 2 of your proposal \"Search\" ({}).", made.id));
 }

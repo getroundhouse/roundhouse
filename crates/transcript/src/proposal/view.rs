@@ -202,7 +202,9 @@ impl Render for ProposalView {
         let outline = self.outline(&parts, cx);
         let page = self.page(parts, area, cx);
         let foot = self.foot(window, cx);
-        let beside = v_flex().flex_1().min_w_0().h_full().child(page).child(foot);
+        // Across the top of the page, as a banner is across a pane, while the agent writes the next revision.
+        let banner = self.round_banner();
+        let beside = v_flex().flex_1().min_w_0().h_full().children(banner).child(page).child(foot);
         self.selection.with_keys(div().flex().size_full().min_h_0().child(outline).child(beside))
     }
 }
