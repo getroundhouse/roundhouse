@@ -18,7 +18,7 @@ use super::super::Hub;
 use super::super::tests::flushed;
 use super::provider::{Asked, answer};
 use crate::session::Item;
-use crate::worker_link::WorkerLink;
+use crate::worker_link::{Answer, WorkerLink};
 
 /// A workspace made from the repository `r`, whose worktree its worker's stand-in makes, and a chat of Claude's in it,
 /// which nothing has been sent.
@@ -139,10 +139,20 @@ pub(in super::super) fn answering_first(
     asked: &Arc<Asked>,
     first: impl Fn(&WorkerRequest) -> Option<Result<WorkerResponse, ApiError>> + Send + 'static,
 ) {
+    answering_first_in_time(hub, workspace, asked, move |request| first(request).map(Answer::Now));
+}
+
+/// The same, with `first` saying whether to answer at once or once the test sends the answer, as [`Answer`] says.
+pub(in super::super) fn answering_first_in_time(
+    hub: &Hub,
+    workspace: &WorkspaceId,
+    asked: &Arc<Asked>,
+    first: impl Fn(&WorkerRequest) -> Option<Answer> + Send + 'static,
+) {
     let asked = asked.clone();
-    let link = WorkerLink::answering(move |request| {
+    let link = WorkerLink::answering_in_time(move |request| {
         asked.requests.lock().push(request.clone());
-        Some(first(&request).unwrap_or_else(|| Ok(answer(request))))
+        Some(first(&request).unwrap_or_else(|| Answer::Now(Ok(answer(request)))))
     });
     hub.workers.lock().insert(workspace.clone(), link);
 }

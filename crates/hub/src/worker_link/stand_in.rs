@@ -2,6 +2,8 @@
 
 use std::sync::Weak;
 
+use tokio::sync::oneshot;
+
 use protocol::frame;
 use protocol::worker::WorkerRequest;
 
@@ -25,12 +27,22 @@ impl WorkerLink {
         Self::answering_as(ChildProcess::until_killed(), answer)
     }
 
+    /// The same, for a worker that may answer a call only after it has answered ones that came later, as [`Answer`]
+    /// says.
+    pub(crate) fn answering_in_time(
+        answer: impl Fn(WorkerRequest) -> Option<Answer> + Send + 'static,
+    ) -> Arc<WorkerLink> {
+        Self::stand_in(versions::WORKERS.newest, ChildProcess::already_exited(), move |request| {
+            answer(serde_json::from_value(request).expect("the hub sends requests"))
+        })
+    }
+
     fn answering_as(
         process: ChildProcess,
         answer: impl Fn(WorkerRequest) -> Option<Result<WorkerResponse, ApiError>> + Send + 'static,
     ) -> Arc<WorkerLink> {
         Self::stand_in(versions::WORKERS.newest, process, move |request| {
-            answer(serde_json::from_value(request).expect("the hub sends requests"))
+            answer(serde_json::from_value(request).expect("the hub sends requests")).map(Answer::Now)
         })
     }
 
@@ -45,14 +57,14 @@ impl WorkerLink {
         answer: impl Fn(WorkerRequest) -> Option<Result<WorkerResponse, ApiError>> + Send + 'static,
     ) -> Arc<WorkerLink> {
         Self::stand_in(protocol::worker::previous::VERSION, ChildProcess::already_exited(), move |request| {
-            answer(serde_json::from_value(request).expect("the hub sends requests"))
+            answer(serde_json::from_value(request).expect("the hub sends requests")).map(Answer::Now)
         })
     }
 
     fn stand_in(
         version: u32,
         process: ChildProcess,
-        answer: impl Fn(serde_json::Value) -> Option<Result<WorkerResponse, ApiError>> + Send + 'static,
+        answer: impl Fn(serde_json::Value) -> Option<Answer> + Send + 'static,
     ) -> Arc<WorkerLink> {
         let (ours, theirs) = tokio::io::duplex(64 * 1024);
         let link = Arc::new(WorkerLink {
@@ -75,13 +87,31 @@ impl WorkerLink {
             while let Ok(Some(line)) = calls.next().await {
                 let Call { id, request } = frame::decode(line).expect("the hub sends calls");
                 let Some(link) = gone.0.upgrade() else { return };
-                if let Some(outcome) = answer(request) {
-                    link.calls.reply(id, outcome);
+                match answer(request) {
+                    None => {}
+                    Some(Answer::Now(outcome)) => link.calls.reply(id, outcome),
+                    Some(Answer::Later(outcome)) => {
+                        let link = Arc::downgrade(&link);
+                        tokio::spawn(async move {
+                            if let (Ok(outcome), Some(link)) = (outcome.await, link.upgrade()) {
+                                link.calls.reply(id, outcome);
+                            }
+                        });
+                    }
                 }
             }
         });
         link
     }
+}
+
+/// How a stand-in answers a call it doesn't leave unanswered.
+pub(crate) enum Answer {
+    /// At once, before it reads the next call.
+    Now(Result<WorkerResponse, ApiError>),
+    /// Once the test sends it, answering the calls after it meanwhile, so the hub can take in something else first, as
+    /// it can while a real worker's answer is on its way.
+    Later(oneshot::Receiver<Result<WorkerResponse, ApiError>>),
 }
 
 /// A call of any version, as each has them.

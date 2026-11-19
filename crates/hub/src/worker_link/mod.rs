@@ -41,6 +41,8 @@ pub(crate) use reaching::Opening;
 #[cfg(test)]
 mod stand_in;
 #[cfg(test)]
+pub(crate) use stand_in::Answer;
+#[cfg(test)]
 #[cfg(unix)]
 mod tests;
 
