@@ -7,4 +7,4 @@ mod tests;
 
 mod styles;
 pub(crate) use styles::{MONO, MONO_SIZE, REM};
-pub use styles::{Type, Typeset};
+pub use styles::{STRONG, Type, Typeset};

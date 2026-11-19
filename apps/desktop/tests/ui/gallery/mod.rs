@@ -8,7 +8,8 @@
 //! foundations: every colour, every kind of text, every step of space, every corner, every size of a control, of a bar,
 //! of a row and of an icon. Each sheet also keeps where it draws each name beside its image, for the design system's
 //! page, as `gallery/places.rs` says. Text of each kind is drawn the same way at several scales, in
-//! `gallery/baselines.rs`, to check it lines up.
+//! `gallery/baselines.rs`, to check it lines up, and each weight the app asks for is found a face of its own, in
+//! `gallery/weights.rs`.
 
 #![cfg(test)]
 
@@ -70,6 +71,7 @@ mod tool_screens;
 mod turn_screens;
 mod typed_chats;
 mod update_screens;
+mod weights;
 mod workspace_screens;
 mod worktree;
 mod worlds;

@@ -8,8 +8,21 @@ pub(crate) const REM: Pixels = px(16.);
 pub(crate) const MONO: &str = "Menlo";
 /// How big code is, which the kit's theme is given too.
 pub(crate) const MONO_SIZE: Pixels = px(12.);
-/// How text that stands out from what's around it is set: medium, never bold, which shouts in a dense layout.
-const EMPHASIS: FontWeight = FontWeight::MEDIUM;
+/// How the app's own text that stands out from what's around it is set: medium, never bold, which shouts in a dense
+/// layout, as a card's title or a page's is.
+pub(super) const EMPHASIS: FontWeight = MEDIUM_AS_FOUND;
+/// How what someone wrote marks as strong is set, such as the agent's `**bold**` and its Markdown headings: semibold,
+/// a step past the app's own emphasis, so a line its writer meant to stand out does among the app's quieter titles.
+pub const STRONG: FontWeight = FontWeight::SEMIBOLD;
+
+/// Medium, as the text system finds it. On a Mac, font-kit, which GPUI finds fonts with, reads the system font's Medium
+/// face as a little under 530, where CSS puts medium at 500, and finds a face for 500 among those at or below it, which
+/// is Regular. Asking for a little over 500 finds the first face at or above it, which is Medium. Elsewhere medium is
+/// 500. #1951 tracks the fix to font-kit's table, after which this is 500 everywhere.
+#[cfg(target_os = "macos")]
+const MEDIUM_AS_FOUND: FontWeight = FontWeight(510.);
+#[cfg(not(target_os = "macos"))]
+const MEDIUM_AS_FOUND: FontWeight = FontWeight::MEDIUM;
 
 /// The fonts text is set in.
 #[derive(Clone, Copy, PartialEq, Eq)]

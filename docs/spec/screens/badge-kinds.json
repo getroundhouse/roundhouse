@@ -3,19 +3,19 @@
     "Failure": {
       "x": 672,
       "y": 233,
-      "width": 98,
+      "width": 100,
       "height": 36
     },
     "Plain": {
       "x": 448,
       "y": 57,
-      "width": 114,
+      "width": 116,
       "height": 36
     },
     "Warning": {
       "x": 492,
       "y": 145,
-      "width": 196,
+      "width": 200,
       "height": 36
     }
   }
