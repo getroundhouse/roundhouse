@@ -169,24 +169,96 @@ fn a_new_proposal_takes_the_tabs_place_only_where_nothing_is_lost(cx: &mut TestA
     assert_eq!(tab_shows(&ui), Some(second), "not over what's chosen and not sent");
 }
 
-/// An answer given while the agent works waits in the chat's queue, as the proposal's line, which can't be edited.
-/// Taken out, it takes the answer back, and the proposal waits for the person again. Given again, the hub sends it once
-/// the turn ends.
+/// Chooses the second option in the proposal tab, sends it, and goes back to the chat.
+fn send_an_answer(ui: &mut Ui<'_>, open: SharedString) {
+    ui.click(open);
+    ui.wait("the proposal tab", |ui| showing(ui) == Showing::Proposal);
+    ui.click("choose-0-1");
+    ui.click("send-proposal-answer");
+    ui.click("proposal-band-chat");
+}
+
+/// The prompt that told the agent of the answer, by where it's recorded, once it is.
+fn told(ui: &mut Ui<'_>) -> Option<protocol::model::Seq> {
+    ui.events().into_iter().find_map(|event| match &event.body {
+        EventBody::UserPrompt { from, .. } if !from.is_person() => Some(event.seq),
+        _ => None,
+    })
+}
+
+/// An answer given while the agent works goes into its turn at once, as the person's own prompt would, rather than
+/// waiting in the queue for the turn to end, so the agent can act on it sooner. It's the proposal's line meanwhile.
 #[gpui_kit::test]
-fn an_answer_given_while_the_agent_works_waits_in_the_queue_as_the_proposals_line(cx: &mut TestAppContext) {
+fn an_answer_given_while_the_agent_works_is_sent_into_its_turn(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let mut ui = in_a_new_workspace(cx, &stack);
     let open = a_proposal(&mut ui);
     let chat = ui.active_chat();
-    let done = Gate::new(&stack, "answer-waits");
+    let done = Gate::new(&stack, "answer-steers");
     stack.client().session_prompt(&chat, &format!("hang-until:{done}"), None).unwrap();
     ui.wait("the agent to start working", |ui| ui.session_status() == Some(SessionStatus::Running));
-    ui.click(open.clone());
-    ui.wait("the proposal tab", |ui| showing(ui) == Showing::Proposal);
 
-    ui.click("choose-0-1");
-    ui.click("send-proposal-answer");
-    ui.click("proposal-band-chat");
+    send_an_answer(&mut ui, open);
+
+    ui.wait("the prompt that told the agent, while it works", |ui| told(ui).is_some());
+    assert_eq!(ui.session_status(), Some(SessionStatus::Running), "sent into the turn, not after it");
+    assert!(queued(&ui).is_empty(), "never left in the queue");
+    let seq = told(&mut ui).unwrap();
+    ui.wait("its line in the chat", |ui| ui.has(SharedString::from(format!("answered-proposal/{seq}"))));
+    done.open();
+    let taken = |ui: &mut Ui<'_>| {
+        ui.events().into_iter().any(|event| matches!(event.body, EventBody::PromptTaken { prompt } if prompt == seq))
+    };
+    ui.wait("the agent to take it", taken);
+    let answers = ui
+        .events()
+        .into_iter()
+        .filter(|event| matches!(&event.body, EventBody::UserPrompt { from, .. } if !from.is_person()));
+    assert_eq!(answers.count(), 1, "the agent is told once");
+}
+
+/// Stopped before it read the answer, the agent never got it, and the answer's line says so, and where it still is,
+/// since the proposal keeps it.
+#[gpui_kit::test]
+fn an_answer_the_agent_never_got_says_so(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let mut ui = in_a_new_workspace(cx, &stack);
+    let open = a_proposal(&mut ui);
+    let chat = ui.active_chat();
+    let done = Gate::new(&stack, "answer-dropped");
+    stack.client().session_prompt(&chat, &format!("hang-until:{done}"), None).unwrap();
+    ui.wait("the agent to start working", |ui| ui.session_status() == Some(SessionStatus::Running));
+    send_an_answer(&mut ui, open);
+    ui.wait("the prompt that told the agent", |ui| told(ui).is_some());
+    let seq = told(&mut ui).unwrap();
+
+    stack.client().session_cancel(&chat).unwrap();
+
+    ui.wait("its line to say the agent never got it", |ui| {
+        ui.has(SharedString::from(format!("answer-never-got/{seq}")))
+    });
+    let answered = ui.view().feed().unwrap().snapshot().proposals(&chat)[0].current.response.is_some();
+    assert!(answered, "the proposal keeps the answer, for the agent to read");
+    done.open();
+}
+
+/// While the queue waits for the person, such as after they stopped the agent, the answer waits there too, as the
+/// proposal's line, which can't be edited. Taken out, it takes the answer back, and the proposal waits for the person
+/// again, with what was chosen still chosen.
+#[gpui_kit::test]
+fn an_answer_given_while_the_queue_is_held_waits_there_and_can_be_taken_back(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let mut ui = in_a_new_workspace(cx, &stack);
+    let open = a_proposal(&mut ui);
+    let chat = ui.active_chat();
+    let done = Gate::new(&stack, "answer-held");
+    stack.client().session_prompt(&chat, &format!("hang-until:{done}"), None).unwrap();
+    ui.wait("the agent to start working", |ui| ui.session_status() == Some(SessionStatus::Running));
+    stack.client().session_cancel(&chat).unwrap();
+    ui.wait("the queue held", |ui| crate::queue::held(ui));
+    done.open();
+
+    send_an_answer(&mut ui, open.clone());
 
     ui.wait("the answer in the queue", |ui| queued(ui).len() == 1);
     let message = queued(&ui)[0].client_msg_id.clone();
@@ -197,28 +269,9 @@ fn an_answer_given_while_the_agent_works_waits_in_the_queue_as_the_proposals_lin
     let answered =
         |ui: &mut Ui<'_>| ui.view().feed().unwrap().snapshot().proposals(&chat)[0].current.response.is_some();
     ui.wait("the answer taken back with it", |ui| queued(ui).is_empty() && !answered(ui));
-
-    // What was chosen is still chosen, to send again as it was, or changed.
     ui.click(open);
     ui.wait("the proposal tab", |ui| showing(ui) == Showing::Proposal);
     ui.click("send-proposal-answer");
-    ui.click("proposal-band-chat");
-    ui.wait("the answer in the queue again", |ui| queued(ui).len() == 1 && answered(ui));
-    let message = queued(&ui)[0].client_msg_id.clone();
-    done.open();
-    ui.wait("the queue to send it", |ui| queued(ui).is_empty());
-    let told = |ui: &mut Ui<'_>| {
-        ui.events().into_iter().find_map(|event| match event.body {
-            EventBody::UserPrompt { client_msg_id: Some(sent), .. } if sent == message => Some(event.seq),
-            _ => None,
-        })
-    };
-    ui.wait("the prompt that told the agent", |ui| told(ui).is_some());
-    let seq = told(&mut ui).unwrap();
-    ui.wait("its line in the chat", |ui| ui.has(SharedString::from(format!("answered-proposal/{seq}"))));
-    let answers = ui
-        .events()
-        .into_iter()
-        .filter(|event| matches!(&event.body, EventBody::UserPrompt { from, .. } if !from.is_person()));
-    assert_eq!(answers.count(), 1, "the agent is told once, of the answer that stood");
+    ui.wait("the same answer queued again", |ui| queued(ui).len() == 1 && answered(ui));
+    assert!(told(&mut ui).is_none(), "the agent's told nothing while the queue's held");
 }

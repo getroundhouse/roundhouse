@@ -83,8 +83,8 @@ When an agent needs you to decide something too large for a question, such as wh
 
 To answer, click `Choose` on the option you want for each question, add a note if you like, and click `Send`, or press `Enter` in the note.
 
-- **The agent is told what you chose,** and reads your note with its tools, so what you write can be as long as it needs to be. If it's working, your answer waits in the queue above the composer until it finishes.
-- **Your answer is drawn in the chat as a line,** `Answered`, where the agent took it, rather than as a message of yours, and the outline marks it the same way. A chat's title is never made from it.
+- **The agent is told what you chose,** and reads your note with its tools, so what you write can be as long as it needs to be. If it's working, your answer goes into what it's doing, which it reads at its next chance, as a message you send while it works does. If you stop the agent before it reads your answer, it never gets it, and the answer's line says so. Your answer stays in the proposal, so ask the agent to read it.
+- **Your answer is drawn in the chat as a line,** `Answered`, faint until the agent reads it, and then where the agent took it, rather than as a message of yours, and the outline marks it the same way. A chat's title is never made from it.
 - **An answer can't be changed once it's sent.** To change your mind, tell the agent in the chat.
 - **What you've chosen and written isn't kept until you send it,** so it's lost if you open another proposal in the tab, close the tab or quit the app. A new proposal from the agent waits rather than take its place.
 

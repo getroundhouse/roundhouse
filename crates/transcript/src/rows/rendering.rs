@@ -237,7 +237,7 @@ pub(super) fn render_event(
             update_rule::line(seq, from, build, cx)
         }
         EventBody::UserPrompt { .. } if let Some(answers) = &around.answers => {
-            tools::proposal::answered(seq, answers, shared, cx)
+            tools::proposal::answered(seq, answers, around.prompt, shared, cx)
         }
         EventBody::UserPrompt { client_msg_id, prompt, .. } => {
             let key = ItemKey::prompt(seq, client_msg_id.as_ref());
