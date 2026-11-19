@@ -33,7 +33,6 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
-  CARGO_PROFILE_DEV_DEBUG: line-tables-only
   # The test runner, which Renovate raises, as in ci.yml.
   # renovate: datasource=crate depName=cargo-nextest
   NEXTEST_VERSION: 0.9.151

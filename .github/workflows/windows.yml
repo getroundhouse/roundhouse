@@ -32,7 +32,6 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
-  CARGO_PROFILE_DEV_DEBUG: line-tables-only
 
 jobs:
   # The free runner, since nothing waits for it. The lint took 14 minutes cold.

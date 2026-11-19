@@ -25,15 +25,15 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
-  # Smaller caches and faster links. A panic still gets line numbers.
-  CARGO_PROFILE_DEV_DEBUG: line-tables-only
   # The test runner, which Renovate raises.
   # renovate: datasource=crate depName=cargo-nextest
   NEXTEST_VERSION: 0.9.152
-  # What GPUI's Linux crates build against. Verified on 2026-11-08 in Docker, not minimized.
+  # What GPUI's Linux crates build against. Verified on 2026-11-08 in Docker, not minimized. Then lld, which
+  # .cargo/config.toml links with on ARM64.
   LINUX_PACKAGES: >-
     pkg-config cmake clang libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev libx11-xcb-dev libxcb1-dev
     libfontconfig-dev libfreetype-dev libvulkan-dev libssl-dev libzstd-dev
+    lld
 
 # The ruleset requires only `checks`. `changes` does the skipping, since a required check whose workflow never runs
 # stays pending. Actions are pinned to full commits.
