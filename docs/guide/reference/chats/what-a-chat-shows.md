@@ -109,6 +109,10 @@ If none of the options will do, say in the note what to change, and click `Anoth
 
 ![Another round asked for in the proposal tab](../../../spec/screens/proposal-another-round.png)
 
+The agent withdraws a proposal it won't use, such as when you decide another way in the chat, and says why. The call has a line of its own, `Withdrew`, with why, the proposal's line says `withdrawn`, and its tab says why at the top, with nothing to choose.
+
+![A withdrawn proposal in the chat](../../../spec/screens/proposal-withdrawn-line.png)
+
 ## Work in the background
 
 A turn can end with work still going: a command, a subagent, or a monitor watching for something. Up to four tasks have a line each where the chat ends, saying what each is for.

@@ -94,6 +94,7 @@ impl Hub {
             WorkerAsk::ListWorktrees => self.list_worktrees(workspace_id, link).await.map(AskReply::Worktrees),
             WorkerAsk::Propose(asked) => self.propose(workspace_id, session_id, asked).await.map(AskReply::Proposal),
             WorkerAsk::Revise(asked) => self.revise(&session_id, asked).await.map(AskReply::Proposal),
+            WorkerAsk::Withdraw(asked) => self.withdraw(&session_id, asked).await.map(AskReply::Proposal),
             WorkerAsk::ReadProposal(asked) => {
                 self.read_proposal_revision(&session_id, asked).await.map(AskReply::Proposal)
             }

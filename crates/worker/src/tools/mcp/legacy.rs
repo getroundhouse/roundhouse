@@ -50,6 +50,7 @@ pub(super) async fn request(
                 Some(diff_comments::NAME) => diff_comments::call(asks, session_id).await,
                 Some(proposals::PROPOSE) => proposals::propose(asks, caller, params).await,
                 Some(proposals::REVISE) => proposals::revise(asks, caller, params).await,
+                Some(proposals::WITHDRAW) => proposals::withdraw(asks, caller, params).await,
                 Some(proposals::GET) => proposals::get(asks, session_id, params).await,
                 _ => {
                     let offered = [
@@ -57,6 +58,7 @@ pub(super) async fn request(
                         diff_comments::NAME,
                         proposals::PROPOSE,
                         proposals::REVISE,
+                        proposals::WITHDRAW,
                         proposals::GET,
                     ];
                     let offered = format!("this protocol offers only {}", offered.join(", "));

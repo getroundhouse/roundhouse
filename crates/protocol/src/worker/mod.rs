@@ -30,7 +30,7 @@ pub use ask::{
     Answer, Ask, AskAnswer, AskId, AskOutcome, AskReply, CancelWait, CreateWorktree, DiffComments, ListWorktrees,
     ListedChild, NewWorktreeOn, OwnWorktree, ProposalRecord, Propose, PullRequestAnswer, PullRequestWaitUntil,
     ReadDiffComments, ReadProposal, ReadPullRequest, ReadPullRequests, ReadWait, RemoveWorktree, Revise,
-    StartPullRequestWait, ToWorker, WaitAnswer, WorkerAsk, WorktreeCreated, WorktreeRemoval, WorktreeRemoved,
+    StartPullRequestWait, ToWorker, WaitAnswer, Withdraw, WorkerAsk, WorktreeCreated, WorktreeRemoval, WorktreeRemoved,
     Worktrees, WouldLose,
 };
 pub use children::{AddChildWorktree, ChildBranch, ChildWorktreeAdded, WatchChildBranches};

@@ -3,7 +3,7 @@ use protocol::model::{AnswerProblem, Choice, ClientRequestId, OptionPlace, Propo
 use protocol::prompt::{Prompt, PromptFrom};
 
 use super::super::{Made, Store, StoreError, lock};
-use super::{AnswerToKeep, Answering, NewRevision};
+use super::{AnswerToKeep, Answering, NewRevision, Revising};
 use crate::store::tests::store_with_session;
 
 /// Writes the revisions from 2 to `newest` of the proposal `p`, each titled by its number.
@@ -12,7 +12,10 @@ fn revise_to(store: &Store, newest: u32) {
         let mut proposed = fixtures::proposal("p").current.proposed;
         proposed.title = format!("Revision {number}");
         let revision = NewRevision { changed: "More".into(), call: None, proposed, made_at_ms: 0, images: Vec::new() };
-        store.revise_proposal(&"p".into(), &revision, &format!("k{number}").into()).unwrap();
+        let Revising::Wrote(_) = store.revise_proposal(&"p".into(), &revision, &format!("k{number}").into()).unwrap()
+        else {
+            panic!("not revised")
+        };
     }
 }
 
@@ -70,6 +73,7 @@ fn a_proposal_is_answered_once_with_its_prompt_queued_in_its_chat() {
             Answering::Again(proposal) => (proposal, "again"),
             Answering::Otherwise(proposal) => (proposal, "otherwise"),
             Answering::Revised(proposal) => (proposal, "revised"),
+            Answering::Withdrawn(proposal) => (proposal, "withdrawn"),
             Answering::Refused(problem) => panic!("refused: {problem}"),
         }
     };

@@ -4,7 +4,7 @@ use crate::attachments;
 use crate::attachments::Carried;
 use crate::folds::Fold;
 use crate::item_key::ItemKey;
-use crate::transcript::{AtWork, IdleCache, Model, Wrote};
+use crate::transcript::{AtWork, IdleCache, Model, ProposalCall};
 use client_core::calls::Recorded;
 use client_core::session_log::{PromptAt, PromptState, SessionLog};
 use client_core::{Approval, ToolUseAsked};
@@ -135,8 +135,8 @@ pub(in super::super) struct BlockAround {
     pub(in super::super) subagent: Option<Subagent>,
     /// For a call to subagents at work: the subagents it names.
     pub(in super::super) names: Option<Names>,
-    /// For a call that proposed a decision, or revised one: the revision it wrote, once the record has come.
-    pub(in super::super) proposal: Option<Wrote>,
+    /// For a call that proposed a decision, or revised or withdrew one: what it did, once the record has come.
+    pub(in super::super) proposal: Option<ProposalCall>,
     /// For a result: whether it's drawn with its call instead.
     pub(in super::super) with_call: bool,
 }

@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::{OptionPlace, ProposalRevision, Proposed, RevisionNumber, chosen_in_words};
+use super::{OptionPlace, Proposal, ProposalRevision, Proposed, RevisionNumber, Withdrawal, chosen_in_words};
 use crate::client::{ApiError, ErrorCode};
 
 /// The most text an answer's note holds, which the agent reads with the proposal. *Unconfirmed.*
@@ -68,6 +68,9 @@ pub enum AnswerProblem {
     /// The agent has written a newer revision than the one answered, which the person hasn't read.
     #[error("the agent has revised the proposal since you read it, as revision {newest}")]
     Revised { newest: RevisionNumber },
+    /// The agent has withdrawn it, so nothing more can be said to it.
+    #[error("the agent has withdrawn the proposal")]
+    Withdrawn,
 }
 
 impl Proposed {
@@ -115,9 +118,27 @@ pub enum RevisionStanding<'a> {
     AnotherRound(&'a Round),
     /// They responded in a way only a newer hub knows.
     Responded,
+    /// The agent withdrew the proposal before they chose, which only its newest revision says, as
+    /// [`Proposal::standing`] has it.
+    Withdrawn(&'a Withdrawal),
+}
+
+impl Proposal {
+    /// Where its newest revision stands with the person: withdrawn, once the agent withdrew it before they chose, or
+    /// as the revision says.
+    pub fn standing(&self) -> RevisionStanding<'_> {
+        match (&self.withdrawn, self.current.standing()) {
+            (Some(withdrawal), RevisionStanding::Waiting | RevisionStanding::AnotherRound(_)) => {
+                RevisionStanding::Withdrawn(withdrawal)
+            }
+            (_, standing) => standing,
+        }
+    }
 }
 
 impl ProposalRevision {
+    /// Where it stands with the person, from what they said to it alone, so never withdrawn, which only
+    /// [`Proposal::standing`] knows of.
     pub fn standing(&self) -> RevisionStanding<'_> {
         match &self.response {
             None => RevisionStanding::Waiting,
@@ -142,7 +163,8 @@ impl ProposalRevision {
 /// conflict, saying why.
 impl From<AnswerProblem> for ApiError {
     fn from(problem: AnswerProblem) -> Self {
-        let conflict = matches!(problem, AnswerProblem::Answered | AnswerProblem::Revised { .. });
+        let conflict =
+            matches!(problem, AnswerProblem::Answered | AnswerProblem::Revised { .. } | AnswerProblem::Withdrawn);
         let code = if conflict { ErrorCode::Conflict } else { ErrorCode::InvalidRequest };
         ApiError::new(code, problem.to_string())
     }

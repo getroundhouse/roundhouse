@@ -117,6 +117,7 @@ async fn the_tools_listed_are_the_ones_it_answers() {
         diff_comments::NAME,
         proposals::PROPOSE,
         proposals::REVISE,
+        proposals::WITHDRAW,
         proposals::GET,
     ];
     assert_eq!(names(&answer), all);
@@ -125,10 +126,11 @@ async fn the_tools_listed_are_the_ones_it_answers() {
     }
     let tools = answer.to_json()["result"]["tools"].clone();
     for tool in tools.as_array().unwrap() {
-        let reads = tool["name"] != proposals::PROPOSE && tool["name"] != proposals::REVISE;
+        let changes = [proposals::PROPOSE, proposals::REVISE, proposals::WITHDRAW];
+        let reads = !changes.iter().any(|name| tool["name"] == *name);
         assert_eq!(
             tool["annotations"]["readOnlyHint"], reads,
-            "only proposing and revising change anything: {}",
+            "only proposing, revising and withdrawing change anything: {}",
             tool["name"]
         );
     }

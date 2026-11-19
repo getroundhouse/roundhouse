@@ -63,6 +63,7 @@ impl Hub {
                     Answering::Revised(proposal) => {
                         (Err(AnswerProblem::Revised { newest: proposal.current.number }), None)
                     }
+                    Answering::Withdrawn(_) => (Err(AnswerProblem::Withdrawn), None),
                     Answering::Refused(problem) => (Err(problem), None),
                 })
             })

@@ -1,15 +1,16 @@
 //! Following the chat's proposals, which a `propose` call's line is drawn from, found by the call the hub recorded as
-//! making each, and the line of the prompt that told the agent of each one's answer, which names it.
+//! making each, and so is each call that revised or withdrew one, and the line of the prompt that told the agent of
+//! each one's answer, which names it.
 
 use std::collections::HashMap;
 use std::sync::Arc;
 
 use gpui_kit::Context;
 use protocol::event::{ContentBlock, EventBody, SessionEvent};
-use protocol::model::{Proposal, ProposalId, ToolUseId};
+use protocol::model::{Proposal, ProposalId, RevisionSummary, ToolUseId};
 
 use super::Transcript;
-use super::model::Wrote;
+use super::model::{Did, ProposalCall};
 
 impl Transcript {
     /// Follows the records of the chat's proposals, as client-core's snapshot shares them, and measures again each
@@ -26,7 +27,7 @@ impl Transcript {
         if changed.is_empty() {
             return;
         }
-        let by_call: HashMap<ToolUseId, Wrote> = proposals.iter().flat_map(written_by).collect();
+        let by_call: HashMap<ToolUseId, ProposalCall> = proposals.iter().flat_map(calls_on).collect();
         let by_id: HashMap<ProposalId, Arc<Proposal>> =
             proposals.iter().map(|proposal| (proposal.id.clone(), Arc::clone(proposal))).collect();
         let draws = |event: &SessionEvent| {
@@ -48,21 +49,26 @@ impl Transcript {
     }
 }
 
-/// Each revision of `proposal` a call wrote, by the call. A hub from before revisions sums none up, and its proposals
-/// have only their first, the newest.
-fn written_by(proposal: &Arc<Proposal>) -> Vec<(ToolUseId, Wrote)> {
-    let wrote = |revision| Wrote { proposal: Arc::clone(proposal), revision };
-    if proposal.revisions.is_empty() {
-        let newest = proposal.current.call.clone().map(|call| (call, wrote(proposal.current.number)));
-        return newest.into_iter().collect();
-    }
-    proposal.revisions.iter().filter_map(|revision| Some((revision.call.clone()?, wrote(revision.number)))).collect()
+/// What each call did to `proposal`, by the call: each revision it wrote, and its withdrawal. A hub from before
+/// revisions sums none up, and its proposals have only their first, the newest.
+fn calls_on(proposal: &Arc<Proposal>) -> Vec<(ToolUseId, ProposalCall)> {
+    let did = |did| ProposalCall { proposal: Arc::clone(proposal), did };
+    let wrote: Vec<_> = if proposal.revisions.is_empty() {
+        let newest = proposal.current.call.clone().map(|call| (call, did(Did::Wrote(proposal.current.number))));
+        newest.into_iter().collect()
+    } else {
+        let wrote = |revision: &RevisionSummary| Some((revision.call.clone()?, did(Did::Wrote(revision.number))));
+        proposal.revisions.iter().filter_map(wrote).collect()
+    };
+    let withdrew =
+        proposal.withdrawn.as_ref().and_then(|withdrawal| Some((withdrawal.call.clone()?, did(Did::Withdrew))));
+    wrote.into_iter().chain(withdrew).collect()
 }
 
 /// Whether `block` is a call that wrote one of the proposals `changed`.
-fn makes(block: &ContentBlock, by_call: &HashMap<ToolUseId, Wrote>, changed: &[ProposalId]) -> bool {
+fn makes(block: &ContentBlock, by_call: &HashMap<ToolUseId, ProposalCall>, changed: &[ProposalId]) -> bool {
     match block {
-        ContentBlock::Call { id, .. } => by_call.get(id).is_some_and(|wrote| changed.contains(&wrote.proposal.id)),
+        ContentBlock::Call { id, .. } => by_call.get(id).is_some_and(|call| changed.contains(&call.proposal.id)),
         ContentBlock::Text { .. }
         | ContentBlock::Thinking { .. }
         | ContentBlock::CallResult { .. }

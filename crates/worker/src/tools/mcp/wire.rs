@@ -330,6 +330,7 @@ async fn call(
         Some(Tool::DiffComments) => Ok(diff_comments::call(asks, session_id).await.to_json()),
         Some(Tool::Propose) => Ok(proposals::propose(asks, caller, params).await.to_json()),
         Some(Tool::Revise) => Ok(proposals::revise(asks, caller, params).await.to_json()),
+        Some(Tool::Withdraw) => Ok(proposals::withdraw(asks, caller, params).await.to_json()),
         Some(Tool::GetProposal) => Ok(proposals::get(asks, session_id, params).await.to_json()),
         None => Err(RpcError::new(Code::InvalidParams, format!("there's no tool called {name}"))),
     }
@@ -344,6 +345,7 @@ pub(super) enum Tool {
     DiffComments,
     Propose,
     Revise,
+    Withdraw,
     GetProposal,
 }
 
@@ -356,6 +358,7 @@ impl Tool {
             diff_comments::NAME => Some(Tool::DiffComments),
             proposals::PROPOSE => Some(Tool::Propose),
             proposals::REVISE => Some(Tool::Revise),
+            proposals::WITHDRAW => Some(Tool::Withdraw),
             proposals::GET => Some(Tool::GetProposal),
             _ => None,
         }

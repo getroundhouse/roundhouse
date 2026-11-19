@@ -8,9 +8,9 @@ use protocol::client::{ClientRequest, ClientResponse, HubNotice};
 use protocol::event::LinkedImage;
 use protocol::model::{
     Choice, ChosenOption, OptionLetter, OptionPlace, Proposal, ProposalOption, ProposalQuestion, ProposalRevision,
-    Proposed, Recommendation, Response, ResponseSummary, Rev, RevisionNumber, RevisionSummary, Round,
+    Proposed, Recommendation, Response, ResponseSummary, Rev, RevisionNumber, RevisionSummary, Round, Withdrawal,
 };
-use protocol::worker::{Ask as _, AskReply, ProposalRecord, Propose, ReadProposal, Revise, WorkerAsk};
+use protocol::worker::{Ask as _, AskReply, ProposalRecord, Propose, ReadProposal, Revise, Withdraw, WorkerAsk};
 
 use super::keeps_its_form;
 
@@ -54,6 +54,7 @@ fn proposal() -> (Proposal, String) {
         session_id: "s".into(),
         current,
         revisions: Vec::new(),
+        withdrawn: None,
         created_at_ms: 1,
         rev: Rev::new(2),
     };
@@ -193,6 +194,22 @@ fn another_round_and_its_response_keep_their_form() {
         &ResponseSummary::AnotherRound { note: "None of".into(), at_ms: 3 },
         r#"{"kind":"another_round","note":"None of","at_ms":3}"#,
     );
+}
+
+/// The agent's withdrawal: the ask, and the record that says it's withdrawn, which a peer from before leaves out.
+#[test]
+fn withdrawing_a_proposal_and_its_record_keep_their_form() {
+    let withdraw = Withdraw { id: "p".into(), why: "Decided".into(), call: Some("toolu_3".into()) };
+    keeps_its_form(&withdraw.into_ask(), r#"{"method":"withdraw","id":"p","why":"Decided","call":"toolu_3"}"#);
+
+    let (proposal, form) = proposal();
+    let withdrawn = Withdrawal { why: "Decided".into(), call: Some("toolu_3".into()), at_ms: 4 };
+    let proposal = Proposal { withdrawn: Some(withdrawn), ..proposal };
+    let form = form.replace(
+        r#","created_at_ms":1"#,
+        r#","withdrawn":{"why":"Decided","call":"toolu_3","at_ms":4},"created_at_ms":1"#,
+    );
+    keeps_its_form(&proposal, &format!("{{{form}}}"));
 }
 
 /// So a client from before a kind of response a newer hub keeps reads the revision as responded to, rather than

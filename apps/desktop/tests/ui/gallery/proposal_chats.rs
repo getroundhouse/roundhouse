@@ -6,7 +6,7 @@
 use protocol::event::EventBody;
 use protocol::model::{
     Choice, OptionLetter, OptionPlace, Proposal, ProposalOption, ProposalQuestion, ProposalRevision, Proposed,
-    Recommendation, Response, RevisionNumber, Round, SessionStatus,
+    Recommendation, Response, RevisionNumber, Round, SessionStatus, Withdrawal,
 };
 use serde_json::json;
 
@@ -79,6 +79,20 @@ pub(crate) const SCREENS: &[Screen] = &[
         name: "proposal-another-round",
         spec: "proposals.md",
         world: Some(asked_world),
+        frame: PROPOSAL,
+        steps: &[Step::Select(FOCUS), Step::Click("open-proposal/8d0c6a5e-proposal"), Step::MoveAway],
+    },
+    Screen {
+        name: "proposal-withdrawn-line",
+        spec: "proposals.md",
+        world: Some(withdrawn_world),
+        frame: CHAT,
+        steps: &[Step::Select(FOCUS)],
+    },
+    Screen {
+        name: "proposal-withdrawn",
+        spec: "proposals.md",
+        world: Some(withdrawn_world),
         frame: PROPOSAL,
         steps: &[Step::Select(FOCUS), Step::Click("open-proposal/8d0c6a5e-proposal"), Step::MoveAway],
     },
@@ -227,6 +241,31 @@ fn answered_world() -> World {
     with_proposal(events, [first(Some(Response::Chose(answered)))])
 }
 
+/// The call that withdrew the proposal.
+const WITHDREW: &str = "toolu-p9";
+
+/// After the person said in the chat that dispatch had decided where holds live, and the agent withdrew the proposal.
+fn withdrawn_world() -> World {
+    let mut events = events();
+    let why = "Dispatch decides where holds live now, in the timetable service.";
+    events.extend([
+        user_prompt("Dispatch just moved holds into the timetable service, so drop that one."),
+        taken(protocol::model::Seq::new(9)),
+        mcp("m5", WITHDREW, "roundhouse", "withdraw_proposal", json!({ "proposal": ID, "why": why })),
+        mcp_said(WITHDREW, &format!("Withdrew \"Holding a train\" ({ID})."), false),
+        text("m6", "Withdrawn. I'll leave holding to the timetable service."),
+        replied("Withdrawn. I'll leave holding to the timetable service.", 12, 0.05),
+    ]);
+    let mut world = with_proposal(events, [first(None)]);
+    for proposals in world.proposals.values_mut() {
+        for proposal in proposals {
+            let withdrawal = Withdrawal { why: why.into(), call: Some(WITHDREW.into()), at_ms: proposal.created_at_ms };
+            proposal.withdrawn = Some(withdrawal);
+        }
+    }
+    world
+}
+
 /// The world of the chat `events`, with the proposal whose revisions are `revisions`, oldest first.
 fn with_proposal(events: Vec<EventBody>, revisions: impl Into<Vec<ProposalRevision>>) -> World {
     let mut world = chat_world(SessionStatus::Idle, events);
@@ -241,6 +280,7 @@ fn with_proposal(events: Vec<EventBody>, revisions: impl Into<Vec<ProposalRevisi
         session_id: session.id.clone(),
         current: revisions.last().unwrap().clone(),
         revisions: revisions.iter().map(ProposalRevision::summary).collect(),
+        withdrawn: None,
         created_at_ms: session.created_at_ms,
         rev: protocol::model::Rev::new(1),
     };
