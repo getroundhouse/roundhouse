@@ -1,9 +1,10 @@
 use super::super::Taken;
+use super::by_session::SessionsListed;
 use super::github::GithubListed;
 use crate::Agents;
 use protocol::model::{
-    Account, AccountId, DiffComment, HubSettings, ModelList, ModelListKey, NewWorkspaceDraft, Reach, Record, Repo,
-    RepoId, Session, SessionId, Subagent, SubagentId, Terminal, Workspace, WorkspaceId,
+    Account, AccountId, DiffComment, HubSettings, ModelList, ModelListKey, NewWorkspaceDraft, Proposal, ProposalId,
+    Reach, Record, Repo, RepoId, Session, SessionId, Subagent, SubagentId, Terminal, Workspace, WorkspaceId,
 };
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -11,12 +12,13 @@ use std::sync::Arc;
 #[derive(Clone, Debug, Default)]
 pub struct Snapshot {
     pub(super) records: Arc<Listed>,
-    pub(super) subagents: Arc<SubagentsListed>,
+    pub(super) subagents: Arc<SessionsListed<Subagent>>,
+    pub(super) proposals: Arc<SessionsListed<Proposal>>,
     /// Not a record, but read beside them, as [`super::super::HubRecords`] says.
     pub(super) agents: Arc<Agents>,
 }
 
-/// Every record but subagents, as views read them.
+/// Every record but those listed by session, as views read them.
 #[derive(Debug, Default)]
 pub(in super::super) struct Listed {
     /// By name.
@@ -37,16 +39,6 @@ pub(in super::super) struct Listed {
     pub(super) hub_settings: Option<HubSettings>,
     pub(super) new_workspace_draft: Option<NewWorkspaceDraft>,
     pub(super) github: GithubListed,
-}
-
-/// The subagents of the sessions views asked for, as views read them.
-#[derive(Debug, Default)]
-pub(in super::super) struct SubagentsListed {
-    /// Each session's, in the order they started, or last started again. Each is shared with what client-core holds, since one can hold a
-    /// call's whole input, such as all of a file it wrote, and with what each frame draws.
-    pub(super) sessions: HashMap<SessionId, Group<Arc<Subagent>>>,
-    /// Where each is in its session's.
-    pub(super) at: HashMap<SessionId, HashMap<SubagentId, usize>>,
 }
 
 /// Some records that go together, such as a workspace's sessions, and which copies of them these are.
@@ -110,7 +102,7 @@ impl Listed {
                     its.push((terminal.clone(), taken));
                 }
                 // Held apart, as `HubRecords::apply_record` says.
-                Record::Subagent(_) => {}
+                Record::Subagent(_) | Record::Proposal(_) => {}
             }
         }
         listed.github.order();
@@ -136,24 +128,14 @@ impl Listed {
     }
 }
 
-impl SubagentsListed {
-    /// From each session's subagents held, with when each copy was taken in.
-    pub(in super::super) fn of<'a>(held: impl Iterator<Item = (&'a SessionId, Vec<(Arc<Subagent>, Taken)>)>) -> Self {
-        let started =
-            |a: &Arc<Subagent>, b: &Arc<Subagent>| (a.started_at_ms, &a.call).cmp(&(b.started_at_ms, &b.call));
-        let sessions: HashMap<SessionId, Group<Arc<Subagent>>> =
-            held.map(|(session, its)| (session.clone(), Group::of(its, started))).collect();
-        let at = sessions.iter().map(|(session, its)| {
-            let at = its.items.iter().enumerate().map(|(at, subagent)| (subagent.id(), at));
-            (session.clone(), at.collect())
-        });
-        SubagentsListed { at: at.collect(), sessions }
-    }
-}
-
 impl Snapshot {
-    pub(in super::super) fn new(records: Arc<Listed>, subagents: Arc<SubagentsListed>, agents: Arc<Agents>) -> Self {
-        Snapshot { records, subagents, agents }
+    pub(in super::super) fn new(
+        records: Arc<Listed>,
+        subagents: Arc<SessionsListed<Subagent>>,
+        proposals: Arc<SessionsListed<Proposal>>,
+        agents: Arc<Agents>,
+    ) -> Self {
+        Snapshot { records, subagents, proposals, agents }
     }
 
     /// What each kind of agent the hub runs is called and offers. None until the hub has said, and for good from a hub
@@ -238,15 +220,25 @@ impl Snapshot {
     }
 
     /// The session's subagents, in the order they started, or last started again, once a view has asked for them with
-    /// [`crate::RecordsFeed::follow_subagents`] and they've been listed.
+    /// [`crate::RecordsFeed::follow_session_records`] and they've been listed.
     pub fn subagents(&self, session: &SessionId) -> &[Arc<Subagent>] {
-        self.subagents.sessions.get(session).map_or(&[], |its| &its.items)
+        self.subagents.of_session(session)
     }
 
     /// The subagent `subagent`, in `session`.
     pub fn subagent(&self, session: &SessionId, subagent: &SubagentId) -> Option<&Arc<Subagent>> {
-        let at = self.subagents.at.get(session)?.get(subagent)?;
-        self.subagents.sessions.get(session).map(|its| &its.items[*at])
+        self.subagents.find(session, subagent)
+    }
+
+    /// The session's proposals, in the order they were made, once a view has asked for them with
+    /// [`crate::RecordsFeed::follow_session_records`] and they've been listed.
+    pub fn proposals(&self, session: &SessionId) -> &[Arc<Proposal>] {
+        self.proposals.of_session(session)
+    }
+
+    /// The proposal `proposal`, in `session`.
+    pub fn proposal(&self, session: &SessionId, proposal: &ProposalId) -> Option<&Arc<Proposal>> {
+        self.proposals.find(session, proposal)
     }
 
     /// What changed between `earlier`, such as the snapshot a view last looked at, and this one.
@@ -267,6 +259,7 @@ impl Changes<'_> {
     pub fn any(&self) -> bool {
         !Arc::ptr_eq(&self.now.records, &self.then.records)
             || !Arc::ptr_eq(&self.now.subagents, &self.then.subagents)
+            || !Arc::ptr_eq(&self.now.proposals, &self.then.proposals)
             || self.agents()
     }
 
@@ -301,8 +294,12 @@ impl Changes<'_> {
 
     /// Whether any of the session's subagents changed, came or went.
     pub fn subagents(&self, session: &SessionId) -> bool {
-        let copies = |snapshot: &Snapshot| snapshot.subagents.sessions.get(session).map(|its| its.copies);
-        copies(self.now) != copies(self.then)
+        self.now.subagents.copies(session) != self.then.subagents.copies(session)
+    }
+
+    /// Whether any of the session's proposals changed, came or went.
+    pub fn proposals(&self, session: &SessionId) -> bool {
+        self.now.proposals.copies(session) != self.then.proposals.copies(session)
     }
 }
 
@@ -353,7 +350,8 @@ impl InWorkspace {
         self.all.terminals(&self.workspace().id)
     }
 
-    /// The whole snapshot it's part of, such as for the accounts its sessions name and their subagents.
+    /// The whole snapshot it's part of, such as for the accounts its sessions name, their subagents and their
+    /// proposals.
     pub fn all(&self) -> &Snapshot {
         &self.all
     }

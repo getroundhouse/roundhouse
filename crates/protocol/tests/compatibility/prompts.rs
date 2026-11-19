@@ -6,8 +6,8 @@ use protocol::attachment::{Attachment, MediaType};
 use protocol::client::{ClientFrame, ClientRequest, agent, queue::SessionQueue};
 use protocol::event::EventBody;
 use protocol::frame;
-use protocol::model::{AttachmentId, QueuedPrompt};
-use protocol::prompt::Prompt;
+use protocol::model::{AttachmentId, Place, PromptLine, QueuedPrompt, RevisionNumber, Seq};
+use protocol::prompt::{Prompt, PromptFrom};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
@@ -67,24 +67,83 @@ fn a_queued_prompt_on_its_session_s_record_keeps_its_form() {
     let with_files = json!({"client_msg_id": "m", "text": "why?", "attachments": [log_form()]});
     keeps_its_json_form(
         &with_files,
-        &QueuedPrompt { client_msg_id: "m".into(), prompt: Prompt::carrying("why?", vec![log()]) },
+        &QueuedPrompt {
+            client_msg_id: "m".into(),
+            prompt: Prompt::carrying("why?", vec![log()]),
+            from: PromptFrom::Person,
+        },
     );
 
     let bare = json!({"client_msg_id": "m", "text": "go"});
-    keeps_its_json_form(&bare, &QueuedPrompt { client_msg_id: "m".into(), prompt: Prompt::new("go") });
+    keeps_its_json_form(
+        &bare,
+        &QueuedPrompt { client_msg_id: "m".into(), prompt: Prompt::new("go"), from: PromptFrom::Person },
+    );
+
+    let answering = json!({"client_msg_id": "m", "text": "I chose B", "from": {"from": "proposal_response", "proposal": "p", "revision": 1}});
+    let from = PromptFrom::ProposalResponse { proposal: "p".into(), revision: RevisionNumber::FIRST };
+    keeps_its_json_form(
+        &answering,
+        &QueuedPrompt { client_msg_id: "m".into(), prompt: Prompt::new("I chose B"), from },
+    );
 }
 
 /// Spelled out, since the log holds this form for good.
 #[test]
 fn a_recorded_prompt_keeps_its_form() {
     let recorded = json!({"type": "user_prompt", "client_msg_id": "m", "text": "", "attachments": [log_form()]});
-    let body = EventBody::UserPrompt { client_msg_id: Some("m".into()), prompt: Prompt::carrying("", vec![log()]) };
+    let body = EventBody::UserPrompt {
+        client_msg_id: Some("m".into()),
+        prompt: Prompt::carrying("", vec![log()]),
+        from: PromptFrom::Person,
+    };
     keeps_its_json_form(&recorded, &body);
 
     let bare = json!({"type": "user_prompt", "client_msg_id": null, "text": "hi"});
-    keeps_its_json_form(&bare, &EventBody::UserPrompt { client_msg_id: None, prompt: Prompt::new("hi") });
+    keeps_its_json_form(
+        &bare,
+        &EventBody::UserPrompt { client_msg_id: None, prompt: Prompt::new("hi"), from: PromptFrom::Person },
+    );
+
+    // As the hub records the one it writes to tell the agent the answer to a proposal.
+    let answering = json!({
+        "type": "user_prompt",
+        "client_msg_id": "m",
+        "text": "I chose B",
+        "from": {"from": "proposal_response", "proposal": "p", "revision": 1},
+    });
+    let body = EventBody::UserPrompt {
+        client_msg_id: Some("m".into()),
+        prompt: Prompt::new("I chose B"),
+        from: PromptFrom::ProposalResponse { proposal: "p".into(), revision: RevisionNumber::FIRST },
+    };
+    keeps_its_json_form(&answering, &body);
 
     // As a hub from before `client_msg_id` recorded it.
     let oldest: EventBody = frame::decode(br#"{"type":"user_prompt","text":"hi"}"#).unwrap();
-    assert_eq!(oldest, EventBody::UserPrompt { client_msg_id: None, prompt: Prompt::new("hi") });
+    assert_eq!(
+        oldest,
+        EventBody::UserPrompt { client_msg_id: None, prompt: Prompt::new("hi"), from: PromptFrom::Person }
+    );
+}
+
+/// Spelled out, since a hub lists a chat's prompts as these lines, and says who wrote one only when it wasn't the
+/// person, so a hub from before reads as the person's.
+#[test]
+fn a_prompt_line_says_who_wrote_it_but_for_the_person() {
+    let line = |text: &str, from| PromptLine::new(Seq::new(7), text, 0).placed(Place::new(6)).written_by(from);
+    let theirs = json!({"seq": 7, "place": 6, "text": "Fix it", "files": 0});
+    keeps_its_json_form(&theirs, &line("Fix it", PromptFrom::Person));
+
+    let answer = json!({
+        "seq": 7,
+        "place": 6,
+        "text": "I chose B",
+        "files": 0,
+        "from": {"from": "proposal_response", "proposal": "p", "revision": 1},
+    });
+    keeps_its_json_form(
+        &answer,
+        &line("I chose B", PromptFrom::ProposalResponse { proposal: "p".into(), revision: RevisionNumber::FIRST }),
+    );
 }

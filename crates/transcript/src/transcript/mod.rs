@@ -7,6 +7,7 @@ mod events;
 mod find;
 mod model;
 mod outline;
+mod proposals;
 mod record;
 mod sending;
 #[cfg(feature = "testing")]

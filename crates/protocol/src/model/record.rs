@@ -7,8 +7,8 @@ use serde::{Deserialize, Serialize};
 use super::{
     Account, AccountId, CommentId, DiffComment, FoundGithubLogin, GithubAccount, GithubAccountId, GithubApp,
     GithubAppId, GithubReach, GithubSignIn, GithubSignInId, HubSettings, ModelList, ModelListKey, NewWorkspaceDraft,
-    ProviderName, Repo, RepoId, Rev, Session, SessionId, Subagent, SubagentId, Terminal, TerminalId, Workspace,
-    WorkspaceId,
+    Proposal, ProposalId, ProviderName, Repo, RepoId, Rev, Session, SessionId, Subagent, SubagentId, Terminal,
+    TerminalId, Workspace, WorkspaceId,
 };
 
 /// Which record, of which kind. A kind this build doesn't know reads as `Unknown`.
@@ -70,6 +70,11 @@ pub enum RecordKey {
     },
     /// Sent once the hub has let go of it, as [`ModelList`] says.
     ModelList(ModelListKey),
+    /// A proposal. The hub never removes one while its chat is there, so this isn't sent, and a peer from before it
+    /// would read it as `Unknown`.
+    Proposal {
+        id: ProposalId,
+    },
     #[serde(other)]
     Unknown,
 }
@@ -93,6 +98,8 @@ pub enum Record {
     GithubReach(GithubReach),
     Terminal(Terminal),
     ModelList(ModelList),
+    /// Listed by session, apart from [`Records`], as subagents are, since each holds what its agent wrote in full.
+    Proposal(Proposal),
 }
 
 impl Record {
@@ -115,6 +122,7 @@ impl Record {
             Record::GithubReach(reach) => RecordKey::GithubReach { repo: reach.repo.clone() },
             Record::Terminal(terminal) => RecordKey::Terminal { id: terminal.id.clone() },
             Record::ModelList(list) => RecordKey::ModelList(list.key.clone()),
+            Record::Proposal(proposal) => RecordKey::Proposal { id: proposal.id.clone() },
         }
     }
 
@@ -136,11 +144,12 @@ impl Record {
             Record::GithubReach(reach) => reach.rev,
             Record::Terminal(terminal) => terminal.rev,
             Record::ModelList(list) => list.rev,
+            Record::Proposal(proposal) => proposal.rev,
         }
     }
 }
 
-/// Every record a hub holds, read at one moment, but for subagents, which are listed by session.
+/// Every record a hub holds, read at one moment, but for subagents and proposals, which are listed by session.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Default)]
 pub struct Records {
     pub repos: Vec<Repo>,

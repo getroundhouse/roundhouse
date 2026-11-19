@@ -14,6 +14,7 @@ use super::{LAST_SEQ, answered_simply, session, start_hub_answering};
 use crate::Client;
 use crate::client::follow::Source as _;
 use crate::session_log::SessionLog;
+use protocol::prompt::PromptFrom;
 
 /// So whatever reads a version, such as a frame drawing each of its rows from it, reads one log however much comes
 /// while it does.
@@ -25,7 +26,11 @@ fn a_version_stays_as_it_was_while_the_log_goes_on() {
     let open = OpenSession::start(&Client::connect(&socket, "test").unwrap(), &session());
     let before = open.version();
 
-    open.add_pending(QueuedPrompt { client_msg_id: "m1".into(), prompt: Prompt::new("next") });
+    open.add_pending(QueuedPrompt {
+        client_msg_id: "m1".into(),
+        prompt: Prompt::new("next"),
+        from: PromptFrom::Person,
+    });
 
     assert!(before.pending().is_empty(), "the version read before stays as it was");
     assert_eq!(open.version().pending().len(), 1, "and the next has it");

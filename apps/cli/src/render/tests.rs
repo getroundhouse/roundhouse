@@ -6,10 +6,11 @@ use protocol::event::{
     Again, AgentTask, ContentBlock, Denied, EndedTask, FailureKind, RequestFailure, TaskKind, TaskOutcome,
 };
 use protocol::fixtures;
-use protocol::model::{EndedWait, Seq, WaitEnd, WaitEnded};
+use protocol::model::{EndedWait, RevisionNumber, Seq, WaitEnd, WaitEnded};
+use protocol::prompt::PromptFrom;
 use serde_json::json;
 
-use super::{Printer, called, came_back, denial, own_turn, request_failed, started};
+use super::{Printer, called, came_back, denial, own_turn, prompted, request_failed, started};
 
 fn task(id: &str, kind: TaskKind) -> AgentTask {
     AgentTask { id: id.into(), description: Some(format!("Do {id}")), kind, call: None, subagent: None }
@@ -158,4 +159,14 @@ fn a_failed_request_that_repeats_the_one_before_says_how_many_times_in_a_row() {
     assert_eq!(request_failed(&failure, None), "request failed: You've hit your limit.");
     let again = Again { previous: Seq::new(12), times: 3 };
     assert_eq!(request_failed(&failure, Some(again)), "request failed again, 3 times in a row: You've hit your limit.");
+}
+
+/// The prompt the hub wrote to tell the agent the person's answer isn't printed as though they typed it.
+#[test]
+fn a_prompt_says_whether_the_person_wrote_it_or_the_hub_did() {
+    let answer = PromptFrom::ProposalResponse { proposal: "p".into(), revision: RevisionNumber::FIRST };
+
+    assert_eq!(prompted(&PromptFrom::Person, "Fix it", &[]), "you: Fix it");
+    assert_eq!(prompted(&answer, "I chose B", &[]), "hub, with your response: I chose B");
+    assert_eq!(prompted(&PromptFrom::Unknown, "Go on", &[]), "hub: Go on", "one a newer hub wrote");
 }

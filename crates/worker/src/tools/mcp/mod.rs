@@ -2,7 +2,7 @@
 //! initializes and offers ordinary tools. Both use the same authenticated HTTP endpoint and hub asks.
 
 #[cfg(test)]
-use super::{diff_comments, pull_request, pull_requests};
+use super::{diff_comments, proposals, pull_request, pull_requests};
 #[cfg(test)]
 use crate::asks::Asks;
 #[cfg(test)]

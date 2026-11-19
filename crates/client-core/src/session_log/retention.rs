@@ -12,6 +12,7 @@ use protocol::prompt::Prompt;
 
 use super::tests::page;
 use super::{By, MAX_LOADED_EVENTS, Position, PromptState, Row, SessionLog};
+use protocol::prompt::PromptFrom;
 
 fn fetch(log: &mut SessionLog, make: impl Fn(Range<u64>) -> Vec<SessionEvent>) -> Vec<Range<Position>> {
     let mut fetched = Vec::new();
@@ -139,7 +140,10 @@ fn a_hub_upgrade_rereads_stale_pages_while_keeping_snapshots_immutable() {
 #[test]
 fn an_agent_other_event_does_not_make_an_unsettled_prompt_look_taken() {
     let mut log = SessionLog::default();
-    log.apply_event(event(Seq::FIRST, EventBody::UserPrompt { client_msg_id: None, prompt: Prompt::new("waiting") }));
+    log.apply_event(event(
+        Seq::FIRST,
+        EventBody::UserPrompt { client_msg_id: None, prompt: Prompt::new("waiting"), from: PromptFrom::Person },
+    ));
     log.apply_event(event(Seq::new(2), EventBody::AgentOther { kind: "future/event".into(), subagent: None }));
 
     assert_eq!(log.prompt_state(Seq::FIRST), PromptState::Waiting);

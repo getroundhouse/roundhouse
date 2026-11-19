@@ -28,13 +28,14 @@ pinned! {
     "client_calls/devices.rs" => [Pair(_), Authenticate(_), PairingStart, PairingWait(_), DeviceList, DeviceRevoke(_)],
     "client_calls/requests.rs" => [
         Hello(_), HubStatus, HubShutdown, HubShutdownIfIdle, HubRestart, HubConfigure(_), RepoAdd(_), RepoList,
-        RecordsList, AgentList, ModelsFor(_), SessionSubagents(_), AccountConnect(_), AccountSetDefault(_), AccountDisconnect(_),
-        GithubAccountConnect(_), GithubAccountDisconnect(_), GithubAccountSetDefault(_), GithubSignInStart(_),
-        GithubSignInCancel(_), WorkspaceCreate(_), WorkspaceList(_), WorkspaceArchive(_), WorkspaceRestore(_),
-        WorkspaceRename(_), WorkspaceRegenerateTitle(_), WorkspaceStatus(_), WorkspaceDiff(_), WorkspaceSetupLog(_),
-        WorkspaceRerunSetup(_), WorkspacePullRequest(_), WorkspaceCommentDraft(_), CommentAdd(_), CommentList(_),
-        CommentEdit(_), CommentDelete(_), WorkspaceFiles(_), WorkspaceFolderRead(_), WorkspaceFileRead(_),
-        WorkspaceFileReadAt(_), WorkspaceFileOpenAt(_), WorkspaceFilePages(_),
+        RecordsList, AgentList, ModelsFor(_), SessionSubagents(_), SessionProposals(_), AccountConnect(_),
+        AccountSetDefault(_), AccountDisconnect(_), GithubAccountConnect(_), GithubAccountDisconnect(_),
+        GithubAccountSetDefault(_), GithubSignInStart(_), GithubSignInCancel(_), WorkspaceCreate(_), WorkspaceList(_),
+        WorkspaceArchive(_), WorkspaceRestore(_), WorkspaceRename(_), WorkspaceRegenerateTitle(_), WorkspaceStatus(_),
+        WorkspaceDiff(_), WorkspaceSetupLog(_), WorkspaceRerunSetup(_), WorkspacePullRequest(_),
+        WorkspaceCommentDraft(_), CommentAdd(_), CommentList(_), CommentEdit(_), CommentDelete(_), WorkspaceFiles(_),
+        WorkspaceFolderRead(_), WorkspaceFileRead(_), WorkspaceFileReadAt(_), WorkspaceFileOpenAt(_),
+        WorkspaceFilePages(_),
     ],
     "client_calls/session_requests.rs" => [
         SessionCreate(_), SessionEnsure(_), SessionList(_), SessionGet(_), SessionConfigure(_), SessionClose(_),
@@ -50,6 +51,7 @@ pinned! {
     "client_calls/github_apps.rs" => [
         GithubAppManifestWrite(_), GithubAppMake(_), GithubAppInstallationsConnect(_), GithubAppRemove(_),
     ],
+    "proposals.rs" => [ProposalAnswer(_), ProposalRevisionsRead(_)],
     "terminals.rs" => [TerminalOpen(_), TerminalAttach(_), TerminalInput(_), TerminalResize(_), TerminalClose(_)],
 }
 

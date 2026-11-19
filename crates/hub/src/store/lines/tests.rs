@@ -1,5 +1,6 @@
 use protocol::event::{CompactedBy, CompactionOutcome, ContentBlock, EventBody};
-use protocol::model::{Place, SettledAt, Settlement, Workspace};
+use protocol::model::{Place, PromptFrom, RevisionNumber, SettledAt, Settlement, Workspace};
+use protocol::prompt::Prompt;
 use rusqlite::params;
 
 use super::*;
@@ -139,8 +140,8 @@ fn a_workspaces_prompts_are_listed_oldest_first_across_its_chats() {
     assert!(store.workspace_prompt_lines(&"missing".into()).unwrap().is_empty());
 }
 
-/// The hub reads a prompt's text straight from what's stored, and a client makes its line from the event, so the two
-/// must agree, or a client would count the same prompt as changed.
+/// The hub reads a prompt's text and who wrote it straight from what's stored, and a client makes its line from the
+/// event, so the two must agree, or a client would count the same prompt as changed, or as the person's.
 #[test]
 fn a_listed_line_is_the_line_its_event_makes() {
     let dir = tempfile::tempdir().unwrap();
@@ -149,7 +150,7 @@ fn a_listed_line_is_the_line_its_event_makes() {
     let texts =
         ["\0a\0b", "\u{1b}[2Jcleared", "abc\u{202E}def", "\"quoted\" \\ back", "👩\u{200D}💻 é", long.as_str(), ""];
 
-    let made: Vec<_> = texts
+    let mut made: Vec<_> = texts
         .iter()
         .enumerate()
         .map(|(files, text)| {
@@ -157,6 +158,9 @@ fn a_listed_line_is_the_line_its_event_makes() {
             PromptLine::of(&event).unwrap()
         })
         .collect();
+    let from = PromptFrom::ProposalResponse { proposal: "p".into(), revision: RevisionNumber::FIRST };
+    let answer = EventBody::UserPrompt { client_msg_id: None, prompt: Prompt::new("I chose B"), from };
+    made.extend(PromptLine::of(&store.append(&"s".into(), None, &answer, None, None, None).unwrap().event));
 
     assert_eq!(store.prompt_lines(&"s".into()).unwrap(), made);
 }

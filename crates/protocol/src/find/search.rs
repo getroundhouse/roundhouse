@@ -90,7 +90,8 @@ impl Needle {
     }
 
     /// Whether the event holds the needle in any text it records, as [`Needle::may_be_in_markdown`] looks: what was
-    /// typed or written, every value, key and number in a call's input, also as the JSON a chat shows it as, what came
+    /// typed or written, but for the prompt that tells the agent the answer to a proposal, which a chat shows as the
+    /// proposal's line, every value, key and number in a call's input, also as the JSON a chat shows it as, what came
     /// back, the lines of a change, what a subagent was for, was asked and reported, and what went wrong, such as why a
     /// request to the model failed. That's everything a chat shows of it, and more, so a client that finds where it
     /// shows can start from these.
@@ -150,7 +151,8 @@ impl Needle {
 /// Whether `found` says yes for any text the event records, as [`Needle::is_in_event`] lists them.
 fn any_text(body: &EventBody, found: &mut impl FnMut(&str) -> bool) -> bool {
     match body {
-        EventBody::UserPrompt { prompt, .. } => found(&prompt.text),
+        // One the hub wrote to tell the agent the answer to a proposal is shown as the proposal's line, not as words.
+        EventBody::UserPrompt { prompt, from, .. } => from.responds_to().is_none() && found(&prompt.text),
         EventBody::Assistant { blocks, .. } | EventBody::AgentUser { blocks, .. } => {
             blocks.iter().any(|block| any_text_in_block(block, found))
         }

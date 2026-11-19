@@ -274,6 +274,7 @@ The pieces screens are built from, on the foundations in `look.md`: what each is
 | `Subagent` | A subagent, by its kind or what it's for: the robot, then its words, such as `Explore` |
 | `Server` | An MCP server a tool is from: a plug, then its name, such as `github` |
 | `Site` | A site, by its address's host: a globe, then the host, such as what a fetch read |
+| `Proposal` | A proposal, by its title: the split mark, then the title whole, such as on the line of the call that made it |
 
 **Every kind of chip, and a file's chip with the lines it's about, with what changed in it, and deleted.** *Unconfirmed.*
 

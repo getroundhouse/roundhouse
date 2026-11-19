@@ -25,7 +25,7 @@ mod update_rule;
 
 pub(crate) use alone::rows_repeating_report;
 pub use alone::subagent_standing;
-pub(crate) use around::{NEAR, REACH, SubagentCalls, redrawn_with, retry_at};
+pub(crate) use around::{NEAR, REACH, SubagentCalls, blocks_of, redrawn_with, retry_at};
 use column::column;
 pub(crate) use column::room_under;
 pub use column::{ABOVE_THE_COMPOSER, around_column, in_column};
@@ -35,6 +35,7 @@ use notices::exit_output;
 use plan_card::plan_card;
 pub(crate) use shown::{Found, of_row as found_in_row, rows_drawing, rows_to_count};
 use text::{from_blocks, written};
+pub use tools::proposal::answered_parts as proposal_answered_parts;
 pub(crate) use tools::{ChangeAsked, agent::Opens};
 
 mod rendering;

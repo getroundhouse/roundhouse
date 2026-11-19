@@ -8,6 +8,7 @@ use super::super::tests::{notice, store_with_session};
 use super::super::{AddedBy, SessionChange};
 use super::super::{older, schema};
 use super::*;
+use protocol::prompt::PromptFrom;
 
 fn effort(store: &Store) -> Effort {
     store.get_session(&"s".into()).unwrap().session.effort
@@ -243,7 +244,7 @@ fn a_session_anything_has_been_sent_in_is_kept() {
         store.append(&"s".into(), None, &notice("x"), None, None, None).unwrap();
     });
     kept_once("a queued prompt", |store| {
-        let later = QueuedPrompt { client_msg_id: "m".into(), prompt: Prompt::new("later") };
+        let later = QueuedPrompt { client_msg_id: "m".into(), prompt: Prompt::new("later"), from: PromptFrom::Person };
         store.queue_prompt(&"s".into(), &later).unwrap();
     });
 }

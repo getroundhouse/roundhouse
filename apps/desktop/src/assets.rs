@@ -53,6 +53,7 @@ gpui_kit::assets::icon_assets!(
         RotateCcwClock,
         ScrollText,
         Server,
+        Split,
         SquareArrowRight,
         SquareDot,
         SquareMinus,

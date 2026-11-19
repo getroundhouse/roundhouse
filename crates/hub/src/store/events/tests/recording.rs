@@ -10,6 +10,7 @@ use protocol::fixtures::{allow_once, deny, to_run};
 use protocol::model::SessionStatus::{Idle, Running, WaitingApproval};
 use protocol::model::{AttachmentId, Session, SessionStatus};
 use protocol::prompt::Prompt;
+use protocol::prompt::PromptFrom;
 use std::collections::HashMap;
 
 /// Appends an event that changes the session's status.
@@ -127,7 +128,11 @@ pub(crate) fn prompt(text: &str, files: usize) -> EventBody {
         media_type: MediaType::Png,
         size_bytes: 4,
     };
-    EventBody::UserPrompt { client_msg_id: None, prompt: Prompt::carrying(text, Vec::from_fn(files, shot)) }
+    EventBody::UserPrompt {
+        client_msg_id: None,
+        prompt: Prompt::carrying(text, Vec::from_fn(files, shot)),
+        from: PromptFrom::Person,
+    }
 }
 
 /// An event someone sent: the hub, the agent, or one of a few subagents, by the number of the call that started it.

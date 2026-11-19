@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 
 use super::{
     Hello, accounts, admin, agent, attachments, comments, drafts, files, github_accounts, github_apps, log,
-    new_workspace, queue, records, sessions, subscriptions, terminals, waits, workspaces,
+    new_workspace, proposals, queue, records, sessions, subscriptions, terminals, waits, workspaces,
 };
 
 /// Every request, each with a type of its own that names what it's answered with. One with no fields is a variant with
@@ -71,6 +71,9 @@ pub enum ClientRequest {
     SessionFind(log::SessionFind),
     SessionSubscribe(subscriptions::SessionSubscribe),
     SessionSubagents(records::SessionSubagents),
+    SessionProposals(records::SessionProposals),
+    ProposalAnswer(proposals::ProposalAnswer),
+    ProposalRevisionsRead(proposals::ProposalRevisionsRead),
     SessionReadPlaces(log::SessionReadPlaces),
     SessionSubscribePlaces(subscriptions::SessionSubscribePlaces),
     SessionUnsubscribe(subscriptions::SessionUnsubscribe),

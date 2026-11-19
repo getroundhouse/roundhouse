@@ -1,7 +1,7 @@
 //! What a model is asked a title from: which prompts, and which of the images they carried.
 
 use protocol::attachment::MediaType;
-use protocol::model::Seq;
+use protocol::model::{PromptFrom, RevisionNumber, Seq};
 
 use super::super::*;
 
@@ -15,6 +15,19 @@ fn a_model_is_asked_about_every_prompt_in_order_under_what_to_make_of_them() {
 
     let expected = format!("{WORK_SO_FAR}\n\n1. Fix the login\n2. Now add a test");
     assert_eq!(asked, expected, "a prompt that only carried files says nothing, so it's passed over");
+}
+
+/// What the hub wrote for the person, such as the answer to a proposal, isn't what they asked for.
+#[test]
+fn a_model_is_asked_only_about_what_the_person_wrote() {
+    let mut prompts = lines(&["Fix the login", "I chose B, in your proposal", "Now add a test"]);
+    prompts[1] = prompts[1]
+        .clone()
+        .written_by(PromptFrom::ProposalResponse { proposal: "p".into(), revision: RevisionNumber::FIRST });
+
+    let asked = work_so_far(&prompts).unwrap();
+
+    assert_eq!(asked, format!("{WORK_SO_FAR}\n\n1. Fix the login\n2. Now add a test"));
 }
 
 #[test]

@@ -35,6 +35,7 @@ mod new_workspace_draft;
 #[cfg(test)]
 pub(crate) mod older;
 mod prompts;
+mod proposals;
 mod queue;
 mod reading;
 mod records;
@@ -64,7 +65,8 @@ pub(crate) use github_sign_ins::{GithubApproved, GithubApproving, StartedSignIn}
 pub use instances::{InstanceStage, RecordedInstance};
 pub(crate) use logins::{Connected, Connecting, Held, IdFrom};
 pub use made::{Made, MadeByRequest};
-pub use queue::{Changed, Queued, Queuing};
+pub use proposals::{AnswerToKeep, Answering};
+pub use queue::{Changed, Queued, Queuing, Unqueued};
 pub use reading::Reading;
 pub use repos::RepoToRead;
 pub(crate) use sessions::SessionLogin;

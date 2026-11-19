@@ -52,6 +52,7 @@ mod patch;
 mod pictures;
 mod places;
 mod prompt_screens;
+mod proposal_chats;
 mod pull_requests;
 mod question_chats;
 mod screens;

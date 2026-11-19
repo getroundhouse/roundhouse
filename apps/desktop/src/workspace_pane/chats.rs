@@ -7,7 +7,7 @@ use client_core::records::InWorkspace;
 use gpui_kit::{AppContext, Context, Result, Window};
 use protocol::capability::settings::Settings;
 use protocol::client::{ApiError, ErrorCode};
-use protocol::model::{Session, SessionId, TerminalId};
+use protocol::model::{Session, SessionId};
 use transcript::{Transcript, TranscriptEvent};
 
 use super::attaching::Composed;
@@ -23,15 +23,6 @@ pub(super) fn neighbor(was_open: &[SessionId], gone: &SessionId, open: &[Session
     let at = was_open.iter().position(|id| id == gone).unwrap_or(0);
     let still_open_before = was_open[..at].iter().filter(|id| open.contains(id)).count();
     open.get(still_open_before).or_else(|| open.last()).cloned()
-}
-
-/// A tab `Ctrl-Tab` comes to.
-#[derive(Clone, PartialEq)]
-enum Stop {
-    File,
-    Subagent,
-    Chat(SessionId),
-    Terminal(TerminalId),
 }
 
 impl WorkspacePane {
@@ -161,15 +152,18 @@ impl WorkspacePane {
 
     fn make_transcript(&mut self, session: Session, cx: &mut Context<Self>) {
         let (client, subagents) = (self.client.clone(), self.subagents_of(&session.id).to_vec());
+        let proposals = self.shown.all().proposals(&session.id).to_vec();
         let view = cx.new(|cx| {
             let mut transcript = Transcript::new(client, &session, cx);
             transcript.set_thinking_open(crate::settings::get(cx).always_expand_thinking, cx);
             transcript.set_subagents(&subagents, cx);
+            transcript.set_proposals(&proposals, cx);
             transcript
         });
         Self::attach_transcript_hints(&view, cx);
-        // Its subagents' calls are drawn from their records, which client-core keeps once a chat asks for them.
-        self.records.follow_subagents(&session.id);
+        // Its subagents' and proposals' calls are drawn from their records, which client-core keeps once a chat asks
+        // for them.
+        self.records.follow_session_records(&session.id);
         let chat = session.id.clone();
         let events = cx.subscribe(&view, move |this, transcript, event: &TranscriptEvent, cx| match event {
             TranscriptEvent::Error(message) => cx.emit(PaneEvent::Error(message.clone())),
@@ -180,6 +174,7 @@ impl WorkspacePane {
             TranscriptEvent::OpenSubagent { subagent, title } => {
                 this.open_subagent_tab(chat.clone(), subagent.clone(), title.clone(), cx);
             }
+            TranscriptEvent::OpenProposal { proposal } => this.open_proposal_tab(chat.clone(), proposal, true, cx),
             TranscriptEvent::TurnEnded => {
                 // The hub reads the pull request again itself, and records it, except a hub too old to.
                 if this.workspace().pull_request.is_none() {
@@ -204,34 +199,6 @@ impl WorkspacePane {
         });
         self.chats.entry(session.id).or_default().transcript = Some((view, events));
         self.pass_on_agents(cx);
-    }
-
-    /// Moves to the tab before or after this one, in the order they're drawn, wrapping around: the file tab, the
-    /// subagent tab, the chats, then the terminals.
-    pub fn step_chat(&mut self, step: isize, cx: &mut Context<Self>) {
-        let chats = self.open_sessions().map(|session| Stop::Chat(session.id.clone()));
-        let stops: Vec<Stop> = (self.file_tab().map(|_| Stop::File).into_iter())
-            .chain(self.subagents.tab_session().map(|_| Stop::Subagent))
-            .chain(chats)
-            .chain(self.shown.terminals().iter().map(|terminal| Stop::Terminal(terminal.id.clone())))
-            .collect();
-        let here = match (self.showing(), self.active.clone()) {
-            (Showing::File, _) => Stop::File,
-            (Showing::Subagent, _) => Stop::Subagent,
-            (Showing::Terminal, _) => match self.terminal_in_front() {
-                Some(id) => Stop::Terminal(id.clone()),
-                None => return,
-            },
-            (Showing::Chat, Some(id)) => Stop::Chat(id),
-            (Showing::Chat, None) => return,
-        };
-        let Some(current) = stops.iter().position(|stop| *stop == here) else { return };
-        match stops[crate::app::wrapped_step(current, step, stops.len())].clone() {
-            Stop::File => self.show_file_tab(cx),
-            Stop::Subagent => self.bring_to_front(Showing::Subagent, cx),
-            Stop::Chat(id) => self.activate(id, cx),
-            Stop::Terminal(id) => self.show_terminal(id, cx),
-        }
     }
 
     /// Asks first if it would stop an agent that's working.
@@ -320,6 +287,7 @@ impl WorkspacePane {
         self.take_drafts_from_elsewhere(cx);
         self.keep_active_valid(&was_open, cx);
         self.keep_subagent_tab_valid(cx);
+        self.keep_proposal_tab_valid(cx);
         self.keep_edit_valid(cx);
         self.showing_changed(cx);
         self.wind_cache_clock(cx);
@@ -342,10 +310,11 @@ impl WorkspacePane {
         });
     }
 
-    /// Lets go of every chat's subagents' records, as the pane goes, such as when its workspace is archived.
-    pub(crate) fn let_go_of_subagents(&self) {
+    /// Lets go of every chat's subagents' and proposals' records, as the pane goes, such as when its workspace is
+    /// archived.
+    pub(crate) fn let_go_of_session_records(&self) {
         for (id, _) in self.chats.iter().filter(|(_, chat)| chat.transcript.is_some()) {
-            self.records.unfollow_subagents(id);
+            self.records.unfollow_session_records(id);
         }
     }
 
@@ -353,13 +322,13 @@ impl WorkspacePane {
     /// were open, and starts one if none are left.
     fn keep_active_valid(&mut self, was_open: &[SessionId], cx: &mut Context<Self>) {
         let open: Vec<SessionId> = self.open_sessions().map(|s| s.id.clone()).collect();
-        // A chat that's gone takes everything the pane held for it: its transcript, and with it its subagents'
-        // records, and what was typed and attached in it, as the hub's draft does as it closes, rather than going to
-        // the chat that shows instead.
+        // A chat that's gone takes everything the pane held for it: its transcript, and with it its subagents' and
+        // proposals' records, and what was typed and attached in it, as the hub's draft does as it closes, rather than
+        // going to the chat that shows instead.
         let gone: Vec<(SessionId, Chat)> = self.chats.extract_if(|id, _| !open.contains(id)).collect();
         for (id, chat) in gone {
             if chat.transcript.is_some() {
-                self.records.unfollow_subagents(&id);
+                self.records.unfollow_session_records(&id);
             }
             if let Some(draft) = chat.draft {
                 self.let_go_of_files(&id, &draft.files);

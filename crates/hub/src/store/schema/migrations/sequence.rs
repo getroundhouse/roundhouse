@@ -382,4 +382,6 @@ pub(in super::super) const MIGRATIONS: &[Migration] = &[
     Sql(super::event_kinds::IN_ORDER),
     // The newest to-do list each chat's agent reported, which its record shows, in `todos`.
     Sql(super::todos::TODOS),
+    // The proposals agents make, in `proposals`.
+    Sql(super::proposals::PROPOSALS),
 ];

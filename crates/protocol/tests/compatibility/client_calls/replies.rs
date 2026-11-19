@@ -130,9 +130,18 @@ fn every_reply_of_the_hub_itself_or_listing_its_records_keeps_its_form() {
         ClientResponse::Sessions(sessions::Sessions { sessions: vec![] }),
         r#"{"result":"sessions","sessions":[]}"#,
     );
+}
+
+/// A chat's subagents and proposals, which are listed by chat, apart from every other record.
+#[test]
+fn every_list_of_a_chats_own_records_keeps_its_form() {
     answered(
         ClientResponse::Subagents(records::Subagents { subagents: vec![], rev: Rev::new(9) }),
         r#"{"result":"subagents","subagents":[],"rev":9}"#,
+    );
+    answered(
+        ClientResponse::Proposals(records::Proposals { proposals: vec![], rev: Rev::new(9) }),
+        r#"{"result":"proposals","proposals":[],"rev":9}"#,
     );
 }
 

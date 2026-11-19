@@ -54,6 +54,10 @@ fn every_request_of_the_hub_itself_or_for_its_records_keeps_its_form() {
         ClientRequest::SessionSubagents(records::SessionSubagents { id: "s".into() }),
         r#"{"method":"session_subagents","id":"s"}"#,
     );
+    asked(
+        ClientRequest::SessionProposals(records::SessionProposals { id: "s".into() }),
+        r#"{"method":"session_proposals","id":"s"}"#,
+    );
 }
 
 #[test]

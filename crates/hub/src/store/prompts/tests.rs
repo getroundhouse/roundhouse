@@ -4,9 +4,10 @@ use protocol::prompt::Prompt;
 
 use super::*;
 use crate::store::tests::store_with_session;
+use protocol::prompt::PromptFrom;
 
 fn prompt() -> EventBody {
-    EventBody::UserPrompt { client_msg_id: None, prompt: Prompt::new("x") }
+    EventBody::UserPrompt { client_msg_id: None, prompt: Prompt::new("x"), from: PromptFrom::Person }
 }
 
 fn append(store: &Store, body: &EventBody) -> Option<Vec<Seq>> {

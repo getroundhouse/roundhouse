@@ -155,7 +155,7 @@ impl HintCollector {
             EventBody::Assistant { blocks, .. } | EventBody::AgentUser { blocks, .. } => {
                 self.add_blocks(blocks, text_messages, tool_events);
             }
-            EventBody::UserPrompt { prompt, .. } if *text_messages < MAX_TEXT_MESSAGES => {
+            EventBody::UserPrompt { prompt, from, .. } if from.is_person() && *text_messages < MAX_TEXT_MESSAGES => {
                 for file in &prompt.files {
                     self.add_path(&file.name);
                 }

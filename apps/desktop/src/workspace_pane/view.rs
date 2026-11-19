@@ -80,12 +80,13 @@ impl WorkspacePane {
         })
     }
 
-    /// The file tab and the subagent tab if they're open, at the far left as tabs that are replaced rather than added
-    /// to usually are, then one tab for each open chat and each open terminal, and a menu that starts another of
-    /// either. At the far end are any closed chats to go back to.
+    /// The file tab, the subagent tab and the proposal tab if they're open, at the far left as tabs that are replaced
+    /// rather than added to usually are, then one tab for each open chat and each open terminal, and a menu that starts
+    /// another of either. At the far end are any closed chats to go back to.
     fn tab_row(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let mut tabs: Vec<AnyElement> = self.file_tab_element(cx).into_iter().collect();
         tabs.extend(self.subagent_tab_element(cx));
+        tabs.extend(self.proposal_tab_element(cx));
         for session in self.open_sessions() {
             tabs.push(self.chat_tab(session, cx));
         }
@@ -222,6 +223,7 @@ impl Render for WorkspacePane {
         let showing = match tab {
             Some(tab) => div().region(Region::OpenFile).flex_1().min_h_0().w_full().child(tab).into_any_element(),
             None if self.showing() == Showing::Subagent => self.subagent_view(cx),
+            None if self.showing() == Showing::Proposal => self.proposal_view(cx),
             None => match self.terminal_view() {
                 Some(terminal) => terminal,
                 None => self.chat(cx),

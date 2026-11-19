@@ -28,6 +28,7 @@ use serde_json::{Value, json};
 
 use super::harness::Harness;
 use crate::{AgentOutput, AgentProcess};
+use protocol::prompt::PromptFrom;
 
 const RUN: RunId = RunId::new(1);
 
@@ -192,7 +193,10 @@ async fn background_command_lists_task_drains_wakeup_into_own_turn_cancels_befor
         Harness::new(&plain_wakeup_script(), super::super::claims::full_access(), Start::New { conversation: None });
     let agent = h.started().await;
     let mut ledger = Ledger::new();
-    let p1 = ledger.push(None, EventBody::UserPrompt { prompt: Prompt::new("run tests"), client_msg_id: None });
+    let p1 = ledger.push(
+        None,
+        EventBody::UserPrompt { prompt: Prompt::new("run tests"), client_msg_id: None, from: PromptFrom::Person },
+    );
 
     agent.prompt(p1, &Prompt::new("run tests")).await.unwrap();
     let turn1 = ledger.collect_turn(&mut h).await;
@@ -370,7 +374,10 @@ async fn mid_turn_system_message_written_before_prompt_finishes_does_not_trigger
     let mut h = Harness::new(&script, super::super::claims::full_access(), Start::New { conversation: None });
     let agent = h.started().await;
     let mut ledger = Ledger::new();
-    let p1 = ledger.push(None, EventBody::UserPrompt { prompt: Prompt::new("turn 1"), client_msg_id: None });
+    let p1 = ledger.push(
+        None,
+        EventBody::UserPrompt { prompt: Prompt::new("turn 1"), client_msg_id: None, from: PromptFrom::Person },
+    );
     agent.prompt(p1, &Prompt::new("turn 1")).await.unwrap();
     loop {
         if matches!(h.next().await, AgentOutput::Event { body: EventBody::PromptTaken { .. }, .. }) {

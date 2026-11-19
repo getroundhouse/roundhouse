@@ -145,8 +145,8 @@ fn a_view_holds_only_the_agents_own_events_or_one_subagents_and_the_feed_keeps_t
     // the list the feed makes when it's asked.
     wait_until("the feed to follow", || feed.connected());
     // One the hub doesn't have, which comes before every real one, can't keep the rest from being listed.
-    feed.follow_subagents(&"!missing".into());
-    feed.follow_subagents(&session.id);
+    feed.follow_session_records(&"!missing".into());
+    feed.follow_session_records(&session.id);
     let finished = |feed: &RecordsFeed| {
         let record = feed.snapshot().subagent(&session.id, &id).map(|record| Subagent::clone(record));
         record.filter(|record| record.status == SubagentStatus::Finished)

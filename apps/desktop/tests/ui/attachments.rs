@@ -19,6 +19,7 @@ use protocol::prompt::Prompt;
 use transcript::TranscriptEvent;
 
 use crate::support::{FakeHub, Stack, Ui};
+use protocol::prompt::PromptFrom;
 
 /// A real PNG, so the app can read its size, as it does for any image it shows.
 fn png() -> Vec<u8> {
@@ -198,6 +199,7 @@ fn a_prompts_image_opens_over_the_window_as_big_as_fits_and_a_click_or_escape_cl
     let prompt = EventBody::UserPrompt {
         client_msg_id: None,
         prompt: Prompt::carrying("Look.".to_string(), vec![carried.clone()]),
+        from: PromptFrom::Person,
     };
     world.chat(
         &workspace,

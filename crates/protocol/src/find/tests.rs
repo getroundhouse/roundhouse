@@ -7,7 +7,8 @@ use crate::capability::calls::output::FileOutcome;
 use crate::capability::calls::{Call, CallOutput};
 use crate::event::{FileChange, Hunk, HunkLine, LineMark};
 use crate::fixtures;
-use crate::model::Seq;
+use crate::model::{RevisionNumber, Seq};
+use crate::prompt::{Prompt, PromptFrom};
 
 fn needle(query: &str) -> Needle {
     Needle::new(query).unwrap()
@@ -69,6 +70,18 @@ fn an_event_holds_what_it_records_of_a_call_and_its_result() {
     assert!(needle("\"timeout\": 600").is_in_event(&call), "and the JSON itself");
     assert!(needle("slow_down").is_in_event(&result), "a change's lines");
     assert!(!needle("granted").is_in_event(&EventBody::PromptTaken { prompt: Seq::new(1) }));
+}
+
+/// A chat shows the prompt that tells the agent the answer to a proposal as the proposal's line, not its words.
+#[test]
+fn the_person_s_prompt_holds_its_words_and_the_one_telling_an_answer_doesnt() {
+    let said = |from| EventBody::UserPrompt { client_msg_id: None, prompt: Prompt::new("I chose B"), from };
+
+    assert!(needle("chose").is_in_event(&said(PromptFrom::Person)));
+    assert!(
+        !needle("chose")
+            .is_in_event(&said(PromptFrom::ProposalResponse { proposal: "p".into(), revision: RevisionNumber::FIRST }))
+    );
 }
 
 #[test]
@@ -190,7 +203,11 @@ proptest! {
         let used = fixtures::typed_call("t", Call::Other { tool: "shell".into(), input });
         let blocks = vec![said, used];
         let bodies = [
-            EventBody::UserPrompt { client_msg_id: None, prompt: crate::prompt::Prompt::new(texts[3].clone()) },
+            EventBody::UserPrompt {
+                client_msg_id: None,
+                prompt: crate::prompt::Prompt::new(texts[3].clone()),
+                from: PromptFrom::Person,
+            },
             EventBody::Assistant { message_id: None, subagent: None, model: None, blocks, first_index: None },
             changed(&texts[0], &texts[1]),
         ];

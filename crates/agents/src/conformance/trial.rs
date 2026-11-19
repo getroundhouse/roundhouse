@@ -262,7 +262,7 @@ mod tests {
     use protocol::capability::Capabilities;
     use protocol::event::EventBody;
     use protocol::model::{RunId, Seq};
-    use protocol::prompt::Prompt;
+    use protocol::prompt::{Prompt, PromptFrom};
 
     use super::Trial;
 
@@ -276,7 +276,10 @@ mod tests {
             run,
             EventBody::AgentStarted { pid: 1, resumed: false, build: None, previous_build: None, capabilities: None },
         );
-        record(None, EventBody::UserPrompt { client_msg_id: None, prompt: Prompt::new("Go") });
+        record(
+            None,
+            EventBody::UserPrompt { client_msg_id: None, prompt: Prompt::new("Go"), from: PromptFrom::Person },
+        );
         for _ in 0..taken {
             record(run, EventBody::PromptTaken { prompt: Seq::new(2) });
         }

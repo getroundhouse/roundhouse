@@ -5,7 +5,7 @@ use crate::model::{
     AgentSessionId, ApprovalId, ClientMessageId, MessageId, ModelName, Place, RunId, Seq, SessionId, SubagentId,
     TaskId, ToolUseId, UsageLimit,
 };
-use crate::prompt::Prompt;
+use crate::prompt::{Prompt, PromptFrom};
 use compaction::CompactionOutcome;
 use content::ContentBlock;
 use ending::{ExitReason, TaskOutcome, TurnOutcome};
@@ -47,6 +47,9 @@ pub enum EventBody {
         /// Its files are in the order they were added, and their bytes are read with `AttachmentRead`.
         #[serde(flatten)]
         prompt: Prompt<Attachment>,
+        /// Who wrote it: the person, or the hub on their behalf, such as to tell the agent their answer to a proposal.
+        #[serde(default, skip_serializing_if = "PromptFrom::is_person")]
+        from: PromptFrom,
     },
     /// The agent took the prompt recorded at `prompt` into its conversation. One sent mid-turn waits until the agent
     /// can take it, such as when a running tool finishes. Every prompt gets this or `PromptDropped`, and until then the

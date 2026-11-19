@@ -20,5 +20,5 @@ mod tests;
 mod neighbors;
 #[cfg(test)]
 pub(super) use neighbors::block_key;
-pub(super) use neighbors::{Around, Asked, BlockAround, Closes, Opening, asks_questions, blocks_of, denied};
-pub(crate) use neighbors::{NEAR, drawn_in_row, drawn_with_its_call, retry_at};
+pub(super) use neighbors::{Answers, Around, Asked, BlockAround, Closes, Opening, asks_questions, denied};
+pub(crate) use neighbors::{NEAR, blocks_of, drawn_in_row, drawn_with_its_call, retry_at};

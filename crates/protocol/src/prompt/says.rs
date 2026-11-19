@@ -1,5 +1,4 @@
-//! What a person sends an agent, and what it has to be to go, sent or queued, so the hub and every client refuse the
-//! same ones and say the same about them.
+//! A prompt: what it says and the files it carries, and whether it can go.
 
 use serde::{Deserialize, Serialize};
 

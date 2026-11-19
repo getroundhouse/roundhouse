@@ -9,6 +9,7 @@ A chat has an outline at its right: a short tick for each prompt, top to bottom,
 - **Rest the pointer on the ticks** for a numbered list of the prompts, with up to two lines of each.
 - **Click a prompt** to put it at the bottom of the chat, with what came before it above.
 - **A dot marks each compaction,** in its place among the ticks.
+- **A dot marks each answer you gave to a proposal too,** since the chat draws it as the proposal's line, not as a prompt of yours. In the list it says `Answered` and the proposal's title.
 - **It has every prompt, however long the chat,** including those too far back for the app to have loaded.
 
 ![The outline's list, open over its ticks](../../../spec/screens/outline-list.png)
@@ -32,7 +33,7 @@ A chat scrolled away from its end also shows a button at its bottom left, which 
 - **It finds what the chat shows:** your prompts, the agent's words and thinking, what calls were given and sent back, and what went wrong.
 - **The count is of the whole chat, however long,** such as `2 of 41`. Until it's counted, the count ends in `…`.
 - **Going to a match opens the call or the thought it's in,** and scrolls it into view.
-- **It doesn't search** the file tab, the subagent tab, answered questions, or a compaction's summary.
+- **It doesn't search** the file tab, the subagent tab, the proposal tab, answered questions, or a compaction's summary.
 
 ## Titles
 
@@ -51,12 +52,12 @@ Every tab is the same width, with its mark and as much of its title as fits. The
 |---|---|
 | `Cmd-T` | A new chat |
 | `Cmd-Shift-T` | A new terminal |
-| `Cmd-W` | Closes the chat showing, or the file tab, subagent tab or terminal if that's showing |
+| `Cmd-W` | Closes the chat showing, or the file tab, subagent tab, proposal tab or terminal if that's showing |
 | `Ctrl-Tab`, `Ctrl-Shift-Tab` | Move between tabs |
 
 The `+` after the tabs opens a new chat or a new terminal, and offers a chat with each of the available agents when there is more than one. `Cmd-T` creates a chat with the current chat's agent, model and effort.
 
-The file tab and the subagent tab sit at the far left, before the chats, and the terminals come after them.
+The file tab, the subagent tab and the proposal tab sit at the far left, before the chats, and the terminals come after them.
 
 Right-clicking a tab also marks its chat read, or unread again.
 

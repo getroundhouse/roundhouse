@@ -12,7 +12,9 @@ use super::queue::take_out_recorded;
 
 /// Whether the person sent this, rather than the agent or the hub: a prompt, or an answer to a question or an
 /// approval that they decided, rather than the hub's settings. Only the hub records them, as its own, so one with a run
-/// is the agent's, and a prompt taken out of the queue as it's recorded was counted when it was queued.
+/// is the agent's, and a prompt taken out of the queue as it's recorded was counted when it was queued. A prompt the
+/// hub wrote, such as one telling the agent the answer to a proposal, only ever comes out of the queue, and answering
+/// is the person's doing, so it counts once, as it's queued.
 fn sent_by_the_person(body: &EventBody) -> bool {
     matches!(
         body,

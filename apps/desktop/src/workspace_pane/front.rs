@@ -1,5 +1,5 @@
-//! What's in front under the tabs: the active chat, the file tab, the subagent tab or a terminal. What's read and what
-//! has focus follow it, and `focus.rs` says where focus goes.
+//! What's in front under the tabs: the active chat, the file tab, the subagent tab, the proposal tab or a terminal.
+//! What's read and what has focus follow it, and `focus.rs` says where focus goes.
 
 use gpui_kit::base::TextSelection;
 use gpui_kit::component::input::Copy;
@@ -13,6 +13,9 @@ impl WorkspacePane {
         if self.subagents.in_front() {
             return Showing::Subagent;
         }
+        if self.proposals.in_front() {
+            return Showing::Proposal;
+        }
         let tab = self.diff.as_ref().and_then(|diff| diff.tab.as_ref());
         if tab.is_some_and(|tab| tab.in_front) {
             Showing::File
@@ -23,15 +26,16 @@ impl WorkspacePane {
         }
     }
 
-    /// Puts the active chat, the file tab, the subagent tab or the terminal last chosen in front, as long as that tab
-    /// is open. It's the only way any of them comes to the front, so what's read and what has focus always follow
-    /// what's drawn. The app moves focus to what's in front, and only in the pane on screen, since only it knows which
-    /// that is, and a pane behind it can change what it has in front too, such as when a terminal in it ends.
+    /// Puts the active chat, the file tab, the subagent tab, the proposal tab or the terminal last chosen in front, as
+    /// long as that tab is open. It's the only way any of them comes to the front, so what's read and what has focus
+    /// always follow what's drawn. The app moves focus to what's in front, and only in the pane on screen, since only it
+    /// knows which that is, and a pane behind it can change what it has in front too, such as when a terminal in it ends.
     pub(super) fn bring_to_front(&mut self, front: Showing, cx: &mut Context<Self>) {
         if let Some(tab) = self.diff.as_mut().and_then(|diff| diff.tab.as_mut()) {
             tab.in_front = front == Showing::File;
         }
         self.subagents.set_in_front(front == Showing::Subagent);
+        self.proposals.set_in_front(front == Showing::Proposal);
         if front != Showing::Terminal {
             self.terminals.set_in_front(None);
         }
@@ -64,6 +68,8 @@ impl WorkspacePane {
                     None => cx.propagate(),
                 }
             }
+            // The page copies what's selected of it while it has focus, which a press on its text gives it.
+            Showing::Proposal => cx.propagate(),
             Showing::Terminal => match self.view_in_front().cloned() {
                 Some(terminal) => terminal.update(cx, |t, cx| t.copy_selection(cx)),
                 None => cx.propagate(),

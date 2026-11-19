@@ -74,7 +74,7 @@ Start a fresh conversation with `session/new`, or continue an existing one with 
 {"name":"roundhouse","type":"http","url":"http://127.0.0.1:PORT/mcp","headers":[{"name":"Authorization","value":"Bearer TOKEN"}]}
 ```
 
-`agy` 1.5.9 speaks MCP `2026-07-28` without advertising `io.modelcontextprotocol/tasks` in `params._meta["io.modelcontextprotocol/clientCapabilities"].extensions`. The worker's stateless HTTP MCP endpoint checks that capability on `server/discover` and `tools/list` as well as protocol version, exposing `get_pull_requests` and `get_diff_comments` while omitting `wait_for_pull_requests` when the client cannot run MCP tasks.
+`agy` 1.5.9 speaks MCP `2026-07-28` without advertising `io.modelcontextprotocol/tasks` in `params._meta["io.modelcontextprotocol/clientCapabilities"].extensions`. The worker's stateless HTTP MCP endpoint checks that capability on `server/discover` and `tools/list` as well as protocol version, exposing `get_pull_requests`, `get_diff_comments`, `propose` and `get_proposal` while omitting `wait_for_pull_requests` when the client cannot run MCP tasks.
 
 When `agy` exposes an MCP tool to its model, it names the tool `mcp_<server>_<tool>` in `name`, sets `title` to `<server>: <tool>`, and injects a `toolSummary` argument into the schema. The adapter uses `title` when it matches `mcp_<server>_<tool>` so server names containing underscores or hyphens stay intact (falling back to the first `_` after `mcp_`), and strips `toolSummary` from translated `Call::Mcp` inputs.
 

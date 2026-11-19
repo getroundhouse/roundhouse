@@ -1,10 +1,11 @@
 use super::super::{Command, LiveSession, LiveState};
 use crate::hub::Hub;
-use crate::store::{Changed, Queued, Queuing, Reading};
+use crate::store::{Changed, Queuing, Reading, Store, StoreError, Unqueued};
 use protocol::attachment::Attachment;
 use protocol::client::{ApiError, ErrorCode, HubNotice};
 use protocol::event::{EventBody, TurnOutcome};
 use protocol::model::{AttachmentId, ClientMessageId, QueuedPrompt, Seq, Session, SessionStatus};
+use protocol::prompt::PromptFrom;
 use protocol::prompt::{Prompt, PromptProblem};
 use std::sync::Arc;
 use tokio::sync::oneshot;
@@ -55,7 +56,9 @@ impl QueueWatch {
     ) -> Option<bool> {
         let stopped = matches!(body, EventBody::TurnEnded { outcome: TurnOutcome::Cancelled | TurnOutcome::Error, .. });
         let went_away = to == SessionStatus::Interrupted && from != SessionStatus::Interrupted;
-        let held = if matches!(body, EventBody::UserPrompt { .. }) {
+        // Only the person's prompt lets a held queue go on. One the hub wrote, such as an answer to a proposal, goes
+        // from the queue once the queue's let go, or when the person sends it now, which sends only it.
+        let held = if matches!(body, EventBody::UserPrompt { from, .. } if from.is_person()) {
             false
         } else {
             self.held || stopped || went_away || never_started
@@ -88,21 +91,33 @@ impl LiveSession {
         client_msg_id: ClientMessageId,
         prompt: Prompt<AttachmentId>,
     ) -> Result<Session, ApiError> {
-        let hub = self.hub()?;
         let id = self.id.clone();
-        let queued = {
-            let _not_while_sending = self.queue_lock.lock().await;
-            hub.blocking(move |store| {
+        let ((), queued) = self
+            .queue_with(move |store| {
                 let Prompt { text, files } = prompt;
                 let prompt = Prompt::carrying(text, store.attachments(&id, &files)?);
-                store.queue_prompt(&id, &QueuedPrompt { client_msg_id, prompt })
+                let queued =
+                    store.queue_prompt(&id, &QueuedPrompt { client_msg_id, prompt, from: PromptFrom::Person })?;
+                Ok(((), queued.queuing()))
             })
-            .await?
+            .await?;
+        queued.ok_or_else(|| ApiError::new(ErrorCode::Conflict, "that prompt has already been sent"))
+    }
+
+    /// Queues a prompt with `write`, which keeps it in the store with whatever else it writes, such as the answer to a
+    /// proposal whose prompt tells the agent of it, and says what queuing it left, if it queued one. Then tells every
+    /// client of the queue, and sends the prompt if the agent's ready for it. Returns what `write` did, and the session
+    /// as queuing left it, unless the prompt had been sent already.
+    pub(crate) async fn queue_with<T: Send + 'static>(
+        &self,
+        write: impl FnOnce(&Store) -> Result<(T, Option<Queuing>), StoreError> + Send + 'static,
+    ) -> Result<(T, Option<Session>), ApiError> {
+        let hub = self.hub()?;
+        let (written, queued) = {
+            let _not_while_sending = self.queue_lock.lock().await;
+            hub.blocking(write).await?
         };
-        let Queued::Done(queuing) = queued else {
-            return Err(ApiError::new(ErrorCode::Conflict, "that prompt has already been sent"));
-        };
-        let Queuing { reading, account } = *queuing;
+        let Some(Queuing { reading, account }) = queued else { return Ok((written, None)) };
         // Queuing it moved when the person last did something in its workspace, if it changed the queue, and maybe
         // when its account was last used.
         let moved = reading.changed;
@@ -117,7 +132,7 @@ impl LiveSession {
         if self.ready_for_queue() {
             self.wake_queue();
         }
-        Ok(session)
+        Ok((written, Some(session)))
     }
 
     /// Changes the text of a queued prompt, unless it's too late to.
@@ -137,16 +152,22 @@ impl LiveSession {
             Changed::AlreadySent => Err(ApiError::new(ErrorCode::Conflict, "that prompt has already been sent")),
             Changed::NotQueued => Err(ApiError::new(ErrorCode::NotFound, "that prompt isn't queued")),
             Changed::WouldBeEmpty => Err(PromptProblem::Empty.into()),
+            Changed::NotThePersons => {
+                Err(ApiError::new(ErrorCode::Conflict, "the hub wrote that prompt, so it can't be changed"))
+            }
         }
     }
 
     pub(crate) async fn unqueue(&self, client_msg_id: ClientMessageId) -> Result<Session, ApiError> {
         let hub = self.hub()?;
         let id = self.id.clone();
-        let reading = {
+        let Unqueued { reading, taken_back } = {
             let _not_while_sending = self.queue_lock.lock().await;
             hub.blocking(move |store| store.unqueue_prompt(&id, &client_msg_id)).await?
         };
+        if let Some(proposal) = taken_back {
+            hub.notify(HubNotice::Proposal(proposal));
+        }
         Ok(self.changed_queue(reading))
     }
 
@@ -232,8 +253,8 @@ impl LiveSession {
         hub: &Arc<Hub>,
         prompt: QueuedPrompt,
     ) -> Result<Option<Delivery>, ApiError> {
-        let QueuedPrompt { client_msg_id, prompt } = prompt;
-        let (seq, duplicate) = self.record_carrying(hub, Some(client_msg_id), &prompt).await?;
+        let QueuedPrompt { client_msg_id, prompt, from } = prompt;
+        let (seq, duplicate) = self.record_carrying(hub, Some(client_msg_id), &prompt, from).await?;
         Ok((!duplicate).then_some((seq, prompt)))
     }
 

@@ -17,6 +17,7 @@ use tokio::sync::mpsc;
 use super::scenario::Failed;
 use super::trial::Seen;
 use crate::{AgentOutput, AgentProcess};
+use protocol::prompt::PromptFrom;
 
 /// What [`Driver::interrupt`] marks, for a check to time from.
 pub const INTERRUPTED: &str = "interrupted";
@@ -118,7 +119,10 @@ impl Driver {
 
     /// Records the prompt, as a hub does before it sends one, and sends it with where it's recorded.
     pub async fn prompt(&mut self, text: &str) -> Result<(), Failed> {
-        let seq = self.record(None, EventBody::UserPrompt { client_msg_id: None, prompt: Prompt::new(text) });
+        let seq = self.record(
+            None,
+            EventBody::UserPrompt { client_msg_id: None, prompt: Prompt::new(text), from: PromptFrom::Person },
+        );
         let control = Control::Prompt { seq, prompt: Prompt::new(text), extras: Extras::default() };
         self.agent()?.control(&control).await.map_err(|e| Failed(format!("prompting: {e}")))
     }

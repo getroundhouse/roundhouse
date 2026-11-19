@@ -5,6 +5,7 @@ use protocol::prompt::Prompt;
 
 use super::super::tests::{idle_session, store_with_session};
 use super::*;
+use protocol::prompt::PromptFrom;
 
 fn log_file(id: &str, name: &str) -> Attachment {
     Attachment { id: AttachmentId::from(id), name: name.to_string(), media_type: MediaType::Text, size_bytes: 3 }
@@ -95,7 +96,11 @@ fn a_workspaces_prompt_images_are_listed_oldest_first_across_its_chats() {
     store.insert_session(&second, None).unwrap();
     let image = |id: &str| Attachment { media_type: MediaType::Png, ..log_file(id, &format!("{id}.png")) };
     let sent = |chat: &str, at_ms: i64, attachments: Vec<Attachment>| {
-        let body = EventBody::UserPrompt { client_msg_id: None, prompt: Prompt::carrying("look", attachments) };
+        let body = EventBody::UserPrompt {
+            client_msg_id: None,
+            prompt: Prompt::carrying("look", attachments),
+            from: PromptFrom::Person,
+        };
         let seq = store.append(&chat.into(), None, &body, None, None, None).unwrap().event.seq;
         let when = "UPDATE events SET ts_ms = ?1 WHERE session_id = ?2 AND seq = ?3";
         lock(&store.writer).execute(when, params![at_ms, chat, seq.get().cast_signed()]).unwrap();

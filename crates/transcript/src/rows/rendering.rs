@@ -1,6 +1,6 @@
 use super::{
     alone, around, asked, cache_rule, column, compaction, failed_request, message, mode, notices, own_turn, plan_card,
-    prompt, tail, turn_end, update_rule,
+    prompt, tail, tools, turn_end, update_rule,
 };
 use crate::find::{FindLook, Marks};
 use crate::item_key::ItemKey;
@@ -235,6 +235,9 @@ pub(super) fn render_event(
         }
         EventBody::AgentStarted { build: Some(build), previous_build: Some(from), .. } => {
             update_rule::line(seq, from, build, cx)
+        }
+        EventBody::UserPrompt { .. } if let Some(answers) = &around.answers => {
+            tools::proposal::answered(seq, answers, shared, cx)
         }
         EventBody::UserPrompt { client_msg_id, prompt, .. } => {
             let key = ItemKey::prompt(seq, client_msg_id.as_ref());

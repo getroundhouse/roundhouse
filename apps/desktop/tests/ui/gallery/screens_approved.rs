@@ -4,9 +4,9 @@ use super::{
     approval_chats, approved, background_chats, bar_kinds, baselines, button_states, cache_screens, call_screens,
     capture, cards, colours, compaction_chats, component_screens, context_screens, controls, corners, dialog_widths,
     dictation_screens, diff_screens, failure_chats, failures_in_a_row, field_states, heights, home_screens, icon_sizes,
-    key_kinds, kinds_of_text, list_rows, mark_states, menu_rows, own_turn_chats, pull_requests, settings_screens,
-    sidebar_screens, small_things, spaces, steps, subagent_chats, switch_kinds, tab_widths, terminal_screens,
-    toggle_states, tool_screens, tooltips, turn_screens, update_screens, workspace_screens,
+    key_kinds, kinds_of_text, list_rows, mark_states, menu_rows, own_turn_chats, proposal_chats, pull_requests,
+    settings_screens, sidebar_screens, small_things, spaces, steps, subagent_chats, switch_kinds, tab_widths,
+    terminal_screens, toggle_states, tool_screens, tooltips, turn_screens, update_screens, workspace_screens,
 };
 use approved::Verdict;
 use capture::Picture;
@@ -152,6 +152,7 @@ fn screens() -> impl Iterator<Item = &'static steps::Screen> {
         .chain(DIFF_SCREENS)
         .chain(TOOL_SCREENS)
         .chain(subagent_chats::SCREENS)
+        .chain(proposal_chats::SCREENS)
         .chain(background_chats::SCREENS)
         .chain(own_turn_chats::SCREENS)
         .chain(compaction_chats::SCREENS)

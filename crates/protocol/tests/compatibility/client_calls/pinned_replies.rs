@@ -28,11 +28,12 @@ pinned! {
     "client_calls/replies.rs" => [
         Hello(_), Ok, HubStatus(_), HubSettings(_), NewWorkspaceDraft(_), NewWorkspaceMade(_), Repo(_), Repos(_),
         Records(_), Agents(_), Workspace(_), Workspaces(_), GitStatus(_), GitDiff(_), SetupLog(_), PullRequest(_),
-        Comment(_), Comments(_), Session(_), Sessions(_), Events(_), Subagents(_), PlacedEvents(_), Prompts(_),
-        Compactions(_), Found(_), PromptRecorded(_), Attachment(_), AttachmentData(_), SessionAccount(_), Account(_),
-        GithubAccount(_), GithubSignIn(_), WorktreeFiles(_), FileContents(_), FileOpened(_), FilePages(_),
+        Comment(_), Comments(_), Session(_), Sessions(_), Events(_), Subagents(_), Proposals(_), PlacedEvents(_),
+        Prompts(_), Compactions(_), Found(_), PromptRecorded(_), Attachment(_), AttachmentData(_), SessionAccount(_),
+        Account(_), GithubAccount(_), GithubSignIn(_), WorktreeFiles(_), FileContents(_), FileOpened(_), FilePages(_),
     ],
     "client_calls/github_apps.rs" => [GithubApp(_), GithubAppManifest(_)],
+    "proposals.rs" => [Proposal(_), ProposalRevisions(_)],
     "terminals.rs" => [Terminal(_)],
     "model_lists.rs" => [ModelList(_)],
 }

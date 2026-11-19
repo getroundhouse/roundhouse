@@ -18,6 +18,7 @@ use crate::hub::setup::SetupGate;
 use crate::hub::tests::{carried_on, flushed, hub_in, hub_with_worktree, serving, stand_in_worker, terminal_in_w};
 use crate::session::{Item, LiveSession, Origin};
 use crate::versions;
+use protocol::prompt::PromptFrom;
 
 const RUN: RunId = RunId::new(7);
 const TIMEOUT: Duration = Duration::from_secs(10);
@@ -27,7 +28,7 @@ fn w() -> WorkspaceId {
 }
 
 fn prompt() -> EventBody {
-    EventBody::UserPrompt { client_msg_id: None, prompt: Prompt::new("next") }
+    EventBody::UserPrompt { client_msg_id: None, prompt: Prompt::new("next"), from: PromptFrom::Person }
 }
 
 /// The hub, with a stand-in as `w`'s worker.

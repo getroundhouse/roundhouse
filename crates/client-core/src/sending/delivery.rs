@@ -2,6 +2,7 @@ use crate::attachments::FileToSend;
 use crate::client::{Client, ClientError, OpenSession, Place, Reply, Result, Shown, new_message_id};
 use protocol::model::{AttachmentId, ClientMessageId, QueuedPrompt, Seq, Session, SessionId};
 use protocol::prompt::Prompt;
+use protocol::prompt::PromptFrom;
 
 /// A prompt as its person wrote it, with the bytes of what it carries, under the ID it keeps until it's recorded and
 /// after.
@@ -19,7 +20,11 @@ impl Written {
     /// The prompt as the hub will have it, with its record of each file, to show while it's on its way.
     pub fn on_its_way(&self) -> QueuedPrompt {
         let files = self.prompt.files.iter().map(|file| file.attachment.clone()).collect();
-        QueuedPrompt { client_msg_id: self.client_msg_id.clone(), prompt: Prompt::carrying(&*self.prompt.text, files) }
+        QueuedPrompt {
+            client_msg_id: self.client_msg_id.clone(),
+            prompt: Prompt::carrying(&*self.prompt.text, files),
+            from: PromptFrom::Person,
+        }
     }
 }
 

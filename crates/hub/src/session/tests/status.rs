@@ -76,10 +76,11 @@ fn resolved() -> EventBody {
 }
 
 use SessionStatus::*;
+use protocol::prompt::PromptFrom;
 
 #[test]
 fn a_prompt_starts_running_from_any_state() {
-    let prompt = EventBody::UserPrompt { client_msg_id: None, prompt: Prompt::new("x") };
+    let prompt = EventBody::UserPrompt { client_msg_id: None, prompt: Prompt::new("x"), from: PromptFrom::Person };
     for from in [Idle, Running, WaitingApproval, Interrupted, Background] {
         assert_eq!(next_status(from, &prompt, NOTHING, NOTHING_KNOWN), Running);
     }
@@ -210,7 +211,7 @@ fn background_work_changing_mid_turn_leaves_the_turn_alone() {
 
 #[test]
 fn a_prompt_or_the_agent_picking_up_again_starts_a_turn_over_background_work() {
-    let prompt = EventBody::UserPrompt { client_msg_id: None, prompt: Prompt::new("x") };
+    let prompt = EventBody::UserPrompt { client_msg_id: None, prompt: Prompt::new("x"), from: PromptFrom::Person };
     assert_eq!(next_status(Background, &prompt, ONE_TASK, NOTHING_KNOWN), Running);
     assert_eq!(next_status(Background, &state(AgentRunState::Running), ONE_TASK, NOTHING_KNOWN), Running);
 }

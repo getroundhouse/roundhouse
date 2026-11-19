@@ -63,12 +63,14 @@ fn carried(response: &ClientResponse) -> Vec<Record> {
         ClientResponse::GithubSignIn(sign_in) => vec![Record::GithubSignIn(sign_in.clone())],
         ClientResponse::GithubApp(app) => vec![Record::GithubApp(app.clone())],
         ClientResponse::Terminal(terminal) => vec![Record::Terminal(terminal.clone())],
+        ClientResponse::Proposal(proposal) => vec![Record::Proposal(proposal.clone())],
         ClientResponse::Repos(_)
         | ClientResponse::Records(_)
         | ClientResponse::Workspaces(_)
         | ClientResponse::Comments(_)
         | ClientResponse::Sessions(_)
         | ClientResponse::Subagents(_)
+        | ClientResponse::Proposals(_)
         // And what isn't a record.
         | ClientResponse::Paired(_)
         | ClientResponse::Devices(_)
@@ -95,6 +97,8 @@ fn carried(response: &ClientResponse) -> Vec<Record> {
         | ClientResponse::WorktreeFiles(_)
         | ClientResponse::FileContents(_)
         | ClientResponse::FileOpened(_)
-        | ClientResponse::FilePages(_) => Vec::new(),
+        | ClientResponse::FilePages(_)
+        // A proposal's revisions, but for its newest, which only the proposal carries.
+        | ClientResponse::ProposalRevisions(_) => Vec::new(),
     }
 }

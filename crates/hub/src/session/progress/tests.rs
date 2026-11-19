@@ -14,6 +14,7 @@ use serde_json::json;
 
 use super::*;
 use crate::store::TurnEdge;
+use protocol::prompt::PromptFrom;
 
 fn progress(status: SessionStatus, tasks: usize) -> Progress {
     let task = |i: usize| AgentTask {
@@ -66,7 +67,7 @@ fn exited() -> EventBody {
 #[test]
 fn a_turn_starts_when_its_event_is_recorded_and_its_end_says_so_whatever_the_agent_said() {
     let mut progress = progress(SessionStatus::Idle, 0);
-    let prompt = EventBody::UserPrompt { client_msg_id: None, prompt: Prompt::new("x") };
+    let prompt = EventBody::UserPrompt { client_msg_id: None, prompt: Prompt::new("x"), from: PromptFrom::Person };
 
     let Step { change, next, .. } = progress.step(Origin::Hub, prompt, true);
     progress.take(next, Seq::new(1), 42, Some(vec![Seq::new(1)]));
@@ -163,7 +164,7 @@ fn an_event_that_changes_nothing_has_nothing_to_commit() {
 /// put in the worktree or its run refuses it, so the agent, running and idle, never says the turn ended.
 #[test]
 fn a_turn_whose_prompt_the_hub_dropped_before_the_agent_said_anything_never_started() {
-    let prompt = EventBody::UserPrompt { client_msg_id: None, prompt: Prompt::new("x") };
+    let prompt = EventBody::UserPrompt { client_msg_id: None, prompt: Prompt::new("x"), from: PromptFrom::Person };
     let dropped = || EventBody::PromptDropped { prompt: Seq::new(1) };
     // The status, the last event's edge, and whether the queue's held, once `opening` is recorded from `from`, and
     // then each of `then`, with an agent running if `agent`.
@@ -310,7 +311,8 @@ fn the_same_failure_after_turns_that_came_to_nothing_else_repeats_the_one_before
 /// so the failure after starts another.
 #[test]
 fn anything_the_person_or_the_agent_does_between_two_failures_ends_the_row() {
-    let prompt = EventBody::UserPrompt { client_msg_id: None, prompt: Prompt::new("Continue") };
+    let prompt =
+        EventBody::UserPrompt { client_msg_id: None, prompt: Prompt::new("Continue"), from: PromptFrom::Person };
     let cancelled = protocol::fixtures::turn_ended(TurnOutcome::Cancelled);
     for between in [prompt, says("Picking up where I left off.", None), cancelled, exited()] {
         let kind = between.kind();

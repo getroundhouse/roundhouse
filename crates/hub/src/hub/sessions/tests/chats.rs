@@ -14,6 +14,7 @@ use super::super::*;
 use crate::hub::tests::{carried_on, flushed, hub_in, stand_in_worker, writing};
 use crate::session::{Item, LiveItem, LiveSession, Origin};
 use crate::store::cancelled_approval;
+use protocol::prompt::PromptFrom;
 
 const FROM_AGENT: Origin = Origin::Run { run: RunId::new(1), current: true, numbered: None };
 
@@ -244,7 +245,7 @@ async fn an_agent_that_drops_the_prompt_it_was_to_take_is_taken_to_be_idle_after
     let live = hub.live_session(&"s".into()).await.unwrap();
     live.record(FROM_AGENT, picked_up(), None).await.unwrap();
     live.record(FROM_AGENT, listed(1), None).await.unwrap();
-    let next = EventBody::UserPrompt { client_msg_id: None, prompt: Prompt::new("next") };
+    let next = EventBody::UserPrompt { client_msg_id: None, prompt: Prompt::new("next"), from: PromptFrom::Person };
     let (prompt, _) = live.record(Origin::Hub, next, None).await.unwrap();
     live.record(FROM_AGENT, turn_ended(), None).await.unwrap();
     live.record(FROM_AGENT, listed(0), None).await.unwrap();

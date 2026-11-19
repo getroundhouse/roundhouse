@@ -4,6 +4,7 @@ use protocol::event::NoticeLevel;
 use protocol::fixtures::{allow_once, approval_request, asking, decided, event, to_run};
 use protocol::model::Place;
 use protocol::prompt::Prompt;
+use protocol::prompt::PromptFrom;
 use protocol::tail::DeltaChange;
 
 fn notice(seq: Seq) -> SessionEvent {
@@ -123,14 +124,22 @@ fn live_events_never_build_up_past_the_limit() {
 #[test]
 fn a_prompt_shows_at_once_with_the_tail_then_becomes_the_recorded_event() {
     let mut log = SessionLog::new(Seq::new(5));
-    log.add_pending(QueuedPrompt { client_msg_id: "m1".into(), prompt: Prompt::new("hello") });
+    log.add_pending(QueuedPrompt {
+        client_msg_id: "m1".into(),
+        prompt: Prompt::new("hello"),
+        from: PromptFrom::Person,
+    });
     assert_eq!(log.row_count(), 5, "it has no row of its own until it's recorded");
     assert_eq!(log.pending()[0].prompt.text, "hello");
     assert_eq!(log.take_changes().rows, Some(5..6), "the tail changed");
 
     log.apply_event(event(
         Seq::new(6),
-        EventBody::UserPrompt { client_msg_id: Some("m1".into()), prompt: Prompt::new("hello") },
+        EventBody::UserPrompt {
+            client_msg_id: Some("m1".into()),
+            prompt: Prompt::new("hello"),
+            from: PromptFrom::Person,
+        },
     ));
     assert_eq!(log.row_count(), 6);
     assert!(log.pending().is_empty());
@@ -140,7 +149,11 @@ fn a_prompt_shows_at_once_with_the_tail_then_becomes_the_recorded_event() {
 #[test]
 fn a_prompt_that_could_not_be_sent_can_be_taken_back() {
     let mut log = SessionLog::new(Seq::default());
-    log.add_pending(QueuedPrompt { client_msg_id: "m1".into(), prompt: Prompt::new("hello") });
+    log.add_pending(QueuedPrompt {
+        client_msg_id: "m1".into(),
+        prompt: Prompt::new("hello"),
+        from: PromptFrom::Person,
+    });
     assert_eq!(log.remove_pending(&"m1".into()).unwrap().prompt.text, "hello");
     assert_eq!(log.row_count(), 0);
     assert_eq!(log.remove_pending(&"m1".into()), None);
@@ -207,10 +220,10 @@ fn the_streaming_tail_follows_deltas_and_clears_with_the_finished_message() {
 #[test]
 fn changes_gather_into_one_range_until_a_view_looks() {
     let mut log = SessionLog::new(Seq::default());
-    log.add_pending(QueuedPrompt { client_msg_id: "p".into(), prompt: Prompt::new("hi") });
+    log.add_pending(QueuedPrompt { client_msg_id: "p".into(), prompt: Prompt::new("hi"), from: PromptFrom::Person });
     log.apply_event(event(
         Seq::new(1),
-        EventBody::UserPrompt { client_msg_id: Some("p".into()), prompt: Prompt::new("hi") },
+        EventBody::UserPrompt { client_msg_id: Some("p".into()), prompt: Prompt::new("hi"), from: PromptFrom::Person },
     ));
     log.apply_event(event(
         Seq::new(2),
@@ -241,7 +254,7 @@ fn placed(seq: Seq, place: u64, body: EventBody) -> SessionEvent {
 }
 
 fn prompt() -> EventBody {
-    EventBody::UserPrompt { client_msg_id: None, prompt: Prompt::new("go") }
+    EventBody::UserPrompt { client_msg_id: None, prompt: Prompt::new("go"), from: PromptFrom::Person }
 }
 
 #[test]
@@ -340,7 +353,7 @@ fn an_event_at_0_is_held_neither_live_nor_by_the_page() {
 #[test]
 fn a_log_by_place_that_has_to_read_the_whole_log_keeps_the_prompts_on_their_way() {
     let mut log = SessionLog::by_place(Place::default());
-    log.add_pending(QueuedPrompt { client_msg_id: "m".into(), prompt: Prompt::new("go") });
+    log.add_pending(QueuedPrompt { client_msg_id: "m".into(), prompt: Prompt::new("go"), from: PromptFrom::Person });
 
     log.read_whole(Seq::new(5));
 

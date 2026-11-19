@@ -9,6 +9,7 @@ use protocol::prompt::Prompt;
 use super::super::tests::notice;
 use super::super::{Queued, StatusChange, Store, TurnEdge};
 use super::rule::Said;
+use protocol::prompt::PromptFrom;
 
 pub(super) fn session(store: &Store) -> Rev {
     store.get_session(&"s".into()).unwrap().session.rev
@@ -51,7 +52,7 @@ pub(super) fn no_draft(store: &Store) -> Said {
 }
 
 pub(super) fn queue(store: &Store) -> Said {
-    let prompt = QueuedPrompt { client_msg_id: "a".into(), prompt: Prompt::new("first") };
+    let prompt = QueuedPrompt { client_msg_id: "a".into(), prompt: Prompt::new("first"), from: PromptFrom::Person };
     let Queued::Done(queuing) = store.queue_prompt(&"s".into(), &prompt).unwrap() else { panic!("refused") };
     Said::Changed(queuing.reading.changed)
 }
@@ -61,7 +62,7 @@ pub(super) fn queued(store: &Store) {
 }
 
 pub(super) fn unqueue(store: &Store) -> Said {
-    Said::Changed(store.unqueue_prompt(&"s".into(), &"a".into()).unwrap().changed)
+    Said::Changed(store.unqueue_prompt(&"s".into(), &"a".into()).unwrap().reading.changed)
 }
 
 /// As a hub carrying on with a run puts them back, and again as the run's next launch finds it running.

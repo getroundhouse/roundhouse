@@ -1,12 +1,11 @@
-use super::{snapshot, subagents};
+use super::of_session::BySession;
+use super::snapshot::{Listed, Snapshot};
 use crate::Agents;
 use protocol::client::{HubNotice, RecordNotice};
-use protocol::model::{Record, RecordKey, Records, Rev};
-use snapshot::{Listed, Snapshot};
+use protocol::model::{Proposal, Record, RecordKey, Records, Rev, SessionId, Subagent};
 use std::cell::OnceCell;
 use std::collections::HashMap;
 use std::sync::Arc;
-use subagents::Subagents;
 
 #[derive(Debug, Default)]
 pub struct HubRecords {
@@ -16,7 +15,8 @@ pub struct HubRecords {
     pub(super) removed: HashMap<RecordKey, Rev>,
     /// The newest list taken in. Everything up to it is already reflected.
     pub(super) listed: Rev,
-    pub(super) subagents: Subagents,
+    pub(super) subagents: BySession<Subagent>,
+    pub(super) proposals: BySession<Proposal>,
     /// The newest copy taken in.
     pub(super) taken: Taken,
     /// What views read of the records, made when they next look after a change.
@@ -102,11 +102,30 @@ impl HubRecords {
 
     /// Takes in one record, from a notice or a reply. Returns whether it changed anything.
     pub fn apply_record(&mut self, record: Record) -> bool {
-        // Kept apart, since only the subagents of the sessions a view shows are kept, each session's listed on its
-        // own rather than with everything, so a list of everything says nothing of them.
-        if let Record::Subagent(subagent) = record {
-            return self.subagents.apply(subagent);
+        match record {
+            // Kept apart, since only the subagents and proposals of the sessions a view shows are kept, each session's
+            // listed on its own rather than with everything, so a list of everything says nothing of them.
+            Record::Subagent(subagent) => self.subagents.apply(subagent),
+            Record::Proposal(proposal) => self.proposals.apply(proposal),
+            listed @ (Record::Repo(_)
+            | Record::Workspace(_)
+            | Record::Session(_)
+            | Record::Comment(_)
+            | Record::HubSettings(_)
+            | Record::Account(_)
+            | Record::NewWorkspaceDraft(_)
+            | Record::GithubAccount(_)
+            | Record::GithubSignIn(_)
+            | Record::FoundGithubLogin(_)
+            | Record::GithubApp(_)
+            | Record::GithubReach(_)
+            | Record::Terminal(_)
+            | Record::ModelList(_)) => self.apply_listed(listed),
         }
+    }
+
+    /// Takes in one of the records a list of everything has.
+    fn apply_listed(&mut self, record: Record) -> bool {
         let (key, rev) = (record.key(), record.rev());
         let removed_since = self.removed.get(&key).is_some_and(|&gone| !rev.supersedes(gone));
         let held = self.held.get(&key).map(|held| &held.record);
@@ -139,15 +158,34 @@ impl HubRecords {
     pub fn snapshot(&self) -> Snapshot {
         let records =
             self.shown.get_or_init(|| Arc::new(Listed::of(self.held.values().map(|held| (&held.record, held.taken)))));
-        Snapshot::new(records.clone(), self.subagents.listed(), self.agents.clone())
+        Snapshot::new(records.clone(), self.subagents.listed(), self.proposals.listed(), self.agents.clone())
     }
 
-    pub(crate) fn subagents(&self) -> &Subagents {
-        &self.subagents
-    }
-
-    pub(crate) fn subagents_mut(&mut self) -> &mut Subagents {
+    pub(crate) fn subagents_mut(&mut self) -> &mut BySession<Subagent> {
         &mut self.subagents
+    }
+
+    pub(crate) fn proposals_mut(&mut self) -> &mut BySession<Proposal> {
+        &mut self.proposals
+    }
+
+    /// Keeps the records of `session` that are listed by session from now on, of every kind. Returns whether any
+    /// weren't kept already.
+    pub(crate) fn want_session(&mut self, session: &SessionId) -> bool {
+        let subagents = self.subagents.want(session.clone());
+        self.proposals.want(session.clone()) || subagents
+    }
+
+    /// Lets go of the records of `session` that are listed by session, of every kind.
+    pub(crate) fn forget_session(&mut self, session: &SessionId) {
+        self.subagents.forget(session);
+        self.proposals.forget(session);
+    }
+
+    /// Lists every wanted session's records of every kind again, as [`BySession::relist`] says.
+    pub(crate) fn relist_sessions(&mut self) {
+        self.subagents.relist();
+        self.proposals.relist();
     }
 
     /// Takes in what the hub said of its agents. Returns whether that changed anything.

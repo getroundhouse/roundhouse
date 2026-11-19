@@ -88,6 +88,8 @@ ids!(
     /// The hub's ID for one of a workspace's other worktrees, as a UUID, since a path names a new one once the last
     /// there is removed.
     ChildWorktreeId,
+    /// A proposal, chosen by the hub as a UUID.
+    ProposalId,
     /// A worker's own name for something it asks its hub to make, as a UUID or the agent's ID for the tool call that
     /// asked, so a hub that hears the ask again, as each new hub does what the last didn't answer, makes it once.
     /// Unique within the session that asked, as a tool use's ID is.

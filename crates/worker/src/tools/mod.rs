@@ -17,6 +17,7 @@ use tokio::net::TcpSocket;
 mod diff_comments;
 mod http;
 mod mcp;
+mod proposals;
 mod pull_request;
 mod pull_requests;
 #[cfg(test)]

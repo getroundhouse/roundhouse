@@ -6,9 +6,10 @@ use protocol::prompt::Prompt;
 
 use super::*;
 use crate::session_log::Position;
+use protocol::prompt::PromptFrom;
 
 fn prompt() -> EventBody {
-    EventBody::UserPrompt { client_msg_id: None, prompt: Prompt::new("steer") }
+    EventBody::UserPrompt { client_msg_id: None, prompt: Prompt::new("steer"), from: PromptFrom::Person }
 }
 
 fn notice() -> EventBody {
@@ -284,11 +285,19 @@ fn a_prompt_waits_for_the_agent_from_when_its_sent_until_its_taken() {
     let mut log = log(vec![prompt(), taken(Seq::new(1))]);
     assert!(!log.has_prompts_waiting(), "taken");
 
-    log.add_pending(protocol::model::QueuedPrompt { client_msg_id: "m".into(), prompt: Prompt::new("steer") });
+    log.add_pending(protocol::model::QueuedPrompt {
+        client_msg_id: "m".into(),
+        prompt: Prompt::new("steer"),
+        from: PromptFrom::Person,
+    });
     assert!(log.has_prompts_waiting(), "on its way");
     log.apply_event(event(
         Seq::new(3),
-        EventBody::UserPrompt { client_msg_id: Some("m".into()), prompt: Prompt::new("steer") },
+        EventBody::UserPrompt {
+            client_msg_id: Some("m".into()),
+            prompt: Prompt::new("steer"),
+            from: PromptFrom::Person,
+        },
     ));
     assert!(log.has_prompts_waiting(), "recorded");
     log.apply_event(event(Seq::new(4), taken(Seq::new(3))));

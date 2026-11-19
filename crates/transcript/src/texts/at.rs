@@ -26,6 +26,12 @@ impl TextAt {
         Self { of, block: 0, among: Among::Only }
     }
 
+    /// The `n`th text a proposal's page draws, in the order it draws them, which are the first block's of a page that
+    /// isn't a chat, since it's drawn as one.
+    pub(crate) fn on_page(n: usize) -> Self {
+        Self { of: Of::Document(0), block: n, among: Among::Only }
+    }
+
     /// The `n`th text the end of the chat draws, in the order it draws them: what the agent is still writing, then the
     /// prompts it hasn't read yet.
     pub(crate) fn at_the_end(n: usize) -> Self {
@@ -43,9 +49,9 @@ impl TextAt {
 
 /// What draws a text, in the chat's order: the subagent tab's head, which says what its subagent was asked above the
 /// tab's first row, an event's row, the end of the chat, with what the agent is still writing and the prompts it
-/// hasn't read yet, or the tab's foot, its report, below that. Or one of the blocks at the top of a
-/// [`Document`](crate::Document), by its place among them, such as a file the file tab shows rendered, which keeps
-/// texts of its own and is never in a chat.
+/// hasn't read yet, or the tab's foot, its report, below that. Or one of the blocks of a page that isn't a chat, by its
+/// place among them, which keeps texts of its own: one at the top of a [`Document`](crate::Document), such as a file
+/// the file tab shows rendered, or a proposal's page, which is drawn as one.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub(crate) enum Of {
     Head,

@@ -8,13 +8,14 @@ use serde_json::json;
 use super::*;
 use crate::store::tests::store_with_session;
 use crate::store::{SessionChange, StatusChange, TurnEdge};
+use protocol::prompt::PromptFrom;
 
 #[test]
 fn a_session_whose_agent_has_gone_is_interrupted_as_it_is_with_the_hub_there() {
     let dir = tempfile::tempdir().unwrap();
     let store = store_with_session(dir.path());
     let id = SessionId::from("s");
-    let prompt = EventBody::UserPrompt { client_msg_id: None, prompt: Prompt::new("x") };
+    let prompt = EventBody::UserPrompt { client_msg_id: None, prompt: Prompt::new("x"), from: PromptFrom::Person };
     let started = StatusChange { status: SessionStatus::Running, turn: TurnEdge::Starts, background_tasks: None };
     let prompted = store.append(&id, None, &prompt, None, None, Some(started.into())).unwrap();
     let asking = json!({"type": "approval_requested", "approval_id": "a", "tool_name": "Bash", "input": {}});

@@ -10,6 +10,7 @@ use protocol::prompt::Prompt;
 use super::{chat_world, sidebar};
 use crate::gallery::{chats, pull_requests};
 use client_core::fake_hub::World;
+use protocol::prompt::PromptFrom;
 
 pub(in crate::gallery) fn streaming() -> World {
     let mut world = World::default();
@@ -135,8 +136,13 @@ fn three_queued() -> Vec<QueuedPrompt> {
                     size_bytes: 48_213,
                 }],
             ),
+            from: PromptFrom::Person,
         },
-        QueuedPrompt { client_msg_id: "queued-2".into(), prompt: Prompt::new("Then open a draft PR for all of it.") },
+        QueuedPrompt {
+            client_msg_id: "queued-2".into(),
+            prompt: Prompt::new("Then open a draft PR for all of it."),
+            from: PromptFrom::Person,
+        },
         QueuedPrompt {
             client_msg_id: "queued-3".into(),
             prompt: Prompt::new(
@@ -144,6 +150,7 @@ fn three_queued() -> Vec<QueuedPrompt> {
                    branches, so the state could go beside each one, but only if it fits on one line at 80 columns."
                     .to_string(),
             ),
+            from: PromptFrom::Person,
         },
     ]
 }

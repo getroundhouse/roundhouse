@@ -96,15 +96,16 @@ fn app_menu() -> Menu {
 }
 
 /// Making things, and closing a chat or archiving the workspace, as a File menu makes and closes documents. The window
-/// handles these. ⌘W closes the file tab or the subagent tab while it shows, so the item says so then. Archiving is here
-/// for a terminal off the Mac, where its key is the terminal's Select All. Off the Mac, Settings… and quitting end it,
-/// as they do a Windows or Linux app's File menu.
+/// handles these. ⌘W closes the file tab, the subagent tab or the proposal tab while it shows, so the item says so
+/// then. Archiving is here for a terminal off the Mac, where its key is the terminal's Select All. Off the Mac,
+/// Settings… and quitting end it, as they do a Windows or Linux app's File menu.
 fn file_menu(system: System, says: Says) -> Menu {
     let close = match says.showing {
         Showing::Chat => "Close Chat",
         Showing::File => "Close File Tab",
         Showing::Subagent => "Close Subagent Tab",
         Showing::Terminal => "Close Terminal",
+        Showing::Proposal => "Close Proposal Tab",
     };
     let mut items = vec![
         MenuItem::action("New Workspace", NewWorkspace),

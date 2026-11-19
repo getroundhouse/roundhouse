@@ -8,6 +8,7 @@ use super::pages::PAGE_EVENTS;
 use super::tests::{is_rewritten, page, rewritten};
 use super::*;
 use protocol::prompt::Prompt;
+use protocol::prompt::PromptFrom;
 
 /// A log as a view of an open session holds it once the subscription has delivered what it starts with.
 fn opened(last_seq: Seq) -> SessionLog {
@@ -185,7 +186,8 @@ proptest! {
             scroll_to(&mut log, focus);
         }
         for prompt in 0..sent {
-            log.add_pending(QueuedPrompt { client_msg_id: format!("m{prompt}").into(), prompt: Prompt::new("hello") });
+            let client_msg_id = format!("m{prompt}").into();
+            log.add_pending(QueuedPrompt { client_msg_id, prompt: Prompt::new("hello"), from: PromptFrom::Person });
         }
 
         let runs = log.loaded_rows();

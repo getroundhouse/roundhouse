@@ -18,6 +18,7 @@ use client_core::fake_hub::events::{
     command, in_background, mcp, mcp_said, monitor, printed, read, read_back, replied, said, taken, text, thought,
     user_prompt,
 };
+use protocol::prompt::PromptFrom;
 
 const ASK: &str = "The sidebar should show each workspace's PR state. Where would that come from?";
 
@@ -128,6 +129,7 @@ pub(crate) fn attached(attachments: Vec<Attachment>) -> Vec<EventBody> {
                     .to_string(),
                 attachments,
             ),
+            from: PromptFrom::Person,
         },
         taken(Seq::new(1)),
         text("msg-1", ATTACHED_REPLY),
@@ -210,6 +212,7 @@ pub(crate) fn steered() -> Vec<EventBody> {
     events.push(EventBody::UserPrompt {
         client_msg_id: None,
         prompt: Prompt::new("Only the sidebar's tests matter here, so skip the rest next time."),
+        from: PromptFrom::Person,
     });
     events
 }

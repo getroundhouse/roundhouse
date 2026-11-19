@@ -1,15 +1,16 @@
 use protocol::attachment::{Attachment, MediaType};
 use protocol::event::EventBody;
-use protocol::model::{QueuedPrompt, Session, SessionId};
+use protocol::model::{QueuedPrompt, RevisionNumber, Session, SessionId};
 use protocol::prompt::Prompt;
 
 use crate::store::SessionChange;
 
 use super::*;
 use crate::store::tests::store_with_session;
+use protocol::prompt::PromptFrom;
 
 fn queued(id: &str, text: &str) -> QueuedPrompt {
-    QueuedPrompt { client_msg_id: id.into(), prompt: Prompt::new(text) }
+    QueuedPrompt { client_msg_id: id.into(), prompt: Prompt::new(text), from: PromptFrom::Person }
 }
 
 fn log(id: &str) -> Attachment {
@@ -68,6 +69,7 @@ fn a_change_keeps_the_files_it_was_queued_with_and_can_leave_only_them() {
     let carrying = QueuedPrompt {
         client_msg_id: "a".into(),
         prompt: Prompt::carrying("look at these", vec![log("a1"), log("a2")]),
+        from: PromptFrom::Person,
     };
     queue(&store, &carrying);
     queue(&store, &queued("b", "no files"));
@@ -114,7 +116,8 @@ fn a_prompt_taken_out_of_the_queue_is_gone() {
 
     let removed = store.unqueue_prompt(&"s".into(), &"a".into()).unwrap();
 
-    assert!(removed.changed);
+    assert!(removed.reading.changed);
+    assert!(removed.taken_back.is_none(), "the person's takes nothing back");
     assert_eq!(session(&store).queued, [queued("b", "second")]);
 }
 
@@ -123,7 +126,11 @@ fn a_prompt_that_has_been_sent_cant_be_queued_or_changed() {
     let dir = tempfile::tempdir().unwrap();
     let store = store_with_session(dir.path());
     queue(&store, &queued("a", "first"));
-    let prompt = EventBody::UserPrompt { client_msg_id: Some("a".into()), prompt: Prompt::new("first") };
+    let prompt = EventBody::UserPrompt {
+        client_msg_id: Some("a".into()),
+        prompt: Prompt::new("first"),
+        from: PromptFrom::Person,
+    };
     store.append(&"s".into(), None, &prompt, None, Some(&"a".into()), None).unwrap();
 
     let refused = store.queue_prompt(&"s".into(), &queued("a", "queued again too late")).unwrap();
@@ -132,6 +139,20 @@ fn a_prompt_that_has_been_sent_cant_be_queued_or_changed() {
     assert!(matches!(refused, Queued::AlreadySent));
     assert!(matches!(late, Changed::AlreadySent));
     assert!(session(&store).queued.is_empty(), "not put back");
+}
+
+/// The hub's words stay the hub's, whatever a client offers, so the person's can't be sent as an answer to a proposal.
+#[test]
+fn a_prompt_the_hub_wrote_cant_be_changed() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = store_with_session(dir.path());
+    let from = PromptFrom::ProposalResponse { proposal: "p".into(), revision: RevisionNumber::FIRST };
+    queue(&store, &QueuedPrompt { from, ..queued("a", "I chose B") });
+
+    let refused = change(&store, "a", "Also rename the table");
+
+    assert!(matches!(refused, Changed::NotThePersons));
+    assert_eq!(session(&store).queued[0].prompt.text, "I chose B");
 }
 
 #[test]
@@ -168,7 +189,11 @@ fn recording_a_queued_prompt_takes_it_out_of_the_queue_in_the_same_commit() {
     queue(&store, &queued("a", "sent"));
     queue(&store, &queued("b", "still waiting"));
     let before = session(&store).rev;
-    let prompt = |id: &str| EventBody::UserPrompt { client_msg_id: Some(id.into()), prompt: Prompt::new("sent") };
+    let prompt = |id: &str| EventBody::UserPrompt {
+        client_msg_id: Some(id.into()),
+        prompt: Prompt::new("sent"),
+        from: PromptFrom::Person,
+    };
 
     let sent = store.append(&"s".into(), None, &prompt("a"), None, Some(&"a".into()), None).unwrap();
     let typed = store.append(&"s".into(), None, &prompt("c"), None, Some(&"c".into()), None).unwrap();
@@ -196,7 +221,11 @@ fn a_queued_prompt_is_the_persons_as_its_queued_and_not_again_as_the_hub_sends_i
     let queued_at = session(&store).user_active_at_ms;
     let workspace_at = workspace();
     forget();
-    let sent = EventBody::UserPrompt { client_msg_id: Some("a".into()), prompt: Prompt::new("first") };
+    let sent = EventBody::UserPrompt {
+        client_msg_id: Some("a".into()),
+        prompt: Prompt::new("first"),
+        from: PromptFrom::Person,
+    };
     let appended = store.append(&"s".into(), None, &sent, None, Some(&"a".into()), None).unwrap();
 
     assert!(queued_at.is_some_and(|at| at > 1), "{queued_at:?}");

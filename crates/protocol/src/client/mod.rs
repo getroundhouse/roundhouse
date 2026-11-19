@@ -18,6 +18,7 @@ pub mod github_apps;
 mod hello;
 pub mod log;
 pub mod new_workspace;
+pub mod proposals;
 pub mod queue;
 pub mod records;
 mod request;

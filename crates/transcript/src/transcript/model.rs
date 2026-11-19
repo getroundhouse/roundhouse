@@ -7,7 +7,7 @@ use crate::folds::Folds;
 use crate::rows::SubagentCalls;
 use client_core::session_log::RecordedApprovals;
 use gpui_kit::SharedString;
-use protocol::model::{AttachmentId, RunId, Seq, Subagent, SubagentId, ToolUseId};
+use protocol::model::{AttachmentId, Proposal, ProposalId, RunId, Seq, Subagent, SubagentId, ToolUseId};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -40,6 +40,12 @@ pub(crate) struct Model {
     /// record changes, which may come after the row was drawn. A call's row is measured only once it's been drawn, so
     /// one that isn't here needs nothing.
     pub subagent_rows: RefCell<HashMap<ToolUseId, Seq>>,
+    /// Each of the chat's proposals, by the call that made it, which draws its line from it. Each is shared with
+    /// client-core's snapshot, as subagents' records are.
+    pub proposals: HashMap<ToolUseId, Arc<Proposal>>,
+    /// Each of the chat's proposals, by its ID, which the prompt that tells the agent of its answer names, and is
+    /// drawn as its line.
+    pub proposals_by_id: HashMap<ProposalId, Arc<Proposal>>,
     /// In the subagent tab, the subagent it shows, alone.
     pub alone: Option<SubagentId>,
     /// What's being found in the chat, for rows to draw.
@@ -73,6 +79,8 @@ impl Model {
             approvals: None,
             subagents: SubagentRecords::default(),
             subagent_rows: RefCell::default(),
+            proposals: HashMap::new(),
+            proposals_by_id: HashMap::new(),
             alone: None,
             find: Rc::default(),
         }
