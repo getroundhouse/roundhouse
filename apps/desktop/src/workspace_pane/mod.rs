@@ -9,6 +9,7 @@ pub use pushing::{INSTALL_APP, OPEN_GIT};
 pub use reading::Mark;
 pub(crate) use reading::OnScreen;
 
+mod account_wait;
 mod agent;
 mod attaching;
 mod band;

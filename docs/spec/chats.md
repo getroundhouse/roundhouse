@@ -726,6 +726,16 @@ Every call is drawn the same way, as the first rule below says, and each kind fi
 
   ![The line's Move menu, each account with how much of its week is left](screens/reserve-line.png)
 
+- **A new chat that Automatic finds no account with usage to spare for doesn't start, and says so in an amber card at its end, above the composer,** since it waits on the person: `No account has usage to spare`, that each account is down to what it reserves of its week or out of a limit, so the message wasn't sent, and to start the chat on one anyway, then send it again. The hub drops what was sent, and says why the agent couldn't start, as for any launch that fails, and its record of the chat says it needs an account, so every client draws the card, in place of the line that the agent stopped before it finished. The card lists the logins added for the chat's kind that work, by name, each with its week's bar, with what's reserved split off its start, how much of its week is left and what it reserves, in amber once it's down to that, and `Start on Work`, which puts the chat on the account as `Move` does, spending what it reserves, as the person chose to. One out of a limit says `Out until` when the last of its used-up limits starts again, and has no button. With every account out, the card says `Every account is out of usage`, and which account is back first, and when, to send it again then. The card goes once the chat is on an account, by `Start on`, `Move`, or a launch that's given one, as when the person sends it again once an account has usage to spare. *Unconfirmed:* the card, its words, and dropping what was sent rather than keeping it to send once the chat is on an account. *Not built:* the chat starting by itself once an account has usage to spare again.
+
+  **A new chat that couldn't start, with Work and Personal down to what they reserve and Side project out of its five hours.** *Unconfirmed.*
+
+  ![The amber card at the chat's end, listing the accounts, with Start on for those with usage left](screens/chat-needs-an-account.png)
+
+  **The same, with every account out of a limit.** *Unconfirmed.*
+
+  ![The amber card saying every account is out of usage, and which is back first](screens/chat-needs-an-account-every-one-out.png)
+
 - **How full a context is belongs to its chat's record,** so every client shows the same ring, and it's still there once the agent has gone or the hub has restarted, since the conversation the agent resumes is as full. It isn't in the chat's history: only the newest matters, and it answers the app's own question rather than being something the agent said. *Unconfirmed.*
 
 ## Compacting

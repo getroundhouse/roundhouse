@@ -53,8 +53,27 @@ impl Target {
 const NO_LOGIN_WORKS: &str =
     "no account added for this kind has a login that works; renew or reconnect one in Agents, or choose an account";
 
+/// The login a launch runs under, as the hub's records say.
+#[derive(Debug)]
+pub(crate) enum Launching {
+    /// The hub's login for an account.
+    Handed(Handed),
+    /// Its machine's own, for a chat on the ambient login, or on none of a kind with no default.
+    Ambient,
+    /// None, since the chat is on none, its kind's chats are put on accounts automatically, and none has usage to
+    /// spare.
+    NoAccountToSpare,
+}
+
+/// Where a launch is aimed, before its login is checked.
+enum Aim {
+    At(Target),
+    Ambient,
+    NoAccountToSpare,
+}
+
 /// Why a chat on none can't start while its kind's chats are put on accounts automatically and none has usage to spare.
-const NO_ACCOUNT_TO_SPARE: &str =
+pub(crate) const NO_ACCOUNT_TO_SPARE: &str =
     "no account has usage to spare: each is down to what it reserves of its week, or has used all of a limit";
 
 /// What's wrong with an account the person is choosing, for a default or a chat, once its login can't be used. It
@@ -100,36 +119,50 @@ impl Logins {
     /// is. A chat on the ambient login is handed none, whatever the default is, and so is one on none of a kind with no
     /// default, which goes on the ambient login once its worker says whose that is.
     pub(crate) fn to_hand(&self, agent: AgentKind, on: &SessionLogin, now_ms: i64) -> Result<Option<Handed>, ApiError> {
+        match self.to_launch(agent, on, now_ms)? {
+            Launching::Handed(handed) => Ok(Some(handed)),
+            Launching::Ambient => Ok(None),
+            Launching::NoAccountToSpare => Err(ApiError::new(ErrorCode::Conflict, NO_ACCOUNT_TO_SPARE)),
+        }
+    }
+
+    /// The login a launch of a chat of `agent`'s kind that's `on` a login runs under, as [`Logins::to_hand`] says, but
+    /// with Automatic finding no account to spare said apart, since the chat says so.
+    pub(crate) fn to_launch(&self, agent: AgentKind, on: &SessionLogin, now_ms: i64) -> Result<Launching, ApiError> {
         let files = self.files.lock();
-        let Some(target) = self.target(agent, on, now_ms)? else { return Ok(None) };
+        let target = match self.target(agent, on, now_ms)? {
+            Aim::At(target) => target,
+            Aim::Ambient => return Ok(Launching::Ambient),
+            Aim::NoAccountToSpare => return Ok(Launching::NoAccountToSpare),
+        };
         let handed = self.available(&files, agent, target.account(), now_ms, |called| target.needs_a_login(called))?;
         let placed = if matches!(target, Target::Automatic(_)) { Placed::Automatically } else { Placed::ByDefault };
-        Ok(Some(Handed { placed, ..handed }))
+        Ok(Launching::Handed(Handed { placed, ..handed }))
     }
 
     /// The account whose login a chat of `agent`'s kind that's `on` a login runs under at `now_ms`: the one it's on, or
     /// else the kind's default, or the one Automatic chooses, while the kind's chats are put on accounts automatically.
-    /// `None` for the ambient login.
-    fn target(&self, agent: AgentKind, on: &SessionLogin, now_ms: i64) -> Result<Option<Target>, ApiError> {
+    fn target(&self, agent: AgentKind, on: &SessionLogin, now_ms: i64) -> Result<Aim, ApiError> {
         match on {
-            SessionLogin::Hub(account) => return Ok(Some(Target::Session(account.clone()))),
-            SessionLogin::Ambient => return Ok(None),
+            SessionLogin::Hub(account) => return Ok(Aim::At(Target::Session(account.clone()))),
+            SessionLogin::Ambient => return Ok(Aim::Ambient),
             SessionLogin::NoneYet => {}
         }
         let settings = self.store.hub_settings()?;
         let default = settings.account_defaults.unwrap_or_default().into_iter().find(|choice| choice.agent == agent);
-        match default {
-            Some(choice) if choice.automatic => {
-                self.automatic(agent, now_ms).map(|account| Some(Target::Automatic(account)))
-            }
-            choice => Ok(choice.map(|choice| Target::Default(choice.account))),
-        }
+        Ok(match default {
+            Some(choice) if choice.automatic => self
+                .automatic(agent, now_ms)?
+                .map_or(Aim::NoAccountToSpare, |account| Aim::At(Target::Automatic(account))),
+            Some(choice) => Aim::At(Target::Default(choice.account)),
+            None => Aim::Ambient,
+        })
     }
 
     /// The account Automatic puts a chat of `agent`'s kind on at `now_ms`, of the logins added for the kind, as
     /// [`automatic::choose`] says. Refused with `Conflict` when none has a login that works, which renewing or
-    /// reconnecting one is what helps, and when none has usage to spare.
-    fn automatic(&self, agent: AgentKind, now_ms: i64) -> Result<AccountId, ApiError> {
+    /// reconnecting one is what helps, and `None` when none has usage to spare.
+    fn automatic(&self, agent: AgentKind, now_ms: i64) -> Result<Option<AccountId>, ApiError> {
         let mut accounts = Vec::new();
         for held in self.store.held_logins(agent)? {
             accounts.extend(self.store.account(&held.account)?);
@@ -142,8 +175,7 @@ impl Logins {
             .iter()
             .map(|account| Candidate { account, working: at_work.get(&account.id).copied().unwrap_or_default() })
             .collect();
-        let chosen = automatic::choose(agent, &candidates, now_ms).cloned();
-        chosen.ok_or_else(|| ApiError::new(ErrorCode::Conflict, NO_ACCOUNT_TO_SPARE))
+        Ok(automatic::choose(agent, &candidates, now_ms).cloned())
     }
 
     /// Whether the person can choose `account` for `agent`'s kind, as a default or a chat's: a login added for that

@@ -3,10 +3,18 @@
 //! so none is here.
 
 use protocol::fixtures::{account, claude_default};
-use protocol::model::{Account, AccountDefault, AccountSource, AgentKind, HeldLogin, LimitWindow, Reserve, UsageLimit};
+use protocol::model::{
+    Account, AccountDefault, AccountSource, AgentKind, HeldLogin, LimitWindow, Reserve, Seq, SessionStatus, UsageLimit,
+};
 
 use super::{context, conversation};
+use client_core::fake_hub::events::user_prompt;
 use client_core::fake_hub::{HOUR_MS, LoginSupport, NOW_MS, World};
+use protocol::event::{EventBody, ExitReason};
+
+/// What the hub says of a launch that Automatic found no account with usage to spare for.
+const NO_ACCOUNT_TO_SPARE: &str =
+    "no account has usage to spare: each is down to what it reserves of its week, or has used all of a limit";
 
 const DAY_MS: i64 = 24 * HOUR_MS;
 /// How long a token `claude setup-token` makes lasts, as the hub takes it to.
@@ -177,5 +185,52 @@ fn personal_reserving() -> Account {
         used_at_ms: Some(NOW_MS - 2 * HOUR_MS),
         reserve: Reserve::new(50),
         ..added("claude-login-0002", "Personal")
+    }
+}
+
+/// A new chat that couldn't start, since Automatic found no account with usage to spare: Work and Personal are down to
+/// what they reserve, and Side project is out of its five hours. What was sent was dropped.
+pub(in crate::gallery) fn needs_an_account() -> World {
+    let prompt = "Add a retry with backoff to the webhook sender, and a test that it gives up after five tries.";
+    let dropped = EventBody::PromptDropped { prompt: Seq::FIRST };
+    let failed = EventBody::AgentExited {
+        reason: ExitReason::StartFailed,
+        code: None,
+        signal: None,
+        stderr_tail: vec![NO_ACCOUNT_TO_SPARE.to_string()],
+    };
+    let mut world = super::chat_world(SessionStatus::Interrupted, vec![user_prompt(prompt), dropped, failed]);
+    world.sessions.last_mut().unwrap().needs_an_account = true;
+    let work = Account {
+        limits: vec![limit(LimitWindow::FiveHours, 20, 2 * HOUR_MS), limit(LimitWindow::SevenDays, 78, 30 * HOUR_MS)],
+        ..work_reserving()
+    };
+    world.accounts = vec![work, personal_reserving(), side_project_out()];
+    world.account_defaults = vec![automatically()];
+    world
+}
+
+/// The same, with every account out of a limit.
+pub(in crate::gallery) fn every_account_out() -> World {
+    let mut world = needs_an_account();
+    let work = Account {
+        limits: vec![limit(LimitWindow::FiveHours, 40, 2 * HOUR_MS), limit(LimitWindow::SevenDays, 100, 30 * HOUR_MS)],
+        ..work_reserving()
+    };
+    let personal = Account {
+        limits: vec![limit(LimitWindow::FiveHours, 100, 3 * HOUR_MS), limit(LimitWindow::SevenDays, 70, 60 * HOUR_MS)],
+        ..personal_reserving()
+    };
+    world.accounts = vec![work, personal, side_project_out()];
+    world
+}
+
+/// Side project, a login the hub holds, out of its five hours until two hours from now.
+fn side_project_out() -> Account {
+    Account {
+        limits: vec![limit(LimitWindow::FiveHours, 100, 2 * HOUR_MS), limit(LimitWindow::SevenDays, 36, 100 * HOUR_MS)],
+        held_login: Some(held(NOW_MS - 60 * DAY_MS)),
+        used_at_ms: Some(NOW_MS - HOUR_MS),
+        ..added("claude-login-0003", "Side project")
     }
 }

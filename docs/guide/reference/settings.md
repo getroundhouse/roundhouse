@@ -90,9 +90,11 @@ The installation is a row in **Added**, by its bot's name, which you make the de
 
 Choose **Automatic** in **Default accounts** to spread new chats across the accounts you've added. As each new chat's agent starts, the hub puts it on the account with the most of its week to spare: what's left beyond what you [reserve](#reserve-part-of-an-accounts-week), for each hour until the week starts again, shared among the chats working on it. So an account whose week starts again tomorrow is used before one with more left that lasts days. An account that's used all of a limit, such as its five hours, isn't chosen, and neither is a login found on a machine. The menu says how much of each account's week is left beside it.
 
-A chat stays on the account it's put on until you [move it](../guides/watch-context-and-limits.md#move-a-chat-to-another-account), and its limits' card says `Chosen automatically`. If no account has usage to spare, a new chat can't start, and says so. Choose an account in the same menu to stop choosing automatically.
+A chat stays on the account it's put on until you [move it](../guides/watch-context-and-limits.md#move-a-chat-to-another-account), and its limits' card says `Chosen automatically`. If no account has usage to spare, a new chat doesn't start, and your message isn't sent. A card at the chat's end lists the accounts, with **Start on** for those with usage left, which spends what they reserve. Choose one, then send your message again. With every account out of a limit, the card says which is back first, and when. Choose an account in the same menu to stop choosing automatically.
 
 ![Default accounts with Automatic chosen for Claude Code](../../spec/screens/settings-agents-automatic.png)
+
+![A new chat that couldn't start, with the accounts it could start on](../../spec/screens/chat-needs-an-account.png)
 
 ### Reserve part of an account's week
 

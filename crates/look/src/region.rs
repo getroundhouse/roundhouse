@@ -33,6 +33,9 @@ pub enum Region {
     PushLine,
     /// That the chat's account is using what's reserved of its week, above the composer.
     ReserveLine,
+    /// That the chat couldn't start, since no account had usage to spare, at the chat's end, with the accounts to start
+    /// it on.
+    AccountWait,
     /// The chat's rows.
     Transcript,
     /// The ticks at the right of a chat with several prompts, one for each, at the pane's edge.
@@ -85,6 +88,7 @@ impl Region {
             Region::SetupLog => "setup-log-text",
             Region::PushLine => "push-line",
             Region::ReserveLine => "reserve-line",
+            Region::AccountWait => "account-wait",
             Region::Transcript => "transcript",
             Region::Outline => "outline",
             Region::FindBar => "find-bar",
