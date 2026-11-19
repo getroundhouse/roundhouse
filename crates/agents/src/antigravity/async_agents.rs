@@ -16,7 +16,12 @@ const SUBAGENT_IDLE_SUFFIX: &str = " has gone idle.";
 pub(super) struct AsyncAgents {
     spawned_this_turn: bool,
     known_subagents: HashSet<String>,
+    /// Spawns whose completion carried no ID, and that no `Created` step in the transcript has named yet.
     unnamed_subagents: usize,
+    /// Subagents a `Created` step named before the spawn's completion arrived, which that completion then takes rather
+    /// than count a second subagent. `agy` 1.5.12 streams a wakeup's tool calls while `wakeup::watch` reads the
+    /// transcript, so either can come first.
+    unclaimed_names: HashSet<String>,
     finished_subagents: HashSet<String>,
     swarm_workers: HashSet<String>,
 }
@@ -42,6 +47,7 @@ impl AsyncAgents {
         self.spawned_this_turn = false;
         self.known_subagents.clear();
         self.unnamed_subagents = 0;
+        self.unclaimed_names.clear();
         self.finished_subagents.clear();
         self.swarm_workers.clear();
     }
@@ -54,8 +60,11 @@ impl AsyncAgents {
             Call::Subagent(_) => {
                 self.spawned_this_turn = true;
                 if let Some(id) = extract_subagent_id_from_wire(wire) {
+                    self.unclaimed_names.remove(id);
                     self.finished_subagents.remove(id);
                     self.known_subagents.insert(id.to_owned());
+                } else if let Some(id) = self.unclaimed_names.iter().next().cloned() {
+                    self.unclaimed_names.remove(&id);
                 } else {
                     self.unnamed_subagents += 1;
                 }
@@ -177,7 +186,11 @@ impl AsyncAgents {
             return;
         }
         if self.known_subagents.insert(id.to_owned()) {
-            self.unnamed_subagents = self.unnamed_subagents.saturating_sub(1);
+            if self.unnamed_subagents > 0 {
+                self.unnamed_subagents -= 1;
+            } else {
+                self.unclaimed_names.insert(id.to_owned());
+            }
         }
     }
 
@@ -293,6 +306,19 @@ mod tests {
         tracked.on_transcript_step(&json!({
             "type": "SYSTEM_MESSAGE",
             "content": "[Message] sender=system content=Subagent sub-2 has gone idle. Done."
+        }));
+        assert!(!tracked.has_live());
+
+        // A `Created` step read before the completion of the spawn it names is that spawn, not a second one.
+        tracked.on_transcript_step(&json!({
+            "type": "GENERIC",
+            "content": "Created the following subagent:\n{\"conversationId\": \"sub-3\"}"
+        }));
+        tracked.on_tool_completed(&call, &wire);
+        assert!(tracked.has_live());
+        tracked.on_transcript_step(&json!({
+            "type": "SYSTEM_MESSAGE",
+            "content": "[Message] sender=system content=Subagent sub-3 has gone idle. Done."
         }));
         assert!(!tracked.has_live());
 

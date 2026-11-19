@@ -119,7 +119,8 @@ async fn turn_transcript_scan_preserves_partial_trailing_line_and_does_not_repla
     let agent = h.started().await;
 
     // Seed a complete `Created` line plus an incomplete trailing line before Turn 1 finishes so `read_turn_transcript`
-    // consumes only through the newline and leaves the partial line intact for the next write.
+    // consumes only through the newline and leaves the partial line intact for the next write. `wakeup::watch` may read
+    // the `Created` line before the turn starts, and the spawn's completion that follows is then that subagent too.
     let created = json!({
         "type": "GENERIC",
         "content": "Created the following subagent:\n{\"conversationId\": \"child-1\"}"
