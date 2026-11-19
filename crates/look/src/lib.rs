@@ -122,6 +122,6 @@ pub use tokens::tokens;
 #[cfg(any(test, feature = "testing"))]
 pub use tooltips::shown_tooltip;
 pub use tooltips::tooltip;
-pub use typography::{STRONG, Type, Typeset};
+pub use typography::{CodeLines, STRONG, Type, Typeset};
 pub use word_changes::{LineChange, word_changes};
 pub use work::Work;

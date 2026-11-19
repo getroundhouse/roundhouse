@@ -2,12 +2,12 @@
 use super::screens::SCREENS;
 use super::{
     approval_chats, approved, background_chats, banner_kinds, bar_kinds, baselines, button_states, cache_screens,
-    call_screens, capture, cards, colours, compaction_chats, component_screens, context_screens, controls, corners,
-    dialog_widths, dictation_screens, diff_screens, empty_kinds, failure_chats, failures_in_a_row, field_states,
-    heights, home_screens, icon_sizes, key_kinds, kinds_of_text, lines, list_rows, mark_states, menu_rows,
-    own_turn_chats, proposal_chats, pull_requests, settings_screens, sidebar_screens, small_things, spaces, steps,
-    subagent_chats, switch_kinds, tab_widths, terminal_screens, toggle_states, tool_screens, tooltips, turn_screens,
-    update_screens, workspace_screens,
+    call_screens, capture, cards, code_lines, colours, compaction_chats, component_screens, context_screens, controls,
+    corners, dialog_widths, dictation_screens, diff_screens, empty_kinds, failure_chats, failures_in_a_row,
+    field_states, heights, home_screens, icon_sizes, key_kinds, kinds_of_text, lines, list_rows, mark_states,
+    menu_rows, own_turn_chats, proposal_chats, pull_requests, settings_screens, sidebar_screens, small_things, spaces,
+    steps, subagent_chats, switch_kinds, tab_widths, terminal_screens, toggle_states, tool_screens, tooltips,
+    turn_screens, update_screens, workspace_screens,
 };
 use approved::Verdict;
 use capture::Picture;
@@ -125,6 +125,7 @@ fn every_screen_looks_as_approved() {
             banner_kinds::NAME,
             field_states::NAME,
             heights::NAME,
+            code_lines::NAME,
             icon_sizes::NAME,
             spaces::NAME,
         ])
@@ -247,6 +248,17 @@ fn every_bar_and_row_height_looks_as_approved() {
 
     let mut problems = look_at(heights::NAME, heights::SPEC, &picture);
     problems.extend(places.look_at(heights::NAME));
+    report(&problems);
+}
+
+#[test]
+fn every_spacing_of_codes_lines_looks_as_approved() {
+    let text_system: Arc<dyn PlatformTextSystem> = Arc::new(gpui_apple::AppleTextSystem::new());
+
+    let (picture, places) = code_lines::draw(&text_system);
+
+    let mut problems = look_at(code_lines::NAME, code_lines::SPEC, &picture);
+    problems.extend(places.look_at(code_lines::NAME));
     report(&problems);
 }
 

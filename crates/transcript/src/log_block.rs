@@ -12,7 +12,7 @@ use gpui_kit::{
 
 use crate::find::Marks;
 
-pub(crate) const LINE_HEIGHT: f32 = 17.0;
+const LINE_HEIGHT: Pixels = look::CodeLines::Chat.height();
 /// Keeps one very long line from costing more than the screen can show.
 const MAX_LINE_BYTES: usize = 2000;
 /// What a tab is drawn as in monospace, here and in a file's lines.
@@ -27,7 +27,7 @@ pub(crate) struct LogText {
 
 #[expect(clippy::cast_precision_loss, reason = "a position on screen, which only drifts past 16 million lines")]
 fn line_top(line: usize) -> Pixels {
-    px(line as f32 * LINE_HEIGHT)
+    LINE_HEIGHT * line as f32
 }
 
 /// The line at a position measured in lines.
@@ -157,8 +157,8 @@ impl Element for LogBlock {
         let clip = window.content_mask().bounds;
         let top = (clip.top() - bounds.top()).max(px(0.));
         let bottom = (clip.bottom() - bounds.top()).max(px(0.));
-        let first = line_at(f32::from(top) / LINE_HEIGHT);
-        let last = line_at((f32::from(bottom) / LINE_HEIGHT).ceil()).min(self.log.lines.len());
+        let first = line_at(top / LINE_HEIGHT);
+        let last = line_at((bottom / LINE_HEIGHT).ceil()).min(self.log.lines.len());
         let font = font(self.font.clone());
         for line in first..last {
             let (start, end) = self.log.span(line);
@@ -180,10 +180,10 @@ impl Element for LogBlock {
             for (range, color) in self.marks.within(start, end).backgrounds() {
                 let (from, to) =
                     (shaped.x_for_index(tabbed(raw, range.start)), shaped.x_for_index(tabbed(raw, range.end)));
-                let quad = Bounds::new(point(origin.x + from, origin.y), size(to - from, px(LINE_HEIGHT)));
+                let quad = Bounds::new(point(origin.x + from, origin.y), size(to - from, LINE_HEIGHT));
                 window.paint_quad(gpui_kit::fill(quad, color));
             }
-            let _ = shaped.paint(origin, px(LINE_HEIGHT), TextAlign::Left, None, window, cx);
+            let _ = shaped.paint(origin, LINE_HEIGHT, TextAlign::Left, None, window, cx);
         }
     }
 }
@@ -194,7 +194,7 @@ impl LogBlock {
     fn say_where_the_match_is(&self, bounds: Bounds<Pixels>) {
         let (Some(here), Some(reveal)) = (self.marks.here(), self.marks.reveal()) else { return };
         let line = self.log.lines.partition_point(|start| *start as usize <= here.start).saturating_sub(1);
-        let at = Bounds::new(point(bounds.left(), bounds.top() + line_top(line)), size(px(1.), px(LINE_HEIGHT)));
+        let at = Bounds::new(point(bounds.left(), bounds.top() + line_top(line)), size(px(1.), LINE_HEIGHT));
         reveal.drawn_at(at, self.area.clone());
     }
 }

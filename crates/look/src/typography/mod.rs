@@ -5,6 +5,8 @@
 #[cfg(test)]
 mod tests;
 
+mod code_lines;
 mod styles;
+pub use code_lines::CodeLines;
 pub(crate) use styles::{MONO, MONO_SIZE, REM};
 pub use styles::{STRONG, Type, Typeset};

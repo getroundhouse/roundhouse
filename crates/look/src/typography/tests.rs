@@ -1,7 +1,7 @@
 use gpui_kit::{SharedString, Styled as _, div};
 
 use super::styles::EMPHASIS;
-use super::{MONO, Type, Typeset as _};
+use super::{CodeLines, MONO, Type, Typeset as _};
 use crate::spec_table;
 
 #[test]
@@ -44,4 +44,12 @@ fn only_code_names_a_font_so_the_system_font_is_the_windows() {
         let code = (kind == Type::Code).then(|| SharedString::new_static(MONO));
         assert_eq!(named, code, "{kind:?}");
     }
+}
+
+#[test]
+fn the_specs_table_has_every_spacing_of_codes_lines_in_order() {
+    let table: Vec<[String; 2]> = spec_table::rows("**How far apart code's lines are, by where it's read.**");
+
+    let spaced: Vec<[String; 2]> = CodeLines::ALL.iter().map(|lines| lines.written()).collect();
+    assert_eq!(table, spaced, "docs/spec/look.md's table of code's line heights, against crates/look/src/typography");
 }

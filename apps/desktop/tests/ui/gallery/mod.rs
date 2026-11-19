@@ -24,6 +24,7 @@ mod call_screens;
 mod capture;
 mod cards;
 mod chats;
+mod code_lines;
 mod codex_screens;
 mod colours;
 mod compaction_chats;

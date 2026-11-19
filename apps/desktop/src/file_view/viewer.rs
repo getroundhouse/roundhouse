@@ -17,7 +17,7 @@ use reading::Unshown;
 use transcript::Document;
 
 /// The height of a line of a file, and of a line of a diff, so the two read alike.
-pub(crate) const LINE_HEIGHT: Pixels = px(20.);
+pub(crate) const LINE_HEIGHT: Pixels = look::CodeLines::File.height();
 
 /// What the file view has to show for its file.
 pub(super) enum Contents {
