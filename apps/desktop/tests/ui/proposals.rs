@@ -188,7 +188,9 @@ fn a_new_proposal_takes_the_tabs_place_only_where_nothing_is_lost(cx: &mut TestA
 
     let second = another(&mut ui, &stack, "Clearing a platform");
     ui.wait("the second to take the place of the first, behind the chat", |ui| tab_shows(ui) == Some(second.clone()));
-    ui.click(SharedString::from(format!("open-proposal/{second}")));
+    let open = SharedString::from(format!("open-proposal/{second}"));
+    ui.wait("the second's line, which the record can come before", |ui| ui.has(open.clone()));
+    ui.click(open);
     ui.wait("the proposal tab", |ui| showing(ui) == Showing::Proposal);
 
     let third = another(&mut ui, &stack, "Closing a line");
