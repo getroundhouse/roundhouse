@@ -5,6 +5,7 @@
 #![cfg(test)]
 #![cfg(target_os = "macos")]
 
+mod another_app;
 mod asking_first;
 mod composer_going;
 mod deleting;

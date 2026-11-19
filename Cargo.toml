@@ -163,6 +163,9 @@ objc2-app-kit = { version = "0.3.2", default-features = false, features = ["std"
 objc2-av-foundation = { version = "0.3.2", default-features = false, features = ["std", "AVCaptureDevice", "AVMediaFormat", "block2"] }
 # Already under cpal. Mutes a Mac's sound output while it's dictated to, if the person has chosen it.
 objc2-core-audio = { version = "0.3.2", default-features = false, features = ["std", "AudioHardware"] }
+# Already under GPUI. Asks a Mac whether Space is down, since letting go of it while another app is in front tells only
+# that app, and asks the person to let the app monitor input, which a Mac needs before it says.
+objc2-core-graphics = { version = "0.3.2", default-features = false, features = ["std", "CGEvent", "CGEventSource", "CGEventTypes", "CGRemoteOperation"] }
 # Runs dictation's model on a Mac, on Core ML.
 objc2-core-ml = { version = "0.3.2", default-features = false, features = ["std", "block2", "MLDictionaryFeatureProvider", "MLFeatureProvider", "MLFeatureValue", "MLModel", "MLModelConfiguration", "MLMultiArray"] }
 # Already under GPUI. Hands the sound for a chat that needs a look to AppKit, by its bytes or its name, and finds the

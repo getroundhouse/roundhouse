@@ -67,6 +67,11 @@ pub(super) fn hold_option_space(ui: &mut Ui) {
     key(ui, PlatformInput::KeyDown(KeyDownEvent { keystroke, is_held: false, prefer_character_input: false }));
 }
 
+/// Has the system say Space is down, or up, whichever keys the app has been given.
+pub(super) fn on_the_keyboard(ui: &mut Ui, space_down: bool) {
+    ui.cx.update(|cx| dictation_ui::hold_space_down(space_down, cx));
+}
+
 /// Lets go of Space.
 pub(super) fn let_go(ui: &mut Ui) {
     key(ui, PlatformInput::KeyUp(KeyUpEvent { keystroke: Keystroke::parse("space").unwrap() }));

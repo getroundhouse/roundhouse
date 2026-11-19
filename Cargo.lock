@@ -1880,6 +1880,7 @@ dependencies = [
  "flume",
  "gpui-kit",
  "look",
+ "objc2-core-graphics",
 ]
 
 [[package]]

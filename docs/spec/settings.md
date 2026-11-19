@@ -5,6 +5,7 @@ The app's own settings, and where they're shown.
 - **Settings… in the app menu, `Cmd-,`, or the gear at the bottom of the sidebar, shows Settings in place of the sidebar and the workspace,** in the same window. `Back`, Escape or `Cmd-W` goes back to where you were, with what you were typing still focused, or to a workspace selected in its place meanwhile, such as when the one showing was archived from elsewhere, which then has the keys. While Settings shows, the workspace's keys do nothing, since what they'd act on is hidden, and a reply that comes in the chat it hides is read once you go back. *Unconfirmed:* the gear, the ways back, the workspace selected meanwhile, the keys doing nothing, and the reply waiting.
 - **A page for each part of the app is in a sidebar on the left, and the chosen page fills the rest.** The sidebar is as wide as the one it stands in for, with a muted `Back` at its top right, level with the window's buttons. *Unconfirmed.*
 - **Settings opens on its first page, but at the page what opens it is about,** as a workspace's `Open Git` opens it at Git, as `workspaces.md` says. *Unconfirmed.*
+- **The app asks for a system permission whenever having it makes something work better, the first time that thing is used,** not before, so the person sees why it's asked: the microphone and leave to monitor input for dictating, as `chats.md` says, and notifications, as Notifications says. What works without it still does.
 
   **General, the first page.** *Unconfirmed.*
 

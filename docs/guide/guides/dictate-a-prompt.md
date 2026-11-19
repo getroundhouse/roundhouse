@@ -38,6 +38,8 @@ Nothing is sent until you press `Enter`, so you can fix what came out wrong firs
 
 The first time, your Mac asks whether Roundhouse may use the microphone. Allow it, and press again. If you didn't, a message says where in System Settings to allow it.
 
+Once holding Space has dictated something the first time, your Mac asks whether Roundhouse may monitor input, which it lists under Input Monitoring in System Settings. With it, dictating goes on while you hold Space even if something else comes in front for a moment. Dictating works without it.
+
 ## Dictate a new workspace, answer, note or comment
 
 The new-workspace prompt uses the same shortcuts. `Enter` finishes the last words before creating the workspace. Create returns when dictation ends. Letting go only puts them into the prompt. Escape cancels dictation first, leaving the dialog open.
@@ -58,7 +60,7 @@ Turn on **Mute sound while dictating**, under Dictation in Settings, and the Mac
 
 ## When it stops by itself
 
-- **Going to another app** stops it as letting go does, so what you said goes in.
+- **Going to another app** stops it as letting go does, so what you said goes in. While you're holding Space, and Roundhouse may monitor input, it goes on until you let go, even in the other app, so the Mac showing something in front for a moment, such as while it checks an app that's opening, doesn't cut you off.
 - **The composer going,** such as for Settings, another chat, the file tab, a question from the agent, the workspace being archived or the app losing its hub, stops it, and drops what was still showing. A hub restarting, such as to finish an update, leaves the composer where it is, so you can go on dictating.
 - **Leaving an answer or the proposal tab, hiding a comment or closing the new-workspace dialog** drops tentative words and keeps finalized text. Starting dictation in another field ends the old recording too.
 - **Recognition falling too far behind** stops the microphone. Once the model responds, a message says it couldn't keep up; text already finalized stays in the field. Try dictating again.

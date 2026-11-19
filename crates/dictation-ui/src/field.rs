@@ -64,8 +64,9 @@ impl Field {
 
     fn new(input: Entity<TextareaState>, corner: look::Corner, window: &Window, cx: &mut Context<Self>) -> Self {
         let keys = cx.observe_keystrokes(|this, event, _, _| this.key_pressed(&event.keystroke));
-        let changed = cx.subscribe(&input, |this, _, event: &InputEvent, _| {
-            if matches!(event, InputEvent::Blur) {
+        // The input is blurred as its window goes behind another app's too, which `keys` decides for itself.
+        let changed = cx.subscribe_in(&input, window, |this, _, event: &InputEvent, window, _| {
+            if matches!(event, InputEvent::Blur) && window.is_window_active() {
                 this.space_down = None;
             }
         });
