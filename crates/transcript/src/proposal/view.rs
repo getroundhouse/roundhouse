@@ -17,9 +17,10 @@ use super::document::{self, Part, Writing};
 use super::page::PageElement;
 use crate::DictationHints;
 use crate::linked_images::LinkedImages;
+use crate::references::References;
 use crate::selection::Selection;
 use crate::texts::{Of, Texts};
-use client_core::Client;
+use client_core::{Client, RecordsFeed};
 
 /// What a proposal's line in the chat starts with, and its tab: a way that splits in two, for the options it offers.
 pub const ICON: gpui_kit::assets::IconName = gpui_kit::assets::IconName::Split;
@@ -36,6 +37,9 @@ pub struct ProposalView {
     /// The images what the agent wrote points to, which the hub kept with each revision, and the page is drawn again
     /// as each comes.
     linked: LinkedImages<()>,
+    /// The issues and pull requests what the agent wrote links to, which a chip names by its number alone in the
+    /// proposal's workspace's repository.
+    references: References<()>,
     selection: Selection,
     /// The selection's, which a press on the page's text takes, so a copy and a select all come to it.
     focus: FocusHandle,
@@ -54,9 +58,20 @@ impl ProposalView {
             let _ = this.update(cx, |_, cx| cx.notify());
         });
         let this = cx.weak_entity();
-        let linked = LinkedImages::new(client, proposal.session_id.clone(), move |_, cx| {
+        let linked = LinkedImages::new(client.clone(), proposal.session_id.clone(), move |_, cx| {
             let _ = this.update(cx, |_, cx| cx.notify());
         });
+        let (changed, go_to) = (cx.weak_entity(), cx.weak_entity());
+        let references = References::new(
+            client,
+            proposal.workspace_id.clone(),
+            move |_, cx| {
+                let _ = changed.update(cx, |_, cx| cx.notify());
+            },
+            move |workspace, cx| {
+                let _ = go_to.update(cx, |_, cx| cx.emit(ProposalEvent::GoToWorkspace(workspace)));
+            },
+        );
         let focus = cx.focus_handle();
         let selection = Selection::new(texts.clone(), focus.clone());
         let answering = Answering::default();
@@ -65,6 +80,7 @@ impl ProposalView {
             answering,
             texts,
             linked,
+            references,
             selection,
             focus,
             scroll: ScrollHandle::new(),
@@ -76,6 +92,12 @@ impl ProposalView {
     /// Carries on on a new connection to the hub, and asks again for what couldn't be read.
     pub fn reconnect(&mut self, client: &Client) {
         self.linked.reconnect(client);
+        self.references.reconnect(client);
+    }
+
+    /// Reads which workspace a pull request the page names is in from `records` from now on.
+    pub fn follow_records(&self, records: RecordsFeed) {
+        self.references.follow_records(records);
     }
 
     pub fn proposal(&self) -> &Arc<Proposal> {
@@ -188,8 +210,14 @@ impl Render for ProposalView {
         let area = ElementId::Name("proposal-page".into());
         let parts = {
             let images = (&self.linked, self.proposal.current.images.as_slice());
-            let mut writing =
-                Writing { texts: &self.texts, selection: &self.selection, images, area: area.clone(), drawn: 0 };
+            let mut writing = Writing {
+                texts: &self.texts,
+                selection: &self.selection,
+                images,
+                references: &self.references,
+                area: area.clone(),
+                drawn: 0,
+            };
             let choosing =
                 Choosing { this: cx.weak_entity(), chosen: &self.answering.chosen, standing: self.proposal.standing() };
             let revision = &self.proposal.current;

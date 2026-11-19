@@ -5,10 +5,13 @@
 #[cfg(test)]
 mod tests;
 
+mod leaf;
 mod markdown;
 mod top_blocks;
+pub(crate) use leaf::Leaf;
+pub(crate) use markdown::ATOM;
 #[cfg(test)]
 pub(super) use markdown::parse;
-pub(crate) use markdown::{ATOM, Parsed, leaves};
-pub(super) use markdown::{Again, ImagesAre, again, gone_on, joined, parse_shown, rest};
+pub(super) use markdown::{Again, Whose, again, gone_on, joined, parse_shown, rest};
+pub(crate) use markdown::{Parsed, leaves};
 pub(crate) use top_blocks::{TopBlock, top_blocks, top_blocks_and_items};

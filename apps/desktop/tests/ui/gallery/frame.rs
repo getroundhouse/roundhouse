@@ -137,7 +137,8 @@ fn region_in_the_column(region: Region) -> bool {
         | Region::TurnCard
         | Region::ContextCard
         | Region::UsageCard
-        | Region::DictationCard => true,
+        | Region::DictationCard
+        | Region::ReferenceCard => true,
         Region::LeftSidebar
         | Region::RightSidebar
         | Region::Header

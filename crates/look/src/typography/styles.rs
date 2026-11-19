@@ -1,7 +1,10 @@
 use crate::named::named;
 use crate::traits::Reach;
 use gpui_kit::component::ActiveTheme as _;
-use gpui_kit::{AbsoluteLength, App, FontWeight, Pixels, SharedString, Styled, px, rems};
+use gpui_kit::{
+    AbsoluteLength, App, FontStyle, FontWeight, Pixels, SharedString, StrikethroughStyle, Styled, UnderlineStyle, px,
+    rems,
+};
 
 /// How big a rem is at a desk. The kit's theme is given it, and the window measures the kinds that are in rems by it.
 pub(crate) const REM: Pixels = px(16.);
@@ -157,6 +160,20 @@ pub trait Typeset: Styled + Sized {
     #[must_use]
     fn emphasis(self) -> Self {
         self.font_weight(EMPHASIS)
+    }
+
+    /// Sets this element's text apart from the text it's drawn among: regular, upright, and with no line under or
+    /// through it, each of which it would otherwise take from that text, as anything does from what it's in. So a
+    /// component drawn among a run of formatted words, such as a chip in a bold link, with what it opens, is drawn as
+    /// it is anywhere else. GPUI clears a line only by making it no thickness.
+    #[must_use]
+    fn apart_from_its_text(mut self) -> Self {
+        let text = self.text_style();
+        text.font_weight = Some(FontWeight::NORMAL);
+        text.font_style = Some(FontStyle::Normal);
+        text.underline = Some(UnderlineStyle { thickness: px(0.), ..UnderlineStyle::default() });
+        text.strikethrough = Some(StrikethroughStyle { thickness: px(0.), ..StrikethroughStyle::default() });
+        self
     }
 }
 

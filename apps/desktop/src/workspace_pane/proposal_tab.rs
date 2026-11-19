@@ -111,9 +111,11 @@ impl WorkspacePane {
                     }
                 });
             });
+            view.read(cx).follow_records(self.records.clone());
             let answers = cx.subscribe(&view, |this, view, event: &ProposalEvent, cx| match event {
                 ProposalEvent::Send(request) => this.answer_proposal(view, request.clone(), cx),
                 ProposalEvent::Error(message) => cx.emit(PaneEvent::Error(message.clone())),
+                ProposalEvent::GoToWorkspace(workspace) => cx.emit(PaneEvent::GoToWorkspace(workspace.clone())),
             });
             self.proposals.take(cx);
             self.proposals.tab = Some(ProposalTab { session, view, in_front, _answers: answers });

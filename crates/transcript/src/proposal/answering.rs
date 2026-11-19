@@ -10,7 +10,7 @@ use gpui_kit::{
     AnyElement, App, AppContext as _, Context, ElementId, Entity, IntoElement as _, Subscription, WeakEntity, Window,
 };
 use protocol::client::proposals::{ProposalAnotherRound, ProposalAnswer};
-use protocol::model::{ClientRequestId, OptionLetter, OptionPlace, RevisionStanding};
+use protocol::model::{ClientRequestId, OptionLetter, OptionPlace, RevisionStanding, WorkspaceId};
 
 use super::view::ProposalView;
 
@@ -21,6 +21,8 @@ pub enum ProposalEvent {
     Send(ProposalRequest),
     /// Say what went wrong, such as dictating into the note.
     Error(String),
+    /// Show this workspace, as the menu of a pull request the page names asks.
+    GoToWorkspace(WorkspaceId),
 }
 
 /// What the view asks the app to send the hub, and to say how it went with [`ProposalView::sent`].

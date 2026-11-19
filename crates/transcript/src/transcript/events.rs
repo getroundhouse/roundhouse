@@ -2,7 +2,7 @@
 
 use client_core::FileToSend;
 use gpui_kit::FocusHandle;
-use protocol::model::{ProposalId, SubagentId};
+use protocol::model::{ProposalId, SubagentId, WorkspaceId};
 use protocol::prompt::Prompt;
 
 /// Things the owner of a transcript has to deal with.
@@ -25,6 +25,8 @@ pub enum TranscriptEvent {
     OpenSubagent { subagent: SubagentId, title: String },
     /// Someone asked to see `proposal`, one of this chat's, in the proposal tab.
     OpenProposal { proposal: ProposalId },
+    /// Someone asked to see the workspace `workspace`, from the menu of an issue or a pull request the chat names.
+    GoToWorkspace { workspace: WorkspaceId },
     /// The bar for finding text in the chat closed, so focus can go back where it was.
     FindClosed,
 }

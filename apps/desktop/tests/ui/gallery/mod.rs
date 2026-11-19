@@ -60,6 +60,7 @@ mod prompt_screens;
 mod proposal_chats;
 mod pull_requests;
 mod question_chats;
+mod reference_screens;
 mod screens;
 mod settings_screens;
 mod sidebar_screens;

@@ -163,10 +163,13 @@ impl MobileApp {
     }
 
     /// Opens `chat`, in place of any panel.
-    pub(super) fn open_chat(&mut self, chat: Entity<ChatView>, cx: &mut Context<Self>) {
-        let events = cx.subscribe(&chat, |app, _, ChatEvent::Back, cx| {
-            app.close_chat(None, cx);
-            cx.notify();
+    pub(super) fn open_chat(&mut self, chat: Entity<ChatView>, window: &mut Window, cx: &mut Context<Self>) {
+        let events = cx.subscribe_in(&chat, window, |app, _, event: &ChatEvent, window, cx| match event {
+            ChatEvent::Back => {
+                app.close_chat(None, cx);
+                cx.notify();
+            }
+            ChatEvent::GoToWorkspace(workspace) => app.open_workspace(workspace, window, cx),
         });
         let opening = chat.read(cx).session().cloned();
         self.close_chat(opening.as_ref(), cx);

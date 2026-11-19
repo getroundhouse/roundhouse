@@ -106,10 +106,16 @@ impl<W: Waiter> LinkedImages<W> {
         self.0.images.lock().retain(|source, linked| read(source, linked));
     }
 
-    /// How a text drawn from the kit's blocks, which names `kept`, for `waiter`, draws the images it points to.
-    pub(crate) fn images(&self, waiter: W, kept: &[LinkedImage]) -> Images {
+    /// How a text drawn from the kit's blocks, which names `kept`, for `waiter`, draws the images it points to, and
+    /// whatever `and` adds to how it's drawn, such as the issues it names.
+    pub(crate) fn images(
+        &self,
+        waiter: W,
+        kept: &[LinkedImage],
+        and: impl FnOnce(MarkdownExtensions) -> MarkdownExtensions,
+    ) -> Images {
         Images {
-            plugins: Arc::new(drawn::to_draw(self, waiter, kept)),
+            plugins: Arc::new(and(drawn::to_draw(self, waiter, kept))),
             resolver: Box::new(self.resolver(waiter, kept)),
         }
     }

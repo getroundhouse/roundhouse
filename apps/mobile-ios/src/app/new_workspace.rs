@@ -102,7 +102,7 @@ impl MobileApp {
         let (client, feed) = (link.read(cx).client(), link.read(cx).feed());
         if let (Some(super::Panel::NewWorkspace), Some(client), Some(feed)) = (self.open.panel, client, feed) {
             let chat = cx.new(|cx| ChatView::new(workspace, Some(session), feed, client, window, cx));
-            self.open_chat(chat, cx);
+            self.open_chat(chat, window, cx);
         }
     }
 }

@@ -1,4 +1,4 @@
-use gpui_kit::{Pixels, px};
+use gpui_kit::{App, Pixels, Window, px};
 
 use crate::icon_sizes::IconSize;
 use crate::named::named;
@@ -41,6 +41,15 @@ impl ChipSize {
             ChipSize::Regular => IconSize::Regular,
             ChipSize::Small => IconSize::Small,
         }
+    }
+
+    /// How far below its top its words' baseline is, as they're centred in it, on a whole device pixel, as GPUI puts a
+    /// glyph's, so one set among words, such as in a reply, sits on theirs.
+    pub fn baseline(self, window: &Window, cx: &App) -> Pixels {
+        let text = self.text();
+        let below = crate::baseline::below_middle(&text.family(cx), text.size(window.rem_size()), window);
+        let scale = window.scale_factor();
+        px(crate::baseline::nearest_pixel((self.height() / 2. + below).scale(scale)).0 / scale)
     }
 
     /// How the spec's table writes it: its name, how tall it is, its text and its mark.

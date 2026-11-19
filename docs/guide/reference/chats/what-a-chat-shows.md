@@ -151,3 +151,19 @@ A diagram the agent writes in Mermaid, in a code block whose language is `mermai
 - **Some images open nothing:** one in a heading, a table or a footnote, one written with its address given elsewhere in the reply, as `![The board][board]` is, several together in bold or italics with no words, one beside nothing but HTML, and one in what a subagent did, shown under its call.
 
 ![The board's screenshot, opened](../../../spec/screens/reply-image-opened.png)
+
+## Issues and pull requests in a reply
+
+A link to an issue or a pull request on GitHub in a reply shows as a chip, whatever the link's words: its state's mark in its state's colour, its number, and, the first time the reply links to it, its title. Roundhouse tells the agent to link to each one it mentions. A number written alone, such as `#1021`, stays as it's written, since it could be another repository's, or the number of something else. A subagent's report where its call shows it, a plan and a proposal show chips too. In a prompt and a thought, a link stays a link.
+
+![A reply's issues and pull requests as chips](../../../spec/screens/references.png)
+
+- **A click opens its link,** to where it goes on GitHub, such as a comment.
+- **Resting the pointer on one shows its card:** where it stands, who opened it and when, its labels, a pull request's lines changed and checks, the workspace it's in, and the start of what it says.
+- **A right-click, or the ⋯ on its card, opens its menu:** Open on GitHub, Copy link, and Go to the workspace it's in, unless that's archived.
+- **Copying and Find use the link's words as they're written,** such as `#1021`, not the title.
+- **One that can't be found stays the link it's written as,** such as a typo, or one in a repository the workspace's GitHub account can't read.
+
+The hub looks each up on GitHub with the account the workspace's pull request is read as, for every client at once, and looks again about once a minute while one is on screen, so a pull request that merges says so.
+
+![A pull request's card](../../../spec/screens/reference-card-pull-request.png)

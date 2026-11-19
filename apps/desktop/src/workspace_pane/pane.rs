@@ -89,6 +89,8 @@ pub enum PaneEvent {
     Present(Presentation),
     /// Show Git in Settings, where the default GitHub account is chosen and accounts are connected.
     OpenGit,
+    /// Show another workspace, as the menu of a pull request a chat links to asks.
+    GoToWorkspace(WorkspaceId),
 }
 
 /// A tab to show once client-core's copy of the records has it open.

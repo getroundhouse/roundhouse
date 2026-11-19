@@ -1,5 +1,5 @@
 use super::super::parse::Again;
-use super::super::{AT_ONCE, ImagesAre, Of, Parsed, Text, TextKey, Texts, parse};
+use super::super::{AT_ONCE, Of, Parsed, Text, TextKey, Texts, Whose, parse};
 use gpui_kit::App;
 use std::rc::Rc;
 
@@ -8,7 +8,7 @@ use std::rc::Rc;
 /// parsed as before, if it was, and what it's drawn as until it's in.
 pub(in super::super) struct Apart {
     pub(super) source: String,
-    pub(super) images: ImagesAre,
+    pub(super) images: Whose,
     pub(super) shown: Option<usize>,
     pub(super) was: Option<Rc<Parsed>>,
     pub(super) again: Option<Again>,
@@ -35,7 +35,7 @@ impl Texts {
         id: &TextKey,
         source: &str,
         of: Of,
-        images: ImagesAre,
+        images: Whose,
         shown: Option<usize>,
     ) -> (Option<Rc<Parsed>>, Option<Apart>) {
         let can_go_on = of.can_go_on();

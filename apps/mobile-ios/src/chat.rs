@@ -13,7 +13,7 @@ use gpui_kit::{
     div,
 };
 use look::{ButtonKind, Space};
-use protocol::model::{Session, SessionId, Workspace};
+use protocol::model::{Session, SessionId, Workspace, WorkspaceId};
 use transcript::{Transcript, TranscriptEvent};
 
 use crate::chrome::{self, TAPPED};
@@ -21,6 +21,8 @@ use crate::chrome::{self, TAPPED};
 /// What the chat asks of the screen around it.
 pub(crate) enum ChatEvent {
     Back,
+    /// Show this workspace's chat instead, as the menu of a pull request the chat names asks.
+    GoToWorkspace(WorkspaceId),
 }
 
 pub(crate) struct ChatView {
@@ -164,11 +166,12 @@ impl ChatView {
         // Its subagents' and proposals' calls are drawn from their records, which client-core keeps once a chat asks
         // for them, and the transcript takes as they come.
         self.feed.follow_session_records(&session.id);
-        let (client, records) = (self.client.clone(), self.feed.snapshot());
+        let (client, records, feed) = (self.client.clone(), self.feed.snapshot(), self.feed.clone());
         let agent = self.agents.of(session.agent);
         let transcript = cx.new(|cx| {
             let mut transcript = Transcript::new(client, &session, cx);
             transcript.set_agent(agent, cx);
+            transcript.follow_records(feed);
             transcript.records_changed(&records, cx);
             transcript
         });
@@ -187,6 +190,10 @@ impl ChatView {
             }
             // Drawn in the composer's place, or gone from it.
             TranscriptEvent::Asking { .. } => {}
+            TranscriptEvent::GoToWorkspace { workspace } => {
+                cx.emit(ChatEvent::GoToWorkspace(workspace.clone()));
+                return;
+            }
             TranscriptEvent::TurnEnded
             | TranscriptEvent::Answering { .. }
             | TranscriptEvent::OpenSubagent { .. }

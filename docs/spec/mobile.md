@@ -18,7 +18,7 @@ One hub's workspaces and chats, on a phone, for keeping work moving away from th
 
 ## A chat
 
-- **A chat shows the same transcript as the desktop,** live as the agent works, with what the workspace is called and its branch above it, which change as the hub's record of it does. What the transcript draws from the chat's records, as the desktop's does, follows them too: whether the agent is working, what it left running, its subagents' calls and its proposals. *Unconfirmed.*
+- **A chat shows the same transcript as the desktop,** live as the agent works, with what the workspace is called and its branch above it, which change as the hub's record of it does. What the transcript draws from the chat's records, as the desktop's does, follows them too: whether the agent is working, what it left running, its subagents' calls, its proposals, and which workspace a pull request it links to is in, and going to that workspace from the chip's menu opens its chat. *Unconfirmed.*
 - **Return makes a new line, and the arrow sends.** The on-screen keyboard's Return only ever types a new line, so sending is a button. The composer grows to six lines. *Unconfirmed.*
 - **What the agent asks, a question or leave to use a tool, takes the composer's place,** in the panel the desktop asks it in, with the answers to tap and a line to type one's own, and the arrow sends it. The composer comes back once it's answered. A plan is approved on its card in the transcript. *Unconfirmed.*
 - *Not built:* stopping a turn, other chats in the workspace, the model and mode pickers, the diff, a subagent's or a proposal's own view, a draft kept for what's typed and not sent, which goes when the chat closes, and which chats have a reply nobody has read.

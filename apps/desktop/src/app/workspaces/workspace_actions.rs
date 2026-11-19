@@ -46,6 +46,7 @@ impl AppView {
                     }
                 }
                 PaneEvent::Present(present) => t.present(cx, move |_, window, cx| present(window, cx)),
+                PaneEvent::GoToWorkspace(id) => t.open_workspace(id, cx),
                 PaneEvent::OpenGit => {
                     t.present(cx, |t, window, cx| t.open_settings_at(Some(PageId::Git), window, cx));
                 }

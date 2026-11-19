@@ -15,7 +15,7 @@ pub(crate) fn unless_it_panics<T, E>(parse: impl FnOnce() -> Result<T, E> + Unwi
 #[cfg(test)]
 mod tests {
     use crate::images_apart::images_apart;
-    use crate::texts::leaves;
+    use crate::texts::{Leaf, leaves};
 
     /// Every parse of a text the parser panics on reads it as it's written: the kit's, which draws it as one
     /// paragraph, and the one that finds the images written one after another, which leaves it as it is.
@@ -28,7 +28,7 @@ mod tests {
         let apart = std::panic::catch_unwind(|| images_apart(&with_images).into_owned());
 
         let read = read.unwrap_or_else(|_| panic!("the kit's parse panicked"));
-        assert_eq!(*read, [panics], "the kit's parse");
+        assert_eq!(read.iter().map(Leaf::shows).collect::<Vec<_>>(), [panics], "the kit's parse");
         let apart = apart.unwrap_or_else(|_| panic!("finding the images written one after another panicked"));
         assert_eq!(apart, with_images, "finding the images written one after another");
     }

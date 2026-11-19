@@ -14,7 +14,7 @@ use gpui_kit::{
 
 use super::code_blocks;
 use super::parsing::Apart;
-use super::{Parsed, Style, TextAt, TextKey, Texts};
+use super::{Leaf, Parsed, Style, TextAt, TextKey, Texts};
 use crate::find::Marks;
 use crate::linked_images::Images;
 use crate::selection::{Geometry, Selection};
@@ -123,7 +123,7 @@ impl Element for ProseElement {
         for (leaf, marks) in (0u64..).zip(&self.marks).filter(|(_, marks)| !marks.is_empty()) {
             behind.entry(leaf).or_default().extend(marks.backgrounds());
         }
-        for (leaf, range) in self.selection.selected_in(self.at, parsed.leaves.iter().map(String::as_str)) {
+        for (leaf, range) in self.selection.selected_in(self.at, parsed.leaves.iter().map(Leaf::shows)) {
             behind.entry(leaf).or_default().push((range, *selection_color));
         }
         let (_, leaves) = collect_leaf_geometry(behind, || element.prepaint(window, cx));

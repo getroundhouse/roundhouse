@@ -1,5 +1,6 @@
-use crate::linked_images;
+use super::leaf::Leaf;
 use crate::parser_panics::unless_it_panics;
+use crate::{linked_images, references};
 use gpui_kit::SharedString;
 use gpui_kit::base::text::editor_host::{BlockNode, InlineNode, LinkMark, Paragraph, Table, parse_markdown};
 use gpui_kit::component::text::MarkdownExtensions;
@@ -15,9 +16,9 @@ pub(crate) struct Parsed {
     /// What was parsed: the text as written, with its images apart.
     pub(in super::super) source: String,
     pub(in super::super) blocks: Vec<BlockNode>,
-    /// What each leaf shows, by its key, which is its place in the text. A selection's bytes, and find's matches,
-    /// are in these.
-    pub(crate) leaves: Arc<[String]>,
+    /// Each leaf, by its key, which is its place in the text. A selection's bytes, and find's matches, are in what
+    /// each shows.
+    pub(crate) leaves: Arc<[Leaf]>,
     /// Where each reference link, such as `[the docs][1]`, goes, by what it's defined as. The kit's parser leaves
     /// these in the blocks for its text view to find, so a text drawn from its blocks is given them itself.
     pub(in super::super) links: BTreeMap<SharedString, LinkMark>,
@@ -27,33 +28,41 @@ pub(crate) struct Parsed {
     /// Whether it was parsed whole, from its start, rather than joined from what it was parsed as before and what it
     /// went on to, which can differ, as [`again`] says.
     pub(in super::super) whole: bool,
-    /// Whose its images are to draw, which it was parsed by.
-    pub(in super::super) images: ImagesAre,
+    /// Whose what it points to is to draw, which it was parsed by.
+    pub(in super::super) images: Whose,
 }
 
-/// Whose a text's images are to draw, which is part of how it's parsed, so a text parsed for one isn't drawn as the
-/// other. The transcript's own are those a reply points to, which `crate::linked_images` takes out of the kit's blocks
-/// as the text is parsed, and draws so a click opens them. Either way a text has the same leaves.
+/// Whose what a text points to is to draw, which is part of how it's parsed, so a text parsed for one isn't drawn as
+/// the other. The transcript's own are the images a reply points to, which `crate::linked_images` takes out of the
+/// kit's blocks as the text is parsed, and draws so a click opens them, and the issues and pull requests it links to,
+/// which `crate::references` makes nodes of, to draw as chips. Either way a text says the same, leaf by leaf, as
+/// [`Leaf::said`] has it, and an image is one [`ATOM`], but a reference is one only in the transcript's.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(in super::super) enum ImagesAre {
+pub(in super::super) enum Whose {
     TheKits,
     TheTranscripts,
 }
 
-impl ImagesAre {
-    /// Whose the images of `source` are to draw, where it's drawn with the images its row's event kept to look up, if
-    /// `looked_up`: the transcript's, unless it's one `linked_images` would take nothing from, which is parsed the
-    /// same either way. So a reply with no images keeps the parse it was written into, rather than being parsed again
-    /// in the row of its record.
+impl Whose {
+    /// Whose what `source` points to is to draw, where it's drawn with the images its row's event kept to look up, and
+    /// its references, if `looked_up`: the transcript's, unless it's one neither would take anything from, which is
+    /// parsed the same either way. So a reply that points to nothing keeps the parse it was written into, rather than
+    /// being parsed again in the row of its record.
     pub(in super::super) fn of(source: &str, looked_up: bool) -> Self {
-        if looked_up && linked_images::may_take(source) { Self::TheTranscripts } else { Self::TheKits }
+        if looked_up && (linked_images::may_take(source) || references::may_link(source)) {
+            Self::TheTranscripts
+        } else {
+            Self::TheKits
+        }
     }
 
-    /// What the kit parses a text with, from byte `from` of it on.
-    pub(super) fn read_with(self, from: usize) -> Arc<MarkdownExtensions> {
+    /// What the kit parses a text with, from where `before`, the text before that, ends.
+    pub(super) fn read_with(self, before: &str) -> Arc<MarkdownExtensions> {
         match self {
             Self::TheKits => Arc::default(),
-            Self::TheTranscripts => linked_images::to_read(from),
+            Self::TheTranscripts => {
+                Arc::new(references::reading(Arc::unwrap_or_clone(linked_images::to_read(before.len()))))
+            }
         }
     }
 }
@@ -67,14 +76,14 @@ pub(super) struct Start {
 
 /// Parses `source`, whose images are `images` to draw, and keys each of its leaves by its place in it. One the kit's
 /// parser can't read is a paragraph, as it's written.
-pub(in super::super) fn parse(source: String, images: ImagesAre) -> Parsed {
+pub(in super::super) fn parse(source: String, images: Whose) -> Parsed {
     parse_shown(source, images, None)
 }
 
 /// Parses `source` as [`parse`] does, but where `shown` says its own text ends, it keeps only the blocks that start in
 /// that, and what's after it is only read: definitions from the rest of the text it was cut from, which a reference
 /// or a footnote's mark in it is read by, as a document's block has them, and which another block draws.
-pub(in super::super) fn parse_shown(source: String, images: ImagesAre, shown: Option<usize>) -> Parsed {
+pub(in super::super) fn parse_shown(source: String, images: Whose, shown: Option<usize>) -> Parsed {
     let (mut blocks, mut leaves, mut starts, mut links) = (Vec::new(), Vec::new(), Some(Vec::new()), BTreeMap::new());
     if let Some(mut read) = read(&source, 0, images) {
         // Before what isn't its own goes, since its references go where the definitions after it say.
@@ -137,8 +146,8 @@ pub(in super::super) fn gone_on(parsed: &Parsed, again: Again, source: String) -
 
 /// The blocks of `source` from where `again` says it's parsed again from on, whose images are `images` to draw, as
 /// [`read`] reads them, if it can.
-pub(in super::super) fn rest(source: &str, again: Again, images: ImagesAre) -> Option<Vec<BlockNode>> {
-    read(&source[again.byte..], again.byte, images)
+pub(in super::super) fn rest(source: &str, again: Again, images: Whose) -> Option<Vec<BlockNode>> {
+    read(source, again.byte, images)
 }
 
 /// `source`, which goes on from `parsed` as `again` says, with `rest`, its blocks from there on, as [`rest`] read them.
@@ -181,7 +190,7 @@ fn more(
     parsed: Vec<BlockNode>,
     from: usize,
     blocks: &mut Vec<BlockNode>,
-    leaves: &mut Vec<String>,
+    leaves: &mut Vec<Leaf>,
     starts: &mut Option<Vec<Start>>,
 ) {
     for block in parsed {
@@ -198,20 +207,20 @@ fn more(
 fn made(
     source: String,
     blocks: Vec<BlockNode>,
-    leaves: Vec<String>,
+    leaves: Vec<Leaf>,
     starts: Option<Vec<Start>>,
     whole: bool,
-    images: ImagesAre,
+    images: Whose,
     links: BTreeMap<SharedString, LinkMark>,
 ) -> Parsed {
     Parsed { source, blocks, leaves: leaves.into(), links, starts, whole, images }
 }
 
-/// `source`'s blocks, as the kit's parser reads them, if it can, on any thread, where `source` starts at byte `from` of
-/// the text it's the end of, and its images are `images` to draw. A text it panics on is one it can't read, as
-/// `crate::parser_panics` says.
-pub(in super::super) fn read(source: &str, from: usize, images: ImagesAre) -> Option<Vec<BlockNode>> {
-    unless_it_panics(|| parse_markdown(source, images.read_with(from)))
+/// The blocks of `text` from byte `from` on, as the kit's parser reads them, if it can, on any thread, where its images
+/// are `images` to draw. A text it panics on is one it can't read, as `crate::parser_panics` says.
+pub(in super::super) fn read(text: &str, from: usize, images: Whose) -> Option<Vec<BlockNode>> {
+    let (before, source) = text.split_at(from);
+    unless_it_panics(|| parse_markdown(source, images.read_with(before)))
 }
 
 /// Adds where each reference link defined in `blocks` goes to `links`, unless it's there. As the Markdown standard has
@@ -241,13 +250,13 @@ fn defined(blocks: &[BlockNode], links: &mut BTreeMap<SharedString, LinkMark>) {
     }
 }
 
-/// What each leaf of `source` shows, in order, as it's drawn.
-pub(crate) fn leaves(source: &str) -> Arc<[String]> {
-    parse(source.to_owned(), ImagesAre::TheKits).leaves
+/// Each leaf of `source`, in order, as it's drawn.
+pub(crate) fn leaves(source: &str) -> Arc<[Leaf]> {
+    parse(source.to_owned(), Whose::TheKits).leaves
 }
 
-pub(super) fn keyed(block: BlockNode, leaves: &mut Vec<String>) -> BlockNode {
-    let all = |children: Vec<BlockNode>, leaves: &mut Vec<String>| -> Vec<BlockNode> {
+pub(super) fn keyed(block: BlockNode, leaves: &mut Vec<Leaf>) -> BlockNode {
+    let all = |children: Vec<BlockNode>, leaves: &mut Vec<Leaf>| -> Vec<BlockNode> {
         children.into_iter().map(|child| keyed(child, leaves)).collect()
     };
     match block {
@@ -265,7 +274,7 @@ pub(super) fn keyed(block: BlockNode, leaves: &mut Vec<String>) -> BlockNode {
         }
         BlockNode::CodeBlock(code) => {
             let key = next_key(leaves);
-            leaves.push(code.code().to_string());
+            leaves.push(Leaf::text(code.code().to_string()));
             BlockNode::CodeBlock(code.with_leaf_key(key))
         }
         // A cell can't be keyed in place, so the table is made again from its cells.
@@ -277,7 +286,7 @@ pub(super) fn keyed(block: BlockNode, leaves: &mut Vec<String>) -> BlockNode {
         // A diagram is a leaf of its code, as the code block it is for the kit.
         BlockNode::Custom { node, state } => {
             if let Some(code) = linked_images::diagram_leaf(&node, next_key(leaves)) {
-                leaves.push(code);
+                leaves.push(Leaf::text(code));
             }
             BlockNode::Custom { node, state }
         }
@@ -293,20 +302,30 @@ pub(super) fn keyed(block: BlockNode, leaves: &mut Vec<String>) -> BlockNode {
 
 /// `paragraph` as a leaf, unless it's only images, which have no text to select. The kit draws a keyed paragraph
 /// with an image in it as a flow of text, which doesn't grow when an image comes in after it's first laid out, and
-/// one that's only images as images, which do.
-fn leaf(paragraph: Paragraph, leaves: &mut Vec<String>) -> Paragraph {
+/// one that's only images as images, which do. An [`ATOM`] in it says a reference's link's words, and an
+/// image's says itself, as [`Leaf`] has it.
+fn leaf(paragraph: Paragraph, leaves: &mut Vec<Leaf>) -> Paragraph {
     let children = paragraph.children();
     if !children.is_empty() && children.iter().all(|node| node.as_image().is_some()) {
         return paragraph;
     }
     let atom = |node: &InlineNode| node.as_image().is_some() || node.as_custom().is_some();
-    let text =
-        children.iter().map(|node| if atom(node) { ATOM.to_string() } else { node.text().to_string() }).collect();
+    let (mut shows, mut atoms) = (String::new(), Vec::new());
+    for node in children {
+        if atom(node) {
+            shows.push(ATOM);
+            atoms.push(if references::named(node) { Box::from(node.text()) } else { Box::from(ATOM.to_string()) });
+        } else {
+            let text = node.text();
+            atoms.extend(text.matches(ATOM).map(Box::from));
+            shows.push_str(text);
+        }
+    }
     let key = next_key(leaves);
-    leaves.push(text);
+    leaves.push(Leaf::new(shows, atoms));
     paragraph.with_leaf_key(key)
 }
 
-fn next_key(leaves: &[String]) -> u64 {
+fn next_key(leaves: &[Leaf]) -> u64 {
     u64::try_from(leaves.len()).unwrap_or(u64::MAX)
 }

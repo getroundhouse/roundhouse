@@ -68,6 +68,8 @@ pub enum Region {
     BuildLineCard,
     /// Where a build from a checkout was made and keeps its data, shown from its card in the sidebar.
     CheckoutDetails,
+    /// What an issue or a pull request a reply links to is, and where it stands, shown while the pointer is on its chip.
+    ReferenceCard,
 }
 
 impl Region {
@@ -105,6 +107,7 @@ impl Region {
             Region::AccountCard => "account-card",
             Region::BuildLineCard => "build-line-card",
             Region::CheckoutDetails => "checkout-details-card",
+            Region::ReferenceCard => "reference-card",
         }
     }
 }

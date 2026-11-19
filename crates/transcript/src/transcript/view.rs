@@ -5,6 +5,7 @@ use crate::item_key::ItemKey;
 use crate::linked_images::LinkedImages;
 use crate::list::TranscriptList;
 use crate::questions::QuestionPanel;
+use crate::references::References;
 use crate::selection::Selection;
 use crate::texts::{Of, Texts};
 use client_core::hints::HintCollector;
@@ -40,6 +41,7 @@ pub struct Transcript {
     pub(super) model: Rc<RefCell<Model>>,
     /// The images the agent's text points to.
     pub(super) linked: LinkedImages<Seq>,
+    pub(super) references: References<Seq>,
     /// The texts the transcript draws from the kit's blocks, parsed.
     pub(super) texts: Texts,
     /// What's selected of them.
@@ -102,6 +104,7 @@ impl Transcript {
         let list = TranscriptList::new(selection.clone(), cx);
         list.set_rows(rows, loaded);
         let linked = LinkedImages::of_transcript(client.clone(), session.id.clone(), cx.weak_entity());
+        let references = References::of_transcript(client.clone(), session.workspace_id.clone(), cx.weak_entity());
         let ticking = tick(&at_work, cx);
         let approvals = RecordedApprovals::of(session);
         let model = Rc::new(RefCell::new(Model {
@@ -125,6 +128,7 @@ impl Transcript {
             log,
             model,
             linked,
+            references,
             texts,
             selection,
             list,
@@ -180,6 +184,12 @@ impl Transcript {
         // changed once it has caught up on the new connection, or lost it, and the transcript is drawn again then.
         self.model.borrow_mut().pictures.retain(|_, picture| !matches!(picture, Picture::Unreadable));
         self.linked.reconnect(client);
+        self.references.reconnect(client);
+    }
+
+    /// Reads which workspace a pull request the chat names is in from `records`, client-core's copy of the hub's.
+    pub fn follow_records(&mut self, records: client_core::RecordsFeed) {
+        self.references.follow_records(records);
     }
 
     /// The approvals waiting on an answer, newest last.
@@ -335,6 +345,7 @@ impl Transcript {
         let shared = crate::rows::Shared {
             this: cx.weak_entity(),
             linked: self.linked.clone(),
+            references: self.references.clone(),
             line_text,
             texts: self.texts.clone(),
             selection: self.selection.clone(),

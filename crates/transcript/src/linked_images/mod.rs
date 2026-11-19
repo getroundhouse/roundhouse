@@ -21,4 +21,4 @@ pub(crate) use drawn::{diagram_leaf, may_take, to_read};
 
 mod loading;
 pub(crate) use drawings::system_fonts;
-pub(crate) use loading::{Images, LinkedImages};
+pub(crate) use loading::{Images, LinkedImages, Waiter};

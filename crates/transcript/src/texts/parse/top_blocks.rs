@@ -12,7 +12,7 @@ use std::sync::Arc;
 
 use gpui_kit::base::text::editor_host::{BlockNode, FlowPosition};
 
-use super::markdown::{ImagesAre, keyed, read};
+use super::markdown::{Whose, keyed, read};
 
 /// One of the blocks at a text's top, as the whole text's parse has it.
 pub(crate) struct TopBlock {
@@ -24,8 +24,8 @@ pub(crate) struct TopBlock {
     pub(crate) shown: usize,
     /// Where it stands among the text's blocks, or `None` for a text that's one block, which stands alone.
     pub(crate) flow: Option<FlowPosition>,
-    /// What each of its leaves shows, in order.
-    pub(crate) leaves: Arc<[String]>,
+    /// Its leaves, in order.
+    pub(crate) leaves: Arc<[super::Leaf]>,
 }
 
 /// `source`'s blocks at its top, but for those that draw nothing, such as a link's definition. One the kit's parser
@@ -49,7 +49,7 @@ fn cut(source: &str, items: bool) -> Vec<TopBlock> {
     let whole = || {
         vec![TopBlock { source: source.to_string(), shown: source.len(), flow: None, leaves: super::leaves(source) }]
     };
-    let Some(blocks) = read(source, 0, ImagesAre::TheKits) else { return whole() };
+    let Some(blocks) = read(source, 0, Whose::TheKits) else { return whole() };
     // A code block from its line's start, since a fence indented by a few spaces takes as many off each of its lines.
     // Anything else from its first word, since an indented line can be words in a block that it would be code at the
     // start of.

@@ -74,7 +74,7 @@ impl Placing {
 /// How far a line's baseline is below the middle of its box: half of what's left of the line once its ascent and
 /// descent are taken out goes above them. They're read from a line laid out in the font, as the text system lays out
 /// the line it draws, rather than from the font's own figures, which a platform's text system can add to.
-fn below_middle(family: &SharedString, size: Pixels, window: &Window) -> Pixels {
+pub(crate) fn below_middle(family: &SharedString, size: Pixels, window: &Window) -> Pixels {
     const SAMPLE: &str = "Hg";
     let run = TextRun { len: SAMPLE.len(), font: font(family.clone()), ..TextRun::default() };
     let line = window.text_system().layout_line(SAMPLE, size, &[run], None);
@@ -82,6 +82,6 @@ fn below_middle(family: &SharedString, size: Pixels, window: &Window) -> Pixels 
 }
 
 /// The nearest whole device pixel, and the one above at a tie, as GPUI places a glyph.
-fn nearest_pixel(at: ScaledPixels) -> ScaledPixels {
+pub(crate) fn nearest_pixel(at: ScaledPixels) -> ScaledPixels {
     ScaledPixels((at.0 - 0.5).ceil())
 }

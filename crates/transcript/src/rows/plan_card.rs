@@ -36,7 +36,7 @@ pub(super) fn plan_card(seq: Seq, body: &EventBody, open: bool, shared: &Shared)
     let content = shared.texts.draw(
         &shared.selection,
         &Written::unfound(TextAt::only(seq, 0), ItemKey::Event(seq, 0).element("plan"), plan),
-        Some(shared.linked.images(seq, &[])),
+        Some(shared.linked.images(seq, &[], |drawn| crate::references::drawing(drawn, &shared.references, seq))),
     );
     let buttons = h_flex()
         .gap(look::Space::Small)

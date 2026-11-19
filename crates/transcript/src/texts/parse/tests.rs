@@ -5,9 +5,14 @@ use proptest::test_runner::{Config, RngSeed};
 
 use gpui_kit::base::text::editor_host::BlockNode;
 
-use super::ImagesAre::{self, TheKits, TheTranscripts};
-use super::{ATOM, Parsed, again, gone_on, leaves, parse, parse_shown, top_blocks};
+use super::Whose::{self, TheKits, TheTranscripts};
+use super::{ATOM, Leaf, Parsed, again, gone_on, leaves, parse, parse_shown, top_blocks};
 use crate::linked_images;
+
+/// What each of `leaves` shows.
+fn shows(leaves: &[Leaf]) -> Vec<&str> {
+    leaves.iter().map(Leaf::shows).collect()
+}
 
 /// Bits of Markdown whose blocks a text that goes on can change: a paragraph a line of `=` makes a heading, lists,
 /// fences that are open, some of them indented, a definition before its use, a footnote and words beyond ASCII. With
@@ -212,8 +217,8 @@ fn a_text_is_cut_into_its_blocks_with_footnotes_defined_at_its_top() {
     let drawn: Vec<_> =
         blocks.iter().map(|block| parse_shown(block.source.clone(), TheKits, Some(block.shown))).collect();
     assert_eq!(
-        drawn.iter().map(|parsed| &*parsed.leaves).collect::<Vec<_>>(),
-        [&["A note[1].".to_string()][..], &["More.".to_string()], &["[1]: The note.".to_string()],]
+        drawn.iter().map(|parsed| shows(&parsed.leaves)).collect::<Vec<_>>(),
+        [["A note[1]."], ["More."], ["[1]: The note."]]
     );
     assert_eq!(top_blocks(&defined("> ")).len(), 1, "one in a quote is drawn whole");
     assert_eq!(top_blocks(&defined("- ")).len(), 1, "as is one in a list");
@@ -237,7 +242,7 @@ fn shown_in_top_blocks_as_whole(text: &str) -> Result<(), TestCaseError> {
         let drawn = parse_shown(block.source.clone(), TheKits, Some(block.shown)).leaves;
         prop_assert_eq!(&drawn, &block.leaves, "{:?} in {:?}", block.source, text);
     }
-    let all: Vec<String> = blocks.iter().flat_map(|block| block.leaves.iter().cloned()).collect();
+    let all: Vec<Leaf> = blocks.iter().flat_map(|block| block.leaves.iter().cloned()).collect();
     prop_assert_eq!(all.as_slice(), &*leaves(text), "{:?}", text);
     Ok(())
 }
@@ -282,16 +287,30 @@ fn a_text_s_leaves_are_its_blocks_of_words_in_order_as_they_show() {
     ];
 
     for (name, source, want) in cases {
-        assert_eq!(*leaves(source), want, "{name}");
+        assert_eq!(shows(&leaves(source)), want, "{name}");
     }
 }
 
 #[test]
-fn a_texts_images_are_the_transcripts_to_draw_only_if_it_has_any_and_they_can_be_looked_up() {
-    assert_eq!(ImagesAre::of("The board, after: ![The board](board.png)", true), TheTranscripts);
-    assert_eq!(ImagesAre::of("The board, after: ![The board][board]", true), TheTranscripts, "by reference too");
-    assert_eq!(ImagesAre::of("The board is red at stop now.", true), TheKits, "none to draw");
-    assert_eq!(ImagesAre::of("![The board](board.png)", false), TheKits, "none to look up");
+fn what_a_text_points_to_is_the_transcripts_to_draw_only_if_it_has_any_and_it_can_be_looked_up() {
+    assert_eq!(Whose::of("The board, after: ![The board](board.png)", true), TheTranscripts);
+    assert_eq!(Whose::of("The board, after: ![The board][board]", true), TheTranscripts, "by reference too");
+    assert_eq!(Whose::of("Fixed in [#12](https://github.com/o/r/pull/12).", true), TheTranscripts, "or a link to one");
+    assert_eq!(Whose::of("The board is red at stop now, as #12 says.", true), TheKits, "none to draw");
+    assert_eq!(Whose::of("![The board](board.png)", false), TheKits, "none to look up");
+}
+
+/// In the transcript's parse, a link to an issue or a pull request is one [`ATOM`], which says the link's words, so
+/// it's found and copied as them. In the kit's, which is what the person's prompts and the agent's thoughts are parsed
+/// as, it's a link like any other.
+#[test]
+fn a_link_to_an_issue_is_one_atom_that_says_its_words_only_in_the_transcripts_parse() {
+    let source = "Fixed in [the\nfix](https://github.com/o/r/pull/12), and [#3](https://github.com/o/r/issues/3).";
+    let theirs = parse(source.to_owned(), TheTranscripts);
+    assert_eq!(shows(&theirs.leaves), [format!("Fixed in {ATOM}, and {ATOM}.")]);
+    let kits = parse(source.to_owned(), TheKits);
+    assert_eq!(shows(&kits.leaves), ["Fixed in the fix, and #3."]);
+    assert_eq!(theirs.leaves[0].said(), kits.leaves[0].shows(), "so find counts what it marks");
 }
 
 /// A text that goes on is parsed again from near its end, and the images taken from what's parsed again are known by
@@ -331,5 +350,5 @@ fn a_reference_link_goes_where_its_first_definition_says_even_inside_a_quote() {
     let links = parse(source.to_owned(), TheKits).links;
 
     assert_eq!(links.get("docs").map(|link| link.url.as_ref()), Some("https://example.com/first"));
-    assert_eq!(*leaves(source), ["See the docs."], "and a definition is no leaf");
+    assert_eq!(shows(&leaves(source)), ["See the docs."], "and a definition is no leaf");
 }
