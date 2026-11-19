@@ -23,19 +23,19 @@ const A_MOMENT: Duration = Duration::from_millis(1);
 const LISTENING_UNSEEN: Duration = SPACE_DICTATES_AFTER.checked_sub(SPACE_LISTENS_AFTER).unwrap();
 
 /// Lets `time` go by while Space is held.
-fn hold_for(ui: &mut Ui, time: Duration) {
+pub(super) fn hold_for(ui: &mut Ui, time: Duration) {
     ui.cx.executor().advance_clock(time);
     ui.frame();
 }
 
 /// Presses Space and holds it until it listens.
-fn hold_space_to_listen(ui: &mut Ui) {
+pub(super) fn hold_space_to_listen(ui: &mut Ui) {
     press_space(ui);
     hold_for(ui, SPACE_LISTENS_AFTER);
 }
 
 /// Goes on holding Space, which has listened, until it dictates.
-fn hold_on_to_dictate(ui: &mut Ui) {
+pub(super) fn hold_on_to_dictate(ui: &mut Ui) {
     hold_for(ui, LISTENING_UNSEEN);
 }
 
@@ -180,25 +180,6 @@ fn the_microphone_clicked_while_space_is_held_dictates_and_space_types_again(cx:
 
     assert_eq!(ui.composer_text(), "Please ", "what the microphone dictates into is left as it was");
     assert!(dictating(&mut ui));
-}
-
-#[gpui_kit::test]
-fn another_app_in_front_while_space_is_held_forgets_it(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = Ui::open_with_a_repository(cx, &stack);
-    ui.bring_to_front();
-    ui.new_workspace();
-    ready(&mut ui);
-
-    hold_space_to_listen(&mut ui);
-    // Space is let go of in the other app, which this one never hears.
-    ui.send_to_back();
-    hold_on_to_dictate(&mut ui);
-
-    assert_eq!(live(&mut ui), None);
-    assert!(!dictating(&mut ui));
-    ui.bring_to_front();
-    assert!(!repeat_space(&mut ui), "a repeat after coming back isn't Space held to dictate");
 }
 
 #[gpui_kit::test]

@@ -7,7 +7,7 @@ use desktop::app::Connection;
 use gpui_kit::{AppContext as _, TestAppContext};
 use protocol::model::SessionStatus;
 
-use super::support::{ended, hearing, hold_option_space, kept, live, ready, say};
+use super::support::{ended, hearing, hold_option_space, kept, live, on_the_keyboard, press_space, ready, say};
 use crate::support::{Stack, Ui, id};
 
 #[gpui_kit::test]
@@ -153,16 +153,20 @@ fn another_app_in_front_stops_dictating_as_letting_go_does_and_what_was_said_goe
     say(&mut ui, &engine, "fix the test");
     hearing(&mut ui, "fix");
 
-    // The key is let go of in the other app, which this one never hears.
+    // The key is let go of as the other app comes in front, which this one never hears.
     ui.send_to_back();
     ui.wait("the final text", |ui| ui.composer_text() == "Fix the test.");
     assert!(ui.has("dictate"), "the microphone stays, so what's beside it doesn't move");
-
-    // Started from the button, it stops too, so the microphone isn't left on with nobody looking.
     ui.bring_to_front();
+    press_space(&mut ui);
+    assert_eq!(ui.composer_text(), "Fix the test. ", "Space types again once the app is back");
+
+    // Started from the button, it stops too, so the microphone isn't left on with nobody looking, even with Space down
+    // for the other app, as ⌘Space would be.
     ui.click("dictate");
     say(&mut ui, &engine, "in hub");
     hearing(&mut ui, "in");
+    on_the_keyboard(&mut ui, true);
     ui.send_to_back();
     ui.wait("the final text", |ui| ui.composer_text() == "Fix the test. In hub.");
     ended(&mut ui);

@@ -6,7 +6,7 @@ use gpui_kit::{Context, Task, Window};
 
 use crate::fine_line::FineLine;
 use crate::text::Before;
-use crate::{Event, Field, source};
+use crate::{Event, Field, keyboard, source};
 
 pub const NOTHING_HEARD: &str = "No speech was heard.";
 const ALLOW_THE_MICROPHONE: &str =
@@ -72,7 +72,13 @@ impl Field {
                 }
             }
             let _ = this.update(cx, |field, cx| {
-                let submit = field.underway.take().is_some_and(|u| u.submit);
+                let underway = field.underway.take();
+                // Asked only now, so the system's question doesn't stop the first recording held to dictate, as
+                // another app coming in front would.
+                if underway.as_ref().is_some_and(|u| u.started == Started::Key) {
+                    keyboard::ask_to_see_the_keyboard(cx);
+                }
+                let submit = underway.is_some_and(|u| u.submit);
                 field.line.update(cx, FineLine::hide);
                 cx.emit(Event::Ended { submit });
                 cx.notify();

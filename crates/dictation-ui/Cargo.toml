@@ -15,5 +15,9 @@ flume.workspace = true
 gpui-kit.workspace = true
 look.workspace = true
 
+# Whether Space is down, by the system's word.
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2-core-graphics.workspace = true
+
 [lints]
 workspace = true

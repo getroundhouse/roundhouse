@@ -182,9 +182,7 @@ impl AppView {
         // changed in System Settings, which macOS doesn't tell the kit about, so it's read again.
         cx.observe_window_activation(window, |t, window, cx| {
             gpui_kit::base::apply_system_reduce_motion(cx);
-            if !window.is_window_active() {
-                dictation_ui::window_left(window.window_handle(), cx);
-            }
+            dictation_ui::window_activation_changed(window.window_handle(), window.is_window_active(), cx);
             t.read_on_screen(window.is_window_active(), cx);
         })
         .detach();
