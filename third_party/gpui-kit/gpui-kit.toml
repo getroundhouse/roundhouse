@@ -28,4 +28,6 @@ patches = [
     "popup-menu-style",
     "tooltip-style",
     "a11y-disabled-ext",
+    "inline-object-fallback-line",
+    "markdown-link-node",
 ]

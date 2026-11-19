@@ -1,3 +1,4 @@
+// Changed in Roundhouse's copy of gpui-kit, as third_party/README.md lists.
 use std::{
     cell::RefCell,
     rc::Rc,
@@ -65,8 +66,16 @@ impl MeasuredInlineObject {
             &[style.to_run(text.len())],
             None,
         );
-        let height = style
-            .line_height_in_pixels(window.rem_size())
+        // As tall as the flow makes its body text's line, snapped to device
+        // pixels rather than rounded to whole ones, as `line_height_in_pixels`
+        // does, so a fallback in the body's own style sits on that line rather
+        // than making it taller.
+        let height = window
+            .pixel_snap(
+                style
+                    .line_height
+                    .to_pixels(style.font_size, window.rem_size()),
+            )
             .max(line.ascent + line.descent);
         let fallback = InlineMetrics {
             size: size(line.width.max(px(1.)), height),
