@@ -32,6 +32,7 @@ on:
       - tools/build.sh
       - Cargo.lock
       - rust-toolchain.toml
+      - .cargo/config.toml
       - apps/desktop/icons/**
       - apps/desktop/src/updates/update-feed.*
       - .github/workflows/release.yml
@@ -551,6 +552,7 @@ jobs:
       PACKAGES: >-
         pkg-config cmake clang libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev libx11-xcb-dev libxcb1-dev
         libfontconfig-dev libfreetype-dev libvulkan-dev libssl-dev libzstd-dev
+        lld
         build-essential ca-certificates curl git jq
         zstd xz-utils
       # rustup's installer, pinned by version and checksum.

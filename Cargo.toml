@@ -247,15 +247,11 @@ suspicious = { level = "deny", priority = -1 }
 [profile.dev]
 debug = "line-tables-only"
 
-# GPUI is unusably slow unoptimized, and dependencies only build once.
+# GPUI is unusably slow unoptimized, and dependencies only build once. They're built without debug info, so a backtrace's
+# frames inside one have no line numbers, while our own crates' frames, and where any panic happened, keep theirs. Linux
+# links every crate's line tables into each test binary, so there `target` came out a third smaller, a cold build 26%
+# faster, and a rebuild after an edit wrote half as much. On a Mac, which leaves them in the object files, `target` came
+# out 15% smaller.
 [profile.dev.package."*"]
 opt-level = 2
-
-# Build scripts, proc macros and what they use are built without debug info, as Cargo builds them by default, but said
-# here so Cargo doesn't decide it build by build. Left to Cargo, a crate that a build also links into a program, as GPUI
-# does `quote` and `unicode-ident` on Linux, takes that program's debug info, so the tests' build and a build of only
-# the programs they run, as `docs/rust.md` says to make one, would each need a copy of their own of everything above
-# it. Said, a crate a program links is built a second time for build scripts and proc macros, which costs less than
-# line tables for every crate only they use.
-[profile.dev.build-override]
 debug = false
