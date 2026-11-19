@@ -9,6 +9,7 @@
 //! kit's drawing of a text asks for an image from any thread, by its address, so what answers has to be shared across
 //! threads. `drawn` has how a text drawn from the kit's blocks draws them, so a click on one opens it over the window.
 
+mod drawings;
 mod drawn;
 
 #[cfg(test)]

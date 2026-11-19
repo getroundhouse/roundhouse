@@ -22,7 +22,9 @@ pub(crate) struct Attached {
 impl Attached {
     /// Keeps the file's ID, so one handed back after a failed send isn't added to the session twice.
     pub(crate) fn new(file: FileToSend) -> Self {
-        let preview = transcript::image_format(file.attachment.media_type)
+        // A drawing goes as text, and is a chip in the prompt, so it's one here too.
+        let media_type = file.attachment.media_type;
+        let preview = (media_type.is_bitmap().then(|| transcript::image_format(media_type)).flatten())
             .map(|format| Arc::new(Image::from_bytes(format, file.data.clone())));
         Self { file, preview, kept_for: None }
     }

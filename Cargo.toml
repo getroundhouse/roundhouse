@@ -132,6 +132,10 @@ libc = "0.2.191"
 # Ghostty's terminal core, through bindings pinned to the commit that builds its 1.0.1, which isn't on crates.io yet.
 # Its build script builds Ghostty with Zig 0.17, which has to be on the PATH, and fetches Ghostty's source as it builds.
 libghostty-vt = { git = "https://github.com/Uzaaft/libghostty-rs", rev = "483ea3d5247b214060da58ef6037a95f30ae89fb" }
+# Already under GPUI, which draws SVG with it. Reads a drawing the agent points to before GPUI draws it, so it shows no
+# file it names by its path, which GPUI's options would read. GPUI turns on its `text` feature, which lays out a
+# drawing's words.
+usvg = { version = "0.46.0", default-features = false, features = ["text"] }
 # Already under gpui-kit, whose text view parses Markdown with it. Finds the images the agent's text points to as the
 # text view does, and reads the guide's pages as GitHub does. 1.0.0 panics on some texts, as wooorm/markdown-rs#275
 # says, so each call the repo makes into it, directly or through the kit's `parse_markdown`, catches a panic. The kit's

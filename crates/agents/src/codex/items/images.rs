@@ -121,8 +121,8 @@ async fn image(path: &str) -> Result<NewAttachment, String> {
     }
     // Known by its bytes, as a prompt's file is, rather than by its name.
     let media_type = MediaType::sniff(&bytes);
-    if !media_type.is_image() || media_type.check(&bytes).is_err() {
-        return Err(format!("{path} isn't an image the chat draws"));
+    if !media_type.is_bitmap() || media_type.check(&bytes).is_err() {
+        return Err(format!("{path} isn't an image the model can see"));
     }
     let id = AttachmentId::from(uuid::Uuid::new_v4().to_string());
     let attachment = Attachment { id, name: file_name(path), media_type, size_bytes };

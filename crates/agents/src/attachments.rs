@@ -37,14 +37,14 @@ fn blocks(
         json!({ "type": "text", "text": text })
     };
     let size = attachment.size_bytes;
-    if attachment.media_type.is_image()
+    if attachment.media_type.is_bitmap()
         && size <= *images_left
         && let Ok(bytes) = std::fs::read(&file.path)
     {
         *images_left -= size;
         return vec![image_block(attachment.media_type, &AttachmentBytes::new(bytes)), tag(None)];
     }
-    if attachment.media_type == MediaType::Text
+    if attachment.media_type.is_text()
         && size <= INLINE_TEXT_BYTES
         && let Ok(bytes) = std::fs::read(&file.path)
     {

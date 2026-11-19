@@ -144,7 +144,7 @@ async fn an_image_not_kept_or_not_made_says_why() {
         })
         .collect();
     let [not_image, gone, relative, too_big, limited, failed] = said[..] else { panic!("{said:?}") };
-    assert_eq!(not_image, (format!("The image wasn't kept: {text} isn't an image the chat draws").as_str(), false));
+    assert_eq!(not_image, (format!("The image wasn't kept: {text} isn't an image the model can see").as_str(), false));
     assert!(gone.0.starts_with(&format!("The image wasn't kept: couldn't read {missing}: ")), "{gone:?}");
     assert_eq!(relative, ("The image wasn't kept: shot.png isn't a full path", false));
     assert_eq!(too_big, (format!("The image wasn't kept: {big} is bigger than 32 MB").as_str(), false));

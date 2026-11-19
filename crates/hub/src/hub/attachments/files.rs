@@ -104,7 +104,7 @@ impl Hub {
         if let Some(bytes) = self.attachment_files.read(&kept_for, &id).await? {
             return Ok(AttachmentBytes::new(bytes));
         }
-        let why = if file.media_type.is_image() || kept_for == FileFor::NewWorkspace {
+        let why = if file.media_type.is_bitmap() || kept_for == FileFor::NewWorkspace {
             "the hub no longer has it"
         } else {
             "the hub keeps only images once they've been sent"
@@ -177,7 +177,7 @@ impl Hub {
         let path = link.call(AttachmentWrite { path, name, data }).await?.path;
         let (session, id, kept) = (session_id.clone(), attachment.id.clone(), path.clone());
         self.blocking(move |store| store.set_attachment_placed_at(&session, &id, &kept)).await?;
-        if !attachment.media_type.is_image()
+        if !attachment.media_type.is_bitmap()
             && let Err(e) = self.attachment_files.remove(&kept_for, &attachment.id).await
         {
             warn!(attachment = %attachment.id, "couldn't let go of a sent attachment: {e}");

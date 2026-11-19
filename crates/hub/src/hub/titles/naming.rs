@@ -243,7 +243,7 @@ pub(super) fn chosen_images(
 ) -> Vec<(SessionId, Attachment)> {
     let mut room = MOST_IMAGE_BYTES;
     let fits = |(_, attachment): &(SessionId, Attachment)| {
-        let fits = attachment.media_type.is_image() && attachment.size_bytes <= room;
+        let fits = attachment.media_type.is_bitmap() && attachment.size_bytes <= room;
         if fits {
             room -= attachment.size_bytes;
         }

@@ -46,19 +46,25 @@ fn replies(ui: &mut Ui<'_>) -> Vec<Pixels> {
     })
 }
 
-/// The window on a fake hub holding a chat whose one reply says `reply`, with the copy the hub kept of each image in
+/// The window on a fake hub holding a chat whose one reply says `reply`, with the copy the hub kept of each PNG in
 /// `kept`, by where the reply says it is and how tall it is, as the worker names one for each place the reply points
 /// to it. The hub goes with the test, so it's returned to be kept.
 fn replied<'a>(cx: &'a mut TestAppContext, reply: &str, kept: &[(&str, u32)]) -> (FakeHub, Ui<'a>) {
+    let kept: Vec<_> = kept.iter().map(|(address, height)| (*address, MediaType::Png, png(*height))).collect();
+    replied_with(cx, reply, &kept)
+}
+
+/// The same, with each image in `kept` as its kind and bytes.
+fn replied_with<'a>(cx: &'a mut TestAppContext, reply: &str, kept: &[(&str, MediaType, Vec<u8>)]) -> (FakeHub, Ui<'a>) {
     let mut world = World::default();
     let mut images = Vec::new();
-    for (address, height) in kept {
-        let data = png(*height);
+    for (address, media_type, data) in kept {
+        let data = data.clone();
         let id = AttachmentId::from(format!("kept-{address}"));
         let attachment = Attachment {
             id: id.clone(),
             name: (*address).to_string(),
-            media_type: MediaType::Png,
+            media_type: *media_type,
             size_bytes: u64::try_from(data.len()).unwrap(),
         };
         let places = reply.matches(&format!("]({address})")).count();
@@ -134,6 +140,21 @@ fn a_click_on_a_replys_image_opens_it_over_the_window(cx: &mut TestAppContext) {
         ui.press("escape");
         assert!(!ui.has_dialog(), "and Escape closes {what}");
     }
+}
+
+/// A drawing is drawn at the size it says it is, as a bitmap is at its pixels, and opens as one does.
+#[gpui_kit::test]
+fn a_drawing_a_reply_points_to_is_drawn_as_tall_as_it_says(cx: &mut TestAppContext) {
+    let drawing = br##"<svg xmlns="http://www.w3.org/2000/svg" width="60" height="120"><rect width="60" height="120" fill="#c33"/></svg>"##;
+    let (_hub, mut ui) =
+        replied_with(cx, "![How it flows](flow.svg)", &[("flow.svg", MediaType::Svg, drawing.to_vec())]);
+
+    ui.wait("the drawing", |ui| replies(ui).first().is_some_and(|height| *height >= px(120.)));
+    let drawn = replies(&mut ui)[0];
+    assert!(drawn < px(200.), "at its own size, not twice it: {drawn:?}");
+    let image = ui.shown("linked-image/").remove(0);
+    ui.click(image);
+    assert!(ui.has_dialog() && ui.shown("opened-picture").len() == 1, "and a click opens it");
 }
 
 /// The kit still draws an image the transcript leaves to it, from the copy the hub kept.

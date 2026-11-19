@@ -189,9 +189,7 @@ impl Lookup {
     /// The image and how many pixels it covers, once it's here, which starts it loading the first time it's asked
     /// for.
     pub(super) fn ready(&self, image: &Pointed, cx: &mut App) -> Option<(Arc<RenderImage>, (u32, u32))> {
-        let ready = self.linked.ready(&image.address, &self.kept, self.seq, cx)?;
-        let covers = covers(&ready)?;
-        Some((ready, covers))
+        self.linked.ready(&image.address, &self.kept, self.seq, cx)
     }
 }
 
@@ -262,11 +260,4 @@ impl<'a> Inside<'a> {
 /// what the element says in its place.
 pub(super) fn in_the_middle(height: Pixels, ascent: Pixels, descent: Pixels) -> Pixels {
     ((height + ascent - descent.abs()) / 2.).clamp(px(0.), height)
-}
-
-/// How many pixels it covers, or `None` for one with none, which has no shape to draw it at.
-fn covers(image: &RenderImage) -> Option<(u32, u32)> {
-    let pixels = image.size(0);
-    let side = |pixels: i32| u32::try_from(pixels).ok().filter(|side| *side > 0);
-    Some((side(pixels.width.0)?, side(pixels.height.0)?))
 }

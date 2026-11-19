@@ -80,8 +80,8 @@ impl Store {
         if changed == 0 { Err(not_found(id)) } else { Ok(()) }
     }
 
-    /// The images the prompts of the workspace's chats carried, oldest first whichever chat each was in, as
-    /// [`Store::workspace_prompt_lines`] lists the prompts, and in the order each prompt carried them.
+    /// The images made of pixels the prompts of the workspace's chats carried, oldest first whichever chat each was in,
+    /// as [`Store::workspace_prompt_lines`] lists the prompts, and in the order each prompt carried them.
     pub fn workspace_prompt_images(
         &self,
         workspace_id: &WorkspaceId,
@@ -97,7 +97,7 @@ impl Store {
         let mut images = Vec::new();
         while let Some(row) = rows.next()? {
             let attachment: Attachment = serde_json::from_str(&row.get::<_, String>(1)?)?;
-            if attachment.media_type.is_image() {
+            if attachment.media_type.is_bitmap() {
                 images.push((SessionId::from(row.get::<_, String>(0)?), attachment));
             }
         }

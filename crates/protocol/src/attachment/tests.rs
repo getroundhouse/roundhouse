@@ -33,12 +33,47 @@ fn a_file_is_known_by_what_it_starts_with() {
     assert_eq!(MediaType::sniff(b"RIFF\x10\0\0\0WAVEfmt "), MediaType::Other, "a RIFF that isn't WebP");
 }
 
+/// A drawing is text whose first element is `<svg`, whatever comes before it that isn't an element, so text that only
+/// mentions one, or an element that only starts the same, is text.
+#[test]
+fn a_drawing_is_known_by_its_first_element() {
+    let drawings: [&[u8]; 5] = [
+        b"<svg xmlns=\"http://www.w3.org/2000/svg\"></svg>",
+        b"<svg>",
+        b"\xef\xbb\xbf  \n<?xml version=\"1.0\"?>\n<!-- made by hand -->\n<!DOCTYPE svg>\n<svg\n width=\"10\"/>",
+        b"<!-- a <svg> in a comment, then --><svg/>",
+        b"<?xml version=\"1.0\" encoding=\"UTF-8\"?><svg viewBox=\"0 0 1 1\"></svg>",
+    ];
+    for drawing in drawings {
+        assert_eq!(MediaType::sniff(drawing), MediaType::Svg, "{}", String::from_utf8_lossy(drawing));
+    }
+    let texts: [&[u8]; 4] =
+        [b"draw it as <svg> later", b"<svgfoo/>", b"<html><svg/></html>", b"<!-- never closed <svg/>"];
+    for text in texts {
+        assert_eq!(MediaType::sniff(text), MediaType::Text, "{}", String::from_utf8_lossy(text));
+    }
+}
+
+/// A drawing is an image the transcript draws, which the hub keeps, but it's text to a model and to a file's tab.
+#[test]
+fn a_drawing_is_an_image_that_goes_to_a_model_as_text() {
+    assert!(MediaType::Svg.is_image() && MediaType::Png.is_image());
+    assert!(!MediaType::Svg.is_bitmap() && MediaType::Png.is_bitmap());
+    assert!(MediaType::Svg.is_text() && MediaType::Text.is_text() && !MediaType::Png.is_text());
+}
+
 #[test]
 fn a_session_takes_any_file_as_what_it_really_is() {
     assert_eq!(MediaType::Png.check(PNG), Ok(()));
     assert_eq!(MediaType::Text.check(b"cargo test\n"), Ok(()));
     assert_eq!(MediaType::Other.check(&[0, 1, 2]), Ok(()));
     assert_eq!(MediaType::Other.check(PNG), Ok(()), "anything can go as a file the agent opens");
+    assert_eq!(MediaType::Svg.check(b"<svg/>"), Ok(()));
+    assert_eq!(MediaType::Text.check(b"<svg/>"), Ok(()), "a client from before drawings says one is text");
+    assert_eq!(
+        MediaType::Svg.check(b"plain words"),
+        Err(AttachmentProblem::NotWhatItSays { said: MediaType::Svg, found: MediaType::Text })
+    );
 
     assert_eq!(
         MediaType::Png.check(&[0xff, 0xd8, 0xff]),
@@ -74,6 +109,7 @@ fn a_size_reads_the_way_a_person_would_say_it() {
 fn a_media_type_travels_as_its_mime_type_and_a_new_one_reads_as_unknown() {
     assert_eq!(crate::frame::encode(&MediaType::Jpeg).unwrap(), b"\"image/jpeg\"\n");
     assert_eq!(crate::frame::encode(&MediaType::Other).unwrap(), b"\"application/octet-stream\"\n");
+    assert_eq!(crate::frame::encode(&MediaType::Svg).unwrap(), b"\"image/svg+xml\"\n");
     assert_eq!(crate::frame::decode::<MediaType>(b"\"application/pdf\"").unwrap(), MediaType::Unknown);
 }
 
