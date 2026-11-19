@@ -3,7 +3,9 @@ use protocol::capability::calls::Call;
 use protocol::capability::calls::call::Read;
 use protocol::event::{ContentBlock, EventBody};
 use protocol::fixtures;
-use protocol::model::{Records, Repo, Rev, RevisionNumber, Seq};
+use protocol::model::{
+    OptionPlace, ProposalOption, ProposalQuestion, Proposed, Recommendation, Records, Repo, Rev, RevisionNumber, Seq,
+};
 use protocol::prompt::{Prompt, PromptFrom};
 
 use super::HintCollector;
@@ -119,4 +121,64 @@ fn a_prompt_the_hub_wrote_gives_no_hints() {
 
     assert!(hints.iter().any(|h| h == "Wollstonecraft"), "the person's words: {hints:?}");
     assert!(!hints.iter().any(|h| h.contains("Kesslerbahn")), "not the hub's: {hints:?}");
+}
+
+/// A proposal's note hints at its names, and at the code its Markdown names, but not at its everyday words.
+#[test]
+fn a_proposal_gives_its_names_and_the_code_its_markdown_names() {
+    let option = |label: &str, description: &str, body: &str| ProposalOption {
+        label: label.into(),
+        description: description.into(),
+        body: body.into(),
+    };
+    let proposed = Proposed {
+        title: "Holding a train".into(),
+        context: "Today `SignalBox` releases every train at once.".into(),
+        questions: vec![ProposalQuestion {
+            header: "Dwell".into(),
+            text: "Where does the wait live?".into(),
+            details: "| | Kesslerbahn | Wollstonecraft |\n|-|-|-|\n| Restart | kept | lost |".into(),
+            options: vec![
+                option("Kesslerbahn", "It counts down in `dwell_ms`.", "Keeps it in `signal_state`."),
+                option("Wollstonecraft", "The train waits.", "Nothing new is stored."),
+            ],
+            recommended: Some(Recommendation { option: OptionPlace(0), why: "It survives `hub_restart`.".into() }),
+        }],
+    };
+
+    let mut collector = HintCollector::new();
+    collector.add_proposal(&proposed);
+    let hints = collector.finish();
+
+    for expected in ["Dwell", "Kesslerbahn", "Wollstonecraft", "dwell_ms", "SignalBox", "signal_state", "hub_restart"] {
+        assert!(hints.iter().any(|h| h == expected), "missing {expected:?} in {hints:?}");
+    }
+    for unwanted in ["Where", "train", "wait", "Nothing"] {
+        assert!(!hints.iter().any(|h| h.eq_ignore_ascii_case(unwanted)), "unexpected {unwanted:?} in {hints:?}");
+    }
+}
+
+/// A long proposal's Markdown gives at most its share, so the names added after it, such as the workspace's, still fit.
+#[test]
+fn a_long_proposal_leaves_room_for_what_comes_after_it() {
+    let identifiers: Vec<String> = (0..200).map(|n| format!("`zeta_{n}`")).collect();
+    let proposed = Proposed {
+        title: "Holding".into(),
+        context: identifiers.join(" "),
+        questions: vec![ProposalQuestion {
+            header: "Dwell".into(),
+            text: "Where?".into(),
+            details: String::new(),
+            options: vec![],
+            recommended: None,
+        }],
+    };
+
+    let mut collector = HintCollector::new();
+    collector.add_proposal(&proposed);
+    collector.add_name("Wollstonecraft");
+    let hints = collector.finish();
+
+    assert!(hints.iter().any(|h| h == "Wollstonecraft"), "room after it: {} hints", hints.len());
+    assert!(hints.iter().filter(|h| h.starts_with("zeta_")).count() <= 40, "{hints:?}");
 }

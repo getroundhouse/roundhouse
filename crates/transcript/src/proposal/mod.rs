@@ -13,6 +13,7 @@
 mod tests;
 
 mod answering;
+mod dictating;
 mod document;
 mod page;
 mod view;

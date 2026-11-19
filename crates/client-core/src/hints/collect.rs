@@ -5,6 +5,7 @@ use std::collections::HashSet;
 
 use protocol::capability::asking::Question;
 use protocol::event::{ContentBlock, EventBody};
+use protocol::model::Proposed;
 
 use super::english::{all_common_english, is_boilerplate};
 use crate::calls::{EditFile, ReadFile, Recorded, ToSubagents, ToolCall, WriteFile};
@@ -15,12 +16,21 @@ const MAX_HINTS: usize = 160;
 const MAX_TEXT_MESSAGES: usize = 24;
 const MAX_TOOL_EVENTS: usize = 30;
 const MAX_PATH_PARENTS: usize = 2;
+/// A proposal's Markdown can be long, so it gives at most this many, leaving room for the names around it.
+const MAX_PROPOSAL_MARKDOWN_HINTS: usize = 40;
 
 /// Accumulates candidate hint phrases, most immediate first, deduplicating case-insensitively on [`Self::finish`].
-#[derive(Default)]
 pub struct HintCollector {
     seen: HashSet<String>,
     out: Vec<String>,
+    /// How many it holds before it takes no more, which is [`MAX_HINTS`] but while one source is held to a budget.
+    limit: usize,
+}
+
+impl Default for HintCollector {
+    fn default() -> Self {
+        Self { seen: HashSet::new(), out: Vec::new(), limit: MAX_HINTS }
+    }
 }
 
 impl HintCollector {
@@ -42,7 +52,7 @@ impl HintCollector {
     }
 
     fn insert(&mut self, raw: &str, proper_noun: bool) {
-        if self.out.len() >= MAX_HINTS {
+        if self.out.len() >= self.limit {
             return;
         }
         let cleaned = raw.trim().trim_matches(|ch: char| {
@@ -58,17 +68,45 @@ impl HintCollector {
 
     /// Adds a question's header, short option labels, and code spans or identifiers in its text and descriptions.
     pub fn add_question(&mut self, question: &Question) {
-        if let Some(header) = &question.header {
+        let options = question.options.iter().map(|option| (option.label.as_str(), option.description.as_deref()));
+        self.add_asked(question.header.as_deref(), options, &question.text);
+    }
+
+    /// Adds a proposal's title, then each of its questions as [`Self::add_question`] does, then code spans or
+    /// identifiers in its Markdown, which is longer and less likely said, up to [`MAX_PROPOSAL_MARKDOWN_HINTS`].
+    pub fn add_proposal(&mut self, proposed: &Proposed) {
+        self.add_prose(&proposed.title);
+        for question in &proposed.questions {
+            let options =
+                question.options.iter().map(|option| (option.label.as_str(), Some(option.description.as_str())));
+            self.add_asked(Some(&question.header), options, &question.text);
+        }
+        let limit = std::mem::replace(&mut self.limit, (self.out.len() + MAX_PROPOSAL_MARKDOWN_HINTS).min(MAX_HINTS));
+        for markdown in proposed.markdown() {
+            self.add_prose(markdown);
+        }
+        self.limit = limit;
+    }
+
+    /// What's asked, as a question or a proposal's question asks it: its header, each option's label and description,
+    /// then its text.
+    fn add_asked<'a>(
+        &mut self,
+        header: Option<&str>,
+        options: impl Iterator<Item = (&'a str, Option<&'a str>)>,
+        text: &str,
+    ) {
+        if let Some(header) = header {
             self.add_short_label(header);
         }
-        for option in &question.options {
-            self.add_short_label(&option.label);
-            self.add_prose(&option.label);
-            if let Some(desc) = &option.description {
-                self.add_prose(desc);
+        for (label, description) in options {
+            self.add_short_label(label);
+            self.add_prose(label);
+            if let Some(description) = description {
+                self.add_prose(description);
             }
         }
-        self.add_prose(&question.text);
+        self.add_prose(text);
     }
 
     /// Adds the leaf file stem and up to [`MAX_PATH_PARENTS`] meaningful parent segments of `path`, leaf first.

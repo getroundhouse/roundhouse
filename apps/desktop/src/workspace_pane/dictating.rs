@@ -1,8 +1,9 @@
 //! Attaches shared dictation to the composer. The pane keeps only the chat being edited and the action to perform
-//! after transcription, so recording mechanics are identical in prompts and question answers.
+//! after transcription, so recording mechanics are identical in prompts, question answers and a proposal's note.
 
 use client_core::hints::HintCollector;
 use gpui_kit::{App, Context, Window};
+use protocol::model::SessionId;
 use protocol::prompt::says_or_carries;
 
 use super::{PaneEvent, Showing, WorkspacePane};
@@ -32,6 +33,10 @@ impl WorkspacePane {
     pub(super) fn dictation_follows_its_composer(&mut self, cx: &mut Context<Self>) {
         let question = self.transcript().is_some_and(|t| t.read(cx).question().is_some());
         let showing_chat = self.drawn() && self.showing() == Showing::Chat;
+        if let Some(view) = self.proposals.view() {
+            let showing = self.drawn() && self.showing() == Showing::Proposal;
+            view.update(cx, |view, cx| view.set_dictation_enabled(showing, cx));
+        }
         if let Some(diff) = &self.diff {
             let showing =
                 self.drawn() && self.showing() == Showing::File && self.file_tab_opened() == Some(super::Opened::Diff);
@@ -88,6 +93,14 @@ impl WorkspacePane {
                 }
             });
         });
+    }
+
+    /// The workspace's hint words, then those of the chat `session`, for what's dictated about it outside it.
+    pub(super) fn collect_chat_hints(&self, session: &SessionId, collector: &mut HintCollector, cx: &App) {
+        self.collect_workspace_hints(collector, cx);
+        if let Some((transcript, _)) = self.chats.get(session).and_then(|chat| chat.transcript.as_ref()) {
+            collector.add_session_log(transcript.read(cx).log());
+        }
     }
 
     fn collect_workspace_hints(&self, collector: &mut HintCollector, cx: &App) {

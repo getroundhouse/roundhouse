@@ -25,7 +25,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
 
-type DictationHints = Box<dyn Fn(&mut HintCollector, &App)>;
+use crate::DictationHints;
 
 pub struct Transcript {
     pub(super) client: Client,

@@ -15,6 +15,7 @@ use protocol::model::Proposal;
 use super::answering::{Answering, Choosing, ProposalEvent};
 use super::document::{self, Part, Writing};
 use super::page::PageElement;
+use crate::DictationHints;
 use crate::linked_images::LinkedImages;
 use crate::selection::Selection;
 use crate::texts::{Of, Texts};
@@ -39,6 +40,9 @@ pub struct ProposalView {
     /// The selection's, which a press on the page's text takes, so a copy and a select all come to it.
     focus: FocusHandle,
     scroll: ScrollHandle,
+    /// The tab's in front, so the note can be dictated into.
+    pub(super) dictation_enabled: bool,
+    pub(super) dictation_hints: Option<DictationHints>,
 }
 
 impl ProposalView {
@@ -56,7 +60,17 @@ impl ProposalView {
         let focus = cx.focus_handle();
         let selection = Selection::new(texts.clone(), focus.clone());
         let answering = Answering::default();
-        Self { proposal, answering, texts, linked, selection, focus, scroll: ScrollHandle::new() }
+        Self {
+            proposal,
+            answering,
+            texts,
+            linked,
+            selection,
+            focus,
+            scroll: ScrollHandle::new(),
+            dictation_enabled: false,
+            dictation_hints: None,
+        }
     }
 
     /// Carries on on a new connection to the hub, and asks again for what couldn't be read.
@@ -74,9 +88,12 @@ impl ProposalView {
             // What was chosen and written was for the revision read, so another starts afresh, rather than sending
             // the choices as an answer to options the person hasn't read.
             if proposal.current.number != self.proposal.current.number {
+                self.end_dictation(cx);
                 self.answering = Answering::default();
             }
             self.proposal = proposal;
+            // Once it's answered, as from another client, there's no note to dictate into.
+            self.follow_dictation(cx);
             cx.notify();
         }
     }

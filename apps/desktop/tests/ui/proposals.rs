@@ -20,7 +20,7 @@ use crate::tools::in_a_new_workspace;
 const PROPOSE: &str = r#"mcp:propose {"title":"Holding a train","context":"Trains wait a minute.","questions":[{"header":"Holding","question":"Where does the wait live?","options":[{"label":"The signal","description":"It counts down."},{"label":"The train"}],"recommended":"A","why":"It survives a restart."}]}"#;
 
 /// Has the agent propose, and waits for its line's Open. That button's ID.
-fn a_proposal(ui: &mut Ui<'_>) -> SharedString {
+pub(crate) fn a_proposal(ui: &mut Ui<'_>) -> SharedString {
     proposing(ui, PROPOSE)
 }
 
