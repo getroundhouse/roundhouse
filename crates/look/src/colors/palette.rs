@@ -5,7 +5,7 @@ use gpui_kit::{App, Global, Hsla, rgba};
 macro_rules! colors {
     ($($group:literal { $($(#[doc = $doc:literal])+ $role:ident = $dark:literal,)+ })+) => {
         /// The colours of the theme the app draws with, which [`colors`](fn@crate::colors) gives.
-        #[derive(Clone, Debug)]
+        #[derive(Clone, Debug, PartialEq)]
         pub struct Colors {
             $($($(#[doc = $doc])+ pub $role: Hsla,)+)+
         }

@@ -49,9 +49,19 @@ const TABLES: &[&str] = &["| a | b |\n", "|---|---|\n", "| c | d |\n"];
 
 const QUOTES: &[&str] = &["> quoted\n", ">\n", "> > nested\n"];
 
-/// Images the transcript draws when it can, and some it leaves to the kit, beside what a paragraph can hold.
-const IMAGES: &[&str] =
-    &["**![b](b.png)**", "[![e](e.png)](https://example.com)", "\n\n![alone](a.png)\n\n", "_![c](c.png)_ ", "<br>"];
+/// Images the transcript draws when it can, and some it leaves to the kit, beside what a paragraph can hold, and the
+/// diagrams it draws, open and closed.
+const IMAGES: &[&str] = &[
+    "**![b](b.png)**",
+    "[![e](e.png)](https://example.com)",
+    "\n\n![alone](a.png)\n\n",
+    "_![c](c.png)_ ",
+    "<br>",
+    "```mermaid\n",
+    "~~~Mermaid\n",
+    "flowchart LR\n  A --> B\n",
+    "~~~\n",
+];
 
 /// `bits` and `more`, each as likely as the other.
 fn with(more: &'static [&'static str]) -> Vec<&'static str> {

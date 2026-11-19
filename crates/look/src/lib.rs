@@ -110,7 +110,7 @@ pub use space::Space;
 pub use switches::{Switch, SwitchKind, switch};
 pub use tabs::{Tab, TabWidth, tab};
 pub use task_ring::{TaskRing, task_ring};
-pub use theme::apply;
+pub use theme::{apply, hex};
 pub use toggles::{Toggle, toggle};
 pub use tokens::tokens;
 #[cfg(any(test, feature = "testing"))]

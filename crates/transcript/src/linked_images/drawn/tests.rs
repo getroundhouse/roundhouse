@@ -11,7 +11,7 @@ use proptest::prelude::*;
 use proptest::sample::select;
 use proptest::test_runner::{Config, RngSeed};
 
-use super::{ALONE, AMONG_WORDS, Holds, Pointed, in_the_middle, to_read};
+use super::{ALONE, AMONG_WORDS, DIAGRAM, Holds, Pointed, in_the_middle, to_read};
 use crate::images_apart::images_apart;
 
 /// What a paragraph can hold: images bare, in marks and in links, words, spaces and line breaks, tags of HTML, code,
@@ -191,4 +191,41 @@ fn something_set_in_the_middle_of_a_line_is_as_far_above_the_baseline_whichever_
     assert_eq!(in_the_middle(height, ascent, descent), px(14.));
     assert_eq!(in_the_middle(height, ascent, -descent), px(14.), "as the text system headless tests draw with has it");
     assert_eq!(in_the_middle(px(4.), ascent, descent), px(4.), "never outside what it's the baseline of");
+}
+
+/// A fenced code block written in `mermaid` is a diagram once its fence is closed, known by where it starts in all of
+/// the text, and copied as it was written. One still open, as one being written is, and one in another language, are
+/// the kit's code blocks.
+#[test]
+fn a_closed_block_written_in_mermaid_is_taken_as_a_diagram() {
+    let diagram = "```mermaid\nflowchart LR\n  A --> B\n```";
+    let text = format!("Before.\n\n{diagram}\n\n~~~~Mermaid\ngraph TD\n  C --> D\n~~~~\n\n```rust\nlet x = 1;\n```");
+    let from = 100;
+
+    let blocks = parse_markdown(&text, to_read(from)).unwrap();
+
+    let taken: Vec<_> = (blocks.iter())
+        .filter_map(|block| if let BlockNode::Custom { node, .. } = block { Some(node) } else { None })
+        .map(|node| (node.name().to_string(), node.as_text().to_string(), node.as_markdown().to_string()))
+        .collect();
+    assert_eq!(
+        taken,
+        [
+            (DIAGRAM.to_string(), "flowchart LR\n  A --> B".to_string(), diagram.to_string()),
+            (DIAGRAM.to_string(), "graph TD\n  C --> D".to_string(), "~~~~Mermaid\ngraph TD\n  C --> D\n~~~~".into()),
+        ]
+    );
+    let codes = blocks.iter().filter(|block| matches!(block, BlockNode::CodeBlock(_))).count();
+    assert_eq!(codes, 1, "the rust one");
+
+    let open = parse_markdown("```mermaid\nflowchart LR\n  A --> B\n", to_read(0)).unwrap();
+    assert!(matches!(open.as_slice(), [BlockNode::CodeBlock(_)]), "one still being written: {open:?}");
+    let quoted = parse_markdown("> ```mermaid\n> flowchart LR\n>   A --> B\n> ```\n", to_read(0)).unwrap();
+    let in_the_quote = |block: &BlockNode| {
+        let BlockNode::Blockquote { children, .. } = block else { return false };
+        matches!(children.as_slice(), [BlockNode::Custom { .. }])
+    };
+    assert!(quoted.iter().any(in_the_quote), "one in a quote: {quoted:?}");
+    let short = parse_markdown("````mermaid\nflowchart LR\n```\n", to_read(0)).unwrap();
+    assert!(matches!(short.as_slice(), [BlockNode::CodeBlock(_)]), "one whose fence is shorter than it opened with");
 }

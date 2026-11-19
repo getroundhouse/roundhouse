@@ -25,6 +25,22 @@ markdown.workspace = true
 # Holds the images the agent's text points to, for the kit's drawing of a text, which takes only what can be shared
 # across threads.
 parking_lot.workspace = true
+# Draws a Mermaid diagram the agent writes, measuring its words with the font GPUI draws them in.
+merman = { workspace = true, features = [
+    "svg",
+    "diagram-class",
+    "diagram-er",
+    "diagram-flowchart",
+    "diagram-gantt",
+    "diagram-git-graph",
+    "diagram-journey",
+    "diagram-mindmap",
+    "diagram-pie",
+    "diagram-sequence",
+    "diagram-state",
+    "diagram-timeline",
+] }
+rustybuzz.workspace = true
 serde_json.workspace = true
 similar.workspace = true
 # Reads a drawing a text points to before GPUI draws it, so it shows no file it names by its path.

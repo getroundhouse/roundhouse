@@ -25,6 +25,12 @@ pub(super) fn with_actions(context: RenderContext) -> RenderContext {
     context.with_style(roomy).with_code_block_actions(actions)
 }
 
+/// What a code block that isn't one of a text's blocks is drawn with, such as a diagram's that couldn't be drawn, as
+/// the text's own are: with the button that copies its code.
+pub(crate) fn code_context(cx: &App) -> RenderContext {
+    with_actions(RenderContext::from_app(cx))
+}
+
 /// The button that copies `block`'s code, shown while the block is hovered, then its language, if it has one.
 fn actions(block: &CodeBlock, _: &mut Window, cx: &mut App) -> AnyElement {
     let copy = look::copy_button("copy", block.code(), "Copy code", cx);

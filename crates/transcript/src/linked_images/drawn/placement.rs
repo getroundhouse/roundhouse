@@ -1,5 +1,6 @@
 use super::super::LinkedImages;
 use super::super::loading::Waiter;
+use super::diagrams::DIAGRAM;
 use crate::images_that_open;
 use gpui_kit::component::text::markdown_ast::{Delete, Emphasis, Image, Link, LinkReference, Node, Strong};
 use gpui_kit::component::text::{
@@ -23,9 +24,11 @@ pub(super) const AMONG_WORDS: &str = "linked-image-among-words";
 const AMONG_WORDS_SHARE: f32 = 0.75;
 
 /// Whether parsing `source` with [`to_read`] can take anything, which it can only if it has an image in Markdown, and
-/// each of those starts `![`. One with none is parsed the same with it as without it.
+/// each of those starts `![`, or a diagram, whose block says `mermaid`, in any case. One with neither is parsed the
+/// same with it as without it.
 pub(crate) fn may_take(source: &str) -> bool {
-    source.contains("![")
+    let language = crate::diagrams::LANGUAGE.as_bytes();
+    source.contains("![") || source.as_bytes().windows(language.len()).any(|word| word.eq_ignore_ascii_case(language))
 }
 
 /// What the kit parses a text with, from byte `from` of it on, for the transcript to draw the images it points to. It's
@@ -37,7 +40,9 @@ pub(crate) fn to_read(from: usize) -> Arc<MarkdownExtensions> {
     let reading = Arc::new(Reading { from, among_words: Mutex::default() });
     let paragraphs = Arc::clone(&reading);
     let read = MarkdownExtensions::default()
-        .block_parser(move |node: &Node, cx: &MarkdownParseContext<'_>| paragraphs.paragraph(node, cx))
+        .block_parser(move |node: &Node, cx: &MarkdownParseContext<'_>| {
+            paragraphs.paragraph(node, cx).or_else(|| paragraphs.diagram(node, cx))
+        })
         .plugin(ReadsAmongWords(reading));
     Arc::new(read)
 }
@@ -55,14 +60,17 @@ pub(in super::super) fn to_draw<W: Waiter>(
     kept: &[LinkedImage],
 ) -> MarkdownExtensions {
     let lookup = Lookup { linked: linked.clone(), waiter, kept: kept.into() };
-    let alone = lookup.clone();
+    let (alone, diagrams) = (lookup.clone(), linked.clone());
     MarkdownExtensions::default()
         .block_renderer(ALONE, move |node: &MarkdownNode, _: &mut Window, cx: &mut App| alone.alone(node, cx))
+        .block_renderer(DIAGRAM, move |node: &MarkdownNode, window: &mut Window, cx: &mut App| {
+            diagrams.diagram(node, waiter, window, cx)
+        })
         .plugin(DrawsAmongWords(lookup))
 }
 
 /// One parse of a text, from byte `from` of it on, which is where a text that goes on is parsed again from.
-struct Reading {
+pub(super) struct Reading {
     pub(super) from: usize,
     /// Where each image among a paragraph's words starts in the text, noted as its paragraph is read, for the image to
     /// be taken when it's read. That relies on the kit offering a paragraph before anything in it. If it didn't, none

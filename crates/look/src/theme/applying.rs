@@ -177,7 +177,7 @@ fn meanings(c: &Colors) -> Vec<(&'static str, String)> {
 
 /// `#rrggbb`, or `#rrggbbaa` for a colour that isn't opaque, as the kit reads a colour, and back to the same bytes
 /// the colour was made from, as a test checks.
-pub(crate) fn hex(color: Hsla) -> String {
+pub fn hex(color: Hsla) -> String {
     let Rgba { r, g, b, a } = color.into();
     let [r, g, b, a] = [r, g, b, a].map(byte);
     if a == u8::MAX { format!("#{r:02x}{g:02x}{b:02x}") } else { format!("#{r:02x}{g:02x}{b:02x}{a:02x}") }

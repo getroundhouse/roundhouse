@@ -7,7 +7,7 @@ use look::Region;
 use protocol::model::SessionStatus;
 
 use super::frame::{CHAT, Frame, Part};
-use super::image_chats::{AFTER_DRAWN, pointed, pointed_among_words, pointed_on_lines};
+use super::image_chats::{AFTER_DRAWN, DIAGRAM_DRAWN, diagrammed, pointed, pointed_among_words, pointed_on_lines};
 use super::screens::FOCUS;
 use super::steps::{Screen, Step, Target};
 use super::typed_chats;
@@ -163,6 +163,13 @@ pub(crate) const TOOL_SCREENS: &[Screen] = &[
         world: Some(pointed_on_lines),
         frame: CHAT,
         steps: &[Step::Select(FOCUS)],
+    },
+    Screen {
+        name: "reply-diagram",
+        spec: "chats.md",
+        world: Some(diagrammed),
+        frame: CHAT,
+        steps: &[Step::Select(FOCUS), Step::WaitFor(DIAGRAM_DRAWN)],
     },
     Screen {
         name: "thinking",

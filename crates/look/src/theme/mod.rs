@@ -8,11 +8,10 @@ use crate::colors::Colors;
 mod tests;
 
 mod applying;
-pub use applying::apply;
 #[cfg(test)]
 use applying::config;
 #[cfg(any(test, feature = "testing"))]
-pub(crate) use applying::hex;
 #[cfg(test)]
 pub(crate) use applying::kit_colors;
 pub(crate) use applying::{CHOSEN, PRESSED, UNDER_POINTER};
+pub use applying::{apply, hex};

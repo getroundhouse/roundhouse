@@ -85,6 +85,23 @@ fn an_image_a_proposal_points_to_in_the_worktree_is_drawn_on_its_page(cx: &mut T
     assert_eq!(drawn.size.height, gpui_kit::px(140.), "at the size it says: {drawn:?}");
 }
 
+/// A Mermaid diagram in what the agent proposed is drawn on its page, as in a reply.
+#[gpui_kit::test]
+fn a_diagram_in_a_proposal_is_drawn_on_its_page(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let mut ui = in_a_new_workspace(cx, &stack);
+    let diagram = "\\n\\n```mermaid\\nflowchart TD\\n  A[Wait] --> B[Go]\\n```";
+    let propose = PROPOSE.replace("Trains wait a minute.", &format!("Trains wait a minute.{diagram}"));
+
+    let open = proposing(&mut ui, &propose);
+    ui.click(open);
+
+    ui.wait("the proposal tab", |ui| showing(ui) == Showing::Proposal);
+    ui.wait("the diagram", |ui| ui.shown("diagram/").len() == 1);
+    let diagram = ui.shown("diagram/").remove(0);
+    assert!(ui.bounds(diagram).size.height > gpui_kit::px(80.), "two boxes, one under the other");
+}
+
 #[gpui_kit::test]
 fn the_proposal_tab_closes_with_its_chat(cx: &mut TestAppContext) {
     let stack = Stack::new();
