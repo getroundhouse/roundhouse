@@ -245,7 +245,7 @@ fn band(
     let colors = look::colors(cx);
     let after = subagent
         .and_then(|s| shown_kind(s.kind.as_deref()))
-        .map(|kind| look::chip(look::ChipKind::Subagent, kind.to_string()).into_any_element());
+        .map(|kind| look::chip(look::ChipKind::Subagent, look::ChipSize::Regular, kind.to_string()).into_any_element());
     let end = subagent.map(subagent_standing).map(|standing| {
         div().flex_none().typeset(look::Type::Detail).text_color(colors.text_faint).child(standing).into_any_element()
     });

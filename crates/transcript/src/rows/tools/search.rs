@@ -28,7 +28,9 @@ pub(super) fn draw(search: &Search, answer: Option<&Answer>, toggle: &Toggle, cx
     let found = found(answer);
     let line = Line::new(IconName::Search, search.title())
         .part(Part::Pill(search.pattern.to_string().into(), toggle.marks(Text::Pill, search.pattern)))
-        .part(search.path.map(|path| Part::Chip(look::chip(looked_in(path), path.to_string()))))
+        .part(
+            search.path.map(|path| Part::Chip(look::chip(looked_in(path), look::ChipSize::Regular, path.to_string()))),
+        )
         .part(found.as_ref().map(|found| Part::Note(found.summary().into())));
     let opened = || found.and_then(|found| opened(&found, toggle, cx));
     line::drawn(line, answer, opened, toggle, cx)

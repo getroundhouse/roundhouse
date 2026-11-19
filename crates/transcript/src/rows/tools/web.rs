@@ -20,8 +20,11 @@ use crate::item_key::ItemKey;
 use crate::rows::shown::Gather;
 
 pub(super) fn fetch(fetch: &Fetch, answer: Option<&Answer>, toggle: &Toggle, cx: &App) -> AnyElement {
-    let line = Line::new(IconName::Globe, Fetch::TITLE)
-        .part(Part::Chip(look::chip(look::ChipKind::Site, site(fetch.url).to_string())));
+    let line = Line::new(IconName::Globe, Fetch::TITLE).part(Part::Chip(look::chip(
+        look::ChipKind::Site,
+        look::ChipSize::Regular,
+        site(fetch.url).to_string(),
+    )));
     let opened = || Some(fetched(fetch, answer, toggle, cx).into_any_element());
     line::drawn(line, answer, opened, toggle, cx)
 }

@@ -70,7 +70,7 @@ pub use bars::{Bar, BarKind, bar};
 pub use baseline::{LineText, Placed};
 pub use cache::{CacheMark, cache_mark, expires_in, minutes_left, next_minute_in_ms};
 pub use cards::{Card, CardHeading, CardKind, CardWidth, card, card_heading};
-pub use chips::{Chip, ChipKind, chip};
+pub use chips::{Chip, ChipKind, ChipSize, GithubState, IssueState, PullRequestState, chip};
 #[cfg(feature = "testing")]
 pub use clock::hold_still;
 pub use clock::{

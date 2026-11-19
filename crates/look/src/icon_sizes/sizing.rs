@@ -13,7 +13,7 @@ named! {
         /// Among a detail's or code's text: a rule's across the chat, such as a compaction's, and the compaction's in
         /// the outline; the build line's answer; a changed file's state at its row's end, and a folder's chevron, in
         /// Changes; the check in a checkbox; and the `+` that adds a comment to a diff's line, on a button as tall as
-        /// the line. Beside a small button's words.
+        /// the line. Beside a small button's words. A small chip's mark, beside its detail's text.
         Small,
         /// Among body text: a warning before the body text it warns of, such as an account's standing; a project's
         /// chevron after its name; the arrow before an answer to a question, and the check on an option chosen; a file

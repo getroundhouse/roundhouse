@@ -162,7 +162,7 @@ fn queued_buttons(
 /// chat says it once it's sent, or that it answers a proposal, until its record has come.
 fn answer_line(proposal: Option<&Proposal>, text: Hsla, muted: Hsla) -> impl IntoElement {
     let (title, chosen) = transcript::proposal_answered_parts(proposal);
-    let title = title.map(|title| look::chip(look::ChipKind::Proposal, title));
+    let title = title.map(|title| look::chip(look::ChipKind::Proposal, look::ChipSize::Regular, title));
     h_flex()
         .flex_1()
         .min_w_0()

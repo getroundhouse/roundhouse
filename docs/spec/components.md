@@ -157,6 +157,8 @@ The pieces screens are built from, on the foundations in `look.md`: what each is
 - **A note at a row's end says something about what the row names, in a detail's text, and its kind says its colour:** faint for a detail, such as a hub's address or how long ago a chat was closed, the text's colour and stronger for how many need a look, and the error's for what went wrong. A row's words are cut short where they're long, so its note stays. `look::NoteKind` holds the kinds. *Unconfirmed.*
 - **A long menu to choose from scrolls once it's taller than half the window, or 450px, and opens on the row that's chosen,** as dictation's 26 languages do, so it never runs off the window, and what's chosen shows as it opens. *Unconfirmed.*
 - **Every menu is filled with `look`'s rows,** so none draws a row of its own, such as the hub switcher's and closed chats' once did. *Unconfirmed.*
+- **What a right-click menu offers can mostly be done another way too, so someone who never right-clicks misses little,** as the owner decided, since nothing on screen says a menu is there. It's a leaning, not a law: a small convenience on something in view, such as marking a workspace read, can be in its menu alone.
+- **Everything the app draws as a thing it knows has a right-click menu, every chip and every row,** as the owner decided, so once someone has found one, they'll try the rest, as a sidebar's row is expected to have one. *Not built:* a chip's menu, and most rows' but a workspace's in the sidebar, such as a file's in the file tree or in Changes, and a project's on Home.
 
 **Every kind of note at a menu's row's end, by its name.** Each is a kind in `look::NoteKind`. *Unconfirmed.*
 
@@ -215,7 +217,7 @@ The pieces screens are built from, on the foundations in `look.md`: what each is
 - **A card holds a few parts about one thing, apart from what's around it, and is drawn by where it sits,** as the owner decided, from pictures, so how a card looks says where it is: one that opens over the rest, such as a hover card, the workspace's card or a turn's, is raised with the one edge and the one shadow; one in place, such as the update card, the checkout's card or a panel in Settings, is raised with the edge and no shadow, since it covers nothing; and one in the chat, such as a plan or a failed request, is a fill of its own with no edge, as a call's block is, since the chat's other boxes are fills too. `look::CardKind` holds the kinds.
 - **A card in the chat that needs you, or where the agent stopped short, is washed in its colour, with its heading in it,** as the owner chose, from six pictures: amber for a plan waiting to be approved and red for a failed request, as `look.md` says, with no edge, and the icon and words of the heading at full strength, where the colour reads as itself rather than mixed into the pane. One of the chat's cards with nothing to say in a colour, such as the compaction's summary or a plan once it's answered, has a call's block's fill. *Unconfirmed:* the wash at 9%, a chat's card with no colour in a call's block's fill, and `Waiting for you` at a plan's heading's end.
 - **A card is 12px in from its edge, with its parts 12px apart, and what's in one part 4px apart,** as the owner decided, such as a heading and what's said under it, so the parts read as apart as the card is from what's around it. A rule between two parts is as far from each. A form set in place, such as a panel in Settings, is laid out as a dialog is, 24px in, with 16px between its parts, as the owner decided.
-- **A card's heading is in body text and stronger,** with the icon that stands for what the card is at its start, such as a failed request's, muted unless the card is in a colour, what's said of it after it, such as a badge of how many times, and what's said faint at its end, such as when a limit resets. *Unconfirmed.*
+- **A card's heading is in body text and stronger,** with the icon that stands for what the card is at its start, such as a failed request's, muted unless the card is in a colour, what's said of it after it, such as a badge of how many times, and what's said faint at its end, such as when a limit resets, then a control, such as a faint ⋯ that opens a menu, centred on the heading's line without making it taller. *Unconfirmed.*
 - **A card over the rest has a width of its own, of two, and one in place or in the chat fills what it's set in,** as the owner decided, since nothing around one over the rest sets a width. A turn's card is as wide as what it holds, as the owner chose, since its rows are short and a width of its own left a gap down its middle. A width is added once a card needs one, rather than guessed at. `look::CardWidth` holds them. What's raised over the rest and isn't a card is raised the same way: the find bar and the outline's list at a card's regular width, as the owner decided, and an edit's preview and a dragged project at widths of their own.
 
 **Every kind of card, by its name.** Each is a kind in `look::CardKind`. *Unconfirmed.*
@@ -262,7 +264,8 @@ The pieces screens are built from, on the foundations in `look.md`: what each is
 
 ### Chips
 
-- **A chip is a thing the app knows, such as a file or a subagent, in one frame whatever its kind,** as the owner decided, so a line with different chips reads as one system: filled with the one edge for something to use, a control's corners, with its kind's mark, then its name in body text, then what's said of it, in code's type on the name's baseline, so the two sizes of text read as one line. It's 24px tall, as a small control is, with 6px at its start and between its parts, as the owner decided, from pictures of six, so its words have room above and below them and its parts don't crowd. The 6px is a chip's own, rather than a space, since the smallest space crowded the mark and the name and the next was looser than it needs. A pill is as tall, so the two sit in one line. Its kind says its mark and what it shows of what it names, such as a path's last part. `look::ChipKind` holds the kinds. *Unconfirmed:* 8px at its end. *Not built:* a click that opens it, its card on hover and its menu, the chips for an issue, a pull request, a workspace, a branch and a commit, and a file's folder where two files in view share a name.
+- **A chip is a thing the app knows, such as a file or a subagent, in one frame whatever its kind,** as the owner decided, so a line with different chips reads as one system: filled with the one edge for something to use, a control's corners, with its kind's mark, then its name in body text, then what's said of it, in code's type on the name's baseline, so the two sizes of text read as one line. It's 24px tall, as a small control is, with 6px at its start and between its parts, as the owner decided, from pictures of six, so its words have room above and below them and its parts don't crowd. The 6px is a chip's own, rather than a space, since the smallest space crowded the mark and the name and the next was looser than it needs. A pill is as tall, so the two sit in one line. Among a paragraph's words, such as an issue a reply names, a chip is small, 20px, with a detail's text and a small mark, as the owner chose, so it's shorter than their line and doesn't touch a chip on the line above or below. A small chip has no lines or what changed, since code's type doesn't come as small as its words. Its kind says its mark and what it shows of what it names, such as a path's last part. `look::ChipKind` holds the kinds. *Unconfirmed:* 8px at its end. *Not built:* a click that opens it, its card on hover and its menu, the chips for a workspace, a branch and a commit, and a file's folder where two files in view share a name.
+- **An issue's or a pull request's chip has its state's mark, in its state's colour, as GitHub draws them, then its number, and its title after it, muted, where it's given one,** as the owner chose, so a list of several reads as what each is. The title is cut short with an ellipsis past 240px. Until its state is known, its mark is an open one's, muted, so it doesn't say it's open before anyone knows. *Unconfirmed:* 240px.
 - **A file's chip always has the icon for its kind, and says what more there is to say of it,** as the owner decided: the lines a call named, after its name, such as `model.rs :12–40`, and the lines a change added and removed, such as `model.rs +12 −3`. A deleted file's name is struck through.
 
 **Every kind of chip, by its name.** Each is a kind in `look::ChipKind`. *Unconfirmed.*
@@ -275,8 +278,34 @@ The pieces screens are built from, on the foundations in `look.md`: what each is
 | `Server` | An MCP server a tool is from: a plug, then its name, such as `github` |
 | `Site` | A site, by its address's host: a globe, then the host, such as what a fetch read |
 | `Proposal` | A proposal, by its title: the split mark, then the title whole, such as on the line of the call that made it |
+| `Issue` | An issue on GitHub, by its number: its state's mark, in its state's colour, then its number, such as `#1021` |
+| `PullRequest` | A pull request on GitHub, by its number: its state's mark, in its state's colour, then its number |
 
-**Every kind of chip, and a file's chip with the lines it's about, with what changed in it, and deleted.** *Unconfirmed.*
+**Every size of a chip, by its name.** Each is a size in `look::ChipSize`, which keeps its mark and its words in proportion to how tall it is, so a small one is a regular one made smaller rather than squeezed, as the owner chose, from pictures of it among a reply's words beside one with words as big as theirs, which crowded its edges.
+
+| Name | Height | Text | Mark |
+|---|---|---|---|
+| `Regular` | 24px | Body | Regular |
+| `Small` | 20px | Detail | Small |
+
+**Every state of an issue's chip, by its name.** Each is a state in `look::IssueState`, with the mark GitHub draws for it, in the colour of the pull request's state it's most like, as GitHub colours them. *Unconfirmed.*
+
+| Name | Mark | Coloured as |
+|---|---|---|
+| `Open` | `CircleDot` | `Open` |
+| `Done` | `CircleCheck` | `Merged` |
+| `NotPlanned` | `CircleSlash` | `Draft` |
+
+**Every state of a pull request's chip, by its name.** Each is a state in `look::PullRequestState`, with the mark GitHub draws for it, in the colour the sidebar's fan gives that work, so each means the same in both. *Unconfirmed.*
+
+| Name | Mark | Coloured as |
+|---|---|---|
+| `Open` | `GitPullRequest` | `Open` |
+| `Draft` | `GitPullRequestDraft` | `Draft` |
+| `Merged` | `GitMerge` | `Merged` |
+| `Closed` | `GitPullRequestClosed` | `Closed` |
+
+**Every kind of chip, an issue's and a pull request's in each state, and before it's known, a file's chip with the lines it's about, with what changed in it, and deleted, and a small one among a paragraph's words.** *Unconfirmed.*
 
 ![Every kind of chip](screens/chip-kinds.png)
 

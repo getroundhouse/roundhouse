@@ -35,7 +35,7 @@ pub(super) fn read(file: &ReadFile, answer: Option<&Answer>, toggle: &Toggle, cx
     let title = amount(read.lines.len(), read.images.len()).map_or_else(|| "Read".to_string(), |n| format!("Read {n}"));
     // The lines it asked for, where it named them, as an editor writes a place in a file.
     let named = file.lines.map(|lines| (lines.first, lines.count.map(|count| lines.first + count.saturating_sub(1))));
-    let file_chip = look::chip(look::ChipKind::File, file.path.to_string());
+    let file_chip = look::chip(look::ChipKind::File, look::ChipSize::Regular, file.path.to_string());
     let file_chip = match named {
         Some((first, last)) => file_chip.lines(first, last),
         None => file_chip,
@@ -182,12 +182,12 @@ pub(super) fn shown_lines(
 
 /// The file at `path`, on its chip.
 pub(super) fn chip(path: &str) -> Part {
-    Part::Chip(look::chip(look::ChipKind::File, path.to_string()))
+    Part::Chip(look::chip(look::ChipKind::File, look::ChipSize::Regular, path.to_string()))
 }
 
 /// The file at `path`, on its chip, with how many lines a change to it added and removed, if it changed one.
 fn changed(path: &str, counts: Option<Counts>) -> Part {
-    let file = look::chip(look::ChipKind::File, path.to_string());
+    let file = look::chip(look::ChipKind::File, look::ChipSize::Regular, path.to_string());
     Part::Chip(match counts {
         Some(Counts { added, removed }) => file.changed(added, removed),
         None => file,

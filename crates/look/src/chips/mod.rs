@@ -7,5 +7,9 @@ mod tests;
 
 mod chip;
 mod kinds;
+mod sizes;
+mod states;
 pub use chip::{Chip, chip};
 pub use kinds::ChipKind;
+pub use sizes::ChipSize;
+pub use states::{GithubState, IssueState, PullRequestState};

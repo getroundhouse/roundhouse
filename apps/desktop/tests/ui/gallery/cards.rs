@@ -89,7 +89,15 @@ fn of_width(width: CardWidth, cx: &App) -> look::Card {
         CardWidth::Fills => "As wide as what it's set in, such as the chat's column.",
     };
     let [name, _] = width.written();
-    look::card(CardKind::Over, width).heading(look::card_heading(name)).under_heading(detail(said, cx))
+    let heading = look::card_heading(name);
+    // A regular one shows a control at its heading's end, as an issue's card has the button that opens its menu.
+    let heading = match width {
+        CardWidth::Regular => heading.control(
+            look::icon_button("card-more", ButtonKind::Faint, ControlSize::Small, IconName::Ellipsis).tooltip("More"),
+        ),
+        CardWidth::Content | CardWidth::Small | CardWidth::Fills => heading,
+    };
+    look::card(CardKind::Over, width).heading(heading).under_heading(detail(said, cx))
 }
 
 /// `sample`, under its name, faint, with its place found by `kind` and `name`.
