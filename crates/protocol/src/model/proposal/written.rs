@@ -16,6 +16,23 @@ pub struct Proposed {
     pub questions: Vec<ProposalQuestion>,
 }
 
+impl Proposed {
+    /// Each part of it that's Markdown, in the order it's read: the context, then each question's details, each
+    /// option's body and why the agent recommends one.
+    pub fn markdown(&self) -> impl Iterator<Item = &str> {
+        std::iter::once(self.context.as_str()).chain(self.questions.iter().flat_map(ProposalQuestion::markdown))
+    }
+}
+
+impl ProposalQuestion {
+    /// Each part of it that's Markdown, in the order it's read.
+    fn markdown(&self) -> impl Iterator<Item = &str> {
+        let bodies = self.options.iter().map(|option| option.body.as_str());
+        let why = self.recommended.iter().map(|recommended| recommended.why.as_str());
+        std::iter::once(self.details.as_str()).chain(bodies).chain(why)
+    }
+}
+
 /// One question the person answers, by choosing one of two to four options.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct ProposalQuestion {

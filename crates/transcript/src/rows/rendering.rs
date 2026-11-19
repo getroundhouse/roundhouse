@@ -38,7 +38,7 @@ pub(crate) struct Item {
 /// text on a line goes. Made once for each frame, since it's the same for every row.
 pub(crate) struct Shared {
     pub(crate) this: WeakEntity<Transcript>,
-    pub(crate) linked: LinkedImages,
+    pub(crate) linked: LinkedImages<Seq>,
     pub(crate) line_text: LineText,
     /// The texts the rows draw from the kit's blocks, and what's selected of them.
     pub(crate) texts: Texts,

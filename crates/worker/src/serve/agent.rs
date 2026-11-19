@@ -150,7 +150,8 @@ async fn tools_for(state: &State, spec: &mut AgentSpec, config: PathBuf) -> Opti
         warn!(%session_id, "the agent goes without the worker's tools, which aren't being served");
         return None;
     };
-    state.tools.admit(token.clone(), session_id.clone());
+    let caller = crate::tools::Caller { session_id: session_id.clone(), worktree: PathBuf::from(&spec.cwd) };
+    state.tools.admit(token.clone(), caller);
     Some(ToolServer { url, token, config })
 }
 

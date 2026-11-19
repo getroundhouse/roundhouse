@@ -48,3 +48,10 @@ pub(super) const PROPOSALS: &str = r"
         UPDATE proposals SET rev = (SELECT value FROM counters WHERE name = 'rev') WHERE id = NEW.proposal_id;
     END;
 ";
+
+/// The images what the agent wrote in each revision points to in its worktree, as JSON, each by the address it gives it
+/// with the attachment of the chat that keeps it, as a reply's text block names them. NULL when it points to none, as
+/// every revision written before did.
+pub(super) const REVISION_IMAGES: &str = r"
+    ALTER TABLE proposal_revisions ADD COLUMN images TEXT;
+";

@@ -39,7 +39,7 @@ pub struct Transcript {
     pub(super) log: Arc<SessionLog>,
     pub(super) model: Rc<RefCell<Model>>,
     /// The images the agent's text points to.
-    pub(super) linked: LinkedImages,
+    pub(super) linked: LinkedImages<Seq>,
     /// The texts the transcript draws from the kit's blocks, parsed.
     pub(super) texts: Texts,
     /// What's selected of them.
@@ -101,7 +101,7 @@ impl Transcript {
         let selection = Selection::new(texts.clone(), cx.focus_handle());
         let list = TranscriptList::new(selection.clone(), cx);
         list.set_rows(rows, loaded);
-        let linked = LinkedImages::new(client.clone(), session.id.clone(), cx.weak_entity());
+        let linked = LinkedImages::of_transcript(client.clone(), session.id.clone(), cx.weak_entity());
         let ticking = tick(&at_work, cx);
         let approvals = RecordedApprovals::of(session);
         let model = Rc::new(RefCell::new(Model {

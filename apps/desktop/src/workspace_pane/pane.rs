@@ -269,6 +269,9 @@ impl WorkspacePane {
             transcript.update(cx, |t, _| t.reconnect(client));
         }
         self.reconnect_terminals(client, cx);
+        if let Some(view) = self.proposals.view() {
+            view.update(cx, |v, _| v.reconnect(client));
+        }
         if let Some(diff) = &mut self.diff {
             diff.sidebar_tab.reconnected();
             diff.review.update(cx, |r, _| r.reconnect(client));

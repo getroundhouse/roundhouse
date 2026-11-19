@@ -392,4 +392,6 @@ pub(in super::super) const MIGRATIONS: &[Migration] = &[
     Sql(super::session_accounts::PLACED_AUTOMATICALLY),
     // Whether each chat couldn't start since Automatic found no account to spare, in `session_accounts`.
     Sql(super::session_accounts::NEEDS_AN_ACCOUNT),
+    // The images each revision of a proposal points to, in `proposals`.
+    Sql(super::proposals::REVISION_IMAGES),
 ];

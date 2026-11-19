@@ -2,6 +2,7 @@ use super::super::mcp::Called;
 use super::described::describe;
 use super::input::{proposed, schema};
 use crate::asks::Asks;
+use crate::tools::Caller;
 use protocol::model::{AskKey, SessionId, ToolUseId};
 use protocol::worker::{ProposalRecord, Propose, ReadProposal};
 use serde_json::{Map, Value, json};
@@ -15,9 +16,11 @@ const PROPOSE_DESCRIPTION: &str = "Asks the person to decide something too large
     with a tool that asks questions, when an option needs more than a sentence to describe, or the person needs a \
     comparison, code or a picture to judge the options, such as choosing between architectures. Give it 1 to 4 \
     questions, each with 2 to 4 options, and each option a label, a one-line description and a body in \
-    Markdown that says what it is and what it costs. Recommend one, and say why, when you have a view. It returns at \
-    once: the person answers later, and their answer comes to you as a prompt. Don't ask them the same in the chat, \
-    or wait or poll for the answer: carry on with other work, or end your turn.";
+    Markdown that says what it is and what it costs. To show a picture, such as a diagram or a screenshot, write it \
+    as a file in the worktree, an SVG for a diagram, and point to it with a Markdown image: Roundhouse keeps a copy \
+    with the proposal, as the file is when you propose. Recommend one, and say why, when you have a view. It returns \
+    at once: the person answers later, and their answer comes to you as a prompt. Don't ask them the same in the \
+    chat, or wait or poll for the answer: carry on with other work, or end your turn.";
 
 const GET_DESCRIPTION: &str = "Reads one of the proposals you made in this chat with the propose tool, by its ID, \
     which propose's result gives: its context, each question with its options and what you recommended, and the \
@@ -49,8 +52,8 @@ pub(in crate::tools) fn definitions() -> Vec<Value> {
 }
 
 /// Makes the proposal the agent wrote, keyed by its call when its CLI names it, so a hub asked again makes it once,
-/// and by a key of its own otherwise.
-pub(in crate::tools) async fn propose(asks: &Asks, session_id: &SessionId, params: &Map<String, Value>) -> Called {
+/// and by a key of its own otherwise, with the images what it wrote points to in its worktree, as they are now.
+pub(in crate::tools) async fn propose(asks: &Asks, caller: &Caller, params: &Map<String, Value>) -> Called {
     let proposed = match proposed(params) {
         Ok(proposed) => proposed,
         Err(problem) => return Called::failed(format!("Roundhouse couldn't read the proposal: {problem}")),
@@ -58,7 +61,10 @@ pub(in crate::tools) async fn propose(asks: &Asks, session_id: &SessionId, param
     let call: Option<ToolUseId> =
         params.get("_meta").and_then(|meta| meta.get("claudecode/toolUseId")).and_then(Value::as_str).map(Into::into);
     let key = call.as_ref().map_or_else(|| AskKey::from(uuid::Uuid::new_v4().to_string()), |call| call.as_str().into());
-    match asks.ask(session_id.clone(), Propose { proposed, call, key }).await {
+    let written = proposed.markdown().map(str::to_string).collect();
+    let (images, attachments) = crate::linked_images::keep_for(&caller.worktree, written).await;
+    let asked = Propose { proposed, call, key, images, attachments };
+    match asks.ask(caller.session_id.clone(), asked).await {
         Ok(ProposalRecord { proposal }) => Called::text(format!(
             "Proposed \"{}\" as {}. It's open in a tab for the person, who answers when they're ready, and their \
              answer comes to you as a prompt. Don't ask them the same in the chat, or wait or poll for it: carry on \

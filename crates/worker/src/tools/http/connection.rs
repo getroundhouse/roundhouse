@@ -1,5 +1,6 @@
 use super::super::mcp::{Code, Headers, Reply, Said};
 use super::super::{PATH, Tools, mcp};
+use crate::tools::Caller;
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD;
 use http_body_util::{BodyExt, Full, LengthLimitError, Limited};
@@ -11,7 +12,6 @@ use hyper::server::conn::http1;
 use hyper::service::service_fn;
 use hyper::{Method, Request, Response, StatusCode};
 use hyper_util::rt::{TokioIo, TokioTimer};
-use protocol::model::SessionId;
 use protocol::worker::ToolsToken;
 use std::convert::Infallible;
 use std::sync::Arc;
@@ -70,7 +70,7 @@ where
         refused.headers_mut().insert(ALLOW, HeaderValue::from_static("POST"));
         return refused;
     }
-    let Some(session_id) = session_for(tools, headers) else {
+    let Some(caller) = caller_for(tools, headers) else {
         let mut refused = empty(StatusCode::UNAUTHORIZED);
         refused.headers_mut().insert(WWW_AUTHENTICATE, HeaderValue::from_static("Bearer"));
         return refused;
@@ -80,7 +80,7 @@ where
         Err(e) if e.is::<LengthLimitError>() => return empty(StatusCode::PAYLOAD_TOO_LARGE),
         Err(_) => return empty(StatusCode::BAD_REQUEST),
     };
-    match mcp::answer(&tools.asks, tools.build, tools.wait_poll, &session_id, &headers_of(headers), &body).await {
+    match mcp::answer(&tools.asks, tools.build, tools.wait_poll, &caller, &headers_of(headers), &body).await {
         Reply::Accepted => empty(StatusCode::ACCEPTED),
         Reply::Answer(answer) => {
             let status = match &answer.outcome {
@@ -101,13 +101,13 @@ fn is_local(host: Option<&HeaderValue>, port: u16) -> bool {
     host.eq_ignore_ascii_case(&format!("127.0.0.1:{port}")) || host.eq_ignore_ascii_case(&format!("localhost:{port}"))
 }
 
-fn session_for(tools: &Tools, headers: &HeaderMap) -> Option<SessionId> {
+fn caller_for(tools: &Tools, headers: &HeaderMap) -> Option<Arc<Caller>> {
     let said = headers.get(AUTHORIZATION)?.to_str().ok()?;
     let (scheme, token) = said.split_once(' ')?;
     if !scheme.eq_ignore_ascii_case("bearer") {
         return None;
     }
-    tools.session_for(&ToolsToken::new(token.trim()))
+    tools.caller_for(&ToolsToken::new(token.trim()))
 }
 
 fn headers_of(headers: &HeaderMap) -> Headers {

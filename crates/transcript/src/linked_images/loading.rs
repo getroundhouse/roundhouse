@@ -20,21 +20,36 @@ pub(crate) struct Images {
     pub(crate) resolver: Box<dyn Fn(&SharedUri) -> ImageSource + Send + Sync>,
 }
 
-/// The images one transcript's text points to, by where each comes from. Cheap to clone.
-#[derive(Clone)]
-pub(crate) struct LinkedImages(pub(super) Arc<Shared>);
+/// The images one chat's texts point to, by where each comes from, whether its transcript's or a proposal's. `W` is
+/// what waits for one, such as the row of a transcript, which is told when it comes. Cheap to clone.
+pub(crate) struct LinkedImages<W>(pub(super) Arc<Shared<W>>);
 
-pub(super) struct Shared {
-    pub(super) session: SessionId,
-    /// Replaced when the transcript reconnects.
-    pub(super) client: Mutex<Client>,
-    pub(super) images: Mutex<HashMap<Source, Linked>>,
-    pub(super) transcript: WeakEntity<Transcript>,
+impl<W> Clone for LinkedImages<W> {
+    fn clone(&self) -> Self {
+        Self(self.0.clone())
+    }
 }
 
-pub(super) enum Linked {
-    /// With the events whose rows are waiting for it.
-    Loading(Vec<Seq>),
+/// What waits for an image, which is told when it comes: a transcript's row, by its event's seq, or a page drawn whole.
+pub(crate) trait Waiter: Copy + PartialEq + Send + Sync + 'static {}
+
+impl<W: Copy + PartialEq + Send + Sync + 'static> Waiter for W {}
+
+pub(super) struct Shared<W> {
+    pub(super) session: SessionId,
+    /// Replaced when its owner reconnects.
+    pub(super) client: Mutex<Client>,
+    pub(super) images: Mutex<HashMap<Source, Linked<W>>>,
+    /// Tells what waited for an image that it has come, so each draws it at its size.
+    pub(super) arrived: Arrived<W>,
+}
+
+/// What tells what waited for an image that it came.
+type Arrived<W> = Box<dyn Fn(Vec<W>, &mut App) + Send + Sync>;
+
+pub(super) enum Linked<W> {
+    /// With what's waiting for it.
+    Loading(Vec<W>),
     /// With how many pixels it covers as it's drawn, as [`drawable`] and [`pixels`] say.
     Ready(Arc<RenderImage>, (u32, u32)),
     /// The hub couldn't give it, or it isn't an image, so it's not asked for again on this connection.
@@ -50,10 +65,29 @@ pub(super) enum Source {
     Embedded(String),
 }
 
-impl LinkedImages {
-    pub(crate) fn new(client: Client, session: SessionId, transcript: WeakEntity<Transcript>) -> Self {
+impl LinkedImages<Seq> {
+    /// The images the texts of the transcript `transcript` point to, each of whose rows is measured again when one it
+    /// waited for comes.
+    pub(crate) fn of_transcript(client: Client, session: SessionId, transcript: WeakEntity<Transcript>) -> Self {
+        Self::new(client, session, move |waiting, cx| {
+            let _ = transcript.update(cx, |transcript, cx| {
+                for seq in waiting {
+                    transcript.remeasure(seq, cx);
+                }
+            });
+        })
+    }
+}
+
+impl<W: Waiter> LinkedImages<W> {
+    /// The images the texts of the chat `session` point to, where `arrived` tells what waited for one that it came.
+    pub(crate) fn new(
+        client: Client,
+        session: SessionId,
+        arrived: impl Fn(Vec<W>, &mut App) + Send + Sync + 'static,
+    ) -> Self {
         let images = Mutex::new(HashMap::new());
-        Self(Arc::new(Shared { session, client: Mutex::new(client), images, transcript }))
+        Self(Arc::new(Shared { session, client: Mutex::new(client), images, arrived: Box::new(arrived) }))
     }
 
     /// Carries on on a new connection, and asks again for what couldn't be read, in case the connection was why.
@@ -62,40 +96,42 @@ impl LinkedImages {
         self.0.images.lock().retain(|_, linked| !matches!(linked, Linked::Unreadable));
     }
 
-    /// How a text drawn from the kit's blocks, which names `kept`, in the row of the event at `seq`, draws the images
-    /// it points to.
-    pub(crate) fn images(&self, seq: Seq, kept: &[LinkedImage]) -> Images {
-        Images { plugins: Arc::new(drawn::to_draw(self, seq, kept)), resolver: Box::new(self.resolver(seq, kept)) }
+    /// How a text drawn from the kit's blocks, which names `kept`, for `waiter`, draws the images it points to.
+    pub(crate) fn images(&self, waiter: W, kept: &[LinkedImage]) -> Images {
+        Images {
+            plugins: Arc::new(drawn::to_draw(self, waiter, kept)),
+            resolver: Box::new(self.resolver(waiter, kept)),
+        }
     }
 
-    /// The image at `uri` in a text that names `kept`, in the row of the event at `seq`, and how many pixels it covers
-    /// as it's drawn, once it's here, or `None` while it loads, if it can't be shown, or if it isn't one that's drawn.
+    /// The image at `uri` in a text that names `kept`, for `waiter`, and how many pixels it covers as it's drawn, once
+    /// it's here, or `None` while it loads, if it can't be shown, or if it isn't one that's drawn.
     pub(super) fn ready(
         &self,
         uri: &str,
         kept: &[LinkedImage],
-        seq: Seq,
+        waiter: W,
         cx: &mut App,
     ) -> Option<(Arc<RenderImage>, (u32, u32))> {
         let source = source(uri, kept)?;
-        self.image(&source, seq, cx)?.ok()?;
+        self.image(&source, waiter, cx)?.ok()?;
         match self.0.images.lock().get(&source) {
             Some(Linked::Ready(image, covers)) => Some((image.clone(), *covers)),
             _ => None,
         }
     }
 
-    /// What the kit draws for the image at an address in a text that names `kept`, in the row of the event at `seq`.
+    /// What the kit draws for the image at an address in a text that names `kept`, for `waiter`.
     pub(crate) fn resolver(
         &self,
-        seq: Seq,
+        waiter: W,
         kept: &[LinkedImage],
     ) -> impl Fn(&SharedUri) -> ImageSource + Send + Sync + 'static {
         let (images, kept) = (self.clone(), kept.to_vec());
         move |uri| {
             let (images, source) = (images.clone(), source(uri, &kept));
             ImageSource::Custom(Arc::new(move |_: &mut Window, cx: &mut App| match &source {
-                Some(source) => images.image(source, seq, cx),
+                Some(source) => images.image(source, waiter, cx),
                 None => Some(Err(ImageCacheError::Asset("not an image that's drawn".into()))),
             }))
         }
@@ -106,7 +142,7 @@ impl LinkedImages {
     pub(super) fn image(
         &self,
         source: &Source,
-        seq: Seq,
+        waiter: W,
         cx: &mut App,
     ) -> Option<Result<Arc<RenderImage>, ImageCacheError>> {
         let mut images = self.0.images.lock();
@@ -114,14 +150,14 @@ impl LinkedImages {
             Some(Linked::Ready(image, _)) => return Some(Ok(image.clone())),
             Some(Linked::Unreadable) => return Some(Err(ImageCacheError::Asset("it can't be shown".into()))),
             Some(Linked::Loading(waiting)) => {
-                if !waiting.contains(&seq) {
-                    waiting.push(seq);
+                if !waiting.contains(&waiter) {
+                    waiting.push(waiter);
                 }
                 return None;
             }
             None => {}
         }
-        images.insert(source.clone(), Linked::Loading(vec![seq]));
+        images.insert(source.clone(), Linked::Loading(vec![waiter]));
         drop(images);
         self.load(source.clone(), cx);
         None
@@ -151,11 +187,7 @@ impl LinkedImages {
                 Some(Linked::Loading(waiting)) => waiting,
                 _ => Vec::new(),
             };
-            let _ = images.0.transcript.update(cx, |transcript, cx| {
-                for seq in waiting {
-                    transcript.remeasure(seq, cx);
-                }
-            });
+            cx.update(|cx| (images.0.arrived)(waiting, cx));
         })
         .detach();
     }

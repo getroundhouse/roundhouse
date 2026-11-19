@@ -1,4 +1,5 @@
 use super::super::LinkedImages;
+use super::super::loading::Waiter;
 use crate::images_that_open;
 use gpui_kit::component::text::markdown_ast::{Delete, Emphasis, Image, Link, LinkReference, Node, Strong};
 use gpui_kit::component::text::{
@@ -11,7 +12,6 @@ use gpui_kit::{
 use look::pixels;
 use parking_lot::Mutex;
 use protocol::event::LinkedImage;
-use protocol::model::Seq;
 use std::collections::HashSet;
 use std::sync::Arc;
 
@@ -48,9 +48,13 @@ pub(crate) fn taken_at(node: &MarkdownNode) -> Option<usize> {
     node.data::<Pointed>().map(|image| image.at)
 }
 
-/// What the kit draws a text read that way with, which names `kept`, in the row of the event at `seq`.
-pub(in super::super) fn to_draw(linked: &LinkedImages, seq: Seq, kept: &[LinkedImage]) -> MarkdownExtensions {
-    let lookup = Lookup { linked: linked.clone(), seq, kept: kept.into() };
+/// What the kit draws a text read that way with, which names `kept`, for `waiter`.
+pub(in super::super) fn to_draw<W: Waiter>(
+    linked: &LinkedImages<W>,
+    waiter: W,
+    kept: &[LinkedImage],
+) -> MarkdownExtensions {
+    let lookup = Lookup { linked: linked.clone(), waiter, kept: kept.into() };
     let alone = lookup.clone();
     MarkdownExtensions::default()
         .block_renderer(ALONE, move |node: &MarkdownNode, _: &mut Window, cx: &mut App| alone.alone(node, cx))
@@ -128,9 +132,9 @@ impl MarkdownPlugin for ReadsAmongWords {
     }
 }
 
-struct DrawsAmongWords(pub(super) Lookup);
+struct DrawsAmongWords<W>(pub(super) Lookup<W>);
 
-impl MarkdownPlugin for DrawsAmongWords {
+impl<W: Waiter> MarkdownPlugin for DrawsAmongWords<W> {
     fn name(&self) -> &str {
         AMONG_WORDS
     }
@@ -158,13 +162,13 @@ impl MarkdownPlugin for DrawsAmongWords {
 
 /// Where a text's images are looked up, to draw them.
 #[derive(Clone)]
-struct Lookup {
-    pub(super) linked: LinkedImages,
-    pub(super) seq: Seq,
+struct Lookup<W> {
+    pub(super) linked: LinkedImages<W>,
+    pub(super) waiter: W,
     pub(super) kept: Arc<[LinkedImage]>,
 }
 
-impl Lookup {
+impl<W: Waiter> Lookup<W> {
     /// The image that's all its paragraph holds, as wide as it is, up to the column's.
     pub(super) fn alone(&self, node: &MarkdownNode, cx: &mut App) -> AnyElement {
         let drawn = node.data::<Pointed>().and_then(|image| {
@@ -189,7 +193,7 @@ impl Lookup {
     /// The image and how many pixels it covers, once it's here, which starts it loading the first time it's asked
     /// for.
     pub(super) fn ready(&self, image: &Pointed, cx: &mut App) -> Option<(Arc<RenderImage>, (u32, u32))> {
-        self.linked.ready(&image.address, &self.kept, self.seq, cx)
+        self.linked.ready(&image.address, &self.kept, self.waiter, cx)
     }
 }
 

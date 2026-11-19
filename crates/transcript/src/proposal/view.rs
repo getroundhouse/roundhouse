@@ -15,8 +15,10 @@ use protocol::model::Proposal;
 use super::answering::{Answering, Choosing, ProposalEvent};
 use super::document::{self, Part, Writing};
 use super::page::PageElement;
+use crate::linked_images::LinkedImages;
 use crate::selection::Selection;
 use crate::texts::{Of, Texts};
+use client_core::Client;
 
 /// What a proposal's line in the chat starts with, and its tab: a way that splits in two, for the options it offers.
 pub const ICON: gpui_kit::assets::IconName = gpui_kit::assets::IconName::Split;
@@ -30,6 +32,9 @@ pub struct ProposalView {
     pub(super) proposal: Arc<Proposal>,
     pub(super) answering: Answering,
     texts: Texts,
+    /// The images what the agent wrote points to, which the hub kept with each revision, and the page is drawn again
+    /// as each comes.
+    linked: LinkedImages<()>,
     selection: Selection,
     /// The selection's, which a press on the page's text takes, so a copy and a select all come to it.
     focus: FocusHandle,
@@ -37,15 +42,26 @@ pub struct ProposalView {
 }
 
 impl ProposalView {
-    pub fn new(proposal: Arc<Proposal>, cx: &mut Context<Self>) -> Self {
+    /// Shows `proposal`, reading the images it points to from the hub through `client`.
+    pub fn new(proposal: Arc<Proposal>, client: Client, cx: &mut Context<Self>) -> Self {
         let this = cx.weak_entity();
         // A long text parsed on another thread is drawn once it's in.
         let texts = Texts::new(move |_, cx| {
             let _ = this.update(cx, |_, cx| cx.notify());
         });
+        let this = cx.weak_entity();
+        let linked = LinkedImages::new(client, proposal.session_id.clone(), move |_, cx| {
+            let _ = this.update(cx, |_, cx| cx.notify());
+        });
         let focus = cx.focus_handle();
         let selection = Selection::new(texts.clone(), focus.clone());
-        Self { proposal, answering: Answering::default(), texts, selection, focus, scroll: ScrollHandle::new() }
+        let answering = Answering::default();
+        Self { proposal, answering, texts, linked, selection, focus, scroll: ScrollHandle::new() }
+    }
+
+    /// Carries on on a new connection to the hub, and asks again for what couldn't be read.
+    pub fn reconnect(&mut self, client: &Client) {
+        self.linked.reconnect(client);
     }
 
     pub fn proposal(&self) -> &Arc<Proposal> {
@@ -154,7 +170,9 @@ impl Render for ProposalView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let area = ElementId::Name("proposal-page".into());
         let parts = {
-            let mut writing = Writing { texts: &self.texts, selection: &self.selection, area: area.clone(), drawn: 0 };
+            let images = (&self.linked, self.proposal.current.images.as_slice());
+            let mut writing =
+                Writing { texts: &self.texts, selection: &self.selection, images, area: area.clone(), drawn: 0 };
             let choosing = Choosing {
                 this: cx.weak_entity(),
                 chosen: &self.answering.chosen,

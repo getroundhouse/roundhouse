@@ -1,10 +1,14 @@
 use std::time::Duration;
 
+use protocol::attachment::{Attachment, AttachmentBytes, MediaType, NewAttachment};
 use protocol::client::proposals::{ProposalRevisions, ProposalRevisionsRead};
 use protocol::client::{ErrorCode, HubNotice};
+use protocol::event::LinkedImage;
 use protocol::fixtures;
 use protocol::model::{Proposed, RevisionNumber, ToolUseId};
 use protocol::worker::Propose;
+
+use crate::attachment_files::FileFor;
 
 use crate::hub::tests::hub_in;
 use crate::store::now_ms;
@@ -13,7 +17,42 @@ use crate::store::now_ms;
 pub(super) const TIMEOUT: Duration = Duration::from_secs(10);
 
 pub(super) fn asking(key: &str) -> Propose {
-    Propose { proposed: fixtures::proposal("p").current.proposed, call: Some("toolu_1".into()), key: key.into() }
+    Propose {
+        proposed: fixtures::proposal("p").current.proposed,
+        call: Some("toolu_1".into()),
+        key: key.into(),
+        images: Vec::new(),
+        attachments: Vec::new(),
+    }
+}
+
+/// An ask for a proposal that points to the drawing `address`, whose bytes the worker sent under `id`.
+fn pointing(key: &str, address: &str, id: &str) -> Propose {
+    let attachment = Attachment { id: id.into(), name: "flow.svg".into(), media_type: MediaType::Svg, size_bytes: 6 };
+    let image = LinkedImage { address: address.into(), attachment: attachment.clone() };
+    let bytes = NewAttachment { attachment, data: AttachmentBytes::new(b"<svg/>".to_vec()) };
+    Propose { images: vec![image], attachments: vec![bytes], ..asking(key) }
+}
+
+/// What the agent wrote points to an image in its worktree, which the hub keeps as the chat's, as it does a reply's,
+/// and names on the revision, so every client draws it as it was. Asked again, it keeps nothing more.
+#[tokio::test]
+async fn the_images_a_proposal_points_to_are_kept_with_it_once() {
+    let dir = tempfile::tempdir().unwrap();
+    let hub = hub_in(dir.path());
+
+    let made = hub.propose(&"w".into(), "s".into(), pointing("k", "docs/flow.svg", "a1")).await.unwrap().proposal;
+    let again = hub.propose(&"w".into(), "s".into(), pointing("k", "docs/flow.svg", "a2")).await.unwrap().proposal;
+
+    let named: Vec<_> =
+        made.current.images.iter().map(|image| (image.address.as_str(), image.attachment.id.as_str())).collect();
+    assert_eq!(named, [("docs/flow.svg", "a1")]);
+    assert_eq!(again, made, "the one made the first time");
+    let kept = hub.file_read(FileFor::Session("s".into()), "a1".into()).await.unwrap();
+    assert_eq!(kept.as_slice(), b"<svg/>");
+    assert!(hub.file_read(FileFor::Session("s".into()), "a2".into()).await.is_err(), "nothing kept the second time");
+    let listed = hub.session_proposals("s".into()).await.unwrap().proposals;
+    assert_eq!(listed[0].current.images, made.current.images, "and it's read back from the store");
 }
 
 /// So every client of the chat shows it as it's made, and a worker asking again, as it asks each new hub, makes one.
