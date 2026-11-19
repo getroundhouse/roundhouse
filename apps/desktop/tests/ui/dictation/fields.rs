@@ -9,16 +9,6 @@ use protocol::model::{AnswerSoFar, DecisionDraft, SoFar};
 use super::support::{SCRIPT, ended, hearing, hold_option_space, let_go, live, press_space, ready, ready_with, say};
 use crate::support::{Stack, Ui};
 
-fn say_in_dialog(ui: &mut Ui, engine: &FakeEngine, words: &str) {
-    let (dialog, audio) = (ui.dialog(), engine.saying(words));
-    ui.cx.update(|cx| dialog.read(cx).hear(&audio, cx));
-}
-
-fn say_in_answer(ui: &mut Ui, engine: &FakeEngine, words: &str) {
-    let (transcript, audio) = (ui.transcript().unwrap(), engine.saying(words));
-    ui.cx.update(|cx| transcript.read(cx).question().unwrap().read(cx).hear(&audio, cx));
-}
-
 /// What's chosen and typed on each question asked, as the panel would have it kept, or `None` with nothing.
 fn answer(ui: &Ui) -> Option<Vec<AnswerSoFar>> {
     let draft = ui.cx.read_entity(&ui.transcript().unwrap(), |t, cx| t.question().and_then(|p| p.read(cx).so_far(cx)));
@@ -42,7 +32,7 @@ fn a_dictated_answer_is_selected_kept_and_sent_with_its_last_words(cx: &mut Test
     ui.click("question-other");
 
     hold_option_space(&mut ui);
-    say_in_answer(&mut ui, &engine, "fix the test. / in hub");
+    say(&mut ui, &engine, "fix the test. / in hub");
 
     ui.wait("the dictated answer to be selected and kept", |_| {
         stack
@@ -68,7 +58,7 @@ fn cancelling_an_answer_restores_its_text_without_leaving_the_input(cx: &mut Tes
     ui.click("question-other");
     ui.input("Keep this");
     hold_option_space(&mut ui);
-    say_in_answer(&mut ui, &engine, "fix the test. / in hub");
+    say(&mut ui, &engine, "fix the test. / in hub");
     ui.wait("the first sentence", |ui| answer(ui).is_some_and(|d| d[0].typed.contains("Fix the test.")));
 
     ui.press("alt-escape");
@@ -89,7 +79,7 @@ fn a_question_change_drops_tentative_words_and_the_next_answer_has_its_own_recor
     ui.ask("ask:First?=One/Two|Second?=One/Two");
     ui.click("question-other");
     hold_option_space(&mut ui);
-    say_in_answer(&mut ui, &engine, "fix the test");
+    say(&mut ui, &engine, "fix the test");
     hearing(&mut ui, "fix");
 
     // The recording toolbar replaces the pager; navigation still ends a retained field.
@@ -101,7 +91,7 @@ fn a_question_change_drops_tentative_words_and_the_next_answer_has_its_own_recor
     assert!(live(&mut ui).is_none());
     ui.click("question-other");
     hold_option_space(&mut ui);
-    say_in_answer(&mut ui, &engine, "in hub");
+    say(&mut ui, &engine, "in hub");
     let_go(&mut ui);
 
     ui.wait("the second answer", |ui| answer(ui).is_some_and(|d| d[1].typed == "In hub."));
@@ -121,7 +111,7 @@ fn creating_waits_for_the_final_dictated_prompt(cx: &mut TestAppContext) {
     ui.click("new-workspace-writing");
     ui.input("say:");
     hold_option_space(&mut ui);
-    say_in_dialog(&mut ui, &engine, "fix the test. / in hub");
+    say(&mut ui, &engine, "fix the test. / in hub");
     ui.wait("the first sentence", |ui| ui.dialog_text() == "say: Fix the test.");
     hearing(&mut ui, "in");
 
@@ -145,7 +135,7 @@ fn escape_cancels_first_then_closes_and_reopening_has_no_old_recording(cx: &mut 
     ui.open_new_workspace();
     ui.input("Keep this");
     hold_option_space(&mut ui);
-    say_in_dialog(&mut ui, &engine, "fix the test. / in hub");
+    say(&mut ui, &engine, "fix the test. / in hub");
     ui.wait("the first sentence", |ui| ui.dialog_text().contains("Fix the test."));
 
     ui.press("alt-escape");
@@ -171,7 +161,7 @@ fn a_transcription_failure_keeps_the_dialog_and_its_text_without_creating(cx: &m
     ui.open_new_workspace();
     ui.input("Keep this");
     hold_option_space(&mut ui);
-    say_in_dialog(&mut ui, &engine, "fix the test");
+    say(&mut ui, &engine, "fix the test");
     hearing(&mut ui, "fix");
 
     ui.press("enter");
@@ -197,7 +187,7 @@ fn holding_space_in_a_multiple_answer_keeps_its_choices_and_enter_finishes_live_
     press_space(&mut ui);
     ui.cx.executor().advance_clock(dictation_ui::SPACE_DICTATES_AFTER);
     ui.frame();
-    say_in_answer(&mut ui, &engine, "fix the test");
+    say(&mut ui, &engine, "fix the test");
     hearing(&mut ui, "fix");
     assert!(!ui.has("question-send"));
     ui.press("enter");
@@ -217,7 +207,7 @@ fn enter_can_finish_the_first_sentence_before_any_answer_is_final(cx: &mut TestA
     ui.ask("ask:What next?=One/Two");
     ui.click("question-other");
     hold_option_space(&mut ui);
-    say_in_answer(&mut ui, &engine, "fix the test");
+    say(&mut ui, &engine, "fix the test");
     hearing(&mut ui, "fix");
     assert!(answer(&ui).is_none(), "no final text has selected an answer yet");
     assert!(!ui.has("question-send"));
@@ -237,7 +227,7 @@ fn starting_in_the_dialog_releases_the_composers_recording(cx: &mut TestAppConte
     hearing(&mut ui, "fix");
     ui.open_new_workspace();
     hold_option_space(&mut ui);
-    say_in_dialog(&mut ui, &engine, "in hub");
+    say(&mut ui, &engine, "in hub");
     let_go(&mut ui);
     ui.wait("the dialog's own words", |ui| ui.dialog_text() == "In hub.");
     ui.press("escape");
@@ -268,7 +258,7 @@ fn dictating_feedback_never_turns_an_empty_denial_into_allow(cx: &mut TestAppCon
     ui.click("question-other");
     let_go(&mut ui);
     hold_option_space(&mut ui);
-    say_in_answer(&mut ui, &engine, "fix the test");
+    say(&mut ui, &engine, "fix the test");
     hearing(&mut ui, "fix");
     ui.press("enter");
     ui.wait("the dictated denial", |ui| {
@@ -303,7 +293,7 @@ fn the_dialog_keeps_its_keys_when_the_model_is_ready_and_the_button_can_dictate(
     super::support::type_keys(&mut ui, "a", "a");
     assert_eq!(ui.dialog_text(), "a");
     ui.click("dictate");
-    say_in_dialog(&mut ui, &engine, "fix the test");
+    say(&mut ui, &engine, "fix the test");
     hearing(&mut ui, "fix");
     ui.press("escape");
     assert_eq!(ui.dialog_text(), "a");

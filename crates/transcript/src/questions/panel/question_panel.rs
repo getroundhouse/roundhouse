@@ -39,7 +39,7 @@ pub struct QuestionPanel {
     /// It has answered, so the arrow and the keys wait for the hub rather than answering again.
     pub(super) answered: bool,
     pub(super) dictation_enabled: bool,
-    pub(super) after_dictation: Option<super::dictating::Then>,
+    pub(super) after_dictation: dictation_ui::Pending<super::dictating::Then>,
 }
 
 /// One of the questions, and what's been chosen on it.
@@ -88,7 +88,7 @@ impl QuestionPanel {
             quiet_until: cx.background_executor().now() + SETTLE,
             answered: false,
             dictation_enabled: false,
-            after_dictation: None,
+            after_dictation: dictation_ui::Pending::default(),
         }
     }
 

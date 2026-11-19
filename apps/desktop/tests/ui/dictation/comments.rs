@@ -2,7 +2,7 @@
 
 use gpui_kit::{AppContext as _, Focusable as _, TestAppContext};
 
-use super::support::{hearing, hold_option_space, let_go, live, ready};
+use super::support::{hear, hearing, hold_option_space, let_go, live, ready};
 use crate::support::{Stack, Ui};
 
 #[gpui_kit::test]
@@ -18,7 +18,7 @@ fn a_comment_can_be_dictated_cancelled_and_saved_with_its_last_words(cx: &mut Te
     ui.input("Please");
     hold_option_space(&mut ui);
     let audio = engine.saying("fix the test. / in hub");
-    ui.cx.update(|cx| diff.file.read(cx).hear(&audio, cx));
+    hear(&mut ui, &audio);
     hearing(&mut ui, "in");
     assert!(!ui.has("save-comment") && !ui.has("cancel-comment"));
 
@@ -27,7 +27,7 @@ fn a_comment_can_be_dictated_cancelled_and_saved_with_its_last_words(cx: &mut Te
     assert_eq!(ui.cx.read_entity(&diff.file, |f, cx| f.writing(cx).unwrap().text), "Please");
     assert!(ui.has("save-comment"));
     hold_option_space(&mut ui);
-    ui.cx.update(|cx| diff.file.read(cx).hear(&audio, cx));
+    hear(&mut ui, &audio);
     hearing(&mut ui, "in");
     ui.press("enter");
 
@@ -49,7 +49,7 @@ fn hiding_the_diff_ends_its_recording_and_keeps_only_final_text(cx: &mut TestApp
     ui.start_comment(&diff, "a.txt", 2);
     hold_option_space(&mut ui);
     let audio = engine.saying("fix the test. / in hub");
-    ui.cx.update(|cx| diff.file.read(cx).hear(&audio, cx));
+    hear(&mut ui, &audio);
     hearing(&mut ui, "in");
 
     ui.press("secondary-w");
@@ -75,7 +75,7 @@ fn a_refresh_that_removes_the_diff_ends_dictation_in_its_retained_comment(cx: &m
     ui.start_comment(&diff, "a.txt", 2);
     hold_option_space(&mut ui);
     let audio = engine.saying("fix the test. / in hub");
-    ui.cx.update(|cx| diff.file.read(cx).hear(&audio, cx));
+    hear(&mut ui, &audio);
     hearing(&mut ui, "in");
 
     std::fs::write(&path, "one\n").unwrap();
@@ -110,7 +110,7 @@ fn a_refresh_that_removes_the_diff_ends_dictation_in_its_retained_comment(cx: &m
         ui.cx.read_entity(&diff.file, |f, cx| f.draft.as_ref().unwrap().dictation.read(cx).is_dictating()),
         "the first press after the comment returns starts recording"
     );
-    ui.cx.update(|cx| diff.file.read(cx).hear(&audio, cx));
+    hear(&mut ui, &audio);
     hearing(&mut ui, "in");
     ui.press("alt-escape");
 }

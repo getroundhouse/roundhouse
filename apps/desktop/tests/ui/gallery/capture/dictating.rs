@@ -9,7 +9,7 @@ use dictation::model::{ModelFile, ModelFiles};
 use fetching::serving::{Reply, serve};
 use gpui_kit::test::TestWindowExt as _;
 
-use super::super::steps::DictationTarget;
+use super::super::steps::DictateWith;
 use super::Driver;
 use crate::support::made_up_model::{made_up, put};
 
@@ -21,16 +21,16 @@ const OTHER_HALF: ModelFile =
 const MODEL: ModelFiles = ModelFiles { repository: "test", revision: "made-up", files: &[HALF, OTHER_HALF] };
 
 impl Driver {
-    /// Dictates `said` from the microphone button, and waits for the line under what's typed to show `shows`.
-    pub(super) fn dictate(&mut self, into: &DictationTarget, said: &str, shows: &str) {
+    /// Dictates `said`, starting as `with` says, and waits for the line under what's typed to show `shows`.
+    pub(super) fn dictate(&mut self, with: &DictateWith, said: &str, shows: &str) {
         let words: Vec<&str> = said.split(' ').collect();
         let engine = FakeEngine::new(&words);
         let audio = engine.saying(said);
         self.cx.update(|cx| desktop::dictating::use_engine(engine, cx));
         self.until("dictation to be ready", |d| d.cx.update(|cx| desktop::dictating::is_ready(cx)));
-        match into {
-            DictationTarget::Composer => self.click("dictate"),
-            DictationTarget::NewWorkspace | DictationTarget::Answer | DictationTarget::Comment => {
+        match with {
+            DictateWith::Microphone => self.click("dictate"),
+            DictateWith::Keys => {
                 self.cx
                     .update_window(self.handle, |_, window, cx| {
                         window.dispatch_event(
@@ -45,19 +45,7 @@ impl Driver {
                     .unwrap();
             }
         }
-        match into {
-            DictationTarget::Composer => self.update_pane(|pane, cx| pane.hear(&audio, cx)),
-            DictationTarget::NewWorkspace => {
-                let view = self.view.clone();
-                self.cx.update(|cx| view.read(cx).new_workspace.as_ref().unwrap().read(cx).hear(&audio, cx));
-            }
-            DictationTarget::Comment => self.update_pane(|pane, cx| {
-                pane.diff.as_ref().unwrap().file.read(cx).hear(&audio, cx);
-            }),
-            DictationTarget::Answer => self.update_pane(|pane, cx| {
-                pane.transcript().unwrap().read(cx).question().unwrap().read(cx).hear(&audio, cx);
-            }),
-        }
+        self.cx.update(|cx| dictation_ui::hear(&audio, cx));
         self.until(&format!("the live text to be {shows:?}"), |d| {
             let live =
                 |window: &gpui_kit::Window| window.try_find(LIVE_LINE).and_then(|l| l.label().map(str::to_string));

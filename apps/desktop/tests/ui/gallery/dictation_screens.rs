@@ -8,7 +8,7 @@ use desktop::workspace_pane::{MICROPHONE, TURN_ON};
 
 use super::frame::{COMPOSER, DICTATION_CARD, Frame, QUESTION};
 use super::screens::FOCUS;
-use super::steps::{DictationTarget, Screen, Step};
+use super::steps::{DictateWith, Screen, Step};
 use super::worlds::{chat_world, conversation};
 use super::{chats, question_chats};
 use protocol::model::SessionStatus;
@@ -25,7 +25,7 @@ pub(crate) const SCREENS: &[Screen] = &[
             Step::StartComment(35),
             Step::Type("Could we keep the status visible?"),
             Step::Dictate {
-                into: DictationTarget::Comment,
+                with: DictateWith::Keys,
                 said: "let the name shrink before hiding the indicator",
                 shows: "let the name shrink before hiding the",
             },
@@ -41,7 +41,7 @@ pub(crate) const SCREENS: &[Screen] = &[
             Step::Select(FOCUS),
             Step::Type("In the sidebar,"),
             Step::Dictate {
-                into: DictationTarget::Composer,
+                with: DictateWith::Microphone,
                 said: "let the name shrink and keep the badge",
                 shows: "let the name shrink and keep the",
             },
@@ -58,7 +58,7 @@ pub(crate) const SCREENS: &[Screen] = &[
             Step::Click("new-in-repo-1"),
             Step::Type("In the sidebar,"),
             Step::Dictate {
-                into: DictationTarget::NewWorkspace,
+                with: DictateWith::Keys,
                 said: "let the name shrink and keep the badge",
                 shows: "let the name shrink and keep the",
             },
@@ -75,7 +75,7 @@ pub(crate) const SCREENS: &[Screen] = &[
             Step::Click("question-other"),
             Step::Type("Keep it in the hub."),
             Step::Dictate {
-                into: DictationTarget::Answer,
+                with: DictateWith::Keys,
                 said: "let every client read the same state",
                 shows: "let every client read the same",
             },
@@ -93,7 +93,7 @@ pub(crate) const SCREENS: &[Screen] = &[
             Step::Click("question-answer-0"),
             Step::Click("question-other"),
             Step::Dictate {
-                into: DictationTarget::Answer,
+                with: DictateWith::Keys,
                 said: "show merged until the workspace is archived",
                 shows: "show merged until the workspace is",
             },
@@ -109,7 +109,7 @@ pub(crate) const SCREENS: &[Screen] = &[
             Step::Select(FOCUS),
             Step::Click("question-other"),
             Step::Dictate {
-                into: DictationTarget::Answer,
+                with: DictateWith::Keys,
                 said: "read how the sidebar gets its records first",
                 shows: "read how the sidebar gets its records",
             },
@@ -125,7 +125,7 @@ pub(crate) const SCREENS: &[Screen] = &[
             Step::Select(FOCUS),
             Step::Click("question-other"),
             Step::Dictate {
-                into: DictationTarget::Answer,
+                with: DictateWith::Keys,
                 said: "keep the last state until the hub returns",
                 shows: "keep the last state until the hub",
             },

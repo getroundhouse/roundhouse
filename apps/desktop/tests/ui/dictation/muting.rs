@@ -1,17 +1,16 @@
 //! Mute sound while dictating, once it's chosen, mutes the sound output from when dictating starts, which for held
 //! Space is once it dictates rather than once it listens, so a press let go of before then doesn't cut what's playing.
 
-use gpui_kit::{AppContext as _, TestAppContext};
+use gpui_kit::TestAppContext;
 
 use super::support::{dictating, hold_option_space, let_go, press_space, ready};
 use crate::settings::open_settings;
 use crate::support::{Stack, Ui};
 use desktop::workspace_pane::{SPACE_DICTATES_AFTER, SPACE_LISTENS_AFTER};
 
-/// Whether what's being dictated into the pane showing has the sound output muted.
+/// Whether what's being dictated has the sound output muted.
 fn muted(ui: &mut Ui) -> bool {
-    let pane = ui.pane().unwrap();
-    ui.cx.read_entity(&pane, desktop::workspace_pane::WorkspacePane::mutes_output)
+    ui.cx.read(dictation_ui::mutes_output_while_dictating)
 }
 
 /// Chooses Mute sound while dictating in Settings, and goes back to the composer.

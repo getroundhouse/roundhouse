@@ -20,9 +20,7 @@ fn composer_dialog_and_question_answers_pass_their_surrounding_terms_as_hints(cx
     ui.open_new_workspace();
     ui.click("new-workspace-writing");
     hold_option_space(&mut ui);
-    let dialog = ui.dialog();
-    let audio = engine.saying("use sqlite in tokio.");
-    ui.cx.update(|cx| dialog.read(cx).hear(&audio, cx));
+    say(&mut ui, &engine, "use sqlite in tokio.");
     ui.wait("the dialog's live text", |ui| ui.has("dictation-live"));
     let_go(&mut ui);
     ui.wait("the dialog's dictated text", |ui| ui.dialog_text() == "Use sqlite in tokio.");
@@ -68,8 +66,7 @@ fn composer_dialog_and_question_answers_pass_their_surrounding_terms_as_hints(cx
     ui.click("question-other");
     hold_option_space(&mut ui);
     let transcript = ui.transcript().unwrap();
-    let answer_audio = engine.saying("use sqlite in tokio.");
-    ui.cx.update(|cx| transcript.read(cx).question().unwrap().read(cx).hear(&answer_audio, cx));
+    say(&mut ui, &engine, "use sqlite in tokio.");
     ui.wait("the answer's live text", |ui| ui.has("dictation-live"));
     let_go(&mut ui);
     ui.wait("question answer with both SQLite and Tokio hinted", |ui| {
