@@ -3,10 +3,12 @@ use protocol::capability::settings::Effort;
 use protocol::capability::settings::Settings;
 use protocol::model::{AgentDescription, AgentKind, ModelName};
 
-// A compiled snapshot of `agy` 1.5.9's native catalog: the Gemini models it offers under both Google OAuth and
-// `gemini-api-key`, then the Claude models it offers only under Google OAuth. Refresh it with the CLI observations in
-// docs/antigravity-cli.md.
-const MODELS: [(&str, &str, &[Effort], Effort); 6] = [
+// A compiled snapshot of `agy` 1.5.10's native catalog: the Gemini models it offers under both Google OAuth and
+// `gemini-api-key`, in its order, then the Claude models it offers only under Google OAuth. Refresh it with the CLI
+// observations in docs/antigravity-cli.md.
+const MODELS: [(&str, &str, &[Effort], Effort); 7] = [
+    // `agy models` lists Neon's High level first.
+    ("gemini-4-neon", "Gemini 4 Neon", &[Effort::Low, Effort::Medium, Effort::High, Effort::Xhigh], Effort::High),
     ("gemini-4-carbon", "Gemini 4 Carbon", &[Effort::Low, Effort::Medium, Effort::High], Effort::Medium),
     (
         "gemini-4-hydrogen",
@@ -65,17 +67,20 @@ mod tests {
     #[test]
     fn the_catalog_keeps_each_models_efforts_and_defaults() {
         let agent = description();
-        assert_eq!(agent.defaults().model, Some(ModelName::named("gemini-4-carbon")));
-        assert_eq!(agent.defaults().effort, Some(Effort::Medium));
+        assert_eq!(agent.defaults().model, Some(ModelName::named("gemini-4-neon")));
+        assert_eq!(agent.defaults().effort, Some(Effort::High));
+        let neon = ModelName::named("gemini-4-neon");
         let hydrogen = ModelName::named("gemini-4-hydrogen");
         let carbon = ModelName::named("gemini-4-carbon");
         let opus = ModelName::named("claude-opus-5-5");
         let sonnet = ModelName::named("claude-sonnet-5-5");
+        assert_eq!(agent.efforts_for(&neon), [Effort::Low, Effort::Medium, Effort::High, Effort::Xhigh]);
         assert!(agent.efforts_for(&hydrogen).contains(&Effort::Xhigh));
         assert!(!agent.efforts_for(&carbon).contains(&Effort::Xhigh));
         assert_eq!(agent.efforts_for(&opus), [Effort::Low, Effort::Medium, Effort::High]);
         assert_eq!(agent.efforts_for(&sonnet), [Effort::Low, Effort::Medium, Effort::High]);
         assert_eq!(agent.effort_for_choice(&carbon, Some(&Effort::Xhigh)), Effort::Medium);
+        assert_eq!(agent.effort_for_choice(&neon, Some(&Effort::Xhigh)), Effort::Xhigh);
         assert_eq!(agent.effort_for_choice(&opus, Some(&Effort::Xhigh)), Effort::Medium);
         assert_eq!(agent.effort_for_choice(&sonnet, Some(&Effort::High)), Effort::High);
         assert_eq!(agent.effort_for_choice(&hydrogen, Some(&Effort::Low)), Effort::Low);

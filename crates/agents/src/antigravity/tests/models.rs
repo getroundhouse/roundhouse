@@ -63,7 +63,8 @@ async fn a_chat_on_claude_opus_runs_it_under_a_google_account() {
     };
     assert_eq!(model.as_deref(), Some("claude-opus-5-5"));
     assert_eq!(set(&h, "model"), ["claude-opus-5-5"]);
-    assert_eq!(set(&h, "thought_level"), ["medium"]);
+    // The catalog's default effort, which Opus offers too.
+    assert_eq!(set(&h, "thought_level"), ["high"]);
     agent.stop().await;
 }
 
