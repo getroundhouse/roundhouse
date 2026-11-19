@@ -305,7 +305,6 @@ impl AllFiles {
 
 impl Render for AllFiles {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let muted = look::colors(cx).text_muted;
         let truncated = matches!(&self.listing, Listing::Listed(listed) if listed.truncated);
         let body = match &self.listing {
             Listing::Loading => look::nothing_to_show("Loading…").into_any_element(),
@@ -325,15 +324,7 @@ impl Render for AllFiles {
         v_flex()
             .size_full()
             .when(truncated, |d| {
-                d.child(
-                    div()
-                        .flex_none()
-                        .px(look::Space::Medium)
-                        .py(look::Space::XSmall)
-                        .typeset(look::Type::Detail)
-                        .text_color(muted)
-                        .child("There are so many files that some aren't shown"),
-                )
+                d.child(look::banner(look::BannerKind::Note).child("There are so many files that some aren't shown"))
             })
             .child(body)
     }

@@ -24,8 +24,8 @@ named! {
     }
 }
 
-/// How much of its colour a card in the chat that's in one is washed with, over the pane.
-const WASH: f32 = 0.09;
+/// How much of its colour a card in the chat that's in one is washed with, over the pane, as a banner is.
+pub(crate) const WASH: f32 = 0.09;
 /// How much of its colour a line on a card washed in one is, so it reads as the card's own rather than a grey stain.
 const LINE_ON_A_WASH: f32 = 0.2;
 

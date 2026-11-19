@@ -150,15 +150,12 @@ pub(super) fn button(moves: &Moves, hold: &HoldOpen) -> AnyElement {
         .into_any_element()
 }
 
-/// `Move`, for a line above the composer, which opens the same menu above it. It stands out past its own room on the
-/// right, so the line's words end as far in as they start, as the push line's button does.
-pub(in super::super) fn line_button(moves: &Moves) -> AnyElement {
+/// `Move`, for the banner above the composer, which opens the same menu above it.
+pub(in super::super) fn line_button(moves: &Moves) -> look::MenuButton {
     let moves = moves.clone();
     look::button("reserve-move", look::ButtonKind::Borderless, look::ControlSize::Small, "Move")
-        .stands_out(&[look::Side::Right])
         .off(moves.off)
         .menu(Anchor::BottomRight, move |menu, _, _| menu_of(&moves, menu))
-        .into_any_element()
 }
 
 /// The accounts, each with how much of its week is left, and a check on the one the chat is on. One whose login

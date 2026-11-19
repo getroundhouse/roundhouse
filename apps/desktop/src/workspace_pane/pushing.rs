@@ -3,11 +3,8 @@
 //! nothing.
 
 use gpui_kit::assets::IconName as Lucide;
-use gpui_kit::component::h_flex;
-use gpui_kit::{AnyElement, Context, HighlightStyle, IntoElement as _, ParentElement as _, SharedString, Styled as _};
-use gpui_kit::{StyledText, div};
-use look::Lined as _;
-use look::{InRegion as _, Region, Typeset as _};
+use gpui_kit::{AnyElement, Context, IntoElement as _, ParentElement as _};
+use look::Region;
 use protocol::model::{GithubRepositoryName, GithubUsername, InstalledApp, Reach};
 
 use super::{PaneEvent, WorkspacePane};
@@ -171,36 +168,19 @@ impl WorkspacePane {
     /// the default's app, when it's done there.
     pub(super) fn push_line(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
         let Said { wrong, then, install_at, in_settings } = said(self.shown.github_reach()?)?;
-        let colors = look::colors(cx);
-        // One paragraph, so what to do wraps on from what's wrong, which only its colour sets apart.
-        let warned = (0..wrong.len(), HighlightStyle { color: Some(colors.warning), ..HighlightStyle::default() });
-        let words = StyledText::new(SharedString::from(format!("{wrong} {then}"))).with_highlights([warned]);
+        // One paragraph, so what to do wraps on from what's wrong.
+        let words = format!("{wrong} {then}");
         let size = look::ControlSize::Small;
         let install = install_at.map(|page| {
             look::button(INSTALL_APP, look::ButtonKind::Borderless, size, "Install on GitHub")
                 .icon(Lucide::ExternalLink)
                 .on_click(move |_, _, cx| cx.open_url(&page))
         });
-        Some(
-            h_flex()
-                .region(Region::PushLine)
-                .flex_none()
-                .w_full()
-                .px(look::Space::Medium)
-                .py(look::Space::XSmall)
-                .gap(look::Space::Small)
-                .line_over(cx)
-                .typeset(look::Type::Detail)
-                .text_color(colors.text_muted)
-                .child(div().flex_1().min_w_0().child(words))
-                .children(install)
-                // Out past its own room, so its words end as far in as the line's start, as the setup line's do.
-                .children(in_settings.then(|| {
-                    look::button(OPEN_GIT, look::ButtonKind::Borderless, size, "Open Git")
-                        .stands_out(&[look::Side::Right])
-                        .on_click(cx.listener(|_, _, _, cx| cx.emit(PaneEvent::OpenGit)))
-                }))
-                .into_any_element(),
-        )
+        let open_git = in_settings.then(|| {
+            look::button(OPEN_GIT, look::ButtonKind::Borderless, size, "Open Git")
+                .on_click(cx.listener(|_, _, _, cx| cx.emit(PaneEvent::OpenGit)))
+        });
+        let banner = look::banner(look::BannerKind::Warning).region(Region::PushLine).child(words);
+        Some(install.into_iter().chain(open_git).fold(banner, look::Banner::answer).into_any_element())
     }
 }

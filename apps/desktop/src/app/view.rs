@@ -3,10 +3,10 @@
 use gpui_kit::component::{h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyElement, Context, Div, Entity, Hsla, InteractiveElement, IntoElement, MouseButton, ParentElement, Render,
-    SharedString, Stateful, StatefulInteractiveElement, Styled, TestSupportExt as _, Window, div,
+    AnyElement, Context, Div, Entity, InteractiveElement, IntoElement, ParentElement, Render, SharedString, Stateful,
+    Styled, TestSupportExt as _, Window, div,
 };
-use look::{Hand as _, Typeset as _};
+use look::Typeset as _;
 use protocol::client::HubStatus;
 
 use super::restarts::restart_note;
@@ -45,7 +45,6 @@ impl Render for AppView {
                 .children(corner::menus(self, cx))
                 .children(window_buttons::of_windows(window, cx));
         }
-        let error_colour = look::colors(cx).error;
         let main = self.beside_the_sidebar(home, cx);
         // Built only while some of it shows.
         let sidebar = Side::Left.shown(cx).map(|shown| {
@@ -60,7 +59,7 @@ impl Render for AppView {
                     .flex_1()
                     .min_w_0()
                     .h_full()
-                    .when_some(self.error.clone(), |d, error| d.child(error_bar(error, error_colour, cx)))
+                    .when_some(self.error.clone(), |d, error| d.child(error_bar(error, cx)))
                     .child(div().flex_1().min_h_0().child(main)),
             )
             .children(corner::menus(self, cx))
@@ -179,27 +178,20 @@ impl AppView {
 }
 
 /// Above the header, in the strip along the window's top, and clear of the window's buttons at both ends.
-fn error_bar(error: String, error_colour: Hsla, cx: &mut Context<AppView>) -> impl IntoElement {
+fn error_bar(error: String, cx: &mut Context<AppView>) -> impl IntoElement {
     let clear = sides::clearance(AtTheTop::AboveTheHeader, cx);
-    h_flex()
+    look::banner(look::BannerKind::Error)
         .id("error-bar")
-        .flex_none()
-        .pl(look::Space::Medium.size() + clear.start)
-        .pr(look::Space::Medium.size() + clear.end)
-        .py(look::Space::Small)
-        .gap(look::Space::Small)
-        .bg(error_colour.opacity(0.15))
-        .typeset(look::Type::Body)
-        .text_color(error_colour)
-        .hand()
-        // It can sit in the strip that moves the window, and it's a button, so a press here is its own.
-        .on_mouse_down(MouseButton::Left, |_, window, _| window.prevent_default())
-        .on_click(cx.listener(|t, _, _, cx| {
-            t.error = None;
-            cx.notify();
-        }))
-        .child(div().id("error-text").flex_1().min_w_0().child(error).test_support())
-        .child(div().flex_none().child("Dismiss"))
+        .clear(clear.start, clear.end)
+        .child(div().id("error-text").child(error).test_support())
+        .answer(
+            look::button("dismiss-error", look::ButtonKind::Borderless, look::ControlSize::Small, "Dismiss").on_click(
+                cx.listener(|t, _, _, cx| {
+                    t.error = None;
+                    cx.notify();
+                }),
+            ),
+        )
 }
 
 fn remote_failure_words(hub_name: &str, failure: &ConnectionFailure) -> (String, String, bool) {

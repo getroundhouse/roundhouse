@@ -16,7 +16,7 @@ named! {
 
 impl BarKind {
     /// How far in from its start what it holds starts.
-    pub(super) fn start(self) -> Space {
+    pub(crate) fn start(self) -> Space {
         match self {
             BarKind::Words => Space::Large,
             BarKind::Tabs => Space::XSmall,
@@ -24,7 +24,7 @@ impl BarKind {
     }
 
     /// How far in from its end what it holds ends: a button's room in from it, whatever it holds.
-    pub(super) const END: Space = Space::Medium;
+    pub(crate) const END: Space = Space::Medium;
 
     /// How far apart what it holds is.
     pub(super) fn gap(self) -> Space {

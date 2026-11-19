@@ -43,7 +43,7 @@ The chat carries on under the account you chose from its next prompt, and stays 
 
 ## When an account uses its reserve
 
-If you've [reserved part of an account's week](../reference/settings.md#reserve-part-of-an-accounts-week), a chat on it says so once the week is down to what's reserved: a line above the composer, in amber, with **Move**, and the week's bar beside Send turns amber too. Nothing stops the chat. Move it if you want to keep the reserve for yourself, or carry on.
+If you've [reserved part of an account's week](../reference/settings.md#reserve-part-of-an-accounts-week), a chat on it says so once the week is down to what's reserved: a strip above the composer, washed in amber, with **Move**, and the week's bar beside Send turns amber too. Nothing stops the chat. Move it if you want to keep the reserve for yourself, or carry on.
 
 ![The line above the composer saying the account is using its reserve](../../spec/screens/usage-in-reserve.png)
 
