@@ -233,8 +233,8 @@ async fn stale_config_option_update_from_set_mode_preserves_model_and_effort_cho
                     {
                         "result": {
                             "configOptions": [
-                                {"id": "model", "currentValue": "gemini-4-carbon", "options": [{"value": "gemini-4-carbon", "name": "Gemini 4 Carbon"}]},
-                                {"id": "thought_level", "currentValue": "high", "options": [{"value": "low", "name": "Low"}, {"value": "medium", "name": "Medium"}, {"value": "high", "name": "High"}]}
+                                {"id": "model", "currentValue": "gemini-4-neon", "options": [{"value": "gemini-4-neon", "name": "Gemini 4 Neon"}]},
+                                {"id": "thought_level", "currentValue": "high", "options": [{"value": "low", "name": "Low"}, {"value": "medium", "name": "Medium"}, {"value": "high", "name": "High"}, {"value": "xhigh", "name": "XHigh"}]}
                             ]
                         }
                     },
@@ -264,11 +264,11 @@ async fn stale_config_option_update_from_set_mode_preserves_model_and_effort_cho
             break model;
         }
     };
-    assert_eq!(init_model.as_deref(), Some("gemini-4-carbon"));
+    assert_eq!(init_model.as_deref(), Some("gemini-4-neon"));
     agent
         .control(&Control::Change(Settings { effort: Some(Effort::Medium), ..Settings::default() }))
         .await
-        .expect("stale gemini-3.1-pro config_option_update must not hide medium effort on gemini-4-carbon");
+        .expect("stale gemini-3.1-pro config_option_update must not hide medium effort on gemini-4-neon");
     agent.stop().await;
 }
 

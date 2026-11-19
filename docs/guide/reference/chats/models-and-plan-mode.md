@@ -18,11 +18,11 @@ One picker, in the composer's bottom row, chooses both, since how hard the agent
 |---|---|
 | **Claude models** | `fable`, `opus`, `sonnet` and `haiku` |
 | **Codex models** | The models your Codex CLI offers |
-| **Antigravity models** | Gemini 4 Carbon, Hydrogen and Argon; Gemini 3.8 Flash; Claude Opus 5.5 and Sonnet 5.5, when Antigravity is signed in with a Google account rather than a Gemini API key |
+| **Antigravity models** | Gemini 4 Neon, Carbon, Hydrogen and Argon; Gemini 3.8 Flash; Claude Opus 5.5 and Sonnet 5.5, when Antigravity is signed in with a Google account rather than a Gemini API key |
 | **Effort** | The levels offered by the selected model |
 
 - **Claude’s models are aliases,** which the Claude CLI resolves to its newest of each, so a new model arrives without an update to Roundhouse.
-- **A Claude chat nobody has chosen for runs Opus at Extra high; Codex uses its discovered defaults; Antigravity runs Gemini 4 Carbon at Medium.**
+- **A Claude chat nobody has chosen for runs Opus at Extra high; Codex uses its discovered defaults; Antigravity runs Gemini 4 Neon at High.**
 - **Each chat keeps its selected model.** When the model offers effort levels, the chat keeps the selected level too.
 - **A new chat with the same agent keeps the model and effort of the chat it was opened from.** Switching agents uses that agent’s defaults.
 - **A new effort reaches an agent that's already working without stopping it.** Codex and Antigravity accept model, mode and effort changes for their next turn.

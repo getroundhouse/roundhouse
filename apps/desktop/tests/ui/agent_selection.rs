@@ -42,7 +42,7 @@ fn cases() -> [Choosing; 2] {
         Choosing {
             agent: AgentKind::Antigravity,
             item: "New Antigravity chat",
-            starts_on: ("gemini-4-carbon", Effort::Medium),
+            starts_on: ("gemini-4-neon", Effort::High),
             picked: vec![
                 picked("Gemini 4 Hydrogen", Some("gemini-4-hydrogen"), None),
                 picked("Extra high", None, Some(Effort::Xhigh)),
