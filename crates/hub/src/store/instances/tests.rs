@@ -1,6 +1,7 @@
 use protocol::model::{Workspace, WorkspaceStatus};
 
 use super::*;
+use crate::store::WorkspacePlacement;
 use crate::store::tests::store_with_session;
 
 /// A workspace being made, named and given an instance of its own, made `later` ms after `w`.
@@ -12,7 +13,7 @@ fn being_made(store: &Store, name: &str, later: i64) -> Workspace {
     workspace.instance_id = format!("{name}-instance").as_str().into();
     workspace.provider = "incus".into();
     workspace.status = WorkspaceStatus::Creating;
-    store.insert_workspace(&workspace, None).unwrap();
+    store.insert_workspace(&workspace, &WorkspacePlacement::local_checkout("/repo"), None).unwrap();
     workspace
 }
 
@@ -75,7 +76,7 @@ fn a_workspace_given_another_workspaces_instance_isnt_made() {
     workspace.id = "birch".into();
     workspace.name = "birch".into();
 
-    let made = store.insert_workspace(&workspace, None);
+    let made = store.insert_workspace(&workspace, &WorkspacePlacement::local_checkout("/repo"), None);
 
     assert!(made.is_err(), "{made:?}");
     assert!(store.get_workspace(&"birch".into()).is_err(), "nor is the workspace recorded");

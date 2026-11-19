@@ -3,10 +3,9 @@
 
 use protocol::client::{ApiError, ErrorCode, HubNotice};
 use protocol::model::{Repo, RepoId, Workspace};
-use protocol::worker::{NamesGitHas, NamesGitHasReply};
+use protocol::worker::{NamesGitHas, NamesGitHasReply, RepoSource};
 
 use crate::hub::Hub;
-use crate::hub::repo_source::repo_source;
 use crate::names::Picked;
 use crate::worker_link::WorkerLink;
 
@@ -68,10 +67,11 @@ impl Hub {
         &self,
         link: &WorkerLink,
         repo: &Repo,
+        source: &RepoSource,
         name: &str,
         names: &mut Names,
     ) -> Result<(), ApiError> {
-        let asking = NamesGitHas { repo_name: repo.name.clone(), source: repo_source(repo)? };
+        let asking = NamesGitHas { repo_name: repo.name.clone(), source: source.clone() };
         let NamesGitHasReply { names: said } = link.call(asking).await?;
         names.git_has = said.iter().map(|had| had.to_ascii_lowercase()).collect();
         if names.git_has.contains(&name.to_ascii_lowercase()) {

@@ -2,14 +2,13 @@
 //! Each keeps its branch and its record.
 
 use protocol::client::{ApiError, ErrorCode};
-use protocol::model::{ChildWorktree, GitStatus, Repo, WorkspaceId};
-use protocol::worker::{self, RemoveWorkspace, WorktreeRemoval, WorktreeRemoved, WouldLose};
+use protocol::model::{ChildWorktree, GitStatus, WorkspaceId};
+use protocol::worker::{self, RemoveWorkspace, RepoSource, WorktreeRemoval, WorktreeRemoved, WouldLose};
 use tracing::warn;
 
 use super::git_status;
 use crate::hub::Hub;
 use crate::hub::ready::ReadyWorkspace;
-use crate::hub::repo_source::repo_source;
 use crate::worker_link::WorkerLink;
 
 impl Hub {
@@ -33,8 +32,8 @@ impl Hub {
         if !force && let Some(status) = last.clone().filter(|status| status.loss_if_removed().is_some()) {
             return Ok(WorktreeRemoval::WouldLose(WouldLose { status }));
         }
-        let repo = self.repo_of(ready.workspace()).await?;
-        let worktree = self.remove_one(&repo, link, ready.path(), &child, force).await?;
+        let source = self.workspace_placement(ready.id()).await?.source;
+        let worktree = self.remove_one(&source, link, ready.path(), &child, force).await?;
         Ok(WorktreeRemoval::Removed(WorktreeRemoved { worktree, last }))
     }
 
@@ -59,14 +58,14 @@ impl Hub {
     /// can't keep the workspace from being archived.
     pub(in crate::hub) async fn remove_children(
         &self,
-        repo: &Repo,
+        source: &RepoSource,
         link: &WorkerLink,
         own: &str,
         children: &[ChildWorktree],
         force: bool,
     ) -> Result<(), ApiError> {
         for child in children {
-            match self.remove_one(repo, link, own, child, force).await {
+            match self.remove_one(source, link, own, child, force).await {
                 Ok(_) => {}
                 Err(e) if force => warn!(path = child.path, "couldn't remove another worktree: {}", e.message),
                 Err(e) => {
@@ -82,14 +81,14 @@ impl Hub {
     /// Has the worker remove `child`, beside the workspace's own worktree at `own`, and records it removed.
     async fn remove_one(
         &self,
-        repo: &Repo,
+        source: &RepoSource,
         link: &WorkerLink,
         own: &str,
         child: &ChildWorktree,
         force: bool,
     ) -> Result<ChildWorktree, ApiError> {
         let removing =
-            RemoveWorkspace { source: repo_source(repo)?, path: child.path.clone(), force, own: Some(own.into()) };
+            RemoveWorkspace { source: source.clone(), path: child.path.clone(), force, own: Some(own.into()) };
         link.call(removing).await?;
         let id = child.id.clone();
         self.blocking(move |store| store.child_removed(&id)).await

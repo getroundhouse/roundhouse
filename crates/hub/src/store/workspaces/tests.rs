@@ -4,7 +4,7 @@ use protocol::model::{
 };
 
 use super::super::tests::{idle_session, store_with_session, workspace_w};
-use super::super::{Ended, Made, Move, now_ms};
+use super::super::{Ended, Made, Move, WorkspacePlacement, now_ms};
 use super::super::{Store, StoredSession, older, schema};
 
 fn open() -> PullRequest {
@@ -78,7 +78,7 @@ fn workspace_names_are_unique_per_repo() {
     let store = store_with_session(dir.path());
     let mut duplicate = store.get_workspace(&"w".into()).unwrap();
     duplicate.id = "w2".into();
-    assert_eq!(store.insert_workspace(&duplicate, None).unwrap(), None);
+    assert_eq!(store.insert_workspace(&duplicate, &WorkspacePlacement::local_checkout("/repo"), None).unwrap(), None);
 }
 
 /// A workspace on its way keeps its ID through a new name, so every client's note for it stays where it is.
@@ -96,7 +96,11 @@ fn only_a_workspace_being_made_takes_a_new_name_and_only_one_nobody_else_has() {
         status: WorkspaceStatus::Creating,
         ..before.clone()
     };
-    let Some(Made::New(made)) = store.insert_workspace(&workspace, None).unwrap() else { panic!("not made") };
+    let Some(Made::New(made)) =
+        store.insert_workspace(&workspace, &WorkspacePlacement::local_checkout("/repo"), None).unwrap()
+    else {
+        panic!("not made")
+    };
 
     let renamed = store.rename_unready_workspace(&making, "cedar", &"cedar/start".into()).unwrap().unwrap();
     let taken = store.rename_unready_workspace(&making, "alder", &"alder/start".into()).unwrap();
@@ -202,7 +206,13 @@ fn records_are_listed_in_the_order_protocol_orders_them() {
         store.add_repo(&id.into(), name, &format!("/{id}"), 0).unwrap();
     }
     for (id, at) in [("w-b", 5), ("w-a", 5), ("w-c", 1)] {
-        store.insert_workspace(&Workspace { created_at_ms: at, ..protocol::fixtures::workspace(id) }, None).unwrap();
+        store
+            .insert_workspace(
+                &Workspace { created_at_ms: at, ..protocol::fixtures::workspace(id) },
+                &WorkspacePlacement::local_checkout("/repo"),
+                None,
+            )
+            .unwrap();
         let session = idle_session(at);
         let session = StoredSession { session: Session { id: format!("s-{id}").into(), ..session.session }, ..session };
         store.insert_session(&session, None).unwrap();

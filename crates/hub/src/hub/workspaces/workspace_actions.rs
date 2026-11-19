@@ -1,39 +1,18 @@
 use super::super::ready::ReadyWorkspace;
-use super::super::repo_source::repo_source;
 use super::super::{Hub, new_id};
 use super::naming;
 use crate::error::{internal, provider_failed};
-use crate::store::{Made, Store, now_ms};
+use crate::store::{Made, Store, WorkspacePlacement, now_ms};
 use naming::{Names, name_taken};
 use protocol::client::{ApiError, ErrorCode, HubNotice};
 use protocol::model::{
     AgentKind, BranchName, ClientRequestId, ProviderName, RecordKey, Repo, RepoId, Rev, SetupStatus, TitleSource,
     Workspace, WorkspaceId, WorkspaceStatus,
 };
-use protocol::worker::{PrepareWorkspace, WorkspaceReady};
+use protocol::worker::{PrepareWorkspace, RepoSource, WorkspaceReady};
 use providers::Provider;
 use std::sync::Arc;
 use tracing::{error, warn};
-
-/// What scripts and agents see, under the names Conductor uses, so that scripts written for it work. The root is the
-/// repository's checkout on the hub's machine, which a repository with none has no root for.
-pub(crate) fn workspace_env(workspace: &Workspace, repo: &Repo) -> Vec<(String, String)> {
-    let base = workspace.base_ref.as_deref().unwrap_or("main");
-    let mut env = vec![
-        ("CONDUCTOR_WORKSPACE_NAME".to_string(), workspace.name.clone()),
-        ("CONDUCTOR_WORKSPACE_ID".to_string(), workspace.id.to_string()),
-        ("CONDUCTOR_DEFAULT_BRANCH".to_string(), base.trim_prefix("origin/").to_string()),
-        ("CONDUCTOR_PORT".to_string(), workspace.port_base.to_string()),
-        ("CONDUCTOR_IS_LOCAL".to_string(), "1".to_string()),
-    ];
-    if let Some(root) = repo.origin.checkout() {
-        env.push(("CONDUCTOR_ROOT_PATH".to_string(), root.to_owned()));
-    }
-    if let Some(path) = &workspace.path {
-        env.push(("CONDUCTOR_WORKSPACE_PATH".to_string(), path.clone()));
-    }
-    env
-}
 
 impl Hub {
     pub(crate) async fn workspace_create(
@@ -69,14 +48,20 @@ impl Hub {
             return Err(ApiError::new(ErrorCode::InvalidRequest, format!("{name} isn't a valid workspace name")));
         }
         let (provider_name, provider) = self.providers.for_new_workspace()?;
+        // Resolve the placement (and refuse an unknown environment or missing remote address) before recording a
+        // workspace or asking the provider for an instance.
+        let placement = self.resolve_workspace_placement(&repo, provider.as_ref()).await?;
         let mut names = Names::new(name);
-        let recorded = self.record_new_workspace(&repo, provider_name, &mut names, client_request_id, first_chat);
+        let recorded =
+            self.record_new_workspace(&repo, provider_name, &placement, &mut names, client_request_id, first_chat);
         let workspace = match recorded.await? {
             Made::New(workspace) => workspace,
             // Sent again while the first was making it.
             Made::Earlier(made) => return Ok(made),
         };
-        let made = self.prepare_new_workspace(&repo, workspace.clone(), &mut names, base_ref, provider.as_ref()).await;
+        let made = self
+            .prepare_new_workspace(&repo, &placement.source, workspace.clone(), &mut names, base_ref, provider.as_ref())
+            .await;
         if made.is_err() {
             self.discard_workspace(&workspace, provider.as_ref()).await;
         }
@@ -92,6 +77,7 @@ impl Hub {
         &self,
         repo: &Repo,
         provider_name: &ProviderName,
+        placement: &WorkspacePlacement,
         names: &mut Names,
         client_request_id: Option<ClientRequestId>,
         first_chat: Option<AgentKind>,
@@ -126,8 +112,8 @@ impl Hub {
         let mut taken = None;
         while let Some(name) = names.next(self, &repo.id).await? {
             (workspace.name, workspace.branch) = (name.clone(), crate::names::start_branch(&name));
-            let (record, request) = (workspace.clone(), client_request_id.clone());
-            match self.blocking(move |store| store.insert_workspace(&record, request.as_ref())).await? {
+            let (record, placement, request) = (workspace.clone(), placement.clone(), client_request_id.clone());
+            match self.blocking(move |store| store.insert_workspace(&record, &placement, request.as_ref())).await? {
                 Some(Made::New(made)) => {
                     if let Some(agent) = first_chat {
                         self.first_chats.lock().insert(made.id.clone(), agent);
@@ -150,12 +136,12 @@ impl Hub {
     pub(super) async fn prepare_new_workspace(
         self: &Arc<Self>,
         repo: &Repo,
+        source: &RepoSource,
         mut workspace: Workspace,
         names: &mut Names,
         base_ref: Option<String>,
         provider: &dyn Provider,
     ) -> Result<Workspace, ApiError> {
-        let source = repo_source(repo)?;
         let (reply, link) = loop {
             let display_name = format!("roundhouse-{}", workspace.name);
             provider
@@ -172,7 +158,7 @@ impl Hub {
                 branch: workspace.branch.clone(),
                 base_ref: base_ref.clone(),
             };
-            let asked = match self.refuse_a_name_git_has(&link, repo, &workspace.name, names).await {
+            let asked = match self.refuse_a_name_git_has(&link, repo, source, &workspace.name, names).await {
                 Ok(()) => link.call(prepare).await,
                 Err(refused) => Err(refused),
             };
@@ -201,7 +187,7 @@ impl Hub {
         self.notify(HubNotice::Workspace(ready.workspace().clone()));
         // Once it's announced, so what the watch sees comes after.
         self.watch_branches(&ready, &link).await;
-        self.start_setup(repo.clone(), ready).await
+        self.start_setup(ready).await
     }
 
     /// Ends the workspace's worker, if it has one, and destroys its instance, whose record goes once it's gone.

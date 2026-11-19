@@ -8,7 +8,7 @@ use super::*;
 use crate::store::backup::files_in;
 use crate::store::older::store_from_before;
 use crate::store::tests::store_with_session;
-use crate::store::{InstanceStage, RecordedInstance, SessionLogin};
+use crate::store::{InstanceStage, RecordedInstance, SessionLogin, Store, WorkspacePlacement};
 
 /// A database as a build with only the first `version` migrations left it, holding a repo. Keep what
 /// this returns open, and what it wrote stays in the WAL, as it does when a hub is killed. One with every migration
@@ -313,4 +313,30 @@ fn a_migration_in_rust_runs_in_its_place_and_one_that_fails_changes_nothing() {
     assert_eq!(after_failing, (MIGRATIONS.len(), "repo".to_string()), "nothing it changed is kept");
     let conn = open_connection(&path).unwrap();
     assert_eq!((schema_version(&conn).unwrap(), name(&conn)), (MIGRATIONS.len() + 2, "REPO".to_string()));
+}
+
+#[test]
+fn workspaces_from_before_placement_migrate_to_their_repos_checkout_without_moving_rev() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("hub.db");
+    let backups = dir.path().join("backups");
+    let before_rev: u64 = {
+        let conn = older_database(&path, &backups, BEFORE_WORKSPACE_PLACEMENT);
+        conn.execute(
+            "INSERT INTO workspaces (id, repo_id, name, branch, status, provider, instance_id, created_at_ms)
+             VALUES ('w', 'r', 'alder', 'alder/start', 'ready', 'local', 'w', 0)",
+            [],
+        )
+        .unwrap();
+        conn.query_row("SELECT rev FROM workspaces WHERE id = 'w'", [], |row| row.get(0)).unwrap()
+    };
+
+    let store = Store::open(&path, &backups).unwrap();
+
+    assert_eq!(store.workspace_placement(&"w".into()).unwrap(), WorkspacePlacement::local_checkout("/repo"));
+    assert_eq!(
+        store.get_workspace(&"w".into()).unwrap().rev,
+        protocol::model::Rev::new(before_rev),
+        "internal columns don't move rev"
+    );
 }

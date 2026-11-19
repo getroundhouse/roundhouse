@@ -11,7 +11,9 @@ use protocol::provider::{
     ProviderOutcome, ProviderRequest, ProviderResponse, Reply, Request, Start, Stop,
 };
 use protocol::{Build, frame};
-use providers::{Capabilities, Instance, Provider, ProviderError, Size, WorkerBinary, WorkerCommand};
+use providers::{
+    Capabilities, Instance, Provider, ProviderError, Size, WorkerBinary, WorkerCommand, WorkerEnvironment,
+};
 use std::io;
 use std::sync::{Arc, Weak};
 use std::time::Duration;
@@ -52,6 +54,8 @@ pub(crate) struct AdapterProvider {
     pub(super) open: Open,
     /// As the newest hello declared them.
     pub(super) capabilities: Mutex<Capabilities>,
+    /// As the newest hello declared it.
+    pub(super) environment: Mutex<WorkerEnvironment>,
     pub(super) connection: AsyncMutex<Option<Arc<Connection>>>,
     /// Set once the hub is shutting down, which gives up on a hello in flight and starts no more adapters.
     pub(super) shut: watch::Sender<bool>,
@@ -67,6 +71,7 @@ impl AdapterProvider {
             hello_within,
             open,
             capabilities: Mutex::new(Capabilities::default()),
+            environment: Mutex::new(WorkerEnvironment::default()),
             connection: AsyncMutex::new(None),
             shut: watch::channel(false).0,
         }
@@ -115,7 +120,7 @@ impl AdapterProvider {
             _ = shut.wait_for(|shut| *shut) => return Err(shutting_down()),
         };
         let outcome = answer?.ok_or_else(|| failed(exited()))?;
-        let HelloReply { protocol_version, adapter, build, capabilities } = match outcome {
+        let HelloReply { protocol_version, adapter, build, capabilities, environment } = match outcome {
             ProviderOutcome::Response(response) => HelloReply::read(response).map_err(|other| unexpected(&other))?,
             // Not with the adapter's own code, which would read as the answer to whatever needed the hello.
             ProviderOutcome::Error(e) => return Err(failed(io::Error::other(e.message))),
@@ -127,6 +132,7 @@ impl AdapterProvider {
         }
         info!(provider = self.name, adapter, build, "a provider's adapter said hello");
         *self.capabilities.lock() = capabilities;
+        *self.environment.lock() = environment;
         *current = Some(connection.clone());
         Ok(connection)
     }
@@ -288,6 +294,11 @@ impl Provider for AdapterProvider {
 
     fn capabilities(&self) -> Capabilities {
         self.capabilities.lock().clone()
+    }
+
+    async fn environment(&self) -> Result<WorkerEnvironment, ProviderError> {
+        self.say_hello().await?;
+        Ok(*self.environment.lock())
     }
 
     fn starts_or_stops_within(&self) -> Duration {

@@ -6,4 +6,3 @@ mod naming;
 mod tests;
 
 mod workspace_actions;
-pub(crate) use workspace_actions::workspace_env;

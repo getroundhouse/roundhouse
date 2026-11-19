@@ -13,7 +13,10 @@ use async_trait::async_trait;
 use clap::Parser;
 use protocol::model::InstanceId;
 use providers::local::{LocalConfig, LocalProvider};
-use providers::{Capabilities, Instance, Provider, ProviderError, Size, WorkerBinary, WorkerCommand};
+use providers::{
+    Capabilities, ClonePersistence, Instance, Provider, ProviderError, Size, WorkerBinary, WorkerCommand,
+    WorkerEnvironment, WorkerFilesystem,
+};
 
 #[derive(Parser)]
 struct Args {
@@ -32,11 +35,15 @@ struct Args {
     /// Where it writes the name each instance is made with.
     #[arg(long)]
     made: PathBuf,
+    /// Declare `WorkerFilesystem::Separate` instead of sharing the hub's filesystem.
+    #[arg(long)]
+    separate: bool,
 }
 
 struct Recording {
     local: LocalProvider,
     made: PathBuf,
+    environment: WorkerEnvironment,
 }
 
 #[async_trait]
@@ -47,6 +54,10 @@ impl Provider for Recording {
 
     fn capabilities(&self) -> Capabilities {
         self.local.capabilities()
+    }
+
+    async fn environment(&self) -> Result<WorkerEnvironment, ProviderError> {
+        Ok(self.environment)
     }
 
     fn starts_or_stops_within(&self) -> std::time::Duration {
@@ -118,7 +129,11 @@ async fn main() {
         shell: Some("/bin/sh".to_string()),
         path: std::env::var("PATH").ok(),
     });
-    let provider: Arc<dyn Provider> = Arc::new(Recording { local, made: args.made });
+    let environment = WorkerEnvironment {
+        filesystem: if args.separate { WorkerFilesystem::Separate } else { WorkerFilesystem::Hub },
+        clones: ClonePersistence::Persistent,
+    };
+    let provider: Arc<dyn Provider> = Arc::new(Recording { local, made: args.made, environment });
     let (stdin, stdout) = (tokio::io::stdin(), tokio::io::stdout());
     let build = protocol::this_build!().version();
     providers::serve::serve(Box::new(move |_| Ok(provider)), build, stdin, stdout).await.unwrap();

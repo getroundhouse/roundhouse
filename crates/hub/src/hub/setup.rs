@@ -3,15 +3,14 @@
 use std::sync::Arc;
 
 use protocol::client::{ApiError, ErrorCode, HubNotice};
-use protocol::model::{Repo, SetupStatus, Workspace, WorkspaceId};
+use protocol::model::{SetupStatus, Workspace, WorkspaceId};
 use protocol::worker::{CancelSetup, SetupDone, SetupLog, SetupWorkspace};
 use tokio::sync::watch;
 use tracing::warn;
 
 use super::Hub;
 use super::ready::ReadyWorkspace;
-use super::repo_source::repo_source;
-use super::workspaces::workspace_env;
+use super::repo_source::workspace_env_for;
 
 /// A workspace's setup, from when the hub records it as running until it records how it ended.
 pub(super) struct SetupGate {
@@ -32,11 +31,7 @@ impl SetupGate {
 impl Hub {
     /// Records that setup is running, starts it in the background, and returns the workspace as stored,
     /// so a reply says only what the hub has recorded. Prompts wait for setup.
-    pub(super) async fn start_setup(
-        self: &Arc<Self>,
-        repo: Repo,
-        ready: ReadyWorkspace,
-    ) -> Result<Workspace, ApiError> {
+    pub(super) async fn start_setup(self: &Arc<Self>, ready: ReadyWorkspace) -> Result<Workspace, ApiError> {
         let (done, _) = watch::channel(false);
         let (stop, stopped) = watch::channel(false);
         self.setup_gates.lock().insert(ready.id().clone(), SetupGate { done: done.clone(), stop });
@@ -56,7 +51,7 @@ impl Hub {
         let hub = self.clone();
         let id = ready.id().clone();
         tokio::spawn(async move {
-            let outcome = hub.run_setup(&repo, &ready, stopped).await;
+            let outcome = hub.run_setup(&ready, stopped).await;
             let marked = id.clone();
             match hub.blocking(move |store| store.set_workspace_setup(&marked, outcome)).await {
                 Ok(workspace) => hub.notify(HubNotice::Workspace(workspace)),
@@ -71,23 +66,22 @@ impl Hub {
 
     /// Asks the worker to stop the script once `stopped` says so. Only once the request to run it is on
     /// its way, so the worker always knows which script is meant, even if it hasn't started it yet.
-    async fn run_setup(
-        self: &Arc<Self>,
-        repo: &Repo,
-        ready: &ReadyWorkspace,
-        mut stopped: watch::Receiver<bool>,
-    ) -> SetupStatus {
+    async fn run_setup(self: &Arc<Self>, ready: &ReadyWorkspace, mut stopped: watch::Receiver<bool>) -> SetupStatus {
         let workspace = ready.workspace();
-        let started = async { Ok::<_, ApiError>((repo_source(repo)?, self.ensure_worker(&workspace.id).await?)) };
-        let (source, link) = match started.await {
+        let started = async {
+            let placement = self.workspace_placement(&workspace.id).await?;
+            let link = self.ensure_worker(&workspace.id).await?;
+            Ok::<_, ApiError>((placement, link))
+        };
+        let (placement, link) = match started.await {
             Ok(started) => started,
             Err(e) => {
                 warn!(workspace = workspace.name, "setup couldn't start: {}", e.message);
                 return SetupStatus::Failed { code: None };
             }
         };
-        let (path, env) = (ready.path().to_owned(), workspace_env(workspace, repo));
-        let request = SetupWorkspace { source, path, env };
+        let (path, env) = (ready.path().to_owned(), workspace_env_for(workspace, &placement));
+        let request = SetupWorkspace { source: placement.source, path, env };
         let finished = async {
             let running = link.send(request).await?;
             tokio::pin!(running);
@@ -128,8 +122,7 @@ impl Hub {
         if self.setup_gates.lock().contains_key(&id) {
             return Err(ApiError::new(ErrorCode::Conflict, "setup is already running"));
         }
-        let repo = self.repo_of(ready.workspace()).await?;
-        self.start_setup(repo, ready).await
+        self.start_setup(ready).await
     }
 
     /// Stops the setup script if it's running, or keeps it from starting if it hasn't yet. The workspace stays

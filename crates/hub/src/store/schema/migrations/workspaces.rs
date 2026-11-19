@@ -55,3 +55,26 @@ pub(super) const CHILD_WORKTREES: &str = r"
         UPDATE counters SET value = value + 1 WHERE name = 'rev';
     END;
 ";
+
+/// The repository source and worker environment settled when each workspace was created, as JSON. Kept in the hub's
+/// store (not on the client-facing record) so later operations never query the provider's adapter or flip a workspace
+/// between a checkout and a clone. The trigger names only the columns the record shows so neither internal column moves
+/// `rev`. Every workspace created before this migration was made from its repository's checkout on the hub's machine.
+pub(super) const PLACEMENT: &str = r#"
+    ALTER TABLE workspaces ADD COLUMN repo_source TEXT;
+    ALTER TABLE workspaces ADD COLUMN worker_environment TEXT;
+    DROP TRIGGER workspaces_rev_on_update;
+    CREATE TRIGGER workspaces_rev_on_update
+        AFTER UPDATE OF repo_id, name, branch, base_ref, path, status, provider, instance_id, created_at_ms,
+            archived_at_ms, setup, port_base, title, title_source, pull_request, user_active_at_ms, comment_draft,
+            branches, pull_request_branch, worker_build
+        ON workspaces
+        WHEN NEW.rev = OLD.rev BEGIN
+        UPDATE counters SET value = value + 1 WHERE name = 'rev';
+        UPDATE workspaces SET rev = (SELECT value FROM counters WHERE name = 'rev') WHERE rowid = NEW.rowid;
+    END;
+    UPDATE workspaces
+        SET repo_source = json_object('kind', 'checkout', 'path', (SELECT path FROM repos WHERE repos.id = workspaces.repo_id)),
+            worker_environment = '{"filesystem":"hub","clones":"persistent"}'
+        WHERE repo_source IS NULL;
+"#;

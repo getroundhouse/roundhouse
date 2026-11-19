@@ -38,12 +38,12 @@ impl Hub {
             Ok(children) => children,
             Err(e) => return debug!(%id, "finding the worktrees to settle: {}", e.message),
         };
-        let repo = match self.repo_of(ready.workspace()).await {
-            Ok(repo) => repo,
-            Err(e) => return debug!(%id, "finding the repository of the worktrees to settle: {}", e.message),
+        let source = match self.workspace_placement(ready.id()).await {
+            Ok(placement) => placement.source,
+            Err(e) => return debug!(%id, "reading the placement of the worktrees to settle: {}", e.message),
         };
         // As an existing branch, so the worker answers with what's there, and makes nothing new.
-        let making = Making { link, repo: &repo, own: ready.path(), base: None };
+        let making = Making { link, source, own: ready.path(), base: None };
         for child in children {
             let there = match link.call(WorktreeThere { path: child.path.clone() }).await {
                 Ok(WorktreeThereReply { there }) => there,

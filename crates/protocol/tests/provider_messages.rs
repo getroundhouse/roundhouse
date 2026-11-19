@@ -9,9 +9,10 @@ use std::fmt::Debug;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::frame;
 use protocol::provider::{
-    Capabilities, Connect, Create, Destroy, Feature, Hello, HelloReply, Instance, InstanceState, Instances, Kill,
-    MakeBaseImage, OpenPreflight, ProviderCall, ProviderEvent, ProviderFrame, ProviderOutcome, ProviderRequest,
-    ProviderResponse, Size, Start, Stop, WorkerBinary, WorkerCommand,
+    Capabilities, ClonePersistence, Connect, Create, Destroy, Feature, Hello, HelloReply, Instance, InstanceState,
+    Instances, Kill, MakeBaseImage, OpenPreflight, ProviderCall, ProviderEvent, ProviderFrame, ProviderOutcome,
+    ProviderRequest, ProviderResponse, Size, Start, Stop, WorkerBinary, WorkerCommand, WorkerEnvironment,
+    WorkerFilesystem,
 };
 use serde::Serialize;
 use serde::de::DeserializeOwned;
@@ -151,7 +152,13 @@ fn the_provider_hellos_keep_their_form() {
     .unwrap();
 
     let ProviderFrame::Reply {
-        outcome: ProviderOutcome::Response(ProviderResponse::Hello(HelloReply { protocol_version, capabilities, .. })),
+        outcome:
+            ProviderOutcome::Response(ProviderResponse::Hello(HelloReply {
+                protocol_version,
+                capabilities,
+                environment,
+                ..
+            })),
         ..
     } = reply
     else {
@@ -160,6 +167,7 @@ fn the_provider_hellos_keep_their_form() {
     assert_eq!(protocol_version, 1);
     assert_eq!(capabilities.targets, ["aarch64-apple-darwin".into()]);
     assert!(capabilities.has(Feature::FilesystemSurvivesStop) && !capabilities.has(Feature::BaseImages));
+    assert_eq!(environment, WorkerEnvironment::default(), "omitted environment defaults to separate ephemeral compute");
 }
 
 /// An adapter written in Rust answers a hello in the form a hub reads.
@@ -173,11 +181,24 @@ fn an_adapters_hello_is_written_as_a_hub_reads_it() {
             targets: vec!["aarch64-apple-darwin".into()],
             features: vec![Feature::FilesystemSurvivesStop],
         },
+        environment: WorkerEnvironment::default(),
     });
 
     keeps_its_form(
         &reply(hello),
         r#"{"frame":"reply","id":7,"response":{"result":"hello","protocol_version":1,"adapter":"local","build":"b","capabilities":{"targets":["aarch64-apple-darwin"],"features":["filesystem_survives_stop"]}}}"#,
+    );
+
+    let on_hub = ProviderResponse::Hello(HelloReply {
+        protocol_version: 1,
+        adapter: "local".into(),
+        build: "b".into(),
+        capabilities: Capabilities::default(),
+        environment: WorkerEnvironment::HUB_MACHINE,
+    });
+    keeps_its_form(
+        &reply(on_hub),
+        r#"{"frame":"reply","id":7,"response":{"result":"hello","protocol_version":1,"adapter":"local","build":"b","capabilities":{"targets":[],"features":[]},"environment":{"filesystem":"hub","clones":"persistent"}}}"#,
     );
 }
 
@@ -211,10 +232,15 @@ fn an_event_state_or_feature_from_a_newer_adapter_reads_as_unknown() {
         frame::decode(br#"{"frame":"event","event":{"kind":"from_a_newer_adapter","instance_id":"i"}}"#).unwrap();
     let state: InstanceState = frame::decode(br#""hibernating""#).unwrap();
     let capabilities: Capabilities = frame::decode(br#"{"features":["teleports"]}"#).unwrap();
+    let environment: WorkerEnvironment = frame::decode(br#"{"filesystem":"mounted","clones":"snapshotted"}"#).unwrap();
 
     assert_eq!(event, ProviderFrame::Event { event: ProviderEvent::Unknown });
     assert_eq!(state, InstanceState::Unknown);
     assert_eq!(capabilities.features, [Feature::Unknown]);
+    assert_eq!(
+        environment,
+        WorkerEnvironment { filesystem: WorkerFilesystem::Unknown, clones: ClonePersistence::Unknown }
+    );
 }
 
 #[test]

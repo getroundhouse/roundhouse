@@ -178,7 +178,7 @@ async fn with_no_client_connected_only_a_workspace_waited_on_is_read() {
     // One that would come first, with an open pull request.
     let found = Some(PullRequestFound { pull_request: Some(open()) });
     let other = Workspace { id: "v".into(), name: "other".into(), instance_id: "v".into(), pull_request: found, ..w };
-    hub.store.insert_workspace(&other, None).unwrap();
+    hub.store.insert_workspace(&other, &crate::store::WorkspacePlacement::local_checkout("/repo"), None).unwrap();
     let next = || async { hub.to_read_in_turn().await.first().map(|workspace| workspace.id.clone()) };
 
     let unwaited = next().await;

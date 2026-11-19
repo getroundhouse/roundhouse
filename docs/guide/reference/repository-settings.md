@@ -56,10 +56,10 @@ Set for both scripts, and for every agent in the workspace.
 | `CONDUCTOR_WORKSPACE_NAME` | The workspace's name, such as `euston` |
 | `CONDUCTOR_WORKSPACE_ID` | The workspace's ID |
 | `CONDUCTOR_WORKSPACE_PATH` | The worktree's path |
-| `CONDUCTOR_ROOT_PATH` | The repository's path |
+| `CONDUCTOR_ROOT_PATH` | The repository's checkout on the hub's machine, when the workspace was made from one (omitted for cloned workspaces) |
 | `CONDUCTOR_DEFAULT_BRANCH` | The branch the workspace was made from, such as `main` |
 | `CONDUCTOR_PORT` | The first of the workspace's ten ports |
-| `CONDUCTOR_IS_LOCAL` | `1` |
+| `CONDUCTOR_IS_LOCAL` | `1` on the hub's machine, `0` on another machine |
 
 ## Folders Roundhouse uses in a worktree
 

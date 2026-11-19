@@ -6,18 +6,17 @@
 use std::sync::Arc;
 
 use protocol::client::{ApiError, ErrorCode, HubNotice};
-use protocol::model::{BranchName, Repo, Workspace, WorkspaceId};
+use protocol::model::{BranchName, Workspace, WorkspaceId};
 use protocol::worker::{ArchiveScript, CancelSetup, GitStatus, RemoveWorkspace, RestoreWorkspace};
 use protocol::worker::{WorktreeThere, WorktreeThereReply};
 use tokio::sync::oneshot;
 use tracing::{error, info, warn};
 
-use super::workspace_env;
 use crate::error::internal;
 use crate::hub::Hub;
 use crate::hub::children::{archive_would_lose, would_lose};
 use crate::hub::ready::ReadyWorkspace;
-use crate::hub::repo_source::repo_source;
+use crate::hub::repo_source::workspace_env_for;
 use crate::session::Command;
 use crate::store::{Ended, Move};
 use crate::worker_link::WorkerLink;
@@ -70,8 +69,7 @@ impl Hub {
         force: bool,
     ) -> Result<Option<BranchName>, ApiError> {
         let id = &workspace.id;
-        let repo = self.repo_of(workspace).await?;
-        let source = repo_source(&repo)?;
+        let placement = self.workspace_placement(id).await?;
         let link = self.ensure_worker(id).await?;
         let owned = id.clone();
         let children = self.blocking(move |store| store.children_of(&owned)).await?;
@@ -91,7 +89,8 @@ impl Hub {
         // Interrupt setup first, so the script isn't running in a worktree that's about to go.
         let _ = link.call(CancelSetup).await;
         self.call_off_waits_of(id).await?;
-        let script = ArchiveScript { source: source.clone(), path: path.clone(), env: workspace_env(workspace, &repo) };
+        let env = workspace_env_for(workspace, &placement);
+        let script = ArchiveScript { source: placement.source.clone(), path: path.clone(), env };
         match link.call(script).await {
             Ok(()) => {}
             Err(e) if !force => return Err(e),
@@ -105,8 +104,8 @@ impl Hub {
         // Its other worktrees first, so one that refuses leaves the workspace's own, and so does a hub that stops part
         // way, which the next then finds ready. Each checks again unless forced, because an agent may have written
         // files before it stopped.
-        self.remove_children(&repo, &link, &path, &children, force).await?;
-        link.call(RemoveWorkspace { source, path, force, own: None }).await?;
+        self.remove_children(&placement.source, &link, &path, &children, force).await?;
+        link.call(RemoveWorkspace { source: placement.source, path, force, own: None }).await?;
         let provider = self.provider(&workspace.provider)?;
         self.close_worker(workspace, &link, provider.as_ref()).await;
         // Agents are expected to rename their branch to match the work. Restoring needs its real name.
@@ -139,11 +138,11 @@ impl Hub {
 
     pub(crate) async fn workspace_restore(self: &Arc<Self>, id: WorkspaceId) -> Result<Workspace, ApiError> {
         let workspace = self.start_move(&id, Move::Restore).await?;
-        let (repo, link) = match self.make_worktree_again(&workspace).await {
+        let link = match self.make_worktree_again(&workspace).await {
             Ok(made) => made,
             Err(e) => return Err(self.put_back(&id, Move::Restore, e).await),
         };
-        match self.record_restored(&id, repo, &link).await {
+        match self.record_restored(&id, &link).await {
             Ok(restored) => Ok(restored),
             Err(e) => Err(self.put_back(&id, Move::Restore, e).await),
         }
@@ -154,7 +153,6 @@ impl Hub {
     async fn record_restored(
         self: &Arc<Self>,
         id: &WorkspaceId,
-        repo: Repo,
         link: &Arc<WorkerLink>,
     ) -> Result<Workspace, ApiError> {
         let ready = id.clone();
@@ -165,18 +163,17 @@ impl Hub {
         let restored = self.ready_workspace(restored.id()).await?;
         self.notify(HubNotice::Workspace(restored.workspace().clone()));
         // A restored worktree has lost what setup made, since none of it is committed.
-        self.start_setup(repo, restored).await
+        self.start_setup(restored).await
     }
 
-    /// Has the workspace's worker make its worktree again from its branch. Returns the workspace's repository, and the
-    /// worker.
-    async fn make_worktree_again(self: &Arc<Self>, workspace: &Workspace) -> Result<(Repo, Arc<WorkerLink>), ApiError> {
-        let repo = self.repo_of(workspace).await?;
+    /// Has the workspace's worker make its worktree again from its branch. Returns the worker.
+    async fn make_worktree_again(self: &Arc<Self>, workspace: &Workspace) -> Result<Arc<WorkerLink>, ApiError> {
         let path = workspace.path.clone().ok_or_else(|| internal("an archived workspace has no path"))?;
+        let placement = self.workspace_placement(&workspace.id).await?;
         let link = self.ensure_worker(&workspace.id).await?;
-        let request = RestoreWorkspace { source: repo_source(&repo)?, path, branch: workspace.branch.clone() };
+        let request = RestoreWorkspace { source: placement.source, path, branch: workspace.branch.clone() };
         link.call(request).await?;
-        Ok((repo, link))
+        Ok(link)
     }
 
     /// Records that the workspace is being archived or restored, and announces it. Refuses one that isn't where that
@@ -278,10 +275,7 @@ impl Hub {
                 let branch = workspace.branches.as_ref().and_then(|branches| branches.checked_out());
                 self.record_archived(id, branch.map(|branch| branch.name.clone())).await
             }
-            (Move::Restore, true) => {
-                let repo = self.repo_of(&workspace).await?;
-                self.record_restored(id, repo, &link).await
-            }
+            (Move::Restore, true) => self.record_restored(id, &link).await,
         }
     }
 }

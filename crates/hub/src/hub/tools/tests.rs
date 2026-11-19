@@ -15,7 +15,7 @@ async fn a_worker_is_refused_what_it_asks_for_a_chat_in_another_workspace() {
     let hub = hub_in(dir.path());
     let w = hub.store.get_workspace(&"w".into()).unwrap();
     let other = Workspace { id: "v".into(), name: "other".into(), instance_id: "v".into(), ..w };
-    hub.store.insert_workspace(&other, None).unwrap();
+    hub.store.insert_workspace(&other, &crate::store::WorkspacePlacement::local_checkout("/repo"), None).unwrap();
 
     let link = WorkerLink::unconnected();
 
@@ -31,7 +31,7 @@ async fn a_worker_asking_for_the_diffs_comments_hears_its_own_workspaces_oldest_
     let hub = hub_in(dir.path());
     let w = hub.store.get_workspace(&"w".into()).unwrap();
     let other = Workspace { id: "v".into(), name: "other".into(), instance_id: "v".into(), ..w };
-    hub.store.insert_workspace(&other, None).unwrap();
+    hub.store.insert_workspace(&other, &crate::store::WorkspacePlacement::local_checkout("/repo"), None).unwrap();
     // Kept by the store, so each says when it was made, rather than two in the same millisecond going by their IDs.
     let add = |id: &str, workspace: &str, created_at_ms: i64| {
         let comment = DiffComment {

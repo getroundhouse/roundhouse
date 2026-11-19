@@ -16,7 +16,8 @@ use std::time::Duration;
 use async_trait::async_trait;
 use protocol::model::InstanceId;
 pub use protocol::provider::{
-    Capabilities, Feature, Instance, InstanceState, OpenPreflight, Size, WorkerBinary, WorkerCommand,
+    Capabilities, ClonePersistence, Feature, Instance, InstanceState, OpenPreflight, Size, WorkerBinary, WorkerCommand,
+    WorkerEnvironment, WorkerFilesystem,
 };
 
 pub use error::ProviderError;
@@ -26,6 +27,8 @@ pub use error::ProviderError;
 pub trait Provider: Send + Sync {
     fn name(&self) -> &str;
     fn capabilities(&self) -> Capabilities;
+    /// What the compute this provider's workers run on looks like to the hub.
+    async fn environment(&self) -> Result<WorkerEnvironment, ProviderError>;
     /// The longest it takes to start one of its instances, up to running its worker there, or to stop one, with what
     /// runs there, so whatever waits for either can tell one that's stuck.
     fn starts_or_stops_within(&self) -> Duration;
