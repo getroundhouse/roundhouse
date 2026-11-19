@@ -5,9 +5,12 @@
 #[cfg(test)]
 mod tests;
 
+mod days;
 mod time;
 
-#[cfg(feature = "testing")]
+pub use days::day_ago;
+
+#[cfg(any(test, feature = "testing"))]
 pub use time::hold_still;
 pub use time::{
     date, date_and_time, day_and_time, days_apart, local_time, months_apart, next_day_at_ms, now_ms, time_of_day,
