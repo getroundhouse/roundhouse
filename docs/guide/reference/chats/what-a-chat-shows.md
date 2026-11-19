@@ -82,6 +82,14 @@ When an agent needs you to decide something too large for a question, such as wh
 
 ![A proposal in the proposal tab](../../../spec/screens/proposal-tab.png)
 
+The agent can revise a proposal, such as when you ask in the chat for something its options don't have, whether or not you've answered it.
+
+- **The tab shows the newest revision,** with what changed since the one before at the top. Options the agent kept keep their letters, so dropping B leaves C as C.
+- **The call that revised it has a line of its own,** `Revised`, and each line says which revision its call wrote and what became of it: what you chose, or that the next revision replaced it.
+- **If it's revised while you're choosing,** what you'd chosen and written goes, since its options may have changed.
+
+![A revised proposal in the proposal tab](../../../spec/screens/proposal-revised.png)
+
 To answer, click `Choose` on the option you want for each question, add a note if you like, and click `Send`, or press `Enter` in the note. On a Mac, you can [dictate the note](../../guides/dictate-a-prompt.md) too.
 
 - **The agent is told what you chose,** and reads your note with its tools, so what you write can be as long as it needs to be. If it's working, your answer goes into what it's doing, which it reads at its next chance, as a message you send while it works does. If you stop the agent before it reads your answer, it never gets it, and the answer's line says so. Your answer stays in the proposal, so ask the agent to read it.

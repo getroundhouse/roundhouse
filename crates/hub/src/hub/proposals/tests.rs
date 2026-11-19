@@ -104,7 +104,7 @@ async fn a_chat_reads_its_own_proposals_and_not_anothers() {
         crate::store::StoredSession { session: protocol::model::Session { id: "t".into(), ..other.session }, ..other };
     hub.store.insert_session(&other, None).unwrap();
 
-    let read = hub.read_proposal(&"s".into(), made.id.clone()).await.unwrap().proposal;
+    let read = hub.read_proposal(&"s".into(), made.id.clone()).await.unwrap();
     let refused = hub.read_proposal(&"t".into(), made.id.clone()).await.unwrap_err();
 
     assert_eq!(read, made);

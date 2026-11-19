@@ -4,7 +4,7 @@ use crate::attachments;
 use crate::attachments::Carried;
 use crate::folds::Fold;
 use crate::item_key::ItemKey;
-use crate::transcript::{AtWork, IdleCache, Model};
+use crate::transcript::{AtWork, IdleCache, Model, Wrote};
 use client_core::calls::Recorded;
 use client_core::session_log::{PromptAt, PromptState, SessionLog};
 use client_core::{Approval, ToolUseAsked};
@@ -13,7 +13,8 @@ use protocol::capability::approvals::ApprovalMode;
 use protocol::capability::approvals::Decision;
 use protocol::capability::asking::Question;
 use protocol::event::{ContentBlock, EventBody, SessionEvent};
-use protocol::model::{ApprovalId, Proposal, ProposalId, Seq, ToolUseId};
+use protocol::model::{ApprovalId, Proposal, ProposalId, RevisionNumber, Seq, ToolUseId};
+use protocol::prompt::PromptFrom;
 use reply::{Answer, Reply};
 use settled::Settled;
 use std::sync::Arc;
@@ -54,9 +55,10 @@ pub(in super::super) struct Around {
     pub(in super::super) failures: Failures,
 }
 
-/// The proposal a prompt the hub wrote tells the agent the answer to.
+/// The proposal a prompt the hub wrote tells the agent the answer to, and which revision of it was answered.
 pub(in super::super) struct Answers {
     pub(in super::super) id: ProposalId,
+    pub(in super::super) revision: RevisionNumber,
     /// Its record, once it's come.
     pub(in super::super) proposal: Option<Arc<Proposal>>,
 }
@@ -133,8 +135,8 @@ pub(in super::super) struct BlockAround {
     pub(in super::super) subagent: Option<Subagent>,
     /// For a call to subagents at work: the subagents it names.
     pub(in super::super) names: Option<Names>,
-    /// For a call that proposed a decision: the proposal, once its record has come.
-    pub(in super::super) proposal: Option<Arc<Proposal>>,
+    /// For a call that proposed a decision, or revised one: the revision it wrote, once the record has come.
+    pub(in super::super) proposal: Option<Wrote>,
     /// For a result: whether it's drawn with its call instead.
     pub(in super::super) with_call: bool,
 }
@@ -192,8 +194,13 @@ impl Around {
         if let EventBody::UserPrompt { prompt, from, .. } = body {
             around.carried = attachments::carried(m, &prompt.files);
             around.prompt = log.prompt_state(seq);
-            around.answers =
-                from.responds_to().map(|id| Answers { id: id.clone(), proposal: m.proposals_by_id.get(id).cloned() });
+            around.answers = match from {
+                PromptFrom::ProposalResponse { proposal: id, revision } => {
+                    let proposal = m.proposals_by_id.get(id).cloned();
+                    Some(Answers { id: id.clone(), revision: *revision, proposal })
+                }
+                PromptFrom::Person | PromptFrom::Unknown => None,
+            };
         }
         if let EventBody::ApprovalRequested { approval_id, .. } = body {
             around.approval_open = log

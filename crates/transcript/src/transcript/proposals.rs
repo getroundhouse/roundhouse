@@ -9,6 +9,7 @@ use protocol::event::{ContentBlock, EventBody, SessionEvent};
 use protocol::model::{Proposal, ProposalId, ToolUseId};
 
 use super::Transcript;
+use super::model::Wrote;
 
 impl Transcript {
     /// Follows the records of the chat's proposals, as client-core's snapshot shares them, and measures again each
@@ -25,10 +26,7 @@ impl Transcript {
         if changed.is_empty() {
             return;
         }
-        let by_call: HashMap<ToolUseId, Arc<Proposal>> = proposals
-            .iter()
-            .filter_map(|proposal| Some((proposal.current.call.clone()?, Arc::clone(proposal))))
-            .collect();
+        let by_call: HashMap<ToolUseId, Wrote> = proposals.iter().flat_map(written_by).collect();
         let by_id: HashMap<ProposalId, Arc<Proposal>> =
             proposals.iter().map(|proposal| (proposal.id.clone(), Arc::clone(proposal))).collect();
         let draws = |event: &SessionEvent| {
@@ -50,10 +48,21 @@ impl Transcript {
     }
 }
 
-/// Whether `block` is the call that made one of the proposals `changed`.
-fn makes(block: &ContentBlock, by_call: &HashMap<ToolUseId, Arc<Proposal>>, changed: &[ProposalId]) -> bool {
+/// Each revision of `proposal` a call wrote, by the call. A hub from before revisions sums none up, and its proposals
+/// have only their first, the newest.
+fn written_by(proposal: &Arc<Proposal>) -> Vec<(ToolUseId, Wrote)> {
+    let wrote = |revision| Wrote { proposal: Arc::clone(proposal), revision };
+    if proposal.revisions.is_empty() {
+        let newest = proposal.current.call.clone().map(|call| (call, wrote(proposal.current.number)));
+        return newest.into_iter().collect();
+    }
+    proposal.revisions.iter().filter_map(|revision| Some((revision.call.clone()?, wrote(revision.number)))).collect()
+}
+
+/// Whether `block` is a call that wrote one of the proposals `changed`.
+fn makes(block: &ContentBlock, by_call: &HashMap<ToolUseId, Wrote>, changed: &[ProposalId]) -> bool {
     match block {
-        ContentBlock::Call { id, .. } => by_call.get(id).is_some_and(|proposal| changed.contains(&proposal.id)),
+        ContentBlock::Call { id, .. } => by_call.get(id).is_some_and(|wrote| changed.contains(&wrote.proposal.id)),
         ContentBlock::Text { .. }
         | ContentBlock::Thinking { .. }
         | ContentBlock::CallResult { .. }

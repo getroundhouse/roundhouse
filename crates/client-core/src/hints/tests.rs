@@ -130,6 +130,7 @@ fn a_proposal_gives_its_names_and_the_code_its_markdown_names() {
         label: label.into(),
         description: description.into(),
         body: body.into(),
+        letter: None,
     };
     let proposed = Proposed {
         title: "Holding a train".into(),

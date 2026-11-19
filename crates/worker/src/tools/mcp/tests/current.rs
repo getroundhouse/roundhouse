@@ -111,15 +111,26 @@ async fn the_tools_listed_are_the_ones_it_answers() {
         let tools = tools.as_array().cloned().unwrap_or_default();
         tools.iter().map(|tool| tool["name"].as_str().unwrap_or_default().to_string()).collect::<Vec<_>>()
     };
-    let all = [pull_requests::READ, pull_requests::WAIT, diff_comments::NAME, proposals::PROPOSE, proposals::GET];
+    let all = [
+        pull_requests::READ,
+        pull_requests::WAIT,
+        diff_comments::NAME,
+        proposals::PROPOSE,
+        proposals::REVISE,
+        proposals::GET,
+    ];
     assert_eq!(names(&answer), all);
     for name in all {
         assert!(Tool::named(name).is_some(), "{name} is answered");
     }
     let tools = answer.to_json()["result"]["tools"].clone();
     for tool in tools.as_array().unwrap() {
-        let reads = tool["name"] != proposals::PROPOSE;
-        assert_eq!(tool["annotations"]["readOnlyHint"], reads, "only propose changes anything: {}", tool["name"]);
+        let reads = tool["name"] != proposals::PROPOSE && tool["name"] != proposals::REVISE;
+        assert_eq!(
+            tool["annotations"]["readOnlyHint"], reads,
+            "only proposing and revising change anything: {}",
+            tool["name"]
+        );
     }
     assert_eq!(
         names(&without_tasks),

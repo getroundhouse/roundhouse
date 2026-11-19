@@ -7,7 +7,9 @@ use crate::folds::Folds;
 use crate::rows::SubagentCalls;
 use client_core::session_log::RecordedApprovals;
 use gpui_kit::SharedString;
-use protocol::model::{AttachmentId, Proposal, ProposalId, RunId, Seq, Subagent, SubagentId, ToolUseId};
+use protocol::model::{
+    AttachmentId, Proposal, ProposalId, RevisionNumber, RunId, Seq, Subagent, SubagentId, ToolUseId,
+};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -40,9 +42,9 @@ pub(crate) struct Model {
     /// record changes, which may come after the row was drawn. A call's row is measured only once it's been drawn, so
     /// one that isn't here needs nothing.
     pub subagent_rows: RefCell<HashMap<ToolUseId, Seq>>,
-    /// Each of the chat's proposals, by the call that made it, which draws its line from it. Each is shared with
-    /// client-core's snapshot, as subagents' records are.
-    pub proposals: HashMap<ToolUseId, Arc<Proposal>>,
+    /// The revision of one of the chat's proposals that each call wrote, by the call, which draws its line from it.
+    /// Each proposal is shared with client-core's snapshot, as subagents' records are.
+    pub(crate) proposals: HashMap<ToolUseId, Wrote>,
     /// Each of the chat's proposals, by its ID, which the prompt that tells the agent of its answer names, and is
     /// drawn as its line.
     pub proposals_by_id: HashMap<ProposalId, Arc<Proposal>>,
@@ -133,4 +135,11 @@ impl Default for Model {
     fn default() -> Self {
         Model::with(AtWork::default())
     }
+}
+
+/// The revision of a proposal a call wrote: its first, which proposed it, or a later one, which revised it.
+#[derive(Clone)]
+pub(crate) struct Wrote {
+    pub(crate) proposal: Arc<Proposal>,
+    pub(crate) revision: RevisionNumber,
 }

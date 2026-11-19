@@ -55,9 +55,10 @@ pub use model_list::{CliVersion, ModelList, ModelListKey, ModelLookup};
 pub use model_name::{ModelName, ModelNameError};
 pub use prompt_line::{PromptLine, SettledAt, Settlement};
 pub use proposal::{
-    AnswerProblem, Choice, MAX_HEADER_CHARS, MAX_NOTE_BYTES, MAX_OPTIONS, MAX_PROPOSAL_BYTES, MAX_QUESTIONS,
-    MIN_OPTIONS, OptionLetter, OptionPlace, Proposal, ProposalOption, ProposalProblem, ProposalQuestion,
-    ProposalRevision, Proposed, Recommendation, Response, RevisionNumber, RevisionStanding,
+    AnswerProblem, Choice, ChosenOption, MAX_HEADER_CHARS, MAX_NOTE_BYTES, MAX_OPTIONS, MAX_PROPOSAL_BYTES,
+    MAX_QUESTIONS, MIN_OPTIONS, NOTE_START_CHARS, OptionLetter, OptionPlace, Proposal, ProposalOption, ProposalProblem,
+    ProposalQuestion, ProposalRevision, Proposed, Recommendation, Response, ResponseSummary, RevisionNumber,
+    RevisionStanding, RevisionSummary, chosen_in_words,
 };
 pub use pull_request::{
     Checks, LeftQueue, Local, MergeState, PrState, PullRequest, PullRequestFound, QueueState, Review, Standing,

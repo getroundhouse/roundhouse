@@ -2,7 +2,7 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
-use super::{Proposed, Response};
+use super::{Proposed, Response, RevisionSummary};
 use crate::event::LinkedImage;
 use crate::model::{ProposalId, Rev, SessionId, ToolUseId, WorkspaceId};
 
@@ -17,6 +17,10 @@ pub struct Proposal {
     pub session_id: SessionId,
     /// The newest revision, whose number says how many there are.
     pub current: ProposalRevision,
+    /// Each revision in short, oldest first, the newest too, so a chat draws each revision's line, and the timeline
+    /// each revision, from the record. A hub from before revisions sends none, for a proposal with only its first.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub revisions: Vec<RevisionSummary>,
     pub created_at_ms: i64,
     #[serde(default)]
     pub rev: Rev,
@@ -26,6 +30,9 @@ pub struct Proposal {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct ProposalRevision {
     pub number: RevisionNumber,
+    /// What changed since the revision before, as the agent said when it revised, in Markdown. Empty for the first.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub changed: String,
     /// The agent's call that wrote it, which the chat draws its line for. `None` from an agent's CLI that doesn't say
     /// which call a tool's use is, whose chat draws the call as any other.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -51,6 +58,24 @@ pub struct RevisionNumber(pub u32);
 
 impl RevisionNumber {
     pub const FIRST: Self = Self(1);
+
+    /// The revision after this one.
+    #[must_use]
+    pub fn next(self) -> Self {
+        Self(self.0.saturating_add(1))
+    }
+}
+
+impl Proposal {
+    /// The revision `number`, in short, if it has one.
+    pub fn revision(&self, number: RevisionNumber) -> Option<&RevisionSummary> {
+        self.revisions.iter().find(|revision| revision.number == number)
+    }
+
+    /// Whether it's been revised, so each revision is named by its number.
+    pub fn revised(&self) -> bool {
+        self.current.number > RevisionNumber::FIRST
+    }
 }
 
 impl fmt::Display for RevisionNumber {

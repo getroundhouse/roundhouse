@@ -97,7 +97,10 @@ fn nothing_is_sent_once_its_responded_to(cx: &mut TestAppContext) {
 fn a_response_only_a_newer_hub_knows_is_drawn_as_responded() {
     let newer = responded(Response::Unknown);
 
-    assert_eq!(crate::proposal_answered_parts(Some(&newer)), (Some("Search".to_string()), "Responded".to_string()));
+    assert_eq!(
+        crate::proposal_answered_parts(Some(&newer), RevisionNumber::FIRST),
+        (Some("Search".to_string()), "Responded".to_string())
+    );
 }
 
 #[gpui_kit::test]

@@ -65,7 +65,7 @@ pub(crate) use github_sign_ins::{GithubApproved, GithubApproving, StartedSignIn}
 pub use instances::{InstanceStage, RecordedInstance};
 pub(crate) use logins::{Connected, Connecting, Held, IdFrom};
 pub use made::{Made, MadeByRequest};
-pub use proposals::{AnswerToKeep, Answering};
+pub use proposals::{AnswerToKeep, Answering, NewRevision};
 pub use queue::{Changed, Queued, Queuing, Unqueued};
 pub use reading::Reading;
 pub use repos::RepoToRead;

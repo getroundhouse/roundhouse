@@ -8,7 +8,7 @@ mod tests;
 mod calls;
 mod described;
 mod input;
-pub(super) use calls::{GET, PROPOSE, definitions, get, propose};
+pub(super) use calls::{GET, PROPOSE, REVISE, definitions, get, propose, revise};
 #[cfg(test)]
 use described::describe;
 #[cfg(test)]

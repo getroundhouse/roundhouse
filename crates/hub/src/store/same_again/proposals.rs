@@ -1,10 +1,11 @@
-//! The rule's rows for a chat's proposals: made again by the same ask, and answered again by the same request.
+//! The rule's rows for a chat's proposals: made again and revised again by the same ask, and answered again by the
+//! same request.
 
 use protocol::fixtures;
 use protocol::model::{Choice, ClientRequestId, OptionPlace, Proposal, Rev, RevisionNumber};
 use protocol::prompt::Prompt;
 
-use super::super::{AnswerToKeep, Answering, Made, Store};
+use super::super::{AnswerToKeep, Answering, Made, NewRevision, Store};
 use super::rule::Said;
 
 pub(super) fn proposal(store: &Store) -> Rev {
@@ -32,4 +33,14 @@ pub(super) fn answer(store: &Store) -> Said {
         Answering::Kept { proposal, .. } | Answering::Again(proposal) => Said::record(&proposal),
         Answering::Otherwise(_) | Answering::Revised(_) | Answering::Refused(_) => panic!("not kept"),
     }
+}
+
+/// As a new hub is asked whatever the last didn't answer.
+pub(super) fn revise(store: &Store) -> Said {
+    let proposed = fixtures::proposal("p").current.proposed;
+    let revision =
+        NewRevision { changed: "Dropped B.".into(), call: None, proposed, made_at_ms: 6, images: Vec::new() };
+    let (Made::New(proposal) | Made::Earlier(proposal)) =
+        store.revise_proposal(&"p".into(), &revision, &"k2".into()).unwrap();
+    Said::record(&proposal)
 }

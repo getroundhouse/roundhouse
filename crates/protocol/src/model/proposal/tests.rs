@@ -1,7 +1,7 @@
 use super::*;
 
 fn option(label: &str) -> ProposalOption {
-    ProposalOption { label: label.into(), description: String::new(), body: String::new() }
+    ProposalOption { label: label.into(), description: String::new(), body: String::new(), letter: None }
 }
 
 fn question(options: usize) -> ProposalQuestion {
@@ -96,6 +96,7 @@ fn an_answer_chooses_one_of_each_questions_options() {
 fn what_was_chosen_names_each_option_by_its_question_when_there_are_several() {
     let answered = |questions: usize, chosen: Vec<OptionPlace>| ProposalRevision {
         number: RevisionNumber::FIRST,
+        changed: String::new(),
         call: None,
         proposed: Proposed { questions: (0..questions).map(|_| question(3)).collect(), ..proposed(1) },
         made_at_ms: 0,
@@ -109,4 +110,49 @@ fn what_was_chosen_names_each_option_by_its_question_when_there_are_several() {
         Some("Index: A, Option 0; Index: C, Option 2")
     );
     assert_eq!(ProposalRevision { response: None, ..answered(1, vec![]) }.chosen_in_words(), None);
+}
+
+/// An option keeps the letter the agent gave it, and one given none takes the first letter no option has, so a
+/// revision that drops B can keep C and D.
+#[test]
+fn an_option_can_name_its_letter_and_the_rest_take_what_is_free() {
+    let named = |written: Option<&str>| ProposalOption { letter: written.map(letter), ..option("o") };
+    let asked =
+        ProposalQuestion { options: vec![named(None), named(Some("A")), named(Some("D")), named(None)], ..question(0) };
+
+    let letters: Vec<_> = asked.places().map(|place| asked.letter(place).unwrap().to_string()).collect();
+
+    assert_eq!(letters, ["B", "A", "D", "C"]);
+    assert_eq!(asked.place_of(letter("D")), Some(OptionPlace(2)));
+    let twice = ProposalQuestion { options: vec![named(Some("B")), named(None), named(Some("B"))], ..question(0) };
+    let check = Proposed { questions: vec![twice], ..proposed(1) }.check();
+    assert_eq!(check, Err(ProposalProblem::SameLetter { question: 1, letter: letter("B") }));
+}
+
+/// The record carries the start of a note, which the timeline shows, and the options chosen as the person read them.
+#[test]
+fn a_revision_in_short_has_what_was_chosen_and_the_start_of_the_note() {
+    let note = "é".repeat(NOTE_START_CHARS + 5);
+    let revision = ProposalRevision {
+        number: RevisionNumber(2),
+        changed: String::new(),
+        call: Some("toolu_2".into()),
+        proposed: proposed(1),
+        made_at_ms: 4,
+        response: Some(Response::Chose(Choice { chosen: vec![OptionPlace(1)], note: note.clone(), at_ms: 5 })),
+        images: Vec::new(),
+    };
+
+    let summary = revision.summary();
+
+    let Some(ResponseSummary::Chose { chosen, note: start, at_ms: 5 }) = &summary.response else {
+        panic!("{summary:?}")
+    };
+    assert_eq!(start.chars().count(), NOTE_START_CHARS);
+    assert!(note.starts_with(start.as_str()));
+    assert_eq!(chosen_in_words(chosen), "B, Option 1");
+    assert_eq!(
+        (summary.number, summary.call.as_ref().map(crate::model::ToolUseId::as_str)),
+        (RevisionNumber(2), Some("toolu_2"))
+    );
 }

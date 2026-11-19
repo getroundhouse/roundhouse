@@ -3,21 +3,16 @@ use protocol::model::{AnswerProblem, Choice, ClientRequestId, OptionPlace, Propo
 use protocol::prompt::{Prompt, PromptFrom};
 
 use super::super::{Made, Store, StoreError, lock};
-use super::{AnswerToKeep, Answering};
+use super::{AnswerToKeep, Answering, NewRevision};
 use crate::store::tests::store_with_session;
 
-/// Writes the revisions from 2 to `newest` of the proposal `p`, each titled by its number, as revising it will.
+/// Writes the revisions from 2 to `newest` of the proposal `p`, each titled by its number.
 fn revise_to(store: &Store, newest: u32) {
     for number in 2..=newest {
         let mut proposed = fixtures::proposal("p").current.proposed;
         proposed.title = format!("Revision {number}");
-        let proposed = serde_json::to_string(&proposed).unwrap();
-        lock(&store.writer)
-            .execute(
-                "INSERT INTO proposal_revisions (proposal_id, number, proposed, made_at_ms) VALUES ('p', ?, ?, 0)",
-                rusqlite::params![number, proposed],
-            )
-            .unwrap();
+        let revision = NewRevision { changed: "More".into(), call: None, proposed, made_at_ms: 0, images: Vec::new() };
+        store.revise_proposal(&"p".into(), &revision, &format!("k{number}").into()).unwrap();
     }
 }
 

@@ -61,6 +61,11 @@ pub struct ProposalOption {
     /// Markdown: the option in full, with what it costs.
     #[serde(default)]
     pub body: String,
+    /// The letter the agent gave it, such as to keep the one it had in the revision before when an option before it
+    /// was dropped. `None` takes the first letter no other option of its question has, as
+    /// [`ProposalQuestion::letter`] says. A peer from before reads each option by its place instead.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub letter: Option<OptionLetter>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
@@ -84,8 +89,23 @@ impl OptionPlace {
 }
 
 /// The letter the person and the agent name an option by, from A to Z.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[serde(try_from = "String", into = "String")]
 pub struct OptionLetter(char);
+
+impl TryFrom<String> for OptionLetter {
+    type Error = String;
+
+    fn try_from(written: String) -> Result<Self, Self::Error> {
+        Self::read(&written).ok_or_else(|| format!("{written:?} isn't a letter from A to Z"))
+    }
+}
+
+impl From<OptionLetter> for String {
+    fn from(letter: OptionLetter) -> Self {
+        letter.to_string()
+    }
+}
 
 impl OptionLetter {
     /// The letter `written` is, in upper or lower case, if it's one letter from A to Z.
@@ -96,10 +116,9 @@ impl OptionLetter {
         upper.is_ascii_uppercase().then_some(Self(upper))
     }
 
-    /// The letter at `place` in the alphabet, from A, if there is one.
-    fn at(place: OptionPlace) -> Option<Self> {
-        let letter = b'A'.checked_add(place.0).filter(u8::is_ascii_uppercase)?;
-        Some(Self(char::from(letter)))
+    /// Every letter, from A to Z.
+    fn all() -> impl Iterator<Item = Self> {
+        ('A'..='Z').map(Self)
     }
 }
 
@@ -110,10 +129,25 @@ impl std::fmt::Display for OptionLetter {
 }
 
 impl ProposalQuestion {
-    /// The letter the option at `place` is named by, which is its place, from A, or `None` if there's no option there.
+    /// The letter the option at `place` is named by, or `None` if there's no option there: the one the agent gave it,
+    /// or else the first that no option of the question was given, and no option before it takes. So options the agent
+    /// gave none are named A, B, C in order, as they always were.
     pub fn letter(&self, place: OptionPlace) -> Option<OptionLetter> {
-        self.options.get(place.index())?;
-        OptionLetter::at(place)
+        self.letters().nth(place.index())
+    }
+
+    /// Each option's letter, in the order they're read.
+    fn letters(&self) -> impl Iterator<Item = OptionLetter> + '_ {
+        let given: Vec<OptionLetter> = self.options.iter().filter_map(|option| option.letter).collect();
+        let mut free = OptionLetter::all().filter(move |letter| !given.contains(letter));
+        // Past Z, which no question gets near, an option takes Z again, which the check refuses.
+        self.options.iter().map(move |option| option.letter.or_else(|| free.next()).unwrap_or(OptionLetter('Z')))
+    }
+
+    /// A letter two of its options are named by, which can't tell them apart.
+    pub(super) fn letter_twice(&self) -> Option<OptionLetter> {
+        let letters: Vec<OptionLetter> = self.letters().collect();
+        letters.iter().enumerate().find(|(at, letter)| letters[..*at].contains(letter)).map(|(_, letter)| *letter)
     }
 
     /// The option `letter` names, if there's one.

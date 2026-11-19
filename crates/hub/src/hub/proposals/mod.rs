@@ -3,6 +3,8 @@
 #[cfg(test)]
 mod answer_tests;
 #[cfg(test)]
+mod revision_tests;
+#[cfg(test)]
 mod tests;
 
 mod answers;

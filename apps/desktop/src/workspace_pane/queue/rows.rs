@@ -10,7 +10,8 @@ use gpui_kit::{
 };
 use look::Lined as _;
 use look::{IconSizing as _, InRegion as _, Region, Shaped as _, Typeset as _};
-use protocol::model::{Proposal, QueuedPrompt};
+use protocol::model::{Proposal, QueuedPrompt, RevisionNumber};
+use protocol::prompt::PromptFrom;
 use protocol::short_text::one_line;
 
 use super::Editing;
@@ -91,7 +92,10 @@ impl WorkspacePane {
             let session = self.session()?;
             self.shown.all().proposals(&session.id).iter().find(|p| &p.id == answers).cloned()
         };
-        let answers = prompt.from.responds_to().map(answered);
+        let answers = match &prompt.from {
+            PromptFrom::ProposalResponse { proposal, revision } => Some((answered(proposal), *revision)),
+            PromptFrom::Person | PromptFrom::Unknown => None,
+        };
         let editing = self.queue_edit.as_ref().filter(|editing| editing.was.client_msg_id == *id);
         if let Some(editing) = editing {
             return editing_row(editing, cx);
@@ -113,7 +117,9 @@ impl WorkspacePane {
             .corners(look::Corner::Control)
             .hover(move |style| style.bg(lit))
             .child(match &answers {
-                Some(proposal) => answer_line(proposal.as_deref(), text, muted).into_any_element(),
+                Some((proposal, revision)) => {
+                    answer_line(proposal.as_deref(), *revision, text, muted).into_any_element()
+                }
                 None => queued_line(prompt, text, muted).into_any_element(),
             })
             .child(queued_buttons(prompt, row, prompt.from.is_person(), group, cx))
@@ -160,8 +166,8 @@ fn queued_buttons(
 
 /// What a queued answer to a proposal says: `Answered`, its title in a chip, and what was chosen, as its line in the
 /// chat says it once it's sent, or that it answers a proposal, until its record has come.
-fn answer_line(proposal: Option<&Proposal>, text: Hsla, muted: Hsla) -> impl IntoElement {
-    let (title, chosen) = transcript::proposal_answered_parts(proposal);
+fn answer_line(proposal: Option<&Proposal>, revision: RevisionNumber, text: Hsla, muted: Hsla) -> impl IntoElement {
+    let (title, chosen) = transcript::proposal_answered_parts(proposal, revision);
     let title = title.map(|title| look::chip(look::ChipKind::Proposal, look::ChipSize::Regular, title));
     h_flex()
         .flex_1()

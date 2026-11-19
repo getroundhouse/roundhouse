@@ -7,10 +7,10 @@ use protocol::client::proposals::{ProposalAnswer, ProposalRevisions, ProposalRev
 use protocol::client::{ClientRequest, ClientResponse, HubNotice};
 use protocol::event::LinkedImage;
 use protocol::model::{
-    Choice, OptionPlace, Proposal, ProposalOption, ProposalQuestion, ProposalRevision, Proposed, Recommendation,
-    Response, Rev, RevisionNumber,
+    Choice, ChosenOption, OptionLetter, OptionPlace, Proposal, ProposalOption, ProposalQuestion, ProposalRevision,
+    Proposed, Recommendation, Response, ResponseSummary, Rev, RevisionNumber, RevisionSummary,
 };
-use protocol::worker::{Ask as _, AskReply, ProposalRecord, Propose, ReadProposal, WorkerAsk};
+use protocol::worker::{Ask as _, AskReply, ProposalRecord, Propose, ReadProposal, Revise, WorkerAsk};
 
 use super::keeps_its_form;
 
@@ -21,6 +21,7 @@ fn proposed() -> Proposed {
         label: label.into(),
         description: description.into(),
         body: body.into(),
+        letter: None,
     };
     let question = ProposalQuestion {
         header: "Index".into(),
@@ -35,6 +36,7 @@ fn proposed() -> Proposed {
 fn revision() -> (ProposalRevision, String) {
     let revision = ProposalRevision {
         number: RevisionNumber::FIRST,
+        changed: String::new(),
         call: Some("toolu_1".into()),
         proposed: proposed(),
         made_at_ms: 1,
@@ -51,6 +53,7 @@ fn proposal() -> (Proposal, String) {
         workspace_id: "w".into(),
         session_id: "s".into(),
         current,
+        revisions: Vec::new(),
         created_at_ms: 1,
         rev: Rev::new(2),
     };
@@ -74,9 +77,12 @@ fn proposing_and_reading_a_proposal_back_keep_their_form() {
         &propose.into_ask(),
         &format!(r#"{{"method":"propose","proposed":{PROPOSED},"call":"toolu_1","key":"toolu_1"}}"#),
     );
-    keeps_its_form(&ReadProposal { id: "p".into() }.into_ask(), r#"{"method":"read_proposal","id":"p"}"#);
     keeps_its_form(
-        &AskReply::Proposal(ProposalRecord { proposal }),
+        &ReadProposal { id: "p".into(), revision: None }.into_ask(),
+        r#"{"method":"read_proposal","id":"p"}"#,
+    );
+    keeps_its_form(
+        &AskReply::Proposal(ProposalRecord { proposal, revision: None }),
         &format!(r#"{{"result":"proposal","proposal":{{{form}}}}}"#),
     );
 }
@@ -173,4 +179,74 @@ fn a_kind_of_response_from_a_newer_hub_reads_as_unknown() {
     let newer = r#"{"kind":"replied","note":"None of these","at_ms":3}"#;
 
     assert_eq!(serde_json::from_str::<Response>(newer).unwrap(), Response::Unknown);
+}
+
+/// A revision: the ask that writes one, with what changed and an option that keeps its letter, the revision the hub
+/// keeps, and the record's summary of each revision, with the start of a note.
+#[test]
+fn revising_a_proposal_and_its_revisions_in_short_keep_their_form() {
+    let mut proposed = proposed();
+    proposed.questions[0].options[1].letter = OptionLetter::read("C");
+    let written = PROPOSED.replace(r#""body":""}"#, r#""body":"","letter":"C"}"#);
+    let revise = Revise {
+        id: "p".into(),
+        proposed: proposed.clone(),
+        changed: "Dropped B".into(),
+        call: Some("toolu_2".into()),
+        key: "toolu_2".into(),
+        images: Vec::new(),
+        attachments: Vec::new(),
+    };
+    keeps_its_form(
+        &revise.into_ask(),
+        &format!(
+            r#"{{"method":"revise","id":"p","proposed":{written},"changed":"Dropped B","call":"toolu_2","key":"toolu_2"}}"#
+        ),
+    );
+
+    let (first, _) = revision();
+    let second = ProposalRevision {
+        number: RevisionNumber(2),
+        changed: "Dropped B".into(),
+        call: Some("toolu_2".into()),
+        proposed,
+        made_at_ms: 2,
+        ..first.clone()
+    };
+    keeps_its_form(
+        &second,
+        &format!(r#"{{"number":2,"changed":"Dropped B","call":"toolu_2","proposed":{written},"made_at_ms":2}}"#),
+    );
+
+    let chose = ResponseSummary::Chose {
+        chosen: vec![ChosenOption {
+            header: "Index".into(),
+            letter: OptionLetter::read("A").unwrap(),
+            label: "Hub".into(),
+        }],
+        note: "None of".into(),
+        at_ms: 3,
+    };
+    let summaries = [
+        RevisionSummary {
+            number: RevisionNumber::FIRST,
+            call: Some("toolu_1".into()),
+            made_at_ms: 1,
+            response: Some(chose),
+        },
+        RevisionSummary { number: RevisionNumber(2), call: None, made_at_ms: 2, response: None },
+    ];
+    keeps_its_form(
+        &summaries,
+        r#"[{"number":1,"call":"toolu_1","made_at_ms":1,"response":{"kind":"chose","chosen":[{"header":"Index","letter":"A","label":"Hub"}],"note":"None of","at_ms":3}},{"number":2,"made_at_ms":2}]"#,
+    );
+}
+
+/// A letter is one from A to Z, so a peer can't name an option by anything else.
+#[test]
+fn an_options_letter_is_one_from_a_to_z() {
+    let read = |letter: &str| serde_json::from_str::<OptionLetter>(&format!("{letter:?}")).ok();
+
+    assert_eq!(read("c"), OptionLetter::read("C"));
+    assert_eq!((read("CC"), read("1")), (None, None));
 }

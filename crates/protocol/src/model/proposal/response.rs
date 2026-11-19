@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::{OptionPlace, ProposalRevision, Proposed, RevisionNumber};
+use super::{OptionPlace, ProposalRevision, Proposed, RevisionNumber, chosen_in_words};
 use crate::client::{ApiError, ErrorCode};
 
 /// The most text an answer's note holds, which the agent reads with the proposal. *Unconfirmed.*
@@ -99,19 +99,9 @@ impl ProposalRevision {
         self.response.as_ref()?.choice()
     }
 
-    /// What was chosen, in words, for the chat's line and the prompt: each option's letter and label, by its
-    /// question's header when there are several.
+    /// What was chosen, in words, for the chat's line and the prompt, as [`chosen_in_words`] says.
     pub fn chosen_in_words(&self) -> Option<String> {
-        let answered = self.choice()?;
-        let named = |(question, place): (&super::ProposalQuestion, &OptionPlace)| match question.named(*place) {
-            Some((letter, option)) => format!("{letter}, {}", option.label.trim()),
-            None => String::new(),
-        };
-        let pairs = self.proposed.questions.iter().zip(&answered.chosen);
-        Some(match self.proposed.questions.as_slice() {
-            [_] => pairs.map(named).collect::<String>(),
-            _ => pairs.map(|pair| format!("{}: {}", pair.0.header.trim(), named(pair))).collect::<Vec<_>>().join("; "),
-        })
+        Some(chosen_in_words(&self.chosen()?))
     }
 }
 

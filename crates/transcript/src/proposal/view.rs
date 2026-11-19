@@ -195,9 +195,9 @@ impl Render for ProposalView {
                 chosen: &self.answering.chosen,
                 standing: self.proposal.current.standing(),
             };
-            let proposed = &self.proposal.current.proposed;
+            let revision = &self.proposal.current;
             // The page is drawn as one block, so its texts are the first of a page that isn't a chat.
-            self.texts.drawing(Of::Document(0), || document::parts(proposed, &mut writing, &choosing, cx))
+            self.texts.drawing(Of::Document(0), || document::parts(revision, &mut writing, &choosing, cx))
         };
         let outline = self.outline(&parts, cx);
         let page = self.page(parts, area, cx);

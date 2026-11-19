@@ -16,7 +16,7 @@ mod testing;
 pub(crate) use record::{AtWork, IdleCache};
 
 mod view;
-pub(crate) use model::{Model, SubagentRecords};
+pub(crate) use model::{Model, SubagentRecords, Wrote};
 pub use view::Transcript;
 #[cfg(any(test, feature = "testing"))]
 use view::rows_and_loaded;

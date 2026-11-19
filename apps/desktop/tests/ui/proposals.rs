@@ -155,7 +155,7 @@ fn an_answer_chosen_in_the_tab_is_sent_and_drawn_in_the_chat_as_the_proposals_li
     ui.wait("its line", |ui| ui.has(SharedString::from(format!("answered-proposal/{seq}"))));
     assert!(!ui.has(SharedString::from(format!("bubble/prompt/{message}"))), "not as the person's prompt");
     let proposal = ui.view().feed().unwrap().snapshot().proposals(&chat)[0].clone();
-    let (title, chosen) = transcript::proposal_answered_parts(Some(&proposal));
+    let (title, chosen) = transcript::proposal_answered_parts(Some(&proposal), proposal.current.number);
     let said = format!("Answered {}: {chosen}", title.unwrap_or_default());
     ui.wait("it says what was chosen", |ui| !ui.labelled(&said).is_empty());
     ui.wait("its mark in the outline", |ui| !ui.labelled("Answered Holding a train").is_empty());
@@ -319,4 +319,34 @@ fn an_answer_given_while_the_queue_is_held_waits_there_and_can_be_taken_back(cx:
     ui.click("send-proposal-answer");
     ui.wait("the same answer queued again", |ui| queued(ui).len() == 1 && answered(ui));
     assert!(told(&mut ui).is_none(), "the agent's told nothing while the queue's held");
+}
+
+/// The agent revises the proposal by its ID: the call that revised it has a line of its own, the first's line says
+/// the second replaced it, and the tab shows the second, what changed first, with the letter the agent kept.
+#[gpui_kit::test]
+fn a_revision_has_a_line_of_its_own_and_the_tab_shows_it(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let mut ui = in_a_new_workspace(cx, &stack);
+    a_proposal(&mut ui);
+    let chat = ui.active_chat();
+    let id = ui.view().feed().unwrap().snapshot().proposals(&chat)[0].id.clone();
+    let revise = format!(
+        r#"mcp:revise_proposal {{"proposal":"{id}","changed":"Dropped B.","title":"Holding a train","context":"Trains wait a minute.","questions":[{{"header":"Holding","question":"Where does the wait live?","options":[{{"label":"The signal"}},{{"label":"The board","letter":"C"}}],"recommended":"C"}}]}}"#
+    );
+
+    ui.input(&format!("{revise}; say:revised"));
+    ui.press("enter");
+
+    ui.wait_idle_with("the turn to finish", |text| text.contains("revised"));
+    ui.wait("the revision's line", |ui| ui.has(SharedString::from(format!("revised/{id}/2"))));
+    let replaced = "Proposed Holding a train: Revision 1 · replaced by revision 2";
+    ui.wait("the first's line says the second replaced it", |ui| !ui.labelled(replaced).is_empty());
+    ui.click(SharedString::from(format!("open-proposal/{id}/2")));
+    ui.wait("the proposal tab", |ui| showing(ui) == Showing::Proposal);
+    let outline = |part: u64| ElementId::NamedInteger("proposal-outline".into(), part);
+    // What changed, the context, the question, its two options and the recommendation.
+    ui.wait("a part for what changed, besides the rest", |ui| ui.has(outline(5)) && !ui.has(outline(6)));
+    let snapshot = ui.view().feed().unwrap().snapshot();
+    let question = &snapshot.proposals(&chat)[0].current.proposed.questions[0];
+    assert_eq!(question.letter(OptionPlace(1)).map(|letter| letter.to_string()).as_deref(), Some("C"));
 }
