@@ -1,7 +1,7 @@
 use super::super::migration::Migration::{self, Rust, Sql};
 use super::{
-    accounts, activity, cache, comments, drafts, first, github_accounts, github_sign_ins, hub_settings, limits, logins,
-    providers, replies, repos, subagents, tools, waiting, waits, workers, workspaces,
+    accounts, activity, cache, comments, drafts, event_runs, first, github_accounts, github_sign_ins, hub_settings,
+    limits, logins, providers, replies, repos, subagents, tools, waiting, waits, workers, workspaces,
 };
 
 /// Applied in order. `PRAGMA user_version` records how many have run.
@@ -18,31 +18,8 @@ pub(in super::super) const MIGRATIONS: &[Migration] = &[
     ALTER TABLE sessions ADD COLUMN title TEXT;
     ALTER TABLE sessions ADD COLUMN closed_at_ms INTEGER;
 "),
-    // Rebuilt rather than altered, so `run` comes before `raw` and `raw` stays last.
-    Sql(r"
-    CREATE TABLE events_with_run (
-        session_id TEXT NOT NULL REFERENCES sessions(id),
-        seq INTEGER NOT NULL,
-        ts_ms INTEGER NOT NULL,
-        kind TEXT NOT NULL,
-        client_msg_id TEXT,
-        run INTEGER,
-        body TEXT NOT NULL,
-        raw TEXT,
-        PRIMARY KEY (session_id, seq)
-    );
-    INSERT INTO events_with_run (session_id, seq, ts_ms, kind, client_msg_id, body, raw)
-        SELECT session_id, seq, ts_ms, kind, client_msg_id, body, raw FROM events;
-    DROP TABLE events;
-    ALTER TABLE events_with_run RENAME TO events;
-    CREATE UNIQUE INDEX events_client_msg ON events (session_id, client_msg_id) WHERE client_msg_id IS NOT NULL;
-    CREATE INDEX events_by_kind ON events (session_id, kind);
-    CREATE TABLE counters (
-        name TEXT PRIMARY KEY,
-        value INTEGER NOT NULL
-    );
-    INSERT INTO counters (name, value) VALUES ('run', 0);
-"),
+    // The run each event was recorded in, in `events`, which is rebuilt for it, in `event_runs`.
+    Sql(event_runs::EVENTS_WITH_RUN),
     // Each record's revision is set by triggers, so no write can forget it. A delete moves the counter too,
     // so a client can tell a removal from what came before it. Revisions start at 1, because 0 means a hub
     // that doesn't keep them.
