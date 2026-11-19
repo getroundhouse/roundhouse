@@ -64,3 +64,46 @@ fn a_separate_provider_clones_from_the_repos_address_without_the_hubs_checkout()
         "from remote\n"
     );
 }
+
+/// An ephemeral provider destroys its instance and repository clone on archive, while the hub keeps unpushed commits
+/// in a bundle and restores them into a fresh clone on restore.
+#[test]
+fn an_ephemeral_provider_keeps_unpushed_commits_across_archive_and_restore() {
+    let mut stack = Stack::start();
+    let remote = stack.path("remote.git");
+    git(&stack.repo(), &["clone", "--bare", stack.repo().to_str().unwrap(), remote.to_str().unwrap()]);
+    git(&stack.repo(), &["remote", "add", "origin", &format!("file://{}", remote.display())]);
+    let client = stack.client();
+    let repo = client.repo_add(stack.repo().to_str().unwrap()).unwrap();
+
+    let local_ws = client.workspace_create(&repo.id, Some("local-first".into()), None, None).unwrap();
+    wait_until("the repository's address to be read", || {
+        client.repo_list().unwrap().into_iter().any(|r| r.id == repo.id && r.origin.url().is_some())
+    });
+    client.workspace_archive(&local_ws.id, false).unwrap();
+
+    stack.make_through_ephemeral_adapter();
+    let client = stack.client();
+    let ws = client.workspace_create(&repo.id, Some("ephemeral-one".into()), None, None).unwrap();
+    let wt = std::path::PathBuf::from(ws.path.as_deref().unwrap());
+    std::fs::write(wt.join("unpushed.txt"), "kept in hub bundle\n").unwrap();
+    git(&wt, &["add", "unpushed.txt"]);
+    git(&wt, &["commit", "-qm", "unpushed work"]);
+    let expected_head = git(&wt, &["rev-parse", "HEAD"]);
+
+    let archived = client.workspace_archive(&ws.id, false).unwrap();
+    assert_eq!(archived.status, WorkspaceStatus::Archived);
+    assert!(!stack.path("adapter-clones").exists(), "ephemeral destroy wiped the adapter's clones directory");
+    let meta_path = stack.path(&format!("home/bundles/{}.json", ws.id));
+    let bundle_path = stack.path(&format!("home/bundles/{}.bundle", ws.id));
+    assert!(meta_path.exists(), "hub stored the archived metadata");
+    assert!(bundle_path.exists(), "hub stored the raw archived commits bundle");
+
+    let restored = client.workspace_restore(&ws.id).unwrap();
+    assert_eq!(restored.status, WorkspaceStatus::Ready);
+    assert!(!meta_path.exists(), "hub removed the metadata once Ready was committed");
+    assert!(!bundle_path.exists(), "hub removed the raw bundle once Ready was committed");
+    let restored_wt = std::path::PathBuf::from(restored.path.as_deref().unwrap());
+    assert_eq!(git(&restored_wt, &["rev-parse", "HEAD"]), expected_head);
+    assert_eq!(std::fs::read_to_string(restored_wt.join("unpushed.txt")).unwrap(), "kept in hub bundle\n");
+}

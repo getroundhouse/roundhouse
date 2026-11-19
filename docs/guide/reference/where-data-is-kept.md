@@ -19,6 +19,7 @@ In it:
 | `hub.db` | Every project, workspace and chat, and each chat's history |
 | `backups/` | Copies of the database from before each migration |
 | `attachments/` | The files prompts carried |
+| `bundles/` | Unpushed commits saved when archiving workspaces whose provider destroys clones on archive, removed once restored |
 | `logins/` | The tokens of the logins you've added in [Settings](settings.md#agents), a file each, which only you can open. Disconnecting one removes its file |
 | `github-logins/` | The tokens of the GitHub accounts you've added in [Settings](settings.md#git), and the key of each app of your own, a file each, which only you can open. Disconnecting an account, or removing an app, removes its file |
 | `hub.log` | The hub's log |

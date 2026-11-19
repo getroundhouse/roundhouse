@@ -16,7 +16,7 @@ pub(crate) mod tests;
 mod worktrees;
 
 pub(crate) use children::add_child_worktree;
-pub(crate) use clones::Clones;
+pub(crate) use clones::{Clones, capture_archived, restore_archived};
 pub use making::prepare_workspace;
 use making::{made_there, make_on_branch, make_on_new_branch};
 pub use names::names_git_has;

@@ -9,7 +9,8 @@ use protocol::capability::{context, settings, turns};
 use protocol::client::ApiError;
 use protocol::model::{AgentAccount, CacheTtl, InstanceId, ProviderName, Workspace};
 use protocol::worker::{
-    AgentStarted, AttachmentWritten, NamesGitHasReply, SetupDone, WorkerRequest, WorkerResponse, WorkspaceReady,
+    AgentStarted, ArchivedBranch, ArchivedBundle, ArchivedGit, AttachmentWritten, NamesGitHasReply, SetupDone,
+    WorkerRequest, WorkerResponse, WorkspaceReady,
 };
 use providers::{
     Capabilities, Instance, Provider, ProviderError, Size, WorkerBinary, WorkerCommand, WorkerEnvironment,
@@ -51,6 +52,8 @@ pub(in super::super) fn hub_with_environment(
     (hub, asked)
 }
 
+type DestroyHook = Box<dyn Fn(&InstanceId) + Send + Sync>;
+
 /// What a hub's stand-ins for its workspaces' workers have been asked, and how often their provider was asked to
 /// create an instance or start a worker, plus a switch to make `Provider::environment` fail on demand.
 #[derive(Default)]
@@ -58,7 +61,10 @@ pub(in super::super) struct Asked {
     pub(super) requests: Mutex<Vec<WorkerRequest>>,
     starts: AtomicUsize,
     creates: AtomicUsize,
+    destroys: AtomicUsize,
     fail_environment: AtomicBool,
+    fail_destroy: AtomicBool,
+    on_destroy: Mutex<Option<DestroyHook>>,
 }
 
 impl Asked {
@@ -79,10 +85,26 @@ impl Asked {
         self.creates.load(Ordering::SeqCst)
     }
 
+    /// How often the provider was asked to destroy an instance.
+    pub(in super::super) fn instances_destroyed(&self) -> usize {
+        self.destroys.load(Ordering::SeqCst)
+    }
+
     /// Makes subsequent `Provider::environment` calls fail, so a test can verify operations after creation don't call
     /// the provider's adapter.
     pub(in super::super) fn fail_environment_reads(&self) {
         self.fail_environment.store(true, Ordering::SeqCst);
+    }
+
+    /// Controls whether subsequent `Provider::destroy` calls fail.
+    pub(in super::super) fn fail_destroys(&self, fail: bool) {
+        self.fail_destroy.store(fail, Ordering::SeqCst);
+    }
+
+    /// Runs `hook` at the start of every `Provider::destroy`, so a test can assert state (such as a saved archive
+    /// bundle on disk) is durable before destruction begins.
+    pub(in super::super) fn on_destroy(&self, hook: impl Fn(&InstanceId) + Send + Sync + 'static) {
+        *self.on_destroy.lock() = Some(Box::new(hook));
     }
 }
 
@@ -124,6 +146,13 @@ pub(super) fn answer(request: WorkerRequest) -> WorkerResponse {
             run: spec.run,
             already_running: false,
             capabilities,
+        });
+    }
+    if let WorkerRequest::CaptureArchive(_) = request {
+        return WorkerResponse::ArchivedGit(ArchivedGit {
+            branches: vec![ArchivedBranch { name: "birch/start".into(), commit: "c0ffee".into() }],
+            bundle: Some(ArchivedBundle::from(b"BODY".as_slice())),
+            bundle_omitted: false,
         });
     }
     WorkerResponse::Ok
@@ -213,7 +242,14 @@ impl Provider for WithWorkers {
         Ok(())
     }
 
-    async fn destroy(&self, _: &InstanceId) -> Result<(), ProviderError> {
+    async fn destroy(&self, id: &InstanceId) -> Result<(), ProviderError> {
+        self.asked.destroys.fetch_add(1, Ordering::SeqCst);
+        if let Some(hook) = self.asked.on_destroy.lock().as_ref() {
+            hook(id);
+        }
+        if self.asked.fail_destroy.load(Ordering::SeqCst) {
+            return Err(ProviderError::io("destroy", std::io::Error::other("transient destroy failure")));
+        }
         Ok(())
     }
 

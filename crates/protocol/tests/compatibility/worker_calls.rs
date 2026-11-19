@@ -85,7 +85,8 @@ fn every_request_about_the_workspace_keeps_its_form() {
         prepare,
         r#"{"method":"prepare_workspace","repo_name":"r","repo_path":"/r","source":{"kind":"checkout","path":"/r"},"workspace_name":"aspen","branch":"aspen","base_ref":null}"#,
     );
-    let restore = worker::RestoreWorkspace { source: checkout(), path: "/w".into(), branch: "birch".into() };
+    let restore =
+        worker::RestoreWorkspace { source: checkout(), path: "/w".into(), branch: "birch".into(), archived: None };
     asked(
         WorkerRequest::RestoreWorkspace(restore),
         r#"{"method":"restore_workspace","repo_path":"/r","source":{"kind":"checkout","path":"/r"},"path":"/w","branch":"birch"}"#,
@@ -110,6 +111,35 @@ fn every_request_about_the_workspace_keeps_its_form() {
     asked(
         WorkerRequest::ArchiveScript(worker::ArchiveScript { source: checkout(), path: "/w".into(), env: vec![] }),
         r#"{"method":"archive_script","repo_path":"/r","source":{"kind":"checkout","path":"/r"},"path":"/w","env":[]}"#,
+    );
+}
+
+#[test]
+fn ephemeral_archive_and_restore_requests_keep_their_form() {
+    let capture = worker::CaptureArchive { source: checkout(), force: false };
+    let capture_forced = worker::CaptureArchive { source: checkout(), force: true };
+    asked(
+        WorkerRequest::CaptureArchive(capture),
+        r#"{"method":"capture_archive","repo_path":"/r","source":{"kind":"checkout","path":"/r"}}"#,
+    );
+    asked(
+        WorkerRequest::CaptureArchive(capture_forced),
+        r#"{"method":"capture_archive","repo_path":"/r","source":{"kind":"checkout","path":"/r"},"force":true}"#,
+    );
+    let archived = worker::ArchivedGit {
+        branches: vec![worker::ArchivedBranch { name: "birch".into(), commit: "abc123".into() }],
+        bundle: Some(worker::ArchivedBundle::from(b"\0\0\0".as_slice())),
+        bundle_omitted: false,
+    };
+    let restore = worker::RestoreWorkspace {
+        source: checkout(),
+        path: "/w".into(),
+        branch: "birch".into(),
+        archived: Some(archived),
+    };
+    asked(
+        WorkerRequest::RestoreWorkspace(restore),
+        r#"{"method":"restore_workspace","repo_path":"/r","source":{"kind":"checkout","path":"/r"},"path":"/w","branch":"birch","archived":{"branches":[{"name":"birch","commit":"abc123"}],"bundle":"AAAA"}}"#,
     );
 }
 
@@ -257,6 +287,22 @@ fn every_reply_about_the_connection_and_the_workspace_keeps_its_form() {
     answered(
         ready,
         r#"{"result":"workspace_ready","path":"/w","branch":"aspen","base_ref":"origin/main","warnings":["no .env to copy"],"branches":{"head":{"kind":"branch","name":"aspen"},"had":[]}}"#,
+    );
+    answered(
+        WorkerResponse::ArchivedGit(worker::ArchivedGit {
+            branches: vec![worker::ArchivedBranch { name: "aspen".into(), commit: "abc123".into() }],
+            bundle: Some(worker::ArchivedBundle::from(b"\0\0\0".as_slice())),
+            bundle_omitted: false,
+        }),
+        r#"{"result":"archived_git","branches":[{"name":"aspen","commit":"abc123"}],"bundle":"AAAA"}"#,
+    );
+    answered(
+        WorkerResponse::ArchivedGit(worker::ArchivedGit {
+            branches: vec![worker::ArchivedBranch { name: "aspen".into(), commit: "abc123".into() }],
+            bundle: None,
+            bundle_omitted: true,
+        }),
+        r#"{"result":"archived_git","branches":[{"name":"aspen","commit":"abc123"}],"bundle_omitted":true}"#,
     );
     answered(WorkerResponse::SetupDone(worker::SetupDone { code: Some(0) }), r#"{"result":"setup_done","code":0}"#);
     answered(WorkerResponse::SetupDone(worker::SetupDone { code: None }), r#"{"result":"setup_done","code":null}"#);

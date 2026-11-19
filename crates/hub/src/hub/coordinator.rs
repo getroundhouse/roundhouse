@@ -50,6 +50,8 @@ pub(crate) struct Hub {
     pub(super) build: Build,
     pub(super) store: Arc<Store>,
     pub(super) attachment_files: AttachmentFiles,
+    /// Where the hub keeps archived git bundles for ephemeral workspaces whose clones are destroyed on archive.
+    pub(super) bundles_dir: PathBuf,
     /// What each worker's command writes to stderr, a file per instance. Apart from any provider's own files.
     pub(super) worker_logs_dir: PathBuf,
     pub(super) logins: Arc<Logins>,
@@ -122,6 +124,7 @@ pub(crate) struct Hub {
 /// Where in its data directory the hub keeps what it keeps outside the database.
 pub(crate) struct HubDirs {
     pub(crate) attachments: PathBuf,
+    pub(crate) bundles: PathBuf,
     pub(crate) worker_logs: PathBuf,
     /// The data directory itself, in which the files of each kind of login have a directory of their own, as
     /// `LoginSecret::DIR` says.
@@ -134,6 +137,7 @@ impl HubDirs {
     pub(crate) fn of(paths: &Paths) -> Self {
         Self {
             attachments: paths.attachments_dir.clone(),
+            bundles: paths.bundles_dir.clone(),
             worker_logs: paths.worker_logs_dir.clone(),
             data: paths.data_dir.clone(),
             network_address: std::net::SocketAddr::from(([127, 0, 0, 1], 0)),
@@ -145,6 +149,7 @@ impl HubDirs {
     pub(crate) fn in_dir(dir: &std::path::Path) -> Self {
         Self {
             attachments: dir.join("attachments"),
+            bundles: dir.join("bundles"),
             worker_logs: dir.join("worker-logs"),
             data: dir.to_path_buf(),
             network_address: std::net::SocketAddr::from(([127, 0, 0, 1], 0)),
@@ -182,6 +187,7 @@ impl Hub {
             addresses_read: Notify::new(),
             store,
             attachment_files: AttachmentFiles::new(dirs.attachments),
+            bundles_dir: dirs.bundles,
             worker_logs_dir: dirs.worker_logs,
             on_demand,
             timers,

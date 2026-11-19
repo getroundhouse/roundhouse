@@ -3,6 +3,7 @@
 
 mod archiving;
 mod environment;
+mod ephemeral;
 mod making;
 mod naming;
 mod setup;

@@ -11,6 +11,7 @@ mod attachments;
 mod awake;
 mod branches;
 mod builds;
+mod bundles;
 mod carrying_on;
 mod children;
 mod comments;

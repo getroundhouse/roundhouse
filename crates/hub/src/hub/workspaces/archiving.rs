@@ -12,6 +12,8 @@ use protocol::worker::{WorktreeThere, WorktreeThereReply};
 use tokio::sync::oneshot;
 use tracing::{error, info, warn};
 
+use super::ephemeral::uses_ephemeral_clone;
+
 use crate::error::internal;
 use crate::hub::Hub;
 use crate::hub::children::{archive_would_lose, would_lose};
@@ -37,14 +39,17 @@ impl Hub {
             Ok(branch) => branch,
             Err(e) => return Err(self.put_back(&id, Move::Archive, e).await),
         };
-        match self.record_archived(&id, branch).await {
-            Ok(workspace) => Ok(workspace),
-            Err(e) => Err(self.put_back(&id, Move::Archive, e).await),
-        }
+        // Once the worktree (and any ephemeral instance) is gone, never put the workspace back to Ready if recording
+        // fails: leaving it Archiving lets startup settling finish it without tidying its saved bundle.
+        self.record_archived(&id, branch).await
     }
 
     /// Records that the workspace is archived, on `branch` if its worktree said which it was on, and announces it.
-    async fn record_archived(&self, id: &WorkspaceId, branch: Option<BranchName>) -> Result<Workspace, ApiError> {
+    pub(super) async fn record_archived(
+        &self,
+        id: &WorkspaceId,
+        branch: Option<BranchName>,
+    ) -> Result<Workspace, ApiError> {
         let archived = id.clone();
         let workspace = self
             .blocking(move |store| {
@@ -70,6 +75,12 @@ impl Hub {
     ) -> Result<Option<BranchName>, ApiError> {
         let id = &workspace.id;
         let placement = self.workspace_placement(id).await?;
+        let ephemeral = uses_ephemeral_clone(&placement);
+        let provider = self.provider(&workspace.provider)?;
+        if ephemeral {
+            // Clear any stale archive left by a failed cleanup on an earlier restore before capturing a new one.
+            self.remove_archived_git(id).await;
+        }
         let link = self.ensure_worker(id).await?;
         let owned = id.clone();
         let children = self.blocking(move |store| store.children_of(&owned)).await?;
@@ -80,7 +91,13 @@ impl Hub {
         if !force {
             // Every worktree's, so forcing past one's doesn't lose another's untold.
             let own = archive_would_lose(&status);
-            let losses: Vec<String> = own.into_iter().chain(would_lose(&link, &children).await).collect();
+            let mut losses: Vec<String> = own.into_iter().chain(would_lose(&link, &children).await).collect();
+            if ephemeral
+                && !losses.is_empty()
+                && let Some(oversized) = Self::probe_oversized_archive(&link, &placement.source).await
+            {
+                losses.push(oversized);
+            }
             if !losses.is_empty() {
                 return Err(ApiError::new(ErrorCode::NeedsForce, losses.join("\n")));
             }
@@ -105,9 +122,22 @@ impl Hub {
         // way, which the next then finds ready. Each checks again unless forced, because an agent may have written
         // files before it stopped.
         self.remove_children(&placement.source, &link, &path, &children, force).await?;
-        link.call(RemoveWorkspace { source: placement.source, path, force, own: None }).await?;
-        let provider = self.provider(&workspace.provider)?;
-        self.close_worker(workspace, &link, provider.as_ref()).await;
+        if ephemeral {
+            // Capture and persist durably BEFORE removing the worktree, so a size refusal, disk error or older worker
+            // leaves the worktree untouched.
+            self.capture_and_save_archive(workspace, &link, &placement.source, force).await?;
+        }
+        if let Err(e) = link.call(RemoveWorkspace { source: placement.source, path, force, own: None }).await {
+            if ephemeral {
+                self.remove_archived_git(id).await;
+            }
+            return Err(e);
+        }
+        if ephemeral {
+            self.destroy_ephemeral_instance(workspace, &link, provider.as_ref()).await;
+        } else {
+            self.close_worker(workspace, &link, provider.as_ref()).await;
+        }
         // Agents are expected to rename their branch to match the work. Restoring needs its real name.
         Ok(match status {
             Ok(status) => status.branch,
@@ -150,13 +180,15 @@ impl Hub {
 
     /// Records that the workspace is ready again, now its worktree is back, announces it and starts its setup. Returns
     /// it as recorded.
-    async fn record_restored(
+    pub(super) async fn record_restored(
         self: &Arc<Self>,
         id: &WorkspaceId,
         link: &Arc<WorkerLink>,
     ) -> Result<Workspace, ApiError> {
         let ready = id.clone();
         let restored = self.blocking(move |store| store.end_move(&ready, Move::Restore, Ended::Done)).await?;
+        // Once `Ready` is durable in SQLite, any saved archive bundle is no longer needed.
+        self.remove_archived_git(id).await;
         let restored = ReadyWorkspace::new(restored)?;
         // The worktree has only the branch it's restored on now, which its record says before it's announced.
         self.watch_branches_from_now(&restored, link).await;
@@ -170,8 +202,12 @@ impl Hub {
     async fn make_worktree_again(self: &Arc<Self>, workspace: &Workspace) -> Result<Arc<WorkerLink>, ApiError> {
         let path = workspace.path.clone().ok_or_else(|| internal("an archived workspace has no path"))?;
         let placement = self.workspace_placement(&workspace.id).await?;
+        if uses_ephemeral_clone(&placement) {
+            return self.restore_ephemeral(workspace, path, placement).await;
+        }
         let link = self.ensure_worker(&workspace.id).await?;
-        let request = RestoreWorkspace { source: placement.source, path, branch: workspace.branch.clone() };
+        let request =
+            RestoreWorkspace { source: placement.source, path, branch: workspace.branch.clone(), archived: None };
         link.call(request).await?;
         Ok(link)
     }
@@ -194,20 +230,27 @@ impl Hub {
         })
     }
 
+    /// Puts the workspace back as it was before it was being archived or restored, and announces it.
+    pub(super) async fn end_move_put_back(&self, id: &WorkspaceId, moving: Move) -> Result<Workspace, ApiError> {
+        let owned = id.clone();
+        let workspace = self.blocking(move |store| store.end_move(&owned, moving, Ended::PutBack)).await?;
+        self.notify(HubNotice::Workspace(workspace.clone()));
+        Ok(workspace)
+    }
+
     /// Puts the workspace back as it was before it was being archived or restored, which was refused or failed for
     /// `why`, and announces it. Returns `why`.
     async fn put_back(&self, id: &WorkspaceId, moving: Move, why: ApiError) -> ApiError {
-        let owned = id.clone();
-        match self.blocking(move |store| store.end_move(&owned, moving, Ended::PutBack)).await {
-            Ok(workspace) => self.notify(HubNotice::Workspace(workspace)),
-            Err(e) => error!(%id, ?moving, "putting back a workspace: {}", e.message),
+        if let Err(e) = self.end_move_put_back(id, moving).await {
+            error!(%id, ?moving, "putting back a workspace: {}", e.message);
         }
         why
     }
 
     /// Settles each workspace an earlier hub left part way through being archived or restored, once this one is
     /// serving, so a worker that's slow to answer keeps no client waiting. Until then its record says it's being
-    /// archived or restored, as it did, and nothing else can be asked of it.
+    /// archived or restored, as it did, and nothing else can be asked of it. Once every move has settled, tidies any
+    /// stale archive bundles.
     pub(crate) async fn settle_moves(self: Arc<Self>, left: Vec<(WorkspaceId, Move)>) {
         for (id, moving) in left {
             match self.settle_move(&id, moving).await {
@@ -222,6 +265,7 @@ impl Hub {
             }
             self.worker_once_settled(&id, moving).await;
         }
+        self.tidy_bundles().await;
     }
 
     /// What becomes of the worker the workspace was settled with, which the hub kept as it started, or started to
@@ -260,22 +304,24 @@ impl Hub {
     async fn settle_move(self: &Arc<Self>, id: &WorkspaceId, moving: Move) -> Result<Workspace, ApiError> {
         let workspace = self.workspace(id).await?;
         let path = workspace.path.clone().ok_or_else(|| internal("a workspace being moved has no path"))?;
+        let placement = self.workspace_placement(id).await?;
+        if uses_ephemeral_clone(&placement) {
+            return self.settle_ephemeral_move(&workspace, path, placement, moving).await;
+        }
         let link = self.ensure_worker(id).await?;
         let WorktreeThereReply { there } = link.call(WorktreeThere { path }).await?;
         match (moving, there) {
             // It got no further than the worktree, so the workspace is as it was before.
-            (Move::Archive, true) | (Move::Restore, false) => {
-                let owned = id.clone();
-                let workspace = self.blocking(move |store| store.end_move(&owned, moving, Ended::PutBack)).await?;
-                self.notify(HubNotice::Workspace(workspace.clone()));
-                Ok(workspace)
-            }
+            (Move::Archive, true) | (Move::Restore, false) => self.end_move_put_back(id, moving).await,
             (Move::Archive, false) => {
                 // The worktree can't say which branch it was on any more. What its worker last read of it can.
-                let branch = workspace.branches.as_ref().and_then(|branches| branches.checked_out());
-                self.record_archived(id, branch.map(|branch| branch.name.clone())).await
+                self.record_archived(id, checked_out_branch(&workspace)).await
             }
             (Move::Restore, true) => self.record_restored(id, &link).await,
         }
     }
+}
+
+pub(super) fn checked_out_branch(workspace: &Workspace) -> Option<BranchName> {
+    workspace.branches.as_ref().and_then(|branches| branches.checked_out()).map(|branch| branch.name.clone())
 }

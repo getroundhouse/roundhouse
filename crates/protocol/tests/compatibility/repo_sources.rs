@@ -5,8 +5,8 @@
 use protocol::frame;
 use protocol::model::BranchName;
 use protocol::worker::{
-    AddChildWorktree, ArchiveScript, ChildBranch, NamesGitHas, PrepareWorkspace, RemoveWorkspace, RepoSource,
-    Request as _, RestoreWorkspace, SetupWorkspace, WorkerRequest,
+    AddChildWorktree, ArchiveScript, CaptureArchive, ChildBranch, NamesGitHas, PrepareWorkspace, RemoveWorkspace,
+    RepoSource, Request as _, RestoreWorkspace, SetupWorkspace, WorkerRequest,
 };
 use serde::Deserialize;
 
@@ -37,7 +37,12 @@ fn every_request(source: &RepoSource) -> Vec<(WorkerRequest, &'static str, &'sta
             "prepare_workspace",
             r#""repo_name":"r","#,
         ),
-        (RestoreWorkspace { source: source(), path: "/w".into(), branch }.into_request(), "restore_workspace", ""),
+        (CaptureArchive { source: source(), force: false }.into_request(), "capture_archive", ""),
+        (
+            RestoreWorkspace { source: source(), path: "/w".into(), branch, archived: None }.into_request(),
+            "restore_workspace",
+            "",
+        ),
         (
             RemoveWorkspace { source: source(), path: "/w".into(), force: false, own: None }.into_request(),
             "remove_workspace",
@@ -56,7 +61,7 @@ fn every_request(source: &RepoSource) -> Vec<(WorkerRequest, &'static str, &'sta
 /// What follows each request's source, which is the same whatever its source is.
 fn after_source(method: &str) -> &'static str {
     match method {
-        "names_git_has" => "",
+        "names_git_has" | "capture_archive" => "",
         "prepare_workspace" => r#","workspace_name":"birch","branch":"birch","base_ref":null"#,
         "restore_workspace" => r#","path":"/w","branch":"birch""#,
         "remove_workspace" => r#","path":"/w","force":false"#,

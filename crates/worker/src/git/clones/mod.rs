@@ -9,9 +9,13 @@
 //! never taken for whole, and the next worker to want it clears it and starts again. Workers take turns at making each,
 //! by a lock beside it in that folder, so the second to want one waits for the first, and then takes the one it made.
 
+mod archive;
+#[cfg(test)]
+mod archive_tests;
 mod making;
 mod place;
 #[cfg(test)]
 mod tests;
 
+pub(crate) use archive::{capture_archived, restore_archived};
 pub(crate) use place::Clones;

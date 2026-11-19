@@ -8,6 +8,7 @@
 //! `method`, and a reply's beside its `result`.
 
 mod agents;
+mod archived;
 mod ask;
 mod children;
 mod connection;
@@ -24,6 +25,7 @@ mod workspaces;
 mod worktree;
 
 pub use agents::{AgentControl, AgentSpec, AgentStarted, AgentStop, Delivery};
+pub use archived::{ArchivedBranch, ArchivedBundle, ArchivedGit, CaptureArchive, MAX_ARCHIVED_BUNDLE_BYTES};
 pub use ask::{
     Answer, Ask, AskAnswer, AskId, AskOutcome, AskReply, CancelWait, CreateWorktree, DiffComments, ListWorktrees,
     ListedChild, NewWorktreeOn, OwnWorktree, ProposalRecord, Propose, PullRequestAnswer, PullRequestWaitUntil,

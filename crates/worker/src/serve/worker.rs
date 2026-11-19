@@ -267,6 +267,7 @@ pub(super) async fn handle(
         WorkerRequest::RunningTerminals => Ok(WorkerResponse::RunningTerminals(state.terminals.running())),
         WorkerRequest::NamesGitHas(asked) => worktrees::names_git_has(state, asked).await,
         WorkerRequest::PrepareWorkspace(asked) => worktrees::prepare(state, asked).await,
+        WorkerRequest::CaptureArchive(asked) => worktrees::capture_archive(state, asked).await,
         WorkerRequest::RestoreWorkspace(asked) => worktrees::restore(state, asked).await,
         WorkerRequest::RemoveWorkspace(asked) => worktrees::remove(state, asked).await,
         WorkerRequest::WorktreeThere(asked) => worktrees::there(state, asked).await,

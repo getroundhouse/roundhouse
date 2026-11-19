@@ -6,4 +6,6 @@
 mod tests;
 
 mod operations;
-pub(super) use operations::{Watches, add_child, names_git_has, prepare, remove, restore, there, watch_branches};
+pub(super) use operations::{
+    Watches, add_child, capture_archive, names_git_has, prepare, remove, restore, there, watch_branches,
+};
