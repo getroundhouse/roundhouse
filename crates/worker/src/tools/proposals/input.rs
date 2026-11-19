@@ -1,8 +1,8 @@
 //! What the agent writes as `propose`'s arguments, which the tool's schema describes, read into what the hub keeps.
 
 use protocol::model::{
-    MAX_HEADER_CHARS, MAX_OPTIONS, MAX_QUESTIONS, MIN_OPTIONS, OptionPlace, ProposalOption, ProposalQuestion, Proposed,
-    Recommendation,
+    MAX_HEADER_CHARS, MAX_OPTIONS, MAX_QUESTIONS, MIN_OPTIONS, OptionLetter, ProposalOption, ProposalQuestion,
+    Proposed, Recommendation,
 };
 use serde::Deserialize;
 use serde_json::{Map, Value, json};
@@ -54,26 +54,27 @@ pub(super) fn proposed(params: &Map<String, Value>) -> Result<Proposed, String> 
 
 impl WrittenQuestion {
     fn read(self, question: usize) -> Result<ProposalQuestion, String> {
-        let recommended = match self.recommended.as_deref().map(str::trim).filter(|letter| !letter.is_empty()) {
-            None => None,
-            Some(letter) => {
-                let option = OptionPlace::of_letter(letter)
-                    .ok_or_else(|| format!("question {question} recommends {letter:?}, which isn't a letter"))?;
-                Some(Recommendation { option, why: self.why })
-            }
-        };
         let options = self.options.into_iter().map(|o| ProposalOption {
             label: o.label,
             description: o.description,
             body: o.body,
         });
-        Ok(ProposalQuestion {
+        let mut read = ProposalQuestion {
             header: self.header,
             text: self.question,
             details: self.details,
             options: options.collect(),
-            recommended,
-        })
+            recommended: None,
+        };
+        if let Some(written) = self.recommended.as_deref().map(str::trim).filter(|letter| !letter.is_empty()) {
+            let letter = OptionLetter::read(written)
+                .ok_or_else(|| format!("question {question} recommends {written:?}, which isn't a letter"))?;
+            let option = read
+                .place_of(letter)
+                .ok_or_else(|| format!("question {question} recommends option {letter}, which it doesn't have"))?;
+            read.recommended = Some(Recommendation { option, why: self.why });
+        }
+        Ok(read)
     }
 }
 

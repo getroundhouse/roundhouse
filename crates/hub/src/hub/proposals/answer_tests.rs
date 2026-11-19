@@ -55,7 +55,7 @@ async fn an_answer_that_doesnt_choose_one_of_the_options_is_refused_and_nothing_
     let refused = hub.answer_proposal(ProposalAnswer { id: made.id.clone(), ..answer("r", 2, "") }).await.unwrap_err();
 
     assert_eq!(refused.code, ErrorCode::InvalidRequest);
-    assert!(refused.message.contains("no option C"), "{}", refused.message);
+    assert!(refused.message.contains("has no such option"), "{}", refused.message);
     assert_eq!(hub.session_proposals("s".into()).await.unwrap().proposals[0].current.response, None);
 }
 

@@ -44,8 +44,8 @@ pub struct Choice {
 pub enum AnswerProblem {
     #[error("choose one option for each of the proposal's {questions} questions")]
     Unchosen { questions: usize },
-    #[error("question {question} has no option {letter}")]
-    NoSuchOption { question: usize, letter: char },
+    #[error("question {question} has no such option")]
+    NoSuchOption { question: usize },
     #[error("a note holds at most {MAX_NOTE_BYTES} bytes, and this holds {0}")]
     LongNote(usize),
     #[error("the proposal has been answered already")]
@@ -62,8 +62,8 @@ impl Proposed {
             return Err(AnswerProblem::Unchosen { questions: self.questions.len() });
         }
         for (at, (question, place)) in self.questions.iter().zip(chosen).enumerate() {
-            if place.index() >= question.options.len() {
-                return Err(AnswerProblem::NoSuchOption { question: at + 1, letter: place.letter() });
+            if question.named(*place).is_none() {
+                return Err(AnswerProblem::NoSuchOption { question: at + 1 });
             }
         }
         if note.len() > MAX_NOTE_BYTES {
@@ -103,9 +103,9 @@ impl ProposalRevision {
     /// question's header when there are several.
     pub fn chosen_in_words(&self) -> Option<String> {
         let answered = self.choice()?;
-        let named = |(question, place): (&super::ProposalQuestion, &OptionPlace)| {
-            let label = question.options.get(place.index()).map_or("", |option| option.label.trim());
-            format!("{}, {label}", place.letter())
+        let named = |(question, place): (&super::ProposalQuestion, &OptionPlace)| match question.named(*place) {
+            Some((letter, option)) => format!("{letter}, {}", option.label.trim()),
+            None => String::new(),
         };
         let pairs = self.proposed.questions.iter().zip(&answered.chosen);
         Some(match self.proposed.questions.as_slice() {
