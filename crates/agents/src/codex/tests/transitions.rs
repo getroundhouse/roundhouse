@@ -1,7 +1,7 @@
 #![cfg(test)]
 use super::harness::Harness;
 use crate::testing::Asking;
-use crate::{AgentOutput, AgentProcess};
+use crate::{AgentError, AgentOutput, AgentProcess};
 use protocol::event::{EventBody, TurnOutcome};
 use protocol::model::Seq;
 use protocol::prompt::Prompt;
@@ -235,10 +235,11 @@ async fn an_interrupt_refused_while_the_turn_goes_on_stops_codex_at_once() {
     assert!(agent.is_gone(), "a turn that may still be going is stopped with its process");
 }
 
-/// Any refusal but one for want of a turn is the prompt's, at once, rather than a wait for the turn's end to start the
-/// next with it. Here the end comes just after the refusal, which a prompt that waited for it would go on to start.
+/// Any refusal but one for want of a turn says at once that Codex took nothing and takes it only once the turn ends, for
+/// the hub to send it again then, rather than a wait for the turn's end to start the next with it. Here the end comes
+/// just after the refusal, which a prompt that waited for it would go on to start.
 #[tokio::test]
-async fn a_steer_refused_while_the_turn_goes_on_is_refused_at_once() {
+async fn a_steer_refused_while_the_turn_goes_on_is_for_after_the_turn_at_once() {
     let refusal = json!({"error":{"code":-32600,"message":"cannot steer a review turn"}});
     let completion = json!({"method":"turn/completed","params":{"turn":{"id":"first","status":"completed"}}});
     let mut h = Harness::new(&json!([
@@ -255,7 +256,7 @@ async fn a_steer_refused_while_the_turn_goes_on_is_refused_at_once() {
 
     let steered = agent.prompt(Seq::new(2), &Prompt::new("second")).await;
 
-    assert!(steered.is_err(), "the prompt waited for the turn's end, and started the next with it");
+    assert!(matches!(steered, Err(AgentError::AfterTheTurn)), "not waited for, nor a failure: {steered:?}");
     assert!(!agent.is_gone(), "a refused prompt leaves Codex running");
     agent.stop().await;
 }

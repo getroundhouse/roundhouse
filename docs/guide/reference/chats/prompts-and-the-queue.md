@@ -45,6 +45,7 @@ A prompt sent with `Enter` while the agent works is read at the agent's next cha
 - **Until it's read, it shows faint,** at the end of the chat, above the working line.
 - **Once it's read, it's where the agent read it,** after what the agent did before then.
 - **One sent while the agent writes its last reply** starts a turn of its own straight after.
+- **One the agent can't read during its turn,** as Codex can't during a review, it reads once the turn ends, with any you sent after it.
 
 ## The queue
 

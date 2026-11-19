@@ -21,7 +21,8 @@ pub(super) async fn send(shared: &Shared, input: Vec<Value>) -> Result<(), Agent
             Ok(_) => return Ok(()),
             // Taking a prompt and ending a turn can cross on the wire, which Codex refuses as having no turn to steer.
             // The refusal proves the prompt wasn't taken. Once the turn it was for has been heard ending, the prompt
-            // starts the next one, once, without a queue of its own. Any other refusal is the prompt's, at once.
+            // starts the next one, once, without a queue of its own. Any other refusal, such as of a turn that can't
+            // be steered, also proves it took nothing, so the hub sends the prompt again once the turn ends.
             Err(refusal) if super::rpc::no_active_turn(&refusal) => {
                 match tokio::time::timeout(END_WAIT, done.wait_for(|id| id.as_ref() == Some(&active))).await {
                     Ok(Ok(_)) => {}
@@ -29,6 +30,7 @@ pub(super) async fn send(shared: &Shared, input: Vec<Value>) -> Result<(), Agent
                     Err(_) => return Err(refusal),
                 }
             }
+            Err(refusal) if super::rpc::refused(&refusal) => return Err(AgentError::AfterTheTurn),
             Err(error) => return Err(error),
         }
     }

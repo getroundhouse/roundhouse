@@ -341,6 +341,7 @@ pub(super) async fn handle(
             match agent.control(&request.control).await {
                 Ok(()) => Ok(WorkerResponse::Ok),
                 Err(_) if agent.is_gone() => Ok(WorkerResponse::AgentNotRunning),
+                Err(agents::AgentError::AfterTheTurn) => Ok(WorkerResponse::AfterTheTurn),
                 Err(e) => Err(e.into()),
             }
         }

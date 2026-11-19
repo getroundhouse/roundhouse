@@ -158,6 +158,8 @@ pub enum WorkerResponse {
     AgentStarted(AgentStarted),
     /// The session has no running agent. The hub starts one and sends the request again.
     AgentNotRunning,
+    /// The agent won't take the prompt while its turn runs, so it took nothing, and the hub sends it once the turn ends.
+    AfterTheTurn,
     Title(TitleReply),
     Account(AgentAccount),
     ToolsServing(ToolsServing),
@@ -194,6 +196,7 @@ mod tests {
         assert_eq!(<()>::read(WorkerResponse::AgentNotRunning), Err(WorkerResponse::AgentNotRunning));
         assert_eq!(Delivery::read(WorkerResponse::Ok), Ok(Delivery::Delivered));
         assert_eq!(Delivery::read(WorkerResponse::AgentNotRunning), Ok(Delivery::AgentNotRunning));
+        assert_eq!(Delivery::read(WorkerResponse::AfterTheTurn), Ok(Delivery::AfterTheTurn));
         assert_eq!(Delivery::read(title.clone()), Err(title.clone()));
         assert_eq!(model::GitStatus::read(title.clone()), Err(title));
     }

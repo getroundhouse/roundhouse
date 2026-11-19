@@ -19,6 +19,7 @@ mod decisions;
 mod ingest;
 mod limits;
 mod messages;
+mod origin;
 mod pickup;
 mod progress;
 mod queue;
@@ -38,4 +39,5 @@ pub(crate) use starting::Starting;
 mod live;
 
 use live::{AgentRun, LiveState, publish};
-pub(crate) use live::{CarriedOver, Live, LiveItem, LiveSession, Origin};
+pub(crate) use live::{CarriedOver, Live, LiveItem, LiveSession};
+pub(crate) use origin::Origin;

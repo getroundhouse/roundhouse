@@ -98,12 +98,18 @@ pub enum Delivery {
     Delivered,
     /// The session has no running agent. The hub starts one and sends the request again.
     AgentNotRunning,
+    /// The agent won't take a prompt while its turn runs, as when the turn can't be steered, so it took nothing. The
+    /// hub keeps the prompt and sends it again once the turn ends. A worker from before this fails the request instead.
+    AfterTheTurn,
 }
 
 impl Reply for Delivery {
     fn read(response: WorkerResponse) -> Result<Self, WorkerResponse> {
         if matches!(response, WorkerResponse::Ok) {
             return Ok(Self::Delivered);
+        }
+        if matches!(response, WorkerResponse::AfterTheTurn) {
+            return Ok(Self::AfterTheTurn);
         }
         let WorkerResponse::AgentNotRunning = response else { return Err(response) };
         Ok(Self::AgentNotRunning)

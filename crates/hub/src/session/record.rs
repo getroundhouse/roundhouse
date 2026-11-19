@@ -109,9 +109,10 @@ impl LiveSession {
     /// them together.
     async fn after_commit(&self, hub: &Arc<Hub>, recorded: Vec<(Origin, &Appended, Next)>, made: Made) {
         let appended: Vec<&Appended> = recorded.iter().map(|(_, appended, _)| *appended).collect();
-        let ready = {
+        let (ready, turn_ended) = {
             let mut state = self.state.lock();
             let was_ready = state.ready_for_queue();
+            let was_in_turn = state.progress.status.in_turn();
             let mut ended_others = false;
             let mut recorded = recorded.into_iter().peekable();
             while let Some((origin, appended, next)) = recorded.next() {
@@ -123,8 +124,12 @@ impl LiveSession {
                     ended_others = false;
                 }
             }
-            !was_ready && state.ready_for_queue()
+            let turn_ended = was_in_turn && !state.progress.status.in_turn();
+            (!was_ready && state.ready_for_queue(), turn_ended && !state.after_the_turn.is_empty())
         };
+        if turn_ended {
+            self.wake_after_the_turn();
+        }
         if ready {
             self.wake_queue();
         }

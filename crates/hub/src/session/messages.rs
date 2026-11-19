@@ -96,6 +96,8 @@ pub(crate) enum Command {
     },
     /// Starts the agent, if it's waiting on nothing but a wait, so it hears how the wait ended.
     WakeAgent,
+    /// Sends the prompts kept for the turn's end, which has come.
+    SendAfterTheTurn,
     /// The session is gone. What's queued ahead of this is carried out, and then the task stops.
     End,
 }

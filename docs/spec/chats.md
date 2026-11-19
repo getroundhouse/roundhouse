@@ -501,6 +501,7 @@ Every call is drawn the same way, as the first rule below says, and each kind fi
 
   ![A prompt waiting under a thought](screens/steered-thinking.png)
 
+- **An agent that can't read a prompt during its turn, as Codex can't during a review, reads it once the turn ends,** with any sent after it, in order. It's faint until then, as any prompt the agent hasn't read is. *Unconfirmed.*
 - **Stopping the agent drops a prompt it hasn't read yet, and the prompt says so,** since stopping means stopping. So does a prompt the agent never read because it went away. *Unconfirmed.*
 
   **A prompt sent while a command ran, which the agent never read, since it was stopped first.** *Unconfirmed.*
