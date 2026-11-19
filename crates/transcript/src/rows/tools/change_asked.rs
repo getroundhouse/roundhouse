@@ -62,16 +62,17 @@ impl ChangeAsked {
     pub(crate) fn rows(&self, cx: &App) -> Vec<AnyElement> {
         let none = Marks::default();
         let muted = look::colors(cx).text_muted;
-        let label = |text: &str| {
-            div().px(look::Space::Medium).typeset(look::Type::Detail).text_color(muted).child(text.to_string())
+        // A path in the code font, since it's what you'd copy or type, and a word as a detail.
+        let label = |kind: look::Type, text: &str| {
+            div().px(look::Space::Medium).typeset(kind).text_color(muted).child(text.to_string())
         };
         let mut rows = Vec::new();
         for file in &self.files {
             if self.several() {
-                rows.push(label(&file.label).into_any_element());
+                rows.push(label(look::Type::Code, &file.label).into_any_element());
             }
             if file.sections.is_empty() {
-                rows.push(label("Deleted").into_any_element());
+                rows.push(label(look::Type::Detail, "Deleted").into_any_element());
             }
             let language = language(&file.path);
             rows.extend(file.sections.iter().flat_map(|section| numbered::rows(language, section, &none, None, cx)));
