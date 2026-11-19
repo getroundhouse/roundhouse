@@ -8,13 +8,17 @@
 //! These are kept apart from the pictures a prompt carries, which the transcript keeps by attachment, because the
 //! kit's drawing of a text asks for an image from any thread, by its address, so what answers has to be shared across
 //! threads. `drawn` has how a text drawn from the kit's blocks draws them, so a click on one opens it over the window.
+//!
+//! A Mermaid diagram the text writes is drawn as one of these, from what `crate::diagrams` draws of it, so it's drawn,
+//! measured again and opened as one the text points to is.
 
 mod drawings;
 mod drawn;
 
 #[cfg(test)]
 pub(crate) use drawn::taken_at;
-pub(crate) use drawn::{may_take, to_read};
+pub(crate) use drawn::{diagram_leaf, may_take, to_read};
 
 mod loading;
+pub(crate) use drawings::system_fonts;
 pub(crate) use loading::{Images, LinkedImages};

@@ -274,10 +274,16 @@ pub(super) fn keyed(block: BlockNode, leaves: &mut Vec<String>) -> BlockNode {
             let rows = table.rows().map(|cells| cells.map(|cell| leaf(cell.clone(), leaves)).collect()).collect();
             BlockNode::Table(Table::new(rows, aligns))
         }
+        // A diagram is a leaf of its code, as the code block it is for the kit.
+        BlockNode::Custom { node, state } => {
+            if let Some(code) = linked_images::diagram_leaf(&node, next_key(leaves)) {
+                leaves.push(code);
+            }
+            BlockNode::Custom { node, state }
+        }
         // These have no text of their own to select, nor does a kind a later kit adds, since the kit's are
         // non-exhaustive, so they're drawn as they are.
-        BlockNode::Custom { .. }
-        | BlockNode::Break { .. }
+        BlockNode::Break { .. }
         | BlockNode::HorizontalRule { .. }
         | BlockNode::Definition { .. }
         | BlockNode::Unknown

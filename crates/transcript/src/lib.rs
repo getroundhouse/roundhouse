@@ -7,6 +7,7 @@
 
 mod attachments;
 mod calls;
+mod diagrams;
 mod document;
 mod find;
 #[cfg(test)]

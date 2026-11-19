@@ -17,7 +17,11 @@
 #[cfg(test)]
 mod tests;
 
+mod diagrams;
 mod placement;
+#[cfg(test)]
+use diagrams::DIAGRAM;
+pub(crate) use diagrams::diagram_leaf;
 #[cfg(test)]
 pub(crate) use placement::taken_at;
 pub(super) use placement::to_draw;

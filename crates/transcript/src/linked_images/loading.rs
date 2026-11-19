@@ -1,5 +1,6 @@
 use super::{drawings, drawn};
 use crate::attachments::image_format;
+use crate::diagrams::{self, Palette};
 use crate::transcript::Transcript;
 use client_core::Client;
 use gpui_kit::component::text::MarkdownExtensions;
@@ -56,6 +57,9 @@ pub(super) enum Linked<W> {
     Unreadable,
 }
 
+/// An image as it's drawn, with how many pixels it covers, as [`drawable`] and [`pixels`] say.
+pub(super) type Drawn = (Arc<RenderImage>, (u32, u32));
+
 /// Where an image a text points to comes from, if it's drawn.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub(super) enum Source {
@@ -63,6 +67,8 @@ pub(super) enum Source {
     Kept(AttachmentId),
     /// Written into the text, by its whole address.
     Embedded(String),
+    /// A diagram written into the text, by what it says, drawn in a palette, as `crate::diagrams` draws it.
+    Diagram(Arc<str>, Palette),
 }
 
 impl LinkedImages<Seq> {
@@ -90,10 +96,14 @@ impl<W: Waiter> LinkedImages<W> {
         Self(Arc::new(Shared { session, client: Mutex::new(client), images, arrived: Box::new(arrived) }))
     }
 
-    /// Carries on on a new connection, and asks again for what couldn't be read, in case the connection was why.
+    /// Carries on on a new connection, and asks again for what couldn't be read, in case the connection was why. A
+    /// diagram that couldn't be drawn isn't drawn again, since nothing it's drawn from has changed.
     pub(crate) fn reconnect(&self, client: &Client) {
         *self.0.client.lock() = client.clone();
-        self.0.images.lock().retain(|_, linked| !matches!(linked, Linked::Unreadable));
+        let read = |source: &Source, linked: &Linked<W>| {
+            !matches!(linked, Linked::Unreadable) || matches!(source, Source::Diagram(..))
+        };
+        self.0.images.lock().retain(|source, linked| read(source, linked));
     }
 
     /// How a text drawn from the kit's blocks, which names `kept`, for `waiter`, draws the images it points to.
@@ -106,17 +116,18 @@ impl<W: Waiter> LinkedImages<W> {
 
     /// The image at `uri` in a text that names `kept`, for `waiter`, and how many pixels it covers as it's drawn, once
     /// it's here, or `None` while it loads, if it can't be shown, or if it isn't one that's drawn.
-    pub(super) fn ready(
-        &self,
-        uri: &str,
-        kept: &[LinkedImage],
-        waiter: W,
-        cx: &mut App,
-    ) -> Option<(Arc<RenderImage>, (u32, u32))> {
-        let source = source(uri, kept)?;
-        self.image(&source, waiter, cx)?.ok()?;
-        match self.0.images.lock().get(&source) {
-            Some(Linked::Ready(image, covers)) => Some((image.clone(), *covers)),
+    pub(super) fn ready(&self, uri: &str, kept: &[LinkedImage], waiter: W, cx: &mut App) -> Option<Drawn> {
+        self.drawn(&source(uri, kept)?, waiter, cx)?.ok()
+    }
+
+    /// The image from `source`, for `waiter`, and how many pixels it covers as it's drawn, once it's here, an error if
+    /// it can't be shown, or `None` while it loads, which it starts doing the first time it's asked for.
+    pub(super) fn drawn(&self, source: &Source, waiter: W, cx: &mut App) -> Option<Result<Drawn, ImageCacheError>> {
+        if let Err(e) = self.image(source, waiter, cx)? {
+            return Some(Err(e));
+        }
+        match self.0.images.lock().get(source) {
+            Some(Linked::Ready(image, covers)) => Some(Ok((image.clone(), *covers))),
             _ => None,
         }
     }
@@ -170,6 +181,7 @@ impl<W: Waiter> LinkedImages<W> {
             let bytes = match reading {
                 Source::Kept(id) => client.attachment_read(&session, &id).ok(),
                 Source::Embedded(uri) => embedded(&uri),
+                Source::Diagram(text, palette) => diagrams::svg(&text, &palette),
             };
             bytes
                 .and_then(|bytes| {

@@ -1,5 +1,6 @@
 //! Chats whose replies point to images in the worktree, for the screens about them: a board of signals that showed the
-//! wrong light for a signal at stop, and a setting shown off and on, and among words.
+//! wrong light for a signal at stop, and a setting shown off and on, and among words. And one whose reply draws a
+//! diagram.
 
 #![cfg(test)]
 
@@ -17,6 +18,9 @@ const AFTER: &str = "docs/screens/board-after.png";
 
 /// The screenshot in [`pointed`]'s reply, as it's drawn, which is known by where it starts in the reply.
 pub(super) const AFTER_DRAWN: &str = "linked-image/91";
+
+/// The diagram in [`diagrammed`]'s reply, as it's drawn, which is known by where it starts in the reply.
+pub(super) const DIAGRAM_DRAWN: &str = "diagram/44";
 
 /// Where the replies in [`pointed_on_lines`] and [`pointed_among_words`] say their screenshots are.
 const OFF: &str = "docs/screens/wake-off.png";
@@ -53,6 +57,22 @@ pub(super) fn pointed_among_words() -> World {
     );
     let prompt = "Add a setting for keeping the Mac awake, and show me how its row looks.";
     pointing(prompt, &reply, vec![(ON, pictures::setting(true))])
+}
+
+/// The agent explaining how a prompt reaches it, with a Mermaid diagram, which the transcript draws.
+pub(super) fn diagrammed() -> World {
+    let reply = "Here's how a prompt reaches the agent now:\n\n\
+                 ```mermaid\n\
+                 flowchart LR\n  \
+                   P[Prompt] --> Q{Agent working?}\n  \
+                   Q -->|No| S[Sent at once]\n  \
+                   Q -->|Yes| T[Steers its turn]\n  \
+                   T -.->|Refused| W[Waits for the turn to end]\n\
+                 ```\n\n\
+                 The hub decides, so every client sends a prompt the same way.";
+    let drawn = reply.find("```").map(|starts| format!("diagram/{starts}"));
+    assert_eq!(drawn.as_deref(), Some(DIAGRAM_DRAWN), "the diagram is known by where it starts in the reply");
+    pointing("How does a prompt reach the agent now? Draw it.", reply, Vec::new())
 }
 
 /// The chat of `prompt` and a reply to it that points to each of `kept`, an address in the worktree and the PNG the hub

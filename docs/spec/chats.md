@@ -149,7 +149,13 @@
 
   ![A reply with two images in it, one under the other](screens/reply-images.png)
 
-- **Every agent is told to show the person an image this way,** and to save one it made in the workspace, rather than in the system's temporary directory, where the image wouldn't show. *Unconfirmed:* in the workspace's `.context/`, where it keeps whatever else it makes for its own use, in folders named for what they hold, such as `.context/screenshots/`.
+- **A diagram a reply writes in Mermaid shows in the reply as a picture,** from a code block whose language is `mermaid`, as GitHub draws one, as wide as it's drawn, up to the column's, and opens as an image does. It's drawn by each client from what the reply says, so nothing is kept but the reply's words, in the app's colours and with its words measured in the font they're drawn in, so each fits its box. While the reply is still being written, and until the block's fence is closed, it's the code block. One that can't be drawn, such as one with a mistake in it, a kind the app doesn't draw, or one that takes over 2 seconds, is the code block it was written as, with Copy. A selection copies its code, and find finds what it says. A plan to approve draws its diagrams too, and a prompt's is its code, as the person wrote it. *Unconfirmed:* the kinds drawn, which are flowcharts, sequence, class, state, entity-relationship and Gantt diagrams, pies, mind maps, timelines, git graphs and journeys, the colours, and the 2 seconds.
+
+  **A reply that draws a diagram.** *Unconfirmed.*
+
+  ![A reply with a Mermaid diagram drawn in it](screens/reply-diagram.png)
+
+- **Every agent is told to show the person an image this way,** and to draw a diagram in Mermaid, and to save one it made in the workspace, rather than in the system's temporary directory, where the image wouldn't show. *Unconfirmed:* in the workspace's `.context/`, where it keeps whatever else it makes for its own use, in folders named for what they hold, such as `.context/screenshots/`.
 
 - **A click on an image in a reply opens it over the window, as a prompt's image opens,** so a screenshot made smaller to fit the column, or the height of the text, can be seen as big as it is. An image in a link goes where its link does instead, as a badge does. One in a heading, a table or a footnote, and one written with its address given elsewhere in the text, as `![The board][board]` is, opens nothing. Nor do images in a paragraph that holds them with no words but isn't one image alone, such as two in one bold with nothing between them, nor one beside nothing but a tag of HTML, nor one in what a subagent did shown under its call. *Unconfirmed.*
 

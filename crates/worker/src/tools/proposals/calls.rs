@@ -16,11 +16,11 @@ const PROPOSE_DESCRIPTION: &str = "Asks the person to decide something too large
     with a tool that asks questions, when an option needs more than a sentence to describe, or the person needs a \
     comparison, code or a picture to judge the options, such as choosing between architectures. Give it 1 to 4 \
     questions, each with 2 to 4 options, and each option a label, a one-line description and a body in \
-    Markdown that says what it is and what it costs. To show a picture, such as a diagram or a screenshot, write it \
-    as a file in the worktree, an SVG for a diagram, and point to it with a Markdown image: Roundhouse keeps a copy \
-    with the proposal, as the file is when you propose. Recommend one, and say why, when you have a view. It returns \
-    at once: the person answers later, and their answer comes to you as a prompt. Don't ask them the same in the \
-    chat, or wait or poll for the answer: carry on with other work, or end your turn.";
+    Markdown that says what it is and what it costs. Draw a diagram in Mermaid, in a code block whose language is \
+    `mermaid`. To show another picture, such as a screenshot, save it in the worktree and point to it with a Markdown \
+    image: Roundhouse keeps a copy with the proposal, as the file is when you propose. Recommend one, and say why, \
+    when you have a view. It returns at once: the person answers later, and their answer comes to you as a prompt. \
+    Don't ask them the same in the chat, or wait or poll for the answer: carry on with other work, or end your turn.";
 
 const GET_DESCRIPTION: &str = "Reads one of the proposals you made in this chat with the propose tool, by its ID, \
     which propose's result gives: its context, each question with its options and what you recommended, and the \

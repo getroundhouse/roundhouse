@@ -31,11 +31,12 @@ pub(super) fn plan_card(seq: Seq, body: &EventBody, open: bool, shared: &Shared)
         look::button(ElementId::NamedInteger(name.into(), seq.get()), kind, look::ControlSize::Large, label)
             .on_click(answer(approve))
     };
-    // Nothing's found in what asks the person something.
+    // Nothing's found in what asks the person something. It points to no images the hub kept, but its diagrams are
+    // drawn.
     let content = shared.texts.draw(
         &shared.selection,
         &Written::unfound(TextAt::only(seq, 0), ItemKey::Event(seq, 0).element("plan"), plan),
-        None,
+        Some(shared.linked.images(seq, &[])),
     );
     let buttons = h_flex()
         .gap(look::Space::Small)

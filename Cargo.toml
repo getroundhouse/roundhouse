@@ -132,6 +132,8 @@ libc = "0.2.191"
 # Ghostty's terminal core, through bindings pinned to the commit that builds its 1.0.1, which isn't on crates.io yet.
 # Its build script builds Ghostty with Zig 0.17, which has to be on the PATH, and fetches Ghostty's source as it builds.
 libghostty-vt = { git = "https://github.com/Uzaaft/libghostty-rs", rev = "483ea3d5247b214060da58ef6037a95f30ae89fb" }
+# Already under GPUI, whose drawing of SVG shapes text with it. Measures a Mermaid diagram's words, so its boxes fit them.
+rustybuzz = "0.20.1"
 # Already under GPUI, which draws SVG with it. Reads a drawing the agent points to before GPUI draws it, so it shows no
 # file it names by its path, which GPUI's options would read. GPUI turns on its `text` feature, which lays out a
 # drawing's words.
@@ -144,6 +146,10 @@ usvg = { version = "0.46.0", default-features = false, features = ["text"] }
 markdown = "1.0.0"
 # Writes the spec's page as HTML, escaping what it puts in.
 maud = "0.27.0"
+# Draws the Mermaid diagrams the agent writes, as SVG, in Rust, with no browser or JavaScript. Only the kinds of diagram
+# the transcript draws, since each adds to the build. MIT or Apache-2.0, though it brings `cssparser`, `cssparser-macros`
+# and `dtoa-short`, which are MPL-2.0, which `tools/policy` allows.
+merman = { version = "0.10.0", default-features = false }
 # Already under serde_json. Finds and counts the line endings in a file the worker reads a few lines of at a time.
 memchr = "2.8.3"
 # Already under gpui-component. Tells a worker when git writes a worktree's branches, from the OS's own file events.

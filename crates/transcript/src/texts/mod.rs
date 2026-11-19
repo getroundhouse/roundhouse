@@ -30,6 +30,7 @@
 //! is kept, as any other is, so it's drawn again at once when it's shown again.
 
 pub(crate) use at::{Among, Of, Place, TextAt};
+pub(crate) use code_blocks::code_context;
 use parse::ImagesAre;
 pub(crate) use parse::{ATOM, Parsed, TopBlock, leaves, top_blocks, top_blocks_and_items};
 pub(crate) use plain::Plain;

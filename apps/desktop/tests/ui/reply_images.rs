@@ -8,11 +8,13 @@ use std::io::Cursor;
 use std::path::Path;
 
 use client_core::fake_hub::World;
-use client_core::fake_hub::events::{finished_turn, taken, text_pointing, user_prompt};
+use client_core::fake_hub::events::{finished_turn, taken, text_pointing, typed_call, user_prompt};
 use gpui_kit::{AppContext as _, Pixels, TestAppContext, px};
 use protocol::attachment::{Attachment, MediaType};
+use protocol::capability::calls::Call;
 use protocol::event::{ContentBlock, EventBody, LinkedImage};
-use protocol::model::{AttachmentId, Seq, SessionStatus};
+use protocol::fixtures::{ApprovalRequest, approval_request, plan};
+use protocol::model::{AttachmentId, Seq, SessionStatus, ToolUseId};
 
 use crate::support::{FakeHub, Gate, Stack, Ui};
 
@@ -37,7 +39,8 @@ fn replies(ui: &mut Ui<'_>) -> Vec<Pixels> {
         let points = |row: &usize| {
             t.event_at(*row).is_some_and(|event| match event.body {
                 EventBody::Assistant { blocks, .. } => {
-                    blocks.iter().any(|block| matches!(block, ContentBlock::Text { text, .. } if text.contains("![")))
+                    let draws = |text: &str| text.contains("![") || text.contains("```mermaid");
+                    blocks.iter().any(|block| matches!(block, ContentBlock::Text { text, .. } if draws(text)))
                 }
                 _ => false,
             })
@@ -155,6 +158,53 @@ fn a_drawing_a_reply_points_to_is_drawn_as_tall_as_it_says(cx: &mut TestAppConte
     let image = ui.shown("linked-image/").remove(0);
     ui.click(image);
     assert!(ui.has_dialog() && ui.shown("opened-picture").len() == 1, "and a click opens it");
+}
+
+/// A Mermaid diagram in a reply is drawn as a picture, as tall as it's drawn, which opens as an image does, and the
+/// reply's row grows to hold it once it's drawn.
+#[gpui_kit::test]
+fn a_diagram_in_a_reply_is_drawn_as_a_picture_that_opens(cx: &mut TestAppContext) {
+    let reply =
+        "How it flows:\n\n```mermaid\nflowchart TD\n  A[Ask] --> B[Decide]\n  B --> C[Build]\n```\n\nThat's all.";
+    let (_hub, mut ui) = replied_with(cx, reply, &[]);
+
+    ui.wait("the diagram", |ui| ui.shown("diagram/").len() == 1);
+    let diagram = ui.shown("diagram/").remove(0);
+    let tall = ui.bounds(diagram.clone()).size.height;
+    assert!(tall > px(150.), "three boxes, one under another: {tall:?}");
+    ui.wait("the row grown to hold it", |ui| replies(ui).first().is_some_and(|height| *height > tall));
+    assert!(ui.shown("code-block-actions").is_empty(), "drawn, not as its code");
+    ui.click(diagram);
+    assert!(ui.has_dialog() && ui.shown("opened-picture").len() == 1, "and a click opens it");
+}
+
+/// A diagram that can't be drawn, such as one with a mistake in it, is the code block it was written as.
+#[gpui_kit::test]
+fn a_diagram_that_cant_be_drawn_is_its_code(cx: &mut TestAppContext) {
+    let reply = "How it flows:\n\n```mermaid\nflowchart TD\n  A[Ask --> B\n```";
+    let (_hub, mut ui) = replied_with(cx, reply, &[]);
+
+    ui.wait("its code", |ui| ui.shown("code-block-actions").len() == 1);
+    assert_eq!(ui.shown("diagram/").len(), 1, "taken as a diagram, and drawn as its code");
+    assert!(ui.shown("opened-picture").is_empty());
+}
+
+/// A plan the agent asks to have approved draws its diagrams too.
+#[gpui_kit::test]
+fn a_diagram_in_a_plan_to_approve_is_drawn(cx: &mut TestAppContext) {
+    let mut world = World::default();
+    let repo = world.repo("signals");
+    let workspace = world.workspace(&repo, "ledger");
+    let planned = "1. Ask.\n\n```mermaid\nflowchart TD\n  A[Ask] --> B[Build]\n```";
+    let asked =
+        ApprovalRequest { tool_use_id: Some(ToolUseId::from("toolu-1")), ..approval_request("ask-1", plan(planned)) };
+    let events =
+        vec![user_prompt("Plan it."), taken(Seq::new(1)), typed_call("msg-1", "toolu-1", Call::Plan), asked.into()];
+    world.chat(&workspace, SessionStatus::WaitingApproval, events);
+    let fake = FakeHub::holding(world);
+    let mut ui = Ui::open_on(cx, &fake);
+
+    ui.wait("the plan's diagram", |ui| ui.shown("diagram/").len() == 1);
 }
 
 /// The kit still draws an image the transcript leaves to it, from the copy the hub kept.

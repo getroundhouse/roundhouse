@@ -76,7 +76,7 @@ When an agent needs you to decide something too large for a question, such as wh
 - **The proposal opens in the proposal tab,** beside the chats, by itself the first time, without taking you from what you're doing, and from `Open` at the end of its line.
 - **The tab has an outline of the proposal on the left.** Click a part to go to it.
 - **Each option is a card,** with its letter, its title, and `Recommended` on the one the agent recommends.
-- **The images the agent points to show on the page,** such as a diagram or a screenshot in the workspace, as they were when it proposed.
+- **The images the agent points to show on the page,** such as a diagram or a screenshot in the workspace, as they were when it proposed, and so do the diagrams it writes in Mermaid.
 - **The agent can go on working, or stop, while you read it.** Ask it about the options in the chat meanwhile.
 - **A workspace has one proposal tab.** Opening another proposal shows that one in the same tab. `Cmd-W` closes it.
 
@@ -119,6 +119,10 @@ Rest the pointer on a code block for a button at its top right that copies its c
 An image the agent's reply points to shows in the reply, if it's in the workspace, and so does an SVG drawing. The hub keeps it as it was when the reply came, so it's still there after the agent changes the file, and after the workspace is archived.
 
 An image anywhere else on the machine, or on the web, shows nothing.
+
+A diagram the agent writes in Mermaid, in a code block whose language is `mermaid`, shows in the reply as a picture, once the reply has it all. One the app can't draw shows as its code.
+
+![A reply that draws a diagram](../../../spec/screens/reply-diagram.png)
 
 ![A reply that points to a screenshot in the workspace](../../../spec/screens/reply-image.png)
 
