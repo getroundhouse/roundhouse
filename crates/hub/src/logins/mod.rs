@@ -19,6 +19,7 @@ use std::sync::Arc;
 mod tests;
 
 mod accounts;
+mod reserves;
 mod targets;
 
 pub(crate) use accounts::{AccountChange, Connect, Handed, Logins};

@@ -1,7 +1,7 @@
 //! The screens about the context and the account, beside Send: the ring's card, as it usually is, when a setting caps
 //! the context and when it's the one card to say whose account it is, for a login on the machine and for one the hub
-//! holds, then the limits' card, with a model's own weekly limit too, and with the menu that moves the chat to
-//! another account.
+//! holds, then the limits' card, with a model's own weekly limit too, with the menu that moves the chat to another
+//! account, and on an account that's using what it reserves of its week, with the line above the composer that says so.
 
 #![cfg(test)]
 
@@ -11,7 +11,8 @@ use super::frame::{CONTEXT, Frame, Part};
 use super::screens::FOCUS;
 use super::steps::{Screen, Step, Target};
 use super::worlds::{
-    context, context_capped, context_held_login, context_to_move, context_with_a_models_limit, context_without_limits,
+    context, context_capped, context_held_login, context_in_reserve, context_to_move, context_with_a_models_limit,
+    context_without_limits,
 };
 
 /// The screens about the context and the account.
@@ -98,5 +99,26 @@ pub(crate) const SCREENS: &[Screen] = &[
             Step::Hover { on: Target::Id("usage"), shows: Region::UsageCard.id() },
             Step::Click("account-move"),
         ],
+    },
+    Screen {
+        name: "usage-in-reserve",
+        spec: "chats.md",
+        world: Some(context_in_reserve),
+        frame: Frame::Around(
+            Part::Region(Region::ReserveLine),
+            &[Part::Region(Region::Composer), Part::Region(Region::UsageCard)],
+        ),
+        steps: &[
+            Step::Select(FOCUS),
+            Step::WaitFor("usage"),
+            Step::Hover { on: Target::Id("usage"), shows: Region::UsageCard.id() },
+        ],
+    },
+    Screen {
+        name: "reserve-line",
+        spec: "chats.md",
+        world: Some(context_in_reserve),
+        frame: Frame::Around(Part::Region(Region::ReserveLine), &[Part::Region(Region::Composer), Part::Menu]),
+        steps: &[Step::Select(FOCUS), Step::WaitFor("usage"), Step::Click("reserve-move")],
     },
 ];

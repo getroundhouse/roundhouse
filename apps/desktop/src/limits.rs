@@ -9,7 +9,7 @@ use gpui_kit::{
     StatefulInteractiveElement as _, Styled as _, TestSupportExt as _, div, px, relative,
 };
 use look::Typeset as _;
-use protocol::model::{LimitWindow, UsageLimit};
+use protocol::model::{Account, LimitWindow, Reserve, UsageLimit};
 
 /// How tall a bar is in a card, a limit's or the context's.
 pub(crate) const BAR_IN_A_CARD: Pixels = px(6.);
@@ -44,51 +44,98 @@ fn window(limit: &UsageLimit) -> Option<String> {
 
 /// A bar `tall` high, filled from the left by `left_percent`, how much of a limit is left from 0 to 100, so it empties
 /// as the limit is used. It's drawn at once, with nothing moving, which the kit's own bar doesn't do: it glides to a
-/// new value.
-pub(crate) fn bar(left_percent: u8, tall: Pixels, cx: &App) -> Div {
-    let (color, left) = (look::colors(cx).text, f32::from(left_percent) / 100.);
-    div()
+/// new value. What the account reserves of the limit is split off its start by a gap, as the context's bar splits off
+/// the room its agent keeps back, since it's the last of the limit a chat uses, and once what's left is down to it,
+/// what's left is in the warning's colour, since a chat on it is spending what the person kept for themselves.
+pub(crate) fn bar(left_percent: u8, reserve: Option<Reserve>, tall: Pixels, cx: &App) -> Div {
+    let colors = look::colors(cx);
+    let left = f32::from(left_percent.min(100)) / 100.;
+    let track = || div().h_full().rounded_full().bg(colors.text.opacity(0.12));
+    let filled = |share: f32, fill| div().h_full().rounded_full().bg(fill).w(relative(share.clamp(0., 1.)));
+    let Some(reserve) = reserve else {
+        return track().w_full().h(tall).child(filled(left, colors.text));
+    };
+    let fill = if reserve.reached_at(left_percent) { colors.warning } else { colors.text };
+    let kept = f32::from(reserve.percent()) / 100.;
+    let rest = (kept < 1.).then(|| track().flex_1().child(filled((left - kept) / (1. - kept), fill)));
+    h_flex()
         .w_full()
         .h(tall)
-        .rounded_full()
-        .bg(color.opacity(0.12))
-        .child(div().h_full().rounded_full().bg(color).w(relative(left.clamp(0., 1.))))
+        // The drawing's own gap, where what's reserved starts, rather than a space.
+        .gap(px(2.))
+        .child(track().w(relative(kept)).flex_shrink_0().child(filled(left / kept, fill)))
+        .children(rest)
+}
+
+/// What `account` reserves of `limit`: only its week has a reserve.
+pub(crate) fn reserve_for(account: &Account, limit: &UsageLimit) -> Option<Reserve> {
+    account.reserve.filter(|_| limit.window == LimitWindow::SevenDays)
+}
+
+/// Whether `limit` is down to what `account` reserves of it.
+pub(crate) fn in_reserve(account: &Account, limit: &UsageLimit) -> bool {
+    reserve_for(account, limit).is_some_and(|reserve| reserve.reached_at(limit.left_percent()))
+}
+
+/// What's said of a limit's reserve once `left_percent` is left, as `25% reserved`, or once that's down to it,
+/// `Using the 25% reserved`.
+pub(crate) fn reserve_said(left_percent: u8, reserve: Reserve) -> String {
+    let percent = reserve.percent();
+    if reserve.reached_at(left_percent) {
+        format!("Using the {percent}% reserved")
+    } else {
+        format!("{percent}% reserved")
+    }
 }
 
 /// A limit called `name`, as a card says it: how much of it is left beside its name, a bar that empties as it's used,
-/// and when it starts again, if its agent heard when. A model's week is named by its provider's label for the model,
-/// which could be long, so the name is cut off before how much is left is. Assistive apps are told it as one label, as
-/// [`said_in_a_card`] says it. It's the card's limit `at` that place in its list, since two can have the same name.
-pub(crate) fn in_a_card(at: usize, name: &SharedString, limit: &UsageLimit, cx: &App) -> AnyElement {
+/// and when it starts again, if its agent heard when, then what the account reserves of it, which its bar splits off,
+/// and which turns what's left to the warning's colour once it's down to it. A model's week is named by its provider's
+/// label for the model, which could be long, so the name is cut off before how much is left is. Assistive apps are told
+/// it as one label, as [`said_in_a_card`] says it. It's the card's limit `at` that place in its list, since two can
+/// have the same name.
+pub(crate) fn in_a_card(
+    at: usize,
+    name: &SharedString,
+    limit: &UsageLimit,
+    reserve: Option<Reserve>,
+    cx: &App,
+) -> AnyElement {
     let colors = look::colors(cx);
     let left = limit.left_percent();
-    let resets = limit.resets_at_ms.and_then(|at_ms| look::day_and_time(at_ms, cx));
+    let in_reserve = reserve.is_some_and(|reserve| reserve.reached_at(left));
+    let resets =
+        limit.resets_at_ms.and_then(|at_ms| look::day_and_time(at_ms, cx)).map(|when| format!("Resets {when}"));
+    let under: Vec<String> = resets.into_iter().chain(reserve.map(|reserve| reserve_said(left, reserve))).collect();
+    let how_much = div().flex_none().emphasis().child(format!("{left}% left"));
     let said = h_flex()
         .justify_between()
         .gap(look::Space::Medium)
         .child(div().min_w_0().truncate().text_color(colors.text_muted).child(name.clone()))
-        .child(div().flex_none().emphasis().child(format!("{left}% left")));
-    let resets = resets
-        .map(|when| div().typeset(look::Type::Detail).text_color(colors.text_faint).child(format!("Resets {when}")));
+        .child(if in_reserve { how_much.text_color(colors.warning) } else { how_much });
+    let under = (!under.is_empty())
+        .then(|| div().typeset(look::Type::Detail).text_color(colors.text_faint).child(under.join(" · ")));
     v_flex()
         .id(("limit", at))
         .role(Role::Label)
-        .aria_label(said_in_a_card(name, limit, cx))
+        .aria_label(said_in_a_card(name, limit, reserve, cx))
         .gap(look::Space::XSmall)
         .child(said)
-        .child(bar(left, BAR_IN_A_CARD, cx))
-        .children(resets)
+        .child(bar(left, reserve, BAR_IN_A_CARD, cx))
+        .children(under)
         .test_support()
         .into_any_element()
 }
 
-/// What [`in_a_card`] says of a limit called `name`, in words: `5h limit, 71% left, resets 3:00 PM`.
-pub(crate) fn said_in_a_card(name: &str, limit: &UsageLimit, cx: &App) -> String {
-    let left = format!("{name}, {}% left", limit.left_percent());
-    match limit.resets_at_ms.and_then(|at_ms| look::day_and_time(at_ms, cx)) {
-        Some(when) => format!("{left}, resets {when}"),
-        None => left,
-    }
+/// What [`in_a_card`] says of a limit called `name`, in words: `5h limit, 71% left, resets 3:00 PM`, then what the
+/// account reserves of it, as `25% reserved`.
+pub(crate) fn said_in_a_card(name: &str, limit: &UsageLimit, reserve: Option<Reserve>, cx: &App) -> String {
+    let left = limit.left_percent();
+    let resets =
+        limit.resets_at_ms.and_then(|at_ms| look::day_and_time(at_ms, cx)).map(|when| format!("resets {when}"));
+    let reserved = reserve.map(|reserve| reserve_said(left, reserve).to_lowercase());
+    let parts: Vec<String> = [Some(format!("{name}, {left}% left")), resets, reserved].into_iter().flatten().collect();
+    parts.join(", ")
 }
 
 #[cfg(test)]

@@ -24,10 +24,10 @@ const LIMIT: Pixels = px(4.);
 /// bars, their card and the ring's card agree on whether there are any.
 #[derive(Clone)]
 pub(in super::super) struct Usage {
-    pub(super) account: Account,
+    pub(in super::super) account: Account,
     pub(super) limits: Vec<(SharedString, UsageLimit)>,
     /// What the menu that moves the chat to another account offers, if there's one to move it to.
-    pub(super) moves: Option<Moves>,
+    pub(in super::super) moves: Option<Moves>,
 }
 
 impl WorkspacePane {
@@ -74,9 +74,16 @@ impl WorkspacePane {
         self.session()?;
         let called = SharedString::from(words::usage_heading(self.agent().as_ref()).to_string());
         let usage = usage.filter(|usage| !usage.limits.is_empty())?.clone();
-        let left: Vec<f32> = usage.limits.iter().map(|(_, limit)| f32::from(limit.left_percent()) / 100.).collect();
-        let least = left.iter().copied().reduce(f32::min)?;
-        let bars = middle().size(Slot::SIZE).child(bars(&drawn(&left), cx));
+        let each: Vec<Bar> = usage
+            .limits
+            .iter()
+            .map(|(_, limit)| Bar {
+                left: f32::from(limit.left_percent()) / 100.,
+                in_reserve: crate::limits::in_reserve(&usage.account, limit),
+            })
+            .collect();
+        let least = each.iter().map(|bar| bar.left).reduce(f32::min)?;
+        let bars = middle().size(Slot::SIZE).child(bars(&drawn(&each), cx));
         // Said in words too, as the ring is. The least of them is the one that runs out first.
         let said = format!("{called} {} left", words::whole_percent(least));
         // It holds a button when the chat can be moved to another account, so it waits for the pointer to cross to it.
@@ -123,13 +130,24 @@ fn ring(used: f32, cx: &App) -> impl IntoElement {
 /// A bar for each limit, lying flat one above the next and as wide as the ring, filled from the left by how much of
 /// the limit is left, from 0 to 1, over a fainter whole bar. So each is its card's bar made small, and empties as
 /// that does. They lie flat because two upright bars beside Send are a pause button.
-fn bars(left: &[f32], cx: &App) -> impl IntoElement {
-    let color = look::colors(cx).text_muted;
-    let bar = move |left: f32| {
-        let filled = div().h_full().w(relative(left.clamp(0., 1.))).rounded_full().bg(color);
+fn bars(each: &[Bar], cx: &App) -> impl IntoElement {
+    let colors = look::colors(cx);
+    let (color, warning) = (colors.text_muted, colors.warning);
+    let bar = move |bar: &Bar| {
+        let fill = if bar.in_reserve { warning } else { color };
+        let filled = div().h_full().w(relative(bar.left.clamp(0., 1.))).rounded_full().bg(fill);
         div().w(RING).h(LIMIT).rounded_full().bg(color.opacity(0.25)).child(filled)
     };
-    div().flex().flex_col().gap(between_limits(left.len())).children(left.iter().copied().map(bar))
+    div().flex().flex_col().gap(between_limits(each.len())).children(each.iter().map(bar))
+}
+
+/// A limit's bar beside Send.
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct Bar {
+    /// How much of the limit is left, from 0 to 1.
+    left: f32,
+    /// Whether it's down to what the account reserves of it, which its fill says in the warning's colour.
+    in_reserve: bool,
 }
 
 /// The most bars there's room for in the slot.
@@ -138,12 +156,12 @@ const MOST_BARS: usize = 5;
 /// Of how much is left of each limit, in the card's order, what's drawn as bars: all of it while there's room, and
 /// otherwise the limits with the least left, which run out first, in the same order. An account can have a week of
 /// its own for each of several models, and the card lists every limit.
-fn drawn(left: &[f32]) -> Vec<f32> {
-    let mut least: Vec<usize> = (0..left.len()).collect();
-    least.sort_by(|&a, &b| left[a].total_cmp(&left[b]));
+fn drawn(each: &[Bar]) -> Vec<Bar> {
+    let mut least: Vec<usize> = (0..each.len()).collect();
+    least.sort_by(|&a, &b| each[a].left.total_cmp(&each[b].left));
     least.truncate(MOST_BARS);
     least.sort_unstable();
-    least.into_iter().map(|at| left[at]).collect()
+    least.into_iter().map(|at| each[at]).collect()
 }
 
 /// How far each of `bars` bars is from the next: as far as a bar is tall while they fit in the slot that way, and
@@ -169,7 +187,12 @@ mod tests {
             assert!(either_side >= 0. && either_side.fract() == 0., "{bars} bars are {tall} px tall");
         }
 
-        assert_eq!(drawn(&[0.5, 0.9]), [0.5, 0.9]);
-        assert_eq!(drawn(&[0.3, 0.9, 0.1, 0.8, 0.5, 0.2, 0.7]), [0.3, 0.1, 0.5, 0.2, 0.7]);
+        let drawn_of = |left: &[f32]| {
+            let each: Vec<Bar> = left.iter().map(|&left| Bar { left, in_reserve: left < 0.25 }).collect();
+            drawn(&each).into_iter().map(|bar| (bar.left, bar.in_reserve)).collect::<Vec<_>>()
+        };
+        assert_eq!(drawn_of(&[0.5, 0.9]), [(0.5, false), (0.9, false)]);
+        let shown = drawn_of(&[0.3, 0.9, 0.1, 0.8, 0.5, 0.2, 0.7]);
+        assert_eq!(shown, [(0.3, false), (0.1, true), (0.5, false), (0.2, true), (0.7, false)], "each with its own");
     }
 }

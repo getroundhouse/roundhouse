@@ -8,4 +8,5 @@ mod words;
 
 mod usage;
 
+pub(super) use moving::line_button;
 pub(super) use usage::Usage;

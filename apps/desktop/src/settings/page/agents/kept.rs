@@ -24,6 +24,8 @@ pub(super) struct Kept {
     /// to ask.
     pub(super) asking: Option<Asking>,
     pub(super) choosing: super::choosing::Choosing,
+    /// The panel that sets how much of an account's week is kept back, while it's open.
+    pub(super) reserving: Option<super::reserving::Reserving>,
     /// Settings' focus, as of the page's last frame, where focus goes back to as the panel goes while it has it, so
     /// keys still reach Settings.
     settings_focus: Option<FocusHandle>,

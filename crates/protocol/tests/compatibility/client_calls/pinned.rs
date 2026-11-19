@@ -29,7 +29,8 @@ pinned! {
     "client_calls/requests.rs" => [
         Hello(_), HubStatus, HubShutdown, HubShutdownIfIdle, HubRestart, HubConfigure(_), RepoAdd(_), RepoList,
         RecordsList, AgentList, ModelsFor(_), SessionSubagents(_), SessionProposals(_), AccountConnect(_),
-        AccountSetDefault(_), AccountDisconnect(_), GithubAccountConnect(_), GithubAccountDisconnect(_),
+        AccountSetDefault(_), AccountDisconnect(_), AccountSetReserve(_),
+        GithubAccountConnect(_), GithubAccountDisconnect(_),
         GithubAccountSetDefault(_), GithubSignInStart(_), GithubSignInCancel(_), WorkspaceCreate(_), WorkspaceList(_),
         WorkspaceArchive(_), WorkspaceRestore(_), WorkspaceRename(_), WorkspaceRegenerateTitle(_), WorkspaceStatus(_),
         WorkspaceDiff(_), WorkspaceSetupLog(_), WorkspaceRerunSetup(_), WorkspacePullRequest(_),

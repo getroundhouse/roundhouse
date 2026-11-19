@@ -384,4 +384,6 @@ pub(in super::super) const MIGRATIONS: &[Migration] = &[
     Sql(super::todos::TODOS),
     // The proposals agents make, in `proposals`.
     Sql(super::proposals::PROPOSALS),
+    // How much of each account's week the person keeps for themselves, in `accounts`.
+    Sql(accounts::RESERVES),
 ];

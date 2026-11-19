@@ -114,6 +114,7 @@ pub fn account(id: &str) -> Account {
         limits: Vec::new(),
         held_login: None,
         used_at_ms: None,
+        reserve: None,
         rev: Rev::default(),
     }
 }

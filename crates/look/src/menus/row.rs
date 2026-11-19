@@ -5,7 +5,7 @@ use gpui_kit::component::{Icon, h_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     Action, App, InteractiveElement as _, IntoElement as _, ParentElement as _, SharedString,
-    StatefulInteractiveElement as _, Styled as _, Window, div,
+    StatefulInteractiveElement as _, Styled as _, TestSupportExt as _, Window, div,
 };
 
 use super::NoteKind;
@@ -137,6 +137,8 @@ fn drawn(
                     .child(note),
             )
         })
+        // So a test finds it by what it tells assistive apps, as it does a row the kit draws.
+        .test_support()
         .into_any_element()
 }
 

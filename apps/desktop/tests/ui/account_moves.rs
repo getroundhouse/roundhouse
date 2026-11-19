@@ -104,7 +104,8 @@ fn the_menu_beside_whose_account_it_is_moves_the_chat_and_back_and_a_lost_login_
     open_the_menu(&mut ui, "context");
     let menu = ElementId::Name(MENU.into());
     let listed = ui.labelled("Personal").iter().any(|item| item.path().contains(&menu));
-    ui.click_menu_item("Work");
+    // Work's row says how much of its week is left, as the fake agent heard it.
+    ui.click_menu_item("Work, 96% of 7d");
     ui.wait("the chat to move back", |ui| on(ui).as_ref() == Some(&work));
     let hubs = stack.client().records_list().unwrap().sessions.into_iter().next().unwrap();
     let hubs = (hubs.hub_account().cloned(), hubs.account);

@@ -1,6 +1,6 @@
-//! Agents in Settings, against a real hub: connecting a login, renewing it, disconnecting it, choosing the default, and
-//! what the hub refuses. What the page draws of logins a hub holds is in `agents_page.rs`, on a fake hub. Every token
-//! is plainly made up.
+//! Agents in Settings, against a real hub: connecting a login, renewing it, disconnecting it, choosing the default,
+//! reserving part of an account's week, and what the hub refuses. What the page draws of logins a hub holds is in
+//! `agents_page.rs`, on a fake hub. Every token is plainly made up.
 
 #![cfg(test)]
 
@@ -9,7 +9,7 @@ use std::path::PathBuf;
 use gpui_kit::component::WindowExt as _;
 use gpui_kit::test::TestWindowExt as _;
 use gpui_kit::{AppContext as _, SharedString, TestAppContext};
-use protocol::model::{Account, AccountId, AgentKind, LoginToken};
+use protocol::model::{Account, AccountId, AgentKind, LoginToken, Reserve};
 
 use super::{open_settings, settings_showing};
 use crate::support::{Stack, Ui, click, files_holding};
@@ -88,6 +88,31 @@ fn choosing_a_default_updates_the_hub_and_other_clients_and_the_badge_moves_with
     let hub = stack.client().records_list().unwrap().hub_settings.unwrap();
     assert_eq!(hub.account_defaults.unwrap()[0].account, personal);
     ui.wait("the badge to move", |ui| ui.has(badge(&personal)) && !ui.has(badge(&work)));
+}
+
+#[gpui_kit::test]
+fn reserving_part_of_a_week_waits_for_save_then_the_hub_and_the_app_have_it(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let work = connected(&stack, "Work", TOKEN);
+    let mut ui = in_agents(cx, &stack);
+
+    ui.click(id("account-more", &work));
+    ui.click_menu_item("Reserve usage…");
+    ui.wait("the panel", |ui| ui.has("reserve-panel"));
+    ui.click("reserve-25");
+    ui.wait_for_every_call();
+    assert_eq!(the_hubs(&stack)[0].reserve, None, "nothing is saved until Save");
+    ui.click("reserve-save");
+
+    ui.wait("the reserve", |ui| record(ui, &work).is_some_and(|account| account.reserve == Reserve::new(25)));
+    assert_eq!(the_hubs(&stack)[0].reserve, Reserve::new(25));
+    ui.wait("the panel to go", |ui| !ui.has("reserve-panel"));
+    ui.click(id("account-more", &work));
+    ui.click_menu_item("Reserve usage…");
+    ui.wait("the panel again", |ui| ui.has("reserve-panel"));
+    ui.click("reserve-0");
+    ui.click("reserve-save");
+    ui.wait("none reserved", |ui| record(ui, &work).is_some_and(|account| account.reserve.is_none()));
 }
 
 /// One walk through connecting a login: first what the hub refuses as no token, then the token in the same panel,

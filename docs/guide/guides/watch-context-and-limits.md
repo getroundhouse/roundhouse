@@ -39,7 +39,13 @@ Once you've added a Claude login in [Settings](../reference/settings.md#agents) 
 
 ![The menu of accounts to move the chat to](../../spec/screens/usage-move-menu.png)
 
-The chat carries on under the account you chose from its next prompt, and stays on it until you move it again, whatever the default becomes. A chat whose agent is working asks first, since moving stops it. Each chat moves on its own, and a new chat is put on the default.
+The chat carries on under the account you chose from its next prompt, and stays on it until you move it again, whatever the default becomes. A chat whose agent is working asks first, since moving stops it. Each chat moves on its own, and a new chat is put on the default. The menu says how much of each account's week is left, so you can move the chat to one with room.
+
+## When an account uses its reserve
+
+If you've [reserved part of an account's week](../reference/settings.md#reserve-part-of-an-accounts-week), a chat on it says so once the week is down to what's reserved: a line above the composer, in amber, with **Move**, and the week's bar beside Send turns amber too. Nothing stops the chat. Move it if you want to keep the reserve for yourself, or carry on.
+
+![The line above the composer saying the account is using its reserve](../../spec/screens/usage-in-reserve.png)
 
 ## When the prompt cache expires
 

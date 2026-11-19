@@ -68,8 +68,10 @@ fn compact(pane: &WeakEntity<WorkspacePane>, off: bool, cx: &App) -> Div {
 /// bar that empties, and when it starts again, then whose account it is, and the menu that moves the chat to another,
 /// which `hold` keeps the card open for.
 pub(super) fn usage_card(usage: &Usage, called: SharedString, hold: &HoldOpen, cx: &App) -> AnyElement {
-    let limits =
-        usage.limits.iter().enumerate().map(|(at, (name, limit))| crate::limits::in_a_card(at, name, limit, cx));
+    let limits = usage.limits.iter().enumerate().map(|(at, (name, limit))| {
+        let reserve = crate::limits::reserve_for(&usage.account, limit);
+        crate::limits::in_a_card(at, name, limit, reserve, cx)
+    });
     let plan = usage.account.plan.clone().map(SharedString::from);
     let limits = v_flex().gap(look::Space::Medium).child(heading(called, plan, cx)).children(limits);
     let whose = whose(&usage.account, Plan::BesideHeading, usage.moves.as_ref().map(|moves| (moves, hold)), cx);

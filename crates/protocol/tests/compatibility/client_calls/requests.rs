@@ -5,7 +5,7 @@ use protocol::client::{
     ClientRequest, Hello, accounts, admin, comments, drafts, files, github_accounts, records, workspaces,
 };
 use protocol::frame;
-use protocol::model::{AgentKind, CommentDraft, DiffSide, GithubToken, HubSettingsChange, LoginToken};
+use protocol::model::{AgentKind, CommentDraft, DiffSide, GithubToken, HubSettingsChange, LoginToken, Reserve};
 
 use super::asked;
 
@@ -85,6 +85,17 @@ fn every_request_about_an_agents_login_keeps_its_form() {
     asked(
         ClientRequest::AccountDisconnect(accounts::AccountDisconnect { id: "claude-1".into() }),
         r#"{"method":"account_disconnect","id":"claude-1"}"#,
+    );
+    asked(
+        ClientRequest::AccountSetReserve(accounts::AccountSetReserve {
+            account: "claude-1".into(),
+            reserve: Reserve::new(25),
+        }),
+        r#"{"method":"account_set_reserve","account":"claude-1","reserve":25}"#,
+    );
+    asked(
+        ClientRequest::AccountSetReserve(accounts::AccountSetReserve { account: "claude-1".into(), reserve: None }),
+        r#"{"method":"account_set_reserve","account":"claude-1"}"#,
     );
 }
 

@@ -206,6 +206,7 @@ pub(super) async fn handle(
         R::SessionAssignAccount(asked) => C::Session(hub.session_assign_account(asked).await?),
         R::AccountConnect(asked) => C::Account(hub.account_connect(asked).await?),
         R::AccountDisconnect(accounts::AccountDisconnect { id }) => C::Account(hub.account_disconnect(id).await?),
+        R::AccountSetReserve(asked) => C::Account(hub.account_set_reserve(asked).await?),
         R::GithubAccountConnect(asked) => C::GithubAccount(hub.github_account_connect(asked).await?),
         R::GithubAccountDisconnect(github_accounts::GithubAccountDisconnect { id }) => {
             C::GithubAccount(hub.github_account_disconnect(id).await?)

@@ -87,6 +87,7 @@ pub enum ClientRequest {
     AccountConnect(accounts::AccountConnect),
     AccountSetDefault(accounts::AccountSetDefault),
     AccountDisconnect(accounts::AccountDisconnect),
+    AccountSetReserve(accounts::AccountSetReserve),
     GithubAccountConnect(github_accounts::GithubAccountConnect),
     GithubAccountDisconnect(github_accounts::GithubAccountDisconnect),
     GithubAccountSetDefault(github_accounts::GithubAccountSetDefault),
