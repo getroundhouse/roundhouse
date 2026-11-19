@@ -209,6 +209,18 @@ What's done on a card as a whole, such as keeping the keyboard's focus or measur
 | Set a line on a side of an element, such as under a bar, between panes or under a row of Settings | `line_under`, `line_over`, `line_left`, `line_right`, from `look::Lined` |
 | Set one over an element inside a card, in the colour a line on that card is | `line_over_on(kind)` |
 
+## Empty states
+
+`docs/spec/components.md` has an empty pane's kinds, and `crates/look/src/empty_states` the code. An empty state fills what it's in and puts what it says in its middle, so a place gives it only its words and what to do.
+
+| To | Call |
+|---|---|
+| Fill a pane that has nothing yet, or can't show what it's for, under a heading | `look::empty(kind, heading)` |
+| Say why under its heading, a paragraph at a time | `says` |
+| Add a button that does something about it, the main action last | `answer`, with a `look::Button` |
+| Say in one muted line that a list or a pane has nothing to show, where nothing needs doing | `look::nothing_to_show(words)` |
+| Find either in a test | `id` |
+
 ## Tabs
 
 `docs/spec/components.md` has a tab's widths, and `crates/look/src/tabs` the code. A tab draws its name, its line and its close button itself, so none is drawn on the kit's tab. The bar it's in is still the place's, until the bars are components.

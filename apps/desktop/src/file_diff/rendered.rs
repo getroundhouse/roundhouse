@@ -9,7 +9,6 @@ use gpui_kit::App;
 use gpui_kit::{AnyElement, Context, IntoElement as _};
 
 use super::FileDiff;
-use super::diff_view::placeholder;
 #[cfg(feature = "testing")]
 use super::view::DiffView;
 
@@ -22,13 +21,12 @@ impl FileDiff {
 
     /// The file rendered, with what it removed and added marked, once it's known whole, as it was and as it is.
     pub(super) fn rendered_file(&mut self, cx: &mut Context<Self>) -> AnyElement {
-        let muted = look::colors(cx).text_muted;
         let versions = self.shown.as_ref().and_then(|shown| shown.sides.versions.clone());
         let Some(versions) = versions else {
             return if self.is_ready() {
-                placeholder("This file can't be read whole, so it can't show rendered", muted)
+                look::nothing_to_show("This file can't be read whole, so it can't show rendered").into_any_element()
             } else {
-                placeholder("Loading…", muted)
+                look::nothing_to_show("Loading…").into_any_element()
             };
         };
         if self.rendered.as_ref().is_none_or(|rendered| !Arc::ptr_eq(rendered, &versions)) {

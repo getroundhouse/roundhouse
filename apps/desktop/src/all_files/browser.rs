@@ -4,7 +4,7 @@ use client_core::{Client, ClientError};
 use gpui_kit::component::v_flex;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyElement, AppContext as _, Context, EventEmitter, Hsla, IntoElement, ParentElement as _, Render, SharedString,
+    AnyElement, AppContext as _, Context, EventEmitter, IntoElement, ParentElement as _, Render, SharedString,
     Styled as _, Window, div, uniform_list,
 };
 use listed::Listed;
@@ -308,10 +308,12 @@ impl Render for AllFiles {
         let muted = look::colors(cx).text_muted;
         let truncated = matches!(&self.listing, Listing::Listed(listed) if listed.truncated);
         let body = match &self.listing {
-            Listing::Loading => placeholder("Loading…".into(), muted),
-            Listing::Unsupported => placeholder("The hub is too old to list files".into(), muted),
-            Listing::Failed(message) => placeholder(format!("Couldn't list the files: {message}").into(), muted),
-            Listing::Listed(_) if self.rows.is_empty() => placeholder("No files".into(), muted),
+            Listing::Loading => look::nothing_to_show("Loading…").into_any_element(),
+            Listing::Unsupported => look::nothing_to_show("The hub is too old to list files").into_any_element(),
+            Listing::Failed(message) => {
+                look::nothing_to_show(format!("Couldn't list the files: {message}")).into_any_element()
+            }
+            Listing::Listed(_) if self.rows.is_empty() => look::nothing_to_show("No files").into_any_element(),
             Listing::Listed(_) => {
                 uniform_list("all-files", self.rows.len(), cx.processor(|t, range, _, cx| t.draw_rows(range, cx)))
                     .flex_1()
@@ -335,18 +337,4 @@ impl Render for AllFiles {
             })
             .child(body)
     }
-}
-
-fn placeholder(text: SharedString, color: Hsla) -> AnyElement {
-    div()
-        .flex_1()
-        .w_full()
-        .px(look::Space::Large)
-        .flex()
-        .items_center()
-        .justify_center()
-        .text_center()
-        .text_color(color)
-        .child(text)
-        .into_any_element()
 }

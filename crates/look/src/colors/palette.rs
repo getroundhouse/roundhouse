@@ -103,8 +103,8 @@ colors! {
         on_main = 0x1d1a_18ff,
     }
     "The brand" {
-        /// The brand's copper: empty states, the app icon, keyboard focus, the caret, the edge of a comment being
-        /// written, and, quieter, a composer that's planning. Never a status.
+        /// The brand's copper: the mark over an empty pane, the app icon, keyboard focus, the caret, the edge of a
+        /// comment being written, and, quieter, a composer that's planning. Never a status.
         brand = 0xd08a_5cff,
         /// The brand's copper paled toward the text, which marks the tab showing, as the line under it, and, faint, the
         /// tab the pointer's over and what's found.
@@ -124,7 +124,8 @@ colors! {
         /// The agent stopped short: the turntable of its mark, and what the chat says of it, such as a turn that
         /// failed.
         stopped = 0xee6f_64ff,
-        /// Something else that went wrong, such as a call that failed or the hub that couldn't be reached.
+        /// Something else that went wrong, such as a call that failed, and the mark over a pane that can't show what
+        /// it's for, such as with no hub.
         error = 0xee6f_64ff,
         /// Lines and counts added to a file.
         added = 0x6cc4_88ff,

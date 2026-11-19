@@ -16,7 +16,6 @@ use look::{Shaped as _, Typeset as _};
 use super::{Comparison, ImageDiff, Outcome, Shown, Side, comparison, stacked};
 use crate::file_header::{bar, copy_path};
 use crate::file_image::{FileImage, Placed, fitted};
-use crate::file_view::placeholder;
 use crate::shared_choice::choose;
 
 impl Render for ImageDiff {
@@ -25,12 +24,12 @@ impl Render for ImageDiff {
         self.compare_if_wanted(cx);
         let drawn = self.drawn(cx);
         let body = match &drawn {
-            Drawn::Loading => placeholder("Loading…".into(), cx),
+            Drawn::Loading => look::nothing_to_show("Loading…").into_any_element(),
             Drawn::Alone(_, image) => alone(image),
             Drawn::Flip(before, after) => stacked::flip(before, after, self.shown, cx.weak_entity()),
             Drawn::Difference(_, _) => stacked::difference(self.difference_shown(), cx),
-            Drawn::SideBySide(before, after) => side_by_side(before, after, cx),
-            Drawn::Why(why) => placeholder(why.clone(), cx),
+            Drawn::SideBySide(before, after) => side_by_side(before, after),
+            Drawn::Why(why) => look::nothing_to_show(why.clone()).into_any_element(),
         };
         let strip = self.told(&drawn).map(|told| strip(told, cx));
         let choices = self.images().is_some().then(|| choices(self.shown, &cx.weak_entity(), cx));
@@ -231,7 +230,7 @@ fn alone(image: &FileImage) -> AnyElement {
 }
 
 /// Each side in a column of its own, the same width, so both are drawn at one scale.
-fn side_by_side(before: &Side, after: &Side, cx: &App) -> AnyElement {
+fn side_by_side(before: &Side, after: &Side) -> AnyElement {
     let covers = covers([before, after]);
     h_flex()
         .id("images-side-by-side")
@@ -240,23 +239,23 @@ fn side_by_side(before: &Side, after: &Side, cx: &App) -> AnyElement {
         .w_full()
         .p(look::Space::XLarge)
         .gap(look::Space::XLarge)
-        .child(column(before, covers, cx))
-        .child(column(after, covers, cx))
+        .child(column(before, covers))
+        .child(column(after, covers))
         .test_support()
         .into_any_element()
 }
 
 /// One side, under where the strip names it, at the top left of what both cover, so a pixel is in the same place in
 /// each column.
-fn column(side: &Side, covers: (u32, u32), cx: &App) -> Div {
+fn column(side: &Side, covers: (u32, u32)) -> Div {
     let body = match side {
         Side::Image(image) => {
             let image = image.clone();
             let picture = fitted(covers, Placed::Top, move |scale, cx| image.within(covers, scale, cx));
             picture.flex_1().w_full().into_any_element()
         }
-        Side::Other(why) => placeholder(why.clone(), cx),
-        Side::Loading | Side::Absent => placeholder(SharedString::default(), cx),
+        Side::Other(why) => look::nothing_to_show(why.clone()).into_any_element(),
+        Side::Loading | Side::Absent => look::nothing_to_show(SharedString::default()).into_any_element(),
     };
     v_flex().flex_1().min_w_0().h_full().child(body)
 }

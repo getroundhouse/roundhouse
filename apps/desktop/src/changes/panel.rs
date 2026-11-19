@@ -148,8 +148,8 @@ impl Render for Changes {
         });
         let muted = look::colors(cx).text_muted;
         let body = match changed {
-            None => placeholder("Loading…", muted),
-            Some(0) => placeholder("No changes yet", muted),
+            None => look::nothing_to_show("Loading…").into_any_element(),
+            Some(0) => look::nothing_to_show("No changes yet").into_any_element(),
             Some(_) => uniform_list(
                 "changed-files",
                 self.rows.len(),
@@ -269,8 +269,4 @@ fn file_row(
 fn plain_folder(open: bool, cx: &App) -> Icon {
     let folder = if open { IconName::FolderOpen } else { IconName::FolderClosed };
     Icon::new(folder).sized(look::IconSize::Large).text_color(look::colors(cx).text_muted)
-}
-
-fn placeholder(text: &'static str, color: gpui_kit::Hsla) -> AnyElement {
-    div().flex_1().w_full().flex().items_center().justify_center().text_color(color).child(text).into_any_element()
 }

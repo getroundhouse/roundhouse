@@ -4,8 +4,8 @@
 #![cfg(test)]
 use super::screens_approved::{look_at, report};
 use super::{
-    bar_kinds, button_states, cards, dialog_widths, field_states, key_kinds, lines, list_rows, menu_rows, small_things,
-    switch_kinds, tab_widths, toggle_states, tooltips,
+    bar_kinds, button_states, cards, dialog_widths, empty_kinds, field_states, key_kinds, lines, list_rows, menu_rows,
+    small_things, switch_kinds, tab_widths, toggle_states, tooltips,
 };
 use gpui_kit::PlatformTextSystem;
 use std::sync::Arc;
@@ -114,6 +114,17 @@ fn every_size_of_list_row_looks_as_approved() {
     let picture = list_rows::draw(&text_system);
 
     report(&look_at(list_rows::NAME, list_rows::SPEC, &picture));
+}
+
+#[test]
+fn every_kind_of_empty_pane_looks_as_approved() {
+    let text_system: Arc<dyn PlatformTextSystem> = Arc::new(gpui_apple::AppleTextSystem::new());
+
+    let (picture, places) = empty_kinds::draw(&text_system);
+
+    let mut problems = look_at(empty_kinds::NAME, empty_kinds::SPEC, &picture);
+    problems.extend(places.look_at(empty_kinds::NAME));
+    report(&problems);
 }
 
 #[test]

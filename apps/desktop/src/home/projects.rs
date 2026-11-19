@@ -10,7 +10,7 @@ use gpui_kit::component::v_flex;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, AppContext as _, Context, ElementId, Entity, InteractiveElement as _, IntoElement, ParentElement,
-    Pixels, ScrollHandle, Styled, Subscription, TestSupportExt as _, Window, div, px,
+    Pixels, ScrollHandle, Styled, Subscription, Window, div, px,
 };
 use look::{InRegion as _, LineText, Placed, Region, RowSize};
 use protocol::model::{RepoId, Workspace, WorkspaceId, WorkspaceStatus};
@@ -193,7 +193,7 @@ pub(crate) fn page(app: &AppView, rows: Rows, cx: &mut Context<AppView>) -> impl
         .region(Region::Home)
         .size_full()
         .child(bar::bar(app, cx))
-        .when(empty, |d| d.child(nothing_listed(cx)))
+        .when(empty, |d| d.child(nothing_listed()))
         .when(!empty, |d| d.child(list))
 }
 
@@ -256,14 +256,6 @@ fn row_button(app: &AppView, workspace: &Workspace, small: &Placed, cx: &mut Con
     .into_any_element()
 }
 
-fn nothing_listed(cx: &mut Context<AppView>) -> impl IntoElement {
-    div()
-        .id("home-nothing")
-        .flex_1()
-        .flex()
-        .items_center()
-        .justify_center()
-        .text_color(look::colors(cx).text_muted)
-        .child("No workspaces to show")
-        .test_support()
+fn nothing_listed() -> impl IntoElement {
+    look::nothing_to_show("No workspaces to show").id("home-nothing")
 }
