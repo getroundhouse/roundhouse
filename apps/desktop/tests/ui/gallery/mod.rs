@@ -44,6 +44,7 @@ mod icon;
 mod image_chats;
 mod image_files;
 mod kinds_of_text;
+mod lines;
 mod long_chats;
 mod mark_states;
 mod nested;

@@ -87,7 +87,7 @@ fn line(compacted: &Compacted, shared: &Shared, cx: &App) -> AnyElement {
             })
         })
         .test_support();
-    let across = rule_across(middle, cx);
+    let across = rule_across(middle);
     // In the words of whoever asked, in quotes, since they needn't start with "keep".
     let keeping = compacted.keeping.map(|keeping| {
         let said = div().max_w(relative(0.8)).text_center().typeset(look::Type::Body).text_color(colors.text_muted);

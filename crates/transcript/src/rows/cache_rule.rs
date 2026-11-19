@@ -28,7 +28,7 @@ pub(super) fn line(seq: Seq, idle_ms: u64, read_tokens: u64, written_tokens: u64
         .child(look::cache_mark(CacheMark::Clock, look::colors(cx).text_faint))
         .child(said(" · "))
         .test_support();
-    rule_row(middle, cx)
+    rule_row(middle)
 }
 
 /// How long the chat was idle, in its two largest units: "12m", "1h 20m", "2d 3h".

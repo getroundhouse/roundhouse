@@ -3,6 +3,7 @@
 
 use gpui_kit::component::{h_flex, v_flex};
 use gpui_kit::{Anchor, AnyElement, App, IntoElement, ParentElement as _, Styled as _, div};
+use look::Lined as _;
 use look::Typeset as _;
 
 use super::{Control, Setting};
@@ -51,8 +52,7 @@ pub(super) fn row(setting: &Setting, cx: &App) -> AnyElement {
         .gap(look::Space::Medium)
         .pt(look::Space::XSmall)
         .pb(look::Space::XLarge)
-        .border_b_1()
-        .border_color(colors.edge)
+        .line_under(cx)
         .typeset(look::Type::Body)
         .child(row)
         .children(status_box)

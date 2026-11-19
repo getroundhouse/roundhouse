@@ -3,6 +3,7 @@
 use gpui_kit::assets::IconName as Lucide;
 use gpui_kit::component::{IconName, IconNamed, h_flex, v_flex};
 use gpui_kit::{Context, IntoElement, ParentElement, Styled};
+use look::Lined as _;
 
 use super::{LIST_PAD, ROW_SIZE, row_icon};
 use crate::app::AppView;
@@ -10,7 +11,6 @@ use crate::app::AppView;
 /// The block of items, with a line under it before the workspaces, and as much room around it as around the list, so
 /// their icons line up.
 pub(super) fn nav(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement {
-    let border = look::colors(cx).edge;
     // The dialog opens while another workspace is being made, and its Create waits.
     let can_create = app.current_repo().is_some();
     v_flex()
@@ -18,8 +18,7 @@ pub(super) fn nav(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement 
         .w_full()
         .p(LIST_PAD)
         .gap(look::Space::XSmall)
-        .border_b_1()
-        .border_color(border)
+        .line_under(cx)
         .child(super::hub::render(app, cx))
         .child(
             item("home", Lucide::House, "Home", cx)

@@ -5,6 +5,7 @@ use gpui_kit::{
     AnyElement, App, AppContext, Context, IntoElement, ParentElement, SharedString, StatefulInteractiveElement, Styled,
     div, px,
 };
+use look::Lined as _;
 use look::{InRegion as _, Region, Typeset as _};
 use protocol::model::SetupStatus;
 
@@ -22,8 +23,7 @@ pub(super) fn setup_log_view(text: String, cx: &App) -> impl IntoElement {
         .overflow_y_scroll()
         .px(look::Space::Medium)
         .py(look::Space::Small)
-        .border_t_1()
-        .border_color(colors.edge)
+        .line_over(cx)
         .typeset(look::Type::Code)
         .text_color(colors.text_muted)
         .child(SharedString::from(if text.is_empty() { "Nothing yet.".to_string() } else { text }))
@@ -92,7 +92,7 @@ impl WorkspacePane {
             _ => return None,
         };
         let colors = look::colors(cx);
-        let (border, muted, warning) = (colors.edge, colors.text_muted, colors.warning);
+        let (muted, warning) = (colors.text_muted, colors.warning);
         let log_label = if self.setup_log.is_some() { "Hide log" } else { "View log" };
         Some(
             h_flex()
@@ -101,8 +101,7 @@ impl WorkspacePane {
                 .px(look::Space::Medium)
                 .py(look::Space::XSmall)
                 .gap(look::Space::Small)
-                .border_t_1()
-                .border_color(border)
+                .line_over(cx)
                 .typeset(look::Type::Detail)
                 .text_color(if running { muted } else { warning })
                 .child(div().flex_1().min_w_0().child(message))

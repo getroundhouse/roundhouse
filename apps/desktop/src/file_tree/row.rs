@@ -53,10 +53,9 @@ impl List {
 }
 
 /// A row, indented to its depth, chosen while what it stands for is showing, for its caller to fill and to click.
-pub(crate) fn row_frame(id: String, list: List, depth: usize, showing: bool, cx: &App) -> look::ListRow {
-    let border = look::colors(cx).edge;
+pub(crate) fn row_frame(id: String, list: List, depth: usize, showing: bool) -> look::ListRow {
     let guides = (0..depth).map(move |level| {
-        div().absolute().top_0().bottom_0().left(list.inset(level) + list.guide()).w(look::EDGE).bg(border)
+        div().absolute().top_0().bottom_0().left(list.inset(level) + list.guide()).child(look::line().down())
     });
     look::list_row(ElementId::Name(id.into()), look::RowSize::Small)
         .indent(list.inset(depth) - PADDING.size())
@@ -67,7 +66,7 @@ pub(crate) fn row_frame(id: String, list: List, depth: usize, showing: bool, cx:
 /// A file's row in All files, which is the only list that shows a file's kind, with the icon for it, for its caller to
 /// add its name to and to click.
 pub(crate) fn file_frame(id: String, path: &str, depth: usize, showing: bool, cx: &App) -> look::ListRow {
-    row_frame(id, List::AllFiles, depth, showing, cx).child(file_icon(path, cx))
+    row_frame(id, List::AllFiles, depth, showing).child(file_icon(path, cx))
 }
 
 /// A folder's row, with the icon its caller gives it, after a chevron in Changes, and the names of the folders it
@@ -84,7 +83,7 @@ pub(crate) fn folder_row(
     let colors = look::colors(cx);
     let muted = colors.text_muted;
     let chevron = if open { IconName::ChevronDown } else { IconName::ChevronRight };
-    row_frame(id, list, depth, false, cx)
+    row_frame(id, list, depth, false)
         .when(list == List::Changes, |d| d.child(Icon::new(chevron).sized(CHEVRON).text_color(colors.text_faint)))
         .child(icon)
         .child(

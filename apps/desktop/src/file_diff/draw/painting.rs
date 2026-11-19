@@ -16,6 +16,7 @@ use gpui_kit::{
     ParentElement as _, Pixels, SharedString, StatefulInteractiveElement as _, Styled, TestSupportExt as _, WeakEntity,
     div, px,
 };
+use look::Lined as _;
 use look::{Hand as _, IconSizing as _, Shaped as _, Typeset as _};
 use protocol::model::{DiffComment, DiffSide};
 use std::sync::Arc;
@@ -57,7 +58,7 @@ pub(in super::super) fn row(ix: usize, row: &Row, drawing: &Drawing, cx: &App) -
             .h(LINE_HEIGHT)
             .typeset(look::Type::Code)
             .child(half(ix, true, *old, *new, *same, drawing, cx))
-            .child(half(ix, false, *new, *new, *same, drawing, cx).border_l_1().border_color(look::colors(cx).edge))
+            .child(half(ix, false, *new, *new, *same, drawing, cx).line_left(cx))
             .into_any_element(),
         Row::Fold(fold) => fold_row(fold, drawing, cx),
         Row::Comment(id) => match drawing.comments.iter().find(|comment| &comment.id == id) {

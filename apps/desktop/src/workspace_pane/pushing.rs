@@ -6,6 +6,7 @@ use gpui_kit::assets::IconName as Lucide;
 use gpui_kit::component::h_flex;
 use gpui_kit::{AnyElement, Context, HighlightStyle, IntoElement as _, ParentElement as _, SharedString, Styled as _};
 use gpui_kit::{StyledText, div};
+use look::Lined as _;
 use look::{InRegion as _, Region, Typeset as _};
 use protocol::model::{GithubRepositoryName, GithubUsername, InstalledApp, Reach};
 
@@ -188,8 +189,7 @@ impl WorkspacePane {
                 .px(look::Space::Medium)
                 .py(look::Space::XSmall)
                 .gap(look::Space::Small)
-                .border_t_1()
-                .border_color(colors.edge)
+                .line_over(cx)
                 .typeset(look::Type::Detail)
                 .text_color(colors.text_muted)
                 .child(div().flex_1().min_w_0().child(words))

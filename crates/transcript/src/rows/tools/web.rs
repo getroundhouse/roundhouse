@@ -42,7 +42,7 @@ fn fetched(fetch: &Fetch, answer: Option<&Answer>, toggle: &Toggle, cx: &App) ->
     block::frame(cx)
         .child(block::found_label(toggle, Text::Label, fetch.url, cx))
         .children(asked)
-        .when_some(answer, |d, answer| d.child(block::separator(cx)).child(block::prose(toggle, Text::Answer, answer)))
+        .when_some(answer, |d, answer| d.child(block::separator()).child(block::prose(toggle, Text::Answer, answer)))
 }
 
 /// What [`fetch`] shows open, for finding.
@@ -109,7 +109,7 @@ fn pages(results: &Results, toggle: &Toggle, cx: &App) -> AnyElement {
     });
     frame
         .when_some(findings, |d, findings| {
-            d.when(linked, |d| d.child(block::separator(cx))).child(block::prose(toggle, Text::Findings, findings))
+            d.when(linked, |d| d.child(block::separator())).child(block::prose(toggle, Text::Findings, findings))
         })
         .into_any_element()
 }

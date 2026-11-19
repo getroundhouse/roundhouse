@@ -8,6 +8,7 @@ use gpui_kit::{
 use super::BarKind;
 use crate::colors::colors;
 use crate::heights::BarSize;
+use crate::lines::Lined as _;
 use crate::region::Region;
 use crate::shape::EDGE;
 use crate::typography::{Type, Typeset as _};
@@ -110,7 +111,7 @@ impl RenderOnce for Bar {
             // A row of tabs has its edge under the tabs rather than as a border, so the line under the one showing can
             // cover it. GPUI draws a border over what's inside it.
             .map(|bar| match kind {
-                BarKind::Words => bar.border_b(EDGE).border_color(colors.edge).child(row),
+                BarKind::Words => bar.line_under(cx).child(row),
                 BarKind::Tabs => {
                     bar.child(div().absolute().left_0().right_0().bottom_0().h(EDGE).bg(colors.edge)).child(row)
                 }

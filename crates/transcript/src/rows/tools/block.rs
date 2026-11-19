@@ -47,8 +47,8 @@ pub(in crate::rows) fn frame(cx: &App) -> Div {
 }
 
 /// A line between the parts of a block, such as a command and its output.
-pub(in crate::rows) fn separator(cx: &App) -> Div {
-    div().h(look::EDGE).bg(look::colors(cx).edge)
+pub(in crate::rows) fn separator() -> look::Line {
+    look::line()
 }
 
 /// A faint name for the part of a block below it, such as "Input".

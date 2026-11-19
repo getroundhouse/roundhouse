@@ -78,7 +78,7 @@ fn opened(command: &Command, answer: Option<&Answer>, toggle: &Toggle, cx: &App)
     let went_on = in_the_background.then(|| aside(toggle, "background", "Went on in the background", cx));
     block::frame(cx)
         .child(command)
-        .children(printed.into_iter().chain(went_on).flat_map(|part| [block::separator(cx).into_any_element(), part]))
+        .children(printed.into_iter().chain(went_on).flat_map(|part| [block::separator().into_any_element(), part]))
 }
 
 /// A faint line under a command that isn't what it printed: why it printed nothing, or where what it prints next goes.

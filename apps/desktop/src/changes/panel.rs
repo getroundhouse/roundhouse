@@ -250,7 +250,7 @@ fn file_row(
         .child(div().flex_shrink_0().child(name));
     let status = status_icon(file.status(), cx);
     let comments = comments_mark::mark(&path, comments, line_text, cx);
-    row_frame(format!("file-{path}"), List::Changes, depth, showing, cx)
+    row_frame(format!("file-{path}"), List::Changes, depth, showing)
         .child(label)
         .child(
             h_flex()

@@ -4,6 +4,7 @@
 use gpui_kit::component::v_flex;
 use gpui_kit::{AnyElement, App, AppContext as _, Context, IntoElement as _, ParentElement as _, Styled as _, div};
 use look::LineText;
+use look::Lined as _;
 use protocol::model::WorkspaceStatus;
 
 use super::{Diff, Opened, PaneEvent, WorkspacePane};
@@ -196,7 +197,7 @@ impl WorkspacePane {
         let on_pick = cx.listener(|t, tab: &SidebarTab, _, cx| t.show_sidebar_tab(*tab, cx));
         let tabs = sidebar_tabs::bar(chosen, changed, controls, on_pick, cx);
         let colors = look::colors(cx);
-        let column = v_flex().size_full().border_l_1().border_color(colors.edge).bg(colors.sidebar);
+        let column = v_flex().size_full().line_left(cx).bg(colors.sidebar);
         let column = column.child(bar).child(tabs).child(div().flex_1().min_h_0().children(list));
         Some(sides::frame(Side::Right, shown, column, cx).into_any_element())
     }

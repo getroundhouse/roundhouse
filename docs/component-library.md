@@ -197,6 +197,18 @@ What's done on a card as a whole, such as keeping the keyboard's focus or measur
 | Have a button show only while the pointer's on it | `group`, with the button's `shown_while_over` |
 | Find it in a test | `region`, `id` |
 
+## Lines
+
+`docs/spec/components.md` has a line's rules, and `crates/look/src/lines` the code. A line is drawn in the edge's colour and width, so no place sets either. A line is between two things. The edge around something, such as a card or a field, is part of that thing. *Unconfirmed.*
+
+| To | Call |
+|---|---|
+| Put a line between two things in a column, such as the parts of a call's block | `look::line()` |
+| Run one down what it's in, such as a guide beside a folder's files | `look::line().down()` |
+| Say what happened in its middle, as a line across the chat does | `look::line().middle(element)` |
+| Set a line on a side of an element, such as under a bar, between panes or under a row of Settings | `line_under`, `line_over`, `line_left`, `line_right`, from `look::Lined` |
+| Set one over an element inside a card, in the colour a line on that card is | `line_over_on(kind)` |
+
 ## Tabs
 
 `docs/spec/components.md` has a tab's widths, and `crates/look/src/tabs` the code. A tab draws its name, its line and its close button itself, so none is drawn on the kit's tab. The bar it's in is still the place's, until the bars are components.

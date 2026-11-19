@@ -7,6 +7,7 @@ use gpui_kit::component::{Icon, h_flex, v_flex};
 use gpui_kit::{
     AnyElement, App, ClickEvent, ElementId, IntoElement, ParentElement, Styled, TestSupportExt as _, Window, div,
 };
+use look::Lined as _;
 use look::{IconSizing as _, Typeset as _};
 use protocol::event::{FailureKind, RequestFailure};
 use protocol::model::Seq;
@@ -34,7 +35,6 @@ pub(super) fn card(
     cx: &App,
 ) -> AnyElement {
     let colors = look::colors(cx);
-    let stopped = colors.stopped;
     let tries = around.failures.card();
     let resets = failure.resets_at_ms.and_then(|at_ms| look::day_and_time(at_ms, cx));
     let head = look::card_heading(title(failure.kind)).mark(IconName::CircleX);
@@ -58,8 +58,7 @@ pub(super) fn card(
                 .items_end()
                 .gap(look::Space::Large)
                 .pt(look::Space::Small)
-                .border_t_1()
-                .border_color(stopped.opacity(0.2))
+                .line_over_on(look::CardKind::Stopped, cx)
                 .child(v_flex().flex_1().min_w_0().children(lines(seq, tries, shared, cx)))
                 .children(retry),
         ),
