@@ -10,7 +10,7 @@ use gpui_kit::{
 };
 use hover::{Hover, Part, Showing};
 use look::{InRegion as _, LineText, Region};
-use protocol::model::{CompactionLine, PromptLine, Proposal, ProposalId};
+use protocol::model::{CompactionLine, PromptFrom, PromptLine, Proposal, ProposalId, Rev, RevisionNumber};
 use std::collections::HashMap;
 use std::ops::Range;
 use std::rc::Rc;
@@ -57,18 +57,24 @@ pub(super) enum Kind {
         line: PromptLine,
         number: usize,
     },
-    /// The prompt the hub wrote to tell the agent the person's answer to a proposal, which the chat draws as the
-    /// proposal's line rather than as something the person asked: the proposal's title, once its record has come.
+    /// The prompt the hub wrote to tell the agent the person's answer to a proposal, or their request for another
+    /// round, which the chat draws as the proposal's line rather than as something the person asked: what its line in
+    /// the outline says, as [`answered`] has it.
     Answer {
         line: PromptLine,
-        title: Option<String>,
+        said: String,
     },
     Compaction(CompactionLine),
 }
 
-/// What an answer's line in the outline says, by the proposal's title once it's known.
-pub(super) fn answered(title: Option<&str>) -> String {
-    title.map_or_else(|| "Answered a proposal".to_string(), |title| format!("Answered {title}"))
+/// What an answer's line in the outline says, as the chat's line says it: `Answered`, or `Replied` for another round,
+/// and the proposal's title once its record has come.
+fn answered(proposal: Option<&Proposal>, revision: RevisionNumber) -> String {
+    let line = crate::proposal_response_line(proposal, revision);
+    match line.title {
+        Some(title) => format!("{} {title}", line.verb),
+        None => "Answered a proposal".to_string(),
+    }
 }
 
 impl Line {
@@ -83,8 +89,9 @@ impl Line {
 #[derive(Default)]
 pub(in super::super) struct Outline {
     pub(super) changes: u64,
-    /// How many of the chat's proposals were known, so an answer's line takes its proposal's title once it comes.
-    pub(super) proposals: usize,
+    /// How many of the chat's proposals were known, and the newest change to any, so an answer's line takes its
+    /// proposal's title, and what was said to it, once its record has them.
+    pub(super) proposals: (usize, Option<Rev>),
     pub(super) lines: Rc<[Line]>,
     pub(super) rows: list::Rows,
 }
@@ -92,14 +99,14 @@ pub(in super::super) struct Outline {
 impl Outline {
     pub(super) fn read(&mut self, log: &SessionLog, proposals: &HashMap<ProposalId, Arc<Proposal>>) -> Rc<[Line]> {
         let changed = {
-            let changed = log.outline_changes() != self.changes || proposals.len() != self.proposals;
+            let known = (proposals.len(), proposals.values().map(|proposal| proposal.rev).max());
+            let changed = log.outline_changes() != self.changes || known != self.proposals;
             if changed {
                 let mut number = 0;
                 let prompts = log.prompt_lines().map(|line| {
-                    let kind = if let Some(id) = line.author().responds_to() {
-                        let title =
-                            proposals.get(id).map(|proposal| proposal.current.proposed.title.trim().to_string());
-                        Kind::Answer { line: line.clone(), title }
+                    let kind = if let PromptFrom::ProposalResponse { proposal, revision } = line.author() {
+                        let said = answered(proposals.get(proposal).map(Arc::as_ref), *revision);
+                        Kind::Answer { line: line.clone(), said }
                     } else {
                         number += 1;
                         Kind::Prompt { line: line.clone(), number }
@@ -114,7 +121,7 @@ impl Outline {
                 lines.sort_by_key(|line| line.row);
                 self.lines = lines.into();
                 self.changes = log.outline_changes();
-                self.proposals = proposals.len();
+                self.proposals = known;
             }
             changed
         };
@@ -262,7 +269,7 @@ fn tick(line: &Line, prompts: usize, look: Tick, cx: &App) -> AnyElement {
         Kind::Compaction(compaction) => {
             ("outline-dot", crate::rows::compaction::who(compaction.by).to_string(), div().size(DOT))
         }
-        Kind::Answer { title, .. } => ("outline-dot", answered(title.as_deref()), div().size(DOT)),
+        Kind::Answer { said, .. } => ("outline-dot", said.clone(), div().size(DOT)),
     };
     div()
         .id(ElementId::Name(format!("{id}/{}", line.row).into()))

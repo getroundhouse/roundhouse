@@ -3,8 +3,9 @@
 //! after the subagent tab, and closes with the chat it's from. It opens by itself, without coming to the front, for a
 //! proposal the pane hasn't seen, so one waiting for the person is a tab away without taking them from what they're
 //! doing, unless it's in front already, showing another, or holds an answer they haven't sent. Open, on the proposal's
-//! line in its chat, brings it to the front. The answer its view asks to send goes to the hub from here, and the view
-//! is told how it went. Its note is dictated into only while the tab is in front, as `dictating` has the composer's.
+//! line in its chat, brings it to the front. The answer, or the request for another round, its view asks to send goes
+//! to the hub from here, and the view is told how it went. Its note is dictated into only while the tab is in front,
+//! as `dictating` has the composer's.
 //!
 //! Each chat's proposals are client-core's, which the pane follows with its subagents, and passes on as they change.
 
@@ -18,9 +19,8 @@ use gpui_kit::{
     Subscription, div,
 };
 use look::{IconSizing as _, InRegion as _, Region};
-use protocol::client::proposals::ProposalAnswer;
 use protocol::model::{Proposal, ProposalId, SessionId};
-use transcript::{PROPOSAL_ICON, ProposalEvent, ProposalView};
+use transcript::{PROPOSAL_ICON, ProposalEvent, ProposalRequest, ProposalView};
 
 use super::band::Band;
 use super::view::chat_title;
@@ -112,7 +112,7 @@ impl WorkspacePane {
                 });
             });
             let answers = cx.subscribe(&view, |this, view, event: &ProposalEvent, cx| match event {
-                ProposalEvent::Answer(answer) => this.answer_proposal(view, answer.clone(), cx),
+                ProposalEvent::Send(request) => this.answer_proposal(view, request.clone(), cx),
                 ProposalEvent::Error(message) => cx.emit(PaneEvent::Error(message.clone())),
             });
             self.proposals.take(cx);
@@ -124,14 +124,22 @@ impl WorkspacePane {
         cx.notify();
     }
 
-    /// Sends the person's answer to the hub, which tells the agent, and tells `view` how it went.
-    fn answer_proposal(&mut self, view: Entity<ProposalView>, answer: ProposalAnswer, cx: &mut Context<Self>) {
-        let answering = self.client.start(move |client| client.proposal_answer(answer));
+    /// Sends the person's answer, or their request for another round, to the hub, which tells the agent, and tells
+    /// `view` how it went.
+    fn answer_proposal(&mut self, view: Entity<ProposalView>, request: ProposalRequest, cx: &mut Context<Self>) {
+        let doing = match &request {
+            ProposalRequest::Answer(_) => "send your answer",
+            ProposalRequest::AnotherRound(_) => "ask for another round",
+        };
+        let answering = self.client.start(move |client| match request {
+            ProposalRequest::Answer(answer) => client.proposal_answer(answer),
+            ProposalRequest::AnotherRound(round) => client.proposal_another_round(round),
+        });
         // client-core takes in the answered proposal the reply carries, so the copy has it by the time this runs.
         cx.spawn(async move |_, cx| {
             let outcome = match answering.recv().await {
                 Ok(_) => Ok(()),
-                Err(e) => Err(client_core::refusals::couldnt("send your answer", &e)),
+                Err(e) => Err(client_core::refusals::couldnt(doing, &e)),
             };
             view.update(cx, |view, cx| view.sent(outcome, cx));
         })

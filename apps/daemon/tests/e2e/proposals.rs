@@ -1,15 +1,17 @@
 //! An agent proposing a decision too large for a question, with the worker's tools: the hub keeps it as a record of
 //! its chat, which a client following the chat is told of, and the agent reads it back by its ID, with the person's
-//! answer, which comes to it as a prompt.
+//! answer, or their request for another round, which comes to it as a prompt.
 
 #![cfg(test)]
 
 use std::sync::Arc;
 
 use client_core::{Client, RecordsFeed};
-use protocol::client::proposals::ProposalAnswer;
+use protocol::client::proposals::{ProposalAnotherRound, ProposalAnswer};
 use protocol::event::{ContentBlock, EventBody, SessionEvent};
-use protocol::model::{ClientMessageId, OptionPlace, Proposal, RevisionNumber, SessionId, ToolUseId};
+use protocol::model::{
+    ClientMessageId, OptionPlace, Proposal, ResponseSummary, RevisionNumber, RevisionStanding, SessionId, ToolUseId,
+};
 use protocol::prompt::PromptFrom;
 
 use crate::support::{Stack, read_all, wait_for_turn_end, wait_until};
@@ -133,4 +135,43 @@ fn an_answer_tells_the_agent_what_was_chosen_once_and_the_agent_reads_the_note()
 
     let [(_, text, false)] = read.as_slice() else { panic!("one call that worked: {read:?}") };
     assert!(text.ends_with("The person chose B, The logs, and wrote:\nKeep it small."), "{text}");
+}
+
+/// The person's request for another round is kept on the proposal, the agent is told of it in a prompt, reads the note
+/// with its tool, and revises, and the revision waits for the person.
+#[test]
+fn another_round_tells_the_agent_which_reads_the_note_and_revises() {
+    let stack = Stack::start();
+    let client = stack.client();
+    let (_, chat) = stack.workspace(&client);
+    calls(&client, &chat.id, PROPOSE, 1);
+    let [proposal] = client.session_proposals(&chat.id).unwrap().0.try_into().unwrap();
+    let round = ProposalAnotherRound {
+        id: proposal.id.clone(),
+        revision: proposal.current.number,
+        note: "Could the logs keep an index of their own?".into(),
+        client_request_id: "r1".into(),
+    };
+
+    client.proposal_another_round(round).unwrap();
+    wait_for_turn_end(&client, &chat.id, 2);
+    let events = read_all(&client, &chat.id);
+    let read = calls(&client, &chat.id, &format!(r#"mcp:get_proposal {{"proposal":"{}"}}"#, proposal.id), 3);
+    let revise = PROPOSE.replace(
+        "mcp:propose {",
+        &format!(r#"mcp:revise_proposal {{"proposal":"{}","changed":"Gave the logs an index.","#, proposal.id),
+    );
+    let revised = calls(&client, &chat.id, &revise, 4);
+
+    let told = events.iter().find_map(|event| match &event.body {
+        EventBody::UserPrompt { prompt, from: PromptFrom::ProposalResponse { .. }, .. } => Some(prompt.text.as_str()),
+        _ => None,
+    });
+    assert!(told.is_some_and(|told| told.starts_with("I'd like another round of your proposal")), "{told:?}");
+    let [(_, text, false)] = read.as_slice() else { panic!("one call that worked: {read:?}") };
+    assert!(text.ends_with("and wrote what to change:\nCould the logs keep an index of their own?"), "{text}");
+    let [(_, _, false)] = revised.as_slice() else { panic!("one call that worked: {revised:?}") };
+    let [newest] = client.session_proposals(&chat.id).unwrap().0.try_into().unwrap();
+    assert_eq!((newest.current.number, newest.current.standing()), (RevisionNumber(2), RevisionStanding::Waiting));
+    assert!(matches!(newest.revisions[0].response, Some(ResponseSummary::AnotherRound { .. })), "{newest:?}");
 }

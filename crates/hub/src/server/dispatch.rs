@@ -149,6 +149,7 @@ pub(super) async fn handle(
         R::SessionSubagents(records::SessionSubagents { id }) => C::Subagents(hub.session_subagents(id).await?),
         R::SessionProposals(records::SessionProposals { id }) => C::Proposals(hub.session_proposals(id).await?),
         R::ProposalAnswer(answer) => C::Proposal(hub.answer_proposal(answer).await?),
+        R::ProposalAnotherRound(round) => C::Proposal(hub.ask_another_round(round).await?),
         R::ProposalRevisionsRead(read) => C::ProposalRevisions(hub.proposal_revisions(read).await?),
         R::SessionSubscribePlaces(subscriptions::SessionSubscribePlaces {
             id,

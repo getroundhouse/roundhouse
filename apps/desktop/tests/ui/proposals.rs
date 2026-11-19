@@ -155,11 +155,41 @@ fn an_answer_chosen_in_the_tab_is_sent_and_drawn_in_the_chat_as_the_proposals_li
     ui.wait("its line", |ui| ui.has(SharedString::from(format!("answered-proposal/{seq}"))));
     assert!(!ui.has(SharedString::from(format!("bubble/prompt/{message}"))), "not as the person's prompt");
     let proposal = ui.view().feed().unwrap().snapshot().proposals(&chat)[0].clone();
-    let (title, chosen) = transcript::proposal_answered_parts(Some(&proposal), proposal.current.number);
-    let said = format!("Answered {}: {chosen}", title.unwrap_or_default());
+    let line = transcript::proposal_response_line(Some(&proposal), proposal.current.number);
+    let said = format!("Answered {}: {}", line.title.unwrap_or_default(), line.said);
     ui.wait("it says what was chosen", |ui| !ui.labelled(&said).is_empty());
     ui.wait("its mark in the outline", |ui| !ui.labelled("Answered Holding a train").is_empty());
     assert!(!ui.labelled("Prompt 1 of 1").is_empty(), "and not counted among the person's prompts");
+}
+
+/// Another round, with a note that says what to change, is asked for without choosing: the tab says the agent is
+/// to write the next revision, and the chat draws the prompt that told the agent as a reply.
+#[gpui_kit::test]
+fn another_round_is_asked_for_with_a_note_and_drawn_in_the_chat_as_a_reply(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let mut ui = in_a_new_workspace(cx, &stack);
+    let open = a_proposal(&mut ui);
+    let chat = ui.active_chat();
+    ui.click(open);
+    ui.wait("the proposal tab", |ui| showing(ui) == Showing::Proposal);
+    assert!(ui.off("another-round"), "nothing's written yet");
+
+    ui.click("proposal-note");
+    ui.input("Could the board own it?");
+    ui.wait("Another round, once the note says something", |ui| !ui.off("another-round"));
+    ui.click("another-round");
+
+    let asked = |ui: &mut Ui<'_>| ui.view().feed().unwrap().snapshot().proposals(&chat)[0].current.response.clone();
+    ui.wait("the request's record", |ui| asked(ui).is_some());
+    let Some(protocol::model::Response::AnotherRound(round)) = asked(&mut ui) else { panic!("{:?}", asked(&mut ui)) };
+    assert_eq!(round.note, "Could the board own it?");
+    ui.wait("the banner that says the next revision comes there", |ui| ui.has("proposal-another-round"));
+    assert!(!ui.has("choose-0-0"), "nothing to choose once another round is asked for");
+    ui.click("proposal-band-chat");
+    ui.wait("the chat", |ui| showing(ui) == Showing::Chat);
+    let replied = "Replied Holding a train: Another round, with a note";
+    ui.wait("the reply's line", |ui| !ui.labelled(replied).is_empty());
+    ui.wait("its mark in the outline", |ui| !ui.labelled("Replied Holding a train").is_empty());
 }
 
 /// Has the agent propose `title`, from outside the app, so the composer needn't show, and waits for its record. Its ID.

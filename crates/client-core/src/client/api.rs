@@ -216,6 +216,13 @@ impl Client {
         self.call(answer)
     }
 
+    /// Asks for another round of the revision `revision` of the proposal `id`, with `note`, which says what the next
+    /// revision should change, and the hub tells its agent. Sending the same `client_request_id` again answers with the
+    /// proposal as it was answered.
+    pub fn proposal_another_round(&self, round: proposals::ProposalAnotherRound) -> Result<Proposal> {
+        self.call(round)
+    }
+
     /// Follows changes to repositories, workspaces and sessions. See [`subscriptions::FeedSubscribe`].
     pub fn feed_subscribe(&self) -> Result<Subscription> {
         self.subscribe(|subscription_id| subscriptions::FeedSubscribe { subscription_id })

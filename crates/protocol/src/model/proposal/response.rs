@@ -8,14 +8,14 @@ use crate::client::{ApiError, ErrorCode};
 /// The most text an answer's note holds, which the agent reads with the proposal. *Unconfirmed.*
 pub const MAX_NOTE_BYTES: usize = 16 * 1024;
 
-/// How the person responded to a revision of a proposal, of which choosing is the only kind built. *Not built:*
-/// replying without choosing, such as that none of the options will do, which asks the agent for another revision,
-/// and would be another kind here. A newer hub's kind that this build doesn't know reads as `Unknown`, which is a
-/// response, so the revision doesn't wait for the person, but says nothing of what it was.
+/// How the person responded to a revision of a proposal: by choosing, or by asking for another round without
+/// choosing, such as when none of the options will do. A newer hub's kind that this build doesn't know reads as
+/// `Unknown`, which is a response, so the revision doesn't wait for the person, but says nothing of what it was.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum Response {
     Chose(Choice),
+    AnotherRound(Round),
     #[serde(other)]
     Unknown,
 }
@@ -39,6 +39,15 @@ pub struct Choice {
     pub at_ms: i64,
 }
 
+/// The person's request for another revision, without choosing, with the note that says what it should change.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct Round {
+    /// What the next revision should change, which the agent reads with the proposal rather than in the prompt. Never
+    /// empty.
+    pub note: String,
+    pub at_ms: i64,
+}
+
 /// Why an answer can't be given. The message is written for the person, whose client says it.
 #[derive(thiserror::Error, Clone, Debug, PartialEq, Eq)]
 pub enum AnswerProblem {
@@ -48,6 +57,12 @@ pub enum AnswerProblem {
     NoSuchOption { question: usize },
     #[error("a note holds at most {MAX_NOTE_BYTES} bytes, and this holds {0}")]
     LongNote(usize),
+    /// Another round was asked for without a note, which is what tells the agent what to change.
+    #[error("say in a note what the next revision should change")]
+    NoNote,
+    /// A kind of response this build doesn't know, which it can't check, so never gives.
+    #[error("this version of Roundhouse can't give that kind of response")]
+    Unknown,
     #[error("the proposal has been answered already")]
     Answered,
     /// The agent has written a newer revision than the one answered, which the person hasn't read.
@@ -66,11 +81,26 @@ impl Proposed {
                 return Err(AnswerProblem::NoSuchOption { question: at + 1 });
             }
         }
-        if note.len() > MAX_NOTE_BYTES {
-            return Err(AnswerProblem::LongNote(note.len()));
-        }
-        Ok(())
+        check_note(note)
     }
+
+    /// Whether `response` can be given to a revision proposing this: a choice that [`Proposed::check_answer`] takes, or
+    /// another round with a note that fits. A kind this build doesn't know can't be checked, so isn't given.
+    pub fn check_response(&self, response: &Response) -> Result<(), AnswerProblem> {
+        match response {
+            Response::Chose(choice) => self.check_answer(&choice.chosen, &choice.note),
+            Response::AnotherRound(Round { note, .. }) if note.trim().is_empty() => Err(AnswerProblem::NoNote),
+            Response::AnotherRound(Round { note, .. }) => check_note(note),
+            Response::Unknown => Err(AnswerProblem::Unknown),
+        }
+    }
+}
+
+fn check_note(note: &str) -> Result<(), AnswerProblem> {
+    if note.len() > MAX_NOTE_BYTES {
+        return Err(AnswerProblem::LongNote(note.len()));
+    }
+    Ok(())
 }
 
 /// Where a revision stands with the person, which every reader asks, rather than whether it has a response or a
@@ -81,6 +111,8 @@ pub enum RevisionStanding<'a> {
     Waiting,
     /// They chose.
     Chose(&'a Choice),
+    /// They asked for another round, so it waits for the agent's next revision.
+    AnotherRound(&'a Round),
     /// They responded in a way only a newer hub knows.
     Responded,
 }
@@ -90,6 +122,7 @@ impl ProposalRevision {
         match &self.response {
             None => RevisionStanding::Waiting,
             Some(Response::Chose(choice)) => RevisionStanding::Chose(choice),
+            Some(Response::AnotherRound(round)) => RevisionStanding::AnotherRound(round),
             Some(Response::Unknown) => RevisionStanding::Responded,
         }
     }

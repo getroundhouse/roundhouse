@@ -72,7 +72,7 @@ async fn the_agent_is_told_what_was_chosen_and_where_the_note_is() {
         proposal.current.response = Some(protocol::model::Response::Chose(choice));
         proposal
     };
-    let said = |proposal: Proposal| told(&proposal, proposal.current.choice().unwrap());
+    let said = |proposal: Proposal| told(&proposal, proposal.current.response.as_ref().unwrap());
 
     assert_eq!(said(answered("")), format!("I chose B, In each client, in your proposal \"Search\" ({id})."));
     assert!(said(answered("Small")).ends_with("I wrote a note with it, which get_proposal reads."));

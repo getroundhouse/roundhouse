@@ -1,4 +1,5 @@
-//! The requests that answer one of an agent's proposals, and read its earlier revisions.
+//! The requests that answer one of an agent's proposals, or ask for another round of it, and read its earlier
+//! revisions.
 
 use serde::{Deserialize, Serialize};
 
@@ -26,6 +27,26 @@ impl Request for ProposalAnswer {
 
     fn into_request(self) -> ClientRequest {
         ClientRequest::ProposalAnswer(self)
+    }
+}
+
+/// Asks the agent for another revision of the proposal's revision `revision`, without choosing, with a note that says
+/// what it should change, which the hub keeps on that revision as the person's response, and tells the agent of in a
+/// prompt of its own, as [`ProposalAnswer`] does. It's refused as [`ProposalAnswer`] is, and as an invalid request
+/// without a note. A hub older than this refuses it as unsupported.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct ProposalAnotherRound {
+    pub id: ProposalId,
+    pub revision: RevisionNumber,
+    pub note: String,
+    pub client_request_id: ClientRequestId,
+}
+
+impl Request for ProposalAnotherRound {
+    type Reply = Proposal;
+
+    fn into_request(self) -> ClientRequest {
+        ClientRequest::ProposalAnotherRound(self)
     }
 }
 

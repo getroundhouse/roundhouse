@@ -13,10 +13,11 @@
 mod tests;
 
 mod answering;
+mod bar;
 mod dictating;
 mod document;
 mod page;
 mod view;
 
-pub use answering::ProposalEvent;
+pub use answering::{ProposalEvent, ProposalRequest};
 pub use view::{ICON, ProposalView};

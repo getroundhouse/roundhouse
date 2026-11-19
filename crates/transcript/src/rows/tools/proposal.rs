@@ -4,11 +4,10 @@
 //! revision, and a button that opens it in the proposal tab. What the agent wrote is read in the tab, so the line
 //! doesn't open. A call whose proposal hasn't come, or which the hub refused, is drawn as any other tool's.
 //!
-//! The prompt the hub sent the agent to say what was chosen is drawn as a line like it, `Answered`, where the agent
-//! took it, rather than as something the person said, since they answered in the tab, with the revision it answered
-//! once there are several. It's sent at once, so while the
-//! agent works it waits for the agent's next chance, faint until then, as the person's own prompt does, and one the
-//! agent never got says so.
+//! The prompt the hub sent the agent to say what was chosen is drawn as a line like it, `Answered`, or `Replied` for
+//! another round, where the agent took it, rather than as something the person said, since they answered in the tab,
+//! with the revision it answered once there are several. It's sent at once, so while the agent works it waits for the
+//! agent's next chance, faint until then, as the person's own prompt does, and one the agent never got says so.
 
 use client_core::calls::count;
 use client_core::session_log::PromptState;
@@ -18,7 +17,7 @@ use gpui_kit::{
     TestSupportExt as _, div,
 };
 use look::Typeset as _;
-use protocol::model::{Proposal, ProposalId, ResponseSummary, RevisionNumber, Seq, chosen_in_words};
+use protocol::model::{Proposal, ProposalId, ResponseSummary, RevisionNumber, RevisionSummary, Seq, chosen_in_words};
 
 use super::super::around::Answers;
 use super::super::{Shared, row};
@@ -36,7 +35,7 @@ pub(super) fn draw(wrote: &Wrote, toggle: &Toggle, cx: &App) -> AnyElement {
     let line = Line::new(PROPOSAL_ICON, verb)
         .part(Part::Chip(look::chip(look::ChipKind::Proposal, look::ChipSize::Regular, title)))
         .part(Part::Note(standing.into()))
-        .action(open(&proposal.id, Some(*revision), toggle.shared));
+        .action(open(&proposal.id, opens(&proposal.id, *revision), toggle.shared));
     // Each revision's line is its own element, the first's as it was before there were revisions.
     let id = match revision.0 {
         1 => format!("proposed/{}", proposal.id),
@@ -61,14 +60,15 @@ pub(in super::super) fn answered(
     shared: &Shared,
     cx: &App,
 ) -> AnyElement {
-    let (title, said) = answered_parts(answers.proposal.as_deref(), answers.revision);
+    let ResponseLine { verb, title, said } = response_line(answers.proposal.as_deref(), answers.revision);
     let label = match &title {
-        Some(title) => format!("Answered {title}: {said}"),
-        None => format!("Answered {said}"),
+        Some(title) => format!("{verb} {title}: {said}"),
+        None => format!("{verb} {said}"),
     };
     let chip = title.map(|title| Part::Chip(look::chip(look::ChipKind::Proposal, look::ChipSize::Regular, title)));
-    let line = Line::new(PROPOSAL_ICON, "Answered").part(chip).part(Part::Note(said.into()));
-    let line = line.action(open(&answers.id, None, shared));
+    let line = Line::new(PROPOSAL_ICON, verb).part(chip).part(Part::Note(said.into()));
+    // Its own, since the proposal's line has one too.
+    let line = line.action(open(&answers.id, ElementId::Name(format!("open-response/{seq}").into()), shared));
     let id = ElementId::Name(format!("answered-proposal/{seq}").into());
     let line =
         div().when(state != PromptState::Taken, |d| d.opacity(0.6)).child(line.still(id, label, &shared.line_text, cx));
@@ -95,33 +95,53 @@ fn standing(proposal: &Proposal, revision: RevisionNumber) -> String {
     if proposal.revised() { format!("Revision {revision} · {said}") } else { said }
 }
 
-/// What a line telling of the answer to the revision `revision` of `proposal` says after `Answered`, as the chat's line
-/// says it and the queue above the composer does while the prompt that tells the agent waits there: the proposal's
-/// title, for its chip, and what was chosen, in which revision once there are several, or only that it answers a
-/// proposal, until its record has come.
-pub fn answered_parts(proposal: Option<&Proposal>, revision: RevisionNumber) -> (Option<String>, String) {
-    let Some(proposal) = proposal else { return (None, "a proposal".to_string()) };
+/// What a line telling of the person's response to a revision of a proposal says, as the chat's line says it and the
+/// queue above the composer does while the prompt that tells the agent waits there.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ResponseLine {
+    /// `Replied` for another round, and `Answered` otherwise.
+    pub verb: &'static str,
+    /// The proposal's title, for its chip, once its record has come.
+    pub title: Option<String>,
+    /// What was said, in which revision once there are several, or only that it answers a proposal, until its record
+    /// has come.
+    pub said: String,
+}
+
+/// What a line telling of the response to the revision `revision` of `proposal` says, as [`ResponseLine`] says.
+pub fn response_line(proposal: Option<&Proposal>, revision: RevisionNumber) -> ResponseLine {
+    let Some(proposal) = proposal else {
+        return ResponseLine { verb: "Answered", title: None, said: "a proposal".to_string() };
+    };
+    let summary = summary(proposal, revision);
+    let replied = matches!(summary.and_then(|summary| summary.response), Some(ResponseSummary::AnotherRound { .. }));
     let said = responded(proposal, revision).unwrap_or_default();
     let said = if proposal.revised() { format!("{said}, in revision {revision}") } else { said };
-    (Some(proposal.current.proposed.title.trim().to_string()), said)
+    let verb = if replied { "Replied" } else { "Answered" };
+    ResponseLine { verb, title: Some(proposal.current.proposed.title.trim().to_string()), said }
 }
 
 /// How the person responded to the revision `revision` of `proposal`, once they have, as its lines say it: what was
-/// chosen, and whether a note went with it. The newest is read from the record in full, and an earlier one from its
-/// summary.
+/// chosen, and whether a note went with it, or that they asked for another round.
 fn responded(proposal: &Proposal, revision: RevisionNumber) -> Option<String> {
-    let summary = if revision == proposal.current.number {
-        proposal.current.summary()
-    } else {
-        proposal.revision(revision).cloned()?
-    };
-    Some(match summary.response? {
+    Some(match summary(proposal, revision)?.response? {
         ResponseSummary::Chose { chosen, note, .. } => {
             let chosen = format!("Chose {}", chosen_in_words(&chosen));
             if note.is_empty() { chosen } else { format!("{chosen} · with a note") }
         }
+        ResponseSummary::AnotherRound { .. } => "Another round, with a note".to_string(),
         ResponseSummary::Unknown => "Responded".to_string(),
     })
+}
+
+/// The revision `revision` of `proposal` in short: the newest from the record in full, and an earlier one from its
+/// summary.
+fn summary(proposal: &Proposal, revision: RevisionNumber) -> Option<RevisionSummary> {
+    if revision == proposal.current.number {
+        Some(proposal.current.summary())
+    } else {
+        proposal.revision(revision).cloned()
+    }
 }
 
 /// What it asks the person to choose: how many options, for one question, or how many questions.
@@ -132,15 +152,19 @@ fn asks(proposal: &Proposal) -> String {
     }
 }
 
-/// The button that opens the proposal in the proposal tab. It says Open, and it's outlined, as a subagent's is. On the
-/// line of a revision after the first, it's named by the revision too, since its proposal has a line for each.
-fn open(proposal: &ProposalId, revision: Option<RevisionNumber>, shared: &Shared) -> AnyElement {
-    let (this, id) = (shared.this.clone(), proposal.clone());
-    let button = match revision.filter(|revision| *revision != RevisionNumber::FIRST) {
-        None => format!("open-proposal/{proposal}"),
-        Some(revision) => format!("open-proposal/{proposal}/{revision}"),
+/// The Open on the line of the revision `revision` of `proposal`: by the proposal, and on a revision after the first, by
+/// the revision too, since its proposal has a line for each.
+fn opens(proposal: &ProposalId, revision: RevisionNumber) -> ElementId {
+    let button = match revision {
+        RevisionNumber::FIRST => format!("open-proposal/{proposal}"),
+        revision => format!("open-proposal/{proposal}/{revision}"),
     };
-    let button = ElementId::Name(button.into());
+    ElementId::Name(button.into())
+}
+
+/// The button `button` that opens `proposal` in the proposal tab. It says Open, and it's outlined, as a subagent's is.
+fn open(proposal: &ProposalId, button: ElementId, shared: &Shared) -> AnyElement {
+    let (this, id) = (shared.this.clone(), proposal.clone());
     look::button(button, look::ButtonKind::Outlined, look::ControlSize::Small, "Open")
         .icon(gpui_kit::assets::IconName::ArrowUpRight)
         .tooltip("Open in the proposal tab")

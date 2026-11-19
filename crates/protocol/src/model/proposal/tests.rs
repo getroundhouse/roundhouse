@@ -92,6 +92,18 @@ fn an_answer_chooses_one_of_each_questions_options() {
     assert_eq!(two.check_answer(&[OptionPlace(0), OptionPlace(0)], &long), Err(AnswerProblem::LongNote(long.len())));
 }
 
+/// Another round needs a note, which is what tells the agent what to change, and one that fits.
+#[test]
+fn another_round_needs_a_note_that_fits() {
+    let round = |note: &str| Response::AnotherRound(Round { note: note.into(), at_ms: 0 });
+    let two = proposed(2);
+    let long = "x".repeat(MAX_NOTE_BYTES + 1);
+
+    assert_eq!(two.check_response(&round("Could the board own it?")), Ok(()));
+    assert_eq!(two.check_response(&round(" \n ")), Err(AnswerProblem::NoNote));
+    assert_eq!(two.check_response(&round(&long)), Err(AnswerProblem::LongNote(long.len())));
+}
+
 #[test]
 fn what_was_chosen_names_each_option_by_its_question_when_there_are_several() {
     let answered = |questions: usize, chosen: Vec<OptionPlace>| ProposalRevision {

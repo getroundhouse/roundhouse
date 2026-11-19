@@ -1,14 +1,14 @@
 //! What a worker asks its hub to propose for its agent, and to read back, the hub's answer, and the notice that says
-//! a chat has one, and a client's answer to one, and its read of one's revisions, which every peer from now on reads
-//! as they were first written.
+//! a chat has one, and a client's answer to one, or request for another round, and its read of one's revisions, which
+//! every peer from now on reads as they were first written.
 
 use protocol::attachment::{Attachment, AttachmentBytes, MediaType, NewAttachment};
-use protocol::client::proposals::{ProposalAnswer, ProposalRevisions, ProposalRevisionsRead};
+use protocol::client::proposals::{ProposalAnotherRound, ProposalAnswer, ProposalRevisions, ProposalRevisionsRead};
 use protocol::client::{ClientRequest, ClientResponse, HubNotice};
 use protocol::event::LinkedImage;
 use protocol::model::{
     Choice, ChosenOption, OptionLetter, OptionPlace, Proposal, ProposalOption, ProposalQuestion, ProposalRevision,
-    Proposed, Recommendation, Response, ResponseSummary, Rev, RevisionNumber, RevisionSummary,
+    Proposed, Recommendation, Response, ResponseSummary, Rev, RevisionNumber, RevisionSummary, Round,
 };
 use protocol::worker::{Ask as _, AskReply, ProposalRecord, Propose, ReadProposal, Revise, WorkerAsk};
 
@@ -172,11 +172,34 @@ fn reading_a_proposals_revisions_and_the_revisions_keep_their_form() {
     );
 }
 
-/// So a client from before a kind of response a newer hub keeps, such as replying without choosing, reads the revision
-/// as responded to, rather than refusing the proposal, or showing it as waiting.
+/// Asking for another round, the response the hub keeps for it, and the record's summary of it.
+#[test]
+fn another_round_and_its_response_keep_their_form() {
+    let round = ProposalAnotherRound {
+        id: "p".into(),
+        revision: RevisionNumber::FIRST,
+        note: "None of these".into(),
+        client_request_id: "r".into(),
+    };
+    keeps_its_form(
+        &ClientRequest::ProposalAnotherRound(round),
+        r#"{"method":"proposal_another_round","id":"p","revision":1,"note":"None of these","client_request_id":"r"}"#,
+    );
+    keeps_its_form(
+        &Response::AnotherRound(Round { note: "None of these".into(), at_ms: 3 }),
+        r#"{"kind":"another_round","note":"None of these","at_ms":3}"#,
+    );
+    keeps_its_form(
+        &ResponseSummary::AnotherRound { note: "None of".into(), at_ms: 3 },
+        r#"{"kind":"another_round","note":"None of","at_ms":3}"#,
+    );
+}
+
+/// So a client from before a kind of response a newer hub keeps reads the revision as responded to, rather than
+/// refusing the proposal, or showing it as waiting.
 #[test]
 fn a_kind_of_response_from_a_newer_hub_reads_as_unknown() {
-    let newer = r#"{"kind":"replied","note":"None of these","at_ms":3}"#;
+    let newer = r#"{"kind":"later","note":"Not yet","at_ms":3}"#;
 
     assert_eq!(serde_json::from_str::<Response>(newer).unwrap(), Response::Unknown);
 }

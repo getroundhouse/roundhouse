@@ -34,9 +34,11 @@ pub use attachments::{file_card, image_format};
 pub use client_core::calls::agent::shown_kind;
 pub use document::Document;
 pub use list::{Place, TranscriptList};
-pub use proposal::{ICON as PROPOSAL_ICON, ProposalEvent, ProposalView};
+pub use proposal::{ICON as PROPOSAL_ICON, ProposalEvent, ProposalRequest, ProposalView};
 pub use questions::QuestionPanel;
-pub use rows::{ABOVE_THE_COMPOSER, around_column, in_column, proposal_answered_parts, subagent_standing};
+pub use rows::{
+    ABOVE_THE_COMPOSER, ProposalResponseLine, around_column, in_column, proposal_response_line, subagent_standing,
+};
 pub use selection::KEY_CONTEXT;
 pub use transcript::{Transcript, TranscriptEvent};
 

@@ -6,7 +6,7 @@
 use protocol::event::EventBody;
 use protocol::model::{
     Choice, OptionLetter, OptionPlace, Proposal, ProposalOption, ProposalQuestion, ProposalRevision, Proposed,
-    Recommendation, Response, RevisionNumber, SessionStatus,
+    Recommendation, Response, RevisionNumber, Round, SessionStatus,
 };
 use serde_json::json;
 
@@ -76,6 +76,13 @@ pub(crate) const SCREENS: &[Screen] = &[
         steps: &[Step::Select(FOCUS)],
     },
     Screen {
+        name: "proposal-another-round",
+        spec: "proposals.md",
+        world: Some(asked_world),
+        frame: PROPOSAL,
+        steps: &[Step::Select(FOCUS), Step::Click("open-proposal/8d0c6a5e-proposal"), Step::MoveAway],
+    },
+    Screen {
         name: "proposal-revised-line",
         spec: "proposals.md",
         world: Some(revised_world),
@@ -101,19 +108,52 @@ fn world() -> World {
     with_proposal(events(), [first(None)])
 }
 
-/// After the person asked in the chat for an option the proposal didn't have, and the agent revised it: B dropped, C
-/// keeping its letter, and D added.
-fn revised_world() -> World {
+/// What the person wrote when they asked for another round.
+const NOTE: &str = "None of these: a hold has to survive a restart, and I'd rather the signal kept no state. Could the \
+    dispatcher's board own it?";
+
+/// The person's request for another round of the first revision.
+fn another_round() -> Response {
+    Response::AnotherRound(Round { note: NOTE.into(), at_ms: 0 })
+}
+
+/// The chat once the person asked for another round, and the agent took the prompt that told it.
+fn asked_events() -> Vec<EventBody> {
     let mut events = events();
+    let told = format!(
+        "I'd like another round of your proposal \"Holding a train\" ({ID}), without choosing yet. My note says what \
+         to change, which get_proposal reads. Then revise it with revise_proposal."
+    );
     events.extend([
-        user_prompt("None of these: a hold has to survive a restart, and I'd rather the signal kept no state. Could the dispatcher's board own it?"),
+        EventBody::UserPrompt {
+            client_msg_id: Some("round-1".into()),
+            prompt: protocol::prompt::Prompt::new(told),
+            from: protocol::prompt::PromptFrom::ProposalResponse {
+                proposal: ID.into(),
+                revision: RevisionNumber::FIRST,
+            },
+        },
         taken(protocol::model::Seq::new(9)),
+    ]);
+    events
+}
+
+/// After the person asked for another round, before the agent has revised.
+fn asked_world() -> World {
+    with_proposal(asked_events(), [first(Some(another_round()))])
+}
+
+/// After the person asked for another round, since the proposal didn't have what they wanted, and the agent revised
+/// it: B dropped, C keeping its letter, and D added.
+fn revised_world() -> World {
+    let mut events = asked_events();
+    events.extend([
         text("m5", "I'll drop B, which can't survive a restart, and write up the dispatcher's board."),
         mcp("m6", REVISED, "roundhouse", "revise_proposal", json!({ "title": "Holding a train" })),
         mcp_said(REVISED, &format!("Revised \"Holding a train\" as revision 2 of {ID}."), false),
         replied("I'll drop B, which can't survive a restart, and write up the dispatcher's board.", 63, 0.31),
     ]);
-    let first = first(None);
+    let first = first(Some(another_round()));
     let mut proposed = proposed();
     let question = &mut proposed.questions[0];
     let board = ProposalOption {
@@ -141,20 +181,21 @@ fn revised_world() -> World {
                 .into(),
         call: Some(REVISED.into()),
         proposed,
+        response: None,
         ..first.clone()
     };
     with_proposal(events, vec![first, second])
 }
 
-/// The first revision, which the person answered with `choice`, if they did.
-fn first(choice: Option<Choice>) -> ProposalRevision {
+/// The first revision, which the person responded to with `response`, if they did.
+fn first(response: Option<Response>) -> ProposalRevision {
     ProposalRevision {
         number: RevisionNumber::FIRST,
         changed: String::new(),
         call: Some(CALL.into()),
         proposed: proposed(),
         made_at_ms: 0,
-        response: choice.map(Response::Chose),
+        response,
         images: Vec::new(),
     }
 }
@@ -183,7 +224,7 @@ fn answered_world() -> World {
     ]);
     let answered =
         Choice { chosen: vec![OptionPlace(0)], note: "Hold it while the platform clears too.".into(), at_ms: 0 };
-    with_proposal(events, [first(Some(answered))])
+    with_proposal(events, [first(Some(Response::Chose(answered)))])
 }
 
 /// The world of the chat `events`, with the proposal whose revisions are `revisions`, oldest first.

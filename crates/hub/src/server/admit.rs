@@ -230,6 +230,7 @@ fn local_only(request: &ClientRequest) -> bool {
         | R::SessionSubagents(..)
         | R::SessionProposals(..)
         | R::ProposalAnswer(..)
+        | R::ProposalAnotherRound(..)
         | R::ProposalRevisionsRead(..)
         | R::SessionReadPlaces(..)
         | R::SessionSubscribePlaces(..)

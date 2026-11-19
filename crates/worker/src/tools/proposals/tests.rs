@@ -83,7 +83,7 @@ fn a_proposal_read_back_says_each_option_by_its_letter_and_what_was_recommended(
     );
 }
 
-/// The prompt says only what was chosen, so the agent reads the note here.
+/// The prompt says only what was chosen, or that another round is asked for, so the agent reads the note here.
 #[test]
 fn a_proposal_read_back_once_answered_says_what_was_chosen_and_the_note() {
     let mut proposal = fixtures::proposal("p1");
@@ -99,6 +99,15 @@ fn a_proposal_read_back_once_answered_says_what_was_chosen_and_the_note() {
 
     assert!(plain.ends_with("The person chose B, In each client."), "{plain}");
     assert!(noted.ends_with("The person chose B, In each client, and wrote:\nKeep it small."), "{noted}");
+    let round = protocol::model::Round { note: "Could the board own it?".into(), at_ms: 0 };
+    proposal.current.response = Some(protocol::model::Response::AnotherRound(round));
+    let again = describe(&proposal, None);
+    assert!(
+        again.ends_with(
+            "The person asked for another round, without choosing, and wrote what to change:\nCould the board own it?"
+        ),
+        "{again}"
+    );
     proposal.current.response = Some(protocol::model::Response::Unknown);
     let newer = describe(&proposal, None);
     assert!(newer.ends_with("in a way this version of Roundhouse can't describe."), "not waiting: {newer}");

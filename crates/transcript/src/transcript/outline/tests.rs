@@ -1,4 +1,9 @@
-use protocol::model::Seq;
+use std::collections::HashMap;
+use std::sync::Arc;
+
+use protocol::event::EventBody;
+use protocol::model::{Proposal, ProposalId, Response, Rev, RevisionNumber, Round, Seq};
+use protocol::prompt::{Prompt, PromptFrom};
 
 use super::*;
 
@@ -93,4 +98,30 @@ fn a_tick_at_the_chats_own_end_is_not_faded() {
     assert_eq!(look(MOST_TICKS - 1, 0, &first, count), Tick::Faded, "more are after it");
     assert_eq!(look(count - 2, count - 1, &last, count), Tick::Plain, "nothing is after the last");
     assert_eq!(look(0, 3, &(0..5), 5), Tick::Plain, "every one shows");
+}
+
+/// What the outline says of a response's prompt, in the order a feed can bring them: the prompt's line before its
+/// proposal's record says what was said to it, so the outline reads it again when only a record changed.
+#[test]
+fn a_responses_mark_follows_its_proposals_record() {
+    let from = PromptFrom::ProposalResponse { proposal: "p".into(), revision: RevisionNumber::FIRST };
+    let told = EventBody::UserPrompt { client_msg_id: None, prompt: Prompt::new("I'd like another round"), from };
+    let log = crate::fixtures::log([crate::fixtures::event(Seq::new(1), told)]);
+    let mut proposal = protocol::fixtures::proposal("p");
+    proposal.rev = Rev::new(1);
+    let mut known: HashMap<ProposalId, Arc<Proposal>> = HashMap::from([("p".into(), Arc::new(proposal.clone()))]);
+    let said = |lines: &[Line]| match &lines[0].kind {
+        Kind::Answer { said, .. } => said.clone(),
+        Kind::Prompt { .. } | Kind::Compaction(_) => panic!("not drawn as a response"),
+    };
+    let mut outline = super::ticks::Outline::default();
+
+    let before = said(&outline.read(&log, &known));
+    proposal.current.response = Some(Response::AnotherRound(Round { note: "Smaller".into(), at_ms: 0 }));
+    proposal.revisions = vec![proposal.current.summary()];
+    proposal.rev = Rev::new(2);
+    known.insert("p".into(), Arc::new(proposal));
+    let after = said(&outline.read(&log, &known));
+
+    assert_eq!((before.as_str(), after.as_str()), ("Answered Search", "Replied Search"));
 }

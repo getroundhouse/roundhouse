@@ -73,6 +73,7 @@ pub enum ClientRequest {
     SessionSubagents(records::SessionSubagents),
     SessionProposals(records::SessionProposals),
     ProposalAnswer(proposals::ProposalAnswer),
+    ProposalAnotherRound(proposals::ProposalAnotherRound),
     ProposalRevisionsRead(proposals::ProposalRevisionsRead),
     SessionReadPlaces(log::SessionReadPlaces),
     SessionSubscribePlaces(subscriptions::SessionSubscribePlaces),

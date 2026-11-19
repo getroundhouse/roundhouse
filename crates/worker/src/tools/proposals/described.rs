@@ -6,7 +6,7 @@ use protocol::model::{
 
 /// The whole proposal, as its revision `revision` says it, or its newest: its title and ID, which revision it is once
 /// there are several, and what changed in it, its context, then each question with its options and what was
-/// recommended, and the person's answer, or that it waits for one.
+/// recommended, and the person's answer or request for another round, or that it waits for them.
 pub(super) fn describe(proposal: &Proposal, revision: Option<&ProposalRevision>) -> String {
     let current = revision.unwrap_or(&proposal.current);
     let proposed = &current.proposed;
@@ -46,6 +46,7 @@ pub(super) fn responded_before(proposal: &Proposal) -> Option<String> {
         .find_map(|revision| Some((revision.number, revision.response.as_ref()?)))?;
     let what = match response {
         ResponseSummary::Chose { chosen, .. } => format!("chose {}", chosen_in_words(chosen)),
+        ResponseSummary::AnotherRound { .. } => "asked for another round".to_string(),
         ResponseSummary::Unknown => "responded".to_string(),
     };
     Some(format!(
@@ -62,6 +63,12 @@ fn answer_in_words(current: &ProposalRevision, newest: bool) -> String {
         RevisionStanding::Waiting => return "You revised it before the person answered.".to_string(),
         RevisionStanding::Responded => {
             return "The person has responded, in a way this version of Roundhouse can't describe.".to_string();
+        }
+        RevisionStanding::AnotherRound(round) => {
+            return format!(
+                "The person asked for another round, without choosing, and wrote what to change:\n{}",
+                round.note
+            );
         }
         RevisionStanding::Chose(choice) => choice,
     };

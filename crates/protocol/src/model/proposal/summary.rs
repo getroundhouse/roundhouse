@@ -37,6 +37,12 @@ pub enum ResponseSummary {
         note: String,
         at_ms: i64,
     },
+    /// The person asked for another round.
+    AnotherRound {
+        /// The start of the note, at most [`NOTE_START_CHARS`] of it.
+        note: String,
+        at_ms: i64,
+    },
     #[serde(other)]
     Unknown,
 }
@@ -71,11 +77,12 @@ impl Response {
     /// So a summary is made without what the agent wrote, the largest part of a revision, unless the person chose.
     pub fn summary(&self, chosen: Vec<ChosenOption>) -> ResponseSummary {
         match self {
-            Response::Chose(choice) => ResponseSummary::Chose {
-                chosen,
-                note: choice.note.chars().take(NOTE_START_CHARS).collect(),
-                at_ms: choice.at_ms,
-            },
+            Response::Chose(choice) => {
+                ResponseSummary::Chose { chosen, note: note_start(&choice.note), at_ms: choice.at_ms }
+            }
+            Response::AnotherRound(round) => {
+                ResponseSummary::AnotherRound { note: note_start(&round.note), at_ms: round.at_ms }
+            }
             Response::Unknown => ResponseSummary::Unknown,
         }
     }
@@ -90,6 +97,11 @@ impl Proposed {
         });
         chosen.collect()
     }
+}
+
+/// The start of `note` a summary carries.
+fn note_start(note: &str) -> String {
+    note.chars().take(NOTE_START_CHARS).collect()
 }
 
 /// What was chosen, in words, for the chat's line and the prompt: each option's letter and label, by its question's
