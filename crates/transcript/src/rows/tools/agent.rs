@@ -14,8 +14,8 @@ use gpui_kit::assets::IconName;
 use gpui_kit::component::v_flex;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyElement, App, Div, ElementId, FontWeight, InteractiveElement as _, IntoElement, ParentElement, Styled,
-    TestSupportExt as _, WeakEntity, div,
+    AnyElement, App, Div, ElementId, InteractiveElement as _, IntoElement, ParentElement, Styled, TestSupportExt as _,
+    WeakEntity, div,
 };
 use look::Lined as _;
 use look::Typeset as _;
@@ -193,10 +193,7 @@ fn asked(call: &Agent, toggle: &Toggle, cx: &App) -> Option<AnyElement> {
 /// full, under a rule and a heading, so it carries more weight than what it was asked.
 pub(in crate::rows) fn report_block(key: &ItemKey, text: impl IntoElement, cx: &App) -> Div {
     let colors = look::colors(cx);
-    // Semibold, where `docs/spec/look.md` says text never is, and kept so until the tidy-ups decide it with pictures,
-    // since medium would change how it looks.
-    let heading =
-        div().typeset(look::Type::Body).font_weight(FontWeight::SEMIBOLD).text_color(colors.text).child("Report");
+    let heading = div().typeset(look::Type::Body).emphasis().text_color(colors.text).child("Report");
     v_flex()
         .mt(look::Space::XSmall)
         .gap(look::Space::Small)

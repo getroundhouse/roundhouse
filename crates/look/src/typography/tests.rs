@@ -1,5 +1,6 @@
-use gpui_kit::{FontWeight, SharedString, Styled as _, div};
+use gpui_kit::{SharedString, Styled as _, div};
 
+use super::styles::EMPHASIS;
 use super::{MONO, Type, Typeset as _};
 use crate::spec_table;
 
@@ -27,7 +28,7 @@ fn emphasis_is_medium_over_any_kind() {
     for &kind in Type::ALL {
         let mut set = div().typeset(kind).emphasis();
 
-        assert_eq!(set.style().text.font_weight, Some(FontWeight::MEDIUM), "{kind:?}");
+        assert_eq!(set.style().text.font_weight, Some(EMPHASIS), "{kind:?}");
     }
 }
 
