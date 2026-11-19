@@ -39,42 +39,80 @@ impl LiveState {
     fn keeps_any(&self) -> bool {
         !self.after_the_turn.is_empty()
     }
+
+    /// Whether what waited for the turn's end is dropped rather than sent: the turn was stopped or failed, so the queue
+    /// waits for the person, or the chat has closed.
+    fn drops_what_waited(&self) -> bool {
+        self.progress.queue.is_held() || !self.is_open()
+    }
+}
+
+/// What becomes of a prompt the run refused as one it takes only once its turn ends, as the session's live state is
+/// when the hub takes the refusal in.
+enum Refused {
+    /// Kept for the turn's end, since the turn runs.
+    Kept,
+    /// Dropped, as it would have been at the turn's end, since the turn has ended and dropped what waited for it.
+    Dropped(Seq),
+    /// To send again, since the turn has ended and sends what waited for it.
+    Again(Sendable),
 }
 
 impl LiveSession {
     /// Sends the agent the prompt recorded at `prompt.seq`, or keeps it for the turn's end, behind any kept already, or
     /// if the run refuses it as one it takes only then.
     pub(super) async fn send_prompt(&self, prompt: Sendable) -> Result<(), ApiError> {
-        match self.keep_for_the_turn_if(prompt, LiveState::keeps_any) {
+        match self.keep_behind_any(prompt) {
             Some(prompt) => self.send_or_keep(prompt).await,
             None => Ok(()),
         }
     }
 
-    /// Sends `prompt`, and keeps it for the turn's end if the run refuses it as one it takes only then.
+    /// Sends `prompt`, and keeps it for the turn's end if the run refuses it as one it takes only then. A refusal the
+    /// hub takes in only once the turn has ended goes as the turn's end would have taken it: sent again, or dropped if
+    /// the turn was stopped or failed. So what becomes of it follows what the person did, not which of the two the hub
+    /// heard of first, since they come by different paths.
     async fn send_or_keep(&self, mut prompt: Sendable) -> Result<(), ApiError> {
         // Twice, since the turn may have ended between the run refusing it and the hub taking that in.
         for _ in 0..2 {
             match self.send_to_agent(prompt.control()).await? {
                 Sent::Took => return Ok(()),
-                Sent::AfterTheTurn => match self.keep_for_the_turn_if(prompt, LiveState::in_turn) {
-                    Some(again) => prompt = again,
-                    None => return Ok(()),
+                Sent::AfterTheTurn => match self.refused(prompt) {
+                    Refused::Kept => return Ok(()),
+                    Refused::Dropped(seq) => {
+                        self.record_or_log(Origin::Hub, EventBody::PromptDropped { prompt: seq }).await;
+                        return Ok(());
+                    }
+                    Refused::Again(again) => prompt = again,
                 },
             }
         }
         Err(ApiError::new(ErrorCode::Worker, "the agent won't take the prompt, though its turn has ended"))
     }
 
-    /// Keeps `prompt` for the turn's end if `keeps` says to, as the session's live state is, and otherwise gives it back
-    /// to send now. Under the lock the turn's end is taken in under, so the turn can't end unseen between the two.
-    fn keep_for_the_turn_if(&self, prompt: Sendable, keeps: impl FnOnce(&LiveState) -> bool) -> Option<Sendable> {
+    /// Keeps `prompt` to follow any already kept for the turn's end, and otherwise gives it back to send now. Under the
+    /// lock the turn's end is taken in under, so what was kept can't be sent unseen between the two.
+    fn keep_behind_any(&self, prompt: Sendable) -> Option<Sendable> {
         let mut state = self.state.lock();
-        if !keeps(&state) {
+        if !state.keeps_any() {
             return Some(prompt);
         }
         state.after_the_turn.push(prompt);
         None
+    }
+
+    /// What becomes of `prompt`, which the run refused as one it takes only once its turn ends, as [`Refused`] says.
+    /// Under the lock the turn's end is taken in under, so the turn can't end unseen between the two.
+    fn refused(&self, prompt: Sendable) -> Refused {
+        let mut state = self.state.lock();
+        if state.in_turn() {
+            state.after_the_turn.push(prompt);
+            Refused::Kept
+        } else if state.drops_what_waited() {
+            Refused::Dropped(prompt.seq)
+        } else {
+            Refused::Again(prompt)
+        }
     }
 
     /// Asks the command task to send what was kept for the turn's end, which has come, as [`Self::after_the_turn`]
@@ -95,7 +133,7 @@ impl LiveSession {
             // Any dropped since, as when the agent went away, which drops every prompt it hadn't taken.
             let untaken = state.progress.queue.untaken();
             let kept: Vec<Sendable> = kept.into_iter().filter(|prompt| untaken.contains(&prompt.seq)).collect();
-            (kept, state.progress.queue.is_held() || !state.is_open())
+            (kept, state.drops_what_waited())
         };
         if dropping {
             for prompt in kept {

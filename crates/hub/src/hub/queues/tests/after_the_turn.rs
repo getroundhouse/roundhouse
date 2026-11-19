@@ -9,9 +9,11 @@ use protocol::event::{EventBody, TurnOutcome};
 use protocol::model::Seq;
 use protocol::prompt::Prompt;
 use protocol::worker::{WorkerRequest, WorkerResponse};
+use tokio::sync::oneshot;
 
 use super::turns::Chat;
-use crate::hub::stand_in_workers::answering_first;
+use crate::hub::stand_in_workers::{answering_first, answering_first_in_time};
+use crate::worker_link::Answer;
 
 /// A chat whose agent, once started, refuses the second prompt it's sent the first time it's sent it, as Codex refuses
 /// one while its turn can't be steered, such as a review.
@@ -63,11 +65,43 @@ async fn a_stopped_turn_drops_what_waited_for_its_end() {
     assert_eq!(chat.given(1).await, [work]);
     chat.says([EventBody::PromptTaken { prompt: work }]).await;
     let (next, _) = chat.hub.session_prompt(chat.id.clone(), None, Prompt::new("next")).await.unwrap();
-    // Once the run has refused it and the hub has kept it for the turn's end, so the turn stops after that. Had the hub
-    // given it, or taken in the refusal, only once the turn had ended, it would send it again, as a turn that ended does.
+    // Once the run has refused it and the hub has kept it for the turn's end, so the turn stops after that. The next test
+    // has the hub take in the refusal only once the turn has ended.
     chat.caught_up().await;
 
     chat.finishes(None, TurnOutcome::Cancelled).await;
+    chat.caught_up().await;
+
+    assert_eq!(chat.asked.prompts_given(&chat.id), [work, next], "refused, and never sent again");
+    let dropped = chat.log().iter().any(|e| matches!(e.body, EventBody::PromptDropped { prompt } if prompt == next));
+    assert!(dropped, "and the log says so");
+    assert!(chat.record().untaken.unwrap_or_default().is_empty(), "so nothing's left for the agent to take");
+}
+
+/// A refusal the hub takes in only once the stopped turn has ended drops the prompt as one taken in before would, since
+/// the two come by different paths, and what becomes of it follows what the person did, not which came first.
+#[tokio::test]
+async fn a_stopped_turn_drops_what_the_run_refused_though_the_hub_hears_of_the_refusal_after_the_turns_end() {
+    let dir = tempfile::tempdir().unwrap();
+    let chat = Chat::idle(dir.path()).await;
+    let (refuse, refusal) = oneshot::channel();
+    let refusal = Mutex::new(Some(refusal));
+    let sent: Mutex<Vec<Seq>> = Mutex::default();
+    answering_first_in_time(&chat.hub, &chat.workspace.id, &chat.asked, move |request| {
+        let WorkerRequest::AgentControl(asked) = request else { return None };
+        let Control::Prompt { seq, .. } = asked.control else { return None };
+        let mut sent = sent.lock();
+        sent.push(seq);
+        (sent.len() == 2).then(|| Answer::Later(refusal.lock().take().expect("refused once")))
+    });
+    let (work, _) = chat.hub.session_prompt(chat.id.clone(), None, Prompt::new("work")).await.unwrap();
+    assert_eq!(chat.given(1).await, [work]);
+    chat.says([EventBody::PromptTaken { prompt: work }]).await;
+    let (next, _) = chat.hub.session_prompt(chat.id.clone(), None, Prompt::new("next")).await.unwrap();
+    assert_eq!(chat.given(2).await, [work, next]);
+
+    chat.finishes(None, TurnOutcome::Cancelled).await;
+    refuse.send(Ok(WorkerResponse::AfterTheTurn)).unwrap();
     chat.caught_up().await;
 
     assert_eq!(chat.asked.prompts_given(&chat.id), [work, next], "refused, and never sent again");
