@@ -90,8 +90,9 @@ impl Patched<'_> {
             Does::Adds { lines, replaced } => {
                 write_line(self.path, lines, replaced.then(|| diff::counts(&self.sections)))
             }
-            Does::Deletes => Line::new(IconName::Trash, "Delete")
-                .part(Part::Chip(look::chip(look::ChipKind::File, self.path.to_string()).gone(true))),
+            Does::Deletes => Line::new(IconName::Trash, "Delete").part(Part::Chip(
+                look::chip(look::ChipKind::File, look::ChipSize::Regular, self.path.to_string()).gone(true),
+            )),
             Does::Changes => {
                 let title = if self.moved_to.is_some() { "Move" } else { "Edit" };
                 edit_line(title, self.path, self.moved_to.unwrap_or(self.path), &self.sections)

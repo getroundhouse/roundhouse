@@ -22,7 +22,7 @@ pub fn card(kind: CardKind, width: CardWidth) -> Card {
 
 /// A card's heading, which says `words`, in medium weight. [`Card::heading`] puts it at the card's top.
 pub fn card_heading(words: impl Into<SharedString>) -> CardHeading {
-    CardHeading { words: words.into(), mark: None, after: Vec::new(), end: None }
+    CardHeading { words: words.into(), mark: None, after: Vec::new(), end: None, control: None }
 }
 
 /// One of a card's parts.
@@ -144,6 +144,7 @@ pub struct CardHeading {
     mark: Option<IconName>,
     after: Vec<AnyElement>,
     end: Option<SharedString>,
+    control: Option<AnyElement>,
 }
 
 impl CardHeading {
@@ -165,6 +166,13 @@ impl CardHeading {
         self
     }
 
+    /// A control at the line's end, after what's said there, such as a faint button that opens the card's menu. It
+    /// doesn't make the heading taller than its words.
+    pub fn control(mut self, control: impl IntoElement) -> Self {
+        self.control = Some(control.into_any_element());
+        self
+    }
+
     /// Drawn in a card of `kind`: in its colour when it has one, and otherwise in the text's, with its mark muted.
     fn drawn(self, kind: CardKind, cx: &App) -> AnyElement {
         let colors = colors(cx);
@@ -172,6 +180,7 @@ impl CardHeading {
         let mark = self.mark.map(|mark| {
             Icon::new(mark).flex_none().sized(IconSize::Large).text_color(tint.unwrap_or(colors.text_muted))
         });
+        let ends = self.end.is_some();
         let end = self
             .end
             .map(|end| div().ml_auto().flex_none().typeset(Type::Detail).text_color(colors.text_faint).child(end));
@@ -181,6 +190,11 @@ impl CardHeading {
             .child(div().min_w_0().emphasis().text_color(tint.unwrap_or(colors.text)).child(self.words))
             .children(self.after)
             .children(end)
+            // In a box no taller than nothing, centred on the line, so a control taller than the heading's words
+            // reaches into the room around it rather than making the heading taller than a heading without one.
+            .children(self.control.map(|control| {
+                div().when(!ends, gpui_kit::Styled::ml_auto).flex_none().h_0().flex().items_center().child(control)
+            }))
             .into_any_element()
     }
 }

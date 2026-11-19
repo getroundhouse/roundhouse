@@ -31,7 +31,7 @@ pub(super) fn draw(proposal: &Arc<Proposal>, toggle: &Toggle, cx: &App) -> AnyEl
     let (title, standing) = (proposal.current.proposed.title.trim().to_string(), standing(proposal));
     let label = format!("Proposed {title}: {standing}");
     let line = Line::new(PROPOSAL_ICON, "Proposed")
-        .part(Part::Chip(look::chip(look::ChipKind::Proposal, title)))
+        .part(Part::Chip(look::chip(look::ChipKind::Proposal, look::ChipSize::Regular, title)))
         .part(Part::Note(standing.into()))
         .action(open(&proposal.id, toggle.shared));
     // It doesn't open, since what the agent wrote is read in the tab, which Open brings up. A call that failed made no
@@ -58,7 +58,7 @@ pub(in super::super) fn answered(
         Some(title) => format!("Answered {title}: {said}"),
         None => format!("Answered {said}"),
     };
-    let chip = title.map(|title| Part::Chip(look::chip(look::ChipKind::Proposal, title)));
+    let chip = title.map(|title| Part::Chip(look::chip(look::ChipKind::Proposal, look::ChipSize::Regular, title)));
     let line = Line::new(PROPOSAL_ICON, "Answered").part(chip).part(Part::Note(said.into()));
     let line = line.action(open(&answers.id, shared));
     let id = ElementId::Name(format!("answered-proposal/{seq}").into());

@@ -12,10 +12,22 @@
       "width": 180,
       "height": 48
     },
+    "Issue": {
+      "x": 356,
+      "y": 579,
+      "width": 474,
+      "height": 48
+    },
     "Proposal": {
       "x": 392,
       "y": 491,
       "width": 262,
+      "height": 48
+    },
+    "PullRequest": {
+      "x": 268,
+      "y": 667,
+      "width": 636,
       "height": 48
     },
     "Server": {

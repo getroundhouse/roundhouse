@@ -1,5 +1,6 @@
 //! The small things that sit in a line, each kind in one picture of its own: every kind of pill, every kind of chip,
-//! with a file's chip with the lines it's about, with what changed in it and deleted, every kind of badge
+//! an issue's and a pull request's in each state and before it's known, with a file's chip with the lines it's about,
+//! with what changed in it and deleted, a small chip among words, every kind of badge
 //! beside what it's said of, with labels in four colours, and every kind of count beside what it counts, with the
 //! lines a file gained and lost, as `look` has them, at the app's scale.
 
@@ -12,7 +13,7 @@ use gpui_kit::{
     AnyElement, App, Context, Hsla, InteractiveElement as _, IntoElement, ParentElement as _, PlatformTextSystem,
     Render, Styled as _, TestSupportExt as _, Window, div, px, rgb, size,
 };
-use look::{BadgeKind, ChipKind, CountKind, PillKind, Type, Typeset as _};
+use look::{BadgeKind, ChipKind, CountKind, GithubState, IssueState, PillKind, PullRequestState, Type, Typeset as _};
 
 use super::capture::Picture;
 use super::headless;
@@ -76,6 +77,14 @@ impl Render for Pills {
 
 struct Chips;
 
+/// A chip of `kind`, an issue's or a pull request's, in each of `states`, each with a number of its own.
+fn in_each_state(kind: ChipKind, states: impl Iterator<Item = GithubState>) -> AnyElement {
+    let chips = states
+        .enumerate()
+        .map(|(number, state)| look::chip(kind, look::ChipSize::Regular, format!("#{}", 1021 + number)).state(state));
+    h_flex().gap(look::Space::XSmall).children(chips).into_any_element()
+}
+
 impl Render for Chips {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let colors = look::colors(cx);
@@ -90,16 +99,25 @@ impl Render for Chips {
                     ChipKind::Server => ("Create issue", "github"),
                     ChipKind::Site => ("Fetched", "docs.rs"),
                     ChipKind::Proposal => ("Proposed", "Holding a train"),
+                    ChipKind::Issue => ("Closes", ""),
+                    ChipKind::PullRequest => ("", ""),
                 };
-                let sample = in_a_line("look::ChipKind", &name, words, look::chip(kind, names), cx);
+                let chip = match kind {
+                    ChipKind::Issue => in_each_state(kind, IssueState::ALL.iter().map(|&state| state.into())),
+                    ChipKind::PullRequest => {
+                        in_each_state(kind, PullRequestState::ALL.iter().map(|&state| state.into()))
+                    }
+                    _ => look::chip(kind, look::ChipSize::Regular, names).into_any_element(),
+                };
+                let sample = in_a_line("look::ChipKind", &name, words, chip, cx);
                 row(name, sample, cx)
             })
             .collect();
-        let file = || look::chip(ChipKind::File, "crates/protocol/src/model.rs");
+        let file = || look::chip(ChipKind::File, look::ChipSize::Regular, "crates/protocol/src/model.rs");
         let files = [
             ("Its lines", "Read", file().lines(12, Some(40))),
             ("What changed", "Edit", file().changed(12, 3)),
-            ("Deleted", "Delete", look::chip(ChipKind::File, "src/legacy.rs").gone(true)),
+            ("Deleted", "Delete", look::chip(ChipKind::File, look::ChipSize::Regular, "src/legacy.rs").gone(true)),
         ];
         rows.extend(files.map(|(name, words, chip)| {
             let line = h_flex()
@@ -109,6 +127,17 @@ impl Render for Chips {
                 .child(chip);
             row(name.to_string(), line.into_any_element(), cx)
         }));
+        let unknown = h_flex()
+            .gap(look::Space::XSmall)
+            .child(look::chip(ChipKind::Issue, look::ChipSize::Regular, "#1021"))
+            .child(look::chip(ChipKind::PullRequest, look::ChipSize::Regular, "#1158"));
+        rows.push(row("Not known yet".to_string(), unknown.into_any_element(), cx));
+        let small = look::chip(ChipKind::Issue, look::ChipSize::Small, "#1021")
+            .state(IssueState::Open)
+            .title("Decide how a row says it");
+        let among_words =
+            h_flex().gap(look::Space::XSmall).typeset(Type::Body).child("Writing into").child(small).child("is left.");
+        rows.push(row("Small".to_string(), among_words.into_any_element(), cx));
         v_flex().size_full().bg(colors.pane).text_color(colors.text).p(px(MARGIN)).children(rows)
     }
 }
@@ -205,7 +234,7 @@ pub(crate) fn pills(text_system: &Arc<dyn PlatformTextSystem>) -> (Picture, Plac
 pub(crate) fn chips(text_system: &Arc<dyn PlatformTextSystem>) -> (Picture, Places) {
     let mut cx = headless::app(text_system);
     let names: Vec<String> = ChipKind::ALL.iter().map(|each| each.written()[0].clone()).collect();
-    let size = size(wide(), tall(ChipKind::ALL.len() + 3));
+    let size = size(wide(), tall(ChipKind::ALL.len() + 5));
     headless::draw_and_measure(
         &mut cx,
         size,

@@ -17,6 +17,7 @@ Each component follows the same pattern, so one that's learned reads like the ot
 - **It's made by a function that takes what it can't be without:** an ID, which tests find it by, for one that's pressed or typed in, its kind, its size, for one that comes in sizes, and what it shows, such as a button's words, a square's icon or the key a key names. So none is made without them, and the function says its shape: `look::button` makes one with words, and `look::icon_button` one that's only an icon.
 - **Its kinds are one enum of what each is for, declared with `named!`,** such as `look::ButtonKind`. A kind says everything about how the component looks but its size and its state, so each look it has is one name in one list, which the spec's table, the component's sheet and the design system's page all go through. A look that differs, such as a button's muted words, is a kind of its own rather than an option on top of the kinds, since an option would make every kind come with it and without it, including some that mean nothing, such as a main action with muted words.
 - **Its sizes are a type of its own while no other component has them, and a foundation once another component shares them,** as `docs/spec/README.md` says, as `look::ControlSize` is, a control's sizes, which a button and a field share.
+- **It takes no size in pixels from what draws it,** such as a height that place needs, since that changes how it looks without changing what's in it, so its words and its mark crowd its edges, as a chip squeezed among a reply's words once did. A size it needs is a value of its sizes, which sets what's in it in proportion, as `look::ChipSize` does. A width that only lays it out among what's around it is an option of how it sits, as below.
 - **Its states are methods named for what they mean,** such as `on`, `off` and `waiting`, rather than the kit's `selected`, `disabled` and `loading`, each taking whether it's in that state, so the state can come straight from what the area holds.
 - **What every one of a kind does is built in,** rather than asked for at each place it's made, such as the hand over a button while a press does something, and the arrow while it's off or waiting.
 - **What it shows beyond what it's made with goes in named slots,** such as a button's icon beside its words, and what comes after them.
@@ -30,7 +31,9 @@ Each component follows the same pattern, so one that's learned reads like the ot
 - **A test in `look` holds what's built in,** such as which buttons have the hand.
 - **`tools/policy`'s `design_system.rs` refuses each of the kit's parts that a component holds outside `look`,** with a test for each, such as `only_the_component_library_uses_the_kits_button`, but in the places its list names, each with why: what a later component will draw, such as the hub switcher, and the few buttons with a look of their own.
 
-## Adding a component, or a kind
+## Adding a component, a kind or a size
+
+A new size or option of a component goes through these steps as a kind does, and is on the component's sheet beside the rest before anything uses it, so how it looks beside them is seen first. A change that would alter what a rule the owner decided comes to, such as a component's height, is asked about before it's made.
 
 1. Write its rules, its table and its sheet's caption in `docs/spec/components.md`, marked *Unconfirmed* until the owner confirms them.
 2. Make its type in `look`, with its kinds in a `named!` enum, the way to make one that takes what it can't be without, and its options.

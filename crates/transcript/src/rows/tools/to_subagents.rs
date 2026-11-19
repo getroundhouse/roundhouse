@@ -29,7 +29,7 @@ pub(super) fn draw(
     let Said { title, called, others } = said(to, called);
     let mut line = Line::new(agent::ICON, title).shows_output(true);
     for called in called {
-        line = line.part(Part::Chip(look::chip(look::ChipKind::Subagent, called.to_string())));
+        line = line.part(Part::Chip(look::chip(look::ChipKind::Subagent, look::ChipSize::Regular, called.to_string())));
     }
     line = line.part(others.map(|others| Part::Note(others.into())));
     let message = message(to);

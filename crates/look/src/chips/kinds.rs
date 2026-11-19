@@ -16,6 +16,12 @@ named! {
         /// A proposal, by its title: a way that splits in two, for the options it offers, then its title, such as the
         /// one a call made, which opens it in its tab.
         Proposal,
+        /// An issue on GitHub, by its number: its state's mark, in its state's colour, then its number, such as `#1021`,
+        /// and its title where it's given one. Until its state is known, its mark is an open issue's, muted.
+        Issue,
+        /// A pull request on GitHub, by its number: its state's mark, in its state's colour, then its number, and its
+        /// title where it's given one. Until its state is known, its mark is an open pull request's, muted.
+        PullRequest,
     }
 }
 
