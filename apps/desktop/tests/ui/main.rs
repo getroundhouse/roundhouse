@@ -10,6 +10,7 @@ mod account_moves;
 mod agent_selection;
 mod all_files;
 mod attachments;
+mod back_and_forward;
 mod cached_transcript;
 mod changes;
 mod chats;

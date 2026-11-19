@@ -4,7 +4,7 @@ The sidebar of changes, the file tab, and comments for the agent.
 
 ## The sidebar of changes
 
-The sidebar on the right, under the pull request's bar. It's open from the start, and `Cmd-Shift-D`, or the button at the right end of the header, hides it and shows it again.
+The sidebar on the right, under the pull request's bar. It's open from the start, and `Cmd-Shift-B`, or the button at the right end of the header, hides it and shows it again.
 
 Two tabs switch what it lists:
 

@@ -872,5 +872,5 @@ The API keeps what an agent's requests read and write for a while, so the next r
 
   ![Closed chats](screens/closed-chats.png)
 
-- **Chat keys are the ones tabs use elsewhere:** `Cmd-T` for a new chat, `Cmd-W` to close one, and `Ctrl-Tab` and `Ctrl-Shift-Tab` to move between them. *Unconfirmed.*
+- **Chat keys are the ones tabs use elsewhere:** `Cmd-T` for a new chat, `Cmd-W` to close one, and `Ctrl-Tab` and `Ctrl-Shift-Tab`, or `Cmd-Shift-]` and `Cmd-Shift-[`, to move between them. *Unconfirmed.*
 - **Each `Cmd-T`, `+` or New Chat from a menu makes a chat, even one asked for while another is still being made,** as `Cmd-T` opens a tab each time elsewhere. They're made one after another, so they open in the order they were asked for, and the last shows. A workspace given its first chat by itself joins the one on its way, rather than making a second. A key held down makes one chat, rather than one for each time it repeats. *Not built:* a held key.

@@ -34,7 +34,7 @@ pub(super) fn workspace_row(
     cx: &mut Context<AppView>,
 ) -> AnyElement {
     // While Home shows, it's what's showing, rather than the workspace still selected under it.
-    let selected = !app.home_showing() && app.selected.as_ref() == Some(&workspace.id);
+    let selected = !app.home_showing() && app.selected() == Some(&workspace.id);
     let id = workspace.id.clone();
     let muted = look::colors(cx).text_muted;
     let Standing { signal: mark, work, needs_a_look } = standing(app, workspace, cx);
@@ -246,7 +246,7 @@ fn row_menu(
     });
     let to_archive = this.clone();
     // Not while Home hides it, when its keys do nothing.
-    let showing = !app.home_showing() && app.selected.as_ref() == Some(&workspace.id);
+    let showing = !app.home_showing() && app.selected() == Some(&workspace.id);
     let marking_key = showing.then(|| Box::new(MarkWorkspace) as Box<dyn Action>);
     let shared = right_click::menu(marking, marking_key, move |window, cx| {
         let _ = this.update(cx, |t, cx| t.start_renaming(id.clone(), window, cx));

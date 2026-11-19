@@ -92,8 +92,8 @@ fn browsing_on_a_fake_hub(cx: &mut TestAppContext) -> (FakeHub, Ui<'_>, Workspac
     }
     let fake = FakeHub::holding(world);
     let mut ui = Ui::open_on(cx, &fake);
-    ui.wait("a workspace", |ui| ui.view().selected.is_some() && ui.pane().is_some());
-    let showing = ui.view().selected.clone().unwrap();
+    ui.wait("a workspace", |ui| ui.view().selected().is_some() && ui.pane().is_some());
+    let showing = ui.view().selected().cloned().unwrap();
     let other = workspaces.into_iter().find(|w| *w != showing).unwrap();
     show_all_files(&mut ui);
     (fake, ui, other)
@@ -211,10 +211,10 @@ fn a_folder_git_ignores_is_read_as_it_opens(cx: &mut TestAppContext) {
 #[gpui_kit::test]
 fn the_window_keys_work_on_a_file_after_coming_back_to_it(cx: &mut TestAppContext) {
     let (_hub, mut ui, other) = browsing_on_a_fake_hub(cx);
-    let browsed = ui.view().selected.clone().unwrap();
+    let browsed = ui.view().selected().cloned().unwrap();
     open_lib(&mut ui);
     ui.click(SharedString::from(format!("workspace-{other}")));
-    ui.wait("the other workspace", |ui| ui.view().selected.as_ref() == Some(&other) && ui.pane().is_some());
+    ui.wait("the other workspace", |ui| ui.view().selected() == Some(&other) && ui.pane().is_some());
 
     ui.click(SharedString::from(format!("workspace-{browsed}")));
     assert_eq!(tab(&ui).0, Showing::File);
@@ -251,7 +251,7 @@ fn list_again(ui: &mut Ui<'_>, file: &str) {
 fn what_s_open_in_all_files_is_read_again_and_stays_open_as_the_worktree_changes(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let mut ui = browsing(cx, &stack);
-    let worktree = ui.worktree(ui.view().selected.as_ref().unwrap());
+    let worktree = ui.worktree(ui.view().selected().unwrap());
     ui.click("all-folder-build");
     ui.wait("what's in the ignored folder", |ui| ui.has("all-folder-build/out"));
     ui.click("all-folder-build/out");

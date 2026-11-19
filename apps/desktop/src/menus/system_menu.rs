@@ -1,8 +1,8 @@
 use crate::workspace_pane::Showing;
 use crate::{
-    About, AddRepository, ArchiveWorkspace, CheckForUpdates, CloseChat, FindInChat, FindNext, FindPrevious, Hide,
-    HideOthers, Minimize, NewChat, NewTerminal, NewWorkspace, NextWorkspace, OpenSettings, PreviousWorkspace, Quit,
-    ShowAll, ToggleDiff, Zoom,
+    About, AddRepository, ArchiveWorkspace, CheckForUpdates, CloseChat, FindInChat, FindNext, FindPrevious, GoBack,
+    GoForward, Hide, HideOthers, Minimize, NewChat, NewTerminal, NewWorkspace, NextChat, NextWorkspace, OpenSettings,
+    PreviousChat, PreviousWorkspace, Quit, ShowAll, ToggleDiff, ToggleSidebar, Zoom,
 };
 use gpui_kit::component::input::{Copy, Cut, Paste, Redo, SelectAll, Undo};
 use gpui_kit::{App, Menu, MenuItem, OsAction, SystemMenuType, Window};
@@ -34,10 +34,12 @@ impl System {
     }
 }
 
-/// What the menus say about the selected workspace. macOS shows only what it was last given, and the menus the app
-/// draws are drawn from what it last gave GPUI, so the window gives them again when this changes.
+/// What the menus say about the window and the selected workspace. macOS shows only what it was last given, and the
+/// menus the app draws are drawn from what it last gave GPUI, so the window gives them again when this changes.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(crate) struct Says {
+    /// The sidebar is open, so View has Hide Sidebar rather than Show Sidebar.
+    pub(crate) sidebar_open: bool,
     /// The sidebar of changes is open, so View has Hide Diff rather than Show Diff.
     pub(crate) diff_open: bool,
     /// What's showing under the tabs, which ⌘W closes, rather than the chat behind it when it's a tab.
@@ -159,16 +161,22 @@ fn edit_menu() -> Menu {
     ])
 }
 
-/// What's on screen: the diff, and which workspace. The window handles these. On a Mac, macOS adds Enter Full Screen
-/// at the bottom, after the separator that keeps it apart. Moving between chats isn't here, because GPUI can't give
-/// macOS Tab as an item's key, so ⌃⇥ would show as ⌃T.
+/// What's on screen: the sidebars, which workspace, and which of its tabs. The window handles these. On a Mac, macOS
+/// adds Enter Full Screen at the bottom, after the separator that keeps it apart.
 fn view_menu(system: System, says: Says) -> Menu {
+    let sidebar = if says.sidebar_open { "Hide Sidebar" } else { "Show Sidebar" };
     let diff = if says.diff_open { "Hide Diff" } else { "Show Diff" };
     let mut items = vec![
+        MenuItem::action(sidebar, ToggleSidebar),
         MenuItem::action(diff, ToggleDiff),
         MenuItem::separator(),
+        MenuItem::action("Back", GoBack),
+        MenuItem::action("Forward", GoForward),
         MenuItem::action("Previous Workspace", PreviousWorkspace),
         MenuItem::action("Next Workspace", NextWorkspace),
+        MenuItem::separator(),
+        MenuItem::action("Previous Tab", PreviousChat),
+        MenuItem::action("Next Tab", NextChat),
     ];
     match system {
         System::Mac => items.push(MenuItem::separator()),

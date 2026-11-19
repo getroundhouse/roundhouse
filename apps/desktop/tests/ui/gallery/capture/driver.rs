@@ -382,5 +382,5 @@ fn attached(view: &AppView, dialog: bool, cx: &App) -> usize {
 }
 
 pub(super) fn selected_pane(view: &AppView) -> Option<Entity<WorkspacePane>> {
-    view.selected.as_ref().and_then(|id| view.panes.get(id).cloned())
+    view.selected().and_then(|id| view.panes.get(id).cloned())
 }

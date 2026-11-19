@@ -152,7 +152,7 @@ fn closing_one_opened_with_its_key(ui: &mut Ui<'_>, stack: &Stack) {
 }
 
 fn ending_in_a_workspace_behind(ui: &mut Ui<'_>, stack: &Stack) {
-    let behind = ui.view().selected.clone().unwrap();
+    let behind = ui.view().selected().cloned().unwrap();
     ui.pick_item("new-tab", "New terminal");
     ui.wait("behind: the terminal to show", |ui| ui.has(terminal_view::SHOWN_ID));
     ui.new_workspace();

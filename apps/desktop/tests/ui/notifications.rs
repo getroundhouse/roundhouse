@@ -40,7 +40,7 @@ fn a_reply_elsewhere_or_behind_another_app_is_told_of_with_a_sound_and_one_in_th
 ) {
     let stack = Stack::new();
     let (mut ui, elsewhere, chat) = open_with_one_elsewhere(cx, &stack);
-    let showing = ui.view().selected.clone().unwrap();
+    let showing = ui.view().selected().cloned().unwrap();
 
     stack.client().session_prompt(&chat, "say:while you were away", None).unwrap();
     ui.wait("a notification", |ui| !told_of(ui, &elsewhere).is_empty());
@@ -89,7 +89,7 @@ fn clicking_a_notification_shows_its_chat_and_reads_no_other_on_the_way(cx: &mut
 
     ui.cx.simulate_system_notification_response(SystemNotificationResponse { tag: note.tag, action_id: None });
 
-    ui.wait("its workspace to show", |ui| ui.view().selected.as_ref() == Some(&elsewhere));
+    ui.wait("its workspace to show", |ui| ui.view().selected() == Some(&elsewhere));
     ui.wait("its chat to show", |ui| ui.active_chat() == clicked);
     ui.wait("the hub to have it read", |_| !stack.client().session_get(&clicked).unwrap().unread());
     assert!(stack.client().session_get(&showing_there).unwrap().unread(), "the chat showing there wasn't read");
@@ -107,7 +107,7 @@ fn reading_a_chat_takes_its_notification_back(cx: &mut TestAppContext) {
     ui.click(SharedString::from(format!("workspace-{elsewhere}")));
 
     ui.wait("the notification to go", |ui| taken_back(ui, &finished));
-    ui.wait("its workspace to show", |ui| ui.view().selected.as_ref() == Some(&elsewhere));
+    ui.wait("its workspace to show", |ui| ui.view().selected() == Some(&elsewhere));
 }
 
 /// One that waits on you isn't read, so nothing on its record changes as it shows, and showing it in its workspace is

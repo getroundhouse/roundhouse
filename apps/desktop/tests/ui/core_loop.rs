@@ -135,16 +135,16 @@ fn clicking_a_workspace_switches_to_it_and_typing_goes_to_the_right_place(cx: &m
     let first = ui.new_workspace();
     let second = ui.new_workspace();
     assert_ne!(first, second);
-    assert_eq!(ui.view().selected.as_ref(), Some(&second));
+    assert_eq!(ui.view().selected(), Some(&second));
 
     ui.click(SharedString::from(format!("workspace-{first}")));
-    ui.wait("the first workspace", |ui| ui.view().selected.as_ref() == Some(&first) && ui.pane().is_some());
+    ui.wait("the first workspace", |ui| ui.view().selected() == Some(&first) && ui.pane().is_some());
     ui.input("say:in the first");
     ui.press("enter");
     ui.wait_idle_with("the answer", |text| text.contains("in the first"));
 
     ui.click(SharedString::from(format!("workspace-{second}")));
-    ui.wait("the second workspace", |ui| ui.view().selected.as_ref() == Some(&second));
+    ui.wait("the second workspace", |ui| ui.view().selected() == Some(&second));
     ui.frame();
     assert!(!ui.assistant_text().contains("in the first"), "the second workspace has its own transcript");
     ui.input("say:in the second");
@@ -162,18 +162,18 @@ fn the_keyboard_moves_between_workspaces_and_opens_the_diff(cx: &mut TestAppCont
     let first = ui.new_workspace();
     let second = ui.new_workspace();
 
-    ui.press("secondary-[");
-    ui.wait("the previous workspace", |ui| ui.view().selected.as_ref() == Some(&first));
-    ui.press("secondary-]");
-    ui.wait("the next workspace", |ui| ui.view().selected.as_ref() == Some(&second));
-    ui.press("secondary-]");
-    ui.wait("wrapping around", |ui| ui.view().selected.as_ref() == Some(&first));
+    ui.press("alt-secondary-up");
+    ui.wait("the previous workspace", |ui| ui.view().selected() == Some(&first));
+    ui.press("alt-secondary-down");
+    ui.wait("the next workspace", |ui| ui.view().selected() == Some(&second));
+    ui.press("alt-secondary-down");
+    ui.wait("wrapping around", |ui| ui.view().selected() == Some(&first));
 
     ui.wait("the pane", |ui| ui.pane().is_some());
     let pane = ui.pane().unwrap();
-    ui.press("secondary-shift-d");
+    ui.press("secondary-shift-b");
     assert!(!ui.changes_open(), "it starts open, so this hides it");
-    ui.press("secondary-shift-d");
+    ui.press("secondary-shift-b");
     ui.wait("the sidebar of changes", |ui| ui.changes_open() && ui.cx.read_entity(&pane, |p, _| p.diff.is_some()));
     let review = ui.cx.read_entity(&pane, |p, _| p.diff.as_ref().map(|d| d.review.clone())).unwrap();
     ui.wait("it to see there are no changes", |ui| ui.cx.read_entity(&review, |r, _| r.has_no_changes()));

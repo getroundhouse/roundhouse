@@ -1,4 +1,5 @@
 use super::failure::ConnectionFailure;
+use super::selection::Selection;
 use super::{home, hub_source, keeping_workers, menu_button, notifying, quitting, restarts, settings};
 use crate::busy::Busy;
 use crate::checkout::Checkout;
@@ -6,7 +7,7 @@ use crate::new_workspace::NewWorkspaceDialog;
 use crate::workspace_pane::WorkspacePane;
 use client_core::records::Snapshot;
 use client_core::{Client, Drafts, HubAdmin, RecordsFeed};
-use gpui_kit::{AnyWindowHandle, App, AppContext, Context, Entity, FocusHandle, ScrollHandle, Task, Window};
+use gpui_kit::{AnyWindowHandle, AppContext, Context, Entity, FocusHandle, ScrollHandle, Task, Window};
 use hub_source::HubSource;
 use protocol::client::HubStatus;
 use protocol::model::{SessionId, Workspace, WorkspaceId};
@@ -56,7 +57,8 @@ pub struct AppView {
     pub(super) restartable_hub: Option<restarts::OlderHub>,
     /// What's shown of the hub's records, as of client-core's last change to them.
     pub(super) records: Snapshot,
-    pub selected: Option<WorkspaceId>,
+    /// The workspace selected, and those selected before it.
+    pub(super) selection: Selection,
     /// Whether the selected workspace shows, or Home in its place.
     pub(super) main: home::Main,
     /// What Home shows, kept while it's put away.
@@ -140,7 +142,7 @@ impl AppView {
             joining: None,
             restartable_hub: None,
             records: Snapshot::default(),
-            selected: None,
+            selection: Selection::default(),
             main: home::Main::default(),
             home: crate::home::Home::new(window, cx),
             panes: HashMap::new(),
@@ -347,38 +349,6 @@ impl AppView {
         self.records.workspaces().iter().filter(|w| crate::sidebar::lists(w)).collect()
     }
 
-    pub fn select(&mut self, id: WorkspaceId, cx: &mut Context<Self>) {
-        self.show_in_sidebar(&id, cx);
-        self.selected = Some(id);
-        self.close_home();
-        self.show_selected(cx);
-        cx.notify();
-    }
-
-    /// Moves `by` workspaces down the sidebar, in the order it shows them. From a workspace in a collapsed project,
-    /// that's to the nearest one showing on that side of where its row would be.
-    pub(super) fn step_selection(&mut self, by: isize, cx: &mut Context<Self>) {
-        let visible = crate::sidebar::shown(self, cx);
-        if visible.is_empty() {
-            return;
-        }
-        let at = self.selected.as_ref().and_then(|id| visible.iter().position(|v| v == id));
-        let at = at.or_else(|| self.beside_the_selected(&visible, by, cx)).unwrap_or(0);
-        let next = wrapped_step(at, by, visible.len());
-        self.select(visible[next].clone(), cx);
-    }
-
-    /// Where in `visible`, the workspaces the sidebar shows, a step of `by` sets off from when the selected one is in a
-    /// collapsed project: the one just above where its row would be for a step down, and the one just below for a
-    /// step up, so the step lands on the other. Above the first is the last, and below the last the first.
-    pub(super) fn beside_the_selected(&self, visible: &[WorkspaceId], by: isize, cx: &App) -> Option<usize> {
-        let selected = self.selected.as_ref()?;
-        let listed = crate::sidebar::listed(self, cx);
-        let place = listed.iter().position(|id| id == selected)?;
-        let above = listed[..place].iter().filter(|id| visible.contains(id)).count();
-        Some(if by > 0 { wrapped_step(above, -1, visible.len()) } else { above % visible.len() })
-    }
-
     /// Makes sure the selected workspace is on screen with its composer focused. This needs the window,
     /// and a click handler is already inside a window update, so it runs just after whatever called it.
     pub(super) fn show_selected(&mut self, cx: &mut Context<Self>) {
@@ -395,6 +365,6 @@ impl AppView {
         if !matches!(self.connection, Connection::Ready(_)) {
             return None;
         }
-        self.selected.as_ref().and_then(|id| self.panes.get(id).cloned())
+        self.selected().and_then(|id| self.panes.get(id).cloned())
     }
 }

@@ -4,19 +4,20 @@
 //! A shortcut bound with no context takes its key wherever focus is, even from a view that binds the same key deeper
 //! in, since GPUI ranks a binding without a context with the deepest. Where both act, the app's wins, as it's bound
 //! after the kit's, and GPUI goes on to the view's only where nothing takes the app's. So the kit's text boxes keep
-//! their own Ctrl keys only because none of their editing keys is one of these that has no context. The four they
+//! their own Ctrl keys only because none of their editing keys is one of these that has no context. The few they
 //! share, Ctrl with F, [, ] and ., which a text box binds to search, outdent, indent and its code actions, the app
-//! takes from them on a Mac too, with Cmd. A view that needs one of these for itself, as a terminal does Ctrl+W, has
-//! to be left out of where it's bound.
+//! takes from them on a Mac too, with Cmd, and Cmd+Option with Up and Down, Ctrl+Alt on Windows, with which a text box
+//! adds a cursor above or below. A view that needs one of these for itself, as a terminal does Ctrl+W, has to be left
+//! out of where it's bound.
 //!
 //! In a terminal, every key is its program's but the app's on Command on a Mac and on Ctrl and Shift elsewhere, and
 //! Ctrl+Tab and Ctrl+Shift+Tab on both, which terminal apps keep for themselves, as Ghostty does. So off the Mac, the
-//! app's other shortcuts, on Ctrl with a letter, `[`, `]`, `,` or `.`, and on F3 and F10, are left out of a terminal,
-//! as Ctrl+W deletes a word in a shell, Ctrl+[ is Escape, and F10 is a key full-screen programs take. In a terminal
-//! there, Close, New Workspace and Quit take Shift as well, as terminal apps have them, and New Chat, Settings and the
-//! workspace before and after are in the menus, which the button in the corner opens. Find and Stop Agent are a
-//! chat's, so they act only while one shows, as `app::shortcuts` has them, which on a Mac too keeps their keys from
-//! acting on a chat out of sight.
+//! app's other shortcuts, on Ctrl with a letter, `[`, `]`, `,`, `.` or an arrow, and on F3 and F10, are left out of a
+//! terminal, as Ctrl+W deletes a word in a shell, Ctrl+[ is Escape, and F10 is a key full-screen programs take. In a
+//! terminal there, Close, New Workspace and Quit take Shift as well, as terminal apps have them, and New Chat,
+//! Settings, hiding the sidebar, Back, Forward and the workspace above and below are in the menus, which the button in
+//! the corner opens. Find and Stop Agent are a chat's, so they act only while one shows, as `app::shortcuts` has
+//! them, which on a Mac too keeps their keys from acting on a chat out of sight.
 //!
 //! Archive is left out of a terminal too, since Ctrl+Shift+A is a terminal's Select All there, as
 //! `terminal_view::bind_keys` has it, so in a terminal Archive is the File menu's.
@@ -28,9 +29,9 @@ use gpui_kit::{Action, App, KeyBinding, KeyBindingContextPredicate};
 
 use crate::{
     ArchiveWorkspace, CloseChat, CloseSettings, CreatePullRequest, FindInChat, FindNext, FindPrevious, FindSetting,
-    FlipImage, Hide, HideOthers, MarkWorkspace, Minimize, NewChat, NewTerminal, NewWorkspace, NextChat, NextWorkspace,
-    OpenSettings, PreviousChat, PreviousWorkspace, Quit, StopAgent, ToggleDiff, ToggleMenus, TogglePlanMode, composing,
-    file_diff, image_diff, settings,
+    FlipImage, GoBack, GoForward, Hide, HideOthers, MarkWorkspace, Minimize, NewChat, NewTerminal, NewWorkspace,
+    NextChat, NextWorkspace, OpenSettings, PreviousChat, PreviousWorkspace, Quit, StopAgent, ToggleDiff, ToggleMenus,
+    TogglePlanMode, ToggleSidebar, composing, file_diff, image_diff, settings,
 };
 
 /// Binds the app's shortcuts, after the kit's.
@@ -72,7 +73,10 @@ pub(crate) fn set(cx: &mut App) {
         key("secondary-w", CloseSettings, in_settings, cx),
         key(settings::FIND_KEY, FindSetting, in_settings, cx),
         key("secondary-n", NewWorkspace, outside_a_terminal, cx),
-        key("secondary-shift-d", ToggleDiff, None, cx),
+        // Left out of a terminal, where off the Mac Ctrl+B is the program's, as tmux's prefix and back a character in a
+        // shell. There the corner's button and the View menu hide it.
+        key("secondary-b", ToggleSidebar, outside_a_terminal, cx),
+        key("secondary-shift-b", ToggleDiff, None, cx),
         key("space", FlipImage, Some(image_diff::KEY_CONTEXT), cx),
         // As the kit binds them in what's typed in, so the diff's text copies as any other text does.
         key("secondary-c", Copy, Some(file_diff::KEY_CONTEXT), cx),
@@ -83,11 +87,20 @@ pub(crate) fn set(cx: &mut App) {
         key("secondary-shift-a", ArchiveWorkspace, outside_a_terminal, cx),
         key("secondary-shift-u", MarkWorkspace, None, cx),
         key("secondary-.", StopAgent, outside_a_terminal, cx),
-        key("secondary-]", NextWorkspace, outside_a_terminal, cx),
-        key("secondary-[", PreviousWorkspace, outside_a_terminal, cx),
+        // Back and Forward, as a browser's. The workspace above and below in the sidebar are on the arrows, which the
+        // app takes from a text box, where they'd add a cursor above or below.
+        key("secondary-[", GoBack, outside_a_terminal, cx),
+        key("secondary-]", GoForward, outside_a_terminal, cx),
+        key("alt-secondary-up", PreviousWorkspace, outside_a_terminal, cx),
+        key("alt-secondary-down", NextWorkspace, outside_a_terminal, cx),
         key("secondary-t", NewChat, outside_a_terminal, cx),
         key("secondary-shift-t", NewTerminal, None, cx),
         key("secondary-w", CloseChat, outside_a_terminal, cx),
+        // Shift with a bracket comes as the brace it types, on every system, so that's what's bound. Bound before
+        // Ctrl+Tab, so a Mac's menu bar, which shows the first, shows these, since it can't show Tab, and the menus
+        // the app draws elsewhere, which show the last, show Ctrl+Tab, as Windows and Linux apps have it.
+        key("secondary-}", NextChat, None, cx),
+        key("secondary-{", PreviousChat, None, cx),
         key("ctrl-tab", NextChat, None, cx),
         key("ctrl-shift-tab", PreviousChat, None, cx),
         // Bound after the text field's own Shift-Tab, which outdents, so this one wins where a prompt is written.

@@ -18,7 +18,7 @@ On the left. It lists your projects, each with its workspaces under it.
 | A workspace's row | Its mark and its title. Click it to show the workspace |
 | The build line | At the bottom: which build is running, a question mark whose menu has Check for Updates and Changelog, and a gear for Settings. An update's card shows over it when there's one |
 
-A button at the window's top left hides the sidebar and shows it again. On Windows and Linux, the button before it opens the menus. Drag the sidebar's inner edge to change its width.
+A button at the window's top left, or `Cmd-B`, hides the sidebar and shows it again. On Windows and Linux, the button before it opens the menus. Drag the sidebar's inner edge to change its width.
 
 ## The workspace
 
@@ -44,7 +44,7 @@ On the right. It's open from the start, so a workspace's changes and its pull re
 | All files | A tab that lists every file in the worktree |
 | Changes | A tab that lists the files the workspace changes |
 
-`Cmd-Shift-D` hides it and shows it again.
+`Cmd-Shift-B` hides it and shows it again.
 
 ## The file tab
 

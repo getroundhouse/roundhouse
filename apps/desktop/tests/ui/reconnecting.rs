@@ -81,7 +81,7 @@ fn after_a_reconnect_panes_catch_up_when_shown_and_an_archived_ones_goes(cx: &mu
     // A kept pane does nothing until there's a connection for it, even when a shortcut reaches the window.
     ui.cx.update_window(ui.handle, |_, window, cx| window.blur(cx)).unwrap();
     ui.frame();
-    ui.press("secondary-shift-d");
+    ui.press("secondary-shift-b");
     assert!(ui.changes_open());
     let client = Client::connect_or_start(&stack.hub.paths, &daemon, "test").unwrap();
     client.workspace_archive(&archived, false).unwrap();
@@ -128,7 +128,7 @@ fn a_pane_shown_while_the_hub_is_gone_catches_up_once_it_is_back(cx: &mut TestAp
     ui.click(SharedString::from(format!("workspace-{behind}")));
     ui.frame();
 
-    assert_eq!(ui.view().selected.as_ref(), Some(&behind));
+    assert_eq!(ui.view().selected(), Some(&behind));
     assert_eq!(ui.view().error.as_deref(), None);
     Client::connect_or_start(&stack.hub.paths, &daemon, "test").unwrap();
     ui.click("try-hub-again");

@@ -166,19 +166,30 @@ pub(super) fn in_a_workspace(
     made.chat(&workspace, SessionStatus::Idle, Vec::new());
     world(&mut made, &workspace);
     let (fake, mut ui) = on(cx, made);
-    ui.wait("the workspace's chat", |ui| ui.view().selected.as_ref() == Some(&workspace) && ui.transcript().is_some());
+    ui.wait("the workspace's chat", |ui| ui.view().selected() == Some(&workspace) && ui.transcript().is_some());
     (fake, ui)
 }
 
 /// Each menu this system has, in order, with its items, `-` for each separator. Off the Mac, what a Mac has in its app
 /// menu ends File, as `menus::tests` checks for each system, so File's are only those it starts with.
 /// macOS adds Enter Full Screen below View's last separator, which only a Mac has, and puts its own items above
-/// Window's.
+/// Window's. The window has no workspace, so View offers to show the diff, and to hide the sidebar, which shows.
 fn menus_and_their_items() -> Vec<(&'static str, Vec<&'static str>)> {
     let file =
         vec!["New Workspace", "New Chat", "New Terminal", "Add Project…", "-", "Close Chat", "Archive Workspace"];
     let edit = vec!["Undo", "Redo", "-", "Cut", "Copy", "Paste", "Select All", "-", "Find"];
-    let mut view = vec!["Show Diff", "-", "Previous Workspace", "Next Workspace"];
+    let mut view = vec![
+        "Hide Sidebar",
+        "Show Diff",
+        "-",
+        "Back",
+        "Forward",
+        "Previous Workspace",
+        "Next Workspace",
+        "-",
+        "Previous Tab",
+        "Next Tab",
+    ];
     if !ON_A_MAC {
         return vec![
             ("File", file),
@@ -220,9 +231,14 @@ fn items_with_their_actions_and_keys() -> Vec<(&'static str, &'static str, &'sta
         ("File", "Add Project…", &desktop::AddRepository, None),
         ("File", "Close Chat", &desktop::CloseChat, Some("secondary-w")),
         ("File", "Archive Workspace", &desktop::ArchiveWorkspace, Some("secondary-shift-a")),
-        ("View", "Show Diff", &desktop::ToggleDiff, Some("secondary-shift-d")),
-        ("View", "Previous Workspace", &desktop::PreviousWorkspace, Some("secondary-[")),
-        ("View", "Next Workspace", &desktop::NextWorkspace, Some("secondary-]")),
+        ("View", "Hide Sidebar", &desktop::ToggleSidebar, Some("secondary-b")),
+        ("View", "Show Diff", &desktop::ToggleDiff, Some("secondary-shift-b")),
+        ("View", "Back", &desktop::GoBack, Some("secondary-[")),
+        ("View", "Forward", &desktop::GoForward, Some("secondary-]")),
+        ("View", "Previous Workspace", &desktop::PreviousWorkspace, Some("alt-secondary-up")),
+        ("View", "Next Workspace", &desktop::NextWorkspace, Some("alt-secondary-down")),
+        ("View", "Previous Tab", &desktop::PreviousChat, Some(if ON_A_MAC { "secondary-{" } else { "ctrl-shift-tab" })),
+        ("View", "Next Tab", &desktop::NextChat, Some(if ON_A_MAC { "secondary-}" } else { "ctrl-tab" })),
     ];
     if ON_A_MAC {
         rows.extend([

@@ -8,7 +8,7 @@ The sidebar on the right lists every file the workspace changes against its base
 
 ![The sidebar of changes, with a comment waiting](../../spec/screens/changes.png)
 
-The button at the sidebar's top right shows the files as a list of paths, or in folders. `Cmd-Shift-D` hides the sidebar and shows it again.
+The button at the sidebar's top right shows the files as a list of paths, or in folders. `Cmd-Shift-B` hides the sidebar and shows it again.
 
 ## Read a diff
 

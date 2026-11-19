@@ -98,7 +98,7 @@ impl Away {
             Away::InTheFileTab => ui.click(SharedString::from(format!("chat-{chat}"))),
             Away::InAnotherWorkspace => {
                 ui.click(SharedString::from(format!("workspace-{workspace}")));
-                ui.wait("it to show", |ui| ui.view().selected.as_ref() == Some(workspace));
+                ui.wait("it to show", |ui| ui.view().selected() == Some(workspace));
             }
         }
     }
@@ -283,7 +283,7 @@ fn the_sidebars_menu_marks_a_workspace_without_showing_it_as_it_offered_when_it_
 
     ui.wait("Mark as read again: the hub to have it read", |_| read_at_the_hub(&stack, &chat));
     ui.wait("Mark as read again: the mark to go", |ui| !row_unread(ui, &elsewhere));
-    assert_ne!(ui.view().selected.as_ref(), Some(&elsewhere), "Mark as read again: it doesn't show the workspace");
+    assert_ne!(ui.view().selected(), Some(&elsewhere), "Mark as read again: it doesn't show the workspace");
 
     // "Mark as unread", with a reply in another of the workspace's chats while the menu is open.
     ui.right_click(menu);

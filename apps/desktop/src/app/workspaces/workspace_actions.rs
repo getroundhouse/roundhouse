@@ -18,7 +18,7 @@ use protocol::prompt::Prompt;
 impl AppView {
     /// Makes the selected workspace's pane if it has none, shows it, and focuses it.
     pub(in super::super) fn make_selected_pane(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let Some(id) = self.selected.clone() else { return };
+        let Some(id) = self.selected().cloned() else { return };
         if !self.panes.contains_key(&id) {
             let (Some(client), Some(shown)) = (self.client(), self.records.in_workspace(&id)) else { return };
             // Only for one the sidebar lists, which one being archived is until it's gone.
@@ -71,7 +71,7 @@ impl AppView {
     /// or else the selected workspace's, or the first.
     pub fn current_repo(&self) -> Option<RepoId> {
         let home = self.home_repo().filter(|_| self.home_showing());
-        let selected = self.selected.as_ref().and_then(|id| self.records.workspace(id));
+        let selected = self.selected().and_then(|id| self.records.workspace(id));
         let selected = selected.map(|w| &w.repo_id);
         home.or(selected).or_else(|| self.records.repos().first().map(|r| &r.id)).cloned()
     }
@@ -147,7 +147,7 @@ impl AppView {
 
     /// What the window shows now, for [`InView::still`] to compare with what it showed when a workspace was asked for.
     pub(super) fn in_view(&self) -> InView {
-        InView { selected: self.selected.clone(), main: self.main, settings: self.settings_open() }
+        InView { selected: self.selected().cloned(), main: self.main, settings: self.settings_open() }
     }
 
     /// Shows the workspace that was made, if the person is still where they were when it was asked for, which was

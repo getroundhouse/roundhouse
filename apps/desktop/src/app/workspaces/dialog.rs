@@ -147,7 +147,7 @@ impl AppView {
     /// Closing the dialog gives focus back to what had it before, which is no longer drawn if another workspace was
     /// selected meanwhile, so that one is focused instead.
     fn dialog_closed(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if let Some(id) = self.focus_once_closed.take().filter(|id| self.selected.as_ref() == Some(id)) {
+        if let Some(id) = self.focus_once_closed.take().filter(|id| self.selected() == Some(id)) {
             self.focus_pane(id, window, cx);
         }
     }

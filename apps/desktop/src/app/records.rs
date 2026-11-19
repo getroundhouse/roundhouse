@@ -29,14 +29,14 @@ impl AppView {
         }
         self.records = records;
         self.keep_workers_as_they_move(cx);
-        let still_there =
-            self.selected.as_ref().and_then(|id| self.records.workspace(id)).is_some_and(crate::sidebar::lists);
+        let still_there = self.selected().and_then(|id| self.records.workspace(id)).is_some_and(crate::sidebar::lists);
         if !still_there {
             // The top of the sidebar, or of what it lists if every project is collapsed.
             let top = crate::sidebar::shown(self, cx).into_iter().next();
-            self.selected = top.or_else(|| crate::sidebar::listed(self, cx).into_iter().next());
+            let instead = top.or_else(|| crate::sidebar::listed(self, cx).into_iter().next());
+            self.selection.fall_back(instead);
         }
-        let has_pane = self.selected.as_ref().is_some_and(|id| self.panes.contains_key(id));
+        let has_pane = self.selected().is_some_and(|id| self.panes.contains_key(id));
         if !still_there || !has_pane {
             self.show_selected(cx);
         }

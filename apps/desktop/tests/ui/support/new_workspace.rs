@@ -38,7 +38,7 @@ impl Ui<'_> {
         self.wait("the new workspace", |ui| {
             ui.view().records().workspaces().len() > before && ui.transcript().is_some() && ui.view().busy == Busy::Free
         });
-        self.view().selected.clone().unwrap()
+        self.view().selected().cloned().unwrap()
     }
 
     /// Lets a dialog that has closed finish going, after which the kit gives the keys back to what had them before it

@@ -124,7 +124,7 @@ fn typing_with_an_update_ready<'a>(cx: &'a mut TestAppContext, stack: &Stack, ty
 /// restarting would lose it, and restarting gives up on it soon.
 fn start_a_comment(ui: &mut Ui<'_>, stack: &Stack) -> Frozen {
     ui.give_up_on_a_frozen_hub_soon();
-    let workspace = ui.view().selected.clone().unwrap();
+    let workspace = ui.view().selected().cloned().unwrap();
     std::fs::write(ui.worktree(&workspace).join("a.txt"), "one\ntwo\n").unwrap();
     let diff = ui.open_changes();
     ui.open_diff_of(&diff, "a.txt");
@@ -204,7 +204,7 @@ fn restarting_to_update_waits_for_whats_on_its_way_to_the_hub(cx: &mut TestAppCo
 fn restarting_to_update_doesnt_ask_about_a_comment_the_hub_has(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let mut ui = typing_with_an_update_ready(cx, &stack, "");
-    let workspace = ui.view().selected.clone().unwrap();
+    let workspace = ui.view().selected().cloned().unwrap();
     std::fs::write(ui.worktree(&workspace).join("a.txt"), "one\ntwo\n").unwrap();
     let diff = ui.open_changes();
     ui.open_diff_of(&diff, "a.txt");

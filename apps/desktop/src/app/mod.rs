@@ -21,6 +21,8 @@ mod reading;
 mod records;
 mod restarts;
 pub(crate) mod saved_hubs;
+mod selecting;
+mod selection;
 mod settings;
 pub(crate) mod share_hub;
 mod shortcuts;

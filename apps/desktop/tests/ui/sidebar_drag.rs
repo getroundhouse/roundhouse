@@ -108,8 +108,8 @@ fn a_project_dragged_past_the_others_middle_moves_with_its_workspaces_and_one_dr
     let saved = [second.to_string(), first.to_string()];
     ui.wait("the order the drag past left to be saved", |_| saved_order(&fake.settings_file()) == saved);
     ui.click(row(&last));
-    ui.press("secondary-]");
-    assert_eq!(ui.view().selected.as_ref(), Some(&upper), "dragged past: and the keys go in the order shown");
+    ui.press("alt-secondary-down");
+    assert_eq!(ui.view().selected(), Some(&upper), "dragged past: and the keys go in the order shown");
     // And back up past the other's middle.
     drag(&mut ui, project_row(&first), project_row(&second));
     assert!(top(&mut ui, project_row(&first)) < top(&mut ui, project_row(&second)), "dragged back: where it was");

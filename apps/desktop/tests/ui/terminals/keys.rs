@@ -138,7 +138,9 @@ fn a_terminal_leaves_its_program_every_key_but_the_apps_own(cx: &mut TestAppCont
 
     for (keys, action) in &bound {
         let held = keys.modifiers;
-        let apps = if cfg!(target_os = "macos") { held.platform } else { held.control && held.shift };
+        // Shift with a bracket comes as the brace it types, with Shift taken off.
+        let shifted = held.shift || ["{", "}"].contains(&keys.key.as_str());
+        let apps = if cfg!(target_os = "macos") { held.platform } else { held.control && shifted };
         let between_tabs = held.control && keys.key == "tab";
         let terminals_own = action.name().starts_with("terminal::")
             || [&Copy as &dyn Action, &Paste, &SelectAll].into_iter().any(|own| action.partial_eq(own));

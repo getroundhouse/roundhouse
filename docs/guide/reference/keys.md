@@ -7,10 +7,12 @@ The app's keyboard shortcuts. They're written as a Mac's. On Windows and Linux, 
 | Key | Action |
 |---|---|
 | `Cmd-N` | New workspace |
-| `Cmd-[`, `Cmd-]` | The workspace before, and after |
+| `Cmd-[`, `Cmd-]` | Back to the workspace shown before, and forward again, as a browser's Back and Forward |
+| `Cmd-Option-Up`, `Cmd-Option-Down` | The workspace above, and below, in the sidebar |
 | `Cmd-Shift-A` | Archive the workspace |
 | `Cmd-Shift-U` | Mark the workspace read, or unread again |
-| `Cmd-Shift-D` | Show or hide the sidebar of changes |
+| `Cmd-B` | Show or hide the sidebar |
+| `Cmd-Shift-B` | Show or hide the sidebar of changes |
 | `Cmd-Shift-P` | Ask the agent for a pull request |
 
 ## Chats
@@ -20,7 +22,8 @@ The app's keyboard shortcuts. They're written as a Mac's. On Windows and Linux, 
 | `Cmd-T` | New chat |
 | `Cmd-Shift-T` | New terminal, in a tab after the chats |
 | `Cmd-W` | Close the chat, or the file tab, subagent tab, proposal tab or terminal while it shows |
-| `Ctrl-Tab`, `Ctrl-Shift-Tab` | The tab after, and before |
+| `Cmd-Shift-]`, `Cmd-Shift-[` | The tab after, and before |
+| `Ctrl-Tab`, `Ctrl-Shift-Tab` | The tab after, and before, too |
 | `Cmd-F` | Find in the chat |
 | `Cmd-G`, `Cmd-Shift-G` | The next match, and the one before |
 | `F3`, `Shift-F3` | On Windows and Linux, the next match, and the one before, too |
@@ -41,7 +44,7 @@ Every key typed in a terminal goes to its program, as in a terminal app, but the
 | `Cmd-Backspace` | On a Mac, delete back to the start of the line in bash and fish, or the whole line in zsh |
 | `Option-Left`, `Option-Right` | On a Mac, back a word, and on one, in a shell |
 
-On Windows and Linux, `Ctrl` with a letter goes to the program, as `Ctrl-W` deletes a word in a shell, so in a terminal the app's own keys take `Shift` too: `Ctrl-Shift-W` closes the terminal, `Ctrl-Shift-N` makes a new workspace and `Ctrl-Shift-Q` quits. The app's other keys go to the program there, `F10` and `Ctrl-,` too, so New chat, Settings and the workspace before and after are in the menus, which the button in the corner opens. `Ctrl-Shift-C`, `Ctrl-Shift-V` and `Ctrl-Shift-A` copy, paste and select all there, so Archive is in the File menu.
+On Windows and Linux, `Ctrl` with a letter goes to the program, as `Ctrl-W` deletes a word in a shell, so in a terminal the app's own keys take `Shift` too: `Ctrl-Shift-W` closes the terminal, `Ctrl-Shift-N` makes a new workspace and `Ctrl-Shift-Q` quits. The app's other keys go to the program there, `F10`, `Ctrl-,` and `Ctrl-B` too, so New chat, Settings, hiding the sidebar, Back, Forward and the workspace above and below are in the menus, which the button in the corner opens. `Ctrl-Shift-C`, `Ctrl-Shift-V` and `Ctrl-Shift-A` copy, paste and select all there, so Archive is in the File menu.
 
 Find and stopping the agent are for a chat, so they do nothing unless the chat shows, such as while a terminal, a file tab or a subagent tab does.
 

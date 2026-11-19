@@ -43,10 +43,15 @@
 
   ![Something typed in two workspaces](screens/drafts.png)
 
+## Back and forward
+
+- **`Cmd-[` and `Cmd-]` go back and forward through the workspaces the window has shown, as a browser's Back and Forward do,** since what's wanted is most often the workspace you just left, such as after turning to one an agent finished in. Every way of choosing a workspace counts: its row, Home, a notification, making it, or the keys. Choosing one after going back forgets those Back came back from, as a browser forgets them once a link is followed. They stop at either end, rather than going round, and pass over a workspace archived since. The window keeps where it's been until the app quits, as it keeps which sidebars show. From Home, Back comes back to the workspace Home covers, as a browser's Back comes back from the page it's on, and Forward goes on from that workspace, putting Home away. Back and Forward in the View menu do the same, greyed out where there's nowhere to go. *Unconfirmed:* from Home, the View menu's items, and each hub's window keeping its own.
+- **`Cmd-Option-Up` and `Cmd-Option-Down` go to the workspace above and below in the order shown,** round from the last to the first and the first to the last, for going through them one by one. Each is a choice that Back comes back from.
+
 ## Order
 
 - **Each project's workspaces are listed last active first,** unless oldest first is chosen instead. *Unconfirmed:* oldest first.
-- **The order is chosen from a button at the heading, before Add project.** The button shows only while the pointer is on the heading, as a row's archive button does, so the list stays quiet, and its menu ticks the order chosen, which lasts once the app quits. The projects keep their order, and `Cmd-[` and `Cmd-]` go in the order shown. *Unconfirmed.*
+- **The order is chosen from a button at the heading, before Add project.** The button shows only while the pointer is on the heading, as a row's archive button does, so the list stays quiet, and its menu ticks the order chosen, which lasts once the app quits. The projects keep their order, and `Cmd-Option-Up` and `Cmd-Option-Down` go in the order shown. *Unconfirmed.*
 
   **The menu of orders, opened from the button at the heading, with the one chosen ticked.** *Unconfirmed.*
 
@@ -70,7 +75,7 @@
 
 - **The workspaces stay where they are while whatever comes after the project slides up over them, in a fifth of a second, and down off them as they come back,** as the sidebars slide, so it's plain where they went. The last project's are covered the same way, from the bottom, with nothing after it to see. The chevron turns as far as they've gone. A fold turned back partway goes on from where it had got to, and Reduce Motion skips it. *Unconfirmed.*
 - **Which projects are collapsed lasts once the app quits,** on this Mac, as the order does. *Unconfirmed.*
-- **`Cmd-[` and `Cmd-]` pass over a collapsed project's workspaces,** since they go in the order shown. From a workspace that's showing in a collapsed project, they go to the nearest one showing below or above where its row would be. *Unconfirmed.*
+- **`Cmd-Option-Up` and `Cmd-Option-Down` pass over a collapsed project's workspaces,** since they go in the order shown. From a workspace that's showing in a collapsed project, they go to the nearest one showing below or above where its row would be. *Unconfirmed.*
 - **Opening a workspace in a collapsed project brings the project's workspaces back,** so the workspace showing has its row: from Home, from a notification, by restoring it, or by making a new one in the project. *Unconfirmed.*
 
 ## The projects' order
@@ -82,11 +87,11 @@
   ![A project being dragged](screens/project-dragged.png)
 
 - **The pointer is an open hand over a project's row, and a closed one while it's dragged,** as `look.md` says for what can be dragged. A press that doesn't move still collapses the project. *Unconfirmed.*
-- **The order lasts once the app quits,** on this Mac, as which projects are collapsed does. Until a project is dragged, the projects are in the hub's order, and one added later goes after those that have been placed. `Cmd-[` and `Cmd-]` go in the order shown. *Unconfirmed.*
+- **The order lasts once the app quits,** on this Mac, as which projects are collapsed does. Until a project is dragged, the projects are in the hub's order, and one added later goes after those that have been placed. `Cmd-Option-Up` and `Cmd-Option-Down` go in the order shown. *Unconfirmed.*
 
 ## Hiding and widening
 
-- **A button in the window's top left corner, beside the window's buttons on a Mac, hides the sidebar, and shows it again,** as the button at the other end of the header does the sidebar of changes. It stays where it is whether the sidebar shows or not, so it's always in the same place, except in full screen, where macOS puts the window's buttons away and it sits where they were. Off the Mac, the button that opens the menus is in the corner too, as `menus.md` says. While the sidebar is hidden, the workspace has its room, and what's in the strip along the top starts after the corner's buttons: the workspace's header, Home's bar, or an error, which sits above the header and leaves it to start at the window's edge. The choice holds until the app quits.
+- **A button in the window's top left corner, beside the window's buttons on a Mac, hides the sidebar, and shows it again,** as the button at the other end of the header does the sidebar of changes. It stays where it is whether the sidebar shows or not, so it's always in the same place, except in full screen, where macOS puts the window's buttons away and it sits where they were. Off the Mac, the button that opens the menus is in the corner too, as `menus.md` says. While the sidebar is hidden, the workspace has its room, and what's in the strip along the top starts after the corner's buttons: the workspace's header, Home's bar, or an error, which sits above the header and leaves it to start at the window's edge. The choice holds until the app quits. `Cmd-B` hides and shows it too, as `Cmd-Shift-B` does the sidebar of changes, and the button's tooltip says so. *Unconfirmed:* the tooltip.
 
   **The sidebar hidden, with the workspace's header starting after the button that shows it again.** *Unconfirmed.*
 

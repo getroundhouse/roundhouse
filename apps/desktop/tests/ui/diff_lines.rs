@@ -69,8 +69,8 @@ fn changed_on_a_fake_hub<'a>(
     }
     let fake = FakeHub::holding(world);
     let mut ui = Ui::open_on(cx, &fake);
-    ui.wait("a workspace", |ui| ui.view().selected.is_some() && ui.pane().is_some());
-    let showing = ui.view().selected.clone().unwrap();
+    ui.wait("a workspace", |ui| ui.view().selected().is_some() && ui.pane().is_some());
+    let showing = ui.view().selected().cloned().unwrap();
     let other = workspaces.into_iter().find(|w| *w != showing).unwrap();
     let diff = ui.open_changes();
     (fake, ui, diff, other)
@@ -166,7 +166,7 @@ fn the_lines_of_a_file_too_big_to_read_whole_are_read_as_they_open(cx: &mut Test
     assert!(ui.has(further) && !ui.has(below), "the fold starts after them");
 
     // A change near the top makes the sides again, which keep what was read.
-    let worktree = ui.worktree(ui.view().selected.as_ref().unwrap());
+    let worktree = ui.worktree(ui.view().selected().unwrap());
     let now = std::fs::read_to_string(worktree.join("big.txt")).unwrap();
     std::fs::write(worktree.join("big.txt"), now.replacen(&format!("line {:>20}\n", 2), "line two\n", 1)).unwrap();
     ui.click("sidebar-tab-changes");
@@ -182,7 +182,7 @@ fn what_was_opened_stays_open_when_the_diff_loads_again(cx: &mut TestAppContext)
     let stack = Stack::new();
     let (mut ui, diff) = changing_a_long_file(cx, &stack);
     ui.click(down_at_the_end());
-    let worktree = ui.worktree(ui.view().selected.as_ref().unwrap());
+    let worktree = ui.worktree(ui.view().selected().unwrap());
     let lines = std::fs::read_to_string(worktree.join("long.txt")).unwrap();
     std::fs::write(worktree.join("long.txt"), lines.replace("line 2\n", "line two\n")).unwrap();
 
@@ -221,7 +221,7 @@ fn the_view_chosen_shows_in_every_workspace(cx: &mut TestAppContext) {
     assert!(!ui.has(up_at_the_top()), "nothing folds in the whole file");
 
     ui.click(SharedString::from(format!("workspace-{second}")));
-    ui.wait("the other workspace", |ui| ui.view().selected.as_ref() == Some(&second) && ui.pane().is_some());
+    ui.wait("the other workspace", |ui| ui.view().selected() == Some(&second) && ui.pane().is_some());
     let other = ui.open_changes();
     ui.open_diff_of(&other, "a.txt");
     assert_eq!(shown_as(&ui, &other), DiffView::WholeFile, "a workspace opened since shows it too");

@@ -30,7 +30,7 @@ fn with_two_workspaces(cx: &mut TestAppContext) -> (FakeHub, Ui<'_>, WorkspaceId
     let fake = FakeHub::holding(world);
     let mut ui = Ui::open_on(cx, &fake);
     ui.wait("the sidebar of changes", |ui| ui.has(RIGHT_EDGE));
-    let showing = ui.view().selected.clone().unwrap();
+    let showing = ui.view().selected().cloned().unwrap();
     let other = workspaces.into_iter().find(|w| *w != showing).unwrap();
     (fake, ui, other)
 }
@@ -38,7 +38,7 @@ fn with_two_workspaces(cx: &mut TestAppContext) -> (FakeHub, Ui<'_>, WorkspaceId
 /// Shows `workspace` by its row in the sidebar.
 fn show(ui: &mut Ui, workspace: &WorkspaceId) {
     ui.click(SharedString::from(format!("workspace-{workspace}")));
-    ui.wait("the workspace", |ui| ui.view().selected.as_ref() == Some(workspace) && ui.has(RIGHT_EDGE));
+    ui.wait("the workspace", |ui| ui.view().selected() == Some(workspace) && ui.has(RIGHT_EDGE));
 }
 
 fn window_width(ui: &mut Ui) -> Pixels {
@@ -93,7 +93,8 @@ pub(crate) fn show_an_error(ui: &mut Ui) {
 }
 
 /// The tests run under Reduce Motion, which skips the slide, so each sidebar goes and comes back at once. What's beside
-/// the one on the left, a workspace or Home, has its room while it's hidden, and starts after the button.
+/// the one on the left, a workspace or Home, has its room while it's hidden, and starts after the button. `Cmd-B` does
+/// what the button does, and the View menu says which it'll do.
 #[gpui_kit::test]
 fn the_button_beside_the_windows_buttons_hides_the_sidebar_and_shows_it_again(cx: &mut TestAppContext) {
     let (_hub, mut ui, _) = with_two_workspaces(cx);
@@ -111,10 +112,12 @@ fn the_button_beside_the_windows_buttons_hides_the_sidebar_and_shows_it_again(cx
     let moved = ui.bounds("workspace-title");
     assert!(moved.left() > button.right(), "the header starts after the button: {moved:?}");
     assert!(moved.left() < title.left(), "and the workspace has the sidebar's room: {moved:?}");
+    assert_eq!(crate::menus::items(&ui, "View")[0], "Show Sidebar");
 
-    ui.click("toggle-sidebar");
+    ui.press("secondary-b");
 
-    assert!(ui.has("add-project"));
+    assert!(ui.has("add-project"), "Cmd-B shows it again");
+    assert_eq!(crate::menus::items(&ui, "View")[0], "Hide Sidebar");
     assert_eq!(ui.bounds("workspace-title"), title);
     ui.click("toggle-diff");
     assert!(!ui.has(RIGHT_EDGE), "the sidebar of changes goes at once too");
@@ -223,7 +226,7 @@ fn a_sidebar_turned_back_partway_slides_from_where_it_had_got_to(cx: &mut TestAp
 #[gpui_kit::test]
 fn a_workspace_shown_partway_through_a_slide_starts_its_header_where_the_sidebar_is(cx: &mut TestAppContext) {
     let (_hub, mut ui, other) = with_two_workspaces(cx);
-    let first = ui.view().selected.clone().unwrap();
+    let first = ui.view().selected().cloned().unwrap();
     show(&mut ui, &other);
     ui.allow_motion();
     ui.click("toggle-sidebar");
@@ -243,7 +246,7 @@ fn a_workspace_shown_partway_through_a_slide_starts_its_header_where_the_sidebar
 #[gpui_kit::test]
 fn in_a_narrow_window_a_sidebar_leaves_its_room_where_its_not_drawn_and_as_it_slides_away(cx: &mut TestAppContext) {
     let (_hub, mut ui, _) = with_two_workspaces(cx);
-    let workspace = ui.view().selected.clone().unwrap();
+    let workspace = ui.view().selected().cloned().unwrap();
     narrow_the_window(&mut ui);
     assert_eq!((left_shown(&mut ui), right_shown(&mut ui)), (px(240.), px(300.)));
 

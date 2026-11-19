@@ -16,7 +16,7 @@ use super::setup::setup_log_view;
 use super::workspace_card;
 use super::{Mark, Opened, PaneEvent, Showing, WorkspacePane, reserving, tab};
 use crate::sides::{self, AtTheTop, Side, Sidebar};
-use crate::{NewChat, NewTerminal, prompt_cache, right_click};
+use crate::{NewChat, NewTerminal, ToggleDiff, prompt_cache, right_click};
 
 /// What a chat is called until it has a title.
 const UNTITLED: &str = "Untitled";
@@ -148,10 +148,14 @@ impl WorkspacePane {
                     look::ControlSize::Regular,
                     IconName::PanelRight,
                 )
-                .tooltip(match sidebar {
-                    Sidebar::Open => "Hide diff",
-                    Sidebar::Hidden => "Show diff",
-                })
+                .tooltip_with_action(
+                    match sidebar {
+                        Sidebar::Open => "Hide diff",
+                        Sidebar::Hidden => "Show diff",
+                    },
+                    &ToggleDiff,
+                    None,
+                )
                 .on_click(cx.listener(|t, _, _, cx| t.toggle_changes(cx))),
             )
     }
