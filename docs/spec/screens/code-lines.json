@@ -1,0 +1,16 @@
+{
+  "look::CodeLines": {
+    "Chat": {
+      "x": 192,
+      "y": 256,
+      "width": 720,
+      "height": 168
+    },
+    "File": {
+      "x": 192,
+      "y": 32,
+      "width": 720,
+      "height": 192
+    }
+  }
+}

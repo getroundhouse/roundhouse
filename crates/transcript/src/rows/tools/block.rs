@@ -137,6 +137,7 @@ fn printed(id: &ElementId, body: AnyElement, color: Hsla) -> AnyElement {
         .px(look::Space::Medium)
         .py(look::Space::Small)
         .typeset(look::Type::Code)
+        .line_height(look::CodeLines::Chat.height())
         .text_color(color)
         .child(body)
         .test_support()

@@ -116,6 +116,7 @@ Three strengths have names of their own, since several places draw with them: wh
 - **The app's emphasis is medium weight, and what someone wrote marks as strong, such as the agent's bold and its Markdown headings, is semibold, never bold,** as the owner chose from pictures of three ways. Medium is for what the app has stand out from what's around it, such as the title that names what a card or section is about, since bold shouts in a dense layout. Semibold lets a line the agent meant to stand out do so among the app's quieter titles, as GitHub draws Markdown's. Medium was drawn as regular until the app asked for the weight a Mac's text system finds the system font's Medium face at, and a test holds each weight to a face of its own. `look::Typeset::emphasis` and `look::STRONG` set them. *Unconfirmed.*
 - **In a list of one kind of thing, such as the workspaces in the sidebar or the chat tabs, a name's colour and weight change only for state that needs you,** such as a reply you haven't read. Which one is selected or open shows in its background or underline instead, and its name looks as it does when it isn't. Names are read side by side, so any change to one reads as news, and macOS's font smoothing thickens brighter text, so a name that brightened would look heavier too.
 - **Code is Menlo at 12px,** set once, as `look::Type` has it, and given to the kit's theme from there.
+- **Code's lines are 20px apart where they're read line by line, and 17px apart among the chat's prose,** as the owner chose from pictures of three ways: a file, a diff and a call's numbered lines are read one line at a time, often beside their numbers, and a code block in a reply, or what a call was given and put out, is glanced at, where denser shows more. The same output is spaced the same however long it is. The terminal lays out a grid of its own. `look::CodeLines` holds them. *Unconfirmed.*
 - **Every kind of text the app sets has a name for what it's for,** so a size means the same wherever it's set, and two kinds that are the same size today, such as details and code, can change apart. What's set takes one of them by its name, rather than a font or a size by its value, and text that stands out from what's around it takes emphasis rather than a weight. `look::Type` holds them, and the kit's theme is given the rem, and code's font and size, from there, so the kit's own parts agree.
 - **Text in different sizes or fonts along one line sits on one baseline,** as the words of a sentence do, such as the workspace header's title beside its branch, in the code font, and where that started, both smaller. Centred one by one, smaller text would ride higher than what's beside it. An icon stays centred, and so does text on a shape, such as a pill, a chip or a button, since it's the shape that's lined up. `look::LineText` sets them. *Unconfirmed.*
 
@@ -134,6 +135,17 @@ Three strengths have names of their own, since several places draw with them: wh
 **Every kind of text, as the app sets it.**
 
 ![Every kind of text](screens/type.png)
+
+**How far apart code's lines are, by where it's read.** Each is a kind in `look::CodeLines`. *Unconfirmed.*
+
+| Name | Height | For |
+|---|---|---|
+| `File` | 20px | Read line by line, often beside their numbers: a file, a diff, and a call's numbered lines |
+| `Chat` | 17px | Glanced at among the chat's prose: a code block in a reply, and what a call was given and put out, however long it is |
+
+**Every spacing of code's lines, as the same code.** *Unconfirmed.*
+
+![The same code at each spacing](screens/code-lines.png)
 
 ## Space and shape
 

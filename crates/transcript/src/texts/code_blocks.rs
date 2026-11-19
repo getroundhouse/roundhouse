@@ -21,7 +21,8 @@ const LINE: Pixels = px(14.);
 /// `context`, with each code block's actions and the room above its code for them.
 pub(super) fn with_actions(context: RenderContext) -> RenderContext {
     let style = context.style();
-    let roomy = style.clone().with_code_block(style.code_block().clone().pt(ROOM));
+    let code_block = style.code_block().clone().pt(ROOM).line_height(look::CodeLines::Chat.height());
+    let roomy = style.clone().with_code_block(code_block);
     context.with_style(roomy).with_code_block_actions(actions)
 }
 
