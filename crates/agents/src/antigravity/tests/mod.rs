@@ -1,6 +1,7 @@
 #![cfg(test)]
 mod approvals;
 mod async_agents;
+mod async_wakeup;
 mod background;
 mod calls;
 mod compaction;

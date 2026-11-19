@@ -9,6 +9,7 @@ use protocol::model::{AgentSessionId, ApprovalId, ModelName, Seq, TaskId, ToolUs
 use serde_json::Value;
 
 use super::async_agents::AsyncAgents;
+use super::wakeup::{IdleOwnTurn, WakeupDelivery};
 use crate::acp::{ConfigOption, FieldSpec, PermissionRequest};
 
 #[derive(Clone, Debug)]
@@ -50,6 +51,8 @@ pub(super) struct Conversation {
     pub(super) prompts: VecDeque<InFlightPrompt>,
     /// Whether `agy` has echoed a `user_message_chunk` in this conversation (`agy` 1.5.9 does; 1.5.12 omits it).
     pub(super) prompt_echo: PromptEcho,
+    pub(super) wakeup_delivery: WakeupDelivery,
+    pub(super) idle_own_turn: IdleOwnTurn,
     pub(super) ending: Ending,
     pub(super) cancelling: bool,
     /// What the turn's earlier prompts took, since `agy` reports each `session/prompt`'s own: a plan's, which its
@@ -184,6 +187,8 @@ impl Conversation {
             config_options: Vec::new(),
             prompts: VecDeque::new(),
             prompt_echo: PromptEcho::Unseen,
+            wakeup_delivery: WakeupDelivery::BufferedDrain,
+            idle_own_turn: IdleOwnTurn::None,
             ending: Ending::Not,
             cancelling: false,
             earlier_tokens: None,
@@ -203,7 +208,11 @@ impl Conversation {
     }
 
     pub(super) fn in_turn(&self) -> bool {
-        !self.prompts.is_empty() || self.ending != Ending::Not
+        !self.prompts.is_empty() || self.idle_own_turn == IdleOwnTurn::Active || self.ending != Ending::Not
+    }
+
+    pub(super) fn can_handle_server_request(&self) -> bool {
+        self.in_turn() || (self.wakeup_delivery == WakeupDelivery::AsyncStream && self.ending == Ending::Not)
     }
 
     /// Needs a fresh `agy acp` process once idle so `--dangerously-skip-permissions` matches `mode`.
@@ -238,17 +247,18 @@ impl Conversation {
     pub(super) fn has_prompt_rpc(&self, rpc_id: u64) -> bool {
         self.prompts.iter().any(|entry| entry.rpc_id == rpc_id)
     }
-
     pub(super) fn next_message_id(&mut self, prefix: &str) -> String {
         let id = self.next_message;
         self.next_message += 1;
         format!("agy-{prefix}-{id}")
     }
-
     pub(super) fn next_order(&mut self) -> u64 {
         let order = self.next_call_order;
         self.next_call_order += 1;
         order
+    }
+    pub(super) fn is_compacting(&self) -> bool {
+        self.prompts.front().is_some_and(InFlightPrompt::is_compact)
     }
 
     /// Marks an in-flight wakeup drain to stay open through a model step because `agy` asked for interaction.
@@ -260,17 +270,26 @@ impl Conversation {
         }
     }
 
-    /// Starts an `OwnTurn` once for the active wakeup drain, taking any background tasks that ended beforehand.
+    /// Starts an `OwnTurn` once for a wakeup drain (`1.5.9`) or an async idle wakeup (`1.5.12+`).
     pub(super) fn begin_own_turn(&mut self) -> Option<OwnTurn> {
-        let Some(InFlightPrompt { origin: PromptOrigin::WakeupDrain { started_own_turn, .. }, .. }) =
+        if let Some(InFlightPrompt { origin: PromptOrigin::WakeupDrain { started_own_turn, .. }, .. }) =
             self.prompts.front_mut()
-        else {
-            return None;
-        };
-        if *started_own_turn {
+        {
+            if *started_own_turn {
+                return None;
+            }
+            *started_own_turn = true;
+        } else if self.prompts.is_empty()
+            && self.ending == Ending::Not
+            && self.idle_own_turn == IdleOwnTurn::None
+            && self.wakeup_delivery == WakeupDelivery::AsyncStream
+        {
+            self.idle_own_turn = IdleOwnTurn::Active;
+            self.reply = None;
+            self.cancelling = false;
+        } else {
             return None;
         }
-        *started_own_turn = true;
         let ended = std::mem::take(&mut self.ended_tasks);
         Some(if ended.is_empty() { OwnTurn::Unknown } else { OwnTurn::TaskEnded { ended } })
     }
@@ -324,11 +343,6 @@ impl Conversation {
         let stopped = if outcome == TaskOutcome::Stopped { vec![task.id.clone()] } else { Vec::new() };
         self.ended_tasks.push(EndedTask { task, outcome, wait: None });
         Some((self.listed_tasks.clone(), stopped))
-    }
-
-    /// Whether the active front prompt is an on-demand `/compact` request.
-    pub(super) fn is_compacting(&self) -> bool {
-        self.prompts.front().is_some_and(InFlightPrompt::is_compact)
     }
 
     /// Takes the front user or continuation prompt on first model output when `agy` omits `user_message_chunk`.

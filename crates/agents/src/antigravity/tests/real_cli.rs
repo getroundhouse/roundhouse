@@ -189,6 +189,21 @@ fn parallel_bg_script(readme_path: &str, req: &Value) -> Vec<Value> {
     }
 }
 
+async fn record_until(
+    rx: &mut mpsc::Receiver<AgentOutput>,
+    record: &mut impl FnMut(Option<RunId>, EventBody) -> Seq,
+    done: impl Fn(&EventBody) -> bool,
+) {
+    loop {
+        let body = recv_event(rx).await;
+        let stop = done(&body);
+        record(Some(RUN), body);
+        if stop {
+            break;
+        }
+    }
+}
+
 #[tokio::test]
 #[ignore = "runs against the installed agy binary"]
 async fn real_agy_parallel_background_commands_wake_twice_and_obey_laws() {
@@ -203,14 +218,7 @@ async fn real_agy_parallel_background_commands_wake_twice_and_obey_laws() {
         events.push(SessionEvent { run, ..fixtures::event(seq, body) });
         seq
     };
-    loop {
-        let body = recv_event(&mut rx).await;
-        let is_init = matches!(body, EventBody::AgentInit { .. });
-        record(Some(RUN), body);
-        if is_init {
-            break;
-        }
-    }
+    record_until(&mut rx, &mut record, |body| matches!(body, EventBody::AgentInit { .. })).await;
     let p1 = record(
         None,
         EventBody::UserPrompt {
@@ -229,18 +237,12 @@ async fn real_agy_parallel_background_commands_wake_twice_and_obey_laws() {
         }
         if let EventBody::TurnEnded { outcome, result, .. } = &body {
             assert_eq!(*outcome, TurnOutcome::Success, "turn failed: {result:?}");
-            turn_results.push(result.clone().unwrap_or_default());
+            turn_results.push(result.as_deref().unwrap_or_default().trim().to_owned());
         }
         record(Some(RUN), body);
     }
-    loop {
-        let body = recv_event(&mut rx).await;
-        let idle = matches!(body, EventBody::AgentState { state: AgentRunState::Idle });
-        record(Some(RUN), body);
-        if idle {
-            break;
-        }
-    }
+    record_until(&mut rx, &mut record, |body| matches!(body, EventBody::AgentState { state: AgentRunState::Idle }))
+        .await;
     agent.stop().await;
     record(
         Some(RUN),
@@ -249,7 +251,12 @@ async fn real_agy_parallel_background_commands_wake_twice_and_obey_laws() {
     let claims = super::super::claims::claims();
     assert_eq!(laws::check(&events, |_| &claims), []);
     assert_eq!(task_ended_turns, 2);
-    assert_eq!(turn_results, ["Started alpha and beta.", "Still waiting on beta.", "Beta finished too."]);
+    assert_eq!(turn_results[0], "Started alpha and beta.");
+    assert!(
+        matches!(turn_results[1].as_str(), "Alpha handled, waiting on beta." | "Still waiting on beta."),
+        "{turn_results:?}"
+    );
+    assert_eq!(turn_results[2], "Beta finished too.");
 }
 
 fn subagent_script(req: &Value) -> Vec<Value> {

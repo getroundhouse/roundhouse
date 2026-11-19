@@ -83,7 +83,9 @@ pub(super) fn launch(
 
 pub(super) async fn initialize(shared: &Shared) -> Result<Option<String>, AgentError> {
     let reply = shared.rpc().ask("initialize", acp::initialize_params("roundhouse", env!("CARGO_PKG_VERSION"))).await?;
-    Ok(acp::parse_agent_version(&reply))
+    let version = acp::parse_agent_version(&reply);
+    shared.state.lock().wakeup_delivery = super::wakeup::delivery_for(version.as_deref());
+    Ok(version)
 }
 
 pub(super) async fn conversation(

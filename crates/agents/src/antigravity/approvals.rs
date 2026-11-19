@@ -40,18 +40,18 @@ async fn permission_requested(
         return unsupported(shared, native_id, "session/request_permission").await;
     };
     let id = ToolUseId::from(perm.tool_call.tool_call_id.as_str());
-    let (mode, in_turn) = {
+    let (mode, can_handle) = {
         let mut state = shared.state.lock();
         if let Some(open) = state.calls.get_mut(&id) {
             open.outlives_turn = false;
         }
-        let in_turn = state.in_turn();
-        if in_turn {
+        let can_handle = state.can_handle_server_request();
+        if can_handle {
             state.note_wakeup_interaction();
         }
-        (state.process_mode, in_turn)
+        (state.process_mode, can_handle)
     };
-    if !in_turn {
+    if !can_handle {
         let reject = perm.option_for(false, false).unwrap_or("reject");
         return shared.rpc().reply(native_id.clone(), acp::permission_selected(reject)).await;
     }
@@ -91,15 +91,15 @@ async fn elicitation_requested(
     params: &Value,
     raw: String,
 ) -> Result<(), AgentError> {
-    let in_turn = {
+    let can_handle = {
         let mut state = shared.state.lock();
-        let in_turn = state.in_turn();
-        if in_turn {
+        let can_handle = state.can_handle_server_request();
+        if can_handle {
             state.note_wakeup_interaction();
         }
-        in_turn
+        can_handle
     };
-    if !in_turn {
+    if !can_handle {
         return shared.rpc().reply(native_id.clone(), acp::elicitation_cancel()).await;
     }
     notifications::ensure_prompt_taken(shared).await;
