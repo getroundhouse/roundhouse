@@ -17,7 +17,7 @@ const MACOS_BUTTONS_WIDTH: Pixels = px(60.);
 const AFTER_MACOS_BUTTONS: Pixels = px(6.);
 /// The buttons in the corner, which hide and show the sidebar on the left, and off the Mac open the menus: a small
 /// button's square.
-const CORNER_BUTTON_WIDTH: Pixels = look::ControlSize::Small.height();
+const CORNER_BUTTON: look::ControlSize = look::ControlSize::Small;
 /// The room between the corner's buttons, as between the buttons in Home's bar.
 const BETWEEN_THE_BUTTONS: look::Space = look::Space::XSmall;
 
@@ -115,13 +115,13 @@ impl Clearance {
     fn toggle_starts(self) -> Pixels {
         match self.menus {
             MenusButton::Absent => self.corner_starts(),
-            MenusButton::InTheCorner => self.corner_starts() + CORNER_BUTTON_WIDTH + BETWEEN_THE_BUTTONS.size(),
+            MenusButton::InTheCorner => self.corner_starts() + CORNER_BUTTON.height() + BETWEEN_THE_BUTTONS.size(),
         }
     }
 
     /// How much of the strip's left end the window's buttons and the corner's own take.
     fn start_room(self) -> Pixels {
-        self.toggle_starts() + CORNER_BUTTON_WIDTH
+        self.toggle_starts() + CORNER_BUTTON.height()
     }
 
     /// How much of its right end the window's buttons take.

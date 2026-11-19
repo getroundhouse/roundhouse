@@ -1,3 +1,4 @@
+use crate::traits::Reach;
 use gpui_kit::{Pixels, px};
 
 use crate::named::named;
@@ -20,16 +21,28 @@ named! {
 
 impl BarSize {
     /// How tall it is, the edge under it included.
-    pub const fn height(self) -> Pixels {
-        match self {
-            BarSize::Small => px(32.),
-            BarSize::Regular => px(40.),
+    pub fn height(self) -> Pixels {
+        self.height_at(Reach::now())
+    }
+
+    /// The same at `reach`.
+    pub const fn height_at(self, reach: Reach) -> Pixels {
+        match reach {
+            Reach::Desk => match self {
+                BarSize::Small => px(32.),
+                BarSize::Regular => px(40.),
+            },
+            Reach::Handheld => match self {
+                BarSize::Small => px(36.),
+                BarSize::Regular => px(44.),
+            },
         }
     }
 
     /// How the spec's table writes it: its name and how tall it is.
     #[cfg(any(test, feature = "testing"))]
-    pub fn written(self) -> [String; 2] {
-        [format!("{self:?}"), format!("{}px", f32::from(self.height()))]
+    pub fn written(self) -> [String; 3] {
+        let pixels = |reach| format!("{}px", f32::from(self.height_at(reach)));
+        [format!("{self:?}"), pixels(Reach::Desk), pixels(Reach::Handheld)]
     }
 }

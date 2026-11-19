@@ -9,7 +9,7 @@ use gpui_kit::base::motion::transition;
 use gpui_kit::component::{Icon, h_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    Action, AnyElement, App, Context, ElementId, InteractiveElement as _, IntoElement, ParentElement, Pixels, Role,
+    Action, AnyElement, App, Context, ElementId, InteractiveElement as _, IntoElement, ParentElement, Role,
     StatefulInteractiveElement as _, Styled, TestSupportExt as _, Window, div, px,
 };
 use look::{IconSizing as _, LineText, Placed};
@@ -21,10 +21,10 @@ use crate::{ArchiveWorkspace, MarkWorkspace};
 use crate::{prompt_cache, right_click};
 
 /// As wide as the button that archives a row, a small button's square.
-const BUTTON: Pixels = look::ControlSize::Small.height();
+const BUTTON: look::ControlSize = look::ControlSize::Small;
 /// How wide the box each icon at a row's end is centred in: as big as a place's or a project's icon at its row's start,
 /// so the pencil, which is smaller, and the cache's clock sit as the sidebar's icons do.
-const ICON_BOX: Pixels = look::IconSize::Large.size();
+const ICON_BOX: look::IconSize = look::IconSize::Large;
 
 pub(super) fn workspace_row(
     app: &AppView,
@@ -180,8 +180,8 @@ fn right_end(
         // The icons rest in the middle of the button's place, half of what the button is wider than their box by in
         // from the row's right end, and end against its box once it has come. Its padding is then the room between
         // them and it: a little more than if they were set edge to edge, so they don't run together.
-        let rests = if icons { (BUTTON - ICON_BOX) / 2. } else { px(0.) };
-        let room = div().flex_none().h(BUTTON).w(rests + (BUTTON - rests) * came);
+        let rests = if icons { (BUTTON.height() - ICON_BOX.size()) / 2. } else { px(0.) };
+        let room = div().flex_none().h(BUTTON.height()).w(rests + (BUTTON.height() - rests) * came);
         // The button is whole and in its place from the first frame, over the room that's still opening for it, so a
         // press where it's coming lands on it rather than on the row.
         let button =
@@ -193,7 +193,7 @@ fn right_end(
 
 /// `icon` in the middle of a box as wide as the sidebar's icons.
 fn icon_box(icon: impl IntoElement) -> gpui_kit::Div {
-    div().flex_none().size(ICON_BOX).flex().items_center().justify_center().child(icon)
+    div().flex_none().size(ICON_BOX.size()).flex().items_center().justify_center().child(icon)
 }
 
 /// What a workspace is waiting on the hub for, such as `Archiving…`, in place of its button to do that. It shows

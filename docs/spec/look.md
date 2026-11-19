@@ -11,8 +11,8 @@ Every client is designed on purpose for the device it's on, rather than another 
 - **Not one scale factor,** because a device is more than a size. A phone is held closer and touched rather than pointed at, and has room for one thing at a time, so the desktop scaled up for it would be a magnified desktop, with hover where nothing hovers and three panes where one fits.
 - **Not a design system for each client,** because the brand would be kept twice and drift apart, and a component that means the same thing everywhere, such as a button, would be built twice.
 - **The brand is shared exactly:** the colours, the status mark, the icons, the app icon's drawing and motion.
-- **The foundations are names, with a value for each reach.** A screen asks for a kind of text, a step of space, or a size of control, bar or row, and gets the value for the client it's in. The values below are a desk's. A handheld's are chosen for a device held in the hand, starting from the platform's own guidance, such as iOS's body text at 17 points, and settled by eye on a device, rather than worked out from a desk's. *Not built:* every foundation has a desk's values only.
-- **A component means the same on every client, and responds as its input asks.** On a touch screen a button takes a tap over at least 44 points, as iOS asks, whatever size it's drawn at, shows that it's pressed rather than that something is over it, and has no tooltip. *Not built.*
+- **The foundations are names, with a value for each reach.** A screen asks for a kind of text, a step of space, or a size of control, bar or row, and gets the value for the client it's in. Each table below gives a desk's and a handheld's. A handheld's are chosen for a device held in the hand, starting from the platform's own guidance, such as iOS's body text at 17 points and its 44-point bars and rows, rather than worked out from a desk's, and are settled by eye on a device. Space is the one foundation that's the same at both, since its 4px steps already suit a phone. The app chooses its reach once, as it starts, as `look::Reach`, since a device's reach doesn't change. *Unconfirmed:* a handheld's values.
+- **A component means the same on every client, and responds as its input asks.** On a touch screen a button has no tooltip, since nothing rests on it, takes a tap over at least 44 points, as iOS asks, whatever size it's drawn at, and shows that it's pressed rather than that something is over it. The app says which input it has as `look::Input`, which can change while it runs. *Not built:* the tap over more than what's drawn, and the press in place of what's over it, so a handheld's large control is drawn at 44 points, for what's tapped most.
 - **Some components belong to one kind of client,** such as a handheld's bar across the top, a row that opens what it names and a sheet, or the desktop's sidebar, tabs and menus. *Not built:* a handheld's.
 - **The transcript is the one view every client shares,** since a chat is the same everywhere, and it takes its sizes from the foundations and how it's touched from the input, such as selecting with a long press on a touch screen. *Not built:* it's sized for a desk, and selects only with a pointer.
 - **Screens are never shared.** Each client lays out its own, for what it's used for there.
@@ -120,17 +120,17 @@ Three strengths have names of their own, since several places draw with them: wh
 - **Every kind of text the app sets has a name for what it's for,** so a size means the same wherever it's set, and two kinds that are the same size today, such as details and code, can change apart. What's set takes one of them by its name, rather than a font or a size by its value, and text that stands out from what's around it takes emphasis rather than a weight. `look::Type` holds them, and the kit's theme is given the rem, and code's font and size, from there, so the kit's own parts agree.
 - **Text in different sizes or fonts along one line sits on one baseline,** as the words of a sentence do, such as the workspace header's title beside its branch, in the code font, and where that started, both smaller. Centred one by one, smaller text would ride higher than what's beside it. An icon stays centred, and so does text on a shape, such as a pill, a chip or a button, since it's the shape that's lined up. `look::LineText` sets them. *Unconfirmed.*
 
-**Every kind of text, by its name.** Each is a kind in `look::Type`, at the app's scale, where a rem is 16px. One with no weight of its own takes what's around it, which is regular unless it's given emphasis.
+**Every kind of text, by its name.** Each is a kind in `look::Type`, at a desk at the app's scale, where a rem is 16px, and on a handheld in pixels, as iOS's own kinds of text are. One with no weight of its own takes what's around it, which is regular unless it's given emphasis.
 
-| Name | Font | Size | Weight | For |
-|---|---|---|---|---|
-| `PageTitle` | System | 24px | Medium | A page's name, such as each of Settings' pages: the largest kind, since it says where you are |
-| `Heading` | System | 16px | Medium | What an empty pane says is missing or went wrong, above why |
-| `Body` | System | 14px | As around it | What to read: what the agent wrote, a prompt, a call's line, a row's name, and most of the rest |
-| `Detail` | System | 12px | As around it | Details beside or under what to read, such as a time, a count, a hint or a heading over a list |
-| `Code` | Menlo | 12px | As around it | Code: a command, a path, a file, or what a call put out |
-| `Key` | System | 10px | As around it | What a key says, such as the `F` of Settings' `⌘ F` |
-| `KeyHeld` | System | 7.5px | As around it | What's held with a key, such as Settings' `⌘`, smaller than the key that's pressed, as on the keys themselves |
+| Name | Font | Size | Weight | On a handheld | For |
+|---|---|---|---|---|---|
+| `PageTitle` | System | 24px | Medium | 28px | A page's name, such as each of Settings' pages: the largest kind, since it says where you are |
+| `Heading` | System | 16px | Medium | 17px | What an empty pane says is missing or went wrong, above why |
+| `Body` | System | 14px | As around it | 17px | What to read: what the agent wrote, a prompt, a call's line, a row's name, and most of the rest |
+| `Detail` | System | 12px | As around it | 15px | Details beside or under what to read, such as a time, a count, a hint or a heading over a list |
+| `Code` | Menlo | 12px | As around it | 14px | Code: a command, a path, a file, or what a call put out |
+| `Key` | System | 10px | As around it | 12px | What a key says, such as the `F` of Settings' `⌘ F` |
+| `KeyHeld` | System | 7.5px | As around it | 9px | What's held with a key, such as Settings' `⌘`, smaller than the key that's pressed, as on the keys themselves |
 
 **Every kind of text, as the app sets it.**
 
@@ -153,7 +153,7 @@ Three strengths have names of their own, since several places draw with them: wh
 
 - **Every space is one of six steps on a 4px grid: 4, 8, 12, 16, 24 or 32px.** A space is the room left between and around things, as a gap, a padding or a margin, to set them apart or hold them together. What belongs together is closer than what's apart, as a project's row and its workspaces are in the sidebar, closer to each other than to the next project. `look::Space` holds the steps, and what's drawn takes one by its name, rather than a length by its value. *Unconfirmed.* A length set for something else isn't a space, even where it's a gap, a padding or a margin, so it isn't a step, but is set by what it's for: one that lines a thing up, such as an icon level with the middle of the line of text beside it, by what it lines up with; one that keeps clear of what the app doesn't lay out, such as the scrollbar's thumb or macOS's window buttons, by what it keeps clear of; a drawing's own, such as the gap between the two parts of the context card's bar, by the drawing; the 2px around and between the buttons of the diff's switch of views, by a regular button's height, which the switch is as tall as; the room above and below a pill's and a chip's words, by the height they share; and the 6px at a chip's start and between its parts, by the chip, as `components.md` says. *Unconfirmed.* Settings' search is a regular field, as `components.md` says, on the grid as every field is, with a key 16px tall and 4px corners. The button back down to a chat's end is a 28px square, as `chats.md` says.
 
-**Every step of space, by its name.** Each is a step in `look::Space`, from the smallest, in pixels, so a space stays as it is whatever size text is set at. *Unconfirmed.*
+**Every step of space, by its name.** Each is a step in `look::Space`, from the smallest, in pixels, so a space stays as it is whatever size text is set at, and is the same on a handheld as at a desk. *Unconfirmed.*
 
 | Name | Room | For |
 |---|---|---|
@@ -192,11 +192,11 @@ Three strengths have names of their own, since several places draw with them: wh
 
 **Every size of a control, by its name.** Each is a size in `look::ControlSize`, from the smallest. What a control says, such as a button's words or what's typed in a field, is the kind of text its row says. *Unconfirmed.*
 
-| Name | Tall | Room at its ends | Text | For |
-|---|---|---|---|---|
-| `Small` | 24px | 8px | Detail | Set in a line of text or a row one line tall: a row of a list, a tab, the heading over a list, a call's line in the chat, a line of a card's text, the composer's bar, the find bar, a banner and a fold, and the window's own buttons in its corner, beside the Mac's. A switch's segments are small, so the switch, with the room around them, is as tall as a regular button |
-| `Regular` | 28px | 12px | Body | A bar's own, along a pane's edge, such as a header's, a tab bar's, the pull request's bar's or Home's bar's, or a card's or a page's own action, set apart from its text, such as the update card's, a comment's on a diff, a setting's or a list's of accounts, and the button over the chat back to its end |
-| `Large` | 32px | 16px | Body | On its own: a dialog's buttons, a menu's rows, the one thing an empty pane says to do, and what answers a card in the chat, such as approving a plan or retrying a request |
+| Name | Tall | Room at its ends | Text | Tall on a handheld | Room on a handheld | For |
+|---|---|---|---|---|---|---|
+| `Small` | 24px | 8px | Detail | 32px | 12px | Set in a line of text or a row one line tall: a row of a list, a tab, the heading over a list, a call's line in the chat, a line of a card's text, the composer's bar, the find bar, a banner and a fold, and the window's own buttons in its corner, beside the Mac's. A switch's segments are small, so the switch, with the room around them, is as tall as a regular button |
+| `Regular` | 28px | 12px | Body | 36px | 14px | A bar's own, along a pane's edge, such as a header's, a tab bar's, the pull request's bar's or Home's bar's, or a card's or a page's own action, set apart from its text, such as the update card's, a comment's on a diff, a setting's or a list's of accounts, and the button over the chat back to its end |
+| `Large` | 32px | 16px | Body | 44px | 16px | On its own: a dialog's buttons, a menu's rows, the one thing an empty pane says to do, and what answers a card in the chat, such as approving a plan or retrying a request |
 
 **Every size of a control, as the app draws it.** *Unconfirmed.*
 
@@ -208,20 +208,20 @@ Three strengths have names of their own, since several places draw with them: wh
 
 **Every size of a bar, by its name.** Each is a size in `look::BarSize`, from the smallest, with the edge under it. *Unconfirmed.*
 
-| Name | Tall | For |
-|---|---|---|
-| `Small` | 32px | Under a bar, saying more of what that one shows, in a detail's text, such as what each side of an image's comparison is |
-| `Regular` | 40px | Along the top of a pane or a card: the workspace's header, the pull request's bar, Home's bar, both rows of tabs, the bar over Changes' files that sends the comments waiting, a file's path, a subagent's tab's bar, and the new workspace's card's |
+| Name | Tall | On a handheld | For |
+|---|---|---|---|
+| `Small` | 32px | 36px | Under a bar, saying more of what that one shows, in a detail's text, such as what each side of an image's comparison is |
+| `Regular` | 40px | 44px | Along the top of a pane or a card: the workspace's header, the pull request's bar, Home's bar, both rows of tabs, the bar over Changes' files that sends the comments waiting, a file's path, a subagent's tab's bar, and the new workspace's card's |
 
 - **Every row of a list that's one line tall has a size for what the list is,** so the rows of the same kind of list are as tall, wherever it is. A regular row is for most lists, such as the places to go in a sidebar, and a large one is a row of a table. A small row is used sparingly, for a long list to look down, where more room would show less of it at once, such as a file tree or a chat's calls, and whatever the list, for the heading over it, and for a line on its own, set apart from a list, such as a fold among a diff's lines or the build line under the sidebar. Each holds a small button, with room above and below it. A row taller than a line, such as a prompt in the outline or in the queue, is as tall as what it says, with room above and below it. `look::RowSize` holds the sizes. *Unconfirmed.*
 
 **Every size of a row, by its name.** Each is a size in `look::RowSize`, from the smallest. *Unconfirmed.*
 
-| Name | Tall | For |
-|---|---|---|
-| `Small` | 28px | Used sparingly: a long list to look down, where more room would show less of it at once, such as a file in a tree, a call's line in the chat, or a page a search found, and whatever the list, the heading over it, and a line on its own, set apart from a list, such as a fold among a diff's lines or the build line under the sidebar |
-| `Regular` | 36px | Most lists, such as the places to go in a sidebar: the sidebar's own places, its projects and their workspaces, and Settings' pages |
-| `Large` | 44px | A row of a table: Home's workspaces, and the accounts in Settings' Agents and Git, which have a line between each and the next |
+| Name | Tall | On a handheld | For |
+|---|---|---|---|
+| `Small` | 28px | 36px | Used sparingly: a long list to look down, where more room would show less of it at once, such as a file in a tree, a call's line in the chat, or a page a search found, and whatever the list, the heading over it, and a line on its own, set apart from a list, such as a fold among a diff's lines or the build line under the sidebar |
+| `Regular` | 36px | 44px | Most lists, such as the places to go in a sidebar: the sidebar's own places, its projects and their workspaces, and Settings' pages |
+| `Large` | 44px | 56px | A row of a table: Home's workspaces, and the accounts in Settings' Agents and Git, which have a line between each and the next |
 
 **Every size of a bar and of a row, as the app draws them.** *Unconfirmed.*
 
@@ -233,11 +233,11 @@ Three strengths have names of their own, since several places draw with them: wh
 
 **Every size of an icon, by its name.** Each is a size in `look::IconSize`, from the smallest. *Unconfirmed.*
 
-| Name | Size | For |
-|---|---|---|
-| `Small` | 12px | Among a detail's or code's text: a rule's across the chat, such as a compaction's, and the compaction's in the outline; the build line's answer; a changed file's state at its row's end, and a folder's chevron, in Changes; the check in a checkbox; and the `+` that adds a comment to a diff's line, on a button as tall as the line. Beside a small button's words |
-| `Regular` | 14px | Among body text: a warning before the body text it warns of, such as an account's standing; a project's chevron after its name; the arrow before an answer to a question, and the check on an option chosen; a file sent with a prompt waiting in the queue; a draft's pencil at a workspace's row's end; the glass in a search field; the arrow after a pull request's number; and the update card's details. Beside a regular button's words, and a small or regular button's own, as a square, such as Send, a tab's close or closed chats |
-| `Large` | 16px | Standing for what a row, a tab, a bar, a card or a call's line is, at its start: a file's or a folder's, in All files or Changes; a place's or a project's in the sidebar; a page's in Settings; an account's; a file tab's, and a subagent's, on its tab and its bar; a terminal's, on its tab; a file's card, sent with a prompt; a failed request's; and a call's kind, or the chevron that takes its place, and the robot of a subagent at work. Beside a large button's words, and a large button's own, and on a menu's row, whether it's the row's icon or its check |
+| Name | Size | On a handheld | For |
+|---|---|---|---|
+| `Small` | 12px | 14px | Among a detail's or code's text: a rule's across the chat, such as a compaction's, and the compaction's in the outline; the build line's answer; a changed file's state at its row's end, and a folder's chevron, in Changes; the check in a checkbox; and the `+` that adds a comment to a diff's line, on a button as tall as the line. Beside a small button's words |
+| `Regular` | 14px | 18px | Among body text: a warning before the body text it warns of, such as an account's standing; a project's chevron after its name; the arrow before an answer to a question, and the check on an option chosen; a file sent with a prompt waiting in the queue; a draft's pencil at a workspace's row's end; the glass in a search field; the arrow after a pull request's number; and the update card's details. Beside a regular button's words, and a small or regular button's own, as a square, such as Send, a tab's close or closed chats |
+| `Large` | 16px | 22px | Standing for what a row, a tab, a bar, a card or a call's line is, at its start: a file's or a folder's, in All files or Changes; a place's or a project's in the sidebar; a page's in Settings; an account's; a file tab's, and a subagent's, on its tab and its bar; a terminal's, on its tab; a file's card, sent with a prompt; a failed request's; and a call's kind, or the chevron that takes its place, and the robot of a subagent at work. Beside a large button's words, and a large button's own, and on a menu's row, whether it's the row's icon or its check |
 
 **Every size of an icon, as the app draws it.** *Unconfirmed.*
 

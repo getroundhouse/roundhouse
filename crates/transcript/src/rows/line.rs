@@ -27,7 +27,7 @@ use crate::rows::around::{Answer, Outcome};
 /// How big a call's icon is, at the start of its line, and the chevron that takes its place.
 pub(super) const ICON: look::IconSize = look::IconSize::Large;
 /// A small row's, so calls in a row read as a list.
-pub(super) const HEIGHT: Pixels = look::RowSize::Small.height();
+pub(super) const SIZE: look::RowSize = look::RowSize::Small;
 /// The hover group of one line, which turns its icon into the way to open it.
 const GROUP: &str = "tool-line";
 /// More of prose's start than a line has room for, so a long first line isn't copied to be cut off.
@@ -161,7 +161,7 @@ impl Line {
 
 /// What a line is drawn in: as tall as every line, its parts side by side, cut off where it ends.
 fn frame() -> Div {
-    h_flex().h(HEIGHT).gap(look::Space::Small).overflow_hidden().whitespace_nowrap()
+    h_flex().h(SIZE.height()).gap(look::Space::Small).overflow_hidden().whitespace_nowrap()
 }
 
 impl Part {

@@ -8,7 +8,7 @@ use gpui_kit::{
     px,
 };
 
-use super::TOP_STRIP_HEIGHT;
+use super::TOP_STRIP;
 use crate::sides::{self, WindowButtons};
 use look::IconSizing as _;
 
@@ -99,7 +99,7 @@ pub(super) fn of_windows(window: &Window, cx: &mut App) -> Option<impl IntoEleme
     // A third of the room `sides` leaves them each.
     let buttons = h_flex()
         .w(sides::WINDOWS_BUTTONS_WIDTH)
-        .h(TOP_STRIP_HEIGHT)
+        .h(TOP_STRIP.height())
         .child(drawn(Button::Minimize, faint))
         .child(drawn(maximize, faint))
         .child(drawn(Button::Close, red));

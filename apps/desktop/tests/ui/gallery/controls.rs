@@ -36,7 +36,7 @@ impl Render for Sheet {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let colors = look::colors(cx);
         let row = |&control: &ControlSize| {
-            let [name, height, padding, kind] = control.written();
+            let [name, height, padding, kind, ..] = control.written();
             let place = places::id(KIND, &name);
             let id = |what: &str| format!("{control:?}-{what}");
             let name = div().w(px(NAME_WIDTH)).typeset(Type::Detail).text_color(colors.text_muted).child(name);

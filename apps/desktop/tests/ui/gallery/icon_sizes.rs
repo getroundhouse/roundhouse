@@ -47,7 +47,7 @@ impl Render for Sheet {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let colors = look::colors(cx);
         let row = |icon: IconSize| -> AnyElement {
-            let [name, pixels] = icon.written();
+            let [name, pixels, _] = icon.written();
             let place = places::id(KIND, &name);
             let label = div().w(px(NAME_WIDTH)).typeset(Type::Detail).text_color(colors.text_muted).child(name);
             // Each in a place as wide as the largest, so the icons are in columns down the sheet.

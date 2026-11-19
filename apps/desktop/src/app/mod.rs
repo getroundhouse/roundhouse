@@ -41,7 +41,7 @@ pub(crate) use quitting::quit;
 #[cfg(feature = "testing")]
 pub use quitting::the_keeping_wait_is;
 pub use restarts::UpdateQuestion;
-pub(crate) use title_bar::TOP_STRIP_HEIGHT;
+pub(crate) use title_bar::TOP_STRIP;
 pub use title_bar::TitleBar;
 #[cfg(feature = "testing")]
 pub use title_bar::the_title_bar_is;

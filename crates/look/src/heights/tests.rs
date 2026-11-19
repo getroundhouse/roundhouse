@@ -9,17 +9,17 @@ const ROOM: Pixels = px(2.);
 
 #[test]
 fn the_specs_table_has_every_bar_size_in_order_as_the_app_has_it() {
-    let table: Vec<[String; 2]> = spec_table::rows("**Every size of a bar, by its name.**");
+    let table: Vec<[String; 3]> = spec_table::rows("**Every size of a bar, by its name.**");
 
-    let sized: Vec<[String; 2]> = BarSize::ALL.iter().map(|size| size.written()).collect();
+    let sized: Vec<[String; 3]> = BarSize::ALL.iter().map(|size| size.written()).collect();
     assert_eq!(table, sized, "docs/spec/look.md's table of bar sizes, against crates/look/src/heights/bars.rs");
 }
 
 #[test]
 fn the_specs_table_has_every_row_size_in_order_as_the_app_has_it() {
-    let table: Vec<[String; 2]> = spec_table::rows("**Every size of a row, by its name.**");
+    let table: Vec<[String; 3]> = spec_table::rows("**Every size of a row, by its name.**");
 
-    let sized: Vec<[String; 2]> = RowSize::ALL.iter().map(|size| size.written()).collect();
+    let sized: Vec<[String; 3]> = RowSize::ALL.iter().map(|size| size.written()).collect();
     assert_eq!(table, sized, "docs/spec/look.md's table of row sizes, against crates/look/src/heights/rows.rs");
 }
 

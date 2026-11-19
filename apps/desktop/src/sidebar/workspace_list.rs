@@ -1,5 +1,5 @@
 use super::{drag, fold, footer, heading, nav, project, row};
-use crate::app::TOP_STRIP_HEIGHT;
+use crate::app::TOP_STRIP;
 use crate::app::{AppView, Connection};
 use crate::reorder;
 use crate::settings::Settings;
@@ -323,7 +323,7 @@ pub(crate) fn render(app: &AppView, arranged: Arranged, cx: &mut Context<AppView
         .line_right(cx)
         // Where the window's buttons sit, level with the workspace header, with the button that hides the sidebar
         // beside them. It stays put, so the list scrolls under its bottom edge rather than under the buttons.
-        .child(div().flex_none().h(TOP_STRIP_HEIGHT))
+        .child(div().flex_none().h(TOP_STRIP.height()))
         .child(nav::nav(app, cx))
         .child(
             reorder::hears_the_pointer(

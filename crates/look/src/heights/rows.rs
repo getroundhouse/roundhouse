@@ -1,3 +1,4 @@
+use crate::traits::Reach;
 use gpui_kit::{Pixels, px};
 
 use crate::named::named;
@@ -26,17 +27,30 @@ named! {
 
 impl RowSize {
     /// How tall it is, with any line drawn under it, such as the one between a table's rows.
-    pub const fn height(self) -> Pixels {
-        match self {
-            RowSize::Small => px(28.),
-            RowSize::Regular => px(36.),
-            RowSize::Large => px(44.),
+    pub fn height(self) -> Pixels {
+        self.height_at(Reach::now())
+    }
+
+    /// The same at `reach`.
+    pub const fn height_at(self, reach: Reach) -> Pixels {
+        match reach {
+            Reach::Desk => match self {
+                RowSize::Small => px(28.),
+                RowSize::Regular => px(36.),
+                RowSize::Large => px(44.),
+            },
+            Reach::Handheld => match self {
+                RowSize::Small => px(36.),
+                RowSize::Regular => px(44.),
+                RowSize::Large => px(56.),
+            },
         }
     }
 
     /// How the spec's table writes it: its name and how tall it is.
     #[cfg(any(test, feature = "testing"))]
-    pub fn written(self) -> [String; 2] {
-        [format!("{self:?}"), format!("{}px", f32::from(self.height()))]
+    pub fn written(self) -> [String; 3] {
+        let pixels = |reach| format!("{}px", f32::from(self.height_at(reach)));
+        [format!("{self:?}"), pixels(Reach::Desk), pixels(Reach::Handheld)]
     }
 }

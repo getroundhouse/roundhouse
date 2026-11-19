@@ -6,7 +6,7 @@ use gpui_kit::component::input::{InputEvent, Textarea, TextareaState};
 use gpui_kit::component::{IconName, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyElement, AppContext as _, Context, Div, Entity, Focusable as _, IntoElement, ParentElement, Pixels, Styled,
+    AnyElement, AppContext as _, Context, Div, Entity, Focusable as _, IntoElement, ParentElement, Styled,
     Subscription, Window, div, px,
 };
 use look::{InRegion as _, Region, Shaped as _};
@@ -321,10 +321,10 @@ pub(super) struct Slot(Div);
 
 impl Slot {
     /// How wide and tall a slot is, which is the main action's size: a small button's.
-    pub(super) const SIZE: Pixels = look::ControlSize::Small.height();
+    pub(super) const SIZE: look::ControlSize = look::ControlSize::Small;
 
     pub(super) fn holding(holds: impl IntoElement) -> Self {
-        Self(middle().flex_none().size(Self::SIZE).child(holds))
+        Self(middle().flex_none().size(Self::SIZE.height()).child(holds))
     }
 }
 

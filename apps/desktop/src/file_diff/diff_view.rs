@@ -7,7 +7,7 @@ use crate::review::{Review, ReviewEvent};
 use crate::shared_choice::{Chosen, chosen, switch_of};
 use crate::{FlipImage, image_diff};
 use draft::Draft;
-use draw::{Drawing, FOLD_HEIGHT, SIGN, gutter};
+use draw::{Drawing, FOLD, SIGN, gutter};
 use gpui_kit::component::v_flex;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
@@ -306,7 +306,7 @@ impl FileDiff {
 fn height(row: &Row) -> Height {
     match row {
         Row::Line { .. } | Row::Pair { .. } => Height::Fixed(LINE_HEIGHT),
-        Row::Fold(_) => Height::Fixed(FOLD_HEIGHT),
+        Row::Fold(_) => Height::Fixed(FOLD.height()),
         Row::Comment(id) => Height::Measured(format!("comment-{id}").into()),
         Row::Draft => Height::Measured("draft".into()),
     }

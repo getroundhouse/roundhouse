@@ -47,7 +47,7 @@ impl Render for Sheet {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let colors = look::colors(cx);
         let row = |&kind: &Type| {
-            let [name, font, size, weight] = kind.written();
+            let [name, font, size, weight, _] = kind.written();
             let place = places::id(KIND, &name);
             let name = div().w(px(NAME_WIDTH)).typeset(Type::Detail).text_color(colors.text_muted).child(name);
             let sample = div().w(px(SAMPLE_WIDTH)).typeset(kind).child(sample(kind)).id(place).test_support();

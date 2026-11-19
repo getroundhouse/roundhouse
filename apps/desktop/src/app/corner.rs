@@ -5,7 +5,7 @@
 use gpui_kit::component::IconName;
 use gpui_kit::{Context, Div, IntoElement, ParentElement as _, Pixels, Styled as _, Window, div};
 
-use super::TOP_STRIP_HEIGHT;
+use super::TOP_STRIP;
 use super::{AppView, menu_button, title_bar};
 use crate::ToggleSidebar;
 use crate::menus::System;
@@ -43,7 +43,7 @@ pub(super) fn menus(app: &AppView, cx: &mut Context<AppView>) -> Option<impl Int
 
 /// A place in the strip along the window's top, as tall as it, starting `starts` from the window's left edge.
 fn in_the_corner(starts: Pixels) -> Div {
-    div().absolute().top_0().left(starts).h(TOP_STRIP_HEIGHT).flex().items_center()
+    div().absolute().top_0().left(starts).h(TOP_STRIP.height()).flex().items_center()
 }
 
 /// Hides and shows the sidebar, as `Cmd-B` does, which its tooltip says, and as the button at the other end of the
