@@ -5,14 +5,14 @@ use protocol::attachment::Attachment;
 use protocol::event::LinkedImage;
 use protocol::model::{
     AnswerProblem, AskKey, ClientMessageId, ClientRequestId, Proposal, ProposalId, ProposalRevision, Proposed,
-    QueuedPrompt, Response, Rev, RevisionNumber, RevisionSummary, SessionId, ToolUseId,
+    QueuedPrompt, Response, Rev, RevisionNumber, RevisionStanding, RevisionSummary, SessionId, ToolUseId, Withdrawal,
 };
 use protocol::prompt::{Prompt, PromptFrom};
 use rusqlite::types::Type;
 use rusqlite::{Connection, OptionalExtension, Row, params};
 
 /// A proposal with its newest revision, read from `proposals` as `p` and `proposal_revisions` as `r`.
-const PROPOSAL_COLUMNS: &str = "p.id, p.workspace_id, p.session_id, p.created_at_ms, p.rev, r.number, r.call, r.proposed, r.made_at_ms, r.response, r.images, r.changed";
+const PROPOSAL_COLUMNS: &str = "p.id, p.workspace_id, p.session_id, p.created_at_ms, p.rev, r.number, r.call, r.proposed, r.made_at_ms, r.response, r.images, r.changed, p.withdrawn";
 const PROPOSAL_WITH_NEWEST: &str = "proposals p JOIN proposal_revisions r ON r.proposal_id = p.id
     AND r.number = (SELECT MAX(number) FROM proposal_revisions WHERE proposal_id = p.id)";
 const REVISION_COLUMNS: &str = "number, call, proposed, made_at_ms, response, images, changed";
@@ -27,6 +27,8 @@ pub enum Answering {
     Otherwise(Proposal),
     /// The agent has revised it since the revision answered, so it's left as it was.
     Revised(Proposal),
+    /// The agent has withdrawn it, so it's left as it was.
+    Withdrawn(Proposal),
     /// The answer doesn't fit the revision, as [`Proposed::check_response`](protocol::model::Proposed::check_response)
     /// says, so it's left as it was.
     Refused(AnswerProblem),
@@ -44,6 +46,24 @@ pub struct AnswerToKeep<'a> {
     pub message: ClientMessageId,
     /// What the prompt says, written from the proposal as the commit that keeps the answer reads it.
     pub told: &'a dyn Fn(&Proposal, &Response) -> Prompt<Attachment>,
+}
+
+/// What revising a proposal did.
+pub enum Revising {
+    /// Wrote the revision, or found the one the same ask wrote before.
+    Wrote(Made<Proposal>),
+    /// The agent has withdrawn it, so it's left as it was.
+    Withdrawn(Proposal),
+}
+
+/// What withdrawing a proposal did.
+pub enum Withdrawing {
+    /// It's withdrawn now.
+    Withdrew(Proposal),
+    /// It was withdrawn already, so it's left as it was.
+    Already(Proposal),
+    /// The person has responded to its newest revision in a way that settles it, by choosing, so it's left as it was.
+    Settled(Proposal),
 }
 
 /// A revision the agent wrote of a proposal it made, which the store numbers, one past the newest.
@@ -89,6 +109,7 @@ fn proposal_from_row(row: &Row<'_>) -> rusqlite::Result<Proposal> {
         session_id: row.get::<_, String>(2)?.into(),
         current: revision_from_row(row, 5)?,
         revisions: Vec::new(),
+        withdrawn: json_at(row, 12)?,
         created_at_ms: row.get(3)?,
         rev: rev_of(row, 4)?,
     })
@@ -254,6 +275,9 @@ impl Store {
         if answer.revision != earlier.current.number {
             return Ok(Answering::Revised(earlier));
         }
+        if earlier.withdrawn.is_some() {
+            return Ok(Answering::Withdrawn(earlier));
+        }
         if earlier.current.response.is_some() {
             return Ok(Answering::Otherwise(earlier));
         }
@@ -274,13 +298,13 @@ impl Store {
     }
 
     /// Writes `revision` as the newest of the proposal `id`, numbered one past the newest it has, unless its session's
-    /// ask with `key` wrote one already, which leaves the proposal as it is.
+    /// ask with `key` wrote one already, which leaves the proposal as it is, or the agent has withdrawn it.
     pub fn revise_proposal(
         &self,
         id: &ProposalId,
         revision: &NewRevision,
         key: &AskKey,
-    ) -> Result<Made<Proposal>, StoreError> {
+    ) -> Result<Revising, StoreError> {
         let mut conn = lock(&self.writer);
         let tx = conn.transaction()?;
         let earlier = proposal_on(&tx, id)?;
@@ -292,7 +316,10 @@ impl Store {
             )
             .optional()?;
         if asked.is_some() {
-            return Ok(Made::Earlier(earlier));
+            return Ok(Revising::Wrote(Made::Earlier(earlier)));
+        }
+        if earlier.withdrawn.is_some() {
+            return Ok(Revising::Withdrawn(earlier));
         }
         tx.execute(
             "INSERT INTO proposal_revisions (proposal_id, number, call, proposed, made_at_ms, images, changed, ask_key)
@@ -310,7 +337,28 @@ impl Store {
         )?;
         let made = proposal_on(&tx, id)?;
         tx.commit()?;
-        Ok(Made::New(made))
+        Ok(Revising::Wrote(Made::New(made)))
+    }
+
+    /// Withdraws the proposal `id`, as `withdrawal` says, unless it's withdrawn already, or the person has chosen in
+    /// its newest revision, which leave it as it was. Checked in the commit that withdraws it, so an answer given
+    /// meanwhile is never withdrawn under.
+    pub fn withdraw_proposal(&self, id: &ProposalId, withdrawal: &Withdrawal) -> Result<Withdrawing, StoreError> {
+        let mut conn = lock(&self.writer);
+        let tx = conn.transaction()?;
+        let earlier = proposal_on(&tx, id)?;
+        match earlier.standing() {
+            RevisionStanding::Waiting | RevisionStanding::AnotherRound(_) => {}
+            RevisionStanding::Withdrawn(_) => return Ok(Withdrawing::Already(earlier)),
+            RevisionStanding::Chose(_) | RevisionStanding::Responded => return Ok(Withdrawing::Settled(earlier)),
+        }
+        tx.execute(
+            "UPDATE proposals SET withdrawn = ? WHERE id = ?",
+            params![serde_json::to_string(withdrawal)?, id.as_str()],
+        )?;
+        let withdrawn = proposal_on(&tx, id)?;
+        tx.commit()?;
+        Ok(Withdrawing::Withdrew(withdrawn))
     }
 
     pub fn get_proposal(&self, id: &ProposalId) -> Result<Proposal, StoreError> {

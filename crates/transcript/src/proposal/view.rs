@@ -190,11 +190,8 @@ impl Render for ProposalView {
             let images = (&self.linked, self.proposal.current.images.as_slice());
             let mut writing =
                 Writing { texts: &self.texts, selection: &self.selection, images, area: area.clone(), drawn: 0 };
-            let choosing = Choosing {
-                this: cx.weak_entity(),
-                chosen: &self.answering.chosen,
-                standing: self.proposal.current.standing(),
-            };
+            let choosing =
+                Choosing { this: cx.weak_entity(), chosen: &self.answering.chosen, standing: self.proposal.standing() };
             let revision = &self.proposal.current;
             // The page is drawn as one block, so its texts are the first of a page that isn't a chat.
             self.texts.drawing(Of::Document(0), || document::parts(revision, &mut writing, &choosing, cx))
@@ -202,9 +199,9 @@ impl Render for ProposalView {
         let outline = self.outline(&parts, cx);
         let page = self.page(parts, area, cx);
         let foot = self.foot(window, cx);
-        // Across the top of the page, as a banner is across a pane, while the agent writes the next revision.
-        let banner = self.round_banner();
-        let beside = v_flex().flex_1().min_w_0().h_full().children(banner).child(page).child(foot);
+        // Across the top of the page, as a banner is across a pane.
+        let banner = self.banner();
+        let beside = v_flex().flex_1().min_w_0().h_full().children(banner).child(page).children(foot);
         self.selection.with_keys(div().flex().size_full().min_h_0().child(outline).child(beside))
     }
 }

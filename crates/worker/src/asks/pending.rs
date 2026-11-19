@@ -91,6 +91,7 @@ impl Asks {
             | WorkerAsk::DiffComments
             | WorkerAsk::Propose(_)
             | WorkerAsk::Revise(_)
+            | WorkerAsk::Withdraw(_)
             | WorkerAsk::ReadProposal(_)
             | WorkerAsk::Unknown => self.patience,
         }

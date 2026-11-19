@@ -113,6 +113,21 @@ fn a_proposal_read_back_once_answered_says_what_was_chosen_and_the_note() {
     assert!(newer.ends_with("in a way this version of Roundhouse can't describe."), "not waiting: {newer}");
 }
 
+/// Once withdrawn, the agent reads that it withdrew it, and why, rather than that the person hasn't answered.
+#[test]
+fn a_withdrawn_proposal_read_back_says_so() {
+    let mut proposal = fixtures::proposal("p1");
+    let why = "Dispatch decides where holds live now.";
+    proposal.withdrawn = Some(protocol::model::Withdrawal { why: why.into(), call: None, at_ms: 0 });
+
+    let text = describe(&proposal, None);
+
+    assert!(
+        text.ends_with("You withdrew it before the person chose: Dispatch decides where holds live now."),
+        "{text}"
+    );
+}
+
 /// Once revised, the agent reads which revision it's reading, what changed in it, and, for one it revised before the
 /// person answered, that they didn't.
 #[test]

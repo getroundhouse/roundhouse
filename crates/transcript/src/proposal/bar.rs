@@ -17,9 +17,10 @@ impl ProposalView {
     /// The bar at the tab's foot: the note and what's chosen, with Another round and Send, or once it's answered, what
     /// was chosen, or that another round was asked for, with the note. While the note's dictated into, its live words
     /// show under what's typed, the fine line runs along the bar's bottom, as along the composer's, and the recording's
-    /// controls take the place of what's chosen, Another round and Send.
-    pub(super) fn foot(&mut self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
-        let (inside, dictation) = match self.proposal.current.standing() {
+    /// controls take the place of what's chosen, Another round and Send. Once the agent's withdrawn it, nothing, since
+    /// nothing more can be said to it, and the banner says why.
+    pub(super) fn foot(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Option<AnyElement> {
+        let (inside, dictation) = match self.proposal.standing() {
             RevisionStanding::Waiting => {
                 let (input, dictation) = self.note(window, cx);
                 let live = dictation.read(cx).live_line(cx).map(|line| {
@@ -48,6 +49,7 @@ impl ProposalView {
                     div().child("Responded, in a way this version of Roundhouse can't show").into_any_element();
                 (inside, None)
             }
+            RevisionStanding::Withdrawn(_) => return None,
         };
         let colors = look::colors(cx);
         let bar = div()
@@ -77,6 +79,7 @@ impl ProposalView {
             .justify_center()
             .child(bar)
             .into_any_element()
+            .into()
     }
 
     /// What's chosen for each question, by its letter and label, Another round, and Send.
@@ -131,13 +134,24 @@ impl ProposalView {
             .into_any_element()
     }
 
-    /// While another round is asked for: the banner over the page that says the next revision shows here once the agent
-    /// writes it, which says nothing of whether it's started, since the request may still wait in the queue.
-    pub(super) fn round_banner(&self) -> Option<look::Banner> {
-        let RevisionStanding::AnotherRound(_) = self.proposal.current.standing() else { return None };
-        let next = self.proposal.current.number.next();
-        let said = format!("You asked for another round. Revision {next} shows here once the agent writes it.");
-        Some(look::banner(look::BannerKind::Note).id("proposal-another-round").child(said))
+    /// The banner over the page while there's nothing to choose. While another round is asked for, that the next
+    /// revision shows here once the agent writes it, which says nothing of whether it's started, since the request may
+    /// still wait in the queue. Once the agent's withdrawn the proposal, that it has, and why.
+    pub(super) fn banner(&self) -> Option<look::Banner> {
+        let (id, said) = match self.proposal.standing() {
+            RevisionStanding::AnotherRound(_) => {
+                let next = self.proposal.current.number.next();
+                (
+                    "proposal-another-round",
+                    format!("You asked for another round. Revision {next} shows here once the agent writes it."),
+                )
+            }
+            RevisionStanding::Withdrawn(withdrawal) => {
+                ("proposal-withdrawn", format!("Withdrawn by the agent: {}", withdrawal.why.trim()))
+            }
+            RevisionStanding::Waiting | RevisionStanding::Chose(_) | RevisionStanding::Responded => return None,
+        };
+        Some(look::banner(look::BannerKind::Note).id(id).child(said))
     }
 
     fn send_button(off: bool, cx: &mut Context<Self>) -> AnyElement {

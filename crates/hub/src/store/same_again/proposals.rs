@@ -1,11 +1,11 @@
-//! The rule's rows for a chat's proposals: made again and revised again by the same ask, and answered again by the
-//! same request.
+//! The rule's rows for a chat's proposals: made again and revised again by the same ask, answered again by the same
+//! request, and withdrawn again.
 
 use protocol::fixtures;
-use protocol::model::{Choice, ClientRequestId, OptionPlace, Proposal, Response, Rev, RevisionNumber};
+use protocol::model::{Choice, ClientRequestId, OptionPlace, Proposal, Response, Rev, RevisionNumber, Withdrawal};
 use protocol::prompt::Prompt;
 
-use super::super::{AnswerToKeep, Answering, Made, NewRevision, Store};
+use super::super::{AnswerToKeep, Answering, Made, NewRevision, Revising, Store, Withdrawing};
 use super::rule::Said;
 
 pub(super) fn proposal(store: &Store) -> Rev {
@@ -31,7 +31,9 @@ pub(super) fn answer(store: &Store) -> Said {
     let keep = AnswerToKeep { revision: RevisionNumber::FIRST, response: answered, request, message: "m".into(), told };
     match store.answer_proposal(&"p".into(), keep).unwrap() {
         Answering::Kept { proposal, .. } | Answering::Again(proposal) => Said::record(&proposal),
-        Answering::Otherwise(_) | Answering::Revised(_) | Answering::Refused(_) => panic!("not kept"),
+        Answering::Otherwise(_) | Answering::Revised(_) | Answering::Withdrawn(_) | Answering::Refused(_) => {
+            panic!("not kept")
+        }
     }
 }
 
@@ -40,7 +42,17 @@ pub(super) fn revise(store: &Store) -> Said {
     let proposed = fixtures::proposal("p").current.proposed;
     let revision =
         NewRevision { changed: "Dropped B.".into(), call: None, proposed, made_at_ms: 6, images: Vec::new() };
-    let (Made::New(proposal) | Made::Earlier(proposal)) =
-        store.revise_proposal(&"p".into(), &revision, &"k2".into()).unwrap();
-    Said::record(&proposal)
+    match store.revise_proposal(&"p".into(), &revision, &"k2".into()).unwrap() {
+        Revising::Wrote(Made::New(proposal) | Made::Earlier(proposal)) => Said::record(&proposal),
+        Revising::Withdrawn(_) => panic!("not revised"),
+    }
+}
+
+/// As a new hub is asked whatever the last didn't answer.
+pub(super) fn withdraw(store: &Store) -> Said {
+    let withdrawal = Withdrawal { why: "Decided".into(), call: None, at_ms: 7 };
+    match store.withdraw_proposal(&"p".into(), &withdrawal).unwrap() {
+        Withdrawing::Withdrew(proposal) | Withdrawing::Already(proposal) => Said::record(&proposal),
+        Withdrawing::Settled(_) => panic!("not withdrawn"),
+    }
 }

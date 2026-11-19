@@ -2,7 +2,7 @@
 
 use protocol::attachment::MediaType;
 use protocol::model::{Choice, OptionPlace, Proposal, ProposalRevision, Response, RevisionNumber, ToolUseId};
-use protocol::worker::{AskReply, ProposalRecord, Propose, Revise, WorkerAsk};
+use protocol::worker::{AskReply, ProposalRecord, Propose, Revise, Withdraw, WorkerAsk};
 use serde_json::json;
 
 use super::super::proposals;
@@ -99,4 +99,32 @@ async fn a_revision_is_asked_for_with_what_changed_and_says_what_the_person_said
     assert!(text.starts_with("Revised \"Search\" as revision 2 of p1."), "{text}");
     assert!(text.contains("The person chose B, In each client, in revision 1, before you revised it."), "{text}");
     assert!(text.ends_with("get_proposal reads what they said, with their note, given revision 1."), "{text}");
+}
+
+/// The agent withdraws by the proposal's ID, saying why, by its call, which the chat draws the line for, and one it
+/// gives no reason for isn't asked of the hub.
+#[tokio::test]
+async fn a_withdrawal_is_asked_for_with_why_by_the_call_that_withdrew() {
+    let (asks, mut sent) = asks();
+    let arguments = json!({ "proposal": "p1", "why": " Dispatch decides where holds live now. " });
+    let call = offering_tasks("tools/call", &json!({ "name": proposals::WITHDRAW, "arguments": arguments }));
+    let headers = headers("tools/call", Some(proposals::WITHDRAW));
+    let calling = answered(&asks, &headers, &call);
+    let made = protocol::fixtures::proposal("p1");
+    let hub = hub_answers(&asks, &mut sent, Ok(AskReply::Proposal(ProposalRecord { proposal: made, revision: None })));
+
+    let (answer, asked) = tokio::join!(calling, hub);
+
+    let WorkerAsk::Withdraw(Withdraw { id, why, call }) = asked else { panic!("asked to withdraw: {asked:?}") };
+    assert_eq!(
+        (id.as_str(), why.as_str(), call.as_ref().map(ToolUseId::as_str)),
+        ("p1", "Dispatch decides where holds live now.", Some("toolu_1"))
+    );
+    let text = answer.to_json()["result"]["content"][0]["text"].as_str().unwrap_or_default().to_string();
+    assert!(text.starts_with("Withdrew \"Search\" (p1)."), "{text}");
+
+    let unsaid =
+        offering_tasks("tools/call", &json!({ "name": proposals::WITHDRAW, "arguments": { "proposal": "p1" } }));
+    let refused = answered(&asks, &headers, &unsaid).await.to_json();
+    assert_eq!(refused["result"]["isError"], true, "{refused}");
 }

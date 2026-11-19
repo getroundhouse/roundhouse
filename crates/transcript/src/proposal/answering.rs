@@ -80,7 +80,7 @@ pub(super) struct Choosing<'a> {
 impl Choosing<'_> {
     /// The button at the end of option `place`'s card, for question `at`: Choose, or Chosen once it's chosen, while
     /// it waits for the person. Once they've chosen, only Chosen, on the one chosen, and once they've asked for
-    /// another round, or responded otherwise, none.
+    /// another round, or responded otherwise, or the agent's withdrawn it, none.
     pub(super) fn button(&self, at: usize, place: OptionPlace, letter: OptionLetter) -> Option<AnyElement> {
         let id = ElementId::Name(format!("choose-{at}-{}", place.index()).into());
         match self.standing {
@@ -89,7 +89,9 @@ impl Choosing<'_> {
                 let chosen = choice.chosen.get(at) == Some(&place);
                 return chosen.then(|| chosen_button(id).into_any_element());
             }
-            RevisionStanding::AnotherRound(_) | RevisionStanding::Responded => return None,
+            RevisionStanding::AnotherRound(_) | RevisionStanding::Responded | RevisionStanding::Withdrawn(_) => {
+                return None;
+            }
         }
         if self.chosen.get(at).copied().flatten() == Some(place) {
             let this = self.this.clone();
@@ -137,7 +139,7 @@ impl ProposalView {
 
     /// Whether the proposal waits for the person's response.
     pub(super) fn waits(&self) -> bool {
-        self.proposal.current.standing() == RevisionStanding::Waiting
+        self.proposal.standing() == RevisionStanding::Waiting
     }
 
     /// Whether an answer or a request for another round can be sent: while it's not answered and not being sent.

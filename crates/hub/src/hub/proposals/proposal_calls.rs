@@ -1,9 +1,9 @@
 use super::super::{Hub, new_id};
-use crate::store::{Made, NewRevision, now_ms};
+use crate::store::{Made, NewRevision, Revising, Withdrawing, now_ms};
 use protocol::client::proposals::{ProposalRevisions, ProposalRevisionsRead};
 use protocol::client::{ApiError, ErrorCode, HubNotice, records};
-use protocol::model::{Proposal, ProposalId, ProposalRevision, RevisionNumber, SessionId, WorkspaceId};
-use protocol::worker::{ProposalRecord, Propose, ReadProposal, Revise};
+use protocol::model::{Proposal, ProposalId, ProposalRevision, RevisionNumber, SessionId, Withdrawal, WorkspaceId};
+use protocol::worker::{ProposalRecord, Propose, ReadProposal, Revise, Withdraw};
 
 impl Hub {
     /// Makes the proposal the agent in `session_id` asked for, in its workspace, `workspace_id`, once it's been
@@ -38,6 +38,7 @@ impl Hub {
             workspace_id: workspace_id.clone(),
             session_id,
             revisions: vec![current.summary()],
+            withdrawn: None,
             current,
             created_at_ms: made_at_ms,
             rev: protocol::model::Rev::default(),
@@ -54,7 +55,8 @@ impl Hub {
 
     /// Writes a new revision of one of the proposals of the chat `session_id`, once it's been checked, with the images
     /// it points to, and tells the feed, whether or not the person has answered the newest. Another chat's is refused
-    /// as not found. Asked again with the same key, it answers with the proposal as it is now.
+    /// as not found, and one the agent withdrew as a conflict. Asked again with the same key, it answers with the
+    /// proposal as it is now.
     pub(crate) async fn revise(&self, session_id: &SessionId, asked: Revise) -> Result<ProposalRecord, ApiError> {
         let Revise { id, proposed, changed, call, key, images, attachments } = asked;
         proposed.check()?;
@@ -67,11 +69,39 @@ impl Hub {
         let revision =
             NewRevision { changed: changed.trim().to_string(), call, proposed, made_at_ms: now_ms(), images };
         let proposal = match self.blocking(move |store| store.revise_proposal(&id, &revision, &key)).await? {
-            Made::New(made) => {
+            Revising::Wrote(Made::New(made)) => {
                 self.notify(HubNotice::Proposal(made.clone()));
                 made
             }
-            Made::Earlier(made) => made,
+            Revising::Wrote(Made::Earlier(made)) => made,
+            Revising::Withdrawn(_) => {
+                let withdrawn = "you withdrew that proposal, so it can't be revised: propose it again instead";
+                return Err(ApiError::new(ErrorCode::Conflict, withdrawn));
+            }
+        };
+        Ok(ProposalRecord { proposal, revision: None })
+    }
+
+    /// Withdraws one of the proposals of the chat `session_id`, so it no longer waits for the person, and tells the
+    /// feed. Another chat's is refused as not found, one without why as an invalid request, and one the person has
+    /// chosen in as a conflict. Asked again, it answers with the proposal as it was withdrawn.
+    pub(crate) async fn withdraw(&self, session_id: &SessionId, asked: Withdraw) -> Result<ProposalRecord, ApiError> {
+        let Withdraw { id, why, call } = asked;
+        if why.trim().is_empty() {
+            return Err(ApiError::new(ErrorCode::InvalidRequest, "say why you're withdrawing it"));
+        }
+        self.read_proposal(session_id, id.clone()).await?;
+        let withdrawal = Withdrawal { why: why.trim().to_string(), call, at_ms: now_ms() };
+        let proposal = match self.blocking(move |store| store.withdraw_proposal(&id, &withdrawal)).await? {
+            Withdrawing::Withdrew(withdrawn) => {
+                self.notify(HubNotice::Proposal(withdrawn.clone()));
+                withdrawn
+            }
+            Withdrawing::Already(withdrawn) => withdrawn,
+            Withdrawing::Settled(_) => {
+                let settled = "the person has already answered that proposal, so there's nothing to withdraw";
+                return Err(ApiError::new(ErrorCode::Conflict, settled));
+            }
         };
         Ok(ProposalRecord { proposal, revision: None })
     }

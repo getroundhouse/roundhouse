@@ -21,9 +21,25 @@ pub struct Proposal {
     /// each revision, from the record. A hub from before revisions sends none, for a proposal with only its first.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub revisions: Vec<RevisionSummary>,
+    /// Once the agent withdrew it, as no longer of use, why and when, so nothing more can be said to it. A hub from
+    /// before withdrawing sends none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub withdrawn: Option<Withdrawal>,
     pub created_at_ms: i64,
     #[serde(default)]
     pub rev: Rev,
+}
+
+/// The agent's withdrawal of a proposal it made, once it was obsolete or wouldn't be used, such as when the person
+/// decided another way in the chat.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct Withdrawal {
+    /// Why, in a sentence, which the person reads in the proposal's tab.
+    pub why: String,
+    /// The agent's call that withdrew it, which the chat draws its line for, as [`ProposalRevision::call`] says.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub call: Option<ToolUseId>,
+    pub at_ms: i64,
 }
 
 /// One revision of a proposal: what the agent wrote, and the person's response to it, once they've given one.

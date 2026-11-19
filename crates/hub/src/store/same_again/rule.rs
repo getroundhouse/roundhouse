@@ -84,6 +84,7 @@ const ROWS: &[Row] = &[
     row("proposals", "made again by its ask", nothing, proposals::propose, proposals::proposal),
     row("proposals", "answered again by its request", proposals::proposed, proposals::answer, proposals::proposal),
     row("proposals", "revised again by its ask", proposals::proposed, proposals::revise, proposals::proposal),
+    row("proposals", "withdrawn again", proposals::proposed, proposals::withdraw, proposals::proposal),
 ];
 
 /// So a record with a revision can't be added without a row, since each table that has one is either among the rows

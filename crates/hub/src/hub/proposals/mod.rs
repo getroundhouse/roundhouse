@@ -8,6 +8,8 @@ mod revision_tests;
 mod round_tests;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod withdrawal_tests;
 
 mod answers;
 mod proposal_calls;

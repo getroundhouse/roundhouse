@@ -26,7 +26,9 @@ pub(super) fn describe(proposal: &Proposal, revision: Option<&ProposalRevision>)
     }
     parts.extend(proposed.questions.iter().enumerate().map(|(at, question)| question_in_words(at + 1, question)));
     let newest = current.number == proposal.current.number;
-    parts.push(answer_in_words(current, newest));
+    // Only the newest says it's withdrawn, as the proposal's standing has it.
+    let standing = if newest { proposal.standing() } else { current.standing() };
+    parts.push(answer_in_words(current, standing, newest));
     if newest {
         parts.extend(responded_before(proposal));
     }
@@ -55,10 +57,10 @@ pub(super) fn responded_before(proposal: &Proposal) -> Option<String> {
     ))
 }
 
-/// What the person said to `current`, which, if it isn't the `newest`, was revised before they answered when they
-/// said nothing.
-fn answer_in_words(current: &ProposalRevision, newest: bool) -> String {
-    let choice = match current.standing() {
+/// What the person said to `current`, as `standing` says, which, if it isn't the `newest`, was revised before they
+/// answered when they said nothing, or that the agent withdrew it.
+fn answer_in_words(current: &ProposalRevision, standing: RevisionStanding<'_>, newest: bool) -> String {
+    let choice = match standing {
         RevisionStanding::Waiting if newest => return "The person hasn't answered yet.".to_string(),
         RevisionStanding::Waiting => return "You revised it before the person answered.".to_string(),
         RevisionStanding::Responded => {
@@ -69,6 +71,9 @@ fn answer_in_words(current: &ProposalRevision, newest: bool) -> String {
                 "The person asked for another round, without choosing, and wrote what to change:\n{}",
                 round.note
             );
+        }
+        RevisionStanding::Withdrawn(withdrawal) => {
+            return format!("You withdrew it before the person chose: {}", withdrawal.why);
         }
         RevisionStanding::Chose(choice) => choice,
     };

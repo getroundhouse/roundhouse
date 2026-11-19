@@ -1,7 +1,8 @@
 //! A call that proposed a decision too large for a question, or revised one, drawn from the proposal's record, which
 //! names the call that wrote each revision: `Proposed`, or `Revised`, its title in a chip, which revision it wrote once
 //! there are several, what it asks the person to choose and that it waits for them, or what was said to that
-//! revision, and a button that opens it in the proposal tab. What the agent wrote is read in the tab, so the line
+//! revision, and a button that opens it in the proposal tab. A call that withdrew one is drawn from the record too:
+//! `Withdrew`, the title, and why. What the agent wrote is read in the tab, so the line
 //! doesn't open. A call whose proposal hasn't come, or which the hub refused, is drawn as any other tool's.
 //!
 //! The prompt the hub sent the agent to say what was chosen is drawn as a line like it, `Answered`, or `Replied` for
@@ -17,30 +18,43 @@ use gpui_kit::{
     TestSupportExt as _, div,
 };
 use look::Typeset as _;
-use protocol::model::{Proposal, ProposalId, ResponseSummary, RevisionNumber, RevisionSummary, Seq, chosen_in_words};
+use protocol::model::{
+    Proposal, ProposalId, ResponseSummary, RevisionNumber, RevisionStanding, RevisionSummary, Seq, chosen_in_words,
+};
 
 use super::super::around::Answers;
 use super::super::{Shared, row};
 use super::Toggle;
 use super::line::{Line, Part};
-use crate::transcript::Wrote;
+use crate::transcript::{Did, ProposalCall};
 use crate::{PROPOSAL_ICON, TranscriptEvent};
 
-/// The line of the call that wrote the revision `wrote`, which doesn't open, with Open at its end.
-pub(super) fn draw(wrote: &Wrote, toggle: &Toggle, cx: &App) -> AnyElement {
-    let Wrote { proposal, revision } = wrote;
-    let verb = if *revision == RevisionNumber::FIRST { "Proposed" } else { "Revised" };
-    let (title, standing) = (proposal.current.proposed.title.trim().to_string(), standing(proposal, *revision));
-    let label = format!("{verb} {title}: {standing}");
+/// The line of a call that did something to a proposal, as `call` says: wrote a revision, with what became of it, or
+/// withdrew it, with why. It doesn't open, and has Open at its end.
+pub(super) fn draw(call: &ProposalCall, toggle: &Toggle, cx: &App) -> AnyElement {
+    let ProposalCall { proposal, did } = call;
+    let title = proposal.current.proposed.title.trim().to_string();
+    // Each line is its own element, the first revision's as it was before there were revisions.
+    let (verb, said, id, button) = match *did {
+        Did::Wrote(revision) => {
+            let verb = if revision == RevisionNumber::FIRST { "Proposed" } else { "Revised" };
+            let id = match revision.0 {
+                1 => format!("proposed/{}", proposal.id),
+                number => format!("revised/{}/{number}", proposal.id),
+            };
+            (verb, standing(proposal, revision), id, opens(&proposal.id, revision))
+        }
+        Did::Withdrew => {
+            let why = proposal.withdrawn.as_ref().map(|withdrawal| withdrawal.why.trim().to_string());
+            let button = ElementId::Name(format!("open-withdrawn/{}", proposal.id).into());
+            ("Withdrew", why.unwrap_or_default(), format!("withdrew/{}", proposal.id), button)
+        }
+    };
+    let label = format!("{verb} {title}: {said}");
     let line = Line::new(PROPOSAL_ICON, verb)
         .part(Part::Chip(look::chip(look::ChipKind::Proposal, look::ChipSize::Regular, title)))
-        .part(Part::Note(standing.into()))
-        .action(open(&proposal.id, opens(&proposal.id, *revision), toggle.shared));
-    // Each revision's line is its own element, the first's as it was before there were revisions.
-    let id = match revision.0 {
-        1 => format!("proposed/{}", proposal.id),
-        number => format!("revised/{}/{number}", proposal.id),
-    };
+        .part(Part::Note(said.into()))
+        .action(open(&proposal.id, button, toggle.shared));
     // It doesn't open, since what the agent wrote is read in the tab, which Open brings up. A call that failed made no
     // proposal, so there's nothing under it to say either.
     line.still(ElementId::Name(id.into()), label, &toggle.shared.line_text, cx)
@@ -84,14 +98,19 @@ pub(in super::super) fn answered(
     row().pb(look::Space::Small).child(line).children(never_got).into_any_element()
 }
 
-/// What became of the revision `revision` of `proposal`, after which it is once there are several: what was said to
-/// it, or, for the newest, what it asks the person to choose and that it waits for them, or, for an earlier one, that
-/// the next replaced it before they answered.
+/// What became of the revision `revision` of `proposal`, after which it is once there are several: for the newest,
+/// that the agent withdrew it, as the proposal's standing says, as the tab does, and otherwise what was said to it,
+/// or, for the newest, what it asks the person to choose and that it waits for them, or, for an earlier one, that the
+/// next replaced it before they answered.
 fn standing(proposal: &Proposal, revision: RevisionNumber) -> String {
-    let said = responded(proposal, revision).unwrap_or_else(|| match revision {
-        newest if newest == proposal.current.number => format!("{} · waiting for you", asks(proposal)),
-        earlier => format!("replaced by revision {}", earlier.next()),
-    });
+    let newest = revision == proposal.current.number;
+    let withdrawn = newest && matches!(proposal.standing(), RevisionStanding::Withdrawn(_));
+    let said = match responded(proposal, revision) {
+        _ if withdrawn => format!("{} · withdrawn", asks(proposal)),
+        Some(said) => said,
+        None if newest => format!("{} · waiting for you", asks(proposal)),
+        None => format!("replaced by revision {}", revision.next()),
+    };
     if proposal.revised() { format!("Revision {revision} · {said}") } else { said }
 }
 
@@ -175,4 +194,25 @@ fn open(proposal: &ProposalId, button: ElementId, shared: &Shared) -> AnyElement
             let _ = this.update(cx, |_, cx| cx.emit(TranscriptEvent::OpenProposal { proposal }));
         })
         .into_any_element()
+}
+
+#[cfg(test)]
+mod tests {
+    use protocol::model::{Proposal, Response, RevisionNumber, Round, Withdrawal};
+
+    /// Withdrawn after the person asked for another round, as the agent may when the round shows it isn't needed: the
+    /// proposal's line says withdrawn, as its tab does, rather than what was said to it.
+    #[test]
+    fn a_line_says_withdrawn_whatever_was_said_to_the_newest() {
+        let mut proposal = protocol::fixtures::proposal("p");
+        proposal.current.response = Some(Response::AnotherRound(Round { note: "Smaller".into(), at_ms: 0 }));
+        proposal.revisions = vec![proposal.current.summary()];
+        let asked = proposal.clone();
+        let withdrawn =
+            Proposal { withdrawn: Some(Withdrawal { why: "Decided".into(), call: None, at_ms: 0 }), ..proposal };
+
+        let said = [&asked, &withdrawn].map(|proposal| super::standing(proposal, RevisionNumber::FIRST));
+
+        assert_eq!(said, ["Another round, with a note", "2 options · withdrawn"]);
+    }
 }

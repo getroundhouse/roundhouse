@@ -1,4 +1,4 @@
-//! What a worker asks its hub to propose for its agent, to revise a proposal, and to read one back.
+//! What a worker asks its hub to propose for its agent, to revise a proposal or withdraw it, and to read one back.
 
 use serde::{Deserialize, Serialize};
 
@@ -60,6 +60,27 @@ impl Ask for Revise {
 
     fn into_ask(self) -> WorkerAsk {
         WorkerAsk::Revise(self)
+    }
+}
+
+/// Withdraws one of the chat's proposals, once it's obsolete or won't be used, so it no longer waits for the person,
+/// which a hub refuses without `why`, as a conflict once the person has chosen, and as not found for another chat's.
+/// Asked again, as a new hub is asked whatever the last didn't answer, it answers with the proposal as it was withdrawn.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct Withdraw {
+    pub id: ProposalId,
+    /// Why, in a sentence, which the person reads in the proposal's tab.
+    pub why: String,
+    /// As [`Propose::call`] says.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub call: Option<ToolUseId>,
+}
+
+impl Ask for Withdraw {
+    type Answer = ProposalRecord;
+
+    fn into_ask(self) -> WorkerAsk {
+        WorkerAsk::Withdraw(self)
     }
 }
 

@@ -64,3 +64,9 @@ pub(super) const REVISIONS: &str = r"
     ALTER TABLE proposal_revisions ADD COLUMN ask_key TEXT;
     CREATE UNIQUE INDEX proposal_revisions_by_ask ON proposal_revisions (proposal_id, ask_key) WHERE ask_key IS NOT NULL;
 ";
+
+/// The agent's withdrawal of each proposal it withdrew, as JSON: why, the call that withdrew it and when. NULL for one
+/// it hasn't, as every proposal made before was.
+pub(super) const WITHDRAWALS: &str = r"
+    ALTER TABLE proposals ADD COLUMN withdrawn TEXT;
+";

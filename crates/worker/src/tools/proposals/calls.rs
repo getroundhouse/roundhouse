@@ -4,11 +4,12 @@ use super::input::{proposed, revise_schema, revised, schema};
 use crate::asks::Asks;
 use crate::tools::Caller;
 use protocol::model::{AskKey, Proposal, RevisionNumber, SessionId, ToolUseId};
-use protocol::worker::{ProposalRecord, Propose, ReadProposal, Revise};
+use protocol::worker::{ProposalRecord, Propose, ReadProposal, Revise, Withdraw};
 use serde_json::{Map, Value, json};
 
 pub(in crate::tools) const PROPOSE: &str = "propose";
 pub(in crate::tools) const REVISE: &str = "revise_proposal";
+pub(in crate::tools) const WITHDRAW: &str = "withdraw_proposal";
 pub(in crate::tools) const GET: &str = "get_proposal";
 
 /// When to propose rather than ask, and how, which the agent reads before it first calls it. *Unconfirmed.*
@@ -21,15 +22,27 @@ const PROPOSE_DESCRIPTION: &str = "Asks the person to decide something too large
     `mermaid`. To show another picture, such as a screenshot, save it in the worktree and point to it with a Markdown \
     image: Roundhouse keeps a copy with the proposal, as the file is when you propose. Recommend one, and say why, \
     when you have a view. It returns at once: the person answers later, and their answer, or their request for \
-    another round, which you answer with revise_proposal, comes to you as a prompt. Don't ask them the same in the chat, or wait or poll for the answer: carry on with other work, or end your turn.";
+    another round, which you answer with revise_proposal, comes to you as a prompt. To change it later, revise it \
+    rather than proposing again. Withdraw it with withdraw_proposal once it's obsolete or you won't use it, so it \
+    doesn't wait for the person. Don't ask them the same in the chat, or wait or poll for the answer: carry on with \
+    other work, or end your turn.";
 
 /// When to revise a proposal, and how. *Unconfirmed.*
 const REVISE_DESCRIPTION: &str = "Writes a new revision of a proposal you made in this chat with the propose tool, \
-    by its ID, whether or not the person has answered the newest, such as when they asked for another round, or you \
-    learned something that changes the options. Write the whole proposal again, as you would to propose it, and say \
-    what changed since the revision before. Give each option you keep the letter it had, where that makes sense, so \
-    the person names it as they did: dropping B leaves C as C. The person reads the newest revision in its tab, and an \
-    answer to an earlier one they hadn't sent is refused. It returns at once, as propose does.";
+    by its ID, whether or not the person has answered the newest, such as when they asked for another round, you \
+    learned something that changes the options, or they want to decide again what they answered. To change a proposal \
+    of yours, revise it rather than proposing again, so the decision stays one proposal, whose revisions the person \
+    reads in order. Write the whole proposal again, as you would to propose it, and say what changed since the \
+    revision before. Give each option you keep the letter it had, where that makes sense, so the person names it as \
+    they did: dropping B leaves C as C. The person reads the newest revision in its tab, and an answer to an earlier \
+    one they hadn't sent is refused. It returns at once, as propose does.";
+
+/// When to withdraw a proposal, which the owner asked agents be told. *Unconfirmed:* the words.
+const WITHDRAW_DESCRIPTION: &str = "Withdraws a proposal you made in this chat with the propose tool, by its ID, once \
+    it's obsolete or you won't use it, such as when the person decided another way in the chat, or the work it was \
+    for moved on, so it no longer waits for them. Withdraw every proposal of yours that won't be answered, rather than \
+    leave it waiting. Say why in a sentence, which the person reads in its tab. One the person has chosen in can't be \
+    withdrawn, and a withdrawn one can't be answered or revised: propose again instead.";
 
 const GET_DESCRIPTION: &str = "Reads one of the proposals you made in this chat with the propose tool, by its ID, \
     which propose's result gives: its context, each question with its options and what you recommended, and the \
@@ -46,6 +59,15 @@ pub(in crate::tools) fn definitions() -> Vec<Value> {
         "required": ["proposal"],
         "additionalProperties": false,
     });
+    let withdraw = json!({
+        "type": "object",
+        "properties": {
+            "proposal": { "type": "string", "description": "The proposal's ID." },
+            "why": { "type": "string", "description": "Why it's withdrawn, in a sentence, which the person reads in its tab." },
+        },
+        "required": ["proposal", "why"],
+        "additionalProperties": false,
+    });
     vec![
         json!({
             "name": PROPOSE,
@@ -60,6 +82,13 @@ pub(in crate::tools) fn definitions() -> Vec<Value> {
             "description": REVISE_DESCRIPTION,
             "inputSchema": revise_schema(),
             "annotations": { "readOnlyHint": false, "destructiveHint": false, "idempotentHint": false, "openWorldHint": false },
+        }),
+        json!({
+            "name": WITHDRAW,
+            "title": "Withdraw a proposal",
+            "description": WITHDRAW_DESCRIPTION,
+            "inputSchema": withdraw,
+            "annotations": { "readOnlyHint": false, "destructiveHint": false, "idempotentHint": true, "openWorldHint": false },
         }),
         json!({
             "name": GET,
@@ -132,6 +161,27 @@ fn call_of(params: &Map<String, Value>) -> Option<ToolUseId> {
 /// The key the hub knows an ask by: the agent's call, or a key of its own when its CLI doesn't name it.
 fn key_of(call: Option<&ToolUseId>) -> AskKey {
     call.map_or_else(|| AskKey::from(uuid::Uuid::new_v4().to_string()), |call| call.as_str().into())
+}
+
+/// Withdraws the proposal the agent names, for the reason it gives, keyed by nothing, since withdrawing again leaves it
+/// as it was withdrawn.
+pub(in crate::tools) async fn withdraw(asks: &Asks, caller: &Caller, params: &Map<String, Value>) -> Called {
+    let arguments = params.get("arguments");
+    let read = |name: &str| arguments.and_then(|args| args.get(name)).and_then(Value::as_str).map(str::trim);
+    let Some(id) = read("proposal").filter(|id| !id.is_empty()) else {
+        return Called::failed("give the proposal's ID, as propose's result said it".to_string());
+    };
+    let Some(why) = read("why").filter(|why| !why.is_empty()) else {
+        return Called::failed("say why you're withdrawing it, in a sentence the person reads".to_string());
+    };
+    let asked = Withdraw { id: id.into(), why: why.to_string(), call: call_of(params) };
+    match asks.ask(caller.session_id.clone(), asked).await {
+        Ok(ProposalRecord { proposal, .. }) => Called::text(format!(
+            "Withdrew \"{}\" ({}). It no longer waits for the person, who reads why in its tab.",
+            proposal.current.proposed.title, proposal.id
+        )),
+        Err(e) => Called::failed(format!("Roundhouse couldn't withdraw the proposal: {}", e.message)),
+    }
 }
 
 pub(in crate::tools) async fn get(asks: &Asks, session_id: &SessionId, params: &Map<String, Value>) -> Called {

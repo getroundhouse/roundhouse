@@ -42,9 +42,9 @@ pub(crate) struct Model {
     /// record changes, which may come after the row was drawn. A call's row is measured only once it's been drawn, so
     /// one that isn't here needs nothing.
     pub subagent_rows: RefCell<HashMap<ToolUseId, Seq>>,
-    /// The revision of one of the chat's proposals that each call wrote, by the call, which draws its line from it.
-    /// Each proposal is shared with client-core's snapshot, as subagents' records are.
-    pub(crate) proposals: HashMap<ToolUseId, Wrote>,
+    /// What each call did to one of the chat's proposals, by the call, which draws its line from it. Each proposal is
+    /// shared with client-core's snapshot, as subagents' records are.
+    pub(crate) proposals: HashMap<ToolUseId, ProposalCall>,
     /// Each of the chat's proposals, by its ID, which the prompt that tells the agent of its answer names, and is
     /// drawn as its line.
     pub proposals_by_id: HashMap<ProposalId, Arc<Proposal>>,
@@ -137,9 +137,16 @@ impl Default for Model {
     }
 }
 
-/// The revision of a proposal a call wrote: its first, which proposed it, or a later one, which revised it.
+/// What a call did to a proposal, which its line is drawn from.
 #[derive(Clone)]
-pub(crate) struct Wrote {
+pub(crate) struct ProposalCall {
     pub(crate) proposal: Arc<Proposal>,
-    pub(crate) revision: RevisionNumber,
+    pub(crate) did: Did,
+}
+
+/// Wrote one of a proposal's revisions, its first, which proposed it, or a later one, which revised it, or withdrew it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Did {
+    Wrote(RevisionNumber),
+    Withdrew,
 }

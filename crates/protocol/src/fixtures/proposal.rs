@@ -32,6 +32,7 @@ pub fn proposal(id: &str) -> Proposal {
         workspace_id: "w".into(),
         session_id: "s".into(),
         revisions: vec![current.summary()],
+        withdrawn: None,
         current,
         created_at_ms: 0,
         rev: Rev::default(),
