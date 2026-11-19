@@ -14,4 +14,4 @@ mod reading;
 mod viewer;
 use viewer::Contents;
 pub use viewer::FileView;
-pub(crate) use viewer::{LINE_HEIGHT, numbers_width, placeholder};
+pub(crate) use viewer::{LINE_HEIGHT, numbers_width};

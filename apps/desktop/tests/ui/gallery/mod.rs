@@ -31,6 +31,7 @@ mod context_screens;
 mod dialog_widths;
 mod dictation_screens;
 mod diff_screens;
+mod empty_kinds;
 mod failure_chats;
 mod failures_in_a_row;
 mod file_chats;

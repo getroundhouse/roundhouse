@@ -4,7 +4,7 @@ use gpui_kit::component::{h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, Context, Div, Entity, Hsla, InteractiveElement, IntoElement, MouseButton, ParentElement, Render,
-    Stateful, StatefulInteractiveElement, Styled, TestSupportExt as _, Window, div, px,
+    SharedString, Stateful, StatefulInteractiveElement, Styled, TestSupportExt as _, Window, div,
 };
 use look::{Hand as _, Typeset as _};
 use protocol::client::HubStatus;
@@ -73,18 +73,18 @@ impl AppView {
     /// What shows beside the sidebar: the selected workspace, Home, with its `home` rows while it's drawn, or what
     /// there is to say with neither.
     fn beside_the_sidebar(&self, home: Option<crate::home::Rows>, cx: &mut Context<Self>) -> AnyElement {
-        let colors = look::colors(cx);
         if let Some(rows) = home {
             return crate::home::page(self, rows, cx).into_any_element();
         }
-        let (muted, error_colour) = (colors.text_muted, colors.error);
         match self.connection() {
-            Connection::Connecting if self.pane_to_draw().is_none() => centered("Connecting…", muted),
-            Connection::Failed(ConnectionFailure::Local(reason)) => failed(reason, error_colour, cx),
-            Connection::Failed(failure) if self.pane_to_draw().is_none() => self.remote_failed(failure, muted, cx),
+            Connection::Connecting if self.pane_to_draw().is_none() => {
+                look::nothing_to_show("Connecting…").into_any_element()
+            }
+            Connection::Failed(ConnectionFailure::Local(reason)) => failed(reason, cx),
+            Connection::Failed(failure) if self.pane_to_draw().is_none() => self.remote_failed(failure, cx),
             Connection::AcrossABreak(status) => {
                 let may_restart = hub_source::may_restart(status, self.hub.build_number);
-                across_a_break(status, self.hub.build_version, may_restart, muted, cx)
+                across_a_break(status, self.hub.build_version, may_restart, cx)
             }
             Connection::Ready(_) | Connection::Connecting | Connection::Failed(_) => match self.pane_to_draw() {
                 Some(pane) => pane.into_any_element(),
@@ -99,7 +99,6 @@ impl AppView {
                         "New workspace",
                     )
                     .on_click(cx.listener(|t, _, window, cx| t.new_workspace_here(window, cx))),
-                    cx,
                 ),
             },
         }
@@ -112,7 +111,7 @@ impl AppView {
                 "Open Roundhouse on {name} and add a repository there. Its projects and workspaces will show up here \
                  automatically."
             );
-            return empty_state(&format!("No projects on {name}"), &body, switch_to_local("first-switch-local"), cx);
+            return empty_state(format!("No projects on {name}"), body, switch_to_local("first-switch-local"));
         }
         let body = format!(
             "Each workspace is a copy of a project on its own branch, with its own agents. Start by adding a project \
@@ -120,14 +119,13 @@ impl AppView {
         );
         empty_state(
             "Add a project",
-            &body,
+            body,
             look::button("first-add-project", look::ButtonKind::Main, look::ControlSize::Large, "Add project")
                 .on_click(cx.listener(|t, _, _, cx| t.add_repository(cx))),
-            cx,
         )
     }
 
-    fn remote_failed(&self, failure: &ConnectionFailure, muted: Hsla, cx: &mut Context<Self>) -> AnyElement {
+    fn remote_failed(&self, failure: &ConnectionFailure, cx: &mut Context<Self>) -> AnyElement {
         let hub_name = self.hub.remote.as_ref().map_or("the hub", |hub| hub.hub_name.as_str());
         let (heading, body, pair_again) = remote_failure_words(hub_name, failure);
         let primary = if pair_again {
@@ -135,21 +133,12 @@ impl AppView {
             look::button("pair-hub-again", look::ButtonKind::Main, look::ControlSize::Large, "Pair again…")
                 .on_click(move |_, window, cx| pairing::open(data_dir.clone(), window, cx))
         } else {
-            try_again(look::ButtonKind::Main, cx)
+            try_again(cx)
         };
-        v_flex()
-            .size_full()
-            .items_center()
-            .justify_center()
-            .gap(look::Space::Large)
-            .child(
-                v_flex()
-                    .items_center()
-                    .gap(look::Space::Small)
-                    .child(div().typeset(look::Type::Heading).child(heading))
-                    .child(div().max_w(px(440.)).text_center().typeset(look::Type::Body).text_color(muted).child(body)),
-            )
-            .child(h_flex().gap(look::Space::Small).child(switch_to_local("failed-switch-local")).child(primary))
+        look::empty(look::EmptyKind::Failed, heading)
+            .says(body)
+            .answer(switch_to_local("failed-switch-local"))
+            .answer(primary)
             .into_any_element()
     }
 
@@ -257,37 +246,21 @@ fn switch_to_local(id: &'static str) -> look::Button {
         .on_click(|_, window, cx| hubs::select(None, window, cx))
 }
 
-/// Tries the hub again, as `kind`: the main action where it's the only one, and an edged one beside another.
-fn try_again(kind: look::ButtonKind, cx: &mut Context<AppView>) -> look::Button {
-    look::button("try-hub-again", kind, look::ControlSize::Large, "Try again")
+/// Tries the hub again, as the main action.
+fn try_again(cx: &mut Context<AppView>) -> look::Button {
+    look::button("try-hub-again", look::ButtonKind::Main, look::ControlSize::Large, "Try again")
         .on_click(cx.listener(|t, _, _, cx| t.connect(cx)))
 }
 
-fn failed(reason: &str, error_colour: Hsla, cx: &mut Context<AppView>) -> AnyElement {
-    v_flex()
-        .size_full()
-        .items_center()
-        .justify_center()
-        .gap(look::Space::Medium)
-        .child(
-            div()
-                .max_w(px(560.0))
-                .text_center()
-                .text_color(error_colour)
-                .child(format!("Couldn't reach the hub. {reason}")),
-        )
-        .child(try_again(look::ButtonKind::Edged, cx))
+fn failed(reason: &str, cx: &mut Context<AppView>) -> AnyElement {
+    look::empty(look::EmptyKind::Failed, "Couldn't reach the hub")
+        .says(reason.to_string())
+        .answer(try_again(cx))
         .into_any_element()
 }
 
 /// `may_restart` says whether this app may restart the hub, which is only one a client started, and an older one.
-fn across_a_break(
-    status: &HubStatus,
-    app_version: &str,
-    may_restart: bool,
-    muted: Hsla,
-    cx: &mut Context<AppView>,
-) -> AnyElement {
+fn across_a_break(status: &HubStatus, app_version: &str, may_restart: bool, cx: &mut Context<AppView>) -> AnyElement {
     let versions = format!("The hub is version {}, and this app is {app_version}.", status.hub_version);
     let next = if may_restart {
         restart_note(status)
@@ -297,61 +270,21 @@ fn across_a_break(
         "It was started by hand, so it's yours to update or stop. To stop it and its agents, run \"roundhouse hub stop\"."
             .to_string()
     };
-    let note =
-        |text: String| div().max_w(px(560.0)).text_center().typeset(look::Type::Body).text_color(muted).child(text);
     let action = if may_restart {
         let pid = status.pid;
         look::button("restart-hub", look::ButtonKind::Main, look::ControlSize::Large, "Restart the hub")
             .on_click(cx.listener(move |t, _, _, cx| t.restart_hub(pid, cx)))
     } else {
-        try_again(look::ButtonKind::Edged, cx)
+        try_again(cx)
     };
-    v_flex()
-        .size_full()
-        .items_center()
-        .justify_center()
-        .gap(look::Space::Medium)
-        .child("This app can't talk to the running hub.")
-        .child(note(versions))
-        .child(note(next))
-        .child(action)
+    look::empty(look::EmptyKind::Failed, "This app can't talk to the running hub")
+        .says(versions)
+        .says(next)
+        .answer(action)
         .into_any_element()
 }
 
 /// What an empty pane shows: the mark, what's missing and why, and the one thing to do about it.
-fn empty_state(title: &str, body: &str, action: look::Button, cx: &mut Context<AppView>) -> AnyElement {
-    let muted = look::colors(cx).text_muted;
-    v_flex()
-        .size_full()
-        .items_center()
-        .justify_center()
-        .gap(look::Space::Large)
-        .child(look::brand(px(72.), cx))
-        .child(
-            v_flex()
-                .items_center()
-                .gap(look::Space::Small)
-                .child(div().typeset(look::Type::Heading).child(title.to_string()))
-                .child(
-                    div()
-                        .max_w(px(400.))
-                        .text_center()
-                        .typeset(look::Type::Body)
-                        .text_color(muted)
-                        .child(body.to_string()),
-                ),
-        )
-        .child(action)
-        .into_any_element()
-}
-
-fn centered(text: &str, color: Hsla) -> AnyElement {
-    div()
-        .size_full()
-        .flex()
-        .items_center()
-        .justify_center()
-        .text_color(color)
-        .child(text.to_string())
-        .into_any_element()
+fn empty_state(title: impl Into<SharedString>, body: impl Into<SharedString>, action: look::Button) -> AnyElement {
+    look::empty(look::EmptyKind::Missing, title).says(body).answer(action).into_any_element()
 }

@@ -353,11 +353,25 @@ The mark has three layers, and each is about one thing, so several facts can sho
 
 ## Empty states
 
-- **An empty pane shows the mark in copper, what's missing and why, and the one thing to do about it,** as a main button. The mark is 72px wide there, with five rows.
+- **An empty pane shows the mark in copper, what's missing and why, and the one thing to do about it,** as a main button. The mark is 72px wide there, with five rows. What it says under its heading is muted, and wraps at 400px.
 
   **The pane with projects and no workspace yet, which says to start one.** *Unconfirmed.*
 
   ![The pane before there's a workspace](screens/start-a-workspace.png)
+
+- **A pane that can't show what it's for is laid out as an empty one, with the mark in red,** as the owner chose, from pictures of three ways and keeping it as it was: what went wrong as its heading, why under it, muted, and what to do about it, with Try again as the main button. Such as with no hub, a hub that can't be reached or that's been unpaired, and one that's on the other side of a change this app can't talk across. No hub was red words in the middle of the pane, with an outlined Try again, unlike the empty pane, and the others had no mark. Copper is the brand's, so it's kept for what's missing, and red says something went wrong, as the status mark's does. `look::empty` draws both, and `look::EmptyKind` holds the kinds. *Unconfirmed.*
+- **A list or a pane with nothing to show, which needs nothing done, says so in one muted line in its middle,** with 24px at its sides wherever it is, as the owner chose, from pictures of three ways, rather than with an icon over it or a second line saying why: such as a search that matches nothing, Changes before there are any, a file that's empty or can't be shown, and what's loading. Each place had its own room at the sides. `look::nothing_to_show` draws one. *Unconfirmed.*
+
+**Every kind of empty pane, by its name.** Each is a kind in `look::EmptyKind`. *Unconfirmed.*
+
+| Name | Mark | For |
+|---|---|---|
+| `Missing` | `brand` | Nothing's there yet: what's missing and the one thing to do about it, such as before there's a project or a workspace |
+| `Failed` | `error` | What the pane is for can't be shown: what went wrong, why and what to do about it, such as with no hub |
+
+**Every kind of empty pane, and a line saying there's nothing to show.** *Unconfirmed.*
+
+![Every kind of empty pane, and nothing to show](screens/empty-kinds.png)
 
 ## The app icon
 

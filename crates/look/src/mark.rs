@@ -77,11 +77,10 @@ pub(crate) fn paint_chat_mark(signal: Signal, bounds: Bounds<Pixels>, window: &m
     Painted::now(signal, Work::NoPr, cx).paint(bounds, window, cx)
 }
 
-/// The mark in copper with nothing on it: the brand, for empty states. Copper is the theme's focus ring, because
-/// focus is the one other place the brand colour shows. The app icon is the same fan, drawn for each of its sizes.
-pub fn brand(width: Pixels, cx: &App) -> impl IntoElement {
-    let copper = colors(cx).brand;
-    drawn(Painted { signal: Signal::Idle, color: copper, hub: unlit(copper), t: STILL_S, moves: false }, width)
+/// The mark in `color` with nothing on it, holding still, as an empty state draws it: copper, the brand, for what's
+/// missing, and red for what failed. The app icon is the same fan, drawn for each of its sizes.
+pub(crate) fn still(width: Pixels, color: Hsla) -> impl IntoElement {
+    drawn(Painted { signal: Signal::Idle, color, hub: unlit(color), t: STILL_S, moves: false }, width)
 }
 
 /// A turntable, or a ring's hub, with nothing to say: in the dots' colour, and quieter than them.

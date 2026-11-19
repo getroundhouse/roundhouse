@@ -36,7 +36,7 @@ Each colour means one thing.
 - **One shadow, under what opens over the rest,** such as a card, the outline, the find bar or what a hover shows, so it reads as on top of what it covers. It's soft, so it lifts what's over the rest without drawing the eye: black at 22.5%, 8px below and blurred by 12px, and black at 15%, 2px below and blurred by 3px, as GPUI measures a blur, which is half what CSS calls it. What's raised in place, such as a pill or the update card, has none. A menu, a tooltip and a dialog cast it too. *Not built:* the kit draws a dialog with a fainter shadow of its own.
 - **A dialog dims everything behind it to 40% of its brightness,** under 60% black, so it's plainly the one thing to deal with, and what's behind it reads as out of reach. *Unconfirmed.*
 - **Three text colours:** foreground `#ebe7e3`, muted `#a39d97`, and faint `#6f6964` for meta, line numbers and hints.
-- **Copper, `#d08a5c`, is the brand.** It's for empty states, the app icon, keyboard focus, the edge of a comment being written, the wash behind a prompt and, quieter, a composer that's planning, and never a status.
+- **Copper, `#d08a5c`, is the brand.** It's for the mark over an empty pane, the app icon, keyboard focus, the edge of a comment being written, the wash behind a prompt and, quieter, a composer that's planning, and never a status.
 - **Pale copper, `#d8c2b3`, marks the chat showing,** as the line under its tab. It's the brand's hue, paled toward the text, so it says where you are without reading as a status.
 - **A composer that's planning is in a quieter copper.** Its surface takes a tenth of copper, its edge is copper at a little over half strength over that, and its texture's dots are copper. It's the brand's own colour, so plan mode reads as a way of working you chose rather than a status, and its edge stays quieter than keyboard focus, which the composer also shows while files are dragged over it. `chats.md` has the texture. *Unconfirmed.*
 - **Amber is for the card that needs you, and red means the agent stopped short.** A plan waiting to be approved is washed in amber, with its heading in amber, and a failed request's card the same in red, as `components.md` says. A question isn't a card, and neither is a request to use a tool, since each takes the composer's place, and has the thin edge colour on the pane's own surface, as `chats.md` says. Amber isn't on the mark, where the merge queue's yellow would be taken for it.
@@ -78,7 +78,7 @@ Each colour means one thing.
 | `main_pressed` | `#ddd8d2` | The main action pressed |
 | `on_main` | `#1d1a18` | What's on the main action, and on any other light fill |
 | **The brand** | | |
-| `brand` | `#d08a5c` | Copper: empty states, the icon, keyboard focus, the caret, a comment being written, a composer that's planning |
+| `brand` | `#d08a5c` | Copper: the mark over an empty pane, the icon, keyboard focus, the caret, a comment being written, a composer that's planning |
 | `current` | `#d8c2b3` | Pale copper: the line under the tab showing, and, faint, under a tab the pointer's over, and what's found |
 | `link` | `#dba27c` | A link |
 | `link_hover` | `#e8b896` | A link under the pointer |
@@ -87,7 +87,7 @@ Each colour means one thing.
 | `warning` | `#e9b24c` | A warning, such as setup that failed |
 | `done` | `#6cc488` | Something ready, or done, such as dictation's model once it's prepared |
 | `stopped` | `#ee6f64` | The agent stopped short: its mark's turntable, and a turn that failed |
-| `error` | `#ee6f64` | Something else that went wrong, such as a call that failed |
+| `error` | `#ee6f64` | Something else that went wrong, such as a call that failed, and the mark over a pane that can't show what it's for |
 | `added` | `#6cc488` | Lines and counts added to a file |
 | `removed` | `#ee6f64` | Lines and counts removed from a file |
 | `modified` | `#e9b24c` | A file that's changed, and what changed in an image |
@@ -124,7 +124,7 @@ Three strengths have names of their own, since several places draw with them: wh
 | Name | Font | Size | Weight | For |
 |---|---|---|---|---|
 | `PageTitle` | System | 24px | Medium | A page's name, such as each of Settings' pages: the largest kind, since it says where you are |
-| `Heading` | System | 16px | Medium | What an empty pane says is missing, above why |
+| `Heading` | System | 16px | Medium | What an empty pane says is missing or went wrong, above why |
 | `Body` | System | 14px | As around it | What to read: what the agent wrote, a prompt, a call's line, a row's name, and most of the rest |
 | `Detail` | System | 12px | As around it | Details beside or under what to read, such as a time, a count, a hint or a heading over a list |
 | `Code` | Menlo | 12px | As around it | Code: a command, a path, a file, or what a call put out |

@@ -11,7 +11,7 @@ use draw::{Drawing, FOLD_HEIGHT, SIGN, gutter};
 use gpui_kit::component::v_flex;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyElement, App, AppContext, Context, DispatchPhase, Entity, EventEmitter, FocusHandle, Focusable, Hsla,
+    AnyElement, App, AppContext, Context, DispatchPhase, Entity, EventEmitter, FocusHandle, Focusable,
     InteractiveElement as _, IntoElement, MouseButton, MouseMoveEvent, MouseUpEvent, ParentElement, Render,
     SharedString, Styled, Subscription, Window, canvas, div, font, px,
 };
@@ -241,7 +241,7 @@ impl FileDiff {
         self.drawn.borrow_mut().clear();
         let Some(shown) = &self.shown else { return div().into_any_element() };
         if rows.is_empty() {
-            return placeholder("Nothing in this file's lines changed", look::colors(cx).text_muted);
+            return look::nothing_to_show("Nothing in this file's lines changed").into_any_element();
         }
         let (mono, size) = (look::Type::Code.family(cx), look::Type::Code.size(window.rem_size()));
         let split = self.view(cx).split();
@@ -319,10 +319,6 @@ fn highest(file: &FilePatch, whole: Option<u32>) -> u32 {
     last.0.max(last.1) + after
 }
 
-pub(super) fn placeholder(text: &'static str, color: Hsla) -> AnyElement {
-    div().size_full().flex().items_center().justify_center().text_color(color).child(text).into_any_element()
-}
-
 #[expect(clippy::cast_precision_loss, reason = "a line has far fewer characters than a float counts exactly")]
 fn count(characters: usize) -> f32 {
     characters as f32
@@ -338,7 +334,6 @@ impl Render for FileDiff {
         {
             window.focus(&self.focus, cx);
         }
-        let muted = look::colors(cx).text_muted;
         let loaded = self.review.read(cx).files.is_some();
         let file = self.file(cx).cloned();
         let binary = file.as_ref().is_some_and(FilePatch::is_binary);
@@ -356,8 +351,8 @@ impl Render for FileDiff {
                     .child(div().flex_1().min_h_0().child(body))
                     .into_any_element()
             }
-            None if loaded => placeholder("This file has no changes now", muted),
-            Some(_) | None => placeholder("Loading…", muted),
+            None if loaded => look::nothing_to_show("This file has no changes now").into_any_element(),
+            Some(_) | None => look::nothing_to_show("Loading…").into_any_element(),
         };
         // Space flips a changed image, while it's flipped between its two sides. Only for a file that isn't text,
         // which has no lines to comment on, since the binding would take Space from what a comment is typed in.

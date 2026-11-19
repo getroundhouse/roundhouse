@@ -11,7 +11,6 @@ use look::{Hand as _, Shaped as _, pixels};
 
 use super::{ImageDiff, Outcome, Shown};
 use crate::file_image::{FileImage, Placed, edged, fitted, on_checkerboard};
-use crate::file_view::placeholder;
 
 /// How far the outline around a place that changed stands off it on the screen, so it doesn't hide the change.
 const STAND_OFF: f32 = 4.;
@@ -46,8 +45,8 @@ pub(super) fn flip(before: &FileImage, after: &FileImage, shown: Shown, view: We
 /// What changed, once the two have been compared.
 pub(super) fn difference(outcome: Outcome<'_>, cx: &App) -> AnyElement {
     let difference = match outcome {
-        Outcome::Comparing => return placeholder("Comparing…".into(), cx),
-        Outcome::Failed => return placeholder("These images couldn't be compared".into(), cx),
+        Outcome::Comparing => return look::nothing_to_show("Comparing…").into_any_element(),
+        Outcome::Failed => return look::nothing_to_show("These images couldn't be compared").into_any_element(),
         Outcome::Made(difference) => difference.clone(),
     };
     let colors = look::colors(cx);

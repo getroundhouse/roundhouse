@@ -205,9 +205,9 @@ pub(crate) fn numbers_width(lines: usize) -> Pixels {
 impl Render for FileView {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let body = match &self.contents {
-            Contents::Loading => placeholder("Loading…".into(), cx),
+            Contents::Loading => look::nothing_to_show("Loading…").into_any_element(),
             Contents::Image(image) => picture(image),
-            Contents::Instead(why) => placeholder(why.said().into(), cx),
+            Contents::Instead(why) => look::nothing_to_show(why.said()).into_any_element(),
             Contents::Lines(_) if self.shows_rendered(cx) => self.document.clone().into_any_element(),
             Contents::Lines(lines) => {
                 uniform_list("file-lines", lines.lines.len(), cx.processor(|t, range, _, cx| t.draw_lines(range, cx)))
@@ -230,19 +230,4 @@ fn picture(image: &FileImage) -> AnyElement {
     let (image, covers) = (image.clone(), (image.width, image.height));
     let room = fitted(covers, Placed::Middle, move |scale, cx| image.whole(scale, cx));
     div().flex_1().w_full().min_h_0().p(look::Space::XLarge).child(room.size_full()).into_any_element()
-}
-
-/// A line in the middle of the room, muted, saying what's there or why nothing is.
-pub(crate) fn placeholder(text: SharedString, cx: &App) -> AnyElement {
-    div()
-        .flex_1()
-        .w_full()
-        .px(look::Space::XLarge)
-        .flex()
-        .items_center()
-        .justify_center()
-        .text_center()
-        .text_color(look::colors(cx).text_muted)
-        .child(text)
-        .into_any_element()
 }

@@ -113,7 +113,7 @@ named! {
     Type {
         /// A page's name, such as each of Settings' pages: the largest kind, since it says where you are.
         PageTitle,
-        /// What an empty pane says is missing, above why.
+        /// What an empty pane says is missing or went wrong, above why.
         Heading,
         /// What to read: what the agent wrote, a prompt, a call's line, a row's name, and most of the rest.
         Body,

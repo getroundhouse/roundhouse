@@ -78,7 +78,7 @@ impl RenderOnce for SettingsView {
         let within = Within { focus: self.focus.clone(), scroll };
         let shown_page = match shown {
             Some(page) => settings_page(page, &within, cx).into_any_element(),
-            None => nothing_found(cx).into_any_element(),
+            None => nothing_found().into_any_element(),
         };
         let shown_id = shown.map(|page| page.id);
         let sidebar = sidebar::sidebar(&search, &sections, shown_id, &chosen, self.width, window, cx);
@@ -295,14 +295,6 @@ fn settings_page(page: &Page, within: &Within, cx: &App) -> impl IntoElement {
 }
 
 /// What shows in place of a page when the search matches no setting.
-fn nothing_found(cx: &App) -> impl IntoElement {
-    div()
-        .id("settings-nothing-found")
-        .size_full()
-        .flex()
-        .items_center()
-        .justify_center()
-        .text_color(look::colors(cx).text_muted)
-        .child("No settings match")
-        .test_support()
+fn nothing_found() -> impl IntoElement {
+    look::nothing_to_show("No settings match").id("settings-nothing-found")
 }
