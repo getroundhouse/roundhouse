@@ -67,6 +67,12 @@ pub(crate) fn bar(left_percent: u8, reserve: Option<Reserve>, tall: Pixels, cx: 
         .children(rest)
 }
 
+/// How much of `account`'s week is left at `now_ms`, as a menu says it beside the account, such as `82% of 7d`, so
+/// choosing one account over another can go by it. `None` while no agent under it has heard of its week.
+pub(crate) fn week_left(account: &Account, now_ms: i64) -> Option<SharedString> {
+    account.week(now_ms).map(|week| format!("{}% of 7d", week.left_percent()).into())
+}
+
 /// What `account` reserves of `limit`: only its week has a reserve.
 pub(crate) fn reserve_for(account: &Account, limit: &UsageLimit) -> Option<Reserve> {
     account.reserve.filter(|_| limit.window == LimitWindow::SevenDays)

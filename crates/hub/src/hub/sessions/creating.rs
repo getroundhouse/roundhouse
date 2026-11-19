@@ -66,6 +66,7 @@ impl Hub {
                 todos: None,
                 queued: Vec::new(),
                 queue_held: false,
+                placed_automatically: false,
                 draft: Draft::default(),
                 decision_draft: None,
                 open_approvals: Some(Vec::new()),

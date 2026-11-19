@@ -688,7 +688,12 @@ Every call is drawn the same way, as the first rule below says, and each kind fi
 
   ![The limits' card with Fable's own weekly limit under the week's](screens/usage-model-limit.png)
 
-- **Under the limits, whose account it is:** the email, or for a login the person gave the hub, the name they gave the account, as Agents in Settings calls it, since a token doesn't say whose it is, then more quietly how it's logged in and the model provider, where the record says. The hub reads it from the agent's CLI on the workspace's machine each time an agent launches, or for a login the hub holds, from its own record of that login, and the chat names the account its agent's newest launch runs under, or once it's moved to another, that one, so it's there once the agent has gone, and before the agent launches under the account it was moved to. A line too long for the card, such as a long email, is cut off with an ellipsis. *Unconfirmed.*
+- **Under the limits, whose account it is:** the email, or for a login the person gave the hub, the name they gave the account, as Agents in Settings calls it, since a token doesn't say whose it is, then more quietly how it's logged in and the model provider, where the record says, and `Chosen automatically` when Automatic put the chat on the account, as `settings.md` says under Agents, until it's moved. The hub reads it from the agent's CLI on the workspace's machine each time an agent launches, or for a login the hub holds, from its own record of that login, and the chat names the account its agent's newest launch runs under, or once it's moved to another, that one, so it's there once the agent has gone, and before the agent launches under the account it was moved to. A line too long for the card, such as a long email, is cut off with an ellipsis. *Unconfirmed.*
+
+  **The limits' card, on a chat Automatic put on Work.** *Unconfirmed.*
+
+  ![The limits' card, saying Chosen automatically under whose account it is](screens/usage-chosen-automatically.png)
+
 - **With no limits to show there are no bars, so the ring's card says whose account it is,** under what the context holds: the email, or the name the person gave a login they gave the hub, then more quietly the plan, how it's logged in and the model provider. Until the chat's agent has launched, when nobody was logged in, and when the hub can't tell whose account it is, nothing says, and the ring's card is only the context. *Unconfirmed.*
 
   **The ring's card on an account no agent has heard a limit for, so it says whose account it is.** *Unconfirmed.*

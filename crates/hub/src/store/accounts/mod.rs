@@ -11,6 +11,7 @@ use protocol::model::{AccountId, AgentAccount, LimitWindow, ModelLabel, UsageLim
 mod tests;
 
 mod account_rows;
+mod at_work;
 mod reserves;
 pub use account_rows::Launched;
 pub(super) use account_rows::{account_or_missing, accounts, name_account, used_by_session};

@@ -2,8 +2,8 @@
 //! launched under it, and the logins the person gave the hub, in each state one can be in. Their tokens are the hub's,
 //! so none is here.
 
-use protocol::fixtures::account;
-use protocol::model::{Account, AccountSource, AgentKind, HeldLogin, LimitWindow, Reserve, UsageLimit};
+use protocol::fixtures::{account, claude_default};
+use protocol::model::{Account, AccountDefault, AccountSource, AgentKind, HeldLogin, LimitWindow, Reserve, UsageLimit};
 
 use super::{context, conversation};
 use client_core::fake_hub::{HOUR_MS, LoginSupport, NOW_MS, World};
@@ -17,7 +17,7 @@ const YEAR_MS: i64 = 365 * DAY_MS;
 pub(in crate::gallery) fn accounts() -> World {
     let mut world = conversation();
     world.accounts = vec![found(), work(), personal(), side_project(), contractor()];
-    world.account_defaults = vec![protocol::model::AccountDefault { agent: AgentKind::Claude, account: work().id }];
+    world.account_defaults = vec![claude_default(&work().id)];
     world
 }
 
@@ -26,7 +26,7 @@ pub(in crate::gallery) fn accounts() -> World {
 pub(in crate::gallery) fn none_found() -> World {
     let mut world = conversation();
     world.accounts = vec![work()];
-    world.account_defaults = vec![protocol::model::AccountDefault { agent: AgentKind::Claude, account: work().id }];
+    world.account_defaults = vec![claude_default(&work().id)];
     world
 }
 
@@ -56,7 +56,7 @@ pub(in crate::gallery) fn context_to_move() -> World {
     let chat = world.sessions.last_mut().unwrap();
     (chat.account, chat.account_source) = (Some(work().id), Some(AccountSource::Hub));
     world.accounts = vec![work(), personal(), side_project(), contractor()];
-    world.account_defaults = vec![protocol::model::AccountDefault { agent: AgentKind::Claude, account: work().id }];
+    world.account_defaults = vec![claude_default(&work().id)];
     world
 }
 
@@ -127,7 +127,7 @@ fn limit(window: LimitWindow, used_percent: u8, resets_in_ms: i64) -> UsageLimit
 pub(in crate::gallery) fn reserves() -> World {
     let mut world = conversation();
     world.accounts = vec![found(), work_reserving(), personal_reserving(), side_project(), contractor()];
-    world.account_defaults = vec![protocol::model::AccountDefault { agent: AgentKind::Claude, account: work().id }];
+    world.account_defaults = vec![claude_default(&work().id)];
     world
 }
 
@@ -138,8 +138,30 @@ pub(in crate::gallery) fn context_in_reserve() -> World {
     let chat = world.sessions.last_mut().unwrap();
     (chat.account, chat.account_source) = (Some(personal().id), Some(AccountSource::Hub));
     world.accounts = vec![work_reserving(), personal_reserving()];
-    world.account_defaults = vec![protocol::model::AccountDefault { agent: AgentKind::Claude, account: work().id }];
+    world.account_defaults = vec![claude_default(&work().id)];
     world
+}
+
+/// The reserves' world, with Claude's chats put on accounts automatically.
+pub(in crate::gallery) fn automatic() -> World {
+    let mut world = reserves();
+    world.account_defaults = vec![automatically()];
+    world
+}
+
+/// The context's world, with the chat on Work, which Automatic chose, and Personal, which the chat could move to.
+pub(in crate::gallery) fn context_placed_automatically() -> World {
+    let mut world = context();
+    let chat = world.sessions.last_mut().unwrap();
+    (chat.account, chat.account_source, chat.placed_automatically) = (Some(work().id), Some(AccountSource::Hub), true);
+    world.accounts = vec![work_reserving(), personal_reserving()];
+    world.account_defaults = vec![automatically()];
+    world
+}
+
+/// Claude's chats put on accounts automatically, with Work the account chosen before.
+fn automatically() -> AccountDefault {
+    AccountDefault { automatic: true, ..claude_default(&work().id) }
 }
 
 /// Work, reserving a quarter of its week.

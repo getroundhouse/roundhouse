@@ -11,14 +11,26 @@ pub(super) struct Choosing {
     pub(super) error: Option<String>,
 }
 
+/// What the person chose for a kind's chats on none.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) enum Choice {
+    /// The account, as the kind's default.
+    Account(AccountId),
+    /// Automatic, which puts each on the account with the most of its week to spare.
+    Automatic,
+}
+
 impl Kept {
-    pub(super) fn choose_default(&mut self, agent: AgentKind, account: AccountId, cx: &mut Context<Self>) {
+    pub(super) fn choose_default(&mut self, agent: AgentKind, choice: Choice, cx: &mut Context<Self>) {
         let Some(asking) = self.asking.clone() else { return };
         if self.choosing.pending.is_some() {
             return;
         }
         self.choosing.error = None;
-        let choosing = asking.client.start(move |client| client.account_set_default(agent, &account));
+        let choosing = asking.client.start(move |client| match &choice {
+            Choice::Account(account) => client.account_set_default(agent, account),
+            Choice::Automatic => client.account_set_automatic(agent),
+        });
         self.choosing.pending = Some(cx.spawn(async move |this, cx| {
             let answer = choosing.recv().await;
             let _ = this.update(cx, |this, cx| {

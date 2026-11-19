@@ -28,6 +28,17 @@ pub(in super::super) struct Usage {
     pub(super) limits: Vec<(SharedString, UsageLimit)>,
     /// What the menu that moves the chat to another account offers, if there's one to move it to.
     pub(in super::super) moves: Option<Moves>,
+    /// Whether Automatic put the chat on the account, as its record says, which its card says.
+    pub(super) chosen: Chosen,
+}
+
+/// Who put a chat on its account, as far as its card says.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum Chosen {
+    /// Automatic, by how much of its week the account had to spare.
+    Automatically,
+    /// The person, as a default or a move, or the agent's own login.
+    Otherwise,
 }
 
 impl WorkspacePane {
@@ -37,7 +48,8 @@ impl WorkspacePane {
         let session = self.session()?;
         let account = self.shown.all().account(session.account.as_ref()?)?.clone();
         let limits = crate::limits::shown(&account.limits, look::now_ms(cx));
-        Some(Usage { account, limits, moves: self.moves(session, cx) })
+        let chosen = if session.placed_automatically { Chosen::Automatically } else { Chosen::Otherwise };
+        Some(Usage { account, limits, moves: self.moves(session, cx), chosen })
     }
 
     /// The ring for the chat showing, once its agent has said how full its context is. Until then there's nothing

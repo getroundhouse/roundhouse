@@ -2,12 +2,22 @@
 //! chooses it, under a heading as the account pages' lists are.
 
 use gpui_kit::component::{h_flex, v_flex};
-use gpui_kit::{Anchor, AnyElement, App, Div, IntoElement, ParentElement as _, SharedString, Styled as _, div, px};
+use gpui_kit::{
+    Anchor, AnyElement, App, Div, IntoElement, ParentElement as _, Pixels, SharedString, Styled as _, Window, div, px,
+};
 use look::Typeset as _;
 use protocol::model::{Account, AgentDescription};
 
 use super::super::lists::{heading, list};
 use super::Drawing;
+use super::choosing::Choice;
+
+/// What a kind's row says while Automatic chooses for it.
+const AUTOMATIC_SAYS: &str = "Each new chat goes to the account with the most of its week to spare, short of what's \
+                              reserved. Chats already on an account stay there.";
+
+/// How wide the picker's menu is, for an account's name and how much of its week is left beside it.
+const MENU_WIDTH: Pixels = px(240.);
 
 /// What Default accounts says above its rows, on a hub that keeps defaults.
 const INTRO: &str =
@@ -29,14 +39,18 @@ pub(super) fn section(drawing: &Drawing<'_>, accounts: &[&Account], cx: &App) ->
 fn row(drawing: &Drawing<'_>, agent: &AgentDescription, accounts: &[&Account], cx: &App) -> Div {
     let selected = drawing.defaults.and_then(|defaults| defaults.iter().find(|choice| choice.agent == agent.kind));
     let account = selected.and_then(|choice| accounts.iter().find(|account| account.id == choice.account).copied());
+    let automatic = selected.is_some_and(|choice| choice.automatic);
     let label = match (drawing.defaults, selected, account) {
         (None, _, _) => "Unavailable on this hub".to_string(),
+        _ if automatic => "Automatic".to_string(),
         (_, None, _) => "Machine login".to_string(),
         (_, Some(_), None) => "Loading account…".to_string(),
         (_, _, Some(account)) => crate::names::called(account),
     };
-    let blocked = account.is_some_and(|account| !account.works_for(agent.kind, drawing.now_ms));
+    // Automatic leaves out an account whose login can't be used, so that one blocks nothing.
+    let blocked = !automatic && account.is_some_and(|account| !account.works_for(agent.kind, drawing.now_ms));
     let says = match (drawing.defaults, selected, account) {
+        _ if automatic => Some(AUTOMATIC_SAYS),
         _ if blocked => Some(
             "Renew or reconnect it. Until then, chats on it can't start, nor can new chats unless you choose another.",
         ),
@@ -69,7 +83,10 @@ fn picker(
     let choices: Vec<_> = accounts
         .iter()
         .filter(|account| account.works_for(agent.kind, drawing.now_ms))
-        .map(|account| (account.id.clone(), crate::names::called(account)))
+        .map(|account| {
+            let week = crate::limits::week_left(account, drawing.now_ms);
+            (account.id.clone(), crate::names::called(account), week)
+        })
         .collect();
     let kept = drawing.kept.read(cx);
     let disabled =
@@ -79,7 +96,7 @@ fn picker(
     let selected = drawing
         .defaults
         .and_then(|defaults| defaults.iter().find(|choice| choice.agent == kind))
-        .map(|choice| choice.account.clone());
+        .map(|choice| if choice.automatic { Choice::Automatic } else { Choice::Account(choice.account.clone()) });
     look::button(
         SharedString::from(format!("account-default-{}", kind.as_str())),
         look::ButtonKind::Outlined,
@@ -88,14 +105,24 @@ fn picker(
     )
     .width(px(200.))
     .off(disabled)
-    .menu(Anchor::TopLeft, move |menu: look::Menu, _, _| {
-        choices.iter().fold(menu, |menu, (account, name)| {
-            let (kept, account) = (kept.clone(), account.clone());
-            menu.row(look::menu_row(name.clone()).chosen(selected.as_ref() == Some(&account)).on_choose(
-                move |_, cx| {
-                    kept.update(cx, |kept, cx| kept.choose_default(kind, account.clone(), cx));
-                },
-            ))
+    .menu(Anchor::TopRight, move |menu: look::Menu, _, _| {
+        let choose = |choice: Choice| {
+            let kept = kept.clone();
+            move |_: &mut Window, cx: &mut App| {
+                kept.update(cx, |kept, cx| kept.choose_default(kind, choice.clone(), cx));
+            }
+        };
+        let automatic = look::menu_row("Automatic").note("Most to spare", look::NoteKind::Detail);
+        let automatic = automatic.chosen(selected == Some(Choice::Automatic)).on_choose(choose(Choice::Automatic));
+        let menu = menu.width(MENU_WIDTH).row(automatic).separator();
+        choices.iter().fold(menu, |menu, (account, name, week)| {
+            let choice = Choice::Account(account.clone());
+            let row = look::menu_row(name.clone()).chosen(selected.as_ref() == Some(&choice));
+            let row = match week {
+                Some(week) => row.note(week.clone(), look::NoteKind::Detail),
+                None => row,
+            };
+            menu.row(row.on_choose(choose(choice)))
         })
     })
     .into_any_element()

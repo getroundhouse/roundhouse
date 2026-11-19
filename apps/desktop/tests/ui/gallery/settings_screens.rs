@@ -9,7 +9,7 @@ use look::Region;
 use super::frame::Frame;
 use super::screens::FOCUS;
 use super::steps::{Screen, Step, Target};
-use super::worlds::{accounts, conversation, logins_unkept, none_found, own_hub, reserves};
+use super::worlds::{accounts, automatic, conversation, logins_unkept, none_found, own_hub, reserves};
 use client_core::fake_hub::{LoginSupport, World};
 
 /// What puts the cursor in Settings' search.
@@ -54,6 +54,13 @@ pub(crate) const SCREENS: &[Screen] = &[
         world: Some(accounts),
         frame: Frame::Layout,
         steps: &[Step::Select(FOCUS), Step::OpenSettings, AGENTS, Step::Click("account-default-claude")],
+    },
+    Screen {
+        name: "settings-agents-automatic",
+        spec: "settings.md",
+        world: Some(automatic),
+        frame: Frame::Layout,
+        steps: &[Step::Select(FOCUS), Step::OpenSettings, AGENTS],
     },
     Screen {
         name: "settings-agents-default-ended",

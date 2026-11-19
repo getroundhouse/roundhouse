@@ -203,6 +203,7 @@ pub(super) async fn handle(
         }
         R::SessionAccount(sessions::SessionAccount { id }) => C::SessionAccount(hub.session_account(id).await?),
         R::AccountSetDefault(asked) => C::HubSettings(hub.account_set_default(asked).await?),
+        R::AccountSetAutomatic(asked) => C::HubSettings(hub.account_set_automatic(asked).await?),
         R::SessionAssignAccount(asked) => C::Session(hub.session_assign_account(asked).await?),
         R::AccountConnect(asked) => C::Account(hub.account_connect(asked).await?),
         R::AccountDisconnect(accounts::AccountDisconnect { id }) => C::Account(hub.account_disconnect(id).await?),

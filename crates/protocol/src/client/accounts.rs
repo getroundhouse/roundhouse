@@ -75,7 +75,7 @@ impl Request for AccountDisconnect {
 /// Chooses the hub-wide default of this kind, the account a chat on none is put on as its agent first launches, as
 /// [`Session::account_source`](crate::model::Session::account_source) says. A chat already on an account, or on the
 /// ambient login, stays there. The account must hold an unexpired login of the same kind. A disconnected or expired
-/// default remains selected and blocks the chats it would be given to.
+/// default remains selected and blocks the chats it would be given to. Choosing one ends Automatic for the kind.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct AccountSetDefault {
     pub agent: AgentKind,
@@ -106,5 +106,27 @@ impl Request for AccountSetReserve {
 
     fn into_request(self) -> ClientRequest {
         ClientRequest::AccountSetReserve(self)
+    }
+}
+
+/// Has the hub put each chat of this kind on none, as its agent first launches, on whichever login added for the kind
+/// has the most of its week to spare, rather than on one account, and answers with the hub's settings. An account to
+/// spare is one whose login can be used, with some of every limit left, and more of its week left than it reserves, as
+/// [`Reserve`] says. Of those, it's the one with the most of its week left beyond its reserve for each hour until the
+/// week starts again, shared among the chats at work on it, since what's left of a week that starts again sooner is
+/// gone then if it isn't used. A chat put on one stays on it, as one put on a default does, until it's moved, and its
+/// record says Automatic chose it. Refused with `InvalidRequest` when the hub can hold no login for the kind, and with
+/// `Conflict` before any login has been added for it. Choosing an account with
+/// [`AccountSetDefault`] ends it.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct AccountSetAutomatic {
+    pub agent: AgentKind,
+}
+
+impl Request for AccountSetAutomatic {
+    type Reply = HubSettings;
+
+    fn into_request(self) -> ClientRequest {
+        ClientRequest::AccountSetAutomatic(self)
     }
 }

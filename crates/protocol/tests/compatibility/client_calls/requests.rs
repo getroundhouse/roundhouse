@@ -83,6 +83,10 @@ fn every_request_about_an_agents_login_keeps_its_form() {
         r#"{"method":"account_set_default","agent":"claude","account":"claude-1"}"#,
     );
     asked(
+        ClientRequest::AccountSetAutomatic(accounts::AccountSetAutomatic { agent: AgentKind::Claude }),
+        r#"{"method":"account_set_automatic","agent":"claude"}"#,
+    );
+    asked(
         ClientRequest::AccountDisconnect(accounts::AccountDisconnect { id: "claude-1".into() }),
         r#"{"method":"account_disconnect","id":"claude-1"}"#,
     );

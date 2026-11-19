@@ -19,6 +19,7 @@ use std::sync::Arc;
 mod tests;
 
 mod accounts;
+mod automatic;
 mod reserves;
 mod targets;
 

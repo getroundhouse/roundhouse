@@ -56,7 +56,7 @@ fn offered<'a>(
             id: account.id.clone(),
             called: crate::names::called(account).into(),
             works: account.works_for(agent, now_ms),
-            week: account.week(now_ms).map(|week| format!("{}% of 7d", week.left_percent()).into()),
+            week: crate::limits::week_left(account, now_ms),
         })
         .filter(|choice| choice.works || on == Some(&choice.id))
         .collect();

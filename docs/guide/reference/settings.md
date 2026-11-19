@@ -51,6 +51,7 @@ The accounts your agents run under: native logins found where agents ran, and Cl
 
 - **Found** has Claude Code's own login on a machine, such as this Mac's, once an agent has run under it. Roundhouse reads who it is, and never copies it, so there's nothing to do with it here.
 - **Default accounts** chooses the account new chats of each supported agent use across this hub. Choose Work or Personal for Claude Code. A chat is put on the default when its agent first starts, and stays on that account when you choose another default, until you [move it](../guides/watch-context-and-limits.md#move-a-chat-to-another-account). For a chat that isn't on an account yet, an added default takes priority over machine credentials. With no added default, the agent uses its machine's own login, and its chat stays on it once you add one, until you move it. A chat that started with nobody signed in on the machine, or with an API key, goes on the default once you add one. So does a chat from before you updated that wasn't on an account, such as one that ran under the machine's own login, when its agent next starts.
+- **Automatic,** first in the same menu, has the hub choose for each new chat instead, as [below](#put-chats-on-accounts-automatically).
 - **Added** has the logins you've given the hub. The chosen account has the `Default` badge. Adding or renewing another account does not change your choice. Logins you've disconnected are listed last.
 - **Each row** says how its login was made: for one found, its plan and how it's logged in, such as `Max · Claude account`, and for one you've added, its agent, such as `Claude Code`. Then it says only what else needs saying: that its login ends soon, has ended or was disconnected, or else what's left of each of its limits, as the chat's limits' card does.
 - **Rest the pointer on a row,** or move to it with **Tab**, to see its card: which day you last used the account, when its login ends, and every limit with what's left and when it starts again, even while the row warns that the login ends soon. A screen reader reads the card out as it comes to the row.
@@ -85,9 +86,17 @@ If the hub couldn't take the app's key, as when GitHub didn't answer, **Try agai
 
 The installation is a row in **Added**, by its bot's name, which you make the default from its **…** menu, as you would an account. An app installed nowhere yet has a row of its own, saying `Not installed`, with **Install on GitHub** in its menu. **Remove app**, in either menu, has the hub forget the app's key and its installation's login, and asks first. It deletes nothing on GitHub, so delete the app there to be rid of it.
 
+### Put chats on accounts automatically
+
+Choose **Automatic** in **Default accounts** to spread new chats across the accounts you've added. As each new chat's agent starts, the hub puts it on the account with the most of its week to spare: what's left beyond what you [reserve](#reserve-part-of-an-accounts-week), for each hour until the week starts again, shared among the chats working on it. So an account whose week starts again tomorrow is used before one with more left that lasts days. An account that's used all of a limit, such as its five hours, isn't chosen, and neither is a login found on a machine. The menu says how much of each account's week is left beside it.
+
+A chat stays on the account it's put on until you [move it](../guides/watch-context-and-limits.md#move-a-chat-to-another-account), and its limits' card says `Chosen automatically`. If no account has usage to spare, a new chat can't start, and says so. Choose an account in the same menu to stop choosing automatically.
+
+![Default accounts with Automatic chosen for Claude Code](../../spec/screens/settings-agents-automatic.png)
+
 ### Reserve part of an account's week
 
-**Reserve usage…**, in an added account's **…** menu, sets how much of its week you keep for yourself: none, 10%, 25%, 50% or all of its 7d limit. Choose one in the panel that opens under the row, and **Save**. What's reserved is split off the start of the week's bar, which turns amber once the account is down to it. It doesn't stop a chat already on the account, and use outside Roundhouse can spend it too, so a chat says when it's [using the reserve](../guides/watch-context-and-limits.md#when-an-account-uses-its-reserve).
+**Reserve usage…**, in an added account's **…** menu, sets how much of its week you keep for yourself: none, 10%, 25%, 50% or all of its 7d limit. Choose one in the panel that opens under the row, and **Save**. [Automatic](#put-chats-on-accounts-automatically) puts no new chat on an account that's down to what it reserves, and none at all on one that reserves all of it. What's reserved is split off the start of the week's bar, which turns amber once the account is down to it. It doesn't stop a chat already on the account, and use outside Roundhouse can spend it too, so a chat says when it's [using the reserve](../guides/watch-context-and-limits.md#when-an-account-uses-its-reserve).
 
 ![Reserving a quarter of an account's week, in a panel under its row](../../spec/screens/settings-agents-reserving.png)
 

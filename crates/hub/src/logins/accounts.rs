@@ -1,6 +1,6 @@
 use crate::login_files::{LoginFiles, LoginSecret, Stored};
 use crate::pasted_token::pasted_token;
-use crate::store::{Connected, Connecting, IdFrom, Store, StoreError};
+use crate::store::{Connected, Connecting, IdFrom, Placed, Store, StoreError};
 use protocol::client::accounts::AccountConnect;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::model::{Account, AccountId, AgentKind, AgentLogin, HubSettings, LoginDescription, LoginToken};
@@ -35,6 +35,8 @@ impl LoginSecret for LoginToken {
 pub(crate) struct Handed {
     pub(crate) account: AccountId,
     pub(crate) login: AgentLogin,
+    /// What put a chat on none yet on the account, which the launch records on the chat.
+    pub(crate) placed: Placed,
 }
 
 /// A login to connect, as a client asked: checked, trimmed and given the ID a new account would get.

@@ -175,10 +175,11 @@ impl LiveSession {
     /// are recorded under, so the feed hears each copy of the record in the order they were made. One given none is put
     /// on the ambient login only once its worker says whose that is, as filing the account it runs under does.
     async fn record_login(&self, hub: &Hub, asked: RunId, login: Option<&Handed>) -> Result<(), ApiError> {
-        let Some(Handed { account, .. }) = login else { return Ok(()) };
+        let Some(Handed { account, placed, .. }) = login else { return Ok(()) };
         let _in_order = self.recording.lock().await;
         let (id, filed) = (self.id.clone(), account.clone());
-        let recorded = hub.blocking(move |store| store.record_run_login(&id, asked, &filed)).await?;
+        let placed = *placed;
+        let recorded = hub.blocking(move |store| store.record_run_login(&id, asked, &filed, placed)).await?;
         {
             let mut state = self.state.lock();
             state.login = recorded.on;

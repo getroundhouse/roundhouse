@@ -64,5 +64,11 @@ pub struct HubSettingsChange {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct AccountDefault {
     pub agent: AgentKind,
+    /// The account chosen for the kind. While `automatic`, it's the one chosen before, which choosing Automatic leaves,
+    /// and which a client from before Automatic shows as the default.
     pub account: AccountId,
+    /// Whether the kind's chats are put on whichever login added for it has the most of its week to spare, as
+    /// [`AccountSetAutomatic`](crate::client::accounts::AccountSetAutomatic) says, rather than on `account`.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub automatic: bool,
 }
