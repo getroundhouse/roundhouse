@@ -57,7 +57,7 @@ A prompt sent with `Enter` while the agent works is read at the agent's next cha
 - **A change is made in place.** `Enter` keeps it, and Escape leaves it as it was. It changes only the text, and the files stay as they were queued.
 - **The arrow steers the agent with the prompt,** as `Enter` would, rather than leaving it to wait.
 - **The hub owns the queue,** so it's sent with the app closed, and every client shows the same one.
-- **Your answer to a proposal waits here too** while the agent works, as `Answered` and what you chose. It can be sent now, but not changed. Taking it out takes your answer back, so the proposal waits for you again, with what you chose still chosen, to send again or change first.
+- **Your answer to a proposal waits here too** while the queue is held, as `Answered` and what you chose. Otherwise it's sent at once. It can be sent now, but not changed. Taking it out takes your answer back, so the proposal waits for you again, with what you chose still chosen, to send again or change first.
 
 ## Stopping
 

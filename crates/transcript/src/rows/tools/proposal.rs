@@ -4,12 +4,20 @@
 //! call whose proposal hasn't come, or which the hub refused, is drawn as any other tool's.
 //!
 //! The prompt the hub sent the agent to say what was chosen is drawn as a line like it, `Answered`, where the agent
-//! took it, rather than as something the person said, since they answered in the tab.
+//! took it, rather than as something the person said, since they answered in the tab. It's sent at once, so while the
+//! agent works it waits for the agent's next chance, faint until then, as the person's own prompt does, and one the
+//! agent never got says so.
 
 use std::sync::Arc;
 
 use client_core::calls::count;
-use gpui_kit::{AnyElement, App, ElementId, IntoElement as _, ParentElement as _, Styled as _};
+use client_core::session_log::PromptState;
+use gpui_kit::prelude::FluentBuilder as _;
+use gpui_kit::{
+    AnyElement, App, ElementId, InteractiveElement as _, IntoElement as _, ParentElement as _, Styled as _,
+    TestSupportExt as _, div,
+};
+use look::Typeset as _;
 use protocol::model::{Proposal, ProposalId, RevisionStanding, Seq};
 
 use super::super::around::Answers;
@@ -31,9 +39,20 @@ pub(super) fn draw(proposal: &Arc<Proposal>, toggle: &Toggle, cx: &App) -> AnyEl
     line.still(ElementId::Name(format!("proposed/{}", proposal.id).into()), label, &toggle.shared.line_text, cx)
 }
 
+/// What an answer the agent never got says under its line, and where the agent can still read it.
+const NEVER_GOT: &str = "The agent stopped before it read this, so it never got your answer. Ask it to read the \
+    proposal, which keeps it.";
+
 /// The prompt at `seq`, which told the agent what was chosen in answer to the proposal it names: its title and what
-/// was chosen, once its record has come, and until then that it answered a proposal.
-pub(in super::super) fn answered(seq: Seq, answers: &Answers, shared: &Shared, cx: &App) -> AnyElement {
+/// was chosen, once its record has come, and until then that it answered a proposal. Faint until the agent has it, in
+/// `state`, and saying so when it never got it.
+pub(in super::super) fn answered(
+    seq: Seq,
+    answers: &Answers,
+    state: PromptState,
+    shared: &Shared,
+    cx: &App,
+) -> AnyElement {
     let (title, said) = answered_parts(answers.proposal.as_deref());
     let label = match &title {
         Some(title) => format!("Answered {title}: {said}"),
@@ -43,8 +62,18 @@ pub(in super::super) fn answered(seq: Seq, answers: &Answers, shared: &Shared, c
     let line = Line::new(PROPOSAL_ICON, "Answered").part(chip).part(Part::Note(said.into()));
     let line = line.action(open(&answers.id, shared));
     let id = ElementId::Name(format!("answered-proposal/{seq}").into());
+    let line =
+        div().when(state != PromptState::Taken, |d| d.opacity(0.6)).child(line.still(id, label, &shared.line_text, cx));
+    let never_got = (state == PromptState::Dropped).then(|| {
+        div()
+            .id(ElementId::Name(format!("answer-never-got/{seq}").into()))
+            .typeset(look::Type::Detail)
+            .text_color(look::colors(cx).text_faint)
+            .child(NEVER_GOT)
+            .test_support()
+    });
     // On its own row, spaced as a row of calls is, so it reads as one of them.
-    row().pb(look::Space::Small).child(line.still(id, label, &shared.line_text, cx)).into_any_element()
+    row().pb(look::Space::Small).child(line).children(never_got).into_any_element()
 }
 
 /// Whether it waits for the person, with what it asks them to choose, or what they chose.

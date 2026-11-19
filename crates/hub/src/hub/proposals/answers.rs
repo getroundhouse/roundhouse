@@ -1,7 +1,8 @@
 //! The person's answer to a proposal, which the hub keeps on it and tells the agent of in a prompt of its own. The
 //! prompt says only what was chosen, and the agent reads the rest, such as the note, with `get_proposal`. The prompt
-//! goes in the chat's queue in the transaction that keeps the answer, so the agent is told of every answer kept, once
-//! it's ready for it, even after the hub restarts, and the queue sends it as it sends any.
+//! goes in the chat's queue in the transaction that keeps the answer, so the agent is told of every answer kept, even
+//! after the hub restarts, and is then sent at once, into the agent's turn while it works, which steers it, unless
+//! the queue waits for the person.
 
 use std::sync::Arc;
 
@@ -11,6 +12,7 @@ use protocol::client::proposals::ProposalAnswer;
 use protocol::client::{ApiError, HubNotice};
 use protocol::model::{AnswerProblem, Choice, ClientMessageId, Proposal, ProposalRevision, Response};
 use protocol::prompt::Prompt;
+use tracing::warn;
 
 impl Hub {
     /// Keeps the answer, once it's checked, with the prompt that tells the agent, which the hub writes and gives an ID
@@ -24,9 +26,10 @@ impl Hub {
         // The store checks it, against the revision as it keeps it, with whether it's answered already or revised since.
         let choice = Choice { chosen, note: note.trim().to_string(), at_ms: now_ms() };
         let session = self.live_session(&proposal.session_id).await?;
+        let message = ClientMessageId::from(new_id());
+        let queued_as = message.clone();
         let (answering, _) = session
             .queue_with(move |store| {
-                let message = ClientMessageId::from(new_id());
                 let told = |proposal: &Proposal, choice: &Choice| Prompt::new(told(proposal, choice));
                 let keep =
                     AnswerToKeep { revision, choice: &choice, request: &client_request_id, message, told: &told };
@@ -45,6 +48,11 @@ impl Hub {
         let (proposal, new) = answering?;
         if new {
             self.notify(HubNotice::Proposal(proposal.clone()));
+            // The agent's to have it at its next chance, steering it as the person's own prompt would, and only a held
+            // queue keeps it there. It's queued first, with the answer, so it's sent even if this hub goes away now.
+            if let Err(e) = session.send_now_unless_held(queued_as).await {
+                warn!(session = %proposal.session_id, "couldn't send the answer to a proposal now: {}", e.message);
+            }
         }
         Ok(proposal)
     }

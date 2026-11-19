@@ -21,7 +21,7 @@ pub(crate) fn queued(ui: &Ui) -> Vec<QueuedPrompt> {
     ui.cx.read_entity(&pane, |p, _| p.session().map_or_default(|s| s.queued.clone()))
 }
 
-fn held(ui: &Ui) -> bool {
+pub(crate) fn held(ui: &Ui) -> bool {
     let pane = ui.pane().unwrap();
     ui.cx.read_entity(&pane, |p, _| p.session().is_some_and(|s| s.queue_held))
 }

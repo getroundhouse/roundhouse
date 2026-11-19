@@ -245,6 +245,19 @@ impl LiveSession {
         }
     }
 
+    /// Sends the queued prompt with this ID now, as [`Self::send_queued_now`] does, unless the queue waits for the
+    /// person, when it's left there for them to let go. For a prompt the hub wrote that the agent should have at its
+    /// next chance, such as the person's answer to a proposal, rather than once the turn ends. Answers once it's
+    /// recorded.
+    pub(crate) async fn send_now_unless_held(&self, client_msg_id: ClientMessageId) -> Result<(), ApiError> {
+        if self.state.lock().progress.queue.is_held() {
+            return Ok(());
+        }
+        let (reply, sent) = oneshot::channel();
+        self.command(Command::SendQueuedNow { client_msg_id, reply }).await?;
+        sent.await.map_err(|_| crate::error::internal("the session has stopped"))?.map(drop)
+    }
+
     /// Records a queued prompt as a prompt, under its own ID, which takes it out of the queue in the same commit. The
     /// caller holds `queue_lock`, so a change can't land between reading the prompt and recording it, and be lost.
     /// Returns what to deliver, which is nothing if the prompt was recorded already.
