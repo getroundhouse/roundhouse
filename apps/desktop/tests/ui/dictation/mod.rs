@@ -14,6 +14,7 @@ mod holding_space;
 mod key;
 mod language;
 mod muting;
+mod proposals;
 mod support;
 mod turning_on;
 mod what_goes_in;

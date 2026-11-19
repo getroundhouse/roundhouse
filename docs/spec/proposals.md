@@ -47,4 +47,10 @@ An agent asks the person to decide something with a question, which shows in the
 
   ![Choosing an option in the proposal tab](screens/proposal-choosing.png)
 
+- **The note can be dictated into, as a question's written answer is,** with the same keys and no microphone, as `chats.md` says, while the tab is in front and the proposal waits for an answer that isn't being sent. The fine line runs along the bar's bottom, as along the composer's, and the recording's controls take the place of what's chosen and Send until the last words are in. Enter while dictating finishes the last words and sends them with the answer, once one option is chosen for each question. The tab going out of sight, such as for the chat, ends the recording, keeping what went in and sending nothing. Its hint words are the proposal's names, such as its options' labels, then the workspace's and its chat's. *Unconfirmed.*
+
+  **Dictating a note, after choosing A.** *Unconfirmed.*
+
+  ![Dictating a note in the proposal tab](screens/proposal-dictation.png)
+
 *Not built:* comments on words, replying without choosing, such as that none of the options will do, and another round, which the agent will write as a revision of the same proposal, kept with the ones before it and the person's response to each, the options side by side, and the guide to writing a good proposal, as #1454's plan has them, and keeping what's chosen and written before it's sent, as a question's answer is kept.

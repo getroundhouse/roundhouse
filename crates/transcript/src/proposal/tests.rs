@@ -21,8 +21,9 @@ fn view(cx: &mut TestAppContext) -> (Entity<ProposalView>, Rc<RefCell<Vec<Propos
     let heard = asked.clone();
     cx.update(|cx| {
         cx.subscribe(&view, move |_, event: &ProposalEvent, _| {
-            let ProposalEvent::Answer(answer) = event;
-            heard.borrow_mut().push(answer.clone());
+            if let ProposalEvent::Answer(answer) = event {
+                heard.borrow_mut().push(answer.clone());
+            }
         })
         .detach();
     });

@@ -4,7 +4,7 @@
 //! proposal the pane hasn't seen, so one waiting for the person is a tab away without taking them from what they're
 //! doing, unless it's in front already, showing another, or holds an answer they haven't sent. Open, on the proposal's
 //! line in its chat, brings it to the front. The answer its view asks to send goes to the hub from here, and the view
-//! is told how it went.
+//! is told how it went. Its note is dictated into only while the tab is in front, as `dictating` has the composer's.
 //!
 //! Each chat's proposals are client-core's, which the pane follows with its subagents, and passes on as they change.
 
@@ -24,7 +24,7 @@ use transcript::{PROPOSAL_ICON, ProposalEvent, ProposalView};
 
 use super::band::Band;
 use super::view::chat_title;
-use super::{Showing, WorkspacePane, tab};
+use super::{PaneEvent, Showing, WorkspacePane, tab};
 
 /// The proposal tab, while it's open, and which proposals the pane has seen.
 #[derive(Default)]
@@ -64,6 +64,13 @@ impl Proposals {
     pub(super) fn view(&self) -> Option<&Entity<ProposalView>> {
         self.tab.as_ref().map(|tab| &tab.view)
     }
+
+    /// Takes the tab away, ending what its note was dictating, which a view that's gone can't do.
+    fn take(&mut self, cx: &mut App) -> Option<ProposalTab> {
+        let tab = self.tab.take()?;
+        tab.view.update(cx, |view, cx| view.set_dictation_enabled(false, cx));
+        Some(tab)
+    }
 }
 
 impl WorkspacePane {
@@ -95,9 +102,20 @@ impl WorkspacePane {
             let in_front = self.proposals.in_front();
             let client = self.client.clone();
             let view = cx.new(|cx| ProposalView::new(record, client, cx));
+            let pane = cx.weak_entity();
+            let chat = session.clone();
+            view.update(cx, |view, _| {
+                view.set_dictation_hints(move |collector, cx| {
+                    if let Some(pane) = pane.upgrade() {
+                        pane.read(cx).collect_chat_hints(&chat, collector, cx);
+                    }
+                });
+            });
             let answers = cx.subscribe(&view, |this, view, event: &ProposalEvent, cx| match event {
                 ProposalEvent::Answer(answer) => this.answer_proposal(view, answer.clone(), cx),
+                ProposalEvent::Error(message) => cx.emit(PaneEvent::Error(message.clone())),
             });
+            self.proposals.take(cx);
             self.proposals.tab = Some(ProposalTab { session, view, in_front, _answers: answers });
         }
         if to_front {
@@ -122,7 +140,7 @@ impl WorkspacePane {
 
     /// Closes the proposal tab, and shows the chat it covered.
     pub fn close_proposal_tab(&mut self, cx: &mut Context<Self>) {
-        if self.proposals.tab.take().is_some_and(|tab| tab.in_front) {
+        if self.proposals.take(cx).is_some_and(|tab| tab.in_front) {
             self.bring_to_front(Showing::Chat, cx);
         }
         cx.notify();
@@ -208,6 +226,12 @@ impl WorkspacePane {
             )
             .child(div().flex_1().min_h_0().w_full().child(tab.view.clone()))
             .into_any_element()
+    }
+
+    /// What the proposal tab shows, for a test to read its note.
+    #[cfg(feature = "testing")]
+    pub fn proposal_tab_view(&self) -> Option<Entity<ProposalView>> {
+        self.proposals.view().cloned()
     }
 
     /// Focuses the proposal, so a copy and a select all come to it, and the window's keys still reach the pane.

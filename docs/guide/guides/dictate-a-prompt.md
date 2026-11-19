@@ -1,6 +1,6 @@
 # Dictate a prompt
 
-Say a chat prompt, a new workspace’s first prompt, an answer to an agent’s question or a comment on a diff. A model on your Mac hears what you say, so it never leaves it, and the text waits for you to send.
+Say a chat prompt, a new workspace’s first prompt, an answer to an agent’s question, a note on your answer to a proposal or a comment on a diff. A model on your Mac hears what you say, so it never leaves it, and the text waits for you to send.
 
 ## Turn it on
 
@@ -30,7 +30,7 @@ A fine copper line responds quietly along the bottom of the field. It settles du
 
 Finishing releases the microphone while the model works on the last words. Cancelling or leaving the field also releases it, even if the model is still loading or processing speech.
 
-What's heard shows dimmed under what you've typed, as you say it. Each sentence goes in at the cursor, as if you'd typed it, once you've paused at its end and started the next one, and the last when you stop. Sentences said without a pause between them go in together, and pausing in the middle of a sentence leaves it showing until it ends. It can come out a little different from what showed, since the whole sentence is heard again, which gets more of it right. A short phrase said quickly is sometimes heard as nothing the second time, and then it goes in as it was first heard. It also favors names from your project, workspace, branch, changed files, recent chat and question options, so project terms, package names and proper nouns come out right when spoken.
+What's heard shows dimmed under what you've typed, as you say it. Each sentence goes in at the cursor, as if you'd typed it, once you've paused at its end and started the next one, and the last when you stop. Sentences said without a pause between them go in together, and pausing in the middle of a sentence leaves it showing until it ends. It can come out a little different from what showed, since the whole sentence is heard again, which gets more of it right. A short phrase said quickly is sometimes heard as nothing the second time, and then it goes in as it was first heard. It also favors names from your project, workspace, branch, changed files, recent chat, and question and proposal options, so project terms, package names and proper nouns come out right when spoken.
 
 Dictation hears 25 European languages, and tells which you're speaking. If you speak one of them, choose it as **Dictation language** in Settings, under Dictation: it's heard better, and never comes out in another alphabet, as a short phrase said quickly can, such as English in Cyrillic.
 
@@ -38,13 +38,17 @@ Nothing is sent until you press `Enter`, so you can fix what came out wrong firs
 
 The first time, your Mac asks whether Roundhouse may use the microphone. Allow it, and press again. If you didn't, a message says where in System Settings to allow it.
 
-## Dictate a new workspace, answer or comment
+## Dictate a new workspace, answer, note or comment
 
 The new-workspace prompt uses the same shortcuts. `Enter` finishes the last words before creating the workspace. Create returns when dictation ends. Letting go only puts them into the prompt. Escape cancels dictation first, leaving the dialog open.
 
 Questions have no microphone button. Focus **Other**, a written answer or the feedback field on a tool request, then hold Space or `Option-Space`. Final text selects your written answer and saves it just as typing does. With multiple choices, your selected options stay selected too. `Enter` finishes the live words and keeps its usual behavior of continuing to the next question or sending the answers. Secret inputs and questions that offer only choices do not support dictation.
 
 ![Dictating an answer with the keyboard](../../spec/screens/question-dictation.png)
+
+Focus the note at the foot of the proposal tab and use the same shortcuts. `Enter` finishes the last words and sends your answer with them, once you've chosen an option for each question.
+
+![Dictating a note on an answer to a proposal](../../spec/screens/proposal-dictation.png)
 
 Focus a comment on a diff and use the same shortcuts. Finish dictation keeps the text in the box; `Enter` finishes the last words and saves the comment. Cancel dictation restores what you had before recording and leaves the comment open.
 
@@ -56,5 +60,5 @@ Turn on **Mute sound while dictating**, under Dictation in Settings, and the Mac
 
 - **Going to another app** stops it as letting go does, so what you said goes in.
 - **The composer going,** such as for Settings, another chat, the file tab, a question from the agent, the workspace being archived or the app losing its hub, stops it, and drops what was still showing. A hub restarting, such as to finish an update, leaves the composer where it is, so you can go on dictating.
-- **Leaving an answer, hiding a comment or closing the new-workspace dialog** drops tentative words and keeps finalized text. Starting dictation in another field ends the old recording too.
+- **Leaving an answer or the proposal tab, hiding a comment or closing the new-workspace dialog** drops tentative words and keeps finalized text. Starting dictation in another field ends the old recording too.
 - **Recognition falling too far behind** stops the microphone. Once the model responds, a message says it couldn't keep up; text already finalized stays in the field. Try dictating again.

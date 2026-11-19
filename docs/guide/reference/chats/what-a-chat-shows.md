@@ -82,7 +82,7 @@ When an agent needs you to decide something too large for a question, such as wh
 
 ![A proposal in the proposal tab](../../../spec/screens/proposal-tab.png)
 
-To answer, click `Choose` on the option you want for each question, add a note if you like, and click `Send`, or press `Enter` in the note.
+To answer, click `Choose` on the option you want for each question, add a note if you like, and click `Send`, or press `Enter` in the note. On a Mac, you can [dictate the note](../../guides/dictate-a-prompt.md) too.
 
 - **The agent is told what you chose,** and reads your note with its tools, so what you write can be as long as it needs to be. If it's working, your answer goes into what it's doing, which it reads at its next chance, as a message you send while it works does. If you stop the agent before it reads your answer, it never gets it, and the answer's line says so. Your answer stays in the proposal, so ask the agent to read it.
 - **Your answer is drawn in the chat as a line,** `Answered`, faint until the agent reads it, and then where the agent took it, rather than as a message of yours, and the outline marks it the same way. A chat's title is never made from it.

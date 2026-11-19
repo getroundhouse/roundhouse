@@ -12,7 +12,7 @@ use serde_json::json;
 
 use super::frame::{CHAT, PROPOSAL};
 use super::screens::FOCUS;
-use super::steps::{Screen, Step};
+use super::steps::{DictateWith, Screen, Step};
 use super::worlds::chat_world;
 use client_core::fake_hub::World;
 use client_core::fake_hub::events::{mcp, mcp_said, replied, taken, text, user_prompt};
@@ -46,6 +46,25 @@ pub(crate) const SCREENS: &[Screen] = &[
             Step::Select(FOCUS),
             Step::Click("open-proposal/8d0c6a5e-proposal"),
             Step::Click("choose-0-0"),
+            Step::MoveAway,
+        ],
+    },
+    Screen {
+        name: "proposal-dictation",
+        spec: "proposals.md",
+        world: Some(world),
+        frame: PROPOSAL,
+        steps: &[
+            Step::Select(FOCUS),
+            Step::Click("open-proposal/8d0c6a5e-proposal"),
+            Step::Click("choose-0-0"),
+            Step::Click("input-state"),
+            Step::Type("The signal, as long as"),
+            Step::Dictate {
+                with: DictateWith::Keys,
+                said: "its count survives a restart of the hub",
+                shows: "its count survives a restart of the",
+            },
             Step::MoveAway,
         ],
     },

@@ -2,6 +2,7 @@
 //! foot, like the composer, takes a note and sends the answer, once one option is chosen for each question. The app
 //! sends it, as [`ProposalEvent::Answer`] asks, and the hub keeps it on the proposal, so once its record says it's
 //! answered, the bar says what was chosen instead. What's chosen and written before it's sent is this view's alone.
+//! The note can be dictated into, as `dictating` says.
 
 use gpui_kit::component::input::{InputEvent, Textarea, TextareaState};
 use gpui_kit::component::{h_flex, v_flex};
@@ -20,6 +21,8 @@ use super::view::{COLUMN, ProposalView};
 pub enum ProposalEvent {
     /// Send this answer to the hub, and say how it went with [`ProposalView::sent`].
     Answer(ProposalAnswer),
+    /// Say what went wrong, such as dictating into the note.
+    Error(String),
 }
 
 /// What's chosen and written, and whether it's being sent.
@@ -27,12 +30,19 @@ pub enum ProposalEvent {
 pub(super) struct Answering {
     /// For each question, the option chosen, if one is.
     pub(super) chosen: Vec<Option<OptionPlace>>,
-    note: Option<(Entity<TextareaState>, Subscription)>,
+    pub(super) note: Option<Note>,
     /// The request that sent the answer, with the answer it sent, kept while it's sent and after it failed, so the
     /// same answer sent again, which the hub may have kept after all, is kept once. A changed answer is a new request,
     /// so the hub doesn't take it for the one it kept and leave the change unsaid.
     request: Option<(ClientRequestId, ProposalAnswer)>,
     sending: Sending,
+}
+
+/// The note, made the first time the bar is drawn, since an input needs the window, and what dictates into it.
+pub(super) struct Note {
+    pub(super) input: Entity<TextareaState>,
+    pub(super) dictation: Entity<dictation_ui::Field>,
+    _events: Vec<Subscription>,
 }
 
 /// Where sending the answer is.
@@ -105,29 +115,38 @@ impl ProposalView {
 
     /// Whether something's chosen or written here that hasn't been sent, which showing another proposal would lose.
     pub fn has_unsent(&self, cx: &App) -> bool {
-        let noted =
-            self.answering.note.as_ref().is_some_and(|(input, _)| !input.read(cx).text().to_string().trim().is_empty());
+        let noted = self.answering.note.as_ref().is_some_and(|note| {
+            !note.input.read(cx).text().to_string().trim().is_empty() || note.dictation.read(cx).has_live_words()
+        });
         self.waits() && (noted || self.answering.chosen.iter().any(Option::is_some))
     }
 
     /// Whether the proposal waits for the person's response.
-    fn waits(&self) -> bool {
+    pub(super) fn waits(&self) -> bool {
         self.proposal.current.standing() == RevisionStanding::Waiting
     }
 
-    /// One option for each question, when one is chosen for each, while it's not answered and not being sent.
-    fn ready(&self) -> Option<Vec<OptionPlace>> {
+    /// Whether it waits for an answer and none is being sent, so one can be given.
+    pub(super) fn open(&self) -> bool {
+        self.waits() && !matches!(self.answering.sending, Sending::Going)
+    }
+
+    /// One option for each question, when one is chosen for each, while it's open.
+    pub(super) fn ready(&self) -> Option<Vec<OptionPlace>> {
         let chosen = &self.answering.chosen;
         let questions = self.proposal.current.proposed.questions.len();
-        let open = self.waits() && !matches!(self.answering.sending, Sending::Going);
-        (open && chosen.len() == questions).then(|| chosen.iter().copied().collect::<Option<_>>())?
+        (self.open() && chosen.len() == questions).then(|| chosen.iter().copied().collect::<Option<_>>())?
     }
 
     /// Asks the app to send the answer, once one option is chosen for each question and until it's answered. The same
     /// answer sent again after it couldn't be is the same request, so if the hub kept it after all, it keeps it once.
+    /// While the note's being dictated into, it sends once the last words are in.
     pub(super) fn send(&mut self, cx: &mut Context<Self>) {
+        if self.once_dictated(cx) {
+            return;
+        }
         let Some(chosen) = self.ready() else { return };
-        let note = self.answering.note.as_ref().map(|(input, _)| input.read(cx).text().to_string());
+        let note = self.answering.note.as_ref().map(|note| note.input.read(cx).text().to_string());
         let mut answer = ProposalAnswer {
             id: self.proposal.id.clone(),
             revision: self.proposal.current.number,
@@ -143,6 +162,7 @@ impl ProposalView {
             _ => self.answering.request = Some((answer.client_request_id.clone(), answer.clone())),
         }
         self.answering.sending = Sending::Going;
+        self.follow_dictation(cx);
         cx.emit(ProposalEvent::Answer(answer));
         cx.notify();
     }
@@ -153,12 +173,17 @@ impl ProposalView {
             Ok(()) => Sending::Idle,
             Err(why) => Sending::Failed(why),
         };
+        self.follow_dictation(cx);
         cx.notify();
     }
 
-    fn note(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Entity<TextareaState> {
-        if let Some((input, _)) = &self.answering.note {
-            return input.clone();
+    fn note(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> (Entity<TextareaState>, Entity<dictation_ui::Field>) {
+        if let Some(note) = &self.answering.note {
+            return (note.input.clone(), note.dictation.clone());
         }
         let input = cx.new(|cx| {
             TextareaState::new(window, cx)
@@ -166,31 +191,49 @@ impl ProposalView {
                 .submit_on_enter(true)
                 .placeholder("Add a note to your answer")
         });
-        let events = cx.subscribe_in(&input, window, |this, _, event: &InputEvent, _, cx| {
+        let typed = cx.subscribe_in(&input, window, |this, _, event: &InputEvent, _, cx| {
             if let InputEvent::PressEnter { shift: false, .. } = event {
                 this.send(cx);
             }
         });
-        self.answering.note = Some((input.clone(), events));
-        input
+        let (dictation, [events, changed]) = self.attach_dictation(&input, window, cx);
+        let events = vec![typed, events, changed];
+        self.answering.note = Some(Note { input: input.clone(), dictation: dictation.clone(), _events: events });
+        (input, dictation)
     }
 
-    /// The bar at the tab's foot: the note and what's chosen, with Send, or once it's answered, what was chosen.
+    /// The bar at the tab's foot: the note and what's chosen, with Send, or once it's answered, what was chosen. While
+    /// the note's dictated into, its live words show under what's typed, the fine line runs along the bar's bottom, as
+    /// along the composer's, and the recording's controls take the place of what's chosen and Send.
     pub(super) fn foot(&mut self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
-        let inside = match self.proposal.current.standing() {
+        let (inside, dictation) = match self.proposal.current.standing() {
             RevisionStanding::Waiting => {
-                let input = self.note(window, cx);
-                let field = div().w_full().child(Textarea::new(&input).appearance(false));
-                v_flex().w_full().gap(look::Space::Small).child(field).child(self.chosen_row(cx)).into_any_element()
+                let (input, dictation) = self.note(window, cx);
+                let live = dictation.read(cx).live_line(cx).map(|line| {
+                    div()
+                        .w_full()
+                        .pt(look::Space::XSmall)
+                        .child(line.px(gpui_kit::component::Size::default().input_px()))
+                });
+                let field = div().w_full().child(Textarea::new(&input).appearance(false)).children(live);
+                let row = match dictation_ui::Field::controls(&dictation, look::ControlSize::Regular, cx) {
+                    Some(controls) => controls.into_any_element(),
+                    None => self.chosen_row(cx),
+                };
+                let inside = v_flex().w_full().gap(look::Space::Small).child(field).child(row).into_any_element();
+                (inside, Some(dictation))
             }
-            RevisionStanding::Chose(choice) => self.chose_bar(choice, cx),
+            RevisionStanding::Chose(choice) => (self.chose_bar(choice, cx), None),
             RevisionStanding::Responded => {
-                div().child("Responded, in a way this version of Roundhouse can't show").into_any_element()
+                let inside =
+                    div().child("Responded, in a way this version of Roundhouse can't show").into_any_element();
+                (inside, None)
             }
         };
         let colors = look::colors(cx);
         let bar = div()
             .id("proposal-answer")
+            .relative()
             .w_full()
             .max_w(px(COLUMN))
             .p(look::Space::Medium)
@@ -200,7 +243,12 @@ impl ProposalView {
             .bg(colors.raised)
             .typeset(look::Type::Body)
             .child(inside)
+            .children(dictation.as_ref().map(|field| field.read(cx).edge()))
             .test_support();
+        let bar = match &dictation {
+            Some(field) => dictation_ui::Field::keys(bar, field).into_any_element(),
+            None => bar.into_any_element(),
+        };
         div()
             .flex_none()
             .w_full()
