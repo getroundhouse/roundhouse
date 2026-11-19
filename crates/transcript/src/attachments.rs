@@ -64,6 +64,7 @@ pub fn image_format(media_type: MediaType) -> Option<ImageFormat> {
         MediaType::Jpeg => Some(ImageFormat::Jpeg),
         MediaType::Gif => Some(ImageFormat::Gif),
         MediaType::Webp => Some(ImageFormat::Webp),
+        MediaType::Svg => Some(ImageFormat::Svg),
         MediaType::Text | MediaType::Other | MediaType::Unknown => None,
     }
 }
@@ -108,7 +109,7 @@ pub(crate) fn fetch_missing<'a>(
     carried: impl IntoIterator<Item = &'a Carried>,
     cx: &mut App,
 ) {
-    let missing = carried.into_iter().filter(|file| file.attachment.media_type.is_image() && file.picture.is_none());
+    let missing = carried.into_iter().filter(|file| file.attachment.media_type.is_bitmap() && file.picture.is_none());
     for file in missing {
         model.borrow_mut().pictures.insert(file.attachment.id.clone(), Picture::Loading);
         let (this, attachment) = (this.clone(), file.attachment.clone());
@@ -118,13 +119,14 @@ pub(crate) fn fetch_missing<'a>(
     }
 }
 
-/// Images first, in a row that wraps, then the other files as chips.
+/// Images first, in a row that wraps, then the other files as chips. A drawing is a chip, as the agent is given it as
+/// text.
 pub(crate) fn view(carried: &[Carried], cx: &App) -> Option<AnyElement> {
     if carried.is_empty() {
         return None;
     }
     let (images, files): (Vec<&Carried>, Vec<&Carried>) =
-        carried.iter().partition(|file| file.attachment.media_type.is_image());
+        carried.iter().partition(|file| file.attachment.media_type.is_bitmap());
     let images = images.into_iter().map(|file| thumbnail(file, cx));
     let files = files.into_iter().map(|file| file_card(file.key.element("file"), &file.attachment).into_any_element());
     Some(

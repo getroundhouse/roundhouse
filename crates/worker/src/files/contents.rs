@@ -166,15 +166,15 @@ pub(crate) async fn read_at(
 
 /// The most of a file that starts with `start` that a client is sent: an image's limit, or text's.
 fn most_sent(start: &[u8]) -> u64 {
-    if MediaType::sniff(&start[..start.len().min(SNIFF_BYTES)]).is_image() { MAX_IMAGE_BYTES } else { MAX_TEXT_BYTES }
+    if MediaType::sniff(&start[..start.len().min(SNIFF_BYTES)]).is_bitmap() { MAX_IMAGE_BYTES } else { MAX_TEXT_BYTES }
 }
 
-/// What a file holds, from all of it: an image by what it starts with, and otherwise text, unless it's too big for
-/// text or has a NUL byte near its start.
+/// What a file holds, from all of it: an image made of pixels by what it starts with, and otherwise text, such as a
+/// drawing's, unless it's too big for text or has a NUL byte near its start.
 fn contents(data: Vec<u8>) -> FileContents {
     let start = &data[..data.len().min(SNIFF_BYTES)];
     let media_type = MediaType::sniff(start);
-    if media_type.is_image() {
+    if media_type.is_bitmap() {
         return FileContents::Image { media_type, data: AttachmentBytes::new(data) };
     }
     if length(data.len()) > MAX_TEXT_BYTES {

@@ -312,7 +312,8 @@ fn whole_characters(bytes: &[u8]) -> usize {
     if bytes.len() - at < needs { at } else { bytes.len() }
 }
 
-/// Whether a file that starts with `start` is text: not an image, and without a NUL byte, as git decides.
+/// Whether a file that starts with `start` is text: not an image made of pixels, and without a NUL byte, as git decides.
+/// A drawing is text.
 fn is_text(start: &[u8]) -> bool {
-    !MediaType::sniff(start).is_image() && !start.contains(&0)
+    !MediaType::sniff(start).is_bitmap() && !start.contains(&0)
 }

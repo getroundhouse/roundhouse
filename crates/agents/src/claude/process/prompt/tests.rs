@@ -50,6 +50,21 @@ fn an_image_and_a_short_text_file_go_in_the_prompt_with_where_they_are() {
     assert_eq!(content[3], json!({"type": "text", "text": "why does this fail?"}));
 }
 
+/// A model takes a drawing as the text it is, not as an image, which it couldn't read.
+#[test]
+fn a_drawing_goes_in_the_prompt_as_its_text() {
+    let dir = tempfile::tempdir().unwrap();
+    let drawing = file(&dir, "flow.svg", MediaType::Svg, b"<svg width=\"4\" height=\"4\"/>");
+
+    let message = given("", std::slice::from_ref(&drawing));
+
+    let expected = format!(
+        "<attachment name=\"flow.svg\" path=\"{}\">\n<svg width=\"4\" height=\"4\"/>\n</attachment>",
+        drawing.path
+    );
+    assert_eq!(texts(&message), [expected]);
+}
+
 #[test]
 fn anything_else_goes_by_where_it_is() {
     let dir = tempfile::tempdir().unwrap();

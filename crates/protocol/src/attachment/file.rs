@@ -8,8 +8,9 @@ pub const MAX_PER_PROMPT: usize = 10;
 /// under [`crate::frame::MAX_FRAME_BYTES`] once it's base64.
 pub const MAX_FILE_BYTES: u64 = 100 * 1024 * 1024;
 
-/// What kind of file an attachment is. The kinds named are the ones an agent can be given in a prompt, and anything
-/// else is `Other`, which an agent opens from the worktree. Each is sent as its MIME type.
+/// What kind of file an attachment is. The kinds named are the ones an agent can be given in a prompt, or the
+/// transcript draws, and anything else is `Other`, which an agent opens from the worktree. Each is sent as its MIME
+/// type.
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum MediaType {
     #[serde(rename = "image/png")]
@@ -20,6 +21,10 @@ pub enum MediaType {
     Gif,
     #[serde(rename = "image/webp")]
     Webp,
+    /// A drawing, which is text, so an agent is given it as text, and the transcript draws it where the agent's text
+    /// points to it, as it does a bitmap.
+    #[serde(rename = "image/svg+xml")]
+    Svg,
     /// UTF-8 text, such as a log or a source file.
     #[serde(rename = "text/plain")]
     Text,
@@ -36,6 +41,7 @@ impl MediaType {
             MediaType::Jpeg => "image/jpeg",
             MediaType::Gif => "image/gif",
             MediaType::Webp => "image/webp",
+            MediaType::Svg => "image/svg+xml",
             MediaType::Text => "text/plain",
             MediaType::Other | MediaType::Unknown => "application/octet-stream",
         }
@@ -44,13 +50,35 @@ impl MediaType {
     /// An image the transcript draws, which is what the hub keeps.
     pub const fn is_image(self) -> bool {
         match self {
-            MediaType::Png | MediaType::Jpeg | MediaType::Gif | MediaType::Webp => true,
+            MediaType::Png | MediaType::Jpeg | MediaType::Gif | MediaType::Webp | MediaType::Svg => true,
             MediaType::Text | MediaType::Other | MediaType::Unknown => false,
         }
     }
 
+    /// An image made of pixels, which an agent's model takes as an image, and a file's tab and a prompt draw as one.
+    /// A drawing isn't, since a model takes it as the text it is.
+    pub const fn is_bitmap(self) -> bool {
+        match self {
+            MediaType::Png | MediaType::Jpeg | MediaType::Gif | MediaType::Webp => true,
+            MediaType::Svg | MediaType::Text | MediaType::Other | MediaType::Unknown => false,
+        }
+    }
+
+    /// Text, which an agent can be given as it's written: plain text, or a drawing.
+    pub const fn is_text(self) -> bool {
+        match self {
+            MediaType::Text | MediaType::Svg => true,
+            MediaType::Png
+            | MediaType::Jpeg
+            | MediaType::Gif
+            | MediaType::Webp
+            | MediaType::Other
+            | MediaType::Unknown => false,
+        }
+    }
+
     /// What `bytes` are, from what they start with rather than from a file's name, which can say anything. Text is
-    /// UTF-8 with no NUL in it.
+    /// UTF-8 with no NUL in it, and a drawing is text whose first element is `<svg`.
     pub fn sniff(bytes: &[u8]) -> MediaType {
         if bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
             MediaType::Png
@@ -60,8 +88,10 @@ impl MediaType {
             MediaType::Gif
         } else if bytes.len() >= 12 && bytes.starts_with(b"RIFF") && &bytes[8..12] == b"WEBP" {
             MediaType::Webp
-        } else if !bytes.contains(&0) && std::str::from_utf8(bytes).is_ok() {
-            MediaType::Text
+        } else if !bytes.contains(&0)
+            && let Ok(text) = std::str::from_utf8(bytes)
+        {
+            if starts_svg(text) { MediaType::Svg } else { MediaType::Text }
         } else {
             MediaType::Other
         }
@@ -80,12 +110,33 @@ impl MediaType {
             return Err(AttachmentProblem::TooLarge { limit_bytes: MAX_FILE_BYTES });
         }
         let found = Self::sniff(bytes);
-        if self == MediaType::Other || found == self {
+        // A client from before drawings says one is text, which it is.
+        let drawing_as_text = self == MediaType::Text && found == MediaType::Svg;
+        if self == MediaType::Other || found == self || drawing_as_text {
             Ok(())
         } else {
             Err(AttachmentProblem::NotWhatItSays { said: self, found })
         }
     }
+}
+
+/// Whether `text`'s first element is an `<svg>`, after any byte-order mark, XML declaration, comment, doctype or space
+/// before it.
+fn starts_svg(text: &str) -> bool {
+    let mut rest = text.trim_start_matches('\u{feff}');
+    loop {
+        rest = rest.trim_start();
+        let skipped = [("<?", "?>"), ("<!--", "-->"), ("<!", ">")]
+            .iter()
+            .find(|(open, _)| rest.starts_with(open))
+            .and_then(|(open, close)| rest[open.len()..].find(close).map(|end| open.len() + end + close.len()));
+        match skipped {
+            Some(end) => rest = &rest[end..],
+            None => break,
+        }
+    }
+    rest.strip_prefix("<svg")
+        .is_some_and(|after| after.starts_with(|c: char| c.is_whitespace() || c == '>' || c == '/'))
 }
 
 /// Why a session won't take a file. The message is written for the person who chose it.

@@ -8884,7 +8884,9 @@ dependencies = [
  "protocol",
  "serde_json",
  "similar",
+ "tempfile",
  "transcript",
+ "usvg 0.46.0",
 ]
 
 [[package]]

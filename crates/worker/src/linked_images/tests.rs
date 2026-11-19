@@ -53,6 +53,21 @@ fn an_image_a_text_points_to_is_named_in_its_block_and_sent_with_its_bytes() {
     assert_eq!(images[0].attachment, image.attachment, "the block names the attachment sent beside it");
 }
 
+/// A drawing is kept as one, since the transcript draws it as it does a bitmap.
+#[test]
+fn a_drawing_a_text_points_to_is_kept_as_one() {
+    let drawing: &[u8] =
+        b"<?xml version=\"1.0\"?>\n<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"4\" height=\"4\"/>";
+    let worktree = worktree_with(&[("docs/flow.svg", drawing)]);
+    let mut body = said(&["![How it flows](docs/flow.svg)"]);
+
+    let kept = keep(worktree.path(), &mut body, u64::MAX);
+
+    let [image] = kept.as_slice() else { panic!("{kept:?}") };
+    assert_eq!((image.attachment.name.as_str(), image.attachment.media_type), ("flow.svg", MediaType::Svg));
+    assert_eq!(named(&body), [["docs/flow.svg"]]);
+}
+
 #[test]
 fn a_text_the_parser_panics_on_points_to_no_image() {
     assert_eq!(addresses::of("![The board](shot.png)\n\na\n===\n---\nb\n==="), Vec::<String>::new());

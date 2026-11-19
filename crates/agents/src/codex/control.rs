@@ -92,7 +92,7 @@ fn took_nothing(error: &AgentError) -> bool {
 async fn prompt_to(shared: &Shared, seq: Seq, prompt: &Prompt<AttachmentFile>) -> Result<(), AgentError> {
     let mut input = vec![json!({"type":"text","text":prompt.text,"text_elements":[]})];
     for file in &prompt.files {
-        input.push(if file.attachment.media_type.is_image() {
+        input.push(if file.attachment.media_type.is_bitmap() {
             json!({"type":"localImage","path":file.path})
         } else {
             json!({"type":"text","text":format!("Attached file: {}",file.path),"text_elements":[]})

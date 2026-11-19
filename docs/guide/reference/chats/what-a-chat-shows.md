@@ -115,7 +115,7 @@ Rest the pointer on a code block for a button at its top right that copies its c
 
 ## Images in a reply
 
-An image the agent's reply points to shows in the reply, if it's in the workspace. The hub keeps it as it was when the reply came, so it's still there after the agent changes the file, and after the workspace is archived.
+An image the agent's reply points to shows in the reply, if it's in the workspace, and so does an SVG drawing. The hub keeps it as it was when the reply came, so it's still there after the agent changes the file, and after the workspace is archived.
 
 An image anywhere else on the machine, or on the web, shows nothing.
 

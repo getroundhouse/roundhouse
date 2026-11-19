@@ -38,7 +38,7 @@ impl Transcript {
         let written = Written::new(prompt);
         {
             let mut m = self.model.borrow_mut();
-            for file in written.prompt.files.iter().filter(|file| file.attachment.media_type.is_image()) {
+            for file in written.prompt.files.iter().filter(|file| file.attachment.media_type.is_bitmap()) {
                 let picture = Picture::read(file.attachment.media_type, file.data.clone());
                 m.pictures.insert(file.attachment.id.clone(), picture);
             }

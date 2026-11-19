@@ -44,7 +44,7 @@ fn image(part: &Value) -> Option<Taken> {
     let data = AttachmentBytes::from_base64(base64)?;
     // Known by its bytes, as a prompt's file is, rather than by the type the CLI gives it.
     let media_type = MediaType::sniff(data.as_slice());
-    if !media_type.is_image() || media_type.check(data.as_slice()).is_err() {
+    if !media_type.is_bitmap() || media_type.check(data.as_slice()).is_err() {
         return None;
     }
     let id = AttachmentId::from(uuid::Uuid::new_v4().to_string());

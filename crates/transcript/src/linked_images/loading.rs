@@ -1,9 +1,11 @@
-use super::drawn;
+use super::{drawings, drawn};
 use crate::attachments::image_format;
 use crate::transcript::Transcript;
 use client_core::Client;
 use gpui_kit::component::text::MarkdownExtensions;
-use gpui_kit::{App, AppContext as _, Image, ImageCacheError, ImageSource, RenderImage, SharedUri, WeakEntity, Window};
+use gpui_kit::{
+    App, AppContext as _, Image, ImageCacheError, ImageFormat, ImageSource, RenderImage, SharedUri, WeakEntity, Window,
+};
 use parking_lot::Mutex;
 use protocol::attachment::{AttachmentBytes, MediaType};
 use protocol::event::LinkedImage;
@@ -33,7 +35,8 @@ pub(super) struct Shared {
 pub(super) enum Linked {
     /// With the events whose rows are waiting for it.
     Loading(Vec<Seq>),
-    Ready(Arc<RenderImage>),
+    /// With how many pixels it covers as it's drawn, as [`drawable`] and [`pixels`] say.
+    Ready(Arc<RenderImage>, (u32, u32)),
     /// The hub couldn't give it, or it isn't an image, so it's not asked for again on this connection.
     Unreadable,
 }
@@ -65,10 +68,21 @@ impl LinkedImages {
         Images { plugins: Arc::new(drawn::to_draw(self, seq, kept)), resolver: Box::new(self.resolver(seq, kept)) }
     }
 
-    /// The image at `uri` in a text that names `kept`, in the row of the event at `seq`, once it's here, or `None`
-    /// while it loads, if it can't be shown, or if it isn't one that's drawn.
-    pub(super) fn ready(&self, uri: &str, kept: &[LinkedImage], seq: Seq, cx: &mut App) -> Option<Arc<RenderImage>> {
-        self.image(&source(uri, kept)?, seq, cx)?.ok()
+    /// The image at `uri` in a text that names `kept`, in the row of the event at `seq`, and how many pixels it covers
+    /// as it's drawn, once it's here, or `None` while it loads, if it can't be shown, or if it isn't one that's drawn.
+    pub(super) fn ready(
+        &self,
+        uri: &str,
+        kept: &[LinkedImage],
+        seq: Seq,
+        cx: &mut App,
+    ) -> Option<(Arc<RenderImage>, (u32, u32))> {
+        let source = source(uri, kept)?;
+        self.image(&source, seq, cx)?.ok()?;
+        match self.0.images.lock().get(&source) {
+            Some(Linked::Ready(image, covers)) => Some((image.clone(), *covers)),
+            _ => None,
+        }
     }
 
     /// What the kit draws for the image at an address in a text that names `kept`, in the row of the event at `seq`.
@@ -97,7 +111,7 @@ impl LinkedImages {
     ) -> Option<Result<Arc<RenderImage>, ImageCacheError>> {
         let mut images = self.0.images.lock();
         match images.get_mut(source) {
-            Some(Linked::Ready(image)) => return Some(Ok(image.clone())),
+            Some(Linked::Ready(image, _)) => return Some(Ok(image.clone())),
             Some(Linked::Unreadable) => return Some(Err(ImageCacheError::Asset("it can't be shown".into()))),
             Some(Linked::Loading(waiting)) => {
                 if !waiting.contains(&seq) {
@@ -123,9 +137,13 @@ impl LinkedImages {
             };
             bytes
                 .and_then(|bytes| {
-                    Image::from_bytes(image_format(MediaType::sniff(&bytes))?, bytes).to_image_data(renderer).ok()
+                    let format = image_format(MediaType::sniff(&bytes))?;
+                    let Drawable { bytes, says } = drawable(format, bytes)?;
+                    let image = Image::from_bytes(format, bytes).to_image_data(renderer).ok()?;
+                    let covers = says.or_else(|| pixels(&image))?;
+                    Some(Linked::Ready(image, covers))
                 })
-                .map_or(Linked::Unreadable, Linked::Ready)
+                .unwrap_or(Linked::Unreadable)
         });
         cx.spawn(async move |cx| {
             let linked = loading.await;
@@ -141,6 +159,32 @@ impl LinkedImages {
         })
         .detach();
     }
+}
+
+/// An image's bytes as they're safe to draw, and the size it says it is, if it's a drawing, since GPUI keeps that to
+/// itself: it draws one at twice that, to be sharp on a screen of twice the pixels, and smaller than that when it's
+/// very large.
+struct Drawable {
+    bytes: Vec<u8>,
+    says: Option<(u32, u32)>,
+}
+
+/// `bytes`, an image of `format`, as they're safe to draw. A drawing is made safe first, as `drawings` says, and is
+/// `None` if it can't be.
+fn drawable(format: ImageFormat, bytes: Vec<u8>) -> Option<Drawable> {
+    if format != ImageFormat::Svg {
+        return Some(Drawable { bytes, says: None });
+    }
+    let drawing = drawings::safe(&bytes)?;
+    Some(Drawable { bytes: drawing.svg, says: Some(drawing.size) })
+}
+
+/// How many pixels a bitmap covers as it's drawn, which is as many as it has, or `None` for one with none, which has
+/// no shape to draw it at.
+fn pixels(image: &RenderImage) -> Option<(u32, u32)> {
+    let pixels = image.size(0);
+    let side = |pixels: i32| u32::try_from(pixels).ok().filter(|side| *side > 0);
+    Some((side(pixels.width.0)?, side(pixels.height.0)?))
 }
 
 /// Where the image at `uri` comes from, from a Markdown image's address and what its text's block names, or `None` if

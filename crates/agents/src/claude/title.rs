@@ -58,7 +58,7 @@ pub async fn title_for(
 /// What the call reads: the prompt's images, then its words, which is where Anthropic's guidance puts images, as a
 /// session's prompt does. Anything that isn't an image, such as a kind from a newer hub, is left out.
 fn asked(prompt: &Prompt<NewAttachment>) -> Value {
-    let images = prompt.files.iter().filter(|image| image.attachment.media_type.is_image());
+    let images = prompt.files.iter().filter(|image| image.attachment.media_type.is_bitmap());
     user_line_saying(images.map(|image| image_block(image.attachment.media_type, &image.data)).collect(), prompt)
 }
 
