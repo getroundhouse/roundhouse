@@ -38,11 +38,15 @@ struct Args {
     /// Declare `WorkerFilesystem::Separate` instead of sharing the hub's filesystem.
     #[arg(long)]
     separate: bool,
+    /// Declare `ClonePersistence::Ephemeral` and wipe `--clones` on `destroy` to simulate an ephemeral VM.
+    #[arg(long)]
+    ephemeral: bool,
 }
 
 struct Recording {
     local: LocalProvider,
     made: PathBuf,
+    clones_dir: PathBuf,
     environment: WorkerEnvironment,
 }
 
@@ -93,7 +97,11 @@ impl Provider for Recording {
     }
 
     async fn destroy(&self, instance_id: &InstanceId) -> Result<(), ProviderError> {
-        self.local.destroy(instance_id).await
+        self.local.destroy(instance_id).await?;
+        if self.environment.clones == ClonePersistence::Ephemeral {
+            let _ = std::fs::remove_dir_all(&self.clones_dir);
+        }
+        Ok(())
     }
 
     async fn list(&self) -> Result<Vec<Instance>, ProviderError> {
@@ -120,6 +128,7 @@ impl Provider for Recording {
 #[tokio::main]
 async fn main() {
     let args = Args::parse();
+    let clones_dir = args.clones.clone();
     let local = LocalProvider::new(LocalConfig {
         worker_exe: args.worker,
         instances_dir: args.instances,
@@ -131,9 +140,9 @@ async fn main() {
     });
     let environment = WorkerEnvironment {
         filesystem: if args.separate { WorkerFilesystem::Separate } else { WorkerFilesystem::Hub },
-        clones: ClonePersistence::Persistent,
+        clones: if args.ephemeral { ClonePersistence::Ephemeral } else { ClonePersistence::Persistent },
     };
-    let provider: Arc<dyn Provider> = Arc::new(Recording { local, made: args.made, environment });
+    let provider: Arc<dyn Provider> = Arc::new(Recording { local, made: args.made, clones_dir, environment });
     let (stdin, stdout) = (tokio::io::stdin(), tokio::io::stdout());
     let build = protocol::this_build!().version();
     providers::serve::serve(Box::new(move |_| Ok(provider)), build, stdin, stdout).await.unwrap();

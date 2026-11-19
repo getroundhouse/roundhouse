@@ -68,6 +68,18 @@ impl Hub {
         made
     }
 
+    /// Asks `provider` to create the instance already recorded as `Creating` for `workspace`, and marks it `Ready`.
+    pub(super) async fn make_workspace_instance(
+        &self,
+        workspace: &Workspace,
+        provider: &dyn Provider,
+    ) -> Result<(), ApiError> {
+        let display_name = format!("roundhouse-{}", workspace.name);
+        provider.create(&workspace.instance_id, None, None, &display_name).await.map_err(|e| provider_failed(&e))?;
+        let instance_id = workspace.instance_id.clone();
+        self.blocking(move |store| store.instance_made(&instance_id)).await
+    }
+
     /// Records a workspace in `repo`, being made, by the first of `names` that no other workspace there has, and
     /// announces it at once, before the fetch, which can take a while. So every client can show it on its way, where
     /// it will be, rather than working out from the list which new workspace is the one it asked for. One that can't
@@ -143,13 +155,7 @@ impl Hub {
         provider: &dyn Provider,
     ) -> Result<Workspace, ApiError> {
         let (reply, link) = loop {
-            let display_name = format!("roundhouse-{}", workspace.name);
-            provider
-                .create(&workspace.instance_id, None, None, &display_name)
-                .await
-                .map_err(|e| provider_failed(&e))?;
-            let instance_id = workspace.instance_id.clone();
-            self.blocking(move |store| store.instance_made(&instance_id)).await?;
+            self.make_workspace_instance(&workspace, provider).await?;
             let link = self.ensure_worker(&workspace.id).await?;
             let prepare = PrepareWorkspace {
                 repo_name: repo.name.clone(),

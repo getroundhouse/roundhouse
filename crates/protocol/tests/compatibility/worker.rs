@@ -111,6 +111,7 @@ fn a_branch_keeps_its_form_in_what_a_hub_and_its_worker_send() {
         source: RepoSource::Checkout { path: "/r".into() },
         path: "/w".into(),
         branch: "birch".into(),
+        archived: None,
     });
     keeps_its_form(
         WorkerCall { id: 2, request: restore },

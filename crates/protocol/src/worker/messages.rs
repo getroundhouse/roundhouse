@@ -1,5 +1,5 @@
 use super::{
-    agents, children, connection, found_login, git_credential, one_off, previous, repo_url, terminals, tools,
+    agents, archived, children, connection, found_login, git_credential, one_off, previous, repo_url, terminals, tools,
     workspaces, worktree,
 };
 use crate::client::Outcome;
@@ -9,6 +9,7 @@ use crate::versions::Versions;
 #[cfg(test)]
 use agents::Delivery;
 use agents::{AgentControl, AgentSpec, AgentStarted, AgentStop};
+use archived::{ArchivedGit, CaptureArchive};
 use children::{AddChildWorktree, ChildWorktreeAdded, WatchChildBranches};
 use connection::{Hello, HelloReply, Received, RunningAgentsReply};
 #[cfg(test)]
@@ -92,6 +93,7 @@ pub enum WorkerRequest {
     Received(Received),
     NamesGitHas(NamesGitHas),
     PrepareWorkspace(PrepareWorkspace),
+    CaptureArchive(CaptureArchive),
     RestoreWorkspace(RestoreWorkspace),
     RemoveWorkspace(RemoveWorkspace),
     WorktreeThere(WorktreeThere),
@@ -144,6 +146,7 @@ pub enum WorkerResponse {
     Ok,
     NamesGitHas(NamesGitHasReply),
     WorkspaceReady(WorkspaceReady),
+    ArchivedGit(ArchivedGit),
     WorktreeThere(WorktreeThereReply),
     ChildWorktreeAdded(ChildWorktreeAdded),
     GitStatus(model::GitStatus),

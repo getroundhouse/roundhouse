@@ -3,8 +3,8 @@ use crate::branch_watch::Whose;
 use crate::{branch_watch, git, setup};
 use protocol::client::ApiError;
 use protocol::worker::{
-    AddChildWorktree, ChildWorktreeAdded, NamesGitHas, NamesGitHasReply, PrepareWorkspace, RemoveWorkspace,
-    RestoreWorkspace, WorkerResponse, WorktreeThere, WorktreeThereReply,
+    AddChildWorktree, CaptureArchive, ChildWorktreeAdded, NamesGitHas, NamesGitHasReply, PrepareWorkspace,
+    RemoveWorkspace, RestoreWorkspace, WorkerResponse, WorktreeThere, WorktreeThereReply,
 };
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -60,12 +60,33 @@ pub(in super::super) async fn prepare(state: &State, asked: PrepareWorkspace) ->
     Ok(WorkerResponse::WorkspaceReady(ready.await?))
 }
 
-/// Puts the worktree back from the repository it was made from, the checkout or the clone, which isn't made again,
-/// since the branch would have gone with it.
+/// Captures local branches and unpushed commits from `asked.source`'s repository before archiving an ephemeral
+/// workspace, so the hub can save them before removing the worktree and destroying the instance.
+pub(in super::super) async fn capture_archive(
+    state: &State,
+    asked: CaptureArchive,
+) -> Result<WorkerResponse, ApiError> {
+    let given = state.credentials.given();
+    let repo = state.clones.repository(&asked.source);
+    let archived = git::capture_archived(&given, &repo, asked.force).await?;
+    Ok(WorkerResponse::ArchivedGit(archived))
+}
+
+/// Puts the worktree back from the repository it was made from, the checkout or the clone. When `archived` is given
+/// (an ephemeral workspace whose clone was destroyed on archive), ensures the clone exists and imports the saved
+/// bundle and branch refs into it before recreating the worktree.
 pub(in super::super) async fn restore(state: &State, asked: RestoreWorkspace) -> Result<WorkerResponse, ApiError> {
     let _alone = state.moves.alone(Path::new(&asked.path)).await;
-    let repo = state.clones.repository(&asked.source);
-    git::restore_workspace(&state.credentials.given(), &repo, &asked.path, &asked.branch).await?;
+    let given = state.credentials.given();
+    let repo = match &asked.archived {
+        Some(archived) => {
+            let repo = state.clones.made_for(&given, &asked.source).await?;
+            git::restore_archived(&given, &repo, archived, &asked.branch).await?;
+            repo
+        }
+        None => state.clones.repository(&asked.source),
+    };
+    git::restore_workspace(&given, &repo, &asked.path, &asked.branch).await?;
     Ok(WorkerResponse::Ok)
 }
 

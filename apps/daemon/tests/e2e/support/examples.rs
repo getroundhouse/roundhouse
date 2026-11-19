@@ -67,6 +67,12 @@ impl Stack {
         self.write_adapter("adapter-clones", &["--separate"]);
     }
 
+    /// Makes workspaces from now on through an adapter declaring [`WorkerFilesystem::Separate`] and
+    /// [`ClonePersistence::Ephemeral`], which wipes `adapter-clones` whenever an instance is destroyed.
+    pub(crate) fn make_through_ephemeral_adapter(&mut self) {
+        self.write_adapter("adapter-clones", &["--separate", "--ephemeral"]);
+    }
+
     fn write_adapter(&mut self, clones: &str, extra: &[&str]) {
         self.kill_hub();
         let path = |name: &str| self.path(name).to_str().unwrap().to_string();

@@ -1,6 +1,6 @@
 use super::super::{Store, StoreError, from_text, lock, now_ms, text_of};
 use protocol::model::{InstanceId, ProviderName};
-use rusqlite::{Connection, Row, params};
+use rusqlite::{Connection, OptionalExtension, Row, params};
 use serde::{Deserialize, Serialize};
 
 /// How far the hub has got with an instance.
@@ -98,6 +98,18 @@ impl Store {
         };
         tx.commit()?;
         Ok(unfinished)
+    }
+
+    /// The recorded instance `id`, if it hasn't been destroyed.
+    pub fn recorded_instance(&self, id: &InstanceId) -> Result<Option<RecordedInstance>, StoreError> {
+        let conn = lock(&self.reader);
+        conn.query_row(
+            &format!("SELECT {INSTANCE_COLUMNS} FROM instances WHERE id = ?"),
+            [id.as_str()],
+            instance_from_row,
+        )
+        .optional()
+        .map_err(StoreError::from)
     }
 
     /// Every instance the hub has recorded, oldest first.

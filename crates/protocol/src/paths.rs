@@ -118,6 +118,9 @@ pub struct Paths {
     pub backups_dir: PathBuf,
     /// The files prompts carry, one directory per session, kept out of the database so it stays small to copy.
     pub attachments_dir: PathBuf,
+    /// The git bundles of archived workspaces whose provider doesn't keep repository clones across archiving, one file
+    /// per workspace, kept out of the database.
+    pub bundles_dir: PathBuf,
     pub log: PathBuf,
     pub instances_dir: PathBuf,
     /// Where the local provider's workers keep their clones of the repositories they're told of by their address, one
@@ -176,6 +179,7 @@ pub fn resolve(env: impl Fn(&str) -> Option<String>) -> Result<Paths, String> {
         database: data_dir.join("hub.db"),
         backups_dir: data_dir.join("backups"),
         attachments_dir: data_dir.join("attachments"),
+        bundles_dir: data_dir.join("bundles"),
         log: data_dir.join("hub.log"),
         instances_dir: data_dir.join("instances"),
         clones_dir: data_dir.join("clones"),

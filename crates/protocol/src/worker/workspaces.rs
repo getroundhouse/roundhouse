@@ -3,6 +3,7 @@
 
 use serde::{Deserialize, Serialize};
 
+use super::archived::ArchivedGit;
 use super::repo_source::{RepoSource, beside_repo_path};
 use super::{Reply, Request, WorkerRequest, WorkerResponse};
 use crate::model::{BranchName, Branches};
@@ -81,14 +82,18 @@ impl Reply for WorkspaceReady {
     }
 }
 
-/// Puts the worktree back from its kept branch, which is in the repository's checkout, or in its clone, which a worker
-/// that has none refuses, since the branch went with it.
+/// Puts the worktree back from its kept branch, which is in the repository's checkout, or in its clone. When
+/// `archived` is given, the worker ensures the clone exists and imports the saved bundle and branch refs into it
+/// before recreating the worktree.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct RestoreWorkspace {
     #[serde(flatten, with = "beside_repo_path")]
     pub source: RepoSource,
     pub path: String,
     pub branch: BranchName,
+    /// Local branches and unpushed commits saved by the hub when an ephemeral workspace was archived.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub archived: Option<ArchivedGit>,
 }
 
 impl Request for RestoreWorkspace {
