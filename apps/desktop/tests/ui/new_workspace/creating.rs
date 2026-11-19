@@ -93,7 +93,7 @@ fn the_dialog_keeps_whats_typed_attached_and_planned_and_the_keys_while_another_
     let fake = FakeHub::holding(world);
     let mut ui = Ui::open_on(cx, &fake);
     ui.wait("a workspace", |ui| ui.transcript().is_some());
-    let showing = ui.view().selected.clone().unwrap();
+    let showing = ui.view().selected().cloned().unwrap();
     let other = workspaces.into_iter().find(|w| *w != showing).unwrap();
     let files = tempfile::tempdir().unwrap();
 
@@ -134,9 +134,7 @@ fn the_dialog_keeps_whats_typed_attached_and_planned_and_the_keys_while_another_
     // As a workspace being made is selected once it's ready.
     let view = ui.view.clone();
     ui.cx.update_entity(&view, |v, cx| v.select(other.clone(), cx));
-    ui.wait("the other workspace's pane", |ui| {
-        ui.transcript().is_some() && ui.view().selected.as_ref() == Some(&other)
-    });
+    ui.wait("the other workspace's pane", |ui| ui.transcript().is_some() && ui.view().selected() == Some(&other));
     ui.input(" task");
 
     assert_eq!(ui.dialog_text(), "half a thought next task", "the keys stayed with the dialog");
@@ -169,7 +167,7 @@ fn what_was_opened_while_a_workspace_is_made_stays_showing_once_it_is(cx: &mut T
     making.release();
 
     ui.wait("the third workspace", |ui| made(ui, 3));
-    assert_eq!(ui.view().selected.as_ref(), Some(&first), "the one chosen meanwhile stays showing");
+    assert_eq!(ui.view().selected(), Some(&first), "the one chosen meanwhile stays showing");
     let third =
         ui.view().records().workspaces().iter().map(|w| w.id.clone()).find(|id| ![&first, &second].contains(&id));
     let third = third.unwrap();
@@ -184,7 +182,7 @@ fn what_was_opened_while_a_workspace_is_made_stays_showing_once_it_is(cx: &mut T
     making.release();
 
     ui.wait("the fourth workspace", |ui| made(ui, 4));
-    assert_eq!(ui.view().selected.as_ref(), Some(&first), "the one under Settings stays under it");
+    assert_eq!(ui.view().selected(), Some(&first), "the one under Settings stays under it");
     ui.press("escape");
     ui.input("here");
     assert_eq!(ui.composer_text(), "here", "and has the keys once Settings goes");

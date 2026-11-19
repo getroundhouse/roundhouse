@@ -41,6 +41,11 @@ fn a_new_workspace_starts_with_one_chat_and_the_keyboard_opens_moves_between_and
     ui.wait("the first chat, wrapping around", |ui| ui.active_chat() == first);
     ui.press("ctrl-shift-tab");
     ui.wait("the second chat, wrapping back", |ui| ui.active_chat() == second);
+    // Shift with a bracket, which comes as the brace it types.
+    ui.press("secondary-}");
+    ui.wait("the first chat, with the bracket", |ui| ui.active_chat() == first);
+    ui.press("secondary-{");
+    ui.wait("the second chat, with the other bracket", |ui| ui.active_chat() == second);
     ui.press("secondary-w");
     ui.wait("the second chat to close", |ui| ui.open_chats() == [first.clone()]);
     ui.wait("the first chat to show", |ui| ui.active_chat() == first);
@@ -101,7 +106,7 @@ fn chats_keep_their_own_transcript_and_draft(cx: &mut TestAppContext) {
     assert_eq!(ui.composer_text(), "half typed more", "the composer has focus after switching");
 
     // The first prompt names the chat, everywhere.
-    let titles: Vec<_> = client.session_list(&ui.view().selected.clone().unwrap()).unwrap();
+    let titles: Vec<_> = client.session_list(&ui.view().selected().cloned().unwrap()).unwrap();
     assert_eq!(titles[0].title.as_deref(), Some("say:from the first chat"));
     ui.wait("the title to reach the app", |ui| {
         let pane = ui.pane().unwrap();
@@ -118,7 +123,7 @@ fn a_closed_chat_can_be_reopened_and_the_last_one_is_replaced(cx: &mut TestAppCo
     let mut ui = Ui::open(cx, &stack);
     ui.wait("the repository", |ui| ui.view().records().repos().len() == 1);
     ui.new_workspace();
-    let workspace = ui.view().selected.clone().unwrap();
+    let workspace = ui.view().selected().cloned().unwrap();
     let first = ui.active_chat();
     ui.input("say:keep this");
     ui.press("enter");

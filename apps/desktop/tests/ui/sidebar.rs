@@ -75,7 +75,7 @@ fn a_rows_archive_button_shows_under_the_pointer_and_archives_it_without_opening
 
     ui.wait("it to start archiving", |_| held.runs() == 1);
     // Held open, so nothing that comes once it's archived has moved the selection yet.
-    assert_eq!(ui.view().selected.as_ref(), Some(&showing), "pressing it doesn't also open the workspace");
+    assert_eq!(ui.view().selected(), Some(&showing), "pressing it doesn't also open the workspace");
     ui.hover("send");
     // The row says so from the workspace's record, which reaches the app on the hub's feed, apart from the script the
     // hub runs once it has recorded it, so it's waited for rather than read as soon as the script has run.
@@ -138,7 +138,7 @@ fn a_rows_archive_button_stays_under_a_press_while_the_pointer_moves(cx: &mut Te
     ui.cx.update_window(ui.handle, |_, window, cx| window.pointer_up(at, MouseButton::Left, cx)).unwrap();
 
     ui.wait("it to start archiving", |_| held.runs() == 1);
-    assert_eq!(ui.view().selected.as_ref(), Some(&showing), "letting go doesn't open the workspace instead");
+    assert_eq!(ui.view().selected(), Some(&showing), "letting go doesn't open the workspace instead");
     held.release();
     ui.wait("it to be archived", |ui| archived(ui, &going));
 }
@@ -172,13 +172,13 @@ fn a_rows_archive_button_stays_while_the_row_is_pressed_and_goes_if_its_let_go_e
         })
         .unwrap();
     assert!(!ui.has(button.clone()), "let go off the row, the pointer has left it");
-    assert_eq!(ui.view().selected.as_ref(), Some(&showing), "and that's no click");
+    assert_eq!(ui.view().selected(), Some(&showing), "and that's no click");
 
     ui.hover(row(&pressed));
     press_and_move(&mut ui);
     let at = on_row + point(px(1.), px(0.));
     ui.cx.update_window(ui.handle, |_, window, cx| window.pointer_up(at, MouseButton::Left, cx)).unwrap();
-    ui.wait("the workspace", |ui| ui.view().selected.as_ref() == Some(&pressed));
+    ui.wait("the workspace", |ui| ui.view().selected() == Some(&pressed));
     assert!(ui.has(button.clone()), "let go on the row, the pointer is still over it");
     ui.hover(ELSEWHERE);
     assert!(!ui.has(button), "and it goes once the pointer does");
@@ -187,7 +187,7 @@ fn a_rows_archive_button_stays_while_the_row_is_pressed_and_goes_if_its_let_go_e
 /// Shows the workspace, as its row does, and waits until it's showing.
 fn show(ui: &mut Ui, id: &WorkspaceId) {
     ui.click(row(id));
-    ui.wait("the workspace", |ui| ui.view().selected.as_ref() == Some(id) && !ui.has("home-page"));
+    ui.wait("the workspace", |ui| ui.view().selected() == Some(id) && !ui.has("home-page"));
 }
 
 /// Shows Home in place of the workspace showing, and waits until it's there.

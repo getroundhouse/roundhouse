@@ -69,8 +69,8 @@ fn reviewing_on_a_fake_hub(cx: &mut TestAppContext) -> (FakeHub, Ui<'_>, Diff, W
     world.base_files.insert("a.txt".to_string(), FileContents::Text { text: "one\n".to_string() });
     let fake = FakeHub::holding(world);
     let mut ui = Ui::open_on(cx, &fake);
-    ui.wait("a workspace", |ui| ui.view().selected.is_some() && ui.pane().is_some());
-    let showing = ui.view().selected.clone().unwrap();
+    ui.wait("a workspace", |ui| ui.view().selected().is_some() && ui.pane().is_some());
+    let showing = ui.view().selected().cloned().unwrap();
     let other = workspaces.into_iter().find(|w| *w != showing).unwrap();
     let diff = ui.open_changes();
     (fake, ui, diff, other)
@@ -79,7 +79,7 @@ fn reviewing_on_a_fake_hub(cx: &mut TestAppContext) -> (FakeHub, Ui<'_>, Diff, W
 /// Shows `workspace` by its row in the sidebar.
 fn show(ui: &mut Ui<'_>, workspace: &WorkspaceId) {
     ui.click(SharedString::from(format!("workspace-{workspace}")));
-    ui.wait("the workspace", |ui| ui.view().selected.as_ref() == Some(workspace) && ui.pane().is_some());
+    ui.wait("the workspace", |ui| ui.view().selected() == Some(workspace) && ui.pane().is_some());
 }
 
 fn showing(ui: &Ui<'_>) -> Showing {
@@ -154,7 +154,7 @@ fn the_file_tab_comes_before_the_chats(cx: &mut TestAppContext) {
 #[gpui_kit::test]
 fn the_window_keys_work_on_the_file_tab_after_coming_back_to_it(cx: &mut TestAppContext) {
     let (_hub, mut ui, diff, other) = reviewing_on_a_fake_hub(cx);
-    let reviewed = ui.view().selected.clone().unwrap();
+    let reviewed = ui.view().selected().cloned().unwrap();
     ui.open_diff_of(&diff, "a.txt");
     show(&mut ui, &other);
 
@@ -183,7 +183,7 @@ fn the_files_show_in_folders_that_close(cx: &mut TestAppContext) {
 fn a_folder_closed_stays_closed_when_a_new_file_splits_its_row(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let (mut ui, _) = reviewing(cx, &stack);
-    let worktree = ui.worktree(ui.view().selected.as_ref().unwrap());
+    let worktree = ui.worktree(ui.view().selected().unwrap());
     std::fs::create_dir_all(worktree.join("docs/spec")).unwrap();
     std::fs::write(worktree.join("docs/spec/files.md"), "# Files\n").unwrap();
     ui.click("changes-layout");
@@ -202,7 +202,7 @@ fn a_folder_closed_stays_closed_when_a_new_file_splits_its_row(cx: &mut TestAppC
 
 /// Leaves a comment on line 2 of `a.txt`, and returns it as the hub keeps it, once the diff shows it.
 fn comment_on_a_txt(ui: &mut Ui<'_>, stack: &Stack, diff: &Diff, text: &str) -> DiffComment {
-    let workspace = ui.view().selected.clone().unwrap();
+    let workspace = ui.view().selected().cloned().unwrap();
     ui.open_diff_of(diff, "a.txt");
     ui.start_comment(diff, "a.txt", 2);
     ui.input(text);
@@ -223,7 +223,7 @@ fn comment_on_a_txt(ui: &mut Ui<'_>, stack: &Stack, diff: &Diff, text: &str) -> 
 fn a_file_with_comments_is_marked_in_the_list_until_theyre_deleted(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let (mut ui, diff) = reviewing(cx, &stack);
-    let workspace = ui.view().selected.clone().unwrap();
+    let workspace = ui.view().selected().cloned().unwrap();
     assert!(!ui.has("comments-a.txt"));
 
     let comment = comment_on_a_txt(&mut ui, &stack, &diff, "Why two?");
@@ -247,7 +247,7 @@ fn a_comment_saved_leaves_the_keys_working_is_edited_where_it_was_left_and_is_ad
 ) {
     let stack = Stack::new();
     let (mut ui, diff) = reviewing(cx, &stack);
-    let workspace = ui.view().selected.clone().unwrap();
+    let workspace = ui.view().selected().cloned().unwrap();
     ui.input("Keep it short.");
     let comment = comment_on_a_txt(&mut ui, &stack, &diff, "Why two?");
 
@@ -298,14 +298,14 @@ fn space_is_typed_in_a_comment(cx: &mut TestAppContext) {
 #[gpui_kit::test]
 fn hiding_the_sidebar_of_changes_hides_it_in_every_workspace(cx: &mut TestAppContext) {
     let (_hub, mut ui, _, other) = reviewing_on_a_fake_hub(cx);
-    let first = ui.view().selected.clone().unwrap();
+    let first = ui.view().selected().cloned().unwrap();
     show(&mut ui, &other);
     assert!(ui.changes_open(), "open in the first, so open in the second");
 
     ui.click("toggle-diff");
     ui.press("secondary-[");
 
-    ui.wait("the first workspace", |ui| ui.view().selected.as_ref() == Some(&first));
+    ui.wait("the first workspace", |ui| ui.view().selected() == Some(&first));
     assert!(!ui.changes_open());
     assert!(!ui.has("changed-files"), "the first workspace's changes aren't drawn either");
 }

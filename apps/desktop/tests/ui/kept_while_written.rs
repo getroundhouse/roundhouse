@@ -27,7 +27,7 @@ fn writing(ui: &Ui<'_>, diff: &Diff) -> Option<CommentDraft> {
 
 /// Opens a changed file's diff in the workspace showing, `a.txt`.
 fn open_a_diff(ui: &mut Ui<'_>) -> Diff {
-    let workspace = ui.view().selected.clone().unwrap();
+    let workspace = ui.view().selected().cloned().unwrap();
     std::fs::write(ui.worktree(&workspace).join("a.txt"), "one\ntwo\n").unwrap();
     let diff = ui.open_changes();
     ui.open_diff_of(&diff, "a.txt");

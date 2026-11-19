@@ -89,13 +89,15 @@ Roundhouse keeps its data in `~/Library/Application Support/roundhouse`, and put
 | Key | Action |
 |---|---|
 | `Cmd-N` | New workspace |
-| `Cmd-[`, `Cmd-]` | Move between workspaces |
+| `Cmd-[`, `Cmd-]` | Back to the workspace shown before, and forward again |
+| `Cmd-Option-Up`, `Cmd-Option-Down` | The workspace above, and below, in the sidebar |
 | `Cmd-T` | New chat |
 | `Cmd-Shift-T` | New terminal |
 | `Cmd-W` | Close a chat, a terminal, or the file tab |
-| `Ctrl-Tab` | Move between chats and terminals |
+| `Cmd-Shift-[`, `Cmd-Shift-]` | Move between chats and terminals. `Ctrl-Tab` does too |
 | `Cmd-F` | Find in the chat |
-| `Cmd-Shift-D` | Show or hide the diff |
+| `Cmd-B` | Show or hide the sidebar |
+| `Cmd-Shift-B` | Show or hide the diff |
 | `Cmd-Shift-P` | Ask the agent for a PR |
 | `Cmd-Enter` | Queue a prompt for when the agent finishes |
 | `Cmd-Shift-A` | Archive the workspace |

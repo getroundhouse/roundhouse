@@ -86,7 +86,7 @@ fn settings_shows_in_place_of_the_workspace_and_each_way_back_leaves_it_as_it_wa
     assert!(settings_showing(&mut ui), "Cmd-, opens it");
     ui.press("secondary-,");
     assert!(settings_showing(&mut ui), "Cmd-, again leaves it showing");
-    ui.press("secondary-shift-d");
+    ui.press("secondary-shift-b");
     ui.press("escape");
     assert!(!settings_showing(&mut ui), "Escape goes back");
     assert!(ui.changes_open(), "the sidebar of changes is still open, since its key did nothing in Settings");
@@ -113,7 +113,7 @@ fn a_workspace_selected_behind_settings_has_the_keys_once_settings_goes(cx: &mut
     open_settings(&mut ui);
 
     stack.client().workspace_archive(&showing, false).unwrap();
-    ui.wait("the other one, behind Settings", |ui| ui.view().selected.as_ref() == Some(&other) && ui.pane().is_some());
+    ui.wait("the other one, behind Settings", |ui| ui.view().selected() == Some(&other) && ui.pane().is_some());
     ui.press("escape");
 
     assert!(!settings_showing(&mut ui), "the keys still reach Settings");

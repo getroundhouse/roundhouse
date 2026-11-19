@@ -10,7 +10,7 @@ A workspace's changes against its base, listed in a sidebar on the right, each f
 
   ![The sidebar of changes as a list](screens/changes.png)
 
-- **It's open from the start, so a workspace's changes, or its files, and its pull request are always in view.** The button at the right end of the header and `Cmd-Shift-D` hide and show it, in every workspace at once, and the choice holds until the app quits, as the choice of list or folders does. It slides open and shut, and its left edge drags to change how wide it is, as `sidebar.md` says. *Unconfirmed.*
+- **It's open from the start, so a workspace's changes, or its files, and its pull request are always in view.** The button at the right end of the header and `Cmd-Shift-B` hide and show it, as `Cmd-B` does the sidebar on the left, and the button's tooltip says the key, in every workspace at once, and the choice holds until the app quits, as the choice of list or folders does. It slides open and shut, and its left edge drags to change how wide it is, as `sidebar.md` says. *Unconfirmed.*
 
   **The sidebar hidden, with the pull request's number and its action in the header.** *Unconfirmed.*
 

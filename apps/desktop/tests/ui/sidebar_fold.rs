@@ -34,7 +34,7 @@ fn pressing_a_projects_row_collapses_it_and_pressing_it_again_brings_its_workspa
     let (world, [first, second], [upper, lower, third, _]) = two_projects_world();
     let (fake, mut ui) = open_on(cx, world);
     let was = top(&mut ui, project_row(&second));
-    let showing = ui.view().selected.clone();
+    let showing = ui.view().selected().cloned();
 
     ui.click(project_row(&first));
 
@@ -42,7 +42,7 @@ fn pressing_a_projects_row_collapses_it_and_pressing_it_again_brings_its_workspa
     assert!(ui.has(row(&third)), "and the other project's aren't");
     let closed = top(&mut ui, project_row(&second));
     assert_eq!(closed, after_collapsed(&mut ui, &first), "the next project comes straight after it");
-    assert_eq!(ui.view().selected, showing, "what's showing is still showing");
+    assert_eq!(ui.view().selected(), showing.as_ref(), "what's showing is still showing");
     let saved = || std::fs::read_to_string(fake.settings_file()).unwrap_or_default();
     ui.wait("it to be saved", |_| saved().contains(first.as_str()));
 
@@ -97,7 +97,7 @@ fn a_collapsed_project_says_how_many_of_its_workspaces_need_a_look(cx: &mut Test
     world.unread(&chat);
     let (_fake, mut ui) = open_on(cx, world);
     let count = |repo: &RepoId| format!("project-needs-a-look-{repo}");
-    assert_ne!(ui.view().selected.as_ref(), Some(&last), "the workspace with the reply isn't the one showing");
+    assert_ne!(ui.view().selected(), Some(&last), "the workspace with the reply isn't the one showing");
 
     ui.click(project_row(&first));
     ui.click(project_row(&second));
@@ -119,7 +119,7 @@ fn opening_a_workspace_from_home_brings_back_its_projects_workspaces(cx: &mut Te
     ui.click("home");
     ui.click(home_row(&last));
 
-    assert_eq!(ui.view().selected.as_ref(), Some(&last));
+    assert_eq!(ui.view().selected(), Some(&last));
     assert!(ui.has(row(&last)) && ui.has(row(&third)), "so the workspace showing has its row");
 }
 
@@ -136,15 +136,15 @@ fn once_the_workspace_showing_has_gone_the_one_in_its_place_is_the_top_of_what_s
 
     stack.client().workspace_archive(&third, false).unwrap();
 
-    ui.wait("one project collapsed: the one archived to go", |ui| ui.view().selected.as_ref() != Some(&third));
-    assert_eq!(ui.view().selected.as_ref(), Some(&last), "one project collapsed: the top of what shows");
+    ui.wait("one project collapsed: the one archived to go", |ui| ui.view().selected() != Some(&third));
+    assert_eq!(ui.view().selected(), Some(&last), "one project collapsed: the top of what shows");
 
     ui.click(project_row(&second));
     stack.client().workspace_archive(&last, false).unwrap();
 
-    ui.wait("every project collapsed: the one archived to go", |ui| ui.view().selected.as_ref() != Some(&last));
+    ui.wait("every project collapsed: the one archived to go", |ui| ui.view().selected() != Some(&last));
     assert!(
-        ui.view().selected.is_some(),
+        ui.view().selected().is_some(),
         "every project collapsed: the top of what it lists, since the sidebar shows none"
     );
 }
@@ -158,22 +158,22 @@ fn the_keys_pass_over_a_collapsed_projects_workspaces_and_go_on_from_where_the_o
     let [upper, lower, third, last]: [WorkspaceId; 4] = order(&mut ui, row, &made).try_into().unwrap();
     ui.click(row(&lower));
     ui.click(project_row(&first));
-    assert_eq!(ui.view().selected.as_ref(), Some(&lower), "it's still showing, with its project collapsed");
+    assert_eq!(ui.view().selected(), Some(&lower), "it's still showing, with its project collapsed");
 
-    ui.press("secondary-]");
+    ui.press("alt-secondary-down");
 
-    assert_eq!(ui.view().selected.as_ref(), Some(&third), "the first one showing below where its row would be");
+    assert_eq!(ui.view().selected(), Some(&third), "the first one showing below where its row would be");
     assert!(!ui.has(row(&lower)), "which doesn't bring the project it left back");
-    ui.press("secondary-[");
-    assert_eq!(ui.view().selected.as_ref(), Some(&last), "around to the last, over the collapsed project's two");
+    ui.press("alt-secondary-up");
+    assert_eq!(ui.view().selected(), Some(&last), "around to the last, over the collapsed project's two");
 
     ui.click(project_row(&first));
     ui.click(project_row(&second));
-    assert_eq!(ui.view().selected.as_ref(), Some(&last));
-    ui.press("secondary-[");
-    assert_eq!(ui.view().selected.as_ref(), Some(&lower), "the last one showing above where its row would be");
-    ui.press("secondary-]");
-    assert_eq!(ui.view().selected.as_ref(), Some(&upper), "around to the first, over the collapsed project's two");
+    assert_eq!(ui.view().selected(), Some(&last));
+    ui.press("alt-secondary-up");
+    assert_eq!(ui.view().selected(), Some(&lower), "the last one showing above where its row would be");
+    ui.press("alt-secondary-down");
+    assert_eq!(ui.view().selected(), Some(&upper), "around to the first, over the collapsed project's two");
 }
 
 /// A fold turned back partway goes on from where it had got to, and one left to run comes to rest. Each starts from the

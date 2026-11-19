@@ -334,7 +334,7 @@ impl<'a> Ui<'a> {
 
     pub(crate) fn pane(&self) -> Option<Entity<WorkspacePane>> {
         let view = self.view();
-        view.selected.as_ref().and_then(|id| view.panes.get(id).cloned())
+        view.selected().and_then(|id| view.panes.get(id).cloned())
     }
 
     pub(crate) fn transcript(&self) -> Option<Entity<Transcript>> {

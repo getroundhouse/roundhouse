@@ -78,14 +78,14 @@ fn the_sidebar_starts_last_active_first_and_the_heading_chooses_another_and_the_
         "the one worked in, then the newest, which nobody has worked in"
     );
     ui.click(sidebar_row(&first));
-    ui.press("secondary-]");
-    assert_eq!(ui.view().selected.as_ref(), Some(&third), "the next one down the sidebar");
+    ui.press("alt-secondary-down");
+    assert_eq!(ui.view().selected(), Some(&third), "the next one down the sidebar");
 
     sort_by(&mut ui, "Oldest first");
 
     assert_eq!(order(&mut ui, sidebar_row, &made), made, "the oldest first");
-    ui.press("secondary-[");
-    assert_eq!(ui.view().selected.as_ref(), Some(&second), "the one above it now");
+    ui.press("alt-secondary-up");
+    assert_eq!(ui.view().selected(), Some(&second), "the one above it now");
 }
 
 /// As the hub hears a workspace was worked in, which sends it to the top.
@@ -170,8 +170,8 @@ fn the_order_holds_still_while_the_pointer_is_on_the_list_or_a_rows_menu_is_open
         [third.clone(), second.clone(), first.clone()],
         "the pointer on it: so it can't move from a click"
     );
-    ui.press("secondary-]");
-    assert_eq!(ui.view().selected.as_ref(), Some(&second), "the pointer on it: the keys go in the order shown");
+    ui.press("alt-secondary-down");
+    assert_eq!(ui.view().selected(), Some(&second), "the pointer on it: the keys go in the order shown");
     ui.hover("send");
     let shown = order(&mut ui, sidebar_row, &made);
     assert_eq!(shown, [second.clone(), third.clone(), first.clone()], "the pointer on it: until it leaves");
@@ -256,15 +256,15 @@ fn a_new_workspaces_note_shows_where_it_will_go_and_keeps_its_place_for_it_once_
     ui.wait("another client's note", |ui| on_its_way(ui, &known).is_some());
     let (coming, note) = on_its_way(&mut ui, &known).unwrap();
     assert!(top(&mut ui, note) < top(&mut ui, sidebar_row(&third)), "another client's: at the top, where it will go");
-    ui.press("secondary-[");
-    assert_eq!(ui.view().selected.as_ref(), Some(&first), "another client's: the keys go past it, round to the bottom");
+    ui.press("alt-secondary-up");
+    assert_eq!(ui.view().selected(), Some(&first), "another client's: the keys go past it, round to the bottom");
     making.release();
     let theirs = asking.join().unwrap();
     assert_eq!(theirs, coming, "another client's: the workspace the note was for");
     ui.wait("another client's row", |ui| ui.has(sidebar_row(&theirs)));
     let shown = order(&mut ui, sidebar_row, &[first.clone(), second.clone(), third.clone(), theirs.clone()]);
     assert_eq!(shown, [theirs.clone(), third.clone(), second.clone(), first.clone()], "another client's: at the top");
-    assert_eq!(ui.view().selected.as_ref(), Some(&first), "another client's: and it doesn't take the window over");
+    assert_eq!(ui.view().selected(), Some(&first), "another client's: and it doesn't take the window over");
 
     let known = [first.clone(), second.clone(), third.clone(), theirs.clone()];
     making.hold_again();

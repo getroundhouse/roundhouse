@@ -36,8 +36,8 @@ fn open_home_on_a_fake_hub(cx: &mut TestAppContext) -> (FakeHub, Ui<'_>, Workspa
     let repo = world.repo("signals");
     let made = [with_a_chat(&mut world, &repo, "ledger"), with_a_chat(&mut world, &repo, "points")];
     let (fake, mut ui) = open_on_the_world(cx, world);
-    ui.wait("a workspace", |ui| ui.view().selected.is_some() && ui.pane().is_some());
-    let showing = ui.view().selected.clone().unwrap();
+    ui.wait("a workspace", |ui| ui.view().selected().is_some() && ui.pane().is_some());
+    let showing = ui.view().selected().cloned().unwrap();
     let first = made.into_iter().find(|w| *w != showing).unwrap();
     to_home(&mut ui);
     (fake, ui, first, showing)
@@ -51,7 +51,7 @@ fn home_shows_in_place_of_the_workspace_until_one_is_picked(cx: &mut TestAppCont
     assert!(ui.has(home_row(&first)) && ui.has(home_row(&second)));
     ui.click(home_row(&first));
 
-    ui.wait("the workspace", |ui| ui.view().selected.as_ref() == Some(&first) && ui.has("workspace-title"));
+    ui.wait("the workspace", |ui| ui.view().selected() == Some(&first) && ui.has("workspace-title"));
     assert!(!ui.has("home-page"));
 }
 
@@ -72,7 +72,7 @@ fn the_workspaces_keys_do_nothing_while_home_hides_it(cx: &mut TestAppContext) {
     let (_hub, mut ui, _, _) = open_home_on_a_fake_hub(cx);
     assert!(ui.changes_open(), "it starts open");
 
-    ui.press("secondary-shift-d");
+    ui.press("secondary-shift-b");
 
     assert!(ui.changes_open(), "the sidebar of the workspace nobody can see stays as it was");
 }
@@ -131,7 +131,7 @@ fn going_back_from_settings_gives_homes_search_the_keys_after_the_selection_move
     ui.wait("Settings", |ui| ui.has("settings-back"));
 
     stack.client().workspace_archive(&second, false).unwrap();
-    ui.wait("the other one, under Home", |ui| ui.view().selected.as_ref() == Some(&first) && ui.pane().is_some());
+    ui.wait("the other one, under Home", |ui| ui.view().selected() == Some(&first) && ui.pane().is_some());
     ui.press("escape");
 
     assert!(ui.has("home-page"));

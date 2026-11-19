@@ -150,7 +150,7 @@ impl AppView {
             self.connection(),
             Connection::Ready(_) | Connection::Connecting | Connection::Failed(ConnectionFailure::Unreachable { .. })
         );
-        self.selected.as_ref().filter(|_| drawn).and_then(|id| self.panes.get(id).cloned())
+        self.selected().filter(|_| drawn).and_then(|id| self.panes.get(id).cloned())
     }
 
     /// The whole window, whatever it shows, and what it answers whatever it shows.

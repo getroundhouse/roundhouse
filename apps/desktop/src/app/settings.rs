@@ -49,7 +49,7 @@ impl AppView {
         let Some(shown) = self.settings.take() else { return };
         // The pane must be marked visible before its focus guard can accept the returned focus.
         self.read_on_screen(window.is_window_active(), cx);
-        match self.focus_once_closed.take().filter(|id| self.selected.as_ref() == Some(id)) {
+        match self.focus_once_closed.take().filter(|id| self.selected() == Some(id)) {
             Some(id) => self.focus_pane(id, window, cx),
             None => window.focus(&shown.focus_before.unwrap_or_else(|| self.focus.clone()), cx),
         }

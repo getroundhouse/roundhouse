@@ -44,7 +44,7 @@ impl Probe {
     /// jump prints that line before and after, and the row the prompt is in.
     pub(crate) async fn run(self, handle: &AnyWindowHandle, view: &Entity<AppView>, cx: &mut AsyncApp) {
         let transcript =
-            view.read_with(cx, |v: &AppView, cx| v.panes[v.selected.as_ref().unwrap()].read(cx).transcript().unwrap());
+            view.read_with(cx, |v: &AppView, cx| v.panes[v.selected().unwrap()].read(cx).transcript().unwrap());
         cx.background_executor().timer(SETTLE).await;
         let bounds = handle.update(cx, |_, window, _| window.find("transcript").bounds()).unwrap();
         let start = Instant::now();

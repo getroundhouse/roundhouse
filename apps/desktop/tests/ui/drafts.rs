@@ -47,7 +47,7 @@ fn whats_typed_and_attached_is_there_when_the_app_opens_again_with_whats_typed_s
 
     ui.open_again(&stack);
 
-    ui.wait("the newest workspace", |ui| ui.view().selected.as_ref() == Some(&newest));
+    ui.wait("the newest workspace", |ui| ui.view().selected() == Some(&newest));
     assert!(ui.visible(pencil(&drafted)), "its row says so before it's opened");
     // Opened and typed in before anything else runs, so its file is still on its way back.
     ui.cx.update_window(ui.handle, |_, window, cx| window.click(sidebar_row(&drafted), cx)).unwrap();

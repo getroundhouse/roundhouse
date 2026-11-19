@@ -53,7 +53,8 @@ Every tab is the same width, with its mark and as much of its title as fits. The
 | `Cmd-T` | A new chat |
 | `Cmd-Shift-T` | A new terminal |
 | `Cmd-W` | Closes the chat showing, or the file tab, subagent tab, proposal tab or terminal if that's showing |
-| `Ctrl-Tab`, `Ctrl-Shift-Tab` | Move between tabs |
+| `Cmd-Shift-]`, `Cmd-Shift-[` | Move between tabs |
+| `Ctrl-Tab`, `Ctrl-Shift-Tab` | Move between tabs too |
 
 The `+` after the tabs opens a new chat or a new terminal, and offers a chat with each of the available agents when there is more than one. `Cmd-T` creates a chat with the current chat's agent, model and effort.
 

@@ -9,13 +9,15 @@ use protocol::model::{CommitId, FileContents, GitDiff};
 use super::{can_find, choose, enabled, in_a_workspace, items, key, keyed, on};
 
 /// What needs a workspace to act on.
-const NEEDS_A_WORKSPACE: [(&str, &str); 6] = [
+const NEEDS_A_WORKSPACE: [(&str, &str); 8] = [
     ("File", "New Chat"),
     ("File", "New Terminal"),
     ("File", "Close Chat"),
     ("File", "Archive Workspace"),
     ("View", "Show Diff"),
     ("View", "Next Workspace"),
+    ("View", "Previous Tab"),
+    ("View", "Next Tab"),
 ];
 
 /// macOS greys out an item when nothing where focus is takes its action, so the window takes each only where it can
@@ -65,14 +67,14 @@ fn in_a_workspace_every_item_can_be_chosen_and_says_what_it_does_to_what_shows(c
         assert!(enabled(&mut ui, menu, item), "{item} in a workspace");
     }
     assert!(enabled(&mut ui, "File", "New Workspace"), "New Workspace in a workspace");
-    assert_eq!(items(&ui, "View")[0], "Hide Diff", "it starts open");
+    assert_eq!(items(&ui, "View")[1], "Hide Diff", "it starts open");
 
     choose(&mut ui, "View", "Hide Diff");
 
     assert!(!ui.changes_open(), "Hide Diff hid it");
-    assert_eq!(items(&ui, "View")[0], "Show Diff", "hidden from the menu");
+    assert_eq!(items(&ui, "View")[1], "Show Diff", "hidden from the menu");
     ui.click("toggle-diff");
-    assert_eq!(items(&ui, "View")[0], "Hide Diff", "shown from the header's button");
+    assert_eq!(items(&ui, "View")[1], "Hide Diff", "shown from the header's button");
 
     let diff = ui.open_changes();
     ui.open_diff_of(&diff, "a.txt");

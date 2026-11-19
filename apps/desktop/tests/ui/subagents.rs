@@ -144,7 +144,7 @@ fn the_band_names_the_chat_and_shows_it(ui: &mut Ui<'_>, chat: &SessionId) -> Se
 /// The subagent tab sits at the far left, as the file tab does, just after it, so neither moves however many chats are
 /// open, and `Ctrl-Tab` comes to them in that order. `Cmd-W` closes it, and leaves the chats open.
 fn the_tab_sits_after_the_file_tab_and_cmd_w_closes_it(ui: &mut Ui<'_>, first: &SessionId, second: &SessionId) {
-    let workspace = ui.view().selected.clone().unwrap();
+    let workspace = ui.view().selected().cloned().unwrap();
     std::fs::write(ui.worktree(&workspace).join("a.txt"), "one\n").unwrap();
     ui.wait("the file, in All files", |ui| ui.has("all-file-a.txt"));
     ui.click("all-file-a.txt");

@@ -7,6 +7,7 @@ use gpui_kit::{Context, Div, IntoElement, ParentElement as _, Pixels, Styled as 
 
 use super::TOP_STRIP_HEIGHT;
 use super::{AppView, menu_button, title_bar};
+use crate::ToggleSidebar;
 use crate::menus::System;
 use crate::sides::{self, Beside, MenusButton, Side, Sidebar};
 
@@ -45,19 +46,26 @@ fn in_the_corner(starts: Pixels) -> Div {
     div().absolute().top_0().left(starts).h(TOP_STRIP_HEIGHT).flex().items_center()
 }
 
-/// Hides and shows the sidebar, as the button at the other end of the workspace's header does the sidebar of
-/// changes. It stays put whether the sidebar shows or not, beside the window's buttons where they're in the corner.
+/// Hides and shows the sidebar, as `Cmd-B` does, which its tooltip says, and as the button at the other end of the
+/// workspace's header does the sidebar of changes. It stays put whether the sidebar shows or not, beside the window's
+/// buttons where they're in the corner.
 fn sidebar_toggle(cx: &mut Context<AppView>) -> look::Button {
+    let says = match Side::Left.chosen(cx).sidebar {
+        Sidebar::Open => "Hide sidebar",
+        Sidebar::Hidden => "Show sidebar",
+    };
     look::icon_button("toggle-sidebar", look::ButtonKind::Borderless, look::ControlSize::Small, IconName::PanelLeft)
-        .tooltip(match Side::Left.chosen(cx).sidebar {
-            Sidebar::Open => "Hide sidebar",
-            Sidebar::Hidden => "Show sidebar",
-        })
+        .tooltip_with_action(says, &ToggleSidebar, None)
         .on_click(cx.listener(|_, _, _, cx| {
             // While the sidebar is hidden the button is over whatever is in the strip, such as an error, which would
             // take the click too.
             cx.stop_propagation();
-            Side::Left.toggle(cx);
-            cx.notify();
+            toggle_sidebar(cx);
         }))
+}
+
+/// Hides the sidebar if it shows, and shows it if it's hidden.
+pub(super) fn toggle_sidebar(cx: &mut Context<AppView>) {
+    Side::Left.toggle(cx);
+    cx.notify();
 }

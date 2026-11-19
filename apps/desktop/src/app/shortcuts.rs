@@ -1,37 +1,47 @@
-//! The shortcuts the window answers for repositories, workspaces and chats, which the File and View menus' items
-//! share, and what those menus say about the selected workspace. macOS greys out an item when nothing where focus is takes its action, so each shortcut is
-//! taken only where it can act.
+//! The shortcuts the window answers for its sidebars, repositories, workspaces and chats, which the File and View
+//! menus' items share, and what those menus say about the sidebars and the selected workspace. macOS greys out an item
+//! when nothing where focus is takes its action, so each shortcut is taken only where it can act.
 
 use gpui_kit::component::input::Copy;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{Context, Div, InteractiveElement};
 
-use super::AppView;
+use super::selection::Way;
+use super::{AppView, corner};
 use crate::menus;
+use crate::sides::{Side, Sidebar};
 use crate::workspace_pane::{Showing, WorkspacePane};
 use crate::{
-    AddRepository, ArchiveWorkspace, CloseChat, CreatePullRequest, FindInChat, FindNext, FindPrevious, MarkWorkspace,
-    NewChat, NewTerminal, NewWorkspace, NextChat, NextWorkspace, PreviousChat, PreviousWorkspace, StopAgent,
-    ToggleDiff,
+    AddRepository, ArchiveWorkspace, CloseChat, CreatePullRequest, FindInChat, FindNext, FindPrevious, GoBack,
+    GoForward, MarkWorkspace, NewChat, NewTerminal, NewWorkspace, NextChat, NextWorkspace, PreviousChat,
+    PreviousWorkspace, StopAgent, ToggleDiff, ToggleSidebar,
 };
 
 impl AppView {
     /// Takes the shortcuts that can act now.
     pub(super) fn with_shortcuts(&self, root: Div, cx: &mut Context<Self>) -> Div {
         let connected = self.client().is_some();
-        root.when(connected && self.current_repo().is_some(), |root| {
-            root.on_action(cx.listener(|t, _: &NewWorkspace, window, cx| t.new_workspace_here(window, cx)))
-        })
-        .when(connected && self.hub.remote.is_none(), |root| {
-            root.on_action(cx.listener(|t, _: &AddRepository, _, cx| t.add_repository(cx)))
-        })
-        .when(!self.visible_workspaces().is_empty(), |root| {
-            root.on_action(cx.listener(|t, _: &NextWorkspace, _, cx| t.step_selection(1, cx)))
-                .on_action(cx.listener(|t, _: &PreviousWorkspace, _, cx| t.step_selection(-1, cx)))
-        })
-        // Home hides the selected workspace, so nothing acts on it unseen.
-        .when(self.selected_pane().is_some() && !self.home_showing(), |root| with_workspace_shortcuts(root, cx))
-        .when(self.chat_showing(cx), |root| with_chat_shortcuts(root, cx))
+        // Settings, which stands in for the sidebar, leaves these out, so there's always one to hide.
+        root.on_action(cx.listener(|_, _: &ToggleSidebar, _, cx| corner::toggle_sidebar(cx)))
+            .when(connected && self.current_repo().is_some(), |root| {
+                root.on_action(cx.listener(|t, _: &NewWorkspace, window, cx| t.new_workspace_here(window, cx)))
+            })
+            .when(connected && self.hub.remote.is_none(), |root| {
+                root.on_action(cx.listener(|t, _: &AddRepository, _, cx| t.add_repository(cx)))
+            })
+            .when(self.can_go_through_history(Way::Back), |root| {
+                root.on_action(cx.listener(|t, _: &GoBack, _, cx| t.go_through_history(Way::Back, cx)))
+            })
+            .when(self.can_go_through_history(Way::Forward), |root| {
+                root.on_action(cx.listener(|t, _: &GoForward, _, cx| t.go_through_history(Way::Forward, cx)))
+            })
+            .when(!self.visible_workspaces().is_empty(), |root| {
+                root.on_action(cx.listener(|t, _: &NextWorkspace, _, cx| t.step_selection(1, cx)))
+                    .on_action(cx.listener(|t, _: &PreviousWorkspace, _, cx| t.step_selection(-1, cx)))
+            })
+            // Home hides the selected workspace, so nothing acts on it unseen.
+            .when(self.selected_pane().is_some() && !self.home_showing(), |root| with_workspace_shortcuts(root, cx))
+            .when(self.chat_showing(cx), |root| with_chat_shortcuts(root, cx))
     }
 
     /// Whether a chat shows, in front of the selected workspace's tabs, to find text in and stop the agent of.
@@ -40,12 +50,13 @@ impl AppView {
         pane.is_some_and(|pane| pane.showing() == Showing::Chat && pane.transcript().is_some())
     }
 
-    /// Gives the menu bar again when what it says about the selected workspace changes, such as Show Diff becoming
-    /// Hide Diff, since macOS only shows what it was last given. Cheap when nothing has changed, so every frame can
-    /// ask, which catches every way it can change.
+    /// Gives the menu bar again when what it says about the window or the selected workspace changes, such as Show
+    /// Diff becoming Hide Diff, since macOS only shows what it was last given. Cheap when nothing has changed, so every
+    /// frame can ask, which catches every way it can change.
     pub(super) fn keep_menus_current(&mut self, cx: &mut Context<Self>) {
         let pane = self.selected_pane().map(|pane| pane.read(cx));
         let says = menus::Says {
+            sidebar_open: Side::Left.chosen(cx).sidebar == Sidebar::Open,
             diff_open: pane.is_some_and(|pane| pane.changes_open(cx)),
             showing: pane.map_or(Showing::Chat, WorkspacePane::showing),
         };
@@ -105,12 +116,12 @@ fn with_workspace_shortcuts(root: Div, cx: &mut Context<AppView>) -> Div {
         )
         // As the selected workspace's row offers them, for the row of the workspace showing.
         .on_action(cx.listener(|t, _: &ArchiveWorkspace, _, cx| {
-            if let Some(id) = t.selected.clone() {
+            if let Some(id) = t.selected().cloned() {
                 t.archive(id, false, cx);
             }
         }))
         .on_action(cx.listener(|t, _: &MarkWorkspace, _, cx| {
-            if let Some((mark, chats)) = t.selected.as_ref().and_then(|id| t.workspace_marking(id, cx)) {
+            if let Some((mark, chats)) = t.selected().and_then(|id| t.workspace_marking(id, cx)) {
                 t.mark_chats(mark, chats, cx);
             }
         }))

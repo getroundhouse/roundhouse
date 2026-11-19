@@ -25,7 +25,7 @@ fn in_a_workspace(cx: &mut TestAppContext) -> (FakeHub, Ui<'_>, WorkspaceId) {
     let [other, showing] = ["ledger", "points"].map(|name| with_a_chat(&mut world, &repo, name));
     let (fake, mut ui) = open_on_the_world(cx, world);
     ui.click(sidebar_row(&showing));
-    ui.wait("the workspace", |ui| ui.view().selected.as_ref() == Some(&showing) && ui.transcript().is_some());
+    ui.wait("the workspace", |ui| ui.view().selected() == Some(&showing) && ui.transcript().is_some());
     (fake, ui, other)
 }
 

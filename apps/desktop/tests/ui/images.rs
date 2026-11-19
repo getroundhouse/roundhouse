@@ -99,7 +99,7 @@ fn in_a_workspace(
     world(&mut made, &workspace);
     let fake = FakeHub::holding(made);
     let mut ui = Ui::open_on(cx, &fake);
-    ui.wait("the workspace", |ui| ui.view().selected.as_ref() == Some(&workspace) && ui.pane().is_some());
+    ui.wait("the workspace", |ui| ui.view().selected() == Some(&workspace) && ui.pane().is_some());
     (fake, ui)
 }
 
