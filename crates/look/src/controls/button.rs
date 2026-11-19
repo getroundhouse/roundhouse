@@ -290,6 +290,12 @@ impl MenuButton {
         self.on_open_change = Some(Rc::new(change));
         self
     }
+
+    /// Stands out past its own room on each of `sides`, as [`Button::stands_out`] does.
+    pub(crate) fn stands_out(mut self, sides: &[Side]) -> Self {
+        self.trigger = Trigger(self.trigger.0.stands_out(sides));
+        self
+    }
 }
 
 impl RenderOnce for MenuButton {

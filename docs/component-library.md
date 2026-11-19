@@ -209,6 +209,19 @@ What's done on a card as a whole, such as keeping the keyboard's focus or measur
 | Set a line on a side of an element, such as under a bar, between panes or under a row of Settings | `line_under`, `line_over`, `line_left`, `line_right`, from `look::Lined` |
 | Set one over an element inside a card, in the colour a line on that card is | `line_over_on(kind)` |
 
+## Banners
+
+`docs/spec/components.md` has a banner's kinds, and `crates/look/src/banners` the code. A banner sets its colour, its icon, its room and its buttons' place by its kind, so a place gives it only what it says and what's done about it.
+
+| To | Call |
+|---|---|
+| Make one, of a kind | `look::banner(kind)` |
+| Put what it says in it, after its icon | `child`, `children` |
+| Add a small borderless button that does something about it, at its end; the last stands out past its own room | `answer`, with a `look::Button` |
+| Add one that opens a menu of what to do, in the same place | `answer_menu`, with a `look::MenuButton` |
+| Keep what it holds clear of what's over its ends, such as the window's buttons | `clear` |
+| Find it in a test | `region`, `id` |
+
 ## Empty states
 
 `docs/spec/components.md` has an empty pane's kinds, and `crates/look/src/empty_states` the code. An empty state fills what it's in and puts what it says in its middle, so a place gives it only its words and what to do.

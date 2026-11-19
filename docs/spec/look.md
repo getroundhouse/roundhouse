@@ -182,7 +182,7 @@ Three strengths have names of their own, since several places draw with them: wh
 
 | Name | Tall | Room at its ends | Text | For |
 |---|---|---|---|---|
-| `Small` | 24px | 8px | Detail | Set in a line of text or a row one line tall: a row of a list, a tab, the heading over a list, a call's line in the chat, a line of a card's text, the composer's bar, the find bar, setup's strip and a fold, and the window's own buttons in its corner, beside the Mac's. A switch's segments are small, so the switch, with the room around them, is as tall as a regular button |
+| `Small` | 24px | 8px | Detail | Set in a line of text or a row one line tall: a row of a list, a tab, the heading over a list, a call's line in the chat, a line of a card's text, the composer's bar, the find bar, a banner and a fold, and the window's own buttons in its corner, beside the Mac's. A switch's segments are small, so the switch, with the room around them, is as tall as a regular button |
 | `Regular` | 28px | 12px | Body | A bar's own, along a pane's edge, such as a header's, a tab bar's, the pull request's bar's or Home's bar's, or a card's or a page's own action, set apart from its text, such as the update card's, a comment's on a diff, a setting's or a list's of accounts, and the button over the chat back to its end |
 | `Large` | 32px | 16px | Body | On its own: a dialog's buttons, a menu's rows, the one thing an empty pane says to do, and what answers a card in the chat, such as approving a plan or retrying a request |
 

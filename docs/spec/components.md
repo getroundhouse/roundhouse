@@ -351,6 +351,23 @@ The mark has three layers, and each is about one thing, so several facts can sho
 
 ![Every way a line is drawn](screens/lines.png)
 
+## Banners
+
+- **A banner runs across a pane, or the window's top, and says something about all of it, washed in its kind's colour at 9%, with its kind's icon in that colour, and its words in the text's,** as the owner chose, from pictures of three ways, as a card in the chat that needs you is washed: an error in red, such as what the hub refused, along the window's top; a warning in amber, such as setup that failed, a workspace whose agents can't push or an account using its reserve, over the composer; and a note in grey, which needs nothing done, such as setup that's running, over the composer, or All files listing only some files, under its tabs. Each was drawn its own way: the error in red words on a stronger red, setup's, pushing's and the reserve's in a detail's text under a line, and All files' as a detail's text alone. *Unconfirmed.*
+- **What's in a banner starts 16px in and ends 12px in, as what's in a bar does, and it's at least as tall as a small bar, 32px,** with its words in body text. Words that wrap make it taller, with its icon and its buttons at their first line, so it reads from its top. What's done about it is small borderless buttons at its end, the last out past its own room, so its words end as far in as the banner's words start. `look::banner` draws one, and `look::BannerKind` holds the kinds. *Unconfirmed.*
+
+**Every kind of banner, by its name.** Each is a kind in `look::BannerKind`. *Unconfirmed.*
+
+| Name | Colour | For |
+|---|---|---|
+| `Error` | `error` | Something went wrong, such as a change the hub refused, with a crossed circle |
+| `Warning` | `warning` | Something's wrong that may cost something later, such as setup that failed, agents that can't push or an account using its reserve, with a warning sign |
+| `Note` | `text_muted` | Something to know, which needs nothing done, such as setup that's running or files left out of a list, with an info sign |
+
+**Every kind of banner, as the hub's error, setup that failed and All files' note.** *Unconfirmed.*
+
+![Every kind of banner](screens/banner-kinds.png)
+
 ## Empty states
 
 - **An empty pane shows the mark in copper, what's missing and why, and the one thing to do about it,** as a main button. The mark is 72px wide there, with five rows. What it says under its heading is muted, and wraps at 400px.

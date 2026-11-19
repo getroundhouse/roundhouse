@@ -10,4 +10,5 @@ mod kinds;
 mod widths;
 pub use card::{Card, CardHeading, card, card_heading};
 pub use kinds::CardKind;
+pub(crate) use kinds::WASH;
 pub use widths::CardWidth;

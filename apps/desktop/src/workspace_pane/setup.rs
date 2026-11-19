@@ -1,6 +1,5 @@
 //! The workspace's setup script: its status line and its log.
 
-use gpui_kit::component::h_flex;
 use gpui_kit::{
     AnyElement, App, AppContext, Context, IntoElement, ParentElement, SharedString, StatefulInteractiveElement, Styled,
     div, px,
@@ -91,36 +90,23 @@ impl WorkspacePane {
             SetupStatus::Failed { code: None } => ("Setup didn't finish, so the agent may find things missing.", false),
             _ => return None,
         };
-        let colors = look::colors(cx);
-        let (muted, warning) = (colors.text_muted, colors.warning);
         let log_label = if self.setup_log.is_some() { "Hide log" } else { "View log" };
+        let kind = if running { look::BannerKind::Note } else { look::BannerKind::Warning };
+        let last = if running {
+            look::button("stop-setup", look::ButtonKind::Borderless, look::ControlSize::Small, "Stop")
+                .on_click(cx.listener(|t, _, _, cx| t.stop_agent(cx)))
+        } else {
+            look::button("rerun-setup", look::ButtonKind::Borderless, look::ControlSize::Small, "Run again")
+                .on_click(cx.listener(|t, _, _, cx| t.rerun_setup(cx)))
+        };
         Some(
-            h_flex()
-                .flex_none()
-                .w_full()
-                .px(look::Space::Medium)
-                .py(look::Space::XSmall)
-                .gap(look::Space::Small)
-                .line_over(cx)
-                .typeset(look::Type::Detail)
-                .text_color(if running { muted } else { warning })
-                .child(div().flex_1().min_w_0().child(message))
-                .child(
+            look::banner(kind)
+                .child(message)
+                .answer(
                     look::button("setup-log", look::ButtonKind::Borderless, look::ControlSize::Small, log_label)
                         .on_click(cx.listener(|t, _, _, cx| t.toggle_setup_log(cx))),
                 )
-                // The last button out past its own room, so its words end as far in as the message starts.
-                .child(if running {
-                    look::button("stop-setup", look::ButtonKind::Borderless, look::ControlSize::Small, "Stop")
-                        .stands_out(&[look::Side::Right])
-                        .on_click(cx.listener(|t, _, _, cx| t.stop_agent(cx)))
-                        .into_any_element()
-                } else {
-                    look::button("rerun-setup", look::ButtonKind::Borderless, look::ControlSize::Small, "Run again")
-                        .stands_out(&[look::Side::Right])
-                        .on_click(cx.listener(|t, _, _, cx| t.rerun_setup(cx)))
-                        .into_any_element()
-                })
+                .answer(last)
                 .into_any_element(),
         )
     }

@@ -15,6 +15,7 @@
 mod approval_chats;
 mod approved;
 mod background_chats;
+mod banner_kinds;
 mod bar_kinds;
 mod baselines;
 mod cache_screens;
