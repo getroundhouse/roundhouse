@@ -51,23 +51,20 @@ pub(in crate::rows) fn separator() -> look::Line {
     look::line()
 }
 
-/// A faint name for the part of a block below it, such as "Input".
+/// A faint name for the part of a block below it, such as "Input": a word, so a detail rather than code.
 pub(in crate::rows) fn label(text: impl Into<SharedString>, cx: &App) -> Div {
     let text: SharedString = text.into();
-    faint(cx).child(text)
+    faint(cx).typeset(look::Type::Detail).child(text)
 }
 
-/// A faint name for the part of a block below it that's the agent's own, such as a file's path, which can be found.
+/// A faint name for the part of a block below it that's the agent's own, such as a file's path, which can be found: in
+/// the code font, since it's what you'd copy or type.
 pub(super) fn found_label(toggle: &Toggle, part: Part, text: &str, cx: &App) -> Div {
-    faint(cx).child(marked(text.to_string().into(), &toggle.marks(part, text), &[], None))
+    faint(cx).typeset(look::Type::Code).child(marked(text.to_string().into(), &toggle.marks(part, text), &[], None))
 }
 
 fn faint(cx: &App) -> Div {
-    div()
-        .px(look::Space::Medium)
-        .pt(look::Space::Small)
-        .typeset(look::Type::Code)
-        .text_color(look::colors(cx).text_faint)
+    div().px(look::Space::Medium).pt(look::Space::Small).text_color(look::colors(cx).text_faint)
 }
 
 /// What [`output`] and [`lines`] draw of `text`: a short output without the blank lines at its end, and a long one
