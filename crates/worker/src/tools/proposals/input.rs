@@ -79,7 +79,8 @@ impl WrittenQuestion {
 
 /// The arguments' schema, which says what each part is for, since the agent reads it to write them.
 pub(super) fn schema() -> Value {
-    let markdown = "Markdown: paragraphs, lists, tables, code blocks and links.";
+    let markdown = "Markdown: paragraphs, lists, tables, code blocks, links, and images in the worktree, such as \
+        `![How it flows](docs/flow.svg)`, by a path relative to it.";
     let option = json!({
         "type": "object",
         "properties": {

@@ -7,21 +7,30 @@ use protocol::worker::{ProposalRecord, Propose};
 
 impl Hub {
     /// Makes the proposal the agent in `session_id` asked for, in its workspace, `workspace_id`, once it's been
-    /// checked, and tells the feed. Asked again with the same key, it answers with the one it made.
+    /// checked, with the images it points to, and tells the feed. Asked again with the same key, it answers with the
+    /// one it made.
     pub(crate) async fn propose(
         &self,
         workspace_id: &WorkspaceId,
         session_id: SessionId,
         asked: Propose,
     ) -> Result<ProposalRecord, ApiError> {
-        let Propose { proposed, call, key } = asked;
+        let Propose { proposed, call, key, images, attachments } = asked;
         proposed.check()?;
+        let (asking, asked_key) = (session_id.clone(), key.clone());
+        if let Some(proposal) = self.blocking(move |store| store.proposal_asked(&asking, &asked_key)).await? {
+            return Ok(ProposalRecord { proposal });
+        }
+        // Before it's made, so a client never asks for one before the hub has it, as for a reply's.
+        self.keep_from_agent(&session_id, attachments).await;
         let made_at_ms = now_ms();
+        let current =
+            ProposalRevision { number: RevisionNumber::FIRST, call, proposed, made_at_ms, response: None, images };
         let proposal = Proposal {
             id: new_id().into(),
             workspace_id: workspace_id.clone(),
             session_id,
-            current: ProposalRevision { number: RevisionNumber::FIRST, call, proposed, made_at_ms, response: None },
+            current,
             created_at_ms: made_at_ms,
             rev: protocol::model::Rev::default(),
         };

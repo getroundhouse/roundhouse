@@ -4,7 +4,8 @@
 use super::super::{diff_comments, proposals, pull_request};
 use super::wire::{Code, Headers, RpcError, Said, agrees, unsupported};
 use crate::asks::Asks;
-use protocol::{Build, model::SessionId};
+use crate::tools::Caller;
+use protocol::Build;
 use serde_json::{Map, Value, json};
 
 pub(super) const VERSION: &str = "2025-06-18";
@@ -18,11 +19,12 @@ const INSTRUCTIONS: &str = "Roundhouse's tools, for the pull request of the bran
 pub(super) async fn request(
     asks: &Asks,
     build: Build,
-    session_id: &SessionId,
+    caller: &Caller,
     headers: &Headers,
     method: &str,
     params: &Map<String, Value>,
 ) -> Result<Value, RpcError> {
+    let session_id = &caller.session_id;
     if method == "initialize" {
         let requested = params.get("protocolVersion").and_then(Value::as_str);
         if headers.version != Said::Nothing {
@@ -43,10 +45,10 @@ pub(super) async fn request(
             Ok(json!({ "tools": tools }))
         }
         "tools/call" => {
-            let called = match params.get("name").and_then(Value::as_str) {
+            let result = match params.get("name").and_then(Value::as_str) {
                 Some(pull_request::NAME) => pull_request::call(asks, session_id).await,
                 Some(diff_comments::NAME) => diff_comments::call(asks, session_id).await,
-                Some(proposals::PROPOSE) => proposals::propose(asks, session_id, params).await,
+                Some(proposals::PROPOSE) => proposals::propose(asks, caller, params).await,
                 Some(proposals::GET) => proposals::get(asks, session_id, params).await,
                 _ => {
                     let offered = [pull_request::NAME, diff_comments::NAME, proposals::PROPOSE, proposals::GET];
@@ -54,7 +56,7 @@ pub(super) async fn request(
                     return Err(RpcError::new(Code::InvalidParams, offered));
                 }
             };
-            Ok(json!({"content":[{"type":"text","text":called.text}],"isError":called.is_error}))
+            Ok(json!({"content":[{"type":"text","text":result.text}],"isError":result.is_error}))
         }
         _ => Err(RpcError::new(Code::MethodNotFound, format!("there's no method {method} here"))),
     }

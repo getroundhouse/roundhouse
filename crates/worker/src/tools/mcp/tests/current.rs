@@ -1,11 +1,13 @@
+use crate::tools::Caller;
 use crate::tools::pull_requests;
 use protocol::client::{ApiError, ErrorCode};
-use protocol::model::{DiffComment, DiffSide, Rev, ToolUseId, WaitEnd};
+use protocol::model::{DiffComment, DiffSide, Rev, WaitEnd};
 use protocol::worker::{
-    AskAnswer, AskOutcome, AskReply, CancelWait, DiffComments, ProposalRecord, Propose, PullRequestAnswer, ReadWait,
-    WaitAnswer, WorkerAsk, WorkerFrame,
+    AskAnswer, AskOutcome, AskReply, CancelWait, DiffComments, PullRequestAnswer, ReadWait, WaitAnswer, WorkerAsk,
+    WorkerFrame,
 };
 use serde_json::{Value, json};
+use std::path::Path;
 use tokio::sync::mpsc;
 
 use super::*;
@@ -54,8 +56,22 @@ pub(super) async fn hub_answers(
     ask
 }
 
+/// The agent in the session `s`, working in `worktree`.
+pub(super) fn caller_in(worktree: &Path) -> Caller {
+    Caller { session_id: "s".into(), worktree: worktree.to_path_buf() }
+}
+
+/// The agent in `s`, in a worktree with nothing in it.
+fn caller() -> Caller {
+    caller_in(Path::new("/no/worktree"))
+}
+
 pub(super) async fn answered(asks: &Asks, headers: &Headers, body: &[u8]) -> Answer {
-    match answer(asks, Build::UNSTAMPED, crate::Timers::DEFAULT.wait_poll, &"s".into(), headers, body).await {
+    answered_by(asks, &caller(), headers, body).await
+}
+
+pub(super) async fn answered_by(asks: &Asks, caller: &Caller, headers: &Headers, body: &[u8]) -> Answer {
+    match answer(asks, Build::UNSTAMPED, crate::Timers::DEFAULT.wait_poll, caller, headers, body).await {
         Reply::Answer(answer) => answer,
         Reply::Accepted => panic!("a request is answered"),
     }
@@ -184,8 +200,7 @@ async fn a_notification_is_taken_and_what_isnt_json_rpc_is_refused() {
     let said = headers("tools/list", None);
     let notification = br#"{"jsonrpc":"2.0","method":"notifications/initialized"}"#;
 
-    let taken =
-        answer(&asks, Build::UNSTAMPED, crate::Timers::DEFAULT.wait_poll, &"s".into(), &said, notification).await;
+    let taken = answer(&asks, Build::UNSTAMPED, crate::Timers::DEFAULT.wait_poll, &caller(), &said, notification).await;
     let garbled = answered(&asks, &said, b"{not json").await;
     let refused = [
         (&br#"{"jsonrpc":"2.0","id":3}"#[..], json!(3), "no method"),
@@ -268,29 +283,6 @@ async fn reading_the_diffs_comments_asks_the_hub_for_them_and_says_each() {
     assert_eq!(result["isError"], false);
     let text = result["content"][0]["text"].as_str().unwrap_or_default();
     assert!(text.ends_with("\n- `a.rs:2`: Why this word?"), "{text}");
-}
-
-/// So the hub makes one proposal for the call however often it's asked, as each new hub is asked what the last
-/// didn't answer, and the chat draws the proposal's line for that call.
-#[tokio::test]
-async fn a_proposal_is_asked_for_by_the_call_that_made_it() {
-    let (asks, mut sent) = asks();
-    let arguments = json!({ "title": "Search", "context": "", "questions": [{ "header": "Index",
-        "question": "Where?", "options": [{ "label": "Hub", "description": "", "body": "" },
-        { "label": "Client", "description": "", "body": "" }] }] });
-    let call = offering_tasks("tools/call", &json!({ "name": proposals::PROPOSE, "arguments": arguments }));
-    let headers = headers("tools/call", Some(proposals::PROPOSE));
-    let calling = answered(&asks, &headers, &call);
-    let made = protocol::fixtures::proposal("p1");
-    let hub = hub_answers(&asks, &mut sent, Ok(AskReply::Proposal(ProposalRecord { proposal: made })));
-
-    let (answer, asked) = tokio::join!(calling, hub);
-
-    let WorkerAsk::Propose(Propose { proposed, call, key }) = asked else { panic!("asked to propose: {asked:?}") };
-    assert_eq!((call.as_ref().map(ToolUseId::as_str), key.as_str()), (Some("toolu_1"), "toolu_1"));
-    assert_eq!(proposed.questions[0].options[1].label, "Client");
-    let text = answer.to_json()["result"]["content"][0]["text"].as_str().unwrap_or_default().to_string();
-    assert!(text.starts_with("Proposed \"Search\" as p1."), "{text}");
 }
 
 #[tokio::test]

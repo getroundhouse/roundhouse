@@ -1,7 +1,7 @@
 use super::super::{diff_comments, proposals, pull_request, pull_requests, wait};
 use crate::asks::Asks;
+use crate::tools::Caller;
 use protocol::Build;
-use protocol::model::SessionId;
 use serde_json::{Map, Value, json};
 use std::time::Duration;
 
@@ -159,13 +159,13 @@ impl<'a> Method<'a> {
     }
 }
 
-/// Answers one message, from the agent in `session_id`. Only a JSON-RPC request or notification is taken, since a
-/// client sends nothing else.
+/// Answers one message, from `caller`. Only a JSON-RPC request or notification is taken, since a client sends nothing
+/// else.
 pub(in super::super) async fn answer(
     asks: &Asks,
     build: Build,
     wait_poll: Duration,
-    session_id: &SessionId,
+    caller: &Caller,
     headers: &Headers,
     body: &[u8],
 ) -> Reply {
@@ -188,7 +188,7 @@ pub(in super::super) async fn answer(
     };
     let Some(id) = id else { return Reply::Accepted };
     let params = message.get("params").and_then(Value::as_object).cloned().unwrap_or_default();
-    let outcome = request(asks, build, wait_poll, session_id, headers, method, &params).await;
+    let outcome = request(asks, build, wait_poll, caller, headers, method, &params).await;
     Reply::Answer(Answer { id, outcome })
 }
 
@@ -200,15 +200,16 @@ async fn request(
     asks: &Asks,
     build: Build,
     wait_poll: Duration,
-    session_id: &SessionId,
+    caller: &Caller,
     headers: &Headers,
     name: &str,
     params: &Map<String, Value>,
 ) -> Result<Value, RpcError> {
     let method = Method::named(name);
     if method == Method::Initialize || matches!(&headers.version, Said::Value(v) if v == super::legacy::VERSION) {
-        return super::legacy::request(asks, build, session_id, headers, name, params).await;
+        return super::legacy::request(asks, build, caller, headers, name, params).await;
     }
+    let session_id = &caller.session_id;
     agrees("MCP-Protocol-Version", &headers.version, version(params))?;
     agrees("Mcp-Method", &headers.method, Some(name))?;
     let names_a_task = matches!(method, Method::GetTask | Method::UpdateTask | Method::CancelTask);
@@ -232,7 +233,7 @@ async fn request(
             "ttlMs": 0,
             "cacheScope": "public",
         })),
-        Method::CallTool => call(asks, wait_poll, session_id, params).await,
+        Method::CallTool => call(asks, wait_poll, caller, params).await,
         Method::GetTask => wait::get(asks, wait_poll, session_id, task_in(params, name)?).await,
         // A wait never asks for input, so there's nothing to update, but the task has to be the chat's.
         Method::UpdateTask => {
@@ -313,9 +314,10 @@ fn discover(build: Build, takes_tasks: bool) -> Value {
 async fn call(
     asks: &Asks,
     wait_poll: Duration,
-    session_id: &SessionId,
+    caller: &Caller,
     params: &Map<String, Value>,
 ) -> Result<Value, RpcError> {
+    let session_id = &caller.session_id;
     let Some(name) = params.get("name").and_then(Value::as_str) else {
         return Err(RpcError::new(Code::InvalidParams, "a call names its tool"));
     };
@@ -326,7 +328,7 @@ async fn call(
         Some(Tool::Waits) => Ok(pull_requests::start(asks, wait_poll, session_id, params).await),
         Some(Tool::PullRequest) => Ok(pull_request::call(asks, session_id).await.to_json()),
         Some(Tool::DiffComments) => Ok(diff_comments::call(asks, session_id).await.to_json()),
-        Some(Tool::Propose) => Ok(proposals::propose(asks, session_id, params).await.to_json()),
+        Some(Tool::Propose) => Ok(proposals::propose(asks, caller, params).await.to_json()),
         Some(Tool::GetProposal) => Ok(proposals::get(asks, session_id, params).await.to_json()),
         None => Err(RpcError::new(Code::InvalidParams, format!("there's no tool called {name}"))),
     }

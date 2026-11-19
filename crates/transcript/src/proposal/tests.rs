@@ -2,6 +2,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
 
+use client_core::stand_in_hub::Does;
 use gpui_kit::{AppContext as _, Entity, TestAppContext};
 use protocol::client::proposals::ProposalAnswer;
 use protocol::model::{Choice, OptionPlace, Proposal, ProposalRevision, Response, RevisionNumber};
@@ -9,9 +10,13 @@ use protocol::model::{Choice, OptionPlace, Proposal, ProposalRevision, Response,
 use super::answering::Choosing;
 use super::{ProposalEvent, ProposalView};
 
-/// The view, and each answer it asks the app to send, as it asks.
+/// The view, and each answer it asks the app to send, as it asks. Its hub answers nothing, since the view only reads
+/// images from it, and the proposal points to none.
 fn view(cx: &mut TestAppContext) -> (Entity<ProposalView>, Rc<RefCell<Vec<ProposalAnswer>>>) {
-    let view = cx.update(|cx| cx.new(|cx| ProposalView::new(Arc::new(protocol::fixtures::proposal("p")), cx)));
+    let dir = tempfile::tempdir().unwrap();
+    let client = client_core::stand_in_hub::connect(&dir.path().join("hub.sock"), |_| Does::Nothing);
+    let proposal = Arc::new(protocol::fixtures::proposal("p"));
+    let view = cx.update(|cx| cx.new(|cx| ProposalView::new(proposal, client, cx)));
     let asked = Rc::new(RefCell::new(Vec::new()));
     let heard = asked.clone();
     cx.update(|cx| {

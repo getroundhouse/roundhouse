@@ -8,6 +8,7 @@ use protocol::worker::ToolsToken;
 use std::collections::HashMap;
 use std::io;
 use std::net::{Ipv4Addr, SocketAddr};
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::net::{TcpListener, TcpSocket, TcpStream};
@@ -28,6 +29,13 @@ const ACCEPT_PAUSE: Duration = Duration::from_millis(100);
 /// that the agents, git and scripts need too.
 const MAX_CONNECTIONS: usize = 64;
 
+/// Whose a call is: the agent in a session, which works in a worktree, where what it writes points to images.
+#[derive(Debug)]
+pub(crate) struct Caller {
+    pub(crate) session_id: SessionId,
+    pub(crate) worktree: PathBuf,
+}
+
 pub(crate) struct Tools {
     pub(super) asks: Arc<Asks>,
     /// The worker's, which the server says it is.
@@ -35,7 +43,7 @@ pub(crate) struct Tools {
     /// How often the agent's CLI is to ask after a wait, as [`crate::Timers::wait_poll`] says.
     pub(super) wait_poll: Duration,
     /// Whose each token is, as each agent starts. Kept while the worker runs, since a session's token doesn't change.
-    pub(super) tokens: Mutex<HashMap<ToolsToken, SessionId>>,
+    pub(super) tokens: Mutex<HashMap<ToolsToken, Arc<Caller>>>,
     /// Held while it starts serving, so two agents starting at once can't start two servers, and one can't start once
     /// the worker is stopping.
     pub(super) serving: tokio::sync::Mutex<Serving>,
@@ -57,9 +65,9 @@ impl Tools {
         Self { asks, build, wait_poll, tokens, serving }
     }
 
-    /// Lets calls carrying `token` through, as the agent in `session_id`'s.
-    pub(crate) fn admit(&self, token: ToolsToken, session_id: SessionId) {
-        self.tokens.lock().insert(token, session_id);
+    /// Lets calls carrying `token` through, as `caller`'s.
+    pub(crate) fn admit(&self, token: ToolsToken, caller: Caller) {
+        self.tokens.lock().insert(token, Arc::new(caller));
     }
 
     /// Where they're served, once they are.
@@ -70,7 +78,7 @@ impl Tools {
         }
     }
 
-    pub(super) fn session_for(&self, token: &ToolsToken) -> Option<SessionId> {
+    pub(super) fn caller_for(&self, token: &ToolsToken) -> Option<Arc<Caller>> {
         self.tokens.lock().get(token).cloned()
     }
 

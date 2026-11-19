@@ -3,6 +3,7 @@ use std::fmt;
 use serde::{Deserialize, Serialize};
 
 use super::{Proposed, Response};
+use crate::event::LinkedImage;
 use crate::model::{ProposalId, Rev, SessionId, ToolUseId, WorkspaceId};
 
 /// A proposal as the hub keeps it, in the chat its agent wrote it in, with its newest revision. Each revision is kept
@@ -35,6 +36,11 @@ pub struct ProposalRevision {
     /// was revised before they responded.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub response: Option<Response>,
+    /// The images what the agent wrote points to in the worktree, as they were when it wrote it, each by the address it
+    /// gives it, as a reply's text names them. The hub keeps each as an attachment of the chat, so a client reads its
+    /// bytes with `AttachmentRead`. One that wasn't there, or wasn't an image inside the worktree, isn't named.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub images: Vec<LinkedImage>,
 }
 
 /// Which revision of its proposal one is: 1 for the first the agent wrote, and one more for each after it. An answer

@@ -93,7 +93,8 @@ impl WorkspacePane {
         if !showing {
             let Some(record) = self.shown.all().proposal(&session, proposal).cloned() else { return };
             let in_front = self.proposals.in_front();
-            let view = cx.new(|cx| ProposalView::new(record, cx));
+            let client = self.client.clone();
+            let view = cx.new(|cx| ProposalView::new(record, client, cx));
             let answers = cx.subscribe(&view, |this, view, event: &ProposalEvent, cx| match event {
                 ProposalEvent::Answer(answer) => this.answer_proposal(view, answer.clone(), cx),
             });

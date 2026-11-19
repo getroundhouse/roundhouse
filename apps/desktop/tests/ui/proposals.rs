@@ -21,8 +21,13 @@ const PROPOSE: &str = r#"mcp:propose {"title":"Holding a train","context":"Train
 
 /// Has the agent propose, and waits for its line's Open. That button's ID.
 fn a_proposal(ui: &mut Ui<'_>) -> SharedString {
+    proposing(ui, PROPOSE)
+}
+
+/// Has the agent make the proposal `propose` says, as [`a_proposal`] does.
+fn proposing(ui: &mut Ui<'_>, propose: &str) -> SharedString {
     let chat = ui.active_chat();
-    ui.input(&format!("{PROPOSE}; say:done"));
+    ui.input(&format!("{propose}; say:done"));
     ui.press("enter");
     ui.wait_idle_with("the turn to finish", |text| text.contains("done"));
     // It's there once the proposal's record is, which comes on the feed.
@@ -57,6 +62,27 @@ fn a_proposal_opens_its_tab_behind_the_chat_and_open_brings_it_to_the_front(cx: 
     ui.press("secondary-w");
     assert_eq!(showing(&ui), Showing::Chat);
     assert!(!ui.has("show-proposal-tab"));
+}
+
+/// The worker reads the drawing the proposal points to in the worktree as the agent proposes, the hub keeps it with
+/// the proposal, and the page draws it, at the size it says, where the proposal points to it.
+#[gpui_kit::test]
+fn an_image_a_proposal_points_to_in_the_worktree_is_drawn_on_its_page(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let mut ui = Ui::open_with_a_repository(cx, &stack);
+    let workspace = ui.new_workspace();
+    let drawing = r##"<svg xmlns="http://www.w3.org/2000/svg" width="80" height="140"><rect width="80" height="140" fill="#3a6"/></svg>"##;
+    std::fs::write(ui.worktree(&workspace).join("flow.svg"), drawing).unwrap();
+    let propose = PROPOSE.replace("Trains wait a minute.", "Trains wait a minute.\\n\\n![How it flows](flow.svg)");
+
+    let open = proposing(&mut ui, &propose);
+    ui.click(open);
+
+    ui.wait("the proposal tab", |ui| showing(ui) == Showing::Proposal);
+    ui.wait("the drawing, from the hub", |ui| ui.shown("linked-image/").len() == 1);
+    let image = ui.shown("linked-image/").remove(0);
+    let drawn = ui.bounds(image);
+    assert_eq!(drawn.size.height, gpui_kit::px(140.), "at the size it says: {drawn:?}");
 }
 
 #[gpui_kit::test]

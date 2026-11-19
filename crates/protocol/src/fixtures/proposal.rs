@@ -23,6 +23,7 @@ pub fn proposal(id: &str) -> Proposal {
             proposed: Proposed { title: "Search".into(), context: String::new(), questions: vec![question] },
             made_at_ms: 0,
             response: None,
+            images: Vec::new(),
         },
         created_at_ms: 0,
         rev: Rev::default(),

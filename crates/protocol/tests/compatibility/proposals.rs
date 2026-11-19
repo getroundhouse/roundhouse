@@ -2,8 +2,10 @@
 //! a chat has one, and a client's answer to one, and its read of one's revisions, which every peer from now on reads
 //! as they were first written.
 
+use protocol::attachment::{Attachment, AttachmentBytes, MediaType, NewAttachment};
 use protocol::client::proposals::{ProposalAnswer, ProposalRevisions, ProposalRevisionsRead};
 use protocol::client::{ClientRequest, ClientResponse, HubNotice};
+use protocol::event::LinkedImage;
 use protocol::model::{
     Choice, OptionPlace, Proposal, ProposalOption, ProposalQuestion, ProposalRevision, Proposed, Recommendation,
     Response, Rev, RevisionNumber,
@@ -37,6 +39,7 @@ fn revision() -> (ProposalRevision, String) {
         proposed: proposed(),
         made_at_ms: 1,
         response: None,
+        images: Vec::new(),
     };
     (revision, format!(r#"{{"number":1,"call":"toolu_1","proposed":{PROPOSED},"made_at_ms":1}}"#))
 }
@@ -59,7 +62,13 @@ fn proposal() -> (Proposal, String) {
 #[test]
 fn proposing_and_reading_a_proposal_back_keep_their_form() {
     let (proposal, form) = proposal();
-    let propose = Propose { proposed: proposed(), call: Some("toolu_1".into()), key: "toolu_1".into() };
+    let propose = Propose {
+        proposed: proposed(),
+        call: Some("toolu_1".into()),
+        key: "toolu_1".into(),
+        images: Vec::new(),
+        attachments: Vec::new(),
+    };
 
     keeps_its_form(
         &propose.into_ask(),
@@ -69,6 +78,31 @@ fn proposing_and_reading_a_proposal_back_keep_their_form() {
     keeps_its_form(
         &AskReply::Proposal(ProposalRecord { proposal }),
         &format!(r#"{{"result":"proposal","proposal":{{{form}}}}}"#),
+    );
+}
+
+/// The images what the agent wrote points to: named on the ask, with their bytes beside them, and on the revision the
+/// hub keeps, by the address the agent gave each, as a reply's text names them.
+#[test]
+fn the_images_a_proposal_points_to_keep_their_form() {
+    let attachment = Attachment { id: "a1".into(), name: "flow.svg".into(), media_type: MediaType::Svg, size_bytes: 6 };
+    let images = vec![LinkedImage { address: "docs/flow.svg".into(), attachment: attachment.clone() }];
+    let bytes = NewAttachment { attachment, data: AttachmentBytes::new(b"<svg/>".to_vec()) };
+    let propose =
+        Propose { proposed: proposed(), call: None, key: "k".into(), images: images.clone(), attachments: vec![bytes] };
+    let image = r#"{"address":"docs/flow.svg","attachment":{"id":"a1","name":"flow.svg","media_type":"image/svg+xml","size_bytes":6}}"#;
+    let (revision, _) = revision();
+    let revision = ProposalRevision { images, ..revision };
+
+    keeps_its_form(
+        &propose.into_ask(),
+        &format!(
+            r#"{{"method":"propose","proposed":{PROPOSED},"key":"k","images":[{image}],"attachments":[{{"attachment":{{"id":"a1","name":"flow.svg","media_type":"image/svg+xml","size_bytes":6}},"data":"PHN2Zy8+"}}]}}"#
+        ),
+    );
+    keeps_its_form(
+        &revision,
+        &format!(r#"{{"number":1,"call":"toolu_1","proposed":{PROPOSED},"made_at_ms":1,"images":[{image}]}}"#),
     );
 }
 

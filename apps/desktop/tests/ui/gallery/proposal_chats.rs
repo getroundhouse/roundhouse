@@ -105,6 +105,7 @@ fn with_proposal(events: Vec<EventBody>, choice: Option<Choice>) -> World {
             proposed: proposed(),
             made_at_ms: session.created_at_ms,
             response: choice.map(Response::Chose),
+            images: Vec::new(),
         },
         created_at_ms: session.created_at_ms,
         rev: protocol::model::Rev::new(1),

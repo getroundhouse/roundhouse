@@ -11,10 +11,10 @@ use rusqlite::types::Type;
 use rusqlite::{Connection, OptionalExtension, Row, params};
 
 /// A proposal with its newest revision, read from `proposals` as `p` and `proposal_revisions` as `r`.
-const PROPOSAL_COLUMNS: &str = "p.id, p.workspace_id, p.session_id, p.created_at_ms, p.rev, r.number, r.call, r.proposed, r.made_at_ms, r.response";
+const PROPOSAL_COLUMNS: &str = "p.id, p.workspace_id, p.session_id, p.created_at_ms, p.rev, r.number, r.call, r.proposed, r.made_at_ms, r.response, r.images";
 const PROPOSAL_WITH_NEWEST: &str = "proposals p JOIN proposal_revisions r ON r.proposal_id = p.id
     AND r.number = (SELECT MAX(number) FROM proposal_revisions WHERE proposal_id = p.id)";
-const REVISION_COLUMNS: &str = "number, call, proposed, made_at_ms, response";
+const REVISION_COLUMNS: &str = "number, call, proposed, made_at_ms, response, images";
 
 /// What answering a proposal did.
 pub enum Answering {
@@ -59,6 +59,7 @@ fn revision_from_row(row: &Row<'_>, at: usize) -> rusqlite::Result<ProposalRevis
         response: row
             .get::<_, Option<String>>(at + 4)?
             .map(|json| serde_json::from_str(&json).unwrap_or(Response::Unknown)),
+        images: json_at(row, at + 5)?.unwrap_or_default(),
     })
 }
 
@@ -99,6 +100,19 @@ pub(in super::super) fn take_back_answer_on(
 }
 
 impl Store {
+    /// The proposal its session's ask with `key` made, if one did.
+    pub fn proposal_asked(&self, session_id: &SessionId, key: &AskKey) -> Result<Option<Proposal>, StoreError> {
+        let conn = lock(&self.reader);
+        let made = conn
+            .query_row(
+                "SELECT id FROM proposals WHERE session_id = ? AND ask_key = ?",
+                params![session_id.as_str(), key.as_str()],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()?;
+        made.map(|id| proposal_on(&conn, &id.into())).transpose()
+    }
+
     /// Keeps `proposal`, with its revision, unless its session's ask with `key` made one already, which it returns
     /// instead.
     pub fn insert_proposal(&self, proposal: &Proposal, key: &AskKey) -> Result<Made<Proposal>, StoreError> {
@@ -126,13 +140,15 @@ impl Store {
         )?;
         let first = &proposal.current;
         tx.execute(
-            "INSERT INTO proposal_revisions (proposal_id, number, call, proposed, made_at_ms) VALUES (?, ?, ?, ?, ?)",
+            "INSERT INTO proposal_revisions (proposal_id, number, call, proposed, made_at_ms, images)
+                 VALUES (?, ?, ?, ?, ?, ?)",
             params![
                 proposal.id.as_str(),
                 first.number.0,
                 first.call.as_ref().map(ToolUseId::as_str),
                 serde_json::to_string(&first.proposed)?,
                 first.made_at_ms,
+                (!first.images.is_empty()).then(|| serde_json::to_string(&first.images)).transpose()?,
             ],
         )?;
         let made = proposal_on(&tx, &proposal.id)?;

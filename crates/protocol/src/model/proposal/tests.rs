@@ -92,6 +92,7 @@ fn what_was_chosen_names_each_option_by_its_question_when_there_are_several() {
         proposed: Proposed { questions: (0..questions).map(|_| question(3)).collect(), ..proposed(1) },
         made_at_ms: 0,
         response: Some(Response::Chose(Choice { chosen, note: String::new(), at_ms: 0 })),
+        images: Vec::new(),
     };
 
     assert_eq!(answered(1, vec![OptionPlace(1)]).chosen_in_words().as_deref(), Some("B, Option 1"));

@@ -26,6 +26,6 @@ mod wait;
 
 mod server;
 use server::PATH;
-pub(crate) use server::Tools;
+pub(crate) use server::{Caller, Tools};
 #[cfg(test)]
 use server::{Serving, answered, listen};
