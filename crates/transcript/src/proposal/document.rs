@@ -6,7 +6,7 @@ use gpui_kit::component::{h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{AnyElement, App, Div, ElementId, IntoElement, ParentElement as _, SharedString, Styled as _, div};
 use look::Typeset as _;
-use protocol::model::{OptionPlace, ProposalOption, ProposalQuestion, Proposed};
+use protocol::model::{OptionLetter, OptionPlace, ProposalOption, ProposalQuestion, Proposed};
 
 use super::answering::Choosing;
 use crate::find::{Marks, marked_with_layout};
@@ -77,11 +77,12 @@ pub(super) fn parts(proposed: &Proposed, writing: &mut Writing<'_>, choosing: &C
     let several = proposed.questions.len() > 1;
     for (at, question) in proposed.questions.iter().enumerate() {
         parts.push(asked(at, question, writing, cx));
-        for (option, place) in question.options.iter().zip((0..).map(OptionPlace)) {
+        for place in question.places() {
+            let Some((letter, option)) = question.named(place) else { continue };
             let recommended = question.recommended.as_ref().is_some_and(|r| r.option == place);
-            let label = format!("{} · {}", place.letter(), option.label.trim()).into();
-            let choose = choosing.button(at, place);
-            let element = option_card(at, place, option, recommended, choose, writing, cx);
+            let label = format!("{letter} · {}", option.label.trim()).into();
+            let choose = choosing.button(at, place, letter);
+            let element = option_card(at, (place, letter), option, recommended, choose, writing, cx);
             parts.push(Part { label, under: several, element });
         }
         if let Some(part) = recommendation(at, question, writing) {
@@ -107,7 +108,7 @@ fn asked(at: usize, question: &ProposalQuestion, writing: &mut Writing<'_>, cx: 
 /// body.
 fn option_card(
     at: usize,
-    place: OptionPlace,
+    (place, letter): (OptionPlace, OptionLetter),
     option: &ProposalOption,
     recommended: bool,
     choose: Option<AnyElement>,
@@ -121,7 +122,7 @@ fn option_card(
         .flex_1()
         .min_w_0()
         .gap(look::Space::Small)
-        .child(look::badge(look::BadgeKind::Plain, place.letter().to_string()))
+        .child(look::badge(look::BadgeKind::Plain, letter.to_string()))
         .child(label)
         .when(recommended, |named| named.child(look::badge(look::BadgeKind::Plain, "Recommended")));
     let top = h_flex()
@@ -144,8 +145,8 @@ fn option_card(
 /// The option the agent recommends, by its letter and label, and why, when it recommends one.
 fn recommendation(at: usize, question: &ProposalQuestion, writing: &mut Writing<'_>) -> Option<Part> {
     let recommended = question.recommended.as_ref()?;
-    let option = question.options.get(recommended.option.index())?;
-    let named = format!("{} · {}", recommended.option.letter(), option.label.trim());
+    let (letter, option) = question.named(recommended.option)?;
+    let named = format!("{letter} · {}", option.label.trim());
     let named = div().typeset(look::Type::Body).child(writing.plain(&format!("recommended-{at}"), &named));
     let why = (!recommended.why.trim().is_empty()).then(|| writing.markdown(&format!("why-{at}"), &recommended.why));
     let element = section(heading("Recommendation")).child(named).children(why).into_any_element();

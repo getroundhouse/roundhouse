@@ -44,10 +44,12 @@ fn what_doesnt_fit_the_schema_is_refused_saying_why() {
     extra["questions"][0]["colour"] = json!("red");
 
     let not_a_letter = proposed(&arguments(&written(&json!("first")))).unwrap_err();
+    let not_an_option = proposed(&arguments(&written(&json!("C")))).unwrap_err();
     let unknown = proposed(&arguments(&extra)).unwrap_err();
     let none = proposed(&arguments(&Value::Null)).unwrap_err();
 
     assert!(not_a_letter.contains("question 1") && not_a_letter.contains("\"first\""), "{not_a_letter}");
+    assert!(not_an_option.contains("recommends option C, which it doesn't have"), "{not_an_option}");
     assert!(unknown.contains("colour"), "{unknown}");
     assert!(none.contains("don't fit"), "{none}");
 }

@@ -1,4 +1,4 @@
-use super::{ProposalQuestion, Proposed};
+use super::{OptionLetter, ProposalQuestion, Proposed};
 use crate::client::{ApiError, ErrorCode};
 
 /// The most questions one proposal asks, as the question tool asks at most four. A project with more splits into
@@ -34,9 +34,9 @@ pub enum ProposalProblem {
     #[error("question {question} has {options} options, and a question has from {MIN_OPTIONS} to {MAX_OPTIONS}")]
     Options { question: usize, options: usize },
     #[error("option {letter} of question {question} needs a label")]
-    Unlabelled { question: usize, letter: char },
-    #[error("question {question} recommends option {letter}, which it doesn't have")]
-    NoSuchOption { question: usize, letter: char },
+    Unlabelled { question: usize, letter: OptionLetter },
+    #[error("question {question} recommends an option it doesn't have")]
+    NoSuchOption { question: usize },
     #[error("a proposal holds at most {MAX_PROPOSAL_BYTES} bytes of text, and this holds {0}")]
     TooLong(usize),
 }
@@ -87,13 +87,13 @@ impl ProposalQuestion {
         if !(MIN_OPTIONS..=MAX_OPTIONS).contains(&options) {
             return Err(ProposalProblem::Options { question, options });
         }
-        let places = (0..).map(super::OptionPlace);
-        if let Some((_, place)) = self.options.iter().zip(places).find(|(option, _)| option.label.trim().is_empty()) {
-            return Err(ProposalProblem::Unlabelled { question, letter: place.letter() });
+        let unlabelled = self.places().filter_map(|place| self.named(place)).find(|(_, o)| o.label.trim().is_empty());
+        if let Some((letter, _)) = unlabelled {
+            return Err(ProposalProblem::Unlabelled { question, letter });
         }
         match &self.recommended {
-            Some(recommended) if recommended.option.index() >= options => {
-                Err(ProposalProblem::NoSuchOption { question, letter: recommended.option.letter() })
+            Some(recommended) if self.named(recommended.option).is_none() => {
+                Err(ProposalProblem::NoSuchOption { question })
             }
             Some(_) | None => Ok(()),
         }

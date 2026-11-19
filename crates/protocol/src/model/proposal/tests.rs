@@ -47,10 +47,10 @@ fn what_a_proposal_lacks_is_said_by_the_question_and_option_its_in() {
 
     let check = |second: ProposalQuestion| Proposed { questions: vec![question(2), second], ..proposed(1) }.check();
 
-    assert_eq!(check(untitled), Err(ProposalProblem::Unlabelled { question: 2, letter: 'B' }));
+    assert_eq!(check(untitled), Err(ProposalProblem::Unlabelled { question: 2, letter: letter("B") }));
     assert_eq!(check(unasked), Err(ProposalProblem::Unasked { question: 2 }));
     assert_eq!(check(long), Err(ProposalProblem::LongHeader { question: 2, chars: MAX_HEADER_CHARS + 1 }));
-    assert_eq!(check(recommends_c), Err(ProposalProblem::NoSuchOption { question: 2, letter: 'C' }));
+    assert_eq!(check(recommends_c), Err(ProposalProblem::NoSuchOption { question: 2 }));
     assert_eq!(Proposed { title: String::new(), ..proposed(1) }.check(), Err(ProposalProblem::NoTitle));
 }
 
@@ -61,13 +61,21 @@ fn a_proposal_holds_at_most_so_much_text() {
     assert!(matches!(long.check(), Err(ProposalProblem::TooLong(_))));
 }
 
+fn letter(written: &str) -> OptionLetter {
+    OptionLetter::read(written).unwrap()
+}
+
 #[test]
 fn an_option_is_named_by_a_letter_from_a() {
-    assert_eq!((OptionPlace(0).letter(), OptionPlace(3).letter()), ('A', 'D'));
-    assert_eq!(OptionPlace::of_letter("b"), Some(OptionPlace(1)));
-    assert_eq!(OptionPlace::of_letter(" D "), Some(OptionPlace(3)));
+    let three = question(3);
+    let letters: Vec<_> = three.places().map(|place| three.letter(place)).collect();
+    assert_eq!(letters, [Some(letter("A")), Some(letter("B")), Some(letter("C"))]);
+    assert_eq!(three.letter(OptionPlace(3)), None, "no option there");
+    assert_eq!(three.place_of(letter("b")), Some(OptionPlace(1)));
+    assert_eq!(three.place_of(letter("D")), None);
+    assert_eq!(letter(" d ").to_string(), "D");
     for not_one in ["", "AB", "1", "é"] {
-        assert_eq!(OptionPlace::of_letter(not_one), None, "{not_one:?}");
+        assert_eq!(OptionLetter::read(not_one), None, "{not_one:?}");
     }
 }
 
@@ -78,7 +86,7 @@ fn an_answer_chooses_one_of_each_questions_options() {
     assert_eq!(two.check_answer(&[OptionPlace(0)], ""), Err(AnswerProblem::Unchosen { questions: 2 }));
     assert_eq!(
         two.check_answer(&[OptionPlace(0), OptionPlace(2)], ""),
-        Err(AnswerProblem::NoSuchOption { question: 2, letter: 'C' })
+        Err(AnswerProblem::NoSuchOption { question: 2 })
     );
     let long = "x".repeat(MAX_NOTE_BYTES + 1);
     assert_eq!(two.check_answer(&[OptionPlace(0), OptionPlace(0)], &long), Err(AnswerProblem::LongNote(long.len())));

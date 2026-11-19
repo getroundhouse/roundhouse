@@ -12,7 +12,7 @@ use gpui_kit::{
 };
 use look::{Shaped as _, Typeset as _};
 use protocol::client::proposals::ProposalAnswer;
-use protocol::model::{Choice, ClientRequestId, OptionPlace, RevisionStanding};
+use protocol::model::{Choice, ClientRequestId, OptionLetter, OptionPlace, RevisionStanding};
 
 use super::view::{COLUMN, ProposalView};
 
@@ -67,7 +67,7 @@ impl Choosing<'_> {
     /// The button at the end of option `place`'s card, for question `at`: Choose, or Chosen once it's chosen, while
     /// it waits for the person. Once they've chosen, only Chosen, on the one chosen, and once they've responded
     /// otherwise, none.
-    pub(super) fn button(&self, at: usize, place: OptionPlace) -> Option<AnyElement> {
+    pub(super) fn button(&self, at: usize, place: OptionPlace, letter: OptionLetter) -> Option<AnyElement> {
         let id = ElementId::Name(format!("choose-{at}-{}", place.index()).into());
         match self.standing {
             RevisionStanding::Waiting => {}
@@ -85,7 +85,7 @@ impl Choosing<'_> {
             return Some(button.into_any_element());
         }
         let this = self.this.clone();
-        let words = format!("Choose {}", place.letter());
+        let words = format!("Choose {letter}");
         let button =
             look::button(id, look::ButtonKind::Edged, look::ControlSize::Small, words).on_click(move |_, _, cx| {
                 let _ = this.update(cx, |view, cx| view.choose(at, Some(place), cx));
@@ -268,8 +268,8 @@ impl ProposalView {
         let several = proposed.questions.len() > 1;
         let picks = proposed.questions.iter().enumerate().map(|(at, question)| {
             let chosen = self.answering.chosen.get(at).copied().flatten();
-            let said = match chosen.and_then(|place| Some((place, question.options.get(place.index())?))) {
-                Some((place, option)) => format!("{} · {}", place.letter(), option.label.trim()),
+            let said = match chosen.and_then(|place| question.named(place)) {
+                Some((letter, option)) => format!("{letter} · {}", option.label.trim()),
                 None => "Not chosen".to_string(),
             };
             let said = if several { format!("{}: {said}", question.header.trim()) } else { said };

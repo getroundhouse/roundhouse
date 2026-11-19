@@ -1,6 +1,6 @@
 //! A proposal in words, for the agent that wrote it to read back, such as after its conversation was compacted.
 
-use protocol::model::{OptionPlace, Proposal, ProposalQuestion, RevisionStanding};
+use protocol::model::{Proposal, ProposalQuestion, RevisionStanding};
 
 /// The whole proposal: its title and ID, its context, then each question with its options and what was recommended,
 /// and the person's answer, or that it waits for one.
@@ -36,19 +36,21 @@ fn question_in_words(number: usize, question: &ProposalQuestion) -> String {
     if !question.details.trim().is_empty() {
         parts.push(question.details.trim().to_string());
     }
-    for (option, place) in question.options.iter().zip((0..).map(OptionPlace)) {
+    for (letter, option) in question.places().filter_map(|place| question.named(place)) {
         let description = option.description.trim();
         let description = if description.is_empty() { String::new() } else { format!(": {description}") };
-        let mut said = format!("{}. {}{description}", place.letter(), option.label.trim());
+        let mut said = format!("{letter}. {}{description}", option.label.trim());
         if !option.body.trim().is_empty() {
             said = format!("{said}\n{}", option.body.trim());
         }
         parts.push(said);
     }
-    if let Some(recommended) = &question.recommended {
+    if let Some((recommended, letter)) =
+        question.recommended.as_ref().and_then(|r| Some((r, question.letter(r.option)?)))
+    {
         let why =
             if recommended.why.trim().is_empty() { String::new() } else { format!(" {}", recommended.why.trim()) };
-        parts.push(format!("You recommended {}.{why}", recommended.option.letter()));
+        parts.push(format!("You recommended {letter}.{why}"));
     }
     parts.join("\n\n")
 }

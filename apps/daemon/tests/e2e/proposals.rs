@@ -59,7 +59,8 @@ fn a_proposal_is_kept_for_the_call_that_made_it_shown_to_a_client_following_its_
     assert!(text.starts_with(&format!("Proposed \"Search\" as {}.", kept.id)), "{text}");
     assert_eq!(kept.current.call.as_ref().map(ToolUseId::as_str), Some(call.as_str()), "drawn as its call's line");
     let question = &kept.current.proposed.questions[0];
-    assert_eq!((question.options.len(), question.recommended.as_ref().map(|r| r.option.letter())), (2, Some('A')));
+    let recommended = question.recommended.as_ref().and_then(|r| question.letter(r.option)).map(|l| l.to_string());
+    assert_eq!((question.options.len(), recommended.as_deref()), (2, Some("A")));
 
     let read = calls(&client, &chat.id, &format!(r#"mcp:get_proposal {{"proposal":"{}"}}"#, kept.id), 2);
 

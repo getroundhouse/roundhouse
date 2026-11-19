@@ -5,7 +5,7 @@ use std::sync::Arc;
 use client_core::stand_in_hub::Does;
 use gpui_kit::{AppContext as _, Entity, TestAppContext};
 use protocol::client::proposals::ProposalAnswer;
-use protocol::model::{Choice, OptionPlace, Proposal, ProposalRevision, Response, RevisionNumber};
+use protocol::model::{Choice, OptionLetter, OptionPlace, Proposal, ProposalRevision, Response, RevisionNumber};
 
 use super::answering::Choosing;
 use super::{ProposalEvent, ProposalView};
@@ -154,7 +154,7 @@ fn a_response_only_a_newer_hub_knows_leaves_nothing_to_choose(cx: &mut TestAppCo
     let buttons = cx.update(|_| {
         [waiting.current.standing(), newer.current.standing()].map(|standing| {
             let choosing = Choosing { this: view.downgrade(), chosen: &[], standing };
-            choosing.button(0, OptionPlace(0)).is_some()
+            choosing.button(0, OptionPlace(0), OptionLetter::read("A").unwrap()).is_some()
         })
     });
 

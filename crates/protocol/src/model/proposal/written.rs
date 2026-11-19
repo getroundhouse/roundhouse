@@ -71,26 +71,64 @@ pub struct Recommendation {
     pub why: String,
 }
 
-/// An option, by its place among its question's options, from 0, which the person reads as a letter, from A.
+/// An option, by its place among its question's options, from 0. The person and the agent name it by its letter,
+/// which its question gives, as [`ProposalQuestion::letter`] says.
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[serde(transparent)]
 pub struct OptionPlace(pub u8);
 
 impl OptionPlace {
-    /// The letter the person and the agent name it by.
-    pub fn letter(self) -> char {
-        char::from(b'A'.saturating_add(self.0))
-    }
-
-    /// The place `letter` names, in upper or lower case, if it names one.
-    pub fn of_letter(letter: &str) -> Option<Self> {
-        let mut chars = letter.trim().chars();
-        let (Some(only), None) = (chars.next(), chars.next()) else { return None };
-        let upper = u8::try_from(only.to_ascii_uppercase()).ok()?;
-        upper.is_ascii_uppercase().then(|| OptionPlace(upper - b'A'))
-    }
-
     pub fn index(self) -> usize {
         usize::from(self.0)
+    }
+}
+
+/// The letter the person and the agent name an option by, from A to Z.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct OptionLetter(char);
+
+impl OptionLetter {
+    /// The letter `written` is, in upper or lower case, if it's one letter from A to Z.
+    pub fn read(written: &str) -> Option<Self> {
+        let mut chars = written.trim().chars();
+        let (Some(only), None) = (chars.next(), chars.next()) else { return None };
+        let upper = only.to_ascii_uppercase();
+        upper.is_ascii_uppercase().then_some(Self(upper))
+    }
+
+    /// The letter at `place` in the alphabet, from A, if there is one.
+    fn at(place: OptionPlace) -> Option<Self> {
+        let letter = b'A'.checked_add(place.0).filter(u8::is_ascii_uppercase)?;
+        Some(Self(char::from(letter)))
+    }
+}
+
+impl std::fmt::Display for OptionLetter {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl ProposalQuestion {
+    /// The letter the option at `place` is named by, which is its place, from A, or `None` if there's no option there.
+    pub fn letter(&self, place: OptionPlace) -> Option<OptionLetter> {
+        self.options.get(place.index())?;
+        OptionLetter::at(place)
+    }
+
+    /// The option `letter` names, if there's one.
+    pub fn place_of(&self, letter: OptionLetter) -> Option<OptionPlace> {
+        self.places().find(|place| self.letter(*place) == Some(letter))
+    }
+
+    /// The option at `place`, with its letter, if there's one.
+    pub fn named(&self, place: OptionPlace) -> Option<(OptionLetter, &ProposalOption)> {
+        Some((self.letter(place)?, self.options.get(place.index())?))
+    }
+
+    /// Each option's place, in the order they're read.
+    pub fn places(&self) -> impl Iterator<Item = OptionPlace> + use<> {
+        let count = u8::try_from(self.options.len()).unwrap_or(u8::MAX);
+        (0..count).map(OptionPlace)
     }
 }
