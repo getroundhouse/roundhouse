@@ -341,6 +341,16 @@ The mark has three layers, and each is about one thing, so several facts can sho
 
 ![Every state of the mark](screens/mark-states.png)
 
+## Lines
+
+- **A line separates what's on either side of it, and is 1px in the edge's colour wherever it's drawn,** as `look.md` says of the edge that separates: between panes, under a bar, between the sidebar's parts, under each row of Settings, between the parts of a card or a call's block, and down the guides beside a folder's files. `look::line` draws one across what it's in, and `look::Lined` one on a side of what it's set on, so no place picks its own colour or width. A line isn't the edge around something, such as a card or a field, nor the 2px rule beside a quote or under the tab showing. *Unconfirmed.*
+- **A line on a card washed in a colour is in that colour, at 20%,** such as the one over a failed request's tries, so it reads as the card's own rather than as a grey mark on the wash. *Unconfirmed.*
+- **A line across the chat can say what happened there in its middle,** such as a compaction, a cache that had expired or an update, with 12px between what it says and the line at each side. *Unconfirmed.*
+
+**Every way a line is drawn: under a bar, under each of a list's rows, between a card's parts, on a washed card, and across the chat with what happened there in its middle.** *Unconfirmed.*
+
+![Every way a line is drawn](screens/lines.png)
+
 ## Empty states
 
 - **An empty pane shows the mark in copper, what's missing and why, and the one thing to do about it,** as a main button. The mark is 72px wide there, with five rows.

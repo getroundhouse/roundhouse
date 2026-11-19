@@ -10,6 +10,7 @@ use gpui_kit::{
     AnyElement, App, Context, ElementId, Hsla, InteractiveElement as _, IntoElement, ParentElement, Pixels, Styled,
     TestSupportExt as _, Window, div, px,
 };
+use look::Lined as _;
 use look::{IconSizing as _, LineText, RowSize, Typeset as _};
 use protocol::model::{RepoId, Workspace, WorkspaceId, WorkspaceStatus};
 use std::ops::Range;
@@ -294,7 +295,7 @@ fn creating(workspace: &Workspace, cx: &mut Context<AppView>) -> AnyElement {
 /// The sidebar, filling the frame `sides` puts it in, with the lines `arrange` worked out for this frame.
 pub(crate) fn render(app: &AppView, arranged: Arranged, cx: &mut Context<AppView>) -> impl IntoElement {
     let colors = look::colors(cx);
-    let (background, border) = (colors.sidebar, colors.edge);
+    let background = colors.sidebar;
     // A moving mark builds this view again on every frame, so only the lines on screen are built, and a long list
     // costs no more than a short one.
     let Arranged { lines, surface, end } = arranged;
@@ -319,8 +320,7 @@ pub(crate) fn render(app: &AppView, arranged: Arranged, cx: &mut Context<AppView
     v_flex()
         .size_full()
         .bg(background)
-        .border_r_1()
-        .border_color(border)
+        .line_right(cx)
         // Where the window's buttons sit, level with the workspace header, with the button that hides the sidebar
         // beside them. It stays put, so the list scrolls under its bottom edge rather than under the buttons.
         .child(div().flex_none().h(TOP_STRIP_HEIGHT))

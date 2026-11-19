@@ -8,6 +8,7 @@ use gpui_kit::{
     AnyElement, Context, ElementId, Hsla, InteractiveElement as _, IntoElement, ParentElement, SharedString,
     StatefulInteractiveElement as _, Styled, TestSupportExt as _, div, px,
 };
+use look::Lined as _;
 use look::{IconSizing as _, InRegion as _, Region, Shaped as _, Typeset as _};
 use protocol::model::{Proposal, QueuedPrompt};
 use protocol::short_text::one_line;
@@ -61,8 +62,7 @@ impl WorkspacePane {
                     div()
                         .px(look::Space::Medium)
                         .py(look::Space::Small)
-                        .border_b_1()
-                        .border_color(border)
+                        .line_under(cx)
                         .typeset(look::Type::Detail)
                         .text_color(muted)
                         .child(heading),

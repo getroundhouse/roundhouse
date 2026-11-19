@@ -26,6 +26,8 @@ named! {
 
 /// How much of its colour a card in the chat that's in one is washed with, over the pane.
 const WASH: f32 = 0.09;
+/// How much of its colour a line on a card washed in one is, so it reads as the card's own rather than a grey stain.
+const LINE_ON_A_WASH: f32 = 0.2;
 
 impl CardKind {
     /// What it's filled with.
@@ -54,6 +56,14 @@ impl CardKind {
             CardKind::NeedsYou => Some(colors.needs_you),
             CardKind::Stopped => Some(colors.stopped),
             CardKind::Over | CardKind::InPlace | CardKind::Chat => None,
+        }
+    }
+
+    /// The colour a line on it is: its wash's, stronger, on one washed in a colour, and the edge's on the rest.
+    pub(crate) fn line(self, colors: &Colors) -> Hsla {
+        match self.tint(colors) {
+            Some(tint) => tint.opacity(LINE_ON_A_WASH),
+            None => colors.edge,
         }
     }
 

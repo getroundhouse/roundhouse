@@ -77,7 +77,7 @@ fn answers(questions: &[Question], asked: &Asked, toggle: &Toggle, cx: &App) -> 
     let mut list = v_flex().id(id.clone());
     for (i, question) in questions.iter().enumerate() {
         if i > 0 {
-            list = list.child(block::separator(cx));
+            list = list.child(block::separator());
         }
         let answer = asked.settled.answer_to(i, question);
         let toggle = &Toggle { in_row: InRow::Own(i), ..*toggle };

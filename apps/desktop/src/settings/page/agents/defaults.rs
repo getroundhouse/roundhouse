@@ -5,6 +5,7 @@ use gpui_kit::component::{h_flex, v_flex};
 use gpui_kit::{
     Anchor, AnyElement, App, Div, IntoElement, ParentElement as _, Pixels, SharedString, Styled as _, Window, div, px,
 };
+use look::Lined as _;
 use look::Typeset as _;
 use protocol::model::{Account, AgentDescription};
 
@@ -67,8 +68,7 @@ fn row(drawing: &Drawing<'_>, agent: &AgentDescription, accounts: &[&Account], c
     h_flex()
         .gap(look::Space::XLarge)
         .py(look::Space::Medium)
-        .border_b_1()
-        .border_color(colors.edge)
+        .line_under(cx)
         .child(description)
         .child(picker(drawing, agent, accounts, label, cx))
 }

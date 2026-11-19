@@ -22,5 +22,5 @@ pub(super) fn line(seq: Seq, from: &str, build: &str, cx: &App) -> AnyElement {
         .child(Icon::new(IconName::CircleFadingArrowUp).sized(RULE_ICON))
         .child(said)
         .test_support();
-    rule_row(middle, cx)
+    rule_row(middle)
 }

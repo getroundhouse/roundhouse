@@ -10,6 +10,7 @@ use gpui_kit::{
     Anchor, AnyElement, App, Div, InteractiveElement as _, IntoElement, ParentElement as _, Pixels, Role, SharedString,
     StatefulInteractiveElement as _, StyleRefinement, Styled as _, TestSupportExt as _, Window, div, px,
 };
+use look::Lined as _;
 use look::{IconSizing as _, Shaped as _, Typeset as _};
 
 use super::lists::default_badge;
@@ -133,14 +134,7 @@ pub(super) fn row(row: Row, columns: Columns, cx: &App) -> AnyElement {
         .gap(look::Space::Large)
         .child(said)
         .child(h_flex().flex_none().w(look::ControlSize::Small.height()).justify_end().children(row.menu));
-    v_flex()
-        .id(row.id)
-        .border_b_1()
-        .border_color(colors.edge)
-        .child(line)
-        .children(row.under)
-        .test_support()
-        .into_any_element()
+    v_flex().id(row.id).line_under(cx).child(line).children(row.under).test_support().into_any_element()
 }
 
 /// `said`, a row's line but its menu, with the row's `card`, which is the app's hover card, so it's timed as every

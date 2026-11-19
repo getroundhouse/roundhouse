@@ -26,7 +26,7 @@ pub(super) fn draw(call: &Call, answer: Option<&Answer>, toggle: &Toggle, cx: &A
         let input = block::code(toggle, Text::Input, "", "", &typed::input(call), cx);
         let output = output.map(|text| block::output(toggle, Text::Output, text, look::colors(cx).text, cx));
         let shown =
-            block::frame(cx).child(input).when_some(output, |d, output| d.child(block::separator(cx)).child(output));
+            block::frame(cx).child(input).when_some(output, |d, output| d.child(block::separator()).child(output));
         Some(shown.into_any_element())
     };
     line::drawn(line, answer, opened, toggle, cx)

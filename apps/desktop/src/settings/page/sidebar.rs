@@ -6,6 +6,7 @@ use gpui_kit::component::{Icon, IconName, v_flex};
 use gpui_kit::{
     App, Entity, InteractiveElement as _, IntoElement, ParentElement as _, Pixels, Styled as _, Window, div,
 };
+use look::Lined as _;
 use look::{IconSizing as _, Typeset as _};
 
 use super::{FIND_KEY, Page, PageId, Section};
@@ -50,8 +51,7 @@ pub(super) fn sidebar(
         .pt(TOP_STRIP_HEIGHT)
         .px(look::Space::Small)
         .bg(colors.sidebar)
-        .border_r_1()
-        .border_color(colors.edge)
+        .line_right(cx)
         .child(search_field(search))
         .child(v_flex().id("settings-pages").flex_1().min_h_0().children(headed).overflow_y_scrollbar())
 }

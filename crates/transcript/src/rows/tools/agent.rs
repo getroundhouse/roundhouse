@@ -17,6 +17,7 @@ use gpui_kit::{
     AnyElement, App, Div, ElementId, FontWeight, InteractiveElement as _, IntoElement, ParentElement, Styled,
     TestSupportExt as _, WeakEntity, div,
 };
+use look::Lined as _;
 use look::Typeset as _;
 use protocol::event::{AgentTask, ContentBlock, SessionEvent, TaskKind};
 use protocol::model::{SubagentId, SubagentStatus, ToolUseId};
@@ -199,8 +200,7 @@ pub(in crate::rows) fn report_block(key: &ItemKey, text: impl IntoElement, cx: &
         .mt(look::Space::XSmall)
         .gap(look::Space::Small)
         .pt(look::Space::Medium)
-        .border_t_1()
-        .border_color(colors.edge)
+        .line_over(cx)
         .child(heading)
         .child(div().id(key.element("report")).child(text).test_support())
 }
@@ -274,7 +274,6 @@ fn gathered(
     toggle: &Toggle,
     cx: &App,
 ) -> AnyElement {
-    let colors = look::colors(cx);
     let events = subagent.and_then(|s| s.events.as_deref()).unwrap_or_default();
     // Made in the order they're shown, which is the order a call nested in another's row has its texts placed in.
     let asked = asked(call, toggle, cx);
@@ -293,8 +292,7 @@ fn gathered(
         .mt(look::Space::XSmall)
         .mb(look::Space::Small)
         .gap(look::Space::Small)
-        .border_l_1()
-        .border_color(colors.edge)
+        .line_left(cx)
         .children(asked)
         .children(work)
         // A call's result names no images, so only one written into the report is drawn.

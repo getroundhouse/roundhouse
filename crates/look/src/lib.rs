@@ -34,6 +34,7 @@ mod highlight;
 mod hover;
 mod icon_sizes;
 mod keys;
+mod lines;
 mod list_rows;
 mod mark;
 mod menus;
@@ -94,6 +95,7 @@ pub use highlight::{Spans, highlight, language, preload_highlighting, try_highli
 pub use hover::{HoldOpen, HoverCard, hover_card, hover_card_with_a_button};
 pub use icon_sizes::{IconSize, IconSizing};
 pub use keys::{Key, KeyKind, key};
+pub use lines::{Line, Lined, line};
 pub use list_rows::{ListRow, ROWS_INSET, list_row};
 pub use mark::{Signal, Size, brand, chat_mark, mark};
 #[cfg(any(test, feature = "testing"))]

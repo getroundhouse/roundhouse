@@ -126,7 +126,7 @@ impl RenderOnce for Card {
             .children(top)
             .children(self.parts.into_iter().map(|part| match part {
                 Part::Element(element) => element,
-                Part::Rule => div().flex_none().h(EDGE).bg(colors.edge).into_any_element(),
+                Part::Rule => div().flex_none().h(EDGE).bg(kind.line(colors)).into_any_element(),
             }));
         match self.id {
             Some(Known::Region(region)) => drawn.id(region.id()).test_support().into_any_element(),

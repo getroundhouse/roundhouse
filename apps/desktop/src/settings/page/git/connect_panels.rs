@@ -9,6 +9,7 @@ use gpui_kit::{
     AnyElement, App, Div, InteractiveElement as _, IntoElement, ParentElement as _, SharedString,
     StatefulInteractiveElement as _, Styled as _, TestSupportExt as _, Window, div,
 };
+use look::Lined as _;
 use look::{Hand as _, IconSizing as _, Typeset as _};
 
 use super::super::field::labelled;
@@ -66,10 +67,7 @@ pub(super) fn choosing(drawing: &Drawing<'_>, panel: &Panel, cx: &App) -> AnyEle
             cx,
         ),
     ];
-    let rows = choices
-        .into_iter()
-        .enumerate()
-        .map(|(at, row)| row.when(at > 0, |row| row.border_t_1().border_color(look::colors(cx).edge)));
+    let rows = choices.into_iter().enumerate().map(|(at, row)| row.when(at > 0, |row| row.line_over(cx)));
     let body = v_flex().gap(look::Space::Small).child(h_flex().child(which(cx))).child(v_flex().children(rows));
     let framed_as = Framed {
         title: "Connect a GitHub account".into(),

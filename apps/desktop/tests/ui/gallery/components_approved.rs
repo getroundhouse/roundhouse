@@ -4,7 +4,7 @@
 #![cfg(test)]
 use super::screens_approved::{look_at, report};
 use super::{
-    bar_kinds, button_states, cards, dialog_widths, field_states, key_kinds, list_rows, menu_rows, small_things,
+    bar_kinds, button_states, cards, dialog_widths, field_states, key_kinds, lines, list_rows, menu_rows, small_things,
     switch_kinds, tab_widths, toggle_states, tooltips,
 };
 use gpui_kit::PlatformTextSystem;
@@ -114,6 +114,15 @@ fn every_size_of_list_row_looks_as_approved() {
     let picture = list_rows::draw(&text_system);
 
     report(&look_at(list_rows::NAME, list_rows::SPEC, &picture));
+}
+
+#[test]
+fn every_way_a_line_is_drawn_looks_as_approved() {
+    let text_system: Arc<dyn PlatformTextSystem> = Arc::new(gpui_apple::AppleTextSystem::new());
+
+    let picture = lines::draw(&text_system);
+
+    report(&look_at(lines::NAME, lines::SPEC, &picture));
 }
 
 #[test]

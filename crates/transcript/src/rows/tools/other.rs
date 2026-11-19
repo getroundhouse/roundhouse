@@ -59,7 +59,7 @@ fn opened(input: &Value, answer: Option<&Answer>, toggle: &Toggle, cx: &App) -> 
         .when_some(came_back(answer), |d, answer| {
             let color = if answer.failure().is_some() { colors.error } else { colors.text };
             let images = answer.images();
-            d.child(block::separator(cx))
+            d.child(block::separator())
                 .child(block::label("Output", cx))
                 .when_some(answer.text_beside_images(), |d, text| {
                     d.child(block::output(toggle, Text::Output, text, color, cx))

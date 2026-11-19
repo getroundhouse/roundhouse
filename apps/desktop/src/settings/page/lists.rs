@@ -6,6 +6,7 @@ use gpui_kit::{
     AnyElement, App, Div, InteractiveElement as _, IntoElement, ParentElement as _, SharedString, Styled as _,
     TestSupportExt as _, div,
 };
+use look::Lined as _;
 use look::Typeset as _;
 
 /// A list's name, with a badge after it if it has one, what it says of itself under that, and what it does at the far
@@ -29,7 +30,7 @@ pub(super) fn heading(
 
 /// The rows of a list, under a line, each with a line under it.
 pub(super) fn list(cx: &App) -> Div {
-    v_flex().border_t_1().border_color(look::colors(cx).edge)
+    v_flex().line_over(cx)
 }
 
 /// What a list says in place of rows, or before them, known to tests by `id`.
@@ -38,8 +39,7 @@ pub(super) fn said_in_the_list(id: &'static str, said: SharedString, cx: &App) -
     div()
         .id(id)
         .py(look::Space::Large)
-        .border_b_1()
-        .border_color(colors.edge)
+        .line_under(cx)
         .typeset(look::Type::Body)
         .text_color(colors.text_muted)
         .child(said)

@@ -8,6 +8,7 @@ use gpui_kit::{
     Anchor, AnyElement, App, Context, Hsla, InteractiveElement, IntoElement, ParentElement, Pixels, SharedString,
     StatefulInteractiveElement, StyleRefinement, Styled, TestSupportExt as _, div,
 };
+use look::Lined as _;
 use look::{IconSizing as _, Region, TaskRing, Typeset as _};
 use std::path::Path;
 
@@ -145,15 +146,13 @@ fn build_line(line: &BuildLine, cx: &mut Context<AppView>) -> impl IntoElement {
 
 pub(in super::super) fn footer(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement {
     let build = app.build_line(cx);
-    let border = look::colors(cx).edge;
     let checkout = app.checkout.as_ref().map(|checkout| checkout_card(checkout, &app.hub.paths.data_dir, cx));
     let card = update_card(&build, app.update_question.as_ref(), cx);
     v_flex()
         .flex_none()
         .p(look::Space::Small)
         .gap(look::Space::Small)
-        .border_t_1()
-        .border_color(border)
+        .line_over(cx)
         .when_some(checkout, ParentElement::child)
         .when_some(card, ParentElement::child)
         .child(build_line(&build, cx))

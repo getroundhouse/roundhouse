@@ -39,7 +39,7 @@ pub(super) fn draw(made: &GenerateImage, answer: Option<&Answer>, toggle: &Toggl
         });
         let shown = block::frame(cx)
             .children(said)
-            .when(asked.is_some() && !images.is_empty(), |d| d.child(block::separator(cx)))
+            .when(asked.is_some() && !images.is_empty(), |d| d.child(block::separator()))
             .when(!images.is_empty(), |d| d.child(block::images(images, cx)));
         Some(shown.into_any_element())
     };

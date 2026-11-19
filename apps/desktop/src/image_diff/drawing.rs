@@ -10,6 +10,7 @@ use gpui_kit::{
     AnyElement, App, Context, Div, InteractiveElement as _, IntoElement, ParentElement as _, Pixels, Render,
     SharedString, Styled as _, TestSupportExt as _, WeakEntity, Window, div, px,
 };
+use look::Lined as _;
 use look::{Shaped as _, Typeset as _};
 
 use super::{Comparison, ImageDiff, Outcome, Shown, Side, comparison, stacked};
@@ -141,8 +142,7 @@ fn strip(told: Told, cx: &App) -> Div {
         .flex_none()
         .w_full()
         .h(look::BarSize::Small.height())
-        .border_b_1()
-        .border_color(colors.edge)
+        .line_under(cx)
         .typeset(look::Type::Detail)
         .text_color(colors.text_muted);
     if told.over_columns {

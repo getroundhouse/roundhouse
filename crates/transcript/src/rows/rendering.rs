@@ -174,16 +174,14 @@ pub(super) fn empty() -> AnyElement {
 pub(crate) const RULE_ICON: look::IconSize = look::IconSize::Small;
 
 /// The row of a rule across the chat, with `middle` in its middle and nothing under it.
-pub(super) fn rule_row(middle: impl IntoElement, cx: &App) -> AnyElement {
-    row().pt(look::Space::Small).child(rule_across(middle, cx)).into_any_element()
+pub(super) fn rule_row(middle: impl IntoElement) -> AnyElement {
+    row().pt(look::Space::Small).child(rule_across(middle)).into_any_element()
 }
 
 /// A rule across the chat with `middle` in its middle, as a compaction, a cache that had expired and an update are
 /// drawn.
-pub(super) fn rule_across(middle: impl IntoElement, cx: &App) -> Div {
-    let border = look::colors(cx).edge;
-    let rule = || div().flex_1().h(look::EDGE).bg(border);
-    h_flex().w_full().items_center().gap(look::Space::Medium).child(rule()).child(middle).child(rule())
+pub(super) fn rule_across(middle: impl IntoElement) -> look::Line {
+    look::line().middle(middle)
 }
 
 /// What's said in the middle of a rule across the chat, small and faint.
