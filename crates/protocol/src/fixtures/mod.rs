@@ -4,7 +4,9 @@
 //! shape tests make, such as [`of_kind`].
 
 mod pr_wait;
+mod proposal;
 pub use pr_wait::{observed_pull_request, pull_request_wait};
+pub use proposal::proposal;
 
 mod repo;
 pub use repo::repo;

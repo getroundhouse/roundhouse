@@ -7,6 +7,7 @@ use protocol::event::{
     AgentTask, CompactionOutcome, ContentBlock, Denied, EventBody, SessionEvent, TaskOutcome, TurnOutcome,
 };
 use protocol::model::{ApprovalId, MessageId, Seq, SubagentId, TaskId};
+use protocol::prompt::PromptFrom;
 use protocol::tail::{DeltaChange, StreamDelta, Tail};
 use std::collections::HashMap;
 use std::io::Write;
@@ -56,10 +57,8 @@ impl Printer {
     }
 
     /// What was typed, and the names of the files it carries.
-    pub(super) fn prompt(&mut self, seq: Seq, text: &str, attachments: &[Attachment]) {
-        let names: Vec<&str> = attachments.iter().map(|a| a.name.as_str()).collect();
-        let carried = if names.is_empty() { String::new() } else { format!(" [attached: {}]", names.join(", ")) };
-        self.line(seq, &format!("you: {text}{carried}"));
+    pub(super) fn prompt(&mut self, seq: Seq, from: &PromptFrom, text: &str, attachments: &[Attachment]) {
+        self.line(seq, &prompted(from, text, attachments));
     }
 
     /// What the agent says it's running as, with `?` for what it left out.
@@ -71,7 +70,7 @@ impl Printer {
 
     pub(crate) fn event(&mut self, event: &SessionEvent) {
         match &event.body {
-            EventBody::UserPrompt { prompt, .. } => self.prompt(event.seq, &prompt.text, &prompt.files),
+            EventBody::UserPrompt { prompt, from, .. } => self.prompt(event.seq, from, &prompt.text, &prompt.files),
             EventBody::AgentStarted { pid, resumed, build, previous_build, .. } => {
                 self.line(event.seq, &started(*pid, *resumed, build.as_deref(), previous_build.as_deref()));
             }
@@ -365,4 +364,17 @@ pub(super) fn how_it_ended(outcome: TaskOutcome) -> &'static str {
         TaskOutcome::Stopped => "stopped",
         TaskOutcome::Unknown => "ended",
     }
+}
+
+/// A prompt's line, said to be the person's, or the hub's for them, such as the one that tells the agent the answer to
+/// a proposal, with the names of the files it carries.
+pub(super) fn prompted(from: &PromptFrom, text: &str, attachments: &[Attachment]) -> String {
+    let names: Vec<&str> = attachments.iter().map(|a| a.name.as_str()).collect();
+    let carried = if names.is_empty() { String::new() } else { format!(" [attached: {}]", names.join(", ")) };
+    let who = match from {
+        PromptFrom::Person => "you",
+        PromptFrom::ProposalResponse { .. } => "hub, with your response",
+        PromptFrom::Unknown => "hub",
+    };
+    format!("{who}: {text}{carried}")
 }

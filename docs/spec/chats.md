@@ -200,6 +200,8 @@
 
   ![The outline's list, with a compaction's row](screens/outline-compactions-list.png)
 
+- **An answer to a proposal is in the outline as the proposal's, not as a prompt the person sent,** since the chat draws it as the proposal's line: a dot among the ticks, as a compaction has, and in the list a row with the proposal's mark where a number goes, then `Answered` and the proposal's title, faint and on one line, or `Answered a proposal` until its record has come. It isn't numbered among the prompts, and is never the one being read. *Unconfirmed.*
+
 ## Finding text
 
 - **⌘F opens a bar at the top right of the chat, over it,** with what's looked for, which match is shown of how many, such as `2 of 41`, and buttons for the match before, the one after, and closing. It works wherever focus is while a chat shows, the message box too, and Find… in the Edit menu does the same. Pressed again, it puts focus back in the bar with what's in it selected. The file tab isn't searched.
@@ -208,7 +210,7 @@
 
   ![Finding text in a chat](screens/finding.png)
 
-- **Nor is the subagent tab,** so Find isn't there while it shows. *Unconfirmed.*
+- **Nor is the subagent tab, or the proposal tab,** so Find isn't there while either shows. *Unconfirmed.*
 - **What's typed is looked for as plain text, ignoring case,** once typing pauses, with no patterns or whole words. A phrase is found across a line break in a paragraph, since the paragraph shows it as a space.
 - **It finds what the chat shows: the prompts, and the agent's words and thinking, as their Markdown renders,** so `**parser** is` holds `parser is` and a link's address holds nothing, **and what calls were given and sent back,** such as a command and what it printed, a file's path and lines, and a search's pattern, **and what went wrong,** such as a failed turn's error, a notice, and what the agent last printed before it stopped unexpectedly. What the app writes itself isn't found, such as `Read 10 lines`, `Exit 1` and line numbers. A closed call's command on its line is marked but not counted, since it's counted where the call shows it open. Cards that ask something aren't found, and nor is a reply until it's recorded.
 - **Nor is a question the agent asked, once it's answered and drawn as a line,** what was asked or what was answered. *Unconfirmed.*
@@ -519,6 +521,7 @@ Every call is drawn the same way, as the first rule below says, and each kind fi
 
 - **A queued prompt with files says so after its text, muted, with a file's name or how many there are,** and beside it while it's changed. The text gives way first, so a long line doesn't hide that something's attached. *Unconfirmed.*
 - **A queued prompt's buttons show only while the pointer is over it,** which lights its row, so it's clear which prompt they're for.
+- **An answer to a proposal waiting in the queue is the proposal's line, `Answered`, its title in a chip, and what was chosen, rather than the prompt's words,** as `proposals.md` says the chat draws it once it's sent. It has no Edit, since only a prompt the person wrote has one, and the hub refuses a change to it from any client, so the person's words are never sent as the answer. It can be sent now like any other, and taken out, which takes the answer back, as `proposals.md` says. *Unconfirmed.*
 - **The arrow on a queued prompt steers the agent with it,** as Enter does, rather than leaving it to wait its turn.
 - **The queue belongs to the hub, not the app,** so it's still sent with the app closed, and every client shows the same queue. *Unconfirmed.*
 - **Stopping the agent holds the queue, and so does the agent going away mid-turn or failing its turn, or the hub failing to give it the prompt, or the compaction asked for, that would start one,** since then it's for the person to say whether to go on, and a prompt sent after a failure, such as a usage limit, could fail as the turn did. When the agent is running, such a turn never started, so the chat is back between turns, with the error, rather than at work on a prompt the agent doesn't have. When it isn't, the agent couldn't be started, and the chat is interrupted. The queue says it's waiting, and the arrow on a prompt sends it as a turn of its own, after which the rest follow. Sending any prompt lets the queue go on, once that turn ends. The hold is on the session's record, so it lasts through a hub restart. *Unconfirmed.*

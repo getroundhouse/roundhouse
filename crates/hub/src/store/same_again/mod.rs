@@ -5,6 +5,7 @@
 
 mod github;
 mod hub;
+mod proposals;
 mod rule;
 mod sessions;
 mod workspaces;

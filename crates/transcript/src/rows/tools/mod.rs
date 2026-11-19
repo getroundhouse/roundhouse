@@ -17,6 +17,7 @@ mod notebook;
 mod numbered;
 mod other;
 mod patch;
+pub(super) mod proposal;
 mod search;
 mod to_subagents;
 pub(super) mod typed;

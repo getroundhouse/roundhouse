@@ -8,6 +8,7 @@ use protocol::fixtures;
 pub(crate) use protocol::fixtures::event;
 use protocol::model::{Rev, Seq, Subagent, SubagentStatus};
 use protocol::prompt::Prompt;
+use protocol::prompt::PromptFrom;
 
 /// The record of the subagent the call `call` started, in the background, at `status`, with nothing else known about
 /// it yet. A test sets what it's about.
@@ -81,7 +82,7 @@ pub(crate) fn asking(id: &str, asks: Asks) -> EventBody {
 
 /// The person's prompt, as the hub recorded it.
 pub(crate) fn prompt(text: &str) -> EventBody {
-    EventBody::UserPrompt { client_msg_id: None, prompt: Prompt::new(text) }
+    EventBody::UserPrompt { client_msg_id: None, prompt: Prompt::new(text), from: PromptFrom::Person }
 }
 
 /// A request to the model that failed on a limit, the agent's own, or the subagent's that `parent` started.

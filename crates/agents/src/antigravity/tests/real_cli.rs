@@ -29,6 +29,7 @@ use tokio::sync::mpsc;
 
 use crate::conformance::http::{self, Server, json_response};
 use crate::{AgentOptions, AgentOutput, AgentProcess, BinaryLookup};
+use protocol::prompt::PromptFrom;
 
 const RUN: RunId = RunId::new(1);
 
@@ -210,7 +211,14 @@ async fn real_agy_parallel_background_commands_wake_twice_and_obey_laws() {
             break;
         }
     }
-    let p1 = record(None, EventBody::UserPrompt { prompt: Prompt::new("start parallel bg"), client_msg_id: None });
+    let p1 = record(
+        None,
+        EventBody::UserPrompt {
+            prompt: Prompt::new("start parallel bg"),
+            client_msg_id: None,
+            from: PromptFrom::Person,
+        },
+    );
     agent.prompt(p1, &Prompt::new("start parallel bg")).await.unwrap();
 
     let (mut turn_results, mut task_ended_turns) = (Vec::new(), 0_usize);

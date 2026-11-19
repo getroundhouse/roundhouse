@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use super::ClientMessageId;
 use crate::attachment::Attachment;
-use crate::prompt::Prompt;
+use crate::prompt::{Prompt, PromptFrom};
 
 /// A prompt waiting its turn. The hub sends the first in a session's queue once the agent has nothing left to do, as a
 /// turn of its own, unless the queue is held. It's held once the person stops the agent, or the agent goes away
@@ -17,4 +17,8 @@ pub struct QueuedPrompt {
     /// changing a queued prompt changes only its text.
     #[serde(flatten)]
     pub prompt: Prompt<Attachment>,
+    /// Who wrote it, which goes with it to the prompt it's recorded as: the person, or the hub, such as when it tells
+    /// the agent the person's answer to a proposal.
+    #[serde(default, skip_serializing_if = "PromptFrom::is_person")]
+    pub from: PromptFrom,
 }

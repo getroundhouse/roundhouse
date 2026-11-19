@@ -5,9 +5,10 @@ use protocol::prompt::Prompt;
 use super::*;
 use crate::session_log::PromptAt;
 use crate::session_log::tests::page;
+use protocol::prompt::PromptFrom;
 
 fn prompt(seq: Seq, text: &str) -> SessionEvent {
-    let body = EventBody::UserPrompt { client_msg_id: None, prompt: Prompt::new(text) };
+    let body = EventBody::UserPrompt { client_msg_id: None, prompt: Prompt::new(text), from: PromptFrom::Person };
     protocol::fixtures::event(seq, body)
 }
 

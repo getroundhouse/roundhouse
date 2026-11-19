@@ -89,6 +89,7 @@ impl Render for Chips {
                     ChipKind::Subagent => ("Asked", "Explore"),
                     ChipKind::Server => ("Create issue", "github"),
                     ChipKind::Site => ("Fetched", "docs.rs"),
+                    ChipKind::Proposal => ("Proposed", "Holding a train"),
                 };
                 let sample = in_a_line("look::ChipKind", &name, words, look::chip(kind, names), cx);
                 row(name, sample, cx)

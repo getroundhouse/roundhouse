@@ -1,11 +1,12 @@
 use protocol::event::{AgentRunState, EventBody, ExitReason, TurnOutcome};
-use protocol::model::SessionStatus;
+use protocol::model::{RevisionNumber, SessionStatus};
 use protocol::prompt::Prompt;
 
 use super::*;
+use protocol::prompt::PromptFrom;
 
 fn prompt() -> EventBody {
-    EventBody::UserPrompt { client_msg_id: None, prompt: Prompt::new("x") }
+    EventBody::UserPrompt { client_msg_id: None, prompt: Prompt::new("x"), from: PromptFrom::Person }
 }
 
 fn idle() -> EventBody {
@@ -84,6 +85,9 @@ fn a_stop_holds_the_queue_until_the_person_sends_a_prompt() {
     assert_eq!(watch.held_after(&ended(TurnOutcome::Success), Running, Idle, false), None, "only a prompt lets it go");
     let compacting = EventBody::CompactionAsked { keeping: None };
     assert_eq!(watch.held_after(&compacting, Idle, Running, false), None, "asking to compact isn't asking to go on");
+    let from = PromptFrom::ProposalResponse { proposal: "p".into(), revision: RevisionNumber::FIRST };
+    let answer = EventBody::UserPrompt { client_msg_id: None, prompt: Prompt::new("I chose B"), from };
+    assert_eq!(watch.held_after(&answer, Idle, Running, false), None, "the hub's prompt isn't the person going on");
 
     record(&mut watch, &prompt(), Idle, Running);
     record(&mut watch, &EventBody::PromptTaken { prompt: Seq::new(3) }, Running, Running);

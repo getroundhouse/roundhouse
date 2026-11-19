@@ -20,9 +20,10 @@ use crate::find::Part;
 use crate::fixtures::{advised, event, from_the_agent, log, subagents, within};
 use crate::folds::Fold;
 use crate::transcript::Model;
+use protocol::prompt::PromptFrom;
 
 fn prompt(text: &str) -> EventBody {
-    EventBody::UserPrompt { client_msg_id: None, prompt: Prompt::new(text) }
+    EventBody::UserPrompt { client_msg_id: None, prompt: Prompt::new(text), from: PromptFrom::Person }
 }
 
 fn agent(blocks: Vec<ContentBlock>) -> EventBody {

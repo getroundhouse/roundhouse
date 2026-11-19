@@ -36,6 +36,7 @@ mod other_hubs;
 mod outline;
 mod pairing;
 mod pickers;
+mod proposals;
 mod pull_requests;
 mod pushing;
 mod questions;

@@ -25,7 +25,9 @@ async fn initializes_without_modern_headers_and_offers_only_immediate_tools() {
     assert_eq!(initialized["result"]["capabilities"], json!({"tools":{}}));
     assert_eq!(initialized["result"]["serverInfo"]["name"], "roundhouse");
     assert!(initialized["result"].get("resultType").is_none());
-    assert_eq!(listed["result"]["tools"], json!([pull_request::definition(), diff_comments::definition()]));
+    let mut tools = vec![pull_request::definition(), diff_comments::definition()];
+    tools.extend(proposals::definitions());
+    assert_eq!(listed["result"]["tools"], json!(tools));
     assert!(listed["result"].get("resultType").is_none());
 }
 

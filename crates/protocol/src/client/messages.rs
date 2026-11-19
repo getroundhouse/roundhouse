@@ -1,14 +1,14 @@
 use super::{
-    admin, agent, attachments, comments, feed, github_apps, hello, log, new_workspace, records, request, sessions,
-    workspaces,
+    admin, agent, attachments, comments, feed, github_apps, hello, log, new_workspace, proposals, records, request,
+    sessions, workspaces,
 };
 use crate::attachment::Attachment;
 use crate::event::SessionEvent;
 use crate::find::Found;
 use crate::model::{
     Account, DiffComment, FileContents, FileOpened, FilePages, GitDiff, GitStatus, GithubAccount, GithubApp,
-    GithubSignIn, HubSettings, NewWorkspaceDraft, Records, Repo, Session, SessionAccount, Terminal, TitleError,
-    Workspace, WorktreeFiles,
+    GithubSignIn, HubSettings, NewWorkspaceDraft, Proposal, Records, Repo, Session, SessionAccount, Terminal,
+    TitleError, Workspace, WorktreeFiles,
 };
 use crate::tail::{StreamDelta, Tail};
 use crate::terminal::TerminalUpdate;
@@ -87,6 +87,9 @@ pub enum ClientResponse {
     Sessions(sessions::Sessions),
     Events(log::Events),
     Subagents(records::Subagents),
+    Proposals(records::Proposals),
+    Proposal(Proposal),
+    ProposalRevisions(proposals::ProposalRevisions),
     PlacedEvents(log::PlacedEvents),
     Prompts(log::Prompts),
     Compactions(log::Compactions),

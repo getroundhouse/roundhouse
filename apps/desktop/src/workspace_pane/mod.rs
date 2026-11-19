@@ -11,6 +11,7 @@ pub(crate) use reading::OnScreen;
 
 mod agent;
 mod attaching;
+mod band;
 mod changes_sidebar;
 mod chats;
 mod closed;
@@ -22,6 +23,7 @@ mod focus;
 mod front;
 mod keeping;
 mod microphone;
+mod proposal_tab;
 mod pull_request;
 mod pushing;
 mod queue;
@@ -29,6 +31,7 @@ mod reading;
 mod setup;
 mod subagent_tab;
 mod tab;
+mod tab_keys;
 mod terminals;
 #[cfg(test)]
 mod tests;

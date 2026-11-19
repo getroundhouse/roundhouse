@@ -8,7 +8,7 @@ use protocol::capability::approvals::Decision;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::event::{EventBody, NoticeLevel};
 use protocol::model::{ApprovalId, AttachmentId, ClientMessageId, Seq, SetupStatus};
-use protocol::prompt::Prompt;
+use protocol::prompt::{Prompt, PromptFrom};
 use protocol::worker::{AgentStop, Delivery};
 use std::sync::Arc;
 use tokio::sync::{mpsc, oneshot};
@@ -93,22 +93,24 @@ impl LiveSession {
         let Prompt { text, files } = prompt;
         let id = self.id.clone();
         let prompt = Prompt::carrying(text, hub.blocking(move |store| store.attachments(&id, &files)).await?);
-        let (seq, duplicate) = self.record_carrying(hub, client_msg_id, &prompt).await?;
+        let (seq, duplicate) = self.record_carrying(hub, client_msg_id, &prompt, PromptFrom::Person).await?;
         Ok((seq, duplicate, prompt))
     }
 
     /// Records a prompt whose files are known already, such as a queued one's, and returns its place in the log and
-    /// whether it had already been recorded.
+    /// whether it had already been recorded. `from` says who wrote it, and only the person's names an untitled chat.
     pub(in super::super) async fn record_carrying(
         &self,
         hub: &Arc<Hub>,
         client_msg_id: Option<ClientMessageId>,
         prompt: &Prompt<Attachment>,
+        from: PromptFrom,
     ) -> Result<(Seq, bool), ApiError> {
         self.can_be_asked(hub).await?;
-        let body = EventBody::UserPrompt { client_msg_id, prompt: prompt.clone() };
+        let person = from.is_person();
+        let body = EventBody::UserPrompt { client_msg_id, prompt: prompt.clone(), from };
         let (event, duplicate) = self.record(Origin::Hub, body, None).await?;
-        if !duplicate {
+        if !duplicate && person {
             hub.title_from_prompt(&self.id, &self.workspace_id, prompt).await;
         }
         Ok((event.seq, duplicate))

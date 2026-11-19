@@ -1,4 +1,4 @@
-use super::{attaching, closed, composer, dictating, file_tab, queue, reading, subagent_tab, terminals};
+use super::{attaching, closed, composer, dictating, file_tab, proposal_tab, queue, reading, subagent_tab, terminals};
 use crate::all_files::AllFiles;
 use crate::attached::Attachments;
 use crate::busy::Busy;
@@ -32,6 +32,8 @@ pub enum Showing {
     Subagent,
     /// One of the workspace's terminals, in place of the active chat.
     Terminal,
+    /// The proposal tab, in place of the active chat.
+    Proposal,
 }
 
 /// The workspace's diff and the views of its worktree, made together the first time the sidebar of changes opens, then
@@ -135,6 +137,7 @@ pub struct WorkspacePane {
     pub diff: Option<Diff>,
     pub(super) subagents: subagent_tab::Subagents,
     pub(super) terminals: terminals::Terminals,
+    pub(super) proposals: proposal_tab::Proposals,
     pub pull_request: Lookup,
     /// How many times the pull request has been asked for, so only the newest answer is shown.
     pub(super) pull_request_asks: u64,
@@ -169,12 +172,7 @@ impl WorkspacePane {
         cx: &mut Context<Self>,
     ) -> Self {
         let (composer, on_enter) = composer::new_input(window, cx);
-        let pane = cx.weak_entity();
-        let dictation = cx.new(|cx| {
-            dictation_ui::Field::new(composer.clone(), look::Corner::Card, window, cx).with_hints(move |cx| {
-                pane.upgrade().map_or_else(dictation_ui::Hints::default, |pane| pane.read(cx).composer_hints(cx))
-            })
-        });
+        let dictation = dictation_field(&composer, window, cx);
         let dictated =
             cx.subscribe_in(&dictation, window, |this, _, event, window, cx| this.dictation_event(event, window, cx));
         let live = cx.observe(&dictation, |_, _, cx| cx.notify());
@@ -211,6 +209,7 @@ impl WorkspacePane {
             diff: None,
             subagents: subagent_tab::Subagents::default(),
             terminals: terminals::Terminals::default(),
+            proposals: proposal_tab::Proposals::default(),
             pull_request,
             pull_request_asks: 0,
             setup_log: None,
@@ -316,6 +315,7 @@ impl WorkspacePane {
             self.take_drafts_from_elsewhere(cx);
         }
         self.pass_on_subagents(&changes, cx);
+        self.pass_on_proposals(&changes, cx);
         if changes.terminals(&id) {
             self.set_terminals(cx);
         }
@@ -366,4 +366,18 @@ impl WorkspacePane {
             transcript.update(cx, Transcript::cancel);
         }
     }
+}
+
+/// The field dictation types into, over `composer`, which takes its hints from what the pane's composer holds.
+fn dictation_field(
+    composer: &Entity<TextareaState>,
+    window: &mut Window,
+    cx: &mut Context<WorkspacePane>,
+) -> Entity<dictation_ui::Field> {
+    let pane = cx.weak_entity();
+    cx.new(|cx| {
+        dictation_ui::Field::new(composer.clone(), look::Corner::Card, window, cx).with_hints(move |cx| {
+            pane.upgrade().map_or_else(dictation_ui::Hints::default, |pane| pane.read(cx).composer_hints(cx))
+        })
+    })
 }

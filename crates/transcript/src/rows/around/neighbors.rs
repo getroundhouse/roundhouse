@@ -13,9 +13,10 @@ use protocol::capability::approvals::ApprovalMode;
 use protocol::capability::approvals::Decision;
 use protocol::capability::asking::Question;
 use protocol::event::{ContentBlock, EventBody, SessionEvent};
-use protocol::model::{ApprovalId, Seq, ToolUseId};
+use protocol::model::{ApprovalId, Proposal, ProposalId, Seq, ToolUseId};
 use reply::{Answer, Reply};
 use settled::Settled;
+use std::sync::Arc;
 use subagent::{Names, Subagent};
 
 /// How many events apart a call and its result can be and still be drawn together. A result follows its call
@@ -35,6 +36,9 @@ pub(in super::super) struct Around {
     pub(in super::super) carried: Vec<Carried>,
     /// For a prompt: whether the agent has it.
     pub(in super::super) prompt: PromptState,
+    /// For a prompt the hub wrote to tell the agent the person's answer to a proposal: which, and its record once it's
+    /// come, since the prompt is drawn as the proposal's line, rather than as something the person said.
+    pub(in super::super) answers: Option<Answers>,
     /// For a turn's end: what the agent the chat runs is called, which its card names, if the hub has said.
     pub(in super::super) agent: Option<SharedString>,
     /// For the newest turn's end: what the cache holds of the conversation while it can expire, which its line and
@@ -48,6 +52,13 @@ pub(in super::super) struct Around {
     pub(in super::super) retry: bool,
     /// Whether it's the card of the agent's failures in a row, or said in a later one's.
     pub(in super::super) failures: Failures,
+}
+
+/// The proposal a prompt the hub wrote tells the agent the answer to.
+pub(in super::super) struct Answers {
+    pub(in super::super) id: ProposalId,
+    /// Its record, once it's come.
+    pub(in super::super) proposal: Option<Arc<Proposal>>,
 }
 
 /// What says what became of an approval, besides the record that closes it.
@@ -122,6 +133,8 @@ pub(in super::super) struct BlockAround {
     pub(in super::super) subagent: Option<Subagent>,
     /// For a call to subagents at work: the subagents it names.
     pub(in super::super) names: Option<Names>,
+    /// For a call that proposed a decision: the proposal, once its record has come.
+    pub(in super::super) proposal: Option<Arc<Proposal>>,
     /// For a result: whether it's drawn with its call instead.
     pub(in super::super) with_call: bool,
 }
@@ -162,6 +175,7 @@ impl Around {
             closes: Closes::Unsaid,
             carried: Vec::new(),
             prompt: PromptState::Taken,
+            answers: None,
             agent: m.agent.clone(),
             cache: (seq == m.at_work.reply_seq).then(|| m.at_work.cache.clone()).flatten(),
             mode_before: None,
@@ -175,9 +189,11 @@ impl Around {
         if matches!(body, EventBody::AgentCompacted { .. }) {
             around.open = m.folds.is_open(&ItemKey::Event(seq, 0), Fold::Output);
         }
-        if let EventBody::UserPrompt { prompt, .. } = body {
+        if let EventBody::UserPrompt { prompt, from, .. } = body {
             around.carried = attachments::carried(m, &prompt.files);
             around.prompt = log.prompt_state(seq);
+            around.answers =
+                from.responds_to().map(|id| Answers { id: id.clone(), proposal: m.proposals_by_id.get(id).cloned() });
         }
         if let EventBody::ApprovalRequested { approval_id, .. } = body {
             around.approval_open = log
@@ -228,21 +244,22 @@ impl BlockAround {
         // Drawn with its call when the call is close enough before it to have found it.
         let with_call = matches!(block, ContentBlock::CallResult { tool_use_id, .. }
             if nearby::call_before(log, seq, tool_use_id, NEAR).is_some());
-        let (reply, subagent, names) = match block {
+        let (reply, subagent, names, proposal) = match block {
             ContentBlock::Call { id, .. } => {
                 let recorded = Recorded::of(block);
                 let hands_off = recorded.is_some_and(|call| call.hands_off());
                 let subagent = hands_off.then(|| Subagent::read(log, m, seq, id, open, opening));
-                (Reply::to(log, m, seq, id), subagent, recorded.and_then(|call| Names::read(log, m, call)))
+                let names = recorded.and_then(|call| Names::read(log, m, call));
+                (Reply::to(log, m, seq, id), subagent, names, m.proposals.get(id).cloned())
             }
-            ContentBlock::CallResult { .. } if !with_call => (Reply::of(block, m), None, None),
+            ContentBlock::CallResult { .. } if !with_call => (Reply::of(block, m), None, None, None),
             ContentBlock::CallResult { .. }
             | ContentBlock::Text { .. }
             | ContentBlock::Thinking { .. }
             | ContentBlock::Image { .. }
-            | ContentBlock::Unknown => (Reply::Nothing, None, None),
+            | ContentBlock::Unknown => (Reply::Nothing, None, None, None),
         };
-        Self { key, fold, open, reply, subagent, names, with_call }
+        Self { key, fold, open, reply, subagent, names, proposal, with_call }
     }
 }
 
@@ -276,7 +293,7 @@ pub(in super::super) fn denied(body: &EventBody) -> bool {
 }
 
 /// The blocks an event holds, if it's one that holds any.
-pub(in super::super) fn blocks_of(body: &EventBody) -> &[ContentBlock] {
+pub(crate) fn blocks_of(body: &EventBody) -> &[ContentBlock] {
     if let EventBody::Assistant { blocks, .. } | EventBody::AgentUser { blocks, .. } = body { blocks } else { &[] }
 }
 

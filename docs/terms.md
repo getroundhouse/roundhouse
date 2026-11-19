@@ -176,6 +176,8 @@ Start with "Easily confused" and "Ending things", which cover the words most lik
 | Update feed | The signed list of published builds that the app checks to update itself. Always written in full, so it isn't confused with the hub's feed | `releases.osx.json`, `updates::source`, `UpdateFeedKey` |
 | Record | Something a hub owns that changes in place, rather than being added to a log: a repository, workspace, session, subagent, comment or terminal, or per-user state such as unread. One of any kind is a `Record`, which its `RecordKey` names | `Record`, `RecordKey`, `Records`, `Repo`, `Workspace`, `Session`, `Subagent`, `DiffComment`, `Terminal` |
 | Revision | When a record last changed, from one counter per hub, so a client can tell which of two copies is newer | `Rev`, `rev` |
+| Proposal | A decision too large for a question that an agent asks the person to make, written as a structure of questions and options, which the person reads and answers in a tab of its own. A record of the chat it was made in | `Proposal`, `Proposed`, `ProposalView` |
+| Proposal's revision | One version of a proposal, as its agent wrote it, numbered from 1, with the person's response to it. A proposal keeps every one, and only the newest can be answered. Not a record's revision, which a proposal has too | `ProposalRevision`, `RevisionNumber`, `Response` |
 
 ## Easily confused
 
@@ -185,6 +187,7 @@ Start with "Easily confused" and "Ending things", which cover the words most lik
 | Contract | What a capability promises once it's claimed, the contract tests of Claude's adapter, which check it against the CLI's captured output, and what an item's doc promises | "A capability's contract", "contract tests", and an item's doc for what it promises |
 | Law | A contract of a capability that a session's log can be checked against by itself, and a property that a property test checks | "Law" for a capability's, as in `capability::laws`, and "property" for what a property test checks |
 | Note | A prompt added to an agent's conversation without starting a turn, and what the app's `--note` says of why a copy is open | "Note" alone for the prompt in code about agents, and the flag by its name, `--note` |
+| Revision | When a record last changed, and one version of a proposal | "A proposal's revision", with its number, for the second, and "revision" alone, or `rev`, only for the first |
 | Review | A turn that reviews changes, a reviewer deciding a use in the person's place, and a pull request's reviews | "Review turn", "reviewer" and "a pull request's reviews", unless the context says which |
 | Session, chat, conversation | The same thing at three levels. A session is ours, a chat is what the interface shows, and a conversation is the agent's own record, which is what it resumes | "Session" in code and docs, "chat" in text people read, and "conversation" only for the agent's side, as in `agent_session_id` (even when an agent's wire protocol, such as ACP's `sessionId`, calls its side a session) |
 | Workspace | Ours, or another tool's, such as a Cargo workspace | A bare "workspace" means ours. Always qualify the others |

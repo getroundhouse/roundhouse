@@ -4,9 +4,10 @@ use protocol::model::{Place, Seq, SubagentId};
 use protocol::prompt::Prompt;
 
 use crate::store::tests::{notice, store_with_session};
+use protocol::prompt::PromptFrom;
 
 fn prompt(text: &str) -> EventBody {
-    EventBody::UserPrompt { client_msg_id: None, prompt: Prompt::new(text) }
+    EventBody::UserPrompt { client_msg_id: None, prompt: Prompt::new(text), from: PromptFrom::Person }
 }
 
 /// What the subagent `call` started says.

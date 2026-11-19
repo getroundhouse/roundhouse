@@ -46,6 +46,8 @@ pub(crate) const TABS_AND_CHAT: Frame = Frame::Transcript(&[Part::Region(Region:
 pub(crate) const TERMINAL: Frame = Frame::Exactly(Part::Region(Region::TabBar), &[Part::Region(Region::Terminal)]);
 /// The chat's tabs, and the file the file tab shows.
 pub(crate) const FILE: Frame = Frame::Exactly(Part::Region(Region::TabBar), &[Part::Region(Region::OpenFile)]);
+/// The chat's tabs, and the proposal the proposal tab shows.
+pub(crate) const PROPOSAL: Frame = Frame::Exactly(Part::Region(Region::TabBar), &[Part::Region(Region::Proposal)]);
 /// The composer, and what's written in it.
 pub(crate) const COMPOSER: Frame = Frame::Around(Part::Region(Region::Composer), NOTHING_MORE);
 /// The composer, and a menu opened from it, such as a picker's.
@@ -143,6 +145,7 @@ fn region_in_the_column(region: Region) -> bool {
         | Region::OpenFile
         | Region::FileBar
         | Region::Terminal
+        | Region::Proposal
         | Region::SetupLog
         | Region::PushLine
         | Region::Transcript

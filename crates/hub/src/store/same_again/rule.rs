@@ -4,7 +4,7 @@ use protocol::model::Rev;
 
 use super::super::tests::store_with_session;
 use super::super::{Store, lock};
-use super::{github, hub, sessions, workspaces};
+use super::{github, hub, proposals, sessions, workspaces};
 
 /// A write the hub can be asked for again with nothing new in it.
 struct Row {
@@ -81,6 +81,8 @@ const ROWS: &[Row] = &[
     row("found_github_logins", "a login found", nothing, github::found, github::found_rev),
     row("github_apps", "its bot", github::made_app, github::bot, github::app),
     row("github_reach", "what it reaches", nothing, github::reach, github::reach_rev),
+    row("proposals", "made again by its ask", nothing, proposals::propose, proposals::proposal),
+    row("proposals", "answered again by its request", proposals::proposed, proposals::answer, proposals::proposal),
 ];
 
 /// So a record with a revision can't be added without a row, since each table that has one is either among the rows

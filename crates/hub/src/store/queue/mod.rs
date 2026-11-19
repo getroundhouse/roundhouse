@@ -7,5 +7,5 @@ use super::{Reading, Store, lock};
 mod tests;
 
 mod queued_rows;
-pub(super) use queued_rows::take_out_recorded;
-pub use queued_rows::{Changed, Queued, Queuing};
+pub use queued_rows::{Changed, Queued, Queuing, Unqueued};
+pub(super) use queued_rows::{queue_on, take_out_recorded};

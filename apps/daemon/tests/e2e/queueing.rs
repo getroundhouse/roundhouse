@@ -12,6 +12,7 @@ use protocol::prompt::Prompt;
 
 use crate::steering::wait_for_tool;
 use crate::support::{Gate, Stack, assistant_text, wait_for_status, wait_for_turn_end, wait_until};
+use protocol::prompt::PromptFrom;
 
 /// Where the prompt queued under `id` was recorded, once it has been.
 fn sent_at(events: &[SessionEvent], id: &str) -> Option<Seq> {
@@ -137,7 +138,7 @@ fn a_new_hub_sends_a_queue_the_last_one_left_ready() {
     // As a hub that went away with the agent idle, and before the queue went, leaves it.
     let store = hub::store::Store::open(&stack.paths().database, &stack.paths().backups_dir).unwrap();
     for (id, text) in [("q1", "say:first"), ("q2", "say:second")] {
-        let prompt = QueuedPrompt { client_msg_id: id.into(), prompt: Prompt::new(text) };
+        let prompt = QueuedPrompt { client_msg_id: id.into(), prompt: Prompt::new(text), from: PromptFrom::Person };
         assert!(matches!(store.queue_prompt(&session.id, &prompt).unwrap(), hub::store::Queued::Done(_)));
     }
     drop(store);

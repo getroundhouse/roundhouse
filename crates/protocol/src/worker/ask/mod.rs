@@ -7,10 +7,12 @@
 
 mod comments;
 mod pr_watch;
+mod proposals;
 mod pull_requests;
 mod worktrees;
 
 pub use comments::{DiffComments, ReadDiffComments};
+pub use proposals::{ProposalRecord, Propose, ReadProposal};
 
 pub use pull_requests::{CancelWait, PullRequestAnswer, ReadPullRequest, ReadWait, WaitAnswer};
 pub use worktrees::{

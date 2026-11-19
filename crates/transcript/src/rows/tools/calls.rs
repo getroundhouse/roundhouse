@@ -2,7 +2,9 @@ use super::super::around::{Answer, BlockAround};
 use super::super::line::{Line, Part};
 use super::super::shown::Gather;
 use super::super::{InRow, Shared, line};
-use super::{advisor, agent, block, command, files, image, notebook, other, patch, search, to_subagents, web};
+use super::{
+    advisor, agent, block, command, files, image, notebook, other, patch, proposal, search, to_subagents, web,
+};
 use crate::find::{FindLook, Marks, Part as Text};
 use crate::folds::Fold;
 use crate::item_key::ItemKey;
@@ -39,6 +41,10 @@ impl Toggle<'_> {
 pub(in super::super) fn call(toggle: &Toggle, recorded: Recorded<'_>, drawing: &BlockAround, cx: &App) -> AnyElement {
     let (reply, subagent) = (&drawing.reply, drawing.subagent.as_ref());
     let (answer, input) = (reply.result(), recorded.input());
+    // Drawn from its proposal's record, which says it's the call that made it, whatever the tool's called.
+    if let Some(made) = &drawing.proposal {
+        return proposal::draw(made, toggle, cx);
+    }
     match ToolCall::read(recorded) {
         ToolCall::Command(command) => match only(&command, answer) {
             Some(Only::Reads(path)) => files::read(&ReadFile { path, lines: None }, answer, toggle, cx),

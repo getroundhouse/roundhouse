@@ -39,6 +39,7 @@ mod new_workspace;
 mod other_builds;
 mod processes_going_away;
 mod prompt_cache;
+mod proposals;
 mod providers;
 mod pull_requests;
 mod questions;

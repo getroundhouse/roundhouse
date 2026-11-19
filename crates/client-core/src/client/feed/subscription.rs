@@ -1,7 +1,7 @@
 use super::super::follow::{Follow, FollowError, Source};
 use super::super::{Client, ClientError, Result, Subscription, SubscriptionItem};
 use crate::Agents;
-use crate::records::{HubRecords, Snapshot};
+use crate::records::{BySession, HubRecords, OfSession, Snapshot};
 use parking_lot::Mutex;
 use protocol::client::HubNotice;
 use protocol::model::{Records, SessionId};
@@ -38,17 +38,18 @@ impl RecordsFeed {
         self.follow.read(HubRecords::snapshot)
     }
 
-    /// Keeps the subagents of `session` from now on, listing them first. Asking again does nothing. Readers hear of
-    /// them once they're listed, not when they're asked for, so a reader can ask each time it reads.
-    pub fn follow_subagents(&self, session: &SessionId) {
-        if self.follow.quietly(|records| records.subagents_mut().want(session.clone())) {
+    /// Keeps the records of `session` that are listed by session, its subagents and its proposals, from now on,
+    /// listing them first. Asking again does nothing. Readers hear of them once they're listed, not when they're asked
+    /// for, so a reader can ask each time it reads.
+    pub fn follow_session_records(&self, session: &SessionId) {
+        if self.follow.quietly(|records| records.want_session(session)) {
             self.follow.wake();
         }
     }
 
-    /// Lets go of the subagents of `session`, once no view shows it, such as when its chat closes.
-    pub fn unfollow_subagents(&self, session: &SessionId) {
-        self.follow.update(|records| records.subagents_mut().forget(session));
+    /// Lets go of the subagents and proposals of `session`, once no view shows it, such as when its chat closes.
+    pub fn unfollow_session_records(&self, session: &SessionId) {
+        self.follow.update(|records| records.forget_session(session));
     }
 
     /// Takes in `record` as though the hub had told of it, for a test whose fake hub holds what never changes.
@@ -92,8 +93,8 @@ impl Source for RecordsSource {
             held.set_agents(agents);
             held.apply_list(list);
         }
-        held.lock().subagents_mut().relist();
-        list_subagents(client, held)?;
+        held.lock().relist_sessions();
+        list_by_session(client, held)?;
         Ok(subscription)
     }
 
@@ -103,8 +104,8 @@ impl Source for RecordsSource {
             SubscriptionItem::Notice(notice) if matches!(*notice, HubNotice::Resync) => {
                 let list = list_records(client)?;
                 let changed = held.lock().apply_list(list);
-                held.lock().subagents_mut().relist();
-                list_subagents(client, held)? || changed
+                held.lock().relist_sessions();
+                list_by_session(client, held)? || changed
             }
             SubscriptionItem::Notice(notice) => held.lock().apply_notice(*notice),
             SubscriptionItem::Event(_)
@@ -114,10 +115,11 @@ impl Source for RecordsSource {
         })
     }
 
-    /// Lists the subagents of a session a view has just asked for, once there's a connection to list them on.
+    /// Lists the subagents and proposals of a session a view has just asked for, once there's a connection to list them
+    /// on.
     fn asked(&mut self, connection: Option<&Client>, held: &Mutex<HubRecords>, _: &dyn Fn()) -> Result<bool> {
         let Some(client) = connection else { return Ok(false) };
-        list_subagents(client, held)
+        list_by_session(client, held)
     }
 }
 
@@ -140,22 +142,40 @@ fn list_records(client: &Client) -> Result<Records> {
     }
 }
 
-/// Lists the subagents of each session a view asked for that hasn't been listed on this connection. Returns whether
-/// that changed anything. The hub refusing one session, such as one it doesn't have, leaves only that one unlisted
-/// until the next connection, so it can't stop the feed. Only losing the connection fails.
-fn list_subagents(client: &Client, held: &Mutex<HubRecords>) -> Result<bool> {
+/// Lists the subagents and the proposals of each session a view asked for that haven't been listed on this
+/// connection. Returns whether that changed anything.
+fn list_by_session(client: &Client, held: &Mutex<HubRecords>) -> Result<bool> {
+    let subagents = list_each(client, held, HubRecords::subagents_mut, |client, session| {
+        client.session_subagents(session).map(|(list, _)| list)
+    })?;
+    let proposals = list_each(client, held, HubRecords::proposals_mut, |client, session| {
+        client.session_proposals(session).map(|(list, _)| list)
+    })?;
+    Ok(subagents || proposals)
+}
+
+/// Lists one kind of record, which `kept` says where the records keep, for each session that needs it, with `list`.
+/// The hub refusing one session, such as one it doesn't have, leaves only that one unlisted until the next
+/// connection, so it can't stop the feed. A hub from before the kind had records has none to list. Only losing the
+/// connection fails.
+fn list_each<R: OfSession>(
+    client: &Client,
+    held: &Mutex<HubRecords>,
+    kept: fn(&mut HubRecords) -> &mut BySession<R>,
+    list: fn(&Client, &SessionId) -> Result<Vec<R>>,
+) -> Result<bool> {
     let mut changed = false;
     // Bound first, so the lock is let go before the loop takes it again.
-    let to_list = held.lock().subagents().to_list();
+    let to_list = kept(&mut held.lock()).to_list();
     for session in to_list {
         // Listed before the lock is taken, as every list is.
-        match client.session_subagents(&session) {
-            Ok((list, _)) => changed |= held.lock().subagents_mut().apply_list(&session, list),
+        match list(client, &session) {
+            Ok(listed) => changed |= kept(&mut held.lock()).apply_list(&session, listed),
             Err(e) if e.is_unsupported() => {
-                held.lock().subagents_mut().unkept();
+                kept(&mut held.lock()).unkept();
                 return Ok(true);
             }
-            Err(ClientError::Api(_)) => held.lock().subagents_mut().skip(session),
+            Err(ClientError::Api(_)) => kept(&mut held.lock()).skip(session),
             Err(e) => return Err(e),
         }
     }

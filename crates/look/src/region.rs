@@ -21,6 +21,8 @@ pub enum Region {
     FileBar,
     /// The terminal in front, in the chat's place.
     Terminal,
+    /// What the proposal tab shows, in the chat's place.
+    Proposal,
     /// Where a prompt is written.
     Composer,
     /// The prompts waiting to be sent, above the composer.
@@ -75,6 +77,7 @@ impl Region {
             Region::OpenFile => "open-file",
             Region::FileBar => "file-bar",
             Region::Terminal => "terminal",
+            Region::Proposal => "proposal",
             Region::Composer => "composer",
             Region::Queue => "queue",
             Region::SetupLog => "setup-log-text",

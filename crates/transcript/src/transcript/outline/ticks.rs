@@ -10,9 +10,11 @@ use gpui_kit::{
 };
 use hover::{Hover, Part, Showing};
 use look::{InRegion as _, LineText, Region};
-use protocol::model::{CompactionLine, PromptLine};
+use protocol::model::{CompactionLine, PromptLine, Proposal, ProposalId};
+use std::collections::HashMap;
 use std::ops::Range;
 use std::rc::Rc;
+use std::sync::Arc;
 
 /// The most ticks shown at once. A chat with more shows those around the prompt being read, and fades a tick at an
 /// end that has more past it.
@@ -50,12 +52,23 @@ pub(super) struct Line {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) enum Kind {
-    /// The prompt `number` places from the first, counting from 1. Compactions aren't counted.
+    /// The prompt `number` places from the first, counting from 1. Compactions aren't counted, nor are answers.
     Prompt {
         line: PromptLine,
         number: usize,
     },
+    /// The prompt the hub wrote to tell the agent the person's answer to a proposal, which the chat draws as the
+    /// proposal's line rather than as something the person asked: the proposal's title, once its record has come.
+    Answer {
+        line: PromptLine,
+        title: Option<String>,
+    },
     Compaction(CompactionLine),
+}
+
+/// What an answer's line in the outline says, by the proposal's title once it's known.
+pub(super) fn answered(title: Option<&str>) -> String {
+    title.map_or_else(|| "Answered a proposal".to_string(), |title| format!("Answered {title}"))
 }
 
 impl Line {
@@ -70,18 +83,28 @@ impl Line {
 #[derive(Default)]
 pub(in super::super) struct Outline {
     pub(super) changes: u64,
+    /// How many of the chat's proposals were known, so an answer's line takes its proposal's title once it comes.
+    pub(super) proposals: usize,
     pub(super) lines: Rc<[Line]>,
     pub(super) rows: list::Rows,
 }
 
 impl Outline {
-    pub(super) fn read(&mut self, log: &SessionLog) -> Rc<[Line]> {
+    pub(super) fn read(&mut self, log: &SessionLog, proposals: &HashMap<ProposalId, Arc<Proposal>>) -> Rc<[Line]> {
         let changed = {
-            let changed = log.outline_changes() != self.changes;
+            let changed = log.outline_changes() != self.changes || proposals.len() != self.proposals;
             if changed {
-                let prompts = log.prompt_lines().zip(1..).map(|(line, number)| Line {
-                    row: log.prompt_row(line),
-                    kind: Kind::Prompt { line: line.clone(), number },
+                let mut number = 0;
+                let prompts = log.prompt_lines().map(|line| {
+                    let kind = if let Some(id) = line.author().responds_to() {
+                        let title =
+                            proposals.get(id).map(|proposal| proposal.current.proposed.title.trim().to_string());
+                        Kind::Answer { line: line.clone(), title }
+                    } else {
+                        number += 1;
+                        Kind::Prompt { line: line.clone(), number }
+                    };
+                    Line { row: log.prompt_row(line), kind }
                 });
                 let compactions = log
                     .compaction_lines()
@@ -91,6 +114,7 @@ impl Outline {
                 lines.sort_by_key(|line| line.row);
                 self.lines = lines.into();
                 self.changes = log.outline_changes();
+                self.proposals = proposals.len();
             }
             changed
         };
@@ -144,7 +168,7 @@ impl Transcript {
         cx: &mut Context<Self>,
     ) -> Div {
         let around = div().relative().size_full();
-        let lines = self.outline.read(&self.log);
+        let lines = self.outline.read(&self.log, &self.model.borrow().proposals_by_id);
         if !lines.iter().any(Line::is_prompt) {
             return around.child(chat);
         }
@@ -238,6 +262,7 @@ fn tick(line: &Line, prompts: usize, look: Tick, cx: &App) -> AnyElement {
         Kind::Compaction(compaction) => {
             ("outline-dot", crate::rows::compaction::who(compaction.by).to_string(), div().size(DOT))
         }
+        Kind::Answer { title, .. } => ("outline-dot", answered(title.as_deref()), div().size(DOT)),
     };
     div()
         .id(ElementId::Name(format!("{id}/{}", line.row).into()))

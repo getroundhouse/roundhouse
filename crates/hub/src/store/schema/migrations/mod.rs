@@ -16,6 +16,7 @@ mod github_sign_ins;
 mod hub_settings;
 mod limits;
 mod logins;
+mod proposals;
 mod providers;
 mod replies;
 mod repos;

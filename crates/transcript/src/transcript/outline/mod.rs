@@ -1,7 +1,8 @@
 //! The outline: a short tick at the right of the chat for each prompt, with the one being read in white, so a long chat
 //! shows how far it goes and where you are in it, and a dot for each compaction, where the agent swapped what it held
-//! for a summary. Resting the pointer on them lists the prompts and compactions over them, and clicking one jumps to
-//! it. The ticks themselves aren't clicked, so they can stay small.
+//! for a summary, and another for each answer to a proposal, which the chat draws as the proposal's line. Resting the
+//! pointer on them lists the prompts and compactions over them, and clicking one jumps to it. The ticks themselves
+//! aren't clicked, so they can stay small.
 
 #[cfg(test)]
 use protocol::model::{CompactionLine, PromptLine};
@@ -13,6 +14,6 @@ mod tests;
 
 mod ticks;
 pub(super) use ticks::Outline;
-use ticks::{Jumps, Kind, Line};
+use ticks::{Jumps, Kind, Line, answered};
 #[cfg(test)]
 use ticks::{MOST_TICKS, Tick, being_read, look, shown};

@@ -13,10 +13,11 @@ use protocol::event::{
 use protocol::fixtures;
 use protocol::model::{MessageId, ModelName, Seq, SubagentId, ToolUseId};
 use protocol::prompt::Prompt;
+use protocol::prompt::PromptFrom;
 use serde_json::Value;
 
 pub fn user_prompt(text: &str) -> EventBody {
-    EventBody::UserPrompt { client_msg_id: None, prompt: Prompt::new(text) }
+    EventBody::UserPrompt { client_msg_id: None, prompt: Prompt::new(text), from: PromptFrom::Person }
 }
 
 /// The agent taking the prompt recorded at `prompt`, which is the first event of every chat here.

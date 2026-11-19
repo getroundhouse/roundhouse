@@ -1,9 +1,11 @@
 use std::sync::Arc;
 
-use protocol::model::{Rev, Subagent, SubagentStatus};
+use protocol::model::{Proposal, Rev, Subagent, SubagentStatus};
 
-use super::{Subagents, subagent_named};
+use super::{BySession, subagent_named};
 use crate::records::Snapshot;
+
+type Subagents = BySession<Subagent>;
 
 fn subagent(session: &str, call: &str, started_at_ms: i64, rev: u64) -> Subagent {
     Subagent { session_id: session.into(), started_at_ms, rev: Rev::new(rev), ..protocol::fixtures::subagent(call) }
@@ -11,13 +13,13 @@ fn subagent(session: &str, call: &str, started_at_ms: i64, rev: u64) -> Subagent
 
 /// The calls that started a session's subagents, as a view would read them.
 fn calls(subagents: &Subagents, session: &str) -> Vec<String> {
-    let shown = Snapshot::new(Arc::default(), subagents.listed(), Arc::default());
+    let shown = Snapshot::new(Arc::default(), subagents.listed(), Arc::default(), Arc::default());
     shown.subagents(&session.into()).iter().map(|subagent| subagent.call.to_string()).collect()
 }
 
 /// The subagent `call` started, as a view would read it.
 fn shown(subagents: &Subagents, session: &str, call: &str) -> Option<Subagent> {
-    let shown = Snapshot::new(Arc::default(), subagents.listed(), Arc::default());
+    let shown = Snapshot::new(Arc::default(), subagents.listed(), Arc::default(), Arc::default());
     shown.subagent(&session.into(), &call.into()).map(|subagent| Subagent::clone(subagent))
 }
 
@@ -123,4 +125,26 @@ fn a_subagent_is_named_by_its_id_or_else_by_its_call() {
     assert_eq!(found("toolu_1").as_deref(), Some("task_1"), "by its call");
     assert_eq!(found("toolu_2").as_deref(), Some("toolu_2"), "by its ID first");
     assert_eq!(found("toolu_9"), None);
+}
+
+fn proposal(session: &str, id: &str, created_at_ms: i64, rev: u64) -> Proposal {
+    Proposal { session_id: session.into(), created_at_ms, rev: Rev::new(rev), ..protocol::fixtures::proposal(id) }
+}
+
+/// Proposals are kept as subagents are, and read in the order they were made.
+#[test]
+fn a_sessions_proposals_are_kept_as_its_subagents_are_in_the_order_they_were_made() {
+    let mut proposals = BySession::<Proposal>::default();
+    proposals.want("s".into());
+    let mut retitled = proposal("s", "p", 2, 9);
+    retitled.current.proposed.title = "Search, again".into();
+
+    assert!(proposals.apply(retitled.clone()));
+    assert!(proposals.apply_list(&"s".into(), vec![proposal("s", "p", 2, 4), proposal("s", "q", 1, 5)]), "q is new");
+    assert!(!proposals.apply(proposal("t", "r", 1, 6)), "another session");
+
+    let shown = Snapshot::new(Arc::default(), Arc::default(), proposals.listed(), Arc::default());
+    let ids: Vec<_> = shown.proposals(&"s".into()).iter().map(|proposal| proposal.id.to_string()).collect();
+    assert_eq!(ids, ["q", "p"]);
+    assert_eq!(shown.proposal(&"s".into(), &"p".into()).map(|p| Proposal::clone(p)), Some(retitled));
 }

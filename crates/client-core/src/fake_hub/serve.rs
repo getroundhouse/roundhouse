@@ -10,8 +10,8 @@ use protocol::client::CLIENT_PROTOCOL_VERSION;
 use protocol::client::log::ReadLimit;
 use protocol::client::{
     ApiError, ClientFrame, ClientRequest, ClientResponse, ErrorCode, HelloReply, HubFrame, ReplyOutcome, admin,
-    attachments, comments, drafts, files, github_accounts, github_apps, log, records, sessions, subscriptions,
-    workspaces,
+    attachments, comments, drafts, files, github_accounts, github_apps, log, proposals, records, sessions,
+    subscriptions, workspaces,
 };
 use protocol::event::SessionEvent;
 use protocol::find::{Found, Needle};
@@ -200,6 +200,24 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
             world.session(&id)?;
             reply(C::Subagents(records::Subagents { subagents: world.subagents_of(&id), rev: Rev::default() }))
         }
+        R::SessionProposals(records::SessionProposals { id }) => {
+            world.session(&id)?;
+            let proposals = world.proposals.get(&id).cloned().unwrap_or_default();
+            reply(C::Proposals(records::Proposals { proposals, rev: Rev::default() }))
+        }
+        // The world keeps only each proposal's newest revision, so it reads no earlier one.
+        R::ProposalRevisionsRead(proposals::ProposalRevisionsRead { id, from, .. }) => {
+            let proposal = world.proposals.values().flatten().find(|proposal| proposal.id == id);
+            let current = &proposal.ok_or_else(|| ApiError::new(ErrorCode::NotFound, "no such proposal"))?.current;
+            let revisions = match from.cmp(&current.number) {
+                std::cmp::Ordering::Less => {
+                    return Err(ApiError::new(ErrorCode::Unsupported, "the fake hub keeps only the newest revision"));
+                }
+                std::cmp::Ordering::Equal => vec![current.clone()],
+                std::cmp::Ordering::Greater => Vec::new(),
+            };
+            reply(C::ProposalRevisions(proposals::ProposalRevisions { revisions, newest: current.number }))
+        }
         R::FeedSubscribe(_) | R::SessionUnsubscribe(_) => reply(C::Ok),
         R::AttachmentRead(attachments::AttachmentRead { id, .. }) => {
             let data = world.attachments.get(&id).ok_or_else(|| ApiError::new(ErrorCode::NotFound, "no such file"))?;
@@ -245,6 +263,7 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
         | R::CommentDelete(_)
         | R::SessionCreate(_)
         | R::SessionPrompt(_)
+        | R::ProposalAnswer(_)
         | R::AttachmentAdd(_)
         | R::AttachmentRemove(_)
         | R::SessionQueue(_)

@@ -8,6 +8,7 @@ use protocol::prompt::Prompt;
 
 use crate::store::tests::{open_in, store_with_session};
 use crate::store::{AddedBy, Queued, StoreError, cancelled_approval};
+use protocol::prompt::PromptFrom;
 
 fn id() -> SessionId {
     "s".into()
@@ -112,6 +113,7 @@ fn prompt_carrying(file: &str) -> EventBody {
     EventBody::UserPrompt {
         client_msg_id: None,
         prompt: Prompt::carrying("see this", vec![log_file(file, "build.log")]),
+        from: PromptFrom::Person,
     }
 }
 
@@ -121,8 +123,11 @@ fn a_file_the_draft_a_queued_prompt_or_a_sent_one_names_is_kept() {
     let store = store_with_session(dir.path());
     add_files(&store, &["drafted", "queued", "sent", "placed"]);
     store.set_draft(&id(), &with_files(&[log_file("drafted", "build.log")])).unwrap();
-    let waiting =
-        QueuedPrompt { client_msg_id: "q".into(), prompt: Prompt::carrying("", vec![log_file("queued", "build.log")]) };
+    let waiting = QueuedPrompt {
+        client_msg_id: "q".into(),
+        prompt: Prompt::carrying("", vec![log_file("queued", "build.log")]),
+        from: PromptFrom::Person,
+    };
     assert!(matches!(store.queue_prompt(&id(), &waiting).unwrap(), Queued::Done(_)));
     store.append(&id(), None, &prompt_carrying("sent"), None, None, None).unwrap();
     store.set_attachment_placed_at(&id(), &"placed".into(), ".context/attachments/build.log").unwrap();

@@ -1,10 +1,10 @@
-//! The requests that add a repository, and read the hub's records: its repositories, a session's subagents, or
-//! every record at once.
+//! The requests that add a repository, and read the hub's records: its repositories, a session's subagents or
+//! proposals, or every record at once.
 
 use serde::{Deserialize, Serialize};
 
 use super::{ClientRequest, ClientResponse, Reply, Request};
-use crate::model::{Records, Repo, Rev, SessionId, Subagent};
+use crate::model::{Proposal, Records, Repo, Rev, SessionId, Subagent};
 
 /// Adds the repository whose checkout on the hub's machine `path` is in, and has a worker there read the address its
 /// `origin` fetches from, which the feed then tells of, as the [`Repo`] has it. Adding the same repository again
@@ -101,5 +101,35 @@ impl Reply for Subagents {
     fn read(response: ClientResponse) -> Result<Self, ClientResponse> {
         let ClientResponse::Subagents(subagents) = response else { return Err(response) };
         Ok(subagents)
+    }
+}
+
+/// The session's proposals, which the feed then says change, as [`SessionSubagents`] lists its subagents, and for the
+/// same reason: each holds what its agent wrote, in full. A hub older than this refuses it as unsupported.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct SessionProposals {
+    pub id: SessionId,
+}
+
+impl Request for SessionProposals {
+    type Reply = Proposals;
+
+    fn into_request(self) -> ClientRequest {
+        ClientRequest::SessionProposals(self)
+    }
+}
+
+/// A session's proposals, oldest first.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct Proposals {
+    pub proposals: Vec<Proposal>,
+    /// The hub's newest revision when they were read, as a list of every record carries.
+    pub rev: Rev,
+}
+
+impl Reply for Proposals {
+    fn read(response: ClientResponse) -> Result<Self, ClientResponse> {
+        let ClientResponse::Proposals(proposals) = response else { return Err(response) };
+        Ok(proposals)
     }
 }

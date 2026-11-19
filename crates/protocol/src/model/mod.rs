@@ -16,6 +16,7 @@ mod model_list;
 mod model_name;
 mod pr_watch;
 mod prompt_line;
+mod proposal;
 mod pull_request;
 mod queue;
 mod record;
@@ -26,6 +27,7 @@ mod title;
 mod wait;
 mod worktrees;
 
+pub use crate::prompt::PromptFrom;
 pub use account::{
     Account, AccountSource, AgentAccount, AgentLogin, HeldLogin, LimitWindow, LoginToken, ModelLabel, SessionAccount,
     UsageLimit,
@@ -52,6 +54,11 @@ pub use hub_settings::{AccountDefault, GithubSettings, HubSettings, HubSettingsC
 pub use model_list::{CliVersion, ModelList, ModelListKey, ModelLookup};
 pub use model_name::{ModelName, ModelNameError};
 pub use prompt_line::{PromptLine, SettledAt, Settlement};
+pub use proposal::{
+    AnswerProblem, Choice, MAX_HEADER_CHARS, MAX_NOTE_BYTES, MAX_OPTIONS, MAX_PROPOSAL_BYTES, MAX_QUESTIONS,
+    MIN_OPTIONS, OptionPlace, Proposal, ProposalOption, ProposalProblem, ProposalQuestion, ProposalRevision, Proposed,
+    Recommendation, Response, RevisionNumber, RevisionStanding,
+};
 pub use pull_request::{
     Checks, LeftQueue, Local, MergeState, PrState, PullRequest, PullRequestFound, QueueState, Review, Standing,
 };
@@ -70,8 +77,8 @@ mod tokens;
 pub use ids::{
     AccountId, AgentSessionId, ApprovalId, AskKey, AttachmentId, BranchName, ChildWorktreeId, ClientMessageId,
     ClientRequestId, CommentId, CommitId, DeviceId, GithubAccountId, GithubAppSlug, GithubSignInId, GithubUserCode,
-    GithubUsername, HubId, InstanceId, MessageId, ProviderName, RemoteName, RepoId, SessionId, SubagentId, TaskId,
-    TerminalId, ToolUseId, WaitId, WorkerTarget, WorkspaceId,
+    GithubUsername, HubId, InstanceId, MessageId, ProposalId, ProviderName, RemoteName, RepoId, SessionId, SubagentId,
+    TaskId, TerminalId, ToolUseId, WaitId, WorkerTarget, WorkspaceId,
 };
 mod repo;
 pub use repo::{Repo, RepoOrigin, RepoUrl, RepoUrlError};

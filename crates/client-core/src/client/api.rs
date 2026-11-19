@@ -4,14 +4,14 @@ use std::sync::atomic::Ordering;
 
 use protocol::capability::approvals::Decision;
 use protocol::client::{
-    HubStatus, Request, admin, agent, comments, log, records, sessions, subscriptions, waits, workspaces,
+    HubStatus, Request, admin, agent, comments, log, proposals, records, sessions, subscriptions, waits, workspaces,
 };
 use protocol::event::SessionEvent;
 use protocol::find::Found;
 use protocol::model::{
     AgentKind, ApprovalId, AttachmentId, ClientMessageId, ClientRequestId, CommentId, DiffComment, DiffSide, GitDiff,
-    GitStatus, HubSettings, HubSettingsChange, PullRequest, Records, Repo, RepoId, Rev, Seq, Session, SessionId,
-    Subagent, SubagentId, TerminalId, WaitId, Workspace, WorkspaceId,
+    GitStatus, HubSettings, HubSettingsChange, Proposal, PullRequest, Records, Repo, RepoId, Rev, Seq, Session,
+    SessionId, Subagent, SubagentId, TerminalId, WaitId, Workspace, WorkspaceId,
 };
 
 use super::{Client, Result, Subscription, hub_is_missing, subscription_channel};
@@ -198,6 +198,22 @@ impl Client {
     pub fn session_subagents(&self, id: &SessionId) -> Result<(Vec<Subagent>, Rev)> {
         let records::Subagents { subagents, rev } = self.call(records::SessionSubagents { id: id.clone() })?;
         Ok((subagents, rev))
+    }
+
+    /// The session's proposals, oldest first, with the revision they're as of, which a [`HubNotice::Proposal`] newer
+    /// than it replaces. A hub from before proposals refuses it, which [`super::ClientError::is_unsupported`] says.
+    ///
+    /// [`HubNotice::Proposal`]: protocol::client::HubNotice::Proposal
+    pub fn session_proposals(&self, id: &SessionId) -> Result<(Vec<Proposal>, Rev)> {
+        let records::Proposals { proposals, rev } = self.call(records::SessionProposals { id: id.clone() })?;
+        Ok((proposals, rev))
+    }
+
+    /// Answers the revision `revision` of the proposal `id`, choosing `chosen`, one option for each decision, with
+    /// `note`, and the hub tells its agent. Sending the same `client_request_id` again answers with the proposal as it
+    /// was answered.
+    pub fn proposal_answer(&self, answer: proposals::ProposalAnswer) -> Result<Proposal> {
+        self.call(answer)
     }
 
     /// Follows changes to repositories, workspaces and sessions. See [`subscriptions::FeedSubscribe`].

@@ -1,4 +1,4 @@
-use super::super::{diff_comments, pull_request, pull_requests, wait};
+use super::super::{diff_comments, proposals, pull_request, pull_requests, wait};
 use crate::asks::Asks;
 use protocol::Build;
 use protocol::model::SessionId;
@@ -23,14 +23,16 @@ pub(super) const TASKS: &str = "io.modelcontextprotocol/tasks";
 /// each tool, as "The worker's tools" in `docs/architecture.md` says. Every agent's system prompt also says when to
 /// reach for them, in `crate::instructions`, so a change to what they cover may change that too.
 const INSTRUCTIONS: &str = "Roundhouse's tools, for pull requests in this workspace's repository and their lower stack \
-    dependencies, and for the comments the person has left on this workspace's diff. For reading the pull requests' \
-    current state or waiting in the background until checks pass, they merge or need attention, look among these \
-    before you use `gh` or write a loop of your own.";
+    dependencies, for the comments the person has left on this workspace's diff, and for proposing a decision too \
+    large for a question, which the person answers in a tab of its own. For reading the pull requests' current state \
+    or waiting in the background until checks pass, they merge or need attention, look among these before you use \
+    `gh` or write a loop of your own.";
 
 /// For a 2026 client that offers no MCP tasks, such as Antigravity's, which is offered no wait tool.
 const READ_ONLY_INSTRUCTIONS: &str = "Roundhouse's tools, for pull requests in this workspace's repository and their \
-    lower stack dependencies, and for the comments the person has left on this workspace's diff. For reading the pull \
-    requests' current state, look among these before you use `gh` or write a loop of your own.";
+    lower stack dependencies, for the comments the person has left on this workspace's diff, and for proposing a \
+    decision too large for a question, which the person answers in a tab of its own. For reading the pull requests' \
+    current state, look among these before you use `gh` or write a loop of your own.";
 
 /// What one of a request's HTTP headers says, which has to agree with its body.
 #[derive(Debug, PartialEq, Eq)]
@@ -291,6 +293,7 @@ pub(super) fn unsupported(requested: Option<&str>) -> RpcError {
 fn definitions(takes_tasks: bool) -> Vec<Value> {
     let mut tools = pull_requests::definitions(takes_tasks);
     tools.push(diff_comments::definition());
+    tools.extend(proposals::definitions());
     tools
 }
 
@@ -323,6 +326,8 @@ async fn call(
         Some(Tool::Waits) => Ok(pull_requests::start(asks, wait_poll, session_id, params).await),
         Some(Tool::PullRequest) => Ok(pull_request::call(asks, session_id).await.to_json()),
         Some(Tool::DiffComments) => Ok(diff_comments::call(asks, session_id).await.to_json()),
+        Some(Tool::Propose) => Ok(proposals::propose(asks, session_id, params).await.to_json()),
+        Some(Tool::GetProposal) => Ok(proposals::get(asks, session_id, params).await.to_json()),
         None => Err(RpcError::new(Code::InvalidParams, format!("there's no tool called {name}"))),
     }
 }
@@ -334,6 +339,8 @@ pub(super) enum Tool {
     PullRequests,
     Waits,
     DiffComments,
+    Propose,
+    GetProposal,
 }
 
 impl Tool {
@@ -343,6 +350,8 @@ impl Tool {
             pull_requests::WAIT => Some(Tool::Waits),
             pull_request::NAME => Some(Tool::PullRequest),
             diff_comments::NAME => Some(Tool::DiffComments),
+            proposals::PROPOSE => Some(Tool::Propose),
+            proposals::GET => Some(Tool::GetProposal),
             _ => None,
         }
     }

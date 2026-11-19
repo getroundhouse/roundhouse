@@ -1,4 +1,4 @@
-use super::super::{Jumps, Kind, Line};
+use super::super::{Jumps, Kind, Line, answered};
 use crate::rows::{RULE_ICON, compaction};
 use gpui_kit::assets::IconName;
 use gpui_kit::component::Icon;
@@ -100,6 +100,7 @@ pub(in super::super) fn draw(
                     row(lines[ix].row, line, *number, ix == being_read, &jumps, &line_text, cx)
                 }
                 Kind::Compaction(compaction) => compaction_row(lines[ix].row, compaction, &jumps, &line_text, cx),
+                Kind::Answer { title, .. } => answer_row(lines[ix].row, title.as_deref(), &jumps, &line_text, cx),
             })
             .into_any_element()
     })
@@ -179,6 +180,25 @@ fn compaction_row(
     let text = line_text.detail.set(text);
     look::list_row(ElementId::Name(format!("outline-compaction/{row}").into()), ROW_SIZE)
         .listed(label)
+        .on_click(jumps.to(row))
+        .child(icon)
+        .child(text)
+        .into_any_element()
+}
+
+/// The answer to a proposal drawn in the chat's `row`, as the chat draws it, as the proposal's rather than as something
+/// the person asked: the proposal's mark where a prompt's number goes, then what was answered, faint and on one line,
+/// as a compaction is, so the row is as tall whether or not the proposal's title has come. It's never chosen, since
+/// it's never the one being read.
+fn answer_row(row: usize, title: Option<&str>, jumps: &Jumps, line_text: &LineText, cx: &App) -> AnyElement {
+    let colors = look::colors(cx);
+    let said = SharedString::from(answered(title));
+    let icon = Icon::new(crate::PROPOSAL_ICON).sized(RULE_ICON).text_color(colors.text_faint);
+    let icon = div().w(NUMBER_WIDTH).flex_none().flex().justify_end().items_center().child(icon);
+    let text = div().flex_1().min_w_0().truncate().text_color(colors.text_faint).child(said.clone());
+    let text = line_text.detail.set(text);
+    look::list_row(ElementId::Name(format!("outline-answer/{row}").into()), ROW_SIZE)
+        .listed(said)
         .on_click(jumps.to(row))
         .child(icon)
         .child(text)

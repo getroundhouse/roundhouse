@@ -1,9 +1,9 @@
 use crate::tools::pull_requests;
 use protocol::client::{ApiError, ErrorCode};
-use protocol::model::{DiffComment, DiffSide, Rev, WaitEnd};
+use protocol::model::{DiffComment, DiffSide, Rev, ToolUseId, WaitEnd};
 use protocol::worker::{
-    AskAnswer, AskOutcome, AskReply, CancelWait, DiffComments, PullRequestAnswer, ReadWait, WaitAnswer, WorkerAsk,
-    WorkerFrame,
+    AskAnswer, AskOutcome, AskReply, CancelWait, DiffComments, ProposalRecord, Propose, PullRequestAnswer, ReadWait,
+    WaitAnswer, WorkerAsk, WorkerFrame,
 };
 use serde_json::{Value, json};
 use tokio::sync::mpsc;
@@ -90,20 +90,26 @@ async fn the_tools_listed_are_the_ones_it_answers() {
     let discover_without =
         answered(&asks, &headers("server/discover", None), &request("server/discover", &json!({}))).await;
 
-    let tools = answer.to_json()["result"]["tools"].clone();
-    assert_eq!(tools.as_array().map(Vec::len), Some(3));
-    let named = [(&tools[0], pull_requests::READ), (&tools[1], pull_requests::WAIT), (&tools[2], diff_comments::NAME)];
-    for (tool, name) in named {
-        assert_eq!(tool["name"], name);
+    let names = |answer: &Answer| {
+        let tools = answer.to_json()["result"]["tools"].clone();
+        let tools = tools.as_array().cloned().unwrap_or_default();
+        tools.iter().map(|tool| tool["name"].as_str().unwrap_or_default().to_string()).collect::<Vec<_>>()
+    };
+    let all = [pull_requests::READ, pull_requests::WAIT, diff_comments::NAME, proposals::PROPOSE, proposals::GET];
+    assert_eq!(names(&answer), all);
+    for name in all {
         assert!(Tool::named(name).is_some(), "{name} is answered");
-        assert_eq!(tool["annotations"]["readOnlyHint"], true);
     }
-    let read_only = without_tasks.to_json()["result"]["tools"].clone();
-    assert_eq!(read_only.as_array().map(Vec::len), Some(2));
+    let tools = answer.to_json()["result"]["tools"].clone();
+    for tool in tools.as_array().unwrap() {
+        let reads = tool["name"] != proposals::PROPOSE;
+        assert_eq!(tool["annotations"]["readOnlyHint"], reads, "only propose changes anything: {}", tool["name"]);
+    }
     assert_eq!(
-        (&read_only[0]["name"], &read_only[1]["name"]),
-        (&json!(pull_requests::READ), &json!(diff_comments::NAME))
+        names(&without_tasks),
+        all.iter().filter(|name| **name != pull_requests::WAIT).copied().collect::<Vec<_>>()
     );
+    let read_only = without_tasks.to_json()["result"]["tools"].clone();
     assert!(!read_only[0]["description"].as_str().unwrap_or_default().contains(pull_requests::WAIT));
     assert!(discover_with.to_json()["result"]["instructions"].as_str().unwrap_or_default().contains("waiting"));
     assert!(!discover_without.to_json()["result"]["instructions"].as_str().unwrap_or_default().contains("waiting"));
@@ -262,6 +268,29 @@ async fn reading_the_diffs_comments_asks_the_hub_for_them_and_says_each() {
     assert_eq!(result["isError"], false);
     let text = result["content"][0]["text"].as_str().unwrap_or_default();
     assert!(text.ends_with("\n- `a.rs:2`: Why this word?"), "{text}");
+}
+
+/// So the hub makes one proposal for the call however often it's asked, as each new hub is asked what the last
+/// didn't answer, and the chat draws the proposal's line for that call.
+#[tokio::test]
+async fn a_proposal_is_asked_for_by_the_call_that_made_it() {
+    let (asks, mut sent) = asks();
+    let arguments = json!({ "title": "Search", "context": "", "questions": [{ "header": "Index",
+        "question": "Where?", "options": [{ "label": "Hub", "description": "", "body": "" },
+        { "label": "Client", "description": "", "body": "" }] }] });
+    let call = offering_tasks("tools/call", &json!({ "name": proposals::PROPOSE, "arguments": arguments }));
+    let headers = headers("tools/call", Some(proposals::PROPOSE));
+    let calling = answered(&asks, &headers, &call);
+    let made = protocol::fixtures::proposal("p1");
+    let hub = hub_answers(&asks, &mut sent, Ok(AskReply::Proposal(ProposalRecord { proposal: made })));
+
+    let (answer, asked) = tokio::join!(calling, hub);
+
+    let WorkerAsk::Propose(Propose { proposed, call, key }) = asked else { panic!("asked to propose: {asked:?}") };
+    assert_eq!((call.as_ref().map(ToolUseId::as_str), key.as_str()), (Some("toolu_1"), "toolu_1"));
+    assert_eq!(proposed.questions[0].options[1].label, "Client");
+    let text = answer.to_json()["result"]["content"][0]["text"].as_str().unwrap_or_default().to_string();
+    assert!(text.starts_with("Proposed \"Search\" as p1."), "{text}");
 }
 
 #[tokio::test]

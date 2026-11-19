@@ -9,16 +9,16 @@
 use std::sync::Arc;
 
 use client_core::records::{Changes, Snapshot, subagent_named};
-use gpui_kit::component::{Icon, IconName, h_flex, v_flex};
-use gpui_kit::prelude::FluentBuilder as _;
+use gpui_kit::component::{Icon, IconName, v_flex};
 use gpui_kit::{
     AnyElement, AppContext as _, Context, Entity, FocusHandle, InteractiveElement as _, IntoElement as _,
-    ParentElement as _, Role, StatefulInteractiveElement as _, Styled, Subscription, TestSupportExt as _, div, px,
+    ParentElement as _, Styled, Subscription, div,
 };
-use look::{Hand as _, IconSizing as _, Typeset as _};
+use look::{IconSizing as _, Typeset as _};
 use protocol::model::{SessionId, Subagent, SubagentId};
 use transcript::{Transcript, TranscriptEvent, shown_kind, subagent_standing};
 
+use super::band::Band;
 use super::view::chat_title;
 use super::{PaneEvent, Showing, WorkspacePane, tab};
 
@@ -93,6 +93,11 @@ impl WorkspacePane {
         self.subagents.tab.as_ref().map(|tab| tab.transcript.clone())
     }
 
+    /// The subagent tab's transcript, while it shows one of the chat `session`'s subagents.
+    pub(super) fn subagent_transcript_of(&self, session: &SessionId) -> Option<&Entity<Transcript>> {
+        self.subagents.tab.as_ref().filter(|tab| &tab.session == session).map(|tab| &tab.transcript)
+    }
+
     /// Every transcript the pane has: each chat's, and the subagent tab's.
     pub(super) fn every_transcript(&self) -> impl Iterator<Item = &Entity<Transcript>> {
         let tab = self.subagents.tab.as_ref().map(|tab| &tab.transcript);
@@ -120,10 +125,12 @@ impl WorkspacePane {
         if !showing && let Some(chat) = self.shown.session(&session).cloned() {
             let (client, records, shown) =
                 (self.client.clone(), self.subagents_of(&session).to_vec(), subagent.clone());
+            let proposals = self.shown.all().proposals(&session).to_vec();
             let transcript = cx.new(|cx| {
                 let mut transcript = Transcript::subagent(client, &chat, shown, cx);
                 transcript.set_thinking_open(crate::settings::get(cx).always_expand_thinking, cx);
                 transcript.set_subagents(&records, cx);
+                transcript.set_proposals(&proposals, cx);
                 transcript
             });
             let chat = session.clone();
@@ -133,6 +140,8 @@ impl WorkspacePane {
                 TranscriptEvent::OpenSubagent { subagent, title } => {
                     this.open_subagent_tab(chat.clone(), subagent.clone(), title.clone(), cx);
                 }
+                // As does a proposal it made, in the chat's proposal tab.
+                TranscriptEvent::OpenProposal { proposal } => this.open_proposal_tab(chat.clone(), proposal, true, cx),
                 // Nothing is sent from it, a subagent's work has no turns, no question is asked in it, since
                 // approvals are the agent's own, and nothing's found in it.
                 TranscriptEvent::NotSent { .. }
@@ -234,47 +243,11 @@ fn band(
     cx: &Context<WorkspacePane>,
 ) -> AnyElement {
     let colors = look::colors(cx);
-    let from = from.map(|(chat, name)| {
-        let link = div()
-            .id("subagent-band-chat")
-            .min_w_0()
-            .max_w(px(240.))
-            .overflow_hidden()
-            .whitespace_nowrap()
-            .text_ellipsis()
-            .typeset(look::Type::Body)
-            .text_color(colors.text_faint)
-            .hand()
-            .hover(|d| d.text_color(colors.text))
-            .role(Role::Link)
-            .aria_label(name.clone())
-            .on_click(cx.listener(move |t, _, _, cx| t.activate(chat.clone(), cx)))
-            .child(name)
-            .test_support();
-        // It gives way well before what the subagent is for does, which is what the page is about.
-        let slash = div().flex_none().typeset(look::Type::Body).text_color(colors.text_faint).child("/");
-        h_flex().flex_shrink(100.).min_w(px(56.)).gap(look::Space::Small).child(link).child(slash)
-    });
-    let chip = subagent
+    let after = subagent
         .and_then(|s| shown_kind(s.kind.as_deref()))
-        .map(|kind| look::chip(look::ChipKind::Subagent, kind.to_string()));
-    let standing = subagent.map(subagent_standing);
-    look::bar(look::BarKind::Words, look::BarSize::Regular)
-        .child(Icon::new(IconName::Bot).sized(look::IconSize::Large).text_color(colors.text_faint))
-        .children(from)
-        .child(
-            div()
-                .min_w_0()
-                .overflow_hidden()
-                .whitespace_nowrap()
-                .text_ellipsis()
-                .typeset(look::Type::Body)
-                .emphasis()
-                .child(title),
-        )
-        .children(chip)
-        .when_some(standing, |band, s| {
-            band.end(div().flex_none().typeset(look::Type::Detail).text_color(colors.text_faint).child(s))
-        })
-        .into_any_element()
+        .map(|kind| look::chip(look::ChipKind::Subagent, kind.to_string()).into_any_element());
+    let end = subagent.map(subagent_standing).map(|standing| {
+        div().flex_none().typeset(look::Type::Detail).text_color(colors.text_faint).child(standing).into_any_element()
+    });
+    Band { id: "subagent", icon: Icon::new(IconName::Bot), from, title, after, end }.element(cx)
 }

@@ -14,6 +14,7 @@ use protocol::prompt::Prompt;
 
 use crate::steering::working;
 use crate::support::{Frozen, Gate, Stack, Ui, one_chat, open_on_the_chat};
+use protocol::prompt::PromptFrom;
 
 pub(crate) fn queued(ui: &Ui) -> Vec<QueuedPrompt> {
     let pane = ui.pane().unwrap();
@@ -176,6 +177,7 @@ fn a_long_queue_scrolls_rather_than_pushing_the_composer_out_of_the_window(cx: &
     world.sessions.last_mut().unwrap().queued = Vec::from_fn(30, |i| QueuedPrompt {
         client_msg_id: format!("q{i}").into(),
         prompt: Prompt::new(format!("say:queued {i}")),
+        from: PromptFrom::Person,
     });
     let (_fake, mut ui) = open_on_the_chat(cx, world, &chat);
 

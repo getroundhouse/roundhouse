@@ -1,5 +1,5 @@
 use super::super::WorkerRequest;
-use super::{DiffComments, ReadPullRequests, StartPullRequestWait};
+use super::{DiffComments, ProposalRecord, Propose, ReadProposal, ReadPullRequests, StartPullRequestWait};
 use super::{pull_requests, worktrees};
 use crate::client::Outcome;
 use crate::frame;
@@ -112,6 +112,8 @@ pub enum WorkerAsk {
     ListWorktrees,
     /// See [`ReadDiffComments`](super::ReadDiffComments).
     DiffComments,
+    Propose(Propose),
+    ReadProposal(ReadProposal),
     #[serde(other)]
     Unknown,
 }
@@ -128,6 +130,7 @@ pub enum AskReply {
     WouldLose(WouldLose),
     Worktrees(Worktrees),
     DiffComments(DiffComments),
+    Proposal(ProposalRecord),
 }
 
 #[cfg(test)]

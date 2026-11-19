@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::{Place, Seq};
+use super::{Place, PromptFrom, Seq};
 use crate::event::{EventBody, SessionEvent};
 use crate::short_text::one_line;
 
@@ -18,6 +18,8 @@ pub struct PromptLine {
     files: u32,
     #[serde(skip_serializing_if = "Option::is_none")]
     settled: Option<SettledAt>,
+    #[serde(skip_serializing_if = "PromptFrom::is_person")]
+    from: PromptFrom,
 }
 
 /// Where the event is that settled a prompt: the last `PromptTaken` or `PromptDropped` that names it, such as where the
@@ -72,12 +74,15 @@ struct Sent {
     /// A hub from before it said where each prompt was settled sends none.
     #[serde(default)]
     settled: Option<SettledAt>,
+    /// A hub from before prompts said who wrote them sends none, as for the person's.
+    #[serde(default)]
+    from: PromptFrom,
 }
 
 impl From<Sent> for PromptLine {
     fn from(sent: Sent) -> Self {
         let line = Self::new(sent.seq, &sent.text, sent.files).placed(sent.place);
-        Self { settled: sent.settled, ..line }
+        Self { settled: sent.settled, from: sent.from, ..line }
     }
 }
 
@@ -89,13 +94,20 @@ impl PromptLine {
     /// The line for a prompt recorded at `seq` that says `text` and carries `files` files, with no place until
     /// [`PromptLine::placed`] gives it one.
     pub fn new(seq: Seq, text: &str, files: u32) -> Self {
-        Self { seq, place: Place::default(), text: one_line(text, Self::MOST_CHARS), files, settled: None }
+        let text = one_line(text, Self::MOST_CHARS);
+        Self { seq, place: Place::default(), text, files, settled: None, from: PromptFrom::Person }
     }
 
     /// The same line, at `place` among the agent's own events.
     #[must_use]
     pub fn placed(self, place: Place) -> Self {
         Self { place, ..self }
+    }
+
+    /// The same line, for a prompt `from` wrote.
+    #[must_use]
+    pub fn written_by(self, from: PromptFrom) -> Self {
+        Self { from, ..self }
     }
 
     /// The same line, settled `at`.
@@ -112,9 +124,9 @@ impl PromptLine {
 
     /// The line for `event`, if it's a prompt, as the hub lists it.
     pub fn of(event: &SessionEvent) -> Option<Self> {
-        let EventBody::UserPrompt { prompt, .. } = &event.body else { return None };
+        let EventBody::UserPrompt { prompt, from, .. } = &event.body else { return None };
         let files = u32::try_from(prompt.files.len()).unwrap_or(u32::MAX);
-        Some(Self::new(event.seq, &prompt.text, files).placed(event.place))
+        Some(Self::new(event.seq, &prompt.text, files).placed(event.place).written_by(from.clone()))
     }
 
     /// Where the prompt is in the log.
@@ -137,6 +149,11 @@ impl PromptLine {
     /// How many files it carries.
     pub fn files(&self) -> u32 {
         self.files
+    }
+
+    /// Who wrote it: the person, or the hub, such as to tell the agent the person's answer to a proposal.
+    pub fn author(&self) -> &PromptFrom {
+        &self.from
     }
 
     /// Where it was settled, as the hub listed it. `None` while the agent hasn't taken it, from a hub that doesn't
@@ -183,7 +200,8 @@ mod tests {
     #[test]
     fn a_prompt_has_a_line_at_its_place_and_nothing_else_does() {
         let event = |seq, place, body| SessionEvent { place: Place::new(place), ..crate::fixtures::event(seq, body) };
-        let body = EventBody::UserPrompt { client_msg_id: None, prompt: Prompt::new("Fix\nit") };
+        let body =
+            EventBody::UserPrompt { client_msg_id: None, prompt: Prompt::new("Fix\nit"), from: PromptFrom::Person };
 
         assert_eq!(
             PromptLine::of(&event(Seq::new(4), 3, body)),

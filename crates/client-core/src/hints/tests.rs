@@ -3,7 +3,8 @@ use protocol::capability::calls::Call;
 use protocol::capability::calls::call::Read;
 use protocol::event::{ContentBlock, EventBody};
 use protocol::fixtures;
-use protocol::model::{Records, Repo, Rev, Seq};
+use protocol::model::{Records, Repo, Rev, RevisionNumber, Seq};
+use protocol::prompt::{Prompt, PromptFrom};
 
 use super::HintCollector;
 use crate::records::{HubRecords, InWorkspace};
@@ -98,4 +99,24 @@ fn collects_jargon_and_proper_nouns_across_tool_heavy_turns_while_skipping_commo
     for unwanted in ["src", "crates", "words", "hints", "MAX_HINTS", "Should", "Runs"] {
         assert!(!hints.iter().any(|h| h.eq_ignore_ascii_case(unwanted)), "unexpected {unwanted:?} in {hints:?}");
     }
+}
+
+/// What the person said hints at what they'll say, and what the hub wrote for them, such as an answer's proposal ID,
+/// doesn't.
+#[test]
+fn a_prompt_the_hub_wrote_gives_no_hints() {
+    let mut log = SessionLog::new(Seq::new(0));
+    let from = PromptFrom::ProposalResponse { proposal: "p".into(), revision: RevisionNumber::FIRST };
+    let told = Prompt::new("I chose B, Kesslerbahn Platform, in your proposal \"Holding\" (p).");
+    log.apply_event(fixtures::event(Seq::new(1), EventBody::UserPrompt { client_msg_id: None, prompt: told, from }));
+    let said = Prompt::new("Ask Wollstonecraft about it.");
+    let person = EventBody::UserPrompt { client_msg_id: None, prompt: said, from: PromptFrom::Person };
+    log.apply_event(fixtures::event(Seq::new(2), person));
+
+    let mut collector = HintCollector::new();
+    collector.add_session_log(&log);
+    let hints = collector.finish();
+
+    assert!(hints.iter().any(|h| h == "Wollstonecraft"), "the person's words: {hints:?}");
+    assert!(!hints.iter().any(|h| h.contains("Kesslerbahn")), "not the hub's: {hints:?}");
 }

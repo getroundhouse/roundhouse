@@ -1,6 +1,6 @@
 use crate::model::{
     Account, DiffComment, FoundGithubLogin, GithubAccount, GithubApp, GithubReach, GithubSignIn, HubSettings,
-    ModelList, NewWorkspaceDraft, Record, RecordKey, Repo, Rev, Session, Subagent, Terminal, Workspace,
+    ModelList, NewWorkspaceDraft, Proposal, Record, RecordKey, Repo, Rev, Session, Subagent, Terminal, Workspace,
 };
 use serde::{Deserialize, Serialize};
 
@@ -30,13 +30,16 @@ pub enum HubNotice {
     /// What an agent offers in one place changed, or the hub began or finished asking it. One the hub let go of is
     /// `Removed`.
     ModelList(ModelList),
+    /// A proposal changed, or was made. A client keeps those of the sessions it's showing, which it lists with
+    /// `SessionProposals`.
+    Proposal(Proposal),
     /// The record is gone, as of `rev`.
     Removed {
         record: RecordKey,
         rev: Rev,
     },
-    /// This client fell behind and missed some. List everything again, and the subagents of each session it's
-    /// showing, which aren't among everything.
+    /// This client fell behind and missed some. List everything again, and the subagents and proposals of each
+    /// session it's showing, which aren't among everything.
     Resync,
     #[serde(other)]
     Unknown,
@@ -94,6 +97,7 @@ impl TryFrom<HubNotice> for RecordNotice {
             HubNotice::GithubReach(reach) => Record::GithubReach(reach),
             HubNotice::Terminal(terminal) => Record::Terminal(terminal),
             HubNotice::ModelList(list) => Record::ModelList(list),
+            HubNotice::Proposal(proposal) => Record::Proposal(proposal),
             HubNotice::Removed { record, rev } => return Ok(RecordNotice::Removed { record, rev }),
             HubNotice::Resync | HubNotice::Unknown => return Err(notice),
         };
@@ -119,6 +123,7 @@ impl From<Record> for HubNotice {
             Record::GithubReach(reach) => HubNotice::GithubReach(reach),
             Record::Terminal(terminal) => HubNotice::Terminal(terminal),
             Record::ModelList(list) => HubNotice::ModelList(list),
+            Record::Proposal(proposal) => HubNotice::Proposal(proposal),
         }
     }
 }

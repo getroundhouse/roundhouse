@@ -359,12 +359,12 @@ impl AppView {
     }
 
     /// Lets go of the panes of workspaces that have gone or been archived. A pane's chats close with it, without
-    /// closing one by one, so it lets go of their subagents' records itself.
+    /// closing one by one, so it lets go of their subagents' and proposals' records itself.
     pub(in super::super) fn drop_hidden_panes(&mut self, records: &Snapshot, cx: &App) {
         self.panes.retain(|id, pane| {
             let shown = records.workspace(id).is_some_and(|w| w.status != WorkspaceStatus::Archived);
             if !shown {
-                pane.read(cx).let_go_of_subagents();
+                pane.read(cx).let_go_of_session_records();
             }
             shown
         });

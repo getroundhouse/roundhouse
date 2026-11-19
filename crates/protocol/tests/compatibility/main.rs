@@ -33,6 +33,7 @@ mod model_lists;
 mod outputs;
 mod previous;
 mod prompts;
+mod proposals;
 mod refusals;
 mod repo_sources;
 mod repos;

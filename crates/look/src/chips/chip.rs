@@ -24,7 +24,7 @@ const INSIDE: Pixels = px(6.);
 const MARK: IconSize = IconSize::Regular;
 
 /// A chip of `kind` for what `names` names: a file's or a folder's path, of which it shows the last part, a subagent's
-/// words, a server's name or a site's host.
+/// words, a server's name, a site's host or a proposal's title.
 pub fn chip(kind: ChipKind, names: impl Into<SharedString>) -> Chip {
     Chip { kind, names: names.into(), lines: None, changed: None, gone: false }
 }
@@ -67,7 +67,7 @@ impl Chip {
                 let path = self.names.trim_end_matches('/');
                 path.rsplit('/').next().filter(|name| !name.is_empty()).unwrap_or(path).to_string().into()
             }
-            ChipKind::Subagent | ChipKind::Server | ChipKind::Site => self.names.clone(),
+            ChipKind::Subagent | ChipKind::Server | ChipKind::Site | ChipKind::Proposal => self.names.clone(),
         }
     }
 
@@ -90,6 +90,7 @@ impl Chip {
             ChipKind::Subagent => icon(IconName::Bot),
             ChipKind::Server => icon(IconName::Plug),
             ChipKind::Site => icon(IconName::Globe),
+            ChipKind::Proposal => icon(IconName::Split),
         }
     }
 }

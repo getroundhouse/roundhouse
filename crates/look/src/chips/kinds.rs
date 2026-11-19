@@ -13,6 +13,9 @@ named! {
         Server,
         /// A site, by its address's host: a globe, then the host, such as what a fetch read.
         Site,
+        /// A proposal, by its title: a way that splits in two, for the options it offers, then its title, such as the
+        /// one a call made, which opens it in its tab.
+        Proposal,
     }
 }
 

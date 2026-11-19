@@ -76,7 +76,7 @@ mod tests {
     use super::*;
     use crate::event::{ContentBlock, EventBody, FileChange, LineMark};
     use crate::model::{AgentKind, DiffSide, RepoId, SessionId, SessionStatus, WorkspaceId, WorkspaceStatus};
-    use crate::prompt::Prompt;
+    use crate::prompt::{Prompt, PromptFrom};
 
     #[test]
     fn a_buffer_that_took_a_large_frame_is_let_go() {
@@ -92,7 +92,11 @@ mod tests {
 
     #[test]
     fn a_frame_is_exactly_one_line() {
-        let body = EventBody::UserPrompt { client_msg_id: None, prompt: Prompt::new("line one\nline two") };
+        let body = EventBody::UserPrompt {
+            client_msg_id: None,
+            prompt: Prompt::new("line one\nline two"),
+            from: PromptFrom::Person,
+        };
         let line = encode(&body).unwrap();
         assert_eq!(line.iter().position(|b| *b == b'\n'), Some(line.len() - 1));
         assert_eq!(line.last(), Some(&b'\n'));
@@ -115,7 +119,10 @@ mod tests {
         assert_eq!(block, ContentBlock::Unknown);
         let body: EventBody =
             decode(br#"{"type":"user_prompt","text":"hi","client_msg_id":null,"later":true}"#).unwrap();
-        assert_eq!(body, EventBody::UserPrompt { client_msg_id: None, prompt: Prompt::new("hi") });
+        assert_eq!(
+            body,
+            EventBody::UserPrompt { client_msg_id: None, prompt: Prompt::new("hi"), from: PromptFrom::Person }
+        );
         assert_eq!(decode::<WorkspaceStatus>(br#""from_the_future""#).unwrap(), WorkspaceStatus::Unknown);
         assert_eq!(decode::<SessionStatus>(br#""from_the_future""#).unwrap(), SessionStatus::Unknown);
         assert_eq!(decode::<AgentKind>(br#""from_the_future""#).unwrap(), AgentKind::Unknown);

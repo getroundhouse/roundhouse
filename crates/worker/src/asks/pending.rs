@@ -89,6 +89,8 @@ impl Asks {
             | WorkerAsk::CancelWait(_)
             | WorkerAsk::ListWorktrees
             | WorkerAsk::DiffComments
+            | WorkerAsk::Propose(_)
+            | WorkerAsk::ReadProposal(_)
             | WorkerAsk::Unknown => self.patience,
         }
     }

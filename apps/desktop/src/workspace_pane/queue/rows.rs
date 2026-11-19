@@ -9,7 +9,7 @@ use gpui_kit::{
     StatefulInteractiveElement as _, Styled, TestSupportExt as _, div, px,
 };
 use look::{IconSizing as _, InRegion as _, Region, Shaped as _, Typeset as _};
-use protocol::model::QueuedPrompt;
+use protocol::model::{Proposal, QueuedPrompt};
 use protocol::short_text::one_line;
 
 use super::Editing;
@@ -82,9 +82,16 @@ impl WorkspacePane {
 
     /// One line of the prompt, and once it's on the record, under the pointer, a lit row with buttons to change it,
     /// take it out, and send it now. A pending prompt is faint, and keeps the same row, so it doesn't move once the hub
-    /// has it.
+    /// has it. One the hub queued to tell the agent what was chosen in answer to a proposal is that proposal's line,
+    /// and only one the person wrote can be changed.
     fn queued_row(&self, prompt: &QueuedPrompt, row: Row, cx: &mut Context<Self>) -> AnyElement {
         let id = &prompt.client_msg_id;
+        // Its record, once it's come, for what the line says.
+        let answered = |answers| {
+            let session = self.session()?;
+            self.shown.all().proposals(&session.id).iter().find(|p| &p.id == answers).cloned()
+        };
+        let answers = prompt.from.responds_to().map(answered);
         let editing = self.queue_edit.as_ref().filter(|editing| editing.was.client_msg_id == *id);
         if let Some(editing) = editing {
             return editing_row(editing, cx);
@@ -105,17 +112,22 @@ impl WorkspacePane {
             .p(look::Space::Small)
             .corners(look::Corner::Control)
             .hover(move |style| style.bg(lit))
-            .child(queued_line(prompt, text, muted))
-            .child(queued_buttons(prompt, row, group, cx))
+            .child(match &answers {
+                Some(proposal) => answer_line(proposal.as_deref(), text, muted).into_any_element(),
+                None => queued_line(prompt, text, muted).into_any_element(),
+            })
+            .child(queued_buttons(prompt, row, prompt.from.is_person(), group, cx))
             .test_support()
             .into_any_element()
     }
 }
 
-/// Hidden rather than left out, so the row keeps its height when they show, and a pending prompt's never show.
+/// Hidden rather than left out, so the row keeps its height when they show, and a pending prompt's never show. Edit
+/// is there only for a prompt the person wrote.
 fn queued_buttons(
     prompt: &QueuedPrompt,
     row: Row,
+    written: bool,
     group: SharedString,
     cx: &mut Context<WorkspacePane>,
 ) -> impl IntoElement {
@@ -132,14 +144,35 @@ fn queued_buttons(
     let (edit, remove) = (button("edit", IconName::Pencil, "Edit"), button("remove", IconName::Trash, "Remove"));
     let buttons = h_flex().flex_none().gap(look::Space::XSmall).invisible();
     let Row::Queued { working } = row else {
-        return buttons.child(edit).child(remove).child(button("send", IconName::ArrowUp, "Send now"));
+        return buttons.when(written, |b| b.child(edit)).child(remove).child(button(
+            "send",
+            IconName::ArrowUp,
+            "Send now",
+        ));
     };
     let (to_edit, to_remove, to_send) = (prompt.clone(), id.clone(), id.clone());
     let edit = edit.on_click(cx.listener(move |t, _, window, cx| t.edit_queued(&to_edit, window, cx)));
     let remove = remove.on_click(cx.listener(move |t, _, _, cx| t.unqueue(to_remove.clone(), cx)));
     let send = button("send", IconName::ArrowUp, if working { "Steer" } else { "Send now" })
         .on_click(cx.listener(move |t, _, _, cx| t.send_queued_now(to_send.clone(), cx)));
-    buttons.group_hover(group, Styled::visible).child(edit).child(remove).child(send)
+    buttons.group_hover(group, Styled::visible).when(written, |b| b.child(edit)).child(remove).child(send)
+}
+
+/// What a queued answer to a proposal says: `Answered`, its title in a chip, and what was chosen, as its line in the
+/// chat says it once it's sent, or that it answers a proposal, until its record has come.
+fn answer_line(proposal: Option<&Proposal>, text: Hsla, muted: Hsla) -> impl IntoElement {
+    let (title, chosen) = transcript::proposal_answered_parts(proposal);
+    let title = title.map(|title| look::chip(look::ChipKind::Proposal, title));
+    h_flex()
+        .flex_1()
+        .min_w_0()
+        .gap(look::Space::Small)
+        .items_center()
+        .typeset(look::Type::Body)
+        .child(Icon::new(transcript::PROPOSAL_ICON).sized(look::IconSize::Regular).flex_none().text_color(muted))
+        .child(div().flex_none().text_color(text).child("Answered"))
+        .children(title)
+        .child(div().min_w_0().truncate().text_color(muted).child(chosen))
 }
 
 /// The editor in place of the prompt's text, with what it carries still beside it, since a change keeps that.

@@ -7,6 +7,7 @@ use crate::event::{ExitReason, TaskOutcome};
 use crate::fixtures::{allow_once, approval_request, decided, event, typed_call, typed_command, typed_result};
 use crate::model::{RunId, Seq};
 use crate::prompt::Prompt;
+use crate::prompt::PromptFrom;
 
 /// A call, `id`, to run a command.
 pub(super) fn call(id: &str) -> ContentBlock {
@@ -29,7 +30,7 @@ pub(super) fn from_hub(seq: u64, body: EventBody) -> SessionEvent {
 }
 
 pub(super) fn prompt() -> EventBody {
-    EventBody::UserPrompt { client_msg_id: None, prompt: Prompt::new("fix the build") }
+    EventBody::UserPrompt { client_msg_id: None, prompt: Prompt::new("fix the build"), from: PromptFrom::Person }
 }
 
 pub(super) fn taken(prompt: u64) -> EventBody {

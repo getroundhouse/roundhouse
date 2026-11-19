@@ -20,6 +20,7 @@ use super::stretch::{Known, counted_in};
 use super::{More, changed_to_count, count_held, first_match, held_to_count, says};
 use crate::fixtures::{event, log, record, subagents, within};
 use crate::transcript::{Model, SubagentRecords};
+use protocol::prompt::PromptFrom;
 
 fn needle(query: &str) -> Needle {
     Needle::new(query).unwrap()
@@ -192,7 +193,8 @@ fn a_stretch_counts_what_came_back_in_its_call_s_row_by_place() {
 #[test]
 fn a_stretch_counts_a_prompt_where_the_chat_draws_it() {
     let prompt = |place| {
-        let body = EventBody::UserPrompt { client_msg_id: None, prompt: Prompt::new("the parser") };
+        let body =
+            EventBody::UserPrompt { client_msg_id: None, prompt: Prompt::new("the parser"), from: PromptFrom::Person };
         placed(place, body)
     };
     // A prompt's `seq` is three times its place.

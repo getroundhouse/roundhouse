@@ -9,8 +9,8 @@ use protocol::event::{EventBody, SessionEvent};
 use protocol::model::{
     Account, AttachmentId, CacheTtl, ContextUsage, DiffComment, FileContents, FoundGithubLogin, GitDiff, GithubAccount,
     GithubApp, GithubSettings, GithubSignIn, GithubSignInStatus, InstanceId, ModelName, PORTS_PER_WORKSPACE, Place,
-    PromptCache, PullRequest, Repo, RepoId, RepoOrigin, Rev, Seq, Session, SessionId, SessionStatus, Subagent,
-    SubagentId, Terminal, TerminalId, Title, Workspace, WorkspaceId, WorktreeFiles,
+    PromptCache, Proposal, PullRequest, Repo, RepoId, RepoOrigin, Rev, Seq, Session, SessionId, SessionStatus,
+    Subagent, SubagentId, Terminal, TerminalId, Title, Workspace, WorkspaceId, WorktreeFiles,
 };
 use protocol::prompt::Prompt;
 use protocol::tail::Tail;
@@ -40,6 +40,8 @@ pub struct World {
     logs: HashMap<SessionId, Vec<SessionEvent>>,
     /// Each session's subagents, made from its events as [`Subagent::recorded_from`] says, so they agree with them.
     subagents: HashMap<SessionId, Vec<Subagent>>,
+    /// Each session's proposals, in the order they were made.
+    pub proposals: HashMap<SessionId, Vec<Proposal>>,
     /// What's still streaming, for a chat caught mid-reply.
     pub tails: HashMap<SessionId, Tail>,
     pub diffs: HashMap<WorkspaceId, GitDiff>,

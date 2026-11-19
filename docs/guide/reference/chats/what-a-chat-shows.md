@@ -69,6 +69,29 @@ An agent can hand part of its work to a subagent. Its call says what the subagen
 
 A subagent's work is kept out of the chat, so it doesn't bury the conversation it's part of. A subagent that starts working again after it finished, as Claude's does when the agent sends it a message, and Codex's does with follow-up work, says so in the same call, its time counts from when it started again, and its report is the one it gives next. Codex names its subagents by their task paths, and a message to one doesn't by itself start more of its work. What it was asked appears only when Codex supplies it. Antigravity doesn't say what its subagents do, so its subagent's call has no `Open` button, and opens to what it was asked and what came back, and its message to a subagent says only that, as `Message a subagent`.
 
+## Proposals
+
+When an agent needs you to decide something too large for a question, such as which of two or three designs to build on, it writes a proposal: the context, then each question with its options, each with what it costs, and the one it recommends. Its call in the chat says `Proposed`, the proposal's title, and how many options it has while it waits for you, or what you chose once you've answered.
+
+- **The proposal opens in the proposal tab,** beside the chats, by itself the first time, without taking you from what you're doing, and from `Open` at the end of its line.
+- **The tab has an outline of the proposal on the left.** Click a part to go to it.
+- **Each option is a card,** with its letter, its title, and `Recommended` on the one the agent recommends.
+- **The agent can go on working, or stop, while you read it.** Ask it about the options in the chat meanwhile.
+- **A workspace has one proposal tab.** Opening another proposal shows that one in the same tab. `Cmd-W` closes it.
+
+![A proposal in the proposal tab](../../../spec/screens/proposal-tab.png)
+
+To answer, click `Choose` on the option you want for each question, add a note if you like, and click `Send`, or press `Enter` in the note.
+
+- **The agent is told what you chose,** and reads your note with its tools, so what you write can be as long as it needs to be. If it's working, your answer waits in the queue above the composer until it finishes.
+- **Your answer is drawn in the chat as a line,** `Answered`, where the agent took it, rather than as a message of yours, and the outline marks it the same way. A chat's title is never made from it.
+- **An answer can't be changed once it's sent.** To change your mind, tell the agent in the chat.
+- **What you've chosen and written isn't kept until you send it,** so it's lost if you open another proposal in the tab, close the tab or quit the app. A new proposal from the agent waits rather than take its place.
+
+![Choosing an option in the proposal tab](../../../spec/screens/proposal-choosing.png)
+
+![An answered proposal in the chat](../../../spec/screens/proposal-answered.png)
+
 ## Work in the background
 
 A turn can end with work still going: a command, a subagent, or a monitor watching for something. Up to four tasks have a line each where the chat ends, saying what each is for.

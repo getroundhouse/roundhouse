@@ -121,7 +121,8 @@ impl Gather<'_> {
 fn of_event(event: &SessionEvent, around: &Around, gather: &mut Gather) {
     let seq = event.seq;
     match &event.body {
-        EventBody::UserPrompt { client_msg_id, prompt, .. } if prompt.says_anything() => {
+        // One that answered a proposal is drawn as its line, which says nothing of what the prompt said.
+        EventBody::UserPrompt { client_msg_id, prompt, .. } if prompt.says_anything() && around.answers.is_none() => {
             gather.written(&ItemKey::prompt(seq, client_msg_id.as_ref()), Part::Prompt, &prompt.text);
         }
         EventBody::Assistant { blocks, .. } | EventBody::AgentUser { blocks, .. } => {
@@ -185,7 +186,9 @@ pub(in crate::rows) fn of_block(block: &ContentBlock, drawing: &BlockAround, gat
         }),
         ContentBlock::Call { .. } => {
             // One that asks the person something is drawn from its approval, which has everything that was asked.
-            if let Some(recorded) = Recorded::of(block).filter(|call| !call.asks_the_person()) {
+            // One that made a proposal is drawn as a line that doesn't open, and its proposal is read in its tab.
+            let recorded = Recorded::of(block).filter(|call| !call.asks_the_person() && drawing.proposal.is_none());
+            if let Some(recorded) = recorded {
                 tools::shown(key, recorded, drawing, gather);
             }
         }

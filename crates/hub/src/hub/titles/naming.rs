@@ -252,12 +252,14 @@ pub(super) fn chosen_images(
     carried.into_iter().filter(fits).take(MOST_IMAGES).collect()
 }
 
-/// What a model is asked to title a workspace's work from: what its chats were asked, oldest first and numbered, under
-/// [`WORK_SO_FAR`]. `None` if nothing was typed in any of them. When they'd come to more than [`MOST_PROMPT_CHARS`],
+/// What a model is asked to title a workspace's work from: what the person asked its chats, oldest first and
+/// numbered, under [`WORK_SO_FAR`], leaving out what the hub wrote for them, such as the answer to a proposal. `None`
+/// if nothing was typed in any of them. When they'd come to more than [`MOST_PROMPT_CHARS`],
 /// it's the first, which set the task, and the newest that fit, which say where it went, with a line of its own for
 /// the gap.
 pub(super) fn work_so_far(prompts: &[PromptLine]) -> Option<String> {
-    let typed: Vec<&str> = prompts.iter().map(PromptLine::text).filter(|text| !text.is_empty()).collect();
+    let theirs = prompts.iter().filter(|line| line.author().is_person());
+    let typed: Vec<&str> = theirs.map(PromptLine::text).filter(|text| !text.is_empty()).collect();
     let (first, later) = typed.split_first()?;
     let mut room = MOST_PROMPT_CHARS.saturating_sub(first.chars().count());
     let fits = |text: &&&str| {

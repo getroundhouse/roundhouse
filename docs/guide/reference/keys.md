@@ -19,7 +19,7 @@ The app's keyboard shortcuts. They're written as a Mac's. On Windows and Linux, 
 |---|---|
 | `Cmd-T` | New chat |
 | `Cmd-Shift-T` | New terminal, in a tab after the chats |
-| `Cmd-W` | Close the chat, or the file tab, subagent tab or terminal while it shows |
+| `Cmd-W` | Close the chat, or the file tab, subagent tab, proposal tab or terminal while it shows |
 | `Ctrl-Tab`, `Ctrl-Shift-Tab` | The tab after, and before |
 | `Cmd-F` | Find in the chat |
 | `Cmd-G`, `Cmd-Shift-G` | The next match, and the one before |

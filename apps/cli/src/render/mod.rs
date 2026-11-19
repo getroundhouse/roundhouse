@@ -11,6 +11,6 @@ mod turns;
 pub(crate) use printer::Printer;
 use printer::about;
 #[cfg(test)]
-use printer::{called, came_back, denial, started};
+use printer::{called, came_back, denial, prompted, started};
 #[cfg(test)]
 use turns::{own_turn, request_failed};

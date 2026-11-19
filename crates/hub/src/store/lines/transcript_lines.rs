@@ -1,13 +1,13 @@
 use super::super::{Store, StoreError, lock, place_of, seq_of};
-use protocol::model::{CompactionLine, PromptLine, Seq, SessionId, SettledAt, Settlement, WorkspaceId};
+use protocol::model::{CompactionLine, PromptFrom, PromptLine, Seq, SessionId, SettledAt, Settlement, WorkspaceId};
 use rusqlite::Connection;
 use rusqlite::types::ValueRef;
 use serde_json::Value;
 use std::collections::HashMap;
 
-/// A chat's prompts, oldest first: each one's `seq`, text, how many files it carries, and place.
+/// A chat's prompts, oldest first: each one's `seq`, text, how many files it carries, place, and who wrote it.
 pub(in crate::store) const PROMPTS: &str = "SELECT seq, json_extract(body, '$.text'), \
-     json_array_length(body, '$.attachments'), place FROM events \
+     json_array_length(body, '$.attachments'), place, json_extract(body, '$.from') FROM events \
      WHERE session_id = ? AND kind = 'user_prompt' ORDER BY seq";
 
 /// The compactions of a chat's own conversation that compacted, oldest first: each one's `seq`, place, who started it,
@@ -74,8 +74,8 @@ impl Store {
     pub fn workspace_prompt_lines(&self, workspace_id: &WorkspaceId) -> Result<Vec<PromptLine>, StoreError> {
         let conn = lock(&self.reader);
         let mut statement = conn.prepare_cached(
-            "SELECT e.seq, json_extract(e.body, '$.text'), json_array_length(e.body, '$.attachments'), e.place \
-             FROM sessions s JOIN events e ON e.session_id = s.id AND e.kind = 'user_prompt' \
+            "SELECT e.seq, json_extract(e.body, '$.text'), json_array_length(e.body, '$.attachments'), e.place, \
+             json_extract(e.body, '$.from') FROM sessions s JOIN events e ON e.session_id = s.id AND e.kind = 'user_prompt' \
              WHERE s.workspace_id = ? ORDER BY e.ts_ms, s.created_at_ms, e.seq",
         )?;
         lines_of(statement.query([workspace_id.as_str()])?)
@@ -98,7 +98,8 @@ fn settled_prompts(conn: &Connection, session_id: &SessionId) -> Result<HashMap<
     Ok(settled)
 }
 
-/// The line for each row of a prompt's `seq`, text, how many files it carries, and place.
+/// The line for each row of a prompt's `seq`, text, how many files it carries, place, and who wrote it, which is the
+/// person where the prompt doesn't say.
 fn lines_of(mut rows: rusqlite::Rows<'_>) -> Result<Vec<PromptLine>, StoreError> {
     let mut lines = Vec::new();
     while let Some(row) = rows.next()? {
@@ -111,7 +112,12 @@ fn lines_of(mut rows: rusqlite::Rows<'_>) -> Result<Vec<PromptLine>, StoreError>
         };
         let files = u32::try_from(row.get::<_, Option<i64>>(2)?.unwrap_or(0)).unwrap_or(u32::MAX);
         let place = place_of(row, 3)?;
-        lines.push(PromptLine::new(seq, &text, files).placed(place));
+        // An object, which comes out as its JSON, and only where the person didn't write it.
+        let from = match row.get::<_, Option<String>>(4)? {
+            Some(from) => serde_json::from_str(&from)?,
+            None => PromptFrom::Person,
+        };
+        lines.push(PromptLine::new(seq, &text, files).placed(place).written_by(from));
     }
     Ok(lines)
 }

@@ -2,7 +2,7 @@
 
 use client_core::FileToSend;
 use gpui_kit::FocusHandle;
-use protocol::model::SubagentId;
+use protocol::model::{ProposalId, SubagentId};
 use protocol::prompt::Prompt;
 
 /// Things the owner of a transcript has to deal with.
@@ -23,6 +23,8 @@ pub enum TranscriptEvent {
     /// Someone asked to see the work of `subagent`, in the subagent tab. `title` is what its call says it's for, for a
     /// subagent whose record hasn't come.
     OpenSubagent { subagent: SubagentId, title: String },
+    /// Someone asked to see `proposal`, one of this chat's, in the proposal tab.
+    OpenProposal { proposal: ProposalId },
     /// The bar for finding text in the chat closed, so focus can go back where it was.
     FindClosed,
 }

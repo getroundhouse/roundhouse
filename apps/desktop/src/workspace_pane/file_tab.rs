@@ -3,7 +3,7 @@
 //! same tab, so reviewing a branch never leaves a trail of tabs.
 
 use gpui_kit::component::{Icon, IconName};
-use gpui_kit::{AnyElement, Context, IntoElement as _, SharedString, Window};
+use gpui_kit::{AnyElement, Context, IntoElement as _, SharedString};
 use look::IconSizing as _;
 
 use super::{Showing, WorkspacePane, tab};
@@ -94,19 +94,6 @@ impl WorkspacePane {
             });
             t.keep_typed(true, cx);
         });
-    }
-
-    /// Closes whichever tab is showing, as `Cmd-W` does.
-    pub fn close_tab(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.showing() == Showing::Subagent {
-            self.close_subagent_tab(cx);
-        } else if self.showing() == Showing::File {
-            self.close_file_tab(cx);
-        } else if let Some(id) = self.terminal_in_front().cloned() {
-            self.close_terminal(id, cx);
-        } else if let Some(id) = self.active.clone() {
-            self.close_chat(id, window, cx);
-        }
     }
 
     /// The file tab, before the chats, named for the file it shows, whether it shows its diff or the file itself. Its
