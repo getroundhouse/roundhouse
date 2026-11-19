@@ -107,7 +107,7 @@ A single Cargo workspace in one repo, beside the copy of gpui-kit, which keeps u
 crates/
   protocol/        Client, worker and provider protocol types, event log schema, versioning. No IO
   hub/             Workspaces, sessions, event log, platform API, SQLite storage
-  github/          The hub's calls to GitHub: whose a token is, signing in through its device flow, apps of your own, pull requests and their checks, and whether a push would be taken, and a stand-in GitHub for tests
+  github/          The hub's calls to GitHub: whose a token is, signing in through its device flow, apps of your own, pull requests and their checks, the issues and pull requests a chat links to, and whether a push would be taken, and a stand-in GitHub for tests
   worker/          Git, worktrees, running agents and terminals
   agents/          Claude adapter, raw event capture
   process/         Signalling a process group, recording a PID with its start time, keeping a process's own input and output from what it starts, and marking the file a process runs from

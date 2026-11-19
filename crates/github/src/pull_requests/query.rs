@@ -96,17 +96,21 @@ pub(super) fn query(asked: &[Asked<'_>]) -> String {
         .iter()
         .map(|asked| {
             let parts: Vec<String> = asked.parts.iter().map(Part::written).collect();
-            let name = asked.repository.as_str().split_once('/').map_or("", |(_, name)| name);
             format!(
-                "r{}: repository(owner:{},name:{}) {{ nameWithOwner url {} }}",
+                "r{}: repository({}) {{ nameWithOwner url {} }}",
                 asked.index,
-                quote(asked.repository.owner()),
-                quote(name),
+                named(asked.repository),
                 parts.join(" ")
             )
         })
         .collect();
     format!("query {{ {} rateLimit {{ limit remaining resetAt }} }}", repositories.join(" "))
+}
+
+/// `repository`'s owner and name, as GraphQL's `repository` takes them.
+pub(crate) fn named(repository: &GithubRepositoryName) -> String {
+    let name = repository.as_str().split_once('/').map_or("", |(_, name)| name);
+    format!("owner:{},name:{}", quote(repository.owner()), quote(name))
 }
 
 pub(super) fn quote(value: &str) -> String {

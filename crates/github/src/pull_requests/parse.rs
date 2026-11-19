@@ -5,7 +5,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use protocol::client::ApiError;
 use protocol::model::{
     BranchName, CheckState, Checks, CommitId, LeftQueue, Local, Mergeability, ObservedCheck, ObservedPullRequest,
-    PrState, PullRequest, PullRequestNumber,
+    PrState, PullRequest, PullRequestNumber, Review,
 };
 use serde_json::Value;
 
@@ -233,7 +233,7 @@ pub(super) fn observation(pr: &Value, metadata: &Metadata) -> Result<ObservedPul
         is_draft: pr["isDraft"].as_bool().ok_or_else(incomplete)?,
         base: Some(BranchName::from(string(pr, "baseRefName")?)),
         merge_state: serde_json::from_value(parse("mergeStateStatus")?).map_err(|_| incomplete())?,
-        review: serde_json::from_value(pr["reviewDecision"].as_str().unwrap_or("").into()).map_err(|_| incomplete())?,
+        review: review(pr)?,
         checks: Checks::default(),
         queue: None,
         left_queue: None,
@@ -289,6 +289,12 @@ fn linear(pr: &Value, metadata: &Metadata) -> Result<Option<bool>, ApiError> {
     Ok(Some(compare["behindBy"].as_u64().ok_or_else(incomplete)? == 0))
 }
 
-fn time(value: &Value) -> Result<i64, ApiError> {
+/// Where `pr`'s review stands, by its `reviewDecision`, which GitHub leaves empty where the repository asks for none.
+pub(crate) fn review(pr: &Value) -> Result<Review, ApiError> {
+    serde_json::from_value(pr["reviewDecision"].as_str().unwrap_or("").into()).map_err(|_| incomplete())
+}
+
+/// When `value`, a time as GitHub writes one, such as `2026-01-01T00:00:00Z`, was, in milliseconds since the epoch.
+pub(crate) fn time(value: &Value) -> Result<i64, ApiError> {
     value.as_str().ok_or_else(incomplete)?.parse().map(jiff::Timestamp::as_millisecond).map_err(|_| incomplete())
 }

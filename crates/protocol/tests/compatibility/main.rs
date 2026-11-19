@@ -34,6 +34,7 @@ mod outputs;
 mod previous;
 mod prompts;
 mod proposals;
+mod references;
 mod refusals;
 mod repo_sources;
 mod repos;

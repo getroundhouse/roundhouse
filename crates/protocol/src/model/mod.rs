@@ -20,6 +20,7 @@ mod proposal;
 mod pull_request;
 mod queue;
 mod record;
+mod references;
 mod session;
 mod subagent;
 mod terminal;
@@ -65,6 +66,10 @@ pub use pull_request::{
 };
 pub use queue::QueuedPrompt;
 pub use record::{Record, RecordKey, Records};
+pub use references::{
+    ChecksRollup, IssueNumber, IssueNumberError, IssueState, PullRequestState, REFERENCE_BODY_CHARS, Reference,
+    ReferenceAsk, ReferenceKind, ReferenceLabel, ReferenceRead, ReferencedPullRequest,
+};
 pub use session::{AgentKind, OpenApproval, Session, SessionStatus};
 pub use subagent::{Lately, LatelyCall, LatelyResult, Said, Subagent, SubagentStatus};
 pub use terminal::Terminal;

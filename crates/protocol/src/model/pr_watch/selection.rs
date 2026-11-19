@@ -25,11 +25,10 @@ impl PullRequestNumber {
 impl TryFrom<u64> for PullRequestNumber {
     type Error = SelectionError;
 
+    /// A pull request's number is one of the numbers GitHub counts issues and pull requests by together.
     fn try_from(value: u64) -> Result<Self, Self::Error> {
-        if value == 0 || value > u64::try_from(i32::MAX).map_err(|_| SelectionError::Number)? {
-            return Err(SelectionError::Number);
-        }
-        Ok(Self(value))
+        let number = super::super::IssueNumber::try_from(value).map_err(|_| SelectionError::Number)?;
+        Ok(Self(number.get()))
     }
 }
 

@@ -93,6 +93,8 @@ pub(crate) struct Hub {
     /// What the agents that discover their own models offer, where the hub has been asked.
     pub(super) model_lists: ModelLists,
     pub(super) pull_requests: pull_requests::Reading,
+    /// What the hub found on GitHub of the issues and pull requests chats name, for every client.
+    pub(super) references: super::references::Kept,
     /// The reads of workspaces' own pull requests nobody asked for that are running now, by whose token each reads
     /// as.
     pub(super) own_reads: Jobs<pull_requests::ReadsAs>,
@@ -203,6 +205,7 @@ impl Hub {
             terminals: Terminals::default(),
             model_lists: ModelLists::default(),
             pull_requests: pull_requests::Reading::new(),
+            references: super::references::Kept::default(),
             own_reads: Jobs::new(),
             sign_ins: Jobs::new(),
             github_checks_stopped: watch::Sender::new(false),

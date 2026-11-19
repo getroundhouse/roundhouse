@@ -208,7 +208,7 @@ impl Set {
 
 /// Each alias in `query` before `marker`, with what follows it up to the next, as `r0: repository(` names the
 /// repository a query asks of first, and what it asks of it.
-fn aliased<'a>(query: &'a str, marker: &str) -> Vec<(&'a str, &'a str)> {
+pub(super) fn aliased<'a>(query: &'a str, marker: &str) -> Vec<(&'a str, &'a str)> {
     let starts: Vec<usize> = query.match_indices(marker).map(|(at, _)| at).collect();
     starts
         .iter()
@@ -256,7 +256,7 @@ fn repository(parts: &[(String, Value)]) -> Value {
     repository
 }
 
-fn answered(mut data: Value) -> Answer {
+pub(super) fn answered(mut data: Value) -> Answer {
     data["rateLimit"] = json!({"cost":1,"limit":5000,"remaining":4900,"resetAt":"2099-01-01T00:00:00Z"});
     Answer::json(&json!({ "data": data }))
 }

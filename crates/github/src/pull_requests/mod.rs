@@ -8,11 +8,15 @@ mod graphql;
 mod heads;
 pub use heads::{BRANCHES_A_QUERY, Headed, HeadsAsk, HeadsRead};
 mod parse;
+pub(crate) use parse::{review, time};
 mod query;
+pub(crate) use query::named;
 mod reading;
 mod rounds;
 pub use rounds::Leaving;
+pub(crate) use rounds::Spent;
 mod said;
 pub use said::RateLimit;
+pub(crate) use said::{array, failed, incomplete, string};
 #[cfg(test)]
 mod tests;

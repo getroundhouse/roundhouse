@@ -7,7 +7,8 @@ use crate::hub::Hub;
 use crate::store::AddedBy;
 use protocol::client::{
     ApiError, ClientRequest, ClientResponse, ErrorCode, accounts, admin, agent, attachments, comments, drafts, files,
-    github_accounts, github_apps, log, new_workspace, queue, records, sessions, subscriptions, waits, workspaces,
+    github_accounts, github_apps, log, new_workspace, queue, records, references, sessions, subscriptions, waits,
+    workspaces,
 };
 use protocol::model::{Place, Seq};
 use std::sync::Arc;
@@ -105,6 +106,9 @@ pub(super) async fn handle(
         }
         R::WorkspacePullRequest(workspaces::WorkspacePullRequest { id }) => {
             C::PullRequest(workspaces::PullRequestReply { pull_request: hub.workspace_pull_request(id).await? })
+        }
+        R::ReferencesRead(references::ReferencesRead { workspace, references }) => {
+            C::References(references::References { references: hub.references_read(&workspace, references).await? })
         }
         R::CommentAdd(comments::CommentAdd { workspace_id, path, side, line, text, client_request_id }) => {
             C::Comment(hub.comment_add(workspace_id, path, side, line, text, client_request_id).await?)

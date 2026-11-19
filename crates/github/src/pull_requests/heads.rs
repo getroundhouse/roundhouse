@@ -17,8 +17,7 @@ use protocol::client::ApiError;
 use protocol::model::{BranchName, CommitId, GithubRepositoryName, GithubToken, PrState, PullRequestNumber};
 use serde_json::Value;
 
-use super::graphql::NoAnswer;
-use super::query::quote;
+use super::query::{named, quote};
 use super::rounds::{Leaving, Spent};
 use super::said::RateLimit;
 use super::said::{failed, incomplete};
@@ -72,18 +71,10 @@ impl Github {
     /// GitHub has nothing for, such as a repository it doesn't show the token, fails no other. Stops asking once
     /// GitHub's limit for the token is down to what `leaving` leaves.
     pub async fn read_heads(&self, token: &GithubToken, asks: &[HeadsAsk], leaving: Leaving) -> HeadsRead {
-        let mut spent = Spent { rate_limit: None, refused: false, leaving };
+        let mut spent = Spent::new(leaving);
         let mut answers = Vec::with_capacity(asks.len());
         for (batch, first) in asks.chunks(BRANCHES_A_QUERY).zip((0..).step_by(BRANCHES_A_QUERY)) {
-            let answered = if let Some(exhausted) = spent.exhausted() {
-                Err(exhausted)
-            } else {
-                let answered = self.graphql(token, &query(batch, first)).await;
-                spent.took(answered.as_ref().ok());
-                spent.refused |= matches!(answered, Err(NoAnswer::Refused));
-                answered.map_err(|no| no.error())
-            };
-            match answered {
+            match self.spend(token, &query(batch, first), &mut spent).await {
                 Ok(answer) => answers.extend(taken(&answer, batch, first)),
                 Err(error) => answers.extend(batch.iter().map(|_| Err(error.clone()))),
             }
@@ -113,12 +104,6 @@ fn query(batch: &[HeadsAsk], first: usize) -> String {
         })
         .collect();
     format!("query {{ {} rateLimit {{ limit remaining resetAt }} }}", asked.join(" "))
-}
-
-/// `repository`'s owner and name, as GraphQL's `repository` takes them.
-fn named(repository: &GithubRepositoryName) -> String {
-    let name = repository.as_str().split_once('/').map_or("", |(_, name)| name);
-    format!("owner:{},name:{}", quote(repository.owner()), quote(name))
 }
 
 /// Each ask's answer from `answer`, by its aliases, with the errors GitHub gave about either: one about the branch

@@ -21,6 +21,7 @@ pub mod new_workspace;
 pub mod proposals;
 pub mod queue;
 pub mod records;
+pub mod references;
 mod request;
 pub mod sessions;
 pub mod subscriptions;

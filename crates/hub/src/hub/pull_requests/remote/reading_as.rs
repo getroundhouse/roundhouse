@@ -139,6 +139,14 @@ impl Hub {
         self.github_logins_asked.forget(provider);
     }
 
+    /// Whether a read as `reads_as` that nobody waits on, such as of what a chat links to, can go now, leaving the part of
+    /// GitHub's limit kept for agents and the person, as a read in turn does.
+    pub(in crate::hub) fn may_read_unasked(&self, reads_as: &ReadsAs) -> Result<(), ApiError> {
+        self.pull_requests.limits.allows(reads_as, super::Asked::InTurn, crate::store::now_ms()).map_err(|_| {
+            ApiError::new(ErrorCode::Worker, "GitHub's limit for reading it is nearly used up until it resets")
+        })
+    }
+
     /// What GitHub said as it answered a read as `reads_as`: what's left of the token's limit, and whether it refused
     /// the token, which a machine's own is forgotten for.
     pub(in crate::hub) fn github_said(&self, reads_as: &ReadsAs, rate_limit: Option<RateLimit>, refused: bool) {
