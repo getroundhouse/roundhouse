@@ -57,9 +57,9 @@ pub(crate) enum Step {
         on: Target,
         shows: &'static str,
     },
-    /// Dictates into this field, whose input is already focused, through its real recording attachment.
+    /// Dictates into the field whose input is focused, through its real recording attachment, starting as `with` says.
     Dictate {
-        into: DictationTarget,
+        with: DictateWith,
         said: &'static str,
         shows: &'static str,
     },
@@ -106,11 +106,10 @@ pub(crate) enum Step {
     },
 }
 
-pub(crate) enum DictationTarget {
-    Composer,
-    NewWorkspace,
-    Answer,
-    Comment,
+/// How dictating starts: from the microphone beside Send, or from the keys, which every field dictated into has.
+pub(crate) enum DictateWith {
+    Microphone,
+    Keys,
 }
 
 /// An element in the app, by its ID, or a line in the chat, by the label it gives assistive apps, for one whose ID is

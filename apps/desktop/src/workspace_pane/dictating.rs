@@ -18,7 +18,7 @@ impl WorkspacePane {
         match event {
             dictation_ui::Event::Error(message) => cx.emit(PaneEvent::Error(message.clone())),
             dictation_ui::Event::Ended { submit } => {
-                let then = self.after_dictation.take().filter(|_| *submit);
+                let then = self.after_dictation.ended(*submit);
                 match then {
                     Some(Then::Send) => self.submit(window, cx),
                     Some(Then::Queue) => self.queue_typed(window, cx),
@@ -52,17 +52,12 @@ impl WorkspacePane {
     }
 
     pub(super) fn end_dictation(&mut self, cx: &mut Context<Self>) {
-        self.after_dictation = None;
         self.dictation.update(cx, dictation_ui::Field::end);
     }
 
     pub(super) fn once_dictated(&mut self, then: Then, cx: &mut Context<Self>) -> bool {
         let content = says_or_carries(&self.composer.read(cx).text().to_string(), self.attached.len());
-        let wait = self.dictation.update(cx, |field, cx| field.finish_before_submit(content, cx));
-        if wait {
-            self.after_dictation = Some(then);
-        }
-        wait
+        self.after_dictation.wait(&self.dictation, content, then, cx)
     }
 
     pub(super) fn composer_hints(&self, cx: &App) -> dictation_ui::Hints {
@@ -107,16 +102,5 @@ impl WorkspacePane {
     #[cfg(feature = "testing")]
     pub fn dictating(&self, cx: &gpui_kit::App) -> bool {
         self.dictation.read(cx).is_dictating()
-    }
-
-    #[cfg(feature = "testing")]
-    pub fn hear(&self, audio: &[f32], cx: &gpui_kit::App) {
-        self.dictation.read(cx).hear(audio);
-    }
-
-    /// Whether what's being dictated has the sound output muted.
-    #[cfg(feature = "testing")]
-    pub fn mutes_output(&self, cx: &gpui_kit::App) -> bool {
-        self.dictation.read(cx).mutes_output()
     }
 }

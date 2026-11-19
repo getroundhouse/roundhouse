@@ -35,7 +35,34 @@ pub enum Event {
 impl EventEmitter<Event> for Field {}
 
 impl Field {
-    pub fn new(input: Entity<TextareaState>, corner: look::Corner, window: &Window, cx: &mut Context<Self>) -> Self {
+    /// Dictation over `input`, for the host view `cx` is of, which is drawn again as the field's live words and
+    /// controls change, and which `on_event` tells of what happens to it. `hints` gives the host's words to favour, as
+    /// each recording starts, and `enabled` whether the input shows now, as [`Self::set_enabled`] says. `corner` is the
+    /// one of what the fine line runs along. The host keeps the subscriptions as long as the field.
+    pub fn attach<V: 'static>(
+        input: &Entity<TextareaState>,
+        corner: look::Corner,
+        enabled: bool,
+        hints: impl Fn(&V, &App) -> Hints + 'static,
+        on_event: impl Fn(&mut V, &Event, &mut Window, &mut Context<V>) + 'static,
+        window: &Window,
+        cx: &mut Context<V>,
+    ) -> (Entity<Self>, [Subscription; 2]) {
+        let host = cx.weak_entity();
+        let field = cx.new(|cx| {
+            let mut field = Self::new(input.clone(), corner, window, cx);
+            field.hints =
+                Some(Box::new(move |cx| host.upgrade().map_or_else(Hints::default, |host| hints(host.read(cx), cx))));
+            field.enabled = enabled;
+            field
+        });
+        let events =
+            cx.subscribe_in(&field, window, move |host, _, event, window, cx| on_event(host, event, window, cx));
+        let changed = cx.observe(&field, |_, _, cx| cx.notify());
+        (field, [events, changed])
+    }
+
+    fn new(input: Entity<TextareaState>, corner: look::Corner, window: &Window, cx: &mut Context<Self>) -> Self {
         let keys = cx.observe_keystrokes(|this, event, _, _| this.key_pressed(&event.keystroke));
         let changed = cx.subscribe(&input, |this, _, event: &InputEvent, _| {
             if matches!(event, InputEvent::Blur) {
@@ -54,13 +81,6 @@ impl Field {
             _keys: keys,
             _input: changed,
         }
-    }
-
-    /// Supplies the hint words to bias speech recognition toward whenever a recording starts on this field.
-    #[must_use]
-    pub fn with_hints(mut self, hints: impl Fn(&App) -> Hints + 'static) -> Self {
-        self.hints = Some(Box::new(hints));
-        self
     }
 
     pub(crate) fn current_hints(&self, cx: &App) -> Hints {
@@ -113,13 +133,13 @@ impl Field {
 
     /// Whether what's being dictated has the sound output muted, or a recording listening towards held Space has.
     #[cfg(feature = "testing")]
-    pub fn mutes_output(&self) -> bool {
+    pub(crate) fn mutes_output(&self) -> bool {
         self.recording().is_some_and(dictation::Recording::mutes_output)
     }
 
     /// Gives the field synthetic audio, including to a recording listening towards held Space.
     #[cfg(feature = "testing")]
-    pub fn hear(&self, audio: &[f32]) {
+    pub(crate) fn hear(&self, audio: &[f32]) {
         if let Some(recording) = self.recording() {
             for buffer in audio.chunks(160) {
                 recording.feed(buffer.to_vec());

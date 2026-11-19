@@ -5,7 +5,7 @@ use std::time::Duration;
 use gpui_kit::test::TestWindowExt as _;
 use gpui_kit::{AppContext as _, Focusable as _, KeyDownEvent, KeyUpEvent, Keystroke, PlatformInput, TestAppContext};
 
-use super::support::{ended, hearing, ready, say, sent};
+use super::support::{ended, hear, hearing, ready, say, sent};
 use crate::support::{Stack, Ui};
 
 #[gpui_kit::test]
@@ -118,16 +118,15 @@ fn the_line_moves_with_audio_and_rests_in_silence_after_cancel_and_under_reduce_
     ui.click("dictate");
     ui.settle(Duration::from_millis(20));
     assert_eq!(ui.play(Duration::from_millis(20)), 0, "listening in silence has no loop");
-    let pane = ui.pane().unwrap();
-    ui.cx.update(|cx| pane.read(cx).hear(&vec![0.1; 480], cx));
+    hear(&mut ui, &[0.1; 480]);
     ui.wait("audio to wake the line", |ui| ui.play(Duration::from_millis(20)) > 0);
     assert!(ui.play(Duration::from_millis(200)) > 0, "a sustained sound keeps its ripple moving");
 
-    ui.cx.update(|cx| pane.read(cx).hear(&vec![0.; 480], cx));
+    hear(&mut ui, &[0.; 480]);
     ui.settle(Duration::from_millis(20));
     assert_eq!(ui.play(Duration::from_millis(20)), 0);
     ui.cx.update(|cx| cx.set_reduce_motion(true));
-    ui.cx.update(|cx| pane.read(cx).hear(&vec![0.1; 480], cx));
+    hear(&mut ui, &[0.1; 480]);
     ui.settle(Duration::from_millis(20));
     assert_eq!(ui.play(Duration::from_millis(200)), 0, "Reduce Motion keeps the trace still");
     ui.click(dictation_ui::CANCEL);

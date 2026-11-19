@@ -103,12 +103,6 @@ impl NewWorkspaceDialog {
         self.dictation.update(cx, |field, cx| field.set_enabled(false, cx));
     }
 
-    /// Gives the prompt synthetic audio in UI tests.
-    #[cfg(feature = "testing")]
-    pub fn hear(&self, audio: &[f32], cx: &App) {
-        self.dictation.read(cx).hear(audio);
-    }
-
     fn dictation_hints(&self, cx: &App) -> dictation_ui::Hints {
         let mut collector = client_core::hints::HintCollector::new();
         collector.add_prose(&self.prompt.read(cx).text().to_string());
@@ -142,18 +136,15 @@ impl NewWorkspaceDialog {
             InputEvent::Change => this.keep(false, cx),
             InputEvent::PressEnter { shift: true, .. } | InputEvent::Focus | InputEvent::Blur => {}
         });
-        let dialog = cx.weak_entity();
-        let dictation = cx.new(|cx| {
-            dictation_ui::Field::new(prompt.clone(), look::Corner::Card, window, cx).with_hints(move |cx| {
-                dialog.upgrade().map_or_else(dictation_ui::Hints::default, |d| d.read(cx).dictation_hints(cx))
-            })
-        });
-        let dictated = cx.subscribe(&dictation, |this, _, event, cx| match event {
-            dictation_ui::Event::Ended { submit: true } => this.create(cx),
-            dictation_ui::Event::Ended { submit: false } => {}
-            dictation_ui::Event::Error(message) => cx.emit(DialogEvent::Error(message.clone())),
-        });
-        let live = cx.observe(&dictation, |_, _, cx| cx.notify());
+        let on_event =
+            |this: &mut Self, event: &dictation_ui::Event, _: &mut Window, cx: &mut Context<Self>| match event {
+                dictation_ui::Event::Ended { submit: true } => this.create(cx),
+                dictation_ui::Event::Ended { submit: false } => {}
+                dictation_ui::Event::Error(message) => cx.emit(DialogEvent::Error(message.clone())),
+            };
+        let corner = look::Corner::Card;
+        let (dictation, [dictated, live]) =
+            dictation_ui::Field::attach(&prompt, corner, true, Self::dictation_hints, on_event, window, cx);
         let readiness = crate::dictating::observe(cx, |_, cx| cx.notify());
         let (model, effort, mode, attached) = (None, None, None, Attachments::default());
         Self {

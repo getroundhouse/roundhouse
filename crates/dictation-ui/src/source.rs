@@ -78,3 +78,18 @@ pub fn unavailable(cx: &mut App) {
         let _ = field.update(cx, Field::end);
     }
 }
+
+/// Gives what's being dictated synthetic audio, including a recording listening towards held Space, wherever it is,
+/// since one field dictates at a time.
+#[cfg(feature = "testing")]
+pub fn hear(audio: &[f32], cx: &App) {
+    if let Some(field) = active(cx).and_then(|field| field.upgrade()) {
+        field.read(cx).hear(audio);
+    }
+}
+
+/// Whether what's being dictated has the sound output muted, or a recording listening towards held Space has.
+#[cfg(feature = "testing")]
+pub fn mutes_output_while_dictating(cx: &App) -> bool {
+    active(cx).and_then(|field| field.upgrade()).is_some_and(|field| field.read(cx).mutes_output())
+}

@@ -45,33 +45,16 @@ impl QuestionPanel {
         let dictation = if let Field::Text(input) = &input
             && self.asks.can_type(q)
         {
-            let panel = cx.weak_entity();
-            let typed_input = input.clone();
-            let field = cx.new(|cx| {
-                let mut field =
-                    dictation_ui::Field::new(input.clone(), look::Corner::Control, window, cx).with_hints(move |cx| {
-                        let mut collector = client_core::hints::HintCollector::new();
-                        collector.add_prose(&typed_input.read(cx).text().to_string());
-                        if let Some(panel) = panel.upgrade() {
-                            let panel = panel.read(cx);
-                            if let Some(asked) = panel.asked.get(q) {
-                                collector.add_question(&asked.question);
-                            }
-                            if let Some(transcript) = panel.transcript.upgrade() {
-                                let transcript = transcript.read(cx);
-                                transcript.add_dictation_hints(&mut collector, cx);
-                                collector.add_session_log(transcript.log());
-                            }
-                        }
-                        dictation_ui::Hints::new(collector.finish())
-                    });
-                field.set_enabled(self.dictation_enabled && q == self.showing, cx);
-                field
-            });
-            events.push(cx.subscribe_in(&field, window, move |this, _, event, window, cx| {
-                this.dictation_event(q, event, window, cx);
-            }));
-            events.push(cx.observe(&field, |_, _, cx| cx.notify()));
+            let typed = input.clone();
+            let hints = move |panel: &Self, cx: &App| panel.answer_hints(q, &typed, cx);
+            let on_event =
+                move |panel: &mut Self, event: &dictation_ui::Event, window: &mut Window, cx: &mut Context<Self>| {
+                    panel.dictation_event(q, event, window, cx);
+                };
+            let enabled = self.dictation_enabled && q == self.showing;
+            let corner = look::Corner::Control;
+            let (field, dictated) = dictation_ui::Field::attach(input, corner, enabled, hints, on_event, window, cx);
+            events.extend(dictated);
             Some(field)
         } else {
             None

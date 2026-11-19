@@ -102,11 +102,14 @@ pub(super) fn dictating(ui: &mut Ui) -> bool {
     ui.cx.read_entity(&pane, desktop::workspace_pane::WorkspacePane::dictating)
 }
 
-/// What's said, given to what's being dictated.
+/// What's said, given to what's being dictated, wherever it is.
 pub(super) fn say(ui: &mut Ui, engine: &FakeEngine, said: &str) {
-    let audio = engine.saying(said);
-    let pane = ui.pane().unwrap();
-    ui.cx.update(|cx| pane.read(cx).hear(&audio, cx));
+    hear(ui, &engine.saying(said));
+}
+
+/// `audio`, given to what's being dictated, wherever it is, since one field dictates at a time.
+pub(super) fn hear(ui: &mut Ui, audio: &[f32]) {
+    ui.cx.update(|cx| dictation_ui::hear(audio, cx));
 }
 
 /// The live text drawn under what's typed, while something is being dictated.

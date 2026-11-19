@@ -13,7 +13,7 @@ use client_core::records::InWorkspace;
 use client_core::{Client, Drafts, RecordsFeed};
 use file_tab::FileTab;
 use gpui_kit::component::input::TextareaState;
-use gpui_kit::{AnyWindowHandle, AppContext as _, Context, Entity, EventEmitter, Subscription, Task, Window};
+use gpui_kit::{AnyWindowHandle, Context, Entity, EventEmitter, Subscription, Task, Window};
 use protocol::attachment::Attachment;
 use protocol::model::{AgentKind, Seq, Session, SessionId, TerminalId, Workspace, WorkspaceId, WorkspaceStatus};
 use reading::Reading;
@@ -132,7 +132,7 @@ pub struct WorkspacePane {
     /// What's being dictated into the composer, which ends with the pane.
     pub(super) dictation: Entity<dictation_ui::Field>,
     pub(super) dictation_chat: Option<SessionId>,
-    pub(super) after_dictation: Option<dictating::Then>,
+    pub(super) after_dictation: dictation_ui::Pending<dictating::Then>,
     pub composer: Entity<TextareaState>,
     pub diff: Option<Diff>,
     pub(super) subagents: subagent_tab::Subagents,
@@ -172,10 +172,9 @@ impl WorkspacePane {
         cx: &mut Context<Self>,
     ) -> Self {
         let (composer, on_enter) = composer::new_input(window, cx);
-        let dictation = dictation_field(&composer, window, cx);
-        let dictated =
-            cx.subscribe_in(&dictation, window, |this, _, event, window, cx| this.dictation_event(event, window, cx));
-        let live = cx.observe(&dictation, |_, _, cx| cx.notify());
+        let (hints, on_event) = (Self::composer_hints, Self::dictation_event);
+        let (dictation, [dictated, live]) =
+            dictation_ui::Field::attach(&composer, look::Corner::Card, true, hints, on_event, window, cx);
         let on_settings = crate::settings::observe(cx, |this, cx| {
             for transcript in this.every_transcript() {
                 transcript.update(cx, |t, cx| t.set_thinking_open(crate::settings::get(cx).always_expand_thinking, cx));
@@ -204,7 +203,7 @@ impl WorkspacePane {
             model_lookup: crate::model_lookup::Lookup::default(),
             dictation,
             dictation_chat: None,
-            after_dictation: None,
+            after_dictation: dictation_ui::Pending::default(),
             composer,
             diff: None,
             subagents: subagent_tab::Subagents::default(),
@@ -369,18 +368,4 @@ impl WorkspacePane {
             transcript.update(cx, Transcript::cancel);
         }
     }
-}
-
-/// The field dictation types into, over `composer`, which takes its hints from what the pane's composer holds.
-fn dictation_field(
-    composer: &Entity<TextareaState>,
-    window: &mut Window,
-    cx: &mut Context<WorkspacePane>,
-) -> Entity<dictation_ui::Field> {
-    let pane = cx.weak_entity();
-    cx.new(|cx| {
-        dictation_ui::Field::new(composer.clone(), look::Corner::Card, window, cx).with_hints(move |cx| {
-            pane.upgrade().map_or_else(dictation_ui::Hints::default, |pane| pane.read(cx).composer_hints(cx))
-        })
-    })
 }
