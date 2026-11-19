@@ -49,9 +49,16 @@ pub(super) async fn request(
                 Some(pull_request::NAME) => pull_request::call(asks, session_id).await,
                 Some(diff_comments::NAME) => diff_comments::call(asks, session_id).await,
                 Some(proposals::PROPOSE) => proposals::propose(asks, caller, params).await,
+                Some(proposals::REVISE) => proposals::revise(asks, caller, params).await,
                 Some(proposals::GET) => proposals::get(asks, session_id, params).await,
                 _ => {
-                    let offered = [pull_request::NAME, diff_comments::NAME, proposals::PROPOSE, proposals::GET];
+                    let offered = [
+                        pull_request::NAME,
+                        diff_comments::NAME,
+                        proposals::PROPOSE,
+                        proposals::REVISE,
+                        proposals::GET,
+                    ];
                     let offered = format!("this protocol offers only {}", offered.join(", "));
                     return Err(RpcError::new(Code::InvalidParams, offered));
                 }

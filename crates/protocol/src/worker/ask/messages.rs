@@ -1,5 +1,5 @@
 use super::super::WorkerRequest;
-use super::{DiffComments, ProposalRecord, Propose, ReadProposal, ReadPullRequests, StartPullRequestWait};
+use super::{DiffComments, ProposalRecord, Propose, ReadProposal, ReadPullRequests, Revise, StartPullRequestWait};
 use super::{pull_requests, worktrees};
 use crate::client::Outcome;
 use crate::frame;
@@ -113,6 +113,7 @@ pub enum WorkerAsk {
     /// See [`ReadDiffComments`](super::ReadDiffComments).
     DiffComments,
     Propose(Propose),
+    Revise(Revise),
     ReadProposal(ReadProposal),
     #[serde(other)]
     Unknown,

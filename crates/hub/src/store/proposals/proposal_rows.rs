@@ -2,19 +2,20 @@ use super::super::made::Made;
 use super::super::queue::{Queued, queue_on};
 use super::super::{Store, StoreError, current_rev, json_at, lock, rev_of};
 use protocol::attachment::Attachment;
+use protocol::event::LinkedImage;
 use protocol::model::{
-    AnswerProblem, AskKey, Choice, ClientMessageId, ClientRequestId, Proposal, ProposalId, ProposalRevision,
-    QueuedPrompt, Response, Rev, RevisionNumber, SessionId, ToolUseId,
+    AnswerProblem, AskKey, Choice, ClientMessageId, ClientRequestId, Proposal, ProposalId, ProposalRevision, Proposed,
+    QueuedPrompt, Response, Rev, RevisionNumber, RevisionSummary, SessionId, ToolUseId,
 };
 use protocol::prompt::{Prompt, PromptFrom};
 use rusqlite::types::Type;
 use rusqlite::{Connection, OptionalExtension, Row, params};
 
 /// A proposal with its newest revision, read from `proposals` as `p` and `proposal_revisions` as `r`.
-const PROPOSAL_COLUMNS: &str = "p.id, p.workspace_id, p.session_id, p.created_at_ms, p.rev, r.number, r.call, r.proposed, r.made_at_ms, r.response, r.images";
+const PROPOSAL_COLUMNS: &str = "p.id, p.workspace_id, p.session_id, p.created_at_ms, p.rev, r.number, r.call, r.proposed, r.made_at_ms, r.response, r.images, r.changed";
 const PROPOSAL_WITH_NEWEST: &str = "proposals p JOIN proposal_revisions r ON r.proposal_id = p.id
     AND r.number = (SELECT MAX(number) FROM proposal_revisions WHERE proposal_id = p.id)";
-const REVISION_COLUMNS: &str = "number, call, proposed, made_at_ms, response, images";
+const REVISION_COLUMNS: &str = "number, call, proposed, made_at_ms, response, images, changed";
 
 /// What answering a proposal did.
 pub enum Answering {
@@ -44,44 +45,93 @@ pub struct AnswerToKeep<'a> {
     pub told: &'a dyn Fn(&Proposal, &Choice) -> Prompt<Attachment>,
 }
 
+/// A revision the agent wrote of a proposal it made, which the store numbers, one past the newest.
+pub struct NewRevision {
+    pub changed: String,
+    pub call: Option<ToolUseId>,
+    pub proposed: Proposed,
+    pub made_at_ms: i64,
+    pub images: Vec<LinkedImage>,
+}
+
+/// The response in the column `at`. One written in a form this build can't read, by a newer one, is still a response,
+/// so the revision isn't taken for waiting, and answered again over it.
+fn response_at(row: &Row<'_>, at: usize) -> rusqlite::Result<Option<Response>> {
+    Ok(row.get::<_, Option<String>>(at)?.map(|json| serde_json::from_str(&json).unwrap_or(Response::Unknown)))
+}
+
+/// What the agent wrote in the column `at`. Only this build and newer ones write it, and a newer one's fields that this
+/// build doesn't know are left out.
+fn proposed_at(row: &Row<'_>, at: usize) -> rusqlite::Result<Proposed> {
+    json_at(row, at)?.ok_or_else(|| rusqlite::Error::InvalidColumnType(at, "proposed".into(), Type::Text))
+}
+
 /// The revision in `REVISION_COLUMNS` from `at` on.
 fn revision_from_row(row: &Row<'_>, at: usize) -> rusqlite::Result<ProposalRevision> {
-    // Only this build and newer ones write it, and a newer one's fields that this build doesn't know are left out.
-    let proposed = json_at(row, at + 2)?
-        .ok_or_else(|| rusqlite::Error::InvalidColumnType(at + 2, "proposed".into(), Type::Text))?;
+    let proposed = proposed_at(row, at + 2)?;
     Ok(ProposalRevision {
         number: RevisionNumber(row.get(at)?),
         call: row.get::<_, Option<String>>(at + 1)?.map(Into::into),
         proposed,
         made_at_ms: row.get(at + 3)?,
-        // A response written in a form this build can't read, by a newer one, is still a response, so the revision
-        // isn't taken for waiting, and answered again over it.
-        response: row
-            .get::<_, Option<String>>(at + 4)?
-            .map(|json| serde_json::from_str(&json).unwrap_or(Response::Unknown)),
+        response: response_at(row, at + 4)?,
         images: json_at(row, at + 5)?.unwrap_or_default(),
+        changed: row.get::<_, Option<String>>(at + 6)?.unwrap_or_default(),
     })
 }
 
+/// A proposal with its newest revision, without the summary of each, which [`with_summaries`] adds.
 fn proposal_from_row(row: &Row<'_>) -> rusqlite::Result<Proposal> {
     Ok(Proposal {
         id: row.get::<_, String>(0)?.into(),
         workspace_id: row.get::<_, String>(1)?.into(),
         session_id: row.get::<_, String>(2)?.into(),
         current: revision_from_row(row, 5)?,
+        revisions: Vec::new(),
         created_at_ms: row.get(3)?,
         rev: rev_of(row, 4)?,
     })
 }
 
+/// `proposal`, with the summary of each of its revisions, read on `conn`.
+fn with_summaries(conn: &Connection, mut proposal: Proposal) -> Result<Proposal, StoreError> {
+    proposal.revisions = conn
+        .prepare_cached(
+            "SELECT number, call, made_at_ms, response, proposed FROM proposal_revisions WHERE proposal_id = ? \
+             ORDER BY number",
+        )?
+        .query_map([proposal.id.as_str()], summary_from_row)?
+        .collect::<rusqlite::Result<_>>()?;
+    Ok(proposal)
+}
+
+/// A revision in short, from `with_summaries`'s columns. What the agent wrote, up to 128 KiB a revision, is read only
+/// for one the person chose in, whose summary names the options chosen, since SQLite reads a column only when it's
+/// asked for, so a record stays cheap to read however often its proposal went another round.
+fn summary_from_row(row: &Row<'_>) -> rusqlite::Result<RevisionSummary> {
+    let response = response_at(row, 3)?;
+    let chosen = match &response {
+        Some(Response::Chose(choice)) => proposed_at(row, 4)?.chosen(choice),
+        Some(Response::Unknown) | None => Vec::new(),
+    };
+    Ok(RevisionSummary {
+        number: RevisionNumber(row.get(0)?),
+        call: row.get::<_, Option<String>>(1)?.map(Into::into),
+        made_at_ms: row.get(2)?,
+        response: response.map(|response| response.summary(chosen)),
+    })
+}
+
 fn proposal_on(conn: &Connection, id: &ProposalId) -> Result<Proposal, StoreError> {
-    conn.query_row(
-        &format!("SELECT {PROPOSAL_COLUMNS} FROM {PROPOSAL_WITH_NEWEST} WHERE p.id = ?"),
-        [id.as_str()],
-        proposal_from_row,
-    )
-    .optional()?
-    .ok_or_else(|| StoreError::NotFound { kind: "proposal", id: id.to_string() })
+    let proposal = conn
+        .query_row(
+            &format!("SELECT {PROPOSAL_COLUMNS} FROM {PROPOSAL_WITH_NEWEST} WHERE p.id = ?"),
+            [id.as_str()],
+            proposal_from_row,
+        )
+        .optional()?
+        .ok_or_else(|| StoreError::NotFound { kind: "proposal", id: id.to_string() })?;
+    with_summaries(conn, proposal)
 }
 
 /// Takes back the answer to the revision `revision` of the proposal `id`, on `conn`, as the prompt that would tell its
@@ -168,6 +218,8 @@ impl Store {
             ))?
             .query_map([session_id.as_str()], proposal_from_row)?
             .collect::<rusqlite::Result<Vec<_>>>()?;
+        let proposals =
+            proposals.into_iter().map(|proposal| with_summaries(&tx, proposal)).collect::<Result<_, _>>()?;
         let rev = current_rev(&tx)?;
         tx.commit()?;
         Ok((proposals, rev))
@@ -223,6 +275,46 @@ impl Store {
         let queued = queue_on(&tx, &proposal.session_id, &prompt)?;
         tx.commit()?;
         Ok(Answering::Kept { proposal, queued })
+    }
+
+    /// Writes `revision` as the newest of the proposal `id`, numbered one past the newest it has, unless its session's
+    /// ask with `key` wrote one already, which leaves the proposal as it is.
+    pub fn revise_proposal(
+        &self,
+        id: &ProposalId,
+        revision: &NewRevision,
+        key: &AskKey,
+    ) -> Result<Made<Proposal>, StoreError> {
+        let mut conn = lock(&self.writer);
+        let tx = conn.transaction()?;
+        let earlier = proposal_on(&tx, id)?;
+        let asked: Option<u32> = tx
+            .query_row(
+                "SELECT number FROM proposal_revisions WHERE proposal_id = ? AND ask_key = ?",
+                params![id.as_str(), key.as_str()],
+                |row| row.get(0),
+            )
+            .optional()?;
+        if asked.is_some() {
+            return Ok(Made::Earlier(earlier));
+        }
+        tx.execute(
+            "INSERT INTO proposal_revisions (proposal_id, number, call, proposed, made_at_ms, images, changed, ask_key)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            params![
+                id.as_str(),
+                earlier.current.number.next().0,
+                revision.call.as_ref().map(ToolUseId::as_str),
+                serde_json::to_string(&revision.proposed)?,
+                revision.made_at_ms,
+                (!revision.images.is_empty()).then(|| serde_json::to_string(&revision.images)).transpose()?,
+                (!revision.changed.is_empty()).then_some(revision.changed.as_str()),
+                key.as_str(),
+            ],
+        )?;
+        let made = proposal_on(&tx, id)?;
+        tx.commit()?;
+        Ok(Made::New(made))
     }
 
     pub fn get_proposal(&self, id: &ProposalId) -> Result<Proposal, StoreError> {

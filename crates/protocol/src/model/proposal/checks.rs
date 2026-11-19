@@ -37,6 +37,8 @@ pub enum ProposalProblem {
     Unlabelled { question: usize, letter: OptionLetter },
     #[error("question {question} recommends an option it doesn't have")]
     NoSuchOption { question: usize },
+    #[error("question {question} names two options {letter}")]
+    SameLetter { question: usize, letter: OptionLetter },
     #[error("a proposal holds at most {MAX_PROPOSAL_BYTES} bytes of text, and this holds {0}")]
     TooLong(usize),
 }
@@ -86,6 +88,9 @@ impl ProposalQuestion {
         let options = self.options.len();
         if !(MIN_OPTIONS..=MAX_OPTIONS).contains(&options) {
             return Err(ProposalProblem::Options { question, options });
+        }
+        if let Some(letter) = self.letter_twice() {
+            return Err(ProposalProblem::SameLetter { question, letter });
         }
         let unlabelled = self.places().filter_map(|place| self.named(place)).find(|(_, o)| o.label.trim().is_empty());
         if let Some((letter, _)) = unlabelled {

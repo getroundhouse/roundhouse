@@ -55,3 +55,12 @@ pub(super) const PROPOSALS: &str = r"
 pub(super) const REVISION_IMAGES: &str = r"
     ALTER TABLE proposal_revisions ADD COLUMN images TEXT;
 ";
+
+/// What the agent said changed in each revision after the first, in Markdown, NULL for the first, and the worker's key
+/// for the ask that wrote it, unique within its proposal, so asking again writes it once. NULL for the first, which
+/// `proposals.ask_key` keys, and for every revision written before.
+pub(super) const REVISIONS: &str = r"
+    ALTER TABLE proposal_revisions ADD COLUMN changed TEXT;
+    ALTER TABLE proposal_revisions ADD COLUMN ask_key TEXT;
+    CREATE UNIQUE INDEX proposal_revisions_by_ask ON proposal_revisions (proposal_id, ask_key) WHERE ask_key IS NOT NULL;
+";

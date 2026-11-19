@@ -3,8 +3,8 @@ use crate::worker_link::WorkerLink;
 use protocol::client::{ApiError, ErrorCode, error_chain};
 use protocol::model::{SessionId, WorkspaceId};
 use protocol::worker::{
-    AskReply, CancelWait, CreateWorktree, DiffComments, PullRequestAnswer, ReadProposal, ReadWait, RemoveWorktree,
-    ServeTools, ToolsServing, ToolsToken, WorkerAsk,
+    AskReply, CancelWait, CreateWorktree, DiffComments, PullRequestAnswer, ReadWait, RemoveWorktree, ServeTools,
+    ToolsServing, ToolsToken, WorkerAsk,
 };
 use std::sync::Arc;
 use std::time::Duration;
@@ -93,8 +93,9 @@ impl Hub {
             }
             WorkerAsk::ListWorktrees => self.list_worktrees(workspace_id, link).await.map(AskReply::Worktrees),
             WorkerAsk::Propose(asked) => self.propose(workspace_id, session_id, asked).await.map(AskReply::Proposal),
-            WorkerAsk::ReadProposal(ReadProposal { id }) => {
-                self.read_proposal(&session_id, id).await.map(AskReply::Proposal)
+            WorkerAsk::Revise(asked) => self.revise(&session_id, asked).await.map(AskReply::Proposal),
+            WorkerAsk::ReadProposal(asked) => {
+                self.read_proposal_revision(&session_id, asked).await.map(AskReply::Proposal)
             }
             WorkerAsk::DiffComments => {
                 let comments = self.comment_list(workspace_id.clone()).await?;

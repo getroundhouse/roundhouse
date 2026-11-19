@@ -90,6 +90,7 @@ impl Asks {
             | WorkerAsk::ListWorktrees
             | WorkerAsk::DiffComments
             | WorkerAsk::Propose(_)
+            | WorkerAsk::Revise(_)
             | WorkerAsk::ReadProposal(_)
             | WorkerAsk::Unknown => self.patience,
         }

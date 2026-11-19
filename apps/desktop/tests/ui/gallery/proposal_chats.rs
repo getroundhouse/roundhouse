@@ -5,8 +5,8 @@
 
 use protocol::event::EventBody;
 use protocol::model::{
-    Choice, OptionPlace, Proposal, ProposalOption, ProposalQuestion, ProposalRevision, Proposed, Recommendation,
-    Response, RevisionNumber, SessionStatus,
+    Choice, OptionLetter, OptionPlace, Proposal, ProposalOption, ProposalQuestion, ProposalRevision, Proposed,
+    Recommendation, Response, RevisionNumber, SessionStatus,
 };
 use serde_json::json;
 
@@ -75,13 +75,88 @@ pub(crate) const SCREENS: &[Screen] = &[
         frame: CHAT,
         steps: &[Step::Select(FOCUS)],
     },
+    Screen {
+        name: "proposal-revised-line",
+        spec: "proposals.md",
+        world: Some(revised_world),
+        frame: CHAT,
+        steps: &[Step::Select(FOCUS)],
+    },
+    Screen {
+        name: "proposal-revised",
+        spec: "proposals.md",
+        world: Some(revised_world),
+        frame: PROPOSAL,
+        steps: &[Step::Select(FOCUS), Step::Click("open-proposal/8d0c6a5e-proposal/2"), Step::MoveAway],
+    },
 ];
+
+/// The call that wrote the second revision.
+const REVISED: &str = "toolu-p2";
 
 /// The prompt that told the agent what was chosen, by its message ID, which the proposal's answer names.
 const TOLD: &str = "answer-1";
 
 fn world() -> World {
-    with_proposal(events(), None)
+    with_proposal(events(), [first(None)])
+}
+
+/// After the person asked in the chat for an option the proposal didn't have, and the agent revised it: B dropped, C
+/// keeping its letter, and D added.
+fn revised_world() -> World {
+    let mut events = events();
+    events.extend([
+        user_prompt("None of these: a hold has to survive a restart, and I'd rather the signal kept no state. Could the dispatcher's board own it?"),
+        taken(protocol::model::Seq::new(9)),
+        text("m5", "I'll drop B, which can't survive a restart, and write up the dispatcher's board."),
+        mcp("m6", REVISED, "roundhouse", "revise_proposal", json!({ "title": "Holding a train" })),
+        mcp_said(REVISED, &format!("Revised \"Holding a train\" as revision 2 of {ID}."), false),
+        replied("I'll drop B, which can't survive a restart, and write up the dispatcher's board.", 63, 0.31),
+    ]);
+    let first = first(None);
+    let mut proposed = proposed();
+    let question = &mut proposed.questions[0];
+    let board = ProposalOption {
+        label: "The dispatcher's board".into(),
+        description: "The board that sets holds keeps them, and tells the signal.".into(),
+        body: "Holds are kept where dispatch sets them, and survive a restart, as the board's state does.".into(),
+        letter: OptionLetter::read("D"),
+    };
+    question.options.remove(1);
+    question.options[1].letter = OptionLetter::read("C");
+    question.options.push(board);
+    question.details = "| | A · The signal | C · The timetable | D · The dispatcher's board |\n|---|---|---|---|\n\
+                        | Survives a restart | Yes | Yes | Yes |\n| New state | One field | One table | One field |\n\
+                        | Work | About a day | About three days | About two days |"
+        .into();
+    question.recommended = Some(Recommendation {
+        option: OptionPlace(2),
+        why: "It keeps the signal free of state, as you asked, and survives a restart.".into(),
+    });
+    let second = ProposalRevision {
+        number: RevisionNumber(2),
+        changed:
+            "Dropped B, the train, which loses a hold on a restart. Added D, the dispatcher's board, as you asked. \
+                  A and C are as they were."
+                .into(),
+        call: Some(REVISED.into()),
+        proposed,
+        ..first.clone()
+    };
+    with_proposal(events, vec![first, second])
+}
+
+/// The first revision, which the person answered with `choice`, if they did.
+fn first(choice: Option<Choice>) -> ProposalRevision {
+    ProposalRevision {
+        number: RevisionNumber::FIRST,
+        changed: String::new(),
+        call: Some(CALL.into()),
+        proposed: proposed(),
+        made_at_ms: 0,
+        response: choice.map(Response::Chose),
+        images: Vec::new(),
+    }
 }
 
 /// After the person chose A, with a note, and the agent was told.
@@ -108,24 +183,23 @@ fn answered_world() -> World {
     ]);
     let answered =
         Choice { chosen: vec![OptionPlace(0)], note: "Hold it while the platform clears too.".into(), at_ms: 0 };
-    with_proposal(events, Some(answered))
+    with_proposal(events, [first(Some(answered))])
 }
 
-fn with_proposal(events: Vec<EventBody>, choice: Option<Choice>) -> World {
+/// The world of the chat `events`, with the proposal whose revisions are `revisions`, oldest first.
+fn with_proposal(events: Vec<EventBody>, revisions: impl Into<Vec<ProposalRevision>>) -> World {
     let mut world = chat_world(SessionStatus::Idle, events);
     let session = world.sessions.last().unwrap();
+    let mut revisions = revisions.into();
+    for revision in &mut revisions {
+        revision.made_at_ms = session.created_at_ms;
+    }
     let proposal = Proposal {
         id: ID.into(),
         workspace_id: session.workspace_id.clone(),
         session_id: session.id.clone(),
-        current: ProposalRevision {
-            number: RevisionNumber::FIRST,
-            call: Some(CALL.into()),
-            proposed: proposed(),
-            made_at_ms: session.created_at_ms,
-            response: choice.map(Response::Chose),
-            images: Vec::new(),
-        },
+        current: revisions.last().unwrap().clone(),
+        revisions: revisions.iter().map(ProposalRevision::summary).collect(),
         created_at_ms: session.created_at_ms,
         rev: protocol::model::Rev::new(1),
     };
@@ -151,6 +225,7 @@ fn proposed() -> Proposed {
         label: label.into(),
         description: description.into(),
         body: body.into(),
+        letter: None,
     };
     let question = ProposalQuestion {
         header: "Holding".into(),

@@ -6,7 +6,7 @@ use gpui_kit::component::{h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{AnyElement, App, Div, ElementId, IntoElement, ParentElement as _, SharedString, Styled as _, div};
 use look::Typeset as _;
-use protocol::model::{OptionLetter, OptionPlace, ProposalOption, ProposalQuestion, Proposed};
+use protocol::model::{OptionLetter, OptionPlace, ProposalOption, ProposalQuestion, ProposalRevision, RevisionNumber};
 
 use super::answering::Choosing;
 use crate::find::{Marks, marked_with_layout};
@@ -66,9 +66,22 @@ impl Writing<'_> {
     }
 }
 
-/// Every part of the page `proposed` makes.
-pub(super) fn parts(proposed: &Proposed, writing: &mut Writing<'_>, choosing: &Choosing<'_>, cx: &App) -> Vec<Part> {
+/// Every part of the page `revision` makes: what changed in it, when it's one the agent revised, then what it proposes.
+pub(super) fn parts(
+    revision: &ProposalRevision,
+    writing: &mut Writing<'_>,
+    choosing: &Choosing<'_>,
+    cx: &App,
+) -> Vec<Part> {
     let mut parts = Vec::new();
+    if !revision.changed.trim().is_empty() {
+        let before = RevisionNumber(revision.number.0.saturating_sub(1));
+        let changed = writing.markdown("changed", &revision.changed);
+        let heading = div().typeset(look::Type::Heading).child(format!("What changed since revision {before}"));
+        let element = section(heading).child(changed).into_any_element();
+        parts.push(Part { label: "What changed".into(), under: false, element });
+    }
+    let proposed = &revision.proposed;
     if !proposed.context.trim().is_empty() {
         let context = writing.markdown("context", &proposed.context);
         let element = section(heading("Context")).child(context).into_any_element();

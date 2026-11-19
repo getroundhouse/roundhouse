@@ -1,11 +1,11 @@
-//! What a worker asks its hub to propose for its agent, and to read a proposal back.
+//! What a worker asks its hub to propose for its agent, to revise a proposal, and to read one back.
 
 use serde::{Deserialize, Serialize};
 
 use super::{Answer, Ask, AskReply, WorkerAsk};
 use crate::attachment::NewAttachment;
 use crate::event::LinkedImage;
-use crate::model::{AskKey, Proposal, ProposalId, Proposed, ToolUseId};
+use crate::model::{AskKey, Proposal, ProposalId, ProposalRevision, Proposed, RevisionNumber, ToolUseId};
 
 /// Makes a proposal in the agent's chat, which a hub refuses, saying why, when [`Proposed::check`] does. Asked again
 /// with the same `key`, as a new hub is asked whatever the last didn't answer, it answers with the one it made.
@@ -34,10 +34,42 @@ impl Ask for Propose {
     }
 }
 
-/// One of the chat's proposals, as the hub keeps it. Another chat's is refused as not found.
+/// Writes a new revision of one of the chat's proposals, whether or not the person has answered the newest, which a hub
+/// refuses, saying why, when [`Proposed::check`] does, and as not found for another chat's. Asked again with the same
+/// `key`, it answers with the proposal as it is now, and writes nothing more.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct Revise {
+    pub id: ProposalId,
+    pub proposed: Proposed,
+    /// What changed since the revision before, which the new revision shows first.
+    pub changed: String,
+    /// As [`Propose::call`] says.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub call: Option<ToolUseId>,
+    pub key: AskKey,
+    /// As [`Propose::images`] says.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub images: Vec<LinkedImage>,
+    /// As [`Propose::attachments`] says.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub attachments: Vec<NewAttachment>,
+}
+
+impl Ask for Revise {
+    type Answer = ProposalRecord;
+
+    fn into_ask(self) -> WorkerAsk {
+        WorkerAsk::Revise(self)
+    }
+}
+
+/// One of the chat's proposals, as the hub keeps it, and its revision `revision` in full, when it's asked for one
+/// that isn't the newest. Another chat's is refused as not found, and so is a revision it doesn't have.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct ReadProposal {
     pub id: ProposalId,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub revision: Option<RevisionNumber>,
 }
 
 impl Ask for ReadProposal {
@@ -51,6 +83,9 @@ impl Ask for ReadProposal {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct ProposalRecord {
     pub proposal: Proposal,
+    /// The revision [`ReadProposal`] asked for, in full, when it isn't the newest, which `proposal` has.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub revision: Option<Box<ProposalRevision>>,
 }
 
 impl Answer for ProposalRecord {

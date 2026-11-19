@@ -373,4 +373,6 @@ pub(in super::super) const MIGRATIONS: &[Migration] = &[
     Sql(super::proposals::REVISION_IMAGES),
     // The repository source and worker environment settled at each workspace's creation, in `workspaces`.
     Sql(workspaces::PLACEMENT),
+    // What changed in each revision of a proposal, and the ask that wrote it, in `proposal_revisions`.
+    Sql(super::proposals::REVISIONS),
 ];

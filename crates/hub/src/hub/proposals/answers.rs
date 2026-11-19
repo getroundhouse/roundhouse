@@ -64,12 +64,22 @@ pub(super) fn told(proposal: &Proposal, choice: &Choice) -> String {
         ProposalRevision { response: Some(Response::Chose(choice.clone())), ..proposal.current.clone() };
     let chosen = answered_revision.chosen_in_words().unwrap_or_default();
     let title = proposal.current.proposed.title.trim();
-    let mut said = match proposal.current.proposed.questions.as_slice() {
-        [_] => format!("I chose {chosen}, in your proposal \"{title}\" ({}).", proposal.id),
-        _ => format!("In your proposal \"{title}\" ({}), I chose {chosen}.", proposal.id),
+    // Once there are several, the revision the person read, which may not be the newest when the agent reads this.
+    let which = if proposal.revised() {
+        format!("revision {} of your proposal \"{title}\" ({})", proposal.current.number, proposal.id)
+    } else {
+        format!("your proposal \"{title}\" ({})", proposal.id)
     };
-    if !choice.note.is_empty() {
-        said.push_str(" I wrote a note with it, which get_proposal reads.");
+    let said = match proposal.current.proposed.questions.as_slice() {
+        [_] => format!("I chose {chosen}, in {which}."),
+        _ => format!("In {which}, I chose {chosen}."),
+    };
+    match (choice.note.is_empty(), proposal.revised()) {
+        (true, _) => said,
+        (false, false) => format!("{said} I wrote a note with it, which get_proposal reads."),
+        (false, true) => format!(
+            "{said} I wrote a note with it, which get_proposal reads, given revision {}.",
+            proposal.current.number
+        ),
     }
-    said
 }
