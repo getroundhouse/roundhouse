@@ -1,4 +1,6 @@
 #![cfg(test)]
+use std::io::Write as _;
+use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -7,7 +9,7 @@ use protocol::capability::conversation::Start;
 use protocol::event::EventBody;
 use protocol::model::{AgentKind, ModelName, RunId};
 use protocol::worker::AgentSpec;
-use serde_json::Value;
+use serde_json::{Value, json};
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 
@@ -138,4 +140,38 @@ impl Harness {
         let launched = tokio::time::timeout(Duration::from_secs(10), &mut self.launch).await.unwrap().unwrap();
         launched.err().expect("the launch failed")
     }
+}
+
+pub(super) fn update(payload: &Value) -> Value {
+    json!({"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "session-1", "update": payload}})
+}
+
+pub(super) fn user_chunk(text: &str) -> Value {
+    update(&json!({"sessionUpdate": "user_message_chunk", "content": {"type": "text", "text": text}}))
+}
+
+pub(super) fn thought_chunk(text: &str) -> Value {
+    update(&json!({"sessionUpdate": "agent_thought_chunk", "content": {"type": "text", "text": text}}))
+}
+
+pub(super) fn msg_chunk(text: &str) -> Value {
+    update(&json!({"sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": text}}))
+}
+
+pub(super) fn append_transcript_raw(room: &Path, raw: &str) {
+    let dir =
+        room.join(".gemini").join("antigravity-cli").join("brain").join("session-1").join(".system_generated/logs");
+    std::fs::create_dir_all(&dir).unwrap();
+    let mut file = std::fs::OpenOptions::new().create(true).append(true).open(dir.join("transcript.jsonl")).unwrap();
+    file.write_all(raw.as_bytes()).unwrap();
+    file.flush().unwrap();
+}
+
+pub(super) fn append_transcript(room: &Path, steps: &[Value]) {
+    let mut raw = String::new();
+    for step in steps {
+        raw.push_str(&step.to_string());
+        raw.push('\n');
+    }
+    append_transcript_raw(room, &raw);
 }

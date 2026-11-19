@@ -7,6 +7,7 @@ use protocol::capability::calls::{
     output::{CommandOutput, Ended, FileOutcome, Lines, McpContent},
 };
 use protocol::capability::setup::ServerName;
+use protocol::model::ModelName;
 use serde_json::Value;
 
 use crate::acp::{ToolCallWire, ToolKindWire, ToolStatusWire};
@@ -72,7 +73,9 @@ fn by_name(name: &str, args: &Value, wire: &ToolCallWire) -> Call {
             persona: str_field(args, &["TypeName"]).map(Into::into),
             description: str_field(args, &["Role", "description"]),
             prompt: str_field(args, &["Prompt", "prompt"]).unwrap_or_default(),
-            model: None,
+            model: str_field(args, &["Model", "model"])
+                .filter(|model| model != "inherit")
+                .and_then(|model| ModelName::try_from(model).ok()),
             effort: None,
             runs: Runs::Background,
             resumes: None,

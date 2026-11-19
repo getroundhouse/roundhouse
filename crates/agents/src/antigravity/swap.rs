@@ -94,7 +94,7 @@ async fn spawn_swapped_child(
         shared.clone(),
     ));
     let setup = match launch::initialize(shared).await {
-        Ok(()) => launch::resume_after_swap(shared, session_id, target_mode).await,
+        Ok(_) => launch::resume_after_swap(shared, session_id, target_mode).await,
         Err(error) => Err(error),
     };
     if let Err(error) = setup {

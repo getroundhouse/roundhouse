@@ -5,8 +5,19 @@ use serde_json::json;
 
 use super::{
     SessionUpdate, StopReason, ToolKindWire, ToolStatusWire, config_offers_value, elicitation_accept,
-    parse_elicitation, parse_permission_request, parse_prompt_response, parse_session_response, parse_session_update,
+    parse_agent_version, parse_elicitation, parse_permission_request, parse_prompt_response, parse_session_response,
+    parse_session_update,
 };
+
+#[test]
+fn initialize_response_parses_non_empty_agent_version() {
+    assert_eq!(
+        parse_agent_version(&json!({ "agentInfo": { "name": "Antigravity ACP Server", "version": "1.5.12" } })),
+        Some("1.5.12".into())
+    );
+    assert_eq!(parse_agent_version(&json!({ "agentInfo": { "name": "Antigravity", "version": "" } })), None);
+    assert_eq!(parse_agent_version(&json!({})), None);
+}
 
 #[test]
 fn session_response_and_config_options_parse_models_and_efforts() {

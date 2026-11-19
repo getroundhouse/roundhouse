@@ -1,6 +1,6 @@
 # Watch context and limits
 
-Three things run out in a long chat: the agent's context, your plan's limits, and the prompt cache. In a Claude chat, the composer shows the first two, and the chat says when the third is about to cost you. Antigravity shows context usage without plan limits, prompt cache estimates or `Compact now`, and Codex shows context usage and plan limits without prompt cache estimates; indicators an agent doesn't report stay absent.
+Three things run out in a long chat: the agent's context, your plan's limits, and the prompt cache. In a Claude chat, the composer shows the first two, and the chat says when the third is about to cost you. Antigravity shows context usage without plan limits or prompt cache estimates, and Codex shows context usage and plan limits without prompt cache estimates; indicators an agent doesn't report stay absent.
 
 ## How full the context is
 

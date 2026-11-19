@@ -12,6 +12,7 @@ use tracing::warn;
 
 use super::files::{ConversationFiles, effective_home};
 use super::running::{Shared, effort_str, ensure_sign_in_offers_model, mode_id};
+use super::state::TranscriptCursor;
 use crate::{AgentError, AgentOptions, acp};
 
 pub(super) const FULL_ACCESS_ARGS: [&str; 3] = ["acp", "--disable-telemetry", "--dangerously-skip-permissions"];
@@ -80,9 +81,9 @@ pub(super) fn launch(
     Ok(Launched { child, pid, stdin, stdout, stderr })
 }
 
-pub(super) async fn initialize(shared: &Shared) -> Result<(), AgentError> {
-    shared.rpc().ask("initialize", acp::initialize_params("roundhouse", env!("CARGO_PKG_VERSION"))).await?;
-    Ok(())
+pub(super) async fn initialize(shared: &Shared) -> Result<Option<String>, AgentError> {
+    let reply = shared.rpc().ask("initialize", acp::initialize_params("roundhouse", env!("CARGO_PKG_VERSION"))).await?;
+    Ok(acp::parse_agent_version(&reply))
 }
 
 pub(super) async fn conversation(
@@ -90,6 +91,7 @@ pub(super) async fn conversation(
     spec: &AgentSpec,
     options: &AgentOptions,
     purpose: Purpose,
+    agent_version: Option<String>,
 ) -> Result<(), AgentError> {
     let servers = session_servers(purpose, options);
     let told = session_instructions(purpose, options);
@@ -103,7 +105,7 @@ pub(super) async fn conversation(
             let path = files.transcript();
             let resumed_same = matches!(&spec.start, Start::Resume { conversation } if *conversation == id);
             let offset = if resumed_same { tokio::fs::metadata(&path).await.map_or(0, |meta| meta.len()) } else { 0 };
-            Some((path, offset))
+            Some(TranscriptCursor::new(path, offset))
         }
         _ => None,
     };
@@ -126,7 +128,7 @@ pub(super) async fn conversation(
                 model: Some(model),
                 cwd: Some(spec.cwd.clone()),
                 mode: Some(mode),
-                agent_version: None,
+                agent_version,
             },
             None,
         )
@@ -148,9 +150,11 @@ pub(super) async fn resume_after_swap(
     let parsed = acp::parse_session_response(&response)
         .ok_or_else(|| AgentError::Failed("Antigravity returned no session ID".into()))?;
     let existing_transcript = shared.state.lock().transcript.clone();
-    let updated_offset = match &existing_transcript {
-        Some((path, prev)) => {
-            Some((path.clone(), tokio::fs::metadata(path).await.map_or(*prev, |m| m.len().max(*prev))))
+    let updated_transcript = match existing_transcript {
+        Some(prev) => {
+            let floor = prev.wakeup_floor.max(prev.async_agents_offset);
+            let offset = tokio::fs::metadata(&prev.path).await.map_or(floor, |m| m.len().max(floor));
+            Some(TranscriptCursor::new(prev.path, offset))
         }
         None => None,
     };
@@ -158,7 +162,7 @@ pub(super) async fn resume_after_swap(
         let mut state = shared.state.lock();
         state.process_mode = mode;
         state.skip_permissions = purpose.skips_permissions(mode);
-        state.transcript = updated_offset;
+        state.transcript = updated_transcript;
         state.config_options = parsed.config_options;
     }
     apply_initial_settings(shared, id, matches!(purpose, Purpose::Agent)).await

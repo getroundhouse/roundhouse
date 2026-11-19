@@ -64,9 +64,9 @@ impl TranscriptWatch {
         Self { offset, phase: Phase::Idle }
     }
 
-    fn feed_bytes(&mut self, bytes: &[u8], skip_permissions: bool, now: Instant) {
+    fn feed_bytes(&mut self, bytes: &[u8], skip_permissions: bool, now: Instant) -> usize {
         let Some(end) = bytes.iter().rposition(|&b| b == b'\n').map(|idx| idx + 1) else {
-            return;
+            return 0;
         };
         self.offset = self.offset.saturating_add(u64::try_from(end).unwrap_or(u64::MAX));
         for line in bytes[..end].split(|&b| b == b'\n').filter(|line| !line.is_empty()) {
@@ -74,6 +74,7 @@ impl TranscriptWatch {
                 self.on_step(&step, skip_permissions, now);
             }
         }
+        end
     }
 
     fn on_step(&mut self, step: &Value, skip_permissions: bool, now: Instant) {
@@ -159,7 +160,9 @@ pub(super) async fn watch(shared: Arc<Shared>, child_gone: Arc<AtomicBool>) {
             let state = shared.state.lock();
             (state.transcript.clone(), state.in_turn(), state.skip_permissions)
         };
-        let Some((path, floor_offset)) = transcript else { continue };
+        let Some(cursor) = transcript else { continue };
+        let path = cursor.path;
+        let floor_offset = cursor.wakeup_floor;
         let (watched_path, watch_state) =
             tracker.get_or_insert_with(|| (path.clone(), TranscriptWatch::new(floor_offset)));
         if *watched_path != path {
@@ -172,7 +175,26 @@ pub(super) async fn watch(shared: Arc<Shared>, child_gone: Arc<AtomicBool>) {
             continue;
         }
         if let Some(bytes) = read_since(&path, watch_state.offset).await {
-            watch_state.feed_bytes(&bytes, skip_permissions, Instant::now());
+            let read_start = watch_state.offset;
+            let consumed = watch_state.feed_bytes(&bytes, skip_permissions, Instant::now());
+            if consumed > 0 {
+                let mut guard = shared.state.lock();
+                let state = &mut *guard;
+                let slice_end = read_start.saturating_add(u64::try_from(consumed).unwrap_or(u64::MAX));
+                if let Some(cursor) =
+                    state.transcript.as_mut().filter(|c| c.path == path && slice_end > c.async_agents_offset)
+                {
+                    let skip =
+                        usize::try_from(cursor.async_agents_offset.saturating_sub(read_start)).unwrap_or(consumed);
+                    if let Some(unread) = bytes.get(skip..consumed) {
+                        let fed = state.async_agents.on_transcript_bytes(unread);
+                        let next = read_start
+                            .saturating_add(u64::try_from(skip).unwrap_or(u64::MAX))
+                            .saturating_add(u64::try_from(fed).unwrap_or(u64::MAX));
+                        cursor.async_agents_offset = cursor.async_agents_offset.max(next);
+                    }
+                }
+            }
         }
         if let Some(action) = watch_state.next_action(Instant::now())
             && trigger_drain(&shared, action).await
@@ -182,7 +204,7 @@ pub(super) async fn watch(shared: Arc<Shared>, child_gone: Arc<AtomicBool>) {
     }
 }
 
-async fn read_since(path: &Path, offset: u64) -> Option<Vec<u8>> {
+pub(super) async fn read_since(path: &Path, offset: u64) -> Option<Vec<u8>> {
     let len = tokio::fs::metadata(path).await.ok()?.len();
     if len <= offset {
         return None;

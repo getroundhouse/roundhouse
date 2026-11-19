@@ -1,5 +1,6 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::PathBuf;
+use std::time::Instant;
 
 use protocol::capability::approvals::ApprovalMode;
 use protocol::capability::{calls::Call, settings, turns::OwnTurn};
@@ -7,12 +8,33 @@ use protocol::event::{AgentTask, EndedTask, TaskKind, TaskOutcome, TokenUsage};
 use protocol::model::{AgentSessionId, ApprovalId, ModelName, Seq, TaskId, ToolUseId};
 use serde_json::Value;
 
+use super::async_agents::AsyncAgents;
 use crate::acp::{ConfigOption, FieldSpec, PermissionRequest};
+
+#[derive(Clone, Debug)]
+pub(super) struct TranscriptCursor {
+    pub(super) path: PathBuf,
+    /// Byte offset through which `wakeup::watch` ignores historical and in-turn steps.
+    pub(super) wakeup_floor: u64,
+    /// Byte offset through which `AsyncAgents` has already consumed complete lines.
+    pub(super) async_agents_offset: u64,
+}
+
+impl TranscriptCursor {
+    pub(super) fn new(path: PathBuf, offset: u64) -> Self {
+        Self { path, wakeup_floor: offset, async_agents_offset: offset }
+    }
+
+    pub(super) fn advance_both(&mut self, offset: u64) {
+        self.wakeup_floor = self.wakeup_floor.max(offset);
+        self.async_agents_offset = self.async_agents_offset.max(offset);
+    }
+}
 
 pub(super) struct Conversation {
     pub(super) session_id: Option<AgentSessionId>,
-    /// `agy`'s trajectory log for this conversation and the byte offset at launch, for noticing between-turn wakeups.
-    pub(super) transcript: Option<(PathBuf, u64)>,
+    /// `agy`'s trajectory log for this conversation and the byte offsets already read from it.
+    pub(super) transcript: Option<TranscriptCursor>,
     pub(super) model: ModelName,
     /// The mode the session is set to; when changed mid-turn, takes effect once idle on the next child launch.
     pub(super) mode: ApprovalMode,
@@ -26,6 +48,8 @@ pub(super) struct Conversation {
     /// Ordered `session/prompt` RPCs still awaiting their JSON-RPC completion. A mid-turn steer appends a second entry;
     /// `agy` resolves the superseded RPC first with `stopReason: "end_turn"` and keeps the turn open under the newer ID.
     pub(super) prompts: VecDeque<InFlightPrompt>,
+    /// Whether `agy` has echoed a `user_message_chunk` in this conversation (`agy` 1.5.9 does; 1.5.12 omits it).
+    pub(super) prompt_echo: PromptEcho,
     pub(super) ending: Ending,
     pub(super) cancelling: bool,
     /// What the turn's earlier prompts took, since `agy` reports each `session/prompt`'s own: a plan's, which its
@@ -58,17 +82,6 @@ pub(super) struct OpenCall {
     pub(super) outlives_turn: bool,
 }
 
-/// How far the turn has got to ending.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) enum AsyncAgents {
-    None,
-    /// A subagent or swarm was spawned during the active turn, so final prose in this turn is a status update rather
-    /// than a finished plan.
-    SpawnedThisTurn,
-    /// A subagent or swarm was spawned in an earlier turn of this child process.
-    Active,
-}
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum Ending {
     /// It hasn't begun to, or there's no turn.
@@ -92,6 +105,8 @@ pub(super) struct InFlightPrompt {
 pub(super) enum PromptOrigin {
     /// A user prompt (`Some(seq)`) or an internal continuation such as plan approval (`None`).
     Prompt(Option<Seq>),
+    /// An on-demand `/compact` `session/prompt` answering `CompactionAsked` at `asked`.
+    Compact { asked: Seq, started_at: Instant },
     /// An internal `session/prompt` sent to drain `agy` 1.5.9's buffered `<SYSTEM_MESSAGE>` wakeup updates.
     WakeupDrain { keep_open: bool, started_own_turn: bool, self_cancelled: bool },
 }
@@ -100,8 +115,13 @@ impl InFlightPrompt {
     pub(super) fn seq(&self) -> Option<Seq> {
         match self.origin {
             PromptOrigin::Prompt(seq) => seq,
+            PromptOrigin::Compact { asked, .. } => Some(asked),
             PromptOrigin::WakeupDrain { .. } => None,
         }
+    }
+
+    pub(super) fn is_compact(&self) -> bool {
+        matches!(self.origin, PromptOrigin::Compact { .. })
     }
 
     pub(super) fn is_drain(&self) -> bool {
@@ -116,6 +136,15 @@ impl InFlightPrompt {
         matches!(self.origin, PromptOrigin::WakeupDrain { self_cancelled: true, .. })
     }
 }
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum PromptEcho {
+    Unseen,
+    Echoed,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) struct TakenPrompt(pub(super) Option<Seq>);
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) enum UserChunk {
@@ -154,6 +183,7 @@ impl Conversation {
             hold_plans,
             config_options: Vec::new(),
             prompts: VecDeque::new(),
+            prompt_echo: PromptEcho::Unseen,
             ending: Ending::Not,
             cancelling: false,
             earlier_tokens: None,
@@ -165,7 +195,7 @@ impl Conversation {
             calls: HashMap::new(),
             emitted_calls: HashSet::new(),
             denied_calls: HashSet::new(),
-            async_agents: AsyncAgents::None,
+            async_agents: AsyncAgents::default(),
             listed_tasks: Vec::new(),
             ended_tasks: Vec::new(),
             waiting: HashMap::new(),
@@ -184,14 +214,14 @@ impl Conversation {
     /// Whether the turn ending now is still waiting on background work (`run_command`, `schedule`, `run_workflow` still
     /// running, or a subagent/swarm spawned during this turn), so its final prose is a status message rather than a plan.
     pub(super) fn awaiting_background_work(&self) -> bool {
-        self.async_agents == AsyncAgents::SpawnedThisTurn || self.calls.values().any(|open| open.outlives_turn)
+        self.async_agents.spawned_this_turn() || self.calls.values().any(|open| open.outlives_turn)
     }
 
     /// Settles calls and listed background commands belonging to a child `agy` stopped for a mode switch.
     pub(super) fn take_replaced_child_tasks(&mut self) -> (Vec<ToolUseId>, Option<Vec<TaskId>>) {
         let dropped = self.calls.drain().map(|(id, _)| id).collect();
         self.denied_calls.clear();
-        self.async_agents = AsyncAgents::None;
+        self.async_agents.clear();
         self.ended_tasks.clear();
         let stopped: Vec<TaskId> = self.listed_tasks.drain(..).map(|task| task.id).collect();
         (dropped, (!stopped.is_empty()).then_some(stopped))
@@ -296,8 +326,25 @@ impl Conversation {
         Some((self.listed_tasks.clone(), stopped))
     }
 
+    /// Whether the active front prompt is an on-demand `/compact` request.
+    pub(super) fn is_compacting(&self) -> bool {
+        self.prompts.front().is_some_and(InFlightPrompt::is_compact)
+    }
+
+    /// Takes the front user or continuation prompt on first model output when `agy` omits `user_message_chunk`.
+    pub(super) fn take_implicit_prompt(&mut self) -> Option<TakenPrompt> {
+        let entry = (self.prompt_echo == PromptEcho::Unseen).then(|| self.prompts.front_mut())??;
+        let PromptOrigin::Prompt(seq) = entry.origin else { return None };
+        (!entry.taken).then(|| {
+            entry.taken = true;
+            entry.user_chunks_left = 0;
+            TakenPrompt(seq)
+        })
+    }
+
     /// Consumes one `user_message_chunk` for the earliest prompt with non-empty `"text"` blocks left.
     pub(super) fn accept_user_chunk(&mut self) -> UserChunk {
+        self.prompt_echo = PromptEcho::Echoed;
         let Some(idx) = self.prompts.iter().position(|entry| entry.user_chunks_left > 0) else {
             return UserChunk::Ignore;
         };
@@ -305,17 +352,22 @@ impl Conversation {
         let has_waiting = !self.waiting.is_empty();
         // `session/cancel` clears `agy`'s deferred reactive wakeup, so never cancel a drain while another background
         // command, schedule, workflow or subagent is still running.
-        let has_live_background =
-            self.async_agents != AsyncAgents::None || self.calls.values().any(|open| open.outlives_turn);
+        let has_live_background = self.async_agents.has_live() || self.calls.values().any(|open| open.outlives_turn);
         let session_id = self.session_id.clone();
         let entry = &mut self.prompts[idx];
         entry.user_chunks_left -= 1;
+        if entry.is_compact() {
+            // Discard any pre-compact buffered wakeup prose that arrived ahead of `/compact`'s echo on `agy` 1.5.9.
+            self.reply = None;
+            return UserChunk::Ignore;
+        }
         if entry.taken {
             return UserChunk::Ignore;
         }
         entry.taken = true;
         match &mut entry.origin {
             PromptOrigin::Prompt(seq) => UserChunk::FirstOfPrompt(*seq),
+            PromptOrigin::Compact { .. } => UserChunk::Ignore,
             PromptOrigin::WakeupDrain { keep_open, self_cancelled, .. } => {
                 if *keep_open || has_later || has_waiting || has_live_background {
                     UserChunk::ContinueDrain
@@ -327,51 +379,5 @@ impl Conversation {
                 }
             }
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn drain_prompt(rpc_id: u64) -> InFlightPrompt {
-        InFlightPrompt {
-            rpc_id,
-            origin: PromptOrigin::WakeupDrain { keep_open: false, started_own_turn: false, self_cancelled: false },
-            user_chunks_left: 1,
-            taken: false,
-        }
-    }
-
-    #[test]
-    fn drain_cancels_when_idle_and_stays_open_while_background_tasks_or_subagents_remain() {
-        let mut conv = Conversation::new(
-            ModelName::named("gemini-4-carbon"),
-            super::super::claims::full_access(),
-            settings::Effort::Medium,
-            true,
-            true,
-        );
-        conv.session_id = Some(AgentSessionId::from("s-1"));
-
-        conv.prompts.push_back(drain_prompt(1));
-        assert_eq!(conv.accept_user_chunk(), UserChunk::CancelDrain { session_id: AgentSessionId::from("s-1") });
-        conv.prompts.clear();
-
-        let cmd = Call::Other { tool: "run_command".into(), input: Value::Null };
-        conv.calls.insert(ToolUseId::from("bg-2"), OpenCall { call: cmd, order: 1, outlives_turn: true });
-        conv.prompts.push_back(drain_prompt(2));
-        assert_eq!(conv.accept_user_chunk(), UserChunk::ContinueDrain);
-        conv.calls.clear();
-        conv.prompts.clear();
-
-        conv.async_agents = AsyncAgents::Active;
-        conv.prompts.push_back(drain_prompt(3));
-        assert_eq!(conv.accept_user_chunk(), UserChunk::ContinueDrain);
-        conv.prompts.clear();
-
-        let _ = conv.take_replaced_child_tasks();
-        conv.prompts.push_back(drain_prompt(4));
-        assert_eq!(conv.accept_user_chunk(), UserChunk::CancelDrain { session_id: AgentSessionId::from("s-1") });
     }
 }

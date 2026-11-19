@@ -55,6 +55,7 @@ async fn permission_requested(
         let reject = perm.option_for(false, false).unwrap_or("reject");
         return shared.rpc().reply(native_id.clone(), acp::permission_selected(reject)).await;
     }
+    notifications::ensure_prompt_taken(shared).await;
     notifications::ensure_own_turn_started(shared).await;
     if mode == super::claims::full_access() {
         let allow = perm.option_for(false, true).unwrap_or("allow");
@@ -101,6 +102,7 @@ async fn elicitation_requested(
     if !in_turn {
         return shared.rpc().reply(native_id.clone(), acp::elicitation_cancel()).await;
     }
+    notifications::ensure_prompt_taken(shared).await;
     notifications::ensure_own_turn_started(shared).await;
     let Some(form) = acp::parse_elicitation(params) else {
         return unsupported(shared, native_id, "elicitation/create").await;

@@ -3,7 +3,7 @@ use std::sync::Arc;
 use protocol::capability::Report;
 use protocol::capability::calls::{Call, CallOutput, output::Ended};
 use protocol::event::{AgentRunState, ContentBlock, Denied, EventBody, NoticeLevel, TaskOutcome};
-use protocol::model::{ContextUsage, MaxSetBy, ToolUseId};
+use protocol::model::{ContextUsage, MaxSetBy, Seq, ToolUseId};
 use protocol::tail::{BlockKind, DeltaChange, StreamDelta};
 use serde_json::{Value, json};
 use tokio::sync::mpsc;
@@ -65,19 +65,14 @@ async fn session_update(shared: &Shared, update: SessionUpdate, raw: String) {
     match update {
         SessionUpdate::UserMessageChunk { .. } => on_user_message(shared, raw).await,
         SessionUpdate::AgentThoughtChunk { text } => {
-            if !text.is_empty() {
+            if !text.is_empty() && !shared.state.lock().is_compacting() {
+                ensure_prompt_taken(shared).await;
                 ensure_own_turn_started(shared).await;
                 flush_text(shared).await;
                 stream_chunk(shared, true, &text).await;
             }
         }
-        SessionUpdate::AgentMessageChunk { text } => {
-            if !text.is_empty() {
-                ensure_own_turn_started(shared).await;
-                flush_thought(shared).await;
-                stream_chunk(shared, false, &text).await;
-            }
-        }
+        SessionUpdate::AgentMessageChunk { text } => on_agent_message_chunk(shared, &text).await,
         SessionUpdate::ToolCall(wire) | SessionUpdate::ToolCallUpdate(wire) => {
             flush_streams(shared).await;
             on_tool(shared, wire, raw).await;
@@ -95,6 +90,9 @@ async fn session_update(shared: &Shared, update: SessionUpdate, raw: String) {
             }
         }
         SessionUpdate::UsageUpdate { used, size } => {
+            if shared.state.lock().is_compacting() {
+                return;
+            }
             shared
                 .emit(AgentOutput::Report(Report::Context {
                     context: ContextUsage {
@@ -111,6 +109,44 @@ async fn session_update(shared: &Shared, update: SessionUpdate, raw: String) {
     }
 }
 
+async fn on_agent_message_chunk(shared: &Shared, text: &str) {
+    if text.is_empty() {
+        return;
+    }
+    let compacting = {
+        let mut state = shared.state.lock();
+        let compacting = state.is_compacting();
+        if compacting {
+            state.reply.get_or_insert_default().push_str(text);
+        }
+        compacting
+    };
+    if !compacting {
+        ensure_prompt_taken(shared).await;
+        ensure_own_turn_started(shared).await;
+        flush_thought(shared).await;
+        stream_chunk(shared, false, text).await;
+    }
+}
+
+pub(super) async fn ensure_prompt_taken(shared: &Shared) {
+    let Some(taken) = shared.state.lock().take_implicit_prompt() else { return };
+    finish_prompt_intake(shared, taken.0, None).await;
+}
+
+async fn finish_prompt_intake(shared: &Shared, prompt: Option<Seq>, raw: Option<String>) {
+    flush_streams(shared).await;
+    {
+        let mut state = shared.state.lock();
+        state.reply = None;
+        state.ended_tasks.clear();
+    }
+    if let Some(prompt) = prompt {
+        shared.event(EventBody::PromptTaken { prompt }, raw).await;
+        shared.event(EventBody::AgentState { state: AgentRunState::Running }, None).await;
+    }
+}
+
 pub(super) async fn ensure_own_turn_started(shared: &Shared) {
     let started = shared.state.lock().begin_own_turn();
     if let Some(why) = started {
@@ -123,18 +159,7 @@ async fn on_user_message(shared: &Shared, raw: String) {
     let chunk = shared.state.lock().accept_user_chunk();
     match chunk {
         UserChunk::Ignore => {}
-        UserChunk::FirstOfPrompt(prompt) => {
-            flush_streams(shared).await;
-            {
-                let mut state = shared.state.lock();
-                state.reply = None;
-                state.ended_tasks.clear();
-            }
-            if let Some(prompt) = prompt {
-                shared.event(EventBody::PromptTaken { prompt }, Some(raw)).await;
-                shared.event(EventBody::AgentState { state: AgentRunState::Running }, None).await;
-            }
-        }
+        UserChunk::FirstOfPrompt(prompt) => finish_prompt_intake(shared, prompt, Some(raw)).await,
         UserChunk::ContinueDrain => {
             ensure_own_turn_started(shared).await;
             flush_streams(shared).await;
@@ -252,9 +277,6 @@ pub(super) async fn ensure_call_emitted(shared: &Shared, wire: &ToolCallWire, ra
         let mut state = shared.state.lock();
         if state.emitted_calls.insert(id.clone()) {
             state.reply = None;
-            if matches!(wire.name.as_deref(), Some("invoke_subagent" | "swarm")) {
-                state.async_agents = super::state::AsyncAgents::SpawnedThisTurn;
-            }
             let call = calls::translate_call(wire);
             let order = state.next_order();
             let outlives = wire.status.is_some_and(|status| outlives_turn(&call, status));
@@ -270,6 +292,7 @@ pub(super) async fn ensure_call_emitted(shared: &Shared, wire: &ToolCallWire, ra
         }
     };
     if let Some((call, model)) = to_emit {
+        ensure_prompt_taken(shared).await;
         ensure_own_turn_started(shared).await;
         shared
             .event(
@@ -296,7 +319,10 @@ async fn on_tool(shared: &Shared, wire: ToolCallWire, raw: String) {
     let settled = {
         let mut state = shared.state.lock();
         let was_denied = state.denied_calls.remove(&id);
-        state.calls.remove(&id).map(|open| (open.call, state.cancelling, was_denied))
+        state.calls.remove(&id).map(|open| {
+            state.async_agents.on_tool_completed(&open.call, &wire);
+            (open.call, state.cancelling, was_denied)
+        })
     };
     let Some((call, cancelling, was_denied)) = settled else { return };
     let output = calls::translate_output(&call, &wire, cancelling, was_denied);
