@@ -1,11 +1,11 @@
 //! The worker's tools, which an agent calls over MCP, and the hub answers, here with a pull request the hub reads from
-//! a stand-in for GitHub.
+//! a stand-in for GitHub, and the comments on the workspace's diff.
 
 #![cfg(test)]
 
 use client_core::{Client, IdleStop, stop_hub_if_idle};
 use protocol::event::{ContentBlock, EventBody, ExitReason, SessionEvent, TaskKind};
-use protocol::model::{SessionId, SessionStatus};
+use protocol::model::{DiffSide, SessionId, SessionStatus};
 
 use hub::GithubPullRequestState::{Merged, Open};
 
@@ -66,6 +66,19 @@ fn an_agent_asking_where_its_pull_request_stands_hears_what_the_hub_read_from_gi
     let [(text, false)] = answered.as_slice() else { panic!("one call that worked: {answered:?}") };
     assert!(text.contains("#7: Change 7"), "{text}");
     assert!(text.contains("https://github.com/example/project/pull/7"), "{text}");
+}
+
+#[test]
+fn an_agent_reading_the_diffs_comments_hears_each_one_the_person_left() {
+    let stack = Stack::start();
+    let client = stack.client();
+    let (workspace, chat) = stack.workspace(&client);
+    client.comment_add(&workspace.id, "a.txt", DiffSide::New, 2, "Why this word?", None).unwrap();
+
+    let answered = run(&client, &chat.id, "mcp:get_diff_comments {}", 1);
+
+    let [(text, false)] = answered.as_slice() else { panic!("one call that worked: {answered:?}") };
+    assert!(text.contains("- `a.txt:2`: Why this word?"), "{text}");
 }
 
 #[test]

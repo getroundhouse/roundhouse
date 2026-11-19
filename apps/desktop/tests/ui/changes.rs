@@ -9,7 +9,7 @@ use client_core::fake_hub::World;
 use desktop::workspace_pane::Showing;
 use gpui_kit::test::TestWindowExt as _;
 use gpui_kit::{AppContext as _, SharedString, TestAppContext};
-use protocol::model::{CommitId, DiffComment, FileContents, GitDiff, SessionStatus, WorkspaceId};
+use protocol::model::{CommitId, DiffComment, DiffSide, FileContents, GitDiff, SessionStatus, WorkspaceId};
 
 use crate::support::{Diff, FakeHub, Stack, Ui};
 
@@ -216,6 +216,27 @@ fn comment_on_a_txt(ui: &mut Ui<'_>, stack: &Stack, diff: &Diff, text: &str) -> 
     // The hub has it before the app does, and the diff draws it only once the app has it.
     ui.wait("the comment to show", |ui| ui.has(SharedString::from(format!("edit-{}", comment.id))));
     comment
+}
+
+/// So a file with comments can be found from the list, and opened to read them, and a closed folder says it holds one.
+#[gpui_kit::test]
+fn a_file_with_comments_is_marked_in_the_list_until_theyre_deleted(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let (mut ui, diff) = reviewing(cx, &stack);
+    let workspace = ui.view().selected.clone().unwrap();
+    assert!(!ui.has("comments-a.txt"));
+
+    let comment = comment_on_a_txt(&mut ui, &stack, &diff, "Why two?");
+    stack.client().comment_add(&workspace, "src/lib.rs", DiffSide::New, 1, "And this?", None).unwrap();
+
+    ui.wait("the other comment to be marked", |ui| ui.has("comments-src/lib.rs"));
+    assert!(ui.has("comments-a.txt"));
+    ui.click("changes-layout");
+    assert!(!ui.has("comments-src"), "an open folder leaves it to its files");
+    ui.click("folder-src");
+    assert!(ui.has("comments-src"), "a closed folder says it holds one");
+    ui.click(SharedString::from(format!("delete-{}", comment.id)));
+    ui.wait("the mark to go with the comment", |ui| !ui.has("comments-a.txt"));
 }
 
 /// Saving a comment takes its box away, and focus with it, so the window's keys still work. Then it's edited where it

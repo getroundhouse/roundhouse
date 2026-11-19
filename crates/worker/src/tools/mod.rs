@@ -14,6 +14,7 @@ use std::time::Duration;
 #[cfg(test)]
 use tokio::net::TcpSocket;
 
+mod diff_comments;
 mod http;
 mod mcp;
 mod pull_request;

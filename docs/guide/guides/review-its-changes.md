@@ -29,12 +29,14 @@ Click a file to see its diff in the workspace's file tab, the leftmost tab. Clic
 
 ![Writing a comment on a changed line](../../spec/screens/writing-a-comment.png)
 
-A comment stays where you wrote it, with `Edit`, `Delete` and `Add to chat` beside it.
+A comment stays where you wrote it, with `Edit`, `Delete` and `Add to chat` beside it. In the sidebar, the file's row shows a comment's icon and how many it has, so you can find it again.
 
-## Send the comments to the agent
+## Give the comments to the agent
 
-- **`Send to agent`,** at the top of the sidebar, sends every comment at once, and shows the chat they went to. The number beside it says how many are waiting.
 - **`Add to chat`,** on one comment, puts it in the composer after what's typed there, so you can say more with it.
+- **Or ask the agent to read them,** such as "address my comments on the diff". The agent reads every comment with Roundhouse's tools, each with its file and line.
+
+A comment stays on the diff until you delete it, so delete the ones the agent has dealt with.
 
 ## Compare a changed image
 

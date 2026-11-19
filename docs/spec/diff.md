@@ -6,7 +6,7 @@ A workspace's changes against its base, listed in a sidebar on the right, each f
 
 - **The sidebar on the right lists every file the workspace changes,** with how many lines each adds and removes, and an icon for how it changed: added, modified, removed or renamed. It sits below the pull request's bar, which `workspaces.md` describes.
 
-  **The sidebar of changes, as a list, with a comment waiting.** *Unconfirmed.*
+  **The sidebar of changes, as a list, with a comment on one file.** *Unconfirmed.*
 
   ![The sidebar of changes as a list](screens/changes.png)
 
@@ -26,7 +26,7 @@ A workspace's changes against its base, listed in a sidebar on the right, each f
 
 - **A folder's name is in the mono font, muted, as a path, and a file's in the body font,** since each changed file is what's read and reviewed, with its lines added and removed beside it. All files, a tree to browse, has every name in mono, as `files.md` says.
 - **A modified file's icon is yellow, and the other icons are muted,** with lines added and removed in green and red, as `look.md` says the diff's colours are.
-- **Comments waiting to be sent are counted at the top of the sidebar, beside Send to agent,** so they can be sent whichever file is showing, or none. Sending them shows the chat they went to, so you see the agent take them up. *Unconfirmed.*
+- **A file with comments shows a comment's icon and how many it has, before its lines added and removed,** so it can be found from the list and opened to read them, edit them or add them to the chat. A closed folder shows how many the files in it have, and an open one leaves it to them. A comment on a file the branch no longer changes has no row, so it isn't counted. *Unconfirmed:* the icon, in the muted colour of the row's other icons, and its place.
 
 ## The file tab
 
@@ -85,7 +85,8 @@ A workspace's changes against its base, listed in a sidebar on the right, each f
 
 - **A comment being written on one file is kept while another file shows,** and comes back with its file. The hub keeps it until it's saved or cancelled, so it's there when the app opens again, and in any other client, where a change made to it shows as it reaches the hub, unless something typed here hasn't reached the hub yet. Saving it takes it off the hub as the comment is saved, so no client shows both, and a save that fails puts it back in its box. A comment deleted while it's being changed, such as in another client, leaves what was typed in the box as a new comment on its line. *Unconfirmed.*
 - **A saved comment shows where it was written, its text where it was typed,** on the same band, with Edit, Delete and Add to chat on its right. Edit opens it in the box again, and saving keeps it in its place. *Unconfirmed:* how Edit works.
-- **Add to chat puts a comment in the chat's composer, after what's typed there,** so you can say more with it. The comment stays on the diff until it's deleted, as every comment does, and Send to agent sends every comment at once.
+- **Add to chat puts a comment in the chat's composer, after what's typed there,** so you can say more with it. The comment stays on the diff until it's deleted, as every comment does.
+- **The agent reads the diff's comments with Roundhouse's tools when it's asked to,** such as to address them. Nothing in the app sends them all at once, or counts them all at the top of the sidebar, rather than on each file's row. It reads every saved comment, oldest first, each with its file, its line, whether that's a line the diff removes, and what it says, as Add to chat puts one in the composer. *Unconfirmed:* nothing counting them, what it reads of each, and the order.
 - **A changed file that isn't text shows what it was and what it is, rather than git's line saying they differ.** An image shows as it was in the commit the diff was taken from, as Before, and as it is in the worktree, as After. A file the branch adds shows only After, and one it removes only Before. Any other file says it isn't text, as All files does. It has no lines, so it takes no comments. It's read again with the diff, and an image that hasn't changed stays as it's drawn. *Unconfirmed.*
 - **A changed image is compared side by side, one side at a time in one place, or as what changed, all from one bar above it.** The bar has its path, the button that copies it, and Side by side, Before, After and Difference at its right end, and nothing else, so neither is ever squeezed. The choice holds in every workspace until the app quits, as the choice of list or folders does, but a file opened while Before is chosen starts at After. Both sides are drawn at one scale from their top left, never bigger than they are, so a pixel is in the same place in each and an image that grew looks bigger. *Unconfirmed.*
 

@@ -1,4 +1,4 @@
-//! The requests about the comments on a workspace's diff, waiting to be sent to its agent.
+//! The requests about the comments on a workspace's diff, for its agent, which reads them with the worker's tools.
 
 use serde::{Deserialize, Serialize};
 

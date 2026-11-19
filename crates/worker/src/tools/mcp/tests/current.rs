@@ -1,8 +1,9 @@
 use crate::tools::pull_requests;
 use protocol::client::{ApiError, ErrorCode};
-use protocol::model::WaitEnd;
+use protocol::model::{DiffComment, DiffSide, Rev, WaitEnd};
 use protocol::worker::{
-    AskAnswer, AskOutcome, AskReply, CancelWait, PullRequestAnswer, ReadWait, WaitAnswer, WorkerAsk, WorkerFrame,
+    AskAnswer, AskOutcome, AskReply, CancelWait, DiffComments, PullRequestAnswer, ReadWait, WaitAnswer, WorkerAsk,
+    WorkerFrame,
 };
 use serde_json::{Value, json};
 use tokio::sync::mpsc;
@@ -25,14 +26,14 @@ pub(super) fn headers(method: &str, name: Option<&str>) -> Headers {
     }
 }
 
-fn request(method: &str, params: &Value) -> Vec<u8> {
+pub(super) fn request(method: &str, params: &Value) -> Vec<u8> {
     let mut params = params.clone();
     params["_meta"] = json!({ VERSION_KEY: VERSION, "io.modelcontextprotocol/clientCapabilities": {} });
     serde_json::to_vec(&json!({ "jsonrpc": "2.0", "id": 7, "method": method, "params": params })).unwrap()
 }
 
 /// A request from a client that offers to take a task, as the Claude CLI's do, naming the agent's call as it does.
-fn offering_tasks(method: &str, params: &Value) -> Vec<u8> {
+pub(super) fn offering_tasks(method: &str, params: &Value) -> Vec<u8> {
     let mut body: Value = serde_json::from_slice(&request(method, params)).unwrap();
     body["params"]["_meta"][CAPABILITIES_KEY] = json!({ "extensions": { TASKS: {} } });
     body["params"]["_meta"]["claudecode/toolUseId"] = json!("toolu_1");
@@ -90,15 +91,19 @@ async fn the_tools_listed_are_the_ones_it_answers() {
         answered(&asks, &headers("server/discover", None), &request("server/discover", &json!({}))).await;
 
     let tools = answer.to_json()["result"]["tools"].clone();
-    assert_eq!(tools.as_array().map(Vec::len), Some(2));
-    for (tool, name) in [(&tools[0], pull_requests::READ), (&tools[1], pull_requests::WAIT)] {
+    assert_eq!(tools.as_array().map(Vec::len), Some(3));
+    let named = [(&tools[0], pull_requests::READ), (&tools[1], pull_requests::WAIT), (&tools[2], diff_comments::NAME)];
+    for (tool, name) in named {
         assert_eq!(tool["name"], name);
         assert!(Tool::named(name).is_some(), "{name} is answered");
         assert_eq!(tool["annotations"]["readOnlyHint"], true);
     }
     let read_only = without_tasks.to_json()["result"]["tools"].clone();
-    assert_eq!(read_only.as_array().map(Vec::len), Some(1));
-    assert_eq!(read_only[0]["name"], pull_requests::READ);
+    assert_eq!(read_only.as_array().map(Vec::len), Some(2));
+    assert_eq!(
+        (&read_only[0]["name"], &read_only[1]["name"]),
+        (&json!(pull_requests::READ), &json!(diff_comments::NAME))
+    );
     assert!(!read_only[0]["description"].as_str().unwrap_or_default().contains(pull_requests::WAIT));
     assert!(discover_with.to_json()["result"]["instructions"].as_str().unwrap_or_default().contains("waiting"));
     assert!(!discover_without.to_json()["result"]["instructions"].as_str().unwrap_or_default().contains("waiting"));
@@ -228,6 +233,35 @@ async fn a_call_asks_the_hub_for_the_chat_that_called_and_answers_with_what_it_s
     let result = &answer.to_json()["result"];
     assert_eq!(result["isError"], false);
     assert_eq!(result["content"][0]["text"], "This workspace's branch has no pull request on GitHub.");
+}
+
+/// A client that takes no tasks, as Antigravity's doesn't, reads them too.
+#[tokio::test]
+async fn reading_the_diffs_comments_asks_the_hub_for_them_and_says_each() {
+    let (asks, mut sent) = asks();
+    let call = request("tools/call", &json!({ "name": diff_comments::NAME, "arguments": {} }));
+    let said = headers("tools/call", Some(diff_comments::NAME));
+    let calling = answered(&asks, &said, &call);
+    let comment = DiffComment {
+        id: "c".into(),
+        workspace_id: "w".into(),
+        path: "a.rs".into(),
+        side: DiffSide::New,
+        line: 2,
+        text: "Why this word?".into(),
+        created_at_ms: 0,
+        rev: Rev::default(),
+    };
+    let reply = Ok(AskReply::DiffComments(DiffComments { comments: vec![comment] }));
+    let hub = hub_answers(&asks, &mut sent, reply);
+
+    let (answer, asked) = tokio::join!(calling, hub);
+
+    assert_eq!(asked, WorkerAsk::DiffComments);
+    let result = &answer.to_json()["result"];
+    assert_eq!(result["isError"], false);
+    let text = result["content"][0]["text"].as_str().unwrap_or_default();
+    assert!(text.ends_with("\n- `a.rs:2`: Why this word?"), "{text}");
 }
 
 #[tokio::test]

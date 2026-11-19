@@ -181,7 +181,7 @@ A title uses its own ephemeral thread, an empty working directory, a title-only 
 
 ## Worker tools over MCP
 
-Codex 0.169.0 initializes an HTTP MCP server with protocol `2025-06-18`, then sends that version in `MCP-Protocol-Version`. It does not send the `2026-07-28` request metadata or method/name headers. A server that accepts only the newer protocol fails startup before its tools reach the model. The worker accepts both envelopes on the same authenticated endpoint, and the older one exposes `get_pull_request` through the same hub ask. It doesn't expose waits, since that protocol has no tasks extension.
+Codex 0.169.0 initializes an HTTP MCP server with protocol `2025-06-18`, then sends that version in `MCP-Protocol-Version`. It does not send the `2026-07-28` request metadata or method/name headers. A server that accepts only the newer protocol fails startup before its tools reach the model. The worker accepts both envelopes on the same authenticated endpoint, and the older one exposes `get_pull_request` and `get_diff_comments` through the same hub asks. It doesn't expose waits, since that protocol has no tasks extension.
 
 The [2025 lifecycle](https://modelcontextprotocol.io/specification/2025-06-18/basic/lifecycle) defines initialization and version negotiation; its [HTTP transport](https://modelcontextprotocol.io/specification/2025-06-18/basic/transports) defines the subsequent version header. No MCP session record is needed for these ordinary stateless tools.
 

@@ -25,10 +25,10 @@ mod worktree;
 
 pub use agents::{AgentControl, AgentSpec, AgentStarted, AgentStop, Delivery};
 pub use ask::{
-    Answer, Ask, AskAnswer, AskId, AskOutcome, AskReply, CancelWait, CreateWorktree, ListWorktrees, ListedChild,
-    NewWorktreeOn, OwnWorktree, PullRequestAnswer, PullRequestWaitUntil, ReadPullRequest, ReadPullRequests, ReadWait,
-    RemoveWorktree, StartPullRequestWait, ToWorker, WaitAnswer, WorkerAsk, WorktreeCreated, WorktreeRemoval,
-    WorktreeRemoved, Worktrees, WouldLose,
+    Answer, Ask, AskAnswer, AskId, AskOutcome, AskReply, CancelWait, CreateWorktree, DiffComments, ListWorktrees,
+    ListedChild, NewWorktreeOn, OwnWorktree, PullRequestAnswer, PullRequestWaitUntil, ReadDiffComments,
+    ReadPullRequest, ReadPullRequests, ReadWait, RemoveWorktree, StartPullRequestWait, ToWorker, WaitAnswer, WorkerAsk,
+    WorktreeCreated, WorktreeRemoval, WorktreeRemoved, Worktrees, WouldLose,
 };
 pub use children::{AddChildWorktree, ChildBranch, ChildWorktreeAdded, WatchChildBranches};
 pub use connection::{Hello, HelloReply, Received, RunningAgent, RunningAgents, RunningAgentsReply, Stop};

@@ -1,7 +1,7 @@
 use super::current::{answered, asks, code, headers, hub_answers};
 use super::*;
 use crate::tools::mcp::legacy::VERSION as LEGACY;
-use protocol::worker::{AskReply, PullRequestAnswer, WorkerAsk};
+use protocol::worker::{AskReply, DiffComments, PullRequestAnswer, WorkerAsk};
 use serde_json::{Value, json};
 
 fn said() -> Headers {
@@ -25,7 +25,7 @@ async fn initializes_without_modern_headers_and_offers_only_immediate_tools() {
     assert_eq!(initialized["result"]["capabilities"], json!({"tools":{}}));
     assert_eq!(initialized["result"]["serverInfo"]["name"], "roundhouse");
     assert!(initialized["result"].get("resultType").is_none());
-    assert_eq!(listed["result"]["tools"], json!([pull_request::definition()]));
+    assert_eq!(listed["result"]["tools"], json!([pull_request::definition(), diff_comments::definition()]));
     assert!(listed["result"].get("resultType").is_none());
 }
 
@@ -54,6 +54,24 @@ async fn a_legacy_call_uses_the_same_hub_ask_and_legacy_result() {
         answer.to_json()["result"],
         json!({"content":[{"type":"text",
         "text":"This workspace's branch has no pull request on GitHub."}],"isError":false})
+    );
+}
+
+/// Codex speaks only this version, and reads the diff's comments as an agent on the current one does.
+#[tokio::test]
+async fn a_legacy_client_reads_the_diffs_comments_through_the_same_hub_ask() {
+    let (asks, mut sent) = asks();
+    let call = body("tools/call", &json!({"name":diff_comments::NAME,"arguments":{}}));
+    let headers = said();
+    let calling = answered(&asks, &headers, &call);
+    let hub = hub_answers(&asks, &mut sent, Ok(AskReply::DiffComments(DiffComments { comments: vec![] })));
+
+    let (answer, asked) = tokio::join!(calling, hub);
+
+    assert_eq!(asked, WorkerAsk::DiffComments);
+    assert_eq!(
+        answer.to_json()["result"],
+        json!({"content":[{"type":"text","text":"There are no comments on this workspace's diff."}],"isError":false})
     );
 }
 

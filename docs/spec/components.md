@@ -4,7 +4,7 @@ The pieces screens are built from, on the foundations in `look.md`: what each is
 
 ## Buttons
 
-- **Each area has at most one main action,** with a light fill and dark text, such as Create PR, Send, Add project or Send to agent. With one obvious next step per area, nothing competes with it.
+- **Each area has at most one main action,** with a light fill and dark text, such as Create PR, Send or Add project. With one obvious next step per area, nothing competes with it.
 - **Every other button is borderless until hovered.** A button with an outline opens something, like the pull request. The button back down to a chat's end has an edge at rest, since it sits over the chat's text, as `chats.md` says.
 - **A borderless or outlined button lights with a wash of the text's colour:** `text` at 6% under the pointer, 12% pressed and 9% on. A wash shows on whatever ground the button is on, whether it's the pane, the sidebar or a card. An outlined button is clear at rest, so only its edge shows.
 

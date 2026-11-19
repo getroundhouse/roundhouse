@@ -3,8 +3,8 @@ use crate::worker_link::WorkerLink;
 use protocol::client::{ApiError, ErrorCode, error_chain};
 use protocol::model::{SessionId, WorkspaceId};
 use protocol::worker::{
-    AskReply, CancelWait, CreateWorktree, PullRequestAnswer, ReadWait, RemoveWorktree, ServeTools, ToolsServing,
-    ToolsToken, WorkerAsk,
+    AskReply, CancelWait, CreateWorktree, DiffComments, PullRequestAnswer, ReadWait, RemoveWorktree, ServeTools,
+    ToolsServing, ToolsToken, WorkerAsk,
 };
 use std::sync::Arc;
 use std::time::Duration;
@@ -92,6 +92,10 @@ impl Hub {
                 self.remove_child(workspace_id, link, path, force).await.map(AskReply::from)
             }
             WorkerAsk::ListWorktrees => self.list_worktrees(workspace_id, link).await.map(AskReply::Worktrees),
+            WorkerAsk::DiffComments => {
+                let comments = self.comment_list(workspace_id.clone()).await?;
+                Ok(AskReply::DiffComments(DiffComments { comments }))
+            }
             WorkerAsk::Unknown => Err(self.unsupported(None)),
         }
     }

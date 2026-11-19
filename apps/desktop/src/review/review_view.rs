@@ -10,8 +10,6 @@ pub enum ReviewEvent {
     Error(String),
     /// The diff has loaded again.
     Loaded,
-    /// Send this to the agent, in the chat showing.
-    SendToAgent(String),
     /// The comment being written was saved, which took it off the hub.
     Saved,
     /// The comment being written couldn't be saved, so here it is back, which the hub still keeps.
