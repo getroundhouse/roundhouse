@@ -63,6 +63,9 @@ async fn a_stopped_turn_drops_what_waited_for_its_end() {
     assert_eq!(chat.given(1).await, [work]);
     chat.says([EventBody::PromptTaken { prompt: work }]).await;
     let (next, _) = chat.hub.session_prompt(chat.id.clone(), None, Prompt::new("next")).await.unwrap();
+    // Once the run has refused it and the hub has kept it for the turn's end, so the turn stops after that. Had the hub
+    // given it, or taken in the refusal, only once the turn had ended, it would send it again, as a turn that ended does.
+    chat.caught_up().await;
 
     chat.finishes(None, TurnOutcome::Cancelled).await;
     chat.caught_up().await;
