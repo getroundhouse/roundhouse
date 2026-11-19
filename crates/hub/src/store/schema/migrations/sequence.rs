@@ -394,4 +394,6 @@ pub(in super::super) const MIGRATIONS: &[Migration] = &[
     Sql(super::session_accounts::NEEDS_AN_ACCOUNT),
     // The images each revision of a proposal points to, in `proposals`.
     Sql(super::proposals::REVISION_IMAGES),
+    // The repository source and worker environment settled at each workspace's creation, in `workspaces`.
+    Sql(workspaces::PLACEMENT),
 ];

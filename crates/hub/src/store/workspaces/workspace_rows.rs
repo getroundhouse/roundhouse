@@ -113,6 +113,7 @@ impl Store {
     pub fn insert_workspace(
         &self,
         workspace: &Workspace,
+        placement: &super::WorkspacePlacement,
         client_request_id: Option<&ClientRequestId>,
     ) -> Result<Option<Made<Workspace>>, StoreError> {
         let mut conn = lock(&self.writer);
@@ -122,8 +123,8 @@ impl Store {
         let tx = conn.transaction()?;
         let added = tx.execute(
             &format!(
-                "INSERT INTO workspaces ({WORKSPACE_COLUMNS}, client_request_id)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                "INSERT INTO workspaces ({WORKSPACE_COLUMNS}, client_request_id, repo_source, worker_environment)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                      ON CONFLICT (repo_id, name) DO NOTHING"
             ),
             params![
@@ -149,6 +150,8 @@ impl Store {
                 workspace.pull_request_branch.as_ref().map(BranchName::as_str),
                 workspace.worker_build,
                 client_request_id.map(ClientRequestId::as_str),
+                serde_json::to_string(&placement.source)?,
+                serde_json::to_string(&placement.environment)?,
             ],
         )?;
         if added == 0 {

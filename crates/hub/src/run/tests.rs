@@ -15,7 +15,7 @@ fn a_half_made_workspace_is_discarded_and_its_instance_handed_over_to_be_destroy
     let mut half_made = store.get_workspace(&"w".into()).unwrap();
     (half_made.id, half_made.name, half_made.instance_id) = ("birch".into(), "birch".into(), "birch-vm".into());
     half_made.status = WorkspaceStatus::Creating;
-    store.insert_workspace(&half_made, None).unwrap();
+    store.insert_workspace(&half_made, &crate::store::WorkspacePlacement::local_checkout("/repo"), None).unwrap();
 
     let unfinished = recover(&store).unwrap();
 
@@ -34,7 +34,7 @@ fn a_workspace_left_being_archived_or_restored_is_handed_over_as_it_was_left() {
     let mut restoring = store.get_workspace(&"w".into()).unwrap();
     (restoring.id, restoring.name, restoring.instance_id) = ("birch".into(), "birch".into(), "birch-vm".into());
     restoring.status = WorkspaceStatus::Restoring;
-    store.insert_workspace(&restoring, None).unwrap();
+    store.insert_workspace(&restoring, &crate::store::WorkspacePlacement::local_checkout("/repo"), None).unwrap();
     store.start_move(&"w".into(), Move::Archive).unwrap().unwrap();
 
     let left = recover(&store).unwrap();

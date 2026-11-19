@@ -2,7 +2,7 @@ use protocol::model::Workspace;
 
 use super::*;
 use crate::store::tests::{idle_session, store_with_session, workspace_w};
-use crate::store::{older, schema};
+use crate::store::{WorkspacePlacement, older, schema};
 
 fn title(text: &str) -> Title {
     Title::typed(text).unwrap()
@@ -173,7 +173,7 @@ fn retitling_one_record_leaves_the_others_alone() {
             instance_id: id.into(),
             ..workspace_w(1)
         };
-        store.insert_workspace(&other, None).unwrap();
+        store.insert_workspace(&other, &WorkspacePlacement::local_checkout("/repo"), None).unwrap();
     }
     for id in ["t", "u"] {
         let mut chat = idle_session(1);

@@ -7,12 +7,14 @@ use std::time::Duration;
 use parking_lot::Mutex;
 use protocol::client::{ApiError, ErrorCode, HubNotice};
 use protocol::model::{Repo, RepoOrigin, RepoUrl, Workspace};
-use protocol::worker::{ReadRepoUrl, RepoUrlReply, WorkerRequest, WorkerResponse};
+use protocol::provider::WorkerEnvironment;
+use protocol::worker::{ReadRepoUrl, RepoSource, RepoUrlReply, WorkerRequest, WorkerResponse};
 use tokio::sync::broadcast;
 
 use super::READ_WITHIN;
 use crate::hub::Hub;
 use crate::hub::tests::hub_in;
+use crate::store::WorkspacePlacement;
 use crate::worker_link::WorkerLink;
 
 type Answer = Option<Result<WorkerResponse, ApiError>>;
@@ -65,9 +67,9 @@ async fn each_address_to_be_read_is_read_once_by_a_worker_on_this_machine_and_an
     let (first, asked_first) = worker_reading(Some(roundhouse()));
     let (second, asked_second) = worker_reading(None);
 
-    Arc::clone(&hub).read_repo_urls("local".into(), first).await;
+    Arc::clone(&hub).read_repo_urls("w".into(), first).await;
     let linked = told(&mut feed).await;
-    Arc::clone(&hub).read_repo_urls("local".into(), second).await;
+    Arc::clone(&hub).read_repo_urls("w".into(), second).await;
 
     assert_eq!(linked.origin, RepoOrigin::Linked { path: "/repo".into(), url: roundhouse() });
     assert!(linked.rev > before.rev);
@@ -77,15 +79,32 @@ async fn each_address_to_be_read_is_read_once_by_a_worker_on_this_machine_and_an
 }
 
 #[tokio::test]
-async fn a_worker_on_another_machine_is_never_asked() {
+async fn only_a_worker_whose_recorded_environment_shares_the_hubs_filesystem_is_asked() {
     let dir = tempfile::tempdir().unwrap();
     let hub = hub_in(dir.path());
-    let (elsewhere, asked) = worker_reading(Some(roundhouse()));
+    // Named `local`, yet placed on a separate filesystem: must never be asked to read hub checkouts.
+    let separate = Workspace { provider: "local".into(), ..protocol::fixtures::workspace("sep") };
+    let separate_placement = WorkspacePlacement {
+        source: RepoSource::Clone { url: roundhouse().to_string() },
+        environment: WorkerEnvironment::default(),
+    };
+    hub.store.insert_workspace(&separate, &separate_placement, None).unwrap();
+    let (elsewhere, asked_elsewhere) = worker_reading(Some(roundhouse()));
 
-    Arc::clone(&hub).read_repo_urls("incus".into(), elsewhere).await;
+    Arc::clone(&hub).read_repo_urls(separate.id.clone(), elsewhere).await;
 
-    assert_eq!(asked.lock().len(), 0);
+    assert_eq!(asked_elsewhere.lock().len(), 0, "a separate-filesystem worker isn't asked even when named local");
     assert_eq!(to_read(&hub), ["r"]);
+
+    // Named `recording` (not `local`), yet placed on the hub's filesystem: is asked.
+    let on_hub = Workspace { provider: "recording".into(), ..protocol::fixtures::workspace("rec") };
+    hub.store.insert_workspace(&on_hub, &WorkspacePlacement::local_checkout("/repo"), None).unwrap();
+    let (local_adapter, asked_adapter) = worker_reading(Some(roundhouse()));
+
+    Arc::clone(&hub).read_repo_urls(on_hub.id.clone(), local_adapter).await;
+
+    assert_eq!(*asked_adapter.lock(), ["/repo"]);
+    assert_eq!(to_read(&hub), [] as [String; 0]);
 }
 
 /// One from before reading addresses is asked once, whatever else is to be read, and one that fails or never answers
@@ -102,13 +121,13 @@ async fn a_worker_that_doesnt_say_leaves_the_checkout_to_be_read_by_the_next() {
     for (answer, asked_about) in [(unsupported, 1), (failed, 2), (None, 2)] {
         let (link, asked) = worker_answering(answer.clone());
         let started = tokio::time::Instant::now();
-        Arc::clone(&hub).read_repo_urls("local".into(), link).await;
+        Arc::clone(&hub).read_repo_urls("w".into(), link).await;
         assert_eq!(asked.lock().len(), asked_about, "{answer:?}");
         assert!(started.elapsed() <= READ_WITHIN * 2, "{answer:?}");
     }
     let unread = hub.records_list().await.unwrap().repos;
     let (link, _) = worker_reading(Some(roundhouse()));
-    Arc::clone(&hub).read_repo_urls("local".into(), link).await;
+    Arc::clone(&hub).read_repo_urls("w".into(), link).await;
 
     let checkouts: Vec<_> = unread.iter().map(|repo| &repo.origin).collect();
     let paths = [RepoOrigin::Checkout { path: "/repo".into() }, RepoOrigin::Checkout { path: "/second".into() }];
@@ -129,7 +148,7 @@ fn checkout_in(dir: &std::path::Path) -> String {
 async fn adding_a_checkout_has_a_worker_on_this_machine_read_its_address_at_once_and_again_when_added_again() {
     let dir = tempfile::tempdir().unwrap();
     let hub = hub_in(dir.path());
-    Arc::clone(&hub).read_repo_urls("local".into(), worker_reading(None).0).await;
+    Arc::clone(&hub).read_repo_urls("w".into(), worker_reading(None).0).await;
     let (link, asked) = worker_reading(Some(roundhouse()));
     hub.workers.lock().insert("w".into(), link);
     let mut feed = hub.subscribe_feed();
@@ -153,7 +172,11 @@ async fn adding_a_checkout_with_no_worker_on_this_machine_leaves_its_address_to_
     let dir = tempfile::tempdir().unwrap();
     let hub = hub_in(dir.path());
     let workspace = Workspace { provider: "incus".into(), ..protocol::fixtures::workspace("x") };
-    hub.store.insert_workspace(&workspace, None).unwrap();
+    let separate = WorkspacePlacement {
+        source: RepoSource::Clone { url: roundhouse().to_string() },
+        environment: WorkerEnvironment::default(),
+    };
+    hub.store.insert_workspace(&workspace, &separate, None).unwrap();
     hub.workers.lock().insert(workspace.id, worker_reading(Some(roundhouse())).0);
 
     let here = hub.worker_here().await;

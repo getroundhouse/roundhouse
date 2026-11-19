@@ -51,6 +51,10 @@ impl Provider for Fake {
         Capabilities::default()
     }
 
+    async fn environment(&self) -> Result<providers::WorkerEnvironment, ProviderError> {
+        Ok(providers::WorkerEnvironment::HUB_MACHINE)
+    }
+
     async fn create(
         &self,
         _: &InstanceId,
@@ -143,7 +147,11 @@ async fn an_instance_the_last_run_left_part_way_is_destroyed_once_its_provider_c
     elsewhere.provider = "gone".into();
     elsewhere.created_at_ms += 1;
     for workspace in [half_made, elsewhere] {
-        hub.blocking(move |store| store.insert_workspace(&workspace, None)).await.unwrap();
+        hub.blocking(move |store| {
+            store.insert_workspace(&workspace, &crate::store::WorkspacePlacement::local_checkout("/repo"), None)
+        })
+        .await
+        .unwrap();
     }
     // As the next start finds it, then the one after.
     let next_start = || async {
@@ -199,7 +207,11 @@ async fn starting_birch(hub: &Arc<Hub>) -> (WorkspaceId, JoinHandle<Result<Arc<W
     (birch.id, birch.name, birch.instance_id, birch.provider) =
         ("birch".into(), "birch".into(), "birch-vm".into(), "fake".into());
     birch.created_at_ms += 1;
-    hub.blocking(move |store| store.insert_workspace(&birch, None)).await.unwrap();
+    hub.blocking(move |store| {
+        store.insert_workspace(&birch, &crate::store::WorkspacePlacement::local_checkout("/repo"), None)
+    })
+    .await
+    .unwrap();
     let id = WorkspaceId::from("birch");
     *hub.worker_gate(&id).lock().await = true;
     let starting = tokio::spawn({

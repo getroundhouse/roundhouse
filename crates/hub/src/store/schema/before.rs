@@ -124,3 +124,6 @@ pub(crate) const BEFORE_TYPED_REQUESTS: usize = 70;
 
 /// How many migrations there were before each chat's approval mode, and each its log names, were typed.
 pub(crate) const BEFORE_TYPED_MODES: usize = 71;
+
+/// How many migrations there were before each workspace recorded its settled repository source and worker environment.
+pub(crate) const BEFORE_WORKSPACE_PLACEMENT: usize = 80;

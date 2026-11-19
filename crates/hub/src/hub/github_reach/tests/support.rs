@@ -28,7 +28,7 @@ pub(super) async fn reads_pushing(hub: &Arc<Hub>, url: &str, push: PushRoute) {
         assert!(matches!(request, WorkerRequest::ReadRepoUrl(_)), "{request:?}");
         Some(Ok(WorkerResponse::RepoUrl(RepoUrlReply { url: Some(url.clone()), push: Some(push) })))
     });
-    Arc::clone(hub).read_repo_urls("local".into(), link).await;
+    Arc::clone(hub).read_repo_urls("w".into(), link).await;
 }
 
 /// The credential of `username`'s token `token`.

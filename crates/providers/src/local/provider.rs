@@ -271,6 +271,10 @@ impl Provider for LocalProvider {
         Capabilities { targets: Vec::new(), features: vec![Feature::FilesystemSurvivesStop] }
     }
 
+    async fn environment(&self) -> Result<crate::WorkerEnvironment, ProviderError> {
+        Ok(crate::WorkerEnvironment::HUB_MACHINE)
+    }
+
     fn starts_or_stops_within(&self) -> Duration {
         STARTS_OR_STOPS_WITHIN
     }

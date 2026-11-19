@@ -4,7 +4,6 @@ pub(crate) use carrying_on::LeftAtWork;
 #[cfg(test)]
 pub(crate) use terminals::QUEUED_UPDATES;
 pub(crate) use terminals::{Numbered, Queued};
-pub(crate) use workspaces::workspace_env;
 
 mod accounts;
 mod agents;

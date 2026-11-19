@@ -74,6 +74,7 @@ fn hello() -> ProviderOutcome {
         adapter: "scripted".into(),
         build: "test".into(),
         capabilities: Capabilities { targets: vec![], features: vec![Feature::Snapshots] },
+        environment: providers::WorkerEnvironment::default(),
     }))
 }
 
@@ -91,9 +92,15 @@ async fn started(open: Open) -> AdapterProvider {
 #[tokio::test]
 async fn it_answers_what_the_adapters_provider_answers() {
     let dir = tempfile::tempdir().unwrap();
-    let provider = started(serving_local(dir.path())).await;
+    let provider =
+        AdapterProvider::new("elsewhere".into(), "h".into(), Build::UNSTAMPED, HELLO_WITHIN, serving_local(dir.path()));
     let id = InstanceId::from("i");
     assert_eq!(provider.name(), "elsewhere");
+    assert_eq!(
+        provider.environment().await.unwrap(),
+        providers::WorkerEnvironment::HUB_MACHINE,
+        "says hello first and returns what the adapter declared"
+    );
     assert!(provider.capabilities().has(Feature::FilesystemSurvivesStop), "as the adapter's hello said");
 
     provider.create(&id, None, None, "roundhouse-i").await.unwrap();
@@ -197,6 +204,7 @@ async fn an_adapter_that_chose_another_version_is_not_used() {
         adapter: "scripted".into(),
         build: "test".into(),
         capabilities: Capabilities::default(),
+        environment: providers::WorkerEnvironment::default(),
     }));
     let open =
         opening(Arc::default(), move |_, stdio| scripted(stdio, vec![Some(chose_another.clone())], Arc::default()));

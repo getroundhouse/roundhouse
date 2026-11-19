@@ -102,7 +102,7 @@ impl WorkerLink {
             hub.clone(),
             provider.clone(),
             link.clone(),
-            workspace_id,
+            workspace_id.clone(),
             instance_id.clone(),
             reader,
         ));
@@ -111,8 +111,8 @@ impl WorkerLink {
             Ok(following) => {
                 tokio::spawn(following.follow());
                 let provider = ProviderName::from(provider.name());
-                hub.find_github_login(provider.clone(), &link).await;
-                tokio::spawn(Arc::clone(&hub).read_repo_urls(provider, Arc::clone(&link)));
+                hub.find_github_login(provider, &link).await;
+                tokio::spawn(Arc::clone(&hub).read_repo_urls(workspace_id, Arc::clone(&link)));
                 return Ok(link);
             }
             Err(failure) => failure,

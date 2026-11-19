@@ -14,7 +14,7 @@ mod instances;
 mod preflight;
 pub use preflight::OpenPreflight;
 
-pub use hello::{Capabilities, Feature, Hello, HelloReply};
+pub use hello::{Capabilities, ClonePersistence, Feature, Hello, HelloReply, WorkerEnvironment, WorkerFilesystem};
 pub use instances::{
     Command, Connect, Create, Destroy, Instance, InstanceState, Instances, Kill, List, MakeBaseImage, Size, Start,
     Stop, WorkerBinary, WorkerCommand,

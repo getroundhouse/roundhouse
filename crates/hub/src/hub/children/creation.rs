@@ -1,19 +1,16 @@
 use self::naming::Try;
 use super::super::ready::ReadyWorkspace;
-use super::super::repo_source::repo_source;
 use super::super::{Hub, new_id};
 use super::naming;
 use crate::error::internal;
 use crate::store::{Made, now_ms};
 use crate::worker_link::WorkerLink;
 use protocol::client::{ApiError, ErrorCode};
-use protocol::model::{
-    AskKey, BranchName, ChildStatus, ChildWorktree, GitStatus, MadeBy, Repo, Rev, SessionId, WorkspaceId,
-};
+use protocol::model::{AskKey, BranchName, ChildStatus, ChildWorktree, GitStatus, MadeBy, Rev, SessionId, WorkspaceId};
 use protocol::worker;
 use protocol::worker::{
-    AddChildWorktree, ChildBranch, ChildWorktreeAdded, ListedChild, NewWorktreeOn, OwnWorktree, WatchChildBranches,
-    WorktreeCreated, Worktrees,
+    AddChildWorktree, ChildBranch, ChildWorktreeAdded, ListedChild, NewWorktreeOn, OwnWorktree, RepoSource,
+    WatchChildBranches, WorktreeCreated, Worktrees,
 };
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -22,7 +19,7 @@ use tracing::debug;
 /// What each worktree an ask tries is made with.
 pub(super) struct Making<'a> {
     pub(super) link: &'a WorkerLink,
-    pub(super) repo: &'a Repo,
+    pub(super) source: RepoSource,
     /// The workspace's own worktree, which the others go beside.
     pub(super) own: &'a str,
     /// What a new branch starts from, or `None` for a branch that exists.
@@ -51,8 +48,8 @@ impl Hub {
             }
             NewWorktreeOn::Existing { branch } => (self.places_of_its(&ready, branch).await?, None),
         };
-        let repo = self.repo_of(ready.workspace()).await?;
-        let making = Making { link, repo: &repo, own: ready.path(), base };
+        let source = self.workspace_placement(ready.id()).await?.source;
+        let making = Making { link, source, own: ready.path(), base };
         let (session, asked) = (session_id.clone(), key.clone());
         if let Some(earlier) = self.blocking(move |store| store.child_for_ask(&session, &asked)).await?
             && let Some(made) = self.answered_before(&making, earlier, &tries).await?
@@ -205,12 +202,8 @@ pub(super) async fn add(making: &Making<'_>, child: &ChildWorktree) -> Result<Ch
         Some(base) => ChildBranch::New { branch, base: base.clone() },
         None => ChildBranch::Existing { branch },
     };
-    let adding = AddChildWorktree {
-        source: repo_source(making.repo)?,
-        own: making.own.to_string(),
-        path: child.path.clone(),
-        on,
-    };
+    let adding =
+        AddChildWorktree { source: making.source.clone(), own: making.own.to_string(), path: child.path.clone(), on };
     making.link.call(adding).await
 }
 

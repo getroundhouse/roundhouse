@@ -39,7 +39,9 @@ fn v() -> WorkspaceId {
 /// no worker yet.
 fn waiting_in_w(dir: &std::path::Path, api: String) -> (Arc<Hub>, WaitId) {
     let hub = hub_reading_github(dir, api);
-    hub.store.insert_workspace(&workspace("v"), None).unwrap();
+    hub.store
+        .insert_workspace(&workspace("v"), &crate::store::WorkspacePlacement::local_checkout("/repo"), None)
+        .unwrap();
     hub.store.workspace_ready(&v(), "/v", &"birch".into(), "main", None).unwrap();
     let wait = hub.store.start_wait(&pull_request_wait("a")).unwrap().id;
     (hub, wait)
@@ -89,7 +91,9 @@ async fn workspaces_due_as_one_token_are_read_together_without_a_worker() {
     let dir = tempfile::tempdir().unwrap();
     let (hub, pull_requests, github) = hub_on_github(dir.path()).await;
     pull_requests.set(7, PullRequestState::Open);
-    hub.store.insert_workspace(&workspace("v"), None).unwrap();
+    hub.store
+        .insert_workspace(&workspace("v"), &crate::store::WorkspacePlacement::local_checkout("/repo"), None)
+        .unwrap();
     hub.store.workspace_ready(&v(), "/v", &"birch".into(), "main", None).unwrap();
     hub.store.set_workspace_branches(&v(), &pushed("head-7", "head-7", (0, 0))).unwrap();
     // As while a client is connected, so every workspace's pull request is read in turn.
@@ -141,7 +145,9 @@ async fn more_groups_of_waits_than_a_burst_of_reads_are_read_together_all_the_sa
     let mut waits = vec![wait];
     for n in 0..40 {
         let id = WorkspaceId::from(format!("x{n}").as_str());
-        hub.store.insert_workspace(&workspace(id.as_str()), None).unwrap();
+        hub.store
+            .insert_workspace(&workspace(id.as_str()), &crate::store::WorkspacePlacement::local_checkout("/repo"), None)
+            .unwrap();
         hub.store.workspace_ready(&id, &format!("/x{n}"), &format!("x{n}").into(), "main", None).unwrap();
         waits.push(waiting_by(&hub, id, &format!("c{n}")));
     }
@@ -247,7 +253,9 @@ async fn a_read_in_turn_waiting_for_a_token_holds_no_workspaces_turn() {
     let address = protocol::model::RepoUrl::try_from("https://github.com/example/project".to_string()).unwrap();
     hub.store.read_repo_url(&"r".into(), "/repo", Some(&address), None).unwrap();
     hub.store.set_workspace_branches(&"w".into(), &pushed("head-7", "head-7", (0, 0))).unwrap();
-    hub.store.insert_workspace(&workspace("v"), None).unwrap();
+    hub.store
+        .insert_workspace(&workspace("v"), &crate::store::WorkspacePlacement::local_checkout("/repo"), None)
+        .unwrap();
     hub.store.workspace_ready(&v(), "/v", &"birch".into(), "main", None).unwrap();
     let asked = Asked::default();
     stuck_in_w(&hub, |request| matches!(request, WorkerRequest::FindGithubLogin), &asked).keep();

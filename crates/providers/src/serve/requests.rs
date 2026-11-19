@@ -51,15 +51,7 @@ where
         match (request, &serving) {
             (Ok(ProviderRequest::Hello(Hello { protocol_version, oldest_protocol_version, hub_id, .. })), _) => {
                 let theirs = Versions::from_hello(protocol_version, Some(oldest_protocol_version));
-                let outcome = match hello(&mut make, &mut serving, theirs, hub_id) {
-                    Ok((provider, chosen)) => ProviderOutcome::Response(ProviderResponse::Hello(HelloReply {
-                        protocol_version: chosen,
-                        adapter: provider.name().to_string(),
-                        build: build.to_string(),
-                        capabilities: provider.capabilities(),
-                    })),
-                    Err(e) => ProviderOutcome::Error(e),
-                };
+                let outcome = hello_outcome(&mut make, &mut serving, theirs, hub_id, build).await;
                 let _ = frames.send(reply(outcome)).await;
             }
             (_, None) => {
@@ -109,6 +101,30 @@ async fn write_frames<W: AsyncWrite + Unpin>(mut writer: W, mut frames: mpsc::Re
             return;
         }
     }
+}
+
+async fn hello_outcome(
+    make: &mut Option<MakeProvider>,
+    serving: &mut Option<(HubId, Arc<dyn Provider>)>,
+    theirs: Versions,
+    hub_id: HubId,
+    build: &str,
+) -> ProviderOutcome {
+    let (provider, chosen) = match hello(make, serving, theirs, hub_id) {
+        Ok(ready) => ready,
+        Err(e) => return ProviderOutcome::Error(e),
+    };
+    let environment = match provider.environment().await {
+        Ok(environment) => environment,
+        Err(e) => return ProviderOutcome::Error(e.to_api_error()),
+    };
+    ProviderOutcome::Response(ProviderResponse::Hello(HelloReply {
+        protocol_version: chosen,
+        adapter: provider.name().to_string(),
+        build: build.to_string(),
+        capabilities: provider.capabilities(),
+        environment,
+    }))
 }
 
 /// The provider, made at the first hello, and the version chosen. A later one, as from a hub that lost its replies, gets

@@ -21,7 +21,7 @@ pub(crate) fn store_with_session(dir: &Path) -> Store {
     let store = open_in(dir);
     let now = now_ms();
     store.add_repo(&"r".into(), "repo", "/repo", now).unwrap();
-    store.insert_workspace(&workspace_w(now), None).unwrap();
+    store.insert_workspace(&workspace_w(now), &WorkspacePlacement::local_checkout("/repo"), None).unwrap();
     store.insert_session(&idle_session(now), None).unwrap();
     store
 }
@@ -237,7 +237,7 @@ fn every_change_to_a_record_gives_it_a_newer_revision() {
     half_made.id = "w2".into();
     half_made.name = "birch".into();
     half_made.instance_id = "w2".into();
-    store.insert_workspace(&half_made, None).unwrap();
+    store.insert_workspace(&half_made, &WorkspacePlacement::local_checkout("/repo"), None).unwrap();
     newer(store.get_workspace(&"w2".into()).unwrap().rev, "a new workspace");
     newer(store.delete_workspace(&"w2".into()).unwrap().unwrap(), "removing a workspace");
     let mut another = store.get_session(&"s".into()).unwrap();
@@ -276,9 +276,12 @@ fn a_request_sent_again_gets_what_it_made_the_first_time() {
     let mut workspace = store.get_workspace(&"w".into()).unwrap();
     let request = ClientRequestId::from("make a workspace");
     (workspace.id, workspace.name, workspace.instance_id) = ("w2".into(), "birch".into(), "w2".into());
-    let Some(Made::New(first)) = store.insert_workspace(&workspace, Some(&request)).unwrap() else { panic!() };
+    let placement = WorkspacePlacement::local_checkout("/repo");
+    let Some(Made::New(first)) = store.insert_workspace(&workspace, &placement, Some(&request)).unwrap() else {
+        panic!()
+    };
     (workspace.id, workspace.name, workspace.instance_id) = ("w3".into(), "cedar".into(), "w3".into());
-    let again = store.insert_workspace(&workspace, Some(&request)).unwrap();
+    let again = store.insert_workspace(&workspace, &placement, Some(&request)).unwrap();
     assert_eq!(again, Some(Made::Earlier(first)), "a workspace");
 
     let mut session = store.get_session(&"s".into()).unwrap();
@@ -338,7 +341,7 @@ fn each_workspace_gets_its_own_ports() {
     next.name = "birch".into();
     next.instance_id = "w2".into();
     next.port_base = 55_010;
-    store.insert_workspace(&next, None).unwrap();
+    store.insert_workspace(&next, &WorkspacePlacement::local_checkout("/repo"), None).unwrap();
     assert_eq!(store.next_port_base().unwrap(), 55_020);
 }
 

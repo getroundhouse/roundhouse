@@ -26,6 +26,7 @@ fn adapter(dir: &Path, name: &str) -> PathBuf {
         adapter: name.into(),
         build: "test".into(),
         capabilities: Capabilities::default(),
+        environment: providers::WorkerEnvironment::default(),
     });
     let reply = frame::encode(&ProviderFrame::Reply { id: 1, outcome: ProviderOutcome::Response(hello) }).unwrap();
     let path = dir.join(name);

@@ -30,6 +30,58 @@ pub struct HelloReply {
     pub adapter: String,
     pub build: String,
     pub capabilities: Capabilities,
+    /// What the compute this provider's workers run on looks like to the hub, separate from the operations the
+    /// provider itself supports in `capabilities`. Omitted when workers run on separate ephemeral compute, which is
+    /// the safe default for an adapter that doesn't say.
+    #[serde(default, skip_serializing_if = "WorkerEnvironment::is_default")]
+    pub environment: WorkerEnvironment,
+}
+
+/// What the compute a provider's workers run on looks like to the hub.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct WorkerEnvironment {
+    /// Whether workers can reach checkouts on the hub's own filesystem.
+    #[serde(default)]
+    pub filesystem: WorkerFilesystem,
+    /// Whether a repository's clone on the worker's machine survives archiving a workspace (`destroy` then `create`).
+    #[serde(default)]
+    pub clones: ClonePersistence,
+}
+
+impl WorkerEnvironment {
+    /// The local provider's environment: workers run on the hub's machine and share its clones directory.
+    pub const HUB_MACHINE: Self = Self { filesystem: WorkerFilesystem::Hub, clones: ClonePersistence::Persistent };
+
+    #[expect(clippy::trivially_copy_pass_by_ref, reason = "serde's skip_serializing_if passes &T")]
+    fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
+}
+
+/// Whether a provider's workers share the hub's own filesystem.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkerFilesystem {
+    /// Separate from the hub's machine: workers clone repositories by address and see `CONDUCTOR_IS_LOCAL=0`.
+    #[default]
+    Separate,
+    /// Shared with the hub's machine: workers can use a checkout on the hub and see `CONDUCTOR_IS_LOCAL=1`.
+    Hub,
+    #[serde(other)]
+    Unknown,
+}
+
+/// Whether a repository's clone on a provider's worker machine survives archiving a workspace (`destroy` then `create`).
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ClonePersistence {
+    /// Destroying an instance may lose the clone (ephemeral VMs/sandboxes, or a pool of machines).
+    #[default]
+    Ephemeral,
+    /// A repository's clone survives archiving a workspace and is reused when restoring it.
+    Persistent,
+    #[serde(other)]
+    Unknown,
 }
 
 impl Reply for HelloReply {

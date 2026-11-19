@@ -119,7 +119,7 @@ fn a_workspaces_prompts_are_listed_oldest_first_across_its_chats() {
         instance_id: "w2".into(),
         ..workspace_w(1)
     };
-    store.insert_workspace(&elsewhere, None).unwrap();
+    store.insert_workspace(&elsewhere, &crate::store::WorkspacePlacement::local_checkout("/repo"), None).unwrap();
     chat("second", "w");
     chat("other", "w2");
     let sent = |chat: &str, at_ms: i64, text: &str| {

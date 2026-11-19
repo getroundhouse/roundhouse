@@ -12,7 +12,7 @@ use protocol::worker;
 use tokio::sync::watch;
 
 use super::{Open, Outcome, Stage};
-use crate::hub::{Hub, workspace_env};
+use crate::hub::Hub;
 use crate::store::{Store, now_ms};
 use crate::worker_link::WorkerLink;
 
@@ -79,8 +79,7 @@ impl Hub {
         let ready = self.ready_worktree(workspace_id).await?;
         let (link, cwd) = (ready.link().clone(), ready.path().to_owned());
         let workspace = ready.into_ready().into_workspace();
-        let repo = self.repo_of(&workspace).await?;
-        let env = workspace_env(&workspace, &repo);
+        let env = self.workspace_env(&workspace).await?;
         if let Some(open) = self.terminals.open.lock().get_mut(id).filter(|open| open.opening_by(noted).is_some()) {
             open.link = Some(link.id);
         }

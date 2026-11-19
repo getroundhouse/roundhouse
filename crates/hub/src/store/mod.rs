@@ -72,7 +72,7 @@ pub use repos::RepoToRead;
 pub(crate) use run_logins::Placed;
 pub(crate) use sessions::SessionLogin;
 pub use titles::{Retitle, Retitled};
-pub use workspaces::{BranchesSet, Ended, Move};
+pub use workspaces::{BranchesSet, Ended, Move, WorkspacePlacement};
 
 mod database;
 pub(crate) use database::later_ms;

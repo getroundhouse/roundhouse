@@ -58,9 +58,19 @@ impl Stack {
     /// [`Stack::instances_made`] says what each instance was called. Starts the hub again, since it reads its
     /// providers as it starts.
     pub(crate) fn make_through_an_adapter(&mut self) {
+        self.write_adapter("home/clones", &[]);
+    }
+
+    /// Makes workspaces from now on through an adapter declaring [`WorkerFilesystem::Separate`], keeping its clones
+    /// in a directory apart from the hub's own `home/clones` so tests prove it never reads the hub's disk.
+    pub(crate) fn make_through_separate_adapter(&mut self) {
+        self.write_adapter("adapter-clones", &["--separate"]);
+    }
+
+    fn write_adapter(&mut self, clones: &str, extra: &[&str]) {
         self.kill_hub();
         let path = |name: &str| self.path(name).to_str().unwrap().to_string();
-        let args = [
+        let mut args = vec![
             "--worker".into(),
             env!("CARGO_BIN_EXE_roundhoused").into(),
             "--instances".into(),
@@ -68,10 +78,11 @@ impl Stack {
             "--workspaces-root".into(),
             path("workspaces"),
             "--clones".into(),
-            path("home/clones"),
+            path(clones),
             "--made".into(),
             path("instances-made"),
         ];
+        args.extend(extra.iter().map(|flag| (*flag).to_string()));
         let adapter = serde_json::json!({"name": "recording", "program": recording_adapter(), "args": args});
         let file = serde_json::json!({"default": "recording", "providers": [adapter]});
         std::fs::write(self.path("home/providers.json"), file.to_string()).unwrap();

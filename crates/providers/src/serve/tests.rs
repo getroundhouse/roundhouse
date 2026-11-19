@@ -8,7 +8,7 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, DuplexStream, Lines, 
 use tokio::sync::Notify;
 
 use super::*;
-use crate::{Capabilities, Feature, Instance, Size, WorkerBinary, WorkerCommand};
+use crate::{Capabilities, Feature, Instance, Size, WorkerBinary, WorkerCommand, WorkerEnvironment};
 
 const TIMEOUT: Duration = Duration::from_secs(5);
 
@@ -16,6 +16,7 @@ const TIMEOUT: Duration = Duration::from_secs(5);
 #[derive(Default)]
 struct Fake {
     let_start_go: Notify,
+    environment: WorkerEnvironment,
 }
 
 #[async_trait]
@@ -28,6 +29,9 @@ impl Provider for Fake {
     }
     fn capabilities(&self) -> Capabilities {
         Capabilities { targets: vec![], features: vec![Feature::BaseImages] }
+    }
+    async fn environment(&self) -> Result<WorkerEnvironment, ProviderError> {
+        Ok(self.environment)
     }
     async fn create(
         &self,
@@ -103,6 +107,12 @@ async fn hello_names_the_adapter_and_what_it_can_do() {
         reply,
         json!({"frame": "reply", "id": 0, "response": {"result": "hello", "protocol_version": 1, "adapter": "fake",
             "build": "test", "capabilities": {"targets": [], "features": ["base_images"]}}})
+    );
+
+    let mut on_hub = serving(Arc::new(Fake { environment: WorkerEnvironment::HUB_MACHINE, ..Fake::default() }));
+    assert_eq!(
+        on_hub.hello("h").await["response"]["environment"],
+        json!({"filesystem": "hub", "clones": "persistent"})
     );
 }
 

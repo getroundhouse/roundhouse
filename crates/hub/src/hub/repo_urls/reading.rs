@@ -2,7 +2,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use protocol::client::{ErrorCode, HubNotice};
-use protocol::model::{ProviderName, RepoUrl};
+use protocol::model::{RepoUrl, WorkspaceId};
+use protocol::provider::WorkerFilesystem;
 use protocol::worker::{ReadRepoUrl, RepoUrlReply};
 use tracing::{info, warn};
 
@@ -15,22 +16,24 @@ use crate::worker_link::WorkerLink;
 /// something a test from outside would sit through, so not one of [`crate::Timers`].
 pub(super) const READ_WITHIN: Duration = Duration::from_secs(10);
 
-/// Whether `provider`'s workers run on the hub's machine, where the checkouts of its repositories are. Only the local
-/// provider's do, as [`ProviderName::LOCAL`] says. *Unconfirmed:* going by the provider's name rather than by something
-/// it declares, since nothing else says yet.
-fn on_this_machine(provider: &ProviderName) -> bool {
-    provider.is_local()
-}
-
 /// The worker can't read any repository's address, as one from before [`ReadRepoUrl`] can't.
 struct Unsupported;
 
 impl Hub {
-    /// As a link to `link`'s worker, of `provider`, opens: if the worker runs on the hub's machine, has it read the
+    /// Whether `workspace`'s worker runs on the hub's own filesystem, read from its recorded placement without
+    /// contacting its provider's adapter. A workspace whose placement can't be read (e.g. removed meanwhile) is treated
+    /// as not here so background URL reads never fail a link open.
+    async fn workspace_shares_hub_filesystem(&self, workspace: &WorkspaceId) -> bool {
+        self.workspace_placement(workspace)
+            .await
+            .is_ok_and(|placement| placement.environment.filesystem == WorkerFilesystem::Hub)
+    }
+
+    /// As a link to `link`'s worker, of `workspace`, opens: if the worker runs on the hub's machine, has it read the
     /// address of each repository whose address is to be read, and keeps what it says, as [`Hub::read_repo_urls_by`]
     /// says.
-    pub(crate) async fn read_repo_urls(self: Arc<Self>, provider: ProviderName, link: Arc<WorkerLink>) {
-        if on_this_machine(&provider) {
+    pub(crate) async fn read_repo_urls(self: Arc<Self>, workspace: WorkspaceId, link: Arc<WorkerLink>) {
+        if self.workspace_shares_hub_filesystem(&workspace).await {
             self.read_repo_urls_by(&link).await;
         }
     }
@@ -54,19 +57,12 @@ impl Hub {
             .filter(|(_, link)| link.is_open())
             .map(|(id, link)| (id.clone(), Arc::clone(link)))
             .collect();
-        if open.is_empty() {
-            return None;
-        }
-        let workspaces = match self.blocking(|store| store.list_workspaces(false)).await {
-            Ok(workspaces) => workspaces,
-            Err(e) => {
-                warn!("finding which workers run on this machine, to read addresses: {}", e.message);
-                return None;
+        for (id, link) in open {
+            if self.workspace_shares_hub_filesystem(&id).await {
+                return Some(link);
             }
-        };
-        let here =
-            |id: &_| workspaces.iter().any(|workspace| &workspace.id == id && on_this_machine(&workspace.provider));
-        open.into_iter().find(|(id, _)| here(id)).map(|(_, link)| link)
+        }
+        None
     }
 
     /// Has `link`'s worker, which runs on the hub's machine, read the address of each repository whose address is to

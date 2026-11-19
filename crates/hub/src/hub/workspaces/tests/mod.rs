@@ -2,6 +2,7 @@
 //! its setup, which the hub records and what waits on it, and what archiving one refuses.
 
 mod archiving;
+mod environment;
 mod making;
 mod naming;
 mod setup;
