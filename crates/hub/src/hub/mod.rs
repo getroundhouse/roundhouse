@@ -30,6 +30,7 @@ mod proposals;
 mod pull_requests;
 mod queues;
 mod ready;
+mod references;
 mod repo_source;
 mod repo_urls;
 mod repos;

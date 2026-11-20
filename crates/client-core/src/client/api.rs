@@ -4,14 +4,15 @@ use std::sync::atomic::Ordering;
 
 use protocol::capability::approvals::Decision;
 use protocol::client::{
-    HubStatus, Request, admin, agent, comments, log, proposals, records, sessions, subscriptions, waits, workspaces,
+    HubStatus, Request, admin, agent, comments, log, proposals, records, references, sessions, subscriptions, waits,
+    workspaces,
 };
 use protocol::event::SessionEvent;
 use protocol::find::Found;
 use protocol::model::{
     AgentKind, ApprovalId, AttachmentId, ClientMessageId, ClientRequestId, CommentId, DiffComment, DiffSide, GitDiff,
-    GitStatus, HubSettings, HubSettingsChange, Proposal, PullRequest, Records, Repo, RepoId, Rev, Seq, Session,
-    SessionId, Subagent, SubagentId, TerminalId, WaitId, Workspace, WorkspaceId,
+    GitStatus, HubSettings, HubSettingsChange, Proposal, PullRequest, Records, ReferenceAsk, ReferenceRead, Repo,
+    RepoId, Rev, Seq, Session, SessionId, Subagent, SubagentId, TerminalId, WaitId, Workspace, WorkspaceId,
 };
 
 use super::{Client, Result, Subscription, hub_is_missing, subscription_channel};
@@ -111,6 +112,12 @@ impl Client {
 
     pub fn workspace_pull_request(&self, id: &WorkspaceId) -> Result<Option<PullRequest>> {
         Ok(self.call(workspaces::WorkspacePullRequest { id: id.clone() })?.pull_request)
+    }
+
+    /// See [`references::ReferencesRead`]. It waits on GitHub for those the hub hasn't read lately. A hub older than
+    /// this refuses it, as `is_unsupported` says.
+    pub fn references_read(&self, workspace: &WorkspaceId, asks: Vec<ReferenceAsk>) -> Result<Vec<ReferenceRead>> {
+        Ok(self.call(references::ReferencesRead { workspace: workspace.clone(), references: asks })?.references)
     }
 
     /// Sending the same `client_request_id` again returns the comment the first request made.

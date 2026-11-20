@@ -10,15 +10,15 @@ use protocol::client::CLIENT_PROTOCOL_VERSION;
 use protocol::client::log::ReadLimit;
 use protocol::client::{
     ApiError, ClientFrame, ClientRequest, ClientResponse, ErrorCode, HelloReply, HubFrame, ReplyOutcome, admin,
-    attachments, comments, drafts, files, github_accounts, github_apps, log, proposals, records, sessions,
+    attachments, comments, drafts, files, github_accounts, github_apps, log, proposals, records, references, sessions,
     subscriptions, workspaces,
 };
 use protocol::event::SessionEvent;
 use protocol::find::{Found, Needle};
 use protocol::frame;
 use protocol::model::{
-    CompactionLine, GitDiff, GitStatus, GithubSignIn, Place, PromptLine, Rev, Seq, Session, SessionId, SettledAt,
-    SubagentId,
+    CompactionLine, GitDiff, GitStatus, GithubSignIn, Place, PromptLine, ReferenceAsk, ReferenceRead, Rev, Seq,
+    Session, SessionId, SettledAt, SubagentId,
 };
 
 use super::base_pages::{opened, paged};
@@ -100,6 +100,21 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
         }
         R::WorkspacePullRequest(workspaces::WorkspacePullRequest { id }) => {
             reply(C::PullRequest(workspaces::PullRequestReply { pull_request: world.pull_requests.get(&id).cloned() }))
+        }
+        R::ReferencesRead(references::ReferencesRead { references, .. }) => {
+            world.references_asked.lock().push(references.clone());
+            let found = |ask: &ReferenceAsk| {
+                (world.references.iter())
+                    .find(|reference| reference.number == ask.number && reference.repository == ask.repository)
+            };
+            let references = references
+                .iter()
+                .map(|ask| match found(ask) {
+                    Some(reference) => ReferenceRead::Found { reference: Box::new(reference.clone()) },
+                    None => ReferenceRead::Missing,
+                })
+                .collect();
+            reply(C::References(references::References { references }))
         }
         R::CommentList(comments::CommentList { workspace_id }) => {
             reply(C::Comments(comments::Comments { comments: world.comments_listed(&workspace_id) }))

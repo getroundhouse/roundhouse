@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 
 use super::{
     Hello, accounts, admin, agent, attachments, comments, drafts, files, github_accounts, github_apps, log,
-    new_workspace, proposals, queue, records, sessions, subscriptions, terminals, waits, workspaces,
+    new_workspace, proposals, queue, records, references, sessions, subscriptions, terminals, waits, workspaces,
 };
 
 /// Every request, each with a type of its own that names what it's answered with. One with no fields is a variant with
@@ -56,6 +56,7 @@ pub enum ClientRequest {
     WorkspaceSetupLog(workspaces::WorkspaceSetupLog),
     WorkspaceRerunSetup(workspaces::WorkspaceRerunSetup),
     WorkspacePullRequest(workspaces::WorkspacePullRequest),
+    ReferencesRead(references::ReferencesRead),
     CommentAdd(comments::CommentAdd),
     CommentList(comments::CommentList),
     CommentEdit(comments::CommentEdit),

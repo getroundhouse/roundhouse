@@ -84,6 +84,7 @@ fn carried(response: &ClientResponse) -> Vec<Record> {
         | ClientResponse::GitDiff(_)
         | ClientResponse::SetupLog(_)
         | ClientResponse::PullRequest(_)
+        | ClientResponse::References(_)
         | ClientResponse::Events(_)
         | ClientResponse::PlacedEvents(_)
         | ClientResponse::Prompts(_)

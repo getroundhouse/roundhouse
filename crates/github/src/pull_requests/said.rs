@@ -13,7 +13,7 @@ pub(super) fn token_refused() -> ApiError {
 }
 
 /// What GitHub left out or wrote otherwise than this reads, so nothing of what it answered is taken.
-pub(super) fn incomplete() -> ApiError {
+pub(crate) fn incomplete() -> ApiError {
     ApiError::new(ErrorCode::Worker, "GitHub's answer was incomplete, so nothing of it was taken")
 }
 
@@ -26,11 +26,11 @@ pub(super) fn changed() -> ApiError {
     )
 }
 
-pub(super) fn string(value: &Value, key: &str) -> Result<String, ApiError> {
+pub(crate) fn string(value: &Value, key: &str) -> Result<String, ApiError> {
     value[key].as_str().map(str::to_owned).ok_or_else(incomplete)
 }
 
-pub(super) fn array<'a>(value: &'a Value, key: &str) -> Result<&'a Vec<Value>, ApiError> {
+pub(crate) fn array<'a>(value: &'a Value, key: &str) -> Result<&'a Vec<Value>, ApiError> {
     value[key].as_array().ok_or_else(incomplete)
 }
 
@@ -64,7 +64,7 @@ pub(super) fn usage(answer: &Value) -> Option<RateLimit> {
 /// What an error GitHub gave means, by its `type` and what it says: GitHub's schema lacking what's asked, as on a
 /// GitHub Enterprise Server from before stacks, is unsupported, being refused access or nothing being there is
 /// unavailable, and anything else, such as GitHub limiting the hub, may pass.
-pub(super) fn failed(error: &Value) -> ApiError {
+pub(crate) fn failed(error: &Value) -> ApiError {
     let kind = error["type"].as_str().unwrap_or_default();
     let message = error["message"].as_str().unwrap_or("GitHub said nothing more");
     let unsupported = kind == "undefinedField" || message.contains("doesn't exist on type");

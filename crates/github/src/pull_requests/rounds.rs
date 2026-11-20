@@ -71,7 +71,7 @@ impl Github {
         asks: Vec<PullRequestsAsk>,
         leaving: Leaving,
     ) -> PullRequestsRead {
-        let mut spent = Spent { rate_limit: None, refused: false, leaving };
+        let mut spent = Spent::new(leaving);
         let mut answers: Vec<Option<Result<_, Unread>>> = asks.iter().map(|_| None).collect();
         let mut reading: Vec<(usize, Reading)> = asks.iter().cloned().map(Reading::new).enumerate().collect();
         for attempt in 1..=ATTEMPTS {
@@ -103,15 +103,7 @@ impl Github {
                 return;
             }
             for batch in batches {
-                let answered = if let Some(exhausted) = spent.exhausted() {
-                    Err(exhausted)
-                } else {
-                    let answered = self.graphql(token, &written(reading, &batch)).await;
-                    spent.took(answered.as_ref().ok());
-                    spent.refused |= matches!(answered, Err(NoAnswer::Refused));
-                    answered.map_err(|no| no.error())
-                };
-                match answered {
+                match self.spend(token, &written(reading, &batch), spent).await {
                     Ok(answer) => take(&answer, &batch, reading),
                     Err(error) => {
                         for (at, _) in &batch {
@@ -185,20 +177,39 @@ fn take(answer: &Value, batch: &[(usize, Vec<Part>)], reading: &mut [(usize, Rea
 }
 
 /// What a read has spent, and what GitHub last said is left.
-pub(super) struct Spent {
-    pub(super) rate_limit: Option<RateLimit>,
-    pub(super) refused: bool,
-    pub(super) leaving: Leaving,
+pub(crate) struct Spent {
+    pub(crate) rate_limit: Option<RateLimit>,
+    pub(crate) refused: bool,
+    leaving: Leaving,
+}
+
+impl Github {
+    /// What GitHub answers `query` with, as `token`, unless what's left of its limit is down to what `spent` leaves,
+    /// in which case it isn't asked. Takes into `spent` what GitHub says is left, and whether it refused the token.
+    pub(crate) async fn spend(&self, token: &GithubToken, query: &str, spent: &mut Spent) -> Result<Value, ApiError> {
+        if let Some(exhausted) = spent.exhausted() {
+            return Err(exhausted);
+        }
+        let answered = self.graphql(token, query).await;
+        spent.took(answered.as_ref().ok());
+        spent.refused |= matches!(answered, Err(NoAnswer::Refused));
+        answered.map_err(|no| no.error())
+    }
 }
 
 impl Spent {
+    /// What a read that leaves `leaving` of GitHub's limit has spent before it asks anything.
+    pub(crate) fn new(leaving: Leaving) -> Self {
+        Self { rate_limit: None, refused: false, leaving }
+    }
+
     /// Why no more is asked, once what's left of GitHub's limit is down to what the read leaves.
-    pub(super) fn exhausted(&self) -> Option<ApiError> {
+    fn exhausted(&self) -> Option<ApiError> {
         self.leaving.stops_at(self.rate_limit)
     }
 
     /// Takes in what GitHub said is left of its limit after a query, if it said.
-    pub(super) fn took(&mut self, answer: Option<&Value>) {
+    fn took(&mut self, answer: Option<&Value>) {
         if let Some(limit) = answer.and_then(usage) {
             self.rate_limit = Some(limit);
         }

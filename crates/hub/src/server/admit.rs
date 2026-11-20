@@ -214,6 +214,7 @@ fn local_only(request: &ClientRequest) -> bool {
         | R::WorkspaceSetupLog(..)
         | R::WorkspaceRerunSetup(..)
         | R::WorkspacePullRequest(..)
+        | R::ReferencesRead(..)
         | R::CommentAdd(..)
         | R::CommentList(..)
         | R::CommentEdit(..)
