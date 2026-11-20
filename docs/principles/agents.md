@@ -15,6 +15,7 @@ These rules say how the hub and clients deal with each kind of agent through its
 - **The hub checks what a client asks of an agent against what the agent's run claims, and rejects it before sending it.** A request the agent can't take is then rejected, and not lost on its way. For example, each `Control`, which is a request to a running agent, names the capabilities it needs, and the hub rejects one that the run doesn't claim. A client reads a run's claims from the session's record, and offers only what they allow.
 - **What Roundhouse owns isn't a capability.** The queue, how conversations are named, worktrees and signing in to an account are Roundhouse's, so no agent keeps a second record of them.
 - **Every session names its model, approval mode and effort, and every launch passes all three.** None is left to the agent's CLI.
+- **Everything else an agent's CLI reads from its own settings, and Roundhouse keeps no copy of them.** The CLI reads them from the machine it runs on and from the repository. On a person's own machine, every account an agent runs under shares that machine's settings, such as `advisorModel`, which turns on Claude Code's advisor. On a worker the provider manages, a setting someone wants reaches the agent through the repository, such as in its committed `.claude/settings.json`. So each setting is changed in one place, the CLI's own, and Roundhouse doesn't keep a second copy in step across accounts and machines.
 
 ## The worker's tools
 
