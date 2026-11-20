@@ -11,7 +11,7 @@ use gpui_kit::{
     AnyElement, App, AppContext as _, Context, Entity, InteractiveElement as _, IntoElement, ParentElement as _, Role,
     SharedString, StatefulInteractiveElement as _, Styled as _, Subscription, Task, TestSupportExt as _, Window, div,
 };
-use look::{Corner, IconSize, IconSizing as _, Shaped as _, Space, TaskRing, Type, Typeset as _};
+use look::{Corner, EDGE, IconSize, IconSizing as _, Shaped as _, Space, TaskRing, Type, Typeset as _};
 use protocol::pairing::PairingLink;
 
 use super::words::{ParsedInput, connect_failure, parse_input};
@@ -230,7 +230,7 @@ fn preview_card(link: &PairingLink, device_name: Option<&str>, cx: &App) -> AnyE
         .p(Space::Medium)
         .gap(Space::XSmall)
         .bg(colors.inset)
-        .border_1()
+        .border(EDGE)
         .border_color(colors.edge)
         .corners(Corner::Control)
         .child(

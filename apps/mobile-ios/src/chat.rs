@@ -12,7 +12,7 @@ use gpui_kit::{
     ParentElement as _, Pixels, Render, SharedString, Styled as _, Subscription, Task, TestSupportExt as _, Window,
     div,
 };
-use look::{ButtonKind, Space};
+use look::{ButtonKind, Lined as _, Space};
 use protocol::model::{Session, SessionId, Workspace, WorkspaceId};
 use transcript::{Transcript, TranscriptEvent};
 
@@ -226,7 +226,7 @@ impl ChatView {
             .accessibility_label("Send")
             .off(self.shown.is_none())
             .on_click(cx.listener(|chat, _, window, cx| chat.send(window, cx)));
-        row.border_t_1().border_color(look::colors(cx).edge).child(
+        row.line_over(cx).child(
             h_flex()
                 .items_end()
                 .gap(Space::Small)

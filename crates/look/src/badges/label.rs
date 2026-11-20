@@ -1,6 +1,7 @@
 use gpui_kit::{App, Hsla, IntoElement, ParentElement as _, RenderOnce, SharedString, Styled as _, Window, div, hsla};
 
 use super::badge::HEIGHT;
+use crate::shape::EDGE;
 use crate::space::Space;
 use crate::typography::{Type, Typeset as _};
 
@@ -28,7 +29,7 @@ impl RenderOnce for Label {
             .px(Space::Small)
             // Round, since its colour is someone else's rather than one of the app's.
             .rounded_full()
-            .border_1()
+            .border(EDGE)
             .border_color(words.opacity(0.32))
             .bg(words.opacity(0.14))
             .typeset(Type::Detail)

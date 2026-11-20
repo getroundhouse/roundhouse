@@ -302,7 +302,7 @@ impl Render for QuestionPanel {
             // The composer's corners, and the thin edge around the pane's own surface rather than a card's amber, since
             // being in the composer's place already says it's your turn.
             .corners(look::Corner::Card)
-            .border_1()
+            .border(look::EDGE)
             .border_color(edge)
             .child(heading)
             .children(detail)

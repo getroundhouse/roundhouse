@@ -151,7 +151,7 @@ fn marked(text: AnyElement, change: Change, kept_next: bool, cx: &App) -> AnyEle
         .pl(look::Space::Medium)
         .pr(look::Space::Small)
         .py(look::Space::XSmall)
-        .border_l(px(2.))
+        .border_l(look::QUOTE_RULE)
         .border_color(tint)
         .bg(tint.opacity(0.12))
         .rounded_r(px(4.))

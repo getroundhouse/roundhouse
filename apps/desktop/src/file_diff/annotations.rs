@@ -46,7 +46,7 @@ pub(super) fn draft_card(
         .w_full()
         .p(look::Space::XSmall)
         .corners(look::Corner::Control)
-        .border_1()
+        .border(look::EDGE)
         .border_color(colors.brand.opacity(0.6))
         .bg(colors.pane)
         .relative()

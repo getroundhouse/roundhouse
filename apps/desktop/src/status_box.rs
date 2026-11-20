@@ -102,7 +102,7 @@ impl StatusBox {
             .pr(look::Space::Small)
             .py(look::Space::Small)
             .corners(look::Corner::Card)
-            .border_1()
+            .border(look::EDGE)
             .border_color(colors.edge)
             .bg(colors.inset)
             .typeset(look::Type::Body)

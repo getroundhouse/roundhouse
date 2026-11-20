@@ -104,7 +104,7 @@ fn step(number: u8, reached: Reached, said: String, body: Option<AnyElement>, cx
         Reached::Done => tile.child(Icon::new(IconName::Check).sized(look::IconSize::Large).text_color(colors.done)),
         Reached::At | Reached::Later => tile
             .rounded_full()
-            .border_1()
+            .border(look::EDGE)
             .border_color(if reached == Reached::At { colors.text_muted } else { colors.edge })
             .typeset(look::Type::Detail)
             .text_color(if reached == Reached::At { colors.text } else { colors.text_faint })

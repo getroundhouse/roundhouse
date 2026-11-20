@@ -190,7 +190,7 @@ fn picture(picture: Picture, cx: &App) -> Div {
         Picture::Initial(initial) => {
             tile.rounded_full().bg(colors.control_edge).emphasis().text_color(colors.text).child(initial.to_string())
         }
-        Picture::Nobody => tile.rounded_full().border_1().border_color(colors.control_edge),
+        Picture::Nobody => tile.rounded_full().border(look::EDGE).border_color(colors.control_edge),
         Picture::Mark(icon) => tile
             .corners(look::Corner::Control)
             .bg(colors.control_edge)

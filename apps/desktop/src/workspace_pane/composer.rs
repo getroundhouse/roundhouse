@@ -245,7 +245,7 @@ impl WorkspacePane {
         let this = cx.weak_entity();
         let textarea = Textarea::new(&self.composer)
             .on_paste(move |item, _, cx| this.update(cx, |t, cx| t.paste(item, cx)).unwrap_or(false));
-        let composer = v_flex().region(Region::Composer).w_full().border_1().border_color(border).bg(surface);
+        let composer = v_flex().region(Region::Composer).w_full().border(look::EDGE).border_color(border).bg(surface);
         let composer = composing::place(composer, planning, look::Corner::Card, cx, Self::toggle_plan_mode);
         let composer = attached::takes_drops(composer, cx, |t: &mut Self, paths, cx| t.attach_paths(paths, cx))
             .children(attached)
