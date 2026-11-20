@@ -1,6 +1,7 @@
 //! A terminal someone has open, and the source it's followed from.
 
 use std::sync::Arc;
+use std::time::Instant;
 
 use parking_lot::Mutex;
 use protocol::model::TerminalId;
@@ -211,6 +212,14 @@ impl Source for TerminalSource {
     /// without one. What that would send the hub is dropped while there's none, as typing over one that's gone is.
     fn asked(&mut self, connection: Option<&Client>, held: &Mutex<Held>, _: &dyn Fn()) -> Result<bool> {
         Ok(self.settle(connection, held))
+    }
+
+    fn due_at(&mut self) -> Option<Instant> {
+        self.copy.compress_at(Instant::now())
+    }
+
+    fn due(&mut self) {
+        self.copy.compress(Instant::now());
     }
 }
 

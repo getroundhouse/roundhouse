@@ -1,18 +1,17 @@
-//! What `RecordsFeed`, `OpenSession` and `OpenTerminal` share: following something a hub serves, on a thread of its
-//! own, and telling readers when it changed. When the subscription falls behind, or there's a new connection, it starts
-//! again from where it got to.
+//! The handles on something followed, and the thread that follows it.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Weak};
+use std::time::Instant;
 
 use parking_lot::Mutex;
 use protocol::client::ErrorCode;
 
-use super::{Client, ClientError, Ended, Result, Subscription, SubscriptionItem};
+use crate::client::{Client, ClientError, Ended, Result, Subscription, SubscriptionItem};
 
 /// What's followed, and how. It's made on the thread that follows it, so it needn't be sent between threads, as one
 /// that keeps Ghostty's terminal can't be.
-pub(super) trait Source: 'static {
+pub(in crate::client) trait Source: 'static {
     type Held: Send + 'static;
 
     /// Subscribes, and catches up on anything the subscription won't send, such as a list of records. Runs
@@ -31,6 +30,15 @@ pub(super) trait Source: 'static {
     /// There's a new connection, which may be to another hub, such as a newer one after a restart. Runs just before
     /// [`Source::resume`] does for it.
     fn reconnected(&mut self) {}
+
+    /// When there's next something to do with what's held that nobody asks for, such as compressing a terminal's
+    /// history once it has been quiet a while. None while there's nothing. Runs each time the thread is about to wait.
+    fn due_at(&mut self) -> Option<Instant> {
+        None
+    }
+
+    /// Does what [`Source::due_at`] said was due, which changes nothing readers see.
+    fn due(&mut self) {}
 }
 
 /// What went wrong while following, for a person to hear about. A connection going isn't one of these:
@@ -43,7 +51,7 @@ pub enum FollowError {
     Asked(ClientError),
 }
 
-pub(super) struct Shared<H> {
+pub(in crate::client) struct Shared<H> {
     held: Mutex<H>,
     /// A new connection to carry on with.
     reconnect: Mutex<Option<Client>>,
@@ -54,19 +62,19 @@ pub(super) struct Shared<H> {
 }
 
 /// A handle on something followed. Its thread stops once every clone of this has gone.
-pub(super) struct Follow<H> {
+pub(in crate::client) struct Follow<H> {
     shared: Arc<Shared<H>>,
-    pub(super) changed: flume::Receiver<()>,
+    pub(in crate::client) changed: flume::Receiver<()>,
     wake: flume::Sender<()>,
 }
 
 /// Tells the readers of something followed that it changed, from outside it, such as a search through it, without
 /// keeping it followed.
 #[derive(Clone)]
-pub(super) struct Teller(flume::Sender<()>);
+pub(in crate::client) struct Teller(flume::Sender<()>);
 
 impl Teller {
-    pub(super) fn tell(&self) {
+    pub(in crate::client) fn tell(&self) {
         let _ = self.0.try_send(());
     }
 }
@@ -79,12 +87,12 @@ impl<H> Clone for Follow<H> {
 
 /// A handle on something followed that doesn't keep it, for changing it from outside for as long as it's there, such
 /// as from a connection that takes in what its replies carry.
-pub(super) struct Reach<H>(Weak<Shared<H>>);
+pub(in crate::client) struct Reach<H>(Weak<Shared<H>>);
 
 impl<H> Reach<H> {
     /// Changes what's held, telling readers when `change` says it changed it. Returns false, changing nothing, once
     /// every handle on it and its thread have gone.
-    pub(super) fn change(&self, change: impl FnOnce(&mut H) -> bool) -> bool {
+    pub(in crate::client) fn change(&self, change: impl FnOnce(&mut H) -> bool) -> bool {
         let Some(shared) = self.0.upgrade() else { return false };
         if change(&mut shared.held.lock()) {
             shared.changed();
@@ -93,14 +101,14 @@ impl<H> Reach<H> {
     }
 
     /// Whether this reaches what `follow` follows.
-    pub(super) fn reaches(&self, follow: &Follow<H>) -> bool {
+    pub(in crate::client) fn reaches(&self, follow: &Follow<H>) -> bool {
         std::ptr::eq(self.0.as_ptr(), Arc::as_ptr(&follow.shared))
     }
 }
 
 impl<H: Send + 'static> Follow<H> {
     /// Starts following on a thread of its own, so this doesn't wait for the hub, with the source `source` makes there.
-    pub(super) fn start<S: Source<Held = H>>(
+    pub(in crate::client) fn start<S: Source<Held = H>>(
         client: &Client,
         held: H,
         source: impl FnOnce() -> S + Send + 'static,
@@ -125,12 +133,12 @@ impl<H: Send + 'static> Follow<H> {
         Self { shared, changed, wake }
     }
 
-    pub(super) fn read<T>(&self, read: impl FnOnce(&H) -> T) -> T {
+    pub(in crate::client) fn read<T>(&self, read: impl FnOnce(&H) -> T) -> T {
         read(&self.shared.held.lock())
     }
 
     /// Changes what's held from here, such as with a reply, and tells readers.
-    pub(super) fn update<T>(&self, update: impl FnOnce(&mut H) -> T) -> T {
+    pub(in crate::client) fn update<T>(&self, update: impl FnOnce(&mut H) -> T) -> T {
         let result = update(&mut self.shared.held.lock());
         self.shared.changed();
         result
@@ -138,26 +146,26 @@ impl<H: Send + 'static> Follow<H> {
 
     /// Changes what's held without telling readers, for a change only the reader making it cares about,
     /// such as taking what changed since it last looked.
-    pub(super) fn quietly<T>(&self, change: impl FnOnce(&mut H) -> T) -> T {
+    pub(in crate::client) fn quietly<T>(&self, change: impl FnOnce(&mut H) -> T) -> T {
         change(&mut self.shared.held.lock())
     }
 
-    pub(super) fn teller(&self) -> Teller {
+    pub(in crate::client) fn teller(&self) -> Teller {
         Teller(self.shared.signal.clone())
     }
 
     /// A handle on what's held that doesn't keep it followed.
-    pub(super) fn reach(&self) -> Reach<H> {
+    pub(in crate::client) fn reach(&self) -> Reach<H> {
         Reach(Arc::downgrade(&self.shared))
     }
 
     /// Has the thread look at what's been asked of it.
-    pub(super) fn wake(&self) {
+    pub(in crate::client) fn wake(&self) {
         let _ = self.wake.try_send(());
     }
 
     /// Carries on on a new connection, which isn't caught up on until the thread says so.
-    pub(super) fn reconnect(&self, client: &Client) {
+    pub(in crate::client) fn reconnect(&self, client: &Client) {
         *self.shared.reconnect.lock() = Some(client.clone());
         self.shared.connected.store(false, Ordering::SeqCst);
         self.wake();
@@ -165,11 +173,11 @@ impl<H: Send + 'static> Follow<H> {
 
     /// True once it has caught up on a connection, and false from when that connection goes until it has
     /// caught up on a new one.
-    pub(super) fn connected(&self) -> bool {
+    pub(in crate::client) fn connected(&self) -> bool {
         self.shared.connected.load(Ordering::SeqCst)
     }
 
-    pub(super) fn take_errors(&self) -> Vec<FollowError> {
+    pub(in crate::client) fn take_errors(&self) -> Vec<FollowError> {
         std::mem::take(&mut self.shared.errors.lock())
     }
 }
@@ -205,19 +213,15 @@ struct Follower<S: Source> {
 enum Next {
     Item(std::result::Result<SubscriptionItem, flume::RecvError>),
     Woken(std::result::Result<(), flume::RecvError>),
+    /// What the source said was due is, with nothing else come first.
+    Due,
 }
 
 impl<S: Source> Follower<S> {
     fn run(mut self) {
         self.resume();
         loop {
-            let next = match &self.subscription {
-                Some(subscription) => {
-                    flume::Selector::new().recv(&subscription.items, Next::Item).recv(&self.woken, Next::Woken).wait()
-                }
-                None => Next::Woken(self.woken.recv()),
-            };
-            match next {
+            match self.next() {
                 Next::Item(Ok(item)) => match self.source.apply(&self.client, &self.shared.held, item) {
                     Ok(changed) => {
                         if changed {
@@ -233,7 +237,23 @@ impl<S: Source> Follower<S> {
                 Next::Woken(Ok(())) => self.woken(),
                 // Every handle has gone.
                 Next::Woken(Err(_)) => return,
+                Next::Due => self.source.due(),
             }
+        }
+    }
+
+    /// Waits for an item, while there's a subscription, or to be woken, or until what the source says is due.
+    fn next(&mut self) -> Next {
+        let due_at = self.source.due_at();
+        let selector = flume::Selector::new();
+        let selector = match &self.subscription {
+            Some(subscription) => selector.recv(&subscription.items, Next::Item),
+            None => selector,
+        };
+        let selector = selector.recv(&self.woken, Next::Woken);
+        match due_at {
+            Some(at) => selector.wait_deadline(at).unwrap_or(Next::Due),
+            None => selector.wait(),
         }
     }
 

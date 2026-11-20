@@ -4,6 +4,7 @@
 //! rows.
 
 use std::sync::Arc;
+use std::time::Instant;
 
 use protocol::terminal::{TerminalSize, TerminalUpdate};
 use terminal_state::drawn::{Frame, Rgb};
@@ -176,6 +177,20 @@ impl TerminalCopy {
         let input = mirror.wheel(lines)?;
         self.changed = true;
         Ok(ToHub { input, ..ToHub::default() })
+    }
+
+    /// When to compress the copy's history next, as [`Mirror::compress_at`] says, which is never before the first
+    /// screen. Ghostty fails only when it can't allocate, and the copy's next change tries again.
+    pub(in crate::client::open_terminal) fn compress_at(&mut self, now: Instant) -> Option<Instant> {
+        self.mirror.as_mut().and_then(|mirror| mirror.compress_at(now).ok().flatten())
+    }
+
+    /// Compresses some of the history, if it's time to, which changes nothing it shows. Ghostty fails only when it
+    /// can't allocate, after which it isn't compressed again until it changes.
+    pub(in crate::client::open_terminal) fn compress(&mut self, now: Instant) {
+        if let Some(mirror) = &mut self.mirror {
+            let _ = mirror.compress(now);
+        }
     }
 
     /// What it shows, if that has changed since the last frame.

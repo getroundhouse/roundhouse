@@ -113,6 +113,8 @@ impl Mirror {
     /// left out, as Ghostty copies it. None while nothing is.
     pub fn selected_text(&self) -> Result<Option<String>, MirrorError> {
         let Some(mut formatter) = Formatter::new_selection(&self.terminal)? else { return Ok(None) };
+        // It can be the whole of it, as after Select All.
+        self.history_read();
         formatter.set_format(Format::Plain)?.set_unwrap(true)?.set_trim(true)?;
         Ok(Some(String::from_utf8_lossy(&formatter.format_alloc(None)?).into_owned()))
     }

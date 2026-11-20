@@ -7,6 +7,7 @@ use libghostty_vt::fmt::{Extras, Format, Formatter};
 use libghostty_vt::screen::Screen;
 use libghostty_vt::snapshot::Decoder;
 
+use super::compressing::Compressing;
 use crate::drawn::Rgb;
 
 /// Abandons any sequence a copy was partway through, then goes back to the shell's screen, as vim does as it quits.
@@ -52,6 +53,7 @@ pub struct Mirror {
     pub(super) drawing: Option<super::drawing::Drawing>,
     pub(super) typing: Option<super::typing::Typing>,
     pub(super) selecting: Option<super::selecting::Selecting>,
+    pub(super) compressing: Compressing,
 }
 
 impl Mirror {
@@ -61,7 +63,7 @@ impl Mirror {
         terminal.set_scrollback_max_lines(Some(HISTORY_LINES))?.set_scrollback_max_bytes(Some(HISTORY_BYTES))?;
         // From the start, since only bytes written after it's on can be carried over by a snapshot.
         terminal.set_continuation_max_bytes(LONGEST_UNFINISHED_BYTES)?;
-        Ok(Self { terminal, drawing: None, typing: None, selecting: None })
+        Ok(Self { terminal, drawing: None, typing: None, selecting: None, compressing: Compressing::default() })
     }
 
     /// A copy that answers what the program asks of its terminal, such as where the cursor is, or what the terminal
@@ -108,6 +110,7 @@ impl Mirror {
     /// need, and a cursor position the program saved on the screen showing, which Ghostty's formatter doesn't write, so
     /// a client that attaches between a save and its restore puts the cursor back at the top left.
     pub fn snapshot(&self) -> Result<Vec<u8>, MirrorError> {
+        self.history_read();
         let mut out = title(&self.terminal)?;
         if self.terminal.active_screen()? == Screen::Alternate {
             out.extend(under_the_program(&self.terminal)?);
