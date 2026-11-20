@@ -1,6 +1,6 @@
 # GitHub
 
-How GitHub behaves, where more than one place in the code depends on it. The `github` crate makes every call the hub makes to GitHub, and `docs/principles/outside-systems.md` has the rules for calling it.
+How GitHub and `gh`, its command line, behave, where more than one place in the code depends on it. The `github` crate makes every call the hub makes to GitHub, and `docs/principles/outside-systems.md` has the rules for calling it.
 
 ## The hourly limit on GraphQL
 
@@ -63,3 +63,29 @@ Any other answer says nothing about the push. The request sends nothing, so it c
 Git gives GitHub an installation's token with the username `x-access-token`, as GitHub's docs say to. GitHub knows whoever pushes with that token as the app's bot, `{slug}[bot]`, and not as `x-access-token`. So for an installation, the username a request was sent with doesn't name the account.
 
 `INSTALLATION_USERNAME`, in `crates/hub/src/github_logins/credential.rs`, is that username. The hub's `DefaultCredential` keeps the bot's name beside it, and a `Reach` names the bot.
+
+## Signing in through the device flow
+
+- **The device flow takes an OAuth App's client ID and no client secret.** That holds for asking for a code, asking after its token and renewing the token, as a real renewal showed in November 2026. So the client ID is no secret, and every hub sends the same one, `ROUNDHOUSE_APP` in `crates/github/src/config.rs`.
+- **A device code and the client ID are all it takes to get a sign-in's token.** So the hub keeps the device code only in the memory of the job that asks after the sign-in (`Hub::wait_for_sign_in`), and a sign-in that's waiting ends when its hub stops.
+- **A code lasts 15 minutes, and GitHub says how often to ask after its token.**
+- **GitHub can answer an ask after the token with an error that asking again won't change,** such as `device_flow_disabled`, for an app that doesn't let people sign in through the device flow. That's neither the person refusing nor the code ending, so a sign-in's record has a state of its own for it, `GithubSignInStatus::Failed`.
+- **A sign-in's token lasts 8 hours, and its refresh token about 181 days.** GitHub says how long each lasts as it gives them. "Tokens" says what renewing one does.
+
+## Apps and their installations
+
+- **A private GitHub App can be installed only on the account or organization it was made under.** So it has at most one installation, on its owner. GitHub lists more only for an app that was made public later. `docs/decisions/private-app-of-your-own.md` says why an app of your own is private.
+- **GitHub's manifest flow sends the person back with a code, which GitHub takes once, within an hour.** `POST /app-manifests/{code}/conversions` turns the code into the app's number, slug, owner and private key. GitHub returns a client secret and a webhook secret too, which the hub doesn't read (`Github::make_app`).
+- **An app's bot is a user of its own, `{slug}[bot]`, with its own number.** GitHub links a commit to the bot by the address `<number>+<slug>[bot]@users.noreply.github.com`, so the hub asks GitHub for the bot by name to learn its number (`Github::bot`).
+- **An installation's token lasts an hour.** "Tokens" says what making the next one does.
+- **Once an app is uninstalled from an account, GitHub stops listing that installation, and answers 404 when asked for its token.** The hub takes either to mean the installation is gone (`GithubLogins::installations_found`, `Minted::Gone`).
+- **An installation's calls count against an hourly limit of its own,** not the limit of the person who made the app.
+
+## `gh`'s own login
+
+A worker reads its machine's own `gh` login for the hub, as `FindGithubLogin` says, and these decide how.
+
+- **`gh` uses a `GH_TOKEN` or `GITHUB_TOKEN` from its environment over its own login.** Every process a worker starts under the machine's own login inherits the worker's environment, so such a token is who those processes push as.
+- **`gh auth status` names the login from `gh`'s own config, even when GitHub can't be reached.** `gh` 2.81 is the first to print it as JSON.
+- **`gh` 2.103 renews a token that it renews by itself whenever it reads the token.** Renewing rotates the refresh token, and `gh` forgets the login if GitHub refuses it. So reading the login could change it. `--no-refresh`, on `gh auth status` and `gh auth token`, reads without renewing.
+- **GitHub answers 401 for such a token once its time is up, until `gh` next runs and renews it.** So that 401 doesn't mean `gh` needs logging in again (`Github::found_login_works`).

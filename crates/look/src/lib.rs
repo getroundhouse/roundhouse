@@ -7,6 +7,7 @@
 //! drawn, how long things take to move, a hover card that waits like a tooltip, a chat's cache, how a count of tokens
 //! reads, and the time text on screen reads, which pictures hold still with everything that moves.
 //! `docs/spec/look.md` has the rules these follow, and `docs/spec/components.md` the status mark's and the app icon's.
+//! It's its own crate because the apps and `transcript` both draw with it, and `transcript` can't depend on an app.
 
 #![warn(clippy::wildcard_enum_match_arm)]
 

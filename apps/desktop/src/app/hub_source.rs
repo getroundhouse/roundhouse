@@ -57,6 +57,7 @@ pub(super) fn restarts_at_once(hub: &HubStatus, app_build: Option<u64>) -> bool 
 /// Which workers the app's update has to keep running on this hub, as [`crate::updates::keep_workers`] takes it: those
 /// of the oldest worker protocol it's running, if it's a hub the app restarts once it has updated, and whose workers
 /// outlive the restart. A hub from before it said is taken to run workers as old as this app's own hub speaks.
+/// *Unconfirmed:* how old they're taken to be.
 pub(super) fn workers_to_keep(hub: &HubStatus) -> Option<u32> {
     (hub.on_demand && hub.keeps_workers)
         .then(|| hub.oldest_running_worker_protocol.unwrap_or(protocol::worker::HUB_SPEAKS.oldest))

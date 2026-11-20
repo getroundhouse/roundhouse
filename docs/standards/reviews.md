@@ -75,7 +75,7 @@ Before any code is written, the reviewer reads the change's design: parts 2 and 
 - Does something in the repo already do this, or could it be extended to?
 - Does it fit `docs/architecture.md`, including the parts that aren't built, such as workers on other machines and the iPhone app?
 - Does it change what an owner doc says, without saying so?
-- What does it commit, and in which PR: the forms it stores or sends, any migration, and any protocol break, as "Changing the protocol" in `docs/architecture.md` says?
+- What does it commit, and in which PR: the forms it stores or sends, any migration, and any protocol break, as `docs/principles/protocol.md` says?
 - For a stack, are its splits and their order right, by `docs/standards/stacks.md`?
 
 A rule changed in words alone is read the same way, the rule being its design, and the reviewer also asks where an agent following it would go wrong, on either side of its line.
@@ -89,7 +89,7 @@ Whether the change does what it's for, and whether it can do harm that can't be 
 - Logic that's wrong in the case the change was built for: conditions, bounds, and assumptions about input.
 - Stored data lost or garbled, including by a migration run on whatever an older build could have stored, and on a large store, and by code that reads rows an older build wrote.
 - A person's work lost, such as a prompt or an agent's output, an action taken on someone's behalf that can't be taken back, such as a push, a merge or a delete, and a credential exposed.
-- A newer client or worker with an older hub, and the reverse, as "Changing the protocol" in `docs/architecture.md` says, since a build can't be changed once it's published.
+- A newer client or worker with an older hub, and the reverse, as `docs/principles/protocol.md` says, since a build can't be changed once it's published.
 
 It doesn't hunt for edge cases beyond these. One it comes across is a minor finding, unless it's a sign that the structure is wrong, as "Findings" says.
 
@@ -113,7 +113,7 @@ Whether the change is built the way a strong engineer would build it, not only w
 - Something with no owner to end it: a process, worker, subscription, task or record kept after nothing needs it.
 - An interface that's easy to call wrong, or an abstraction that leaks what it should hide.
 - A fix in the wrong place, which patches a symptom whose cause is elsewhere.
-- A break in the dependency rules or the layers in `docs/architecture.md`, and new coupling between parts.
+- A break in the dependency rules or the layers in `docs/principles/layers.md`, and new coupling between parts.
 - A second way to do what the repo already does: a mechanism, where `docs/standards/rust.md` says to change the mechanism instead, or a helper, type, constant, piece of wording or test fixture. It searches for it and says where it is.
 - A crate, module, file, trait or function that doesn't earn its place, or does more than one job, by "Crates and modules" in `docs/standards/rust.md`. A type for a value that means something specific always earns its place, as "Types" there says.
 - A requirement that makes the change harder than it's worth, where accepting a downside would be simpler.
@@ -148,7 +148,7 @@ Once a stack is built, the reviewer reads it as one change, against its design. 
 - A shape that suits what fills it but not what reads it, or the reverse: a field nothing reads, a reader working out what the writer knew, a value converted twice, or one thing named differently in two layers.
 - State with the wrong owner, by "State ownership" in `docs/architecture.md`, that only shows with both layers in view.
 - Code that exists only for the middle of the stack, beyond what `docs/standards/stacks.md` lets in, and any of it left at the top.
-- Two forms of one shape at the top, where "Each shape has one form" in "Changing the protocol" asks for one, and readers of an old form the top no longer needs.
-- A pairing of versions in "Changing the protocol" that the stack breaks, and a migration that makes a different form from the live path given the same input.
+- Two forms of one shape at the top, where "Each message type has one serialized form" in `docs/principles/protocol.md` asks for one, and readers of an old form the top no longer needs.
+- A pairing of versions in `docs/principles/protocol.md` that the stack breaks, and a migration that makes a different form from the live path given the same input.
 - No test that follows the data across the layers.
 - A doc that isn't true at the top of the stack.

@@ -1,5 +1,5 @@
 //! The versions of each protocol this hub speaks, side by side. Each is only the current one until a break, which
-//! brings the one before it until the next break, as "Changing the protocol" in `docs/architecture.md` says.
+//! brings the one before it until the next break, as `docs/principles/protocol.md` says.
 
 use protocol::client::CLIENT_PROTOCOL_VERSION;
 use protocol::provider::PROVIDER_PROTOCOL_VERSION;

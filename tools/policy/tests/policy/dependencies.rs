@@ -1,6 +1,6 @@
-//! What each crate may depend on, from `docs/architecture.md`'s dependency rules, and the pins that have to agree: the
-//! tool that packages the app and the crate that reads its packages, and the copy of gpui-kit, its tool's pin and the
-//! GPUI the app draws with.
+//! What each crate may depend on, from `docs/principles/layers.md`, and the pins that have to agree: the tool that
+//! packages the app and the crate that reads its packages, and the copy of gpui-kit, its tool's pin and the GPUI the
+//! app draws with.
 
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::path::Path;

@@ -21,7 +21,7 @@ const LIMITS: &[(&str, usize)] = &[
 /// down: it stays within [`SLACK`] of the doc as the doc is shortened, and the doc comes off this list once it's within
 /// its kind's limit, or gone.
 const OVER: &[(&str, usize)] = &[
-    ("docs/architecture.md", 29_800),
+    ("docs/architecture.md", 17_400),
     ("docs/ui.md", 3_700),
     ("docs/standards/components.md", 4_500),
     ("docs/standards/gpui.md", 3_000),
@@ -37,7 +37,7 @@ const MAX_CELL_WORDS: usize = 60;
 
 /// Docs with longer cells from before there was a limit, as (path, how many). The number only comes down.
 const LONG_CELLS: &[(&str, usize)] = &[
-    ("docs/architecture.md", 4),
+    ("docs/architecture.md", 3),
     ("docs/reference/antigravity-cli.md", 7),
     ("docs/reference/claude-cli.md", 67),
     ("docs/reference/codex-cli.md", 7),

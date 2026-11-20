@@ -9,7 +9,7 @@ use super::{Store, StoreError, lock};
 /// For a run's exit, takes its claims off the session's record, which holds those of the run that's running and nothing
 /// once it's gone, so a client offers a chat with no agent its kind's. An exit the hub records with no run is of
 /// whichever ran, as at a start after the agent went with the machine. Returns the run whose claims it took off, which
-/// the session announces.
+/// the session announces. *Unconfirmed.*
 pub(super) fn clear_claims(
     conn: &Connection,
     session_id: &SessionId,

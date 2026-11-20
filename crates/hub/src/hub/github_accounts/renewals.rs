@@ -23,6 +23,7 @@ impl Hub {
     /// which would send GitHub what renews its token after GitHub had revoked it. Each is a task of its own, so one
     /// that panics fails only itself. Once the hub has stopped checking, as [`Hub::stop_checking_github_logins`] says,
     /// a check starts none, and the stop waits for the renewals started before, and drops the rest where they are.
+    /// *Unconfirmed:* a check waiting for its renewals, so they run one at a time.
     pub(in super::super) async fn check_github_logins(self: &Arc<Self>, now_ms: i64) {
         let logins = Arc::clone(&self.github_logins);
         let Checked { due, changed, minting, apps, profiles } = match off_thread(move || logins.check(now_ms)).await {

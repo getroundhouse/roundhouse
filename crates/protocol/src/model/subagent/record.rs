@@ -43,9 +43,9 @@ pub struct Subagent {
     /// How many calls it's made.
     #[serde(default)]
     pub calls: u32,
-    /// What it's done lately, which its call shows while it works, with each call typed, as `docs/architecture.md`
-    /// has calls stored in "What each kind of agent can do". Only while it works: it's emptied when it ends. `None` from
-    /// a hub that doesn't keep it.
+    /// What it's done lately, which its call shows while it works, with each call typed, as
+    /// [`crate::capability::calls`] says a call is stored. Only while it works: it's emptied when it ends. `None` from a
+    /// hub that doesn't keep it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub lately: Option<Lately>,
     /// What it reported, once it finished.

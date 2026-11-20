@@ -31,7 +31,7 @@ impl RepoSource {
 /// before `source` reads, so such a worker goes on making worktrees from it. A clone is written without `repo_path`,
 /// so such a worker can't read the request and refuses it, rather than make a worktree of `""`. Read from `source`, or,
 /// from a hub from before `source`, as after a rollback, from `repo_path` alone. `repo_path` goes with the next break of
-/// the worker protocol, as "Changing the protocol" in `docs/architecture.md` says.
+/// the worker protocol, as `docs/principles/protocol.md` says.
 pub(super) mod beside_repo_path {
     use serde::de::Error as _;
     use serde::{Deserialize, Deserializer, Serialize, Serializer};

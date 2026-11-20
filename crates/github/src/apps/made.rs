@@ -19,7 +19,7 @@ pub struct MadeApp {
 
 /// What `POST /app-manifests/{code}/conversions` answers that the hub reads. GitHub gives a client ID and secret, and a
 /// webhook's secret, too, which the hub has no use for, as nothing signs a person in as the app or sends it hooks, so
-/// it never reads them, and GitHub keeps them for the person on the app's page.
+/// it never reads them, and GitHub keeps them for the person on the app's page. *Unconfirmed.*
 #[derive(Deserialize)]
 struct Made {
     id: u64,

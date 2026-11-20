@@ -46,12 +46,10 @@
 //! Codex at 0.167.0 and opencode at 1.18.30 is read from their source and their servers' schemas, rather than seen
 //! running.
 //!
-//! "What each kind of agent can do" in `docs/architecture.md` has the plan that puts this in place of
-//! [`AgentFeature`], the efforts and modes in an [`AgentDescription`], the worker's requests of an agent, and what the
-//! methods of the `agents` crate's `AgentProcess` say of themselves.
+//! A capability that no adapter claims yet is only a contract, which the hub and the clients do nothing for, as
+//! `docs/decisions/typed-capabilities.md` says. The change that first has an adapter claim it builds what they need.
 //!
-//! [`AgentFeature`]: crate::model::AgentFeature
-//! [`AgentDescription`]: crate::model::AgentDescription
+//! *Unconfirmed:* the areas, their capabilities and contracts, who keeps each report, and the laws.
 
 pub mod account;
 pub mod approvals;

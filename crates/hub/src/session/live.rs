@@ -270,7 +270,7 @@ impl LiveSession {
 
     /// Saved only once a running agent has agreed, so what's shown is never ahead of what's true. A running agent reports
     /// a change of mode itself, and with none running, it goes in the log here, so the log says when every change was
-    /// made.
+    /// made. *Unconfirmed:* that the hub records it.
     ///
     /// It's refused unless the chat's kind takes the settings the change leaves it with, which hold every setting the
     /// change names, so this is the only check a change needs. For a kind that discovers its models, those are judged

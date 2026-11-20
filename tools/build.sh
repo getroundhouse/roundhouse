@@ -8,10 +8,10 @@
 #                                       DIR/worker-versions.json, which the release workflow says of it in the feed
 #   tools/build.sh --allow-dirty ...    Either, with uncommitted changes in the build
 #
-# `docs/architecture.md` says what the stamp is for. ROUNDHOUSE_BUILD is a package's version, or an install's commit,
-# and ROUNDHOUSE_BUILD_NUMBER when the commit was made, so a hub can tell an older build. With uncommitted changes, the
-# build also says when it was built, and the number is that time, since the same commit can be built with different
-# changes.
+# `crates/protocol/src/build.rs` says what the stamp is for. ROUNDHOUSE_BUILD is a package's version, or an install's
+# commit, and ROUNDHOUSE_BUILD_NUMBER when the commit was made, so a hub can tell an older build. With uncommitted
+# changes, the build also says when it was built, and the number is that time, since the same commit can be built with
+# different changes.
 
 BINARIES=(roundhouse-desktop roundhoused roundhouse)
 # What a program's file ends in where this runs, which is Git's bash on Windows.
@@ -40,6 +40,10 @@ stamp() {
     package) BUILD="$(version)" || return 1 ;;
     *) echo "error: a build is an install or a package, not $kind" >&2; return 1 ;;
   esac
+  # When the commit was made, rather than when it was installed, which would let an older commit installed later
+  # replace a newer hub, whose database it might not be able to open. So going back to an older install keeps its
+  # older number, and the app leaves the newer hub alone until it's stopped. Not a count of commits, since counts
+  # disagree across branches.
   NUMBER="$(git -C "$ROOT" log -1 --format=%ct)"
   if [ -n "$(git -C "$ROOT" status --porcelain)" ]; then
     [ "$allow_dirty" = yes ] || {

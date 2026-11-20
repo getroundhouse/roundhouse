@@ -12,11 +12,15 @@ use crate::capability::settings::ModelCatalog;
 pub struct ModelListKey {
     pub agent: AgentKind,
     pub repo: RepoId,
+    /// Two providers that run the same version of the CLI have a list each. That costs a second lookup, and a chat
+    /// on one provider is never offered what the CLI offers as the other configures it.
     pub provider: ProviderName,
     /// The hub's account whose login a launch there is handed, or `None` for the login the machine has itself.
     pub account: Option<AccountId>,
     /// The version of the agent's CLI that runs there, where the provider installs it. `None` where the machine's own
-    /// CLI runs, whatever its version, as on the local provider. *Not built:* a provider that installs it.
+    /// CLI runs, whatever its version, as on the local provider. *Not built:* a provider that installs it. Such a
+    /// provider records each workspace's version on the workspace's record, so a workspace on an older version has a
+    /// list of its own. The hub asks that workspace's worker for it, since the version runs nowhere else.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cli_version: Option<CliVersion>,
 }

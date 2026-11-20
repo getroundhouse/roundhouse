@@ -125,7 +125,7 @@ impl GithubLogins {
 
     /// Each installation whose token has less than [`MINTED_WITH_LEFT`] left at `now_ms`, or has ended, with its app's
     /// key, under the lock `files` holds. One whose app's key can't be read is said and left, so it blocks once its
-    /// token ends, saying it's being renewed.
+    /// token ends, saying it's being renewed. *Unconfirmed:* every installation's, not only the default's.
     pub(super) fn installations_due(
         &self,
         files: &Locked<'_, GithubLogin>,
@@ -192,7 +192,8 @@ impl GithubLogins {
 /// Whether to connect `installation`, as `account`, the account of its app on the same user or organization, stands:
 /// one with none, or that's another installation, as when the app was installed there again where it had been removed,
 /// is connected, and one that was disconnected only when the person asks, since disconnecting it was theirs. One that
-/// holds a login for it already isn't.
+/// holds a login for it already isn't. *Unconfirmed:* the checks leaving one the person disconnected, and one
+/// installed again connecting in place.
 fn wanted(account: Option<&GithubAccount>, installation: &Installation, by_person: bool) -> bool {
     let Some(account) = account else { return true };
     if account.installation.as_ref().is_none_or(|installed| installed.id != installation.id) {

@@ -18,11 +18,15 @@ pub struct Proposal {
     /// The newest revision, whose number says how many there are.
     pub current: ProposalRevision,
     /// Each revision in short, oldest first, the newest too, so a chat draws each revision's line, and the timeline
-    /// each revision, from the record. A hub from before revisions sends none, for a proposal with only its first.
+    /// each revision, from the record. The owner chose this over each client reading every revision in full, and over
+    /// a request of its own for the summaries. A client would have to send that request again whenever the record
+    /// changed, and would draw the lines wrong until the reply came. A hub from before revisions sends none, for a
+    /// proposal with only its first.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub revisions: Vec<RevisionSummary>,
-    /// Once the agent withdrew it, as no longer of use, why and when, so nothing more can be said to it. A hub from
-    /// before withdrawing sends none.
+    /// Once the agent withdrew it, as no longer of use, why and when, so nothing more can be said to it. It's on the
+    /// proposal and not on a revision, since it's the agent's act on the whole proposal, where a [`Response`] is the
+    /// person's to one revision. A hub from before withdrawing sends none. *Unconfirmed.*
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub withdrawn: Option<Withdrawal>,
     pub created_at_ms: i64,

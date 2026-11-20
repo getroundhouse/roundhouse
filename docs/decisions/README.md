@@ -14,6 +14,7 @@ A decision record holds one large, one-off choice among real alternatives, such 
 | [hub-holds-agent-logins.md](hub-holds-agent-logins.md) | The hub holds each agent account's login and hands it to every launch |
 | [git-credential-set-by-hub.md](git-credential-set-by-hub.md) | The hub sets the GitHub credential for every process a worker starts |
 | [machine-gh-token-handed-to-hub.md](machine-gh-token-handed-to-hub.md) | While each machine's own `gh` login is the default, the hub reads GitHub with the token a worker hands it |
+| [private-app-of-your-own.md](private-app-of-your-own.md) | An app of your own is a private GitHub App, made under each account or organization it's for |
 | [github-batched-graphql.md](github-batched-graphql.md) | The hub reads pull requests from GitHub in batched GraphQL |
 | [pull-request-from-pushed-branch.md](pull-request-from-pushed-branch.md) | A workspace's pull request is found from the branch it's pushed to, with no stored link |
 | [provider-adapters-over-stdio.md](provider-adapters-over-stdio.md) | A provider's adapter is a separate program that the hub runs over stdio |
@@ -23,6 +24,7 @@ A decision record holds one large, one-off choice among real alternatives, such 
 | [linux-appimage.md](linux-appimage.md) | The Linux app is an AppImage |
 | [publish-every-merge.md](publish-every-merge.md) | Every merge to `main` is published, as version `0.1.<commits on main>` |
 | [hub-runs-from-its-own-copy.md](hub-runs-from-its-own-copy.md) | A hub that a client starts runs from a copy of the daemon outside the app's install directory |
+| [no-strong-copyleft.md](no-strong-copyleft.md) | Nothing that ships is under GPL, AGPL or LGPL |
 | [gpui-kit-copy.md](gpui-kit-copy.md) | gpui-kit and three parts of GPUI are built from copies in the repo |
 
 ## Chosen, with no reason recorded
@@ -36,4 +38,3 @@ Each of these is a choice that was written down without an alternative or a reas
 - NVIDIA's nemotron model, on Core ML, turns speech into text for dictation.
 - Catppuccin's icons are the desktop app's file icons.
 - Signing in with GitHub uses Roundhouse's OAuth App and GitHub's device flow.
-- An app of your own is a private GitHub App, made under each account or organization it's for.

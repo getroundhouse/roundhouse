@@ -1,4 +1,4 @@
-//! What `agents`, `providers`, `worker`, the hub, `client-core` and the daemon share about the processes they start:
+//! What `agents`, `providers`, `worker`, the hub, `local-hub` and the daemon share about the processes they start:
 //! what one is given beyond the environment it inherits, starting one as the leader of a process group, or apart from
 //! this process, signalling that group, telling whether a recorded PID is still the same process, keeping a process's
 //! own input and output from what it starts, keeping a console window from opening on Windows, telling whether any process runs from a program's file, and which run from

@@ -20,8 +20,9 @@ protocol::tokens!(
 /// takes, as GitHub's docs give.
 const MADE_BEFORE: Duration = Duration::from_secs(60);
 
-/// How long a JWT lasts from when it says it was made: under the 10 minutes GitHub takes at most, so a clock a little
-/// behind GitHub's makes one it takes too.
+/// How long after the hub's clock a JWT ends: under the 10 minutes GitHub takes at most, so a clock a little behind
+/// GitHub's makes one it takes too. It says it was made [`MADE_BEFORE`] before the clock, so it lasts 10 minutes from
+/// then.
 const LASTS: Duration = Duration::from_mins(9);
 
 /// What a JWT says, as GitHub reads it: who it's from, as the app's number, and when it was made and ends, in seconds
@@ -35,7 +36,8 @@ pub(crate) struct Claims {
 
 impl GithubAppKey {
     /// A JWT as `app`, signed with this key, made at `now_ms` by the hub's clock, with RS256, as GitHub takes one.
-    /// Refused with `Conflict` for a key that isn't an RSA private key in PEM, which GitHub gives no app.
+    /// `ring` signs it, which the hub has already for pairing, so an app's key adds no dependency. Refused with
+    /// `Conflict` for a key that isn't an RSA private key in PEM, which GitHub gives no app.
     pub(crate) fn signed_as(&self, app: GithubAppId, now_ms: i64) -> Result<AppJwt, ApiError> {
         let key = self.key_pair().ok_or_else(|| {
             ApiError::new(ErrorCode::Conflict, "the app's key isn't an RSA private key Roundhouse can sign with")

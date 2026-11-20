@@ -1,6 +1,6 @@
 # Merging
 
-Which checks a pull request needs before it's pushed, how it merges through the queue, and what to do about a flaky test. `docs/standards/pull-requests.md` says how a PR is written, and `docs/standards/stacks.md` how a change is split into several.
+Which checks a pull request needs before it's pushed, how it merges through the queue, what to do about a flaky test, and when a break in the worker protocol can merge. `docs/standards/pull-requests.md` says how a PR is written, and `docs/standards/stacks.md` how a change is split into several.
 
 ## The full checks
 
@@ -20,3 +20,9 @@ PRs merge through GitHub's merge queue, squashed, once CI's `checks` job passes 
 ## A flaky test
 
 For a flaky test, repeat it only enough to see how often it fails, find the cause by reading the code, then repeat it only enough to confirm the fix. Put the fix in a PR of its own from `main`, and when it changes only tests and the code that supports them, add it to the queue yourself once its CI passes, and say you did. Until it merges, the test fails PRs that didn't break it and throws them out of the queue, so it shouldn't wait for the owner to notice it. Making a test wait for the right thing is a fix. Skipping it, deleting it or loosening what it checks isn't, and waits for the owner like any other change.
+
+## A break in the worker protocol
+
+A PR that breaks the worker protocol merges only once each platform whose apps update in steps, which are macOS and Linux, has published a release that includes the previous break. The app's update crosses one break at a time, as `docs/principles/protocol.md` says, so it needs a published release between every two breaks to step to. Until then, CI's `steps` job, which runs `tools/update-steps`, fails the PR, in the queue too. Queue it again once those releases are published.
+
+A published break in the worker protocol is fixed forward, not reverted. An app can have one worker on the break's version and an older one still at work. That app would take the revert as an update, and its hub would stop the newer worker, with its agents. The exception is a break that got past the `steps` job. `tools/package/publish.py` refuses to publish it, and every release after it, on a platform that has no release to step to, and only a revert gets that platform publishing again.

@@ -1,10 +1,12 @@
 //! Which build a program is. An install or a package stamps a build with `ROUNDHOUSE_BUILD` and
 //! `ROUNDHOUSE_BUILD_NUMBER`, and any other build says `-dev`. A package's build version is its published version,
-//! `0.1.N`, and an install's its commit.
+//! `0.1.N`, which is the name of what people download, and an install's its commit. The stamp comes from whatever makes
+//! the install or the package, not from a build script, which would rebuild the crates above it on every commit, for
+//! builds nobody needs to identify.
 //!
 //! Each binary reads the stamp with [`this_build!`], and `main` passes the [`Build`] down. A library that read it would
 //! change with every stamp, and every crate above it with it, so no build of a package or an install could reuse what
-//! the one before it compiled, when most commits change few crates.
+//! the one before it compiled, when most commits change few crates. *Unconfirmed.*
 
 /// A build stamped with both a build version and a build number.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

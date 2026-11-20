@@ -20,8 +20,8 @@ pub(super) const TASKS: &str = "io.modelcontextprotocol/tasks";
 /// What the agent is told of these tools from its first turn: what they're for, as a whole, and what to look among
 /// them for, since the Claude CLI shows it each tool only by name until it loads that tool, as `docs/reference/claude-cli.md`
 /// says. When to use each, and how, is in its description, so this grows only with what they're for, rather than with
-/// each tool, as "The worker's tools" in `docs/architecture.md` says. Every agent's system prompt also says when to
-/// reach for them, in `crate::instructions`, so a change to what they cover may change that too.
+/// each tool, as `docs/principles/agents.md` says of the worker's tools. Every agent's system prompt also says when
+/// to reach for them, in `crate::instructions`, so a change to what they cover may change that too.
 const INSTRUCTIONS: &str = "Roundhouse's tools, for pull requests in this workspace's repository and their lower stack \
     dependencies, for the comments the person has left on this workspace's diff, and for proposing a decision too \
     large for a question, which the person answers in a tab of its own. For reading the pull requests' current state \

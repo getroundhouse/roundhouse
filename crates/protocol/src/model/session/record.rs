@@ -140,7 +140,7 @@ pub struct Session {
     pub agent: AgentKind,
     /// What the run that's running claims, from when it says until it exits, and nothing when no agent is running, as
     /// when a hub starts and doesn't find the chat's agent. A client offers what these say, and what the chat's kind
-    /// claims when there are none.
+    /// claims when there are none. *Unconfirmed:* that they go with the run, and what a client offers then.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub agent_capabilities: Option<super::super::RunCapabilities>,
     pub model: ModelName,

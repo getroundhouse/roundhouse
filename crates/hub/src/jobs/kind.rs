@@ -24,6 +24,7 @@ impl JobKind {
             // One person signs in once, so a few let a second client, or a second account, sign in at once without
             // letting a client that keeps starting them have the hub ask GitHub after many, each every five seconds
             // or so, for its code's fifteen minutes. A sign-in's job ends with it, so this is how many can wait.
+            // *Unconfirmed.*
             Self::WaitForGithubSignIn => 4,
             // Each starts the agent's CLI, which takes a few seconds and some memory, and a list is asked for once per
             // place, so a few cover the dialog and the chats of the projects open, and a client that keeps asking about
