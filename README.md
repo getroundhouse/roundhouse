@@ -161,7 +161,7 @@ cargo test --workspace     # Also the transcript and the desktop app's UI tests
 
 A build from a checkout has a hub and data of its own, in `.context/dev`, and can't reach the installed app's. So Roundhouse can be worked on from inside Roundhouse, which is how it's built: most of its code is written by agents, each in a workspace here.
 
-- [`AGENTS.md`](AGENTS.md) has every command, and the rules for working here, for people as much as for agents.
+- [`AGENTS.md`](AGENTS.md) has the rules for working here, for people as much as for agents, and [`docs/reference/commands.md`](docs/reference/commands.md) has every command.
 - [`docs/README.md`](docs/README.md) lists the docs, and [`docs/standards/documentation.md`](docs/standards/documentation.md) says what goes in a doc and what goes on GitHub.
 - [`docs/spec/`](docs/spec/README.md) is what the product does. The app draws every screen in it from made-up data, and a test fails when one no longer matches its picture.
 

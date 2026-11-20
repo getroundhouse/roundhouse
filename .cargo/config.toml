@@ -18,6 +18,6 @@ global-min-publish-age = "3 days"
 # Links on ARM64 Linux with LLD, which a rebuild of the tests after an edit took 5 s instead of GNU ld's 12 s. Rust
 # links with its own LLD on x86-64 Linux already, and on ARM64 only with the system's, which `lld` installs. RUSTFLAGS
 # set in the environment would replace this. Once Rust links with its own LLD on ARM64 too, as
-# https://github.com/rust-lang/rust/issues/165555 proposes, this and the `lld` the workflows and AGENTS.md install can go.
+# https://github.com/rust-lang/rust/issues/165555 proposes, this and the `lld` the workflows and docs/reference/commands.md install can go.
 [target.aarch64-unknown-linux-gnu]
 rustflags = ["-C", "link-arg=-fuse-ld=lld"]

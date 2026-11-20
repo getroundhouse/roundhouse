@@ -1,7 +1,7 @@
 #![cfg(test)]
 
 //! The guide built from made-up repositories. This repository's own guide isn't built here: a change to only its
-//! Markdown runs none of these, as AGENTS.md says, so a test of it would fail later, in a pull request that didn't
+//! Markdown runs none of these, as docs/standards/merging.md says, so a test of it would fail later, in a pull request that didn't
 //! break it. CI's `guide` job builds it instead, for each pull request that changes what it's made of.
 
 use std::fs;

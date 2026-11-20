@@ -2,6 +2,8 @@
 
 Where to split a change into stacked pull requests, what to keep together, and in what order. `docs/standards/pull-requests.md` says how each PR is written.
 
+**Use GitHub's stacked PRs when changes build on each other.** If a change depends on one that isn't merged yet, or a large change splits where a part below can be judged without what's above it, make them a stack with `gh stack` rather than one big PR. Independent changes get their own PR from `main`.
+
 Every PR has an overhead that doesn't shrink with it: a description, its checks, a rebase whenever `main` moves, a trip through the merge queue, and reviewers who each have to learn the change before they can judge it. What it buys is a diff that can be judged alone, a part on `main` before the rest, and a commit that can be found and reverted alone. A split that buys none of them isn't worth a PR. Every merge to `main` that changes more than docs and the marketing site is published, so what merges is a build someone may run for days, and a build that reverts a migration can't open a store it ran on. A build from the middle of a stack can be rough, as when a client shows a new form as it shows what it can't draw, as long as nothing it sends or stores is lost or can't be read.
 
 - **Split where the part below can be judged without what's above it.** One such part is groundwork, which is worth having whatever happens above it, and which nothing above it could change, such as a refactor or a fix the change needs. Another is a mechanical change across many files, such as a rename, or deleting what nothing uses, since mixed with the rest it hides what needs judging.

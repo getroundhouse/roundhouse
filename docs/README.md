@@ -20,7 +20,7 @@ A README beside code says how to build, run or change that code, and agents keep
 | Doc | Its one purpose |
 |---|---|
 | `README.md` | What this is, why it exists, and how to try it |
-| `AGENTS.md` | How to build and test, and the rules for working here |
+| `AGENTS.md` | What every session needs: the rules for working here, the everyday commands, and what to read before each kind of task |
 | `docs/spec/` | What the product does for the person using it, how fast, how it looks, and why, one file per area |
 | `docs/guide/` | How to use Roundhouse, a page for each task and each thing, published as the site's `/docs/` pages |
 | `docs/standards/documentation.md` | Where each kind of information goes: a doc, GitHub, the code, or kept private |
@@ -35,9 +35,12 @@ A README beside code says how to build, run or change that code, and agents keep
 | `docs/standards/workarounds.md` | The kinds of workaround, and what one needs before it's kept |
 | `docs/standards/pull-requests.md` | How a pull request and its commit are written |
 | `docs/standards/stacks.md` | Where to split a change into stacked pull requests, and in what order |
+| `docs/standards/merging.md` | Which checks a pull request needs, how it merges through the queue, and what to do about a flaky test |
+| `docs/standards/dependencies.md` | What a dependency has to meet before it's added: its license, and how its updates arrive |
 | `docs/standards/reviews.md` | How agents review a change when the owner asks for a review |
 | `docs/standards/manual-checks.md` | What a person has to judge by hand |
 | `docs/reference/terms.md` | What the project's words mean, and which to write |
+| `docs/reference/commands.md` | Every command for building, testing, running and packaging from a checkout |
 | `docs/reference/claude-cli.md` | How the Claude CLI behaves, and how the worker drives it |
 | `docs/reference/codex-cli.md` | How Codex's app-server behaves on the wire, and how to probe it |
 | `docs/reference/antigravity-cli.md` | How Antigravity's ACP server behaves on the wire, and how the worker drives it |
