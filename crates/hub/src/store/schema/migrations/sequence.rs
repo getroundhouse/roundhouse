@@ -379,4 +379,6 @@ pub(in super::super) const MIGRATIONS: &[Migration] = &[
     Sql(super::proposals::WITHDRAWALS),
     // Which device has each chat's conversation, in conversation mode, in `conversations`.
     Sql(super::conversations::CONVERSATION),
+    // The providers whose machines Roundhouse leaves GitHub to, in `hub_settings`.
+    Sql(super::github_accounts::GITHUB_LEFT_TO_MACHINE),
 ];

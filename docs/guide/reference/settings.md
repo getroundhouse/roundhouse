@@ -122,7 +122,7 @@ The GitHub accounts agents push and open pull requests as. [Who agents are on Gi
 
 ![Git, with three accounts added and the logins found on two machines](../../spec/screens/settings-git.png)
 
-- **Added** has the accounts you've given the hub, the default first. Every machine's `git` and `gh` use the default for github.com, so agents push and open pull requests as it, and Roundhouse reads pull requests with it, wherever they run.
+- **Added** has the accounts you've given the hub, the default first. On every machine Roundhouse sets up GitHub on, `git` and `gh` use the default for github.com, so agents push and open pull requests as it, and Roundhouse reads pull requests with it, wherever they run. On your own machine, agents use your `git` and `gh` as they are, as [Who agents are on GitHub](../concepts/who-agents-are-on-github.md) says.
 - **Found** has who `gh` is logged in as on each machine where a workspace has run since the hub last started, and whether GitHub took its token then. Roundhouse asks GitHub with that token, and while it's the default reads pull requests with it, keeping it only in memory. While you've added no account, agents use each machine's own login, and Found has the Default badge. **Make default**, by Found's heading, goes back to each machine's own login once you have.
 - **Each row** says how the account was connected, `Signed in`, `Token` or `App`, and only what else needs saying, such as when a token ends, or where an app is installed.
 
@@ -146,7 +146,7 @@ Whichever way, the hub keeps the login in its own data, as [Where data is kept](
 - **A sign-in says `Renewing`** while the hub renews a token that has ended, and `Needs signing in again` once GitHub won't renew it. Choose **Sign in again** in its menu, and approve it as the same GitHub user.
 - **Disconnect,** in the same menu, has the hub forget the login, and asks first. The account stays, with **Connect again** and **Sign in again**. It doesn't revoke the token on GitHub.
 
-If the default can't be used, because its token ended, it was disconnected, it needs signing in again, or it's an app's installation that was uninstalled on GitHub, or whose token ended before the hub could make the next, it stays the default, and agents can't push until you put it right or make another the default. They don't fall back on the machine's own login, but for a repository whose pushes go round the default, as over SSH, as [Who agents are on GitHub](../concepts/who-agents-are-on-github.md#when-the-default-cant-push-to-a-repository) says. Git says so at the top of **Added**, with why and what to do, in the words a workspace's line says and git gives as it refuses a push.
+If the default can't be used, because its token ended, it was disconnected, it needs signing in again, or it's an app's installation that was uninstalled on GitHub, or whose token ended before the hub could make the next, it stays the default, and agents can't push until you put it right or make another the default. They don't fall back on the machine's own login. On your own machine, agents push as they always do, as [Who agents are on GitHub](../concepts/who-agents-are-on-github.md) says. Git says so at the top of **Added**, with why and what to do, in the words a workspace's line says and git gives as it refuses a push.
 
 ![Git saying agents can't push, since the default's token ended](../../spec/screens/settings-git-default-ended.png)
 

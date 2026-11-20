@@ -67,7 +67,9 @@ pub(super) fn lead(bot: Option<&str>) -> String {
 /// default when `default`.
 pub(super) fn lead_installed(bot: &str, on: &str, default: bool) -> String {
     if default {
-        format!("{bot} is installed on {on}. It's the default, so agents push as it on every machine.")
+        format!(
+            "{bot} is installed on {on}. It's the default, so agents push as it wherever Roundhouse sets up GitHub."
+        )
     } else {
         format!("{bot} is installed on {on}. Make it the default from its menu for agents to push as it.")
     }

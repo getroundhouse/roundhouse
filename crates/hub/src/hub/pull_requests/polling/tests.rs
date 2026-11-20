@@ -227,7 +227,7 @@ async fn a_read_in_turn_that_doesnt_finish_waits_longer_each_time() {
     let dir = tempfile::tempdir().unwrap();
     let hub = hub_with_worktree(dir.path());
     let address = protocol::model::RepoUrl::try_from("https://github.com/example/project".to_string()).unwrap();
-    hub.store.read_repo_url(&"r".into(), "/repo", Some(&address), None).unwrap();
+    hub.store.read_repo_url(&"r".into(), "/repo", Some(&address)).unwrap();
     hub.store.set_workspace_branches(&"w".into(), &pushed("head-7", "head-7", (0, 0))).unwrap();
     let asked = Asked::default();
     // Kept, so it's there to be asked again.
@@ -251,7 +251,7 @@ async fn a_read_in_turn_waiting_for_a_token_holds_no_workspaces_turn() {
     let dir = tempfile::tempdir().unwrap();
     let hub = hub_with_worktree(dir.path());
     let address = protocol::model::RepoUrl::try_from("https://github.com/example/project".to_string()).unwrap();
-    hub.store.read_repo_url(&"r".into(), "/repo", Some(&address), None).unwrap();
+    hub.store.read_repo_url(&"r".into(), "/repo", Some(&address)).unwrap();
     hub.store.set_workspace_branches(&"w".into(), &pushed("head-7", "head-7", (0, 0))).unwrap();
     hub.store
         .insert_workspace(&workspace("v"), &crate::store::WorkspacePlacement::local_checkout("/repo"), None)
@@ -279,7 +279,7 @@ async fn a_token_not_handed_over_yet_is_no_sign_that_gh_has_no_login() {
     let dir = tempfile::tempdir().unwrap();
     let hub = hub_with_worktree(dir.path());
     let address = protocol::model::RepoUrl::try_from("https://github.com/example/project".to_string()).unwrap();
-    hub.store.read_repo_url(&"r".into(), "/repo", Some(&address), None).unwrap();
+    hub.store.read_repo_url(&"r".into(), "/repo", Some(&address)).unwrap();
     hub.store.set_workspace_branches(&"w".into(), &pushed("head-7", "head-7", (0, 0))).unwrap();
     stuck_in_w(&hub, |request| matches!(request, WorkerRequest::FindGithubLogin), &Asked::default()).keep();
 

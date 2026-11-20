@@ -127,3 +127,6 @@ pub(crate) const BEFORE_TYPED_MODES: usize = 71;
 
 /// How many migrations there were before each workspace recorded its settled repository source and worker environment.
 pub(crate) const BEFORE_WORKSPACE_PLACEMENT: usize = 80;
+
+/// How many migrations there were before the hub recorded the providers whose machines Roundhouse leaves GitHub to.
+pub(crate) const BEFORE_GITHUB_LEFT_TO_MACHINE: usize = 84;

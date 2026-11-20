@@ -335,9 +335,17 @@ impl InWorkspace {
         self.all.session(id).filter(|session| session.workspace_id == self.workspace().id)
     }
 
-    /// What a push from it would meet, which is its repository's, as [`Snapshot::github_reach`] says.
+    /// What a push from it would meet, which is its repository's, as [`Snapshot::github_reach`] says, on a provider
+    /// where Roundhouse sets up GitHub. `None` on one whose machines the hub's settings say it leaves GitHub to, as
+    /// [`GithubSettings::left_to_machine`](protocol::model::GithubSettings::left_to_machine) says, whose pushes go as
+    /// the machine sends them, not as the default.
     pub fn github_reach(&self) -> Option<&Reach> {
-        self.all.github_reach(&self.workspace().repo_id)
+        let workspace = self.workspace();
+        let github = self.all.hub_settings().and_then(|settings| settings.github.as_ref());
+        if github.is_some_and(|github| !github.sets_up(&workspace.provider)) {
+            return None;
+        }
+        self.all.github_reach(&workspace.repo_id)
     }
 
     /// The comments on its diff, oldest first.

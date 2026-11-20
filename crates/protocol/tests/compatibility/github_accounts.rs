@@ -134,7 +134,7 @@ fn what_workers_are_sent_keeps_its_form_on_the_settings_and_one_from_a_hub_from_
     let older: GithubSettings = serde_json::from_str(r#"{"account":"g"}"#).unwrap();
 
     for (sent, form) in forms {
-        let settings = GithubSettings { account: Some("g".into()), sent: Some(sent) };
+        let settings = GithubSettings { account: Some("g".into()), sent: Some(sent), left_to_machine: Vec::new() };
         let written = format!(r#"{{"account":"g","sent":{form}}}"#);
         assert_eq!(serde_json::to_string(&settings).unwrap(), written);
         assert_eq!(serde_json::from_str::<GithubSettings>(&written).unwrap(), settings);
@@ -142,5 +142,19 @@ fn what_workers_are_sent_keeps_its_form_on_the_settings_and_one_from_a_hub_from_
     for (why, form) in whys {
         assert_eq!(serde_json::to_value(why).unwrap(), form);
     }
-    assert_eq!(older, GithubSettings { account: Some("g".into()), sent: None });
+    assert_eq!(older, GithubSettings { account: Some("g".into()), sent: None, left_to_machine: Vec::new() });
+}
+
+/// The providers the hub's settings say it leaves GitHub to the machines of, by name, and the settings of a hub from
+/// before they said, which say none, so every provider's workspaces are taken to be set up, as that hub's were.
+#[test]
+fn the_providers_left_to_their_machines_keep_their_form_and_a_hub_from_before_leaves_none() {
+    let settings = GithubSettings { account: None, sent: None, left_to_machine: vec!["keyed".into(), "local".into()] };
+    let written = r#"{"account":null,"left_to_machine":["keyed","local"]}"#;
+    let older: GithubSettings = serde_json::from_str("{}").unwrap();
+
+    assert_eq!(serde_json::to_string(&settings).unwrap(), written);
+    assert_eq!(serde_json::from_str::<GithubSettings>(written).unwrap(), settings);
+    assert!(!settings.sets_up(&"local".into()) && settings.sets_up(&"vms".into()));
+    assert!(older.sets_up(&"local".into()), "{older:?}");
 }

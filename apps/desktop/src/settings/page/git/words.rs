@@ -15,20 +15,22 @@ pub(super) const ABOUT: &str = "The GitHub accounts agents push and open pull re
                                 has.";
 
 /// What Added says of itself under its heading.
-pub(super) const ADDED_SAYS: &str = "GitHub accounts you've given the hub. Every machine's git and gh use the default \
-                                     for github.com, so agents push and open pull requests as it, wherever they run.";
+pub(super) const ADDED_SAYS: &str = "GitHub accounts you've given the hub. Agents push and open pull requests as the \
+                                     default on the providers Roundhouse sets up GitHub on. On the hub's own machine, \
+                                     they use its git and gh as they are.";
 
 /// What Added says of itself under its heading on a hub that keeps no GitHub accounts, which uses no default.
 pub(super) const ADDED_SAYS_OLDER: &str = "GitHub accounts you've given the hub.";
 
 /// What Found says of itself under its heading.
 pub(super) const FOUND_SAYS: &str = "Who gh is logged in as on each machine a workspace has run on since the hub \
-                                     started, and whether GitHub took its token then. Agents use a machine's own \
-                                     login only while it's the default, and only there. Roundhouse never copies it.";
+                                     started, and whether GitHub took its token then. Agents on the hub's own \
+                                     machine use its login, and elsewhere only while it's the default. Roundhouse \
+                                     never copies it.";
 
 /// What Added says while the hub holds no GitHub account.
-pub(super) const NONE_ADDED: &str =
-    "None yet, so agents use each machine's own login. Connect an account to push as it on every machine.";
+pub(super) const NONE_ADDED: &str = "None yet, so agents use each machine's own login. Connect an account to push as it on the providers Roundhouse \
+     sets up GitHub on.";
 
 /// What Found says while the hub has asked no machine.
 pub(super) const NONE_FOUND: &str =

@@ -1,7 +1,8 @@
 //! A GitHub account connected through a real hub, which asks a stand-in for GitHub whose its token is, as what a
-//! workspace's git uses for github.com: the hub makes it the default and sets it on the workspace's worker, whose setup
-//! script's git gets it, and commits as it, and a block once it's disconnected, and the next token the hub's check of
-//! its logins makes an app's installation. And who a provider's machine's own `gh` is logged in as, which the hub
+//! workspace's git uses for github.com on a provider where Roundhouse sets up GitHub, which these reach through an
+//! adapter: the hub makes it the default and sets it on the workspace's worker, whose setup script's git gets it, and
+//! commits as it, and a block once it's disconnected, and the next token the hub's check of its logins makes an app's
+//! installation. On the local provider, the worker is given none of it. And who a provider's machine's own `gh` is logged in as, which the hub
 //! records once a worker there has said, and whether the default can push to a workspace's repository.
 
 #![cfg(test)]
@@ -37,7 +38,8 @@ const TOKEN: &str = "github_pat_made_up_for_a_test";
 fn a_workspaces_git_gets_the_default_github_accounts_token_and_a_block_once_its_disconnected() {
     let runtime = tokio::runtime::Runtime::new().unwrap();
     let github = runtime.block_on(GithubStandIn::start(vec![(TOKEN, GithubAnswer::user(7, "ada", None))]));
-    let stack = Stack::start_with(vec![(ENV_TEST_GITHUB_API, github.api())]);
+    let mut stack = Stack::start_with(vec![(ENV_TEST_GITHUB_API, github.api())]);
+    stack.make_through_an_adapter();
     commit_settings(&stack, &format!("[scripts]\nsetup = '''\n{ASKS_GIT}\n'''\n"));
     let client = stack.client();
     // The first account the hub has a record of becomes the default.
@@ -55,6 +57,28 @@ fn a_workspaces_git_gets_the_default_github_accounts_token_and_a_block_once_its_
     assert!(said.contains("Roundhouse's default GitHub account, ada, was disconnected"), "{said}");
 }
 
+/// Says what of the worker's git credential the setup script was given: the git config git is to include, and the
+/// directory `gh` keeps its logins in, each as an empty line where there's none.
+const GIVEN: &str = r#"printf '%s\n%s\n' "$GIT_CONFIG_VALUE_0" "$GH_CONFIG_DIR" > given"#;
+
+/// On the local provider, Roundhouse leaves GitHub to the machine, so the worker gives its processes none of the
+/// default, and their git and `gh` are the machine's own.
+#[test]
+fn a_workspaces_git_on_the_local_provider_is_given_nothing_of_the_default() {
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    let github = runtime.block_on(GithubStandIn::start(vec![(TOKEN, GithubAnswer::user(7, "ada", None))]));
+    let stack = Stack::start_with(vec![(ENV_TEST_GITHUB_API, github.api())]);
+    commit_settings(&stack, &format!("[scripts]\nsetup = '''\n{GIVEN}\n'''\n"));
+    let client = stack.client();
+    client.call(GithubAccountConnect { token: GithubToken::new(TOKEN), id: None }).unwrap();
+
+    let (workspace, _) = stack.workspace(&client);
+
+    assert_eq!(wait_for_setup(&client, &workspace.id), SetupStatus::Succeeded);
+    let given = std::fs::read_to_string(PathBuf::from(workspace.path.unwrap()).join("given")).unwrap();
+    assert_eq!(given, "\n\n");
+}
+
 /// Commits as git does on a machine with no name or email of its own, since `user.useConfigOnly` takes them only from
 /// git's config, rather than guessing them from the machine, then says who the commit is by and who committed it.
 const COMMITS: &str = "git -c user.useConfigOnly=true commit --allow-empty -qm 'by an agent'
@@ -70,6 +94,7 @@ fn a_workspaces_commits_are_by_the_default_github_account_on_a_machine_with_no_g
     let github = runtime.block_on(GithubStandIn::start(vec![(TOKEN, ada)]));
     let mut stack = Stack::start_with(vec![(ENV_TEST_GITHUB_API, github.api())]);
     let _gh = StandInGh::start(&mut stack);
+    stack.make_through_an_adapter();
     git(&stack.repo(), &["remote", "add", "origin", "https://github.com/ada/rails.git"]);
     commit_settings(&stack, &format!("[scripts]\nsetup = '''\n{COMMITS}\n'''\n"));
     let client = stack.client();
@@ -110,6 +135,7 @@ fn a_workspaces_git_gets_the_token_the_check_makes_an_installation_as_the_hub_st
         ..GithubScript::default()
     }));
     let mut stack = Stack::start_with(vec![(ENV_TEST_GITHUB_API, github.api())]);
+    stack.make_through_an_adapter();
     commit_settings(&stack, &format!("[scripts]\nsetup = '''\n{ASKS_GIT_UNTIL_FILLED}\n'''\n"));
     stack.client().call(GithubAppMake { code: GithubManifestCode::new("a-code") }).unwrap();
 
@@ -184,29 +210,4 @@ fn a_hub_records_whether_the_default_can_push_to_a_workspaces_repository_on_gith
     assert_eq!(left, &as_it_was, "the last run's, as it was, with when GitHub answered");
     let [again] = &listed(&stack)[..] else { panic!() };
     assert!(again.answered_at_ms > checked.answered_at_ms, "{again:?}");
-}
-
-/// Through the real worker of the local provider, whose checkout's `origin` is `cli/cli` over SSH, as `ssh://`, which
-/// the worker's rewriting of GitHub's SSH addresses doesn't take, so agents push there with the machine's own key,
-/// which the hub says without asking GitHub. Nothing is fetched from `origin`, so nothing reaches GitHub.
-#[test]
-fn a_hub_says_agents_push_as_the_machines_own_where_pushes_go_round_the_git_credential() {
-    let runtime = tokio::runtime::Runtime::new().unwrap();
-    let github = runtime.block_on(GithubStandIn::with(GithubScript {
-        users: vec![(TOKEN, GithubAnswer::user(7, "ada", None))],
-        ..GithubScript::default()
-    }));
-    let stack = Stack::start_with(vec![(ENV_TEST_GITHUB_API, github.api())]);
-    git(&stack.repo(), &["remote", "add", "origin", "ssh://github.com/cli/cli.git"]);
-    let client = stack.client();
-    client.call(GithubAccountConnect { token: GithubToken::new(TOKEN), id: None }).unwrap();
-    let listed = || client.records_list().unwrap().github_reach;
-
-    stack.workspace(&client);
-    wait_until("the repository's reach", || !listed().is_empty());
-
-    let [said] = &listed()[..] else { panic!("{:?}", listed()) };
-    assert_eq!(said.reach, Reach::PushesAsMachineOwn { repository: GithubRepositoryName::named("cli/cli") });
-    let pushes: Vec<_> = github.asked().into_iter().filter(|asked| asked.contains("git-receive-pack")).collect();
-    assert_eq!(pushes, [] as [String; 0], "GitHub isn't asked of a push the default doesn't make");
 }

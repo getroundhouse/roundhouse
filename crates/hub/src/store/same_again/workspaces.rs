@@ -14,7 +14,7 @@ pub(super) fn repo(store: &Store) -> Rev {
 
 pub(super) fn read_address(store: &Store) -> Said {
     let url = RepoUrl::try_from("https://github.com/ada/roundhouse.git".to_owned()).unwrap();
-    Said::Changed(store.read_repo_url(&"r".into(), "/repo", Some(&url), None).unwrap().is_some())
+    Said::Changed(store.read_repo_url(&"r".into(), "/repo", Some(&url)).unwrap().is_some())
 }
 
 pub(super) fn workspace(store: &Store) -> Rev {

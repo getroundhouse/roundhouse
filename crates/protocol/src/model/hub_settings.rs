@@ -3,7 +3,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::{AccountId, AgentKind, GithubAccountId, Rev, SentCredential};
+use super::{AccountId, AgentKind, GithubAccountId, ProviderName, Rev, SentCredential};
 
 /// A hub's settings. There's one record of them per hub.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
@@ -28,7 +28,7 @@ pub struct HubSettings {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct GithubSettings {
     /// The default: the [`GithubAccount`](super::GithubAccount) agents push and open pull requests as, on every
-    /// machine, for every repository on GitHub. `None` is each machine's own login. Connecting the first GitHub account
+    /// provider where Roundhouse sets up GitHub, for every repository on GitHub. `None` is each machine's own login. Connecting the first GitHub account
     /// the hub has a record of makes it the default. Otherwise only
     /// [`GithubAccountSetDefault`](crate::client::github_accounts::GithubAccountSetDefault) changes it, so a default
     /// whose login is disconnected or has ended stays the default, holding no login that can be used, until it's
@@ -40,6 +40,12 @@ pub struct GithubSettings {
     /// from before it said, whose client works nothing out in its place.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sent: Option<SentCredential>,
+    /// The providers whose machines Roundhouse leaves GitHub to, so their workers are given none of the default, and a
+    /// workspace there says nothing of whether the default can push: the local provider, whose machine is the
+    /// person's own, and any other whose entry in the hub's providers file says so. Every other provider's workers are
+    /// given the default. Empty from a hub from before it said, which gave the default to every worker. *Unconfirmed.*
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub left_to_machine: Vec<ProviderName>,
 }
 
 impl GithubSettings {
@@ -47,6 +53,11 @@ impl GithubSettings {
     /// default, as [`SentCredential::is_for`] says. `None` otherwise, which says nothing of whether agents can push.
     pub fn sent_for_default(&self) -> Option<&SentCredential> {
         self.sent.as_ref().filter(|sent| sent.is_for(self.account.as_ref()))
+    }
+
+    /// Whether Roundhouse gives the workers of `provider` the default, as [`GithubSettings::left_to_machine`] says.
+    pub fn sets_up(&self, provider: &ProviderName) -> bool {
+        !self.left_to_machine.contains(provider)
     }
 }
 

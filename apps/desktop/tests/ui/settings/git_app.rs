@@ -141,7 +141,7 @@ fn an_app_is_made_on_github_and_connected_as_the_window_comes_back_once_its_inst
     ui.wait("the first account to be the default", |ui| default(ui) == Some(account.id.clone()));
     assert_eq!(
         says(&mut ui),
-        "ada-roundhouse[bot] is installed on adalabs. It's the default, so agents push as it on every machine."
+        "ada-roundhouse[bot] is installed on adalabs. It's the default, so agents push as it wherever Roundhouse sets up GitHub."
     );
     assert_eq!(steps(&mut ui)[2], "Done: Installed on adalabs");
 

@@ -7,6 +7,9 @@
 //! ```json
 //! {"default": "incus", "providers": [{"name": "incus", "program": "/path/to/roundhouse-incus", "args": []}]}
 //! ```
+//!
+//! An entry can also say `"set_up_github": false`, so Roundhouse leaves GitHub on that provider's machines to the
+//! machine, as it always does on the local provider's, as `ProviderSet::leaves_github_to_machine` says.
 
 #[cfg(test)]
 use protocol::Build;

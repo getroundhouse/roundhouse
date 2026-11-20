@@ -26,8 +26,6 @@ pub(super) struct Said {
     pub(super) then: String,
     /// GitHub's page for installing the default's app, when what to do is done there.
     pub(super) install_at: Option<String>,
-    /// Whether what it says to do is done in Git in Settings, which the line's button opens.
-    pub(super) in_settings: bool,
 }
 
 /// What to do, after what's wrong, and GitHub's page for installing the default's app, when it's done there, as
@@ -36,7 +34,9 @@ type ToDo = (String, Option<String>);
 
 /// What a workspace says of its repository's `reach`, if anything. Nothing while a push would be taken, or the hub
 /// couldn't tell, since a push that fails then says why itself, or while the default is each machine's own, which the
-/// hub has no token of to check, or the repository isn't on GitHub. *Unconfirmed.*
+/// hub has no token of to check, or the repository isn't on GitHub, or an older hub said its pushes went round the
+/// default, which this build's never says. A workspace on a provider that leaves GitHub to its machines has no reach
+/// to say, as client-core's copy of the workspace gives it. *Unconfirmed.*
 pub(super) fn said(reach: &Reach) -> Option<Said> {
     let (repository, username, (then, install_at)) = match reach {
         Reach::Refused { repository, username, reason, installation } => {
@@ -51,27 +51,17 @@ pub(super) fn said(reach: &Reach) -> Option<Said> {
         // The block's reason says why and what to do, as git says it as it refuses the push.
         Reach::Blocked { repository, reason } => {
             let wrong = format!("Agents can't push to {repository}.");
-            return Some(Said { wrong, then: sentence(reason), install_at: None, in_settings: true });
-        }
-        // What to do is in the repository's git config, not in Settings, so there's no button.
-        Reach::PushesAsMachineOwn { repository } => {
-            let wrong =
-                format!("Agents push to {repository} as their machine's own login, not the default GitHub account.");
-            let then = format!(
-                "Where origin pushes, as git config rewrites it, isn't https://github.com/, so pushes go round the \
-                 default, as over SSH with the machine's key. To push as the default, have origin push to \
-                 https://github.com/{repository}.git."
-            );
-            return Some(Said { wrong, then, install_at: None, in_settings: false });
+            return Some(Said { wrong, then: sentence(reason), install_at: None });
         }
         Reach::Pushes { .. }
         | Reach::CouldntTell { .. }
         | Reach::MachineOwn { .. }
+        | Reach::PushesAsMachineOwn { .. }
         | Reach::NotOnGithub
         | Reach::Unknown => return None,
     };
     let wrong = format!("Agents can't push to {repository} as {username}, the default GitHub account.");
-    Some(Said { wrong, then, install_at, in_settings: true })
+    Some(Said { wrong, then, install_at })
 }
 
 /// What to do once GitHub refused a push to `repository` as `username`, saying `reason`. A token's or a sign-in's
@@ -164,10 +154,10 @@ fn sentence(words: &str) -> String {
 
 impl WorkspacePane {
     /// A line above the composer while agents can't push to the workspace's repository on GitHub as the default, with
-    /// a way to Git in Settings, where what it says to do is done, if that's where, and to GitHub's page for installing
-    /// the default's app, when it's done there.
+    /// a way to Git in Settings, where what it says to do is done, and to GitHub's page for installing the default's
+    /// app, when it's done there.
     pub(super) fn push_line(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
-        let Said { wrong, then, install_at, in_settings } = said(self.shown.github_reach()?)?;
+        let Said { wrong, then, install_at } = said(self.shown.github_reach()?)?;
         // One paragraph, so what to do wraps on from what's wrong.
         let words = format!("{wrong} {then}");
         let size = look::ControlSize::Small;
@@ -176,11 +166,9 @@ impl WorkspacePane {
                 .icon(Lucide::ExternalLink)
                 .on_click(move |_, _, cx| cx.open_url(&page))
         });
-        let open_git = in_settings.then(|| {
-            look::button(OPEN_GIT, look::ButtonKind::Borderless, size, "Open Git")
-                .on_click(cx.listener(|_, _, _, cx| cx.emit(PaneEvent::OpenGit)))
-        });
+        let open_git = look::button(OPEN_GIT, look::ButtonKind::Borderless, size, "Open Git")
+            .on_click(cx.listener(|_, _, _, cx| cx.emit(PaneEvent::OpenGit)));
         let banner = look::banner(look::BannerKind::Warning).region(Region::PushLine).child(words);
-        Some(install.into_iter().chain(open_git).fold(banner, look::Banner::answer).into_any_element())
+        Some(install.into_iter().chain([open_git]).fold(banner, look::Banner::answer).into_any_element())
     }
 }

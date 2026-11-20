@@ -1,7 +1,4 @@
-use std::collections::HashSet;
-
 use protocol::model::{Repo, RepoId, RepoOrigin, RepoUrl};
-use protocol::worker::PushRoute;
 use rusqlite::types::Type;
 use rusqlite::{OptionalExtension, Row, params};
 
@@ -83,36 +80,20 @@ impl Store {
         rows.collect::<rusqlite::Result<_>>().map_err(StoreError::from)
     }
 
-    /// Each repository whose checkout's pushes go round the git credential, as the worker that last read its address
-    /// said.
-    pub fn repos_pushing_around(&self) -> Result<HashSet<RepoId>, StoreError> {
-        let conn = lock(&self.reader);
-        let mut statement = conn.prepare_cached("SELECT id FROM repos WHERE push_around = 1")?;
-        let rows = statement.query_map([], |row| Ok(row.get::<_, String>(0)?.into()))?;
-        rows.collect::<rusqlite::Result<_>>().map_err(StoreError::from)
-    }
-
-    /// Keeps `url` as the address of the repository `id`, as a worker read it from `checkout`, with where its pushes
-    /// go, `push`, if its address is to be read and that's its checkout, and returns the record if that changed it,
-    /// for the feed to tell of, which only the address does. Either way its address isn't to be read once that's what
-    /// it is, so a second answer to the same ask changes nothing.
+    /// Keeps `url` as the address of the repository `id`, as a worker read it from `checkout`, if its address is to be
+    /// read and that's its checkout, and returns the record if that changed it, for the feed to tell of. Either way its
+    /// address isn't to be read once that's what it is, so a second answer to the same ask changes nothing.
     pub fn read_repo_url(
         &self,
         id: &RepoId,
         checkout: &str,
         url: Option<&RepoUrl>,
-        push: Option<PushRoute>,
     ) -> Result<Option<Repo>, StoreError> {
-        let around = match push {
-            Some(PushRoute::Around) => Some(true),
-            Some(PushRoute::Credential) => Some(false),
-            None | Some(PushRoute::Unknown) => None,
-        };
         let mut conn = lock(&self.writer);
         let tx = conn.transaction()?;
         let was_to_read = tx.execute(
-            "UPDATE repos SET url_to_read = 0, push_around = ? WHERE id = ? AND path = ? AND url_to_read = 1",
-            params![around, id.as_str(), checkout],
+            "UPDATE repos SET url_to_read = 0 WHERE id = ? AND path = ? AND url_to_read = 1",
+            params![id.as_str(), checkout],
         )?;
         let url = url.map(RepoUrl::as_str);
         let changed = was_to_read > 0

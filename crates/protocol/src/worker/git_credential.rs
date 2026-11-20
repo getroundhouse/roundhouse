@@ -1,6 +1,6 @@
 //! The git credential a hub sets on a worker: what git and `gh` use for github.com in every process the worker starts,
-//! so agents push and open pull requests as the hub's default GitHub account on any machine, rather than as whatever
-//! login the machine has.
+//! so agents on a provider where Roundhouse sets up GitHub push and open pull requests as the hub's default GitHub
+//! account, rather than as whatever login the machine has.
 
 use serde::{Deserialize, Serialize};
 
@@ -19,6 +19,9 @@ use crate::model::{GithubToken, GithubUsername};
 /// worker rewrites the files it reads: a renewal reaches an agent that's running, and so does a credential that's
 /// [`Blocked`](GithubCredential::Blocked). One started under [`MachineOwn`](GithubCredential::MachineOwn) is given
 /// none of it, so it keeps the machine's own until it next starts. *Unconfirmed:* a set reaching what's running.
+///
+/// A worker on a provider whose machines Roundhouse leaves GitHub to, such as the local provider, is only ever set
+/// [`MachineOwn`](GithubCredential::MachineOwn), as its link opens.
 ///
 /// A worker from before this answers `Unsupported`, and goes on with the machine's own. One that can't apply it, such
 /// as one whose git is older than 2.31, the first to read `GIT_CONFIG_COUNT`, or that can't write its files, answers
@@ -44,8 +47,9 @@ impl Request for GitCredentialSet {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum GithubCredential {
-    /// The default is the machine's own login. The worker writes nothing that changes what git or `gh` use, so what it
-    /// starts from then on uses the machine's own.
+    /// The machine's own login: the worker's provider leaves GitHub to the machine, or the default is each machine's
+    /// own. The worker writes nothing that changes what git or `gh` use, so what it starts from then on uses the
+    /// machine's own.
     MachineOwn,
     /// Everything the worker starts uses this for github.com.
     Account(GitCredential),

@@ -5,7 +5,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use protocol::client::{ApiError, ErrorCode};
-use protocol::worker::GitCredentialSet;
+use protocol::worker::{GitCredentialSet, GithubCredential};
 use tokio::sync::watch;
 use tokio::time::error::Elapsed;
 use tracing::warn;
@@ -22,23 +22,29 @@ pub(crate) const SET_WITHIN: Duration = Duration::from_secs(10);
 /// One link's following of what the hub has workers give their processes for github.com, which sends the worker each
 /// credential the hub has, in turn, each once the worker has answered the one before. It sends the newest each time,
 /// so one that changes twice while the worker applies a set is sent only the second after it. Each link follows on a
-/// task of its own, so a slow worker holds up only its own link.
+/// task of its own, so a slow worker holds up only its own link. A worker on a provider whose machines Roundhouse
+/// leaves GitHub to is sent the machine's own as its link opens, and nothing after.
 pub(crate) struct Following {
     link: Arc<WorkerLink>,
-    credential: watch::Receiver<DefaultCredential>,
+    /// What the hub has workers give their processes for github.com, or `None` for a worker on a provider whose
+    /// machines Roundhouse leaves GitHub to, as `Hub::leaves_github_to_machine` says.
+    credential: Option<watch::Receiver<DefaultCredential>>,
     /// Whether the log has said the worker doesn't know the request, which it says once a link.
     said_unsupported: bool,
 }
 
 impl Following {
-    pub(crate) fn new(link: Arc<WorkerLink>, credential: watch::Receiver<DefaultCredential>) -> Self {
+    pub(crate) fn new(link: Arc<WorkerLink>, credential: Option<watch::Receiver<DefaultCredential>>) -> Self {
         Self { link, credential, said_unsupported: false }
     }
 
-    /// Queues the set of the credential the hub has now, and returns the worker's answer to wait for, which
-    /// [`Following::answered`] reads.
+    /// Queues the set of the credential the hub has now, or of the machine's own, and returns the worker's answer to
+    /// wait for, which [`Following::answered`] reads.
     pub(crate) async fn queue(&mut self) -> Result<impl Future<Output = Result<(), ApiError>> + use<>, ApiError> {
-        let credential = self.credential.borrow_and_update().for_workers();
+        let credential = match &mut self.credential {
+            Some(credential) => credential.borrow_and_update().for_workers(),
+            None => GithubCredential::MachineOwn,
+        };
         self.link.send(GitCredentialSet { credential }).await
     }
 
@@ -60,8 +66,9 @@ impl Following {
     /// started there is sent the credential as it opens.
     pub(crate) async fn follow(mut self) {
         loop {
+            let Some(credential) = self.credential.as_mut() else { return };
             tokio::select! {
-                changed = self.credential.changed() => if changed.is_err() { return },
+                changed = credential.changed() => if changed.is_err() { return },
                 () = self.link.wait_closed() => return,
             }
             // Queueing waits too, while the link's lines aren't being written.

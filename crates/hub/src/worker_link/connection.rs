@@ -96,7 +96,8 @@ impl WorkerLink {
             version: OnceLock::new(),
         });
         let within = hub.timers.hello_within;
-        let following = Following::new(link.clone(), hub.git_credential());
+        let left_to_machine = hub.leaves_github_to_machine(&ProviderName::from(provider.name()));
+        let following = Following::new(link.clone(), (!left_to_machine).then(|| hub.git_credential()));
         tokio::spawn(acks::acknowledge(hub.clone(), link.clone()));
         tokio::spawn(reading::read_frames(
             hub.clone(),

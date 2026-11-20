@@ -113,7 +113,10 @@ fn load_providers(
         path,
     }));
     let hub_id = store.hub_id().map_err(HubError::OpenDatabase)?;
-    Ok(ProviderSet::load(local, &paths.providers, &hub_id, build, timers.adapter_hello_within))
+    let providers = ProviderSet::load(local, &paths.providers, &hub_id, build, timers.adapter_hello_within);
+    // Before any client reads the settings, so none is told of the providers an earlier run had.
+    store.record_github_left_to_machine(&providers.left_to_machine()).map_err(HubError::OpenDatabase)?;
+    Ok(providers)
 }
 
 /// Runs until asked to stop or signalled. Returns an error if another hub is using these paths.

@@ -32,7 +32,8 @@ pub(in crate::gallery) fn github_accounts() -> World {
 /// logged in as `ada`, and a server's logged in to no one.
 pub(in crate::gallery) fn no_github_accounts() -> World {
     let mut world = conversation();
-    world.github = Some(GithubSettings { account: None, sent: Some(SentCredential::MachineOwn) });
+    world.github =
+        Some(GithubSettings { account: None, sent: Some(SentCredential::MachineOwn), left_to_machine: Vec::new() });
     world.found_github_logins = vec![found_github_login("local"), logged_out("incus")];
     world
 }
@@ -71,14 +72,14 @@ pub(in crate::gallery) fn github_signing_in_to(status: GithubSignInStatus) -> Wo
 /// The settings of a hub whose default is `account`, whose login workers are sent.
 pub(in crate::gallery) fn sending(account: &GithubAccount) -> GithubSettings {
     let sent = SentCredential::Account { account: account.id.clone() };
-    GithubSettings { account: Some(account.id.clone()), sent: Some(sent) }
+    GithubSettings { account: Some(account.id.clone()), sent: Some(sent), left_to_machine: Vec::new() }
 }
 
 /// The settings of a hub whose default is `account`, which blocks every worker, for the reason `why`, saying
 /// `reason`, as the hub words it.
 pub(in crate::gallery) fn blocking(account: &GithubAccount, why: UnusableLogin, reason: &str) -> GithubSettings {
     let sent = SentCredential::Blocked { account: account.id.clone(), why, reason: reason.to_string() };
-    GithubSettings { account: Some(account.id.clone()), sent: Some(sent) }
+    GithubSettings { account: Some(account.id.clone()), sent: Some(sent), left_to_machine: Vec::new() }
 }
 
 /// The account `ada` signed in as, three weeks ago, whose token the hub renews by itself.

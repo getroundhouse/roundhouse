@@ -1,8 +1,9 @@
 use protocol::client::HubNotice;
 use protocol::fixtures::{found_github_login, github_account, github_app, github_sign_in};
 use protocol::model::{
-    DiffComment, DiffSide, GithubAccount, GithubApp, GithubAppId, GithubReach, GithubRepositoryName, GithubUser,
-    GithubUserId, Proposal, Reach, RecordKey, Records, Repo, Rev, Session, Subagent, Terminal, Title, Workspace,
+    DiffComment, DiffSide, GithubAccount, GithubApp, GithubAppId, GithubReach, GithubRepositoryName, GithubSettings,
+    GithubUser, GithubUserId, HubSettings, Proposal, Reach, RecordKey, Records, Repo, Rev, Session, Subagent, Terminal,
+    Title, Workspace,
 };
 
 use crate::records::HubRecords;
@@ -245,6 +246,35 @@ fn a_workspace_says_what_a_push_from_it_meets_by_its_repositorys_reach() {
 
     held.apply_notice(HubNotice::GithubReach(reach(Reach::NotOnGithub, 8)));
     assert_eq!(held.snapshot().in_workspace(&"w".into()).unwrap().github_reach(), Some(&Reach::NotOnGithub));
+}
+
+/// A workspace on a provider whose machines the hub's settings say Roundhouse leaves GitHub to says nothing of its
+/// repository's reach, since its pushes go as the machine sends them. One on any other provider says it.
+#[test]
+fn a_workspace_on_a_provider_left_to_its_machine_says_nothing_of_its_repositorys_reach() {
+    let repository = GithubRepositoryName::named("example/project");
+    let refused = Reach::Refused { repository, username: "ada".into(), reason: "No.".into(), installation: None };
+    let github_reach = vec![GithubReach { reach: refused.clone(), ..protocol::fixtures::github_reach("r") }];
+    let on_vms = Workspace { provider: "vms".into(), ..workspace("w2", 20, 3) };
+    let github = GithubSettings { account: None, sent: None, left_to_machine: vec!["local".into()] };
+    let hub_settings = HubSettings {
+        keep_awake: false,
+        allow_asked_in_full_access: None,
+        account_defaults: None,
+        github: Some(github),
+        rev: Rev::new(1),
+    };
+    let mut held = HubRecords::default();
+    held.apply_list(Records {
+        workspaces: vec![on_vms, workspace("w", 10, 2)],
+        github_reach,
+        hub_settings: Some(hub_settings),
+        ..listed()
+    });
+
+    let shown = held.snapshot();
+    assert_eq!(shown.in_workspace(&"w".into()).unwrap().github_reach(), None, "on the local provider");
+    assert_eq!(shown.in_workspace(&"w2".into()).unwrap().github_reach(), Some(&refused));
 }
 
 /// A session's proposals come and go with its subagents, as a view follows and lets go of the session, and a change to

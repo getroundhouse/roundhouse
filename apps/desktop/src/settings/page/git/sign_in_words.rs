@@ -101,7 +101,9 @@ impl<'a> Stands<'a> {
                     .to_string(),
             },
             Stands::Approved { name: Some(name), default: true } => {
-                format!("Signed in as {name}. It's the default, so agents push as it on every machine.")
+                format!(
+                    "Signed in as {name}. It's the default, so agents push as it wherever Roundhouse sets up GitHub."
+                )
             }
             Stands::Approved { name: Some(name), default: false } => format!("Signed in as {name}."),
             Stands::Approved { name: None, .. } => "Signed in.".to_string(),

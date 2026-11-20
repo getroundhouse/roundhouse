@@ -1,12 +1,14 @@
 # Who agents are on GitHub
 
-When an agent pushes, opens a pull request or comments, GitHub records someone as doing it. You choose who on the Git page in [Settings](../reference/settings.md#git): a GitHub account you've added, the bot of an app of your own, or each machine's own login. The account you make the default is used on every machine, for every repository on GitHub.
+When an agent pushes, opens a pull request or comments, GitHub records someone as doing it. You choose who on the Git page in [Settings](../reference/settings.md#git): a GitHub account you've added, the bot of an app of your own, or each machine's own login. The account you make the default is used for every repository on GitHub, on every machine Roundhouse sets up GitHub on.
+
+On your own machine, where the hub runs, Roundhouse sets up nothing of GitHub: agents use your `git` and `gh` as they are, as your own terminal does, SSH key and all. On another provider's machines, which are made for workspaces and rarely have a login for GitHub of their own, Roundhouse sets up GitHub as the default, and sends a push to GitHub over SSH over HTTPS instead, unless that provider's settings say `"set_up_github": false`.
 
 ![The Git page, with three accounts added and the logins found on two machines](../../spec/screens/settings-git.png)
 
 ## An account you add
 
-**Sign in with GitHub**, or paste a token, and agents act as you. Every machine's `git` and `gh` use the default for github.com, so agents push and open pull requests as it, and so does what you type in a workspace's terminal, and Roundhouse reads pull requests with it, wherever they run. Nothing else on the machine has to be logged in.
+**Sign in with GitHub**, or paste a token, and agents act as you. On every machine Roundhouse sets up GitHub on, `git` and `gh` use the default for github.com, so agents push and open pull requests as it, and so does what you type in a workspace's terminal, and Roundhouse reads pull requests with it, wherever they run. Nothing else on the machine has to be logged in.
 
 - Their pull requests are yours, so GitHub won't let you approve them, and nothing on GitHub tells their work from yours.
 - What they ask of GitHub counts against your rate limit.
@@ -35,13 +37,13 @@ Removing the app, from its row's `…` menu, has the hub forget its key, and del
 
 ## Each machine's own login
 
-Until you add an account, and whenever you make it the default, agents use the login each machine already has, as they would without Roundhouse, and only on that machine. Roundhouse asks GitHub with its token to say whether it works, and reads pull requests with it, keeping it only in memory. Under **Found**, the Git page says who `gh` is logged in as on each machine where a workspace has run since the hub last started, and whether GitHub took its token then. `git` can push with something else, such as an SSH key, which Roundhouse doesn't see.
+On your own machine, agents always use the login it already has. Elsewhere, until you add an account, and whenever you make it the default, agents use the login each machine already has, as they would without Roundhouse, and only on that machine. Roundhouse asks GitHub with its token to say whether it works, and reads pull requests with it, keeping it only in memory. Under **Found**, the Git page says who `gh` is logged in as on each machine where a workspace has run since the hub last started, and whether GitHub took its token then. `git` can push with something else, such as an SSH key, which Roundhouse doesn't see.
 
 A repository that isn't on GitHub, such as one on GitLab or GitHub Enterprise, is always reached with the machine's own login, and its commits are by whoever its own Git config or the machine's says. On a machine whose Git is older than 2.36, so are the commits in every repository, though agents there still push to GitHub as the default.
 
 ## When the default can't be used
 
-If the default's token ends, you disconnect it, it needs signing in again, or it's an app's installation that was uninstalled on GitHub, it stays the default, and agents can't push until you renew it, sign in again, or make another the default. They don't fall back on the machine's own login, so nothing is pushed as someone you didn't choose, but for a repository whose pushes go round the default, [below](#when-the-default-cant-push-to-a-repository). The Git page says what's wrong, and what to do, at the top of **Added**.
+If the default's token ends, you disconnect it, it needs signing in again, or it's an app's installation that was uninstalled on GitHub, it stays the default, and agents can't push until you renew it, sign in again, or make another the default. They don't fall back on the machine's own login, so nothing is pushed as someone you didn't choose. On your own machine, agents push as they always do. The Git page says what's wrong, and what to do, at the top of **Added**.
 
 A signed-in account's token lasts 8 hours, and the hub renews it before it ends, so this happens only if the hub couldn't reach GitHub in time. Git says it's `Renewing` until the hub has. An app's installation's token lasts an hour, and the hub makes the next well before it ends, so the same goes for it: while GitHub doesn't make the next, a default installation says `Renewing` once the last has ended.
 
@@ -49,9 +51,9 @@ A signed-in account's token lasts 8 hours, and the hub renews it before it ends,
 
 The hub asks GitHub whether the default can push to the repository on GitHub that each repository's `origin` names, as `git push` would ask, so it meets what a push would: your access, a fine-grained token's repositories, the repositories an app of your own is installed on, and an organization that hasn't approved Roundhouse. It asks as it starts, whenever the default or its login changes, and every half hour, since what an account can do changes on GitHub too.
 
-If GitHub refuses, has no such repository the default can see, or doesn't take its token, every workspace of that repository says so in a line above the composer, with GitHub's words and what to do. **Open Git** opens the Git page, where you can make another account the default or add one that can push there. It blocks nothing: agents push as they would anyway. The line goes once the hub finds a push would be taken.
+If GitHub refuses, has no such repository the default can see, or doesn't take its token, every workspace of that repository on a machine Roundhouse sets up GitHub on says so in a line above the composer, with GitHub's words and what to do. **Open Git** opens the Git page, where you can make another account the default or add one that can push there. It blocks nothing: agents push as they would anyway. The line goes once the hub finds a push would be taken.
 
-Agents push as the default only to `https://github.com/`. If `origin` pushes anywhere else, as over SSH, which a `url."git@github.com:".insteadOf "https://github.com/"` in your git config makes of an `https://` address, they push as the machine's own login, with its SSH key, whoever the default is. The line says so instead, and to push as the default, have `origin` push to `https://github.com/`. Roundhouse reads where `origin` pushes when you add the project, so add it again after you change that.
+A workspace on your own machine has no line, since its agents push as your own login, not the default.
 
 ![A line above the composer saying GitHub refuses pushes as the default](../../spec/screens/push-refused.png)
 
