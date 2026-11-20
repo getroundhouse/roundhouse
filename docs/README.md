@@ -55,7 +55,7 @@ A README beside code says how to build, run or change that code, and agents keep
 | `docs/reference/codex-cli.md` | How Codex's app-server behaves on the wire, and how to probe it |
 | `docs/reference/antigravity-cli.md` | How Antigravity's ACP server behaves on the wire, and how the worker drives it |
 | `docs/reference/git.md` | What git does that took an experiment to find, or that more than one place in the code depends on |
-| `docs/reference/github.md` | How GitHub behaves, where more than one place in the code depends on it |
+| `docs/reference/github.md` | How GitHub and `gh` behave, where more than one place in the code depends on it |
 | `docs/reference/conformance.md` | How a version of an agent's CLI is checked against what Roundhouse needs of it, and how to play the scenarios that check it |
 | `docs/reference/performance.md` | How to measure the desktop app's speed, and what helps it meet the bars |
 | `docs/reference/inspiration.md` | What Conductor does, as a source of ideas |
@@ -71,5 +71,5 @@ Two docs are from before the folders, and are being taken apart as `docs/standar
 
 | Doc | What it holds until then |
 |---|---|
-| `docs/architecture.md` | How the system fits together: dependency rules, state ownership, wire format, managing a hub, and providers |
+| `docs/architecture.md` | How the system fits together: state ownership, wire format, updating the app, and providers |
 | `docs/ui.md` | Why the apps are built on GPUI and gpui-kit, how the transcript builds on the kit, and why the iOS app is on Zed's iOS backend |

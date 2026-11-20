@@ -19,7 +19,7 @@ Where each kind of test goes, what a test runs in, which is its hub, its clocks 
 | An agent's CLI | That a version of it does what Roundhouse needs, as `docs/reference/conformance.md` says | `crates/agents/src/conformance/` |
 | The real CLI | That the fake agent is still honest. By hand, since it costs money | `tools/smoke/` |
 
-- **A rule the hub decides by itself is a unit test in the hub,** on a hub from `hub_with_stand_in_workers`, whose stand-in answers as a worker would and says what it was asked. An e2e test is for what spans processes, and for one example of a rule's wiring.
+- **A rule the hub decides by itself is a unit test in the hub,** on a hub from `hub_with_stand_in_workers`, whose stand-in answers as a worker would and says what it was asked.
 - **The window is tested through its real UI,** by clicking and typing in the kit's headless windows, which keeps test code out of the product and catches what a picture can't, such as a click that does nothing.
 - **A window test opens on a fake hub, with `Ui::open_on`, unless it's about what a hub, a worker or an agent does.** What the window draws of what a hub holds needs none of them, and real ones make it slower and give it more to race. On a real hub, only the agent is faked.
 - **The fake hub answers by the hub's own rules,** so it sends only what a hub could. It calls the rule in `protocol` that the hub calls. Where the hub's store does it in SQL, `protocol` holds the rule behind `testing`, and the store's tests hold the SQL to it.
@@ -50,7 +50,7 @@ Where each kind of test goes, what a test runs in, which is its hub, its clocks 
 ## Writing tests
 
 - **Test each guarantee at the narrowest boundary that proves it.** Assert what can be observed: returned values, stored state, effects, and state left unchanged after a refusal. Separate setup, the action and assertions with blank lines.
-- **Each level tests its own guarantees.** A behavior tested at one level appears at a higher one only as one example showing the wiring. `docs/standards/testing.md` lists the levels.
+- **Each level tests its own guarantees.** A behavior tested at one level appears at a higher one only as one example showing the wiring.
 - **A change extends the test that covers what it changes.** One more case of a rule a test already covers is a row in its table or an assertion beside the others: a field added to a record, a kind added to an enum. A new test is for a guarantee no test covers. A test that would start as another does, and differ in one input or assertion, is a case of that one, so they share the cost of their setup, which matters most where a test starts a process.
 - **What several callers share is tested once, where it's defined.** A generic type's rules are tested on an instance made up for the test, and a helper's against the helper. Each caller gets one example of the wiring, and tests only what it adds. So a rule that holds for every agent, column or kind of record is one test that goes through them all.
 - **A few unit tests sit beside their code.** When they grow, they move to `foo/tests.rs`, declared with `#[cfg(test)] mod tests;` in `foo/mod.rs`.
@@ -61,9 +61,9 @@ Where each kind of test goes, what a test runs in, which is its hub, its clocks 
 - **A test passes under `cargo test` and under nextest,** which CI runs. nextest gives each test a process of its own, where `cargo test` runs a binary's tests in one, so a `OnceLock` in a test runs once per test under nextest. Work that should happen once per run, such as building a helper, takes a file lock in `CARGO_TARGET_TMPDIR`, keyed by `NEXTEST_RUN_ID`. nextest skips doc tests, so CI runs those with `cargo test --doc`.
 - **What only tests read or set goes behind the crate's `testing` feature,** which the crate turns on for its own tests by naming itself in `[dev-dependencies]`, so the product never builds it.
 - **A test makes a session, workspace, event, subagent or child worktree from `protocol::fixtures`,** behind protocol's `testing` feature, and sets only what it's about, with struct update syntax. A field added to a record then changes one builder rather than every test that makes one. A test of how a record reads on the wire, such as one from an older peer, spells out its JSON instead.
+- **A protocol break is tested against the version before it.** Its PR spells out the previous version's wire form of each message it changes, in `crates/protocol/tests/compatibility/`, and tests that the hub still reads and answers it. *Not built:* CI running a turn with older releases' workers.
 - **Laws, invariants and round trips are property tests** with fixed seeds that shrink a failure to its smallest case. An example beside a law pins only what the law doesn't.
 - **Errors are asserted by variant or code, not by message.** The exception is text the user sees, which is what a UI test is about.
-- **Tests wait on a condition, not a duration,** as "Waiting" in `docs/standards/testing.md` says, and don't wait out one of the product's timers, as "Timers" there says.
 - **A test takes under 5 s in CI's test job, and CI fails one that takes over 10 s,** even if it passed, since every PR and the merge queue wait for the tests. The gap leaves room for a slower runner or a busier moment. There are no exceptions: a test that's big on purpose is made as small as still catches what it's for, or checks the same thing a cheaper way.
 
 Tests that can't fail prove nothing. When a behavior matters, break it on purpose once and confirm a test notices. Undo the break with an edit, not by copying a saved file back: some `cp`s, such as the one in Homebrew's `uutils-coreutils`, keep the saved file's older modification time, so cargo doesn't rebuild and goes on testing the broken code.

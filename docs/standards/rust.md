@@ -74,7 +74,7 @@ At a limit, split by responsibility, not into halves or numbered parts. A flat `
 
 ## Errors
 
-- **Library crates define `thiserror` enums,** with a variant for each condition callers handle. Callers match variants, not messages. `anyhow` is for binaries and tests, whose errors only reach a person or a log. The one exception is an error type shared across a process boundary, which `docs/architecture.md` describes.
+- **Library crates define `thiserror` enums,** with a variant for each condition callers handle. Callers match variants, not messages. `anyhow` is for binaries and tests, whose errors only reach a person or a log. The one exception is an error type shared across a process boundary, which `docs/principles/layers.md` describes.
 - **A condition has one home:** one type, in the lowest crate that has it. A caller passing it on wraps it with `#[error(transparent)]` and `#[from]`, rather than declaring it again.
 - **Wrapping keeps the source and adds context** at I/O, database and process boundaries: which path, which command.
 - **Panics are for programmer errors only.** Input from users, the network, storage and other programs is fallible.

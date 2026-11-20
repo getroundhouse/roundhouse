@@ -28,7 +28,8 @@ pub const GH_RUNS_WITHIN: Duration = Duration::from_secs(15);
 /// owner GitHub didn't say. Every run of `gh` for it shares [`GH_RUNS_WITHIN`], so a check that
 /// has no time left can't tell. A worker from before this refuses it as unsupported. It changes nothing, so asking
 /// again only asks again: `gh` is asked not to renew a token it renews by itself, where `gh` has that, as asking for
-/// its status or its token would if it's due.
+/// its status or its token would if it's due. *Unconfirmed:* refusing a login whose user can't be told, rather than
+/// recording it.
 #[derive(Clone, Copy, Debug)]
 pub struct FindGithubLogin;
 

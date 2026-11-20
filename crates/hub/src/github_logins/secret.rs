@@ -77,7 +77,7 @@ pub(crate) struct InstallationToken {
 /// only a newer build knows is kept for that build, as [`Stored::Newer`] says, rather than taken for what isn't a login
 /// and deleted, as tidying would, so going back to an older build loses no sign-in or app. So a change that only adds
 /// a field keeps the form, which an older build reads past what it doesn't know of, and a change it would misread is a
-/// new form.
+/// new form. Neither needs a migration of the database, which would stop an older build opening the store at all.
 #[derive(Serialize, Deserialize)]
 #[serde(tag = "format", rename_all = "snake_case")]
 enum Form {

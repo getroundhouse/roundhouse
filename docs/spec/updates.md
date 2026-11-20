@@ -1,6 +1,6 @@
 # Updates
 
-What someone using the desktop app sees when it or its hub updates, or when there is no hub to reach. How it works is under "Managing a hub" in `docs/architecture.md`.
+What someone using the desktop app sees when it or its hub updates, or when there is no hub to reach.
 
 - **Updating never stops running agents unless you choose to.** An update looks like this:
   1. The app downloads an update in the background and installs it when you quit, without relaunching. Everything shows as before, and running agents keep going on the old hub. *Unconfirmed:* `Restart to update` installs it sooner, and opens the app again.
@@ -36,7 +36,7 @@ What someone using the desktop app sees when it or its hub updates, or when ther
 
 ## The build line
 
-The bottom of the sidebar shows which build is running, faint, and only brings up the hub when it isn't the app's build. While an update has something to say, a card with the app's icon sits over that line, saying where it's got to and what to do next, and the line stays, so its buttons are where they always are. An info mark in its corner says more on hover, in a box just above the card and as wide as it: which version it's updating from and to, as its heading, then what that means for what's running. Nothing about an update arriving or finishing by itself is a modal or a notification, since every merge publishes one. The one dialog is the one you ask for, before `Restart now` stops something. *Unconfirmed:* all of this section, and each screen in it.
+The bottom of the sidebar shows which build is running, faint, since a bug report has to say which code it came from, and only brings up the hub when it isn't the app's build. While an update has something to say, a card with the app's icon sits over that line, saying where it's got to and what to do next, and the line stays, so its buttons are where they always are. An info mark in its corner says more on hover, in a box just above the card and as wide as it: which version it's updating from and to, as its heading, then what that means for what's running. Nothing about an update arriving or finishing by itself is a modal or a notification, since every merge publishes one. The one dialog is the one you ask for, before `Restart now` stops something. *Unconfirmed:* all of this section, and each screen in it.
 
 - **The build line ends with two buttons, a question mark and then a gear,** faint until the pointer is on one. The question mark's menu has Check for Updates, then Changelog, and is where help goes as there's more of it. It opens upward, with its right edge at the button's, so it stays over the sidebar. Changelog opens the history of `main` on GitHub, newest first, since every merge is published as the next version. *Not built:* a page of the changelog, and one that starts at the version that's running. The gear opens Settings, as `Cmd-,` does, which its tooltip says. *Unconfirmed.*
 

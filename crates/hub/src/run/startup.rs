@@ -193,6 +193,7 @@ pub async fn run(config: HubConfig) -> Result<(), HubError> {
 
 /// Waits until the hub is asked to go, and says whether a signal asked. Whoever sends one, such as systemd, can't say
 /// whether another hub is coming, so a signal stops the agents, even once the hub was asked to restart.
+/// *Unconfirmed:* that a signal stops them.
 async fn asked_to_go(hub: &Hub, terminate: &mut Terminate) -> bool {
     tokio::select! {
         () = hub.shutdown.notified() => {

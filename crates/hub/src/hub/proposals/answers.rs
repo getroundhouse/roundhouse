@@ -82,7 +82,8 @@ impl Hub {
 }
 
 /// What the agent is told: what was chosen, in which proposal, and that it reads the note with its tool, or that the
-/// person asks for another round, and reads what to change in the note.
+/// person asks for another round, and reads what to change in the note. The note is left to the tool so the prompt
+/// stays short however long the note is.
 pub(super) fn told(proposal: &Proposal, response: &Response) -> String {
     let title = proposal.current.proposed.title.trim();
     // Once there are several, the revision the person read, which may not be the newest when the agent reads this.

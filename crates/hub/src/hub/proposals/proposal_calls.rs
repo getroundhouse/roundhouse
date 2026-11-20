@@ -18,6 +18,7 @@ impl Hub {
         let Propose { proposed, call, key, images, attachments } = asked;
         proposed.check()?;
         let (asking, asked_key) = (session_id.clone(), key.clone());
+        // Before its images are kept, so asking again for one already made keeps nothing more.
         if let Some(proposal) = self.blocking(move |store| store.proposal_asked(&asking, &asked_key)).await? {
             return Ok(ProposalRecord { proposal, revision: None });
         }

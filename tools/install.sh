@@ -34,7 +34,7 @@ report_hub() {
   status="$("$INSTALL_ROOT/current/roundhouse" hub status 2>&1 || true)"
   running="$(echo "$status" | awk '$1 == "pid" { print $4; exit }')"
   if [ -n "$running" ] && [ "$running" != "$version" ]; then
-    echo "The running hub is still $running. The app replaces an older one when it starts with nothing running. To stop it and its agents now:"
+    echo "The running hub is still $running. The app restarts an older one when it next opens. To stop it and its agents now:"
     echo "  \"$INSTALL_ROOT/current/roundhouse\" hub stop"
   elif [ -z "$running" ] && ! echo "$status" | grep -q "no hub"; then
     echo "$status"

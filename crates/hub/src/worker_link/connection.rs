@@ -213,7 +213,8 @@ impl WorkerLink {
     }
 
     /// Whether the worker is another build than `hub`, as its hello said, such as one an earlier hub left. One that
-    /// didn't say is from before workers said, so it's another too.
+    /// didn't say is from before workers said, so it's another too. An older build and a newer one both count, so a
+    /// rollback replaces a worker too. Two builds without a stamp both say `-dev`, so they count as one build.
     pub(crate) fn is_another_build(&self, hub: Build) -> bool {
         self.build.get().is_some_and(|build| build.as_deref() != Some(hub.version()))
     }

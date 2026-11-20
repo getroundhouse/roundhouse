@@ -1,6 +1,6 @@
 //! What GitHub's profile of each GitHub account's user said as the hub last asked, which the account's commit identity
 //! is made from. Only the hub reads it, for what it sends workers, so it's on no record, and keeping it moves no
-//! revision but for a new username, which is on the account's.
+//! revision but for a new username, which is on the account's. *Unconfirmed:* keeping it apart from the record.
 
 use github::GithubProfile;
 use protocol::model::{GithubAccount, GithubAccountId, GithubLoginKind, GithubUser};
@@ -87,7 +87,7 @@ impl Store {
 
     /// Says the hub asked GitHub for `id`'s user's profile at `asked_at_ms`, and GitHub didn't take the account's
     /// token, as one revoked, so it's asked again only once the next read is due, rather than at every check. What
-    /// GitHub said before is kept, if it said anything.
+    /// GitHub said before is kept, if it said anything. *Unconfirmed:* a refusal counting as an ask.
     pub(crate) fn github_profile_refused(&self, id: &GithubAccountId, asked_at_ms: i64) -> Result<(), StoreError> {
         lock(&self.writer).execute(
             "INSERT INTO github_profiles (account_id, read_at_ms) SELECT id, ?2 FROM github_accounts WHERE id = ?1

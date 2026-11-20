@@ -1,6 +1,6 @@
 //! Speaking protocol 4, the version before this one, to a worker of an older build, which the hub replaces with one of
-//! its own once its workspace is idle. It goes with [`protocol::worker::previous`], at the next break, as "Changing the
-//! protocol" in `docs/architecture.md` says, and so does each place that asks [`WorkerLink::speaks_previous`]. So does
+//! its own once its workspace is idle. It goes with [`protocol::worker::previous`], at the next break, as
+//! `docs/principles/protocol.md` says, and so does each place that asks [`WorkerLink::speaks_previous`]. So does
 //! reading the forms from before an agent's calls, approvals and modes were typed from a worker, since only a worker of
 //! protocol 4 can be of a build from before then.
 

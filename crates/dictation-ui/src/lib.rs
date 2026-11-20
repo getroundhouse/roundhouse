@@ -2,7 +2,8 @@
 //! each attachment owns its recording, tentative words and cancellation snapshot. Final words emit the input's usual
 //! change event, so the host saves them as typing. Hosts attach it with [`Field::attach`], enable only visible
 //! targets, draw the optional live line and microphone, and keep their own submission actions, which [`Pending`] holds
-//! until the last words are in for a host with more than one. Nothing here knows a hub, chat or question.
+//! until the last words are in for a host with more than one. Nothing here knows a hub, chat or question. It's a crate
+//! of its own because the desktop app and `transcript` both attach it, and `transcript` can't depend on the app.
 
 #![warn(clippy::wildcard_enum_match_arm)]
 

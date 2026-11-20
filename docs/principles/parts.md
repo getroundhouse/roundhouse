@@ -9,6 +9,7 @@ These rules say which process does which job: hubs, workers, providers and clien
 - **The hub is a process of its own that outlives every client, so whatever must happen with no client connected is the hub's job.** Closing the app stops no agent. For example, the hub sends a queued prompt when a turn ends. When the hub's settings allow a tool use that an agent asks about, the hub approves it itself, because the agent waits on the hub whether or not a client is open.
 - **The hub doesn't know what starts, updates or stops it.** Who does that depends on where the hub runs: a client, for a local hub that was started on demand, and a person, systemd or Docker, for a hub someone runs themselves. The hub only reports its status and shuts down cleanly on `SIGTERM`. It has no desktop mode and doesn't depend on the app.
 - **The hub replies from its records without starting a worker, wherever the records can say.** Then a workspace nobody is using doesn't keep a worker running. For example, a workspace's record holds its branches and where each is pushed, so the hub works out which pull request is the workspace's with no worker.
+- **What the hub does by itself never undoes what a person chose.** For example, the hub's checks leave an installation the person disconnected as disconnected, though GitHub still lists it, and only the person changes the default GitHub account once there's one. *Unconfirmed.*
 
 ## Workers and providers
 

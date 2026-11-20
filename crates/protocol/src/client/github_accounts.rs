@@ -17,6 +17,7 @@ use crate::model::{GithubAccount, GithubAccountId, GithubSignIn, GithubSignInId,
 /// if it was, and one whose login was disconnected has one again. A token the hub holds already is that account again,
 /// and changes nothing, so sending it again does nothing more, and the hub doesn't ask GitHub. A token the hub held and
 /// was told to forget makes a new account without `id`, since the hub keeps nothing to know it again by.
+/// *Unconfirmed:* finding the account of a token the hub holds without asking GitHub.
 ///
 /// Refused with `InvalidRequest` when the token is empty, very long, or has a space or a control character inside, and
 /// when GitHub doesn't take it as a user's, as with one that has ended or been revoked. Refused with `NotFound` when

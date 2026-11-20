@@ -10,7 +10,7 @@ use super::{GithubAppId, GithubInstallationId, GithubUser};
 /// says. It's private, as it's made, so only its owner can install it, and it has at most one installation, on its
 /// owner: the person makes one for each account or organization it's for. An app made public on GitHub later could
 /// have more, which the record takes as it is, though the hub connects only its owner's. The key is in a file of the
-/// hub's, and never on a record.
+/// hub's, and never on a record. *Unconfirmed:* an app as a record of its own, apart from its installations' accounts.
 ///
 /// Removing it has the hub forget the key and every installation's token, and removes its record, as
 /// `HubNotice::Removed` says. The app stays on GitHub, installed where it was, until the person deletes it there.

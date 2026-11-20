@@ -36,7 +36,8 @@ impl Github {
     /// [`ASK_WITHIN`](super::super::ASK_WITHIN). GitHub revokes the token and `refresh` as it gives what replaces them,
     /// so what it gives has to be kept before anything relies on it. Refused with `Unavailable` for whatever may pass
     /// by the next try: GitHub can't be reached, doesn't answer in time, answers with a status other than a 2xx, as
-    /// when it's limiting how often it's asked, or with neither a token nor `bad_refresh_token`.
+    /// when it's limiting how often it's asked, or with neither a token nor `bad_refresh_token`. *Unconfirmed:* trying
+    /// again after every answer but a token and `bad_refresh_token`.
     pub async fn renew(&self, refresh: &GithubRefreshToken) -> Result<Renewal, ApiError> {
         let asking = Renewing {
             client_id: self.config.client_id.as_str(),

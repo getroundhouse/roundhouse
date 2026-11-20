@@ -2,7 +2,7 @@
 //! of their context, their requests' prompt cache and their account's limits, each as a frame of its own, where this
 //! protocol sends a [`Report`](crate::capability::Report). A worker of an older build speaks it until the hub replaces
 //! it with one of its own, once its workspace is idle. Only the hub uses it, and it goes with the next break, as
-//! "Changing the protocol" in `docs/architecture.md` says.
+//! `docs/principles/protocol.md` says.
 //!
 //! Each keeps protocol 4's wire form, which `crates/protocol/tests/compatibility/` spells out, so a change to a type
 //! they're made of that changes that form fails there, rather than each being a frozen copy of those types.

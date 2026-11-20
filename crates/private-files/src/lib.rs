@@ -1,5 +1,5 @@
 //! Making files and directories that only this user can open, as a hub's data directory and what's in it are, and the
-//! sockets that only this user can connect to. The hub, `client-core`, `agents` and `worker` all make them, and none of
+//! sockets that only this user can connect to. The hub, `local-hub`, `agents` and `worker` all make them, and none of
 //! the four is one the other three may depend on, so this is its own small crate.
 //!
 //! Windows has no modes, so there each of these does no more than std does: what's created there takes its folder's

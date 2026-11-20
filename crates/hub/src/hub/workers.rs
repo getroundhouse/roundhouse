@@ -145,7 +145,8 @@ impl Hub {
 
     /// Ends what an earlier hub left on the workspace's instance that this hub doesn't carry on with: its worker, with
     /// `link` if it was reached, and the agents with it, so none goes on unseen. Such as a worker that's stopping, one
-    /// that doesn't answer, or one nothing carried on with, which is no more wanted than one started for a read nobody
+    /// that doesn't answer, one whose version of the worker protocol this hub doesn't speak, as after two breaks or a
+    /// rollback past one, or one nothing carried on with, which is no more wanted than one started for a read nobody
     /// asked for. On its own, since the hub needn't wait for that to serve, and under the workspace's gate, so a worker
     /// wanted meanwhile starts once it's done.
     pub(super) fn end_left_running(self: &Arc<Self>, workspace_id: WorkspaceId, link: Option<Arc<WorkerLink>>) {

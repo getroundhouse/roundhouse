@@ -1,11 +1,11 @@
 //! Hearing speech and turning it into text, on this device. No UI and no async runtime: an engine is loaded on a
 //! thread of its own, which hears one recording at a time, and each recording's text comes back through a channel
-//! that both threads and async tasks can read, as `client-core`'s subscriptions do.
+//! that both threads and async tasks can read, as `client-core`'s subscriptions do. It builds none of the workspace's
+//! other crates but `fetching`, so any client on any device can hear with it, as `docs/principles/layers.md` says.
 //!
 //! [`Dictation`] holds the thread. Each [`Recording`] is heard twice: as it's said, for live text, and a sentence at a
 //! time, cut at the pauses where the live text ends one, for each sentence's final text, which can change words the
-//! live text had. An [`Engine`] is the model that does both. The desktop app's composer dictates with it, as
-//! `apps/desktop ──> dictation` in `docs/architecture.md` has it.
+//! live text had. An [`Engine`] is the model that does both. The desktop app's composer dictates with it.
 
 #![warn(clippy::wildcard_enum_match_arm)]
 

@@ -40,7 +40,8 @@ pub enum GhLogin {
 
 /// Whether GitHub took a found login's token, by the HTTP status it answered the hub with when the hub asked whose the
 /// token is, with the token its worker handed it, as [`FindGithubLogin`](crate::worker::FindGithubLogin) says. A
-/// worker from before the hub asked said it from what GitHub answered `gh`.
+/// worker from before the hub asked said it from what GitHub answered `gh`. *Unconfirmed:* how it's said, and a success
+/// naming another user being one that can't be told.
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, Default, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum GhLoginWorks {

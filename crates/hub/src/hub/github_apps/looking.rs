@@ -83,7 +83,8 @@ impl Hub {
     }
 
     /// Looks for where the app `id` is installed, as the hub does by itself as it checks its GitHub logins, saying in
-    /// the log what failed, for the next check to try again.
+    /// the log what failed, for the next check to try again. *Unconfirmed:* looking at every check, as well as when a
+    /// client asks.
     pub(in super::super) async fn look_by_itself(&self, id: GithubAppId) {
         if let Err(e) = self.look_at_app(id, false).await {
             warn!(app = %id, "couldn't look for where an app of your own is installed: {}", e.message);

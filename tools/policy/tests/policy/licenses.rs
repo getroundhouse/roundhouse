@@ -7,8 +7,8 @@ use serde_json::Value;
 
 use super::workspace::{metadata_for, workspace};
 
-/// Licenses that are fine in anything that ships, App Store apps included. `docs/architecture.md` has why
-/// these, and why not GPL, AGPL or LGPL.
+/// Licenses that are fine in anything that ships, App Store apps included. `docs/decisions/no-strong-copyleft.md` has
+/// why these, and why not GPL, AGPL or LGPL.
 const ALLOWED: &[&str] = &[
     "0BSD",
     "Apache-2.0",
@@ -137,6 +137,14 @@ fn shipped_packages(metadata: &Value, root: &str) -> BTreeMap<String, (String, O
 /// Checks what ships, on the platforms it ships on, rather than everything in `Cargo.lock`, which also
 /// holds build tools, proc macros and other platforms' crates. Add each platform here as it starts
 /// shipping.
+///
+/// It can't see what ships without being a crate in the graph:
+/// - Velopack's prebuilt programs: `UpdateMac`, `Update.exe` and the installer on Windows, and `UpdateNix` and the
+///   `AppImage` runtime on Linux. Velopack is MIT, and `docs/decisions/linux-appimage.md` has the runtime's libfuse.
+/// - Ghostty's terminal core, in the daemon, the CLI and the desktop app, which the build script of
+///   `libghostty-vt-sys` fetches and builds with Zig, with the libraries built into it. Ghostty's
+///   `deps/libghostty-vt-third-party.json` lists them: Ghostty and translate-c are MIT, simdutf and Wuffs are
+///   Apache-2.0 or MIT, Highway is Apache-2.0 or BSD-3-Clause, and uucode is MIT and Unicode-3.0.
 #[test]
 fn only_allowed_licenses_ship() {
     const MAC: [&str; 2] = ["aarch64-apple-darwin", "x86_64-apple-darwin"];

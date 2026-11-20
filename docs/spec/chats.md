@@ -639,6 +639,7 @@ Every call is drawn the same way, as the first rule below says, and each kind fi
 ## The model and plan mode
 
 - **A workspace can have Claude, Codex and Antigravity chats.** Choose the agent in the new-workspace dialog or from the chat tabs' `+`; a chat keeps the kind it was created with. When only one kind is offered, the tabs' `+` offers New chat, which starts its chat, rather than a chat with each. The keyboard shortcut starts another of the current chat's kind. *Unconfirmed.*
+- **A new chat is Claude's until another agent is chosen,** since Claude is the first agent the hub offers. The new-workspace dialog starts on it, and a chat made without naming an agent, as from the command line, is one.
 - **Codex starts with the model and effort its CLI offers as defaults, with the worker machine's native Codex sign-in.** Roundhouse leaves those credentials with Codex. Its model, mode and effort changes apply on the next turn. Its completed plan waits for approval even when Codex returns it as ordinary final text, so implementation cannot follow an unapproved plan. *Unconfirmed.*
   ![Choose the agent for a new chat](screens/new-chat-agents.png)
 

@@ -234,7 +234,7 @@ impl LiveSession {
     }
 
     /// Refuses a run whose claims it can't be held to, since a claim that needs another without it means nothing, as
-    /// [`Capabilities::unmet_needs`] says, and stops it, so nothing is asked of it or recorded as its.
+    /// [`Capabilities::unmet_needs`] says, and stops it, so nothing is asked of it or recorded as its. *Unconfirmed.*
     async fn held_to(&self, link: &WorkerLink, claims: &Capabilities) -> Result<(), ApiError> {
         let unmet = claims.unmet_needs();
         if unmet.is_empty() {

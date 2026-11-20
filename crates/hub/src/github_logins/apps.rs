@@ -25,7 +25,8 @@ pub(crate) struct AppRemoved {
 }
 
 impl GithubLogins {
-    /// The app GitHub made from `code`, if the hub keeps one, which making it again answers with.
+    /// The app GitHub made from `code`, if the hub keeps one, which making it again answers with. *Unconfirmed:*
+    /// keeping the code an app was made from.
     pub(crate) fn made_from(&self, code: &GithubManifestCode) -> Result<Option<GithubApp>, ApiError> {
         Ok(self.store.github_app_made_from(code)?)
     }

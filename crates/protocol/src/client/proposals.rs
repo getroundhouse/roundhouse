@@ -33,7 +33,10 @@ impl Request for ProposalAnswer {
 /// Asks the agent for another revision of the proposal's revision `revision`, without choosing, with a note that says
 /// what it should change, which the hub keeps on that revision as the person's response, and tells the agent of in a
 /// prompt of its own, as [`ProposalAnswer`] does. It's refused as [`ProposalAnswer`] is, and as an invalid request
-/// without a note. A hub older than this refuses it as unsupported.
+/// without a note.
+///
+/// It's a request of its own, which a hub older than this refuses as unsupported. As a field of [`ProposalAnswer`], an
+/// older hub would read it as an answer that chose nothing. *Unconfirmed.*
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct ProposalAnotherRound {
     pub id: ProposalId,

@@ -18,7 +18,7 @@ use request::ClientRequest;
 use serde::{Deserialize, Serialize};
 
 /// The client protocol's version, apart from the worker protocol's, so a break in one doesn't break the other. It
-/// changes only for a real break, as "Changing the protocol" in `docs/architecture.md` says.
+/// changes only for a real break, as `docs/principles/protocol.md` says.
 pub const CLIENT_PROTOCOL_VERSION: u32 = 3;
 
 /// A request to a hub, which names what the hub answers it with.
@@ -152,7 +152,9 @@ pub struct HubStatus {
     pub oldest_protocol_version: Option<u32>,
     /// The oldest version of the worker protocol among the workers it's running, counting its own, which every worker it
     /// starts speaks. A hub that doesn't speak it would end those workers as it started, so the app takes no update whose
-    /// hub doesn't, as "Managing a hub" in `docs/architecture.md` says. `None` from a hub from before this.
+    /// hub doesn't. Its own counts even with no worker running, since the hub goes on after the app quits, and starts a
+    /// worker of its own build whenever something asks for one, such as an agent whose wait on its pull request ends.
+    /// `None` from a hub from before this.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub oldest_running_worker_protocol: Option<u32>,
     /// Terminals open in its workspaces, or being opened, whose shells stopping their workers would end. A hub from

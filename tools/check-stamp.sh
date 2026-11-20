@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Checks that only the binaries read the build stamp, as `docs/architecture.md` says, so the libraries compile the same
-# whatever the stamp. Checks the binaries with one stamp and then another, and fails if the second compiles anything
-# but a binary again. CI's lint job runs it. Needs `jq`.
+# Checks that only the binaries read the build stamp, as `crates/protocol/src/build.rs` says, so the libraries compile
+# the same whatever the stamp. Checks the binaries with one stamp and then another, and fails if the second compiles
+# anything but a binary again. CI's lint job runs it. Needs `jq`.
 #
 #   tools/check-stamp.sh
 set -euo pipefail

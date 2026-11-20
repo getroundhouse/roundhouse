@@ -1,6 +1,7 @@
 //! The parts of the window that tests find by where they're drawn, such as the gallery cutting a screen's picture down
 //! to one. Marking a part gives it its ID and lets a test find it in one call, so neither can be left out, and a test
-//! that names a part names a [`Region`], which only [`InRegion::region`] puts on an element.
+//! that names a part names a [`Region`], which only [`InRegion::region`] puts on an element. They're named here because
+//! the app and `transcript` each mark some, and `transcript` can't depend on the app.
 
 use gpui_kit::base::ObservedElement;
 use gpui_kit::{Div, Stateful, TestSupportExt as _};

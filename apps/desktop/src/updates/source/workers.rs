@@ -7,13 +7,13 @@ use protocol::worker::HUB_SPEAKS;
 /// next hub has to speak, so the update ends none of them. `None` when the restart leaves no worker running: on a hub
 /// someone runs themselves, which the app leaves alone, and on one whose workers stop with it, which the app restarts
 /// only once nothing is running. The app says it as it learns it from its hub, and the source reads the feed without
-/// each release whose hub doesn't speak it, as "Managing a hub" in `docs/architecture.md` says.
+/// each release whose hub doesn't speak it.
 #[derive(Clone, Debug)]
 pub(crate) struct WorkersToKeep(Arc<Mutex<Option<u32>>>);
 
 impl WorkersToKeep {
     /// Until the app has heard from its hub: workers as old as its own build's hub speaks, so the update crosses no break
-    /// in the worker protocol.
+    /// in the worker protocol. *Unconfirmed.*
     pub(crate) fn until_heard() -> Self {
         Self::oldest_at(Some(HUB_SPEAKS.oldest))
     }
