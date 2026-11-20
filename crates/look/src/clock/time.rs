@@ -135,7 +135,7 @@ pub(super) fn day_and_time_from(at: &ZonedDateTime, now: &ZonedDateTime) -> Stri
 
 /// Holds everything that moves still from now on, by turning Reduce Motion on, and the time at `at_ms`, so pictures of
 /// the app come out the same every time. Marks stay where they are, and anything else shows as it ends.
-#[cfg(feature = "testing")]
+#[cfg(any(test, feature = "testing"))]
 pub fn hold_still(at_ms: i64, cx: &mut App) {
     cx.set_reduce_motion(true);
     cx.set_global(Still { at_ms });

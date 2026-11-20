@@ -160,7 +160,7 @@ pub(super) fn limits_left(limits: &[(SharedString, u8, Option<Reserve>)]) -> Str
 /// yesterday". `None` until they have, and from a hub from before it kept that, which can't be told apart, so nothing
 /// is said of either.
 pub(super) fn last_used(account: &Account, now_ms: i64, cx: &App) -> Option<String> {
-    let day = crate::ago::day_ago(account.used_at_ms?, now_ms, cx)?;
+    let day = look::day_ago(account.used_at_ms?, now_ms, cx)?;
     Some(format!("Last used {day}"))
 }
 
