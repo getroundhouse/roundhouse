@@ -70,7 +70,6 @@ impl RenderOnce for Key {
                     .border_color(colors.control_edge)
                     .bg(colors.raised)
                     .typeset(Type::Key)
-                    .line_height(px(10.))
                     .text_color(colors.text_muted)
                     .children(parts)
                     .into_any_element()

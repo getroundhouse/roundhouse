@@ -1,8 +1,9 @@
-use gpui_kit::{SharedString, Styled as _, div};
+use gpui_kit::{AbsoluteLength, SharedString, Styled as _, div};
 
 use super::styles::EMPHASIS;
 use super::{CodeLines, MONO, Type, Typeset as _};
 use crate::spec_table;
+use crate::traits::Reach;
 
 #[test]
 fn the_specs_table_has_every_kind_of_text_in_order_as_the_app_sets_it() {
@@ -13,13 +14,35 @@ fn the_specs_table_has_every_kind_of_text_in_order_as_the_app_sets_it() {
 }
 
 #[test]
-fn each_kind_sets_its_size_and_its_weight() {
+fn each_kind_sets_its_size_its_weight_and_its_lines() {
     for &kind in Type::ALL {
         let mut set = div().typeset(kind);
         let text = &set.style().text;
 
         assert_eq!(text.font_size, Some(kind.set().size), "{kind:?}");
         assert_eq!(text.font_weight, kind.set().weight, "{kind:?}");
+        assert_eq!(text.line_height, kind.set().line, "{kind:?}");
+    }
+}
+
+/// What's held with a key is smaller than the key, and sits on its line.
+#[test]
+fn only_a_keys_kinds_have_lines_of_their_own_as_tall_as_what_the_key_says() {
+    for reach in [Reach::Desk, Reach::Handheld] {
+        let key = Type::Key.set_at(reach).size;
+
+        for &kind in Type::ALL {
+            let on_a_key = matches!(kind, Type::Key | Type::KeyHeld);
+            assert_eq!(kind.set_at(reach).line, on_a_key.then(|| key.into()), "{kind:?} at {reach:?}");
+        }
+    }
+}
+
+/// So none drifts from the rest, or from the kit's own text, if the rem changes.
+#[test]
+fn every_kind_is_in_rems_at_a_desk() {
+    for &kind in Type::ALL {
+        assert!(matches!(kind.set_at(Reach::Desk).size, AbsoluteLength::Rems(_)), "{kind:?}");
     }
 }
 
