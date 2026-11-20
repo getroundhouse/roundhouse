@@ -142,6 +142,39 @@ fn a_terminal_carries_on_on_a_new_connection() {
     assert!(first_asked.try_iter().all(|asked| !matches!(asked, ClientRequest::TerminalInput(_))));
 }
 
+/// A new connection's first screen asks for the size the view has room for, and a screen that catches up after the
+/// copy fell behind doesn't, which is the second screen on a subscription.
+#[test]
+fn only_a_connections_first_screen_asks_for_the_views_size() {
+    let dir = tempfile::tempdir().unwrap();
+    let (first, second) = (dir.path().join("first.sock"), dir.path().join("second.sock"));
+    let first_asked = start_hub(&first, false, |_| Some(vec![screen(b"first"), screen(b"caught up")]));
+    let second_asked = start_hub(&second, false, |_| Some(vec![screen(b"after")]));
+    let open = OpenTerminal::start(&Client::connect(&first, "test").unwrap(), &"t".into());
+    let room = Size { cols: 100, rows: 30 };
+    open.fit(room);
+    frame_when(&open, "the screen that catches up", |frame| text(frame)[0] == "caught up");
+    // Sent after anything the screens had it send, on the same connection.
+    open.key(key('x'));
+    let resize = ClientRequest::TerminalResize(TerminalResize {
+        id: "t".into(),
+        size: TerminalSize { cols: room.cols, rows: room.rows },
+    });
+    let mut resized = 0;
+    loop {
+        match first_asked.recv_timeout(WAIT).unwrap() {
+            asked if asked == typed(b"x") => break,
+            asked => resized += usize::from(asked == resize),
+        }
+    }
+
+    open.reconnect(&Client::connect(&second, "test").unwrap());
+
+    assert_eq!(resized, 1, "once, for the first screen or for the view's room");
+    assert!(matches!(second_asked.recv_timeout(WAIT).unwrap(), ClientRequest::TerminalAttach(_)));
+    assert_eq!(second_asked.recv_timeout(WAIT).unwrap(), resize, "again on a new connection");
+}
+
 /// The copy scrolls through its history with no connection, as it's the client's, but what's typed then is dropped,
 /// rather than sent once there's a connection again, as typing over one that's gone is.
 #[test]

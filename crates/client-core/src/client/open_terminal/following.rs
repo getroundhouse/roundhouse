@@ -117,7 +117,8 @@ impl OpenTerminal {
     }
 
     /// The view has room for `size`, which the terminal is asked to take if it isn't that size already, and again
-    /// whenever it's attached at another size. A new size another client gives it is kept until the room changes.
+    /// whenever it's attached at another size, on a connection, but not when it catches up after falling behind. A new
+    /// size another client gives it is kept until the room changes.
     pub fn fit(&self, size: Size) {
         self.give(Given::Fit(size));
     }
@@ -212,6 +213,10 @@ impl Source for TerminalSource {
     /// without one. What that would send the hub is dropped while there's none, as typing over one that's gone is.
     fn asked(&mut self, connection: Option<&Client>, held: &Mutex<Held>, _: &dyn Fn()) -> Result<bool> {
         Ok(self.settle(connection, held))
+    }
+
+    fn reconnected(&mut self) {
+        self.copy.attaching();
     }
 
     fn due_at(&mut self) -> Option<Instant> {

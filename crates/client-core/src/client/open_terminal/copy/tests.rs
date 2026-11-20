@@ -80,10 +80,28 @@ fn a_screen_of_another_size_asks_for_the_one_the_view_has_room_for() {
     assert_eq!(copy.fit(BIG).unwrap(), ToHub::default(), "nothing to resize yet");
 
     let other = copy.take_in(screen(SMALL, b"")).unwrap();
+    copy.attaching();
     let same = copy.take_in(screen(BIG, b"")).unwrap();
 
     assert_eq!(other.resize, Some(terminal_size(BIG)));
     assert_eq!(same.resize, None);
+}
+
+/// One that catches up after falling behind is at the size another client gave the terminal, which is kept, as a
+/// new size from elsewhere is, so two clients don't take it from each other each time either falls behind.
+#[test]
+fn a_screen_that_catches_up_keeps_the_size_it_comes_at() {
+    let mut copy = TerminalCopy::new();
+    copy.fit(BIG).unwrap();
+    copy.take_in(screen(BIG, b"")).unwrap();
+
+    let caught_up = copy.take_in(screen(SMALL, b"")).unwrap();
+
+    assert_eq!(caught_up.resize, None);
+    assert_eq!(copy.frame().unwrap().unwrap().size, SMALL);
+    assert_eq!(copy.fit(BIG).unwrap().resize, None, "until the view's room changes");
+    copy.attaching();
+    assert_eq!(copy.take_in(screen(SMALL, b"")).unwrap().resize, Some(terminal_size(BIG)), "or it attaches again");
 }
 
 /// Another client showing it gave it that size, so it isn't fought over.

@@ -22,6 +22,8 @@ pub(in crate::client::open_terminal) struct TerminalCopy {
     /// The size the copy last asked the terminal to take, until the hub says it has, or a new screen comes. Until then
     /// it's what the terminal will be, so the view's room going back to the size it had asks for that again.
     asked: Option<Size>,
+    /// Whether the next screen is the first on a connection, rather than one that catches up after falling behind.
+    attaching: bool,
     /// Whether it has changed since the last frame.
     changed: bool,
 }
@@ -37,7 +39,7 @@ pub(in crate::client::open_terminal) struct ToHub {
 
 impl TerminalCopy {
     pub(in crate::client::open_terminal) fn new() -> Self {
-        Self { mirror: None, colors: None, fit: None, asked: None, changed: true }
+        Self { mirror: None, colors: None, fit: None, asked: None, attaching: true, changed: true }
     }
 
     /// Draws a cell that sets no colour in `foreground` on `background`, the view's own, from now on.
@@ -53,10 +55,17 @@ impl TerminalCopy {
         Ok(())
     }
 
+    /// The next screen comes on a new connection, which takes the terminal back to the view's own size.
+    pub(in crate::client::open_terminal) fn attaching(&mut self) {
+        self.attaching = true;
+    }
+
     /// Takes in what the hub sent. A screen starts a new copy, which keeps the place the old one was scrolled to and
-    /// what was selected, as [`Mirror::keep_place_of`] says. It asks for the size the view has room for if it isn't
-    /// that size already, so a view that attaches, or attaches again, takes the terminal back to its own size. A new
-    /// size from elsewhere is kept, though, since the client that gave it is showing it too.
+    /// what was selected, as [`Mirror::keep_place_of`] says. The first on a connection asks for the size the view has
+    /// room for if it isn't that size already, so a view that attaches, or attaches again, takes the terminal back to
+    /// its own size. One that catches up after falling behind keeps the size it comes at, as a new size from elsewhere
+    /// is kept, since the client that gave it is showing it too, and the two would otherwise take it from each other
+    /// each time either fell behind.
     pub(in crate::client::open_terminal) fn take_in(&mut self, update: TerminalUpdate) -> Result<ToHub, MirrorError> {
         let mut to_hub = ToHub::default();
         match update {
@@ -73,7 +82,8 @@ impl TerminalCopy {
                     let _ = mirror.keep_place_of(old);
                 }
                 self.mirror = Some(mirror);
-                self.asked = self.fit.filter(|fit| *fit != size);
+                let attaching = std::mem::take(&mut self.attaching);
+                self.asked = self.fit.filter(|fit| attaching && *fit != size);
                 to_hub.resize = self.asked.map(terminal_size);
             }
             TerminalUpdate::Output { output } => {
