@@ -1,4 +1,5 @@
-//! The icons the app draws: the kit's own, and the few more it uses that the kit doesn't bundle by default.
+//! The icons the app draws: the few more of its own that the kit doesn't bundle by default, in front of those of what
+//! every client shares, which `look::Assets` has.
 
 use std::borrow::Cow;
 
@@ -8,66 +9,33 @@ use gpui_kit::{AssetSource, Result, SharedString};
 gpui_kit::assets::icon_assets!(
     Extra,
     [
-        Activity,
         Archive,
         ArchiveRestore,
         ArrowUpDown,
-        ArrowUpRight,
-        Bell,
-        Brain,
-        ChevronsUpDown,
-        CircleCheck,
-        CircleDot,
-        CircleFadingArrowUp,
         CircleQuestionMark,
-        CircleSlash,
         CodeXml,
         Columns2,
-        CornerDownRight,
         Download,
-        FilePen,
-        FilePlus,
-        Files,
-        FoldVertical,
         GitBranch,
-        GitMerge,
-        GitPullRequest,
-        GitPullRequestClosed,
-        GitPullRequestDraft,
-        HardDrive,
         House,
-        ImagePlus,
         KeyRound,
         Laptop,
-        Lightbulb,
         ListTree,
-        LoaderCircle,
         Mail,
         MailOpen,
-        MessageCircleQuestionMark,
-        MessageSquare,
         MessageSquarePlus,
-        Mic,
-        NotebookPen,
         Paperclip,
         Pencil,
         PencilSparkles,
-        Plug,
         QrCode,
-        RotateCcw,
         RotateCcwClock,
         ScrollText,
         Server,
-        Split,
         SquareArrowRight,
         SquareDot,
         SquareMinus,
         SquarePlus,
-        Terminal,
         TextAlignStart,
-        Trash,
-        TriangleAlert,
-        Wrench,
     ]
 );
 
@@ -77,18 +45,15 @@ pub struct Assets;
 
 impl AssetSource for Assets {
     fn load(&self, path: &str) -> Result<Option<Cow<'static, [u8]>>> {
-        if let Some(icon) = look::file_icon_asset(path) {
-            return Ok(Some(Cow::Borrowed(icon)));
-        }
         match Extra.load(path)? {
             Some(icon) => Ok(Some(icon)),
-            None => gpui_kit::assets::Assets.load(path),
+            None => look::Assets.load(path),
         }
     }
 
     fn list(&self, path: &str) -> Result<Vec<SharedString>> {
         let mut found = Extra.list(path)?;
-        found.extend(gpui_kit::assets::Assets.list(path)?);
+        found.extend(look::Assets.list(path)?);
         Ok(found)
     }
 }
