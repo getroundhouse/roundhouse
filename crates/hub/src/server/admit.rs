@@ -2,7 +2,6 @@
 //! authenticates first, then every client says hello.
 
 use std::sync::Arc;
-use std::sync::atomic::Ordering;
 use std::time::Duration;
 
 use protocol::client::{ApiError, ClientRequest, ClientResponse, ErrorCode, ReplyOutcome};
@@ -10,6 +9,7 @@ use protocol::frame;
 use tokio::sync::{OwnedSemaphorePermit, watch};
 use tokio::time::Instant;
 
+use super::counted::Counted;
 use crate::hub::Hub;
 use crate::remote::{DeviceLink, Revoke};
 
@@ -50,22 +50,6 @@ pub(super) struct Gate {
     revoke: Revoke,
 }
 
-/// Counts a connection among the hub's clients for as long as it's held.
-struct Counted(Arc<Hub>);
-
-impl Counted {
-    fn new(hub: &Arc<Hub>) -> Counted {
-        hub.clients.fetch_add(1, Ordering::Relaxed);
-        Counted(hub.clone())
-    }
-}
-
-impl Drop for Counted {
-    fn drop(&mut self) {
-        self.0.clients.fetch_sub(1, Ordering::Relaxed);
-    }
-}
-
 /// What to do with a request.
 pub(super) enum Admit {
     /// Answer it as usual, alongside whatever comes after it.
@@ -81,7 +65,7 @@ impl Gate {
     pub(super) fn local(hub: &Arc<Hub>) -> Gate {
         Gate {
             origin: Origin::Local,
-            stage: Stage::Admitted { greeted: false, _counted: Counted::new(hub) },
+            stage: Stage::Admitted { greeted: false, _counted: Counted::client(hub) },
             device: None,
             revoke: Arc::new(watch::Sender::new(false)),
         }
@@ -162,7 +146,7 @@ impl Gate {
             Ok((response, link)) => {
                 self.device = Some(link);
                 // Gives up its place among those that haven't authenticated.
-                self.stage = Stage::Admitted { greeted: false, _counted: Counted::new(hub) };
+                self.stage = Stage::Admitted { greeted: false, _counted: Counted::client(hub) };
                 Admit::Answer(ReplyOutcome::Response(response))
             }
             Err(error) => Admit::Refuse(ReplyOutcome::Error(error)),
