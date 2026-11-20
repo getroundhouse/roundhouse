@@ -1,0 +1,97 @@
+diff --git a/crates/component/src/dialog/dialog.rs b/crates/component/src/dialog/dialog.rs
+index b8055105..dcb5b5d0 100644
+--- a/crates/component/src/dialog/dialog.rs
++++ b/crates/component/src/dialog/dialog.rs
+@@ -18,6 +18,7 @@ use crate::{
+     button::{Button, ButtonVariant, ButtonVariants as _},
+     dialog::{DialogContent, DialogDispatchAnchor, DialogTitle},
+     scroll::ScrollableElement as _,
++    styled::FOCUS_RING_WIDTH,
+     v_flex,
+ };
+ 
+@@ -797,6 +798,13 @@ impl RenderOnce for Dialog {
+                                             v_flex()
+                                                 .flex_1()
+                                                 .overflow_hidden()
++                                                // A focus ring is painted outside its control, so
++                                                // each area that clips the content reaches past it
++                                                // by the ring's width above and below, and pads it
++                                                // back, which leaves the layout as it was. At the
++                                                // sides the dialog's padding already gives it room.
++                                                .my(-FOCUS_RING_WIDTH)
++                                                .py(FOCUS_RING_WIDTH)
+                                                 .gap_y_2()
+                                                 .when_some(self.header, |this, header| {
+                                                     this.child(
+@@ -826,15 +834,20 @@ impl RenderOnce for Dialog {
+                                                 })
+                                                 .when(!self.children.is_empty(), |this| {
+                                                     this.child(
+-                                                        div().flex_1().overflow_hidden().child(
+-                                                            // Body
+-                                                            v_flex()
+-                                                                .size_full()
+-                                                                .overflow_y_scrollbar()
+-                                                                .pl(paddings.left)
+-                                                                .pr(paddings.right)
+-                                                                .children(self.children),
+-                                                        ),
++                                                        div()
++                                                            .flex_1()
++                                                            .overflow_hidden()
++                                                            .my(-FOCUS_RING_WIDTH)
++                                                            .child(
++                                                                // Body
++                                                                v_flex()
++                                                                    .size_full()
++                                                                    .overflow_y_scrollbar()
++                                                                    .py(FOCUS_RING_WIDTH)
++                                                                    .pl(paddings.left)
++                                                                    .pr(paddings.right)
++                                                                    .children(self.children),
++                                                            ),
+                                                     )
+                                                 }),
+                                         )
+@@ -1060,6 +1073,40 @@ pub(crate) mod tests {
+         );
+     }
+ 
++    /// A focus ring is painted outside its control, so the body must leave
++    /// room for one on a control at its top or bottom rather than clip it.
++    /// A press is clipped as paint is, so where presses land says what shows.
++    #[gpui::test]
++    fn a_focus_ring_at_the_edge_of_the_body_is_not_clipped(cx: &mut TestAppContext) {
++        let cx = window(cx, size(px(1000.), px(800.)));
++        let presses = Rc::new(Cell::new(0));
++        let counter = presses.clone();
++        open(cx, move |dialog, _, _| {
++            let counter = counter.clone();
++            // The only thing in the body, so it is at both of its edges, with
++            // a probe around it where its focus ring would be.
++            let control = div().relative().h(px(32.)).child(
++                div()
++                    .id("ring-probe")
++                    .debug_selector(|| "ring-probe".into())
++                    .absolute()
++                    .top(-FOCUS_RING_WIDTH)
++                    .left(-FOCUS_RING_WIDTH)
++                    .right(-FOCUS_RING_WIDTH)
++                    .bottom(-FOCUS_RING_WIDTH)
++                    .on_click(move |_, _, _| counter.set(counter.get() + 1)),
++            );
++            dialog.child(control).footer(div().h(px(32.)))
++        });
++
++        let ring = cx.debug_bounds("ring-probe").unwrap();
++        let x = ring.center().x;
++        cx.simulate_click(point(x, ring.top() + px(1.)), gpui::Modifiers::default());
++        assert_eq!(presses.get(), 1, "the body clipped the top of the ring");
++        cx.simulate_click(point(x, ring.bottom() - px(1.)), gpui::Modifiers::default());
++        assert_eq!(presses.get(), 2, "the body clipped the bottom of the ring");
++    }
++
+     /// `Dialog::button_props` overrides only the fields it sets.
+     #[gpui::test]
+     fn dialog_button_props_merge_with_what_the_dialog_already_carries(cx: &mut TestAppContext) {
