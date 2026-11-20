@@ -5,15 +5,14 @@
 
 use std::sync::Arc;
 
-use gpui_kit::component::{h_flex, v_flex};
 use gpui_kit::{
-    Context, InteractiveElement as _, IntoElement, ParentElement as _, PlatformTextSystem, Render, Styled as _,
-    TestSupportExt as _, Window, div, px, size,
+    AnyElement, App, InteractiveElement as _, ParentElement as _, PlatformTextSystem, Styled as _, TestSupportExt as _,
+    div, px,
 };
-use look::{Corner, Shaped as _, Type, Typeset as _};
+use look::{Corner, Shaped as _};
 
 use super::capture::Picture;
-use super::headless;
+use super::foundation_sheet::Columns;
 use super::places::{self, Places};
 
 /// Its image's name, in `docs/spec/screens/`.
@@ -22,46 +21,29 @@ pub(crate) const NAME: &str = "corners";
 pub(crate) const SPEC: &str = "look.md";
 /// What the spec's table calls the type that names each.
 const KIND: &str = "look::Corner";
-const NAME_WIDTH: f32 = 130.;
 /// Big enough that the roundest corner is plain, and the least still shows.
 const SQUARE: f32 = 40.;
-const SAMPLE_WIDTH: f32 = 90.;
-const RADIUS_WIDTH: f32 = 60.;
-const ROW: f32 = 56.;
-const MARGIN: f32 = 16.;
+const COLUMNS: Columns = Columns { name: 130., sample: 90., written: 60., row: 56. };
 
-struct Sheet;
-
-impl Render for Sheet {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let colors = look::colors(cx);
-        let row = |&corner: &Corner| {
-            let [name, radius] = corner.written();
-            let place = places::id(KIND, &name);
-            let name = div().w(px(NAME_WIDTH)).typeset(Type::Detail).text_color(colors.text_muted).child(name);
-            let square = div()
-                .size(px(SQUARE))
-                .corners(corner)
-                .border(look::EDGE)
-                .border_color(colors.control_edge)
-                .bg(colors.raised)
-                .id(place)
-                .test_support();
-            let sample = div().w(px(SAMPLE_WIDTH)).child(square);
-            let radius = div().w(px(RADIUS_WIDTH)).typeset(Type::Detail).text_color(colors.text_faint).child(radius);
-            h_flex().h(px(ROW)).border_b_1().border_color(colors.edge).child(name).child(sample).child(radius)
-        };
-        v_flex().size_full().bg(colors.pane).text_color(colors.text).p(px(MARGIN)).children(Corner::ALL.iter().map(row))
-    }
+fn rows(cx: &App) -> Vec<AnyElement> {
+    let colors = look::colors(cx);
+    let row = |&corner: &Corner| {
+        let [name, radius] = corner.written();
+        let square = div()
+            .size(px(SQUARE))
+            .corners(corner)
+            .border(look::EDGE)
+            .border_color(colors.control_edge)
+            .bg(colors.raised)
+            .id(places::id(KIND, &name))
+            .test_support();
+        COLUMNS.row(name, div().w(px(COLUMNS.sample)).child(square), radius, cx)
+    };
+    Corner::ALL.iter().map(row).collect()
 }
 
 /// At the app's scale, as the screens are, with where it draws each corner's square.
 pub(crate) fn draw(text_system: &Arc<dyn PlatformTextSystem>) -> (Picture, Places) {
-    let mut cx = headless::app(text_system);
-    #[expect(clippy::cast_precision_loss, reason = "a handful of rows")]
-    let rows = Corner::ALL.len() as f32;
-    let width = px(MARGIN * 2. + NAME_WIDTH + SAMPLE_WIDTH + RADIUS_WIDTH);
     let names: Vec<String> = Corner::ALL.iter().map(|each| each.written()[0].clone()).collect();
-    let size = size(width, px(MARGIN * 2. + rows * ROW));
-    headless::draw_and_measure(&mut cx, size, None, |_| Sheet, |window| Places::of(window, &[(KIND, &names)]))
+    COLUMNS.draw(text_system, &[(KIND, &names)], rows)
 }

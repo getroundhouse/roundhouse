@@ -39,6 +39,7 @@ mod failure_chats;
 mod failures_in_a_row;
 mod file_chats;
 mod finding;
+mod foundation_sheet;
 mod frame;
 mod git_app_screens;
 mod git_screens;
