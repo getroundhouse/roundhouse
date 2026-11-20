@@ -115,7 +115,8 @@ impl Checks {
     /// Which repository on GitHub each repository is, as its record's address names it, so the hub checks them as it
     /// starts and as a worker reads an address. One with no address whose address a worker is still to read, as each
     /// is once the hub that added it is upgraded to keep addresses, is checked for the one its last check was of, if
-    /// any, so it isn't left unchecked until a worker on the hub's machine links. `None` if the store can't say.
+    /// any, so it isn't left unchecked until a worker on the hub's machine links. *Unconfirmed.* `None` if the store
+    /// can't say.
     /// And whether a push from its checkout goes round the git credential, as the worker that read its address said.
     async fn recorded(&self) -> Option<HashMap<RepoId, PushesTo>> {
         let read = |store: &Store| {

@@ -221,8 +221,9 @@ async fn still_running(agent: &ProcessRecord) -> bool {
 /// process exits. Any record still here means the worker was killed without stopping it. An orphaned agent runs on
 /// until its turn ends, with nobody reading its output, and a new agent would be working in the same worktree on the
 /// same conversation. So each recorded process that's still the one recorded, by its start time, goes first, with its
-/// group, which gets `grace` to stop by itself. Every other file here is a run's too, such as the one that tells an
-/// agent's CLI where the worker's tools are, which holds the agent's token, so everything here goes.
+/// group, which gets `grace` to stop by itself. A group whose leader has gone is left, since only the leader's start
+/// time shows that the record is still that group's. Every other file here is a run's too, such as the one that tells
+/// an agent's CLI where the worker's tools are, which holds the agent's token, so everything here goes.
 pub(super) async fn stop_orphans(instance_dir: &Path, grace: Duration) {
     let Ok(records) = std::fs::read_dir(instance_dir.join(AGENTS_DIR)) else {
         return;

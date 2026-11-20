@@ -1,6 +1,7 @@
 //! What each item the transcript shows is, whichever state it's in. GPUI keeps an element's state,
 //! such as how far an area has scrolled, under the element's ID, so an item keeps one key from pending to
-//! recorded, and every element ID for an item comes from its key here.
+//! recorded, and every element ID for an item comes from its key here. A button is the exception: it belongs to one
+//! event and never changes state, so it's keyed by that event's `seq`, such as Retry on a failed request.
 
 use gpui_kit::ElementId;
 use protocol::model::{AttachmentId, ClientMessageId, MessageId, Seq, ToolUseId};

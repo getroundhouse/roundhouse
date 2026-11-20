@@ -73,6 +73,9 @@ impl PullRequestsSnapshot {
     }
 }
 
+/// When a pull request last had changes requested, and last left the merge queue, as a wait on it started, each by
+/// GitHub's own timestamp. Only one later than that ends the wait, so a review or a removal from before the wait
+/// started doesn't.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct WaitBaseline {
     pub number: PullRequestNumber,

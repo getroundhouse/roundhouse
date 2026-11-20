@@ -49,10 +49,13 @@ A README beside code says how to build, run or change that code, and agents keep
 | `docs/principles/agents.md` | How the hub and clients deal with each kind of agent through its adapter, and how an agent uses Roundhouse's tools |
 | `docs/decisions/` | One record a file, listed in its `README.md` |
 | `docs/reference/terms.md` | What the project's words mean, and which to write |
+| `docs/reference/layout.md` | A map of the parts and what connects them, and what each crate is |
 | `docs/reference/commands.md` | Every command for building, testing, running and packaging from a checkout |
 | `docs/reference/claude-cli.md` | How the Claude CLI behaves, and how the worker drives it |
 | `docs/reference/codex-cli.md` | How Codex's app-server behaves on the wire, and how to probe it |
 | `docs/reference/antigravity-cli.md` | How Antigravity's ACP server behaves on the wire, and how the worker drives it |
+| `docs/reference/git.md` | What git does that took an experiment to find, or that more than one place in the code depends on |
+| `docs/reference/github.md` | How GitHub behaves, where more than one place in the code depends on it |
 | `docs/reference/conformance.md` | How a version of an agent's CLI is checked against what Roundhouse needs of it, and how to play the scenarios that check it |
 | `docs/reference/performance.md` | How to measure the desktop app's speed, and what helps it meet the bars |
 | `docs/reference/inspiration.md` | What Conductor does, as a source of ideas |
@@ -68,5 +71,5 @@ Two docs are from before the folders, and are being taken apart as `docs/standar
 
 | Doc | What it holds until then |
 |---|---|
-| `docs/architecture.md` | How the system fits together: parts, repo layout, dependency rules, state ownership, wire format, what happens when a process dies, managing a hub, and providers |
+| `docs/architecture.md` | How the system fits together: dependency rules, state ownership, wire format, managing a hub, and providers |
 | `docs/ui.md` | Why the apps are built on GPUI and gpui-kit, how the transcript builds on the kit, and why the iOS app is on Zed's iOS backend |

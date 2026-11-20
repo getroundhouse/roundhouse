@@ -61,7 +61,8 @@ impl Hub {
     /// within [`ASK_WITHIN`](github::ASK_WITHIN), 15 s, and then its write, which waits on nothing outside the
     /// hub. So the wait is at most the check's own work, a renewal's call and its write. GitHub revokes what a renewal
     /// renews as it gives the next, so a stop that dropped what GitHub gave would have the account need signing in
-    /// again, where waiting makes a stop at most about 15 s longer. Making an installation's token, and looking for
+    /// again, where waiting makes a stop at most about 15 s longer. A hub that's killed during a renewal still loses
+    /// what GitHub gave. Making an installation's token, and looking for
     /// where an app of your own is installed, are dropped where they are, since GitHub revokes nothing as it makes a
     /// token, so dropping one costs only another call, at the next hub's first check.
     pub(crate) async fn stop_checking_github_logins(&self, watching: JoinHandle<()>) {

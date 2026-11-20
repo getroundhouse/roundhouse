@@ -11,7 +11,9 @@ A decision record holds one large, one-off choice among real alternatives, such 
 | [hub-speaks-previous-version.md](hub-speaks-previous-version.md) | Only the hub speaks the previous protocol version |
 | [typed-capabilities.md](typed-capabilities.md) | What an agent can do is one typed set of capabilities, which each adapter fits its agent to |
 | [worker-tools-over-mcp-http.md](worker-tools-over-mcp-http.md) | The worker serves Roundhouse's tools to its agents over MCP, as HTTP on 127.0.0.1 |
+| [hub-holds-agent-logins.md](hub-holds-agent-logins.md) | The hub holds each agent account's login and hands it to every launch |
 | [git-credential-set-by-hub.md](git-credential-set-by-hub.md) | The hub sets the GitHub credential for every process a worker starts |
+| [machine-gh-token-handed-to-hub.md](machine-gh-token-handed-to-hub.md) | While each machine's own `gh` login is the default, the hub reads GitHub with the token a worker hands it |
 | [github-batched-graphql.md](github-batched-graphql.md) | The hub reads pull requests from GitHub in batched GraphQL |
 | [pull-request-from-pushed-branch.md](pull-request-from-pushed-branch.md) | A workspace's pull request is found from the branch it's pushed to, with no stored link |
 | [provider-adapters-over-stdio.md](provider-adapters-over-stdio.md) | A provider's adapter is a separate program that the hub runs over stdio |

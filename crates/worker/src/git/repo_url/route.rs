@@ -13,7 +13,8 @@ pub(super) fn route(addresses: &str) -> PushRoute {
 
 /// Whether git pushes to `address` with the worker's credential helper, which its git config names for
 /// `https://github.com` alone: an `https://` address on github.com, with no port, which git takes for another, and no
-/// password, which git would push with instead. A user alone is still the helper's to answer for.
+/// password, which git would push with instead. A user alone is still the helper's to answer for. *Unconfirmed:* an
+/// address with a port, or with a password, counting as one that goes round the credential.
 fn through_the_credential(address: &str) -> bool {
     let scheme = "https://";
     let Some(prefix) = address.get(..scheme.len()).filter(|it| it.eq_ignore_ascii_case(scheme)) else { return false };
