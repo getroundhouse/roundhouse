@@ -19,10 +19,11 @@ use crate::worker_link::WorkerLink;
 use github::GithubProfile;
 use github::TokenOwner;
 
-/// A stand-in for a worker, following `credential` as an opened link does, which keeps each credential it's set, in
-/// turn, and answers each as `answer` says, or never, for `None`.
+/// A stand-in for a worker, following `credential` as an opened link does, or on a provider whose machines Roundhouse
+/// leaves GitHub to, for `None`, which keeps each credential it's set, in turn, and answers each as `answer` says, or
+/// never, for `None`.
 fn following(
-    credential: watch::Receiver<DefaultCredential>,
+    credential: Option<watch::Receiver<DefaultCredential>>,
     answer: impl Fn() -> Option<Result<WorkerResponse, ApiError>> + Send + 'static,
 ) -> (Arc<WorkerLink>, watch::Receiver<Vec<GithubCredential>>) {
     let (kept, sets) = watch::channel(Vec::new());
@@ -90,7 +91,7 @@ async fn every_link_is_sent_each_change_in_the_order_made_ending_with_the_newest
     let made = [ada("first"), blocked, ada("second")];
     let credential = watch::Sender::new(DefaultCredential::MachineOwn);
     let mut links: Vec<_> =
-        (0..3).map(|_| following(credential.subscribe(), || Some(Ok(WorkerResponse::Ok)))).collect();
+        (0..3).map(|_| following(Some(credential.subscribe()), || Some(Ok(WorkerResponse::Ok)))).collect();
 
     for (at, set) in made.iter().enumerate() {
         credential.send_replace(set.clone());
@@ -108,12 +109,33 @@ async fn every_link_is_sent_each_change_in_the_order_made_ending_with_the_newest
     }
 }
 
+/// A worker on a provider whose machines Roundhouse leaves GitHub to is set the machine's own as its link opens, and
+/// its link follows nothing after, so no default, nor a block, ever reaches it.
+#[tokio::test(start_paused = true)]
+async fn a_worker_left_to_its_machine_is_set_the_machines_own_once_and_follows_nothing() {
+    let (kept, sets) = watch::channel(Vec::new());
+    let link = WorkerLink::answering(move |request| {
+        let WorkerRequest::GitCredentialSet(GitCredentialSet { credential }) = request else { panic!("{request:?}") };
+        kept.send_modify(|sets| sets.push(credential));
+        Some(Ok(WorkerResponse::Ok))
+    });
+
+    let mut following = Following::new(Arc::clone(&link), None);
+    // As the link's greeting sets it.
+    following.queue().await.unwrap().await.unwrap();
+    let followed = tokio::time::timeout(SET_WITHIN, following.follow()).await;
+
+    assert!(followed.is_ok(), "it stopped following, with nothing to follow");
+    assert_eq!(*sets.borrow(), [GithubCredential::MachineOwn]);
+    assert!(link.is_open());
+}
+
 #[tokio::test(start_paused = true)]
 async fn a_worker_that_never_answers_holds_up_no_other_link_nor_a_change_and_is_ended_at_the_limit() {
     let dir = tempfile::tempdir().unwrap();
     let logins = logins_in(dir.path());
-    let (answering, mut answered) = following(logins.git_credential(), || Some(Ok(WorkerResponse::Ok)));
-    let (stuck, mut stuck_sets) = following(logins.git_credential(), || None);
+    let (answering, mut answered) = following(Some(logins.git_credential()), || Some(Ok(WorkerResponse::Ok)));
+    let (stuck, mut stuck_sets) = following(Some(logins.git_credential()), || None);
     let started = tokio::time::Instant::now();
 
     let id = connect(&logins, "a-token", None);
@@ -140,9 +162,9 @@ async fn a_worker_that_doesnt_apply_a_set_is_said_and_used_on_and_no_token_is_lo
     let dir = tempfile::tempdir().unwrap();
     let logins = logins_in(dir.path());
     let older = || Some(Err(ApiError::new(ErrorCode::Unsupported, "a request this worker doesn't know")));
-    let (from_before, mut from_before_sets) = following(logins.git_credential(), older);
+    let (from_before, mut from_before_sets) = following(Some(logins.git_credential()), older);
     let old_git = || Some(Err(ApiError::new(ErrorCode::Unavailable, "its git is older than 2.31")));
-    let (cant, mut cant_sets) = following(logins.git_credential(), old_git);
+    let (cant, mut cant_sets) = following(Some(logins.git_credential()), old_git);
 
     let id = connect(&logins, "github_pat_a_secret", None);
     until_set(&mut from_before_sets, 1).await;

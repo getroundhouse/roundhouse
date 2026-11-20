@@ -92,7 +92,7 @@ A worker reads its machine's own `gh` login for the hub, as `FindGithubLogin` sa
 
 ## The login `gh` uses in a config directory it's given
 
-A worker gives every process it starts a `gh` config directory of its own, as `GH_CONFIG_DIR`, while the default GitHub account isn't each machine's own login. `Files::write`, in `crates/worker/src/git_credential/files.rs`, writes its `hosts.yml`.
+A worker gives every process it starts a `gh` config directory of its own, as `GH_CONFIG_DIR`, while the hub sets it an account or a block, which it does only on a provider where Roundhouse sets up GitHub, and while the default isn't each machine's own login. `Files::write`, in `crates/worker/src/git_credential/files.rs`, writes its `hosts.yml`.
 
 - **`gh` reads its config from the directory `GH_CONFIG_DIR` names, and none of the person's own.** So `gh` there has none of the person's settings, such as their aliases.
 - **`gh` takes a token in `hosts.yml` before the one it keeps in the system's keychain, and uses the keychain's when the file holds none,** as `gh` 2.103.3 does. So a config directory with no login leaves `gh` logged in as the machine's own. To log `gh` in as nobody, the worker writes a login whose token GitHub refuses (`BLOCKED_USER`).

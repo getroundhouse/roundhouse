@@ -241,6 +241,12 @@ impl Hub {
             .ok_or_else(|| ApiError::new(ErrorCode::Unavailable, format!("there's no provider {name}")))
     }
 
+    /// Whether Roundhouse leaves GitHub on `name`'s machines to the machine, as
+    /// [`ProviderSet::leaves_github_to_machine`] says.
+    pub(crate) fn leaves_github_to_machine(&self, name: &ProviderName) -> bool {
+        self.providers.leaves_github_to_machine(name)
+    }
+
     /// Ends every job where it is, sign-ins' and lookups of models included, and starts none after, as the hub stops,
     /// before its workers are stopped or left. A sign-in left waiting is recorded as ended as the next hub starts, and
     /// lists of models aren't kept.

@@ -66,8 +66,7 @@ impl Hub {
     }
 
     /// Has `link`'s worker, which runs on the hub's machine, read the address of each repository whose address is to
-    /// be read, one at a time, and keeps each it says, with where its pushes go, which the check of whether the
-    /// default can push reads, announcing each record that changes. One the worker can't
+    /// be read, one at a time, and keeps each it says, announcing each record that changes. One the worker can't
     /// say, as one from before [`ReadRepoUrl`] can't, or doesn't within [`READ_WITHIN`], is left to be read, so the
     /// record stays its checkout until a worker here can say.
     async fn read_repo_urls_by(&self, link: &WorkerLink) {
@@ -84,24 +83,25 @@ impl Hub {
 
     async fn read_repo_url(&self, link: &WorkerLink, repo: RepoToRead) -> Result<(), Unsupported> {
         let RepoToRead { id, name, checkout } = repo;
-        let (url, push) =
-            match tokio::time::timeout(READ_WITHIN, link.call(ReadRepoUrl { path: checkout.clone() })).await {
-                Ok(Ok(RepoUrlReply { url, push })) => (url, push),
-                Ok(Err(e)) if e.code == ErrorCode::Unsupported => {
-                    info!(repo = name, "{link} can't read where a checkout fetches from: {}", e.message);
-                    return Err(Unsupported);
-                }
-                Ok(Err(e)) => {
-                    warn!(repo = name, "{link} couldn't read where {checkout} fetches from: {}", e.message);
-                    return Ok(());
-                }
-                Err(_) => {
-                    warn!(repo = name, "{link} didn't say where {checkout} fetches from within {READ_WITHIN:?}");
-                    return Ok(());
-                }
-            };
+        // Where an older worker says its pushes go is no longer kept, since a push meets the default only on a provider
+        // where Roundhouse sets up GitHub, which rewrites GitHub's addresses to go through it.
+        let url = match tokio::time::timeout(READ_WITHIN, link.call(ReadRepoUrl { path: checkout.clone() })).await {
+            Ok(Ok(RepoUrlReply { url, .. })) => url,
+            Ok(Err(e)) if e.code == ErrorCode::Unsupported => {
+                info!(repo = name, "{link} can't read where a checkout fetches from: {}", e.message);
+                return Err(Unsupported);
+            }
+            Ok(Err(e)) => {
+                warn!(repo = name, "{link} couldn't read where {checkout} fetches from: {}", e.message);
+                return Ok(());
+            }
+            Err(_) => {
+                warn!(repo = name, "{link} didn't say where {checkout} fetches from within {READ_WITHIN:?}");
+                return Ok(());
+            }
+        };
         let said = url.as_ref().map_or_else(|| "no address".to_owned(), RepoUrl::to_string);
-        match self.blocking(move |store| store.read_repo_url(&id, &checkout, url.as_ref(), push)).await {
+        match self.blocking(move |store| store.read_repo_url(&id, &checkout, url.as_ref())).await {
             Ok(changed) => {
                 if let Some(repo) = changed {
                     info!(repo = name, "{link} read that its checkout fetches from {said}");

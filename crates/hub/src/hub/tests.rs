@@ -212,7 +212,7 @@ pub(crate) fn hub_reading_github_timed(dir: &Path, api: String, timers: Timers) 
     let hub = hub_timed(dir, vec![described()], Github::new(GithubConfig::at(api)), timers);
     hub.store.workspace_ready(&"w".into(), "/w", &"alder".into(), "main", None).unwrap();
     let address = protocol::model::RepoUrl::try_from("https://github.com/example/project".to_string()).unwrap();
-    hub.store.read_repo_url(&"r".into(), "/repo", Some(&address), None).unwrap();
+    hub.store.read_repo_url(&"r".into(), "/repo", Some(&address)).unwrap();
     handed_a_token(&hub);
     hub
 }

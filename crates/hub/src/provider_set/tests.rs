@@ -59,6 +59,25 @@ async fn without_a_file_there_is_only_the_local_provider() {
     assert!(set.get(&"local".into()).is_some());
 }
 
+/// Roundhouse sets up GitHub on each provider the file names unless its entry says not to, and never on the local
+/// provider's machine, which is the person's own, whether there's a file or not.
+#[tokio::test]
+async fn only_the_local_provider_and_one_whose_entry_says_so_are_left_to_their_machines() {
+    let dir = tempfile::tempdir().unwrap();
+    let program = adapter(dir.path(), "vm");
+    let file = serde_json::json!({"providers": [
+        {"name": "vms", "program": program},
+        {"name": "keyed", "program": program, "set_up_github": false},
+    ]});
+    let set = loaded(dir.path(), Some(file.to_string()));
+
+    assert_eq!(set.left_to_machine(), ["keyed".into(), "local".into()]);
+    assert!(!set.leaves_github_to_machine(&"vms".into()));
+    assert!(!set.leaves_github_to_machine(&"gone".into()), "one the hub doesn't know");
+    let without = tempfile::tempdir().unwrap();
+    assert_eq!(loaded(without.path(), None).left_to_machine(), ["local".into()], "without a file");
+}
+
 #[tokio::test]
 async fn new_workspaces_go_to_the_provider_the_file_makes_the_default() {
     let dir = tempfile::tempdir().unwrap();

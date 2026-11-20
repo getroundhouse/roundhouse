@@ -45,17 +45,6 @@ const GITHUB_OVER_SSH: [&str; 2] = ["git@github.com:", "ssh://git@github.com/"];
 /// or with one, since git asks the helper for `https://github.com` whatever user an address names.
 const GITHUB_OVER_HTTPS: [&str; 2] = ["https://github.com/", "https://*@github.com/"];
 
-/// `machine` with the git config's rewriting of GitHub's SSH addresses, and nothing else of it, given in
-/// `GIT_CONFIG_*` as the file is, so what git makes of an address while the worker hands on a credential can be read
-/// whatever it hands on now, as it hands on none under the machine's own.
-pub(crate) fn rewriting(machine: &Environment) -> Environment {
-    let key = format!("url.{SENT_TO}.insteadOf");
-    let given = machine.clone().with("GIT_CONFIG_COUNT", GITHUB_OVER_SSH.len().to_string());
-    GITHUB_OVER_SSH.iter().enumerate().fold(given, |given, (i, address)| {
-        given.with(format!("GIT_CONFIG_KEY_{i}"), &key).with(format!("GIT_CONFIG_VALUE_{i}"), *address)
-    })
-}
-
 /// What a process can be handed for github.com: an account to push as, or a block, with what to do about it.
 pub(super) enum Handed {
     Account(GitCredential),

@@ -285,7 +285,7 @@ pub(super) async fn handle(
             crate::found_login::reply(state.credentials.machine(), &state.config.scratch_dir).await
         }
         // The machine's own too, since the git credential's rewriting of GitHub's addresses is the worker's, not the
-        // checkout's, which only where it pushes is read with, whatever the credential is now.
+        // checkout's.
         WorkerRequest::ReadRepoUrl(ReadRepoUrl { path }) => {
             Ok(WorkerResponse::RepoUrl(git::repo_url(state.credentials.machine(), Path::new(&path)).await?))
         }

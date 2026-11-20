@@ -142,7 +142,7 @@ async fn a_clone_of_a_forks_pull_request_is_read_where_it_merges_into() {
     let fork = protocol::model::RepoUrl::try_from("https://github.com/ada/project".to_string()).unwrap();
     // Added again, as a checkout seen again is, so its address is read again.
     hub.store.add_repo(&"r".into(), "repo", "/repo", 0).unwrap();
-    hub.store.read_repo_url(&"r".into(), "/repo", Some(&fork), None).unwrap();
+    hub.store.read_repo_url(&"r".into(), "/repo", Some(&fork)).unwrap();
     let mut branches = pushed("head-7", "head-7", (0, 0));
     branches.had[0].upstream.as_mut().unwrap().address = Some(fork);
     hub.store.set_workspace_branches(&"w".into(), &branches).unwrap();

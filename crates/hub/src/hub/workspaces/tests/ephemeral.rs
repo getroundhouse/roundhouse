@@ -37,7 +37,7 @@ fn hub_ephemeral(
     first: impl Fn(&WorkerRequest) -> Option<Result<WorkerResponse, ApiError>> + Send + Sync + 'static,
 ) -> (Arc<Hub>, Arc<Asked>) {
     let (hub, asked) = hub_with_environment(dir, ephemeral_env(), vec![described()], first);
-    hub.store.read_repo_url(&"r".into(), "/repo", Some(&remote_url()), None).unwrap();
+    hub.store.read_repo_url(&"r".into(), "/repo", Some(&remote_url())).unwrap();
     (hub, asked)
 }
 

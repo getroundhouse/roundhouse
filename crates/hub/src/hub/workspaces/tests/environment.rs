@@ -37,7 +37,7 @@ async fn a_separate_workspace_uses_its_recorded_placement_without_re_querying_th
     let separate = WorkerEnvironment { filesystem: WorkerFilesystem::Separate, clones: ClonePersistence::Persistent };
     let (hub, asked) = hub_with_environment(dir.path(), separate, vec![described()], |_| None);
     let url = remote_url();
-    hub.store.read_repo_url(&"r".into(), "/repo", Some(&url), None).unwrap();
+    hub.store.read_repo_url(&"r".into(), "/repo", Some(&url)).unwrap();
 
     let made = hub.workspace_create("r".into(), Some("birch".into()), None, None).await.unwrap();
     // From here on, nothing after creation may contact the provider for its environment.

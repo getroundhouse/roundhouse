@@ -5,7 +5,7 @@ use protocol::client::{ApiError, ErrorCode, error_chain};
 use protocol::model::{HubId, ProviderName};
 use providers::Provider;
 use serde::Deserialize;
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::io;
 use std::path::Path;
 use std::sync::Arc;
@@ -19,6 +19,8 @@ pub(crate) struct ProviderSet {
     pub(super) adapters: Vec<Arc<AdapterProvider>>,
     /// The one new workspaces go to, or why there's none.
     pub(super) default: Result<ProviderName, String>,
+    /// The providers whose machines Roundhouse leaves GitHub to, as [`ProviderSet::leaves_github_to_machine`] says.
+    pub(super) left_to_machine: BTreeSet<ProviderName>,
 }
 
 #[derive(Deserialize)]
@@ -37,13 +39,40 @@ struct Entry {
     pub(super) program: String,
     #[serde(default)]
     pub(super) args: Vec<String>,
+    /// Whether Roundhouse sets up GitHub on the provider's machines, as [`ProviderSet::leaves_github_to_machine`]
+    /// says. On unless the entry says otherwise, since a machine made for a workspace rarely has a login for GitHub.
+    #[serde(default = "sets_up_github")]
+    pub(super) set_up_github: bool,
+}
+
+fn sets_up_github() -> bool {
+    true
 }
 
 impl ProviderSet {
-    /// Just `provider`, which new workspaces go to.
+    /// Just `provider`, which new workspaces go to, and on whose machines Roundhouse sets up GitHub.
     pub(crate) fn only(provider: Arc<dyn Provider>) -> Self {
         let default = ProviderName::from(provider.name());
-        Self { by_name: HashMap::from([(default.clone(), provider)]), adapters: Vec::new(), default: Ok(default) }
+        Self {
+            by_name: HashMap::from([(default.clone(), provider)]),
+            adapters: Vec::new(),
+            default: Ok(default),
+            left_to_machine: BTreeSet::new(),
+        }
+    }
+
+    /// Whether Roundhouse leaves GitHub on `name`'s machines to the machine, so its workers are given none of the
+    /// default GitHub account, and git and `gh` there are as the machine has them. So it is for the local provider,
+    /// whose machine is the person's own, and for a provider whose entry says `"set_up_github": false`, as one whose
+    /// machines come with their own login for GitHub would. Not for any other, nor for a name the hub doesn't know.
+    /// `docs/decisions/github-identity-held-by-hub.md` says why. *Unconfirmed.*
+    pub(crate) fn leaves_github_to_machine(&self, name: &ProviderName) -> bool {
+        self.left_to_machine.contains(name)
+    }
+
+    /// Every provider [`ProviderSet::leaves_github_to_machine`] is true of, in order of name.
+    pub(crate) fn left_to_machine(&self) -> Vec<ProviderName> {
+        self.left_to_machine.iter().cloned().collect()
     }
 
     pub(crate) fn get(&self, name: &ProviderName) -> Option<Arc<dyn Provider>> {
@@ -69,7 +98,9 @@ impl ProviderSet {
         build: Build,
         adapter_hello_within: Duration,
     ) -> Self {
+        let local_name = ProviderName::from(local.name());
         let mut set = Self::only(local);
+        set.left_to_machine.insert(local_name);
         let parsed = match std::fs::read(file) {
             Ok(bytes) => serde_json::from_slice::<ProvidersFile>(&bytes).map_err(|e| format!("it didn't parse: {e}")),
             Err(e) if e.kind() == io::ErrorKind::NotFound => return set,
@@ -87,6 +118,9 @@ impl ProviderSet {
             if set.by_name.contains_key(&entry.name) {
                 warn!(provider = %entry.name, "leaving out a second provider of the same name");
                 continue;
+            }
+            if !entry.set_up_github {
+                set.left_to_machine.insert(entry.name.clone());
             }
             let open = provider_link::process(AdapterCommand { program: entry.program, args: entry.args });
             let (name, hub_id) = (entry.name.to_string(), hub_id.clone());

@@ -132,3 +132,11 @@ pub(super) const GITHUB_PROFILES: &str = r"
 pub(super) const GITHUB_SENT: &str = r"
     ALTER TABLE hub_settings ADD COLUMN github_sent TEXT;
 ";
+
+/// The providers whose machines Roundhouse leaves GitHub to, on the hub's settings, as a JSON list of their names, so
+/// every client says nothing of whether the default can push from a workspace there. The hub writes it as it starts,
+/// from its providers, before any client reads it, so the `NULL` every hub from before has is never read as of this
+/// run. Changing it is a change to the settings' record, so it moves their revision.
+pub(super) const GITHUB_LEFT_TO_MACHINE: &str = r"
+    ALTER TABLE hub_settings ADD COLUMN github_left_to_machine TEXT;
+";

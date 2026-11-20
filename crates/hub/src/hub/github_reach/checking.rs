@@ -5,14 +5,13 @@ use std::time::Duration;
 use protocol::client::HubNotice;
 #[cfg(doc)]
 use protocol::model::RepoUrl;
-use protocol::model::{GithubReach, GithubUsername, Reach, RepoId};
+use protocol::model::{GithubReach, GithubRepositoryName, GithubUsername, Reach, RepoId};
 use tokio::sync::watch;
 use tokio::task::JoinSet;
 use tokio::time::{Instant, MissedTickBehavior};
 use tracing::{error, warn};
 
 use super::super::Hub;
-use super::reaching::PushesTo;
 use crate::github_logins::DefaultCredential;
 use crate::store::{Store, StoreError, now_ms};
 
@@ -27,16 +26,15 @@ impl Hub {
     /// Checks whether the default GitHub account can push to each repository's repository on GitHub, and records each
     /// answer as the repository's `GithubReach`, announced as records are, until the hub stops: as it starts, as a
     /// worker reads a repository's address, as `Hub::read_repo_urls` says, for one whose address then names another
-    /// repository on GitHub, or whose pushes go another way, as what workers give their processes for github.com
-    /// changes, which it does as the default, its login or its commit identity changes, and every
-    /// [`CHECKED_AGAIN_EVERY`]. Once a repository and login, not a workspace, and each repository's checks side by
+    /// repository on GitHub, as what workers give their processes for github.com changes, which it does as the
+    /// default, its login or its commit identity changes, and every [`CHECKED_AGAIN_EVERY`]. Once a repository and login, not a workspace, and each repository's checks side by
     /// side, each within GitHub's time limit, never under the logins' lock.
     ///
     /// Which repository on GitHub a repository is, is the one its record's address names, as [`RepoUrl::on_github`]
     /// says, so one with no address, or an address elsewhere, isn't on GitHub. That's where its checkout fetches from,
-    /// and a `pushurl` of the checkout's can send its pushes elsewhere, which this doesn't see. *Unconfirmed.* One whose
-    /// pushes go round the git credential, as the worker that read its address said, isn't checked, since its agents
-    /// push as the machine's own whoever the default is, as `Reach::PushesAsMachineOwn` says.
+    /// and a `pushurl` of the checkout's can send its pushes elsewhere, which this doesn't see. *Unconfirmed.* What it
+    /// finds is what a push meets on a provider where Roundhouse sets up GitHub. A workspace on one where it leaves
+    /// GitHub to the machine says nothing of it, as `GithubSettings::left_to_machine` says.
     pub(crate) async fn watch_github_reach(self: Arc<Self>) {
         let credential = self.git_credential();
         Checks::new(self, credential).run().await;
@@ -50,8 +48,8 @@ pub(super) struct Checks {
     /// What workers give their processes for github.com, which a push meets, and who GitHub knows that as, as the
     /// logins work it out.
     credential: watch::Receiver<DefaultCredential>,
-    /// Where each repository's pushes went when it was last checked, by its record's address.
-    pushes_to: HashMap<RepoId, PushesTo>,
+    /// Which repository on GitHub each repository was when it was last checked, by its record's address.
+    pushes_to: HashMap<RepoId, Option<GithubRepositoryName>>,
     under_way: JoinSet<Checked>,
     /// The number of each repository's newest check, whose answer alone is recorded.
     newest: HashMap<RepoId, u64>,
@@ -117,13 +115,12 @@ impl Checks {
     /// is once the hub that added it is upgraded to keep addresses, is checked for the one its last check was of, if
     /// any, so it isn't left unchecked until a worker on the hub's machine links. *Unconfirmed.* `None` if the store
     /// can't say.
-    /// And whether a push from its checkout goes round the git credential, as the worker that read its address said.
-    async fn recorded(&self) -> Option<HashMap<RepoId, PushesTo>> {
+    async fn recorded(&self) -> Option<HashMap<RepoId, Option<GithubRepositoryName>>> {
         let read = |store: &Store| {
             let (repos, to_read) = (store.list_repos()?, store.repos_to_read()?);
-            Ok((repos, to_read, store.github_reaches()?, store.repos_pushing_around()?))
+            Ok((repos, to_read, store.github_reaches()?))
         };
-        let (repos, to_read, reaches, around) = match self.hub.blocking(read).await {
+        let (repos, to_read, reaches) = match self.hub.blocking(read).await {
             Ok(recorded) => recorded,
             Err(e) => {
                 warn!("couldn't read which repositories to check the default can push to: {}", e.message);
@@ -139,8 +136,7 @@ impl Checks {
                 None if to_read.contains(&repo.id) => Some(checked.remove(&repo.id)?),
                 None => None,
             };
-            let around = around.contains(&repo.id);
-            Some((repo.id, PushesTo { repository, around }))
+            Some((repo.id, repository))
         });
         Some(named.collect())
     }

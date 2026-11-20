@@ -1,12 +1,12 @@
 use super::super::{Store, StoreError, from_text, json_at, lock, rev_of, text_of};
 use protocol::model::{
     AccountDefault, AccountId, AgentKind, GithubAccountId, GithubSettings, HubId, HubSettings, HubSettingsChange,
-    SentCredential,
+    ProviderName, SentCredential,
 };
 use rusqlite::{Connection, params};
 
 pub(in super::super) fn hub_settings(conn: &Connection) -> rusqlite::Result<HubSettings> {
-    let columns = "keep_awake, allow_asked_in_full_access, rev, github_account_id, github_sent";
+    let columns = "keep_awake, allow_asked_in_full_access, rev, github_account_id, github_sent, github_left_to_machine";
     conn.query_row(&format!("SELECT {columns} FROM hub_settings"), [], |row| {
         // The outer SELECT remains active while the defaults are read, keeping one SQLite snapshot.
         let mut defaults =
@@ -27,6 +27,7 @@ pub(in super::super) fn hub_settings(conn: &Connection) -> rusqlite::Result<HubS
             github: Some(GithubSettings {
                 account: row.get::<_, Option<String>>(3)?.map(GithubAccountId::from),
                 sent: json_at(row, 4)?,
+                left_to_machine: json_at(row, 5)?.unwrap_or_default(),
             }),
             rev: rev_of(row, 2)?,
         })
@@ -86,6 +87,21 @@ impl Store {
         let sent = serde_json::to_string(sent)?;
         let conn = lock(&self.writer);
         let changed = conn.execute("UPDATE hub_settings SET github_sent = ?1 WHERE github_sent IS NOT ?1", [&sent])?;
+        Ok(if changed == 0 { None } else { Some(hub_settings(&conn)?) })
+    }
+
+    /// Records `providers` as the ones whose machines Roundhouse leaves GitHub to, on the hub's settings, in order of
+    /// name, and returns the settings when that changed them.
+    pub(crate) fn record_github_left_to_machine(
+        &self,
+        providers: &[ProviderName],
+    ) -> Result<Option<HubSettings>, StoreError> {
+        let mut providers = providers.to_vec();
+        providers.sort();
+        let providers = serde_json::to_string(&providers)?;
+        let conn = lock(&self.writer);
+        let sql = "UPDATE hub_settings SET github_left_to_machine = ?1 WHERE github_left_to_machine IS NOT ?1";
+        let changed = conn.execute(sql, [&providers])?;
         Ok(if changed == 0 { None } else { Some(hub_settings(&conn)?) })
     }
 

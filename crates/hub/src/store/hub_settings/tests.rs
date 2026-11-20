@@ -102,6 +102,27 @@ fn what_workers_are_sent_is_on_the_settings_once_recorded_and_moves_their_revisi
     assert_eq!(store.list_records().unwrap().hub_settings, Some(changed));
 }
 
+/// A hub from before it recorded the providers whose machines Roundhouse leaves GitHub to has none on its settings, so
+/// every client takes every provider as set up, as that hub's were, until the hub that starts records them, in order
+/// of name. Recording the same again moves nothing.
+#[test]
+fn the_providers_left_to_their_machines_are_on_the_settings_once_recorded() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = older::store_from_before(dir.path(), schema::BEFORE_GITHUB_LEFT_TO_MACHINE, "");
+    let before = store.hub_settings().unwrap();
+
+    let recorded = store.record_github_left_to_machine(&["vms".into(), "local".into()]).unwrap().unwrap();
+    let again = store.record_github_left_to_machine(&["local".into(), "vms".into()]).unwrap();
+
+    let github = recorded.github.as_ref().unwrap();
+    assert!(before.github.unwrap().sets_up(&"local".into()));
+    assert_eq!(github.left_to_machine, ["local".into(), "vms".into()]);
+    assert!(!github.sets_up(&"local".into()) && github.sets_up(&"incus".into()));
+    assert!(recorded.rev > before.rev);
+    assert_eq!(again, None);
+    assert_eq!(store.list_records().unwrap().hub_settings, Some(recorded));
+}
+
 #[test]
 fn a_hub_is_given_an_id_once_and_keeps_it() {
     let (first, second) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());

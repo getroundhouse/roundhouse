@@ -52,7 +52,7 @@ fn hub_reading(dir: &Path, provider: &Arc<dyn Provider>, api: String) -> Arc<Hub
     store.workspace_ready(&"w".into(), "/w", &"alder".into(), "main", None).unwrap();
     store.set_workspace_branches(&"w".into(), &pushed("head-7", "head-7", (0, 0))).unwrap();
     let address = model::RepoUrl::try_from("https://github.com/example/project".to_string()).unwrap();
-    store.read_repo_url(&"r".into(), "/repo", Some(&address), None).unwrap();
+    store.read_repo_url(&"r".into(), "/repo", Some(&address)).unwrap();
     let providers = ProviderSet::only(provider.clone());
     let github = Github::new(github::GithubConfig::at(api));
     let (dirs, timers) = (HubDirs::in_dir(dir), Timers::FOR_TESTS);
@@ -65,7 +65,7 @@ fn hub_reading(dir: &Path, provider: &Arc<dyn Provider>, api: String) -> Arc<Hub
 fn hub_timed(dir: &Path, provider: &Arc<dyn Provider>, timers: Timers) -> Arc<Hub> {
     let store = Arc::new(store_with_session(dir));
     store.workspace_ready(&"w".into(), "/w", &"alder".into(), "main", None).unwrap();
-    store.read_repo_url(&"r".into(), "/repo", None, None).unwrap();
+    store.read_repo_url(&"r".into(), "/repo", None).unwrap();
     let providers = ProviderSet::only(provider.clone());
     let github = Github::new(github::GithubConfig::at(NO_GITHUB.to_string()));
     Arc::new(Hub::new(Build::UNSTAMPED, store, HubDirs::in_dir(dir), providers, github, Vec::new(), false, timers))
