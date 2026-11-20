@@ -19,7 +19,6 @@ mod outline;
 mod places;
 mod prompts;
 mod queueing;
-mod start;
 mod stream;
 mod terminals;
 mod typed;
@@ -42,7 +41,6 @@ use protocol::client::{
 #[cfg(test)]
 use protocol::frame;
 pub(crate) use queueing::Shown;
-pub use start::Daemon;
 #[cfg(test)]
 use std::io::{BufRead, BufReader, Write};
 #[cfg(test)]
@@ -54,8 +52,9 @@ mod tests;
 mod connection;
 #[cfg(test)]
 use connection::SUBSCRIPTION_CAPACITY;
+pub use connection::hub_is_missing;
+use connection::subscription_channel;
 pub use connection::{Client, ClientError, Ended, Result, Subscription, SubscriptionItem};
-use connection::{hub_is_missing, subscription_channel};
 
 mod transport;
 

@@ -114,6 +114,7 @@ crates/
   private-files/   Making files, directories and sockets that only their user can open, such as the data directory and what's in it, for the crates that make them. Unconfirmed
   providers/       The trait a provider adapter written in Rust implements, the loop that serves it over the provider protocol, and the local provider
   client-core/     Connection, and each hub's records, open sessions and open terminals, kept in sync. Shared by every Rust client. No UI
+  local-hub/       Starting a hub on this machine when there's none, and removing the copies of the daemon nothing runs from, for the desktop app and the CLI. A phone never starts one
   transcript/      A session's history and live output, in a list of its own, on the kit's Markdown blocks
   look/            How the app looks: every colour it draws with, by what it's for, the theme made from them, code's colours, the words that changed in a diff's lines, the components screens are built from, such as buttons, the status mark and the app icon, the file icons, and the parts of the window tests find
   terminal-state/  What a terminal shows, kept from what the program in it writes on Ghostty's terminal core, the bytes that draw it again in another terminal, a plain copy of it to draw, and what its program reads for a key or a paste. No IO and no UI
@@ -166,13 +167,14 @@ apps/desktop, transcript ──> look
 apps/desktop ──> dictation, fetching
 dictation ──> fetching, to download its model
 apps/cli ─────────────────────────────────────> client-core
+apps/desktop, apps/cli ──> local-hub ──> client-core, to start a hub on this machine
 apps/daemon ──> hub ──> github ──> protocol
 apps/daemon ──> providers ──> protocol
 apps/daemon ──> worker ──> agents ──> protocol
 worker, client-core, terminal-view ──> terminal-state
 apps/daemon ──> agents, for their descriptions
-hub, agents, providers, worker, client-core, apps/daemon ──> process
-hub, agents, worker, client-core ──> private-files
+hub, agents, providers, worker, local-hub, apps/daemon ──> process
+hub, agents, worker, local-hub ──> private-files
 ```
 
 1. **Clients only talk to hubs.** They never touch git, terminals or agents directly. The hub fetches or proxies live data from the worker.

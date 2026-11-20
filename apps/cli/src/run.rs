@@ -3,7 +3,8 @@
 use std::path::PathBuf;
 
 use anyhow::Context;
-use client_core::{Approval, Client, Daemon, FileToSend, HubAdmin, Written};
+use client_core::{Approval, Client, FileToSend, HubAdmin, Written};
+use local_hub::Daemon;
 use protocol::capability::approvals::Decision;
 use protocol::event::SessionEvent;
 use protocol::model::{ApprovalId, Repo, RepoOrigin, Session};
@@ -19,7 +20,7 @@ use crate::workspace::workspace_command;
 fn connect(paths: &Paths) -> anyhow::Result<Client> {
     let named = std::env::var_os(protocol::paths::ENV_DAEMON_BIN).map(PathBuf::from);
     let daemon = Daemon::find(named, crate::BUILD).context("finding the daemon next to this binary")?;
-    Client::connect_or_start(paths, &daemon, "cli").context("connecting to the hub")
+    local_hub::connect_or_start(paths, &daemon, "cli").context("connecting to the hub")
 }
 
 pub(crate) fn run(args: Args) -> anyhow::Result<()> {

@@ -4,7 +4,7 @@ use std::os::unix::fs::{MetadataExt as _, OpenOptionsExt as _, PermissionsExt as
 use std::path::Component;
 
 use super::*;
-use crate::stand_in_hub::{self, Does};
+use client_core::stand_in_hub::{self, Does};
 
 const VERSION: &str = "abc123";
 
@@ -236,7 +236,7 @@ fn a_client_that_cannot_start_its_hub_joins_one_started_meanwhile() {
     assert!(Command::new("mkfifo").arg(&original).status().unwrap().success());
     let connecting = std::thread::spawn({
         let (daemon, paths) = (stamped(&original, 1), paths.clone());
-        move || Client::connect_or_start(&paths, &daemon, "test").map(drop)
+        move || connect_or_start(&paths, &daemon, "test").map(drop)
     });
     // It's copying, so it found no hub. Then another is up, and this copy doesn't turn out to be the build.
     let mut pipe = wait_for("the copy to open the original", || {

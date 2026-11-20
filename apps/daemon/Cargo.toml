@@ -30,6 +30,7 @@ libc.workspace = true
 agents = { workspace = true, features = ["testing"] }
 process = { workspace = true, features = ["testing"] }
 client-core = { workspace = true, features = ["testing"] }
+local-hub = { workspace = true, features = ["testing"] }
 hub = { workspace = true, features = ["testing"] }
 worker = { workspace = true, features = ["testing"] }
 flume.workspace = true

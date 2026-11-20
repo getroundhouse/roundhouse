@@ -381,7 +381,7 @@ pub(super) fn subscription_channel() -> (flume::Sender<SubscriptionItem>, flume:
 
 /// Nothing's there, or what was there went away as we connected: a hub that's exiting can accept a
 /// connection and then drop it, and so can one that loses the race with another starting at once.
-pub(super) fn hub_is_missing(error: &ClientError) -> bool {
+pub fn hub_is_missing(error: &ClientError) -> bool {
     match error {
         ClientError::Disconnected => true,
         ClientError::Io(e) => matches!(

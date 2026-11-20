@@ -1,7 +1,7 @@
 #![cfg(test)]
 
 use super::daemons;
-use client_core::{Client, Daemon};
+use client_core::Client;
 use daemons::{binaries, hub_environment};
 use desktop::app::{AppView, BuildLine, Connection, HubSource};
 use desktop::checkout::Checkout;
@@ -11,6 +11,7 @@ use gpui_kit::{
     AnyWindowHandle, AppContext as _, Bounds, ElementId, Entity, InputEvent as _, MouseMoveEvent, Pixels, ScrollDelta,
     ScrollEvent, SharedString, TestAppContext,
 };
+use local_hub::Daemon;
 use process::testing::WholeEnvironment;
 pub(crate) use process::testing::git;
 use protocol::capability::approvals::ApprovalMode;
@@ -68,7 +69,7 @@ impl Stack {
 
     /// A second client, for setting things up and checking them from outside the app.
     pub(crate) fn client(&self) -> Client {
-        Client::connect_or_start(&self.hub.paths, &self.hub.daemon, "test").unwrap()
+        local_hub::connect_or_start(&self.hub.paths, &self.hub.daemon, "test").unwrap()
     }
 
     /// Where the app keeps its settings.

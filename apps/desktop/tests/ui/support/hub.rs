@@ -4,9 +4,10 @@
 
 use std::process::Command;
 
-use client_core::{Client, Daemon};
+use client_core::Client;
 use desktop::app::Connection;
 use gpui_kit::{AppContext as _, ElementId};
+use local_hub::Daemon;
 
 use super::{Stack, Ui, click};
 

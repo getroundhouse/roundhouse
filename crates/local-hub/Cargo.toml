@@ -1,0 +1,27 @@
+[package]
+name = "local-hub"
+description = "Starting a hub on this machine when there's none, for the desktop app and the CLI."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+license.workspace = true
+
+[features]
+# Starting a hub in an environment a test gives it.
+testing = []
+
+[dependencies]
+client-core.workspace = true
+private-files.workspace = true
+process.workspace = true
+protocol.workspace = true
+
+[dev-dependencies]
+client-core = { workspace = true, features = ["testing"] }
+libc.workspace = true
+protocol = { workspace = true, features = ["testing"] }
+tempfile.workspace = true
+waiting.workspace = true
+
+[lints]
+workspace = true

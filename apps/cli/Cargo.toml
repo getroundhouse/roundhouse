@@ -14,6 +14,7 @@ path = "src/main.rs"
 qrcode.workspace = true
 protocol.workspace = true
 client-core.workspace = true
+local-hub.workspace = true
 anyhow.workspace = true
 clap.workspace = true
 serde_json.workspace = true

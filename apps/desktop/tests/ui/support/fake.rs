@@ -5,11 +5,11 @@
 
 use std::path::{Path, PathBuf};
 
-use client_core::Daemon;
 use client_core::fake_hub::{self, World};
 use desktop::app::HubSource;
 use desktop::checkout::Checkout;
 use gpui_kit::TestAppContext;
+use local_hub::Daemon;
 use protocol::event::EventBody;
 use protocol::model::{SessionId, SessionStatus};
 use tempfile::TempDir;

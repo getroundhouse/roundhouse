@@ -89,7 +89,7 @@ fn a_client_can_start_a_new_hub_as_soon_as_stopping_the_last_one_returns() {
     HubAdmin::connect(&stack.socket()).unwrap().stop().unwrap();
 
     let daemon = stack.daemon(env!("CARGO_BIN_EXE_roundhoused"));
-    let client = Client::connect_or_start(&stack.paths(), &daemon, "test").unwrap();
+    let client = local_hub::connect_or_start(&stack.paths(), &daemon, "test").unwrap();
     let status = client.hub_status().unwrap();
     // First, because nothing else would stop this hub if an assertion failed.
     client.hub_shutdown().unwrap();
@@ -140,7 +140,7 @@ fn a_stamped_build_runs_its_hub_from_a_copy_that_updating_the_app_leaves_alone()
     daemon.build = Some(build);
     let copy = stack.paths().hub_copy(&build);
 
-    let started = Client::connect_or_start(&stack.paths(), &daemon, "test").and_then(|client| client.hub_status());
+    let started = local_hub::connect_or_start(&stack.paths(), &daemon, "test").and_then(|client| client.hub_status());
     let command = started.map(|status| command_line(status.pid));
     // Before the assertion, because nothing else would stop this hub if it failed.
     client_core::stop_hub(&stack.socket()).unwrap();
@@ -163,7 +163,7 @@ fn a_stamped_build_runs_its_hub_from_a_copy_that_updating_the_app_leaves_alone()
     stack.hub.take().unwrap().wait().unwrap();
 
     // The broken daemon never answers, so this only connects if it starts the copy again.
-    let next = Client::connect_or_start(&stack.paths(), &daemon, "test").and_then(|client| client.hub_status());
+    let next = local_hub::connect_or_start(&stack.paths(), &daemon, "test").and_then(|client| client.hub_status());
     let _ = client_core::stop_hub(&stack.socket());
     assert!(next.is_ok(), "{next:?}");
 }
@@ -231,7 +231,7 @@ fn replaces_a_hub_that_drops_the_connection(reads_hello_first: bool) {
     });
 
     let daemon = stack.daemon(env!("CARGO_BIN_EXE_roundhoused"));
-    let client = Client::connect_or_start(&stack.paths(), &daemon, "test").unwrap();
+    let client = local_hub::connect_or_start(&stack.paths(), &daemon, "test").unwrap();
     hub_going_away.join().unwrap();
     assert!(client.hub_status().is_ok());
     client.hub_shutdown().unwrap();

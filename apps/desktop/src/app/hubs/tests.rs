@@ -28,7 +28,7 @@ pub(in crate::app) fn host(cx: &mut TestAppContext) -> (tempfile::TempDir, AnyWi
     .unwrap();
     let source = HubSource {
         remote: None,
-        daemon: client_core::Daemon::in_place(dir.path().join("unused")),
+        daemon: local_hub::Daemon::in_place(dir.path().join("unused")),
         paths,
         build_number: None,
         build_version: "test",
