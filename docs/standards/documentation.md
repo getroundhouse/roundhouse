@@ -10,7 +10,7 @@ Two things belong in neither place. Why a piece of code is the way it is goes in
 
 `docs/README.md` lists every doc, by the folder it's in. A folder holds one kind of doc, and says who decides it.
 
-A doc describes how things are. It leaves out what was removed or replaced, and how a change was made or checked, since git and the PR keep that. Each doc has one purpose, and something that fits none of them gets a doc of its own rather than a section in a nearby one. A purpose is narrow enough when someone doing the task the doc is for needs all of it. Each doc also has a word limit, which a test in `tools/policy` holds it to, so adding to a full doc means cutting or moving something. *Not built.*
+A doc describes how things are. It leaves out what was removed or replaced, and how a change was made or checked, since git and the PR keep that. Each doc has one purpose, and something that fits none of them gets a doc of its own rather than a section in a nearby one. A purpose is narrow enough when someone doing the task the doc is for needs all of it. Each doc also has a word limit, and each table cell another, which a test in `tools/policy` holds them to, so adding to a full doc means cutting or moving something. A doc that was longer when the limits came keeps a ceiling of its own, which only comes down. The spec and the guide have no limit, which is *Not built*.
 
 The guide is the one kind written for someone using the product rather than building it. It decides nothing: everything it says the app does is a rule in the spec, or where the spec doesn't reach, such as what installing needs and the command line, what the README and the code say. So agents keep it, and change a page in the PR that changes what it rests on.
 
