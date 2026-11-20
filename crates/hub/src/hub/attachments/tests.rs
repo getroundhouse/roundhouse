@@ -151,7 +151,7 @@ async fn a_prompt_can_be_only_files_and_can_only_carry_what_was_added_to_its_own
     let unchanged = Settings::default();
     let other = hub.session_create(workspace.id.clone(), AgentKind::Claude, unchanged, None).await.unwrap().id;
     let shot = add(&hub, &other, "a1", "shot.png", MediaType::Png, &png(64)).await.unwrap();
-    let prompt = |chat: &SessionId, prompt: Prompt<AttachmentId>| hub.session_prompt(chat.clone(), None, prompt);
+    let prompt = |chat: &SessionId, prompt: Prompt<AttachmentId>| hub.session_prompt(chat.clone(), None, prompt, None);
 
     let elsewhere = prompt(&chat.id, Prompt::carrying("attached", vec![shot.id.clone()])).await;
     let too_many = prompt(&other, Prompt::carrying("attached", vec![shot.id.clone(); 11])).await;

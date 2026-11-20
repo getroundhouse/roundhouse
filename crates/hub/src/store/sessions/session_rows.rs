@@ -8,8 +8,8 @@ use protocol::capability::approvals::ApprovalMode;
 use protocol::capability::output::TodoList;
 use protocol::capability::settings::Settings;
 use protocol::model::{
-    Account, AccountId, AccountSource, AgentKind, AttachmentId, ClientRequestId, ContextUsage, Draft, ModelName,
-    PromptCache, QueuedPrompt, Rev, RunId, Session, SessionId, SessionStatus, Title, Wait, WorkspaceId,
+    Account, AccountId, AccountSource, AgentKind, AttachmentId, ClientRequestId, ContextUsage, Draft, Interaction,
+    ModelName, PromptCache, QueuedPrompt, Rev, RunId, Session, SessionId, SessionStatus, Title, Wait, WorkspaceId,
 };
 use rusqlite::{Connection, OptionalExtension, Row, TransactionBehavior, params};
 
@@ -90,8 +90,9 @@ pub(in super::super) fn session_from_row(row: &Row) -> rusqlite::Result<StoredSe
             queue_held: row.get(18)?,
             placed_automatically: row.get(33)?,
             needs_an_account: row.get(34)?,
-            // Written only by this hub, as JSON. One it can't read is as good as the mode being off.
-            conversation: json_at(row, 35)?,
+            // The device that has the conversation, written only by this hub, as JSON, while the mode is on. One it
+            // can't read is as good as the mode being off.
+            interaction: json_at(row, 35)?.map_or(Interaction::Typing, |device| Interaction::Conversation { device }),
             turn_started_at_ms: row.get(19)?,
             effort: from_text(row.get(20)?)?,
             // Written only by this hub, as JSON. One it can't read is as good as none, until the agent next says.
@@ -180,7 +181,7 @@ impl Store {
                 session.todos.as_ref().map(serde_json::to_string).transpose()?,
                 session.placed_automatically,
                 session.needs_an_account,
-                session.conversation.as_ref().map(serde_json::to_string).transpose()?,
+                session.interaction.device().map(serde_json::to_string).transpose()?,
                 client_request_id.map(ClientRequestId::as_str),
             ],
         )?;

@@ -68,7 +68,7 @@ impl Hub {
                 queue_held: false,
                 placed_automatically: false,
                 needs_an_account: false,
-                conversation: None,
+                interaction: protocol::model::Interaction::Typing,
                 draft: Draft::default(),
                 decision_draft: None,
                 open_approvals: Some(Vec::new()),

@@ -21,7 +21,7 @@ fn kept_with_its_queue(hub: &Hub, wait: &Wait, held: Option<bool>) -> Session {
         recorded: None,
         initialized: None,
         claims: None,
-        conversation: None,
+        interaction: None,
     };
     hub.store.append(&"s".into(), None, &listed, None, None, Some(change)).unwrap();
     hub.store.get_session(&"s".into()).unwrap().session

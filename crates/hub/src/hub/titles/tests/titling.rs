@@ -49,7 +49,7 @@ impl Named {
     }
 
     pub(super) async fn prompt(&self, chat: &SessionId, prompt: Prompt<AttachmentId>) {
-        self.hub.session_prompt(chat.clone(), None, prompt).await.unwrap();
+        self.hub.session_prompt(chat.clone(), None, prompt, None).await.unwrap();
     }
 
     /// Another chat of Claude's in the workspace.

@@ -6,7 +6,7 @@ use super::super::status::{
 use super::failing::{self, Failing, FailingAfter};
 use crate::store::{SessionChange, StatusChange, Store, StoreError, TurnEdge};
 use protocol::event::{AgentTask, EventBody};
-use protocol::model::{ApprovalId, RunId, Seq, Session, SessionId, SessionStatus};
+use protocol::model::{ApprovalId, Interaction, RunId, Seq, Session, SessionId, SessionStatus};
 
 /// Where the session's agent has got to, as its record says: everything that recording an event changes together.
 /// [`Progress::step`] is the only thing that works out a change to any of it, whether the session is live or the hub is
@@ -136,8 +136,8 @@ impl Progress {
             queue_held: held,
             recorded: None,
             // Turning conversation mode on puts the conversation on the device that turned it on.
-            conversation: if let EventBody::ConversationStarted { device } = &body {
-                Some(device.clone())
+            interaction: if let EventBody::ConversationStarted { device } = &body {
+                Some(Interaction::Conversation { device: Box::new(device.clone()) })
             } else {
                 None
             },

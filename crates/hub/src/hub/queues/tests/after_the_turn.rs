@@ -39,12 +39,12 @@ async fn a_chat_that_refuses_a_steer(dir: &std::path::Path) -> Chat {
 async fn a_prompt_a_run_refuses_while_its_turn_runs_goes_again_once_the_turn_ends_and_the_next_after_it() {
     let dir = tempfile::tempdir().unwrap();
     let chat = a_chat_that_refuses_a_steer(dir.path()).await;
-    let (work, _) = chat.hub.session_prompt(chat.id.clone(), None, Prompt::new("work")).await.unwrap();
+    let (work, _) = chat.hub.session_prompt(chat.id.clone(), None, Prompt::new("work"), None).await.unwrap();
     assert_eq!(chat.given(1).await, [work]);
     chat.says([EventBody::PromptTaken { prompt: work }]).await;
 
-    let (refused, _) = chat.hub.session_prompt(chat.id.clone(), None, Prompt::new("refused")).await.unwrap();
-    let (later, _) = chat.hub.session_prompt(chat.id.clone(), None, Prompt::new("later")).await.unwrap();
+    let (refused, _) = chat.hub.session_prompt(chat.id.clone(), None, Prompt::new("refused"), None).await.unwrap();
+    let (later, _) = chat.hub.session_prompt(chat.id.clone(), None, Prompt::new("later"), None).await.unwrap();
     chat.caught_up().await;
     let meanwhile = chat.asked.prompts_given(&chat.id);
     chat.finishes(None, TurnOutcome::Success).await;
@@ -61,10 +61,10 @@ async fn a_prompt_a_run_refuses_while_its_turn_runs_goes_again_once_the_turn_end
 async fn a_stopped_turn_drops_what_waited_for_its_end() {
     let dir = tempfile::tempdir().unwrap();
     let chat = a_chat_that_refuses_a_steer(dir.path()).await;
-    let (work, _) = chat.hub.session_prompt(chat.id.clone(), None, Prompt::new("work")).await.unwrap();
+    let (work, _) = chat.hub.session_prompt(chat.id.clone(), None, Prompt::new("work"), None).await.unwrap();
     assert_eq!(chat.given(1).await, [work]);
     chat.says([EventBody::PromptTaken { prompt: work }]).await;
-    let (next, _) = chat.hub.session_prompt(chat.id.clone(), None, Prompt::new("next")).await.unwrap();
+    let (next, _) = chat.hub.session_prompt(chat.id.clone(), None, Prompt::new("next"), None).await.unwrap();
     // Once the run has refused it and the hub has kept it for the turn's end, so the turn stops after that. The next test
     // has the hub take in the refusal only once the turn has ended.
     chat.caught_up().await;
@@ -94,10 +94,10 @@ async fn a_stopped_turn_drops_what_the_run_refused_though_the_hub_hears_of_the_r
         sent.push(seq);
         (sent.len() == 2).then(|| Answer::Later(refusal.lock().take().expect("refused once")))
     });
-    let (work, _) = chat.hub.session_prompt(chat.id.clone(), None, Prompt::new("work")).await.unwrap();
+    let (work, _) = chat.hub.session_prompt(chat.id.clone(), None, Prompt::new("work"), None).await.unwrap();
     assert_eq!(chat.given(1).await, [work]);
     chat.says([EventBody::PromptTaken { prompt: work }]).await;
-    let (next, _) = chat.hub.session_prompt(chat.id.clone(), None, Prompt::new("next")).await.unwrap();
+    let (next, _) = chat.hub.session_prompt(chat.id.clone(), None, Prompt::new("next"), None).await.unwrap();
     assert_eq!(chat.given(2).await, [work, next]);
 
     chat.finishes(None, TurnOutcome::Cancelled).await;

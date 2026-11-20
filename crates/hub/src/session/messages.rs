@@ -5,7 +5,7 @@ use protocol::capability::Report;
 use protocol::capability::approvals::Decision;
 use protocol::client::ApiError;
 use protocol::event::{EventBody, ExitReason};
-use protocol::model::{ApprovalId, AttachmentId, ClientMessageId, RunId, Seq, Session};
+use protocol::model::{ApprovalId, AttachmentId, ClientDevice, ClientMessageId, RunId, Seq, Session};
 use protocol::prompt::Prompt;
 use protocol::tail::{Retrying, StreamDelta, Tail};
 use tokio::sync::oneshot;
@@ -70,6 +70,8 @@ pub(crate) enum Command {
     Prompt {
         client_msg_id: Option<ClientMessageId>,
         prompt: Prompt<AttachmentId>,
+        /// The device the person sent it from, if their client said one in its hello.
+        device: Option<ClientDevice>,
         reply: oneshot::Sender<Result<(Seq, bool), ApiError>>,
     },
     Decide {

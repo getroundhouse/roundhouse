@@ -35,7 +35,18 @@ pub struct Trial {
 /// Records `body` at the end of `log`, under `run`, numbered as a hub numbers its log, and returns where.
 pub(super) fn record(log: &mut Vec<SessionEvent>, run: Option<RunId>, body: EventBody) -> Seq {
     let (seq, place) = (Seq::new(log.len() as u64 + 1), Place::default());
-    log.push(SessionEvent { session_id: "trial".into(), seq, ts_ms: 0, run, subagent: None, place, body, raw: None });
+    let interaction = protocol::model::InteractionMode::Typing;
+    log.push(SessionEvent {
+        session_id: "trial".into(),
+        seq,
+        ts_ms: 0,
+        run,
+        subagent: None,
+        place,
+        interaction,
+        body,
+        raw: None,
+    });
     seq
 }
 

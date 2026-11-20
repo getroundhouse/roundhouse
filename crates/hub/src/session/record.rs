@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use protocol::client::{ApiError, HubNotice};
 use protocol::event::{EventBody, SessionEvent};
-use protocol::model::{ClientMessageId, RunCapabilities, RunId, Session, SubagentId};
+use protocol::model::{ClientMessageId, Interaction, InteractionMode, RunCapabilities, RunId, Session, SubagentId};
 use protocol::tail::Tail;
 use tracing::error;
 
@@ -42,30 +42,32 @@ impl LiveSession {
         refused: impl FnOnce(&LiveState) -> Option<ApiError>,
     ) -> Result<(SessionEvent, bool), ApiError> {
         let _in_order = self.recording.lock().await;
-        self.record_in_order(origin, body, raw, refused).await
+        self.record_in_order(origin, body, raw, |state| refused(state).map_or(Ok(None), Err)).await
     }
 
     /// Records `body` as [`LiveSession::record_unless`] does, for a caller that holds `recording` already, so it can
-    /// decide what to record from what everything recorded before it left.
+    /// decide what to record from what everything recorded before it left. `admit` refuses it, as `refused` does there,
+    /// or says how the person talks with the agent from it on, when it changes that, as a prompt they type does.
     pub(super) async fn record_in_order(
         &self,
         origin: Origin,
         body: EventBody,
         raw: Option<String>,
-        refused: impl FnOnce(&LiveState) -> Option<ApiError>,
+        admit: impl FnOnce(&LiveState) -> Result<Option<Interaction>, ApiError>,
     ) -> Result<(SessionEvent, bool), ApiError> {
         let hub = self.hub()?;
         let run = origin.run();
-        let (Step { body, mut change, next, waits }, still_current) = {
+        let (Step { body, mut change, next, waits }, still_current, interaction) = {
             let state = self.state.lock();
-            if let Some(refusal) = refused(&state) {
-                return Err(refusal);
-            }
+            let interaction = admit(&state)?;
             // The current agent saying it, which only a running one can, or the hub with one running.
             let agent = state.agent.is_some() || run.is_some();
             let still_current = run.is_some() && state.agent.map(|agent| agent.run) == run;
-            (state.progress.step(origin, body, agent), still_current)
+            (state.progress.step(origin, body, agent), still_current, interaction)
         };
+        if interaction.is_some() {
+            change.interaction = interaction;
+        }
         note_recorded(origin, &mut change);
         if origin.speaks_for_session() {
             if let EventBody::AgentInit { agent_session_id, .. } = &body {
@@ -253,6 +255,15 @@ fn note_recorded(origin: Origin, change: &mut SessionChange) {
 fn take(state: &mut LiveState, origin: Origin, appended: &Appended, next: Next) -> bool {
     let (seq, body, subagent) = (appended.event.seq, &appended.event.body, &appended.event.subagent);
     state.last_seq = seq;
+    // The mode the event was recorded under is the record's, once the event changed it: on, from the rule that turns
+    // it on, with the device that rule names, and off, from a prompt typed while it was on.
+    match (body, appended.event.interaction) {
+        (EventBody::ConversationStarted { device }, _) => {
+            state.interaction = Interaction::Conversation { device: Box::new(device.clone()) };
+        }
+        (_, InteractionMode::Typing) => state.interaction = Interaction::Typing,
+        (_, InteractionMode::Conversation | InteractionMode::Unknown) => {}
+    }
     if origin.speaks_for_session() {
         if let EventBody::AgentInit { agent_session_id, .. } = body {
             state.agent_opened = true;

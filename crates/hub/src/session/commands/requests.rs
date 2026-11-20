@@ -1,4 +1,5 @@
 use super::super::controls::Askable;
+use super::super::conversation::Sending;
 use super::super::decisions::refusal;
 use super::super::{Command, LiveSession, LiveState, Origin};
 use super::after_the_turn::Sendable;
@@ -8,7 +9,7 @@ use protocol::capability::Control;
 use protocol::capability::approvals::Decision;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::event::{EventBody, NoticeLevel};
-use protocol::model::{ApprovalId, AttachmentId, ClientMessageId, Seq, SetupStatus};
+use protocol::model::{ApprovalId, AttachmentId, ClientDevice, ClientMessageId, Seq, SetupStatus};
 use protocol::prompt::{Prompt, PromptFrom};
 use protocol::worker::{AgentStop, Delivery};
 use std::sync::Arc;
@@ -31,8 +32,8 @@ pub(super) enum Sent {
 pub(crate) async fn run_commands(session: Arc<LiveSession>, mut commands: mpsc::Receiver<Command>) {
     while let Some(command) = commands.recv().await {
         match command {
-            Command::Prompt { client_msg_id, prompt, reply } => {
-                session.handle_prompt(client_msg_id, prompt, reply).await;
+            Command::Prompt { client_msg_id, prompt, device, reply } => {
+                session.handle_prompt(client_msg_id, prompt, device, reply).await;
             }
             Command::Decide { approval_id, decision, reply } => {
                 let _ = reply.send(session.handle_decide(approval_id, decision).await);
@@ -98,44 +99,77 @@ impl LiveSession {
         hub.ready_workspace(&self.workspace_id).await.map(drop)
     }
 
-    /// Returns the prompt's place in the log, whether it had already been recorded, and the prompt with the hub's record
-    /// of each file it carries.
+    /// Returns the prompt's place in the log, and the prompt to deliver, as [`LiveSession::record_carrying`] does, with
+    /// the hub's record of each file it carries. The person sent it from `device`, as [`Sending::Sent`] says.
     pub(super) async fn record_prompt(
         &self,
         hub: &Arc<Hub>,
         client_msg_id: Option<ClientMessageId>,
         prompt: Prompt<AttachmentId>,
-    ) -> Result<(Seq, bool, Prompt<Attachment>), ApiError> {
+        device: Option<&ClientDevice>,
+    ) -> Result<(Seq, Option<Prompt<Attachment>>), ApiError> {
         let id = self.id.clone();
         let asked = prompt.files.clone();
         let prompt = prompt.with_files(hub.blocking(move |store| store.attachments(&id, &asked)).await?);
-        let (seq, duplicate) = self.record_carrying(hub, client_msg_id, &prompt, PromptFrom::Person).await?;
-        Ok((seq, duplicate, prompt))
+        let sent = Sending::Sent { device };
+        self.record_carrying(hub, client_msg_id, prompt, PromptFrom::Person, sent).await
     }
 
-    /// Records a prompt whose files are known already, such as a queued one's, and returns its place in the log and
-    /// whether it had already been recorded. `from` says who wrote it, and only the person's names an untitled chat.
+    /// Records a prompt whose files are known already, such as a queued one's, and returns its place in the log, and
+    /// the prompt as it was recorded, to deliver, or none if it had been recorded already. `from` says who wrote it,
+    /// and only the person's names an untitled chat. `sending` says how it came, which decides what it does to
+    /// conversation mode, and whether it goes as said out loud.
     pub(in super::super) async fn record_carrying(
         &self,
         hub: &Arc<Hub>,
         client_msg_id: Option<ClientMessageId>,
-        prompt: &Prompt<Attachment>,
+        prompt: Prompt<Attachment>,
         from: PromptFrom,
-    ) -> Result<(Seq, bool), ApiError> {
+        sending: Sending<'_>,
+    ) -> Result<(Seq, Option<Prompt<Attachment>>), ApiError> {
         self.can_be_asked(hub).await?;
         let person = from.is_person();
-        let body = EventBody::UserPrompt { client_msg_id, prompt: prompt.clone(), from };
-        let (event, duplicate) = self.record(Origin::Hub, body, None).await?;
-        if !duplicate && person {
-            hub.title_from_prompt(&self.id, &self.workspace_id, prompt).await;
+        let (event, duplicate, prompt) = {
+            let _in_order = self.recording.lock().await;
+            // Decided in order with what's recorded, which is all that turns the mode on or off.
+            let admitted = sending.admit(&self.state.lock().interaction, prompt);
+            let (prompt, interaction) = match admitted {
+                Ok(admitted) => admitted,
+                Err(refusal) => return self.sent_before(hub, client_msg_id, refusal).await,
+            };
+            let body = EventBody::UserPrompt { client_msg_id, prompt: prompt.clone(), from };
+            let (event, duplicate) = self.record_in_order(Origin::Hub, body, None, |_| Ok(interaction)).await?;
+            (event, duplicate, prompt)
+        };
+        if duplicate {
+            return Ok((event.seq, None));
         }
-        Ok((event.seq, duplicate))
+        if person {
+            hub.title_from_prompt(&self.id, &self.workspace_id, &prompt).await;
+        }
+        Ok((event.seq, Some(prompt)))
+    }
+
+    /// Where a prompt that can't be recorded now, for `refusal`, was recorded, if it was sent before under
+    /// `client_msg_id`, so a request sent again gets what the first one got whatever has changed since, as
+    /// [`LiveSession::record_unless`] says of a prompt recorded twice, and nothing is delivered again.
+    async fn sent_before(
+        &self,
+        hub: &Hub,
+        client_msg_id: Option<ClientMessageId>,
+        refusal: ApiError,
+    ) -> Result<(Seq, Option<Prompt<Attachment>>), ApiError> {
+        let Some(client_msg_id) = client_msg_id else { return Err(refusal) };
+        let id = self.id.clone();
+        let sent = hub.blocking(move |store| store.sent_at(&id, &client_msg_id)).await?;
+        sent.map(|seq| (seq, None)).ok_or(refusal)
     }
 
     pub(super) async fn handle_prompt(
         &self,
         client_msg_id: Option<ClientMessageId>,
         prompt: Prompt<AttachmentId>,
+        device: Option<ClientDevice>,
         reply: oneshot::Sender<Result<(Seq, bool), ApiError>>,
     ) {
         let hub = match self.hub() {
@@ -145,7 +179,7 @@ impl LiveSession {
                 return;
             }
         };
-        let (seq, duplicate, prompt) = match self.record_prompt(&hub, client_msg_id, prompt).await {
+        let (seq, prompt) = match self.record_prompt(&hub, client_msg_id, prompt, device.as_ref()).await {
             Ok(recorded) => recorded,
             Err(e) => {
                 let _ = reply.send(Err(e));
@@ -154,8 +188,8 @@ impl LiveSession {
         };
         // Recorded, so the prompt is real and the client can stop retrying. From here, failures are
         // reported in the log, where every client can see them.
-        let _ = reply.send(Ok((seq, duplicate)));
-        if !duplicate {
+        let _ = reply.send(Ok((seq, prompt.is_none())));
+        if let Some(prompt) = prompt {
             self.deliver_prompt(&hub, seq, prompt).await;
         }
     }

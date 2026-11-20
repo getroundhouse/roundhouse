@@ -119,7 +119,7 @@ async fn a_wait_ending_starts_the_agent_of_a_chat_waiting_on_nothing_else() {
             recorded: None,
             initialized: None,
             claims: None,
-            conversation: None,
+            interaction: None,
         };
         let said = EventBody::Notice { level: NoticeLevel::Info, message: "x".into(), subagent: None };
         hub.store.append(&"s".into(), None, &said, None, None, Some(change)).unwrap();
@@ -167,7 +167,7 @@ async fn a_chat_whose_record_lists_only_a_wait_isnt_counted_as_running() {
             recorded: None,
             initialized: None,
             claims: None,
-            conversation: None,
+            interaction: None,
         };
         hub.store.append(&"s".into(), None, &listed, None, None, Some(change)).unwrap();
 

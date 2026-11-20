@@ -70,7 +70,7 @@ async fn moving_a_chat_whose_agent_is_at_work_needs_force_and_leaves_it_stopped_
     let dir = tempfile::tempdir().unwrap();
     let accounts = TwoAccounts::start(dir.path()).await;
     let (chats, chat) = (&accounts.chats, &accounts.chat);
-    let (seq, _) = chats.hub.session_prompt(chat.clone(), None, Prompt::new("work")).await.unwrap();
+    let (seq, _) = chats.hub.session_prompt(chat.clone(), None, Prompt::new("work"), None).await.unwrap();
     the_agent_says(&chats.hub, &chats.asked, chat, [EventBody::PromptTaken { prompt: seq }]).await;
 
     // A hub that took the move without being told to stop the agent would wait for the agent's exit, which nothing

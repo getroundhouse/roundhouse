@@ -32,7 +32,7 @@ impl Chat {
     /// One whose agent is at work on the prompt the chat was sent, which it took.
     pub(super) async fn at_work(dir: &Path) -> Self {
         let chat = Self::idle(dir).await;
-        let (seq, _) = chat.hub.session_prompt(chat.id.clone(), None, Prompt::new("work")).await.unwrap();
+        let (seq, _) = chat.hub.session_prompt(chat.id.clone(), None, Prompt::new("work"), None).await.unwrap();
         assert_eq!(chat.given(1).await, [seq]);
         chat.says([EventBody::PromptTaken { prompt: seq }]).await;
         chat
@@ -66,7 +66,7 @@ impl Chat {
     }
 
     pub(super) async fn queue(&self, id: &str, prompt: Prompt<AttachmentId>) -> Result<Session, ApiError> {
-        self.hub.session_queue(self.id.clone(), id.into(), prompt).await
+        self.hub.session_queue(self.id.clone(), id.into(), prompt, None).await
     }
 
     pub(super) async fn change(&self, id: &str, text: &str) -> Result<Session, ApiError> {

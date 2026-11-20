@@ -54,7 +54,7 @@ async fn a_prompt_sent_during_setup_is_recorded_at_once_and_given_once_setup_has
     let (workspace, chat) = a_chat(&hub).await;
     let end = setup_held(&hub, &asked, &workspace).await;
 
-    let prompting = hub.session_prompt(chat.id.clone(), None, Prompt::new("go"));
+    let prompting = hub.session_prompt(chat.id.clone(), None, Prompt::new("go"), None);
     let (seq, _) = tokio::time::timeout(TIMEOUT, prompting).await.expect("the prompt waited for setup").unwrap();
     let recorded = log(&hub, &chat.id);
     let launched = waiting::task::up_to(NOT_LAUNCHED_WITHIN, || !asked.launches(&chat.id).is_empty()).await;
@@ -86,7 +86,7 @@ async fn closing_a_chat_with_a_prompt_waiting_on_setup_never_starts_its_agent() 
         let added = hub.file_add(kept_for, "a1".into(), "build.log".into(), text, data, crate::store::AddedBy::Client);
         let file = added.await.unwrap();
         let prompt = Prompt::carrying("go", vec![file.id]);
-        let (seq, _) = hub.session_prompt(chat.id.clone(), None, prompt).await.unwrap();
+        let (seq, _) = hub.session_prompt(chat.id.clone(), None, prompt, None).await.unwrap();
 
         tokio::time::timeout(TIMEOUT, hub.session_close(chat.id.clone())).await.expect("closing waited").unwrap();
         if worker_went {
@@ -98,7 +98,7 @@ async fn closing_a_chat_with_a_prompt_waiting_on_setup_never_starts_its_agent() 
         let launched = || !asked.launches(&chat.id).is_empty();
         waiting::task::until(TIMEOUT, "the prompt to be dropped, or given", || dropped() || launched()).await;
         let written = asked.requests(|request| matches!(request, WorkerRequest::AttachmentWrite(_)).then_some(()));
-        let too_late = hub.session_prompt(chat.id.clone(), None, Prompt::new("too late")).await;
+        let too_late = hub.session_prompt(chat.id.clone(), None, Prompt::new("too late"), None).await;
         let case = if worker_went { "with its worker gone" } else { "with its worker there" };
         let wrong = [
             (launched(), "an agent was launched for a closed chat"),

@@ -13,6 +13,7 @@ mod files;
 mod git;
 mod github_account;
 mod hub_settings;
+mod interaction;
 mod model_list;
 mod model_name;
 mod pr_watch;
@@ -54,6 +55,7 @@ pub use github_account::{
     SentCredential, SshLogin, UnusableLogin,
 };
 pub use hub_settings::{AccountDefault, GithubSettings, HubSettings, HubSettingsChange};
+pub use interaction::{Interaction, InteractionMode};
 pub use model_list::{CliVersion, ModelList, ModelListKey, ModelLookup};
 pub use model_name::{ModelName, ModelNameError};
 pub use prompt_line::{PromptLine, SettledAt, Settlement};

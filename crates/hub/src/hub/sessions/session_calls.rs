@@ -184,11 +184,12 @@ impl Hub {
         id: SessionId,
         client_msg_id: Option<ClientMessageId>,
         prompt: Prompt<AttachmentId>,
+        device: Option<ClientDevice>,
     ) -> Result<(Seq, bool), ApiError> {
         prompt.check()?;
         let session = self.live_session(&id).await?;
         let (reply, recorded) = oneshot::channel();
-        session.command(Command::Prompt { client_msg_id, prompt, reply }).await?;
+        session.command(Command::Prompt { client_msg_id, prompt, device, reply }).await?;
         recorded.await.map_err(|_| internal("the session has stopped"))?
     }
 

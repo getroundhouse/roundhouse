@@ -175,7 +175,7 @@ pub(super) async fn handle(
             C::Ok
         }
         R::SessionPrompt(agent::SessionPrompt { id, client_msg_id, prompt }) => {
-            let (seq, duplicate) = hub.session_prompt(id, client_msg_id, prompt).await?;
+            let (seq, duplicate) = hub.session_prompt(id, client_msg_id, prompt, device).await?;
             C::PromptRecorded(agent::PromptRecorded { seq, duplicate })
         }
         R::AttachmentAdd(attachments::AttachmentAdd { session_id, id, name, media_type, data }) => {
@@ -233,7 +233,7 @@ pub(super) async fn handle(
         }
         R::GithubAppRemove(github_apps::GithubAppRemove { id }) => C::GithubApp(hub.github_app_remove(id).await?),
         R::SessionQueue(queue::SessionQueue { id, client_msg_id, prompt }) => {
-            C::Session(hub.session_queue(id, client_msg_id, prompt).await?)
+            C::Session(hub.session_queue(id, client_msg_id, prompt, device.as_ref()).await?)
         }
         R::SessionChangeQueued(queue::SessionChangeQueued { id, client_msg_id, text }) => {
             C::Session(hub.session_change_queued(id, client_msg_id, text).await?)

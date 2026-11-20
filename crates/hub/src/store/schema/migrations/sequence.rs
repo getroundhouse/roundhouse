@@ -386,4 +386,6 @@ pub(in super::super) const MIGRATIONS: &[Migration] = &[
     Sql(super::github_accounts::GITHUB_SET_UP),
     // A GitHub account's removal, and none of the accounts the person disconnected before, in `github_accounts`.
     Sql(super::github_accounts::GITHUB_ACCOUNT_REMOVAL),
+    // How the person was talking with the agent as each event was recorded, in `conversations`.
+    Sql(super::conversations::INTERACTION),
 ];

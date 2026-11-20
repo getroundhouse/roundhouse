@@ -3,11 +3,13 @@ use super::super::claims::clear_claims;
 use super::super::prompts::note_prompts;
 use super::super::sent::{Sent, note_sent};
 use super::super::subagents::note_subagents;
-use super::super::{Appended, Store, StoreError, lock, now_ms, place_column, place_of, seq_column, seq_of};
+use super::super::{
+    Appended, Store, StoreError, from_text, lock, now_ms, place_column, place_of, seq_column, seq_of, text_of,
+};
 use super::change::{SessionChange, change_session};
 use protocol::client::log::ReadLimit;
 use protocol::event::{EventBody, SessionEvent};
-use protocol::model::{ApprovalId, ClientMessageId, Place, RunId, Seq, SessionId, SubagentId};
+use protocol::model::{ApprovalId, ClientMessageId, InteractionMode, Place, RunId, Seq, SessionId, SubagentId};
 use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
 
 impl Appended {
@@ -75,9 +77,12 @@ fn append_in(tx: &Connection, session_id: &SessionId, recording: Recording<'_>) 
     let encoded = serde_json::to_string(body)?;
     let subagent = body.subagent();
     let place = last_place(tx, session_id, subagent)?.next();
+    // Before the event's row, so it's stamped with the mode it leaves the session in.
+    change_session(tx, session_id, seq, ts_ms, change.unwrap_or_default())?;
+    let interaction = interaction_of(tx, session_id)?;
     tx.execute(
-        "INSERT INTO events (session_id, seq, ts_ms, kind, client_msg_id, run, subagent, place, body, raw)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO events (session_id, seq, ts_ms, kind, client_msg_id, run, subagent, place, interaction, body, raw)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         params![
             session_id.as_str(),
             seq_column(seq),
@@ -87,15 +92,11 @@ fn append_in(tx: &Connection, session_id: &SessionId, recording: Recording<'_>) 
             run.map(|run| run.get().cast_signed()),
             subagent.map(SubagentId::as_str),
             place_column(place),
+            interaction_column(interaction),
             encoded,
             raw
         ],
     )?;
-    tx.execute(
-        "UPDATE sessions SET last_seq = ?, updated_at_ms = ? WHERE id = ?",
-        params![seq_column(seq), ts_ms, session_id.as_str()],
-    )?;
-    change_session(tx, session_id, seq, ts_ms, change.unwrap_or_default())?;
     let Sent { dequeued, by_the_person, account } = note_sent(tx, session_id, ts_ms, run, body, client_msg_id)?;
     let untaken = note_prompts(tx, session_id, seq, body)?;
     let approvals = note_approvals(tx, session_id, seq, body)?;
@@ -106,6 +107,7 @@ fn append_in(tx: &Connection, session_id: &SessionId, recording: Recording<'_>) 
         run,
         subagent: subagent.cloned(),
         place,
+        interaction,
         body: body.clone(),
         raw: None,
     };
@@ -285,12 +287,12 @@ fn events_in(
 }
 
 /// What [`event_in`] reads, before the raw line or NULL.
-const EVENT_COLUMNS: &str = "seq, ts_ms, run, subagent, place, body";
+const EVENT_COLUMNS: &str = "seq, ts_ms, run, subagent, place, interaction, body";
 
 /// The event in a row of [`EVENT_COLUMNS`] and then its raw line, and how many bytes its body and raw line take.
 fn event_in(session_id: &SessionId, row: &rusqlite::Row<'_>) -> Result<(SessionEvent, u64), StoreError> {
-    let body: String = row.get(5)?;
-    let raw: Option<String> = row.get(6)?;
+    let body: String = row.get(6)?;
+    let raw: Option<String> = row.get(7)?;
     let size = (body.len() + raw.as_ref().map_or(0, String::len)) as u64;
     let event = SessionEvent {
         session_id: session_id.clone(),
@@ -299,8 +301,23 @@ fn event_in(session_id: &SessionId, row: &rusqlite::Row<'_>) -> Result<(SessionE
         run: row.get::<_, Option<i64>>(2)?.map(|run| RunId::new(run.cast_unsigned())),
         subagent: row.get::<_, Option<String>>(3)?.map(SubagentId::from),
         place: place_of(row, 4)?,
+        interaction: row.get::<_, Option<String>>(5)?.map_or(Ok(InteractionMode::Typing), from_text)?,
         body: serde_json::from_str(&body)?,
         raw,
     };
     Ok((event, size))
+}
+
+/// How the person is talking with the agent of `session_id`, as its record says.
+fn interaction_of(tx: &Connection, session_id: &SessionId) -> Result<InteractionMode, StoreError> {
+    let on: bool =
+        tx.query_row("SELECT conversation IS NOT NULL FROM sessions WHERE id = ?", [session_id.as_str()], |row| {
+            row.get(0)
+        })?;
+    Ok(if on { InteractionMode::Conversation } else { InteractionMode::Typing })
+}
+
+/// What the `interaction` column holds for `mode`: NULL for typing, as in every event from before it was recorded.
+fn interaction_column(mode: InteractionMode) -> Option<String> {
+    (!mode.is_typing()).then(|| text_of(&mode))
 }

@@ -36,6 +36,7 @@ A decision record holds one large, one-off choice among real alternatives, such 
 | [transcript-keeps-its-texts.md](transcript-keeps-its-texts.md) | The transcript draws its text from the kit's Markdown blocks and keeps the selection itself. *Unconfirmed* |
 | [talk-with-the-chats-own-agent.md](talk-with-the-chats-own-agent.md) | Conversation mode talks with the chat's own agent, and a small model only says what it's doing while it can't answer. Not built |
 | [phonon-speaks-replies.md](phonon-speaks-replies.md) | Replies are spoken by Gradium's Phonon, on the device. Not built |
+| [interaction-mode.md](interaction-mode.md) | How the person talks with a chat's agent is its interaction mode, which every event is recorded under |
 | [spoken-prompt-carries-instruction.md](spoken-prompt-carries-instruction.md) | A spoken prompt reaches the agent with how to talk, which its adapter adds. Not built |
 | [pause-media-through-perl.md](pause-media-through-perl.md) | The app pauses what's playing with a library of its own, which `/usr/bin/perl` loads |
 
