@@ -4,7 +4,6 @@ use std::path::PathBuf;
 use std::process::Command;
 
 /// A user of this machine, as the system's database of users has them.
-#[cfg_attr(windows, expect(dead_code, reason = "no account is found on Windows, which runs no service yet"))]
 pub(crate) struct Account {
     pub(crate) name: String,
     ids: Ids,
