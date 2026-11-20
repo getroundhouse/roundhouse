@@ -6,7 +6,7 @@
 use serde::{Deserialize, Serialize};
 
 use super::{ClientRequest, ClientResponse, Reply, Request};
-use crate::model::{GithubAccount, GithubAccountId, GithubSignIn, GithubSignInId, GithubToken, HubSettings};
+use crate::model::{GhLogin, GithubAccount, GithubAccountId, GithubSignIn, GithubSignInId, GithubToken, HubSettings};
 
 /// Gives the hub a token the person made on GitHub, such as a fine-grained one, to hold as a GitHub account's login,
 /// and answers with the account's record. The hub asks GitHub whose it is and when it ends, keeps it in a file of its
@@ -36,6 +36,48 @@ impl Request for GithubAccountConnect {
 
     fn into_request(self) -> ClientRequest {
         ClientRequest::GithubAccountConnect(self)
+    }
+}
+
+/// Asks who `gh` on the hub's own machine is logged in to github.com as, and answers with it, without its token, so a
+/// client can offer it as an account. The hub runs `gh` there, and asks GitHub whether it takes its token, each time
+/// it's asked, and keeps nothing of it. Refused with `Unavailable` when `gh` can't be run, doesn't answer in time, or
+/// prints what the hub can't read.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct HubGhLogin;
+
+impl Request for HubGhLogin {
+    type Reply = GhLogin;
+
+    fn into_request(self) -> ClientRequest {
+        ClientRequest::HubGhLogin
+    }
+}
+
+impl Reply for GhLogin {
+    fn read(response: ClientResponse) -> Result<Self, ClientResponse> {
+        let ClientResponse::GhLogin(login) = response else { return Err(response) };
+        Ok(login)
+    }
+}
+
+/// Has the hub use the login `gh` has on its own machine as a GitHub account's, and answers with the account's record,
+/// which is of kind [`Gh`](crate::model::GithubLoginKind::Gh). The hub reads the token from `gh`, asks GitHub whose it
+/// is, and keeps nothing but which user it's for, reading the token from `gh` again each time it checks its logins.
+/// It makes a new account, which becomes the default if it's the first the hub has a record of. The hub never does
+/// this by itself. An account of that kind for the same GitHub user, whose login the hub holds, is that account
+/// again, and changes nothing, so sending it again does nothing more.
+///
+/// Refused with `Conflict` when `gh` there isn't logged in to github.com, or there's no `gh`, with `InvalidRequest`
+/// when GitHub doesn't take its token, and with `Unavailable` when `gh` can't be run or GitHub can't be reached.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct GithubAccountConnectGh;
+
+impl Request for GithubAccountConnectGh {
+    type Reply = GithubAccount;
+
+    fn into_request(self) -> ClientRequest {
+        ClientRequest::GithubAccountConnectGh
     }
 }
 

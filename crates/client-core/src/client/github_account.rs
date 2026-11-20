@@ -1,9 +1,12 @@
 //! The calls about the GitHub accounts a hub holds, the default of which agents push and open pull requests as on every
-//! machine: connecting a token, disconnecting one, choosing the default, and signing in with GitHub. A hub older than
-//! these refuses them, as `is_unsupported` says, and its settings say nothing of GitHub.
+//! machine: connecting a token or `gh`'s login on the hub's machine, disconnecting one, choosing the default, and
+//! signing in with GitHub. A hub older than these refuses them, as `is_unsupported` says, and its settings say nothing
+//! of GitHub.
 
 use protocol::client::github_accounts;
-use protocol::model::{GithubAccount, GithubAccountId, GithubSignIn, GithubSignInId, GithubToken, HubSettings};
+use protocol::model::{
+    GhLogin, GithubAccount, GithubAccountId, GithubSignIn, GithubSignInId, GithubToken, HubSettings,
+};
 
 use super::{Client, Result};
 
@@ -17,6 +20,18 @@ impl Client {
         account: Option<GithubAccountId>,
     ) -> Result<GithubAccount> {
         self.call(github_accounts::GithubAccountConnect { token, id: account })
+    }
+
+    /// Who `gh` on the hub's machine is logged in to github.com as, and whether GitHub takes its token. See
+    /// [`github_accounts::HubGhLogin`].
+    pub fn hub_gh_login(&self) -> Result<GhLogin> {
+        self.call(github_accounts::HubGhLogin)
+    }
+
+    /// Has the hub use the login `gh` has on its machine as a GitHub account's, and answers with the account's record.
+    /// See [`github_accounts::GithubAccountConnectGh`].
+    pub fn github_account_connect_gh(&self) -> Result<GithubAccount> {
+        self.call(github_accounts::GithubAccountConnectGh)
     }
 
     /// Has the hub forget the login it holds for the GitHub account `id`, and answers with its record, which stays. See

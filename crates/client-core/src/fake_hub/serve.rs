@@ -10,7 +10,7 @@ use protocol::client::CLIENT_PROTOCOL_VERSION;
 use protocol::client::log::ReadLimit;
 use protocol::client::{
     ApiError, ClientFrame, ClientRequest, ClientResponse, ErrorCode, HelloReply, HubFrame, ReplyOutcome, admin,
-    attachments, comments, drafts, files, github_accounts, github_apps, log, proposals, records, references, sessions,
+    attachments, comments, drafts, files, github_accounts, log, proposals, records, references, sessions,
     subscriptions, workspaces,
 };
 use protocol::event::SessionEvent;
@@ -22,6 +22,7 @@ use protocol::model::{
 };
 
 use super::base_pages::{opened, paged};
+use super::github;
 use super::stand_in::{claude, fixed_pairing, status, version};
 use super::world::{LoginSupport, NOW_MS, World};
 
@@ -310,13 +311,10 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
         | R::GithubSignInCancel(_)
         | R::GithubAppMake(_)
         | R::GithubAppRemove(_) => Err(read_only("change anything")),
-        R::GithubAppInstallationsConnect(_) => Err(world.app_look_refused.clone().unwrap_or_else(|| read_only("look"))),
-        // As a hub writes it, which changes nothing the hub holds, though with only what the app reads of it, its name
-        // and where GitHub sends the person back, since nothing here posts it to GitHub.
-        R::GithubAppManifestWrite(github_apps::GithubAppManifestWrite { name, redirect_url }) => {
-            let manifest = serde_json::json!({"name": name, "redirect_url": redirect_url, "public": false});
-            reply(C::GithubAppManifest(github_apps::GithubAppManifest { manifest }))
-        }
+        R::GithubAccountConnectGh => github::connect_gh(world),
+        R::HubGhLogin => github::gh_login(world),
+        R::GithubAppInstallationsConnect(_) => github::look_for_installations(world),
+        R::GithubAppManifestWrite(write) => reply(github::manifest(write)),
         // So a screen can show the app waiting on a workspace it asked for, or on a new title. The workspace's record
         // saying it's being made, or on its way out, is the world's to say.
         R::WorkspaceCreate(_) | R::WorkspaceRegenerateTitle(_) => Ok(Outcome::Never),
@@ -391,6 +389,6 @@ fn prompt_lines(world: &World, id: &SessionId) -> Vec<PromptLine> {
     world.events_from(id, Seq::new(1)).filter_map(PromptLine::of).map(line).collect()
 }
 
-fn read_only(what: &str) -> ApiError {
+pub(super) fn read_only(what: &str) -> ApiError {
     ApiError::new(ErrorCode::Unsupported, format!("a fake hub holds only what it was made with, so it can't {what}"))
 }

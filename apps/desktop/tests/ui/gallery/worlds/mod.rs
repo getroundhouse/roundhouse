@@ -5,6 +5,7 @@
 mod accounts;
 mod github;
 mod github_apps;
+mod github_gh;
 mod working;
 
 pub(super) use accounts::{
@@ -16,6 +17,10 @@ pub(super) use github::{
 };
 pub(super) use github_apps::{
     github_app_installed, github_app_not_installed, github_app_not_looked, github_app_renewing,
+};
+pub(super) use github_gh::{
+    github_gh_default, github_gh_logged_out, github_gh_offered, github_gh_other_user, github_gh_refused,
+    github_gh_unread,
 };
 pub(super) use working::{
     queue_held, queued, steered, steered_thinking, streaming, thinking_streaming, waiting_on_checks, waiting_on_stacks,

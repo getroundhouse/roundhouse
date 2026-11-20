@@ -135,8 +135,7 @@ async fn main() {
         workspaces_root: args.workspaces_root,
         clones_dir: args.clones,
         // So it doesn't wait on the login shell of whoever runs the tests.
-        shell: Some("/bin/sh".to_string()),
-        path: std::env::var("PATH").ok(),
+        path: providers::local::MachinePath::new(Some("/bin/sh".to_string()), std::env::var("PATH").ok()),
     });
     let environment = WorkerEnvironment {
         filesystem: if args.separate { WorkerFilesystem::Separate } else { WorkerFilesystem::Hub },

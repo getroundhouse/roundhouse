@@ -4,20 +4,22 @@
 //! How a sign-in goes is in `sign_in_words`, and what's said of apps of your own in `app_words`.
 
 use client_core::{ClientError, refusals};
-use gpui_kit::App;
+use gpui_kit::{App, SharedString};
 use protocol::model::{
-    GhLogin, GhLoginWorks, GithubLoginKind, HeldGithubLogin, ProviderName, SentCredential, UnusableLogin,
+    GhLogin, GhLoginWorks, GithubLoginKind, GithubUsername, HeldGithubLogin, ProviderName, SentCredential,
+    UnusableLogin,
 };
 
 /// What a search finds the page by, besides its name.
-pub(super) const ABOUT: &str = "The GitHub accounts agents push and open pull requests as: signing in with GitHub, \
-                                tokens, apps of your own, the default account, and the gh login each machine already \
+pub(super) const ABOUT: &str = "Who Roundhouse is on GitHub: signing in with GitHub, tokens, apps of your own, gh's \
+                                login on this computer, the default account, and the gh login each machine already \
                                 has.";
 
-/// What Added says of itself under its heading.
-pub(super) const ADDED_SAYS: &str = "GitHub accounts you've given the hub. Agents push and open pull requests as the \
-                                     default on the providers Roundhouse sets up GitHub on. On the hub's own machine, \
-                                     they use its git and gh as they are.";
+/// What Added says of itself under its heading: as approved, but for Providers, which isn't built, so it says what the
+/// hub's own machine does in place of where to see it. *Unconfirmed.*
+pub(super) const ADDED_SAYS: &str = "Who Roundhouse is on GitHub. It reads pull requests as the default, and agents on \
+                                     the providers it sets up push and open pull requests as it. On the hub's own \
+                                     machine, agents use its git and gh as they are.";
 
 /// What Added says of itself under its heading on a hub that keeps no GitHub accounts, which uses no default.
 pub(super) const ADDED_SAYS_OLDER: &str = "GitHub accounts you've given the hub.";
@@ -28,9 +30,15 @@ pub(super) const FOUND_SAYS: &str = "Who gh is logged in as on each machine a wo
                                      machine use its login, and elsewhere only while it's the default. Roundhouse \
                                      never copies it.";
 
-/// What Added says while the hub holds no GitHub account.
-pub(super) const NONE_ADDED: &str = "None yet, so agents use each machine's own login. Connect an account to push as it on the providers Roundhouse \
-     sets up GitHub on.";
+/// What Added says while the hub holds no GitHub account, so each machine's own login is the default, which Roundhouse
+/// reads pull requests as too, until Found goes. *Unconfirmed.*
+pub(super) fn none_added() -> String {
+    format!(
+        "None yet, so Roundhouse uses each machine's own gh login. Connect one, such as gh's login on this {}, for \
+         agents on the providers Roundhouse sets up to push as it.",
+        crate::names::MACHINE,
+    )
+}
 
 /// What Found says while the hub has asked no machine.
 pub(super) const NONE_FOUND: &str =
@@ -62,6 +70,14 @@ pub(super) enum Standing {
     /// The hub can't use it for a reason no record says, as it says of the default: a login only a newer Roundhouse
     /// reads, one it can't read, or a reason from a newer hub. What the hub says of it is above the rows.
     CantBeUsed,
+    /// `gh`'s login on the hub's machine, which `gh` there has no login that works for now, as the hub says of the
+    /// default: it's logged out, there's no `gh`, or GitHub refused its token.
+    GhLoggedOut,
+    /// `gh`'s login on the hub's machine, which `gh` there is logged in as another user now, as the hub says of the
+    /// default.
+    GhOtherUser,
+    /// `gh`'s login on the hub's machine, which the hub couldn't read lately, as it says of the default.
+    GhUnread,
 }
 
 impl Standing {
@@ -78,7 +94,8 @@ impl Standing {
         }
         match held.how {
             GithubLoginKind::SignIn => Standing::Renewing,
-            GithubLoginKind::Token | GithubLoginKind::App | GithubLoginKind::Unknown => {
+            // `gh`'s login has no end on its record, so it works as far as the record says.
+            GithubLoginKind::Token | GithubLoginKind::App | GithubLoginKind::Gh | GithubLoginKind::Unknown => {
                 Standing::Ended { on: ended_on(held, cx) }
             }
         }
@@ -99,6 +116,9 @@ impl Standing {
             UnusableLogin::Ended => Standing::Ended { on: held.map_or_default(|held| ended_on(held, cx)) },
             UnusableLogin::Renewing => Standing::Renewing,
             UnusableLogin::SignInAgain => Standing::SignInAgain,
+            UnusableLogin::GhLoggedOut => Standing::GhLoggedOut,
+            UnusableLogin::GhOtherUser => Standing::GhOtherUser,
+            UnusableLogin::GhUnread => Standing::GhUnread,
             UnusableLogin::Newer | UnusableLogin::Unreadable | UnusableLogin::Unknown => Standing::CantBeUsed,
         }
     }
@@ -113,6 +133,9 @@ impl Standing {
             Standing::SignInAgain => Some("Needs signing in again".to_string()),
             Standing::Disconnected => Some("Disconnected".to_string()),
             Standing::CantBeUsed => Some("Can't be used".to_string()),
+            Standing::GhLoggedOut => Some("gh is logged out".to_string()),
+            Standing::GhOtherUser => Some("gh is another account now".to_string()),
+            Standing::GhUnread => Some("Can't read gh".to_string()),
         }
     }
 
@@ -136,14 +159,35 @@ fn ended_on(held: &HeldGithubLogin, cx: &App) -> String {
 }
 
 /// How an account's login was connected, as its row says.
-pub(super) fn connected_by(how: GithubLoginKind) -> &'static str {
+pub(super) fn connected_by(how: GithubLoginKind) -> SharedString {
     match how {
-        GithubLoginKind::SignIn => "Signed in",
-        GithubLoginKind::Token => "Token",
-        GithubLoginKind::App => super::app_words::APP,
+        GithubLoginKind::SignIn => "Signed in".into(),
+        GithubLoginKind::Token => "Token".into(),
+        GithubLoginKind::App => super::app_words::APP.into(),
+        GithubLoginKind::Gh => gh_on_this_machine().into(),
         // A way a newer hub connects one.
-        GithubLoginKind::Unknown => "Another way",
+        GithubLoginKind::Unknown => "Another way".into(),
     }
+}
+
+/// What `gh` on the hub's machine is called, which is this one, as the page is only drawn of a hub the app reaches.
+pub(super) fn gh_on_this_machine() -> String {
+    format!("gh on this {}", crate::names::MACHINE)
+}
+
+/// The button that has the hub use `gh`'s login, which is `username`'s, as an account's. *Unconfirmed.*
+pub(super) fn use_gh(username: &GithubUsername) -> String {
+    format!("Use {username}'s login")
+}
+
+/// What Connect account's panel says of using `gh`'s login, which is `username`'s. *Unconfirmed.*
+pub(super) fn gh_choice_says(username: &GithubUsername) -> SharedString {
+    format!(
+        "gh on this {} is logged in as {username}. Roundhouse reads its token from gh when it needs it and keeps no \
+         copy, so logging gh out stops Roundhouse too.",
+        crate::names::MACHINE,
+    )
+    .into()
 }
 
 /// What a machine's own login is called on its row, and what its row says of it, if anything, and whether that's a
@@ -168,7 +212,7 @@ pub(super) fn found(login: &GhLogin) -> (String, Option<(&'static str, bool)>) {
 /// Whose `gh` a machine's own login is, by the provider whose machines it's on.
 pub(super) fn found_on(provider: &ProviderName) -> String {
     if provider.is_local() {
-        return format!("gh on this {}", crate::names::MACHINE);
+        return gh_on_this_machine();
     }
     format!("gh on {provider}")
 }

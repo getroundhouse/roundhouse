@@ -84,7 +84,10 @@ fn a_due_sign_in_that_nothing_can_renew_needs_signing_in_again_and_a_default_it_
         .collect();
     assert_eq!(needing, [("g", true), ("none", true)]);
     let reason = reason(sent(&logins));
-    assert!(reason.contains("ada, has ended") && reason.contains("Sign in with GitHub again"), "{reason}");
+    assert!(
+        reason.contains("ada, the default account, has ended") && reason.contains("Sign in with GitHub again"),
+        "{reason}"
+    );
     assert!(again.changed.is_empty() && again.due.is_empty(), "the next check changes nothing: {again:?}");
 }
 
@@ -131,7 +134,10 @@ fn a_sign_in_whose_refresh_token_github_refused_needs_signing_in_again_and_a_def
     assert!(change.account.held_login.unwrap().needs_sign_in);
     assert_eq!(held(&logins, &store, "g"), before, "its file is as it was");
     let reason = reason(sent(&logins));
-    assert!(reason.contains("ada, has ended") && reason.contains("Sign in with GitHub again"), "{reason}");
+    assert!(
+        reason.contains("ada, the default account, has ended") && reason.contains("Sign in with GitHub again"),
+        "{reason}"
+    );
     assert_eq!(due_at(&logins, ENDS - 1), [], "it isn't renewed again");
 }
 

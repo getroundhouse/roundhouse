@@ -26,10 +26,10 @@ pub(in crate::gallery) fn github_app_installed() -> World {
 /// blocks every worker, which only it can say, since the installation's record says nothing of its token's end.
 pub(in crate::gallery) fn github_app_renewing() -> World {
     let mut world = github_app_installed();
-    let reason = "The token of Roundhouse's default GitHub account, ada-roundhouse[bot], installed on adalabs, has \
-                  ended, and Roundhouse is making another, so this workspace's agents push to GitHub as nobody. It \
-                  tries every minute until GitHub answers. If this goes on, check the app is still on GitHub, or \
-                  choose another default in Roundhouse's Settings.";
+    let reason = "The token of ada-roundhouse[bot], the default account, installed on adalabs, has ended, and \
+                  Roundhouse is making another. Until it has, Roundhouse can't read pull requests, and agents on the \
+                  providers it sets up can't push. It tries every minute until GitHub answers. If this goes on, check \
+                  the app is still on GitHub, or choose another default.";
     world.github = Some(blocking(&installation(), UnusableLogin::Renewing, reason));
     world
 }

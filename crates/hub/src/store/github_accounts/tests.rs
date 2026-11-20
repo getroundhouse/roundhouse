@@ -76,7 +76,7 @@ fn renewing_a_sign_in_and_its_needing_signing_in_again_each_move_its_records_rev
     let signing_in = GithubConnecting { how: GithubLoginKind::SignIn, ends_at_ms: Some(9000), ..signing_in };
     let connected = store.connect_github_login(&signing_in).unwrap().account;
 
-    let listed = store.held_github_sign_ins().unwrap();
+    let listed = store.held_github_logins_of(GithubLoginKind::SignIn).unwrap();
     let renewed = store.renew_github_sign_in(&signed_in, Some(20_000)).unwrap().unwrap();
     let needing = store.github_login_needs_sign_in(&signed_in).unwrap().unwrap();
 

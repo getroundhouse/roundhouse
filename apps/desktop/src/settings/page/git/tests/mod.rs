@@ -4,6 +4,7 @@
 #[cfg(unix)]
 mod app_hub;
 mod apps;
+mod gh_choice;
 /// Against a stand-in hub, which listens on a Unix socket.
 #[cfg(unix)]
 mod hub;

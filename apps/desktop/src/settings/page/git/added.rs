@@ -11,7 +11,7 @@ use protocol::model::{GithubAccount, GithubAccountId, SentCredential};
 use super::super::account_row::{self, Detail, Picture, Row, Tone};
 use super::super::lists::{heading, list as rows_of, said_in_the_list};
 use super::git_page::COLUMNS;
-use super::kept::{Asked, Panel, Shows};
+use super::kept::{Asked, Kept, Panel, Shows};
 use super::words::{self, Standing};
 use super::{Drawing, account_menu, app_panel_drawn, app_rows, connect_panels, sign_in_panel};
 use crate::status_box::{self, StatusBox};
@@ -24,13 +24,13 @@ pub(super) fn list(drawing: &Drawing<'_>, cx: &App) -> Div {
         look::button("git-connect", look::ButtonKind::Outlined, look::ControlSize::Regular, "Connect account")
             .icon(IconName::Plus)
             .off(!drawing.can_ask(cx) || at_top.is_some())
-            .on_click(move |_, _, cx| opening.update(cx, |kept, cx| kept.open(Shows::Choosing, cx)));
+            .on_click(move |_, _, cx| opening.update(cx, Kept::open_choosing));
     let panel = at_top.map(|panel| div().py(look::Space::Large).child(draw_panel(drawing, panel, cx)));
     let accounts = listed(drawing.records.github_accounts(), drawing.github.and_then(|github| github.account.as_ref()));
     let said = if drawing.older {
-        Some(("git-older-hub", words::OLDER_HUB))
+        Some(("git-older-hub", words::OLDER_HUB.to_string()))
     } else {
-        (accounts.is_empty() && panel.is_none()).then_some(("git-none-added", words::NONE_ADDED))
+        (accounts.is_empty() && panel.is_none()).then(|| ("git-none-added", words::none_added()))
     };
     let said = said.map(|(id, said)| said_in_the_list(id, said.into(), cx));
     let rows = accounts.iter().map(|account| account_row(drawing, account, cx));
@@ -51,7 +51,7 @@ pub(super) fn listed<'a>(accounts: &'a [GithubAccount], default: Option<&GithubA
 /// The panel that's open, whichever it is.
 pub(super) fn draw_panel(drawing: &Drawing<'_>, panel: &Panel, cx: &App) -> AnyElement {
     match &panel.shows {
-        Shows::Choosing => connect_panels::choosing(drawing, panel, cx),
+        Shows::Choosing(choosing) => connect_panels::choosing(drawing, panel, choosing, cx),
         Shows::Token(token) => connect_panels::token(drawing, panel, token, cx),
         Shows::SignIn(sign_in) => sign_in_panel::sign_in(drawing, panel, sign_in, cx),
         Shows::App(app) => app_panel_drawn::app(drawing, panel, app, cx),
@@ -67,7 +67,7 @@ fn blocked(drawing: &Drawing<'_>, cx: &App) -> Option<AnyElement> {
         id: "git-blocked",
         icon: Lucide::TriangleAlert,
         tone: status_box::Tone::Problem,
-        lead: Some("Agents can't push.".into()),
+        lead: Some("Roundhouse can't use its GitHub account.".into()),
         detail: reason.clone().into(),
         progress: None,
         action: None,
@@ -80,8 +80,12 @@ fn account_row(drawing: &Drawing<'_>, account: &GithubAccount, cx: &App) -> AnyE
     let standing = drawing.standing(account, cx);
     let tone = match standing {
         Standing::Works { .. } | Standing::Disconnected => Tone::Plain,
-        Standing::Renewing => Tone::Warning,
-        Standing::Ended { .. } | Standing::SignInAgain | Standing::CantBeUsed => Tone::Problem,
+        Standing::Renewing | Standing::GhUnread => Tone::Warning,
+        Standing::Ended { .. }
+        | Standing::SignInAgain
+        | Standing::CantBeUsed
+        | Standing::GhLoggedOut
+        | Standing::GhOtherUser => Tone::Problem,
     };
     let kept = drawing.kept.read(cx);
     let failed = kept.failed(&Asked::Account(account.id.clone())).map(|said| failed_line(said, cx).into_any_element());
@@ -102,7 +106,7 @@ fn account_row(drawing: &Drawing<'_>, account: &GithubAccount, cx: &App) -> AnyE
         name: account.user.name.to_string(),
         dim: standing == Standing::Disconnected,
         default: drawing.is_default(account),
-        how: account.held_login.map(|held| words::connected_by(held.how).into()),
+        how: account.held_login.map(|held| words::connected_by(held.how)),
         detail,
         menu,
         card: None,

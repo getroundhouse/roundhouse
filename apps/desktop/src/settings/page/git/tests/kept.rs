@@ -4,7 +4,7 @@ use gpui_kit::{AppContext as _, TestAppContext};
 use protocol::fixtures::github_sign_in;
 use protocol::model::{GithubAccountId, GithubSignInStatus};
 
-use super::super::kept::{Asked, Kept, Shows};
+use super::super::kept::{Asked, Kept};
 use super::super::words;
 use super::made_up::{ended, records};
 
@@ -42,7 +42,7 @@ fn a_sign_in_that_waits_shows_wherever_git_does_unless_its_panel_was_put_away_he
     let waiting = records(Vec::new(), vec![github_sign_in("s2"), github_sign_in("s1"), refused], None);
 
     kept.update(cx, |kept, cx| {
-        kept.open(Shows::Choosing, cx);
+        kept.open_choosing(cx);
         kept.show_waiting(&waiting, cx);
     });
     kept.read_with(cx, |kept, _| assert_eq!(showing(kept).as_deref(), Some("s1"), "in place of Connect account's"));

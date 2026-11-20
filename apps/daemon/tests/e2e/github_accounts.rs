@@ -54,7 +54,7 @@ fn a_workspaces_git_gets_the_default_github_accounts_token_and_a_block_once_its_
     assert!(first.contains(&format!("username=ada\npassword={TOKEN}\n")), "{first}");
     assert_eq!(wait_for_setup(&client, &workspace.id), SetupStatus::Succeeded, "git was blocked");
     let said = std::fs::read_to_string(worktree.join("said")).unwrap();
-    assert!(said.contains("Roundhouse's default GitHub account, ada, was disconnected"), "{said}");
+    assert!(said.contains("ada, the default account, was disconnected. Until"), "{said}");
 }
 
 /// Says what of the worker's git credential the setup script was given: the git config git is to include, and the

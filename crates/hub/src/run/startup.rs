@@ -11,7 +11,7 @@ use protocol::Build;
 use protocol::model::{AgentDescription, WorkspaceId};
 use protocol::paths::Paths;
 use providers::Provider;
-use providers::local::{LocalConfig, LocalProvider};
+use providers::local::{LocalConfig, LocalProvider, MachinePath};
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::task::JoinSet;
@@ -99,8 +99,7 @@ fn load_providers(
     build: Build,
     paths: &Paths,
     worker_exe: PathBuf,
-    shell: Option<String>,
-    path: Option<String>,
+    path: MachinePath,
     store: &Store,
     timers: &Timers,
 ) -> Result<ProviderSet, HubError> {
@@ -109,7 +108,6 @@ fn load_providers(
         instances_dir: paths.instances_dir.clone(),
         workspaces_root: paths.workspaces_root.clone(),
         clones_dir: paths.clones_dir.clone(),
-        shell,
         path,
     }));
     let hub_id = store.hub_id().map_err(HubError::OpenDatabase)?;
@@ -133,11 +131,11 @@ pub async fn run(config: HubConfig) -> Result<(), HubError> {
     let left_at_work = LeftAtWork::read(&store).map_err(HubError::Recover)?;
     let settings = store.hub_settings().map_err(HubError::OpenDatabase)?;
 
-    let providers = load_providers(build, &paths, worker_exe, shell, path, &store, &timers)?;
+    let machine = MachinePath::new(shell, path);
+    let providers = load_providers(build, &paths, worker_exe, machine.clone(), &store, &timers)?;
     let github = Github::new(github);
-    let mut dirs = HubDirs::of(&paths);
-    dirs.network_address = network_address;
-    let hub = Arc::new(Hub::new(build, store, dirs, providers, github, agents, on_demand, timers));
+    let dirs = HubDirs { network_address, ..HubDirs::of(&paths) };
+    let hub = Arc::new(Hub::new(build, store, dirs, providers, github, machine, agents, on_demand, timers));
     // Before clients are served, so none is told the hub holds a login whose token is gone.
     hub.tidy_logins().await;
     // Before carrying on with the agents an earlier hub left, since what they asked meanwhile comes in as soon as

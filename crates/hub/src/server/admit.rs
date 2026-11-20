@@ -273,6 +273,8 @@ fn local_only(request: &ClientRequest) -> bool {
         | R::AccountDisconnect(..)
         | R::AccountSetReserve(..)
         | R::GithubAccountConnect(..)
+        | R::GithubAccountConnectGh
+        | R::HubGhLogin
         | R::GithubAccountDisconnect(..)
         | R::GithubAccountSetDefault(..)
         | R::GithubSignInStart(..)

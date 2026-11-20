@@ -14,8 +14,7 @@ fn local(dir: &Path) -> Arc<dyn Provider> {
         instances_dir: dir.join("instances"),
         workspaces_root: dir.join("workspaces"),
         clones_dir: dir.join("clones"),
-        shell: Some("/bin/sh".to_string()),
-        path: None,
+        path: providers::local::MachinePath::new(Some("/bin/sh".to_string()), None),
     }))
 }
 

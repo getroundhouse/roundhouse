@@ -12,9 +12,10 @@ use protocol::event::{CompactedBy, SessionEvent};
 use protocol::find::Found;
 use protocol::fixtures;
 use protocol::model::{
-    Account, CompactionLine, DiffComment, DiffSide, FileContents, FileOpened, FilePages, GitDiff, GitStatus,
-    GithubAccount, GithubLoginKind, GithubSettings, GithubSignIn, GithubUser, GithubUserId, HeldGithubLogin,
-    HubSettings, NewWorkspaceDraft, Place, PromptLine, Records, Repo, Reserve, Rev, Seq, SessionAccount, WorktreeFiles,
+    Account, CompactionLine, DiffComment, DiffSide, FileContents, FileOpened, FilePages, GhLogin, GhLoginWorks,
+    GitDiff, GitStatus, GithubAccount, GithubLoginKind, GithubSettings, GithubSignIn, GithubUser, GithubUserId,
+    HeldGithubLogin, HubSettings, NewWorkspaceDraft, Place, PromptLine, Records, Repo, Reserve, Rev, Seq,
+    SessionAccount, WorktreeFiles,
 };
 
 use super::answered;
@@ -88,6 +89,20 @@ fn a_github_accounts_record_keeps_its_form_held_or_disconnected() {
         ClientResponse::GithubAccount(account(None)),
         r#"{"result":"github_account","id":"g","user":{"id":7,"name":"ada"},"held_login":null,"rev":2}"#,
     );
+    let gh = HeldGithubLogin { how: GithubLoginKind::Gh, ends_at_ms: None, ..held };
+    answered(
+        ClientResponse::GithubAccount(account(Some(gh))),
+        r#"{"result":"github_account","id":"g","user":{"id":7,"name":"ada"},"held_login":{"how":"gh","connected_at_ms":1,"ends_at_ms":null,"needs_sign_in":false},"rev":2}"#,
+    );
+}
+
+#[test]
+fn who_gh_on_the_hubs_machine_is_keeps_its_form() {
+    answered(
+        ClientResponse::GhLogin(GhLogin::LoggedIn { username: "ada".into(), works: GhLoginWorks::Yes }),
+        r#"{"result":"gh_login","state":"logged_in","username":"ada","works":"yes"}"#,
+    );
+    answered(ClientResponse::GhLogin(GhLogin::LoggedOut), r#"{"result":"gh_login","state":"logged_out"}"#);
 }
 
 #[test]

@@ -77,6 +77,10 @@ pub enum GithubLoginKind {
     /// makes from the app's key, and makes again before it ends, so it needs nothing of the person while the app's
     /// installed there.
     App,
+    /// The login `gh` has on the hub's own machine, whose token the hub reads from `gh` each time it checks its logins,
+    /// and keeps only in memory, so logging `gh` out, or switching it to another user, reaches what workers are sent
+    /// within a minute. Its record says nothing of when it ends, which is `gh`'s to renew.
+    Gh,
     /// One from a newer peer.
     #[serde(other)]
     Unknown,

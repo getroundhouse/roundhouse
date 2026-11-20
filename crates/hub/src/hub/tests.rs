@@ -20,7 +20,7 @@ use super::{Hub, HubDirs};
 use crate::provider_set::ProviderSet;
 use crate::session::{CarriedOver, Item, LiveSession, Starting};
 use crate::store::Store;
-use crate::store::tests::store_with_session;
+use crate::store::tests::{open_in, store_with_session};
 use crate::timers::Timers;
 use crate::worker_link::WorkerLink;
 use github::{Github, GithubConfig, PullRequests, Script, StandIn};
@@ -77,9 +77,17 @@ pub(super) fn hub_describing(dir: &Path, agents: Vec<AgentDescription>) -> Arc<H
 /// test's hub does, as [`Timers::FOR_TESTS`] has it, since a test that calls a stand-in can't pause tokio's clock,
 /// which a request to the stand-in would race.
 pub(crate) fn hub_calling_github(dir: &Path, api: String) -> Arc<Hub> {
-    let timers = Timers { sign_in_pace: Timers::FOR_TESTS.sign_in_pace, ..Timers::DEFAULT };
-    hub_timed(dir, vec![described()], Github::new(GithubConfig::at(api)), timers)
+    hub_timed(dir, vec![described()], Github::new(GithubConfig::at(api)), CALLING_GITHUB)
 }
+
+/// The same, started again on the store and the files a hub left in `dir`, as a hub that restarts is.
+pub(crate) fn hub_calling_github_again(dir: &Path, api: String) -> Arc<Hub> {
+    let github = Github::new(GithubConfig::at(api));
+    Arc::new(hub_on(open_in(dir), dir, local(dir), vec![described()], github, CALLING_GITHUB))
+}
+
+/// How [`hub_calling_github`] times what it does.
+const CALLING_GITHUB: Timers = Timers { sign_in_pace: Timers::FOR_TESTS.sign_in_pace, ..Timers::DEFAULT };
 
 /// The same as [`hub_in`], which looks at a worker of another build as often as a test's hub does, as
 /// [`Timers::FOR_TESTS`] has it, so a test sees it replaced within a few looks rather than seconds.
@@ -97,31 +105,39 @@ fn hub_of(dir: &Path, agents: Vec<AgentDescription>, github: Github) -> Arc<Hub>
 }
 
 fn hub_timed(dir: &Path, agents: Vec<AgentDescription>, github: Github, timers: Timers) -> Arc<Hub> {
+    Arc::new(hub_on(store_with_session(dir), dir, local(dir), agents, github, timers))
+}
+
+/// The local provider, with no worker to start.
+fn local(dir: &Path) -> Arc<dyn Provider> {
     let config = LocalConfig {
         worker_exe: dir.join("no-worker"),
         instances_dir: dir.join("instances"),
         workspaces_root: dir.join("workspaces"),
         clones_dir: dir.join("clones"),
-        shell: Some("/bin/sh".to_string()),
-        path: None,
+        path: providers::local::MachinePath::new(Some("/bin/sh".to_string()), None),
     };
-    Arc::new(hub_on(dir, Arc::new(LocalProvider::new(config)), agents, github, timers))
+    Arc::new(LocalProvider::new(config))
 }
 
 fn hub_on(
+    store: Store,
     dir: &Path,
     provider: Arc<dyn Provider>,
     agents: Vec<AgentDescription>,
     github: Github,
     timers: Timers,
 ) -> Hub {
-    let (store, providers) = (Arc::new(store_with_session(dir)), ProviderSet::only(provider));
-    Hub::new(Build::UNSTAMPED, store, HubDirs::in_dir(dir), providers, github, agents, false, timers)
+    let (store, providers) = (Arc::new(store), ProviderSet::only(provider));
+    // Only `bin` in the test's directory, where a test about `gh` puts a stand-in for it, so no test runs the real one.
+    let machine = providers::local::MachinePath::only(Some(dir.join("bin").display().to_string()));
+    Hub::new(Build::UNSTAMPED, store, HubDirs::in_dir(dir), providers, github, machine, agents, false, timers)
 }
 
 /// A hub as [`hub_describing`] makes one, before anything shares it, whose workspaces are all `provider`'s.
 pub(super) fn hub_provided_by(dir: &Path, provider: Arc<dyn Provider>, agents: Vec<AgentDescription>) -> Hub {
-    hub_on(dir, provider, agents, Github::new(GithubConfig::at(NO_GITHUB.to_string())), Timers::DEFAULT)
+    let github = Github::new(GithubConfig::at(NO_GITHUB.to_string()));
+    hub_on(store_with_session(dir), dir, provider, agents, github, Timers::DEFAULT)
 }
 
 /// A stand-in for `w`'s worker, which fails every call, as `hub`'s worker.

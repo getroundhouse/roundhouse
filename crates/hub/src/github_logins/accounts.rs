@@ -2,6 +2,7 @@ use std::fmt;
 use std::path::Path;
 use std::sync::Arc;
 
+use parking_lot::Mutex;
 use protocol::client::github_accounts::GithubAccountConnect;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::model::{
@@ -10,6 +11,7 @@ use protocol::model::{
 use tokio::sync::watch;
 
 use super::blocks::Unusable;
+use super::gh_login::GhKept;
 use super::{DefaultCredential, GithubLogin};
 use crate::error::internal;
 use crate::login_files::{Locked, LoginFiles};
@@ -31,6 +33,8 @@ pub(crate) struct GithubLogins {
     pub(super) credential: watch::Sender<DefaultCredential>,
     /// The hub's settings as of the last time what workers are sent was recorded anew on them, under the lock.
     pub(super) recorded: watch::Sender<Option<HubSettings>>,
+    /// What the hub last read of the login `gh` has on its machine, in memory alone, as `GithubLogins::gh_read` says.
+    pub(super) gh: Mutex<Option<GhKept>>,
 }
 
 /// A token to connect, as a client asked: trimmed, and given the ID a new account would get.
@@ -66,7 +70,7 @@ pub(crate) struct GithubAccountChange {
 }
 
 impl GithubAccountChange {
-    fn unchanged(account: GithubAccount) -> Self {
+    pub(super) fn unchanged(account: GithubAccount) -> Self {
         Self { account, changed: false, settings: None }
     }
 
@@ -114,6 +118,7 @@ impl GithubLogins {
             files: LoginFiles::new(data_dir),
             credential: watch::Sender::new(unread),
             recorded: watch::Sender::new(None),
+            gh: Mutex::new(None),
         };
         logins.publish(&logins.files.lock(), now_ms);
         logins
@@ -261,10 +266,24 @@ impl GithubLogins {
                 let message = format!("{}'s login is one only a newer Roundhouse can read", account.user.name);
                 Err(ApiError::new(ErrorCode::Conflict, message))
             }
+            Err(Unusable::GhLoggedOut(why)) => {
+                let message =
+                    format!("gh on the hub's machine has no login that works for {} ({why})", account.user.name);
+                Err(ApiError::new(ErrorCode::Conflict, message))
+            }
+            Err(Unusable::GhOtherUser(now)) => {
+                let message = format!("gh on the hub's machine is logged in as {now} now, not {}", account.user.name);
+                Err(ApiError::new(ErrorCode::Conflict, message))
+            }
+            Err(Unusable::GhUnread(_)) => {
+                let message =
+                    format!("the hub couldn't read gh's login for {} lately; try again in a minute", account.user.name);
+                Err(ApiError::new(ErrorCode::Conflict, message))
+            }
         }
     }
 
-    fn record(&self, id: &GithubAccountId) -> Result<GithubAccount, ApiError> {
+    pub(super) fn record(&self, id: &GithubAccountId) -> Result<GithubAccount, ApiError> {
         let found = self.store.github_account(id)?;
         Ok(found.ok_or_else(|| StoreError::NotFound { kind: "GitHub account", id: id.to_string() })?)
     }

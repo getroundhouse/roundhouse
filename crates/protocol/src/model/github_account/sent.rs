@@ -54,6 +54,14 @@ pub enum UnusableLogin {
     Newer,
     /// Its record, its login's file or its profile can't be read, or the hub has no record of it.
     Unreadable,
+    /// It's the `gh` login on the hub's machine, and `gh` there has no login that works: it's logged out, there's no
+    /// `gh`, or GitHub refused its token.
+    GhLoggedOut,
+    /// It's the `gh` login on the hub's machine, and `gh` there is logged in as another GitHub user now.
+    GhOtherUser,
+    /// It's the `gh` login on the hub's machine, which the hub couldn't read lately, as when `gh` didn't answer, or
+    /// hasn't read since it started.
+    GhUnread,
     /// From a newer hub.
     #[serde(other)]
     Unknown,

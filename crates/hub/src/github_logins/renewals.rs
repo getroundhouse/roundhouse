@@ -5,7 +5,7 @@
 use std::time::Duration;
 
 use protocol::client::ApiError;
-use protocol::model::{GithubAccount, GithubAccountId, GithubAppId};
+use protocol::model::{GithubAccount, GithubAccountId, GithubAppId, GithubLoginKind};
 use tracing::{error, info, warn};
 
 use super::{GithubAccountChange, GithubLogin, GithubLogins, MintDue, ProfileDue, SignedIn};
@@ -41,6 +41,8 @@ pub(crate) struct Checked {
     pub(crate) apps: Vec<GithubAppId>,
     /// Each token's or sign-in's account to ask GitHub who it is again, for its commit identity.
     pub(crate) profiles: Vec<ProfileDue>,
+    /// Whether to read `gh` on the hub's machine, since an account holds its login.
+    pub(crate) gh: bool,
 }
 
 impl GithubLogins {
@@ -56,7 +58,7 @@ impl GithubLogins {
         self.changing(now_ms, |files| {
             let renewed_before = later_ms(now_ms, RENEWED_WITH_LEFT);
             let mut checked = Checked::default();
-            for (account, file) in self.store.held_github_sign_ins()? {
+            for (account, file) in self.store.held_github_logins_of(GithubLoginKind::SignIn)? {
                 let due = account.held_login.is_some_and(|held| {
                     !held.needs_sign_in && held.ends_at_ms.is_some_and(|ends_at_ms| ends_at_ms < renewed_before)
                 });
@@ -74,6 +76,7 @@ impl GithubLogins {
             checked.minting = self.installations_due(files, now_ms)?;
             checked.apps = self.store.github_app_keys()?.into_iter().map(|(app, _)| app).collect();
             checked.profiles = self.profiles_due(files, &checked.due, now_ms)?;
+            checked.gh = self.holds_gh()?;
             Ok(checked)
         })
     }

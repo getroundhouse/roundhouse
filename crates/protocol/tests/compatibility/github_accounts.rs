@@ -114,7 +114,7 @@ fn a_list_of_every_record_reads_its_sign_ins_and_one_from_a_hub_that_cant_sign_i
 /// before they said, which say nothing of it.
 #[test]
 fn what_workers_are_sent_keeps_its_form_on_the_settings_and_one_from_a_hub_from_before_says_none() {
-    let reason = "The token of Roundhouse's default GitHub account, ada, has ended.";
+    let reason = "The token of ada, the default account, has ended.";
     let forms = [
         (SentCredential::MachineOwn, r#"{"kind":"machine_own"}"#.to_string()),
         (SentCredential::Account { account: "g".into() }, r#"{"kind":"account","account":"g"}"#.to_string()),
@@ -130,6 +130,9 @@ fn what_workers_are_sent_keeps_its_form_on_the_settings_and_one_from_a_hub_from_
         (UnusableLogin::SignInAgain, "sign_in_again"),
         (UnusableLogin::Newer, "newer"),
         (UnusableLogin::Unreadable, "unreadable"),
+        (UnusableLogin::GhLoggedOut, "gh_logged_out"),
+        (UnusableLogin::GhOtherUser, "gh_other_user"),
+        (UnusableLogin::GhUnread, "gh_unread"),
     ];
     let older: GithubSettings = serde_json::from_str(r#"{"account":"g"}"#).unwrap();
 

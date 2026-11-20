@@ -3,6 +3,7 @@ use super::terminals::Terminals;
 use super::{awake, feed, found_github_logins, pull_requests, sessions, setup};
 use crate::attachment_files::AttachmentFiles;
 use crate::error::internal;
+use crate::gh::Gh;
 use crate::github_logins::GithubLogins;
 use crate::jobs::Jobs;
 use crate::logins::Logins;
@@ -24,6 +25,7 @@ use protocol::model::{
 };
 use protocol::paths::Paths;
 use providers::Provider;
+use providers::local::MachinePath;
 use sessions::Sessions;
 use setup::SetupGate;
 use std::collections::HashMap;
@@ -58,6 +60,8 @@ pub(crate) struct Hub {
     pub(super) github_logins: Arc<GithubLogins>,
     /// What the hub asks GitHub, such as whose a token is.
     pub(super) github: Github,
+    /// `gh` on the hub's own machine, whose login an account can use.
+    pub(super) gh: Gh,
     /// The providers whose machines' own GitHub login has been found since the hub started, or is being asked for.
     pub(super) github_logins_asked: Arc<found_github_logins::ProvidersAsked>,
     /// The token each provider's machines' own `gh` uses, as found since the hub started, in memory alone.
@@ -170,6 +174,7 @@ impl Hub {
         dirs: HubDirs,
         providers: ProviderSet,
         github: Github,
+        machine: MachinePath,
         agents: Vec<AgentDescription>,
         on_demand: bool,
         timers: Timers,
@@ -184,6 +189,7 @@ impl Hub {
             logins: Arc::new(Logins::new(store.clone(), &dirs.data)),
             github_logins: Arc::new(GithubLogins::new(store.clone(), &dirs.data, now_ms())),
             github,
+            gh: Gh::new(machine, dirs.data.clone()),
             github_logins_asked: Arc::default(),
             found_tokens: found_github_logins::FoundTokens::default(),
             addresses_read: Notify::new(),

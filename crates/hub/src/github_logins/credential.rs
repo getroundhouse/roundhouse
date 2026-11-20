@@ -76,6 +76,7 @@ impl GithubLogins {
             Ok(Stored::Secret(GithubLogin::Installation(made))) if made.token_ends_at_ms <= now_ms => {
                 Err(Unusable::Renewing)
             }
+            Ok(Stored::Secret(GithubLogin::Gh { user })) => self.gh_token(user, now_ms),
             Ok(Stored::Secret(login)) => login.token().cloned().ok_or(Unusable::Unreadable(None)),
             Ok(Stored::Newer) => Err(Unusable::Newer),
             Ok(Stored::Nothing) => Err(Unusable::Unreadable(None)),
@@ -140,6 +141,7 @@ impl GithubLogins {
         let unread = |e: &dyn std::fmt::Display| {
             reason(
                 &format!("Roundhouse couldn't read its default GitHub account ({e})"),
+                "it can",
                 "It tries again within a minute.",
             )
         };
@@ -159,10 +161,7 @@ impl GithubLogins {
             Ok(Some(account)) => account,
             Ok(None) => {
                 let why = "Roundhouse's default GitHub account is one it has no record of";
-                return blocked(
-                    UnusableLogin::Unreadable,
-                    reason(why, "Choose another default in Roundhouse's Settings."),
-                );
+                return blocked(UnusableLogin::Unreadable, reason(why, "another is chosen", "Choose another default."));
             }
             Err(e) => return blocked(UnusableLogin::Unreadable, unread(&e)),
         };
@@ -181,7 +180,7 @@ impl GithubLogins {
                         "Roundhouse has no record of the app its default GitHub account, {}, is an installation of",
                         account.user.name,
                     );
-                    blocked(UnusableLogin::Unreadable, reason(&why, "Choose another default in Roundhouse's Settings."))
+                    blocked(UnusableLogin::Unreadable, reason(&why, "another is chosen", "Choose another default."))
                 }
                 Err(e) => blocked(UnusableLogin::Unreadable, unread(&e)),
             };

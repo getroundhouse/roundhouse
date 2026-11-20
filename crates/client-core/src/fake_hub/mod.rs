@@ -8,6 +8,7 @@
 
 mod base_pages;
 pub mod events;
+mod github;
 mod listing;
 mod model_lists;
 mod serve;
