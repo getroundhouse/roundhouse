@@ -47,6 +47,7 @@ impl Binding for Codex {
             env: Vec::new(),
             tools_token: None,
             login: None,
+            repository: None,
         };
         crate::codex::spawn_at(launch.bin, spec, output, AgentOptions::default())
             .await

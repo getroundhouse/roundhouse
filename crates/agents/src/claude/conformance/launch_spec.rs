@@ -32,6 +32,7 @@ pub(super) fn spec(
         env,
         tools_token: None,
         login: None,
+        repository: None,
     })
 }
 

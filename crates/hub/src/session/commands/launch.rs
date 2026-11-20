@@ -6,7 +6,7 @@ use protocol::capability::Capabilities;
 use protocol::capability::conversation::Start;
 use protocol::client::{ApiError, ErrorCode, HubNotice};
 use protocol::event::{EventBody, ExitReason};
-use protocol::model::{RunCapabilities, RunId};
+use protocol::model::{GithubRepositoryName, RunCapabilities, RunId};
 use protocol::worker::{AgentSpec, AgentStarted, AgentStop};
 use tracing::{error, warn};
 
@@ -22,6 +22,8 @@ struct Launch {
     env: Vec<(String, String)>,
     /// The login the hub gives it, as [`Hub::launching`] chose, or `None` to run it under its machine's own.
     login: Option<Handed>,
+    /// The workspace's repository on GitHub, which the agent is told, if it's on github.com.
+    repository: Option<GithubRepositoryName>,
 }
 
 impl LiveSession {
@@ -39,6 +41,7 @@ impl LiveSession {
         }
         let (workspace, cwd) = hub.ready_workspace(&self.workspace_id).await?.into_parts();
         let mut env = hub.workspace_env(&workspace).await?;
+        let repository = hub.github_repository_of(&workspace).await?;
         env.push(("CONDUCTOR_SESSION_ID".to_string(), self.id.to_string()));
         let _nothing_changes_meanwhile = self.configuring.lock().await;
         if self.is_closed() {
@@ -53,7 +56,7 @@ impl LiveSession {
                 return Err(ApiError::new(ErrorCode::Conflict, NO_ACCOUNT_TO_SPARE));
             }
         };
-        self.start_agent(&hub, &link, Launch { cwd, env, login }).await?;
+        self.start_agent(&hub, &link, Launch { cwd, env, login, repository }).await?;
         Ok(link)
     }
 
@@ -118,7 +121,7 @@ impl LiveSession {
     /// Picks the run before the launch and marks it current, so the new agent's first deltas aren't
     /// taken for a replaced agent's and dropped.
     async fn start_agent(&self, hub: &Hub, link: &WorkerLink, launch: Launch) -> Result<(), ApiError> {
-        let Launch { cwd, env, login } = launch;
+        let Launch { cwd, env, login, repository } = launch;
         let (resume, start, mut kept) = {
             let state = self.state.lock();
             let start = match (&state.agent_session_id, state.agent_opened) {
@@ -143,7 +146,8 @@ impl LiveSession {
         let build = link.said_build().map(str::to_string);
         let previous_build = self.previous_build(hub, build.as_deref()).await;
         let (session_id, agent, login) = (self.id.clone(), self.agent, login.map(|handed| handed.login));
-        let spec = AgentSpec { session_id, run: asked, agent, cwd, start, settings, env, tools_token, login };
+        let spec =
+            AgentSpec { session_id, run: asked, agent, cwd, start, settings, env, tools_token, login, repository };
         let starting = AgentRun { link: link.id, run: asked };
         self.state.lock().agent = Some(starting);
         let launched = self.launch(link, spec).await;

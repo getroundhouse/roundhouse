@@ -73,6 +73,7 @@ pub async fn title_for(
         env: Vec::new(),
         tools_token: None,
         login: None,
+        repository: None,
     };
     let (tx, mut rx) = mpsc::channel(128);
     let options = AgentOptions { tools: None, ..options.clone() };

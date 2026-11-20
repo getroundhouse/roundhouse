@@ -199,6 +199,7 @@ impl Launcher for RealCli {
             env: self.env.clone(),
             tools_token: None,
             login: None,
+            repository: None,
         };
         let (sender, mut receiver) = mpsc::channel(1024);
         let conversation = self.conversation.clone();

@@ -34,6 +34,7 @@ pub(crate) fn spec(dir: &Path) -> AgentSpec {
         env: vec![],
         tools_token: None,
         login: None,
+        repository: None,
     }
 }
 

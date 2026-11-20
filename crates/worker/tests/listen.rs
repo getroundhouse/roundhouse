@@ -74,6 +74,7 @@ impl Listening {
             env: vec![],
             tools_token: None,
             login: None,
+            repository: None,
         })
     }
 

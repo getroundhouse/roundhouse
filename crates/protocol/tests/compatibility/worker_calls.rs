@@ -8,7 +8,7 @@ use protocol::capability::{Capabilities, Claimed};
 use protocol::frame;
 use protocol::model::{
     AgentAccount, AgentKind, AgentLogin, Branches, FileContents, FileOpened, FilePage, FilePages, GitDiff, GitStatus,
-    Head, LoginToken, ModelName, PageLine, RunId, WorktreeFiles,
+    GithubRepositoryName, Head, LoginToken, ModelName, PageLine, RunId, WorktreeFiles,
 };
 use protocol::worker::{
     self, AgentSpec, RepoSource, RunningAgent, ToolsToken, WorkerCall, WorkerFrame, WorkerOutcome, WorkerRequest,
@@ -205,10 +205,17 @@ fn every_request_about_an_agent_keeps_its_form() {
         env: vec![],
         tools_token: Some(ToolsToken::new("t")),
         login: None,
+        repository: None,
     };
     asked(
         WorkerRequest::AgentStart(spec.clone()),
         r#"{"method":"agent_start","session_id":"s","run":4,"agent":"claude","cwd":"/w","start":"resume","conversation":"a","settings":{"model":"opus","mode":{"unasked":"everything","beyond":"asks"},"effort":"high","speed":null,"thinking":null,"persona":null,"style":null,"verbosity":null,"advisor":null,"budget":null},"env":[],"tools_token":"t"}"#,
+    );
+    let in_a_repository_on_github =
+        AgentSpec { repository: Some(GithubRepositoryName::named("cli/cli")), tools_token: None, ..spec.clone() };
+    asked(
+        WorkerRequest::AgentStart(in_a_repository_on_github),
+        r#"{"method":"agent_start","session_id":"s","run":4,"agent":"claude","cwd":"/w","start":"resume","conversation":"a","settings":{"model":"opus","mode":{"unasked":"everything","beyond":"asks"},"effort":"high","speed":null,"thinking":null,"persona":null,"style":null,"verbosity":null,"advisor":null,"budget":null},"env":[],"repository":"cli/cli"}"#,
     );
     let under_a_login = AgentSpec {
         start: protocol::capability::conversation::Start::New { conversation: None },
