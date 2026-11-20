@@ -6,7 +6,7 @@ use serde_json::json;
 use super::{
     SessionUpdate, StopReason, ToolKindWire, ToolStatusWire, config_offers_value, elicitation_accept,
     parse_agent_version, parse_elicitation, parse_permission_request, parse_prompt_response, parse_session_response,
-    parse_session_update,
+    parse_session_update, prompt_blocks,
 };
 
 #[test]
@@ -201,4 +201,17 @@ fn empty_elicitation_answers_decline_rather_than_sending_empty_required_fields()
         elicitation_accept(&elicitation.fields, &[QuestionAnswer { picked: Vec::new(), typed: None }]),
         json!({ "action": "decline" })
     );
+}
+
+#[test]
+fn a_spoken_prompt_has_how_to_talk_in_a_block_before_it_and_a_typed_one_doesnt() {
+    let texts = |prompt: &protocol::prompt::Prompt<_>| -> Vec<String> {
+        prompt_blocks(prompt).iter().map(|block| block["text"].as_str().unwrap().to_string()).collect()
+    };
+
+    let spoken = texts(&protocol::prompt::Prompt::new("is it done?").said_out_loud());
+
+    assert!(spoken[0].starts_with("(Roundhouse: the person said this out loud"), "{spoken:?}");
+    assert_eq!(spoken[1..], ["is it done?"]);
+    assert_eq!(texts(&protocol::prompt::Prompt::new("is it done?")), ["is it done?"]);
 }

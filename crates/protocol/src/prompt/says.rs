@@ -17,16 +17,27 @@ pub struct Prompt<F> {
     pub text: String,
     #[serde(rename = "attachments", default = "Vec::new", skip_serializing_if = "Vec::is_empty")]
     pub files: Vec<F>,
+    /// Whether the person said it out loud, in conversation mode, rather than typed it. The agent's adapter puts how to
+    /// talk in front of a spoken one, and a client marks it. Left out of what's sent for a typed one, so a prompt from
+    /// before it was said was typed.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub spoken: bool,
 }
 
 impl<F> Prompt<F> {
     /// A prompt that only says `text`.
     pub fn new(text: impl Into<String>) -> Self {
-        Self { text: text.into(), files: Vec::new() }
+        Self::carrying(text, Vec::new())
     }
 
     pub fn carrying(text: impl Into<String>, files: Vec<F>) -> Self {
-        Self { text: text.into(), files }
+        Self { text: text.into(), files, spoken: false }
+    }
+
+    /// The same prompt, said out loud.
+    #[must_use]
+    pub fn said_out_loud(self) -> Self {
+        Self { spoken: true, ..self }
     }
 
     /// Whether it can go.
@@ -50,9 +61,10 @@ impl<F> Prompt<F> {
         !self.text.trim().is_empty()
     }
 
-    /// The same words, carrying `files` in place of these, such as the hub's record of each.
+    /// The same words, said or typed as these were, carrying `files` in place of these, such as the hub's record of
+    /// each.
     pub fn with_files<G>(self, files: Vec<G>) -> Prompt<G> {
-        Prompt { text: self.text, files }
+        Prompt { text: self.text, files, spoken: self.spoken }
     }
 }
 

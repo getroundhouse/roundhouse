@@ -92,3 +92,34 @@ async fn a_queued_prompt_sent_now_steers_the_turn_and_the_rest_wait_their_turn()
     assert_eq!(sent_at(&events, "q1"), Some(later));
     assert!(steered < ends[0] && ends[0] < later, "into the running turn, and q1 after it: {ends:?} {steered} {later}");
 }
+
+/// Said out loud, sent at once or from the queue, so the agent's adapter can tell it how to talk, and clients mark it.
+#[tokio::test]
+async fn a_spoken_prompt_is_recorded_and_given_to_the_agent_as_spoken_whether_sent_or_queued() {
+    let dir = tempfile::tempdir().unwrap();
+    let chat = Chat::idle(dir.path()).await;
+    let said = Prompt::new("is it done?").said_out_loud();
+
+    let (sent, _) = chat.hub.session_prompt(chat.id.clone(), None, said.clone()).await.unwrap();
+    chat.given(1).await;
+    chat.says([EventBody::PromptTaken { prompt: sent }]).await;
+    chat.queue("q1", said).await.unwrap();
+    chat.finishes(Some(sent), TurnOutcome::Success).await;
+    let queued = chat.given(2).await[1];
+
+    let given = |request: &WorkerRequest| {
+        let WorkerRequest::AgentControl(asked) = request else { return None };
+        let Control::Prompt { prompt, .. } = &asked.control else { return None };
+        Some(prompt.spoken)
+    };
+    assert_eq!(chat.asked.requests(given), [true, true]);
+    let recorded: Vec<_> = chat
+        .log()
+        .into_iter()
+        .filter_map(|e| {
+            let EventBody::UserPrompt { prompt, .. } = e.body else { return None };
+            Some((e.seq, prompt.spoken))
+        })
+        .collect();
+    assert_eq!(recorded, [(sent, true), (queued, true)]);
+}

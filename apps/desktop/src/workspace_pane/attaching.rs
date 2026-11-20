@@ -109,7 +109,7 @@ impl WorkspacePane {
     /// anything typed or attached since. With no chat, it goes to the one showing, or if none is yet, such as while the
     /// hub makes a new workspace's first, to the first that shows.
     pub(crate) fn give_back(&mut self, chat: Option<&SessionId>, prompt: Prompt<FileToSend>, cx: &mut Context<Self>) {
-        let Prompt { text, files } = prompt;
+        let Prompt { text, files, .. } = prompt;
         let Some(chat) = chat.or(self.active.as_ref()).cloned() else {
             let waiting = &mut self.waiting.get_or_insert_default().draft;
             let problems = waiting.files.put_back(files);

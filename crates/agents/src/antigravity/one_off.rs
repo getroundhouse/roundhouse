@@ -133,7 +133,7 @@ pub async fn title_for(
     let session_id = process.shared.state.lock().session_id.clone();
     let ask_text = format!("Write a short title for this task description:\n\n{}", prompt.text);
     let ask = async {
-        let blocks = tokio::task::spawn_blocking(move || acp::prompt_blocks(&Prompt { text: ask_text, files }))
+        let blocks = tokio::task::spawn_blocking(move || acp::prompt_blocks(&Prompt::carrying(ask_text, files)))
             .await
             .map_err(|_| AgentError::Exited)?;
         control::send_prompt_rpc(&process.shared, None, blocks).await?;

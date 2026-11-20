@@ -101,14 +101,17 @@ pub(crate) fn config_offers_value(options: &[ConfigOption], config_id: &str, tar
 }
 
 /// Builds ACP `session/prompt` content blocks, reading small text and image attachments off async threads when needed.
+/// A spoken prompt has how to talk before it.
 pub(crate) fn prompt_blocks(prompt: &Prompt<AttachmentFile>) -> Vec<Value> {
-    let mut content = crate::attachments::file_content_blocks(prompt, |media_type, data| {
+    let mut content: Vec<Value> =
+        crate::spoken::how_to_talk(prompt).map(|told| json!({ "type": "text", "text": told })).into_iter().collect();
+    content.extend(crate::attachments::file_content_blocks(prompt, |media_type, data| {
         json!({
             "type": "image",
             "mimeType": media_type.mime(),
             "data": data.to_base64(),
         })
-    });
+    }));
     if prompt.says_anything() || content.is_empty() {
         content.push(json!({ "type": "text", "text": prompt.text }));
     }
