@@ -9,7 +9,7 @@ use element::ProseElement;
 use gpui_kit::base::text::editor_host::FlowPosition;
 use gpui_kit::{AnyElement, App, ElementId, IntoElement, SharedString, Task};
 use moves::Places;
-use parse::{ImagesAre, Parsed};
+use parse::{Leaf, Parsed, Whose};
 use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
@@ -63,11 +63,11 @@ pub(super) enum Text {
     Parsed { parsed: Rc<Parsed> },
     /// A short text not drawn lately, with what it shows, for a copy, and not its blocks, which it's parsed for again
     /// when it's next drawn.
-    Read { leaves: Arc<[String]> },
+    Read { leaves: Arc<[Leaf]> },
     /// Being parsed from `source` on another thread, by a task that's dropped, and stops, with this. It's drawn as what
     /// it was parsed as before, `was`, if it was, until it's in, and a copy has that, or what it was read ahead as
     /// showing, `read`, if it wasn't, as a document's block out of sight is.
-    Parsing { source: String, was: Option<Rc<Parsed>>, read: Option<Arc<[String]>>, _task: Task<()> },
+    Parsing { source: String, was: Option<Rc<Parsed>>, read: Option<Arc<[Leaf]>>, _task: Task<()> },
     /// Plain text, which isn't parsed: what it says, as find searches it.
     Plain { said: SharedString },
 }
@@ -108,9 +108,9 @@ impl Text {
 /// What a text shows, leaf by leaf, which the bytes of a place in it count in. Cheap to clone.
 #[derive(Clone)]
 pub(crate) enum Leaves {
-    /// Markdown's: each a paragraph, heading, code block or table cell, where each image the text shows is an
-    /// [`ATOM`](super::ATOM), which a copy leaves out.
-    Markdown(Arc<[String]>),
+    /// Markdown's: each a paragraph, heading, code block or table cell, where each image or reference the text shows
+    /// is an [`ATOM`](super::ATOM), which a copy and find have as what it says.
+    Markdown(Arc<[Leaf]>),
     /// Plain text's, which is one leaf: what it says, as find searches it, however it's laid out, so a place in it is
     /// the same place to find and to the selection. It has no images, so an [`ATOM`](super::ATOM) in it is a character it says.
     Plain(SharedString),
@@ -121,7 +121,7 @@ impl Leaves {
     pub(crate) fn leaf(&self, leaf: u64) -> Option<&str> {
         let leaf = usize::try_from(leaf).ok()?;
         match self {
-            Leaves::Markdown(leaves) => leaves.get(leaf).map(String::as_str),
+            Leaves::Markdown(leaves) => leaves.get(leaf).map(Leaf::shows),
             Leaves::Plain(said) => (leaf == 0).then_some(said.as_ref()),
         }
     }
@@ -129,7 +129,7 @@ impl Leaves {
     /// What each leaf shows, in order.
     pub(crate) fn each(&self) -> impl Iterator<Item = &str> {
         let (markdown, plain) = match self {
-            Leaves::Markdown(leaves) => (Some(leaves.iter().map(String::as_str)), None),
+            Leaves::Markdown(leaves) => (Some(leaves.iter().map(Leaf::shows)), None),
             Leaves::Plain(said) => (None, Some(said.as_ref())),
         };
         markdown.into_iter().flatten().chain(plain)
@@ -281,7 +281,7 @@ impl Texts {
             Some((shown, Cow::Owned(own))) => (Cow::Owned(format!("{own}{}", &written.text[shown..])), Some(own.len())),
             None => (images_apart(written.text), None),
         };
-        let whose = ImagesAre::of(&source, images.is_some());
+        let whose = Whose::of(&source, images.is_some());
         let (parsed, apart) = self.parsed(&known, &source, at.of, whose, shown);
         let marks = (parsed.as_ref().zip(written.found))
             .map_or_default(|(parsed, (id, find))| find.marks_in_leaves(id, &parsed.leaves));
@@ -359,7 +359,7 @@ impl Texts {
 impl Texts {
     /// Places the text known as `element` at `at`, showing `leaves`, unless it's known, so a copy has it before it's
     /// drawn, as a document's blocks out of sight are. It's parsed when it's drawn.
-    pub(crate) fn read_ahead(&self, element: ElementId, at: TextAt, leaves: Arc<[String]>) {
+    pub(crate) fn read_ahead(&self, element: ElementId, at: TextAt, leaves: Arc<[Leaf]>) {
         let known = TextKey(element);
         let mut store = self.0.borrow_mut();
         store.texts.entry(known.clone()).or_insert(Text::Read { leaves });

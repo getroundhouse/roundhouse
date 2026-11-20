@@ -118,7 +118,7 @@ const REVISED: &str = "toolu-p2";
 /// The prompt that told the agent what was chosen, by its message ID, which the proposal's answer names.
 const TOLD: &str = "answer-1";
 
-fn world() -> World {
+pub(super) fn world() -> World {
     with_proposal(events(), [first(None)])
 }
 

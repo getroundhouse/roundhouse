@@ -163,6 +163,7 @@ fn screens() -> impl Iterator<Item = &'static steps::Screen> {
         .chain(compaction_chats::SCREENS)
         .chain(failure_chats::SCREENS)
         .chain(failures_in_a_row::SCREENS)
+        .chain(super::reference_screens::SCREENS)
         .chain(cache_screens::SCREENS)
         .chain(terminal_screens::SCREENS)
         .chain(UPDATE_SCREENS)

@@ -13,6 +13,7 @@ use protocol::find::Needle;
 
 use super::reveal::Reveal;
 use crate::item_key::ItemKey;
+use crate::texts::Leaf;
 
 /// Which of an item's texts one is, such as a call's output, or the third link a search found. Ordered as declared,
 /// which orders the texts a call draws of its own on either side of what it nests, in `crate::texts`, if it draws more
@@ -204,21 +205,26 @@ impl FindLook {
     }
 
     /// [`FindLook::marks`] of each of `leaves`, the leaves of the Markdown text `id`, such as its paragraphs, none of
-    /// which a match runs on from into the next. They're counted as one text, as find counts them, each a line after
-    /// the last. None while nothing's being found.
-    pub(crate) fn marks_in_leaves(&self, id: &TextId, leaves: &[String]) -> Vec<Marks> {
+    /// which a match runs on from into the next, each searched as it says, as [`Leaf::found`] has it. They're counted
+    /// as one text, as find counts them, each a line after the last. None while nothing's being found.
+    pub(crate) fn marks_in_leaves(&self, id: &TextId, leaves: &[Leaf]) -> Vec<Marks> {
         if self.needle.is_none() {
             return Vec::new();
         }
+        let shown = |leaf: &Leaf| leaf.shows().len();
         let starts: Vec<usize> =
-            (leaves.iter()).scan(0, |at, leaf| Some(std::mem::replace(at, *at + leaf.len() + 1))).collect();
-        let len = starts.last().zip(leaves.last()).map_or(0, |(start, leaf)| start + leaf.len());
+            (leaves.iter()).scan(0, |at, leaf| Some(std::mem::replace(at, *at + shown(leaf) + 1))).collect();
+        let len = starts.last().zip(leaves.last()).map_or(0, |(start, leaf)| start + shown(leaf));
         let all = self.marks_found(id, len, |needle| {
             (leaves.iter().zip(&starts))
-                .flat_map(|(leaf, start)| needle.ranges(leaf).map(move |range| range.start + start..range.end + start))
+                .flat_map(|(leaf, start)| {
+                    leaf.found(|said| needle.ranges(said).collect())
+                        .into_iter()
+                        .map(move |at| at.start + start..at.end + start)
+                })
                 .collect()
         });
-        leaves.iter().zip(&starts).map(|(leaf, start)| all.within(*start, start + leaf.len())).collect()
+        leaves.iter().zip(&starts).map(|(leaf, start)| all.within(*start, start + shown(leaf))).collect()
     }
 
     /// The marks of the text `id`, `len` long, with the needle where `find` says, worked out once for each length

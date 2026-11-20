@@ -45,6 +45,7 @@ mod questions;
 mod queue;
 mod quitting;
 mod reconnecting;
+mod references;
 mod reply_images;
 mod restart_now;
 mod retrying;

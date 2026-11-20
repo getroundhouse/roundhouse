@@ -163,6 +163,35 @@
 
   ![A reply's image, opened](screens/reply-image-opened.png)
 
+- **A link to an issue or a pull request on GitHub in a reply is a chip, whatever the link's words, with its state's mark in its state's colour, its number, and its title the first time the message links to it,** so a reply that lists several reads as what they are, and one linked to again doesn't repeat its title. Only a link is one, since only a link says which it is: a number alone, such as `#1021`, could be another repository's, or the number of something else, so it's never guessed at, and stays as it's written. Roundhouse tells the agent to link to each, as "What agents are told" in `docs/architecture.md` says. Clicking a chip opens its link, to where it goes, such as a comment. What's selected and copied, and what the chat's search finds, is the link's words as the agent wrote them, such as `#1021`, since the title is the app's, not the agent's. *Unconfirmed:* a chip is a small one, with Detail text and a small mark, on its line's baseline, and names one in the workspace's own repository by its number alone, such as `#1021`, and one in another as `owner/name#41`. It's drawn in a reply, a subagent's report where its call shows it, a plan and a proposal, from a link of any words, such as a number, a phrase, code or an image, or an address written bare, but not yet from one written by reference to a definition elsewhere, such as `[#12][pr]`, which stays a link. It's drawn as it is anywhere else, whatever's around it, such as bold. Not in a prompt or a thought, whose links stay links. Nor in a reply still coming in, whose links stay links until it's recorded. One the hub hasn't found yet, or can't find, such as a typo or one in a repository its token can't read, stays the link it's written as.
+
+  **A reply that links to two pull requests and three issues, one in another repository and one with words of its own, and to a number GitHub has nothing for.** *Unconfirmed.*
+
+  ![A reply's issues and pull requests as chips](screens/references.png)
+
+  **A proposal that links to an issue and a pull request.** *Unconfirmed.*
+
+  ![A proposal's issue and pull request as chips](screens/references-in-a-proposal.png)
+- **Resting the pointer on one shows its card, which tells, and whose one control is a faint ⋯ at its heading's end that opens the chip's menu:** its title, with a muted mark as a card's heading has, where it stands, in its state's colour, who opened it and when, and the lines a pull request changes, its labels, tinted with their colours on GitHub, where its checks stand, the workspace it's in, and the start of what it says. A button by its state, such as Start a workspace or Go to birch, offered a different kind of thing on each card, so the card offers only the ⋯, the same on every card, and the menu has what can be done. The ⋯ shows that the menu is there, since nothing says a right-click would open it.
+
+  **An open issue's card, with its labels.** *Unconfirmed.*
+
+  ![An issue's card](screens/reference-card-issue.png)
+
+  **A pull request's card, open in birch.** *Unconfirmed.*
+
+  ![A pull request's card](screens/reference-card-pull-request.png)
+- **Right-clicking one opens the same menu on every chip, with what doesn't apply greyed out:** Open on GitHub, Copy link, Go to its workspace, and Start a workspace, which only an open issue in a project of Roundhouse's, with no workspace yet, can do. A workspace that's archived is named on the card and in the menu, and can't be gone to, since it's brought back from Home. *Not built:* Start a workspace, which the menu leaves out until it can.
+
+  **The menu of a pull request open in birch.** *Unconfirmed.*
+
+  ![A pull request's menu](screens/reference-menu.png)
+
+  **The same menu, from the ⋯ on its card.** *Unconfirmed.*
+
+  ![A pull request's menu from its card](screens/reference-card-menu.png)
+- **The hub looks each one up on GitHub and keeps what it found, for every client, and refreshes those on screen now and then,** so a pull request that merges while its chip is in view says so, and two clients looking at one chat ask GitHub once. *Unconfirmed:* the hub keeps what it found in memory, so it looks each up again after a restart, and reads one again once what it found is a minute old, when a client asks. A read that failed is tried again no sooner, and what was found before is kept meanwhile. A client asks for those it draws, all those first drawn in a frame at once, and again each minute while they're in view. It reads as the account the workspace's own pull request is read as.
+
 ## Finding a prompt
 
 - **A chat scrolled away from its end shows a button that scrolls back down to the end,** in three tenths of a second, slowing as it arrives, so it's plain where the chat went. From more than two screens of chat up, it goes straight to a screen above the end and scrolls the rest, since rows passed any faster can't be followed. The button fades as soon as it's clicked, what arrives on the way is scrolled to as well, and the wheel or the scrollbar stops the scroll where it is. Reduce Motion skips it. *Unconfirmed.*

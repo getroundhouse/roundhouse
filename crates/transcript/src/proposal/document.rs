@@ -11,6 +11,7 @@ use protocol::model::{OptionLetter, OptionPlace, ProposalOption, ProposalQuestio
 use super::answering::Choosing;
 use crate::find::{Marks, marked_with_layout};
 use crate::linked_images::LinkedImages;
+use crate::references::References;
 use crate::selection::{Pieces, Selection};
 use crate::texts::{Plain, TextAt, Texts, Written};
 use protocol::event::LinkedImage;
@@ -30,6 +31,8 @@ pub(super) struct Writing<'a> {
     pub(super) selection: &'a Selection,
     /// Where the images it points to come from, and the copies the hub kept of them.
     pub(super) images: (&'a LinkedImages<()>, &'a [LinkedImage]),
+    /// The issues and pull requests it names.
+    pub(super) references: &'a References<()>,
     /// The page's area, which scrolls every text on it.
     pub(super) area: ElementId,
     /// How many texts it's drawn so far.
@@ -46,7 +49,11 @@ impl Writing<'_> {
     fn markdown(&mut self, key: &str, text: &str) -> AnyElement {
         let written = Written::unfound(self.next(), ElementId::Name(key.to_string().into()), text);
         let (linked, kept) = self.images;
-        self.texts.draw(self.selection, &written.in_area(self.area.clone()), Some(linked.images((), kept)))
+        self.texts.draw(
+            self.selection,
+            &written.in_area(self.area.clone()),
+            Some(linked.images((), kept, |drawn| crate::references::drawing(drawn, self.references, ()))),
+        )
     }
 
     /// What the agent wrote as plain text, such as a title, which is selected and copied as its Markdown is.

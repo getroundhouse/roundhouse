@@ -52,7 +52,9 @@ fn among(part: Part) -> Among {
 /// The text `written`, drawn from the kit's blocks, with the images the hub kept of those it points to, if it's in an
 /// event's row and can point to any, which a click opens over the window.
 pub(super) fn from_blocks(written: &Written<'_>, images: Option<&[LinkedImage]>, shared: &Shared) -> AnyElement {
-    let images = (written.at.seq()).zip(images).map(|(seq, images)| shared.linked.images(seq, images));
+    let images = (written.at.seq()).zip(images).map(|(seq, images)| {
+        shared.linked.images(seq, images, |drawn| crate::references::drawing(drawn, &shared.references, seq))
+    });
     shared.texts.draw(&shared.selection, written, images)
 }
 

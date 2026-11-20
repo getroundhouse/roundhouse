@@ -151,10 +151,11 @@ impl WorkspacePane {
     }
 
     fn make_transcript(&mut self, session: Session, cx: &mut Context<Self>) {
-        let (client, records) = (self.client.clone(), self.shown.all().clone());
+        let (client, records, feed) = (self.client.clone(), self.shown.all().clone(), self.records.clone());
         let view = cx.new(|cx| {
             let mut transcript = Transcript::new(client, &session, cx);
             transcript.set_thinking_open(crate::settings::get(cx).always_expand_thinking, cx);
+            transcript.follow_records(feed);
             transcript.records_changed(&records, cx);
             transcript
         });
@@ -193,6 +194,7 @@ impl WorkspacePane {
             }
             TranscriptEvent::Answering { at_once } => this.keep_answer(&chat, *at_once, cx),
             // Typing goes back to the message box, as it would have before the bar opened.
+            TranscriptEvent::GoToWorkspace { workspace } => cx.emit(PaneEvent::GoToWorkspace(workspace.clone())),
             TranscriptEvent::FindClosed => this.with_window(cx, |t, window, cx| t.focus_showing(window, cx)),
         });
         self.chats.entry(session.id).or_default().transcript = Some((view, events));

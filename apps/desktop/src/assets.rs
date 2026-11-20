@@ -16,7 +16,6 @@ gpui_kit::assets::icon_assets!(
         CodeXml,
         Columns2,
         Download,
-        GitBranch,
         House,
         KeyRound,
         Laptop,

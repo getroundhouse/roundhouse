@@ -148,7 +148,7 @@ impl Texts {
     /// As if the text known as `id`, saying `text`, were drawn at `at`.
     pub(crate) fn drawn_as(&self, id: &TextKey, at: TextAt, text: &str) {
         self.0.borrow_mut().placed(id, at);
-        self.parsed(id, text, at.of, super::super::ImagesAre::TheKits, None);
+        self.parsed(id, text, at.of, super::super::Whose::TheKits, None);
     }
 
     /// As if the text known by `at`, saying `text`, were drawn there.

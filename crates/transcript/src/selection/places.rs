@@ -25,14 +25,16 @@ pub(super) fn copied(start: Spot, end: Spot, texts: &[(TextAt, Leaves)]) -> Stri
     copied.join("\n\n")
 }
 
-/// What a copy has of `range` of the leaf `leaf` of `leaves`, if the leaf has it: what it shows, but for an image in
-/// Markdown, which is an [`ATOM`] there.
+/// What a copy has of `range` of the leaf `leaf` of `leaves`, if the leaf has it: what it says, where a reference in
+/// Markdown says its link's words, but for an image, which says an [`ATOM`], which a copy leaves out.
 fn copied_of(leaves: &Leaves, leaf: u64, range: Range<usize>) -> Option<Cow<'_, str>> {
-    let text = leaves.leaf(leaf)?.get(range)?;
-    Some(match leaves {
-        Leaves::Markdown(_) => Cow::Owned(text.replace(ATOM, "")),
-        Leaves::Plain(_) => Cow::Borrowed(text),
-    })
+    match leaves {
+        Leaves::Markdown(leaves) => {
+            let says = leaves.get(usize::try_from(leaf).ok()?)?.says(range)?;
+            Some(if says.contains(ATOM) { Cow::Owned(says.replace(ATOM, "")) } else { says })
+        }
+        Leaves::Plain(_) => leaves.leaf(leaf)?.get(range).map(Cow::Borrowed),
+    }
 }
 
 /// What's selected from `start` to `end` of the text at `at`, whose leaves say `leaves`, by leaf. An end keeps its
@@ -145,11 +147,11 @@ mod tests {
     use super::super::test_layouts::in_pieces;
     use super::super::{Drawn, Geometry, Spot};
     use super::{copied, line_around, selected, spot_at, text_under, word_around};
-    use crate::texts::{ATOM, Leaves, TextAt, TextKey};
+    use crate::texts::{ATOM, Leaf, Leaves, TextAt, TextKey};
 
-    /// The leaves of Markdown that says `leaves`.
+    /// The leaves of Markdown that shows `leaves`, each of whose atoms is an image's.
     fn markdown(leaves: &[&str]) -> Leaves {
-        Leaves::Markdown(leaves.iter().map(ToString::to_string).collect())
+        Leaves::Markdown(leaves.iter().map(|leaf| Leaf::new(leaf.to_string(), [])).collect())
     }
 
     #[test]
@@ -177,21 +179,23 @@ mod tests {
     }
 
     /// Each leaf of a text a line apart, such as each paragraph of a reply, and each text a blank line apart, such as
-    /// a command and what it printed. An image in Markdown is an [`ATOM`] in its leaf, which a copy leaves out, and one
-    /// in plain text is a character it says.
+    /// a command and what it printed. An image or a reference in Markdown is an [`ATOM`] in its leaf, which a copy has
+    /// as what it says, nothing for an image and what named it for a reference, and one in plain text is a character it
+    /// says.
     #[test]
-    fn a_copy_has_each_leaf_a_line_apart_each_text_a_blank_line_apart_and_an_atom_only_where_it_s_said() {
+    fn a_copy_has_each_leaf_a_line_apart_each_text_a_blank_line_apart_and_an_atom_as_what_it_says() {
         let (reply, command, output) =
             (TextAt::only(Seq::new(1), 0), TextAt::only(Seq::new(2), 0), TextAt::only(Seq::new(2), 1));
         let printed = format!("one\nfound {ATOM} in it");
+        let says = Leaf::new(format!("See {ATOM}here, in {ATOM}"), [Box::from(ATOM.to_string()), Box::from("#12")]);
         let texts = [
-            (reply, markdown(&[&format!("See {ATOM}here"), "Then this"])),
+            (reply, Leaves::Markdown([says, Leaf::new("Then this".to_string(), [])].into())),
             (command, Leaves::Plain("grep -r x".into())),
             (output, Leaves::Plain(printed.clone().into())),
         ];
         let (start, end) = (Spot { at: reply, leaf: 0, byte: 0 }, Spot { at: output, leaf: 0, byte: printed.len() });
 
-        assert_eq!(copied(start, end, &texts), format!("See here\nThen this\n\ngrep -r x\n\n{printed}"));
+        assert_eq!(copied(start, end, &texts), format!("See here, in #12\nThen this\n\ngrep -r x\n\n{printed}"));
     }
 
     /// What's selected of a text runs from one end to the other: from the first end, in its leaf, to the last, in

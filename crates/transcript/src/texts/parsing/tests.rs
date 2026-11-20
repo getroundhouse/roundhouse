@@ -5,8 +5,8 @@ use gpui_kit::base::text::editor_host::BlockNode;
 use gpui_kit::{Task, TestAppContext};
 use protocol::model::Seq;
 
-use super::super::ImagesAre::{TheKits, TheTranscripts};
-use super::super::{AT_ONCE, Of, Parsed, Text, TextAt, TextKey, Texts, parse};
+use super::super::Whose::{TheKits, TheTranscripts};
+use super::super::{AT_ONCE, Leaf, Of, Parsed, Text, TextAt, TextKey, Texts, parse};
 
 /// The end of the chat, where a text can go on.
 const END: Of = Of::Tail;
@@ -47,7 +47,7 @@ fn with(parsed: Parsed) -> Texts {
 fn with_kept(was: &str) -> Texts {
     let mut kept = parse::parse(was.to_owned(), TheKits);
     let mut leaves = kept.leaves.to_vec();
-    leaves[0] = KEPT.to_owned();
+    leaves[0] = Leaf::text(KEPT.to_owned());
     kept.leaves = Arc::from(leaves);
     with(kept)
 }
@@ -66,7 +66,7 @@ fn source_of(parsed: Option<Rc<Parsed>>) -> Option<String> {
 }
 
 fn first_leaf(parsed: Option<Rc<Parsed>>) -> Option<String> {
-    parsed.map(|parsed| parsed.leaves[0].clone())
+    parsed.map(|parsed| parsed.leaves[0].shows().to_string())
 }
 
 #[test]
@@ -151,7 +151,7 @@ fn a_text_parsed_apart_from_near_its_end_keeps_what_was_before(cx: &mut TestAppC
 
     let (parsed, _) = texts.parsed(&id(), &source, END, TheKits, None);
     let parsed = parsed.expect("parsed");
-    assert_eq!(parsed.leaves[0], KEPT);
+    assert_eq!(parsed.leaves[0].shows(), KEPT);
     assert_eq!(parsed.leaves[1..], parse::leaves(&source)[1..], "and the rest as a whole parse would have it");
 }
 
@@ -294,5 +294,5 @@ fn a_text_read_ahead_keeps_what_it_shows_while_it_s_parsed_apart(cx: &mut TestAp
     cx.update(|cx| texts.parse_apart(id(), apart.expect("parsed apart"), cx));
 
     let copied = texts.leaves_of(&id()).map(|leaves| leaves.each().map(String::from).collect::<Vec<_>>());
-    assert_eq!(copied.as_deref(), Some(&read[..]));
+    assert_eq!(copied, Some(read.iter().map(|leaf| leaf.shows().to_string()).collect()));
 }

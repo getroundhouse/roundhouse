@@ -5,6 +5,7 @@ use super::{
 use crate::find::{FindLook, Marks};
 use crate::item_key::ItemKey;
 use crate::linked_images::LinkedImages;
+use crate::references::References;
 use crate::selection::Selection;
 use crate::texts::{Of, TextAt, Texts};
 use crate::transcript::{Model, Transcript};
@@ -39,6 +40,8 @@ pub(crate) struct Item {
 pub(crate) struct Shared {
     pub(crate) this: WeakEntity<Transcript>,
     pub(crate) linked: LinkedImages<Seq>,
+    /// The issues and pull requests its text can name.
+    pub(crate) references: References<Seq>,
     pub(crate) line_text: LineText,
     /// The texts the rows draw from the kit's blocks, and what's selected of them.
     pub(crate) texts: Texts,

@@ -23,6 +23,7 @@ mod model_names;
 mod parser_panics;
 mod proposal;
 mod questions;
+mod references;
 mod rows;
 mod scroll_area;
 mod selection;
@@ -50,3 +51,6 @@ type DictationHints = Box<dyn Fn(&mut client_core::hints::HintCollector, &gpui_k
 /// How long what's just been asked in the composer's place ignores keys, which a test can wait out.
 #[cfg(feature = "testing")]
 pub const QUESTION_SETTLES: std::time::Duration = questions::SETTLE;
+/// How long what was found of an issue or a pull request a chat links to is drawn before it's asked for again, while
+/// it's drawn.
+pub const REFERENCES_ASKED_AGAIN_AFTER: std::time::Duration = references::ASK_AGAIN_AFTER;

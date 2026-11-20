@@ -89,7 +89,7 @@ impl MobileApp {
 
     /// Opens a workspace's chat: the one last worked in, or with none open, the one the hub finds or starts. Needs a
     /// connection, since the chat reads its history from the hub.
-    fn open_workspace(&mut self, id: &WorkspaceId, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn open_workspace(&mut self, id: &WorkspaceId, window: &mut Window, cx: &mut Context<Self>) {
         let Some(link) = self.link() else { return };
         let link = link.read(cx);
         let (Some(client), Some(feed)) = (link.client(), link.feed()) else { return };
@@ -97,7 +97,7 @@ impl MobileApp {
         let Some(workspace) = records.workspace(id).cloned() else { return };
         let session = Session::last_worked_in(records.sessions(id).iter().filter(|s| s.is_open())).cloned();
         let chat = cx.new(|cx| ChatView::new(workspace, session, feed, client, window, cx));
-        self.open_chat(chat, cx);
+        self.open_chat(chat, window, cx);
     }
 }
 

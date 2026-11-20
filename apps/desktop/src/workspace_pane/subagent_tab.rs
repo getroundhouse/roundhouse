@@ -119,8 +119,10 @@ impl WorkspacePane {
         let showing = tab.is_some_and(|tab| tab.session == session && tab.subagent == subagent);
         if !showing && let Some(chat) = self.shown.session(&session).cloned() {
             let (client, records, shown) = (self.client.clone(), self.shown.all().clone(), subagent.clone());
+            let feed = self.records.clone();
             let transcript = cx.new(|cx| {
                 let mut transcript = Transcript::subagent(client, &chat, shown, cx);
+                transcript.follow_records(feed);
                 transcript.set_thinking_open(crate::settings::get(cx).always_expand_thinking, cx);
                 transcript.records_changed(&records, cx);
                 transcript
@@ -136,6 +138,7 @@ impl WorkspacePane {
                 TranscriptEvent::OpenProposal { proposal } => this.open_proposal_tab(chat.clone(), proposal, true, cx),
                 // Nothing is sent from it, a subagent's work has no turns, no question is asked in it, since
                 // approvals are the agent's own, and nothing's found in it.
+                TranscriptEvent::GoToWorkspace { workspace } => cx.emit(PaneEvent::GoToWorkspace(workspace.clone())),
                 TranscriptEvent::NotSent { .. }
                 | TranscriptEvent::Answering { .. }
                 | TranscriptEvent::TurnEnded

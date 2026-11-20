@@ -31,8 +31,9 @@
 
 pub(crate) use at::{Among, Of, Place, TextAt};
 pub(crate) use code_blocks::code_context;
-use parse::ImagesAre;
-pub(crate) use parse::{ATOM, Parsed, TopBlock, leaves, top_blocks, top_blocks_and_items};
+pub(crate) use parse::ATOM;
+use parse::Whose;
+pub(crate) use parse::{Leaf, Parsed, TopBlock, leaves, top_blocks, top_blocks_and_items};
 pub(crate) use plain::Plain;
 pub(crate) use style::Style;
 

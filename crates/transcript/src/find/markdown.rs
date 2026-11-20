@@ -1,5 +1,6 @@
 //! How many times the needle is in Markdown, as the chat shows it: in the text the kit renders of it, so `**parser** is` holds
-//! `parser is`, and a link's address holds nothing. That's read leaf by leaf, from the kit's own parse as
+//! `parser is`, and a link's address holds nothing, so a link to an issue or a pull request is its words, such as
+//! `#12`, though it's drawn as a chip, whose words `crate::texts` has as the kit draws them. That's read leaf by leaf, from the kit's own parse as
 //! `crate::texts` keys it, so a match never runs from one leaf into the next. Counting parses a text again rather than
 //! asking `crate::texts` for it, since it runs on another thread too.
 
@@ -12,7 +13,7 @@ pub(crate) fn count(needle: &Needle, source: &str) -> usize {
     if !needle.may_be_in_markdown(source) {
         return 0;
     }
-    leaves(source).iter().map(|leaf| needle.ranges(leaf).count()).sum()
+    leaves(source).iter().map(|leaf| needle.ranges(&leaf.said()).count()).sum()
 }
 
 #[cfg(test)]
@@ -36,5 +37,10 @@ mod tests {
     #[test]
     fn a_needle_across_an_image_is_not_found() {
         assert_eq!(count(&needle("before after"), "before ![a picture](a.png)after"), 0);
+        assert_eq!(
+            count(&needle("before after"), "before ![a picture](a.png)after, and before after"),
+            1,
+            "only after"
+        );
     }
 }
