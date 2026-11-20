@@ -2745,7 +2745,7 @@ checksum = "1033caf0b349c518623b5396bfb2cf0bddf44f0306d543a250e5743297aafd10"
 name = "github"
 version = "0.1.0"
 dependencies = [
- "base64 0.22.1",
+ "base64 0.23.1",
  "fetching",
  "github",
  "http",
@@ -4060,7 +4060,7 @@ name = "hub"
 version = "0.1.0"
 dependencies = [
  "async-trait",
- "base64 0.22.1",
+ "base64 0.23.1",
  "client-core",
  "fastrand",
  "github",
@@ -7038,7 +7038,7 @@ dependencies = [
 name = "protocol"
 version = "0.1.0"
 dependencies = [
- "base64 0.22.1",
+ "base64 0.23.1",
  "proptest",
  "protocol",
  "serde",
@@ -10982,7 +10982,7 @@ version = "0.1.0"
 dependencies = [
  "agents",
  "anyhow",
- "base64 0.22.1",
+ "base64 0.23.1",
  "http-body-util",
  "hyper",
  "hyper-util",
