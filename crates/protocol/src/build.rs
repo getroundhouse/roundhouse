@@ -29,6 +29,12 @@ impl StampedBuild {
     pub const fn number(&self) -> u64 {
         self.number
     }
+
+    /// The name of a directory that holds this build's files, such as `0.1.371-1794519400`, which tells it from every
+    /// other build, even two of one commit with different changes.
+    pub fn dir_name(&self) -> String {
+        format!("{}-{}", self.version, self.number)
+    }
 }
 
 /// Which build a program is, which its `main` makes with [`this_build!`] and passes down.

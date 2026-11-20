@@ -10,7 +10,7 @@ use crate::paths::{HUB_COPY_NAME, Paths, daemon_file, program_file};
 impl Paths {
     /// The copy of the daemon that `build`'s hubs run from, called `Roundhouse Hub`, in a directory named for the build.
     pub fn hub_copy(&self, build: &StampedBuild) -> PathBuf {
-        self.daemons_dir.join(format!("{}-{}", build.version(), build.number())).join(program_file(HUB_COPY_NAME))
+        self.daemons_dir.join(build.dir_name()).join(program_file(HUB_COPY_NAME))
     }
 
     /// Where a Windows hub runs from, whichever build it is: a second name for the build's [`Paths::hub_copy`], which
@@ -44,7 +44,8 @@ pub fn hub_copy_files() -> [String; 2] {
     [program_file(HUB_COPY_NAME), daemon_file()]
 }
 
-/// Whether `name` is one [`Paths::hub_copy`] gives a build's directory in [`Paths::daemons_dir`].
+/// Whether `name` is one [`Paths::hub_copy`] gives a build's directory in [`Paths::daemons_dir`], which
+/// [`StampedBuild::dir_name`] makes.
 pub fn is_hub_copy_dir(name: &str) -> bool {
     name.rsplit_once('-').is_some_and(|(version, number)| {
         !version.is_empty() && number.parse::<u64>().is_ok_and(|parsed| parsed.to_string() == number)

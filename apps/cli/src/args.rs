@@ -100,6 +100,20 @@ pub(crate) enum Cmd {
 pub(crate) enum HubCmd {
     Status,
     Stop,
+    /// Make this build's hub a service that starts at boot as USER, with nobody logged in, and start it. Run it as an
+    /// administrator, with sudo, from where a hub's archive was unpacked. Run again, it moves the service to the build
+    /// it's run from.
+    Install {
+        /// Who the hub runs as. Its data, and the builds it runs, go in that user's data directory.
+        #[arg(long)]
+        user: String,
+    },
+    /// Remove the service `hub install` made, which stops its hub. Its data and its builds stay where they are.
+    Uninstall,
+    /// Put this build where a hub installed as a service runs it from, and point the service at it. `hub install` runs
+    /// it as the hub's user, so what it makes is that user's.
+    #[command(hide = true)]
+    Place,
 }
 
 #[derive(Subcommand)]

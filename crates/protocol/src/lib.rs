@@ -28,6 +28,7 @@ pub mod paths;
 pub mod preflight;
 pub mod prompt;
 pub mod provider;
+mod service_builds;
 pub mod short_text;
 pub mod tail;
 pub mod terminal;

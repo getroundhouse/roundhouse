@@ -85,8 +85,10 @@ Wherever a command takes a session, give it one of:
 |---|---|
 | `roundhouse hub status` | Says which version the hub is, and how many workers, running sessions and clients it has |
 | `roundhouse hub stop` | Stops it, and any agents at work on it, which pick up their conversations at their next prompts |
+| `sudo roundhouse hub install --user <name>` | On a Mac or Linux, makes this build's hub a service that starts at boot as that user, with nobody logged in, and starts it. Run it from where the hub's files are, and run it again to move the service to another build |
+| `sudo roundhouse hub uninstall` | Removes the service, which stops its hub. Its data stays in its user's data directory |
 
-Quit the app before stopping the hub, since the app starts a new one as soon as this one stops.
+Quit the app before stopping the hub, since the app starts a new one as soon as this one stops. A hub installed as a service stays stopped until the machine starts again, or until `hub install` runs again.
 
 ## Paired devices
 

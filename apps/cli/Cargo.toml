@@ -18,9 +18,14 @@ local-hub.workspace = true
 anyhow.workspace = true
 clap.workspace = true
 serde_json.workspace = true
+private-files.workspace = true
+
+[target.'cfg(unix)'.dependencies]
+libc.workspace = true
 
 [dev-dependencies]
 protocol = { workspace = true, features = ["testing"] }
+tempfile.workspace = true
 
 [lints]
 workspace = true

@@ -1212,10 +1212,13 @@ dependencies = [
  "anyhow",
  "clap",
  "client-core",
+ "libc",
  "local-hub",
+ "private-files",
  "protocol",
  "qrcode",
  "serde_json",
+ "tempfile",
 ]
 
 [[package]]
