@@ -5,8 +5,8 @@ use std::time::Duration;
 
 use protocol::event::{ContentBlock, EventBody, TurnOutcome};
 use protocol::fixtures::turn_ended;
-use protocol::model::{Place, RunId, SessionId, SubagentId};
-use protocol::tail::{DeltaChange, StreamDelta};
+use protocol::model::{ClientDevice, CutBy, Place, RunId, SessionId, SpokenThrough, SubagentId};
+use protocol::tail::{DeltaChange, StreamDelta, Tail};
 
 use super::*;
 use crate::hub::Hub;
@@ -130,9 +130,14 @@ async fn following(hub: &Arc<Hub>, session: &Arc<LiveSession>, subagent: Option<
 
 /// The next tail `sent`, by who is writing each of its messages.
 async fn next_tail(sent: &mut mpsc::Receiver<HubFrame>) -> Vec<Option<SubagentId>> {
+    next_whole_tail(sent).await.messages.into_iter().map(|m| m.subagent).collect()
+}
+
+/// The next tail `sent`.
+async fn next_whole_tail(sent: &mut mpsc::Receiver<HubFrame>) -> Tail {
     loop {
         match tokio::time::timeout(TIMEOUT, sent.recv()).await.expect("the follower was never sent the tail") {
-            Some(HubFrame::Tail { tail, .. }) => return tail.messages.into_iter().map(|m| m.subagent).collect(),
+            Some(HubFrame::Tail { tail, .. }) => return tail,
             Some(_) => {}
             None => panic!("the pump stopped"),
         }
@@ -179,4 +184,67 @@ async fn the_end_of_a_turn_leaves_a_subagent_in_the_foreground_s_follower_nothin
 
     assert_eq!(next_tail(&mut work).await, [], "the tail again, once the turn has ended");
     assert!(work.try_recv().is_err(), "nothing else, since the end is the agent's own: {:?}", work.try_recv());
+}
+
+/// How far the device that has the conversation has read the agent's reply out reaches each subscriber following the
+/// agent as it changes, and outlasts the turn, since it's the device's rather than the agent's. A subscriber following a
+/// subagent never has it, since only the agent's own replies are read out.
+#[tokio::test]
+async fn a_subscriber_is_sent_how_far_a_reply_has_been_read_out_which_outlasts_the_turn() {
+    let dir = tempfile::tempdir().unwrap();
+    let hub = hub_in(dir.path());
+    let run = RunId::new(1);
+    let session = carried_on(&hub, &stand_in_worker(&hub), run);
+    let studio = ClientDevice { id: "d1".into(), name: "Mac Studio".into() };
+    session.start_conversation(studio.clone()).await.unwrap();
+    writes(&session, run, None, "Found").await;
+    flushed(&session).await;
+    let (mut own, mut work) = (following(&hub, &session, None).await, following(&hub, &session, Some("task_1")).await);
+    assert_eq!(next_whole_tail(&mut own).await.speaking, None);
+    assert_eq!(next_whole_tail(&mut work).await.speaking, None);
+    let read_out = SpokenThrough { message: "Found".into(), block: 0, through: 3 };
+
+    session.speaking(&studio, Some(read_out.clone())).unwrap();
+
+    let sent = next_whole_tail(&mut own).await;
+    assert_eq!((sent.speaking.as_ref(), sent.messages.len()), (Some(&read_out), 1), "beside what's being written");
+    assert_eq!(next_whole_tail(&mut work).await.speaking, None, "a subagent's replies aren't read out");
+
+    let ended = Item::Event {
+        run,
+        body: Box::new(turn_ended(TurnOutcome::Success)),
+        raw: None,
+        attachments: Vec::new(),
+        seq: None,
+    };
+    session.send_item(ended).await;
+    flushed(&session).await;
+
+    let joined = next_whole_tail(&mut following(&hub, &session, None).await).await;
+    assert_eq!((joined.speaking, joined.messages.len()), (Some(read_out), 0), "once the turn is over");
+}
+
+/// The person talks over the agent while it's still writing, so the cut is recorded mid-turn. It stops the tail saying
+/// how far the reply was read out, and leaves what the agent is writing and where the chat stands as they were.
+#[tokio::test]
+async fn a_reply_cut_off_while_the_agent_writes_leaves_what_it_writes() {
+    let dir = tempfile::tempdir().unwrap();
+    let hub = hub_in(dir.path());
+    let run = RunId::new(1);
+    let session = carried_on(&hub, &stand_in_worker(&hub), run);
+    let studio = ClientDevice { id: "d1".into(), name: "Mac Studio".into() };
+    session.start_conversation(studio.clone()).await.unwrap();
+    writes(&session, run, None, "Found").await;
+    flushed(&session).await;
+    let read_out = SpokenThrough { message: "Found".into(), block: 0, through: 3 };
+    session.speaking(&studio, Some(read_out.clone())).unwrap();
+    let mut own = following(&hub, &session, None).await;
+    assert_eq!(next_whole_tail(&mut own).await.speaking, Some(read_out.clone()));
+    let status = session.status();
+
+    session.cut_voice(&studio, read_out, CutBy::TalkedOver).await.unwrap();
+
+    let after = next_whole_tail(&mut own).await;
+    assert_eq!((after.speaking, after.messages.len()), (None, 1), "what's being written stays");
+    assert_eq!(session.status(), status);
 }

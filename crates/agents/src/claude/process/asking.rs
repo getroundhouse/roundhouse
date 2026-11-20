@@ -54,6 +54,7 @@ pub(super) fn work(body: &EventBody) -> Work {
         | EventBody::AgentCompacting { .. }
         | EventBody::CacheExpired { .. }
         | EventBody::ConversationStarted { .. }
+        | EventBody::VoiceCut { .. }
         | EventBody::Unknown => Work::Other,
     }
 }

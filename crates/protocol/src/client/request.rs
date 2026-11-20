@@ -120,6 +120,8 @@ pub enum ClientRequest {
     SessionMarkUnread(sessions::SessionMarkUnread),
     SessionConversationStart(conversation::SessionConversationStart),
     SessionConversationEnd(conversation::SessionConversationEnd),
+    SessionSpeaking(conversation::SessionSpeaking),
+    SessionVoiceCut(conversation::SessionVoiceCut),
     SessionCallOffWait(waits::SessionCallOffWait),
     SessionDraft(drafts::SessionDraft),
     SessionDecisionDraft(drafts::SessionDecisionDraft),

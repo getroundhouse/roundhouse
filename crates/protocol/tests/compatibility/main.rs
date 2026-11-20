@@ -301,3 +301,17 @@ fn a_tail_from_a_hub_that_doesnt_say_which_subagents_are_in_the_background_has_n
     assert!(tail.in_background.is_empty());
     assert_eq!(frame::encode(&tail).unwrap(), [older.as_slice(), b"\n"].concat(), "none is left out");
 }
+
+/// How far a reply has been read out keeps its form, and a tail from a hub that doesn't say has none, and leaves it out.
+#[test]
+fn a_tail_says_how_far_a_reply_has_been_read_out_in_one_form() {
+    let speaking = br#"{"messages":[],"speaking":{"message":"m","block":1,"through":42}}"#;
+    let tail: Tail = frame::decode(speaking).unwrap();
+    let through = protocol::model::SpokenThrough { message: "m".into(), block: 1, through: 42 };
+
+    assert_eq!(tail.speaking, Some(through));
+    assert_eq!(frame::encode(&tail).unwrap(), [speaking.as_slice(), b"\n"].concat());
+    let older: Tail = frame::decode(br#"{"messages":[]}"#).unwrap();
+    assert_eq!(older.speaking, None);
+    assert_eq!(frame::encode(&older).unwrap(), b"{\"messages\":[]}\n", "none is left out");
+}

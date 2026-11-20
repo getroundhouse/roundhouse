@@ -172,6 +172,7 @@ fn of_event(event: &SessionEvent, around: &Around, gather: &mut Gather) {
         | EventBody::AgentCompacted { .. }
         | EventBody::CacheExpired { .. }
         | EventBody::ConversationStarted { .. }
+        | EventBody::VoiceCut { .. }
         | EventBody::Unknown => {}
     }
 }

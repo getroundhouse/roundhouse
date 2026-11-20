@@ -6,7 +6,7 @@ use protocol::capability::turns::OwnTurn;
 use protocol::event::{
     AgentTask, CompactionOutcome, ContentBlock, Denied, EventBody, SessionEvent, TaskOutcome, TurnOutcome,
 };
-use protocol::model::{ApprovalId, MessageId, Seq, SubagentId, TaskId};
+use protocol::model::{ApprovalId, CutBy, MessageId, Seq, SubagentId, TaskId};
 use protocol::prompt::PromptFrom;
 use protocol::tail::{DeltaChange, StreamDelta, Tail};
 use std::collections::HashMap;
@@ -124,6 +124,14 @@ impl Printer {
             }
             EventBody::ConversationStarted { device } => {
                 self.line(event.seq, &format!("conversation mode turned on, on {}", device.name));
+            }
+            EventBody::VoiceCut { by, .. } => {
+                let why = match by {
+                    CutBy::TalkedOver => "talked over",
+                    CutBy::Stopped => "stopped",
+                    CutBy::Unknown => "cut off",
+                };
+                self.line(event.seq, &format!("the reply being read out was {why}"));
             }
             EventBody::OwnTurn(_)
             | EventBody::PromptTaken { .. }

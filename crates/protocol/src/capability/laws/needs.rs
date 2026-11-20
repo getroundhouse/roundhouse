@@ -34,6 +34,7 @@ pub fn needs(body: &EventBody) -> Vec<Capability> {
         EventBody::CompactionAsked { .. }
         | EventBody::CacheExpired { .. }
         | EventBody::ConversationStarted { .. }
+        | EventBody::VoiceCut { .. }
         | EventBody::UserPrompt { .. }
         | EventBody::PromptTaken { .. }
         | EventBody::PromptDropped { .. }

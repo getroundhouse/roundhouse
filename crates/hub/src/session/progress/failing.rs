@@ -75,9 +75,10 @@ pub(super) fn after(failing: Option<&Failing>, body: &mut EventBody) -> FailingA
 /// Whether the agent's own failed requests either side of `body` can still be failures in a row. Everything of a
 /// subagent's keeps them, since the subagent's tab shows it, and so does what the agent does by itself that comes to
 /// nothing else: starting a turn, such as to take in a task's end, saying what it's running, what changed of one of its
-/// tasks or of its limits, a line its adapter has no form for, and ending a turn that only failed or said nothing. What the log records of the person
-/// ends the row, such as a prompt, Retry among them, a change of approval mode or a turn they stopped, and so does
-/// anything the agent says or does, the agent going or starting, and anything this build can't tell.
+/// tasks or of its limits, a line its adapter has no form for, and ending a turn that only failed or said nothing. A cut
+/// in the voice reading a reply out keeps them too, since it draws nothing between them. What the log records of the
+/// person ends the row, such as a prompt, Retry among them, a change of approval mode or a turn they stopped, and so
+/// does anything the agent says or does, the agent going or starting, and anything this build can't tell.
 pub(super) fn keeps(body: &EventBody) -> bool {
     if body.subagent().is_some() {
         return true;
@@ -91,7 +92,8 @@ pub(super) fn keeps(body: &EventBody) -> bool {
         | EventBody::TaskChanged { .. }
         | EventBody::AgentOther { .. }
         | EventBody::SubagentContext { .. }
-        | EventBody::SubagentEnded { .. } => true,
+        | EventBody::SubagentEnded { .. }
+        | EventBody::VoiceCut { .. } => true,
         // A turn the agent started by itself can end with nothing said, as when its CLI doesn't try while it's
         // limited, and anything it said would have ended the row already.
         EventBody::TurnEnded { outcome, request_failed, .. } => *request_failed || *outcome == TurnOutcome::Success,

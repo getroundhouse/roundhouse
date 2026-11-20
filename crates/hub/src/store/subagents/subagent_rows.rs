@@ -134,6 +134,7 @@ pub(in super::super) fn note_subagents(tx: &Connection, event: &SessionEvent) ->
         | EventBody::AgentCompacted { .. }
         | EventBody::CacheExpired { .. }
         | EventBody::ConversationStarted { .. }
+        | EventBody::VoiceCut { .. }
         | EventBody::Unknown => Ok(Vec::new()),
     }
 }

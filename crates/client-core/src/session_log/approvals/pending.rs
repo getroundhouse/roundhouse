@@ -179,6 +179,7 @@ fn follow<'a>(open: &mut Vec<&'a SessionEvent>, event: &'a SessionEvent) {
         | EventBody::AgentCompacted { .. }
         | EventBody::CacheExpired { .. }
         | EventBody::ConversationStarted { .. }
+        | EventBody::VoiceCut { .. }
         | EventBody::Unknown => {}
     }
 }

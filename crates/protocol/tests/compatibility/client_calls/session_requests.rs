@@ -10,8 +10,8 @@ use protocol::client::{
 use protocol::fixtures;
 use protocol::frame;
 use protocol::model::{
-    AgentKind, AnswerSoFar, DecisionDraft, DraftToKeep, ModelName, NewWorkspaceDraftToKeep, Place, Seq, SoFar,
-    UseChoice,
+    AgentKind, AnswerSoFar, CutBy, DecisionDraft, DraftToKeep, ModelName, NewWorkspaceDraftToKeep, Place, Seq, SoFar,
+    SpokenThrough, UseChoice,
 };
 use protocol::prompt::Prompt;
 
@@ -60,14 +60,6 @@ fn every_request_about_a_session_keeps_its_form() {
     asked(
         ClientRequest::SessionMarkUnread(sessions::SessionMarkUnread { id: "s".into() }),
         r#"{"method":"session_mark_unread","id":"s"}"#,
-    );
-    asked(
-        ClientRequest::SessionConversationStart(conversation::SessionConversationStart { id: "s".into() }),
-        r#"{"method":"session_conversation_start","id":"s"}"#,
-    );
-    asked(
-        ClientRequest::SessionConversationEnd(conversation::SessionConversationEnd { id: "s".into() }),
-        r#"{"method":"session_conversation_end","id":"s"}"#,
     );
     asked(
         ClientRequest::SessionRename(sessions::SessionRename { id: "s".into(), title: "Login".into() }),
@@ -309,5 +301,31 @@ fn every_request_about_the_new_workspace_dialog_keeps_its_form() {
     asked(
         ClientRequest::NewWorkspaceCreate(create),
         r#"{"method":"new_workspace_create","made_of":{"text":"fix the login","files":["f1"]},"client_request_id":"make it"}"#,
+    );
+}
+
+#[test]
+fn every_request_about_a_chat_s_conversation_keeps_its_form() {
+    asked(
+        ClientRequest::SessionConversationStart(conversation::SessionConversationStart { id: "s".into() }),
+        r#"{"method":"session_conversation_start","id":"s"}"#,
+    );
+    asked(
+        ClientRequest::SessionConversationEnd(conversation::SessionConversationEnd { id: "s".into() }),
+        r#"{"method":"session_conversation_end","id":"s"}"#,
+    );
+    let through = || SpokenThrough { message: "m".into(), block: 1, through: 42 };
+    asked(
+        ClientRequest::SessionSpeaking(conversation::SessionSpeaking { id: "s".into(), through: Some(through()) }),
+        r#"{"method":"session_speaking","id":"s","through":{"message":"m","block":1,"through":42}}"#,
+    );
+    asked(
+        ClientRequest::SessionSpeaking(conversation::SessionSpeaking { id: "s".into(), through: None }),
+        r#"{"method":"session_speaking","id":"s"}"#,
+    );
+    let cut = conversation::SessionVoiceCut { id: "s".into(), through: through(), by: CutBy::Stopped };
+    asked(
+        ClientRequest::SessionVoiceCut(cut),
+        r#"{"method":"session_voice_cut","id":"s","through":{"message":"m","block":1,"through":42},"by":"stopped"}"#,
     );
 }

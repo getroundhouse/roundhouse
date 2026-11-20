@@ -251,13 +251,18 @@ pub(super) async fn handle(
         R::SessionClose(sessions::SessionClose { id }) => C::Session(hub.session_close(id).await?),
         R::SessionReopen(sessions::SessionReopen { id }) => C::Session(hub.session_reopen(id).await?),
         R::SessionConversationStart(conversation::SessionConversationStart { id }) => {
-            let device = device.ok_or_else(|| {
-                ApiError::new(ErrorCode::InvalidRequest, "this client didn't say in its hello which device it's on")
-            })?;
-            C::Session(hub.session_conversation_start(id, device).await?)
+            C::Session(hub.session_conversation_start(id, said_which(device)?).await?)
         }
         R::SessionConversationEnd(conversation::SessionConversationEnd { id }) => {
             C::Session(hub.session_conversation_end(id).await?)
+        }
+        R::SessionSpeaking(conversation::SessionSpeaking { id, through }) => {
+            hub.session_speaking(id, &said_which(device)?, through).await?;
+            C::Ok
+        }
+        R::SessionVoiceCut(conversation::SessionVoiceCut { id, through, by }) => {
+            hub.session_voice_cut(id, &said_which(device)?, through, by).await?;
+            C::Ok
         }
         R::SessionMarkRead(sessions::SessionMarkRead { id, through_seq }) => {
             C::Session(hub.session_mark_read(id, through_seq).await?)
@@ -279,5 +284,12 @@ pub(super) async fn handle(
             hub.session_compact(id, keeping).await?;
             C::Ok
         }
+    })
+}
+
+/// The device the client said it's on, for a request that needs one, refused from a client that didn't say.
+fn said_which(device: Option<ClientDevice>) -> Result<ClientDevice, ApiError> {
+    device.ok_or_else(|| {
+        ApiError::new(ErrorCode::InvalidRequest, "this client didn't say in its hello which device it's on")
     })
 }

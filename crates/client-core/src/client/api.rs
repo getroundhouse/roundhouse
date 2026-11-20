@@ -10,9 +10,10 @@ use protocol::client::{
 use protocol::event::SessionEvent;
 use protocol::find::Found;
 use protocol::model::{
-    AgentKind, ApprovalId, AttachmentId, ClientMessageId, ClientRequestId, CommentId, DeviceId, DiffComment, DiffSide,
-    GitDiff, GitStatus, HubSettings, HubSettingsChange, Proposal, PullRequest, Records, ReferenceAsk, ReferenceRead,
-    Repo, RepoId, Rev, Seq, Session, SessionId, Subagent, SubagentId, TerminalId, WaitId, Workspace, WorkspaceId,
+    AgentKind, ApprovalId, AttachmentId, ClientMessageId, ClientRequestId, CommentId, CutBy, DeviceId, DiffComment,
+    DiffSide, GitDiff, GitStatus, HubSettings, HubSettingsChange, Proposal, PullRequest, Records, ReferenceAsk,
+    ReferenceRead, Repo, RepoId, Rev, Seq, Session, SessionId, SpokenThrough, Subagent, SubagentId, TerminalId, WaitId,
+    Workspace, WorkspaceId,
 };
 
 use super::{Client, Result, Subscription, hub_is_missing, subscription_channel};
@@ -274,6 +275,16 @@ impl Client {
     /// See [`conversation::SessionConversationEnd`]. A hub older than this refuses it, as `is_unsupported` says.
     pub fn session_conversation_end(&self, id: &SessionId) -> Result<Session> {
         self.call(conversation::SessionConversationEnd { id: id.clone() })
+    }
+
+    /// See [`conversation::SessionSpeaking`]. A hub older than this refuses it, as `is_unsupported` says.
+    pub fn session_speaking(&self, id: &SessionId, through: Option<SpokenThrough>) -> Result<()> {
+        self.call(conversation::SessionSpeaking { id: id.clone(), through })
+    }
+
+    /// See [`conversation::SessionVoiceCut`]. A hub older than this refuses it, as `is_unsupported` says.
+    pub fn session_voice_cut(&self, id: &SessionId, through: SpokenThrough, by: CutBy) -> Result<()> {
+        self.call(conversation::SessionVoiceCut { id: id.clone(), through, by })
     }
 
     /// See [`sessions::SessionMarkRead`]. A hub older than this refuses it, as `is_unsupported` says.

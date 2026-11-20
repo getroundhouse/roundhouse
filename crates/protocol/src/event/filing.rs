@@ -36,6 +36,7 @@ impl EventBody {
             EventBody::AgentCompacted { .. } => "agent_compacted",
             EventBody::CacheExpired { .. } => "cache_expired",
             EventBody::ConversationStarted { .. } => "conversation_started",
+            EventBody::VoiceCut { .. } => "voice_cut",
             EventBody::Unknown => "unknown",
         }
     }
@@ -80,6 +81,7 @@ impl EventBody {
             | EventBody::AgentCompacted { .. }
             | EventBody::CacheExpired { .. }
             | EventBody::ConversationStarted { .. }
+            | EventBody::VoiceCut { .. }
             | EventBody::Unknown => None,
         }
     }

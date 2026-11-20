@@ -84,6 +84,7 @@ fn note<'a>(held: &'a mut Vec<Subagent>, event: &SessionEvent) -> Vec<&'a mut Su
         | EventBody::AgentCompacted { .. }
         | EventBody::CacheExpired { .. }
         | EventBody::ConversationStarted { .. }
+        | EventBody::VoiceCut { .. }
         | EventBody::Unknown => Vec::new(),
     }
 }

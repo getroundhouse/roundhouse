@@ -207,6 +207,7 @@ pub(super) fn muted_line(text: impl Into<SharedString>, cx: &App) -> AnyElement 
 
 /// `event`, drawn in the row of an event, which is its own but for a prompt drawn where the agent took it, or at the
 /// end of the chat. A prompt's text goes at `prompt_at`, and the texts of any other event by its place in the log.
+#[expect(clippy::too_many_lines, reason = "a flat match, with one short arm per kind of event")]
 pub(super) fn render_event(
     event: &SessionEvent,
     around: &Around,
@@ -281,8 +282,10 @@ pub(super) fn render_event(
         | EventBody::AgentOther { .. }
         | EventBody::AgentCompacting { .. }
         | EventBody::ApprovalResolved { .. }
-        // Drawn as the rule across the chat once the desktop app has conversation mode.
+        // Drawn once the desktop app has conversation mode: the rule across the chat, and on the line of the reply that
+        // was cut off.
         | EventBody::ConversationStarted { .. }
+        | EventBody::VoiceCut { .. }
         | EventBody::Unknown => empty(),
     }
 }

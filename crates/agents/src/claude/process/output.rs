@@ -227,6 +227,7 @@ fn track_approval(shared: &Shared, body: &EventBody, line: &str) {
         | EventBody::AgentCompacted { .. }
         | EventBody::CacheExpired { .. }
         | EventBody::ConversationStarted { .. }
+        | EventBody::VoiceCut { .. }
         | EventBody::Unknown => {}
     }
 }

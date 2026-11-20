@@ -108,6 +108,7 @@ impl EventBody {
             | EventBody::AgentCompacted { .. }
             | EventBody::CacheExpired { .. }
             | EventBody::ConversationStarted { .. }
+            | EventBody::VoiceCut { .. }
             | EventBody::Unknown => None,
         }
     }

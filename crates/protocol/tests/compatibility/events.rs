@@ -185,3 +185,19 @@ fn conversation_mode_turned_on_keeps_its_form() {
     assert_eq!(serde_json::to_string(&started).unwrap(), stored);
     assert_eq!(serde_json::from_str::<EventBody>(stored).unwrap(), started);
 }
+
+/// The hub keeps a cut in the voice reading a reply out in the form it sends, and reads a cut it doesn't know the cause
+/// of as `Unknown`.
+#[test]
+fn a_voice_cut_off_keeps_its_form() {
+    use protocol::model::{CutBy, SpokenThrough};
+    let through = SpokenThrough { message: "m".into(), block: 2, through: 17 };
+    let cut = EventBody::VoiceCut { through, by: CutBy::TalkedOver };
+    let stored = r#"{"type":"voice_cut","through":{"message":"m","block":2,"through":17},"by":"talked_over"}"#;
+    assert_eq!(serde_json::to_string(&cut).unwrap(), stored);
+    assert_eq!(serde_json::from_str::<EventBody>(stored).unwrap(), cut);
+    let stopped = stored.replace("talked_over", "stopped");
+    assert!(matches!(serde_json::from_str(&stopped).unwrap(), EventBody::VoiceCut { by: CutBy::Stopped, .. }));
+    let later = stored.replace("talked_over", "hung_up");
+    assert!(matches!(serde_json::from_str(&later).unwrap(), EventBody::VoiceCut { by: CutBy::Unknown, .. }));
+}

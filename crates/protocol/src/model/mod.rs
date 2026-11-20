@@ -23,6 +23,7 @@ mod queue;
 mod record;
 mod references;
 mod session;
+mod spoken;
 mod subagent;
 mod terminal;
 mod title;
@@ -73,6 +74,7 @@ pub use references::{
     ReferenceAsk, ReferenceKind, ReferenceLabel, ReferenceRead, ReferencedPullRequest,
 };
 pub use session::{AgentKind, OpenApproval, Session, SessionStatus};
+pub use spoken::{CutBy, SpokenThrough};
 pub use subagent::{Lately, LatelyCall, LatelyResult, Said, Subagent, SubagentStatus};
 pub use terminal::Terminal;
 pub use title::{Title, TitleError, TitleSource};

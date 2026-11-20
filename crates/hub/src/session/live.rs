@@ -111,6 +111,9 @@ pub(super) struct LiveState {
     pub(super) closed_at_ms: Option<i64>,
     /// The device that has the chat's conversation, as its record says, while conversation mode is on.
     pub(super) conversation: Option<protocol::model::ClientDevice>,
+    /// How far that device has read the agent's reply out loud, as it last said, while it's reading one. Each
+    /// subscriber's tail has it, as [`Tail::speaking`] says, and nothing else keeps it.
+    pub(super) speaking: Option<protocol::model::SpokenThrough>,
     /// Prompts recorded for the agent that it's sent once its turn ends, oldest first, as
     /// [`super::commands::Sendable`]'s module says. Only this hub has them, so a hub that goes before the turn ends
     /// loses them, and they stay untaken.
@@ -202,6 +205,7 @@ impl LiveSession {
                 login: SessionLogin::of_record(&stored.session),
                 closed_at_ms: stored.session.closed_at_ms,
                 conversation: stored.session.conversation.as_deref().cloned(),
+                speaking: None,
                 after_the_turn: Vec::new(),
                 live: None,
             }),
@@ -255,7 +259,10 @@ impl LiveSession {
 
     pub(crate) fn snapshot(&self) -> Snapshot {
         let state = self.state.lock();
-        Snapshot { last_seq: state.last_seq, tail: state.tail.clone(), version: state.version }
+        // What's read out is the device's, rather than the agent's, so it's kept apart from what the agent writes, which
+        // its runs come and go with.
+        let tail = Tail { speaking: state.speaking.clone(), ..state.tail.clone() };
+        Snapshot { last_seq: state.last_seq, tail, version: state.version }
     }
 
     pub(crate) fn status(&self) -> SessionStatus {

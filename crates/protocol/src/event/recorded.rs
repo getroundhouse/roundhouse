@@ -355,6 +355,14 @@ pub enum EventBody {
     ConversationStarted {
         device: crate::model::ClientDevice,
     },
+    /// The voice reading the agent's reply out was cut off, `through` that place in it, so the rest of the reply wasn't
+    /// heard. The device that has the conversation says so, and the hub records it, as it does when the mode is turned
+    /// off or the conversation moves while a reply is read out. A reply read to its end records nothing, and nor does
+    /// one never read out. The agent hears nothing of it.
+    VoiceCut {
+        through: crate::model::SpokenThrough,
+        by: crate::model::CutBy,
+    },
     #[serde(other)]
     Unknown,
 }
