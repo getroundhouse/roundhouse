@@ -16,6 +16,7 @@ A decision record holds one large, one-off choice among real alternatives, such 
 | [pull-request-from-pushed-branch.md](pull-request-from-pushed-branch.md) | A workspace's pull request is found from the branch it's pushed to, with no stored link |
 | [provider-adapters-over-stdio.md](provider-adapters-over-stdio.md) | A provider's adapter is a separate program that the hub runs over stdio |
 | [remote-workspace-vm.md](remote-workspace-vm.md) | A remote workspace runs in a VM of its own, not a container. Not built |
+| [base-image-is-an-instance.md](base-image-is-an-instance.md) | A base image is an instance, built through a worker. Not built |
 | [velopack.md](velopack.md) | Velopack packages, installs and updates the app |
 | [linux-appimage.md](linux-appimage.md) | The Linux app is an AppImage |
 | [publish-every-merge.md](publish-every-merge.md) | Every merge to `main` is published, as version `0.1.<commits on main>` |

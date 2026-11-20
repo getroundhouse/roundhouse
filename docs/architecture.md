@@ -365,7 +365,7 @@ Details are in `crates/protocol/`.
 
 ### Changing the protocol
 
-These rules let peers on different versions keep working together. They hold for all three protocols that cross between processes: the client protocol, between clients and a hub, the worker protocol, between a hub and its workers, and the provider protocol, between a hub and its providers' adapters. All three meet the same problem, so one set of rules covers them, and nobody has to remember which applies where. *Not built:* the provider protocol. The stream a provider opens for preflight carries one question and its answer, with no hello, so the question carries a version of its own, which goes up only for a break, and an endpoint refuses one newer than its own with `Unsupported`. A question or a field is added to it as to the others.
+These rules let peers on different versions keep working together. They hold for all three protocols that cross between processes: the client protocol, between clients and a hub, the worker protocol, between a hub and its workers, and the provider protocol, between a hub and its providers' adapters. All three meet the same problem, so one set of rules covers them, and nobody has to remember which applies where. *Not built:* the local provider as an adapter. The hub calls it directly, so nothing shipped speaks the provider protocol. The stream a provider opens for preflight carries one question and its answer, with no hello, so the question carries a version of its own, which goes up only for a break, and an endpoint refuses one newer than its own with `Unsupported`. A question or a field is added to it as to the others.
 
 - **Each shape has one form.** It's the serde form in `protocol`, on the wire and in the hub's SQLite columns, so changing a type also changes how old rows read.
 - **A new field is `Option` or `#[serde(default)]`,** so a message from an older peer still decodes. The same goes for old rows.
@@ -551,7 +551,7 @@ Every provider has an adapter: a program the hub runs, which makes and ends the 
 | `open_preflight` | Return the command that opens a byte stream for preflight in the prospective launch environment | Optional |
 | `destroy` | Remove the instance | Yes |
 | `list` | Say which instances exist, so a hub that starts finds those that outlived it | Yes |
-| Base images | Build one with a repository's script, list them, and delete one | Optional, declared by the provider |
+| `make_base_image` | Turn a stopped instance into a base image, which other instances are copied from and which can't start again | Optional, declared by the provider |
 | `snapshot`, `restore` | Preserve or roll back the filesystem | Optional, declared by the provider |
 
 An adapter also tells the hub, unasked, when an instance is about to end or has gone, such as when a cloud takes back a spot instance or a host goes down, rather than leaving the hub to find out when the worker's stream breaks.
