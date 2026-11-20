@@ -36,7 +36,8 @@ impl Reply for Attachment {
 }
 
 /// A file's bytes, for drawing an image, or for putting a draft's file back in the composer. Only the session it was
-/// added to has it, and once its prompt has gone, the hub keeps only images, so any other file is not found.
+/// added to has it, and once its prompt has gone, the hub keeps only images made of pixels, so any other file, a
+/// drawing such as an SVG included, is not found.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct AttachmentRead {
     pub session_id: SessionId,

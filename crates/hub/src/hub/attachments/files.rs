@@ -1,8 +1,8 @@
 //! Files a person adds to a session, for its prompts to carry, or to the new-workspace dialog, before any session
 //! exists, and images a tool sends its agent. Each is added, read and let go of the same way, whatever it's for. What
 //! each is goes in the database, and its bytes in `attachment_files`. Before a prompt reaches its agent, the worker
-//! puts each of its files in the worktree, and then the hub keeps the bytes only of an image, since that's all the
-//! transcript draws.
+//! puts each of its files in the worktree, and then the hub keeps the bytes only of an image made of pixels, since
+//! that's all the transcript draws.
 
 use std::sync::Arc;
 

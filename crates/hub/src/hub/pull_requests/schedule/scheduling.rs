@@ -59,8 +59,8 @@ pub(in super::super) enum Went<'a> {
     Changed,
     /// It found what was known.
     Same(Option<&'a PullRequest>),
-    /// It couldn't be read, such as while GitHub can't be reached, or without `gh`, a login to it or a worker to read
-    /// it with. Showing it reads it at once anyway.
+    /// It couldn't be read, such as while GitHub can't be reached, or with no login to read it as. Showing it reads it
+    /// at once anyway.
     Failed,
 }
 
