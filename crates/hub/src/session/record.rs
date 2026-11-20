@@ -8,6 +8,7 @@ use protocol::model::{ClientMessageId, Interaction, InteractionMode, RunCapabili
 use protocol::tail::Tail;
 use tracing::error;
 
+use super::conversation::{left_conversation, set_interaction};
 use super::progress::{Next, Step};
 use super::{LiveItem, LiveSession, LiveState, Origin, publish};
 use crate::hub::Hub;
@@ -123,24 +124,20 @@ impl LiveSession {
     /// them together.
     async fn after_commit(&self, hub: &Arc<Hub>, recorded: Vec<(Origin, &Appended, Next)>, made: Made) {
         let appended: Vec<&Appended> = recorded.iter().map(|(_, appended, _)| *appended).collect();
-        let (ready, turn_ended) = {
+        let (ready, turn_ended, left) = {
             let mut state = self.state.lock();
             let was_ready = state.ready_for_queue();
             let was_in_turn = state.progress.status.in_turn();
-            let mut ended_others = false;
-            let mut recorded = recorded.into_iter().peekable();
-            while let Some((origin, appended, next)) = recorded.next() {
-                ended_others |= take(&mut state, origin, appended, next);
-                let subagent = &appended.event.subagent;
-                if recorded.peek().is_none_or(|(_, after, _)| after.event.subagent != *subagent) {
-                    let seq = appended.event.seq;
-                    publish(&mut state, LiveItem::Appended { seq, subagent: subagent.clone(), ended_others });
-                    ended_others = false;
-                }
-            }
+            let had = state.interaction.device().map(|had| had.id.clone());
+            take_all(&mut state, recorded);
             let turn_ended = was_in_turn && !state.progress.status.in_turn();
-            (!was_ready && state.ready_for_queue(), turn_ended && !state.after_the_turn.is_empty())
+            let left = left_conversation(had.as_ref(), &state.interaction);
+            (!was_ready && state.ready_for_queue(), turn_ended && !state.after_the_turn.is_empty(), left)
         };
+        // A prompt typed while the mode was on ended it, so what the device was reading out is settled.
+        if left {
+            self.settle_hearing(hub).await;
+        }
         if turn_ended {
             self.wake_after_the_turn();
         }
@@ -252,6 +249,22 @@ fn note_recorded(origin: Origin, change: &mut SessionChange) {
 
 /// Updates live state for an event just recorded, and says whether that ended streamed messages of the agent or of
 /// subagents other than the one it came from.
+/// Takes in what one commit recorded, `recorded`, oldest first, and tells subscribers once for each run of events from
+/// the agent or the same subagent, at the newest, as [`LiveSession::after_commit`] says.
+fn take_all(state: &mut LiveState, recorded: Vec<(Origin, &Appended, Next)>) {
+    let mut ended_others = false;
+    let mut recorded = recorded.into_iter().peekable();
+    while let Some((origin, appended, next)) = recorded.next() {
+        ended_others |= take(state, origin, appended, next);
+        let subagent = &appended.event.subagent;
+        if recorded.peek().is_none_or(|(_, after, _)| after.event.subagent != *subagent) {
+            let seq = appended.event.seq;
+            publish(state, LiveItem::Appended { seq, subagent: subagent.clone(), ended_others });
+            ended_others = false;
+        }
+    }
+}
+
 fn take(state: &mut LiveState, origin: Origin, appended: &Appended, next: Next) -> bool {
     let (seq, body, subagent) = (appended.event.seq, &appended.event.body, &appended.event.subagent);
     state.last_seq = seq;
@@ -259,9 +272,11 @@ fn take(state: &mut LiveState, origin: Origin, appended: &Appended, next: Next) 
     // it on, with the device that rule names, and off, from a prompt typed while it was on.
     match (body, appended.event.interaction) {
         (EventBody::ConversationStarted { device }, _) => {
-            state.interaction = Interaction::Conversation { device: Box::new(device.clone()) };
+            set_interaction(state, Interaction::Conversation { device: Box::new(device.clone()) });
         }
-        (_, InteractionMode::Typing) => state.interaction = Interaction::Typing,
+        (_, InteractionMode::Typing) => {
+            set_interaction(state, Interaction::Typing);
+        }
         (_, InteractionMode::Conversation | InteractionMode::Unknown) => {}
     }
     if origin.speaks_for_session() {

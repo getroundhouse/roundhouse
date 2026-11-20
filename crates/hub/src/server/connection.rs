@@ -7,6 +7,7 @@ use super::{admit, dispatch};
 
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
 use crate::listener::Listener;
@@ -25,6 +26,9 @@ use crate::hub::Hub;
 
 /// How many events a page a subscriber is fed holds at most, up to [`protocol::client::log::ReadLimit::BYTES`].
 pub(crate) const PUMP_PAGE_EVENTS: u32 = 256;
+
+/// The ID the next connection is given.
+static NEXT_CONNECTION: AtomicU64 = AtomicU64::new(0);
 
 /// Bounded, so a client that stops reading holds back only its own subscriptions.
 const CONNECTION_QUEUE: usize = 1024;
@@ -48,6 +52,8 @@ pub(crate) async fn accept_loop(hub: Arc<Hub>, mut listener: Listener) {
 }
 
 pub(super) struct Connection {
+    /// Which it is, of every connection this hub has served.
+    pub(super) id: u64,
     pub(super) frames: mpsc::Sender<Outgoing>,
     pub(super) subscriptions: Mutex<HashMap<u64, AbortHandle>>,
     /// True once nothing more will be read, so a request that only waits, with nothing to carry on with, can stop.
@@ -93,7 +99,9 @@ pub(super) async fn serve_connection(
     let (frames, queued) = mpsc::channel::<Outgoing>(CONNECTION_QUEUE);
     let mut writer = tokio::spawn(write_frames(write, queued));
     let closed = Arc::new(watch::Sender::new(false));
-    let connection = Arc::new(Connection { frames, subscriptions: Mutex::new(HashMap::new()), closed: closed.clone() });
+    let id = NEXT_CONNECTION.fetch_add(1, Ordering::Relaxed);
+    let subscriptions = Mutex::new(HashMap::new());
+    let connection = Arc::new(Connection { id, frames, subscriptions, closed: closed.clone() });
     let revoked = gate.revoked();
     let mut revoking = revoked.clone();
 

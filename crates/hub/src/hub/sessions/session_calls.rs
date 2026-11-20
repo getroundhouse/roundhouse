@@ -1,6 +1,6 @@
 use super::super::Hub;
 use crate::error::internal;
-use crate::session::{Command, LiveSession};
+use crate::session::{Command, LiveSession, ReadingOn};
 use crate::store::{Places, Reading, Store, StoreError};
 use protocol::capability::approvals::Decision;
 use protocol::capability::settings::Settings;
@@ -10,7 +10,7 @@ use protocol::event::SessionEvent;
 use protocol::find::{Found, Needle};
 use protocol::model::{
     ApprovalId, AttachmentId, ClientDevice, ClientMessageId, CompactionLine, DecisionDraft, DraftToKeep, Ending,
-    MessageId, Place, PromptLine, RecordKey, Seq, Session, SessionId, SubagentId, WorkspaceId,
+    MessageId, Place, PromptLine, RecordKey, Seq, Session, SessionId, SpokenThrough, SubagentId, WorkspaceId,
 };
 use protocol::prompt::Prompt;
 use std::collections::{HashMap, HashSet};
@@ -262,6 +262,16 @@ impl Hub {
         ending: Ending,
     ) -> Result<(), ApiError> {
         self.live_session(&id).await?.keep_reply_heard(device, message, ending).await
+    }
+
+    pub(crate) async fn session_speaking(
+        self: &Arc<Self>,
+        id: SessionId,
+        device: Option<&ClientDevice>,
+        on: ReadingOn,
+        through: SpokenThrough,
+    ) -> Result<(), ApiError> {
+        self.live_session(&id).await?.speaking(device, on, through).await
     }
 
     pub(crate) async fn session_replies_heard(&self, id: SessionId) -> Result<records::RepliesHeard, ApiError> {

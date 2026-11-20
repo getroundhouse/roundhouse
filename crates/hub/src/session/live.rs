@@ -112,6 +112,8 @@ pub(super) struct LiveState {
     /// How the person talks with the agent, as the chat's record says, with the device that has the conversation while
     /// conversation mode is on.
     pub(super) interaction: protocol::model::Interaction,
+    /// The reply that device is reading out, if any.
+    pub(super) reading_out: super::reading_out::ReadingOut,
     /// Prompts recorded for the agent that it's sent once its turn ends, oldest first, as
     /// [`super::commands::Sendable`]'s module says. Only this hub has them, so a hub that goes before the turn ends
     /// loses them, and they stay untaken.
@@ -144,6 +146,8 @@ pub(crate) struct LiveSession {
     /// Held while the model, mode or effort is being changed, and while an agent is being started with them,
     /// so a change can't fall between the two and reach neither, and to keep an agent from starting meanwhile.
     pub(super) configuring: tokio::sync::Mutex<()>,
+    /// Held while the reply being read out changes, or one is settled, so a place can't land after its reply's end.
+    pub(super) settling: tokio::sync::Mutex<()>,
 }
 
 /// Tells subscribers something changed, under the lock, so their order matches `version`.
@@ -203,12 +207,14 @@ impl LiveSession {
                 login: SessionLogin::of_record(&stored.session),
                 closed_at_ms: stored.session.closed_at_ms,
                 interaction: stored.session.interaction.clone(),
+                reading_out: super::reading_out::ReadingOut::default(),
                 after_the_turn: Vec::new(),
                 live: None,
             }),
             recording: tokio::sync::Mutex::new(()),
             queue_lock: tokio::sync::Mutex::new(()),
             configuring: tokio::sync::Mutex::new(()),
+            settling: tokio::sync::Mutex::new(()),
         });
         tokio::spawn(run_commands(session.clone(), commands_rx));
         tokio::spawn(run_ingest(session.clone(), ingest_rx));
@@ -256,7 +262,9 @@ impl LiveSession {
 
     pub(crate) fn snapshot(&self) -> Snapshot {
         let state = self.state.lock();
-        Snapshot { last_seq: state.last_seq, tail: state.tail.clone(), version: state.version }
+        // What's read out is the device's, rather than the agent's, so it's kept apart from what the agent writes.
+        let tail = Tail { speaking: state.reading_out.speaking(), ..state.tail.clone() };
+        Snapshot { last_seq: state.last_seq, tail, version: state.version }
     }
 
     pub(crate) fn status(&self) -> SessionStatus {

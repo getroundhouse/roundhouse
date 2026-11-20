@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use protocol::model::{Ending, Proposal, ReplyHeard, Rev, Subagent, SubagentStatus};
+use protocol::model::{Ending, Proposal, ReplyHeard, Rev, SettledBy, Subagent, SubagentStatus};
 
 use super::{BySession, subagent_named};
 use crate::records::Snapshot;
@@ -156,6 +156,7 @@ fn how_a_sessions_replies_were_heard_is_kept_as_its_proposals_are_and_found_by_r
         session_id: session.into(),
         message: message.into(),
         ending,
+        settled_by: SettledBy::Device,
         rev: Rev::new(rev),
     };
     let mut kept = BySession::<ReplyHeard>::default();

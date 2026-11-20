@@ -1,5 +1,5 @@
 use crate::event::EventBody;
-use crate::model::{MessageId, RunId, Seq, SubagentId};
+use crate::model::{MessageId, RunId, Seq, SpokenThrough, SubagentId};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 
@@ -66,6 +66,12 @@ pub struct Tail {
     /// The agent is trying a request to its model again, which failed, as it last said.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub retrying: Option<Retrying>,
+    /// How far the device that has the chat's conversation has read the agent's reply out loud, as it last said, while
+    /// it's reading one. It's the device's rather than the agent's, so it outlasts the message being recorded, the turn
+    /// and the agent, and it's in no run. Only the hub sets it, as a client sends it, so a worker's tail never holds it.
+    /// Only the agent's own replies are read out, so a subagent's tail never holds it either.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub speaking: Option<SpokenThrough>,
 }
 
 /// A compaction under way, or asked for.
@@ -283,7 +289,7 @@ impl Tail {
         self.retrying = self.retrying.take().filter(|retrying| later(run, retrying.run));
     }
 
-    /// Whether nothing is being written.
+    /// Whether nothing is being written. A reply being read out is written already.
     pub fn is_empty(&self) -> bool {
         self.messages.is_empty() && self.compacting.is_none() && self.retrying.is_none()
     }
@@ -291,7 +297,8 @@ impl Tail {
     /// Whether it holds nothing of any run, not even a subagent in the background, which [`Tail::is_empty`] leaves out
     /// since one writes nothing until it does.
     pub fn holds_nothing(&self) -> bool {
-        let Tail { messages, in_background, compacting, retrying } = self;
+        // How far a reply has been read out is in no run.
+        let Tail { messages, in_background, compacting, retrying, speaking: _ } = self;
         messages.is_empty() && in_background.is_empty() && compacting.is_none() && retrying.is_none()
     }
 
@@ -303,7 +310,9 @@ impl Tail {
         // Only the agent compacts its conversation, or says it's retrying, so a subagent's tail never says either.
         let compacting = self.compacting.clone().filter(|_| subagent.is_none());
         let retrying = self.retrying.filter(|_| subagent.is_none());
-        Tail { messages: messages.cloned().collect(), in_background: Vec::new(), compacting, retrying }
+        // Only the agent's own replies are read out.
+        let speaking = self.speaking.clone().filter(|_| subagent.is_none());
+        Tail { messages: messages.cloned().collect(), in_background: Vec::new(), compacting, retrying, speaking }
     }
 
     /// Updates the tail for an event from `run` that no hub has recorded yet, as its worker sends it on, so it has
@@ -334,6 +343,8 @@ impl Tail {
             in_background: self.in_background.iter().filter(|background| of(background.run)).cloned().collect(),
             compacting: self.compacting.clone().filter(|compacting| of(compacting.run)),
             retrying: self.retrying.filter(|retrying| of(retrying.run)),
+            // In no run.
+            speaking: None,
         }
     }
 

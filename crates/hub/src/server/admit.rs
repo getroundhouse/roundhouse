@@ -306,6 +306,7 @@ fn local_only(request: &ClientRequest) -> bool {
         | R::SessionConversationStart(..)
         | R::SessionConversationEnd(..)
         | R::SessionReplyHeard(..)
+        | R::SessionSpeaking(..)
         | R::SessionCallOffWait(..)
         | R::SessionDraft(..)
         | R::SessionDecisionDraft(..)
