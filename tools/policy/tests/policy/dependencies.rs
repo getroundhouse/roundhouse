@@ -71,7 +71,7 @@ fn nothing_outside_the_ui_depends_on_gpui() {
 #[test]
 fn clients_only_reach_the_hub_through_the_protocol() {
     let metadata = metadata();
-    for package in ["client-core", "local-hub", "cli"] {
+    for package in ["client-core", "local-hub", "cli", "mobile-ios"] {
         let closure = runtime_closure(&metadata, package);
         for banned in ["hub", "github", "worker", "agents", "providers"] {
             assert!(!closure.contains(banned), "{package} depends on {banned}");
@@ -82,10 +82,13 @@ fn clients_only_reach_the_hub_through_the_protocol() {
 /// Every client builds `client-core`, and a phone starts no process, so starting a hub on this machine, and what it
 /// takes, are `local-hub`'s, which only the clients that start one build.
 #[test]
-fn client_core_starts_no_processes() {
-    let closure = runtime_closure(&metadata(), "client-core");
-    for banned in ["local-hub", "process", "private-files"] {
-        assert!(!closure.contains(banned), "client-core depends on {banned}");
+fn client_core_and_the_phone_start_no_processes() {
+    let metadata = metadata();
+    for package in ["client-core", "mobile-ios"] {
+        let closure = runtime_closure(&metadata, package);
+        for banned in ["local-hub", "process", "private-files"] {
+            assert!(!closure.contains(banned), "{package} depends on {banned}");
+        }
     }
 }
 
@@ -184,8 +187,11 @@ fn every_copied_crate_is_the_one_the_app_builds() {
     let root = Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."));
     let lock: toml::Table = std::fs::read_to_string(root.join("Cargo.lock")).unwrap().parse().unwrap();
     let gpui = locked("gpui-pre");
-    for (name, folder, on_gpui) in [("gpui-pre-apple", "gpui-pre-apple", true), ("zed-font-kit", "zed-font-kit", false)]
-    {
+    for (name, folder, on_gpui) in [
+        ("gpui-pre-apple", "gpui-pre-apple", true),
+        ("gpui-pre-ios", "gpui-pre-ios", true),
+        ("zed-font-kit", "zed-font-kit", false),
+    ] {
         let manifest: toml::Table =
             std::fs::read_to_string(root.join("third_party").join(folder).join("Cargo.toml")).unwrap().parse().unwrap();
         let copy = manifest["package"]["version"].as_str().unwrap();

@@ -1,6 +1,6 @@
 # Code from other projects
 
-Other projects' code that the apps build from a copy kept here, on a release of the project's own, with our changes on top: gpui-kit, in `gpui-kit/`, and two crates of GPUI's and Zed's, in `gpui-pre-apple/` and `zed-font-kit/`.
+Other projects' code that the apps build from a copy kept here, on a release of the project's own, with our changes on top: gpui-kit, in `gpui-kit/`, and three crates of GPUI's and Zed's, in `gpui-pre-apple/`, `gpui-pre-ios/` and `zed-font-kit/`.
 
 ## gpui-kit
 
@@ -88,8 +88,9 @@ Renovate opens a pull request for each new release, on its weekly schedule. It c
 
 ## GPUI's and Zed's crates
 
-Two crates the apps build from crates.io are kept here as copies, each at the release the app's `Cargo.toml` asks for, which it puts in place of the published one under `[patch.crates-io]`:
+Three crates the apps build from crates.io are kept here as copies, each at the release the app's `Cargo.toml` asks for, which it puts in place of the published one under `[patch.crates-io]`:
 
+- `gpui-pre-ios/`, the backend Zed publishes that runs GPUI on iOS. Only the iPhone app builds it.
 - `gpui-pre-apple/`, GPUI's text system for Apple's systems, which both apps build.
 - `zed-font-kit/`, Zed's fork of Servo's font-kit, which that text system finds and loads fonts with.
 
@@ -99,5 +100,7 @@ They're copied whole and changed in place, rather than patched as the kit is, si
 
 | Change | Copy | Files | Why | Upstream |
 |---|---|---|---|---|
+| Asks the display link for 120 frames a second, and no fewer than 60, with `objc2-quartz-core`'s `CAFrameRateRange` | `gpui-pre-ios` | `Cargo.toml`, `src/ios/application.rs` | An iPhone runs a display link at 60 Hz unless it asks for more, so scrolling on a 120 Hz screen stuttered. 60 leaves the system room to slow it, such as in Low Power Mode | Not offered yet |
+| An input that reports neither its editable range nor its length still says how much of an unbounded range it holds | `gpui-pre-ios` | `src/ios/text_input.rs` | gpui-kit's input reports neither, and with no document range iOS never shows the keyboard | Not offered yet |
 | `core-text` 22 and the `core-graphics` 0.25 it takes, rather than 21 and 0.24 | `gpui-pre-apple`, `zed-font-kit` | `Cargo.toml` | CoreText gives a font's trait that's zero as a boolean on iOS, as macOS Ventura does for some fonts, and 21 panics reading it. 22 reads it as 0 or 1 | Zed's Renovate update to 22 waits for approval |
 | A trait CoreText gives as a boolean counts as read | `gpui-pre-apple` | `src/text_system.rs` | The text system skipped any face whose traits weren't all numbers, to avoid 21's panic. Every face of Menlo has one on iOS, so none loaded, and with no font found GPUI stopped the app | Not offered yet |

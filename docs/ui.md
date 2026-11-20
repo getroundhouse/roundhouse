@@ -63,7 +63,7 @@ A row in sight that changes height by itself moves nothing else on screen, such 
 
 ## iOS
 
-The iOS app is GPUI throughout, on Zed's iOS backend, `gpui-pre-ios`, and shares the transcript with the desktop app. *Not built:* `mobile-poc/` holds the proof of concept.
+The iOS app, in `apps/mobile-ios`, is GPUI throughout, on Zed's iOS backend, `gpui-pre-ios`, and shares the transcript with the desktop app.
 
 - **It behaves like an iPhone app where it counts.** It scrolls at 120 Hz, and selection, copy and paste, and editing with the on-screen keyboard work as in other iOS apps, including moving the cursor from the space bar.
 - **It's released with GPUI,** at the version the kit pins, so an upgrade needs no porting.
@@ -81,4 +81,4 @@ Why not the alternatives:
 - **No VoiceOver.** Neither iOS backend has accessibility code, unlike GPUI on the Mac.
 - It's experimental, and young.
 - Native views can only sit on top of GPUI, not around it, so a native navigation bar or composer would mean switching backends.
-- It needs two patches the kit and the backend don't carry. The kit's text input has to report its length, or the keyboard never appears, and the display link has to ask for 120 Hz, or an iPhone holds it to 60. `mobile-poc/README.md` lists them.
+- It needs changes GPUI's releases don't carry: the keyboard has to appear for the kit's text input, which doesn't report its length, the display link has to ask for 120 Hz, or an iPhone holds it to 60, and the text system has to load a font whose traits iOS gives as booleans, as it does every face of Menlo. So the app builds copies of the iOS backend, the Apple text system and the font-kit it uses with them, which `third_party/README.md` lists.

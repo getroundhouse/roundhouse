@@ -65,7 +65,7 @@ mod typography;
 mod word_changes;
 mod work;
 
-pub use app_icon::{AppIconSize, AppIconStyle, app_icon};
+pub use app_icon::{AppIconSize, AppIconStyle, app_icon, phone_icon};
 pub use assets::Assets;
 pub use badges::{Badge, BadgeKind, Label, badge, label};
 pub use banners::{Banner, BannerKind, banner};

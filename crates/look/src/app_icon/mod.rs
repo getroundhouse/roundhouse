@@ -7,4 +7,4 @@ mod pixels;
 mod drawing;
 #[cfg(test)]
 use drawing::Drawing;
-pub use drawing::{AppIconSize, AppIconStyle, app_icon};
+pub use drawing::{AppIconSize, AppIconStyle, app_icon, phone_icon};

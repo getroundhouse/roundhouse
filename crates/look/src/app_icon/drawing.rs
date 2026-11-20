@@ -3,7 +3,7 @@ use crate::fan;
 use crate::fan::{ASPECT, Fan};
 use crate::mark::{LIGHT, light_on};
 use gpui_kit::{
-    App, BorderStyle, Bounds, Corners, Edges, Hsla, IntoElement, Pixels, Styled, Window, canvas, fill,
+    App, Background, BorderStyle, Bounds, Corners, Edges, Hsla, IntoElement, Pixels, Styled, Window, canvas, fill,
     linear_color_stop, linear_gradient, point, px, quad, size,
 };
 use pixels::{Layout, OnPixels};
@@ -75,7 +75,7 @@ impl AppIconSize {
             }
             AppIconSize::Px128 => Drawing::Scaled { rows: 3, fan: 0.66 },
             AppIconSize::Px256 => Drawing::Scaled { rows: 4, fan: 0.66 },
-            AppIconSize::Px512 | AppIconSize::Px1024 => Drawing::Scaled { rows: 9, fan: 0.62 },
+            AppIconSize::Px512 | AppIconSize::Px1024 => Drawing::Scaled { rows: LARGEST_ROWS, fan: LARGEST_FAN },
         }
     }
 }
@@ -88,6 +88,10 @@ pub(super) enum Drawing {
     },
     OnPixels(OnPixels),
 }
+
+/// How the biggest sizes draw the fan, which the phone's icon draws too.
+const LARGEST_ROWS: usize = 9;
+const LARGEST_FAN: f32 = 0.62;
 
 /// macOS's grid for an app icon: the tile is inset by this share of the canvas, and rounded by this share of itself.
 /// macOS masks the icon to its own shape anyway, so the tile only has to sit under that mask.
@@ -105,14 +109,25 @@ const TRAIL: f32 = 0.18;
 /// The icon in `style` at `size`, drawn for a Retina display, so it's half as many points wide as its drawing has
 /// pixels.
 pub fn app_icon(style: AppIconStyle, size: AppIconSize, cx: &App) -> impl IntoElement {
-    let app = crate::colors::colors(cx);
-    let colors =
-        Colors { copper: app.brand, light: app.text, top: app.icon_tile_top, bottom: app.pane, edge: app.edge };
+    let colors = colors(cx);
     let width = px(f32::from(size.pixels()) / 2.0);
     canvas(|_, _, _| {}, move |bounds, (), window, _| paint(bounds, style, &size.drawing(), &colors, window))
         .flex_none()
         .w(width)
         .h(width)
+}
+
+/// The iOS app's icon, at the 1024 pixels iOS draws every size from, so 512 points wide. iOS rounds an app's icon to
+/// its own shape and wants it opaque, so this is the working icon's tile filling the canvas, with no edge, and the fan
+/// as big against it as the 1024 drawing's is against its tile. iOS's corners are about macOS's, so it looks the same.
+pub fn phone_icon(cx: &App) -> impl IntoElement {
+    let colors = colors(cx);
+    canvas(|_, _, _| {}, move |bounds, (), window, _| paint_phone(bounds, &colors, window)).flex_none().size(px(512.))
+}
+
+fn colors(cx: &App) -> Colors {
+    let app = crate::colors::colors(cx);
+    Colors { copper: app.brand, light: app.text, top: app.icon_tile_top, bottom: app.pane, edge: app.edge }
 }
 
 /// Copper is the theme's focus ring, as for the brand, the light is the mark's, and the tile fades down to the pane's
@@ -136,13 +151,24 @@ fn paint(bounds: Bounds<Pixels>, style: AppIconStyle, drawing: &Drawing, colors:
         point(bounds.origin.x + inset, bounds.origin.y + inset),
         size(side - inset * 2.0, side - inset * 2.0),
     );
-    let fill = linear_gradient(180., linear_color_stop(colors.top, 0.), linear_color_stop(colors.bottom, 1.));
     let corners = Corners::all(tile.size.width * CORNER);
-    window.paint_quad(quad(tile, corners, fill, Edges::all(side * EDGE), colors.edge, BorderStyle::default()));
+    let edges = Edges::all(side * EDGE);
+    window.paint_quad(quad(tile, corners, tile_fill(colors), edges, colors.edge, BorderStyle::default()));
     match drawing {
         Drawing::Scaled { rows, fan } => scaled(bounds, style, *rows, side * *fan, colors, window),
         Drawing::OnPixels(fan) => on_pixels(bounds, style, fan, colors, window),
     }
+}
+
+fn paint_phone(bounds: Bounds<Pixels>, colors: &Colors, window: &mut Window) {
+    window.paint_quad(fill(bounds, tile_fill(colors)));
+    // The same fan as the Mac's, to the tile rather than the canvas, since the phone's tile fills it.
+    let width = bounds.size.width * LARGEST_FAN / (1. - 2. * INSET);
+    scaled(bounds, AppIconStyle::Working, LARGEST_ROWS, width, colors, window);
+}
+
+fn tile_fill(colors: &Colors) -> Background {
+    linear_gradient(180., linear_color_stop(colors.top, 0.), linear_color_stop(colors.bottom, 1.))
 }
 
 /// In the middle of the tile, as a fan is in the middle of its box.
