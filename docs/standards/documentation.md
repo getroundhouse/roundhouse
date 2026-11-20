@@ -28,6 +28,12 @@ The spec says what the product does, in product and design terms only. Everythin
 | Is it a fact about a system this project doesn't own, such as GitHub or an agent's CLI? | A reference doc | Agents |
 | None of those | The code, with a comment where the reason isn't plain from it | Agents |
 
+Three things the questions leave open:
+
+- **A person notices in ordinary use.** The spec says the behavior, and a value only where someone using the app could tell it had changed, such as how long a terminal's shell gets before it's killed. A value they couldn't tell, such as what a program is told the terminal is, stays in the code. So does a fix for something that would otherwise break.
+- **What's planned and not designed is an issue.** A rule marked *Not built* says what the thing will do. Where all that's known is that something is missing, such as links in a terminal, an issue holds it.
+- **A fact about an outside system gets a reference doc when more than one place depends on it, or when it took an experiment to find.** Otherwise it's a comment at the one place that depends on it.
+
 So no doc describes how a part works. The code says that, and an agent can explain it from the code when someone asks. A doc holds what the code can't say: what the system is built to obey, why a choice was made and what it was chosen over, what's decided and not built, and what an outside system does.
 
 A decision record is written once, with its date, and only its status changes afterwards. When the choice changes, a new record replaces it and the old one says which.
