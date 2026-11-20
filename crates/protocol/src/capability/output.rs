@@ -46,6 +46,11 @@ area! { "the agent's output";
     /// The agent can ask for the person's attention in words of its own, as Claude's `PushNotification` does, which the
     /// hub records, and a client shows as it does a chat that needs the person.
     Notifications => notifications: Claimed,
+    /// While the agent can't answer a prompt said out loud, because it's busy or still thinking, the adapter says in a
+    /// sentence, in the agent's voice, what it's doing, which a small model writes for it, as [`Covering`] says. Each is
+    /// shown, and said by the device that has the conversation, as it comes, until the agent starts answering, and
+    /// kept nowhere.
+    CoverLines => cover_lines: Claimed,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
@@ -181,6 +186,16 @@ pub struct Retrying {
     pub after_ms: Option<u64>,
     /// Why the last attempt failed.
     pub failure: crate::event::RequestFailure,
+}
+
+/// What the agent is doing, in a sentence in its own voice, said for it while it can't answer the prompt said out loud
+/// that was recorded at `prompt`, as [`Capability::CoverLines`] reports it. It says only what the agent is doing, never
+/// an answer, an opinion or anything the agent hasn't done. The adapter reports at most one for each prompt, and only
+/// while the agent hasn't started answering it: nothing of the agent's own words since the prompt was sent.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct Covering {
+    pub prompt: crate::model::Seq,
+    pub line: String,
 }
 
 /// Messages the agent took back, as [`Capability::Retractions`] reports them.

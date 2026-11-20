@@ -1,9 +1,11 @@
 //! Conversation mode: which device has a chat's conversation, the one that hears and speaks, and how far it has read
 //! the agent's reply out.
 
+use protocol::capability::output;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::event::EventBody;
-use protocol::model::{ClientDevice, CutBy, Session, SpokenThrough};
+use protocol::model::{ClientDevice, CutBy, RunId, Session, SpokenThrough};
+use protocol::tail::Covering;
 
 use super::{LiveItem, LiveSession, LiveState, Origin, publish};
 use crate::hub::Hub;
@@ -100,6 +102,19 @@ impl LiveSession {
     async fn stop_speaking(&self, hub: &Hub) -> Result<(), ApiError> {
         let Some(through) = self.state.lock().speaking.clone() else { return Ok(()) };
         self.record_cut(hub, through, CutBy::Stopped).await
+    }
+
+    /// Shows what the agent of `run` is doing, said for it while it can't answer a prompt said out loud, in every
+    /// subscriber's tail, until the agent writes words of its own, as [`protocol::tail::Covering`] says. Only while the
+    /// run is the session's and conversation mode is on, since otherwise nobody is listening for it.
+    pub(super) fn covering(&self, run: RunId, covering: output::Covering) {
+        let mut state = self.state.lock();
+        if state.agent.is_none_or(|agent| agent.run != run) || state.conversation.is_none() {
+            return;
+        }
+        let output::Covering { prompt, line } = covering;
+        state.tail.covering(run, Covering { run: None, prompt, line });
+        publish(&mut state, LiveItem::Rewritten);
     }
 
     /// Records the cut, unless the message was cut off already, and stops the tail saying how far the reply has got.

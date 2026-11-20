@@ -39,6 +39,7 @@ impl LiveSession {
                 let limits = limits.iter().map(Limit::usage).collect();
                 self.heard_limits(run, limits, every_models_week, crate::store::now_ms());
             }
+            Report::Covering(covering) => self.covering(run, covering),
             Report::Commands { .. }
             | Report::Skills { .. }
             | Report::Personas { .. }

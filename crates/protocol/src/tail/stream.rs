@@ -1,7 +1,6 @@
-use crate::event::EventBody;
+use crate::event::{ContentBlock, EventBody};
 use crate::model::{MessageId, RunId, Seq, SpokenThrough, SubagentId};
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeSet;
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -66,6 +65,11 @@ pub struct Tail {
     /// The agent is trying a request to its model again, which failed, as it last said.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub retrying: Option<Retrying>,
+    /// What the agent is doing, said for it while it can't answer a prompt said out loud, as its adapter last said.
+    /// Boxed, since it's there only in conversation mode, and every tail would otherwise carry room for its line, which
+    /// a client's subscription moves by value.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub covering: Option<Box<Covering>>,
     /// How far the device that has the chat's conversation has read the agent's reply out loud, as it last said, while
     /// it's reading one. It's the device's rather than the agent's, so it outlasts the message being recorded, the turn
     /// and the agent, and it's in no run. Only the hub sets it, as a client sends it, so a worker's tail never holds it.
@@ -109,6 +113,19 @@ pub struct Retrying {
     pub delay_ms: Option<u64>,
 }
 
+/// What the agent is doing, in a sentence in its own voice, said for it while it can't answer the prompt said out loud
+/// recorded at `prompt`, as [`crate::capability::output::Covering`] says. It's over once the agent writes words of its
+/// own, which answer the prompt, or its turn or the agent ends. Thinking, a call or a subagent's words don't end it. A
+/// client tells one line from the next by `prompt`, so a tail sent again whole doesn't say it twice.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct Covering {
+    /// The run it's said for, so the end of an earlier run's turn can't say it's over. The hub sets it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub run: Option<RunId>,
+    pub prompt: Seq,
+    pub line: String,
+}
+
 /// A subagent working in the background, and the run that started it, whose end it goes with.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct InBackground {
@@ -144,6 +161,10 @@ impl Tail {
     pub fn apply(&mut self, delta: &StreamDelta) {
         if delta.subagent.is_none() {
             self.retried(delta.run);
+            if matches!(delta.change, DeltaChange::Text { .. } | DeltaChange::BlockStart { kind: BlockKind::Text, .. })
+            {
+                self.covered(delta.run);
+            }
         }
         if matches!(delta.change, DeltaChange::MessageStop) {
             self.messages.retain(|m| m.message_id != delta.message_id);
@@ -193,13 +214,16 @@ impl Tail {
     /// What [`Tail::on_event`] does, for an event recorded at `seq`, or one no hub has recorded yet.
     pub(super) fn heard(&mut self, seq: Option<Seq>, run: Option<RunId>, body: &EventBody) {
         match body {
-            EventBody::Assistant { message_id, subagent, .. } => {
+            EventBody::Assistant { message_id, subagent, blocks, .. } => {
                 if let Some(id) = message_id {
                     self.messages.retain(|m| m.message_id != *id);
                 }
                 if subagent.is_none() {
                     self.compacted(run);
                     self.retried(run);
+                    if blocks.iter().any(|block| matches!(block, ContentBlock::Text { .. })) {
+                        self.covered(run);
+                    }
                 }
             }
             EventBody::RequestFailed { subagent: None, .. } => self.retried(run),
@@ -258,6 +282,7 @@ impl Tail {
         self.messages.retain(|m| later(run, m.run) || m.subagent.as_ref().is_some_and(carries_on));
         self.compacted(run);
         self.retried(run);
+        self.covered(run);
     }
 
     /// The agent of `run` exited, which ends everything it and its subagents were writing.
@@ -266,6 +291,7 @@ impl Tail {
         self.in_background.retain(|b| later(run, b.run));
         self.compacted(run);
         self.retried(run);
+        self.covered(run);
     }
 
     /// `subagent`, which `run` started, works in the background, so the end of a turn leaves what it's writing.
@@ -285,6 +311,16 @@ impl Tail {
         self.retrying = Some(Retrying { run: Some(run), ..retrying });
     }
 
+    /// What the agent of `run` is doing is said for it, as `covering` says, with the run set.
+    pub fn covering(&mut self, run: RunId, covering: Covering) {
+        self.covering = Some(Box::new(Covering { run: Some(run), ..covering }));
+    }
+
+    /// `run`'s covering is over, or an earlier run's.
+    fn covered(&mut self, run: Option<RunId>) {
+        self.covering = self.covering.take().filter(|covering| later(run, covering.run));
+    }
+
     /// `run`'s retrying is over, or an earlier run's.
     fn retried(&mut self, run: Option<RunId>) {
         self.retrying = self.retrying.take().filter(|retrying| later(run, retrying.run));
@@ -292,28 +328,16 @@ impl Tail {
 
     /// Whether nothing is being written. A reply being read out is written already.
     pub fn is_empty(&self) -> bool {
-        self.messages.is_empty() && self.compacting.is_none() && self.retrying.is_none()
+        self.messages.is_empty() && self.compacting.is_none() && self.retrying.is_none() && self.covering.is_none()
     }
 
     /// Whether it holds nothing of any run, not even a subagent in the background, which [`Tail::is_empty`] leaves out
     /// since one writes nothing until it does.
     pub fn holds_nothing(&self) -> bool {
         // How far a reply has been read out is in no run.
-        let Tail { messages, in_background, compacting, retrying, speaking: _ } = self;
-        messages.is_empty() && in_background.is_empty() && compacting.is_none() && retrying.is_none()
-    }
-
-    /// What the agent itself is writing, or the subagent `subagent`. It holds no other's messages for the end of a
-    /// turn to leave, so it doesn't say which subagents are in the background.
-    #[must_use]
-    pub fn of(&self, subagent: Option<&SubagentId>) -> Tail {
-        let messages = self.messages.iter().filter(|message| message.subagent.as_ref() == subagent);
-        // Only the agent compacts its conversation, says it's retrying or has its replies read out, so a subagent's tail
-        // never says any of those.
-        let compacting = self.compacting.clone().filter(|_| subagent.is_none());
-        let retrying = self.retrying.filter(|_| subagent.is_none());
-        let speaking = self.speaking.clone().filter(|_| subagent.is_none());
-        Tail { messages: messages.cloned().collect(), in_background: Vec::new(), compacting, retrying, speaking }
+        let Tail { messages, in_background, compacting, retrying, covering, speaking: _ } = self;
+        let unsaid = compacting.is_none() && retrying.is_none() && covering.is_none();
+        messages.is_empty() && in_background.is_empty() && unsaid
     }
 
     /// Updates the tail for an event from `run` that no hub has recorded yet, as its worker sends it on, so it has
@@ -321,52 +345,6 @@ impl Tail {
     /// agent sends one.
     pub fn on_agent_event(&mut self, run: RunId, body: &EventBody) {
         self.heard(None, Some(run), body);
-    }
-
-    /// Every run it holds something of, oldest first.
-    #[must_use]
-    pub fn runs(&self) -> Vec<RunId> {
-        let messages = self.messages.iter().map(|message| message.run);
-        let in_background = self.in_background.iter().map(|background| background.run);
-        let compacting = self.compacting.iter().map(|compacting| compacting.run);
-        let retrying = self.retrying.iter().map(|retrying| retrying.run);
-        let runs: BTreeSet<RunId> = messages.chain(in_background).chain(compacting).chain(retrying).flatten().collect();
-        runs.into_iter().collect()
-    }
-
-    /// What `run` is writing, the subagents it runs in the background, its compaction and its retrying, which a worker
-    /// sends a hub that connects to it.
-    #[must_use]
-    pub fn of_run(&self, run: RunId) -> Tail {
-        let of = |by: Option<RunId>| by == Some(run);
-        Tail {
-            messages: self.messages.iter().filter(|message| of(message.run)).cloned().collect(),
-            in_background: self.in_background.iter().filter(|background| of(background.run)).cloned().collect(),
-            compacting: self.compacting.clone().filter(|compacting| of(compacting.run)),
-            retrying: self.retrying.filter(|retrying| of(retrying.run)),
-            speaking: None,
-        }
-    }
-
-    /// Takes what `run` is writing from `written`, its worker's tail of it, in place of what this holds of it, as a hub
-    /// does from a worker it connects to again, since the deltas that wrote it went to the hub before, or to none.
-    /// Everything in `written` is taken as `run`'s. A compaction only asked for so far is the hub's own, so it stays
-    /// unless `written` says `run` is compacting.
-    pub fn replace_run(&mut self, run: RunId, written: Tail) {
-        let of = |by: Option<RunId>| by == Some(run);
-        self.messages.retain(|message| !of(message.run));
-        self.messages.extend(written.messages.into_iter().map(|message| TailMessage { run: Some(run), ..message }));
-        self.in_background.retain(|background| !of(background.run));
-        let in_background = written.in_background.into_iter();
-        self.in_background.extend(in_background.map(|background| InBackground { run: Some(run), ..background }));
-        self.compacting = match written.compacting {
-            Some(compacting) => Some(Compacting { run: Some(run), ..compacting }),
-            None => self.compacting.take().filter(|compacting| !of(compacting.run)),
-        };
-        self.retrying = match written.retrying {
-            Some(retrying) => Some(Retrying { run: Some(run), ..retrying }),
-            None => self.retrying.take().filter(|retrying| !of(retrying.run)),
-        };
     }
 }
 

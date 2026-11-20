@@ -4,7 +4,7 @@
 use protocol::capability::Report;
 use protocol::client::{ClientFrame, ClientRequest, HubStatus};
 use protocol::frame;
-use protocol::model::{ModelLabel, RunId};
+use protocol::model::{ModelLabel, RunId, Seq};
 use protocol::tail::Tail;
 use protocol::worker::{
     Received, RunningAgent, RunningAgentsReply, WorkerCall, WorkerFrame, WorkerRequest, WorkerResponse,
@@ -130,4 +130,21 @@ fn a_restart_and_what_says_a_hub_knows_one_keep_their_form() {
     assert_eq!((now.keeps_workers, now.oldest_protocol_version), (true, Some(3)));
     let before: HubStatus = serde_json::from_str(&format!("{{{fields}}}")).unwrap();
     assert_eq!((before.keeps_workers, before.oldest_protocol_version), (false, None), "from a hub from before");
+}
+
+/// What an agent is doing, said for it while it can't answer a prompt said out loud, as a worker reports it, and as a
+/// worker hands it on in its run's tail, with the run.
+#[test]
+fn a_line_said_for_a_busy_agent_keeps_its_form() {
+    let line = br#"{"frame":"agent_report","session_id":"s","run":4,"report":{"report":"covering","prompt":7,"line":"Hold on."}}"#;
+    let frame: WorkerFrame = frame::decode(line).unwrap();
+
+    let WorkerFrame::AgentReport { report: Report::Covering(covering), .. } = &frame else { panic!("{frame:?}") };
+    assert_eq!((covering.prompt, covering.line.as_str()), (Seq::new(7), "Hold on."));
+    assert_eq!(frame::encode(&frame).unwrap(), [&line[..], b"\n"].concat());
+
+    let tail = br#"{"messages":[],"covering":{"run":4,"prompt":7,"line":"Hold on."}}"#;
+    let read: Tail = frame::decode(tail).unwrap();
+    assert_eq!(read.covering.as_ref().map(|covering| covering.run), Some(Some(RunId::new(4))));
+    assert_eq!(frame::encode(&read).unwrap(), [&tail[..], b"\n"].concat());
 }

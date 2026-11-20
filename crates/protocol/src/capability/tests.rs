@@ -182,6 +182,9 @@ fn a_report_needs_what_it_reports_and_one_this_build_doesnt_know_needs_nothing_a
     assert_eq!(Report::FilesRestored { files: vec![] }.needs(), Some(conversation::Capability::RestoreFiles.into()));
     let would = Report::WouldRestoreFiles { paths: vec![], insertions: None, deletions: None };
     assert_eq!(would.needs(), Some(conversation::Capability::PreviewRestoreFiles.into()));
+    let covering = Report::Covering(output::Covering { prompt: Seq::new(7), line: "Hold on.".into() });
+    assert_eq!(covering.needs(), Some(output::Capability::CoverLines.into()));
+    assert_eq!(covering.keeper(), Keeper::Shown, "said as it comes, and kept nowhere");
     assert_eq!(Report::FilesRestored { files: vec![] }.keeper(), Keeper::Log);
     assert_eq!(would.keeper(), Keeper::Answer);
     assert_eq!(Report::Limits { limits: vec![], every_models_week: false }.keeper(), Keeper::Account);

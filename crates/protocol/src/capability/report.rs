@@ -8,7 +8,7 @@ use super::account::{Credits, Limit};
 use super::approvals::{Denied, Rule, Verdict};
 use super::calls::output::FileOutcome;
 use super::conversation::Outside;
-use super::output::{CallSummary, Rerouted, Retracted, Retrying, TodoList};
+use super::output::{CallSummary, Covering, Rerouted, Retracted, Retrying, TodoList};
 use super::prompts::{AgentCommand, ListedSkill};
 use super::settings::{ModelOffer, Persona, Speed, StyleName};
 use super::setup::{HookRun, ToolServerState};
@@ -64,6 +64,8 @@ pub enum Report {
     Notification {
         text: String,
     },
+    /// What the agent is doing, said for it while it can't answer a prompt said out loud.
+    Covering(Covering),
     /// What the running call `call` has done since it last said.
     CallProgress {
         call: ToolUseId,
@@ -205,6 +207,7 @@ impl Report {
             Report::Suggestion { .. } => output::Capability::Suggestions.into(),
             Report::CallSummary(_) => output::Capability::CallSummaries.into(),
             Report::Notification { .. } => output::Capability::Notifications.into(),
+            Report::Covering(_) => output::Capability::CoverLines.into(),
             Report::CallProgress { progress: Progress::Input { .. }, .. } => calls::Capability::StreamInput.into(),
             Report::CallProgress { .. } => calls::Capability::Progress.into(),
             Report::Verdict { .. } => approvals::Capability::ReviewVerdicts.into(),
@@ -271,7 +274,7 @@ impl Report {
             | Report::Context { .. }
             | Report::Cache { .. } => Keeper::Session,
             Report::Limits { .. } | Report::Credits(_) => Keeper::Account,
-            Report::ThinkingProgress { .. } | Report::CallProgress { .. } => Keeper::Shown,
+            Report::ThinkingProgress { .. } | Report::CallProgress { .. } | Report::Covering(_) => Keeper::Shown,
             Report::WouldRestoreFiles { .. } | Report::TaskOutput { .. } | Report::Outside { .. } | Report::Unknown => {
                 Keeper::Answer
             }
