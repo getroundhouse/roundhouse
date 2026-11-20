@@ -29,6 +29,7 @@ The guide is the one kind written for someone using the product rather than buil
 | `docs/architecture.md` | Architecture | Owner | How the system fits together: parts, repo layout, dependency rules, state ownership, wire format, what happens when a process dies, managing a hub, and providers |
 | `docs/ui.md` | Architecture | Owner | Why the apps are built on GPUI and gpui-kit, how the transcript builds on the kit, and why the iOS app is on Zed's iOS backend |
 | `docs/documentation.md` | Standards | Owner | Where each kind of information goes, and who decides it |
+| `docs/writing.md` | Standards | Owner | How to word what a person reads: docs, issues, pull requests, commit messages and comments |
 | `docs/rust.md` | Standards | Owner | How Rust is written, whatever the crate. A rule about one part of the system goes in that part's doc |
 | `docs/gpui.md` | Standards | Owner | How code that uses GPUI is written |
 | `docs/component-library.md` | Standards | Owner | How code makes and uses the components screens are built from, and how a component's API is laid out |
