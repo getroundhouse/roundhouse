@@ -26,15 +26,15 @@
     },
     "Key": {
       "x": 252,
-      "y": 499,
+      "y": 505,
       "width": 640,
-      "height": 32
+      "height": 20
     },
     "KeyHeld": {
       "x": 252,
-      "y": 591,
+      "y": 593,
       "width": 640,
-      "height": 24
+      "height": 20
     },
     "PageTitle": {
       "x": 252,

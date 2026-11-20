@@ -2,8 +2,8 @@ use crate::named::named;
 use crate::traits::Reach;
 use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::{
-    AbsoluteLength, App, FontStyle, FontWeight, Pixels, SharedString, StrikethroughStyle, Styled, UnderlineStyle, px,
-    rems,
+    AbsoluteLength, App, DefiniteLength, FontStyle, FontWeight, Pixels, SharedString, StrikethroughStyle, Styled,
+    UnderlineStyle, px, rems,
 };
 
 /// How big a rem is at a desk. The kit's theme is given it, and the window measures the kinds that are in rems by it.
@@ -13,10 +13,6 @@ pub(crate) const REM: Pixels = px(16.);
 const HANDHELD_REM: Pixels = px(17. / 0.875);
 /// The code font. Every Mac and iPhone has it, and Linux and Windows don't, so code there falls back to the system font.
 pub(crate) const MONO: &str = "Menlo";
-/// How big code is at a desk, which the kit's theme is given too.
-pub(crate) const MONO_SIZE: Pixels = px(12.);
-/// How big code is on a handheld.
-const HANDHELD_MONO_SIZE: Pixels = px(14.);
 
 /// How big a rem is at `reach`.
 pub(crate) fn rem(reach: Reach) -> Pixels {
@@ -26,12 +22,9 @@ pub(crate) fn rem(reach: Reach) -> Pixels {
     }
 }
 
-/// How big code is at `reach`.
+/// How big code is at `reach`, which the kit's theme is given too.
 pub(crate) fn mono_size(reach: Reach) -> Pixels {
-    match reach {
-        Reach::Desk => MONO_SIZE,
-        Reach::Handheld => HANDHELD_MONO_SIZE,
-    }
+    Type::Code.set_at(reach).size.to_pixels(rem(reach))
 }
 
 /// How the app's own text that stands out from what's around it is set: medium, never bold, which shouts in a dense
@@ -69,6 +62,10 @@ pub(super) struct Set {
     pub(super) size: AbsoluteLength,
     /// A weight of its own, or none to leave it to what's around it.
     pub(super) weight: Option<FontWeight>,
+    /// How far apart its lines are, or none to leave them to where it's set, as its weight is: what's read takes its
+    /// lines from what it's in, such as a field, a menu's row or a diff, and code from
+    /// [`CodeLines`](super::CodeLines).
+    pub(super) line: Option<DefiniteLength>,
 }
 
 impl Type {
@@ -76,29 +73,40 @@ impl Type {
         self.set_at(Reach::now())
     }
 
-    /// How it's set at `reach`. At a desk, the kinds that set what's read are in rems, so the kit's own text agrees.
-    /// On a handheld, each is in pixels, as iOS's own kinds of text are, from their sizes. *Unconfirmed.*
-    fn set_at(self, reach: Reach) -> Set {
-        let system = |size: AbsoluteLength| Set { font: Font::System, size, weight: None };
+    /// How it's set at `reach`. At a desk, every kind is in rems, so the kit's own text agrees, and none drifts from
+    /// the rest if the rem changes. On a handheld, each is in pixels, as iOS's own kinds of text are, from their
+    /// sizes. *Unconfirmed.*
+    ///
+    /// A key's lines are as tall as what it says, since it's set on its cap, and what's held with it is on the key's
+    /// line.
+    pub(super) fn set_at(self, reach: Reach) -> Set {
+        let read = |size: AbsoluteLength| Set { font: Font::System, size, weight: None, line: None };
+        let on_a_key = |size: AbsoluteLength, key: AbsoluteLength| Set { line: Some(key.into()), ..read(size) };
         match reach {
-            Reach::Desk => match self {
-                Type::PageTitle => Set { weight: Some(EMPHASIS), ..system(px(24.).into()) },
-                Type::Heading => Set { weight: Some(EMPHASIS), ..system(rems(1.).into()) },
-                Type::Body => system(rems(0.875).into()),
-                Type::Detail => system(rems(0.75).into()),
-                Type::Code => Set { font: Font::Code, size: MONO_SIZE.into(), weight: None },
-                Type::Key => system(px(10.).into()),
-                Type::KeyHeld => system(px(7.5).into()),
-            },
-            Reach::Handheld => match self {
-                Type::PageTitle => Set { weight: Some(EMPHASIS), ..system(px(28.).into()) },
-                Type::Heading => Set { weight: Some(EMPHASIS), ..system(px(17.).into()) },
-                Type::Body => system(px(17.).into()),
-                Type::Detail => system(px(15.).into()),
-                Type::Code => Set { font: Font::Code, size: HANDHELD_MONO_SIZE.into(), weight: None },
-                Type::Key => system(px(12.).into()),
-                Type::KeyHeld => system(px(9.).into()),
-            },
+            Reach::Desk => {
+                let key = rems(0.625).into();
+                match self {
+                    Type::PageTitle => Set { weight: Some(EMPHASIS), ..read(rems(1.5).into()) },
+                    Type::Heading => Set { weight: Some(EMPHASIS), ..read(rems(1.).into()) },
+                    Type::Body => read(rems(0.875).into()),
+                    Type::Detail => read(rems(0.75).into()),
+                    Type::Code => Set { font: Font::Code, ..read(rems(0.75).into()) },
+                    Type::Key => on_a_key(key, key),
+                    Type::KeyHeld => on_a_key(rems(0.46875).into(), key),
+                }
+            }
+            Reach::Handheld => {
+                let key = px(12.).into();
+                match self {
+                    Type::PageTitle => Set { weight: Some(EMPHASIS), ..read(px(28.).into()) },
+                    Type::Heading => Set { weight: Some(EMPHASIS), ..read(px(17.).into()) },
+                    Type::Body => read(px(17.).into()),
+                    Type::Detail => read(px(15.).into()),
+                    Type::Code => Set { font: Font::Code, ..read(px(14.).into()) },
+                    Type::Key => on_a_key(key, key),
+                    Type::KeyHeld => on_a_key(px(9.).into(), key),
+                }
+            }
         }
     }
 
@@ -140,8 +148,8 @@ impl Type {
 
 /// Sets text as one of the kinds the app has.
 pub trait Typeset: Styled + Sized {
-    /// Sets this element's text as `kind`: its size, any weight of its own, and the code font for code. Text in the
-    /// system font takes the window's.
+    /// Sets this element's text as `kind`: its size, any lines and weight of its own, and the code font for code.
+    /// Text in the system font takes the window's.
     #[must_use]
     fn typeset(self, kind: Type) -> Self {
         let set = kind.set();
@@ -149,6 +157,10 @@ pub trait Typeset: Styled + Sized {
         let element = match set.font {
             Font::System => element,
             Font::Code => element.font_family(SharedString::new_static(MONO)),
+        };
+        let element = match set.line {
+            Some(line) => element.line_height(line),
+            None => element,
         };
         match set.weight {
             Some(weight) => element.font_weight(weight),
