@@ -38,7 +38,8 @@ impl Reply for ToolsServing {
 crate::tokens!(
     /// What an agent's calls to the worker's tools carry, as a bearer token, which tells the worker whose they are.
     /// It's only as secret as the agent's own files, since the agent's config holds it, but it's kept out of logs all
-    /// the same.
+    /// the same. It opens only its session's tools, from the worker's own machine, so the hub keeps it as a row, as
+    /// `docs/principles/outside-systems.md` says such a token can be.
     ToolsToken,
 );
 
