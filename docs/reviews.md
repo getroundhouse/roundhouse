@@ -155,6 +155,7 @@ Whether every doc is still true after the change. It looks for:
 - A rule in the spec that says more or less than the code does, and *Not built* and *Unconfirmed* marks that are wrong. A choice an agent made in an owner doc is marked *Unconfirmed*.
 - What `docs/documentation.md` keeps out of docs, such as a date, "yet" or an issue number.
 - A new word, or a new sense of one, missing from `docs/terms.md`.
+- Text that fails the test in `docs/writing.md`, in a doc, a comment or the PR's description: a thing described where it has a name, an everyday word standing in for a technical one, or an opening that starts from the code rather than from what happens. It quotes the passage and gives the rewrite.
 
 ### Stack
 

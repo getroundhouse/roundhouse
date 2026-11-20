@@ -51,7 +51,7 @@ The parts come in this order. The last four start with their label in bold, writ
 7. **Not checked:** what wasn't verified, and why, so nothing unverified reads as checked. Leave this out only when everything was checked.
 8. **Left open:** anything a reader might expect the PR to do that it doesn't, each with its issue, since `docs/documentation.md` gives everything left open an issue.
 
-Write it the way the docs are written: plain words, short sentences, and only claims you checked. Code, files, commands and test names go in backticks. Leave out numbers nobody will act on, such as how many tests ran, and plans beyond the issues in **Left open:**. Nothing that `docs/documentation.md` keeps private goes in a PR or a commit, since they'd go public with the repo.
+Word it as `docs/writing.md` says, and claim only what you checked. Code, files, commands and test names go in backticks. Leave out numbers nobody will act on, such as how many tests ran, and plans beyond the issues in **Left open:**. Nothing that `docs/documentation.md` keeps private goes in a PR or a commit, since they'd go public with the repo.
 
 ## Labels
 
