@@ -11,7 +11,13 @@ use protocol::tail::{DeltaChange, StreamDelta};
 use super::*;
 use crate::hub::Hub;
 use crate::hub::tests::{carried_on, flushed, hub_in, stand_in_worker, writing};
+use crate::server::Outgoing;
 use crate::session::{Item, LiveSession};
+
+/// The next frame queued, once one is.
+async fn frame(sent: &mut mpsc::Receiver<Outgoing>) -> Option<HubFrame> {
+    sent.recv().await.map(|queued| queued.frame)
+}
 
 const TIMEOUT: Duration = Duration::from_secs(10);
 
@@ -26,12 +32,12 @@ async fn a_subscriber_is_sent_the_tail_again_once_the_hub_takes_what_a_worker_ke
     let live = session.subscribe();
     let following = Following::Log { next: Seq::new(1) };
     tokio::spawn(pump(hub.clone(), session.clone(), "s".into(), 1, following, live, frames));
-    let first = tokio::time::timeout(TIMEOUT, sent.recv()).await.unwrap();
+    let first = tokio::time::timeout(TIMEOUT, frame(&mut sent)).await.unwrap();
     assert!(matches!(first, Some(HubFrame::Tail { ref tail, .. }) if tail.is_empty()), "{first:?}");
 
     session.send_item(Item::Tail { run: RunId::new(1), tail: writing(RunId::new(1), "Reading the") }).await;
 
-    let next = tokio::time::timeout(TIMEOUT, sent.recv()).await.unwrap();
+    let next = tokio::time::timeout(TIMEOUT, frame(&mut sent)).await.unwrap();
     let Some(HubFrame::Tail { tail, .. }) = next else { panic!("{next:?}") };
     assert_eq!(tail, writing(RunId::new(1), "Reading the"));
 }
@@ -57,7 +63,7 @@ async fn a_subscriber_that_names_a_subagent_by_its_call_before_it_starts_follows
         session.subscribe(),
         frames,
     ));
-    let first = tokio::time::timeout(TIMEOUT, sent.recv()).await.unwrap();
+    let first = tokio::time::timeout(TIMEOUT, frame(&mut sent)).await.unwrap();
     assert!(matches!(first, Some(HubFrame::Tail { .. })), "{first:?}");
     // One whose pump starts only once the start is recorded, so it's before the snapshot.
     let late = named().await.unwrap();
@@ -90,7 +96,7 @@ async fn a_subscriber_that_names_a_subagent_by_its_call_before_it_starts_follows
 
     for sent in [&mut sent, &mut sent_late] {
         let event = loop {
-            match tokio::time::timeout(TIMEOUT, sent.recv()).await.unwrap() {
+            match tokio::time::timeout(TIMEOUT, frame(sent)).await.unwrap() {
                 Some(HubFrame::Event { event, .. }) => break event,
                 Some(_) => {}
                 None => panic!("the pump stopped"),
@@ -121,7 +127,7 @@ fn writes(session: &LiveSession, run: RunId, from: Option<&str>, text: &str) -> 
 
 /// A subscription to the session `s` of `hub` that follows the agent's own events, or those of the subagent `task_1`,
 /// as a pump feeds it.
-async fn following(hub: &Arc<Hub>, session: &Arc<LiveSession>, subagent: Option<&str>) -> mpsc::Receiver<HubFrame> {
+async fn following(hub: &Arc<Hub>, session: &Arc<LiveSession>, subagent: Option<&str>) -> mpsc::Receiver<Outgoing> {
     let follows = Following::places(hub, &"s".into(), subagent.map(Into::into), Place::FIRST).await.unwrap();
     let (frames, sent) = mpsc::channel(8);
     tokio::spawn(pump(hub.clone(), session.clone(), "s".into(), 1, follows, session.subscribe(), frames));
@@ -129,9 +135,9 @@ async fn following(hub: &Arc<Hub>, session: &Arc<LiveSession>, subagent: Option<
 }
 
 /// The next tail `sent`, by who is writing each of its messages.
-async fn next_tail(sent: &mut mpsc::Receiver<HubFrame>) -> Vec<Option<SubagentId>> {
+async fn next_tail(sent: &mut mpsc::Receiver<Outgoing>) -> Vec<Option<SubagentId>> {
     loop {
-        match tokio::time::timeout(TIMEOUT, sent.recv()).await.expect("the follower was never sent the tail") {
+        match tokio::time::timeout(TIMEOUT, frame(sent)).await.expect("the follower was never sent the tail") {
             Some(HubFrame::Tail { tail, .. }) => return tail.messages.into_iter().map(|m| m.subagent).collect(),
             Some(_) => {}
             None => panic!("the pump stopped"),

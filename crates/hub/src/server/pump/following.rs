@@ -1,4 +1,5 @@
 use crate::hub::Hub;
+use crate::server::Outgoing;
 use crate::session::{Live, LiveItem, LiveSession};
 use protocol::client::{ApiError, HubFrame};
 use protocol::event::SessionEvent;
@@ -89,7 +90,7 @@ pub(in super::super) async fn pump(
     subscription_id: u64,
     mut following: Following,
     mut live: broadcast::Receiver<Live>,
-    frames: mpsc::Sender<HubFrame>,
+    frames: mpsc::Sender<Outgoing>,
 ) {
     'resync: loop {
         // Its start may have been recorded since the subscription named it, before the snapshot, which the items for
@@ -100,7 +101,7 @@ pub(in super::super) async fn pump(
             return;
         }
         let tail = following.tail(snapshot.tail);
-        if frames.send(HubFrame::Tail { subscription_id, tail }).await.is_err() {
+        if frames.send(HubFrame::Tail { subscription_id, tail }.into()).await.is_err() {
             return;
         }
         loop {
@@ -126,7 +127,7 @@ pub(in super::super) async fn pump(
                 // The client never sees the event, so a new snapshot gives it the tail that's left.
                 LiveItem::Appended { ended_others: true, .. } | LiveItem::Rewritten => continue 'resync,
                 LiveItem::Delta(delta) if following.takes(delta.subagent.as_ref()) => {
-                    frames.send(HubFrame::Delta { subscription_id, delta }).await.map_err(|_| ())
+                    frames.send(HubFrame::Delta { subscription_id, delta }.into()).await.map_err(|_| ())
                 }
                 // What another records or writes, which this doesn't follow.
                 LiveItem::Appended { .. } | LiveItem::Delta(_) => Ok(()),
@@ -145,7 +146,7 @@ async fn send_through(
     subscription_id: u64,
     following: &mut Following,
     through: Seq,
-    frames: &mpsc::Sender<HubFrame>,
+    frames: &mpsc::Sender<Outgoing>,
 ) -> Result<(), ()> {
     loop {
         // Stopping at `through` matters. An event read early would overtake the live deltas that came
@@ -163,7 +164,7 @@ async fn send_through(
         }
         for event in page {
             following.sent(&event);
-            frames.send(HubFrame::Event { subscription_id, event }).await.map_err(|_| ())?;
+            frames.send(HubFrame::Event { subscription_id, event }.into()).await.map_err(|_| ())?;
         }
     }
 }

@@ -7,8 +7,10 @@
 #[cfg(test)]
 mod tests;
 
+mod held;
 mod size;
 mod updates;
 
+pub use held::{HeldUpdates, JOINED_OUTPUT_BYTES};
 pub use size::TerminalSize;
 pub use updates::{TerminalBytes, TerminalExit, TerminalScreen, TerminalUpdate, UpdateIndex};

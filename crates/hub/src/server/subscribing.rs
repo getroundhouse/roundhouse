@@ -8,8 +8,8 @@ use protocol::model::SessionId;
 use tokio::sync::{broadcast, mpsc};
 use tokio::task::AbortHandle;
 
-use super::Connection;
 use super::pump::{Following, pump};
+use super::{Connection, Outgoing};
 use crate::hub::Hub;
 
 /// Starts feeding a subscription to a session's log.
@@ -56,14 +56,14 @@ pub(super) fn add_subscription(
     Ok(())
 }
 
-async fn pump_feed(mut feed: broadcast::Receiver<HubNotice>, subscription_id: u64, frames: mpsc::Sender<HubFrame>) {
+async fn pump_feed(mut feed: broadcast::Receiver<HubNotice>, subscription_id: u64, frames: mpsc::Sender<Outgoing>) {
     loop {
         let notice = match feed.recv().await {
             Ok(notice) => notice,
             Err(broadcast::error::RecvError::Lagged(_)) => HubNotice::Resync,
             Err(broadcast::error::RecvError::Closed) => return,
         };
-        if frames.send(HubFrame::Notice { subscription_id, notice }).await.is_err() {
+        if frames.send(HubFrame::Notice { subscription_id, notice }.into()).await.is_err() {
             return;
         }
     }
