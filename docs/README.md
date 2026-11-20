@@ -9,8 +9,8 @@ A folder holds one kind of doc:
 | `docs/spec/` | What the product does for the person using it, how fast, how it looks, and why | Owner |
 | `docs/guide/` | How to use the product, for the person using it | Agents |
 | `docs/standards/` | How work is done: how code, tests, docs and pull requests are written, reviewed and merged | Owner |
-| `docs/principles/` | The rules the system is built to obey. *Not built* | Owner |
-| `docs/decisions/` | One record for each large choice, with what it was chosen over. *Not built* | Owner |
+| `docs/principles/` | The rules the system is built to obey | Owner |
+| `docs/decisions/` | One record for each large choice, with what it was chosen over | Owner |
 | `docs/reference/` | Facts to look up: what words mean, how an outside system behaves, how to measure | Agents |
 
 A README beside code says how to build, run or change that code, and agents keep it. `README.md` and `AGENTS.md`, at the root, are the owner's.
@@ -39,6 +39,15 @@ A README beside code says how to build, run or change that code, and agents keep
 | `docs/standards/dependencies.md` | What a dependency has to meet before it's added: its license, and how its updates arrive |
 | `docs/standards/reviews.md` | How agents review a change when the owner asks for a review |
 | `docs/standards/manual-checks.md` | What a person has to judge by hand |
+| `docs/principles/parts.md` | Which process does which job: hubs, workers, providers and clients |
+| `docs/principles/layers.md` | Which crate can depend on which, how code is layered, and how an error crosses the layers |
+| `docs/principles/state.md` | Who owns a piece of state, what goes on a record and what in a log, and how the database changes |
+| `docs/principles/sync.md` | How a client's copy of a hub's state stays correct, and who allocates each ID |
+| `docs/principles/protocol.md` | How a protocol changes so that peers on different builds keep working together |
+| `docs/principles/failure.md` | What happens when a process dies, and how a slow one is kept from delaying the others |
+| `docs/principles/outside-systems.md` | How the code deals with a system the project doesn't own, and how its credentials are kept |
+| `docs/principles/agents.md` | How the hub and clients deal with each kind of agent through its adapter, and how an agent uses Roundhouse's tools |
+| `docs/decisions/` | One record a file, listed in its `README.md` |
 | `docs/reference/terms.md` | What the project's words mean, and which to write |
 | `docs/reference/commands.md` | Every command for building, testing, running and packaging from a checkout |
 | `docs/reference/claude-cli.md` | How the Claude CLI behaves, and how the worker drives it |

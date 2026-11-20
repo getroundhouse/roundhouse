@@ -30,9 +30,9 @@ The spec says what the product does, in product and design terms only. Everythin
 
 So no doc describes how a part works. The code says that, and an agent can explain it from the code when someone asks. A doc holds what the code can't say: what the system is built to obey, why a choice was made and what it was chosen over, what's decided and not built, and what an outside system does.
 
-A decision record is written once, with its date, and isn't edited afterwards. When the choice changes, a new record replaces it and the old one says which.
+A decision record is written once, with its date, and only its status changes afterwards. When the choice changes, a new record replaces it and the old one says which.
 
-`docs/principles/` and `docs/decisions/` are *Not built*. `docs/architecture.md` and `docs/ui.md` are from before this rule, and hold all five kinds mixed together. They're being taken apart a section at a time, and a section holds until it's gone.
+`docs/architecture.md` and `docs/ui.md` are from before this rule, and hold all five kinds mixed together. They're being taken apart a section at a time, and a section holds until it's gone. Where one of them and a principle disagree, the principle holds.
 
 ## GitHub
 

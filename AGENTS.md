@@ -40,7 +40,7 @@ cargo run -p guide -- OUT         # Builds docs/guide, and refuses a link or a p
 | Before you… | Read |
 |---|---|
 | write a doc, an issue, a PR or a comment | `docs/standards/writing.md` and `docs/standards/documentation.md` |
-| decide where a change goes | "State ownership" in `docs/architecture.md` |
+| decide where a change goes | `docs/principles/state.md`, and the rest of `docs/principles/` for the part you're changing |
 | write Rust | `docs/standards/rust.md` and `docs/standards/platforms.md` |
 | write a test | `docs/standards/testing.md` |
 | write UI code | `docs/standards/gpui.md` and `docs/standards/components.md` |
