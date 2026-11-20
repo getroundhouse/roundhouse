@@ -1,0 +1,132 @@
+diff --git a/crates/base/src/text/format/markdown.rs b/crates/base/src/text/format/markdown.rs
+index 98eaf89a..38c76155 100644
+--- a/crates/base/src/text/format/markdown.rs
++++ b/crates/base/src/text/format/markdown.rs
+@@ -28,6 +28,26 @@ pub(crate) fn parse(source: &str, cx: &mut NodeContext) -> Result<ParsedDocument
+     Ok(ast_to_document(source, root, cx))
+ }
+ 
++/// Where `link` goes, as its mark has it.
++fn link_mark(link: &mdast::Link) -> LinkMark {
++    LinkMark {
++        url: link.url.clone().into(),
++        title: link.title.clone().map(|s| s.into()),
++        ..Default::default()
++    }
++}
++
++/// The source of `link`'s words, from its first child to its last, or `""`
++/// when it has none.
++fn link_words_source<'a>(link: &mdast::Link, cx: &MarkdownParseContext<'a>) -> &'a str {
++    let start = link.children.first().and_then(|child| child.position());
++    let end = link.children.last().and_then(|child| child.position());
++    start
++        .zip(end)
++        .and_then(|(start, end)| cx.source().get(start.start.offset..end.end.offset))
++        .unwrap_or_default()
++}
++
+ /// Math parsing is on by default, so prose that merely contains two dollar
+ /// signs ("$5 and $10") parses as an inline math node. When no plugin claims
+ /// such a node, the text between the dollars must stay ordinary Markdown:
+@@ -878,9 +898,27 @@ fn parse_paragraph(
+     let parse_cx = MarkdownParseContext::new(source, cx.offset);
+     if let Some(mut custom) = cx.markdown_extensions.parse_inline(node, &parse_cx) {
+         custom.set_span(span);
+-        let custom = custom.with_inline_source(parse_cx.node_source(node).unwrap_or_default());
++        // A node made of a link is still that link: it keeps the link's mark,
++        // so it's drawn and opened as one, and its own Markdown is the link's
++        // words, around which the mark writes the link.
++        let (source_of, link) = match node {
++            Node::Link(link) => (link_words_source(link, &parse_cx), Some(link_mark(link))),
++            _ => (parse_cx.node_source(node).unwrap_or_default(), None),
++        };
++        let custom = custom.with_inline_source(source_of);
+         let text = custom.as_text().to_string();
+-        paragraph.push(InlineNode::custom(custom));
++        let mut inline = InlineNode::custom(custom);
++        if let Some(link) = link {
++            let len = inline.text.len();
++            inline.marks.push((
++                0..len,
++                TextMark {
++                    link: Some(link),
++                    ..Default::default()
++                },
++            ));
++        }
++        paragraph.push(inline);
+         return text;
+     }
+ 
+@@ -951,18 +989,12 @@ fn parse_paragraph(
+             );
+         }
+         Node::Link(val) => {
+-            let link_mark = Some(LinkMark {
+-                url: val.url.clone().into(),
+-                title: val.title.clone().map(|s| s.into()),
+-                ..Default::default()
+-            });
+-
+             text = merge_children_with_mark(
+                 source,
+                 paragraph,
+                 &val.children,
+                 TextMark {
+-                    link: link_mark,
++                    link: Some(link_mark(val)),
+                     ..Default::default()
+                 },
+                 cx,
+@@ -2771,6 +2803,50 @@ mod tests {
+         assert!(document.to_markdown().contains("**before $x^2$ after**"));
+     }
+ 
++    #[test]
++    fn a_node_an_inline_plugin_makes_of_a_link_is_still_that_link() {
++        let source = "See **[the fix](https://example.com/12 \"Fix\")** now";
++        let extensions = MarkdownExtensions::default().plugin(
++            crate::text::markdown_ext::TestInlinePlugin::new("test").parse_with(|node, _| {
++                let Node::Link(_) = node else {
++                    return None;
++                };
++                Some(MarkdownNode::new("reference", ()).text(node.to_string()))
++            }),
++        );
++        let mut cx = NodeContext {
++            markdown_extensions: extensions.into(),
++            ..Default::default()
++        };
++        let document = parse(source, &mut cx).unwrap();
++        let BlockNode::Paragraph(paragraph) = &document.blocks[0] else {
++            panic!()
++        };
++        let object = paragraph
++            .children
++            .iter()
++            .find(|node| node.custom.is_some())
++            .expect("the link's node");
++        let link = object.marks.iter().find_map(|(_, mark)| mark.link.as_ref());
++        assert_eq!(
++            link.map(|link| (link.url.as_ref(), link.title.as_deref())),
++            Some(("https://example.com/12", Some("Fix")))
++        );
++        assert!(
++            object.marks.iter().any(|(_, mark)| mark.bold),
++            "and the marks around it"
++        );
++        assert_eq!(object.custom.as_ref().unwrap().as_markdown(), "the fix");
++        assert_eq!(document.text(), "See the fix now\n");
++        assert!(
++            document
++                .to_markdown()
++                .contains("[**the fix**](https://example.com/12 \"Fix\")"),
++            "{}",
++            document.to_markdown()
++        );
++    }
++
+     #[test]
+     fn block_math_parses_as_a_block_and_falls_back_to_a_code_block() {
+         // `$$` is a block fence. With only the inline construct enabled it was
