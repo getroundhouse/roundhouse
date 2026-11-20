@@ -17,6 +17,12 @@ How to word anything a person reads here: a doc, an issue, a pull request, a com
 - **Follow an abstract statement with an example,** as these rules do. If you can't find one, you may not know what the statement means. Find out, or say what you don't know.
 - **Give a title the same care.** It says what goes wrong, or what's true afterwards, in words someone would search for: "Changing a chat's mode fails if its effort is no longer offered".
 
+## An issue's description
+
+- **It's written for whoever builds it next,** so it holds what happens, why, what to build, and what's still open. How it was found, the evidence for each claim, and counts and dates go in a comment, such as which processes were found running and when, as `docs/standards/documentation.md` puts results there. A reader who wants the proof can find it, and one who's building doesn't have to read past it.
+- **Once something is decided, rewrite the description around it,** and take out the options that weren't chosen. Paragraphs added below leave the reader to work out which still holds. The comments keep who decided and when.
+- **Before filing, read it once as that reader, and cut whatever wouldn't change what they do.** One that runs past about 500 words is usually holding a plan, so split it into sub-issues, as `docs/standards/issues.md` says.
+
 ## A bug's issue
 
 Its parts, in this order:
