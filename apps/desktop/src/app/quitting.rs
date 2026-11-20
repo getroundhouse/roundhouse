@@ -15,7 +15,7 @@ use crate::asking::{self, Question};
 use crate::window_place;
 
 /// The longest quitting, or restarting to update, waits for what's on its way to the hub, such as a file attached just
-/// before, before asking about whatever it would still lose. GPUI gives the app's own wait as it quits a fifth of this.
+/// before, before asking about whatever it would still lose. GPUI gives the app's own wait as it quits a tenth of this.
 /// *Unconfirmed.*
 pub(super) const KEEPING_WAIT: Duration = Duration::from_secs(2);
 

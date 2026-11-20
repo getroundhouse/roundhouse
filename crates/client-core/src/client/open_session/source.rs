@@ -34,6 +34,9 @@ impl SessionSource {
     /// far as the hub's events go, which [`SessionSource::place`] has learned by then for a log by place, since the agent
     /// can have gone on while the hub restarted. Builds that no install or package stamped all say the same, so the log
     /// isn't read again between two of them.
+    ///
+    /// The build is what every hello already says, so the hub keeps nothing of its migrations for a client to compare.
+    /// The cost is that every update reads each open chat's window again, once, though few updates rewrite an event.
     fn read_again_on_another_build(&mut self, client: &Client, held: &Mutex<Arc<SessionLog>>) {
         let build = client.hub_version();
         if self.read_from != build {

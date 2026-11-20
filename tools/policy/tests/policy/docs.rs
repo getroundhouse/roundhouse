@@ -5,13 +5,15 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 
-/// The most words a doc can have, by its path or the folder it's in. A reference doc has no limit, since it's searched
-/// rather than read through.
+/// The most words a doc can have, by its path or the folder it's in, where the first that fits is the doc's. A reference
+/// doc has no limit, since it's searched rather than read through. The list of decision records is a map, as
+/// `docs/README.md` is, and grows by a row with each record.
 const LIMITS: &[(&str, usize)] = &[
     ("AGENTS.md", 800),
     ("docs/README.md", 1_500),
     ("docs/standards/", 2_000),
     ("docs/principles/", 1_500),
+    ("docs/decisions/README.md", 1_500),
     ("docs/decisions/", 600),
 ];
 
@@ -19,7 +21,7 @@ const LIMITS: &[(&str, usize)] = &[
 /// down: it stays within [`SLACK`] of the doc as the doc is shortened, and the doc comes off this list once it's within
 /// its kind's limit, or gone.
 const OVER: &[(&str, usize)] = &[
-    ("docs/architecture.md", 44_500),
+    ("docs/architecture.md", 29_800),
     ("docs/ui.md", 3_700),
     ("docs/standards/components.md", 4_500),
     ("docs/standards/gpui.md", 3_000),
@@ -35,7 +37,7 @@ const MAX_CELL_WORDS: usize = 60;
 
 /// Docs with longer cells from before there was a limit, as (path, how many). The number only comes down.
 const LONG_CELLS: &[(&str, usize)] = &[
-    ("docs/architecture.md", 8),
+    ("docs/architecture.md", 4),
     ("docs/reference/antigravity-cli.md", 7),
     ("docs/reference/claude-cli.md", 67),
     ("docs/reference/codex-cli.md", 7),

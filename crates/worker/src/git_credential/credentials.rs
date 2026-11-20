@@ -108,7 +108,9 @@ impl GitCredentials {
     }
 
     /// Removes the files, as the worker starts and as it exits, so no snapshot of the machine keeps a token, and the
-    /// last worker's are gone if it was killed. What can't be removed goes in the log.
+    /// last worker's are gone if it was killed. Only the worker removes them, so a killed worker's stay until the next
+    /// worker starts on its instance: the provider clears each run's files, and not these. *Unconfirmed.* What can't
+    /// be removed goes in the log.
     pub(crate) fn remove(&self) {
         self.given.send_replace(self.machine.clone());
         if let Err(e) = self.files.remove() {

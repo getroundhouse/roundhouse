@@ -8,8 +8,9 @@ use anyhow::Context;
 use crate::runtime::run_to_end;
 use crate::worker_role::{Given, config};
 
-/// How long a worker that can outlive its hub goes on without one before it stops its agents, as "When a process dies"
-/// in `docs/architecture.md` says. Longer than a hub takes to restart, a migration included.
+/// How long a worker that can outlive its hub goes on without one before it stops its agents, so nothing runs for good
+/// with no hub to record it, as `docs/principles/failure.md` says. Longer than a hub takes to restart, a migration
+/// included.
 const WITHOUT_A_HUB: Duration = Duration::from_mins(10);
 
 /// In the worker's state directory, where the socket is named relative to it. A worker that's stopping has removed its

@@ -16,7 +16,8 @@ pub(super) struct Inner {
     pub(super) keeping: bool,
     /// The number the last frame kept was given. The first is 1.
     pub(super) numbered: u64,
-    /// What the hub hasn't said it recorded, oldest first, each with its number.
+    /// What the hub hasn't said it recorded, oldest first, each with its number. In memory, since a local worker lives
+    /// through its hub's restart. *Unconfirmed.*
     pub(super) kept: VecDeque<(u64, Arc<WorkerFrame>)>,
     pub(super) writing: Writing,
 }

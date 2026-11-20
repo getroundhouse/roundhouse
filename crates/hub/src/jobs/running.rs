@@ -142,7 +142,9 @@ impl<K: Clone + Eq + Hash + Display + Send + Sync + 'static> Jobs<K> {
         }
     }
 
-    /// Ends every job where it is, without its after-step, and starts none after, as the hub stops.
+    /// Ends every job where it is, without its after-step, and starts none after, as the hub stops. The next hub puts
+    /// back what a job left, as it starts: it ends a worker nothing carries on with, and records a sign-in left waiting
+    /// as ended.
     pub(crate) fn stop(&self) {
         let running = self.running.lock().take().unwrap_or_default();
         for job in running.into_values() {

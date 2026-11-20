@@ -34,9 +34,12 @@ impl Github {
     /// before it sends anything: `GET {repository}.git/info/refs?service=git-receive-pack`, with the username and token
     /// as git's credential helper gives them, which is where GitHub decides whether the push is taken. So it's GitHub's
     /// own word on everything that limits a push but a branch's own rules: the user's access, a fine-grained token's
-    /// repositories and permissions, an organization's SAML SSO and its restrictions on OAuth Apps. It sends nothing,
-    /// so it changes nothing. Within [`ASK_WITHIN`](super::ASK_WITHIN), whatever GitHub does, and `Unavailable` when
+    /// repositories and permissions, an app's installation's repositories, an organization's SAML SSO and its
+    /// restrictions on OAuth Apps. The API's `permissions` on a repository says only the user's role, which is why
+    /// this makes git's request and not a call to the API, as `docs/reference/github.md` says. It sends nothing, so
+    /// it changes nothing. Within [`ASK_WITHIN`](super::ASK_WITHIN), whatever GitHub does, and `Unavailable` when
     /// GitHub can't be reached, doesn't answer in time, limits how often it's asked, or answers with anything else.
+    /// *Unconfirmed:* this request as the check.
     pub async fn push_reach(
         &self,
         repository: &GithubRepositoryName,

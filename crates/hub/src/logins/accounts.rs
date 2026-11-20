@@ -46,6 +46,8 @@ pub(crate) struct Connect {
     pub(super) token: LoginToken,
     /// The account whose login it replaces, or `None` for a new one, or the one already holding the token.
     pub(super) account: Option<AccountId>,
+    /// The hub's own ID for an account whose token doesn't say whose it is. It starts with the kind's name, as an
+    /// adapter's ID does, and `-login-` follows, which no adapter writes, so it can't be the same as an adapter's.
     pub(super) new_id: AccountId,
     pub(super) connected_at_ms: i64,
     pub(super) ends_at_ms: Option<i64>,

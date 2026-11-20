@@ -168,6 +168,8 @@ where
                     None => Ok(handled),
                 };
                 let answering = terminals::in_order(&hub, read).await;
+                // On a task of its own, which outlasts the connection, so a request the hub has read is carried out
+                // whether or not its client is still there, as a prompt sent just before a client quits is.
                 tokio::spawn(async move {
                     let answered = match answering {
                         Answering::Queued(queued) => queued.await,
