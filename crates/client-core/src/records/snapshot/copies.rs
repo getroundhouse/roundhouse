@@ -3,8 +3,9 @@ use super::by_session::SessionsListed;
 use super::github::GithubListed;
 use crate::Agents;
 use protocol::model::{
-    Account, AccountId, DiffComment, HubSettings, ModelList, ModelListKey, NewWorkspaceDraft, Proposal, ProposalId,
-    Reach, Record, Repo, RepoId, Session, SessionId, Subagent, SubagentId, Terminal, Workspace, WorkspaceId,
+    Account, AccountId, DiffComment, HubSettings, MessageId, ModelList, ModelListKey, NewWorkspaceDraft, Proposal,
+    ProposalId, Reach, Record, ReplyHeard, Repo, RepoId, Session, SessionId, Subagent, SubagentId, Terminal, Workspace,
+    WorkspaceId,
 };
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -14,6 +15,7 @@ pub struct Snapshot {
     pub(super) records: Arc<Listed>,
     pub(super) subagents: Arc<SessionsListed<Subagent>>,
     pub(super) proposals: Arc<SessionsListed<Proposal>>,
+    pub(super) replies_heard: Arc<SessionsListed<ReplyHeard>>,
     /// Not a record, but read beside them, as [`super::super::HubRecords`] says.
     pub(super) agents: Arc<Agents>,
 }
@@ -102,7 +104,7 @@ impl Listed {
                 }
                 // Held apart, as `HubRecords::apply_record` says, but for a found login, from a hub from before
                 // Settings' Providers, which no view shows.
-                Record::Subagent(_) | Record::Proposal(_) | Record::FoundGithubLogin(_) => {}
+                Record::Subagent(_) | Record::Proposal(_) | Record::ReplyHeard(_) | Record::FoundGithubLogin(_) => {}
             }
         }
         listed.github.order();
@@ -133,9 +135,10 @@ impl Snapshot {
         records: Arc<Listed>,
         subagents: Arc<SessionsListed<Subagent>>,
         proposals: Arc<SessionsListed<Proposal>>,
+        replies_heard: Arc<SessionsListed<ReplyHeard>>,
         agents: Arc<Agents>,
     ) -> Self {
-        Snapshot { records, subagents, proposals, agents }
+        Snapshot { records, subagents, proposals, replies_heard, agents }
     }
 
     /// What each kind of agent the hub runs is called and offers. None until the hub has said, and for good from a hub
@@ -241,6 +244,13 @@ impl Snapshot {
         self.proposals.find(session, proposal)
     }
 
+    /// How the reply `message`, in `session`, ended for the person hearing it, once a view has asked for the session's
+    /// records with [`crate::RecordsFeed::follow_session_records`] and they've been listed. `None` for a reply that
+    /// wasn't read out, or hasn't ended.
+    pub fn reply_heard(&self, session: &SessionId, message: &MessageId) -> Option<&Arc<ReplyHeard>> {
+        self.replies_heard.find(session, message)
+    }
+
     /// What changed between `earlier`, such as the snapshot a view last looked at, and this one.
     pub fn changes_since<'a>(&'a self, earlier: &'a Snapshot) -> Changes<'a> {
         Changes { now: self, then: earlier }
@@ -260,6 +270,7 @@ impl Changes<'_> {
         !Arc::ptr_eq(&self.now.records, &self.then.records)
             || !Arc::ptr_eq(&self.now.subagents, &self.then.subagents)
             || !Arc::ptr_eq(&self.now.proposals, &self.then.proposals)
+            || !Arc::ptr_eq(&self.now.replies_heard, &self.then.replies_heard)
             || self.agents()
     }
 
@@ -300,6 +311,11 @@ impl Changes<'_> {
     /// Whether any of the session's proposals changed, came or went.
     pub fn proposals(&self, session: &SessionId) -> bool {
         self.now.proposals.copies(session) != self.then.proposals.copies(session)
+    }
+
+    /// Whether how any of the session's replies was heard changed, or was recorded.
+    pub fn replies_heard(&self, session: &SessionId) -> bool {
+        self.now.replies_heard.copies(session) != self.then.replies_heard.copies(session)
     }
 }
 

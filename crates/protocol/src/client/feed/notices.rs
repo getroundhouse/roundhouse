@@ -1,6 +1,7 @@
 use crate::model::{
     Account, DiffComment, FoundGithubLogin, GithubAccount, GithubApp, GithubReach, GithubSignIn, HubSettings,
-    ModelList, NewWorkspaceDraft, Proposal, Record, RecordKey, Repo, Rev, Session, Subagent, Terminal, Workspace,
+    ModelList, NewWorkspaceDraft, Proposal, Record, RecordKey, ReplyHeard, Repo, Rev, Session, Subagent, Terminal,
+    Workspace,
 };
 use serde::{Deserialize, Serialize};
 
@@ -33,13 +34,16 @@ pub enum HubNotice {
     /// A proposal changed, or was made. A client keeps those of the sessions it's showing, which it lists with
     /// `SessionProposals`.
     Proposal(Proposal),
+    /// How one of a session's replies said out loud ended changed, or was recorded. A client keeps those of the
+    /// sessions it's showing, which it lists with `SessionRepliesHeard`.
+    ReplyHeard(ReplyHeard),
     /// The record is gone, as of `rev`.
     Removed {
         record: RecordKey,
         rev: Rev,
     },
-    /// This client fell behind and missed some. List everything again, and the subagents and proposals of each
-    /// session it's showing, which aren't among everything.
+    /// This client fell behind and missed some. List everything again, and the subagents, proposals and replies heard
+    /// of each session it's showing, which aren't among everything.
     Resync,
     #[serde(other)]
     Unknown,
@@ -98,6 +102,7 @@ impl TryFrom<HubNotice> for RecordNotice {
             HubNotice::Terminal(terminal) => Record::Terminal(terminal),
             HubNotice::ModelList(list) => Record::ModelList(list),
             HubNotice::Proposal(proposal) => Record::Proposal(proposal),
+            HubNotice::ReplyHeard(heard) => Record::ReplyHeard(heard),
             HubNotice::Removed { record, rev } => return Ok(RecordNotice::Removed { record, rev }),
             HubNotice::Resync | HubNotice::Unknown => return Err(notice),
         };
@@ -124,6 +129,7 @@ impl From<Record> for HubNotice {
             Record::Terminal(terminal) => HubNotice::Terminal(terminal),
             Record::ModelList(list) => HubNotice::ModelList(list),
             Record::Proposal(proposal) => HubNotice::Proposal(proposal),
+            Record::ReplyHeard(heard) => HubNotice::ReplyHeard(heard),
         }
     }
 }

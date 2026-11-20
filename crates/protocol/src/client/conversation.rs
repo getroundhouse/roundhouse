@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 use super::{ClientRequest, Request};
-use crate::model::{Session, SessionId};
+use crate::model::{Ending, MessageId, Session, SessionId};
 
 /// Turns conversation mode on in the chat `id`, with the conversation on the asking device, or moves the conversation
 /// there from another device, which then stops hearing and speaking. Turning it on records the rule across the chat,
@@ -33,5 +33,26 @@ impl Request for SessionConversationEnd {
 
     fn into_request(self) -> ClientRequest {
         ClientRequest::SessionConversationEnd(self)
+    }
+}
+
+/// Records how the agent's reply `message` in the chat `id` ended for the person hearing it, as the asking device read
+/// it out, as [`crate::model::ReplyHeard`] says, which every device following the feed is then sent. The first the device
+/// says of a reply is kept, so sending it again, or another of the same reply, changes nothing. The hub refuses it from
+/// a device that doesn't have the chat's conversation, so a device says how a reply ended before it turns the mode off
+/// or moves it, and from a client that didn't say in its hello which device it's on. A hub older than this refuses it
+/// as unsupported.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct SessionReplyHeard {
+    pub id: SessionId,
+    pub message: MessageId,
+    pub ending: Ending,
+}
+
+impl Request for SessionReplyHeard {
+    type Reply = ();
+
+    fn into_request(self) -> ClientRequest {
+        ClientRequest::SessionReplyHeard(self)
     }
 }

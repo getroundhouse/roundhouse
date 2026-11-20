@@ -1,10 +1,10 @@
-//! The requests that add a repository, and read the hub's records: its repositories, a session's subagents or
-//! proposals, or every record at once.
+//! The requests that add a repository, and read the hub's records: its repositories, a session's subagents,
+//! proposals or how its replies were heard, or every record at once.
 
 use serde::{Deserialize, Serialize};
 
 use super::{ClientRequest, ClientResponse, Reply, Request};
-use crate::model::{Proposal, Records, Repo, Rev, SessionId, Subagent};
+use crate::model::{Proposal, Records, ReplyHeard, Repo, Rev, SessionId, Subagent};
 
 /// Adds the repository whose checkout on the hub's machine `path` is in, and has a worker there read the address its
 /// `origin` fetches from, which the feed then tells of, as the [`Repo`] has it. Adding the same repository again
@@ -131,5 +131,36 @@ impl Reply for Proposals {
     fn read(response: ClientResponse) -> Result<Self, ClientResponse> {
         let ClientResponse::Proposals(proposals) = response else { return Err(response) };
         Ok(proposals)
+    }
+}
+
+/// How each of the session's replies said out loud ended, which the feed then says change, as [`SessionSubagents`]
+/// lists its subagents, since only the sessions a view shows need them. A hub older than this refuses it as
+/// unsupported.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct SessionRepliesHeard {
+    pub id: SessionId,
+}
+
+impl Request for SessionRepliesHeard {
+    type Reply = RepliesHeard;
+
+    fn into_request(self) -> ClientRequest {
+        ClientRequest::SessionRepliesHeard(self)
+    }
+}
+
+/// How each of a session's replies said out loud ended, in no order, since each is read by its reply.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct RepliesHeard {
+    pub replies: Vec<ReplyHeard>,
+    /// The hub's newest revision when they were read, as a list of every record carries.
+    pub rev: Rev,
+}
+
+impl Reply for RepliesHeard {
+    fn read(response: ClientResponse) -> Result<Self, ClientResponse> {
+        let ClientResponse::RepliesHeard(heard) = response else { return Err(response) };
+        Ok(heard)
     }
 }

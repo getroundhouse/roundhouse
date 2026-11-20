@@ -142,8 +142,8 @@ fn list_records(client: &Client) -> Result<Records> {
     }
 }
 
-/// Lists the subagents and the proposals of each session a view asked for that haven't been listed on this
-/// connection. Returns whether that changed anything.
+/// Lists the subagents, the proposals and how the replies were heard of each session a view asked for that haven't
+/// been listed on this connection. Returns whether that changed anything.
 fn list_by_session(client: &Client, held: &Mutex<HubRecords>) -> Result<bool> {
     let subagents = list_each(client, held, HubRecords::subagents_mut, |client, session| {
         client.session_subagents(session).map(|(list, _)| list)
@@ -151,7 +151,10 @@ fn list_by_session(client: &Client, held: &Mutex<HubRecords>) -> Result<bool> {
     let proposals = list_each(client, held, HubRecords::proposals_mut, |client, session| {
         client.session_proposals(session).map(|(list, _)| list)
     })?;
-    Ok(subagents || proposals)
+    let heard = list_each(client, held, HubRecords::replies_heard_mut, |client, session| {
+        client.session_replies_heard(session).map(|(list, _)| list)
+    })?;
+    Ok(subagents || proposals || heard)
 }
 
 /// Lists one kind of record, which `kept` says where the records keep, for each session that needs it, with `list`.

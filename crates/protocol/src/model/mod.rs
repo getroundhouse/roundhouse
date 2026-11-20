@@ -23,6 +23,7 @@ mod pull_request;
 mod queue;
 mod record;
 mod references;
+mod reply_heard;
 mod session;
 mod subagent;
 mod terminal;
@@ -74,6 +75,7 @@ pub use references::{
     ChecksRollup, IssueNumber, IssueNumberError, IssueState, PullRequestState, REFERENCE_BODY_CHARS, Reference,
     ReferenceAsk, ReferenceKind, ReferenceLabel, ReferenceRead, ReferencedPullRequest,
 };
+pub use reply_heard::{Ending, ReplyHeard, ReplyPlace};
 pub use session::{AgentKind, OpenApproval, Session, SessionStatus};
 pub use subagent::{Lately, LatelyCall, LatelyResult, Said, Subagent, SubagentStatus};
 pub use terminal::Terminal;

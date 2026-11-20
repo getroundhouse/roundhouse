@@ -1,9 +1,9 @@
-//! The rule's rows for a session, and for its subagents.
+//! The rule's rows for a session, for its subagents, and for how its replies were heard.
 
 use protocol::capability::Capabilities;
 use protocol::event::{ContentBlock, EventBody};
 use protocol::fixtures;
-use protocol::model::{DraftToKeep, QueuedPrompt, Rev, RunCapabilities, RunId, Seq, SessionStatus};
+use protocol::model::{DraftToKeep, Ending, QueuedPrompt, Rev, RunCapabilities, RunId, Seq, SessionStatus};
 use protocol::prompt::Prompt;
 
 use super::super::tests::notice;
@@ -97,4 +97,14 @@ pub(super) fn model(store: &Store) -> Said {
 
 pub(super) fn holds(store: &Store) -> Said {
     recorded(store, &EventBody::SubagentContext { subagent: "agent".into(), tokens: 1_200 })
+}
+
+/// As a device says again how a reply ended, after a lost reply.
+pub(super) fn reply_heard(store: &Store) -> Said {
+    Said::Changed(store.keep_reply_heard(&"s".into(), &"m".into(), Ending::ToTheEnd).unwrap().is_some())
+}
+
+pub(super) fn reply_heard_rev(store: &Store) -> Rev {
+    let (heard, _) = store.list_replies_heard(&"s".into()).unwrap();
+    heard.first().expect("one reply heard").rev
 }

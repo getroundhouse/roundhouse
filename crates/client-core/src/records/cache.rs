@@ -2,7 +2,7 @@ use super::of_session::BySession;
 use super::snapshot::{Listed, Snapshot};
 use crate::Agents;
 use protocol::client::{HubNotice, RecordNotice};
-use protocol::model::{Proposal, Record, RecordKey, Records, Rev, SessionId, Subagent};
+use protocol::model::{Proposal, Record, RecordKey, Records, ReplyHeard, Rev, SessionId, Subagent};
 use std::cell::OnceCell;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -17,6 +17,7 @@ pub struct HubRecords {
     pub(super) listed: Rev,
     pub(super) subagents: BySession<Subagent>,
     pub(super) proposals: BySession<Proposal>,
+    pub(super) replies_heard: BySession<ReplyHeard>,
     /// The newest copy taken in.
     pub(super) taken: Taken,
     /// What views read of the records, made when they next look after a change.
@@ -107,6 +108,7 @@ impl HubRecords {
             // listed on its own rather than with everything, so a list of everything says nothing of them.
             Record::Subagent(subagent) => self.subagents.apply(subagent),
             Record::Proposal(proposal) => self.proposals.apply(proposal),
+            Record::ReplyHeard(heard) => self.replies_heard.apply(heard),
             listed @ (Record::Repo(_)
             | Record::Workspace(_)
             | Record::Session(_)
@@ -158,7 +160,13 @@ impl HubRecords {
     pub fn snapshot(&self) -> Snapshot {
         let records =
             self.shown.get_or_init(|| Arc::new(Listed::of(self.held.values().map(|held| (&held.record, held.taken)))));
-        Snapshot::new(records.clone(), self.subagents.listed(), self.proposals.listed(), self.agents.clone())
+        Snapshot::new(
+            records.clone(),
+            self.subagents.listed(),
+            self.proposals.listed(),
+            self.replies_heard.listed(),
+            self.agents.clone(),
+        )
     }
 
     pub(crate) fn subagents_mut(&mut self) -> &mut BySession<Subagent> {
@@ -169,23 +177,30 @@ impl HubRecords {
         &mut self.proposals
     }
 
+    pub(crate) fn replies_heard_mut(&mut self) -> &mut BySession<ReplyHeard> {
+        &mut self.replies_heard
+    }
+
     /// Keeps the records of `session` that are listed by session from now on, of every kind. Returns whether any
     /// weren't kept already.
     pub(crate) fn want_session(&mut self, session: &SessionId) -> bool {
         let subagents = self.subagents.want(session.clone());
-        self.proposals.want(session.clone()) || subagents
+        let proposals = self.proposals.want(session.clone());
+        self.replies_heard.want(session.clone()) || subagents || proposals
     }
 
     /// Lets go of the records of `session` that are listed by session, of every kind.
     pub(crate) fn forget_session(&mut self, session: &SessionId) {
         self.subagents.forget(session);
         self.proposals.forget(session);
+        self.replies_heard.forget(session);
     }
 
     /// Lists every wanted session's records of every kind again, as [`BySession::relist`] says.
     pub(crate) fn relist_sessions(&mut self) {
         self.subagents.relist();
         self.proposals.relist();
+        self.replies_heard.relist();
     }
 
     /// Takes in what the hub said of its agents. Returns whether that changed anything.

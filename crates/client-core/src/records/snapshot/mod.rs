@@ -3,8 +3,8 @@
 //! snapshot it last looked at, to tell what's changed since, as [`Snapshot::changes_since`] says.
 //!
 //! It's made the first time it's asked for after a change, so changes that come between two looks are made into one,
-//! and made again only for the side that changed: the records, or the subagents or the proposals of the sessions views
-//! show.
+//! and made again only for the side that changed: the records, or the subagents, the proposals or the replies heard of
+//! the sessions views show.
 
 #[cfg(test)]
 mod tests;

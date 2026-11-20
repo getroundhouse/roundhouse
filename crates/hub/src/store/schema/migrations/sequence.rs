@@ -388,4 +388,6 @@ pub(in super::super) const MIGRATIONS: &[Migration] = &[
     Sql(super::github_accounts::GITHUB_ACCOUNT_REMOVAL),
     // How the person was talking with the agent as each event was recorded, in `conversations`.
     Sql(super::conversations::INTERACTION),
+    // How each reply said out loud ended, in `conversations`.
+    Sql(super::conversations::REPLIES_HEARD),
 ];

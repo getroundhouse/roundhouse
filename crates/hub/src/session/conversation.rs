@@ -1,9 +1,9 @@
 //! Conversation mode: which device has a chat's conversation, the one that hears and speaks, and what the person
 //! sending a prompt does to it.
 
-use protocol::client::{ApiError, ErrorCode};
+use protocol::client::{ApiError, ErrorCode, HubNotice};
 use protocol::event::EventBody;
-use protocol::model::{ClientDevice, Interaction, Session};
+use protocol::model::{ClientDevice, Ending, Interaction, MessageId, Session};
 use protocol::prompt::Prompt;
 
 use super::{LiveSession, LiveState, Origin};
@@ -30,7 +30,9 @@ impl Sending<'_> {
         prompt: Prompt<F>,
     ) -> Result<(Prompt<F>, Option<Interaction>), ApiError> {
         match self {
-            Sending::Sent { device } if prompt.spoken => may_say(interaction, device).map(|()| (prompt, None)),
+            Sending::Sent { device } if prompt.spoken => {
+                has_the_conversation(interaction, device).map(|()| (prompt, None))
+            }
             Sending::Sent { .. } => Ok((prompt, (!interaction.is_typing()).then_some(Interaction::Typing))),
             Sending::Queued if prompt.spoken && interaction.is_typing() => {
                 Ok((Prompt { spoken: false, ..prompt }, None))
@@ -40,16 +42,16 @@ impl Sending<'_> {
     }
 }
 
-/// Whether something can be said out loud on `device`, which only the device that has the conversation can, while
-/// conversation mode is on. Devices are the same by their IDs, so a device that's been renamed still has it.
-pub(super) fn may_say(interaction: &Interaction, device: Option<&ClientDevice>) -> Result<(), ApiError> {
-    let has_it = interaction.device().zip(device).is_some_and(|(has_it, asking)| has_it.id == asking.id);
-    if has_it {
-        return Ok(());
-    }
-    let why =
-        if interaction.device().is_some() { "another device has the conversation" } else { "conversation mode is off" };
-    Err(ApiError::new(ErrorCode::Conflict, format!("this can't be said out loud here: {why}")))
+/// Whether `device` has the conversation, which only it can say anything out loud in, or say how a reply was heard,
+/// while conversation mode is on. Devices are the same by their IDs, so a device that's been renamed still has it.
+pub(super) fn has_the_conversation(interaction: &Interaction, device: Option<&ClientDevice>) -> Result<(), ApiError> {
+    let why = match (interaction.device(), device) {
+        (Some(has_it), Some(asking)) if has_it.id == asking.id => return Ok(()),
+        (Some(_), Some(_)) => "another device has the conversation",
+        (Some(_), None) => "this client didn't say in its hello which device it's on",
+        (None, _) => "conversation mode is off",
+    };
+    Err(ApiError::new(ErrorCode::Conflict, why))
 }
 
 impl LiveSession {
@@ -94,5 +96,22 @@ impl LiveSession {
             self.state.lock().interaction = Interaction::Typing;
         }
         self.announce(&hub).await
+    }
+
+    /// Keeps how the reply `message` ended for the person hearing it, as `device` read it out, which has to have the
+    /// conversation, and tells everyone following the feed, unless how it ended is kept already.
+    pub(crate) async fn keep_reply_heard(
+        &self,
+        device: Option<&ClientDevice>,
+        message: MessageId,
+        ending: Ending,
+    ) -> Result<(), ApiError> {
+        let hub = self.hub()?;
+        has_the_conversation(&self.state.lock().interaction, device)?;
+        let id = self.id.clone();
+        if let Some(heard) = hub.blocking(move |store| store.keep_reply_heard(&id, &message, ending)).await? {
+            hub.notify(HubNotice::ReplyHeard(heard));
+        }
+        Ok(())
     }
 }
