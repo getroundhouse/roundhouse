@@ -88,7 +88,7 @@ fn a_sign_in_that_isnt_approved_says_how_it_ended_and_offers_to_sign_in_again(cx
 
     ui.click("git-sign-in-again");
     ui.wait("the code's end", |ui| statuses(ui) == [GithubSignInStatus::Ended] && ui.has("git-sign-in-again"));
-    assert!(says(&mut ui).starts_with("Its code ended before it was approved on GitHub"));
+    assert!(says(&mut ui).starts_with("The sign-in ended before it was approved on GitHub"));
 
     ui.click("git-sign-in-again");
     let failed = |ui: &mut Ui<'_>| matches!(&statuses(ui)[..], [GithubSignInStatus::Failed { .. }]);
