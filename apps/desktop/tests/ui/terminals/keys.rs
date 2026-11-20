@@ -2,7 +2,6 @@
 //! gives a meaning edit the shell's line as they do there.
 
 use desktop::workspace_pane::Showing;
-use gpui_kit::component::input::{Copy, Paste, SelectAll};
 use gpui_kit::{Action, ClipboardItem, TestAppContext};
 use protocol::model::WorkspaceStatus;
 
@@ -18,6 +17,9 @@ enum Reaching {
     /// Off the Mac, where the app's shortcuts are on Ctrl, as Ctrl-W closes a chat, in a terminal it deletes the word
     /// before it, as a shell has it. On a Mac, where Ctrl-W was never the app's, the same holds.
     CtrlW,
+    /// Ctrl-C interrupts the program, as in terminal apps, though off the Mac it's Copy everywhere else, so `cat` ends
+    /// and the shell runs what's typed after.
+    CtrlC,
     /// On a Mac, the keys Ghostty gives a meaning there edit the shell's line as they do in Ghostty: Command-Backspace
     /// deletes back to its start, as `/bin/sh`, which is bash, reads it, Command-Left and Command-Right go to its start
     /// and its end, and Option-Left and Option-Right go back a word and on one. Each puts what's typed after it
@@ -39,6 +41,11 @@ impl Reaching {
             Reaching::CtrlW => {
                 type_text(ui, "echo worded there");
                 type_keys(ui, &["ctrl-w", "enter"]);
+            }
+            Reaching::CtrlC => {
+                type_line(ui, "cat");
+                ui.press("ctrl-c");
+                type_line(ui, "echo interrupted");
             }
             Reaching::GhosttysMacKeys => {
                 type_keys(ui, &["x", "x", "cmd-backspace", "o", "n", "e", "space", "t", "w", "o"]);
@@ -73,6 +80,7 @@ impl Reaching {
         match self {
             Reaching::Typed => "typed",
             Reaching::CtrlW => "worded",
+            Reaching::CtrlC => "interrupted",
             Reaching::GhosttysMacKeys => "ones two yx",
             Reaching::ThePasteKey => "pasted",
             Reaching::TheEditMenusPaste => "pasted from the menu",
@@ -87,7 +95,7 @@ impl Reaching {
 fn whats_typed_and_pasted_in_a_terminal_reaches_its_shell(cx: &mut TestAppContext) {
     let stack = stack();
     let mut ui = with_a_terminal(cx, &stack);
-    let mut ways = vec![Reaching::Typed, Reaching::CtrlW];
+    let mut ways = vec![Reaching::Typed, Reaching::CtrlW, Reaching::CtrlC];
     if cfg!(target_os = "macos") {
         ways.push(Reaching::GhosttysMacKeys);
     }
@@ -127,7 +135,8 @@ fn the_file_menu_archives_the_workspace_a_terminal_is_in(ui: &mut Ui<'_>) {
 /// A terminal's keys are its program's, as in terminal apps, but the app's on Command on a Mac and on Ctrl and Shift
 /// elsewhere, Ctrl-Tab and Ctrl-Shift-Tab on both, and the terminal's own. So every key bound where a terminal has the
 /// keys is one of those, whatever shortcuts the app has, and off the Mac, the app's others, such as Ctrl-W, Ctrl-, and
-/// F10, aren't bound there. Which keys are bound is the app's own, so a fake hub's terminal does.
+/// F10, aren't bound there. The terminal's Copy, Paste and Select All count only on the app's keys, since off the Mac
+/// the kit binds Ctrl-C to Copy. Which keys are bound is the app's own, so a fake hub's terminal does.
 #[gpui_kit::test]
 fn a_terminal_leaves_its_program_every_key_but_the_apps_own(cx: &mut TestAppContext) {
     let (_fake, mut ui) = with_a_made_up_terminal(cx);
@@ -142,8 +151,7 @@ fn a_terminal_leaves_its_program_every_key_but_the_apps_own(cx: &mut TestAppCont
         let shifted = held.shift || ["{", "}"].contains(&keys.key.as_str());
         let apps = if cfg!(target_os = "macos") { held.platform } else { held.control && shifted };
         let between_tabs = held.control && keys.key == "tab";
-        let terminals_own = action.name().starts_with("terminal::")
-            || [&Copy as &dyn Action, &Paste, &SelectAll].into_iter().any(|own| action.partial_eq(own));
+        let terminals_own = action.name().starts_with("terminal::");
         assert!(apps || between_tabs || terminals_own, "{keys:?} is bound to {} in a terminal", action.name());
     }
     for (key, action) in [(close, &desktop::CloseChat as &dyn Action), ("ctrl-tab", &desktop::NextChat)] {
