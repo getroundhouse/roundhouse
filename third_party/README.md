@@ -2,6 +2,8 @@
 
 Other projects' code that the apps build from a copy kept here, on a release of the project's own, with our changes on top: gpui-kit, in `gpui-kit/`, and three crates of GPUI's and Zed's, in `gpui-pre-apple/`, `gpui-pre-ios/` and `zed-font-kit/`.
 
+Renovate reads nothing in this folder, as `ignorePaths` in `.github/renovate.json5` has it. Each copy keeps upstream's manifests and workflows, so the versions in them are upstream's, and change only when the copy is brought to a new release. `Cargo.lock` still takes the newest crate each of those versions allows, in Renovate's pull request for the whole lockfile.
+
 ## gpui-kit
 
 `gpui-kit/vendor/` is our copy of [Longbridge's gpui-kit](https://github.com/longbridge/gpui-kit), the component kit the desktop app is built on, at the release `gpui-kit/gpui-kit.toml` names, with our patches in `gpui-kit/patches/` applied on top. The app takes it as a path dependency, as `Cargo.toml` says.
@@ -94,7 +96,7 @@ Three crates the apps build from crates.io are kept here as copies, each at the 
 - `gpui-pre-apple/`, GPUI's text system for Apple's systems, which both apps build.
 - `zed-font-kit/`, Zed's fork of Servo's font-kit, which that text system finds and loads fonts with.
 
-They're copied whole and changed in place, rather than patched as the kit is, since their changes are few and each goes once a release has it. Each is marked `Changed for Roundhouse` where it's made, with why. Taking a new release, as `tools/kit-sync` moves GPUI with the kit, means replacing each GPUI copy with the release's crate, and making again each change it doesn't have yet. The policy test fails while the app builds a release rather than a copy, which is what Cargo does, with only a warning, when the two versions differ.
+They're copied whole and changed in place, rather than patched as the kit is, since their changes are few and each goes once a release has it. Each is marked `Changed for Roundhouse` where it's made, with why. Taking a new release, as `tools/kit-sync` moves GPUI with the kit, means replacing each GPUI copy with the release's crate, making again each change it doesn't have yet, and moving `gpui_ios` in `Cargo.toml` to the release, which the tool doesn't. The policy test fails while the app builds a release rather than a copy, which is what Cargo does, with only a warning, when the two versions differ.
 
 ### Our changes
 
