@@ -1,14 +1,19 @@
-//! What a chat's mark says of its agent, which chat's a workspace's mark shows, and whether a chat is waiting on the
-//! person, which its name says rather than its mark.
+//! What a chat's mark says of its agent, which chat's a workspace's mark shows, the colour it's in for how the
+//! workspace's pull request is getting on, and whether a chat is waiting on the person, which its name says rather than
+//! its mark. Every app shows them the same way.
 
-use look::Signal;
+use look::{Signal, Work};
 use protocol::event::TaskKind;
-use protocol::model::{Session, SessionStatus};
+use protocol::model::{Session, SessionStatus, SetupStatus, Standing, Workspace};
 
-/// A workspace's mark. The open chat with the most going on speaks for it. A reply nobody has read isn't on the mark,
+/// A workspace's mark, of its record and its chats: being set up, until it is, and then the open chat with the most
+/// going on speaks for it. A reply nobody has read isn't on the mark,
 /// and neither is a chat waiting on an answer: the name beside it says to look, so that shows along with whatever
 /// the agent is doing.
-pub(crate) fn workspace(chats: &[Session]) -> Signal {
+pub fn workspace_signal(workspace: &Workspace, chats: &[Session]) -> Signal {
+    if workspace.setup == SetupStatus::Running {
+        return Signal::SettingUp;
+    }
     let urgency = |signal: &Signal| match signal {
         Signal::Working | Signal::SettingUp => 3,
         Signal::Failed => 2,
@@ -16,7 +21,7 @@ pub(crate) fn workspace(chats: &[Session]) -> Signal {
         Signal::Idle => 0,
     };
     let open = chats.iter().filter(|chat| chat.is_open());
-    open.map(chat).max_by_key(urgency).unwrap_or(Signal::Idle)
+    open.map(chat_signal).max_by_key(urgency).unwrap_or(Signal::Idle)
 }
 
 /// A chat's mark. The light sweeps only for the agent's own work: a turn, or a subagent it left going
@@ -24,7 +29,7 @@ pub(crate) fn workspace(chats: &[Session]) -> Signal {
 /// is, and the agent doesn't say which. So that gets a quieter light, which claims only that something is running.
 /// An agent that stopped short, by going away mid-turn or failing its turn, needs the person more than anything it
 /// left going does.
-pub(crate) fn chat(session: &Session) -> Signal {
+pub fn chat_signal(session: &Session) -> Signal {
     match session.status {
         SessionStatus::Running => Signal::Working,
         SessionStatus::Interrupted => Signal::Failed,
@@ -39,19 +44,54 @@ pub(crate) fn chat(session: &Session) -> Signal {
     }
 }
 
+/// Where a workspace's work stands, as its record says, for its mark. `None` from a hub too old to record its pull
+/// request.
+pub fn recorded_work(workspace: &Workspace) -> Option<Work> {
+    workspace.pull_request.as_ref().map(|found| work(Standing::of(found.pull_request.as_ref())))
+}
+
+/// The colour a pull request that stands so is shown in, on a workspace's mark and the desktop's pull request bar.
+pub fn work(standing: Standing) -> Work {
+    match standing {
+        Standing::NoPullRequest => Work::NoPr,
+        Standing::Merged => Work::Merged,
+        Standing::Closed => Work::Closed,
+        Standing::Queued(_) => Work::Queued,
+        Standing::Draft => Work::Draft,
+        Standing::Ready => Work::Ready,
+        // What can't be told is neither good nor bad news, as far as anyone here knows.
+        Standing::Unknown
+        | Standing::Uncommitted(_)
+        | Standing::Diverged
+        | Standing::Behind(_)
+        | Standing::Unpushed(_)
+        | Standing::Conflicts
+        | Standing::ChangesRequested
+        | Standing::ChecksFailed(_)
+        | Standing::ChecksRunning(_)
+        | Standing::ReviewRequired
+        | Standing::Blocked
+        | Standing::Checking => Work::Open,
+    }
+}
+
 /// Whether an open chat is waiting on the person, for an answer or an approval. It needs a look as a reply nobody has
 /// read does, so a name stands out for either.
-pub(crate) fn waiting_on_you<'a>(chats: impl IntoIterator<Item = &'a Session>) -> bool {
+pub fn waiting_on_you<'a>(chats: impl IntoIterator<Item = &'a Session>) -> bool {
     chats.into_iter().any(|chat| chat.is_open() && chat.status == SessionStatus::WaitingApproval)
 }
 
 #[cfg(test)]
 mod tests {
-    use look::Signal;
+    use look::{Signal, Work};
     use protocol::event::{AgentTask, TaskKind, TurnOutcome};
-    use protocol::model::{Seq, Session, SessionStatus};
+    use protocol::model::{Checks, QueueState, Seq, Session, SessionStatus, SetupStatus, Standing, Workspace};
 
-    use super::{chat, waiting_on_you, workspace};
+    use super::{chat_signal as chat, waiting_on_you, work};
+
+    fn workspace(chats: &[Session]) -> Signal {
+        super::workspace_signal(&protocol::fixtures::workspace("w"), chats)
+    }
 
     fn session(status: SessionStatus) -> Session {
         Session { status, ..protocol::fixtures::session("s") }
@@ -77,6 +117,8 @@ mod tests {
         assert_eq!(workspace(&chats), Signal::Working);
         let chats = [session(Interrupted), left_running(&[TaskKind::Subagent]), session(Idle)];
         assert_eq!(workspace(&chats), Signal::Working);
+        let setting_up = Workspace { setup: SetupStatus::Running, ..protocol::fixtures::workspace("w") };
+        assert_eq!(super::workspace_signal(&setting_up, &chats), Signal::SettingUp, "until it's set up");
     }
 
     #[test]
@@ -138,5 +180,14 @@ mod tests {
             assert!(unread(chat_of()).unread());
             assert_eq!(chat(&unread(chat_of())), chat(&chat_of()));
         }
+    }
+
+    #[test]
+    fn only_a_pull_request_that_can_merge_now_is_shown_as_ready() {
+        assert_eq!(work(Standing::Ready), Work::Ready);
+        assert_eq!(work(Standing::ChecksRunning(Checks::default())), Work::Open);
+        assert_eq!(work(Standing::Queued(QueueState::Mergeable)), Work::Queued);
+        assert_eq!(work(Standing::Draft), Work::Draft);
+        assert_eq!(work(Standing::Unknown), Work::Open);
     }
 }

@@ -133,3 +133,18 @@ fn a_chat_has_a_reply_once_a_turn_has_ended_whether_or_not_it_s_read() {
     assert_eq!([new.has_reply(), replied.has_reply(), read.has_reply()], [false, true, true]);
     assert_eq!([replied.unread(), read.unread()], [true, false]);
 }
+
+#[test]
+fn the_chat_last_worked_in_is_the_one_last_sent_something_or_of_two_at_once_the_one_made_last() {
+    let chat = |id: &str, created_at_ms, user_active_at_ms| Session {
+        created_at_ms,
+        user_active_at_ms,
+        ..crate::fixtures::session(id)
+    };
+
+    let older_but_sent_to = [chat("older", 1, Some(9)), chat("newer", 5, None)];
+    assert_eq!(Session::last_worked_in(&older_but_sent_to).map(|c| &c.id), Some(&older_but_sent_to[0].id));
+    let at_once = [chat("made-first", 3, Some(5)), chat("made-last", 5, None)];
+    assert_eq!(Session::last_worked_in(&at_once).map(|c| &c.id), Some(&at_once[1].id));
+    assert!(Session::last_worked_in(&[]).is_none());
+}

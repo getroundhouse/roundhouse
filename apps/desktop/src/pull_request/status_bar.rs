@@ -47,7 +47,7 @@ impl Lookup {
     }
 
     pub fn work(&self) -> Work {
-        self.standing().map_or(Work::NoPr, words::work)
+        self.standing().map_or(Work::NoPr, transcript::work)
     }
 
     /// Takes the hub's answer, unless a newer ask has been made, whose answer can arrive first, so this one says
@@ -62,11 +62,6 @@ impl Lookup {
             Ok(_) | Err(_) => false,
         }
     }
-}
-
-/// Where a workspace's work stands, as its record says, for its mark. `None` where [`Lookup::recorded`] is.
-pub(crate) fn recorded_work(workspace: &Workspace) -> Option<Work> {
-    workspace.pull_request.as_ref().map(|found| words::work(Standing::of(found.pull_request.as_ref())))
 }
 
 /// The bar at the top of the sidebar: the pull request's number, which opens it, what stands in its way, and the

@@ -1,7 +1,7 @@
 use look::Work;
 use protocol::model::{Checks, Local, MergeState, PrState, PullRequest, QueueState, Review, Standing};
 
-use super::words::{action, work};
+use super::words::action;
 use super::{Action, Ask, Lookup};
 
 #[test]
@@ -24,13 +24,7 @@ fn what_waits_on_someone_else_offers_nothing_to_do() {
 }
 
 #[test]
-fn only_a_pull_request_that_can_merge_now_is_shown_as_ready() {
-    assert_eq!(work(Standing::Ready), Work::Ready);
-    assert_eq!(work(Standing::ChecksRunning(Checks::default())), Work::Open);
-    assert_eq!(work(Standing::Queued(QueueState::Mergeable)), Work::Queued);
-    assert_eq!(work(Standing::Draft), Work::Draft);
-    assert_eq!(work(Standing::Unknown), Work::Open);
-    // Until it's known, nothing is offered, and the mark shows no pull request.
+fn until_the_pull_request_is_known_nothing_is_offered_and_the_mark_shows_none() {
     assert_eq!((Lookup::Looking.standing(), Lookup::Looking.work()), (None, Work::NoPr));
     assert_eq!(Lookup::Found(None).standing(), Some(Standing::NoPullRequest));
 }

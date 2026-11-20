@@ -7,7 +7,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use client_core::records::subagent_named;
+use client_core::records::{Snapshot, subagent_named};
 use gpui_kit::{Context, SharedString, Task};
 use protocol::event::AgentTask;
 use protocol::model::{AgentDescription, PromptCache, Seq, Session, Subagent, SubagentStatus, Wait};
@@ -98,6 +98,21 @@ impl Transcript {
             self.list.all_out_of_date();
             cx.notify();
         }
+    }
+
+    /// Takes what the client holds now of the chat's records: its session's, its subagents' and its proposals'. Each
+    /// is taken only if it changed, so a client can call this whenever its records do. The client has the subagents'
+    /// and proposals' only while it follows the chat's. The subagent tab's transcript takes whether it's at work from
+    /// its subagent's record, not the chat's.
+    pub fn records_changed(&mut self, records: &Snapshot, cx: &mut Context<Self>) {
+        let id = self.session_id.clone();
+        if self.model.borrow().alone.is_none()
+            && let Some(session) = records.session(&id)
+        {
+            self.set_session(session, cx);
+        }
+        self.set_subagents(records.subagents(&id), cx);
+        self.set_proposals(records.proposals(&id), cx);
     }
 
     /// Follows the session's record.

@@ -361,6 +361,12 @@ impl Session {
         let sent = self.user_active_at_ms.or(self.turn_started_at_ms);
         sent.map_or(self.created_at_ms, |sent| sent.max(self.created_at_ms))
     }
+
+    /// Of `chats`, the one last worked in, as [`Session::last_active_at_ms`] says, and of two worked in at once, the one
+    /// made last. It's the chat a workspace opens on, so every client opens the same one.
+    pub fn last_worked_in<'a>(chats: impl IntoIterator<Item = &'a Session>) -> Option<&'a Session> {
+        chats.into_iter().max_by_key(|chat| (chat.last_active_at_ms(), chat.created_at_ms))
+    }
 }
 
 impl Session {

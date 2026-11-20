@@ -162,19 +162,16 @@ impl WorkspacePane {
         }
     }
 
-    /// Passes each chat's proposals on to its transcript, and to the tab if it shows one of them, when they've changed
-    /// since the pane last looked, as `changes` says, and opens the tab by itself for the newest the pane hasn't seen.
+    /// Passes each chat's proposals on to the tab if it shows one of them, when they've changed since the pane last
+    /// looked, as `changes` says, and opens the tab by itself for the newest the pane hasn't seen. The pane passes them
+    /// on to the transcripts with the rest of their records.
     pub(super) fn pass_on_proposals(&mut self, changes: &Changes<'_>, cx: &mut Context<Self>) {
         let mut unseen: Option<Arc<Proposal>> = None;
         for (id, chat) in &self.chats {
-            let Some((transcript, _)) = &chat.transcript else { continue };
-            if !changes.proposals(id) {
+            if chat.transcript.is_none() || !changes.proposals(id) {
                 continue;
             }
             let list = self.shown.all().proposals(id);
-            for transcript in std::iter::once(transcript).chain(self.subagent_transcript_of(id)) {
-                transcript.update(cx, |t, cx| t.set_proposals(list, cx));
-            }
             if let Some(view) = self.proposals.view() {
                 let shown = view.read(cx).proposal().id.clone();
                 if let Some(newer) = list.iter().find(|proposal| proposal.id == shown) {

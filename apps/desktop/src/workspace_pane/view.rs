@@ -33,8 +33,8 @@ impl WorkspacePane {
         let title = chat_title(session).to_string();
         let selected = self.active.as_ref() == Some(&session.id) && self.showing() == Showing::Chat;
         let unread = self.shows_unread(session);
-        let needs_a_look = unread || crate::sidebar::signal::waiting_on_you([session]);
-        let mark = crate::sidebar::signal::chat(session);
+        let needs_a_look = unread || transcript::waiting_on_you([session]);
+        let mark = transcript::chat_signal(session);
         let expiring = prompt_cache::expiring_in_ms(session, look::now_ms(cx))
             .map(|left_ms| prompt_cache::clock(format!("tab-cache-{}", session.id), left_ms, muted));
         let (to_show, to_close) = (session.id.clone(), session.id.clone());

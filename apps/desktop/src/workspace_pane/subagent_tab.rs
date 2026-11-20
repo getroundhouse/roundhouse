@@ -4,11 +4,11 @@
 //! chat whose subagent it shows. It closes with that chat, since its agent stops then.
 //!
 //! Each chat's subagents' records, which the chat draws their calls from and the tab its top, are client-core's, and the
-//! pane passes them on as they change.
+//! pane passes them on to every transcript it has as they change.
 
 use std::sync::Arc;
 
-use client_core::records::{Changes, Snapshot, subagent_named};
+use client_core::records::{Snapshot, subagent_named};
 use gpui_kit::component::{Icon, IconName, v_flex};
 use gpui_kit::{
     AnyElement, AppContext as _, Context, Entity, FocusHandle, InteractiveElement as _, IntoElement as _,
@@ -93,11 +93,6 @@ impl WorkspacePane {
         self.subagents.tab.as_ref().map(|tab| tab.transcript.clone())
     }
 
-    /// The subagent tab's transcript, while it shows one of the chat `session`'s subagents.
-    pub(super) fn subagent_transcript_of(&self, session: &SessionId) -> Option<&Entity<Transcript>> {
-        self.subagents.tab.as_ref().filter(|tab| &tab.session == session).map(|tab| &tab.transcript)
-    }
-
     /// Every transcript the pane has: each chat's, and the subagent tab's.
     pub(super) fn every_transcript(&self) -> impl Iterator<Item = &Entity<Transcript>> {
         let tab = self.subagents.tab.as_ref().map(|tab| &tab.transcript);
@@ -123,14 +118,11 @@ impl WorkspacePane {
         let tab = self.subagents.tab.as_ref();
         let showing = tab.is_some_and(|tab| tab.session == session && tab.subagent == subagent);
         if !showing && let Some(chat) = self.shown.session(&session).cloned() {
-            let (client, records, shown) =
-                (self.client.clone(), self.subagents_of(&session).to_vec(), subagent.clone());
-            let proposals = self.shown.all().proposals(&session).to_vec();
+            let (client, records, shown) = (self.client.clone(), self.shown.all().clone(), subagent.clone());
             let transcript = cx.new(|cx| {
                 let mut transcript = Transcript::subagent(client, &chat, shown, cx);
                 transcript.set_thinking_open(crate::settings::get(cx).always_expand_thinking, cx);
-                transcript.set_subagents(&records, cx);
-                transcript.set_proposals(&proposals, cx);
+                transcript.records_changed(&records, cx);
                 transcript
             });
             let chat = session.clone();
@@ -173,27 +165,14 @@ impl WorkspacePane {
         }
     }
 
-    /// Passes each chat's subagents on to its transcript, and to the tab if it shows one of them, when they've changed
-    /// since the pane last looked, as `changes` says.
-    pub(super) fn pass_on_subagents(&mut self, changes: &Changes<'_>, cx: &mut Context<Self>) {
-        // A tab opened on the subagent a call started, before its record came, names it by that call, and the hub
-        // follows it by the ID its agent gives it once the agent says it started. Its record names it so, as its
-        // transcript does once it has the record.
+    /// Names the tab's subagent as its record does. A tab opened on the subagent a call started, before its record
+    /// came, names it by that call, and the hub follows it by the ID its agent gives it once the agent says it started.
+    /// Its record names it so, as its transcript does once it has the record.
+    pub(super) fn name_the_tab_s_subagent(&mut self) {
         if let Some(tab) = &mut self.subagents.tab
             && let Some(named) = subagent_named(self.shown.all().subagents(&tab.session), &tab.subagent)
         {
             tab.subagent = named.id();
-        }
-        for (id, chat) in &self.chats {
-            let Some((transcript, _)) = &chat.transcript else { continue };
-            if !changes.subagents(id) {
-                continue;
-            }
-            let list = self.subagents_of(id);
-            transcript.update(cx, |t, cx| t.set_subagents(list, cx));
-            if let Some(tab) = self.subagents.tab.as_ref().filter(|tab| &tab.session == id) {
-                tab.transcript.update(cx, |t, cx| t.set_subagents(list, cx));
-            }
         }
     }
 
