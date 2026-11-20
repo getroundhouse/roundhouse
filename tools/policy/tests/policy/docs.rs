@@ -38,7 +38,6 @@ const LONG_CELLS: &[(&str, usize)] = &[
     ("docs/reference/antigravity-cli.md", 7),
     ("docs/reference/claude-cli.md", 67),
     ("docs/reference/codex-cli.md", 7),
-    ("docs/reference/terms.md", 55),
 ];
 
 /// The folders whose docs these limits cover. The spec and the guide aren't among them.
