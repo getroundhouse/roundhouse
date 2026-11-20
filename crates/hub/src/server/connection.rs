@@ -1,12 +1,12 @@
 //! Serving clients, on the Unix socket and over TLS for paired devices. Each connection reads its requests in order,
 //! and answers them alongside one another.
 
+use super::counted::Counted;
 use super::terminals::{self, Answering};
 use super::{admit, dispatch};
 
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::sync::atomic::Ordering;
 use std::time::Duration;
 
 use crate::listener::Listener;
@@ -162,7 +162,9 @@ where
         let (outcome, close) = match gate.admit(hub, asked).await {
             Admit::Handle(handled) => {
                 let (hub, connection) = (hub.clone(), connection.clone());
-                hub.requests.fetch_add(1, Ordering::Relaxed);
+                // Then held by the request's task, so the count comes down however the request ends, even if the
+                // connection stops reading before the task starts, as it can while typing waits for room at its worker.
+                let under_way = Counted::request(&hub);
                 let read = match unreadable {
                     Some(error) => Err(error),
                     None => Ok(handled),
@@ -180,7 +182,7 @@ where
                         Ok(response) => ReplyOutcome::Response(response),
                         Err(error) => ReplyOutcome::Error(error),
                     };
-                    hub.requests.fetch_sub(1, Ordering::Relaxed);
+                    drop(under_way);
                     let _ = connection.frames.send(HubFrame::Reply { id: request.id, outcome }).await;
                 });
                 continue;

@@ -9,6 +9,7 @@ use connection::Connection;
 pub(crate) use connection::{PUMP_PAGE_EVENTS, accept_loop};
 
 mod admit;
+mod counted;
 mod dispatch;
 mod hello;
 mod network;
