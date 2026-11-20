@@ -226,3 +226,15 @@ fn text_is_sent_as_it_is_and_goes_back_to_the_screen() {
     assert_eq!(text(&copy.frame().unwrap().unwrap(), 0), on_screen);
     assert_eq!(copy.selected_text().unwrap(), None, "typing clears what's selected");
 }
+
+/// A screen starts a new copy, whose history isn't compressed until it has been quiet a while.
+#[test]
+fn a_copy_compresses_its_history_once_its_terminal_is_quiet() {
+    let mut copy = TerminalCopy::new();
+    let now = std::time::Instant::now();
+    assert_eq!(copy.compress_at(now), None, "nothing to compress before the screen");
+
+    copy.take_in(screen(SMALL, b"$ ")).unwrap();
+
+    assert_eq!(copy.compress_at(now), Some(now + terminal_state::QUIET_BEFORE_COMPRESSING));
+}

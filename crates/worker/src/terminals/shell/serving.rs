@@ -231,6 +231,9 @@ impl Shell {
         let mut look = tokio::time::interval(self.look_every);
         look.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
         while !(read_all && self.exit.is_some()) {
+            // By the clock this waits on, so the two agree. Ghostty fails only when it can't allocate, which leaves the
+            // copy as it is, uncompressed.
+            let compress_at = mirror.compress_at(Instant::now().into_std()).ok().flatten().map(Instant::from_std);
             // In this order, so neither a stop nor the end waits out a program that writes without a pause.
             tokio::select! {
                 biased;
@@ -261,6 +264,9 @@ impl Shell {
                     Some(output) => self.wrote(mirror, output).await,
                     None => read_all = true,
                 },
+                () = until(compress_at) => {
+                    let _ = mirror.compress(Instant::now().into_std());
+                }
             }
         }
         // The job can outlast the shell, and the PTY, which a Mac closes as the shell ends.
@@ -358,8 +364,8 @@ impl Shell {
 /// Never, without a deadline.
 #[expect(
     clippy::disallowed_methods,
-    reason = "the deadlines a terminal waits for: the end of a stop's grace, when what hasn't ended is killed, and of the \
-              wait for the last of what its shell wrote, once the shell has ended"
+    reason = "the deadlines a terminal waits for: the end of a stop's grace, when what hasn't ended is killed, of the \
+              wait for the last of what its shell wrote, once the shell has ended, and when its history is next compressed"
 )]
 async fn until(deadline: Option<Instant>) {
     match deadline {
