@@ -14,6 +14,9 @@ pub enum ContentBlock {
         /// gives it. The worker reads each, and the hub keeps it as an attachment of the session, so a client reads
         /// its bytes with `AttachmentRead`, as it does a prompt's. One that wasn't there, or wasn't an image inside the
         /// worktree, isn't named, and neither is any in a text recorded before the hub kept them.
+        ///
+        /// This is the only record of which images the worker read, since the agent's raw line doesn't say. So
+        /// anything that builds the event again from its raw line has to carry these over from the event it replaces.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         images: Vec<LinkedImage>,
     },
@@ -32,6 +35,12 @@ pub enum ContentBlock {
         /// what an MCP tool or a subagent said, or `Words`, which is where an adapter records the agent's own words
         /// for a failure. One that failed with any other output, such as a patch's files, says only that it failed.
         is_error: bool,
+        /// The person wouldn't let the call be made. Its adapter says so, since what came back is what the agent was
+        /// told, which reads as any failure, and only the adapter can read where its agent says it was a denial. It's
+        /// said here, and not on the record that closes the approval, since everything that draws a call reads its
+        /// result, and a subagent's work, in its tab or on its record, has no way back to the request. A request a stop
+        /// cancelled isn't a denial, so its call's result says none, and its approval's record says what became of it.
+        /// *Unconfirmed:* that it's said here.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         denied: Option<Denied>,
         /// Images that came back beside what the call did, such as a screenshot a command made, each an attachment of

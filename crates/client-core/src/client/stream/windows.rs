@@ -36,6 +36,8 @@ struct Pipe {
 
 impl Stream {
     /// The hub may only learn who this is, not act as them, in case something else took the pipe's name first.
+    /// Nothing checks who serves the pipe, so another user's process that made a pipe of this name before the hub did
+    /// gets whatever the client sends its hub, prompts included.
     #[expect(
         clippy::disallowed_methods,
         reason = "the pace connecting tries again at while every instance of the pipe has a client, until the hub makes the next"

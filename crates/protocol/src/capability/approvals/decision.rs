@@ -167,7 +167,8 @@ impl Decision {
     /// not to answer, so that's said one way, which every adapter takes; a plan approved or not; a host reached or not;
     /// access granted, of what was asked, or refused; or a tool server answered. A call keeps only a rule the request
     /// suggests, as [`Request::suggests`] says, and a request that comes whatever the mode keeps none. One this build
-    /// doesn't know can only be refused.
+    /// doesn't know can only be refused. *Unconfirmed:* an empty answer as the one way to leave a question unanswered,
+    /// and a call keeping only a rule its request suggests.
     ///
     /// [`Question::takes`]: crate::capability::asking::Question::takes
     pub fn answers(&self, request: &Request) -> bool {

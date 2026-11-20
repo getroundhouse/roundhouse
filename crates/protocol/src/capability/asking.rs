@@ -21,8 +21,9 @@ area! { "asking the person";
     /// answered, not what with, and keeps no draft of it. The agent asks in every approval mode.
     Questions => questions: Claimed,
     /// In plan mode, the agent asks to have its plan approved before it changes anything, with the plan's words.
-    /// Approving it takes the agent out of plan mode into the mode chosen with it, and it starts on the plan in the
-    /// same turn. Not approving it keeps it planning, with the person's words when they gave some. An agent that only
+    /// Approving it takes the agent out of plan mode, into the mode its adapter goes on in after a plan, as
+    /// [`Decision::ApprovePlan`](super::approvals::Decision::ApprovePlan) says, and it starts on the plan in the same
+    /// turn. Not approving it keeps it planning, with the person's words when they gave some. An agent that only
     /// writes its plan and ends its turn, as Codex does, gets this from its adapter, which holds that turn's end back
     /// and asks, and on a decision starts the agent's next turn, out of plan mode or in it, as the same turn, so a turn
     /// ends only once its plan is decided, as with Claude.

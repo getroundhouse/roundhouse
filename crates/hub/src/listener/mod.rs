@@ -1,5 +1,5 @@
-//! Where clients connect: a Unix socket, or on Windows a named pipe. Either way, only this user can send the hub
-//! anything, which is what authenticates a local client.
+//! Where clients connect: a Unix socket, or on Windows a named pipe, since neither tokio nor stable Rust has Unix
+//! sockets there. Either way, only this user can send the hub anything, which is what authenticates a local client.
 
 #[cfg(unix)]
 mod unix;

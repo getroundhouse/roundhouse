@@ -98,8 +98,9 @@ impl PromptCache {
         Some(self.used_at_ms.saturating_add(ttl).saturating_sub(warn_ms))
     }
 
-    /// How warm it is at `now_ms`, by the hub's clock, as [`PromptCache::warns_at_ms`] says. `None` for a TTL this
-    /// build doesn't know.
+    /// How warm it is at `now_ms`, as [`PromptCache::warns_at_ms`] says. `None` for a TTL this build doesn't know.
+    /// A client passes the time by its own clock, as it does to count how long a turn has taken, so how long is left
+    /// is all it works out about the cache, and the rest it reads from the record.
     pub fn state(&self, now_ms: i64) -> Option<CacheState> {
         let (expires_at_ms, warns_at_ms) = (self.expires_at_ms()?, self.warns_at_ms()?);
         // Never more than the TTL, for a hub whose clock runs ahead of this one's.

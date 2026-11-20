@@ -1,7 +1,7 @@
-//! What's open, kept apart from how it's laid out, as a device's view is in "State ownership" in
-//! `docs/architecture.md`: a workspace's chat, and a panel over the list of workspaces. The compact layout shows the
-//! panel if one's open, then the chat, then the list, a screen at a time with a way back. A wider one would show the
-//! list beside the chat from the same, so a change of width opens nothing again.
+//! What's open, which is this device's to keep, as `docs/principles/state.md` says, kept apart from how it's laid
+//! out: a workspace's chat, and a panel over the list of workspaces. The compact layout shows the panel if one's open,
+//! then the chat, then the list, a screen at a time with a way back. A wider one would show the list beside the chat
+//! from the same, so a change of width opens nothing again.
 
 use gpui_kit::{Entity, Subscription};
 

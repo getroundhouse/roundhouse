@@ -177,7 +177,8 @@ pub enum SoFar {
     Unknown,
 }
 
-/// Whether a use is allowed or denied.
+/// Whether a use is allowed or denied. A draft keeps the choice by name, not by its place among the answers a client
+/// shows, so a client that draws the answers in another order reads the same draft.
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum UseChoice {

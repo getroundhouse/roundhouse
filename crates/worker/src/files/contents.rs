@@ -124,7 +124,8 @@ pub(crate) fn read_folder(worktree: &Path, folder: &str) -> Result<WorktreeFiles
 }
 
 /// What the file at `path`, relative to the worktree at `worktree`, holds. Refused unless it's a file inside the
-/// worktree.
+/// worktree. It reads any kind of file there, where [`crate::images::read`] reads only an image, since a person chose
+/// this path, and the agent's text chose that one.
 pub(crate) fn read(worktree: &Path, path: &str) -> Result<FileContents, ApiError> {
     relative(path)?;
     let file = crate::worktree_file::find(worktree, path)?;

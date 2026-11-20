@@ -1,6 +1,7 @@
 //! Images a tool sends back, such as a screenshot the agent reads. Each becomes an attachment of the session, which the
 //! hub keeps in a file of its own, as it does a prompt's images. The line is kept without their bytes, since the CLI
 //! sends a read image twice in one line, in its result and in its record of the read, as about a megabyte of base64.
+//! *Unconfirmed.*
 
 use protocol::attachment::{Attachment, AttachmentBytes, MediaType, NewAttachment};
 use protocol::event::ContentBlock;

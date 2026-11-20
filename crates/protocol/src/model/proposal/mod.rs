@@ -1,6 +1,6 @@
 //! A proposal: a decision too large for a question, which an agent writes with Roundhouse's tools as a structure, and
-//! the person reads and answers in a tab of its own. The hub keeps it, as `docs/architecture.md` says under "State
-//! ownership", so every client shows the same one.
+//! the person reads and answers in a tab of its own. The hub keeps it, so every client shows the same one, as
+//! `docs/principles/state.md` says.
 
 #[cfg(test)]
 mod tests;

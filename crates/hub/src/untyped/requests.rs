@@ -32,7 +32,8 @@ pub(crate) fn type_request(body: &mut Value) -> bool {
     changed
 }
 
-/// What the request `body`, in the form Claude's adapter recorded it in, asked.
+/// What the request `body`, in the form Claude's adapter recorded it in, asked. None is said to be asked in every
+/// mode, since whether one was went unrecorded.
 fn request(body: &Value) -> Request {
     let tool = body.get("tool_name").and_then(Value::as_str).unwrap_or_default();
     let input = body.get("input").unwrap_or(&Value::Null);
@@ -161,6 +162,7 @@ pub(crate) fn type_resolution(body: &mut Value, asks: Option<&Asks>, said: Optio
 /// the conversation it was planned in, as no client could say otherwise, and answers by text are matched to the
 /// options they name.
 /// Questions denied were left unanswered, an empty answer to each, which is how a person chooses not to answer now.
+/// *Unconfirmed.*
 fn decision(body: &Value, asks: Option<&Asks>, said: Option<&str>) -> Option<Decision> {
     let allowed = match body.get("outcome").and_then(Value::as_str) {
         Some("allowed") => true,

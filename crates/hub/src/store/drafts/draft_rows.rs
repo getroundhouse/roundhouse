@@ -14,6 +14,10 @@ impl Store {
     /// has it, and one it hasn't been given is left out, as are any past what a prompt can carry. A closed session
     /// keeps none, since its composer went with it. Keeping what's kept already changes nothing, so the session's
     /// revision only moves when the draft does.
+    ///
+    /// It lets go of no file, even one the draft stops naming. A client empties the draft as it sends a prompt, and
+    /// the prompt that carries the draft's files may not be recorded yet. So a client asks for each file to be let go
+    /// of, with `AttachmentRemove`, and one it never asks about, such as when it stops first, stays with the session.
     pub fn set_draft(&self, id: &SessionId, draft: &DraftToKeep) -> Result<Reading, StoreError> {
         let conn = lock(&self.writer);
         let files = named_on(&conn, &FileFor::Session(id.clone()), &draft.files)?;

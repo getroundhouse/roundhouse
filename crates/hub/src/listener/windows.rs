@@ -15,7 +15,7 @@ impl Listener {
     /// Fails if anything already serves a pipe of this name, so a hub never shares its clients with another process.
     /// The pipe has the permissions Windows gives a pipe by default: this user, administrators and the system can
     /// read and write it, and anyone else can only read, so they can't send a request, and a hub only writes replies
-    /// to requests.
+    /// to requests. *Unconfirmed.*
     pub(crate) fn bind(path: &Path) -> io::Result<Self> {
         Ok(Self { name: path.into(), waiting: instance(path.as_os_str(), true)? })
     }

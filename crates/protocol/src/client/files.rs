@@ -124,6 +124,9 @@ impl Reply for FileOpened {
 /// them, as many as fit in what's sent at once and always the first, and none past the file's end. A line too long to
 /// send whole is cut short, and says so. Refused as `WorkspaceFileReadAt` is, and with `InvalidRequest` when
 /// `page_lines` is 0 or more than 4096. A hub older than this refuses it as unsupported.
+///
+/// The request says how many lines a page has, rather than leaving it to the worker, so page `n` is the same lines
+/// whichever build of the worker reads it.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct WorkspaceFilePages {
     pub id: WorkspaceId,

@@ -49,7 +49,7 @@ A README beside code says how to build, run or change that code, and agents keep
 | `docs/principles/agents.md` | How the hub and clients deal with each kind of agent through its adapter, and how an agent uses Roundhouse's tools |
 | `docs/decisions/` | One record a file, listed in its `README.md` |
 | `docs/reference/terms.md` | What the project's words mean, and which to write |
-| `docs/reference/layout.md` | A map of the parts and what connects them, and what each crate is |
+| `docs/reference/layout.md` | A map of the parts and what connects them, what each crate is, and who owns each piece of state |
 | `docs/reference/commands.md` | Every command for building, testing, running and packaging from a checkout |
 | `docs/reference/claude-cli.md` | How the Claude CLI behaves, and how the worker drives it |
 | `docs/reference/codex-cli.md` | How Codex's app-server behaves on the wire, and how to probe it |
@@ -71,5 +71,5 @@ Two docs are from before the folders, and are being taken apart as `docs/standar
 
 | Doc | What it holds until then |
 |---|---|
-| `docs/architecture.md` | How the system fits together: state ownership, wire format, updating the app, and providers |
+| `docs/architecture.md` | What's left of it: the worker's git credential, what agents are told, updating the app, and providers |
 | `docs/ui.md` | Why the apps are built on GPUI and gpui-kit, how the transcript builds on the kit, and why the iOS app is on Zed's iOS backend |

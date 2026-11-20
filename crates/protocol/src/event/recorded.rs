@@ -147,7 +147,9 @@ pub enum EventBody {
         in_background: bool,
     },
     /// How much the conversation of the subagent `subagent` holds, as the agent says while it works. It's the agent's
-    /// own event, about the subagent.
+    /// own event, about the subagent. Only the newest count matters, which would keep it off the log, but the agent
+    /// says it unasked, on a line of its output, which the log keeps anyway. How much the agent's own context holds is
+    /// an answer the worker asks for, so that goes on the session's record alone.
     SubagentContext {
         /// Sent as `call`, its name from when a subagent was named by the call that started it, since it's stored so.
         #[serde(rename = "call")]
@@ -265,7 +267,9 @@ pub enum EventBody {
     ApprovalResolved {
         approval_id: ApprovalId,
         /// What was decided, with any secret answer taken out, as [`Decision::without_secrets`] says. `None` where
-        /// nobody decided, since the request was cancelled: by a stop, the agent's going, or the agent itself.
+        /// nobody decided, since the request was cancelled: by a stop, the agent's going, or the agent itself. A hub
+        /// from before decisions were recorded sends none, so whatever closed a request there reads as cancelled.
+        /// *Unconfirmed:* how one from such a hub reads.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         decision: Option<Box<Decision>>,
         /// The hub decided itself, as its settings have it allow what an agent with full access still asks about,
