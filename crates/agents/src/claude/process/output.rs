@@ -67,6 +67,7 @@ pub(super) async fn read_stdout(mut stdout: Output, shared: Arc<Shared>, output:
                 AgentOutput::event(body, Some(line))
             }
         };
+        shared.covering.took_in(&item);
         let opened = matches!(&item, AgentOutput::Event { body, .. } if opens(body));
         if opened && !confirm(&shared, &output).await {
             return;

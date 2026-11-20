@@ -336,3 +336,36 @@ printf '{"type":"result","subtype":"success","num_turns":0,"result":""}\n'
     assert_eq!((by, summary.as_deref()), (CompactedBy::Asked, Some("1. What was asked")));
     assert!(only, "{seen:?}");
 }
+
+/// A prompt said out loud that the agent hasn't answered when its time is up gets a line said for it, which a CLI
+/// started for the stand-in, on Haiku, writes. The script is both: the stand-in when it's started on Haiku, and
+/// otherwise an agent that opens and then says nothing.
+#[tokio::test]
+async fn a_prompt_said_out_loud_and_not_answered_in_time_gets_a_line_said_for_it() {
+    use protocol::capability::output::Covering;
+    use protocol::capability::{Control, Report, prompts::Extras};
+    let dir = tempfile::tempdir().unwrap();
+    let body = r#"
+case "$*" in
+*"--model haiku"*)
+    read line
+    printf '{"type":"result","subtype":"success","is_error":false,"result":"Hold on, one sec."}\n' ;;
+*)
+    printf '{"type":"system","subtype":"init","session_id":"s"}\n'
+    exec cat >/dev/null ;;
+esac"#;
+    let (tx, mut rx) = mpsc::channel(64);
+    let agent = spawn_at(script(dir.path(), body), spec(dir.path()), tx, AgentOptions::default()).await.unwrap();
+    let prompt = Prompt { spoken: true, ..Prompt::new("How's it going?") };
+
+    agent.control(&Control::Prompt { seq: Seq::new(3), prompt, extras: Extras::default() }).await.unwrap();
+
+    let said = loop {
+        let item = timeout(Duration::from_secs(20), rx.recv()).await.expect("a line said for it").expect("output");
+        if let AgentOutput::Report(Report::Covering(said)) = item {
+            break said;
+        }
+    };
+    assert_eq!(said, Covering { prompt: Seq::new(3), line: "Hold on, one sec.".into() });
+    agent.stop().await;
+}

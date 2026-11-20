@@ -148,6 +148,7 @@ async fn finish(
     }
     shared.context.lock().close();
     shared.usage.lock().close();
+    shared.covering.stop();
     let _ = output.send(AgentOutput::Exited { code, signal, stderr_tail, requested }).await;
     shared.exited.send_replace(true);
 }
