@@ -104,7 +104,8 @@ struct Case {
     shows: Shows,
 }
 
-/// With the view scrolled up and two rows of it selected, at the same size.
+/// With the view scrolled up and two rows of it selected, at the same size. A full history takes more lines than the
+/// 10,000 a copy keeps, which a wide copy reaches sooner, as #2066 says.
 fn case(name: &'static str, lines: (usize, usize, usize), shows: Shows) -> Case {
     Case { name, lines, up: 40, selected: Some((2, 3)), size: SIZE, missing: |_| {}, shows }
 }
@@ -115,10 +116,10 @@ fn a_new_copy_keeps_the_place_while_it_has_its_rows() {
         case("attached again, with nothing missed", (300, 0, 0), Shows::ThePlace),
         case("with output missed", (300, 0, 150), Shows::ThePlace),
         Case { selected: None, ..case("with nothing selected", (300, 0, 150), Shows::ThePlace) },
-        case("once the history is full", (5000, 0, 400), Shows::ThePlace),
-        case("once output taken in has filled it", (300, 5000, 400), Shows::ThePlace),
+        case("once the history is full", (15_000, 0, 400), Shows::ThePlace),
+        case("once output taken in has filled it", (300, 15_000, 400), Shows::ThePlace),
         Case { up: 0, ..case("at the bottom, with what's selected there", (300, 0, 150), Shows::ThePlace) },
-        case("once its rows have gone from the history", (300, 0, 5000), Shows::TheBottom),
+        case("once its rows have gone from the history", (300, 0, 15_000), Shows::TheBottom),
         Case {
             missing: |worker| worker.write(b"\x1b[3J\x1b[2J"),
             ..case("once the history is cleared", (300, 0, 0), Shows::TheBottom)
