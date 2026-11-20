@@ -58,20 +58,19 @@ pub(super) async fn read_stdout(mut stdout: Output, shared: Arc<Shared>, output:
                 }
                 note(&shared, &mut body, &line);
                 answering.note(&body);
-                let opened = matches!(body, EventBody::AgentInit { .. });
                 // Not of a launch that hasn't opened, which may be about to be replaced by another.
-                if opened || shared.confirmed.load(Ordering::SeqCst) {
+                if opens(&body) || shared.confirmed.load(Ordering::SeqCst) {
                     context::heard(&shared, &body, &line);
                     context::after(&shared, &body, &output);
                     usage::after(&shared, &body, &output);
                 }
-                let item = AgentOutput::event(body, Some(line));
-                if opened && !confirm(&shared, &output).await {
-                    return;
-                }
-                item
+                AgentOutput::event(body, Some(line))
             }
         };
+        let opened = matches!(&item, AgentOutput::Event { body, .. } if opens(body));
+        if opened && !confirm(&shared, &output).await {
+            return;
+        }
         if !deliver(&shared, &output, item).await || !deliver_shown(&shared, &output, after).await {
             return;
         }
@@ -120,7 +119,14 @@ async fn deliver_shown(
     true
 }
 
-/// The CLI has opened the session, so what was held for it goes on. False once nobody is reading.
+/// Whether `body` shows the CLI has opened the conversation, so its launch stands: its `init`, which the start of a turn
+/// brings, or what became of a prompt, which it reads only once it has opened. A prompt cancelled before the first turn
+/// gets no `init`, so by `init` alone a chat stopped as it started would stay at work on a prompt the CLI dropped.
+fn opens(body: &EventBody) -> bool {
+    matches!(body, EventBody::AgentInit { .. } | EventBody::PromptTaken { .. } | EventBody::PromptDropped { .. })
+}
+
+/// The CLI has opened the conversation, so what was held for it goes on. False once nobody is reading.
 async fn confirm(shared: &Shared, output: &mpsc::Sender<AgentOutput>) -> bool {
     if shared.confirmed.swap(true, Ordering::SeqCst) {
         return true;
