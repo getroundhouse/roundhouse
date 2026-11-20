@@ -1,6 +1,6 @@
 # Changing a protocol
 
-These rules let peers on different builds keep working together. They hold for all three protocols that cross between processes: the client protocol, between clients and a hub, the worker protocol, between a hub and its workers, and the provider protocol, between a hub and its provider adapters. All three have the same problem, so nobody has to remember which rule applies where. *Not built:* the provider protocol.
+These rules let peers on different builds keep working together. They hold for all three protocols that cross between processes: the client protocol, between clients and a hub, the worker protocol, between a hub and its workers, and the provider protocol, between a hub and its provider adapters. All three have the same problem, so nobody has to remember which rule applies where. *Not built:* the local provider as an adapter. The hub calls it directly, so nothing shipped speaks the provider protocol.
 
 ## Changes that need no new version
 
