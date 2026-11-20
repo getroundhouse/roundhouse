@@ -17,7 +17,7 @@ pub(super) const FEB_3_MS: i64 = 1_801_666_800_000;
 const OCT_29_MS: i64 = 1_793_286_000_000;
 
 /// The conversation, on a hub with three GitHub accounts: `ada`, signed in, the default; `ada_northwind`, a token that
-/// ends in February; and `grace`, whose token was disconnected.
+/// ends in February; and `grace`, whose token ended three days ago.
 pub(in crate::gallery) fn github_accounts() -> World {
     let mut world = conversation();
     world.github = Some(sending(&ada()));
@@ -35,6 +35,21 @@ pub(in crate::gallery) fn no_github_accounts() -> World {
     let sent = SentCredential::NoAccount { reason: reason.to_string() };
     world.github =
         Some(GithubSettings { account: None, sent: Some(sent), left_to_machine: Vec::new(), set_up: Vec::new() });
+    world
+}
+
+/// The conversation, on a hub whose default was disconnected, which leaves none, with `ada` signed in and
+/// `ada_northwind`'s token to choose from, so it reads nothing of GitHub and blocks the workers of the providers it sets
+/// up, as the hub words why.
+pub(in crate::gallery) fn github_no_default() -> World {
+    let mut world = conversation();
+    let reason = "Roundhouse has no default GitHub account. Until one is chosen, Roundhouse can't read pull requests, \
+                  and agents on the providers it sets up can't push. Make one the default in Roundhouse's Settings, or \
+                  connect another.";
+    let sent = SentCredential::NoAccount { reason: reason.to_string() };
+    world.github =
+        Some(GithubSettings { account: None, sent: Some(sent), left_to_machine: Vec::new(), set_up: Vec::new() });
+    world.github_accounts = vec![ada(), northwind(FEB_3_MS)];
     world
 }
 
@@ -121,9 +136,15 @@ pub(super) fn northwind(ends_at_ms: i64) -> GithubAccount {
     )
 }
 
-/// `grace`, whose token the hub was told to forget.
+/// `grace`, a token made for 90 days, which ended three days ago.
 fn grace() -> GithubAccount {
-    GithubAccount { held_login: None, ..held("github-0003", 3, "grace", ada().held_login.unwrap()) }
+    let ended = HeldGithubLogin {
+        how: GithubLoginKind::Token,
+        connected_at_ms: OCT_29_MS - 90 * DAY_MS,
+        ends_at_ms: Some(OCT_29_MS),
+        needs_sign_in: false,
+    };
+    held("github-0003", 3, "grace", ended)
 }
 
 fn held(id: &str, user: u64, name: &str, held: HeldGithubLogin) -> GithubAccount {

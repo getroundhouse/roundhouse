@@ -140,23 +140,42 @@ fn renewing_is_refused_for_another_users_token_one_another_account_holds_and_no_
 }
 
 #[test]
-fn disconnecting_forgets_the_token_and_keeps_the_record_and_the_default_and_again_changes_nothing() {
+fn disconnecting_forgets_the_token_and_the_record_and_the_default_and_again_is_not_found() {
     let dir = tempfile::tempdir().unwrap();
     let (logins, store) = logins_in(dir.path());
     logins.connect(&connect("a-token", None, "g1"), &ada()).unwrap();
+    logins.connect(&connect("b-token", None, "g2"), &owner(8, "grace", None)).unwrap();
+    let before = store.list_records().unwrap().github_accounts;
 
     let disconnected = logins.disconnect(&"g1".into(), 2000).unwrap();
-    let again = logins.disconnect(&"g1".into(), 2000).unwrap();
+    let again = logins.disconnect(&"g1".into(), 2000);
     let nobody = logins.disconnect(&"nobody".into(), 2000);
-    let connected_again = logins.held(&connect("a-token", None, "g2")).unwrap();
+    let connected_again = logins.held(&connect("a-token", None, "g3")).unwrap();
 
-    assert!(disconnected.changed);
-    assert_eq!((disconnected.account.held_login, &disconnected.account.user), (None, &ada().user));
-    assert_eq!(again, GithubAccountChange { account: disconnected.account, changed: false, settings: None });
+    let Disconnected::Removed(removed) = disconnected else { panic!("{disconnected:?}") };
+    assert_eq!(removed.account, before[0], "the reply is the record as it last was");
+    assert!(removed.rev.supersedes(before[1].rev), "its removal moved the records' revision");
+    assert_eq!(removed.settings.and_then(|settings| settings.github).map(|github| github.account), Some(None));
+    assert_eq!(again.unwrap_err().code, ErrorCode::NotFound);
     assert_eq!(nobody.unwrap_err().code, ErrorCode::NotFound);
-    assert_eq!(default_of(&store), Some("g1".into()), "a lost default stays the default");
-    assert_eq!(tokens_kept(dir.path()), Vec::<String>::new());
+    assert_eq!(store.list_records().unwrap().github_accounts, before[1..], "only the disconnected account went");
+    assert_eq!(default_of(&store), None, "a disconnected default leaves none");
+    assert_eq!(tokens_kept(dir.path()), ["b-token"]);
     assert_eq!(connected_again, None, "the hub keeps nothing to know the token by");
+}
+
+#[test]
+fn disconnecting_an_account_that_isnt_the_default_leaves_the_settings() {
+    let dir = tempfile::tempdir().unwrap();
+    let (logins, store) = logins_in(dir.path());
+    logins.connect(&connect("a-token", None, "g1"), &ada()).unwrap();
+    logins.connect(&connect("b-token", None, "g2"), &owner(8, "grace", None)).unwrap();
+
+    let disconnected = logins.disconnect(&"g2".into(), 2000).unwrap();
+
+    let Disconnected::Removed(removed) = disconnected else { panic!("{disconnected:?}") };
+    assert_eq!(removed.settings, None);
+    assert_eq!(default_of(&store), Some("g1".into()));
 }
 
 #[test]
@@ -176,7 +195,7 @@ fn the_default_is_refused_for_an_account_with_no_record_or_no_login_that_can_be_
     let after_refusals = default_of(&store);
     let machines_own = logins.set_default(None, 2000).unwrap();
 
-    assert_eq!(refused, [ErrorCode::NotFound, ErrorCode::Conflict, ErrorCode::Conflict, ErrorCode::Conflict]);
+    assert_eq!(refused, [ErrorCode::NotFound, ErrorCode::Conflict, ErrorCode::NotFound, ErrorCode::Conflict]);
     assert_eq!(after_refusals, Some("work".into()), "each refusal left the default as it was");
     assert_eq!(machines_own.github.unwrap().account, None);
 }
@@ -195,9 +214,10 @@ fn choosing_the_default_moves_the_settings_revision_and_choosing_it_again_doesnt
     assert_eq!(again, home);
 }
 
-/// A sign-in's login in a form only a newer build reads is kept with its account, for that build.
+/// A sign-in's login in a form only a newer build reads is kept with its account, for that build. An account whose
+/// file isn't a token goes, as disconnecting it would have.
 #[test]
-fn tidying_clears_a_login_whose_file_isnt_a_token_and_removes_what_no_account_names_but_not_agents_or_a_newer_form() {
+fn tidying_removes_an_account_whose_file_isnt_a_token_and_what_no_account_names_but_not_agents_or_a_newer_form() {
     let dir = tempfile::tempdir().unwrap();
     let (logins, store) = logins_in(dir.path());
     logins.connect(&connect("kept-token", None, "kept"), &ada()).unwrap();
@@ -215,8 +235,8 @@ fn tidying_clears_a_login_whose_file_isnt_a_token_and_removes_what_no_account_na
 
     logins.tidy(2000).unwrap();
 
-    let held = |id: &str| store.github_account(&id.into()).unwrap().unwrap().held_login.is_some();
-    assert_eq!([held("kept"), held("garbled"), held("newer")], [true, false, true]);
+    let held = |id: &str| store.github_account(&id.into()).unwrap().map(|account| account.held_login.is_some());
+    assert_eq!([held("kept"), held("garbled"), held("newer")], [Some(true), None, Some(true)]);
     assert_eq!(tokens_kept(dir.path()), ["kept-token", NEWER_FORM]);
     assert_eq!(std::fs::read_dir(dir.path().join("logins")).unwrap().count(), 1, "an agent's login is another's");
 }

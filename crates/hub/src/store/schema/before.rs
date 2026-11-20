@@ -131,3 +131,6 @@ pub(crate) const BEFORE_GITHUB_LEFT_TO_MACHINE: usize = 84;
 /// How many migrations there were before the hub recorded the providers Roundhouse sets up GitHub on, and forgot each
 /// provider's found `gh` login.
 pub(crate) const BEFORE_GITHUB_SET_UP: usize = 85;
+
+/// How many migrations there were before disconnecting a GitHub account removed it, but for an app's installation.
+pub(crate) const BEFORE_GITHUB_ACCOUNT_REMOVAL: usize = 86;

@@ -1,9 +1,10 @@
 use super::super::{Hub, off_thread};
-use crate::github_logins::{Connect, GithubAccountChange};
+use crate::github_logins::{Connect, Disconnected, GithubAccountChange};
+use crate::store::GithubRemoved;
 use crate::store::now_ms;
 use protocol::client::github_accounts::{GithubAccountConnect, GithubAccountSetDefault};
 use protocol::client::{ApiError, HubNotice};
-use protocol::model::{GithubAccount, GithubAccountId, HubSettings};
+use protocol::model::{GithubAccount, GithubAccountId, HubSettings, RecordKey};
 use std::sync::Arc;
 use tracing::error;
 
@@ -23,12 +24,22 @@ impl Hub {
         Ok(self.announce_github_account(change))
     }
 
-    /// Has the hub forget the login it holds for the GitHub account, as `GithubAccountDisconnect` says, and tells every
-    /// client when that changed the account's record.
+    /// Has the hub forget the login it holds for the GitHub account, and the account with it but for an app's
+    /// installation, as `GithubAccountDisconnect` says, and tells every client what that changed: the installation's
+    /// record, or the account's removal, and the settings when it was the default. A removed account's reply is its
+    /// record as it last was, as a removal's always is.
     pub(crate) async fn github_account_disconnect(&self, id: GithubAccountId) -> Result<GithubAccount, ApiError> {
         let logins = Arc::clone(&self.github_logins);
-        let change = off_thread(move || logins.disconnect(&id, now_ms())).await?;
-        Ok(self.announce_github_account(change))
+        match off_thread(move || logins.disconnect(&id, now_ms())).await? {
+            Disconnected::Kept(change) => Ok(self.announce_github_account(change)),
+            Disconnected::Removed(GithubRemoved { account, rev, settings }) => {
+                self.notify(HubNotice::Removed { record: RecordKey::GithubAccount { id: account.id.clone() }, rev });
+                if let Some(settings) = settings {
+                    self.notify(HubNotice::HubSettings(settings));
+                }
+                Ok(account)
+            }
+        }
     }
 
     /// Chooses the default GitHub account, as `GithubAccountSetDefault` says, and tells every client of the settings.

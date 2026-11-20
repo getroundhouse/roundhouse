@@ -14,7 +14,8 @@ pub(super) use accounts::{
     every_account_out, logins_unkept, needs_an_account, none_found, reserves,
 };
 pub(super) use github::{
-    ada, github_accounts, github_default_ended, github_signing_in, github_signing_in_to, no_github_accounts,
+    ada, github_accounts, github_default_ended, github_no_default, github_signing_in, github_signing_in_to,
+    no_github_accounts,
 };
 pub(super) use github_apps::{
     github_app_installed, github_app_not_installed, github_app_not_looked, github_app_renewing,

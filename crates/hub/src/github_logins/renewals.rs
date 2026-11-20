@@ -132,6 +132,10 @@ impl GithubLogins {
     /// The file of `due`'s account's login, while it holds the sign-in `due` renews: one whose file holds what renews
     /// its token that GitHub was asked with.
     fn holding_still(&self, files: &Locked<'_, GithubLogin>, due: &Due) -> Result<Option<LoginFile>, ApiError> {
+        // An account disconnected since is gone, and holds nothing to renew.
+        if self.store.github_account(&due.account)?.is_none() {
+            return Ok(None);
+        }
         let Some(file) = self.store.github_login_file(&due.account)? else { return Ok(None) };
         match files.read(&file) {
             Ok(Stored::Secret(GithubLogin::SignIn(held))) if held.refresh.as_ref() == Some(&due.refresh) => {

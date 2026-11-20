@@ -187,7 +187,7 @@ fn what_renewing_came_to_is_let_go_of_once_the_account_holds_another_login_or_no
 
     assert!(after.iter().all(Option::is_none), "{after:?}");
     assert_eq!(records(), records_before, "no record changed");
-    assert_eq!(store.github_login_file(&"g".into()).unwrap(), None, "the one disconnected holds none still");
+    assert_eq!(store.github_account(&"g".into()).unwrap(), None, "the one disconnected is gone still");
     let Stored::Secret(GithubLogin::SignIn(signed_in)) = &h_before.1 else { panic!("{h_before:?}") };
     assert_eq!(signed_in.token.as_str(), "graces-new-token", "the one signed in again holds the new sign-in's");
     assert_eq!((held(&logins, &store, "h"), held(&logins, &store, "i")), (h_before, i_before));

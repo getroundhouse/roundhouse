@@ -3,17 +3,20 @@ use serde::{Deserialize, Serialize};
 use super::super::{GithubAccountId, GithubUsername, Rev};
 use super::{GithubInstallation, GithubUserId};
 
-/// A GitHub account the hub holds, or held, a login for, as a record of its own, so every client shows the same of it.
-/// The default, as [`GithubSettings::account`](crate::model::GithubSettings::account) names it, is the one agents push
-/// and open pull requests as, on every machine. The login itself is in a file of the hub's, and never on a record.
-/// Disconnecting forgets the login and keeps the record, with none, since the default can still name it.
+/// A GitHub account the hub holds a login for, as a record of its own, so every client shows the same of it. The
+/// default, as [`GithubSettings::account`](crate::model::GithubSettings::account) names it, is the one the hub reads
+/// GitHub as, and agents push and open pull requests as on the providers Roundhouse sets up GitHub on. The login itself
+/// is in a file of the hub's, and never on a record. Disconnecting forgets the login and the record, but for an app's
+/// installation, whose record stays with none, as
+/// [`GithubAccountDisconnect`](crate::client::github_accounts::GithubAccountDisconnect) says.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct GithubAccount {
     pub id: GithubAccountId,
     /// Who it is, as GitHub said when the hub last asked: as the account was connected, or its login renewed, and for a
     /// token's or a sign-in's, as the hub asks again once a day, for its commit identity.
     pub user: GithubUser,
-    /// `None` once its login was disconnected, or its file is gone.
+    /// `None` for an app's installation that was disconnected or uninstalled there, and from a hub from before
+    /// Disconnect removed an account, for one that was disconnected.
     #[serde(default)]
     pub held_login: Option<HeldGithubLogin>,
     /// Where it's installed, for one that's an installation of an app of your own, whose `user` is then the app's bot.

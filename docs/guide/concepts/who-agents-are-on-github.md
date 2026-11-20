@@ -60,7 +60,9 @@ A repository that isn't on GitHub, such as one on GitLab or GitHub Enterprise, i
 
 ## When the default can't be used
 
-If the default's token ends, you disconnect it, it needs signing in again, it's `gh`'s login and `gh` is logged out or logged in as someone else, or it's an app's installation that was uninstalled on GitHub, it stays the default, and agents can't push until you renew it, sign in again, or make another the default. They don't fall back on the machine's own login, so nothing is pushed as someone you didn't choose. On your own machine, agents push as they always do. The Git page says what's wrong, and what to do, at the top of **Added**.
+If the default's token ends, it needs signing in again, it's `gh`'s login and `gh` is logged out or logged in as someone else, or it's an app's installation that was uninstalled on GitHub, it stays the default, and agents can't push until you renew it, sign in again, or make another the default. They don't fall back on the machine's own login, so nothing is pushed as someone you didn't choose. On your own machine, agents push as they always do. The Git page says what's wrong, and what to do, at the top of **Added**.
+
+If you disconnect the default, Roundhouse forgets it, and there's no default until you make another account the default, with the same effect. Git says so at the top of **Added**.
 
 A signed-in account's token lasts 8 hours, and the hub renews it before it ends, so this happens only if the hub couldn't reach GitHub in time. Git says it's `Renewing` until the hub has. An app's installation's token lasts an hour, and the hub makes the next well before it ends, so the same goes for it: while GitHub doesn't make the next, a default installation says `Renewing` once the last has ended.
 

@@ -188,12 +188,12 @@ pub(super) fn disconnect_asks(name: &str) -> String {
 /// What the question before disconnecting an account says under it, and more when it's the `default`.
 pub(super) fn disconnect_says(default: bool) -> &'static str {
     if default {
-        "The hub forgets its login, so connecting it again takes a new token or signing in again. It isn't revoked on \
-         GitHub, so it still works wherever else it's kept. It stays the default, so agents on the providers Roundhouse \
-         sets up can't push until you connect it again or make another account the default."
+        "Roundhouse forgets the account and its login, so using it again takes connecting it again. The login isn't \
+         revoked on GitHub, so it still works wherever else it's kept. Then there's no default, so Roundhouse can't read \
+         pull requests, and agents on the providers it sets up can't push, until you make another account the default."
     } else {
-        "The hub forgets its login, so connecting it again takes a new token or signing in again. It isn't revoked on \
-         GitHub, so it still works wherever else it's kept."
+        "Roundhouse forgets the account and its login, so using it again takes connecting it again. The login isn't \
+         revoked on GitHub, so it still works wherever else it's kept."
     }
 }
 

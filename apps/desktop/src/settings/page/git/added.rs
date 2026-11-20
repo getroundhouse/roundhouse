@@ -34,7 +34,8 @@ pub(super) fn list(drawing: &Drawing<'_>, cx: &App) -> Div {
     };
     let said = said.map(|(id, said)| said_in_the_list(id, said.into(), cx));
     let rows = accounts.iter().map(|account| account_row(drawing, account, cx));
-    let list = rows_of(cx).children(panel).children(blocked(drawing, cx)).children(said).children(rows);
+    let blocked = blocked(drawing, !accounts.is_empty(), cx);
+    let list = rows_of(cx).children(panel).children(blocked).children(said).children(rows);
     let list = list.children(app_rows::not_installed(drawing, cx));
     let says = if drawing.older { words::ADDED_SAYS_OLDER.to_string() } else { words::added_says() };
     v_flex().child(heading("Added", None, says, Some(connect.into_any_element()), cx)).child(list)
@@ -60,14 +61,19 @@ pub(super) fn draw_panel(drawing: &Drawing<'_>, panel: &Panel, cx: &App) -> AnyE
 
 /// What stops the default being used, and what to do about it, while the hub blocks every worker: agents can't push
 /// until it's put right, rather than push as the machine's own. In the hub's words, as the block gives them to git,
-/// and as a workspace's line says them.
-fn blocked(drawing: &Drawing<'_>, cx: &App) -> Option<AnyElement> {
-    let SentCredential::Blocked { reason, .. } = drawing.sent()? else { return None };
+/// and as a workspace's line says them. So is there being no default while there are accounts, as once the default was
+/// disconnected, whose rows `has_accounts` says there are. With none, Added says to connect one in place of its rows.
+fn blocked(drawing: &Drawing<'_>, has_accounts: bool, cx: &App) -> Option<AnyElement> {
+    let (lead, reason) = match drawing.sent()? {
+        SentCredential::Blocked { reason, .. } => ("Roundhouse can't use its GitHub account.", reason),
+        SentCredential::NoAccount { reason } if has_accounts => ("No account is the default.", reason),
+        _ => return None,
+    };
     let said = StatusBox {
         id: "git-blocked",
         icon: Lucide::TriangleAlert,
         tone: status_box::Tone::Problem,
-        lead: Some("Roundhouse can't use its GitHub account.".into()),
+        lead: Some(lead.into()),
         detail: reason.clone().into(),
         progress: None,
         action: None,

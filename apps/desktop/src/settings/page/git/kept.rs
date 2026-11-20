@@ -206,7 +206,10 @@ impl Kept {
         cx.spawn(async move |this, cx| {
             let answer = disconnecting.recv().await;
             let _ = this.update(cx, |this, cx| {
-                if let Err(e) = answer {
+                // An account that's gone was disconnected already, as by another app, which is what was asked.
+                if let Err(e) = answer
+                    && !e.is_not_found()
+                {
                     this.failed = Some((Asked::Account(id), words::couldnt("disconnect it", &e)));
                 }
                 cx.notify();

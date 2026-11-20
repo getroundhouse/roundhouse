@@ -340,3 +340,36 @@ fn workspaces_from_before_placement_migrate_to_their_repos_checkout_without_movi
         "internal columns don't move rev"
     );
 }
+
+#[test]
+fn a_github_account_disconnected_before_removal_is_removed_with_its_profile_and_as_the_default_but_an_installation_isnt()
+ {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("hub.db");
+    let backups = dir.path().join("backups");
+    {
+        let conn = older_database(&path, &backups, BEFORE_GITHUB_ACCOUNT_REMOVAL);
+        conn.execute_batch(
+            "INSERT INTO github_accounts (id, user_id, username) VALUES ('gone', 7, 'ada');
+             INSERT INTO github_accounts (id, user_id, username, app_id, installation_id, installed_on_id, installed_on)
+                 VALUES ('installed', 9, 'ada-roundhouse[bot]', 1, 2, 7, 'ada');
+             INSERT INTO github_accounts (id, user_id, username, login_kind, login_file, login_connected_at_ms)
+                 VALUES ('held', 8, 'grace', 'token', 'a-file', 0);
+             INSERT INTO github_profiles (account_id, read_at_ms) VALUES ('gone', 0), ('held', 0);
+             UPDATE hub_settings SET github_account_id = 'gone';",
+        )
+        .unwrap();
+    }
+
+    let store = Store::open(&path, &backups).unwrap();
+
+    let ids = store.list_records().unwrap().github_accounts.into_iter().map(|account| account.id.to_string());
+    assert_eq!(ids.collect::<Vec<_>>(), ["installed", "held"]);
+    assert_eq!(store.hub_settings().unwrap().github.and_then(|github| github.account), None);
+    let profiles: Vec<String> = {
+        let conn = open_connection(&path).unwrap();
+        let mut statement = conn.prepare("SELECT account_id FROM github_profiles ORDER BY account_id").unwrap();
+        statement.query_map([], |row| row.get(0)).unwrap().collect::<Result<_, _>>().unwrap()
+    };
+    assert_eq!(profiles, ["held"]);
+}

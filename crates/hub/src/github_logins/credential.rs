@@ -155,7 +155,10 @@ impl GithubLogins {
                 };
             }
         };
-        let Some(id) = default else { return DefaultCredential::NoAccount { reason: no_account() } };
+        let Some(id) = default else {
+            let has_accounts = self.store.has_github_accounts().unwrap_or(false);
+            return DefaultCredential::NoAccount { reason: no_account(has_accounts) };
+        };
         let blocked = |why, reason| DefaultCredential::Blocked { reason, account: Some(id.clone()), why };
         let account = match self.store.github_account(&id) {
             Ok(Some(account)) => account,

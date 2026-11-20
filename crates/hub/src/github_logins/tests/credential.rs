@@ -52,7 +52,11 @@ fn workers_are_sent_a_block_saying_to_connect_an_account_while_theres_no_default
 
     let GithubCredential::Blocked { reason } = &with_none else { panic!("{with_none:?}") };
     assert!(reason.starts_with("Roundhouse has no GitHub account") && reason.contains("Connect one"), "{reason}");
-    assert_eq!(sent(&logins), with_none, "an account that isn't the default isn't sent");
+    let with_an_account = sent(&logins);
+    let GithubCredential::Blocked { reason } = &with_an_account else {
+        panic!("an account that isn't the default isn't sent")
+    };
+    assert!(reason.starts_with("Roundhouse has no default GitHub account"), "{reason}");
 }
 
 #[test]
@@ -74,16 +78,20 @@ fn workers_are_sent_the_defaults_username_and_token_as_its_connected_and_renewed
 }
 
 #[test]
-fn a_disconnected_default_blocks_saying_to_connect_it_again() {
+fn a_disconnected_default_leaves_a_block_saying_to_choose_another_or_connect_one() {
     let dir = tempfile::tempdir().unwrap();
     let (logins, _) = logins_in(dir.path());
     logins.connect(&connect("a-token", None, "g1"), &ada()).unwrap();
+    logins.connect(&connect("b-token", None, "g2"), &owner(8, "grace", None)).unwrap();
 
     logins.disconnect(&"g1".into(), 2000).unwrap();
+    let choose = reason(sent(&logins));
+    logins.disconnect(&"g2".into(), 2000).unwrap();
+    let connect_one = reason(sent(&logins));
 
-    let reason = reason(sent(&logins));
-    assert!(reason.contains("ada, the default account, was disconnected"), "{reason}");
-    assert!(reason.contains("Connect it again, or choose another default"), "{reason}");
+    assert!(choose.starts_with("Roundhouse has no default GitHub account"), "{choose}");
+    assert!(choose.contains("Make one the default"), "{choose}");
+    assert!(connect_one.starts_with("Roundhouse has no GitHub account"), "{connect_one}");
 }
 
 #[test]

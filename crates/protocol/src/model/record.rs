@@ -42,8 +42,8 @@ pub enum RecordKey {
         #[serde(rename = "call")]
         subagent: SubagentId,
     },
-    /// Disconnecting one keeps its record, so the hub never removes one, and this isn't sent, as [`GithubAccount`]
-    /// says.
+    /// Sent once it has been disconnected, unless it's an app's installation, whose record stays until its app is
+    /// removed, as [`GithubAccountDisconnect`](crate::client::github_accounts::GithubAccountDisconnect) says.
     GithubAccount {
         id: GithubAccountId,
     },

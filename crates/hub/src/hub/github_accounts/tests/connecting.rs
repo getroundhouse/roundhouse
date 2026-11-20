@@ -5,7 +5,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use protocol::model::GithubToken;
+use protocol::model::{GithubToken, RecordKey};
 use protocol::worker::{GitIdentity, GithubCredential};
 use tokio::sync::broadcast::error::TryRecvError;
 
@@ -44,8 +44,31 @@ async fn every_client_is_told_of_what_changed_a_github_accounts_record_and_the_d
     assert!(matches!(told_again, Err(TryRecvError::Empty)), "{told_again:?}");
     assert_eq!(github.asked().len(), 1, "the same token again didn't ask GitHub");
     assert!(matches!(told_of_settings, Ok(HubNotice::HubSettings(settings)) if settings == machines_own));
-    assert_eq!(disconnected.held_login, None);
-    assert!(matches!(told_last, Ok(HubNotice::GithubAccount(record)) if record == disconnected));
+    assert_eq!(disconnected, connected, "the reply is the record as it last was");
+    let removed = RecordKey::GithubAccount { id: connected.id.clone() };
+    assert!(matches!(&told_last, Ok(HubNotice::Removed { record, .. }) if *record == removed), "{told_last:?}");
+    assert!(matches!(feed.try_recv(), Err(TryRecvError::Empty)), "no default, so the settings didn't change");
+}
+
+#[tokio::test]
+async fn disconnecting_the_default_tells_every_client_its_gone_and_then_that_theres_no_default() {
+    let github = StandIn::start(vec![("a-token", Answer::user(7, "ada", None))]).await;
+    let dir = tempfile::tempdir().unwrap();
+    let hub = hub_calling_github(dir.path(), github.api());
+    let connected = hub.github_account_connect(asking("a-token")).await.unwrap();
+    let mut feed = hub.subscribe_feed();
+
+    hub.github_account_disconnect(connected.id.clone()).await.unwrap();
+    let (gone, settings) = (feed.try_recv(), feed.try_recv());
+    let again = hub.github_account_disconnect(connected.id.clone()).await;
+
+    let Ok(HubNotice::Removed { record, rev }) = gone else { panic!("{gone:?}") };
+    assert_eq!(record, RecordKey::GithubAccount { id: connected.id.clone() });
+    assert!(rev.supersedes(connected.rev));
+    let Ok(HubNotice::HubSettings(settings)) = settings else { panic!("{settings:?}") };
+    assert_eq!(settings.github.map(|github| github.account), Some(None));
+    assert_eq!(again.unwrap_err().code, ErrorCode::NotFound);
+    assert_eq!(hub.records_list().await.unwrap().github_accounts, []);
 }
 
 /// As `GET /user` says, when the hub asks whose the token is.
@@ -96,7 +119,7 @@ async fn a_github_that_doesnt_answer_holds_up_only_the_connect_waiting_on_it() {
     let disconnecting = hub.github_account_disconnect(ada.id.clone());
     let disconnected = tokio::time::timeout(Duration::from_secs(5), disconnecting).await;
 
-    assert_eq!(disconnected.expect("the disconnect waited on the other connect").unwrap().held_login, None);
+    assert_eq!(disconnected.expect("the disconnect waited on the other connect").unwrap().id, ada.id);
     assert!(!waiting.is_finished(), "the other connect is still waiting on GitHub");
 }
 
