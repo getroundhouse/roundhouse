@@ -6931,6 +6931,7 @@ version = "0.1.0"
 dependencies = [
  "libc",
  "process",
+ "serde_json",
  "tempfile",
  "waiting",
  "windows-sys 0.61.2",

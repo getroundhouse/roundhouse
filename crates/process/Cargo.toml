@@ -6,8 +6,11 @@ publish.workspace = true
 license.workspace = true
 
 [features]
-# What tests of the crates that start processes share.
-testing = []
+# What tests of the crates that start processes share. Cargo says in JSON where it built the hub.
+testing = ["dep:serde_json"]
+
+[dependencies]
+serde_json = { workspace = true, optional = true }
 
 [target.'cfg(unix)'.dependencies]
 libc.workspace = true
