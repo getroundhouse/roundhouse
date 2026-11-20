@@ -10,7 +10,7 @@ use look::Lined as _;
 use look::{IconSizing as _, Typeset as _};
 
 use super::{FIND_KEY, Page, PageId, Section};
-use crate::app::TOP_STRIP_HEIGHT;
+use crate::app::TOP_STRIP;
 
 /// What the search says while nothing is typed in it, and what it's called to assistive apps.
 /// What the search says it's for, while nothing is typed in it, and what assistive apps call it.
@@ -48,7 +48,7 @@ pub(super) fn sidebar(
         .flex_none()
         .w(width)
         .h_full()
-        .pt(TOP_STRIP_HEIGHT)
+        .pt(TOP_STRIP.height())
         .px(look::Space::Small)
         .bg(colors.sidebar)
         .line_right(cx)

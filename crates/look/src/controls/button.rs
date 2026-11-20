@@ -18,6 +18,7 @@ use super::{ButtonKind, Sizing as _};
 use crate::ControlSize;
 use crate::colors::colors;
 use crate::hand::Hand;
+use crate::traits::Input;
 use crate::work::Work;
 
 /// A button with words, and maybe an icon beside them, of `kind`, as big as `size` has it.
@@ -72,11 +73,19 @@ pub struct Button {
     off: bool,
     waiting: bool,
     work: Option<Work>,
+    tooltip: Option<Tooltip>,
+}
+
+/// What a button says it does while the pointer rests on it, given to the kit as it's drawn, and only with a pointer,
+/// since under touch nothing rests on it.
+enum Tooltip {
+    Words(SharedString),
+    WithAction { words: SharedString, action: Box<dyn Action>, context: Option<SharedString> },
 }
 
 impl Button {
     fn new(kit: KitButton, kind: ButtonKind, shape: Shape) -> Self {
-        Button { kit, kind, shape, off: false, waiting: false, work: None }
+        Button { kit, kind, shape, off: false, waiting: false, work: None, tooltip: None }
     }
 
     fn kit(mut self, change: impl FnOnce(KitButton) -> KitButton) -> Self {
@@ -95,19 +104,22 @@ impl Button {
         self.kit(|kit| kit.child(element))
     }
 
-    /// What it says it does while the pointer rests on it.
-    pub fn tooltip(self, tooltip: impl Into<SharedString>) -> Self {
-        self.kit(|kit| kit.tooltip(tooltip))
+    /// What it says it does while the pointer rests on it. Under touch, it has none.
+    pub fn tooltip(mut self, tooltip: impl Into<SharedString>) -> Self {
+        self.tooltip = Some(Tooltip::Words(tooltip.into()));
+        self
     }
 
     /// What it says it does while the pointer rests on it, with the keys that do the same.
     pub fn tooltip_with_action(
-        self,
+        mut self,
         tooltip: impl Into<SharedString>,
         action: &dyn Action,
         context: Option<&str>,
     ) -> Self {
-        self.kit(|kit| kit.tooltip_with_action(tooltip, action, context))
+        let context = context.map(|context| SharedString::from(context.to_string()));
+        self.tooltip = Some(Tooltip::WithAction { words: tooltip.into(), action: action.boxed_clone(), context });
+        self
     }
 
     /// What an assistive app calls it, where its words don't say, as for a button that's only an icon.
@@ -218,6 +230,13 @@ impl Button {
             (ButtonKind::Main, Some(work)) => work.hue(colors),
             _ => None,
         };
+        let kit = match self.tooltip.filter(|_| Input::of(cx) == Input::Pointer) {
+            Some(Tooltip::Words(words)) => self.kit.tooltip(words),
+            Some(Tooltip::WithAction { words, action, context }) => {
+                self.kit.tooltip_with_action(words, action.as_ref(), context.as_deref())
+            }
+            None => self.kit,
+        };
         let kit = match (fill, self.work) {
             // The kit draws a custom button's colour faintly, so the fill is set on the button itself, which hover and
             // press still change. Not while it's off, since the kit lays the button's own style over its greyed-out
@@ -228,12 +247,12 @@ impl Button {
                     .foreground(colors.on_main)
                     .hover(fill.opacity(0.85))
                     .active(fill.opacity(0.7));
-                self.kit.custom(style).when(!off, |kit| kit.bg(fill))
+                kit.custom(style).when(!off, |kit| kit.bg(fill))
             }
             (None, Some(work)) if kind == ButtonKind::Outlined => {
-                self.kit.border_color(work.edge(colors)).text_color(work.text(colors))
+                kit.border_color(work.edge(colors)).text_color(work.text(colors))
             }
-            _ => self.kit,
+            _ => kit,
         };
         kit.disabled(self.off)
             .loading(self.waiting)

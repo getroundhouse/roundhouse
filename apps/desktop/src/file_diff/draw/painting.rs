@@ -22,7 +22,7 @@ use protocol::model::{DiffComment, DiffSide};
 use std::sync::Arc;
 
 /// A small row's, taller than a line, so a fold reads as a band across the code rather than as a line of it.
-pub(in super::super) const FOLD_HEIGHT: Pixels = look::RowSize::Small.height();
+pub(in super::super) const FOLD: look::RowSize = look::RowSize::Small;
 /// The column between the line numbers and the code, which says how a line changed.
 pub(in super::super) const SIGN: Pixels = px(16.);
 /// Each line's group, whose hover shows its button to add a comment.
@@ -249,7 +249,7 @@ fn fold_row(fold: &Fold, drawing: &Drawing, cx: &App) -> AnyElement {
     let said = format!("{lines} unchanged line{}", if lines == 1 { "" } else { "s" });
     h_flex()
         .w_full()
-        .h(FOLD_HEIGHT)
+        .h(FOLD.height())
         .bg(colors.inset)
         .text_color(colors.text_muted)
         .child(h_flex().flex_none().w(drawing.gutter).justify_center().gap(BETWEEN_ARROWS).children(arrows))

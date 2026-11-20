@@ -1,5 +1,7 @@
 use gpui_kit::{Pixels, px};
 
+use crate::traits::Reach;
+
 use crate::icon_sizes::IconSize;
 use crate::named::named;
 use crate::typography::Type;
@@ -26,22 +28,46 @@ named! {
 
 impl ControlSize {
     /// How tall it is, and how wide too, for one that's only an icon.
-    pub const fn height(self) -> Pixels {
-        match self {
-            ControlSize::Small => px(24.),
-            ControlSize::Regular => px(28.),
-            ControlSize::Large => px(32.),
+    pub fn height(self) -> Pixels {
+        self.height_at(Reach::now())
+    }
+
+    /// How tall it is at `reach`.
+    pub const fn height_at(self, reach: Reach) -> Pixels {
+        match reach {
+            Reach::Desk => match self {
+                ControlSize::Small => px(24.),
+                ControlSize::Regular => px(28.),
+                ControlSize::Large => px(32.),
+            },
+            Reach::Handheld => match self {
+                ControlSize::Small => px(32.),
+                ControlSize::Regular => px(36.),
+                ControlSize::Large => px(44.),
+            },
         }
     }
 
     /// The room at each end of a control, between its edge and what it says, such as a button's words. Something that
     /// lines the words up with an edge past the button, such as a quiet button under a card's text, takes the button
     /// out by this.
-    pub const fn padding(self) -> Pixels {
-        match self {
-            ControlSize::Small => px(8.),
-            ControlSize::Regular => px(12.),
-            ControlSize::Large => px(16.),
+    pub fn padding(self) -> Pixels {
+        self.padding_at(Reach::now())
+    }
+
+    /// The room at each end at `reach`.
+    pub const fn padding_at(self, reach: Reach) -> Pixels {
+        match reach {
+            Reach::Desk => match self {
+                ControlSize::Small => px(8.),
+                ControlSize::Regular => px(12.),
+                ControlSize::Large => px(16.),
+            },
+            Reach::Handheld => match self {
+                ControlSize::Small => px(12.),
+                ControlSize::Regular => px(14.),
+                ControlSize::Large => px(16.),
+            },
         }
     }
 
@@ -79,10 +105,19 @@ impl ControlSize {
         }
     }
 
-    /// How the spec's table writes it: its name, how tall it is, the room at its ends, and its kind of text.
+    /// How the spec's table writes it: its name, how tall it is and the room at its ends at a desk, its kind of text,
+    /// and how tall it is and the room at its ends on a handheld.
     #[cfg(any(test, feature = "testing"))]
-    pub fn written(self) -> [String; 4] {
+    pub fn written(self) -> [String; 6] {
         let pixels = |pixels: Pixels| format!("{}px", f32::from(pixels));
-        [format!("{self:?}"), pixels(self.height()), pixels(self.padding()), format!("{:?}", self.text())]
+        let (desk, handheld) = (Reach::Desk, Reach::Handheld);
+        [
+            format!("{self:?}"),
+            pixels(self.height_at(desk)),
+            pixels(self.padding_at(desk)),
+            format!("{:?}", self.text()),
+            pixels(self.height_at(handheld)),
+            pixels(self.padding_at(handheld)),
+        ]
     }
 }

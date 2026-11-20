@@ -64,7 +64,7 @@ impl WorkspacePane {
         let used = context.used_fraction();
         // The whole slot is the ring's to point at, and what the card lines up with, so the ring's own square is as
         // big as the slot.
-        let ring = middle().size(Slot::SIZE).child(div().size(RING).child(ring(used, cx)));
+        let ring = middle().size(Slot::SIZE.height()).child(div().size(RING).child(ring(used, cx)));
         // There's no asking while the record says the hub would refuse, such as while the agent is on a turn, or with no
         // hub to ask, nor an agent that doesn't compact when asked.
         let (pane, off, compacts) =
@@ -95,7 +95,7 @@ impl WorkspacePane {
             })
             .collect();
         let least = each.iter().map(|bar| bar.left).reduce(f32::min)?;
-        let bars = middle().size(Slot::SIZE).child(bars(&drawn(&each), cx));
+        let bars = middle().size(Slot::SIZE.height()).child(bars(&drawn(&each), cx));
         // Said in words too, as the ring is. The least of them is the one that runs out first.
         let said = format!("{called} {} left", words::whole_percent(least));
         // It holds a button when the chat can be moved to another account, so it waits for the pointer to cross to it.
@@ -195,7 +195,7 @@ mod tests {
         for bars in 1..=u8::try_from(MOST_BARS).unwrap() {
             let between = between_limits(usize::from(bars)).as_f32();
             let tall = f32::from(bars) * LIMIT.as_f32() + f32::from(bars - 1) * between;
-            let either_side = (Slot::SIZE.as_f32() - tall) / 2.;
+            let either_side = (Slot::SIZE.height().as_f32() - tall) / 2.;
             assert!(either_side >= 0. && either_side.fract() == 0., "{bars} bars are {tall} px tall");
         }
 

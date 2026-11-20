@@ -10,9 +10,9 @@ use crate::spec_table;
 
 #[test]
 fn the_specs_table_has_every_icon_size_in_order_as_the_app_sizes_it() {
-    let table: Vec<[String; 2]> = spec_table::rows("**Every size of an icon, by its name.**");
+    let table: Vec<[String; 3]> = spec_table::rows("**Every size of an icon, by its name.**");
 
-    let sized: Vec<[String; 2]> = IconSize::ALL.iter().map(|size| size.written()).collect();
+    let sized: Vec<[String; 3]> = IconSize::ALL.iter().map(|size| size.written()).collect();
     assert_eq!(table, sized, "docs/spec/look.md's table of icon sizes, against crates/look/src/icon_sizes/sizing.rs");
 }
 

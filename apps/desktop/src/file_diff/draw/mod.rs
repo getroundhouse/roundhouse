@@ -7,7 +7,7 @@ use code::code;
 mod code;
 
 mod painting;
-pub(super) use painting::{Drawing, FOLD_HEIGHT, SIGN, row};
+pub(super) use painting::{Drawing, FOLD, SIGN, row};
 
 #[cfg(test)]
 mod tests;

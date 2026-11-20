@@ -49,7 +49,7 @@ struct Sample {
 /// What the sheet shows, in its order: every size of a bar, then every size of a row.
 fn samples() -> Vec<Sample> {
     let bars = BarSize::ALL.iter().map(|&bar| {
-        let [name, tall] = bar.written();
+        let [name, tall, _] = bar.written();
         let (kind, button) = match bar {
             BarSize::Small => (Type::Detail, ControlSize::Small),
             BarSize::Regular => (Type::Body, ControlSize::Regular),
@@ -58,7 +58,7 @@ fn samples() -> Vec<Sample> {
         Sample { name: format!("{name} bar"), place, tall, height: bar.height(), edge: true, kind, button }
     });
     let rows = RowSize::ALL.iter().map(|&row| {
-        let [name, tall] = row.written();
+        let [name, tall, _] = row.written();
         let (kind, button) = (Type::Body, ControlSize::Small);
         let place = places::id(ROWS, &name);
         Sample { name: format!("{name} row"), place, tall, height: row.height(), edge: false, kind, button }

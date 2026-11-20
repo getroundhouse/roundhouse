@@ -1,3 +1,4 @@
+use crate::traits::Reach;
 use gpui_kit::component::{Icon, Sizable as _};
 use gpui_kit::{Pixels, px};
 
@@ -33,18 +34,31 @@ named! {
 
 impl IconSize {
     /// How wide and tall it is.
-    pub const fn size(self) -> Pixels {
-        match self {
-            IconSize::Small => px(12.),
-            IconSize::Regular => px(14.),
-            IconSize::Large => px(16.),
+    pub fn size(self) -> Pixels {
+        self.size_at(Reach::now())
+    }
+
+    /// The same at `reach`.
+    pub const fn size_at(self, reach: Reach) -> Pixels {
+        match reach {
+            Reach::Desk => match self {
+                IconSize::Small => px(12.),
+                IconSize::Regular => px(14.),
+                IconSize::Large => px(16.),
+            },
+            Reach::Handheld => match self {
+                IconSize::Small => px(14.),
+                IconSize::Regular => px(18.),
+                IconSize::Large => px(22.),
+            },
         }
     }
 
     /// How the spec's table writes it: its name and how big it is.
     #[cfg(any(test, feature = "testing"))]
-    pub fn written(self) -> [String; 2] {
-        [format!("{self:?}"), format!("{}px", f32::from(self.size()))]
+    pub fn written(self) -> [String; 3] {
+        let pixels = |reach| format!("{}px", f32::from(self.size_at(reach)));
+        [format!("{self:?}"), pixels(Reach::Desk), pixels(Reach::Handheld)]
     }
 }
 

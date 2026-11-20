@@ -1,13 +1,36 @@
 use crate::named::named;
+use crate::traits::Reach;
 use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::{AbsoluteLength, App, FontWeight, Pixels, SharedString, Styled, px, rems};
 
-/// How big a rem is. The kit's theme is given it, and the window measures the kinds that are in rems by it.
+/// How big a rem is at a desk. The kit's theme is given it, and the window measures the kinds that are in rems by it.
 pub(crate) const REM: Pixels = px(16.);
+/// How big a rem is on a handheld, where every kind of text has a size of its own in pixels: as big as makes the kit's
+/// own text, which is 0.875 rem as body text is at a desk, as big as body text is there.
+const HANDHELD_REM: Pixels = px(17. / 0.875);
 /// The code font. Every Mac has it, and Linux and Windows don't, so code there falls back to the system font.
 pub(crate) const MONO: &str = "Menlo";
-/// How big code is, which the kit's theme is given too.
+/// How big code is at a desk, which the kit's theme is given too.
 pub(crate) const MONO_SIZE: Pixels = px(12.);
+/// How big code is on a handheld.
+const HANDHELD_MONO_SIZE: Pixels = px(14.);
+
+/// How big a rem is at `reach`.
+pub(crate) fn rem(reach: Reach) -> Pixels {
+    match reach {
+        Reach::Desk => REM,
+        Reach::Handheld => HANDHELD_REM,
+    }
+}
+
+/// How big code is at `reach`.
+pub(crate) fn mono_size(reach: Reach) -> Pixels {
+    match reach {
+        Reach::Desk => MONO_SIZE,
+        Reach::Handheld => HANDHELD_MONO_SIZE,
+    }
+}
+
 /// How the app's own text that stands out from what's around it is set: medium, never bold, which shouts in a dense
 /// layout, as a card's title or a page's is.
 pub(super) const EMPHASIS: FontWeight = MEDIUM_AS_FOUND;
@@ -47,15 +70,32 @@ pub(super) struct Set {
 
 impl Type {
     pub(super) fn set(self) -> Set {
+        self.set_at(Reach::now())
+    }
+
+    /// How it's set at `reach`. At a desk, the kinds that set what's read are in rems, so the kit's own text agrees.
+    /// On a handheld, each is in pixels, as iOS's own kinds of text are, from their sizes. *Unconfirmed.*
+    fn set_at(self, reach: Reach) -> Set {
         let system = |size: AbsoluteLength| Set { font: Font::System, size, weight: None };
-        match self {
-            Type::PageTitle => Set { weight: Some(EMPHASIS), ..system(px(24.).into()) },
-            Type::Heading => Set { weight: Some(EMPHASIS), ..system(rems(1.).into()) },
-            Type::Body => system(rems(0.875).into()),
-            Type::Detail => system(rems(0.75).into()),
-            Type::Code => Set { font: Font::Code, size: MONO_SIZE.into(), weight: None },
-            Type::Key => system(px(10.).into()),
-            Type::KeyHeld => system(px(7.5).into()),
+        match reach {
+            Reach::Desk => match self {
+                Type::PageTitle => Set { weight: Some(EMPHASIS), ..system(px(24.).into()) },
+                Type::Heading => Set { weight: Some(EMPHASIS), ..system(rems(1.).into()) },
+                Type::Body => system(rems(0.875).into()),
+                Type::Detail => system(rems(0.75).into()),
+                Type::Code => Set { font: Font::Code, size: MONO_SIZE.into(), weight: None },
+                Type::Key => system(px(10.).into()),
+                Type::KeyHeld => system(px(7.5).into()),
+            },
+            Reach::Handheld => match self {
+                Type::PageTitle => Set { weight: Some(EMPHASIS), ..system(px(28.).into()) },
+                Type::Heading => Set { weight: Some(EMPHASIS), ..system(px(17.).into()) },
+                Type::Body => system(px(17.).into()),
+                Type::Detail => system(px(15.).into()),
+                Type::Code => Set { font: Font::Code, size: HANDHELD_MONO_SIZE.into(), weight: None },
+                Type::Key => system(px(12.).into()),
+                Type::KeyHeld => system(px(9.).into()),
+            },
         }
     }
 
@@ -73,13 +113,14 @@ impl Type {
         self.set().size.to_pixels(rem)
     }
 
-    /// How the spec's table writes it: its name, its font, its size at the app's rem, and its weight.
+    /// How the spec's table writes it: its name, its font, its size at a desk, at the app's rem there, its weight, and
+    /// its size on a handheld.
     ///
     /// # Panics
     ///
     /// For a weight the table has no word for.
     #[cfg(any(test, feature = "testing"))]
-    pub fn written(self) -> [String; 4] {
+    pub fn written(self) -> [String; 5] {
         let font = match self.set().font {
             Font::System => "System",
             Font::Code => MONO,
@@ -89,8 +130,8 @@ impl Type {
             Some(EMPHASIS) => "Medium",
             Some(weight) => panic!("{self:?} is {weight:?}, which the table has no word for"),
         };
-        let size = format!("{}px", f32::from(self.size(REM)));
-        [format!("{self:?}"), font.to_string(), size, weight.to_string()]
+        let size = |reach| format!("{}px", f32::from(self.set_at(reach).size.to_pixels(rem(reach))));
+        [format!("{self:?}"), font.to_string(), size(Reach::Desk), weight.to_string(), size(Reach::Handheld)]
     }
 }
 

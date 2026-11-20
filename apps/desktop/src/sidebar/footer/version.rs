@@ -5,7 +5,7 @@ use crate::updates::{Answer, Kind, Said};
 use gpui_kit::component::{Icon, IconName, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    Anchor, AnyElement, App, Context, Hsla, InteractiveElement, IntoElement, ParentElement, Pixels, SharedString,
+    Anchor, AnyElement, App, Context, Hsla, InteractiveElement, IntoElement, ParentElement, SharedString,
     StatefulInteractiveElement, StyleRefinement, Styled, TestSupportExt as _, div,
 };
 use look::Lined as _;
@@ -14,7 +14,7 @@ use std::path::Path;
 
 /// How tall the build line is, whatever it says, so a check for updates never moves the sidebar above it: a small
 /// row's.
-const HEIGHT: Pixels = look::RowSize::Small.height();
+const SIZE: look::RowSize = look::RowSize::Small;
 
 /// What pointing at the version's place shows: all of what it says, which it may cut short, or what goes with it.
 enum Pointed {
@@ -135,7 +135,7 @@ fn build_line(line: &BuildLine, cx: &mut Context<AppView>) -> impl IntoElement {
     h_flex()
         .id("build-line")
         .w_full()
-        .h(HEIGHT)
+        .h(SIZE.height())
         .pl(look::Space::Small)
         .gap(look::Space::XSmall)
         .typeset(look::Type::Detail)

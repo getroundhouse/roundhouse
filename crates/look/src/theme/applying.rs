@@ -1,6 +1,7 @@
 use crate::colors::Colors;
 use crate::shape::Corner;
-use crate::typography::{MONO, MONO_SIZE, REM};
+use crate::traits::Reach;
+use crate::typography::{MONO, mono_size, rem};
 use gpui_kit::component::{Theme, ThemeConfig, ThemeMode};
 use gpui_kit::{App, Hsla, Pixels, Rgba};
 use serde_json::{Map, Value, json};
@@ -17,7 +18,8 @@ pub(crate) const CHOSEN: f32 = 0.09;
 // reads as chosen with the pointer on another, as a borderless button that's on does.
 const _: () = assert!(UNDER_POINTER < CHOSEN && CHOSEN < PRESSED);
 
-/// Installs the app's colours, and its theme as the kit's dark theme, and switches to it. Going through the kit,
+/// Installs the app's colours, and its theme as the kit's dark theme, and switches to it, with the rem and code's size
+/// of the reach the process draws for, which [`Reach::choose`] chooses before this. Going through the kit,
 /// rather than setting colours on the theme directly, is what lets its other layers, such as rich text, pick the
 /// colours up too.
 pub fn apply(cx: &mut App) {
@@ -52,9 +54,9 @@ pub(super) fn config(colors: &Colors) -> ThemeConfig {
     serde_json::from_value(json!({
         "name": "Roundhouse Dark",
         "mode": "dark",
-        "font.size": f32::from(REM),
+        "font.size": f32::from(rem(Reach::now())),
         "mono_font.family": MONO,
-        "mono_font.size": f32::from(MONO_SIZE),
+        "mono_font.size": f32::from(mono_size(Reach::now())),
         "radius": whole(Corner::Control.radius()),
         "radius.lg": whole(Corner::Card.radius()),
         "shadow": false,

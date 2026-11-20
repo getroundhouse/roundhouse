@@ -82,3 +82,47 @@ fn a_quiet_buttons_words_are_muted_but_while_its_off(cx: &mut TestAppContext) {
         assert_eq!(words(ButtonKind::Quiet, true), None, "off");
     });
 }
+
+/// A button the pointer can rest on, alone in a window, so the only raised fill painted is its tooltip's.
+struct Resting;
+
+impl gpui_kit::Render for Resting {
+    fn render(&mut self, _: &mut gpui_kit::Window, _: &mut gpui_kit::Context<Self>) -> impl gpui_kit::IntoElement {
+        use gpui_kit::ParentElement as _;
+        gpui_kit::div()
+            .p(px(40.))
+            .child(button("says", ButtonKind::Borderless, ControlSize::Regular, "Add").tooltip("Adds one"))
+    }
+}
+
+/// Nothing rests on what's touched, so a button under touch has no tooltip, and one with a pointer says what it does.
+#[gpui_kit::test]
+fn a_button_says_what_it_does_while_the_pointer_rests_on_it_and_not_under_touch(cx: &mut TestAppContext) {
+    use gpui_kit::{AppContext as _, VisualTestContext};
+
+    cx.update(gpui_kit::init);
+    cx.update(crate::theme::apply);
+    for (input, shown) in [(crate::Input::Pointer, true), (crate::Input::Touch, false)] {
+        cx.update(|cx| input.choose(cx));
+        let window = cx.update(|cx| {
+            cx.open_window(gpui_kit::WindowOptions::default(), |window, cx| {
+                let view = cx.new(|_| Resting);
+                cx.new(|cx| gpui_kit::component::Root::new(view, window, cx))
+            })
+            .unwrap()
+        });
+        let cx = &mut VisualTestContext::from_window(window.into(), cx);
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+
+        cx.simulate_mouse_move(gpui_kit::point(px(50.), px(50.)), None, gpui_kit::Modifiers::default());
+        cx.executor().advance_clock(std::time::Duration::from_secs(1));
+        cx.run_until_parked();
+        let raised = cx.update(|window, cx| {
+            window.draw(cx).clear(cx);
+            let raised: gpui_kit::Background = crate::colors::colors(cx).raised.into();
+            window.painted_quads().iter().any(|quad| quad.background == raised)
+        });
+
+        assert_eq!(raised, shown, "{input:?}");
+    }
+}
