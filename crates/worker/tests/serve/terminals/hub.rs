@@ -14,7 +14,7 @@ use protocol::worker::{
     WorkerOutcome, WorkerRequest, WorkerResponse,
 };
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, DuplexStream, WriteHalf};
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, watch};
 use tokio::task::JoinHandle;
 use tokio::time::timeout;
 
@@ -31,6 +31,8 @@ pub(super) struct Hub {
     write: WriteHalf<DuplexStream>,
     frames: mpsc::UnboundedReceiver<WorkerFrame>,
     running: JoinHandle<()>,
+    /// Whether it reads what the worker sends, as a hub on a slow link stops for a while.
+    reading: watch::Sender<bool>,
     calls: u64,
     replies: HashMap<u64, WorkerOutcome>,
     /// Everything the terminals' programs wrote, in order.
@@ -57,16 +59,31 @@ impl Hub {
         let config = worker::Config { timers, ..config(dir, None) };
         let super::super::Worker { read, write, running } = start_worker(config);
         let (sending, frames) = mpsc::unbounded_channel();
-        // Read as they come, so the worker never waits on the test.
+        let (reading, mut may_read) = watch::channel(true);
+        // Read as they come, so the worker never waits on the test, unless it has stopped reading.
         tokio::spawn(async move {
             let mut lines = BufReader::new(read).lines();
-            while let Ok(Some(line)) = lines.next_line().await {
+            while may_read.wait_for(|may| *may).await.is_ok()
+                && let Ok(Some(line)) = lines.next_line().await
+            {
                 let _ = sending.send(frame::decode(line.as_bytes()).unwrap());
             }
         });
         let (replies, output, updates, next) = (HashMap::new(), Vec::new(), Vec::new(), HashMap::new());
-        let mut hub =
-            Self { write, frames, running, calls: 0, replies, output, searched: 0, updates, updates_searched: 0, next };
+        let (searched, updates_searched) = (0, 0);
+        let mut hub = Self {
+            write,
+            frames,
+            running,
+            reading,
+            calls: 0,
+            replies,
+            output,
+            searched,
+            updates,
+            updates_searched,
+            next,
+        };
         hub.call(hello()).await;
         hub
     }
@@ -121,10 +138,26 @@ impl Hub {
     }
 
     pub(super) async fn call(&mut self, request: WorkerRequest) -> WorkerOutcome {
+        let id = self.ask(request).await;
+        self.reply(id).await
+    }
+
+    /// Sends `request` without waiting for its reply, and says which call it is.
+    pub(super) async fn ask(&mut self, request: WorkerRequest) -> u64 {
         let id = self.calls;
         self.calls += 1;
         self.write.write_all(&frame::encode(&WorkerCall { id, request }).unwrap()).await.unwrap();
+        id
+    }
+
+    /// Until the reply to call `id`, keeping everything that comes before it.
+    pub(super) async fn reply(&mut self, id: u64) -> WorkerOutcome {
         self.until(|hub| hub.replies.remove(&id)).await
+    }
+
+    /// Stops reading what the worker sends, or starts again, as a hub on a slow link does.
+    pub(super) fn read(&self, reading: bool) {
+        self.reading.send_replace(reading);
     }
 
     /// Until a program writes `text`, after what the last wait found, and then how many updates have come of the

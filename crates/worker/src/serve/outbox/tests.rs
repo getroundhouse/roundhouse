@@ -70,8 +70,8 @@ fn number(frame: &WorkerFrame) -> Option<u64> {
 }
 
 /// What a hub on a channel of its own has been sent so far.
-fn sent(hub: &mut mpsc::Receiver<Arc<WorkerFrame>>) -> Vec<Arc<WorkerFrame>> {
-    std::iter::from_fn(|| hub.try_recv().ok()).collect()
+fn sent(hub: &mut mpsc::Receiver<Outgoing>) -> Vec<Arc<WorkerFrame>> {
+    std::iter::from_fn(|| hub.try_recv().ok().map(|sent| sent.frame)).collect()
 }
 
 #[tokio::test]

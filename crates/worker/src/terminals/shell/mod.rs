@@ -2,6 +2,7 @@
 
 mod command;
 mod front;
+mod sending;
 mod serving;
 #[cfg(test)]
 mod tests;

@@ -1,5 +1,4 @@
 use std::path::Path;
-use std::sync::Arc;
 use std::time::Duration;
 
 use protocol::Build;
@@ -17,6 +16,7 @@ use super::{Watches, add_child, remove, restore, there, watch_branches};
 use crate::branch_watch::Whose;
 use crate::branch_watch::tests::PATIENCE;
 use crate::git::tests::{new_repo, prepare, run};
+use crate::serve::Outgoing;
 use crate::serve::moves::tests::BOUND;
 use crate::serve::{Worker, handle};
 use crate::{Config, CredentialHelper, Deleter};
@@ -54,10 +54,10 @@ async fn a_watch_replaces_only_its_own_worktree_s_and_stopping_one_leaves_the_re
 }
 
 /// The next frame `wanted` takes, of what the worker sent its hub, skipping the rest.
-async fn next_frame<T>(frames: &mut mpsc::Receiver<Arc<WorkerFrame>>, wanted: impl Fn(&WorkerFrame) -> Option<T>) -> T {
+async fn next_frame<T>(frames: &mut mpsc::Receiver<Outgoing>, wanted: impl Fn(&WorkerFrame) -> Option<T>) -> T {
     let found = async {
         loop {
-            let frame = frames.recv().await.expect("the worker stopped sending");
+            let frame = frames.recv().await.expect("the worker stopped sending").frame;
             if let Some(found) = wanted(&frame) {
                 return found;
             }
@@ -136,7 +136,7 @@ fn added(response: Result<WorkerResponse, ApiError>) -> ChildWorktreeAdded {
 }
 
 /// Commits in `worktree`, and waits for its watch to send the new commit, in the frame `whose` watch sends.
-async fn committed(frames: &mut mpsc::Receiver<Arc<WorkerFrame>>, worktree: &str, whose: Whose) {
+async fn committed(frames: &mut mpsc::Receiver<Outgoing>, worktree: &str, whose: Whose) {
     run(Path::new(worktree), &["commit", "-q", "--allow-empty", "-m", "more"]);
     let tip = run(Path::new(worktree), &["rev-parse", "HEAD"]);
     next_frame(frames, |frame| {

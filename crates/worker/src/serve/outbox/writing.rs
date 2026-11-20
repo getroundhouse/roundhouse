@@ -4,14 +4,28 @@ use protocol::tail::{StreamDelta, Tail};
 use protocol::worker::WorkerFrame;
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
-use tokio::sync::{Mutex, mpsc};
+use tokio::sync::{Mutex, OwnedSemaphorePermit, mpsc};
 
 #[derive(Default)]
 pub(crate) struct Outbox(pub(super) Mutex<Inner>);
 
+/// A frame on its way to the hub, and what it holds until it has been written, as a terminal holds its room for its
+/// next frame.
+#[derive(Debug)]
+pub(crate) struct Outgoing {
+    pub(crate) frame: Arc<WorkerFrame>,
+    pub(crate) written: Option<OwnedSemaphorePermit>,
+}
+
+impl From<Arc<WorkerFrame>> for Outgoing {
+    fn from(frame: Arc<WorkerFrame>) -> Self {
+        Self { frame, written: None }
+    }
+}
+
 #[derive(Default)]
 pub(super) struct Inner {
-    pub(super) hub: Option<mpsc::Sender<Arc<WorkerFrame>>>,
+    pub(super) hub: Option<mpsc::Sender<Outgoing>>,
     /// Whether to number and keep what's sent, as the last hub to say hello asked.
     pub(super) keeping: bool,
     /// The number the last frame kept was given. The first is 1.
@@ -25,7 +39,13 @@ pub(super) struct Inner {
 impl Outbox {
     /// Sends `frame` to the hub connected, after everything sent before it, and numbers and keeps it first if the hub
     /// asked. Under one lock, so frames reach the hub in the order they were numbered.
-    pub(crate) async fn send(&self, mut frame: WorkerFrame) {
+    pub(crate) async fn send(&self, frame: WorkerFrame) {
+        self.send_holding(frame, None).await;
+    }
+
+    /// Sends `frame`, as [`Outbox::send`] does, holding `written` until it has been written, or there's no hub to write
+    /// it to.
+    pub(crate) async fn send_holding(&self, mut frame: WorkerFrame, written: Option<OwnedSemaphorePermit>) {
         let mut inner = self.0.lock().await;
         let number = inner.keeping.then(|| number_of(&mut frame)).flatten().map(|seq| {
             inner.numbered += 1;
@@ -38,7 +58,7 @@ impl Outbox {
             inner.kept.push_back((number, frame.clone()));
         }
         if let Some(hub) = &inner.hub
-            && hub.send(frame).await.is_err()
+            && hub.send(Outgoing { frame, written }).await.is_err()
         {
             inner.hub = None;
         }
@@ -54,13 +74,13 @@ impl Outbox {
 
     /// Sends `hub` whatever is kept, oldest first, then what each agent is writing, and then each frame as it's sent,
     /// numbered and kept if `keeping`.
-    pub(crate) async fn attach(&self, hub: mpsc::Sender<Arc<WorkerFrame>>, keeping: bool) {
+    pub(crate) async fn attach(&self, hub: mpsc::Sender<Outgoing>, keeping: bool) {
         let mut inner = self.0.lock().await;
         inner.keeping = keeping;
         let kept = inner.kept.iter().map(|(_, frame)| frame.clone());
         let catching_up: Vec<_> = kept.chain(inner.writing.frames().map(Arc::new)).collect();
         for frame in catching_up {
-            if hub.send(frame).await.is_err() {
+            if hub.send(frame.into()).await.is_err() {
                 return;
             }
         }

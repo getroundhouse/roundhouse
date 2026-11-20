@@ -11,8 +11,8 @@ use portable_pty::{Child, MasterPty, PtyPair, PtySize, PtySystem, native_pty_sys
 use process::Environment;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::model::TerminalId;
-use protocol::terminal::{TerminalBytes, TerminalExit, TerminalScreen, TerminalSize, TerminalUpdate, UpdateIndex};
-use protocol::worker::{TerminalShown, TerminalStart, WorkerFrame};
+use protocol::terminal::{TerminalBytes, TerminalExit, TerminalScreen, TerminalSize, TerminalUpdate};
+use protocol::worker::{TerminalShown, TerminalStart};
 use terminal_state::{Mirror, Size};
 use tokio::sync::{mpsc, oneshot};
 use tokio::time::Instant;
@@ -20,6 +20,7 @@ use tracing::warn;
 
 use super::command;
 use super::front::{self, Front};
+use super::sending::Sending;
 use crate::Timers;
 use crate::serve::Outbox;
 use crate::terminals::process_records::ProcessRecords;
@@ -111,11 +112,10 @@ pub(in crate::terminals) fn start(
         }
         return Err(failed("couldn't wait for the shell", &e));
     }
-    let next = UpdateIndex::new(0);
     let (master, stop_grace, look_every) = (pty.master, timers.terminal_stop_grace, timers.look_in_front_every);
-    let front = Front::Looked(None);
+    let (front, sending) = (Front::Looked(None), Sending::new(terminal.clone(), outbox));
     let shell =
-        Shell { terminal, size, master, pid, front, process_records, look_every, stop_grace, outbox, next, exit: None };
+        Shell { terminal, size, master, pid, front, process_records, look_every, stop_grace, sending, exit: None };
     let (to_shell, told) = mpsc::unbounded_channel();
     let running = Running {
         number: ending.number,
@@ -186,9 +186,7 @@ struct Shell {
     look_every: Duration,
     /// How long the shell asked to end, and the job it runs, have to end by themselves before they're killed.
     stop_grace: Duration,
-    outbox: Arc<Outbox>,
-    /// The `at` the next update gets, which is how many it has sent.
-    next: UpdateIndex,
+    sending: Sending,
     /// How the shell ended, once it has.
     exit: Option<TerminalExit>,
 }
@@ -217,7 +215,7 @@ impl Shell {
         self.process_records.finished();
         ending.forget();
         let exited = self.exit.unwrap_or(TerminalExit { code: None });
-        self.send(TerminalUpdate::Exited(exited)).await;
+        self.sending.finish(TerminalUpdate::Exited(exited)).await;
     }
 
     async fn until_ended(
@@ -238,7 +236,7 @@ impl Shell {
             tokio::select! {
                 biased;
                 told = told.recv(), if !untold => match told {
-                    Some(ToShell::Resize(size)) => self.resize(mirror, size).await,
+                    Some(ToShell::Resize(size)) => self.resize(mirror, size),
                     Some(ToShell::Show(reply)) => {
                         let _ = reply.send(self.shown(mirror));
                     }
@@ -260,8 +258,12 @@ impl Shell {
                 }
                 // Not on Windows, which has no groups to look at.
                 _ = look.tick(), if cfg!(unix) && self.exit.is_none() => self.look_in_front(),
-                output = read.recv(), if !read_all => match output {
-                    Some(output) => self.wrote(mirror, output).await,
+                Ok(written) = self.sending.room().acquire_owned(), if self.sending.holds_any() => {
+                    self.sending.send(written).await;
+                }
+                // Not while it holds as much as it should, so the program waits in its PTY.
+                output = read.recv(), if !read_all && !self.sending.full() => match output {
+                    Some(output) => self.wrote(mirror, output),
                     None => read_all = true,
                 },
                 () = until(compress_at) => {
@@ -298,14 +300,14 @@ impl Shell {
         }
     }
 
-    async fn wrote(&mut self, mirror: &mut Mirror, output: Vec<u8>) {
+    fn wrote(&mut self, mirror: &mut Mirror, output: Vec<u8>) {
         mirror.write(&output);
-        self.send(TerminalUpdate::Output { output: TerminalBytes::new(output) }).await;
+        self.sending.hold(TerminalUpdate::Output { output: TerminalBytes::new(output) });
     }
 
     /// Gives the worker's copy the new size, and the PTY, which tells the program, and says so in order with the
     /// output. The same size again changes nothing, and so does one either can't take, so the two never differ.
-    async fn resize(&mut self, mirror: &mut Mirror, size: TerminalSize) {
+    fn resize(&mut self, mirror: &mut Mirror, size: TerminalSize) {
         if size == self.size {
             return;
         }
@@ -321,21 +323,15 @@ impl Shell {
             return;
         }
         self.size = size;
-        self.send(TerminalUpdate::Resized { size }).await;
+        self.sending.hold(TerminalUpdate::Resized { size });
     }
 
-    fn shown(&self, mirror: &Mirror) -> Result<TerminalShown, ApiError> {
+    fn shown(&mut self, mirror: &Mirror) -> Result<TerminalShown, ApiError> {
         let snapshot = mirror.snapshot().map_err(|e| {
             ApiError::new(ErrorCode::Worker, format!("couldn't say what terminal {} shows: {e}", self.terminal))
         })?;
         let screen = TerminalScreen { size: self.size, bytes: TerminalBytes::new(snapshot) };
-        Ok(TerminalShown { screen, next: self.next })
-    }
-
-    async fn send(&mut self, update: TerminalUpdate) {
-        let at = self.next;
-        self.next = at.next();
-        self.outbox.send(WorkerFrame::Terminal { terminal: self.terminal.clone(), at, update }).await;
+        Ok(TerminalShown { screen, next: self.sending.screen_taken() })
     }
 
     /// Signals the shell's group, only before the shell has ended, since its PID can be another process's after, and

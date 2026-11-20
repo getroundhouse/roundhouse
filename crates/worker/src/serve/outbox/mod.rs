@@ -16,4 +16,4 @@ use tokio::sync::mpsc;
 mod tests;
 
 mod writing;
-pub(crate) use writing::Outbox;
+pub(crate) use writing::{Outbox, Outgoing};
