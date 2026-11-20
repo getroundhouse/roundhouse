@@ -47,7 +47,7 @@ pub(super) fn menu(drawing: &Drawing<'_>, account: &GithubAccount, works: bool, 
 }
 
 fn make_default(kept: &mut Kept, account: &GithubAccount, _: bool, _: &mut Window, cx: &mut Context<Kept>) {
-    kept.make_default(Some(account.id.clone()), cx);
+    kept.make_default(account.id.clone(), cx);
 }
 
 /// Opens the panel for a token in place of the account's login, under its row.

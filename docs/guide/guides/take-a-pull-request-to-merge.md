@@ -48,7 +48,7 @@ Each wait has its own line and `Stop` button in the chat. A wait for checks coun
 
 ![Independent waits on a stack's required checks and another PR's merge, which is in the merge queue](../../spec/screens/waiting-on-stacks.png)
 
-The hub keeps the waits, and reads their pull requests from GitHub itself, as the default GitHub account in [Settings](../reference/settings.md#git), or with none, as the machine's own `gh` login, so they go on with the app closed, and through an update. Waits on the same account are read together, so many cost little of GitHub's hourly limit, and with the workspace's own pull request, so a wait on it and the bar always agree. Only repositories on github.com can be read, so not those on GitHub Enterprise Server or on a `ghe.com` host. You can ask for a time limit; without one, a wait continues until it reaches its condition or needs attention.
+The hub keeps the waits, and reads their pull requests from GitHub itself, as the default GitHub account in [Settings](../reference/settings.md#git), so they go on with the app closed, and through an update. Waits on the same account are read together, so many cost little of GitHub's hourly limit, and with the workspace's own pull request, so a wait on it and the bar always agree. Only repositories on github.com can be read, so not those on GitHub Enterprise Server or on a `ghe.com` host. You can ask for a time limit; without one, a wait continues until it reaches its condition or needs attention.
 
 If GitHub temporarily cannot be read, the wait keeps its last observation and says what failed. A changed dependency stack ends the wait so the agent can reconsider what to watch.
 

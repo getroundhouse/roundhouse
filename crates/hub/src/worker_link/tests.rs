@@ -15,7 +15,7 @@ use providers::local::{LocalConfig, LocalProvider};
 
 use super::*;
 use crate::hub::HubDirs;
-use crate::hub::tests::{NO_GITHUB, handed_a_token, pushed, serving};
+use crate::hub::tests::{NO_GITHUB, pushed, reading_as_ada, serving};
 use crate::provider_set::ProviderSet;
 use crate::store::tests::store_with_session;
 use crate::timers::Timers;
@@ -66,7 +66,7 @@ fn hub_reading(dir: &Path, provider: &Arc<dyn Provider>, api: String) -> Arc<Hub
         false,
         timers,
     ));
-    handed_a_token(&hub);
+    reading_as_ada(&hub);
     hub
 }
 
@@ -189,8 +189,7 @@ async fn a_worker_asking_for_its_pull_request_is_answered_once_it_has_answered_t
         dir.path(),
         &[
             ("ask", WorkerFrame::Ask { id: AskId::new(9), session_id: "s".into(), ask: WorkerAsk::PullRequest }),
-            // After the hub's ask of the machine's login, which it isn't answered.
-            ("status", WorkerFrame::Reply { id: 4, outcome: WorkerOutcome::Response(status) }),
+            ("status", WorkerFrame::Reply { id: 3, outcome: WorkerOutcome::Response(status) }),
         ],
     );
     let d = dir.path().display();
@@ -250,8 +249,8 @@ async fn an_ask_this_hub_cant_read_is_refused() {
 }
 
 /// The worker answers the hello only once it has read the set too, so a hub that waited for the hello's answer before
-/// it queued the set would fail, and the hub's next call comes after the set. The hub's ask of who its machine's own
-/// `gh` is logged in as comes after the set, and the link is used without waiting for its answer, which never comes.
+/// it queued the set would fail, and the hub's next call comes after the set, with nothing between, as a hub from
+/// before Settings' Providers asked who the machine's own `gh` was.
 #[tokio::test]
 async fn a_worker_is_set_the_hubs_git_credential_right_behind_its_hello_before_anything_else() {
     let dir = tempfile::tempdir().unwrap();
@@ -262,8 +261,7 @@ async fn a_worker_is_set_the_hubs_git_credential_right_behind_its_hello_before_a
     let call = |name: &str| frame::decode::<WorkerCall>(&std::fs::read(dir.path().join(name)).unwrap()).unwrap();
     let set = WorkerRequest::GitCredentialSet(GitCredentialSet { credential });
     assert_eq!(call("set"), WorkerCall { id: 2, request: set });
-    assert_eq!(call("find"), WorkerCall { id: 3, request: WorkerRequest::FindGithubLogin });
-    assert_eq!(call("next"), WorkerCall { id: 4, request: WorkerRequest::CancelSetup });
+    assert_eq!(call("next"), WorkerCall { id: 3, request: WorkerRequest::CancelSetup });
     assert_eq!(cancelled, Ok(()));
     link.kill();
 }
@@ -280,10 +278,10 @@ async fn a_worker_from_before_git_credentials_is_used_all_the_same() {
     link.kill();
 }
 
-/// A link to a worker that answers the hub's set of its git credential with `set_answer`, and the call after the hub's
-/// ask of its machine's own login, which it keeps in `next` in `dir`, as done, and what the hub had to set as it opened.
+/// A link to a worker that answers the hub's set of its git credential with `set_answer`, and the call after it, which
+/// it keeps in `next` in `dir`, as done, and what the hub had to set as it opened.
 async fn greeted_link(dir: &Path, set_answer: WorkerOutcome) -> (Arc<WorkerLink>, GithubCredential) {
-    let done = WorkerFrame::Reply { id: 4, outcome: WorkerOutcome::Response(WorkerResponse::Ok) };
+    let done = WorkerFrame::Reply { id: 3, outcome: WorkerOutcome::Response(WorkerResponse::Ok) };
     frames_in(dir, &[("done", done)]);
     let d = dir.display();
     let next = format!("read -r next\nprintf '%s\\n' \"$next\" > '{d}/next'\ncat '{d}/done'\ncat >/dev/null");
@@ -293,16 +291,13 @@ async fn greeted_link(dir: &Path, set_answer: WorkerOutcome) -> (Arc<WorkerLink>
     let hub = hub_timed(dir, &provider, Timers { hello_within: Duration::from_secs(2), ..Timers::DEFAULT });
     let credential = hub.git_credential().borrow().for_workers();
     let log = dir.join("logs/i.log");
-    // Well within the time the hub gives the answer to its ask of the machine's own login, which never comes, so a
-    // hub that waited for it before the link is used fails.
     let opening = WorkerLink::open(hub, provider, "w".into(), "i".into(), &log, Opening::Started);
     let opened = tokio::time::timeout(Duration::from_secs(5), opening).await.expect("the link to open");
     (opened.unwrap(), credential)
 }
 
 /// For a script: reads the hub's hello and the git credential it sets behind it, keeping the set in `set` in `dir`,
-/// then answers the hello, and the set with `set`, as its first two calls, then reads the hub's ask of who its machine's
-/// own `gh` is logged in as, which it keeps in `find`, and never answers.
+/// then answers the hello, and the set with `set`, as its first two calls.
 fn greeted(dir: &Path, set: WorkerOutcome) -> String {
     let hello = WorkerResponse::Hello(HelloReply { protocol_version: versions::WORKERS.newest, build: None });
     frames_in(
@@ -313,10 +308,7 @@ fn greeted(dir: &Path, set: WorkerOutcome) -> String {
         ],
     );
     let d = dir.display();
-    format!(
-        "read -r call\nread -r set\nprintf '%s\\n' \"$set\" > '{d}/set'\ncat '{d}/hello'\ncat '{d}/set-answer'\n\
-         read -r find\nprintf '%s\\n' \"$find\" > '{d}/find'\n"
-    )
+    format!("read -r call\nread -r set\nprintf '%s\\n' \"$set\" > '{d}/set'\ncat '{d}/hello'\ncat '{d}/set-answer'\n")
 }
 
 /// For a script: reads the hub's next line, an answer, into `answered` in `dir`, all at once, then waits.

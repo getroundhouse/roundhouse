@@ -21,11 +21,16 @@ pub(super) fn allow(store: &Store) -> Said {
 }
 
 pub(super) fn sent(store: &Store) -> Said {
-    Said::Changed(store.record_github_sent(&SentCredential::MachineOwn).unwrap().is_some())
+    let sent = SentCredential::NoAccount { reason: "Connect one".into() };
+    Said::Changed(store.record_github_sent(&sent).unwrap().is_some())
 }
 
-pub(super) fn machines(store: &Store) -> Said {
+pub(super) fn no_default(store: &Store) -> Said {
     Said::record(&store.set_github_default(None).unwrap())
+}
+
+pub(super) fn providers(store: &Store) -> Said {
+    Said::Changed(store.record_github_providers(&["local".into()], &["vms".into()]).unwrap().is_some())
 }
 
 pub(super) fn account(store: &Store) -> Rev {

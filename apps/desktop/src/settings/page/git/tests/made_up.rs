@@ -46,6 +46,7 @@ pub(super) fn listed(records: Records, default: Option<&str>) -> Snapshot {
             account: default.map(GithubAccountId::from),
             sent: None,
             left_to_machine: Vec::new(),
+            set_up: Vec::new(),
         }),
         rev: Rev::default(),
     };

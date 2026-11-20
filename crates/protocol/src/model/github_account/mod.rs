@@ -12,7 +12,7 @@ mod tests;
 mod app;
 pub use app::{GithubApp, GithubInstallation};
 mod found;
-pub use found::{FoundGithubLogin, GhLogin, GhLoginWorks};
+pub use found::{FoundGithubLogin, GhLogin, GhLoginWorks, MachineLogins, SshLogin};
 mod numbers;
 pub use numbers::{GithubAppId, GithubInstallationId, GithubUserId};
 mod reach;

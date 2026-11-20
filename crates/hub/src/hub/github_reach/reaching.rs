@@ -16,11 +16,12 @@ pub(super) async fn reach(
 ) -> Reach {
     let Some(repository) = repository else { return Reach::NotOnGithub };
     let (credential, username, installation) = match default {
-        DefaultCredential::MachineOwn => return Reach::MachineOwn { repository },
         DefaultCredential::Account { credential, username, installation, .. } => {
             (credential, username.clone(), installation.clone())
         }
-        DefaultCredential::Blocked { reason, .. } => return Reach::Blocked { repository, reason: reason.clone() },
+        DefaultCredential::NoAccount { reason } | DefaultCredential::Blocked { reason, .. } => {
+            return Reach::Blocked { repository, reason: reason.clone() };
+        }
     };
     match github.push_reach(&repository, credential).await {
         Ok(PushAnswer::Takes) => Reach::Pushes { repository, username },

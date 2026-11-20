@@ -209,21 +209,24 @@ fn what_a_newer_hub_sends_workers_or_why_it_blocks_reads_as_unknown() {
 
 /// As a copy of the settings read between the default changing and what's sent for it being worked out has it.
 #[test]
-fn whats_sent_is_for_the_default_it_names_and_each_machines_own_for_none() {
+fn whats_sent_is_for_the_default_it_names_and_no_account_or_an_older_hubs_machine_own_for_none() {
     let (ada, grace) = (GithubAccountId::from("g1"), GithubAccountId::from("g2"));
     let blocked = SentCredential::Blocked { account: ada.clone(), why: UnusableLogin::Ended, reason: "Ended.".into() };
     let settings = |account: Option<&GithubAccountId>| GithubSettings {
         account: account.cloned(),
         sent: Some(blocked.clone()),
         left_to_machine: Vec::new(),
+        set_up: Vec::new(),
     };
 
     assert!(SentCredential::MachineOwn.is_for(None) && !SentCredential::MachineOwn.is_for(Some(&ada)));
+    let none = SentCredential::NoAccount { reason: "Connect one.".into() };
+    assert!(none.is_for(None) && !none.is_for(Some(&ada)));
     assert!(SentCredential::Account { account: ada.clone() }.is_for(Some(&ada)));
     assert!(blocked.is_for(Some(&ada)) && !blocked.is_for(Some(&grace)) && !blocked.is_for(None));
     assert!(!SentCredential::Unknown.is_for(None), "a newer hub's can't be told");
     assert_eq!(settings(Some(&ada)).sent_for_default(), Some(&blocked));
     assert_eq!(settings(Some(&grace)).sent_for_default(), None, "the default changed, and it hasn't been worked out");
-    let older = GithubSettings { account: Some(ada), sent: None, left_to_machine: Vec::new() };
+    let older = GithubSettings { account: Some(ada), sent: None, left_to_machine: Vec::new(), set_up: Vec::new() };
     assert_eq!(older.sent_for_default(), None, "from a hub from before it said");
 }

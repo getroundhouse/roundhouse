@@ -117,6 +117,10 @@ fn what_workers_are_sent_keeps_its_form_on_the_settings_and_one_from_a_hub_from_
     let reason = "The token of ada, the default account, has ended.";
     let forms = [
         (SentCredential::MachineOwn, r#"{"kind":"machine_own"}"#.to_string()),
+        (
+            SentCredential::NoAccount { reason: "Connect one.".into() },
+            r#"{"kind":"no_account","reason":"Connect one."}"#.to_string(),
+        ),
         (SentCredential::Account { account: "g".into() }, r#"{"kind":"account","account":"g"}"#.to_string()),
         (
             SentCredential::Blocked { account: "g".into(), why: UnusableLogin::Ended, reason: reason.to_string() },
@@ -137,7 +141,12 @@ fn what_workers_are_sent_keeps_its_form_on_the_settings_and_one_from_a_hub_from_
     let older: GithubSettings = serde_json::from_str(r#"{"account":"g"}"#).unwrap();
 
     for (sent, form) in forms {
-        let settings = GithubSettings { account: Some("g".into()), sent: Some(sent), left_to_machine: Vec::new() };
+        let settings = GithubSettings {
+            account: Some("g".into()),
+            sent: Some(sent),
+            left_to_machine: Vec::new(),
+            set_up: Vec::new(),
+        };
         let written = format!(r#"{{"account":"g","sent":{form}}}"#);
         assert_eq!(serde_json::to_string(&settings).unwrap(), written);
         assert_eq!(serde_json::from_str::<GithubSettings>(&written).unwrap(), settings);
@@ -145,19 +154,47 @@ fn what_workers_are_sent_keeps_its_form_on_the_settings_and_one_from_a_hub_from_
     for (why, form) in whys {
         assert_eq!(serde_json::to_value(why).unwrap(), form);
     }
-    assert_eq!(older, GithubSettings { account: Some("g".into()), sent: None, left_to_machine: Vec::new() });
+    assert_eq!(
+        older,
+        GithubSettings { account: Some("g".into()), sent: None, left_to_machine: Vec::new(), set_up: Vec::new() }
+    );
 }
 
-/// The providers the hub's settings say it leaves GitHub to the machines of, by name, and the settings of a hub from
-/// before they said, which say none, so every provider's workspaces are taken to be set up, as that hub's were.
+/// The providers the hub's settings say it leaves GitHub to the machines of, and those it sets up, by name, and the
+/// settings of a hub from before they said, which say none, so every provider's workspaces are taken to be set up, as
+/// that hub's were.
 #[test]
 fn the_providers_left_to_their_machines_keep_their_form_and_a_hub_from_before_leaves_none() {
-    let settings = GithubSettings { account: None, sent: None, left_to_machine: vec!["keyed".into(), "local".into()] };
-    let written = r#"{"account":null,"left_to_machine":["keyed","local"]}"#;
+    let settings = GithubSettings {
+        account: None,
+        sent: None,
+        left_to_machine: vec!["keyed".into(), "local".into()],
+        set_up: vec!["incus".into()],
+    };
+    let written = r#"{"account":null,"left_to_machine":["keyed","local"],"set_up":["incus"]}"#;
     let older: GithubSettings = serde_json::from_str("{}").unwrap();
 
     assert_eq!(serde_json::to_string(&settings).unwrap(), written);
     assert_eq!(serde_json::from_str::<GithubSettings>(written).unwrap(), settings);
     assert!(!settings.sets_up(&"local".into()) && settings.sets_up(&"vms".into()));
     assert!(older.sets_up(&"local".into()), "{older:?}");
+    assert!(older.set_up.is_empty(), "{older:?}");
+}
+
+/// What a hub sends while it has no default, as an older client reads it: as one it can't tell, which says nothing of
+/// whether agents can push.
+#[test]
+fn no_account_is_one_an_older_client_cant_tell() {
+    #[derive(serde::Deserialize, Debug, PartialEq)]
+    #[serde(tag = "kind", rename_all = "snake_case")]
+    enum OlderSent {
+        MachineOwn,
+        Account,
+        #[serde(other)]
+        Unknown,
+    }
+
+    let read: OlderSent = serde_json::from_str(r#"{"kind":"no_account","reason":"Connect one."}"#).unwrap();
+
+    assert_eq!(read, OlderSent::Unknown);
 }

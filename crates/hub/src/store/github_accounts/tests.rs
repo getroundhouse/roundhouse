@@ -18,13 +18,16 @@ fn connecting<'a>(id: &'a GithubAccountId, user: &'a GithubUser, file: &'a Login
 }
 
 #[test]
-fn a_hub_from_before_github_accounts_holds_none_and_each_machines_own_login_is_the_default() {
+fn a_hub_from_before_github_accounts_holds_none_and_has_no_default() {
     let dir = tempfile::tempdir().unwrap();
 
     let store = store_from_before(dir.path(), BEFORE_GITHUB_ACCOUNTS, "");
 
     let settings = store.hub_settings().unwrap();
-    assert_eq!(settings.github, Some(GithubSettings { account: None, sent: None, left_to_machine: Vec::new() }));
+    assert_eq!(
+        settings.github,
+        Some(GithubSettings { account: None, sent: None, left_to_machine: Vec::new(), set_up: Vec::new() })
+    );
     assert_eq!(store.list_records().unwrap().github_accounts, []);
 }
 

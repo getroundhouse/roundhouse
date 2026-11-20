@@ -1,6 +1,6 @@
 //! What Git says of whether agents can push, as the hub says what it sends every worker for the default, against a real
 //! hub that calls a stand-in for GitHub: an installation whose next token GitHub won't make past its last's end, which
-//! its record can't say, a token's default ended, a sign-in being renewed, and each machine's own. Every token is
+//! its record can't say, a token's default ended, and a sign-in being renewed. Every token is
 //! plainly made up, and each ends as GitHub gives it, so nothing waits for a clock.
 
 #![cfg(test)]
@@ -9,9 +9,9 @@ use gpui_kit::test::TestWindowExt as _;
 use gpui_kit::{AppContext as _, TestAppContext};
 use hub::{GithubAnswer, GithubScript};
 use protocol::client::github_apps::GithubManifestCode;
-use protocol::model::{GithubAccountId, SentCredential, UnusableLogin};
+use protocol::model::{SentCredential, UnusableLogin};
 
-use super::git::{connected, in_git, more};
+use super::git::{connected, in_git};
 use super::git_app::{CODE, making, on_adalabs};
 use crate::support::{Stack, Ui};
 
@@ -113,20 +113,4 @@ fn a_default_signed_in_whose_token_has_ended_says_its_being_renewed_in_amber(cx:
 
     assert_eq!(blocked_for(&ui), Some(UnusableLogin::Renewing));
     assert!(box_says(&mut ui).contains("ada, the default account, has ended, and Roundhouse is renewing it"));
-}
-
-/// With a default that blocks, choosing each machine's own has the hub send workers that, and the box goes.
-#[gpui_kit::test]
-fn each_machines_own_as_the_default_blocks_nothing(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let _github = stack.start_hub_with_stand_in_github(super::git::knowing_two());
-    let account: GithubAccountId = connected(&stack, super::git::TOKEN);
-    stack.client().github_account_disconnect(&account).unwrap();
-    let mut ui = in_git(cx, &stack);
-    ui.wait("agents blocked", |ui| ui.has("git-blocked") && ui.has(more(&account)));
-    assert_eq!(blocked_for(&ui), Some(UnusableLogin::Disconnected));
-
-    ui.click("git-machines-own-default");
-
-    ui.wait("nothing blocked", |ui| sent(ui) == Some(SentCredential::MachineOwn) && !ui.has("git-blocked"));
 }

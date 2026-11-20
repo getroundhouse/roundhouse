@@ -2,18 +2,45 @@ use serde::{Deserialize, Serialize};
 
 use super::super::{GithubUsername, ProviderName, Rev};
 
-/// Who a provider's machines' own `gh` is logged in to github.com as, and whether GitHub took its token, as a record of
-/// its own, keyed by the provider, so every client can show it beside the GitHub accounts the hub holds. Agents there use it only while the default is
-/// the machine's own, as [`GithubSettings::account`](crate::model::GithubSettings::account) says. The local provider's
-/// is this machine's. The hub asks the first worker of each provider it links to after it starts, as
-/// [`FindGithubLogin`](crate::worker::FindGithubLogin) says, and forgets every one as it starts, so a provider with none
-/// hasn't been asked since, or no worker there has been able to say. It never carries the token.
+/// Who a provider's machines' own `gh` was logged in to github.com as, as a record a hub from before Settings' Providers
+/// kept, keyed by the provider, which asked the first worker of each provider it linked to, as
+/// [`FindGithubLogin`](crate::worker::FindGithubLogin) says. A hub from since sends none, and has the hub's own
+/// machine's on its settings, as [`GithubSettings::machine`](crate::model::GithubSettings::machine) says. It never
+/// carries the token.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct FoundGithubLogin {
     pub provider: ProviderName,
     pub login: GhLogin,
     #[serde(default)]
     pub rev: Rev,
+}
+
+/// Who `gh` and the SSH key on the hub's own machine are on GitHub, as
+/// [`HubMachineLogins`](crate::client::github_accounts::HubMachineLogins) answers, so Settings' Providers shows them
+/// beside who the hub reads GitHub as, and a person sees when they differ. Agents on the local provider are whoever
+/// these are, since Roundhouse hands them nothing for GitHub there.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct MachineLogins {
+    /// Who `gh` is, as [`HubGhLogin`](crate::client::github_accounts::HubGhLogin) says, or `None` when the hub couldn't
+    /// tell, as when `gh` didn't answer in time, or printed what the hub can't read.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gh: Option<GhLogin>,
+    pub ssh: SshLogin,
+}
+
+/// Whose SSH key a machine pushes to github.com with, as GitHub names it to `ssh -T git@github.com`.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[serde(tag = "state", rename_all = "snake_case")]
+pub enum SshLogin {
+    /// GitHub took the key as `username`'s.
+    Key { username: GithubUsername },
+    /// GitHub took no key from the machine.
+    NoKey,
+    /// GitHub couldn't be asked, or didn't say.
+    CouldntTell,
+    /// From a newer peer.
+    #[serde(other)]
+    Unknown,
 }
 
 /// What a machine's own `gh` is logged in to github.com with, as its worker found it, without the token. It's `gh`'s

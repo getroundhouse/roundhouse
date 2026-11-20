@@ -3,13 +3,11 @@
 
 use gpui_kit::TestAppContext;
 use protocol::fixtures::github_account;
-use protocol::model::{
-    GhLogin, GhLoginWorks, GithubAccount, GithubLoginKind, HeldGithubLogin, SentCredential, UnusableLogin,
-};
+use protocol::model::{GithubAccount, GithubLoginKind, HeldGithubLogin, SentCredential, UnusableLogin};
 
 use super::super::added::listed;
 use super::super::git_page::changes_at_ms;
-use super::super::words::{self, Standing};
+use super::super::words::Standing;
 use super::made_up::{FEB_3_MS, HOUR_MS, NOW_MS, OCT_29_MS, held, named, records};
 
 /// How `held` stands at [`NOW_MS`], with days in UTC.
@@ -70,27 +68,6 @@ fn the_defaults_row_says_how_it_stands_as_the_hub_says_what_workers_are_sent(cx:
     }
     assert_eq!(standing(SentCredential::Unknown, fine_by_its_record), Standing::CantBeUsed, "a newer hub's word");
     assert_eq!(Standing::Ended { on: String::new() }.said().as_deref(), Some("Ended"), "with no end on its record");
-}
-
-#[test]
-fn a_found_login_says_who_whether_github_took_it_and_what_to_do_when_theres_none() {
-    let logged_in = |works| GhLogin::LoggedIn { username: "ada".into(), works };
-
-    assert_eq!(words::found(&logged_in(GhLoginWorks::Yes)), ("ada".to_string(), Some(("Works", false))));
-    assert_eq!(
-        words::found(&logged_in(GhLoginWorks::Refused)),
-        ("ada".to_string(), Some(("GitHub refused its token", true))),
-        "in red"
-    );
-    assert_eq!(words::found(&logged_in(GhLoginWorks::CouldntTell)).1, Some(("Couldn't tell if it works", false)));
-    assert_eq!(words::found(&logged_in(GhLoginWorks::Unknown)).1, None, "a newer hub's answer says nothing");
-    assert_eq!(
-        words::found(&GhLogin::LoggedOut),
-        ("Not logged in".to_string(), Some(("Run gh auth login there", false)))
-    );
-    assert_eq!(words::found(&GhLogin::NotInstalled), ("No gh".to_string(), Some(("Install gh there", false))));
-    assert_eq!(words::found_on(&"local".into()), format!("gh on this {}", crate::names::MACHINE));
-    assert_eq!(words::found_on(&"incus".into()), "gh on incus");
 }
 
 /// As the hub lists them, which is in neither client-core's order nor their IDs', and client-core keeps them by

@@ -1,5 +1,3 @@
-use std::time::Duration;
-
 use github::Leaving;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::model::{GithubRepositoryName, IssueNumber, Reference, ReferenceAsk, ReferenceRead, WorkspaceId};
@@ -14,7 +12,7 @@ pub(crate) const MOST_ASKED: usize = 200;
 impl Hub {
     /// What GitHub says of each of `asks`, named in a chat of the workspace `id`, in the order asked, from what the hub
     /// keeps where it's fresh, as [`super::Kept`] says, and otherwise read now, as the workspace's pull request is
-    /// read, without starting a worker for a token.
+    /// read.
     pub(crate) async fn references_read(
         &self,
         id: &WorkspaceId,
@@ -24,10 +22,11 @@ impl Hub {
             let message = format!("{} issues and pull requests asked for at once, over {MOST_ASKED}", asks.len());
             return Err(ApiError::new(ErrorCode::InvalidRequest, message));
         }
-        let workspace = self.workspace(id).await?;
+        // Only to refuse a workspace the hub has no record of.
+        self.workspace(id).await?;
         let wanted: Vec<(GithubRepositoryName, IssueNumber)> =
             asks.into_iter().map(|ask| (ask.repository, ask.number)).collect();
-        self.read_stale_references(&workspace, &wanted).await;
+        self.read_stale_references(&wanted).await;
         Ok(wanted
             .iter()
             .map(|(repository, number)| {
@@ -40,11 +39,7 @@ impl Hub {
 
     /// Reads those of `wanted` that aren't fresh from GitHub, as the workspace's pull request is read, and keeps what
     /// it found, or why it couldn't, and waits for those another ask is reading.
-    async fn read_stale_references(
-        &self,
-        workspace: &protocol::model::Workspace,
-        wanted: &[(GithubRepositoryName, IssueNumber)],
-    ) {
+    async fn read_stale_references(&self, wanted: &[(GithubRepositoryName, IssueNumber)]) {
         let keys: Vec<Key> = wanted.iter().map(|(repository, number)| key(repository, *number)).collect();
         let (mine, theirs) = self.references.claim(&keys);
         if let Some(mine) = mine {
@@ -54,7 +49,7 @@ impl Hub {
                     asks.push(ask.clone());
                 }
             }
-            for (key, said) in self.read_from_github(workspace, &asks).await {
+            for (key, said) in self.read_from_github(&asks).await {
                 self.references.keep(key, said);
             }
         }
@@ -67,20 +62,19 @@ impl Hub {
         }
     }
 
-    /// What GitHub says of each of `asks`, as the workspace's pull request is read, or why it couldn't be read.
+    /// What GitHub says of each of `asks`, as pull requests are read, or why it couldn't be read.
     async fn read_from_github(
         &self,
-        workspace: &protocol::model::Workspace,
         asks: &[(GithubRepositoryName, IssueNumber)],
     ) -> Vec<(Key, Result<Option<Reference>, String>)> {
         let all_failed = |why: &str| {
             asks.iter().map(|(repository, number)| (key(repository, *number), Err(why.to_string()))).collect()
         };
-        let reads_as = match self.reads_as(workspace) {
+        let reads_as = match self.reads_as() {
             Ok(reads_as) => reads_as,
             Err(error) => return all_failed(&error.message),
         };
-        let token = match self.token_of(&reads_as, Duration::ZERO).await {
+        let token = match self.token_of(&reads_as) {
             Ok(token) => token,
             Err(error) => return all_failed(&error.message),
         };
@@ -89,7 +83,7 @@ impl Hub {
         }
         jobs::step("waiting for GitHub to answer for what chats name");
         let read = self.github.read_references(&token, asks, Leaving::ForOthers).await;
-        self.github_said(&reads_as, read.rate_limit, read.refused);
+        self.github_said(&reads_as, read.rate_limit);
         (asks.iter().zip(read.answers))
             .map(|((repository, number), answer)| (key(repository, *number), answer.map_err(|error| error.message)))
             .collect()

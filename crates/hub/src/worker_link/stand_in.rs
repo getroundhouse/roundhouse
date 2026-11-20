@@ -72,7 +72,6 @@ impl WorkerLink {
             calls: Calls::new(Box::new(ours)),
             closed: watch::channel(false).0,
             kept: AtomicBool::new(false),
-            reads: std::sync::atomic::AtomicUsize::new(0),
             process,
             tools_unserved: AtomicBool::new(false),
             held: AsyncMutex::new(None),

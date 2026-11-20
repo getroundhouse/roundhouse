@@ -16,7 +16,6 @@ mod carrying_on;
 mod children;
 mod comments;
 mod feed;
-mod found_github_logins;
 mod github_accounts;
 mod github_apps;
 mod github_reach;
@@ -53,6 +52,6 @@ use crate::store::now_ms;
 
 mod coordinator;
 pub(crate) use coordinator::{Hub, HubDirs};
-use coordinator::{KEEPS_WORKERS, Wanted, new_id, off_thread};
+use coordinator::{KEEPS_WORKERS, new_id, off_thread};
 
 mod devices;

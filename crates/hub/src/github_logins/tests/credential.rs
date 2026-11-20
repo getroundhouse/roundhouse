@@ -39,8 +39,10 @@ fn file_holding(dir: &Path, token: &str) -> PathBuf {
     paths.find(|path| std::fs::read_to_string(path).is_ok_and(|held| held == token)).unwrap()
 }
 
+/// With no default, workers on the providers Roundhouse sets up GitHub on are sent a block saying to connect one, rather
+/// than nothing, which would leave them to whatever their machine has, and no account that isn't the default.
 #[test]
-fn workers_are_sent_nothing_of_the_hubs_while_the_default_is_each_machines_own() {
+fn workers_are_sent_a_block_saying_to_connect_an_account_while_theres_no_default() {
     let dir = tempfile::tempdir().unwrap();
     let (logins, _) = logins_in(dir.path());
     let with_none = sent(&logins);
@@ -48,8 +50,9 @@ fn workers_are_sent_nothing_of_the_hubs_while_the_default_is_each_machines_own()
 
     logins.set_default(None, 2000).unwrap();
 
-    assert_eq!(with_none, GithubCredential::MachineOwn);
-    assert_eq!(sent(&logins), GithubCredential::MachineOwn, "an account that isn't the default isn't sent");
+    let GithubCredential::Blocked { reason } = &with_none else { panic!("{with_none:?}") };
+    assert!(reason.starts_with("Roundhouse has no GitHub account") && reason.contains("Connect one"), "{reason}");
+    assert_eq!(sent(&logins), with_none, "an account that isn't the default isn't sent");
 }
 
 #[test]

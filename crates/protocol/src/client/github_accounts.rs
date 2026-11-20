@@ -6,7 +6,9 @@
 use serde::{Deserialize, Serialize};
 
 use super::{ClientRequest, ClientResponse, Reply, Request};
-use crate::model::{GhLogin, GithubAccount, GithubAccountId, GithubSignIn, GithubSignInId, GithubToken, HubSettings};
+use crate::model::{
+    GhLogin, GithubAccount, GithubAccountId, GithubSignIn, GithubSignInId, GithubToken, HubSettings, MachineLogins,
+};
 
 /// Gives the hub a token the person made on GitHub, such as a fine-grained one, to hold as a GitHub account's login,
 /// and answers with the account's record. The hub asks GitHub whose it is and when it ends, keeps it in a file of its
@@ -51,6 +53,29 @@ impl Request for HubGhLogin {
 
     fn into_request(self) -> ClientRequest {
         ClientRequest::HubGhLogin
+    }
+}
+
+/// Asks who `gh` and the SSH key on the hub's own machine are on GitHub, and answers with them, so a client can show who
+/// agents on the local provider are there. The hub runs `gh` as [`HubGhLogin`] says, and `ssh -T git@github.com`,
+/// never letting it ask anything, each time it's asked, and keeps nothing of them. It never refuses for what it read,
+/// which says what it couldn't tell. A hub from before it could refuses it, as `is_unsupported` says. *Unconfirmed:*
+/// reading them only when asked.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct HubMachineLogins;
+
+impl Request for HubMachineLogins {
+    type Reply = MachineLogins;
+
+    fn into_request(self) -> ClientRequest {
+        ClientRequest::HubMachineLogins
+    }
+}
+
+impl Reply for MachineLogins {
+    fn read(response: ClientResponse) -> Result<Self, ClientResponse> {
+        let ClientResponse::MachineLogins(logins) = response else { return Err(response) };
+        Ok(logins)
     }
 }
 
@@ -111,7 +136,9 @@ impl Request for GithubAccountDisconnect {
 }
 
 /// Chooses the default GitHub account, as [`GithubSettings::account`](crate::model::GithubSettings::account) says, and
-/// answers with the hub's settings. `None` makes each machine's own login the default. Choosing the default again
+/// answers with the hub's settings. `None` leaves no default, so the hub reads nothing of GitHub and blocks the
+/// workers it sets up GitHub for, which a hub from before it had an identity of its own took as each machine's own
+/// login. Choosing the default again
 /// changes nothing. Refused with `NotFound` when the hub has no record of the account, and with `Conflict` when its
 /// login can't be used now, as when it's been disconnected or has ended, leaving the default as it was.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]

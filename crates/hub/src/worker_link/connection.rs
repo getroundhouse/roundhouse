@@ -15,7 +15,7 @@ use providers::Provider;
 use reaching::{Opening, reach};
 use std::collections::HashMap;
 use std::fmt;
-use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 use tokio::sync::{Mutex as AsyncMutex, watch};
@@ -33,11 +33,8 @@ pub(crate) struct WorkerLink {
     /// Closing these closes the worker's stdin, which is how it's told to stop.
     pub(super) calls: Calls<Result<WorkerResponse, ApiError>>,
     pub(super) closed: watch::Sender<bool>,
-    /// Something other than a read nobody asked for has wanted it, so it's kept running.
+    /// Something has wanted it since it was found running, so it's kept running.
     pub(super) kept: AtomicBool,
-    /// How many reads nobody asked for hold it now, each by a [`ReadHold`], so one that ends doesn't stop it under
-    /// another.
-    pub(super) reads: AtomicUsize,
     /// The command the hub runs to reach the worker.
     pub(super) process: ChildProcess,
     /// It didn't serve its tools when asked, as a worker that doesn't know how never answers, so its agents go without
@@ -66,10 +63,9 @@ fn unexpected(reply: &WorkerResponse) -> ApiError {
 
 impl WorkerLink {
     /// Starts the instance's worker, says hello and sets the hub's git credential, as [`WorkerLink::greet`] says, and
-    /// from then on sets each the hub has, as [`Following::follow`] says. Then asks who the worker's machine's own
-    /// `gh` is logged in as, if nobody has said for its provider since the hub started, as [`Hub::find_github_login`]
-    /// says, and, on a worker on the hub's machine, where each repository's checkout whose address is to be read
-    /// fetches from, as [`Hub::read_repo_urls`] says, without waiting for either answer. On failure nothing is left
+    /// from then on sets each the hub has, as [`Following::follow`] says. Then, on a worker on the hub's machine, asks
+    /// where each repository's checkout whose address is to be read fetches from, as [`Hub::read_repo_urls`] says,
+    /// without waiting for the answer. On failure nothing is left
     /// running, so the next attempt starts clean.
     pub(crate) async fn open(
         hub: Arc<Hub>,
@@ -86,7 +82,6 @@ impl WorkerLink {
             calls: Calls::new(writer),
             closed: watch::channel(false).0,
             kept: AtomicBool::new(false),
-            reads: AtomicUsize::new(0),
             process,
             tools_unserved: AtomicBool::new(false),
             held: AsyncMutex::new((opening == Opening::LeftRunning).then(Vec::new)),
@@ -111,8 +106,6 @@ impl WorkerLink {
         let failure = match link.greet(within, following).await {
             Ok(following) => {
                 tokio::spawn(following.follow());
-                let provider = ProviderName::from(provider.name());
-                hub.find_github_login(provider, &link).await;
                 tokio::spawn(Arc::clone(&hub).read_repo_urls(workspace_id, Arc::clone(&link)));
                 return Ok(link);
             }
@@ -178,7 +171,6 @@ impl WorkerLink {
             calls,
             closed: watch::channel(true).0,
             kept: AtomicBool::new(false),
-            reads: AtomicUsize::new(0),
             process: ChildProcess::already_exited(),
             tools_unserved: AtomicBool::new(false),
             held: AsyncMutex::new(None),
@@ -196,21 +188,9 @@ impl WorkerLink {
         self.kept.store(true, Ordering::Relaxed);
     }
 
-    /// Whether anything but a read nobody asked for has wanted it.
+    /// Whether anything has wanted it, which one an earlier hub left running is not until something does.
     pub(crate) fn kept(&self) -> bool {
         self.kept.load(Ordering::Relaxed)
-    }
-
-    /// Holds it for a read nobody asked for, until the hold goes. Only where no read that ends can be deciding to stop
-    /// it, as with [`WorkerLink::keep`].
-    pub(crate) fn hold_for_read(self: &Arc<Self>) -> ReadHold {
-        self.reads.fetch_add(1, Ordering::Relaxed);
-        ReadHold(Arc::clone(self))
-    }
-
-    /// Whether a read nobody asked for holds it now.
-    pub(crate) fn held_for_read(&self) -> bool {
-        self.reads.load(Ordering::Relaxed) > 0
     }
 
     /// Whether the worker is another build than `hub`, as its hello said, such as one an earlier hub left. One that
@@ -327,22 +307,5 @@ impl fmt::Display for WorkerLink {
             Some(build) => write!(f, "worker link {} of build {build}", self.id),
             None => write!(f, "worker link {}", self.id),
         }
-    }
-}
-
-/// A read's hold on a worker it was started or found for, as [`WorkerLink::hold_for_read`] gives one. A read that ends
-/// lets go of the worker only once no other read holds it, so two reads of one workspace, such as its own pull request
-/// and a machine's token for its waits, don't stop the worker under each other.
-pub(crate) struct ReadHold(Arc<WorkerLink>);
-
-impl ReadHold {
-    pub(crate) fn link(&self) -> &Arc<WorkerLink> {
-        &self.0
-    }
-}
-
-impl Drop for ReadHold {
-    fn drop(&mut self) {
-        self.0.reads.fetch_sub(1, Ordering::Relaxed);
     }
 }

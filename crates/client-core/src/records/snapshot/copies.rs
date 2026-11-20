@@ -94,15 +94,15 @@ impl Listed {
                 }
                 Record::GithubAccount(account) => listed.github.account(account),
                 Record::GithubSignIn(sign_in) => listed.github.sign_in(sign_in),
-                Record::FoundGithubLogin(found) => listed.github.found(found),
                 Record::GithubApp(app) => listed.github.app(app),
                 Record::GithubReach(reach) => listed.github.reach(reach),
                 Record::Terminal(terminal) => {
                     let its: &mut Vec<_> = terminals.entry(terminal.workspace_id.clone()).or_default();
                     its.push((terminal.clone(), taken));
                 }
-                // Held apart, as `HubRecords::apply_record` says.
-                Record::Subagent(_) | Record::Proposal(_) => {}
+                // Held apart, as `HubRecords::apply_record` says, but for a found login, from a hub from before
+                // Settings' Providers, which no view shows.
+                Record::Subagent(_) | Record::Proposal(_) | Record::FoundGithubLogin(_) => {}
             }
         }
         listed.github.order();

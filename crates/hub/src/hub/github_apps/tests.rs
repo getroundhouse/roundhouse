@@ -124,7 +124,7 @@ async fn an_app_whose_installations_cant_be_listed_is_made_and_connected_once_th
     let before = sent(&hub);
     let app = hub.github_app_installations_connect(APP).await.unwrap();
 
-    assert_eq!(before, GithubCredential::MachineOwn);
+    assert!(matches!(before, GithubCredential::Blocked { .. }), "{before:?}");
     assert_eq!(app.id, APP);
     assert_eq!(sent(&hub), bots("ghs_first"));
 }

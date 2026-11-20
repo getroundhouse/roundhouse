@@ -65,7 +65,7 @@ impl ProviderSet {
     /// default GitHub account, and git and `gh` there are as the machine has them. So it is for the local provider,
     /// whose machine is the person's own, and for a provider whose entry says `"set_up_github": false`, as one whose
     /// machines come with their own login for GitHub would. Not for any other, nor for a name the hub doesn't know.
-    /// `docs/decisions/github-identity-held-by-hub.md` says why. *Unconfirmed.*
+    /// `docs/decisions/github-on-provisioned-machines.md` says why.
     pub(crate) fn leaves_github_to_machine(&self, name: &ProviderName) -> bool {
         self.left_to_machine.contains(name)
     }
@@ -73,6 +73,14 @@ impl ProviderSet {
     /// Every provider [`ProviderSet::leaves_github_to_machine`] is true of, in order of name.
     pub(crate) fn left_to_machine(&self) -> Vec<ProviderName> {
         self.left_to_machine.iter().cloned().collect()
+    }
+
+    /// Every other provider, whose machines Roundhouse sets up GitHub on, in order of name.
+    pub(crate) fn set_up_github(&self) -> Vec<ProviderName> {
+        let mut set_up: Vec<_> =
+            self.by_name.keys().filter(|name| !self.leaves_github_to_machine(name)).cloned().collect();
+        set_up.sort();
+        set_up
     }
 
     pub(crate) fn get(&self, name: &ProviderName) -> Option<Arc<dyn Provider>> {

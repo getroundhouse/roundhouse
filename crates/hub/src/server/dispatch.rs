@@ -217,6 +217,7 @@ pub(super) async fn handle(
         R::GithubAccountConnect(asked) => C::GithubAccount(hub.github_account_connect(asked).await?),
         R::GithubAccountConnectGh => C::GithubAccount(hub.github_account_connect_gh().await?),
         R::HubGhLogin => C::GhLogin(hub.hub_gh_login().await?),
+        R::HubMachineLogins => C::MachineLogins(hub.hub_machine_logins().await),
         R::GithubAccountDisconnect(github_accounts::GithubAccountDisconnect { id }) => {
             C::GithubAccount(hub.github_account_disconnect(id).await?)
         }

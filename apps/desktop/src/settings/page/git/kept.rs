@@ -46,8 +46,6 @@ pub(super) enum Asked {
     Account(GithubAccountId),
     /// Under the row of an app of your own that's installed nowhere: looking for where it's installed, or removing it.
     App(GithubAppId),
-    /// Under Found's heading: making each machine's own login the default.
-    MachinesOwn,
 }
 
 /// A panel open on the page: under Added's heading, or under the row of the account it renews.
@@ -113,11 +111,6 @@ impl Kept {
         }
     }
 
-    /// Whether the page waits for the hub to choose the default.
-    pub(super) fn choosing(&self) -> bool {
-        self.choosing.is_some()
-    }
-
     /// Opens a panel showing `shows`, in place of any that was open.
     pub(super) fn open(&mut self, shows: Shows, cx: &mut Context<Self>) {
         self.panel = Some(Panel { shows, focus: cx.focus_handle(), reveal: true });
@@ -151,17 +144,17 @@ impl Kept {
         }
     }
 
-    /// Has the hub make `account` the default, or each machine's own login with `None`, and says where it was asked
-    /// why it couldn't, if it couldn't. The hub's settings say which is the default, once it has answered.
-    pub(super) fn make_default(&mut self, account: Option<GithubAccountId>, cx: &mut Context<Self>) {
-        let at = account.clone().map_or(Asked::MachinesOwn, Asked::Account);
+    /// Has the hub make `account` the default, and says under its row why it couldn't, if it couldn't. The hub's
+    /// settings say which is the default, once it has answered.
+    pub(super) fn make_default(&mut self, account: GithubAccountId, cx: &mut Context<Self>) {
+        let at = Asked::Account(account.clone());
         let Some(asking) = self.asking.clone() else {
             self.failed = Some((at, words::NO_HUB.to_string()));
             cx.notify();
             return;
         };
         self.failed = None;
-        let choosing = asking.client.start(move |client| client.github_account_set_default(account));
+        let choosing = asking.client.start(move |client| client.github_account_set_default(Some(account)));
         self.choosing = Some(cx.spawn(async move |this, cx| {
             let answer = choosing.recv().await;
             let _ = this.update(cx, |this, cx| {

@@ -5,7 +5,6 @@ use rusqlite::{Row, Transaction};
 
 use super::accounts::accounts;
 use super::comments::{COMMENT_COLUMNS, comment_from_row};
-use super::found_github_logins::found_github_logins;
 use super::github_accounts::github_accounts;
 use super::github_apps::github_apps;
 use super::github_reach::github_reach;
@@ -48,7 +47,8 @@ impl Store {
             new_workspace_draft: Some(new_workspace_draft(&tx)?),
             github_accounts: github_accounts(&tx)?,
             github_sign_ins: github_sign_ins(&tx)?,
-            found_github_logins: found_github_logins(&tx)?,
+            // A hub from before Settings' Providers found these, as `FoundGithubLogin` says. This one finds none.
+            found_github_logins: Vec::new(),
             github_apps: github_apps(&tx)?,
             github_reach: github_reach(&tx)?,
             // Kept in memory rather than here, as `Terminal` and `ModelList` say, so the hub adds them.

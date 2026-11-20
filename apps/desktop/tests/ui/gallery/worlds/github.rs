@@ -1,11 +1,10 @@
 //! The GitHub accounts agents push as, as Git in Settings lists them: the accounts the person gave the hub, by signing
-//! in with GitHub and with tokens, in each state one can be in, and the `gh` login found on each provider's machines.
-//! Their tokens are the hub's, so none is here.
+//! in with GitHub and with tokens, in each state one can be in. Their tokens are the hub's, so none is here.
 
-use protocol::fixtures::{found_github_login, github_account, github_sign_in};
+use protocol::fixtures::{github_account, github_sign_in};
 use protocol::model::{
-    FoundGithubLogin, GhLogin, GhLoginWorks, GithubAccount, GithubLoginKind, GithubSettings, GithubSignInStatus,
-    GithubUser, GithubUserId, HeldGithubLogin, SentCredential, UnusableLogin,
+    GithubAccount, GithubLoginKind, GithubSettings, GithubSignInStatus, GithubUser, GithubUserId, HeldGithubLogin,
+    SentCredential, UnusableLogin,
 };
 
 use super::conversation;
@@ -18,28 +17,29 @@ pub(super) const FEB_3_MS: i64 = 1_801_666_800_000;
 const OCT_29_MS: i64 = 1_793_286_000_000;
 
 /// The conversation, on a hub with three GitHub accounts: `ada`, signed in, the default; `ada_northwind`, a token that
-/// ends in February; and `grace`, whose token was disconnected. Found has this Mac's `gh`, logged in as `ada`, which
-/// GitHub took, and a server's, with no `gh`.
+/// ends in February; and `grace`, whose token was disconnected.
 pub(in crate::gallery) fn github_accounts() -> World {
     let mut world = conversation();
     world.github = Some(sending(&ada()));
     world.github_accounts = vec![ada(), northwind(FEB_3_MS), grace()];
-    world.found_github_logins = vec![found_github_login("local"), not_installed("incus")];
     world
 }
 
-/// The conversation, on a hub with no GitHub account, so each machine's own login is the default, with this Mac's `gh`
-/// logged in as `ada`, and a server's logged in to no one.
+/// The conversation, on a hub with no GitHub account, so it reads nothing of GitHub, and blocks the workers of the
+/// providers it sets up, as the hub words why.
 pub(in crate::gallery) fn no_github_accounts() -> World {
     let mut world = conversation();
+    let reason = "Roundhouse has no GitHub account. Until one is connected, Roundhouse can't read pull requests, and \
+                  agents on the providers it sets up can't push. Connect one in Roundhouse's Settings, such as gh's \
+                  login on the machine Roundhouse runs on.";
+    let sent = SentCredential::NoAccount { reason: reason.to_string() };
     world.github =
-        Some(GithubSettings { account: None, sent: Some(SentCredential::MachineOwn), left_to_machine: Vec::new() });
-    world.found_github_logins = vec![found_github_login("local"), logged_out("incus")];
+        Some(GithubSettings { account: None, sent: Some(sent), left_to_machine: Vec::new(), set_up: Vec::new() });
     world
 }
 
 /// The conversation, on a hub whose default, `ada_northwind`'s token, ended three days ago, so agents can't push, with
-/// `ada` signed in to choose instead. This Mac's `gh` is logged in with a token GitHub refused.
+/// `ada` signed in to choose instead.
 pub(in crate::gallery) fn github_default_ended() -> World {
     let mut world = conversation();
     let reason = "The token of ada_northwind, the default account, has ended. Until it's renewed, Roundhouse can't \
@@ -47,8 +47,6 @@ pub(in crate::gallery) fn github_default_ended() -> World {
                   default.";
     world.github = Some(blocking(&northwind(OCT_29_MS), UnusableLogin::Ended, reason));
     world.github_accounts = vec![ada(), northwind(OCT_29_MS)];
-    let refused = GhLogin::LoggedIn { username: "ada".into(), works: GhLoginWorks::Refused };
-    world.found_github_logins = vec![FoundGithubLogin { login: refused, ..found_github_login("local") }];
     world
 }
 
@@ -73,14 +71,24 @@ pub(in crate::gallery) fn github_signing_in_to(status: GithubSignInStatus) -> Wo
 /// The settings of a hub whose default is `account`, whose login workers are sent.
 pub(in crate::gallery) fn sending(account: &GithubAccount) -> GithubSettings {
     let sent = SentCredential::Account { account: account.id.clone() };
-    GithubSettings { account: Some(account.id.clone()), sent: Some(sent), left_to_machine: Vec::new() }
+    GithubSettings {
+        account: Some(account.id.clone()),
+        sent: Some(sent),
+        left_to_machine: Vec::new(),
+        set_up: Vec::new(),
+    }
 }
 
 /// The settings of a hub whose default is `account`, which blocks every worker, for the reason `why`, saying
 /// `reason`, as the hub words it.
 pub(in crate::gallery) fn blocking(account: &GithubAccount, why: UnusableLogin, reason: &str) -> GithubSettings {
     let sent = SentCredential::Blocked { account: account.id.clone(), why, reason: reason.to_string() };
-    GithubSettings { account: Some(account.id.clone()), sent: Some(sent), left_to_machine: Vec::new() }
+    GithubSettings {
+        account: Some(account.id.clone()),
+        sent: Some(sent),
+        left_to_machine: Vec::new(),
+        set_up: Vec::new(),
+    }
 }
 
 /// The account `ada` signed in as, three weeks ago, whose token the hub renews by itself.
@@ -124,12 +132,4 @@ fn held(id: &str, user: u64, name: &str, held: HeldGithubLogin) -> GithubAccount
         held_login: Some(held),
         ..github_account(id)
     }
-}
-
-fn not_installed(provider: &str) -> FoundGithubLogin {
-    FoundGithubLogin { login: GhLogin::NotInstalled, ..found_github_login(provider) }
-}
-
-fn logged_out(provider: &str) -> FoundGithubLogin {
-    FoundGithubLogin { login: GhLogin::LoggedOut, ..found_github_login(provider) }
 }

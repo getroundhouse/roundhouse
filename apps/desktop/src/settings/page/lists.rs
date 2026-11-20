@@ -12,13 +12,13 @@ use look::Typeset as _;
 /// A list's name, with a badge after it if it has one, what it says of itself under that, and what it does at the far
 /// end, if anything.
 pub(super) fn heading(
-    name: &'static str,
+    name: impl Into<SharedString>,
     badge: Option<look::Badge>,
     says: impl Into<SharedString>,
     action: Option<AnyElement>,
     cx: &App,
 ) -> Div {
-    let name = h_flex().gap(look::Space::Small).child(div().emphasis().child(name)).children(badge);
+    let name = h_flex().gap(look::Space::Small).child(div().emphasis().child(name.into())).children(badge);
     let said = v_flex()
         .flex_1()
         .min_w_0()

@@ -197,7 +197,8 @@ fn only_an_installation_on_the_apps_owner_is_connected() {
 
     assert_eq!(looked.connect, [on_adalabs(70)]);
     assert!(connected.is_none(), "{connected:?}");
-    assert_eq!(sent(&logins), GithubCredential::MachineOwn, "nothing became the default");
+    let nothing = matches!(sent(&logins), GithubCredential::Blocked { reason } if reason.contains("no GitHub account"));
+    assert!(nothing, "nothing became the default");
 }
 
 /// So it's the same account as before, which may be the default, rather than another of the same bot on the same user.

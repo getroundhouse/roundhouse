@@ -140,3 +140,12 @@ pub(super) const GITHUB_SENT: &str = r"
 pub(super) const GITHUB_LEFT_TO_MACHINE: &str = r"
     ALTER TABLE hub_settings ADD COLUMN github_left_to_machine TEXT;
 ";
+
+/// The providers whose machines Roundhouse sets up GitHub on, on the hub's settings, as a JSON list of their names,
+/// which the hub writes as it starts, before any client reads it. Changing it is a change to the settings' record, so
+/// it moves their revision. And no table of the `gh` login each provider's machines had, which the hub asked their
+/// workers for, since it asks no worker, and reads its own machine's only when a client asks.
+pub(super) const GITHUB_SET_UP: &str = r"
+    ALTER TABLE hub_settings ADD COLUMN github_set_up TEXT;
+    DROP TABLE found_github_logins;
+";

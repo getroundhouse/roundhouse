@@ -1,11 +1,11 @@
-//! The rule's rows for what the hub keeps of GitHub: its accounts, the sign-ins to them, the logins found on each
-//! provider's machines, the apps of the person's own, and what each repository's account reaches.
+//! The rule's rows for what the hub keeps of GitHub: its accounts, the sign-ins to them, the apps of the person's
+//! own, and what each repository's account reaches.
 
 use protocol::client::github_apps::GithubManifestCode;
 use protocol::fixtures;
 use protocol::model::{
-    GhLogin, GithubAccountId, GithubAppId, GithubLoginKind, GithubRepositoryName, GithubSignInStatus, GithubUser,
-    GithubUserId, Reach, Rev,
+    GithubAccountId, GithubAppId, GithubLoginKind, GithubRepositoryName, GithubSignInStatus, GithubUser, GithubUserId,
+    Reach, Rev,
 };
 
 use super::super::{GithubAppMaking, GithubConnecting, Store};
@@ -63,14 +63,6 @@ pub(super) fn waiting(store: &Store) {
 
 pub(super) fn refused(store: &Store) -> Said {
     Said::record(&store.set_github_sign_in(&"i".into(), &GithubSignInStatus::Refused).unwrap())
-}
-
-pub(super) fn found_rev(store: &Store) -> Rev {
-    store.list_records().unwrap().found_github_logins[0].rev
-}
-
-pub(super) fn found(store: &Store) -> Said {
-    Said::record(&store.record_found_github_login(&"local".into(), &GhLogin::LoggedOut).unwrap())
 }
 
 const APP: GithubAppId = GithubAppId::new(9);

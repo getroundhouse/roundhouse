@@ -171,7 +171,7 @@ pub struct Records {
     /// Empty from a hub that keeps no GitHub accounts, or that can't sign in with GitHub.
     #[serde(default)]
     pub github_sign_ins: Vec<GithubSignIn>,
-    /// Empty from a hub that doesn't find them, and until a provider has been asked since the hub started.
+    /// Only from a hub from before Settings' Providers, as [`FoundGithubLogin`] says, and empty from any other.
     #[serde(default)]
     pub found_github_logins: Vec<FoundGithubLogin>,
     /// Empty from a hub from before apps of your own.

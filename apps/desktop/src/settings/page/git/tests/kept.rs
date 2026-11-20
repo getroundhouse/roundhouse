@@ -13,18 +13,12 @@ fn with_no_hub_to_ask_making_a_default_or_disconnecting_says_so_where_it_was_ask
     let kept = cx.new(|_| Kept::default());
     let (ada, bea) = (GithubAccountId::from("g1"), GithubAccountId::from("g2"));
 
-    kept.update(cx, |kept, cx| kept.make_default(Some(ada.clone()), cx));
-    kept.read_with(cx, |kept, _| {
-        assert_eq!(kept.failed(&Asked::Account(ada.clone())), Some(words::NO_HUB));
-        assert_eq!(kept.failed(&Asked::MachinesOwn), None);
-    });
-    kept.update(cx, |kept, cx| kept.make_default(None, cx));
-    kept.read_with(cx, |kept, _| assert_eq!(kept.failed(&Asked::MachinesOwn), Some(words::NO_HUB)));
+    kept.update(cx, |kept, cx| kept.make_default(ada.clone(), cx));
+    kept.read_with(cx, |kept, _| assert_eq!(kept.failed(&Asked::Account(ada.clone())), Some(words::NO_HUB)));
     kept.update(cx, |kept, cx| kept.disconnect(bea.clone(), cx));
     kept.read_with(cx, |kept, _| {
         assert_eq!(kept.failed(&Asked::Account(bea)), Some(words::NO_HUB), "under that account's row alone");
         assert_eq!(kept.failed(&Asked::Account(ada)), None);
-        assert!(!kept.choosing());
     });
     kept.update(cx, |kept, cx| kept.sign_in(None, cx));
     kept.read_with(cx, |kept, _| assert!(kept.panel.is_none(), "a sign-in needs a hub to run it"));

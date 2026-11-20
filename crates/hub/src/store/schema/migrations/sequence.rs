@@ -381,4 +381,7 @@ pub(in super::super) const MIGRATIONS: &[Migration] = &[
     Sql(super::conversations::CONVERSATION),
     // The providers whose machines Roundhouse leaves GitHub to, in `hub_settings`.
     Sql(super::github_accounts::GITHUB_LEFT_TO_MACHINE),
+    // The providers Roundhouse sets up GitHub on, and who `gh` and the SSH key on the hub's machine are, in
+    // `hub_settings`, without the table of each provider's `gh` login.
+    Sql(super::github_accounts::GITHUB_SET_UP),
 ];

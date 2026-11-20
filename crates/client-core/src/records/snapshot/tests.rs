@@ -1,5 +1,5 @@
 use protocol::client::HubNotice;
-use protocol::fixtures::{found_github_login, github_account, github_app, github_sign_in};
+use protocol::fixtures::{github_account, github_app, github_sign_in};
 use protocol::model::{
     DiffComment, DiffSide, GithubAccount, GithubApp, GithubAppId, GithubReach, GithubRepositoryName, GithubSettings,
     GithubUser, GithubUserId, HubSettings, Proposal, Reach, RecordKey, Records, Repo, Rev, Session, Subagent, Terminal,
@@ -192,8 +192,7 @@ fn a_sessions_subagents_are_listed_as_they_started_and_found_by_their_call() {
     assert!(std::sync::Arc::ptr_eq(&unchanged(&before), &unchanged(&now)), "one that didn't change is shared");
 }
 
-/// Two accounts of one user and one of another, a sign-in, three apps of your own, and the logins found on three
-/// providers, this one among them.
+/// Two accounts of one user and one of another, a sign-in, and three apps of your own.
 #[test]
 fn what_a_hub_says_of_github_is_listed_in_the_order_views_show_it_and_found_by_its_id() {
     let named = |id: &str, name: &str| GithubAccount {
@@ -206,7 +205,6 @@ fn what_a_hub_says_of_github_is_listed_in_the_order_views_show_it_and_found_by_i
     held.apply_list(Records {
         github_accounts: vec![named("g3", "bea"), named("g2", "Ada"), named("g1", "ada")],
         github_sign_ins: vec![github_sign_in("s")],
-        found_github_logins: vec![found_github_login("incus"), found_github_login("local"), found_github_login("aws")],
         github_apps: vec![app(9, "bea-roundhouse"), app(8, "Ada-roundhouse"), app(7, "ada-roundhouse")],
         rev: Rev::new(1),
         ..Records::default()
@@ -217,11 +215,6 @@ fn what_a_hub_says_of_github_is_listed_in_the_order_views_show_it_and_found_by_i
     assert_eq!(shown.github_account(&"g3".into()).map(|a| a.user.name.as_str()), Some("bea"));
     assert_eq!(shown.github_sign_in(&"s".into()).map(|s| s.status.is_waiting()), Some(true));
     assert_eq!(shown.github_sign_ins().count(), 1);
-    assert_eq!(
-        ids(shown.found_github_logins(), |f| f.provider.as_str()),
-        ["local", "aws", "incus"],
-        "this machine's first"
-    );
     let apps: Vec<u64> = shown.github_apps().iter().map(|a| a.id.get()).collect();
     assert_eq!(apps, [7, 8, 9], "by name in any case, then number");
     assert_eq!(shown.github_app(GithubAppId::new(9)).map(|a| a.name.as_str()), Some("bea-roundhouse"));
@@ -256,7 +249,8 @@ fn a_workspace_on_a_provider_left_to_its_machine_says_nothing_of_its_repositorys
     let refused = Reach::Refused { repository, username: "ada".into(), reason: "No.".into(), installation: None };
     let github_reach = vec![GithubReach { reach: refused.clone(), ..protocol::fixtures::github_reach("r") }];
     let on_vms = Workspace { provider: "vms".into(), ..workspace("w2", 20, 3) };
-    let github = GithubSettings { account: None, sent: None, left_to_machine: vec!["local".into()] };
+    let github =
+        GithubSettings { account: None, sent: None, left_to_machine: vec!["local".into()], set_up: Vec::new() };
     let hub_settings = HubSettings {
         keep_awake: false,
         allow_asked_in_full_access: None,

@@ -137,6 +137,7 @@ fn every_request_about_a_github_account_keeps_its_form() {
         r#"{"method":"github_sign_in_cancel","id":"s"}"#,
     );
     asked(ClientRequest::HubGhLogin, r#"{"method":"hub_gh_login"}"#);
+    asked(ClientRequest::HubMachineLogins, r#"{"method":"hub_machine_logins"}"#);
     asked(ClientRequest::GithubAccountConnectGh, r#"{"method":"github_account_connect_gh"}"#);
 }
 

@@ -8,8 +8,9 @@ use protocol::worker::{GitCredential, GithubCredential};
 /// can be sent.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum DefaultCredential {
-    /// Each machine's own login.
-    MachineOwn,
+    /// No default, so the hub reads nothing of GitHub, and workers are sent a block saying `reason`, which says to
+    /// connect an account.
+    NoAccount { reason: String },
     /// The login of `account`, the default, which GitHub knows as `username`: the username git gives GitHub, as
     /// `credential` has it, for a token's or a sign-in's, and for an app's installation, whose git username is
     /// `x-access-token`, its bot, with where the app is installed, as `installation` says.
@@ -28,9 +29,10 @@ impl DefaultCredential {
     /// What workers give their processes for github.com.
     pub(crate) fn for_workers(&self) -> GithubCredential {
         match self {
-            DefaultCredential::MachineOwn => GithubCredential::MachineOwn,
             DefaultCredential::Account { credential, .. } => GithubCredential::Account(credential.clone()),
-            DefaultCredential::Blocked { reason, .. } => GithubCredential::Blocked { reason: reason.clone() },
+            DefaultCredential::NoAccount { reason } | DefaultCredential::Blocked { reason, .. } => {
+                GithubCredential::Blocked { reason: reason.clone() }
+            }
         }
     }
 
@@ -39,7 +41,7 @@ impl DefaultCredential {
     /// on the same settings, which it couldn't read either.
     pub(crate) fn recorded(&self) -> Option<SentCredential> {
         Some(match self {
-            DefaultCredential::MachineOwn => SentCredential::MachineOwn,
+            DefaultCredential::NoAccount { reason } => SentCredential::NoAccount { reason: reason.clone() },
             DefaultCredential::Account { account, .. } => SentCredential::Account { account: account.clone() },
             DefaultCredential::Blocked { reason, account, why } => {
                 SentCredential::Blocked { account: account.clone()?, why: *why, reason: reason.clone() }

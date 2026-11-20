@@ -7,10 +7,10 @@ use protocol::client::ApiError;
 use protocol::client::ErrorCode;
 use protocol::event::{EventBody, SessionEvent};
 use protocol::model::{
-    Account, AttachmentId, CacheTtl, ContextUsage, DiffComment, FileContents, FoundGithubLogin, GitDiff, GithubAccount,
-    GithubApp, GithubSettings, GithubSignIn, GithubSignInStatus, InstanceId, ModelName, PORTS_PER_WORKSPACE, Place,
-    PromptCache, Proposal, PullRequest, Repo, RepoId, RepoOrigin, Rev, Seq, Session, SessionId, SessionStatus,
-    Subagent, SubagentId, Terminal, TerminalId, Title, Workspace, WorkspaceId, WorktreeFiles,
+    Account, AttachmentId, CacheTtl, ContextUsage, DiffComment, FileContents, GitDiff, GithubAccount, GithubApp,
+    GithubSettings, GithubSignIn, GithubSignInStatus, InstanceId, ModelName, PORTS_PER_WORKSPACE, Place, PromptCache,
+    Proposal, PullRequest, Repo, RepoId, RepoOrigin, Rev, Seq, Session, SessionId, SessionStatus, Subagent, SubagentId,
+    Terminal, TerminalId, Title, Workspace, WorkspaceId, WorktreeFiles,
 };
 use protocol::prompt::Prompt;
 use protocol::tail::Tail;
@@ -79,10 +79,12 @@ pub struct World {
     pub github: Option<GithubSettings>,
     pub github_accounts: Vec<GithubAccount>,
     pub github_sign_ins: Vec<GithubSignIn>,
-    pub found_github_logins: Vec<FoundGithubLogin>,
     /// Who `gh` on the hub's machine is logged in as, as the hub answers each time it's asked. `None` refuses it, as a hub
     /// from before it read `gh` does.
     pub hub_gh_login: Option<protocol::model::GhLogin>,
+    /// Who `gh` and the SSH key on the hub's machine are, as the hub answers each time it's asked. `None` refuses it,
+    /// as a hub from before it read them does.
+    pub machine_logins: Option<protocol::model::MachineLogins>,
     /// Why the hub couldn't use `gh`'s login as an account's, as it answers each time it's asked. `None` refuses it, as the
     /// rest of what would change what the hub holds.
     pub gh_connect_refused: Option<ApiError>,

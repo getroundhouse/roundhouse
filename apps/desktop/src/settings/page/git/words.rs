@@ -5,44 +5,32 @@
 
 use client_core::{ClientError, refusals};
 use gpui_kit::{App, SharedString};
-use protocol::model::{
-    GhLogin, GhLoginWorks, GithubLoginKind, GithubUsername, HeldGithubLogin, ProviderName, SentCredential,
-    UnusableLogin,
-};
+use protocol::model::{GithubLoginKind, GithubUsername, HeldGithubLogin, SentCredential, UnusableLogin};
 
 /// What a search finds the page by, besides its name.
 pub(super) const ABOUT: &str = "Who Roundhouse is on GitHub: signing in with GitHub, tokens, apps of your own, gh's \
-                                login on this computer, the default account, and the gh login each machine already \
-                                has.";
+                                login on this computer, and the default account.";
 
-/// What Added says of itself under its heading: as approved, but for Providers, which isn't built, so it says what the
-/// hub's own machine does in place of where to see it. *Unconfirmed.*
-pub(super) const ADDED_SAYS: &str = "Who Roundhouse is on GitHub. It reads pull requests as the default, and agents on \
-                                     the providers it sets up push and open pull requests as it. On the hub's own \
-                                     machine, agents use its git and gh as they are.";
-
-/// What Added says of itself under its heading on a hub that keeps no GitHub accounts, which uses no default.
-pub(super) const ADDED_SAYS_OLDER: &str = "GitHub accounts you've given the hub.";
-
-/// What Found says of itself under its heading.
-pub(super) const FOUND_SAYS: &str = "Who gh is logged in as on each machine a workspace has run on since the hub \
-                                     started, and whether GitHub took its token then. Agents on the hub's own \
-                                     machine use its login, and elsewhere only while it's the default. Roundhouse \
-                                     never copies it.";
-
-/// What Added says while the hub holds no GitHub account, so each machine's own login is the default, which Roundhouse
-/// reads pull requests as too, until Found goes. *Unconfirmed.*
-pub(super) fn none_added() -> String {
+/// What Added says of itself under its heading. *Unconfirmed.*
+pub(super) fn added_says() -> String {
     format!(
-        "None yet, so Roundhouse uses each machine's own gh login. Connect one, such as gh's login on this {}, for \
-         agents on the providers Roundhouse sets up to push as it.",
+        "Who Roundhouse is on GitHub. It reads pull requests as the default, and agents on the providers it sets up \
+         push and open pull requests as it. Providers says who agents are on this {}.",
         crate::names::MACHINE,
     )
 }
 
-/// What Found says while the hub has asked no machine.
-pub(super) const NONE_FOUND: &str =
-    "None yet. The hub asks each machine once, through the first workspace that runs there after it starts.";
+/// What Added says of itself under its heading on a hub that keeps no GitHub accounts, which uses no default.
+pub(super) const ADDED_SAYS_OLDER: &str = "GitHub accounts you've given the hub.";
+
+/// What Added says while the hub holds no GitHub account. *Unconfirmed.*
+pub(super) fn none_added() -> String {
+    format!(
+        "None yet. Without one, Roundhouse can't read pull requests, and agents on the providers it sets up can't push \
+         or use gh. Connect one, such as gh's login on this {}.",
+        crate::names::MACHINE,
+    )
+}
 
 /// What a hub that keeps no GitHub accounts is said to be, in place of both lists.
 pub(super) const OLDER_HUB: &str = "This hub is from before hubs kept GitHub accounts, so agents use each machine's own \
@@ -109,7 +97,9 @@ impl Standing {
                 return Standing::Works { ends: held.and_then(|held| ends(held, cx)) };
             }
             SentCredential::Blocked { why, .. } => why,
-            SentCredential::MachineOwn | SentCredential::Unknown => return Standing::CantBeUsed,
+            SentCredential::MachineOwn | SentCredential::NoAccount { .. } | SentCredential::Unknown => {
+                return Standing::CantBeUsed;
+            }
         };
         match why {
             UnusableLogin::Disconnected => Standing::Disconnected,
@@ -190,33 +180,6 @@ pub(super) fn gh_choice_says(username: &GithubUsername) -> SharedString {
     .into()
 }
 
-/// What a machine's own login is called on its row, and what its row says of it, if anything, and whether that's a
-/// problem, so it's said in red.
-pub(super) fn found(login: &GhLogin) -> (String, Option<(&'static str, bool)>) {
-    match login {
-        GhLogin::LoggedIn { username, works } => {
-            let works = match works {
-                GhLoginWorks::Yes => Some(("Works", false)),
-                GhLoginWorks::Refused => Some(("GitHub refused its token", true)),
-                GhLoginWorks::CouldntTell => Some(("Couldn't tell if it works", false)),
-                GhLoginWorks::Unknown => None,
-            };
-            (username.to_string(), works)
-        }
-        GhLogin::LoggedOut => ("Not logged in".to_string(), Some(("Run gh auth login there", false))),
-        GhLogin::NotInstalled => ("No gh".to_string(), Some(("Install gh there", false))),
-        GhLogin::Unknown => ("Unknown".to_string(), None),
-    }
-}
-
-/// Whose `gh` a machine's own login is, by the provider whose machines it's on.
-pub(super) fn found_on(provider: &ProviderName) -> String {
-    if provider.is_local() {
-        return gh_on_this_machine();
-    }
-    format!("gh on {provider}")
-}
-
 /// What disconnecting the account called `name` asks first.
 pub(super) fn disconnect_asks(name: &str) -> String {
     format!("Disconnect {name}?")
@@ -226,8 +189,8 @@ pub(super) fn disconnect_asks(name: &str) -> String {
 pub(super) fn disconnect_says(default: bool) -> &'static str {
     if default {
         "The hub forgets its login, so connecting it again takes a new token or signing in again. It isn't revoked on \
-         GitHub, so it still works wherever else it's kept. It stays the default, so agents can't push until you \
-         connect it again or make another account the default."
+         GitHub, so it still works wherever else it's kept. It stays the default, so agents on the providers Roundhouse \
+         sets up can't push until you connect it again or make another account the default."
     } else {
         "The hub forgets its login, so connecting it again takes a new token or signing in again. It isn't revoked on \
          GitHub, so it still works wherever else it's kept."

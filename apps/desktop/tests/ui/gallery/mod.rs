@@ -59,6 +59,7 @@ mod pictures;
 mod places;
 mod prompt_screens;
 mod proposal_chats;
+mod provider_screens;
 mod pull_requests;
 mod question_chats;
 mod reference_screens;

@@ -29,7 +29,6 @@ const STATUS_WITHIN: Duration = Duration::from_secs(10);
 pub(in crate::hub::pull_requests) struct OwnRead {
     pub(in crate::hub::pull_requests) found: Vec<(WorkspaceId, WorkspaceRead)>,
     pub(in crate::hub::pull_requests) rate_limit: Option<RateLimit>,
-    pub(in crate::hub::pull_requests) refused: bool,
 }
 
 /// One workspace's read, once GitHub has said which pull request is its own.
@@ -56,11 +55,11 @@ impl Hub {
     ) -> OwnRead {
         let Asking(plans) = asking;
         let heads: Vec<HeadsAsk> = plans.iter().filter_map(|plan| heads_of(plan).cloned()).collect();
-        let (mut rate_limit, mut refused, mut headed) = (None, false, Vec::new().into_iter());
+        let (mut rate_limit, mut headed) = (None, Vec::new().into_iter());
         if !heads.is_empty() {
             jobs::step(format!("waiting for GitHub to say which pull requests {} branches have", heads.len()));
             let read = self.github.read_heads(token, &heads, asked.leaving()).await;
-            (rate_limit, refused, headed) = (read.rate_limit, read.refused, read.answers.into_iter());
+            (rate_limit, headed) = (read.rate_limit, read.answers.into_iter());
         }
         let mut readings: Vec<Reading> = plans.into_iter().map(|plan| reading(plan, &mut headed)).collect();
         let asks: Vec<PullRequestsAsk> =
@@ -72,7 +71,7 @@ impl Hub {
         } else {
             jobs::step(format!("waiting for GitHub to answer for {} pull requests", asks.len()));
             let read = self.github.read_pull_requests(token, asks, asked.leaving()).await;
-            (rate_limit, refused) = (read.rate_limit.or(rate_limit), refused || read.refused);
+            rate_limit = read.rate_limit.or(rate_limit);
             read.answers
         };
         let uncommitted = if asked == Asked::InTurn { HashMap::new() } else { self.uncommitted(&readings).await };
@@ -81,7 +80,7 @@ impl Hub {
             .iter_mut()
             .map(|reading| (reading.workspace.id.clone(), reading.answered(&mut answers, &uncommitted)))
             .collect();
-        OwnRead { found, rate_limit, refused }
+        OwnRead { found, rate_limit }
     }
 
     /// How many files are uncommitted in the worktree of each of `readings` whose own pull request is read and whose

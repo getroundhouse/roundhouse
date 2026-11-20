@@ -6,27 +6,16 @@ use std::sync::Arc;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
 
-use parking_lot::Mutex;
 use protocol::fixtures::{pull_request_wait, workspace};
-use protocol::model::{GhLogin, GhLoginWorks, WaitEnd, WaitId, WorkspaceId};
-use protocol::worker::{FoundToken, GithubLoginReply, WorkerRequest, WorkerResponse};
+use protocol::model::{WaitEnd, WaitId, WorkspaceId};
 use tokio::time::Instant;
 
 use crate::hub::Hub;
-use crate::hub::tests::{hub_on_github, hub_reading_github, hub_with_worktree, pushed};
+use crate::hub::tests::{hub_on_github, hub_reading_github, pushed};
 use crate::store::tests::idle_session;
-use crate::worker_link::WorkerLink;
 use github::{Answer, PullRequestState, PullRequests, Script, StandIn};
 
-/// When a stand-in was asked what it never answers, each time.
-type Asked = Arc<Mutex<Vec<Instant>>>;
-
-/// Waits until `done`, failing rather than hanging if it never is, on tokio's clock, which moves on by itself.
-async fn until(what: &str, done: impl Fn() -> bool) {
-    waiting::task::until(Duration::from_mins(60), format!("{what} never happened"), done).await;
-}
-
-/// The same, on the real clock, for the tests that call a stand-in for GitHub.
+/// Waits until `done`, on the real clock, for the tests that call a stand-in for GitHub.
 async fn soon(what: &str, done: impl Fn() -> bool) {
     waiting::task::until(Duration::from_secs(30), format!("{what} never happened"), done).await;
 }
@@ -59,21 +48,6 @@ fn waiting_by(hub: &Hub, workspace: WorkspaceId, chat: &str) -> WaitId {
     hub.store.insert_session(&session, None).unwrap();
     let wait = protocol::model::Wait { workspace_id: workspace, session_id: chat.into(), ..pull_request_wait(chat) };
     hub.store.start_wait(&wait).unwrap().id
-}
-
-/// `w`'s worker, which never answers what `never` picks, as one stuck doesn't, says when it was asked in `asked`, and
-/// does whatever else it's asked without a word.
-fn stuck_in_w(hub: &Hub, never: fn(&WorkerRequest) -> bool, asked: &Asked) -> Arc<WorkerLink> {
-    let asked = asked.clone();
-    let link = WorkerLink::answering(move |request| {
-        if !never(&request) {
-            return Some(Ok(WorkerResponse::Ok));
-        }
-        asked.lock().push(Instant::now());
-        None
-    });
-    hub.workers.lock().insert("w".into(), link.clone());
-    link
 }
 
 fn read_error(hub: &Hub, wait: &WaitId) -> Option<String> {
@@ -161,45 +135,6 @@ async fn more_groups_of_waits_than_a_burst_of_reads_are_read_together_all_the_sa
     assert!(queries <= 4, "{queries} queries");
 }
 
-/// A machine's own `gh` that handed the hub no token, as one logged out as the hub started, then logged in, so its
-/// workspace's worker is asked again, and the wait is read with what it hands over.
-#[tokio::test]
-async fn a_wait_read_as_a_machines_gh_that_handed_no_token_asks_its_worker_again() {
-    let dir = tempfile::tempdir().unwrap();
-    let users = vec![("b-token", Answer::user(1, "ada", None))];
-    let script = Script { users, graphql: Answer::pull_request_read(7, true), ..Script::default() };
-    let github = StandIn::with(script).await;
-    let (hub, wait) = waiting_in_w(dir.path(), github.api());
-    let provider = hub.store.get_workspace(&"w".into()).unwrap().provider;
-    hub.found_tokens.found(provider.clone(), None);
-    let link = WorkerLink::answering(|request| {
-        if !matches!(request, WorkerRequest::FindGithubLogin) {
-            return Some(Ok(WorkerResponse::Ok));
-        }
-        Some(Ok(WorkerResponse::GithubLogin(GithubLoginReply {
-            login: GhLogin::LoggedIn { username: "ada".into(), works: GhLoginWorks::CouldntTell },
-            token: Some(FoundToken { token: protocol::model::GithubToken::new("b-token"), renews: false }),
-        })))
-    });
-    link.keep();
-    hub.workers.lock().insert("w".into(), link);
-
-    let watching = tokio::spawn(hub.clone().watch_pull_requests());
-    soon("the wait ending", || ended(&hub, &wait).is_some()).await;
-    watching.abort();
-
-    assert_eq!(ended(&hub, &wait), Some(WaitEnd::ChecksPassed));
-    let tokens: Vec<_> = github
-        .asked()
-        .into_iter()
-        .filter(|asked| asked.starts_with("post /graphql "))
-        .filter_map(|asked| {
-            asked.lines().find_map(|line| line.strip_prefix("authorization: bearer ")).map(str::to_string)
-        })
-        .collect();
-    assert_eq!(tokens, ["b-token", "b-token"]);
-}
-
 /// GitHub failing, which reading again may get past, so the waits go on waiting, saying it, and are read again later
 /// than they would have been.
 #[tokio::test]
@@ -218,73 +153,4 @@ async fn a_read_of_waits_github_fails_says_so_on_them_and_backs_off() {
     assert_eq!(ended(&hub, &wait), None);
     let due_at = schedule().unwrap().due_at_soonest();
     assert!(due_at > Instant::now() + Duration::from_mins(3), "twice the two minutes between reads that worked");
-}
-
-/// The machine's own `gh` handed the hub no token, and `w`'s worker never hands one over, as one stuck doesn't, so the
-/// read is stopped at its limit, and each time it's read again later than the time before.
-#[tokio::test(start_paused = true)]
-async fn a_read_in_turn_that_doesnt_finish_waits_longer_each_time() {
-    let dir = tempfile::tempdir().unwrap();
-    let hub = hub_with_worktree(dir.path());
-    let address = protocol::model::RepoUrl::try_from("https://github.com/example/project".to_string()).unwrap();
-    hub.store.read_repo_url(&"r".into(), "/repo", Some(&address)).unwrap();
-    hub.store.set_workspace_branches(&"w".into(), &pushed("head-7", "head-7", (0, 0))).unwrap();
-    let asked = Asked::default();
-    // Kept, so it's there to be asked again.
-    stuck_in_w(&hub, |request| matches!(request, WorkerRequest::FindGithubLogin), &asked).keep();
-    hub.clients.store(1, Ordering::Relaxed);
-
-    let watching = tokio::spawn(hub.clone().watch_pull_requests());
-    until("three reads of w's pull request", || asked.lock().len() > 2).await;
-    watching.abort();
-
-    let asked = asked.lock();
-    let (first, second) = (asked[1] - asked[0], asked[2] - asked[1]);
-    assert!(second > first + Duration::from_mins(2), "{first:?}, then {second:?}");
-}
-
-/// `w`'s worker never hands over its machine's `gh`'s token, which the read in turn of `w` and `v` together waits for,
-/// but holds neither's turn meanwhile, so a client asking after `v`, whose branch is pushed nowhere, so needs nothing
-/// of GitHub, is answered at once, rather than once the read's limit cuts it off.
-#[tokio::test(start_paused = true)]
-async fn a_read_in_turn_waiting_for_a_token_holds_no_workspaces_turn() {
-    let dir = tempfile::tempdir().unwrap();
-    let hub = hub_with_worktree(dir.path());
-    let address = protocol::model::RepoUrl::try_from("https://github.com/example/project".to_string()).unwrap();
-    hub.store.read_repo_url(&"r".into(), "/repo", Some(&address)).unwrap();
-    hub.store.set_workspace_branches(&"w".into(), &pushed("head-7", "head-7", (0, 0))).unwrap();
-    hub.store
-        .insert_workspace(&workspace("v"), &crate::store::WorkspacePlacement::local_checkout("/repo"), None)
-        .unwrap();
-    hub.store.workspace_ready(&v(), "/v", &"birch".into(), "main", None).unwrap();
-    let asked = Asked::default();
-    stuck_in_w(&hub, |request| matches!(request, WorkerRequest::FindGithubLogin), &asked).keep();
-    hub.clients.store(1, Ordering::Relaxed);
-
-    let watching = tokio::spawn(hub.clone().watch_pull_requests());
-    until("w's worker being asked for its token", || !asked.lock().is_empty()).await;
-    let asking = Instant::now();
-    let found = hub.workspace_pull_request(v()).await;
-    let took = asking.elapsed();
-    watching.abort();
-
-    assert_eq!(found.unwrap(), None);
-    assert!(took < Duration::from_secs(1), "{took:?}");
-}
-
-/// `w`'s worker never says whether its machine's `gh` has a token, which may yet come, so a client asking after its
-/// pull request, with nothing known, is told it couldn't be read, rather than that it has none.
-#[tokio::test(start_paused = true)]
-async fn a_token_not_handed_over_yet_is_no_sign_that_gh_has_no_login() {
-    let dir = tempfile::tempdir().unwrap();
-    let hub = hub_with_worktree(dir.path());
-    let address = protocol::model::RepoUrl::try_from("https://github.com/example/project".to_string()).unwrap();
-    hub.store.read_repo_url(&"r".into(), "/repo", Some(&address)).unwrap();
-    hub.store.set_workspace_branches(&"w".into(), &pushed("head-7", "head-7", (0, 0))).unwrap();
-    stuck_in_w(&hub, |request| matches!(request, WorkerRequest::FindGithubLogin), &Asked::default()).keep();
-
-    let found = hub.workspace_pull_request("w".into()).await;
-
-    assert!(found.is_err(), "{found:?}");
-    assert_eq!(hub.store.get_workspace(&"w".into()).unwrap().pull_request, None);
 }

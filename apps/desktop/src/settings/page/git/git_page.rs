@@ -1,4 +1,4 @@
-//! Git as Settings lists it, and the page as it's drawn: Added, then Found, in a column, each frame from the hub's
+//! Git as Settings lists it, and the page as it's drawn: Added, in a column, each frame from the hub's
 //! records and settings as client-core holds them, with what the page keeps from one frame to the next.
 
 use client_core::records::Snapshot;
@@ -10,7 +10,7 @@ use protocol::model::{GithubAccount, GithubSettings, SentCredential};
 use super::super::account_row::{COLUMN_WIDTH, Columns};
 use super::kept::Kept;
 use super::words::Standing;
-use super::{Asking, Body, OfHub, Page, PageId, Within, added, found, words};
+use super::{Asking, Body, OfHub, Page, PageId, Within, added, words};
 
 /// How wide a row's middle columns are: how it was connected, `Signed in` or `Token`, and what else there is to say,
 /// such as when a token ends.
@@ -97,7 +97,6 @@ impl RenderOnce for GitPage {
             .gap(look::Space::XXLarge)
             .pb(look::Space::Large)
             .child(added::list(&drawing, cx))
-            .children(found::list(&drawing, cx))
     }
 }
 

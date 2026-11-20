@@ -36,7 +36,7 @@ pub(super) fn list(drawing: &Drawing<'_>, cx: &App) -> Div {
     let rows = accounts.iter().map(|account| account_row(drawing, account, cx));
     let list = rows_of(cx).children(panel).children(blocked(drawing, cx)).children(said).children(rows);
     let list = list.children(app_rows::not_installed(drawing, cx));
-    let says = if drawing.older { words::ADDED_SAYS_OLDER } else { words::ADDED_SAYS };
+    let says = if drawing.older { words::ADDED_SAYS_OLDER.to_string() } else { words::added_says() };
     v_flex().child(heading("Added", None, says, Some(connect.into_any_element()), cx)).child(list)
 }
 

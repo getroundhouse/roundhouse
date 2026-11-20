@@ -50,8 +50,8 @@ pub use git::{GitDiff, GitFile, GitStatus};
 pub use github_account::{
     FoundGithubLogin, GhLogin, GhLoginWorks, GithubAccount, GithubApp, GithubAppId, GithubInstallation,
     GithubInstallationId, GithubLoginKind, GithubReach, GithubRepositoryName, GithubRepositoryNameError, GithubSignIn,
-    GithubSignInStatus, GithubToken, GithubUser, GithubUserId, HeldGithubLogin, InstalledApp, Reach, SentCredential,
-    UnusableLogin,
+    GithubSignInStatus, GithubToken, GithubUser, GithubUserId, HeldGithubLogin, InstalledApp, MachineLogins, Reach,
+    SentCredential, SshLogin, UnusableLogin,
 };
 pub use hub_settings::{AccountDefault, GithubSettings, HubSettings, HubSettingsChange};
 pub use model_list::{CliVersion, ModelList, ModelListKey, ModelLookup};

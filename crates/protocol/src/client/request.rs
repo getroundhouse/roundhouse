@@ -97,6 +97,7 @@ pub enum ClientRequest {
     GithubSignInStart(github_accounts::GithubSignInStart),
     GithubSignInCancel(github_accounts::GithubSignInCancel),
     HubGhLogin,
+    HubMachineLogins,
     GithubAccountConnectGh,
     GithubAppManifestWrite(github_apps::GithubAppManifestWrite),
     GithubAppMake(github_apps::GithubAppMake),

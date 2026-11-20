@@ -11,8 +11,6 @@ mod claim;
 mod context_dir;
 mod deleting;
 mod files;
-mod found_login;
-mod gh;
 pub mod git;
 mod git_credential;
 mod images;

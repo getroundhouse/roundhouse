@@ -78,6 +78,7 @@ fn carried(response: &ClientResponse) -> Vec<Record> {
         | ClientResponse::Device(_)
         | ClientResponse::Hello(_)
         | ClientResponse::GhLogin(_)
+        | ClientResponse::MachineLogins(_)
         | ClientResponse::Ok
         | ClientResponse::HubStatus(_)
         | ClientResponse::Agents(_)

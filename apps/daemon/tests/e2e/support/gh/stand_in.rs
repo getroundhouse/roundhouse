@@ -7,7 +7,9 @@ pub(crate) const LOGGED_IN_AS: &str = "ada";
 pub(crate) const LOGGED_IN_WITH: &str = "gho_made_up_for_ada";
 
 /// A `gh` at the front of the hub's `PATH`, which says it's logged in as [`LOGGED_IN_AS`], with the token
-/// [`LOGGED_IN_WITH`], as a machine's own `gh` hands the hub the token it reads pull requests with. Other commands fail.
+/// [`LOGGED_IN_WITH`], so nothing an agent or the hub asks `gh` reaches GitHub. Other commands fail. And an `ssh`
+/// beside it, which answers as GitHub does a key it takes as [`LOGGED_IN_AS`]'s, so nothing the hub asks `ssh` leaves
+/// the machine.
 pub(crate) struct StandInGh {
     bin: PathBuf,
 }
@@ -21,10 +23,21 @@ impl StandInGh {
         let source = stack.path("gh.source");
         std::fs::write(&source, Self::script()).unwrap();
         install_executable(&source, &gh.bin.join("gh"));
+        let source = stack.path("ssh.source");
+        std::fs::write(&source, Self::ssh_script()).unwrap();
+        install_executable(&source, &gh.bin.join("ssh"));
         // Workers get the hub's PATH, since the stack's hubs have no login shell to ask for one.
         stack.env.put_first_on_path(&gh.bin);
         stack.start_hub();
         gh
+    }
+
+    /// The stand-in for `ssh`, as a shell script.
+    fn ssh_script() -> String {
+        format!(
+            "#!/bin/sh\necho \"Hi {LOGGED_IN_AS}! You've successfully authenticated, but GitHub does not provide shell \
+             access.\" >&2\nexit 1\n"
+        )
     }
 
     /// The stand-in itself, as a shell script.

@@ -1,10 +1,10 @@
 # Who agents are on GitHub
 
-When an agent pushes, opens a pull request or comments, GitHub records someone as doing it. You choose who on the Git page in [Settings](../reference/settings.md#git): a GitHub account you've added, `gh`'s login on the Mac Roundhouse runs on, the bot of an app of your own, or each machine's own login. The account you make the default is used for every repository on GitHub, on every machine Roundhouse sets up GitHub on.
+When an agent pushes, opens a pull request or comments, GitHub records someone as doing it. You choose who on the Git page in [Settings](../reference/settings.md#git): a GitHub account you've added, `gh`'s login on the Mac Roundhouse runs on, or the bot of an app of your own. The account you make the default is who Roundhouse reads GitHub as, such as for pull requests, and is used for every repository on GitHub, on every machine Roundhouse sets up GitHub on.
 
-On your own machine, where the hub runs, Roundhouse sets up nothing of GitHub: agents use your `git` and `gh` as they are, as your own terminal does, SSH key and all. On another provider's machines, which are made for workspaces and rarely have a login for GitHub of their own, Roundhouse sets up GitHub as the default, and sends a push to GitHub over SSH over HTTPS instead, unless that provider's settings say `"set_up_github": false`.
+On your own machine, where the hub runs, Roundhouse sets up nothing of GitHub: agents use your `git` and `gh` as they are, as your own terminal does, SSH key and all. The Providers page in [Settings](../reference/settings.md#providers) says who they are there. On another provider's machines, which are made for workspaces and rarely have a login for GitHub of their own, Roundhouse sets up GitHub as the default, and sends a push to GitHub over SSH over HTTPS instead, unless that provider's settings say `"set_up_github": false`.
 
-![The Git page, with three accounts added and the logins found on two machines](../../spec/screens/settings-git.png)
+![The Git page, with three accounts added](../../spec/screens/settings-git.png)
 
 ## An account you add
 
@@ -46,9 +46,15 @@ Making one takes three steps in the panel, as [Settings](../reference/settings.m
 
 Removing the app, from its row's `…` menu, has the hub forget its key, and deletes nothing on GitHub. Delete it there, in the developer settings of your account or the organization, to be rid of it.
 
-## Each machine's own login
+## Your own machine's login
 
-On your own machine, agents always use the login it already has. Elsewhere, until you add an account, and whenever you make it the default, agents use the login each machine already has, as they would without Roundhouse, and only on that machine. Roundhouse asks GitHub with its token to say whether it works, and reads pull requests with it, keeping it only in memory. Under **Found**, the Git page says who `gh` is logged in as on each machine where a workspace has run since the hub last started, and whether GitHub took its token then. `git` can push with something else, such as an SSH key, which Roundhouse doesn't see.
+On your own machine, agents always use the login it already has: whoever `gh` is logged in as, and the SSH key or other credential `git` pushes with. The Providers page in Settings says who `gh` is there and whose SSH key GitHub takes, which the hub reads each time you open it, beside who Roundhouse itself reads pull requests as, so you see when they differ.
+
+![Providers, with gh and the SSH key on this Mac both ada's](../../spec/screens/settings-providers.png)
+
+## With no account
+
+Until you add an account, there's no default, so Roundhouse reads nothing of GitHub: it can't say a workspace's pull request or wait on one. Agents on the machines Roundhouse sets up GitHub on can't push or use `gh`, and git there says to connect an account. Agents on your own machine work as they always do.
 
 A repository that isn't on GitHub, such as one on GitLab or GitHub Enterprise, is always reached with the machine's own login, and its commits are by whoever its own Git config or the machine's says. On a machine whose Git is older than 2.36, so are the commits in every repository, though agents there still push to GitHub as the default.
 
@@ -72,7 +78,7 @@ When the default is an app of your own, the line names its bot. For a repository
 
 ![The line for an app of your own, with Install on GitHub](../../spec/screens/push-refused-app.png)
 
-While each machine's own login is the default, the hub doesn't ask, and no workspace says.
+With no account, every workspace of a repository on GitHub, on a machine Roundhouse sets up GitHub on, says its agents can't push, and to connect an account.
 
 ## More than one
 
@@ -86,4 +92,4 @@ You can add more than one account, but only the default is used.
 - **A few repositories, or an organization that hasn't approved Roundhouse:** a fine-grained token.
 - **Agents' work told apart from yours, in pull requests you can approve:** an app of your own.
 - **An organization's repositories, as a bot of the organization's own:** an app of your own, made under it.
-- **Whatever each machine is already logged in as:** each machine's own login.
+- **Whatever your own machine is already logged in as:** nothing to choose, since agents there use it anyway.

@@ -93,9 +93,6 @@ pub(crate) const BEFORE_GITHUB_ACCOUNTS: usize = 58;
 /// How many migrations there were before the hub signed in with GitHub.
 pub(crate) const BEFORE_GITHUB_SIGN_INS: usize = 59;
 
-/// How many migrations there were before the hub recorded the logins found on each provider's machines.
-pub(crate) const BEFORE_FOUND_GITHUB_LOGINS: usize = 60;
-
 /// How many migrations there were before the hub kept apps of your own.
 pub(crate) const BEFORE_GITHUB_APPS: usize = 62;
 
@@ -130,3 +127,7 @@ pub(crate) const BEFORE_WORKSPACE_PLACEMENT: usize = 80;
 
 /// How many migrations there were before the hub recorded the providers whose machines Roundhouse leaves GitHub to.
 pub(crate) const BEFORE_GITHUB_LEFT_TO_MACHINE: usize = 84;
+
+/// How many migrations there were before the hub recorded the providers Roundhouse sets up GitHub on, and forgot each
+/// provider's found `gh` login.
+pub(crate) const BEFORE_GITHUB_SET_UP: usize = 85;

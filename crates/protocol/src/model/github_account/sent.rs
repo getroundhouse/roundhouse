@@ -2,8 +2,9 @@ use serde::{Deserialize, Serialize};
 
 use super::super::GithubAccountId;
 
-/// What the hub sends every worker as its git credential, as it last worked it out, without the token: each machine's
-/// own, the default's login, or a block, with the reason workers are given. It's the hub's to say, on its settings, as
+/// What the hub sends the workers of every provider it sets up GitHub on as their git credential, as it last worked it
+/// out, without the token: the default's login, or a block, with the reason workers are given, as while there's no
+/// default. It's the hub's to say, on its settings, as
 /// [`GithubSettings::sent`](crate::model::GithubSettings::sent) says, so a client draws whether agents can push rather
 /// than working it out from an account's record and its own clock, which can't see what the hub does: an
 /// installation's token that has ended while the hub makes the next, a login's file only a newer build reads, or one it
@@ -12,8 +13,12 @@ use super::super::GithubAccountId;
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum SentCredential {
-    /// Each machine's own login, as while the default is.
+    /// Each machine's own login, which a hub from before the hub had an identity of its own sent while it had no
+    /// default.
     MachineOwn,
+    /// No default, so the hub reads nothing of GitHub, and the workers of the providers it sets up GitHub on are sent a
+    /// block saying `reason`, which says to connect an account. *Unconfirmed.*
+    NoAccount { reason: String },
     /// The login of `account`, the default, which can be used.
     Account { account: GithubAccountId },
     /// A block, since the login of `account`, the default, can't be used, for the reason `why`, saying `reason`, which
@@ -30,7 +35,7 @@ impl SentCredential {
     /// has a default whose credential hasn't been worked out yet, and one from a newer hub can't be told.
     pub fn is_for(&self, default: Option<&GithubAccountId>) -> bool {
         match self {
-            SentCredential::MachineOwn => default.is_none(),
+            SentCredential::MachineOwn | SentCredential::NoAccount { .. } => default.is_none(),
             SentCredential::Account { account } | SentCredential::Blocked { account, .. } => default == Some(account),
             SentCredential::Unknown => false,
         }

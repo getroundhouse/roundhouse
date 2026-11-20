@@ -204,7 +204,7 @@ fn kinds() -> [Kind; 5] {
                 held.snapshot().account(id).cloned().map(Record::Account)
             },
         },
-        // Held, though no view draws one yet.
+        // Held, from a hub from before Settings' Providers, though no view draws one.
         Kind {
             name: "a found GitHub login",
             copy: |version, rev| {

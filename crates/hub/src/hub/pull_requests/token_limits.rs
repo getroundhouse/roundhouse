@@ -45,7 +45,7 @@ mod tests {
     use super::*;
 
     fn account(n: u64) -> ReadsAs {
-        ReadsAs::Account(GithubAccountId::from(format!("account-{n}")))
+        ReadsAs(GithubAccountId::from(format!("account-{n}")))
     }
 
     /// Each token by what GitHub said of it alone, and none once its limit has reset.

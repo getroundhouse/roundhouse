@@ -1,12 +1,11 @@
 //! Reading a workspace's own pull request for an agent and for a client, from a stand-in for GitHub, by the branch on
 //! GitHub that the branch checked out pushes to, on the real clock, since a call to the stand-in would race tokio's.
 
-use protocol::model::GhLogin;
 use protocol::model::{Branches, GitFile, GitStatus, Head, Local, PrState, PullRequest, PullRequestFound};
-use protocol::worker::{GithubLoginReply, WorkerRequest, WorkerResponse};
+use protocol::worker::{WorkerRequest, WorkerResponse};
 
 use super::*;
-use crate::hub::tests::{hub_on_github, hub_on_github_timed, pushed};
+use crate::hub::tests::{hub_on_github, hub_on_github_timed, hub_without_account, pushed};
 use crate::timers::Timers;
 use github::PullRequestState;
 
@@ -161,22 +160,18 @@ async fn a_clone_of_a_forks_pull_request_is_read_where_it_merges_into() {
     );
 }
 
-/// The machine's `gh` isn't logged in, so there's no login to read the pull request as, which asking again won't
-/// change until it's logged in, so with nothing known it's recorded as none, and the app offers to create one rather
-/// than look for one for ever.
+/// The hub has no GitHub account, so there's no login to read the pull request as, which asking again won't change
+/// until one is connected, so with nothing known it's recorded as none, and the app offers to create one rather than
+/// look for one for ever.
 #[tokio::test]
-async fn with_no_login_to_read_as_a_workspace_with_nothing_known_has_none() {
+async fn with_no_account_to_read_as_a_workspace_with_nothing_known_has_none() {
     let dir = tempfile::tempdir().unwrap();
-    let (hub, pull_requests, github) = hub_on_github(dir.path()).await;
+    let pull_requests = github::PullRequests::default();
+    let script = github::Script { pull_requests: Some(pull_requests.clone()), ..github::Script::default() };
+    let github = github::StandIn::with(script).await;
+    let hub = hub_without_account(dir.path(), github.api(), Timers::FOR_TESTS);
+    hub.store.set_workspace_branches(&"w".into(), &pushed("head-7", "head-7", (0, 0))).unwrap();
     pull_requests.set(7, PullRequestState::Open);
-    hub.found_tokens.found(hub.store.get_workspace(&"w".into()).unwrap().provider, None);
-    let link = crate::worker_link::WorkerLink::answering(|request| {
-        let logged_out = GithubLoginReply { login: GhLogin::LoggedOut, token: None };
-        let found = matches!(request, WorkerRequest::FindGithubLogin);
-        Some(Ok(if found { WorkerResponse::GithubLogin(logged_out) } else { WorkerResponse::Ok }))
-    });
-    link.keep();
-    hub.workers.lock().insert("w".into(), link);
 
     let found = hub.workspace_pull_request("w".into()).await;
 

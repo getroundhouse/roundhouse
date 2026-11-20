@@ -15,6 +15,14 @@ pub(super) fn gh_login(world: &World) -> Answer {
     }
 }
 
+/// Who `gh` and the SSH key on the hub's machine are, as the world says, or refused, as a hub from before it read them.
+pub(super) fn machine_logins(world: &World) -> Answer {
+    match &world.machine_logins {
+        Some(logins) => Ok(Outcome::Reply(ClientResponse::MachineLogins(logins.clone()), Vec::new())),
+        None => Err(ApiError::new(ErrorCode::Unsupported, "an older hub doesn't read its machine's logins")),
+    }
+}
+
 /// Connecting `gh`'s login, which the world refuses as it says, or as a change.
 pub(super) fn connect_gh(world: &World) -> Answer {
     Err(world.gh_connect_refused.clone().unwrap_or_else(|| read_only("connect")))

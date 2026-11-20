@@ -13,7 +13,7 @@ use protocol::worker::{GitCredential, GitIdentity};
 use tokio::sync::watch;
 use tracing::{error, info};
 
-use super::blocks::{Unusable, lost, reason};
+use super::blocks::{Unusable, lost, no_account, reason};
 use super::{DefaultCredential, GithubLogin, GithubLogins};
 use crate::login_files::{Locked, Stored};
 use crate::store::StoreError;
@@ -132,7 +132,7 @@ impl GithubLogins {
     }
 
     /// What workers are to give their processes for github.com at `now_ms`, with who GitHub knows the default as, as
-    /// [`DefaultCredential`] says: nothing while the default is each machine's own login, the default's username and
+    /// [`DefaultCredential`] says: a block saying to connect an account while there's no default, the default's username and
     /// token while its login can be used, with its commit identity, an installation's bot, or as GitHub's profile of a
     /// token's or a sign-in's user said, once the hub has asked, and otherwise a block that says what to do, and why,
     /// never the machine's own in its place. So is a default the hub can't read, one whose profile it can't read, and an
@@ -155,7 +155,7 @@ impl GithubLogins {
                 };
             }
         };
-        let Some(id) = default else { return DefaultCredential::MachineOwn };
+        let Some(id) = default else { return DefaultCredential::NoAccount { reason: no_account() } };
         let blocked = |why, reason| DefaultCredential::Blocked { reason, account: Some(id.clone()), why };
         let account = match self.store.github_account(&id) {
             Ok(Some(account)) => account,

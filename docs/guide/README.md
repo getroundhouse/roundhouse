@@ -19,7 +19,7 @@ New here? Start with the [quickstart](get-started/quickstart.md).
 - [Workspaces, projects and chats](concepts/workspaces.md): what each one is, and what it owns
 - [The hub](concepts/the-hub.md): why agents keep working with the app closed
 - [Full access and plan mode](concepts/full-access-and-plan-mode.md): what an agent does without asking
-- [Who agents are on GitHub](concepts/who-agents-are-on-github.md): an account you add, or each machine's own login
+- [Who agents are on GitHub](concepts/who-agents-are-on-github.md): an account you add, and your own machine's login
 - [The window](concepts/the-window.md): what each part of the app is called
 
 ## Guides

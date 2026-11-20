@@ -89,7 +89,7 @@ async fn every_link_is_sent_each_change_in_the_order_made_ending_with_the_newest
     let blocked =
         DefaultCredential::Blocked { reason: "R".into(), account: Some("g".into()), why: UnusableLogin::Ended };
     let made = [ada("first"), blocked, ada("second")];
-    let credential = watch::Sender::new(DefaultCredential::MachineOwn);
+    let credential = watch::Sender::new(DefaultCredential::NoAccount { reason: "Connect one".into() });
     let mut links: Vec<_> =
         (0..3).map(|_| following(Some(credential.subscribe()), || Some(Ok(WorkerResponse::Ok)))).collect();
 
