@@ -7,6 +7,7 @@
 mod dependencies;
 mod design_system;
 mod environments;
+mod icons;
 mod licenses;
 mod rust_standards;
 mod waits;

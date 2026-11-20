@@ -11,6 +11,7 @@
 #![warn(clippy::wildcard_enum_match_arm)]
 
 mod app_icon;
+mod assets;
 mod badges;
 mod banners;
 mod bars;
@@ -65,6 +66,7 @@ mod word_changes;
 mod work;
 
 pub use app_icon::{AppIconSize, AppIconStyle, app_icon};
+pub use assets::Assets;
 pub use badges::{Badge, BadgeKind, Label, badge, label};
 pub use banners::{Banner, BannerKind, banner};
 pub use bars::{Bar, BarKind, bar};
