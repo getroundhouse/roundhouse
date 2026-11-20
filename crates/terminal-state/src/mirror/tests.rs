@@ -59,6 +59,27 @@ fn shell_with_history() -> Mirror {
     worker
 }
 
+/// Both limits, each where it's the one reached: the lines at a width people use, and the bytes in the widest
+/// terminal, with a colour in every cell. Ghostty drops history a page at a time, so each is reached only roughly.
+#[test]
+fn a_terminal_keeps_its_lines_of_history_unless_they_take_too_much() {
+    let mut narrow = Mirror::new(Size { cols: 200, rows: 50 }).unwrap();
+    for line in 0..12_000 {
+        narrow.write(format!("\x1b[32mline {line}\x1b[0m of a build's output, as long as most are\r\n").as_bytes());
+    }
+    let wide = Size { cols: 2000, rows: 50 };
+    let mut colourful = Mirror::new(wide).unwrap();
+    for line in 0..3_000_usize {
+        let cells = (0..usize::from(wide.cols)).map(|col| format!("\x1b[38;5;{}mx", (line + col) % 256));
+        colourful.write(format!("{}\r\n", cells.collect::<String>()).as_bytes());
+    }
+
+    let rows = |mirror: &Mirror| mirror.terminal.scrollback_rows().unwrap();
+    let bytes = |mirror: &Mirror| usize::try_from(mirror.terminal.memory_usage().unwrap().primary_resident_bytes);
+    assert!(rows(&narrow) > HISTORY_LINES * 9 / 10, "{} rows", rows(&narrow));
+    assert!(bytes(&colourful).unwrap() < HISTORY_BYTES * 11 / 10, "{:?} bytes", bytes(&colourful));
+}
+
 #[test]
 fn a_new_terminal_shows_the_shell_and_its_history_again() {
     let worker = shell_with_history();
