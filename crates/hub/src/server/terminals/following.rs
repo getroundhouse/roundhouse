@@ -6,15 +6,16 @@ use std::time::Duration;
 use protocol::client::terminals::TerminalAttach;
 use protocol::client::{ApiError, ClientRequest, ClientResponse, ErrorCode, HubFrame};
 use protocol::model::TerminalId;
-use protocol::terminal::{TerminalExit, TerminalUpdate};
+use protocol::terminal::{TerminalExit, TerminalUpdate, UpdateIndex};
 use protocol::worker::TerminalShown;
 use tokio::sync::broadcast::error::RecvError;
-use tokio::sync::{broadcast, mpsc};
+use tokio::sync::{OwnedSemaphorePermit, Semaphore, broadcast, mpsc};
 use tracing::warn;
 
+use super::backlog::Backlog;
 use crate::hub::{Hub, Numbered, Queued};
-use crate::server::Connection;
 use crate::server::subscribing::add_subscription;
+use crate::server::{Connection, Outgoing};
 
 /// How long to wait before asking again what a terminal shows, when its worker couldn't say. Long enough not to keep a
 /// worker that can't busy, and short enough that a client sees the terminal soon after it can.
@@ -57,17 +58,23 @@ pub(in crate::server) fn attach(
 /// A client attached to a terminal.
 pub(super) struct Attached {
     pub(super) subscription_id: u64,
-    pub(super) frames: mpsc::Sender<HubFrame>,
+    pub(super) frames: mpsc::Sender<Outgoing>,
+}
+
+/// Why following from a screen stopped.
+enum Stopped {
+    /// The client fell too far behind, so it's sent what the terminal shows again.
+    Behind,
+    /// The shell ended, or the client stopped following.
+    Ended,
 }
 
 impl Attached {
     /// Sends what the terminal shows, from the worker on link `link`, then each update after it, until its shell ends
-    /// or the client stops following it. A client too far behind to be sent every update is sent what it shows again
-    /// instead. `updates` has to have been subscribed to before, so none comes between the two.
-    #[expect(
-        clippy::disallowed_methods,
-        reason = "the pause before asking again what a terminal whose shell runs on shows"
-    )]
+    /// or the client stops following it. While a frame of it is still being written to the client, what comes is held,
+    /// so a slow client has at most one of its frames queued, and what's queued behind it, such as replies, waits for
+    /// little. A client too far behind is sent what it shows again instead. It follows `updates` from each screen on,
+    /// starting it again before it asks for each, so `updates` is only where it starts from.
     pub(super) async fn follow(
         self,
         hub: Arc<Hub>,
@@ -75,48 +82,92 @@ impl Attached {
         id: TerminalId,
         mut updates: broadcast::Receiver<Numbered>,
     ) {
-        'screen: loop {
-            let TerminalShown { screen, next } = match hub.terminal_screen(&id, link).await {
-                Ok(shown) => shown,
-                // It has gone, with its shell or its worker.
-                Err(e) if e.code == ErrorCode::NotFound => {
-                    self.send(TerminalUpdate::Exited(TerminalExit { code: None })).await;
-                    return;
-                }
+        let room = Arc::new(Semaphore::new(1));
+        loop {
+            // Room first, so the worker is asked for a screen only once it can be sent, and once each time the client
+            // falls behind, rather than once for each frame's worth of output that comes meanwhile.
+            let Ok(written) = room.clone().acquire_owned().await else { return };
+            // From what comes from here, which the screen takes in or is followed by.
+            updates = updates.resubscribe();
+            let Some(TerminalShown { screen, next }) = self.screen(&hub, link, &id).await else {
+                let _ = self.send(TerminalUpdate::Exited(TerminalExit { code: None }), written).await;
+                return;
+            };
+            if !self.send(TerminalUpdate::Screen(screen), written).await {
+                return;
+            }
+            match self.follow_from(&mut updates, next, &room).await {
+                Stopped::Behind => {}
+                Stopped::Ended => return,
+            }
+        }
+    }
+
+    /// What the terminal shows, or None once it has gone, with its shell or its worker.
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "the pause before asking again what a terminal whose shell runs on shows"
+    )]
+    async fn screen(&self, hub: &Hub, link: u64, id: &TerminalId) -> Option<TerminalShown> {
+        loop {
+            match hub.terminal_screen(id, link).await {
+                Ok(shown) => return Some(shown),
+                Err(e) if e.code == ErrorCode::NotFound => return None,
                 // Its shell runs on, so the client waits for what it shows.
                 Err(e) => {
                     warn!(terminal = %id, "asking what a terminal shows: {}", e.message);
                     tokio::time::sleep(SCREEN_AGAIN_AFTER).await;
-                    continue;
-                }
-            };
-            if !self.send(TerminalUpdate::Screen(screen)).await {
-                return;
-            }
-            loop {
-                let Numbered { at, update } = match updates.recv().await {
-                    Ok(numbered) => numbered,
-                    Err(RecvError::Lagged(_)) => continue 'screen,
-                    // Its record has gone, with its shell or its worker.
-                    Err(RecvError::Closed) => {
-                        self.send(TerminalUpdate::Exited(TerminalExit { code: None })).await;
-                        return;
-                    }
-                };
-                // One the screen takes in already, or one from a newer worker, which a client couldn't read either.
-                if at < next || update == TerminalUpdate::Unknown {
-                    continue;
-                }
-                let ended = matches!(update, TerminalUpdate::Exited(_));
-                if !self.send(update).await || ended {
-                    return;
                 }
             }
         }
     }
 
-    /// Whether the client is still there to send to.
-    async fn send(&self, update: TerminalUpdate) -> bool {
-        self.frames.send(HubFrame::Terminal { subscription_id: self.subscription_id, update }).await.is_ok()
+    /// Sends each update from `next` on, holding what comes while the last frame is still being written, until the
+    /// client falls too far behind, or the following ends.
+    async fn follow_from(
+        &self,
+        updates: &mut broadcast::Receiver<Numbered>,
+        next: UpdateIndex,
+        room: &Arc<Semaphore>,
+    ) -> Stopped {
+        let mut held = Backlog::default();
+        // Once the end is held, after which nothing more comes.
+        let mut ending = false;
+        loop {
+            tokio::select! {
+                // Sending first, since under a flood there's always more to take in.
+                biased;
+                Ok(written) = room.clone().acquire_owned(), if !held.is_empty() => {
+                    let Some(update) = held.take_oldest() else { continue };
+                    let ended = matches!(update, TerminalUpdate::Exited(_));
+                    if !self.send(update, written).await || ended {
+                        return Stopped::Ended;
+                    }
+                }
+                received = updates.recv(), if !ending => {
+                    let update = match received {
+                        // One the screen takes in already, or one from a newer worker, which a client couldn't read
+                        // either.
+                        Ok(Numbered { at, update }) if at < next || update == TerminalUpdate::Unknown => continue,
+                        Ok(Numbered { update, .. }) => update,
+                        Err(RecvError::Lagged(_)) => return Stopped::Behind,
+                        // Its record has gone, with its shell or its worker.
+                        Err(RecvError::Closed) => TerminalUpdate::Exited(TerminalExit { code: None }),
+                    };
+                    ending = matches!(update, TerminalUpdate::Exited(_));
+                    held.hold(update);
+                    if held.too_far_behind() {
+                        return Stopped::Behind;
+                    }
+                }
+                else => return Stopped::Ended,
+            }
+        }
+    }
+
+    /// Queues `update` for the client, holding `written` until it has been written. False once the client has gone.
+    async fn send(&self, update: TerminalUpdate, written: OwnedSemaphorePermit) -> bool {
+        let frame = HubFrame::Terminal { subscription_id: self.subscription_id, update };
+        self.frames.send(Outgoing { frame, written: Some(written) }).await.is_ok()
     }
 }

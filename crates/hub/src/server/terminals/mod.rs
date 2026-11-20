@@ -4,6 +4,7 @@
 #[cfg(test)]
 mod tests;
 
+mod backlog;
 mod following;
 
 pub(super) use following::{Answering, attach, in_order};
