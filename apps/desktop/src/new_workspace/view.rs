@@ -68,11 +68,14 @@ impl NewWorkspaceDialog {
         h_flex()
             .w_full()
             .h(look::BarSize::Regular.height())
-            .px(look::Space::Small)
+            .pl(look::BarKind::Words.start())
+            .pr(look::BarKind::END)
             .border_b(look::EDGE)
             .border_color(self.colors(cx).1)
             .child(
                 look::button("new-workspace-repo", look::ButtonKind::Borderless, look::ControlSize::Regular, name)
+                    // So the project's name starts where a bar's words do, rather than its button's room in from there.
+                    .stands_out(&[look::Side::Left])
                     .menu(Anchor::TopLeft, menu),
             )
     }

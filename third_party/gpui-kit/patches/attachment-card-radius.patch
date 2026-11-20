@@ -1,0 +1,125 @@
+diff --git a/crates/component/src/attachment.rs b/crates/component/src/attachment.rs
+index 6e63a868..31cedadb 100644
+--- a/crates/component/src/attachment.rs
++++ b/crates/component/src/attachment.rs
+@@ -95,6 +95,9 @@ struct SlotLayout {
+     progress: Option<f32>,
+     /// The attachment's identity, keying the progress ring's state.
+     id: Option<ElementId>,
++    /// The card's corner radius when the caller rounds it, which flush media
++    /// stays concentric with.
++    radius: Option<AbsoluteLength>,
+ }
+ 
+ /// How far the remove control rides outside the card's upper trailing corner.
+@@ -382,6 +385,7 @@ impl Attachment {
+             // indeterminate.
+             progress: self.progress.filter(|_| self.status.is_uploading()),
+             id: self.id.clone(),
++            radius: self.style.corner_radii.top_left,
+         };
+ 
+         self.media = self.media.take().map(|media| media.layout(layout.clone()));
+@@ -397,7 +401,7 @@ impl Attachment {
+ }
+ 
+ impl RenderOnce for Attachment {
+-    fn render(mut self, _: &mut Window, cx: &mut App) -> impl IntoElement {
++    fn render(mut self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+         let tokens = cx.theme().semantic_tokens();
+         let size = self.size;
+         let axis = self.axis;
+@@ -411,7 +415,12 @@ impl RenderOnce for Attachment {
+             .progress
+             .filter(|_| status.is_uploading() && axis == Axis::Horizontal);
+         let metrics = card_metrics(size);
+-        let radius = card_radius(size, cx);
++        // A caller's `.rounded()` rounds the card, and what hugs its corners
++        // follows: the upload bar here, and flush media through its layout.
++        let radius = self.style.corner_radii.top_left.map_or_else(
++            || card_radius(size, cx),
++            |radius| radius.to_pixels(window.rem_size()),
++        );
+         let flush = axis == Axis::Vertical && !has_content;
+ 
+         self.layout_slots();
+@@ -653,6 +662,8 @@ pub struct AttachmentMedia {
+     axis: Axis,
+     /// Whether the media fills a vertical card flush with its border.
+     flush: bool,
++    /// The card's corner radius when the caller rounds it.
++    card_radius: Option<AbsoluteLength>,
+     retry: Option<Control>,
+     /// Upload progress in percent, while uploading.
+     progress: Option<f32>,
+@@ -672,6 +683,7 @@ impl AttachmentMedia {
+             status: AttachmentStatus::Complete,
+             axis: Axis::Horizontal,
+             flush: false,
++            card_radius: None,
+             retry: None,
+             progress: None,
+             id: None,
+@@ -709,6 +721,7 @@ impl AttachmentMedia {
+         self.status = layout.status;
+         self.axis = layout.axis;
+         self.flush = layout.flush;
++        self.card_radius = layout.radius;
+         self.retry = layout.retry;
+         self.progress = layout.progress;
+         self.id = layout.id;
+@@ -742,14 +755,18 @@ impl Styled for AttachmentMedia {
+ }
+ 
+ impl RenderOnce for AttachmentMedia {
+-    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
++    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+         let tokens = cx.theme().semantic_tokens();
+         let resolved_size = self.size.unwrap_or_default();
+         let metrics = card_metrics(resolved_size);
+         // Flush media sits inside the card's 1px border, so its corners are
+         // one border width tighter than the card's to stay concentric.
+         let radius = if self.flush {
+-            (card_radius(resolved_size, cx) - px(1.)).max(px(0.))
++            let card = self.card_radius.map_or_else(
++                || card_radius(resolved_size, cx),
++                |radius| radius.to_pixels(window.rem_size()),
++            );
++            (card - px(1.)).max(px(0.))
+         } else if resolved_size == Size::XSmall {
+             tokens.radius.sm
+         } else {
+@@ -1540,6 +1557,25 @@ mod tests {
+         assert!(!card.media.as_ref().unwrap().flush);
+     }
+ 
++    #[test]
++    fn test_attachment_media_follows_a_rounded_card() {
++        let mut tile = Attachment::new()
++            .axis(Axis::Vertical)
++            .media(AttachmentMedia::new().src("preview.png"));
++        tile.layout_slots();
++        assert_eq!(tile.media.as_ref().unwrap().card_radius, None);
++
++        let mut rounded = Attachment::new()
++            .axis(Axis::Vertical)
++            .media(AttachmentMedia::new().src("preview.png"))
++            .rounded(px(6.));
++        rounded.layout_slots();
++        assert_eq!(
++            rounded.media.as_ref().unwrap().card_radius,
++            Some(px(6.).into())
++        );
++    }
++
+     #[test]
+     fn test_attachment_defaults_and_status_helpers() {
+         assert_eq!(Attachment::new().status, AttachmentStatus::Complete);
+@@ -1677,6 +1713,7 @@ mod tests {
+             retry: None,
+             progress: None,
+             id: None,
++            radius: None,
+         };
+         let inherited = AttachmentMedia::new().layout(slot(
+             Size::Small,

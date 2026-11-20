@@ -120,7 +120,7 @@ pub(super) fn row(row: Row, columns: Columns, cx: &App) -> AnyElement {
         .min_w_0()
         .h(look::RowSize::Large.height() - look::EDGE)
         .items_center()
-        .gap(look::Space::Large)
+        .gap(look::Space::Medium)
         .child(picture(row.picture, cx))
         .child(name)
         .child(column(columns.how, cx).children(row.how))

@@ -124,8 +124,8 @@ impl ImageDiff {
 }
 
 /// The strip under the bar: each side shown, named, and how much changed at its other end. Side by side, each is over
-/// its column, the same width, with the same room around and between them, and otherwise they start at the path's
-/// start. What's said of each is cut short with an ellipsis when there isn't room.
+/// its column, the same width, with the same room around and between them, and otherwise they start and end where
+/// what's in a bar does, as the path over them. What's said of each is cut short with an ellipsis when there isn't room.
 fn strip(told: Told, cx: &App) -> Div {
     let colors = look::colors(cx);
     let sides = told.sides.into_iter().map(|(name, about)| {
@@ -153,7 +153,12 @@ fn strip(told: Told, cx: &App) -> Div {
         let swatch = div().flex_none().size(px(8.)).corners(look::Corner::Glyph).bg(colors.modified);
         h_flex().flex_none().ml_auto().pl(look::Space::Large).gap(look::Space::Small).child(swatch).child(changed)
     });
-    strip.px(look::Space::Large).gap(look::Space::XLarge).children(sides).children(changed)
+    strip
+        .pl(look::BarKind::Words.start())
+        .pr(look::BarKind::END)
+        .gap(look::Space::XLarge)
+        .children(sides)
+        .children(changed)
 }
 
 /// How much faster the folders in its path give up their room than its name, so the name is cut short only once the
