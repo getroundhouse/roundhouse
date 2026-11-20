@@ -1,6 +1,6 @@
 //! The app's button: made of a kind and a size, with what it shows, what it does and what state it's in, and nothing
 //! else. It holds the kit's button and draws with it, but gives none of the kit's or GPUI's styling to whoever makes
-//! it, so every button of a kind and a size looks the same. `docs/component-library.md` says why, and how a component's
+//! it, so every button of a kind and a size looks the same. `docs/standards/components.md` says why, and how a component's
 //! API is laid out.
 
 use std::rc::Rc;

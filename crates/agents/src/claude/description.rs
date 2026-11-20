@@ -20,7 +20,7 @@ pub(super) const EFFORTS: [Effort; 5] = [Effort::Low, Effort::Medium, Effort::Hi
 pub(super) const STARTS_ON: (ModelName, Effort) = (ModelName::named("opus"), Effort::Xhigh);
 
 /// The command that makes a token for a hub to hold, which `login` gives the CLI. An interactive terminal app, as
-/// `docs/claude-cli.md` says, so the person runs it themselves.
+/// `docs/reference/claude-cli.md` says, so the person runs it themselves.
 const MAKES_A_TOKEN: &str = "claude setup-token";
 
 /// How long a token `claude setup-token` makes works for, as the CLI says where it shows the token: "valid for 1

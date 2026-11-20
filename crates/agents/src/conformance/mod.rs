@@ -2,7 +2,7 @@
 //! in Roundhouse's terms. A trial plays a scenario against a scripted model, which is free and the same every time, or
 //! the real one, which costs a little. Each scripted trial's capture of what crossed the CLI's stdio is a fixture,
 //! which `cargo test` replays through the adapter, so the same checks run without the CLI. What's here is every
-//! agent's, and each agent's binding, such as `claude::conformance`, has what's its own. `docs/conformance.md` says
+//! agent's, and each agent's binding, such as `claude::conformance`, has what's its own. `docs/reference/conformance.md` says
 //! what a trial is for, and how to play one.
 
 pub mod capture;

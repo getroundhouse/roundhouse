@@ -5,7 +5,7 @@
 //! call to one of the agent's own tools. The CLI has been seen to send the message back without the call, so to the
 //! model it was never made, and nothing in the stream says so. What shows it is the sender's next message beginning
 //! with something other than the call's result, which is where the result of a call still pending would be expected.
-//! `docs/claude-cli.md` has what was seen, and what hasn't been.
+//! `docs/reference/claude-cli.md` has what was seen, and what hasn't been.
 
 use std::collections::HashMap;
 

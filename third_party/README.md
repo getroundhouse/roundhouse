@@ -6,7 +6,7 @@ Other projects' code that the apps build from a copy kept here, on a release of 
 
 `gpui-kit/vendor/` is our copy of [Longbridge's gpui-kit](https://github.com/longbridge/gpui-kit), the component kit the desktop app is built on, at the release `gpui-kit/gpui-kit.toml` names, with our patches in `gpui-kit/patches/` applied on top. The app takes it as a path dependency, as `Cargo.toml` says.
 
-The kit often has nearly what the app needs: a hook it keeps private, an option it doesn't have, a bug in what it draws. The change to it is often a few lines. With a copy, that change goes in the same pull request as the app code that needs it, and the app's tests, the gallery and the merge queue check the two together. Keeping each change in its own patch file beside the copy shows how each one moves when a new release comes in, and keeps each ready to offer upstream on its own. `docs/gpui.md` says when a change belongs in the kit rather than the app.
+The kit often has nearly what the app needs: a hook it keeps private, an option it doesn't have, a bug in what it draws. The change to it is often a few lines. With a copy, that change goes in the same pull request as the app code that needs it, and the app's tests, the gallery and the merge queue check the two together. Keeping each change in its own patch file beside the copy shows how each one moves when a new release comes in, and keeps each ready to offer upstream on its own. `docs/standards/gpui.md` says when a change belongs in the kit rather than the app.
 
 ### What's here
 
@@ -29,7 +29,7 @@ The code is under Apache-2.0. The icons in `crates/assets` are Lucide's, under I
 
 ### Changing the kit
 
-- **Write it as upstream would,** as `docs/rust.md` says, so it can go upstream as it is.
+- **Write it as upstream would,** as `docs/standards/rust.md` says, so it can go upstream as it is.
 - **Change it in the same pull request as the app code that needs it,** or in a stack with the kit's change at the bottom, as `AGENTS.md` says of layers.
 - **Record it in its own patch,** after editing `third_party/gpui-kit/vendor/`, by running `cargo run -p kit-sync -- patch <name>`. That writes `third_party/gpui-kit/patches/<name>.patch` (adding `<name>` to `gpui-kit.toml`, or updating it in place when it's already listed, and refreshing any patches after it) and puts `Changed in Roundhouse's copy of gpui-kit, as third_party/README.md lists.` in a comment at the top of each `.rs` and `.toml` file that differs from upstream, as Apache-2.0 asks of a changed file. `cargo run -p kit-sync -- drop <name>` takes a patch out of the copy and deletes its file. A file that can't hold a comment, such as a JSON theme, is named in its entry under "Our changes" instead.
 - **List it under "Our changes",** with its patch file, the files it changes, why, and the issue that tracks offering it upstream, or where it was offered.

@@ -147,7 +147,7 @@ pub(super) struct Limits {
 }
 
 impl Side {
-    /// Its inner edge included. As wide as the sidebars `docs/inspiration.md` measures, so the layout feels familiar,
+    /// Its inner edge included. As wide as the sidebars `docs/reference/inspiration.md` measures, so the layout feels familiar,
     /// which on the right is wide enough for a long path and its counts on one line.
     pub(super) const fn usual_width(self) -> Pixels {
         match self {

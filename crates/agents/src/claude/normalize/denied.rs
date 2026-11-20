@@ -1,5 +1,5 @@
 //! Which of a `user` line's results answer a tool's use the person denied, as the CLI says beside them in
-//! `tool_result_meta`, and what the person said. `docs/claude-cli.md` has what the CLI writes there.
+//! `tool_result_meta`, and what the person said. `docs/reference/claude-cli.md` has what the CLI writes there.
 
 use protocol::capability::calls::{Call, CallOutput};
 use protocol::event::{ContentBlock, Denied, EventBody};

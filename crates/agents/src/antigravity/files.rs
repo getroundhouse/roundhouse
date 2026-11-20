@@ -1,5 +1,5 @@
 //! Where `agy` keeps a conversation on its machine, under the home's `.gemini/antigravity-cli/`, as
-//! `docs/antigravity-cli.md` says. The adapter reads it to tell a conversation `agy` no longer has from one it can't
+//! `docs/reference/antigravity-cli.md` says. The adapter reads it to tell a conversation `agy` no longer has from one it can't
 //! read, to notice a between-turn reactive wakeup `agy` 1.5.9 hasn't streamed over ACP, and to remove a title call's
 //! files, which nobody resumes.
 

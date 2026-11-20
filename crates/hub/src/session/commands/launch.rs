@@ -78,7 +78,7 @@ impl LiveSession {
 
     /// Starts the agent for a chat that's idle or at work only in the background, with its queue not held. It needs no
     /// prompt: a CLI started again lists its tasks again and asks after them, and starts a turn by itself once one has
-    /// ended, as `docs/claude-cli.md` says. One that was cut off, or held for the person, is left for them, and hears
+    /// ended, as `docs/reference/claude-cli.md` says. One that was cut off, or held for the person, is left for them, and hears
     /// how its wait ended with their next prompt, since its CLI lists its tasks again then too, so the wait comes off
     /// its list meanwhile, rather than leave it at work on a wait that's over.
     pub(super) async fn handle_wake_agent(&self) {

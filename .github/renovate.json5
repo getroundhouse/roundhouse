@@ -312,7 +312,7 @@
     },
     {
       description: [
-        'mobile-poc is a prototype on pinned GPUI snapshots, which docs/rust.md exempts, so all of its updates, its',
+        'mobile-poc is a prototype on pinned GPUI snapshots, which docs/standards/rust.md exempts, so all of its updates, its',
         "patched sources' among them, are on the Dashboard, and come in one PR when approved.",
       ],
       matchFileNames: [

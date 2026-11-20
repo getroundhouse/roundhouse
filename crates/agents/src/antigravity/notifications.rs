@@ -266,7 +266,7 @@ async fn flush_text(shared: &Shared) {
 
 /// `agy` keeps backgrounded `run_command`, `schedule` and `run_workflow` calls in `in_progress` across `session/prompt`
 /// endings and settles them later under the same `toolCallId`, whereas `invoke_subagent` completes its own call on
-/// spawn and all other tools are turn-local (`docs/antigravity-cli.md`).
+/// spawn and all other tools are turn-local (`docs/reference/antigravity-cli.md`).
 fn outlives_turn(call: &Call, status: ToolStatusWire) -> bool {
     status == ToolStatusWire::InProgress && matches!(call, Call::Command(_) | Call::Schedule(_) | Call::Workflow(_))
 }

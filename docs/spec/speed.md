@@ -1,6 +1,6 @@
 # Speed
 
-How fast the desktop app has to be. How to measure it, the test sizes, and what helps, are in `docs/performance.md`. What can't be measured is in `docs/manual-checks.md`.
+How fast the desktop app has to be. How to measure it, the test sizes, and what helps, are in `docs/reference/performance.md`. What can't be measured is in `docs/standards/manual-checks.md`.
 
 *Unconfirmed:* every bar here.
 

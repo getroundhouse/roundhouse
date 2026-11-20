@@ -3,13 +3,13 @@ allow-expect-in-tests = true
 allow-dbg-in-tests = true
 too-many-lines-threshold = 60
 disallowed-types = [
-    { path = "std::sync::Mutex", reason = "use parking_lot::Mutex; see docs/rust.md" },
-    { path = "std::sync::RwLock", reason = "use parking_lot::RwLock; see docs/rust.md" },
+    { path = "std::sync::Mutex", reason = "use parking_lot::Mutex; see docs/standards/rust.md" },
+    { path = "std::sync::RwLock", reason = "use parking_lot::RwLock; see docs/standards/rust.md" },
 ]
 disallowed-methods = [
-    { path = "std::thread::sleep", reason = "a test waits for what it means to, with `waiting::thread`, and never a while, which a slow machine loses, as docs/testing.md says. Where something has to pass a time, such as the product's pace between retries or a stand-in's between looks, #[expect] this with what the time is for" },
-    { path = "tokio::time::sleep", reason = "a test waits for what it means to, with `waiting::task`, and never a while, which a slow machine loses, as docs/testing.md says. Where something has to pass a time, such as the product's pace between retries, or a test's on tokio's paused clock, which moves it, #[expect] this with what the time is for" },
-    { path = "tokio::time::sleep_until", reason = "a test waits for what it means to, with `waiting::task`, and never until a time, which a slow machine loses, as docs/testing.md says. Where something has to wait for a time, such as the product's timer, or a test's on tokio's paused clock, which moves it, #[expect] this with what the time is for" },
+    { path = "std::thread::sleep", reason = "a test waits for what it means to, with `waiting::thread`, and never a while, which a slow machine loses, as docs/standards/testing.md says. Where something has to pass a time, such as the product's pace between retries or a stand-in's between looks, #[expect] this with what the time is for" },
+    { path = "tokio::time::sleep", reason = "a test waits for what it means to, with `waiting::task`, and never a while, which a slow machine loses, as docs/standards/testing.md says. Where something has to pass a time, such as the product's pace between retries, or a test's on tokio's paused clock, which moves it, #[expect] this with what the time is for" },
+    { path = "tokio::time::sleep_until", reason = "a test waits for what it means to, with `waiting::task`, and never until a time, which a slow machine loses, as docs/standards/testing.md says. Where something has to wait for a time, such as the product's timer, or a test's on tokio's paused clock, which moves it, #[expect] this with what the time is for" },
     { path = "gpui_kit::component::text::TextView::markdown", reason = "the kit's text view ends the app on a text its Markdown parser panics on, gives a long text no height until it's read, and keeps what's selected only while it's painted, as docs/ui.md says. The transcript draws Markdown through `crate::texts`. Elsewhere, #[expect] this with why none of those matters there" },
     { path = "gpui_kit::component::text::TextView::html", reason = "the kit's text view ends the app on a text its Markdown parser panics on, gives a long text no height until it's read, and keeps what's selected only while it's painted, as docs/ui.md says. The transcript draws Markdown through `crate::texts`. Elsewhere, #[expect] this with why none of those matters there" },
     { path = "gpui_kit::component::text::markdown", reason = "the kit's text view ends the app on a text its Markdown parser panics on, gives a long text no height until it's read, and keeps what's selected only while it's painted, as docs/ui.md says. The transcript draws Markdown through `crate::texts`. Elsewhere, #[expect] this with why none of those matters there" },

@@ -1,4 +1,4 @@
-//! Running the CLI under a login its hub holds, rather than the one on this machine. `docs/claude-cli.md` has what the
+//! Running the CLI under a login its hub holds, rather than the one on this machine. `docs/reference/claude-cli.md` has what the
 //! CLI does with one.
 
 use protocol::model::AgentLogin;

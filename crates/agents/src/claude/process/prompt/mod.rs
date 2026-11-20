@@ -5,7 +5,7 @@
 //! to what one prompt takes, and the CLI shrinks one bigger than its API takes. A short text file goes in whole,
 //! inside its tag.
 //! Anything else, such as a PDF, an archive or a long log, the agent opens from where it is. Files come before what
-//! was typed, which is where Anthropic's guidance puts images for the best answers. `docs/claude-cli.md` has what was
+//! was typed, which is where Anthropic's guidance puts images for the best answers. `docs/reference/claude-cli.md` has what was
 //! checked.
 
 #[cfg(test)]

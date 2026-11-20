@@ -1,7 +1,7 @@
 //! What the worker's tests give the processes the product's code starts. `Environment::NONE` adds nothing to what a
 //! process inherits, so the worker's git, run from a test with it, would read the environment of whoever runs the
 //! tests, such as their git config, their hooks or a `GIT_DIR` from a hook they're in. A test gives it the worker's
-//! `testing::given()` instead, as `docs/testing.md` says.
+//! `testing::given()` instead, as `docs/standards/testing.md` says.
 
 use std::path::Path;
 
@@ -64,7 +64,7 @@ fn the_worker_s_tests_give_the_product_s_processes_what_a_test_gives() {
     assert!(
         found.is_empty(),
         "a worker test gives what the product's code starts `crate::testing::given()`, or builds on it, rather than \
-         {NOTHING_ADDED}, which leaves it the environment of whoever runs the tests, as docs/testing.md says: \
+         {NOTHING_ADDED}, which leaves it the environment of whoever runs the tests, as docs/standards/testing.md says: \
          {found:#?}"
     );
 }

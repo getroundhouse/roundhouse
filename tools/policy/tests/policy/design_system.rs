@@ -1,5 +1,5 @@
 //! The design system's boundary: screens draw with its components rather than with the kit's own parts that the
-//! components hold, as `docs/component-library.md` says.
+//! components hold, as `docs/standards/components.md` says.
 
 use std::collections::BTreeSet;
 use std::path::Path;

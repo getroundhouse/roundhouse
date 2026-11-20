@@ -7,7 +7,7 @@ bun mobile-poc/test-server/gen.ts                # Generates the sessions into o
 PORT=7801 LATENCY_MS=100 bun mobile-poc/test-server/server.ts
 ```
 
-It binds to `127.0.0.1`, so a phone on Wi-Fi needs `hostname` in `server.ts` changed first. `gen.ts` takes `--only s,m,l,xl`, and the sizes are explained in `docs/performance.md`. Its content is synthetic and deterministic, with no real transcript in it.
+It binds to `127.0.0.1`, so a phone on Wi-Fi needs `hostname` in `server.ts` changed first. `gen.ts` takes `--only s,m,l,xl`, and the sizes are explained in `docs/reference/performance.md`. Its content is synthetic and deterministic, with no real transcript in it.
 
 ## Protocol
 

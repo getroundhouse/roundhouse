@@ -1,5 +1,5 @@
 # How CI runs the tests on Linux: `cargo nextest run --profile ci`, and on a Mac with the mac profile below. Locally they
-# run under `cargo test`, as docs/rust.md says.
+# run under `cargo test`, as docs/standards/testing.md says.
 [profile.ci]
 # Every test runs, so one failure doesn't hide another behind it.
 fail-fast = false
@@ -10,7 +10,7 @@ retries = 0
 # saved only a few seconds, and loaded the tests enough to widen a race in one of them.
 test-threads = 32
 # A test takes under 5s, so the log marks one that takes longer, and the end of the run lists them. One that takes
-# longer than 10s fails the job, as docs/rust.md says, even if it passed. Those are for CI's test job's runner, 16 cores
+# longer than 10s fails the job, as docs/standards/testing.md says, even if it passed. Those are for CI's test job's runner, 16 cores
 # of the 8th Graviton generation or later, at the 32 tests at once above, and a slower runner or fewer cores would need
 # them measured again. CI reads how long each took from the report below once every test has run, rather than stopping
 # a test at 10s, so one that waits on something that never comes runs on to its own timeout and says what it waited

@@ -57,7 +57,7 @@ pub(super) struct Conversation {
     pub(super) cancelling: bool,
     /// What the turn's earlier prompts took, since `agy` reports each `session/prompt`'s own: a plan's, which its
     /// approval or feedback carries on in a prompt of its own. A steer's superseded prompt reports nothing, since the
-    /// steering one reports the whole turn's, as `docs/antigravity-cli.md` says.
+    /// steering one reports the whole turn's, as `docs/reference/antigravity-cli.md` says.
     pub(super) earlier_tokens: Option<TokenUsage>,
     pub(super) streaming_thought: Option<(String, String)>,
     pub(super) streaming_text: Option<(String, String)>,

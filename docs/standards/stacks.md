@@ -1,0 +1,20 @@
+# Stacks
+
+Where to split a change into stacked pull requests, what to keep together, and in what order. `docs/standards/pull-requests.md` says how each PR is written.
+
+Every PR has an overhead that doesn't shrink with it: a description, its checks, a rebase whenever `main` moves, a trip through the merge queue, and reviewers who each have to learn the change before they can judge it. What it buys is a diff that can be judged alone, a part on `main` before the rest, and a commit that can be found and reverted alone. A split that buys none of them isn't worth a PR. Every merge to `main` that changes more than docs and the marketing site is published, so what merges is a build someone may run for days, and a build that reverts a migration can't open a store it ran on. A build from the middle of a stack can be rough, as when a client shows a new form as it shows what it can't draw, as long as nothing it sends or stores is lost or can't be read.
+
+- **Split where the part below can be judged without what's above it.** One such part is groundwork, which is worth having whatever happens above it, and which nothing above it could change, such as a refactor or a fix the change needs. Another is a mechanical change across many files, such as a rename, or deleting what nothing uses, since mixed with the rest it hides what needs judging.
+- **A new shape goes in the PR with the first code that fills or reads it,** since a type nothing uses can only be judged against what its description promises.
+- **Keep together what can't stand apart:** a step that only serves another, such as letting migrations run Rust and the one migration that needs it, a layer's few lines and the PR they serve, and two halves that would need code between them that goes once the second merges.
+- **Size alone isn't a reason to split, but it is a reason to look again.** A change too big to review in one go splits where a part stands alone. Where none does, first ask whether it does more than one thing, or whether it can be cut into slices that each take one behavior through every layer, such as one kind of call at a time, without leaving two forms of one shape between them. It stays whole only when neither works, and its description says why, in a paragraph of its own.
+
+The parts then go in this order:
+
+- **Groundwork first,** so it can merge as soon as it passes.
+- **What reads a form comes before, or with, what writes it,** so no commit on `main` sends or stores a form that the part receiving it can't decode: the hub's reader with the worker that sends the form, and with the migration that stores it. A client can draw it later. Until then, the PR that adds the form names each new variant in the client's arms for `Unknown`, since its matches are exhaustive, as `docs/standards/rust.md` asks, so the client shows it as it shows what it can't draw, as "Changing the protocol" in `docs/architecture.md` has it. The PR that draws it moves it out of those arms.
+- **The PR that makes the new form the only one written and stored, with any migration that rewrites the old, goes as low as that allows.** It deletes the readers of the old form in every layer, except what "Changing the protocol" keeps for older peers, so the PRs above it read only the new form.
+- **Code that exists only for the middle of a stack, but for those arms, means the order or the split is wrong.** Reorder, or merge the PRs it bridges. What's kept anyway is a workaround, with the reason `docs/standards/reviews.md` asks for, and a PR higher in the stack deletes it.
+- **A stack makes at most one protocol break, in one PR,** since a stack's PRs often land in one push, as one build, and a hub speaks no version older than the one before its own, so a second would cut off the workers and clients of the build before the stack, with no release between them for the app's update to step to, as "Changing the protocol" says.
+
+A stack's plan, which PRs it has, in what order, and why each split is where it is, goes in the description of the issue the stack is for, filed first when there's none, since `docs/standards/documentation.md` puts plans on GitHub.

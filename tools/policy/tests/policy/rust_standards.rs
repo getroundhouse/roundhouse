@@ -7,7 +7,7 @@ use serde_json::Value;
 
 use super::workspace::workspace;
 
-/// The most lines a Rust file can have, tests included. `docs/rust.md` has the reasoning.
+/// The most lines a Rust file can have, tests included. `docs/standards/rust.md` has the reasoning.
 const MAX_FILE_LINES: usize = 400;
 
 /// Files allowed past that limit, as (path from the repo root, why). Empty so far.

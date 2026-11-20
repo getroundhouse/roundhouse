@@ -1,6 +1,6 @@
 //! A title for a prompt, from a one-off call to a small model, outside any session, so it costs the session nothing
 //! and never shows in its chat. The prompt's images go with its words, since a prompt such as "how do we fix this?"
-//! is often about a screenshot. See `docs/claude-cli.md`.
+//! is often about a screenshot. See `docs/reference/claude-cli.md`.
 
 use std::path::Path;
 use std::process::Output;

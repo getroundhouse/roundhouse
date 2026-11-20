@@ -1,6 +1,6 @@
 # Why GPUI and gpui-kit
 
-Why the apps are built on GPUI and gpui-kit, how the transcript builds on the kit, and why the iOS app runs on Zed's iOS backend. How code that uses them is written is in `docs/gpui.md`.
+Why the apps are built on GPUI and gpui-kit, how the transcript builds on the kit, and why the iOS app runs on Zed's iOS backend. How code that uses them is written is in `docs/standards/gpui.md`.
 
 ## GPUI
 

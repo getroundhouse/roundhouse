@@ -56,7 +56,7 @@ pub(crate) fn log_in_as(stack: &Stack, status: &serde_json::Value) {
 }
 
 /// Has the fake agent's CLI say nobody is logged in on its machine, from here on. How the real CLI says so hasn't been
-/// seen, as `docs/claude-cli.md` says, so this is the adapter's reading of it: `loggedIn` false.
+/// seen, as `docs/reference/claude-cli.md` says, so this is the adapter's reading of it: `loggedIn` false.
 pub(crate) fn log_out(stack: &Stack) {
     log_in_as(stack, &json!({"loggedIn": false, "authMethod": "none", "apiProvider": "firstParty"}));
 }

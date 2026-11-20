@@ -10,7 +10,7 @@ const PACKAGES_OWN_PREFIXES: [&str; 3] = ["CARGO_PKG_", "CARGO_MANIFEST_", "CARG
 /// The rest of what Cargo sets for a package's own crate, by name.
 const PACKAGES_OWN: [&str; 4] = ["CARGO_CRATE_NAME", "CARGO_PRIMARY_PACKAGE", "CARGO_TARGET_TMPDIR", "OUT_DIR"];
 
-/// `cargo build --workspace`, for a test to build a program it runs, as `docs/rust.md` says, without what Cargo set in
+/// `cargo build --workspace`, for a test to build a program it runs, as `docs/standards/testing.md` says, without what Cargo set in
 /// the test's environment for the test's own package, such as `CARGO_MANIFEST_DIR`. The build that made the test
 /// didn't have those, so to a build script that watches one, as ring's watches every variable it reads, it would have
 /// changed, and the build would compile that crate and everything above it again in every run. Everything else, such
@@ -51,7 +51,7 @@ pub fn once_per_run(dir: &Path, name: &str, build: impl FnOnce()) {
 
 /// Builds the hub and `examples` with [`workspace_build`], once per run as [`once_per_run`] says, and answers the folder
 /// Cargo says it put the hub in, with the examples in its `examples`. Naming the examples in the same build is what
-/// gives the hub the whole workspace's features, as `docs/rust.md` says. Where Cargo keeps a test binary, and so what's
+/// gives the hub the whole workspace's features, as `docs/standards/testing.md` says. Where Cargo keeps a test binary, and so what's
 /// near it, isn't something it promises, and 1.100 moved it. `dir` and `name` are as [`once_per_run`] takes them.
 ///
 /// # Panics

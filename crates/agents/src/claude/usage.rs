@@ -1,4 +1,4 @@
-//! What's left of the account's limits, from what the CLI answers `get_usage`. `docs/claude-cli.md` has how it
+//! What's left of the account's limits, from what the CLI answers `get_usage`. `docs/reference/claude-cli.md` has how it
 //! behaves.
 
 use std::cmp::Reverse;

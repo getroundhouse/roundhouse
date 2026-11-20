@@ -1,6 +1,6 @@
 # Reviews
 
-How agents review a change when the owner asks for a review. What the PR then says about its reviews is in `docs/pull-requests.md`, and what a person has to judge by hand is in `docs/manual-checks.md`.
+How agents review a change when the owner asks for a review. What the PR then says about its reviews is in `docs/standards/pull-requests.md`, and what a person has to judge by hand is in `docs/standards/manual-checks.md`.
 
 Agents write this codebase, and each one copies what it finds. A workaround that gets in becomes the pattern for the next change, so a review asks whether a change is built the way it should be, not only whether it works. An agent that didn't build a change sees what its builder can't, because it isn't anchored on the builder's reasoning. So a review is a fresh look at what's complicated, not a check on what the builder can verify itself, such as whether a test fails when the code it covers breaks.
 
@@ -20,7 +20,7 @@ An agent reviews a change, or has one reviewed, only when the owner asks, in the
 - **A reviewer reads the description to learn the change,** rather than checking it claim by claim. Where the description and the code disagree about what the change does, it says which is wrong: code that doesn't do what the description promises is a finding against the code, and a description that's wrong is a minor one.
 - **A reviewer changes nothing in the builder's checkout, and makes no checkout of its own.** It judges a test from the code, and from what the builder says it broke on purpose. A test it doubts is a finding that asks the builder to break the code and see.
 - **A reviewer stays in its lanes.** Something it sees outside them gets one line.
-- **Findings go back to the builder,** and the reviewer files nothing, as `docs/documentation.md` says of any local review.
+- **Findings go back to the builder,** and the reviewer files nothing, as `docs/standards/documentation.md` says of any local review.
 
 ## Findings
 
@@ -61,23 +61,6 @@ The owner hears about a review once, when it's done, in one report from the buil
 - **What was filed,** as issues, including each bug passed on, since nothing lives only in a chat.
 - **How much review it took:** how many reviewers ran, in which lanes, and whether the fixes were checked.
 
-## Workarounds
-
-Each of these needs a reason: in a comment beside it, where `docs/documentation.md` puts why code is the way it is, so the next agent sees it, and in a paragraph of its own in part 3 of the PR, as `docs/pull-requests.md` says of any choice a reviewer might question. Without one, the change is restructured instead.
-
-- A flag, mode or option added so that one caller works.
-- A special case for one value, kind or caller.
-- An error swallowed, or a fallback that hides a failure.
-- A check for a state the code can't reach. If it can reach it, fix what lets it. A state that comes from outside the process can always arrive, such as from the network, storage, another program, or an older hub or client, and handling it is right.
-- Logic copied, or nearly copied, rather than shared.
-- A wrapper around code this repo owns, rather than a change to it. The copy of gpui-kit doesn't count, since what only this app needs is built in the app, as `docs/gpui.md` says.
-- Code that exists only for the middle of a stack, as "Splitting a change" in `docs/pull-requests.md` says.
-- A sleep in the product's code, a retry of what failed, or a longer timeout, added so that a test passes. A fixed sleep in a test isn't let in even with a reason, as "Tests" in `docs/rust.md` says.
-
-A workaround copied from code nearby isn't let in, even with a reason. As `AGENTS.md` says, the change doesn't copy it, and the one it would copy is fixed if it's part of the change, and otherwise given an issue.
-
-Working around the kit has a rule of its own, and signs of its own, in `docs/gpui.md`: the kit is changed, or the app builds the piece itself, instead.
-
 ## Lanes
 
 ### Design
@@ -93,11 +76,11 @@ Before any code is written, the reviewer reads the change's design: parts 2 and 
 - Does it fit `docs/architecture.md`, including the parts that aren't built, such as workers on other machines and the iPhone app?
 - Does it change what an owner doc says, without saying so?
 - What does it commit, and in which PR: the forms it stores or sends, any migration, and any protocol break, as "Changing the protocol" in `docs/architecture.md` says?
-- For a stack, are its splits and their order right, by "Splitting a change" in `docs/pull-requests.md`?
+- For a stack, are its splits and their order right, by `docs/standards/stacks.md`?
 
 A rule changed in words alone is read the same way, the rule being its design, and the reviewer also asks where an agent following it would go wrong, on either side of its line.
 
-It ends with a verdict: go ahead, go ahead with changes, or rethink, with the better approach described. A design that needs an owner doc to change follows "Who decides" in `docs/documentation.md`.
+It ends with a verdict: go ahead, go ahead with changes, or rethink, with the better approach described. A design that needs an owner doc to change follows `docs/standards/who-decides.md`.
 
 ### Correctness
 
@@ -115,10 +98,10 @@ It doesn't hunt for edge cases beyond these. One it comes across is a minor find
 Whether the tests would notice the change breaking. It looks for:
 
 - A test that can't fail: an assertion that holds either way, a wait that passes with no delay, values that happen to match, such as places equal to `seq`s, or a check that something is still there when nothing would have removed it.
-- A fake that hides what the real program does, such as the fake agent where the Claude CLI behaves otherwise. `docs/claude-cli.md` and the CLI's captured output in `crates/agents/tests/` say how it behaves.
-- A guarantee tested at the wrong one of the levels in `docs/testing.md`, or tested again at a higher one beyond one example of the wiring, which "Tests" in `docs/rust.md` rules out.
-- A new test that's a case of one already there, with the same setup and one input or assertion changed, or that tests again, for one more caller, what's tested where it's defined, both of which "Tests" in `docs/rust.md` rules out. It names the test that should have taken the case.
-- A test made to pass rather than fixed: a sleep, retry or longer timeout under "Workarounds" without a reason, or what `AGENTS.md` says isn't a fix for a flaky test, such as loosening what it checks.
+- A fake that hides what the real program does, such as the fake agent where the Claude CLI behaves otherwise. `docs/reference/claude-cli.md` and the CLI's captured output in `crates/agents/tests/` say how it behaves.
+- A guarantee tested at the wrong one of the levels in `docs/standards/testing.md`, or tested again at a higher one beyond one example of the wiring, which "Writing tests" in `docs/standards/testing.md` rules out.
+- A new test that's a case of one already there, with the same setup and one input or assertion changed, or that tests again, for one more caller, what's tested where it's defined, both of which "Writing tests" in `docs/standards/testing.md` rules out. It names the test that should have taken the case.
+- A test made to pass rather than fixed: a sleep, retry or longer timeout that `docs/standards/workarounds.md` lists, without a reason, or what `AGENTS.md` says isn't a fix for a flaky test, such as loosening what it checks.
 - No test of the case the change was built for, or of a failure the structure is meant to contain, such as one part that never answers while the rest carry on.
 
 ### Architecture
@@ -131,19 +114,19 @@ Whether the change is built the way a strong engineer would build it, not only w
 - An interface that's easy to call wrong, or an abstraction that leaks what it should hide.
 - A fix in the wrong place, which patches a symptom whose cause is elsewhere.
 - A break in the dependency rules or the layers in `docs/architecture.md`, and new coupling between parts.
-- A second way to do what the repo already does: a mechanism, where `docs/rust.md` says to change the mechanism instead, or a helper, type, constant, piece of wording or test fixture. It searches for it and says where it is.
-- A crate, module, file, trait or function that doesn't earn its place, or does more than one job, by "Crates and modules" in `docs/rust.md`. A type for a value that means something specific always earns its place, as "Types" there says.
+- A second way to do what the repo already does: a mechanism, where `docs/standards/rust.md` says to change the mechanism instead, or a helper, type, constant, piece of wording or test fixture. It searches for it and says where it is.
+- A crate, module, file, trait or function that doesn't earn its place, or does more than one job, by "Crates and modules" in `docs/standards/rust.md`. A type for a value that means something specific always earns its place, as "Types" there says.
 - A requirement that makes the change harder than it's worth, where accepting a downside would be simpler.
 - A rule other work is built to that the change adds or rewrites, judged as part of its design, and, when no reviewer has the docs lane, one the change makes untrue.
-- Anything under "Workarounds" without a reason, any workaround copied from code nearby, and any sign of working around the kit that `docs/gpui.md` lists.
+- Anything `docs/standards/workarounds.md` lists, without a reason, any workaround copied from code nearby, and any sign of working around the kit that `docs/standards/gpui.md` lists.
 
 In how the change is written, it looks for:
 
 - Repetition within the diff.
 - Dead code, unused parameters, debugging left in, and stale comments.
-- Names that don't say what a thing is, or that use a word in a sense `docs/terms.md` doesn't give it.
-- A doc that only repeats an item's name and type, which "Docs" in `docs/rust.md` rules out, and a comment that only repeats the code beside it.
-- Code that breaks a rule in `docs/rust.md` or `docs/gpui.md` that the lints don't enforce. It skips what `rustfmt` and Clippy catch.
+- Names that don't say what a thing is, or that use a word in a sense `docs/reference/terms.md` doesn't give it.
+- A doc that only repeats an item's name and type, which "Docs" in `docs/standards/rust.md` rules out, and a comment that only repeats the code beside it.
+- Code that breaks a rule in `docs/standards/rust.md` or `docs/standards/gpui.md` that the lints don't enforce. It skips what `rustfmt` and Clippy catch.
 
 When it would have built the change differently, it says how, and what that would take.
 
@@ -153,9 +136,9 @@ Whether every doc is still true after the change. It looks for:
 
 - A doc the change makes untrue, anywhere in `docs/`, `AGENTS.md` and the READMEs, and docs that now contradict each other.
 - A rule in the spec that says more or less than the code does, and *Not built* and *Unconfirmed* marks that are wrong. A choice an agent made in an owner doc is marked *Unconfirmed*.
-- What `docs/documentation.md` keeps out of docs, such as a date, "yet" or an issue number.
-- A new word, or a new sense of one, missing from `docs/terms.md`.
-- Text that breaks `docs/writing.md`, in a doc, a comment or the PR's description: a thing described where it has a name, an everyday word standing in for a technical one, an opening that starts from the code rather than from what happens, or more than the reader will act on. It quotes the passage and gives the rewrite, or says what to cut.
+- What `docs/standards/documentation.md` keeps out of docs, such as a date, "yet" or an issue number.
+- A new word, or a new sense of one, missing from `docs/reference/terms.md`.
+- Text that breaks `docs/standards/writing.md`, in a doc, a comment or the PR's description: a thing described where it has a name, an everyday word standing in for a technical one, an opening that starts from the code rather than from what happens, or more than the reader will act on. It quotes the passage and gives the rewrite, or says what to cut.
 
 ### Stack
 
@@ -164,7 +147,7 @@ Once a stack is built, the reviewer reads it as one change, against its design. 
 - Where the built change departs from its design, and whether it was right to.
 - A shape that suits what fills it but not what reads it, or the reverse: a field nothing reads, a reader working out what the writer knew, a value converted twice, or one thing named differently in two layers.
 - State with the wrong owner, by "State ownership" in `docs/architecture.md`, that only shows with both layers in view.
-- Code that exists only for the middle of the stack, beyond what "Splitting a change" in `docs/pull-requests.md` lets in, and any of it left at the top.
+- Code that exists only for the middle of the stack, beyond what `docs/standards/stacks.md` lets in, and any of it left at the top.
 - Two forms of one shape at the top, where "Each shape has one form" in "Changing the protocol" asks for one, and readers of an old form the top no longer needs.
 - A pairing of versions in "Changing the protocol" that the stack breaks, and a migration that makes a different form from the live path given the same input.
 - No test that follows the data across the layers.
