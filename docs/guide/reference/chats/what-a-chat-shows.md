@@ -86,7 +86,7 @@ The agent can revise a proposal, such as when you ask for another round, or ask 
 
 - **The tab shows the newest revision,** with what changed since the one before at the top. Options the agent kept keep their letters, so dropping B leaves C as C.
 - **The call that revised it has a line of its own,** `Revised`, and each line says which revision its call wrote and what became of it: what you chose, that you asked for another round, or that the next revision replaced it.
-- **If it's revised while you're choosing,** what you'd chosen and written goes, since its options may have changed.
+- **If it's revised while you're reading it, or part way through answering,** the tab stays as it is, with what you'd chosen and written, and a banner says the newer revision is there. Nothing can be sent until you click `Show revision 2`, or `Open` on one of its lines in the chat. Your note comes with you, and so does each choice whose option is still there under its letter.
 
 ![A revised proposal in the proposal tab](../../../spec/screens/proposal-revised.png)
 

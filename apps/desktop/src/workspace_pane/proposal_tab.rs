@@ -3,9 +3,10 @@
 //! after the subagent tab, and closes with the chat it's from. It opens by itself, without coming to the front, for a
 //! proposal the pane hasn't seen, so one waiting for the person is a tab away without taking them from what they're
 //! doing, unless it's in front already, showing another, or holds an answer they haven't sent. Open, on the proposal's
-//! line in its chat, brings it to the front. The answer, or the request for another round, its view asks to send goes
-//! to the hub from here, and the view is told how it went. Its note is dictated into only while the tab is in front,
-//! as `dictating` has the composer's.
+//! line in its chat, brings it to the front, on its newest revision, which its view holds back while the person reads
+//! the one before it. The answer, or the request for another round, its view asks to send goes to the hub from here,
+//! and the view is told how it went. Its note is dictated into only while the tab is in front, as `dictating` has the
+//! composer's.
 //!
 //! Each chat's proposals are client-core's, which the pane follows with its subagents, and passes on as they change.
 
@@ -68,7 +69,7 @@ impl Proposals {
     /// Takes the tab away, ending what its note was dictating, which a view that's gone can't do.
     fn take(&mut self, cx: &mut App) -> Option<ProposalTab> {
         let tab = self.tab.take()?;
-        tab.view.update(cx, |view, cx| view.set_dictation_enabled(false, cx));
+        tab.view.update(cx, |view, cx| view.set_in_sight(false, cx));
         Some(tab)
     }
 }
@@ -87,7 +88,7 @@ impl WorkspacePane {
     }
 
     /// Shows `proposal`, of the chat `session`, in the proposal tab, opening the tab if it isn't, and brings it to the
-    /// front if `to_front`. Until the pane has its record there's nothing to show, so the tab stays as it is, rather
+    /// front if `to_front`, on its newest revision. Until the pane has its record there's nothing to show, so the tab stays as it is, rather
     /// than coming to the front with another proposal in it.
     pub fn open_proposal_tab(
         &mut self,
@@ -121,6 +122,10 @@ impl WorkspacePane {
             self.proposals.tab = Some(ProposalTab { session, view, in_front, _answers: answers });
         }
         if to_front {
+            // Open on a line in the chat asks for the proposal as it is now, so a revision the tab held back shows.
+            if let Some(view) = self.proposals.view() {
+                view.update(cx, ProposalView::show_newest);
+            }
             self.bring_to_front(Showing::Proposal, cx);
         }
         cx.notify();

@@ -54,7 +54,7 @@ An agent asks the person to decide something with a question, which shows in the
 
   ![A proposal in the proposal tab](screens/proposal-tab.png)
 
-- **The tab shows the newest revision, and one the agent revised starts with what changed,** under `What changed since revision 1`, first in the outline too, before its context. Its options keep the letters the agent gave them, so the outline and the cards can skip one, as A, C, D. *Unconfirmed.* *Not built:* the timeline of revisions, in the right sidebar, which shows an earlier one.
+- **The tab shows the newest revision, and one the agent revised starts with what changed,** under `What changed since revision 1`, first in the outline too, before its context. Its options keep the letters the agent gave them, so the outline and the cards can skip one, as A, C, D. A revision the agent writes while the person is reading the one before it waits to be shown, as "Answering" says. *Unconfirmed.* *Not built:* the timeline of revisions, in the right sidebar, which shows an earlier one.
 
   **The second revision, which dropped B and added D: what changed first, and the options A, C and D.** *Unconfirmed.*
 
@@ -69,6 +69,12 @@ An agent asks the person to decide something with a question, which shows in the
   **Choosing A, before sending, with the bar at the tab's foot.** *Unconfirmed.*
 
   ![Choosing an option in the proposal tab](screens/proposal-choosing.png)
+
+- **A revision the agent writes while the person is reading the proposal, or has chosen or written something in it that they haven't sent, waits to be shown.** The tab stays on the revision it shows, with what's chosen and written, and a banner across the top of the page says `The agent wrote revision 2, so this one can't be answered.`, with `Show revision 2`. Another round and Send are off meanwhile, since the hub refuses a response to a revision the agent has replaced. `Show revision 2` shows it from its top, and so does Open on one of the proposal's lines in the chat. The note goes on to it as it is, and so does what's chosen for each question it still asks, where the option chosen is still there under its letter. The person is reading it while its tab is in front, in the workspace that's showing. A tab behind another, with nothing chosen or written, shows the newest at once, since nobody is reading it. The owner chose this over the newest taking the page and clearing what was chosen and written. *Unconfirmed:* the banner's words, what counts as reading, and that a question keeps its choice only at the same place, under the same header.
+
+  **The agent revised while the person was answering: the banner, the first revision still on the page, and Another round and Send off.** *Unconfirmed.*
+
+  ![A proposal the agent has revised since, in the proposal tab](screens/proposal-held.png)
 
 - **The note can be dictated into, as a question's written answer is,** with the same keys and no microphone, as `chats.md` says, while the tab is in front and the proposal waits for an answer that isn't being sent. The fine line runs along the bar's bottom, as along the composer's, and the recording's controls take the place of what's chosen, `Another round` and Send until the last words are in. Enter while dictating finishes the last words and sends them with the answer, once one option is chosen for each question. The tab going out of sight, such as for the chat, ends the recording, keeping what went in and sending nothing. Its hint words are the proposal's names, such as its options' labels, then the workspace's and its chat's. *Unconfirmed.*
 

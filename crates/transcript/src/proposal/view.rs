@@ -7,7 +7,7 @@ use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, Context, ElementId, FocusHandle, Focusable, InteractiveElement as _, IntoElement,
     ParentElement as _, Render, ScrollHandle, StatefulInteractiveElement as _, Styled as _, TestSupportExt as _,
-    Window, div, px,
+    Window, div, point, px,
 };
 use look::{Hand as _, Shaped as _, Typeset as _};
 use protocol::model::Proposal;
@@ -31,7 +31,11 @@ pub(super) const COLUMN: f32 = 848.;
 
 /// One proposal's page, which the app shows in its tab.
 pub struct ProposalView {
+    /// The record whose newest revision the page shows.
     pub(super) proposal: Arc<Proposal>,
+    /// The record as the hub has it now, while the page stays on a revision the agent has since replaced, as `held`
+    /// says.
+    pub(super) newest: Option<Arc<Proposal>>,
     pub(super) answering: Answering,
     texts: Texts,
     /// The images what the agent wrote points to, which the hub kept with each revision, and the page is drawn again
@@ -44,8 +48,9 @@ pub struct ProposalView {
     /// The selection's, which a press on the page's text takes, so a copy and a select all come to it.
     focus: FocusHandle,
     scroll: ScrollHandle,
-    /// The tab's in front, so the note can be dictated into.
-    pub(super) dictation_enabled: bool,
+    /// The tab's in front, in a workspace that's showing, so the person may be reading it: the note can be dictated
+    /// into, and a revision the agent writes doesn't take the page.
+    pub(super) in_sight: bool,
     pub(super) dictation_hints: Option<DictationHints>,
 }
 
@@ -77,6 +82,7 @@ impl ProposalView {
         let answering = Answering::default();
         Self {
             proposal,
+            newest: None,
             answering,
             texts,
             linked,
@@ -84,7 +90,7 @@ impl ProposalView {
             selection,
             focus,
             scroll: ScrollHandle::new(),
-            dictation_enabled: false,
+            in_sight: false,
             dictation_hints: None,
         }
     }
@@ -100,24 +106,14 @@ impl ProposalView {
         self.references.follow_records(records);
     }
 
+    /// The record whose newest revision the page shows, which isn't the hub's newest while that's held back.
     pub fn proposal(&self) -> &Arc<Proposal> {
         &self.proposal
     }
 
-    /// Shows a newer copy of its record.
-    pub fn set_proposal(&mut self, proposal: Arc<Proposal>, cx: &mut Context<Self>) {
-        if !Arc::ptr_eq(&self.proposal, &proposal) {
-            // What was chosen and written was for the revision read, so another starts afresh, rather than sending
-            // the choices as an answer to options the person hasn't read.
-            if proposal.current.number != self.proposal.current.number {
-                self.end_dictation(cx);
-                self.answering = Answering::default();
-            }
-            self.proposal = proposal;
-            // Once it's answered, as from another client, there's no note to dictate into.
-            self.follow_dictation(cx);
-            cx.notify();
-        }
+    /// Scrolls the page back to its top, where another revision starts with what changed.
+    pub(super) fn scroll_to_top(&self) {
+        self.scroll.set_offset(point(px(0.), px(0.)));
     }
 
     /// The outline: each part, set in under its question when there are several, and the one at the top of the page
@@ -228,7 +224,7 @@ impl Render for ProposalView {
         let page = self.page(parts, area, cx);
         let foot = self.foot(window, cx);
         // Across the top of the page, as a banner is across a pane.
-        let banner = self.banner();
+        let banner = self.banner(cx);
         let beside = v_flex().flex_1().min_w_0().h_full().children(banner).child(page).children(foot);
         self.selection.with_keys(div().flex().size_full().min_h_0().child(outline).child(beside))
     }

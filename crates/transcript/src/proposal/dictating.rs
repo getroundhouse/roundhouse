@@ -1,7 +1,8 @@
 //! The note dictates as a question's written answer does, with the shared keys and live line and no microphone. The
-//! app says whether the tab is in front, and the note dictates only then, and only while the proposal waits for an
-//! answer and none is being sent, since what went in meanwhile would be lost once it's answered. The view outlives
-//! being out of sight, so going out of sight ends a recording, keeping what went in.
+//! app says whether the tab is in sight, and the note dictates only then, and only while the revision shown waits for
+//! an answer and none is being sent, since what went in meanwhile would be lost once it's answered. It goes on while
+//! a newer revision is held back, as `held` says, since the note goes on to that one. The view outlives being out of
+//! sight, so going out of sight ends a recording, keeping what went in.
 
 use client_core::hints::HintCollector;
 use gpui_kit::component::input::TextareaState;
@@ -11,9 +12,10 @@ use super::answering::ProposalEvent;
 use super::view::ProposalView;
 
 impl ProposalView {
-    /// Whether the tab is in front, where the note can be dictated into.
-    pub fn set_dictation_enabled(&mut self, enabled: bool, cx: &mut Context<Self>) {
-        self.dictation_enabled = enabled;
+    /// Whether the tab is in sight: in front, in a workspace that's showing. Its note is dictated into only then, and
+    /// a revision the agent writes then doesn't take the page, as `held` says.
+    pub fn set_in_sight(&mut self, in_sight: bool, cx: &mut Context<Self>) {
+        self.in_sight = in_sight;
         self.follow_dictation(cx);
     }
 
@@ -23,10 +25,10 @@ impl ProposalView {
     }
 
     fn dictates(&self) -> bool {
-        self.dictation_enabled && self.open()
+        self.in_sight && self.takes_a_note()
     }
 
-    /// Lets the note dictate while the tab's in front and the proposal takes an answer, and otherwise ends its
+    /// Lets the note dictate while the tab's in sight and the note can be written in, and otherwise ends its
     /// recording.
     pub(super) fn follow_dictation(&mut self, cx: &mut Context<Self>) {
         let dictates = self.dictates();
