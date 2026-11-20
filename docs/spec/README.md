@@ -7,7 +7,7 @@ A rule can end with *Not built*, when it's decided and not in the product yet, o
 | File | Covers |
 |---|---|
 | `workspaces.md` | Creating, setting up and archiving workspaces, their titles, and their pull requests |
-| `chats.md` | Chats, their titles, dictating into the composer, the agent's questions, the model picker, plan mode, the context and the account, and their keys, and a workspace's terminals in the tabs beside them |
+| `chats.md` | Chats, their titles, dictating into the composer, conversation mode, which talks with the agent out loud, the agent's questions, the model picker, plan mode, the context and the account, and their keys, and a workspace's terminals in the tabs beside them |
 | `diff.md` | The diff, and comments on it |
 | `proposals.md` | Proposals, which ask the person to decide something too large for a question, and the proposal tab |
 | `files.md` | All files, which lists every file in a workspace, and a file opened from it |
