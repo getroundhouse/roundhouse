@@ -44,7 +44,8 @@ impl Request for Start {
 
 /// Ends whatever runs on it, which can be a worker an earlier hub left, and leaves it awake. Putting it to sleep is a
 /// request of its own, which is yet to come. Does nothing to one that's stopped or gone. The hub closes its own
-/// worker's stream and gives it time to stop first.
+/// worker's stream and gives it time to stop first, since that's the same over any transport, so an adapter only ends
+/// what's left.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct Stop {
     pub instance_id: InstanceId,

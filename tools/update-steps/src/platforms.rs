@@ -35,8 +35,8 @@ pub(crate) fn leave_a_step(speaks: Versions) -> anyhow::Result<()> {
         stranded.is_empty(),
         "This hub speaks workers of {speaks}, so an app with these releases' workers at work would have no release to \
          step to:\n{}\nA break in the worker protocol merges only once each platform whose apps step has published a \
-         release with the one before, as \"Updating the app\" in docs/architecture.md says. Queue it again once \
-         they have.",
+         release with the one before, as \"A break in the worker protocol\" in docs/standards/merging.md says. Queue \
+         it again once they have.",
         stranded.join("\n")
     );
     println!("A hub that speaks workers of {speaks} leaves every app on {} a release to step to.", STEPPING.join(", "));

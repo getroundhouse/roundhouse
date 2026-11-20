@@ -209,6 +209,13 @@ Read from 0.170.0 against a scripted model, as compacting was, and from its gene
 
 `initialize` takes `optOutNotificationMethods` among its `capabilities`, a list of notification methods Codex then doesn't send. 0.170.0 honored it: a scripted turn that edited a file, with the list the adapter sends, brought none of the methods on it. The adapter lists `thread/status/changed`, `thread/started`, `item/reasoning/textDelta`, `item/commandExecution/outputDelta`, `item/reasoning/summaryPartAdded`, `turn/diff/updated`, `thread/readState/changed`, `remoteControl/status/changed`, `turn/moderationMetadata`, `thread/settings/updated` and `thread/compacted`, each of which it has no use for, as the code says beside it. It still drops any of them that comes, so a Codex that ignores the list loses nothing.
 
+## What a command inherits
+
+Codex filters the environment its commands inherit, by `shell_environment_policy` in its config. A worker gives every process its git config in `GIT_CONFIG_COUNT`, `GIT_CONFIG_KEY_0` and `GIT_CONFIG_VALUE_0`, and its `gh` config in `GH_CONFIG_DIR`, so two settings a person can choose keep them from a command. Both were seen through `codex sandbox` 0.169.0.
+
+- **With `ignore_default_excludes = false`, Codex drops `GIT_CONFIG_KEY_0`,** whose name has `KEY` in it, and keeps `GIT_CONFIG_COUNT`. Every `git` its commands run then fails with "missing config key GIT_CONFIG_KEY_0".
+- **With `inherit = "core"`, Codex drops them all,** so its commands use the machine's own login.
+
 ## What isn't established
 
 These observations don't qualify Windows or Linux process behavior, a CLI version other than 0.169.0, every tool or every failure path. They don't establish how to recover an unanswered request across process death, handle MCP tasks, fork or rewind, interpret all usage fields, or obtain and refresh a subscription login for remote workers. The account's limits being reported on a real turn isn't evidence that a hub can share its credentials.

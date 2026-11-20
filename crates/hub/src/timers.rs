@@ -72,7 +72,7 @@ impl Timers {
         // Tokio's timers don't count the time a Mac sleeps, so waiting until a token's end, or until it's due to be
         // renewed, would wait as long again as the Mac slept, where checking every minute it's awake finds it within a
         // minute of waking. Until then, a push fails at GitHub, which says the token is bad, rather than with the
-        // block, which says what to do.
+        // block, which says what to do. *Unconfirmed:* a minute.
         check_github_logins_every: Duration::from_secs(60),
     };
 

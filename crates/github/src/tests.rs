@@ -150,7 +150,7 @@ fn ada(token: &str) -> GitCredential {
 }
 
 /// As GitHub answered for a repository a login could push to, one it couldn't, one that isn't there, and a token it
-/// doesn't take, in November 2026, as `docs/architecture.md` says.
+/// doesn't take, in November 2026, as `docs/reference/github.md` says.
 #[tokio::test]
 async fn a_push_meets_what_github_answers_git_as_it_asks_before_sending_anything() {
     let github = StandIn::with(Script {

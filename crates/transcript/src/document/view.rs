@@ -16,8 +16,9 @@ use crate::texts::{Of, TextAt, Texts, TopBlock, Written, top_blocks};
 const OVERDRAW: f32 = 400.;
 
 /// A Markdown text, scrolled in the chat's column, with what's selected of it, which a copy takes. It's cut into the
-/// blocks at its top, and only those in sight are drawn, each as a text of its own, since a long one drawn whole would
-/// take longer than a frame to draw.
+/// blocks at its top, and only those in sight are drawn, each as a text of its own, since a document drawn whole costs
+/// every frame what all its blocks do. Drawn whole, a 14 KB README took about 21 ms a frame and a 228 KB one 110 ms.
+/// Drawn a block at a time, the 228 KB one took about 1.3 ms.
 pub struct Document {
     texts: Texts,
     selection: Selection,

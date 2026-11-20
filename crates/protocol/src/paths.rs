@@ -27,7 +27,7 @@ pub const ENV_TEST_GITHUB_API: &str = "ROUNDHOUSE_TEST_GITHUB_API";
 pub const DAEMON_NAME: &str = "roundhoused";
 
 /// What a stamped build's copy of the daemon is called, and so what its hub and the workers that hub starts are called
-/// wherever a process is named for its file. "Updating the app" in `docs/architecture.md` says why it's a plain file.
+/// wherever a process is named for its file. `docs/decisions/hub-runs-from-its-own-copy.md` says why it's a plain file.
 pub(crate) const HUB_COPY_NAME: &str = "Roundhouse Hub";
 
 /// The directory in the data directory where the hub keeps the token of each login it holds for an agent's account,
@@ -49,7 +49,7 @@ pub const WORKER_RECORD_FILE: &str = "worker.pid";
 pub const AGENTS_DIR: &str = "agents";
 /// Where a local worker that can outlive its hub listens for it, in its state directory. The worker runs in that
 /// directory, and both it and what connects to it name the socket relative to it, since the whole path can be longer
-/// than a socket's may be.
+/// than a socket's may be, which is 103 bytes on macOS.
 pub const WORKER_SOCKET_FILE: &str = "worker.sock";
 /// Longer than any ID a client or worker makes, which is a UUID.
 const MAX_FILE_NAME_ID_CHARS: usize = 64;

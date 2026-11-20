@@ -21,8 +21,8 @@ case "$(uname -s)" in
 esac
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-# The version, `0.1.<commits>`, as `docs/architecture.md` says. It refuses a shallow clone, which would count only the
-# commits it fetched.
+# The version, `0.1.<commits>`, as `docs/decisions/publish-every-merge.md` says. It refuses a shallow clone, which would
+# count only the commits it fetched.
 version() {
   [ "$(git -C "$ROOT" rev-parse --is-shallow-repository)" = false ] || {
     echo "error: this is a shallow clone, so its commits can't be counted for the version. Fetch the whole history" >&2
@@ -95,7 +95,8 @@ if [ "${BASH_SOURCE[0]}" = "$0" ]; then
   # Cargo writes to stderr, so the build is all that's printed.
   build_release "$1"
   # Which versions of the worker protocol its hub speaks, which only the build can say. Asked here, on the platform it
-  # was built for, since Windows and Linux releases are packaged and published on another runner.
+  # was built for, since Windows and Linux releases are packaged and published on another runner. *Unconfirmed:* that
+  # the daemon says it through a hidden command.
   if [ "$kind" = package ]; then
     "$1/roundhoused$EXE" worker-versions >"$1/worker-versions.json"
   fi

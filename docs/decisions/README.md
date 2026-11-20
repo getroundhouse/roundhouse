@@ -25,7 +25,13 @@ A decision record holds one large, one-off choice among real alternatives, such 
 | [publish-every-merge.md](publish-every-merge.md) | Every merge to `main` is published, as version `0.1.<commits on main>` |
 | [hub-runs-from-its-own-copy.md](hub-runs-from-its-own-copy.md) | A hub that a client starts runs from a copy of the daemon outside the app's install directory |
 | [no-strong-copyleft.md](no-strong-copyleft.md) | Nothing that ships is under GPL, AGPL or LGPL |
+| [gpui-not-web-view.md](gpui-not-web-view.md) | The desktop app is native Rust on GPUI, not a web view |
+| [gpui-kit.md](gpui-kit.md) | The apps are built on gpui-kit, Longbridge's component kit for GPUI |
 | [gpui-kit-copy.md](gpui-kit-copy.md) | gpui-kit and three parts of GPUI are built from copies in the repo |
+| [zed-ios-backend.md](zed-ios-backend.md) | The iPhone app is GPUI throughout, on Zed's iOS backend |
+| [transcript-on-gpui-kit.md](transcript-on-gpui-kit.md) | The transcript is drawn with GPUI and gpui-kit, not by a renderer of its own |
+| [transcript-list-of-its-own.md](transcript-list-of-its-own.md) | The transcript's rows are in a list of its own, not GPUI's |
+| [transcript-keeps-its-texts.md](transcript-keeps-its-texts.md) | The transcript draws its text from the kit's Markdown blocks and keeps the selection itself. *Unconfirmed* |
 
 ## Chosen, with no reason recorded
 

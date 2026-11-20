@@ -26,7 +26,8 @@ const OF_A_REPOSITORY: [&str; 13] = [
 /// `machine`, the environment of the machine the worker runs on, with none of [`OF_A_REPOSITORY`], whether a process
 /// would inherit it or `machine` gives it. Each workspace is a repository of its own, so a variable of one the worker
 /// was started in, as from inside a git hook or a shell with `GIT_DIR` exported, would point every workspace's git at
-/// that one, and the git of every agent, script and terminal in it.
+/// that one, and the git of every agent, script and terminal in it. *Unconfirmed:* taking them out of every process
+/// the worker starts, by git's own list.
 pub(crate) fn in_no_repository(machine: Environment) -> Environment {
     OF_A_REPOSITORY.into_iter().fold(machine, Environment::without)
 }

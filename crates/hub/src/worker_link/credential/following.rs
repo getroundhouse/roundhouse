@@ -21,7 +21,8 @@ pub(crate) const SET_WITHIN: Duration = Duration::from_secs(10);
 
 /// One link's following of what the hub has workers give their processes for github.com, which sends the worker each
 /// credential the hub has, in turn, each once the worker has answered the one before. It sends the newest each time,
-/// so one that changes twice while the worker applies a set is sent only the second after it.
+/// so one that changes twice while the worker applies a set is sent only the second after it. Each link follows on a
+/// task of its own, so a slow worker holds up only its own link.
 pub(crate) struct Following {
     link: Arc<WorkerLink>,
     credential: watch::Receiver<DefaultCredential>,

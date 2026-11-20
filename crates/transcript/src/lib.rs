@@ -1,7 +1,8 @@
 //! One session's transcript: its history by range and its live output, in a list of its own, with its Markdown drawn
 //! from the kit's Markdown blocks, and the rest laid out as plain text, with a selection the transcript keeps over its
-//! Markdown and most of the plain text its calls show. `docs/ui.md` has why it's built on those. Everything GPUI about
-//! a transcript is in here, and the data is in `client_core::session_log`, which knows nothing about rendering.
+//! Markdown and most of the plain text its calls show. `docs/decisions/transcript-on-gpui-kit.md` has why it's built
+//! on those, and names the records for the list and the texts. Everything GPUI about a transcript is in here, and the
+//! data is in `client_core::session_log`, which knows nothing about rendering.
 
 #![warn(clippy::wildcard_enum_match_arm)]
 

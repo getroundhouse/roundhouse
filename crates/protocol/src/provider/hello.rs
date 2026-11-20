@@ -117,6 +117,8 @@ pub enum Feature {
     Sizes,
     /// It answers `MakeBaseImage`, and makes instances `from` a base image.
     BaseImages,
+    /// It saves an instance's files and rolls them back, which an instance whose files don't survive a stop needs
+    /// before it can sleep. *Not built:* the requests that ask for either.
     Snapshots,
     #[serde(other)]
     Unknown,

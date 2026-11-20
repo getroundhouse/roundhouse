@@ -4,7 +4,8 @@
 //! to change. A `.gitignore` the repository keeps in `.context/` is kept instead, and decides what's ignored there. So
 //! `.context/attachments/` has one of its own, which also covers a prompt's files put there before any agent has
 //! started in the worktree, and so before `.context/` has its `.gitignore`. Files the repository tracks there stay
-//! tracked, though a new one needs `git add -f`. They're deleted with the worktree when it's archived. Nothing else in
+//! tracked, though a new one needs `git add -f`, and a search that honours `.gitignore` passes over them, such as
+//! ripgrep, which agents' own search uses. They're deleted with the worktree when it's archived. Nothing else in
 //! `.context/` is touched, since agents and the repository keep things of their own there.
 
 #[cfg(test)]

@@ -55,7 +55,7 @@ A README beside code says how to build, run or change that code, and agents keep
 | `docs/reference/codex-cli.md` | How Codex's app-server behaves on the wire, and how to probe it |
 | `docs/reference/antigravity-cli.md` | How Antigravity's ACP server behaves on the wire, and how the worker drives it |
 | `docs/reference/git.md` | What git does that took an experiment to find, or that more than one place in the code depends on |
-| `docs/reference/github.md` | How GitHub and `gh` behave, where more than one place in the code depends on it |
+| `docs/reference/github.md` | How GitHub and `gh` behave, where more than one place in the code depends on it, or it took an experiment to find |
 | `docs/reference/conformance.md` | How a version of an agent's CLI is checked against what Roundhouse needs of it, and how to play the scenarios that check it |
 | `docs/reference/performance.md` | How to measure the desktop app's speed, and what helps it meet the bars |
 | `docs/reference/inspiration.md` | What Conductor does, as a source of ideas |
@@ -66,10 +66,3 @@ A README beside code says how to build, run or change that code, and agents keep
 | `site/README.md` | How to preview the marketing site, and how it follows the app's look |
 | `tools/guide/README.md` | How the guide is organized and written, and how it's built and published |
 | `infra/README.md` | How the AWS account where RunsOn can run CI's jobs is set up, planned and applied, and how a job uses its runners. *Unconfirmed* |
-
-Two docs are from before the folders, and are being taken apart as `docs/standards/documentation.md` says. Both are the owner's.
-
-| Doc | What it holds until then |
-|---|---|
-| `docs/architecture.md` | What's left of it: the worker's git credential, what agents are told, updating the app, and providers |
-| `docs/ui.md` | Why the apps are built on GPUI and gpui-kit, how the transcript builds on the kit, and why the iOS app is on Zed's iOS backend |

@@ -118,7 +118,9 @@ pub(crate) async fn start_agent(
 /// The name of a file a run keeps, ending in `extension`. Named by run, because a replaced agent removes its own files
 /// as it finishes, which can be after its replacement has started, and a CLI whose `--mcp-config` file has gone doesn't
 /// start at all. It starts with the worktree's folder name, so a CLI given the files on its command line, as Claude's is,
-/// says which worktree it works in, and a listing of processes, such as `ps`'s, finds it by that name.
+/// says which worktree it works in, and a listing of processes, such as `ps`'s, finds it by that name. Codex and
+/// Antigravity are given the tools and their instructions over their protocols, so nothing on their command lines names
+/// the worktree.
 fn run_file_name(worktree: &Path, session_id: &SessionId, run: RunId, extension: &str) -> String {
     let name = format!("{session_id}-{run}.{extension}");
     match worktree.file_name() {

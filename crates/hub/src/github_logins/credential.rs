@@ -1,7 +1,8 @@
 //! What every worker gives the processes it starts for github.com, worked out from the default GitHub account in one
-//! place, under the logins' lock, and kept as it changes for each worker's link and the check of reach to follow, as
-//! "The worker's git credential" in `docs/architecture.md` says, and recorded without its token on the hub's settings,
-//! for every client to show.
+//! place, under the logins' lock, and kept as it changes for each worker's link and the check of reach to follow, and
+//! recorded without its token on the hub's settings, for every client to show.
+//! `docs/decisions/git-credential-set-by-hub.md` says why the hub sets it, and `docs/principles/outside-systems.md`
+//! why a default that can't be used blocks.
 
 use protocol::client::ApiError;
 use protocol::model::{
@@ -24,7 +25,8 @@ const INSTALLATION_USERNAME: &str = "x-access-token";
 impl GithubLogins {
     /// What workers are to give their processes for github.com, from now on, as it changes, with who GitHub knows the
     /// default as, as [`DefaultCredential`] says. It changes under the logins' lock, as each change to the logins is
-    /// made, so it changes in the order they were made.
+    /// made, so it changes in the order they were made. Each worker's link follows it on a task of its own, so nothing
+    /// is sent to a worker under the lock, and no change to the logins waits on a worker. *Unconfirmed:* a `watch`.
     pub(crate) fn git_credential(&self) -> watch::Receiver<DefaultCredential> {
         self.credential.subscribe()
     }
@@ -133,7 +135,7 @@ impl GithubLogins {
     /// token while its login can be used, with its commit identity, an installation's bot, or as GitHub's profile of a
     /// token's or a sign-in's user said, once the hub has asked, and otherwise a block that says what to do, and why,
     /// never the machine's own in its place. So is a default the hub can't read, one whose profile it can't read, and an
-    /// installation whose app's record it can't read.
+    /// installation whose app's record it can't read. *Unconfirmed:* blocking for what the hub can't read.
     fn worked_out(&self, files: &Locked<'_, GithubLogin>, now_ms: i64) -> DefaultCredential {
         let unread = |e: &dyn std::fmt::Display| {
             reason(

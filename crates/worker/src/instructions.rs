@@ -1,9 +1,13 @@
-//! What every agent is told about working in Roundhouse, and each of its subagents, in their system prompts, as
-//! `docs/architecture.md` says under "What agents are told". It's written for any agent, and each adapter passes it to
-//! its own. It tells an agent when to use the worker's tools rather than `gh`, as well as the tool server's own
-//! instructions, in `crate::tools`, do, since those are a section about the server, which a subagent sees only after its
-//! first tool call. It isn't Markdown, since the checks pass over a change that touches only Markdown, and this is built
-//! into the worker.
+//! What every agent is told about working in Roundhouse, and each of its subagents, in their system prompts. It's
+//! written for any agent, and each adapter passes it to its own. It tells an agent when to use the worker's tools
+//! rather than `gh`, as well as the tool server's own instructions, in `crate::tools`, do, since those are a section
+//! about the server, which a subagent sees only after its first tool call. It isn't Markdown, since the checks pass over
+//! a change that touches only Markdown, and this is built into the worker.
+//!
+//! `docs/principles/agents.md` has the rule this text is worded by, under "The worker's tools". Rules in the spec say
+//! what an agent is told, such as to show an image from `.context/`, in `docs/spec/chats.md`, to wait on a pull request
+//! with the tools, in `docs/spec/workspaces.md`, and when to propose, in `docs/spec/proposals.md`, so a change to this
+//! text may change a rule there.
 
 use protocol::model::AgentKind;
 
@@ -12,7 +16,8 @@ const FOR_EVERY_AGENT: &str = include_str!("instructions.txt");
 
 /// What every agent is told of the worker's tools, worded to hold whether or not it has them, since a chat keeps the
 /// system prompt it was first given until it's compacted, and the tools are given at each launch. It holds for every
-/// version of the tool server, whose tools differ by the version the agent's CLI speaks.
+/// version of the tool server, whose tools differ by the version of MCP the agent's CLI speaks. So it doesn't say which
+/// pull requests the tools cover, and leaves that to the server's own instructions.
 const OF_THE_TOOLS: &str = include_str!("instructions_tools.txt");
 
 /// What an agent that hears how a tool call it left in the background ended is told of waiting with the tools. One that

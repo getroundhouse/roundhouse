@@ -16,7 +16,7 @@
   &nbsp;·&nbsp; <a href="#get-started">Get started</a>
   &nbsp;·&nbsp; <a href="docs/guide/README.md">Guide</a>
   &nbsp;·&nbsp; <a href="docs/spec/README.md">Spec</a>
-  &nbsp;·&nbsp; <a href="docs/architecture.md">Architecture</a>
+  &nbsp;·&nbsp; <a href="docs/reference/layout.md">Architecture</a>
 </p>
 
 ![A workspace in Roundhouse: its chat in the middle, the other workspaces on the left, and its files and pull request on the right](docs/spec/screens/conversation.png)
@@ -147,7 +147,7 @@ What's left is on GitHub: [issues](https://github.com/getroundhouse/roundhouse/i
 - **A worker does the work,** in a process of its own, one per workspace.
 - **A provider gives a hub somewhere to run workers.** This Mac is one, and no provider is special, so a workspace in a VM or a cloud sandbox changes where its worker runs and nothing else.
 
-[`docs/architecture.md`](docs/architecture.md) has the whole design, with what isn't built marked, and [`docs/ui.md`](docs/ui.md) says why the app is on GPUI.
+[`docs/reference/layout.md`](docs/reference/layout.md) has a map of the parts, [`docs/principles/`](docs/principles/) the rules they follow, with what isn't built marked, and [`docs/decisions/`](docs/decisions/README.md) why each large choice was made, such as [building on GPUI](docs/decisions/gpui-not-web-view.md).
 
 ## Working on Roundhouse
 

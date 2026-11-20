@@ -17,7 +17,8 @@ const CONFIG: &str = "config";
 /// Who commits are by, which the git config includes only in a repository on github.com, and which is there only while
 /// the credential has a commit identity. The git config names it by this alone, which git reads as a file beside it.
 const IDENTITY: &str = "identity";
-/// What the credential helper answers with, which is the credential as the hub sent it.
+/// What the credential helper answers with, which is the credential as the hub sent it. A file of its own, so the token
+/// isn't in git's config, where `git config --list` would print it. *Unconfirmed.*
 pub(super) const ANSWER: &str = "credential.json";
 /// The `gh` config directory every process is given, and the file in it where `gh` keeps its logins.
 const GH: &str = "gh";
@@ -75,7 +76,7 @@ impl Files {
 
     /// What a process is given on a machine whose own is `machine`, so its `git` and `gh` read the files: the git
     /// config as an `include.path` given in `GIT_CONFIG_*`, which replaces any of those the worker inherited, and the
-    /// `gh` directory as `GH_CONFIG_DIR`.
+    /// `gh` directory as `GH_CONFIG_DIR`. *Unconfirmed:* replacing what it inherited.
     pub(super) fn environment(&self, machine: &Environment) -> Environment {
         GH_TOKENS
             .into_iter()
@@ -90,7 +91,8 @@ impl Files {
     /// that sends git to them. Each is replaced whole, by renaming a new one over it, so a process reading one meanwhile
     /// reads the last or the next, never part of either. Who commits are by is removed for a credential without a
     /// commit identity, and for a block, and git passes over an include of a file that isn't there. None is synced,
-    /// since the worker removes them all as it starts, so nothing reads what a power cut leaves.
+    /// since the worker removes them all as it starts, so nothing reads what a power cut leaves. *Unconfirmed:* not
+    /// syncing.
     pub(super) fn write(&self, handed: &Handed) -> io::Result<()> {
         let gh = self.dir.join(GH);
         private_files::create_dir_all(&gh)?;
@@ -137,7 +139,8 @@ impl Files {
     /// GitLab or GitHub Enterprise, commits as its own config or the machine's says. So does every repository under a
     /// git before 2.36, the first to know `hasconfig:remote.*.url`, since git takes a condition it doesn't know as
     /// false. It's the same for every account and block, since what the helper answers says which, and whether who
-    /// commits are by is there says whether there's anyone.
+    /// commits are by is there says whether there's anyone. `docs/reference/git.md` has what git does with the
+    /// condition. *Unconfirmed:* any remote counting, not only `origin`, and what a git before 2.36 does.
     fn config(&self) -> Vec<u8> {
         let words =
             self.helper.iter().map(|word| word.as_encoded_bytes()).chain([self.dir.as_os_str().as_encoded_bytes()]);
@@ -180,7 +183,8 @@ fn identity_config(identity: &GitIdentity) -> Vec<u8> {
 }
 
 /// `gh`'s logins, as `gh` writes them with the token in the file, logged in to github.com as `credential`. Each value
-/// is quoted as JSON is, which YAML reads the same.
+/// is quoted as JSON is, which YAML reads the same. Its user is the username git gives GitHub, so for an app's
+/// installation `gh` is logged in as `x-access-token`, and not as the app's bot. *Unconfirmed.*
 fn hosts(credential: &GitCredential) -> String {
     let quoted = |text: &str| serde_json::Value::from(text).to_string();
     let (user, token) = (quoted(credential.username.as_str()), quoted(credential.token.as_str()));

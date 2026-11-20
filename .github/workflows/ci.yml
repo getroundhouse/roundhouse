@@ -85,6 +85,7 @@ jobs:
             kit=false
           fi
           # What the worker protocol's versions are defined in, and the check and what it reads them with.
+          # *Unconfirmed:* that the check runs for a change to these alone.
           if $based && git diff --quiet FETCH_HEAD HEAD -- \
             crates/protocol/src/worker crates/update-feed tools/update-steps \
             apps/desktop/src/updates/update-feed.url; then
@@ -295,9 +296,10 @@ jobs:
           key: ${{ steps.cache.outputs.cache-primary-key }}
 
   # Holds a break in the worker protocol back until each platform whose apps step has published a release with the last
-  # one, so an app with that one's workers at work has a release to step to, as "Updating the app" in
-  # docs/architecture.md says. The one check that reads something from outside the repo, the published feeds, so it runs
-  # only for a change to what it reads. A PR's run that passed holds for the queue too, since a feed only gets newer.
+  # one, so an app with that one's workers at work has a release to step to, as "A break in the worker protocol" in
+  # docs/standards/merging.md says. The one check that reads something from outside the repo, the published feeds, so it
+  # runs only for a change to what it reads. A PR's run that passed holds for the queue too, since a feed only gets
+  # newer.
   steps:
     needs: changes
     if: needs.changes.outputs.steps == 'true' && github.event_name != 'push'

@@ -4,7 +4,7 @@
 //! from when they're sent, a plan to approve, a compaction's summary, the prose a call shows of its own, such as a
 //! subagent's report, what a call's row nests, such as a subagent's words, and what the subagent tab says its subagent
 //! was asked and reported, above and below its rows. They're also the plain text a call shows, such as a command and
-//! what it printed, which `plain` draws. `docs/ui.md` has why.
+//! what it printed, which `plain` draws. `docs/decisions/transcript-keeps-its-texts.md` has why.
 //!
 //! The kit parses the Markdown and draws each block as its text view would, through its `editor_host`. Each
 //! paragraph, heading, code block and table cell is a leaf, keyed by its place in the text. The kit says where it drew

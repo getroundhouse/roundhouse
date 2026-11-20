@@ -3,6 +3,11 @@
 //! lets go of what's selected once a row holding either end of it isn't painted. A plain text is one leaf, what it
 //! says as find searches it, which a row lays out as it likes: whole, or in `Pieces`, such as a line of what a command
 //! printed at a time. What's selected is painted behind what draws it, as `Pieces` says.
+//!
+//! It isn't drawn as the kit's code blocks, which would bring the kit's geometry and its painting of what's selected.
+//! Two things a call shows can't be the kit's blocks: output too long to draw whole, which `crate::log_block` draws a
+//! line at a time as it comes into sight, and a file's numbered lines, with their gutter and tints. The transcript has
+//! to lay those out itself, so it lays out all its plain text one way.
 
 use gpui_kit::base::Theme;
 use gpui_kit::{
