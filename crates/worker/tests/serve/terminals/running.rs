@@ -217,13 +217,14 @@ async fn stopping_a_terminal_again_changes_nothing_and_it_shows_nothing_after() 
 const SHORT_STOP_GRACE: worker::Timers =
     worker::Timers { terminal_stop_grace: Duration::from_millis(200), ..worker::Timers::FOR_TESTS };
 
-/// Closing a terminal's tab ends its shell, and the job it runs, even one that doesn't end when it's hung up on.
+/// Closing a terminal's tab ends its shell, and the job it runs, even one that doesn't end when it's hung up on, and
+/// even while the shell runs something else in front as it exits, as its exit trap's `sleep` is here.
 #[tokio::test]
 async fn stopping_a_terminal_ends_its_shell_and_the_job_it_runs() {
     let dir = tempfile::tempdir().unwrap();
     let mut hub = Hub::start_with(dir.path(), SHORT_STOP_GRACE).await;
     hub.open("t", dir.path()).await;
-    hub.type_in("t", r#"echo "shell $$""#).await;
+    hub.type_in("t", r#"trap "sleep 60" EXIT; echo "shell $$""#).await;
     let shell = hub.until_pid("shell ").await;
     hub.type_in("t", r#"sh -c 'trap "" HUP; echo "job $$"; exec sleep 60'"#).await;
     let job = hub.until_pid("job ").await;
