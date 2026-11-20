@@ -1,6 +1,6 @@
 # While a machine's own `gh` login is the default, the hub reads GitHub with `gh`'s token
 
-**Status:** Decided.
+**Status:** Replaced by [github-identity-held-by-hub.md](github-identity-held-by-hub.md).
 **First recorded:** 2026-11-17, in #1616.
 
 Someone who uses Roundhouse locally with only `gh` logged in has added no GitHub account. Each machine's own login is then the default, and the hub has no token of its own to read GitHub with. So the worker that finds a machine's `gh` login hands the hub the token `gh` uses, and the hub reads GitHub with it. The person sees their pull requests with no account added.

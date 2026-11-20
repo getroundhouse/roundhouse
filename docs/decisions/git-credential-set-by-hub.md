@@ -1,6 +1,6 @@
 # The hub sets the GitHub credential for every process a worker starts
 
-**Status:** Decided.
+**Status:** Decided. Its case of each machine's own login being the default is replaced by [github-identity-held-by-hub.md](github-identity-held-by-hub.md).
 **First recorded:** 2026-11-16, in #1517.
 
 Agents push and open pull requests with whatever credential git and `gh` find. So the hub decides what they find for github.com: the credential of the hub's default GitHub account. The hub sends it to each worker with `GitCredentialSet`, when the worker's link opens and whenever the credential changes. The worker gives it to every process it starts.
