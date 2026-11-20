@@ -1,5 +1,5 @@
 //! One of the agent's own requests to its model, from the `message_start` the CLI passes on as the model starts to
-//! answer: how its input met the API's cache. `docs/claude-cli.md` has how the CLI says it.
+//! answer: how its input met the API's cache. `docs/reference/claude-cli.md` has how the CLI says it.
 
 use protocol::model::{CacheRequest, CacheTtl, ModelName};
 use serde_json::Value;

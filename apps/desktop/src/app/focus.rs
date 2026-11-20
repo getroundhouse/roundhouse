@@ -1,6 +1,6 @@
 //! Where focus goes once nothing has it, as when what had it goes away: the composer microphone's card, once the
 //! microphone dictates or is hidden, or what closing Settings gives focus back to, if that went meanwhile. The window's
-//! keys reach nothing without it, as "Focus stays on something that's drawn" in `docs/gpui.md` says.
+//! keys reach nothing without it, as "Focus stays on something that's drawn" in `docs/standards/gpui.md` says.
 
 use gpui_kit::{Context, Focusable as _, Window};
 

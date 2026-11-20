@@ -1,5 +1,5 @@
 //! Paints a terminal's frame as a grid of cells, inside one layer, with each cell's character painted as a glyph at its
-//! column, as `docs/performance.md` says makes a terminal fast to draw. It also says where on it the pointer is pressed
+//! column, as `docs/reference/performance.md` says makes a terminal fast to draw. It also says where on it the pointer is pressed
 //! and dragged, in cells, which selects.
 
 use std::cell::{Cell, RefCell};

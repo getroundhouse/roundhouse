@@ -1,5 +1,5 @@
 //! How full the CLI's context is, from what it answers `get_context_usage`, and how much each model holds, from its
-//! `result` lines. `docs/claude-cli.md` has how it behaves.
+//! `result` lines. `docs/reference/claude-cli.md` has how it behaves.
 
 use protocol::model::{ContextPart, ContextPartKind, ContextUsage, MaxSetBy, ModelName};
 use protocol::short_text::start_of;

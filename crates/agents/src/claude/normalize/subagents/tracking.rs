@@ -16,7 +16,7 @@ pub(in super::super) struct Subagents {
     /// its task out, which can be after it ends.
     pub(super) by_task: HashMap<TaskId, SubagentId>,
     /// The subagent each call started, for a line that names only its parent, as a streamed message may. Every
-    /// subagent's other lines named the task too, on 2.1.319 to 2.1.325, as `docs/claude-cli.md` says.
+    /// subagent's other lines named the task too, on 2.1.319 to 2.1.325, as `docs/reference/claude-cli.md` says.
     pub(super) by_call: HashMap<ToolUseId, SubagentId>,
     /// Those in the background, which carry on after the turn ends.
     pub(super) in_background: HashSet<SubagentId>,
@@ -91,7 +91,7 @@ impl Subagents {
 }
 
 /// The CLI's count of tokens for the task this line is about, if it has one, which for a subagent's is about what its
-/// conversation holds, as `docs/claude-cli.md` says.
+/// conversation holds, as `docs/reference/claude-cli.md` says.
 fn context_tokens(value: &Value) -> Option<u64> {
     value.get("usage")?.get("total_tokens")?.as_u64()
 }

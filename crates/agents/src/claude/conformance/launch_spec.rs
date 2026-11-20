@@ -5,7 +5,7 @@ use protocol::worker::AgentSpec;
 use std::path::Path;
 
 /// The cheapest model, by its full ID, since the CLI answers a chat in plan mode on the alias `haiku` with Sonnet, as
-/// `docs/claude-cli.md` says. The scripted model answers to any name, and says it's the one asked for.
+/// `docs/reference/claude-cli.md` says. The scripted model answers to any name, and says it's the one asked for.
 pub(super) const MODEL: ModelName = ModelName::named("claude-haiku-5-5");
 
 /// What a scenario's process for `run` is launched with: the chat's mode, the cheapest model, and the least effort.

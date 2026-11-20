@@ -3,7 +3,7 @@
 //! views lay out by is a [`Sliding`], kept where they can all read it. A scroll to a place that can move meanwhile
 //! is a [`Scrolling`], which says what share of the way is left rather than where to be, since a slide between two
 //! values set as it starts can't follow a place that moves. Each skips the motion under Reduce Motion, and asks for
-//! frames only while it moves. What scrolls on under a pointer held past its edge is [`ScrollingOn`]. `docs/gpui.md`
+//! frames only while it moves. What scrolls on under a pointer held past its edge is [`ScrollingOn`]. `docs/standards/gpui.md`
 //! has the rules.
 
 mod edge;

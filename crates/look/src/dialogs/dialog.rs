@@ -1,6 +1,6 @@
 //! The app's dialog: a title, what it says under it, what's in it and its answers along its foot, raised over the
 //! window, which it dims. It holds the kit's dialog and draws with it, but gives none of the kit's or GPUI's styling to
-//! whoever makes it, so every dialog is laid out the same. `docs/component-library.md` says why, and how a component's
+//! whoever makes it, so every dialog is laid out the same. `docs/standards/components.md` says why, and how a component's
 //! API is laid out.
 
 use std::rc::Rc;

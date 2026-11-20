@@ -1,5 +1,5 @@
 //! Drives the user's installed `claude` CLI over its stream-json stdio protocol. This is the same
-//! protocol the Agent SDK uses, so there is no sidecar. See `docs/claude-cli.md`.
+//! protocol the Agent SDK uses, so there is no sidecar. See `docs/reference/claude-cli.md`.
 
 mod account;
 mod approvals;

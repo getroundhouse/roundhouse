@@ -7,7 +7,7 @@ use super::{AT_ONCE, Store, Text, TextKey};
 
 /// How long the short texts whose blocks are kept can come to, in bytes of what they say, but for those drawn in this
 /// frame. A text's blocks, with the kit's layout of them once they're drawn, take about 20 bytes for each of its own,
-/// so this is about 2.5 MB. `docs/performance.md` has how that was measured.
+/// so this is about 2.5 MB. `docs/reference/performance.md` has how that was measured.
 const BLOCKS_KEPT: usize = 128 * 1024;
 /// How many short texts are parsed between each look at whether too many blocks are kept.
 const PARSES_A_LOOK: u32 = 8;

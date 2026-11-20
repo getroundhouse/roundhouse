@@ -19,7 +19,7 @@ use std::sync::Arc;
 
 /// The most of a text that's parsed where it's drawn: all of it, or what's parsed again of one that goes on. Parsing
 /// takes about 0.1 ms a KB of prose on the main thread, and 0.35 ms a KB of a list, so this takes under 1.5 ms, and
-/// more is parsed on another thread. `docs/performance.md` has how that was measured.
+/// more is parsed on another thread. `docs/reference/performance.md` has how that was measured.
 pub(super) const AT_ONCE: usize = 4 * 1024;
 
 /// What's being drawn, such as an event's row: the texts it's drawn so far, and how many of them each of its blocks

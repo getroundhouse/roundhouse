@@ -5,7 +5,7 @@
 //! The app draws the diff itself, rather than with the kit's `Diff`, which shows only the lines in git's patch, and
 //! keeps what's open, where it's scrolled to and what's selected with what it draws, so a diff loaded again lost them.
 //! Here what's open of each file, and where the list is, are this view's, and the lines git left out are read from
-//! the file as it was. `docs/gpui.md` has why.
+//! the file as it was. `docs/standards/gpui.md` has why.
 
 pub use draft::{Draft, LineAt};
 pub(crate) use selection::KEY_CONTEXT;

@@ -35,7 +35,7 @@ So a replay fails when a scenario's check doesn't hold of what the adapter made 
 
 ## Claude's binding
 
-`claude::conformance` has Claude's scripted model, a stand-in for the Messages API, each scenario's script, and what a replay needs to know of stream-json. A trial plays on Haiku, the cheapest model, by its full ID, since by its alias a plan comes from Sonnet, as the plan-mode row of `docs/claude-cli.md` says, and at the lowest effort.
+`claude::conformance` has Claude's scripted model, a stand-in for the Messages API, each scenario's script, and what a replay needs to know of stream-json. A trial plays on Haiku, the cheapest model, by its full ID, since by its alias a plan comes from Sonnet, as the plan-mode row of `docs/reference/claude-cli.md` says, and at the lowest effort.
 
 A scripted trial's CLI is kept from this machine:
 
@@ -59,4 +59,4 @@ Scripted trials use a scratch project, a scratch `HOME`, `GOOGLE_GEMINI_BASE_URL
 
 ## After a CLI upgrade
 
-Play the upgraded agent's scenarios against its scripted and real model with `--agent claude`, `--agent codex` or `--agent antigravity`. Record native behavior changes in `docs/claude-cli.md`, `docs/codex-cli.md` or `docs/antigravity-cli.md`, and adapt the binding when Roundhouse should follow them. For a Claude upgrade, also run `tools/smoke/capture_claude_fixture.py`, since its other fixtures come from that tool. Once the scenarios pass, `--save` refreshes synthetic conformance fixtures, and `cargo test -p agents` checks all three adapters without a paid model.
+Play the upgraded agent's scenarios against its scripted and real model with `--agent claude`, `--agent codex` or `--agent antigravity`. Record native behavior changes in `docs/reference/claude-cli.md`, `docs/reference/codex-cli.md` or `docs/reference/antigravity-cli.md`, and adapt the binding when Roundhouse should follow them. For a Claude upgrade, also run `tools/smoke/capture_claude_fixture.py`, since its other fixtures come from that tool. Once the scenarios pass, `--save` refreshes synthetic conformance fixtures, and `cargo test -p agents` checks all three adapters without a paid model.

@@ -1,5 +1,5 @@
 //! Whose account the CLI is logged in to, from `claude auth status --json`, which answers from what's on the machine
-//! and spends nothing. `docs/claude-cli.md` has what it says. Under a login its hub holds, it says only that there's a
+//! and spends nothing. `docs/reference/claude-cli.md` has what it says. Under a login its hub holds, it says only that there's a
 //! token, not whose, so the account has no ID here and its hub names it.
 
 use std::path::{Path, PathBuf};
@@ -150,7 +150,7 @@ mod tests {
         assert_eq!(account.id, None, "a login that names nobody can't be told from another");
     }
 
-    /// What the CLI says under a token `claude setup-token` made, as `docs/claude-cli.md` records.
+    /// What the CLI says under a token `claude setup-token` made, as `docs/reference/claude-cli.md` records.
     #[test]
     fn a_token_login_is_logged_in_and_says_how_but_not_who() {
         let status = json!({"loggedIn": true, "authMethod": "oauth_token", "apiProvider": "firstParty"});

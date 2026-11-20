@@ -69,7 +69,7 @@ fn build(name: &str) -> PathBuf {
     {
         return path;
     }
-    // With the whole workspace's features, as `docs/rust.md` says.
+    // With the whole workspace's features, as `docs/standards/testing.md` says.
     let output = process::testing::workspace_build()
         .args(["--example", name, "--locked", "--message-format=json"])
         .output()

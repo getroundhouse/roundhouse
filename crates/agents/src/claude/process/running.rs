@@ -154,7 +154,7 @@ async fn answered(shared: &Shared, asked: Asked) -> Result<Value, AgentError> {
     }
 }
 
-/// How the CLI refuses a request it doesn't know, as `docs/claude-cli.md` records and a contract test checks.
+/// How the CLI refuses a request it doesn't know, as `docs/reference/claude-cli.md` records and a contract test checks.
 const UNKNOWN_REQUEST: &str = "Unsupported control request subtype";
 
 /// What the CLI's refusal of a control request was, in its own words: a request it doesn't know, or one it said no

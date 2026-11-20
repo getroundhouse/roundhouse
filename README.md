@@ -162,7 +162,7 @@ cargo test --workspace     # Also the transcript and the desktop app's UI tests
 A build from a checkout has a hub and data of its own, in `.context/dev`, and can't reach the installed app's. So Roundhouse can be worked on from inside Roundhouse, which is how it's built: most of its code is written by agents, each in a workspace here.
 
 - [`AGENTS.md`](AGENTS.md) has every command, and the rules for working here, for people as much as for agents.
-- [`docs/documentation.md`](docs/documentation.md) lists the docs, and says what goes in a doc and what goes on GitHub.
+- [`docs/README.md`](docs/README.md) lists the docs, and [`docs/standards/documentation.md`](docs/standards/documentation.md) says what goes in a doc and what goes on GitHub.
 - [`docs/spec/`](docs/spec/README.md) is what the product does. The app draws every screen in it from made-up data, and a test fails when one no longer matches its picture.
 
 ### Installing a build of your own
@@ -179,7 +179,7 @@ Anything recorded since the copy is lost.
 
 ## Contributing
 
-Issues are welcome: a bug, with the build shown at the bottom of the sidebar or in About Roundhouse, or something that's missing. Before a pull request that's more than a small fix, open an issue, since what the product does and how it looks are settled there first, as [`docs/documentation.md`](docs/documentation.md) says. [`docs/pull-requests.md`](docs/pull-requests.md) says how a pull request is written.
+Issues are welcome: a bug, with the build shown at the bottom of the sidebar or in About Roundhouse, or something that's missing. Before a pull request that's more than a small fix, open an issue, since what the product does and how it looks are settled there first, as [`docs/standards/documentation.md`](docs/standards/documentation.md) says. [`docs/standards/pull-requests.md`](docs/standards/pull-requests.md) says how a pull request is written.
 
 ## License
 

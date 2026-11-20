@@ -1,6 +1,6 @@
 //! Watches `brain/<sessionId>/.system_generated/logs/transcript.jsonl` for between-turn reactive wakeups.
 //!
-//! Workaround (`docs/reviews.md`): `agy` 1.5.9 buffers between-turn updates and parks permission requests until a
+//! Workaround (`docs/standards/reviews.md`): `agy` 1.5.9 buffers between-turn updates and parks permission requests until a
 //! `session/prompt` arrives, so this module sends a drain `session/prompt` and cancels it on `user_message_chunk` once
 //! finished (`WakeupDelivery::BufferedDrain`). `agy` 1.5.12+ streams between-turn updates, permission requests and
 //! elicitations asynchronously while idle, but still emits no ACP turn-end notification, so this module watches

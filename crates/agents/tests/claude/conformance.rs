@@ -1,7 +1,7 @@
 //! The conformance scenarios, replayed through the adapter's own process code from what the CLI said when they were
 //! played on the scripted model, in `../fixtures/claude/`, so their checks run without the CLI. Then the replay itself,
 //! on captures changed so the adapter no longer does what they say. `cargo run -p agents --example conformance --
-//! --save` captures them again, as `docs/conformance.md` says.
+//! --save` captures them again, as `docs/reference/conformance.md` says.
 
 #![cfg(test)]
 

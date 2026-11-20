@@ -1,5 +1,5 @@
 //! What the CLI calls each approval mode: what `--permission-mode` and `set_permission_mode` take, and what `init` and
-//! `status` report. `docs/claude-cli.md` has how it behaves.
+//! `status` report. `docs/reference/claude-cli.md` has how it behaves.
 
 use protocol::capability::approvals::ApprovalMode;
 

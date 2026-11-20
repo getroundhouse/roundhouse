@@ -1,7 +1,7 @@
 //! Runs one `claude` process and supervises it across its whole life.
 //!
 //! The flags, the input format and every behavior relied on here were checked against the real CLI.
-//! `docs/claude-cli.md` has the results, with the version each was read from.
+//! `docs/reference/claude-cli.md` has the results, with the version each was read from.
 
 #[cfg(test)]
 use crate::AgentError;

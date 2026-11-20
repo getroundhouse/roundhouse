@@ -4,7 +4,7 @@
 //! tell, and its parts never say it does less than it does.
 //!
 //! An agent's own reading of its commands isn't used. Codex's, the only one an agent sends, sums a command up for
-//! Codex's own interface and leaves out what it does beyond that, as "What a command does" in `docs/codex-cli.md`
+//! Codex's own interface and leaves out what it does beyond that, as "What a command does" in `docs/reference/codex-cli.md`
 //! says. What no reading of a command's words can see is what its shell or its program is set up to do, such as a
 //! function in a shell's startup file, or a flag in `rg`'s config file.
 

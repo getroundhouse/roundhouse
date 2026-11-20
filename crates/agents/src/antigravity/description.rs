@@ -5,7 +5,7 @@ use protocol::model::{AgentDescription, AgentKind, ModelName};
 
 // A compiled snapshot of `agy` 1.5.10's native catalog: the Gemini models it offers under both Google OAuth and
 // `gemini-api-key`, in its order, then the Claude models it offers only under Google OAuth. Refresh it with the CLI
-// observations in docs/antigravity-cli.md.
+// observations in docs/reference/antigravity-cli.md.
 const MODELS: [(&str, &str, &[Effort], Effort); 7] = [
     // `agy models` lists Neon's High level first.
     ("gemini-4-neon", "Gemini 4 Neon", &[Effort::Low, Effort::Medium, Effort::High, Effort::Xhigh], Effort::High),

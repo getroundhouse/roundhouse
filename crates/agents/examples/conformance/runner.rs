@@ -9,8 +9,8 @@
 //! machine's login, or under `ROUNDHOUSE_CONFORMANCE_TOKEN`, a token `claude setup-token` made, with a config of its
 //! own. `--save` keeps each passing scripted trial's fixture for `cargo test` to replay, and `--out` keeps every
 //! scripted trial's in `DIR`, with what the scripted model was asked, to see what happened in one that failed. A
-//! fixture's IDs are numbered and its times zeroed, as `docs/conformance.md` says. One on the real model is never
-//! kept. `docs/conformance.md` says more.
+//! fixture's IDs are numbered and its times zeroed, as `docs/reference/conformance.md` says. One on the real model is never
+//! kept. `docs/reference/conformance.md` says more.
 
 #![expect(
     clippy::unwrap_used,
