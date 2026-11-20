@@ -1,67 +1,17 @@
 //! The daemons these tests start: building them, and the environment they run in.
 
-use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
 use process::testing::WholeEnvironment;
 
-/// The binaries live in other packages, so `cargo test -p desktop` wouldn't otherwise rebuild them. They're in the
-/// folder Cargo says it built the hub in, with the examples in its `examples`. Where it keeps this test binary, and so
-/// what's near it, isn't something Cargo promises, and 1.100 moved it.
+/// The binaries live in other packages, so `cargo test -p desktop` wouldn't otherwise rebuild them.
 pub(crate) fn binaries() -> &'static PathBuf {
     static DIR: OnceLock<PathBuf> = OnceLock::new();
     DIR.get_or_init(|| {
-        // The build says the folder here, for the tests a nextest run starts after it, which don't build.
-        let said = Path::new(env!("CARGO_TARGET_TMPDIR")).join("ui-binaries.dir");
-        once_per_run("ui-binaries", || std::fs::write(&said, build_binaries()).unwrap());
-        PathBuf::from(std::fs::read_to_string(&said).unwrap())
+        let tmp = Path::new(env!("CARGO_TARGET_TMPDIR"));
+        process::testing::the_hub_and_examples(tmp, "ui-binaries", &["fake_claude", "stand_in_hub"])
     })
-}
-
-/// Builds the hub and the examples, with the whole workspace's features as `docs/rust.md` says, and answers the folder
-/// Cargo says it put the hub in. Naming the examples in the same build is what gives the hub those features too.
-fn build_binaries() -> String {
-    let output = process::testing::workspace_build()
-        .args([
-            "--bin",
-            "roundhoused",
-            "--example",
-            "fake_claude",
-            "--example",
-            "stand_in_hub",
-            "--message-format=json-render-diagnostics",
-        ])
-        .output()
-        .unwrap();
-    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
-    let hub = output
-        .stdout
-        .split(|&byte| byte == b'\n')
-        .filter_map(|line| serde_json::from_slice::<serde_json::Value>(line).ok())
-        .find(|message| message["reason"] == "compiler-artifact" && message["target"]["name"] == "roundhoused")
-        .and_then(|message| message["executable"].as_str().map(PathBuf::from))
-        .expect("Cargo says where it built the hub");
-    hub.parent().unwrap().to_str().unwrap().to_string()
-}
-
-/// Builds once per nextest run, which starts a process for each test, so the `OnceLock` above alone would run cargo
-/// for every test, and those take turns on its lock on the target directory. Under `cargo test`, once per process.
-/// `name` names the lock, and the file that says which run built it.
-fn once_per_run(name: &str, build: impl FnOnce()) {
-    let dir = Path::new(env!("CARGO_TARGET_TMPDIR"));
-    // Cargo makes it only as it compiles a test, and the build writes what it found there, nextest or not.
-    std::fs::create_dir_all(dir).unwrap();
-    let Ok(run) = std::env::var("NEXTEST_RUN_ID") else { return build() };
-    let lock = File::create(dir.join(format!("{name}.lock"))).unwrap();
-    // Let go as it drops, even in a panic.
-    lock.lock().unwrap();
-    let last_run = dir.join(format!("{name}.run"));
-    if std::fs::read_to_string(&last_run).is_ok_and(|last| last == run) {
-        return;
-    }
-    build();
-    std::fs::write(last_run, run).unwrap();
 }
 
 /// The whole environment of every daemon these tests start, whether a test starts it or the app does: what

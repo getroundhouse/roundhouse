@@ -1,7 +1,7 @@
-//! What tests of the crates that start processes share: building a program a test runs, the whole environment a
-//! process a test starts runs in, git for a test's repositories and for the code under test, the repository a test's
-//! hub works in, what a test binary keeps for every process of its build, a `gh` that's logged in to nothing, and
-//! whether a process is still running.
+//! What tests of the crates that start processes share: building a program a test runs, such as the hub, the whole
+//! environment a process a test starts runs in, git for a test's repositories and for the code under test, the
+//! repository a test's hub works in, what a test binary keeps for every process of its build, a `gh` that's logged in
+//! to nothing, and whether a process is still running.
 
 mod git;
 mod kept;
@@ -17,4 +17,4 @@ pub use logged_out_gh::logged_out_gh;
 pub use repository::repository_with_a_commit;
 pub use running::is_running;
 pub use whole_environment::WholeEnvironment;
-pub use workspace_build::workspace_build;
+pub use workspace_build::{once_per_run, the_hub_and_examples, workspace_build};
