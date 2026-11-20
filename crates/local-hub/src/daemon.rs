@@ -1,5 +1,5 @@
-use super::super::{Client, Result, hub_is_missing};
 use super::old_copies;
+use client_core::{Client, Result, hub_is_missing};
 use protocol::paths::{DAEMON_NAME, Paths, daemon_file};
 use protocol::{Build, StampedBuild};
 #[cfg(any(test, feature = "testing"))]
@@ -15,29 +15,27 @@ use std::time::{Duration, Instant};
 /// Far longer than a forked child takes to exec, which is all a busy copy waits for. See [`waiting_out_busy`].
 const BUSY_TIMEOUT: Duration = Duration::from_secs(5);
 
-impl Client {
-    /// Connects, starting a hub first if none is running. The hub is a separate process that
-    /// outlives this client, which is why closing a client doesn't stop its agents. Once a hub this started is up, it
-    /// removes the copies of the daemon in the data directory that nothing runs from anymore.
-    pub fn connect_or_start(paths: &Paths, daemon: &Daemon, client_name: &str) -> Result<Client> {
-        match Client::connect(&paths.socket, client_name) {
-            Ok(client) => return Ok(client),
-            Err(e) if hub_is_missing(&e) => {}
-            Err(e) => return Err(e),
-        }
-        if let Err(couldnt) = start_hub(paths, daemon) {
-            // Another client may have started one meanwhile, and removed the copy this one was about to start.
-            return Client::connect(&paths.socket, client_name).map_err(|_| couldnt.into());
-        }
-        let client = connect_once_started(&paths.socket, client_name)?;
-        // A client starts a hub once the one before has gone, as for an update, which is when a copy goes out of use.
-        if let Some(build) = &daemon.build {
-            old_copies::remove_unused(paths, build);
-            #[cfg(windows)]
-            super::fixed::remove_leftovers(paths);
-        }
-        Ok(client)
+/// Connects, starting a hub first if none is running. The hub is a separate process that outlives this client, which
+/// is why closing a client doesn't stop its agents. Once a hub this started is up, it removes the copies of the daemon
+/// in the data directory that nothing runs from anymore.
+pub fn connect_or_start(paths: &Paths, daemon: &Daemon, client_name: &str) -> Result<Client> {
+    match Client::connect(&paths.socket, client_name) {
+        Ok(client) => return Ok(client),
+        Err(e) if hub_is_missing(&e) => {}
+        Err(e) => return Err(e),
     }
+    if let Err(couldnt) = start_hub(paths, daemon) {
+        // Another client may have started one meanwhile, and removed the copy this one was about to start.
+        return Client::connect(&paths.socket, client_name).map_err(|_| couldnt.into());
+    }
+    let client = connect_once_started(&paths.socket, client_name)?;
+    // A client starts a hub once the one before has gone, as for an update, which is when a copy goes out of use.
+    if let Some(build) = &daemon.build {
+        old_copies::remove_unused(paths, build);
+        #[cfg(windows)]
+        super::fixed::remove_leftovers(paths);
+    }
+    Ok(client)
 }
 
 /// Connects to the hub just started at `socket`, waiting for it to listen.

@@ -7,7 +7,6 @@
 
 use std::fmt::Write as _;
 
-use client_core::Client;
 use client_core::fake_hub::World;
 use desktop::app::Connection;
 use desktop::file_view::FileView;
@@ -296,7 +295,7 @@ fn what_s_opened_as_the_hub_goes_shows_once_it_s_back(cx: &mut TestAppContext) {
     assert_eq!(ui.view().error.as_deref(), None);
     assert!(ui.cx.read_entity(&all_files, |a, _| a.is_open("build")), "the folder stays open");
     assert_eq!(ui.cx.read_entity(&viewer(&ui), |v, _| v.failure()), None);
-    Client::connect_or_start(&stack.hub.paths, &daemon, "test").unwrap();
+    local_hub::connect_or_start(&stack.hub.paths, &daemon, "test").unwrap();
     ui.click("try-hub-again");
     ui.wait("what's in the folder", |ui| ui.has("all-folder-build/out"));
     ui.wait("the file", |ui| shown_text(ui).as_deref() == Some("mod app;"));

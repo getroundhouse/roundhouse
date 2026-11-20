@@ -23,6 +23,7 @@ testing = ["dictation/testing", "dictation-ui/testing"]
 [dependencies]
 protocol.workspace = true
 client-core.workspace = true
+local-hub.workspace = true
 transcript.workspace = true
 terminal-view.workspace = true
 gpui-kit.workspace = true
@@ -73,6 +74,7 @@ anyhow.workspace = true
 [dev-dependencies]
 agents = { workspace = true, features = ["testing"] }
 client-core = { workspace = true, features = ["testing"] }
+local-hub = { workspace = true, features = ["testing"] }
 desktop = { workspace = true, features = ["testing"] }
 dictation = { workspace = true, features = ["testing"] }
 fetching = { workspace = true, features = ["testing"] }

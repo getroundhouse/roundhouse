@@ -4,7 +4,6 @@
 
 use std::path::PathBuf;
 
-use client_core::Client;
 use desktop::app::Connection;
 use gpui_kit::{AppContext as _, SharedString, TestAppContext};
 use protocol::model::SessionStatus;
@@ -83,7 +82,7 @@ fn after_a_reconnect_panes_catch_up_when_shown_and_an_archived_ones_goes(cx: &mu
     ui.frame();
     ui.press("secondary-shift-b");
     assert!(ui.changes_open());
-    let client = Client::connect_or_start(&stack.hub.paths, &daemon, "test").unwrap();
+    let client = local_hub::connect_or_start(&stack.hub.paths, &daemon, "test").unwrap();
     client.workspace_archive(&archived, false).unwrap();
     for id in [&hidden, &shown] {
         std::fs::write(ui.worktree(id).join("a.txt"), "one\nchanged while away\n").unwrap();
@@ -119,7 +118,7 @@ fn a_pane_shown_while_the_hub_is_gone_catches_up_once_it_is_back(cx: &mut TestAp
     assert_eq!(ui.view().records().repos().len(), 1, "the repository is still listed");
     assert!(ui.has("add-project"), "so the heading stays over it");
     assert!(ui.off("add-project"), "with no hub to add one to");
-    Client::connect_or_start(&stack.hub.paths, &daemon, "test").unwrap();
+    local_hub::connect_or_start(&stack.hub.paths, &daemon, "test").unwrap();
     ui.click("try-hub-again");
     ui.wait("the hub to come back", |ui| matches!(ui.view().connection(), Connection::Ready(_)));
     lose_the_hub(&mut ui, &stack);
@@ -130,7 +129,7 @@ fn a_pane_shown_while_the_hub_is_gone_catches_up_once_it_is_back(cx: &mut TestAp
 
     assert_eq!(ui.view().selected(), Some(&behind));
     assert_eq!(ui.view().error.as_deref(), None);
-    Client::connect_or_start(&stack.hub.paths, &daemon, "test").unwrap();
+    local_hub::connect_or_start(&stack.hub.paths, &daemon, "test").unwrap();
     ui.click("try-hub-again");
     ui.wait("it to catch up", |ui| matches!(ui.view().connection(), Connection::Ready(_)) && shows_changes(ui, &diff));
     assert_eq!(ui.view().error.as_deref(), None);
@@ -159,7 +158,7 @@ fn a_failed_connection_can_be_tried_again(cx: &mut TestAppContext) {
     let daemon = stack.without_a_daemon();
     let mut ui = Ui::open_without_waiting(cx, &stack);
     ui.wait("the failure", |ui| matches!(ui.view().connection(), Connection::Failed(_)));
-    let _hub = Client::connect_or_start(&stack.hub.paths, &daemon, "test").unwrap();
+    let _hub = local_hub::connect_or_start(&stack.hub.paths, &daemon, "test").unwrap();
 
     ui.click("try-hub-again");
 

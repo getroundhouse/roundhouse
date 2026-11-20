@@ -2,9 +2,10 @@
 
 use super::examples;
 use super::processes::Hub;
-use client_core::{Client, Daemon, Subscription, SubscriptionItem};
+use client_core::{Client, Subscription, SubscriptionItem};
 use examples::fake_agent;
 use hub::Timers;
+use local_hub::Daemon;
 use process::testing::WholeEnvironment;
 pub(crate) use process::testing::git;
 use protocol::capability::approvals::ApprovalMode;

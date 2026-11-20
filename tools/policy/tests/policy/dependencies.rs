@@ -47,9 +47,19 @@ fn protocol_stays_free_of_io_and_ui() {
 #[test]
 fn nothing_outside_the_ui_depends_on_gpui() {
     let metadata = metadata();
-    for package in
-        ["process", "protocol", "hub", "github", "worker", "agents", "providers", "client-core", "daemon", "cli"]
-    {
+    for package in [
+        "process",
+        "protocol",
+        "hub",
+        "github",
+        "worker",
+        "agents",
+        "providers",
+        "client-core",
+        "local-hub",
+        "daemon",
+        "cli",
+    ] {
         let gpui: Vec<_> = runtime_closure(&metadata, package)
             .into_iter()
             .filter(|name| name.starts_with("gpui") || name == "zed")
@@ -61,11 +71,21 @@ fn nothing_outside_the_ui_depends_on_gpui() {
 #[test]
 fn clients_only_reach_the_hub_through_the_protocol() {
     let metadata = metadata();
-    for package in ["client-core", "cli"] {
+    for package in ["client-core", "local-hub", "cli"] {
         let closure = runtime_closure(&metadata, package);
         for banned in ["hub", "github", "worker", "agents", "providers"] {
             assert!(!closure.contains(banned), "{package} depends on {banned}");
         }
+    }
+}
+
+/// Every client builds `client-core`, and a phone starts no process, so starting a hub on this machine, and what it
+/// takes, are `local-hub`'s, which only the clients that start one build.
+#[test]
+fn client_core_starts_no_processes() {
+    let closure = runtime_closure(&metadata(), "client-core");
+    for banned in ["local-hub", "process", "private-files"] {
+        assert!(!closure.contains(banned), "client-core depends on {banned}");
     }
 }
 

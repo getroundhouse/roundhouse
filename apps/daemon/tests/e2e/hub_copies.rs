@@ -7,7 +7,6 @@ use std::path::Path;
 use std::process::Stdio;
 use std::time::{Duration, SystemTime};
 
-use client_core::Client;
 use protocol::StampedBuild;
 
 use crate::support::{Stack, install_executable, wait_until};
@@ -50,7 +49,7 @@ fn starting_a_hub_removes_the_copies_nothing_runs_from_but_not_a_worker_s() {
     let mut daemon = stack.daemon(app.join("roundhoused"));
     daemon.build = Some(build(4));
 
-    let started = Client::connect_or_start(&paths, &daemon, "test");
+    let started = local_hub::connect_or_start(&paths, &daemon, "test");
     let _ = client_core::stop_hub(&stack.socket());
     worker.kill().unwrap();
     worker.wait().unwrap();

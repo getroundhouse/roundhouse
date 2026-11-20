@@ -3,8 +3,9 @@
 use std::path::PathBuf;
 
 use anyhow::Context as _;
-use client_core::{Client, ClientError, Daemon, IdleStop, Restart};
+use client_core::{Client, ClientError, IdleStop, Restart};
 use gpui_kit::Result;
+use local_hub::Daemon;
 use protocol::Build;
 use protocol::client::HubStatus;
 use protocol::paths::Paths;
@@ -105,7 +106,7 @@ impl HubSource {
     }
 
     fn connect_or_start(&self) -> Result<Client, ClientError> {
-        Client::connect_or_start(&self.paths, &self.daemon, "desktop")
+        local_hub::connect_or_start(&self.paths, &self.daemon, "desktop")
     }
 }
 
