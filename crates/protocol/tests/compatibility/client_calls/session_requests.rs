@@ -5,7 +5,7 @@ use protocol::attachment::{AttachmentBytes, MediaType};
 use protocol::capability::approvals::{AfterDenial, Decision};
 use protocol::capability::settings::{Effort, Settings};
 use protocol::client::{
-    ClientRequest, agent, attachments, drafts, log, new_workspace, queue, sessions, subscriptions, waits,
+    ClientRequest, agent, attachments, conversation, drafts, log, new_workspace, queue, sessions, subscriptions, waits,
 };
 use protocol::fixtures;
 use protocol::frame;
@@ -60,6 +60,14 @@ fn every_request_about_a_session_keeps_its_form() {
     asked(
         ClientRequest::SessionMarkUnread(sessions::SessionMarkUnread { id: "s".into() }),
         r#"{"method":"session_mark_unread","id":"s"}"#,
+    );
+    asked(
+        ClientRequest::SessionConversationStart(conversation::SessionConversationStart { id: "s".into() }),
+        r#"{"method":"session_conversation_start","id":"s"}"#,
+    );
+    asked(
+        ClientRequest::SessionConversationEnd(conversation::SessionConversationEnd { id: "s".into() }),
+        r#"{"method":"session_conversation_end","id":"s"}"#,
     );
     asked(
         ClientRequest::SessionRename(sessions::SessionRename { id: "s".into(), title: "Login".into() }),

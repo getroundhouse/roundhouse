@@ -281,6 +281,8 @@ pub(super) fn render_event(
         | EventBody::AgentOther { .. }
         | EventBody::AgentCompacting { .. }
         | EventBody::ApprovalResolved { .. }
+        // Drawn as the rule across the chat once the desktop app has conversation mode.
+        | EventBody::ConversationStarted { .. }
         | EventBody::Unknown => empty(),
     }
 }

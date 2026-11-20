@@ -33,6 +33,7 @@ pub fn needs(body: &EventBody) -> Vec<Capability> {
         // The hub records the first two itself, so they have no run to claim anything.
         EventBody::CompactionAsked { .. }
         | EventBody::CacheExpired { .. }
+        | EventBody::ConversationStarted { .. }
         | EventBody::UserPrompt { .. }
         | EventBody::PromptTaken { .. }
         | EventBody::PromptDropped { .. }

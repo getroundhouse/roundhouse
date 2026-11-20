@@ -239,6 +239,7 @@ async fn whats_typed_and_new_sizes_reach_the_worker_in_the_order_they_were_sent(
         protocol_version: CLIENT_PROTOCOL_VERSION,
         client: "t".into(),
         oldest_protocol_version: None,
+        device: None,
     });
     let mut lines = frame::encode(&ClientFrame { id: 0, request: hello }).unwrap();
     let mut sent = String::new();

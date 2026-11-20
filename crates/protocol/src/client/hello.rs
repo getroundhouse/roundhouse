@@ -5,13 +5,18 @@ use serde::{Deserialize, Serialize};
 use super::{ClientRequest, ClientResponse, Reply, Request};
 
 /// Must come first on a connection. It names the newest version of the protocol the client speaks, and the oldest,
-/// which a client from before ranges leaves out, since it speaks only the one.
+/// which a client from before ranges leaves out, since it speaks only the one, and which device the client runs on,
+/// which a client from before devices leaves out, as does one with no device of its own, such as the command line.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct Hello {
     pub protocol_version: u32,
     pub client: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub oldest_protocol_version: Option<u32>,
+    /// Which device it runs on. The hub takes a client on the network to be the device it authenticated as, whatever
+    /// this says.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub device: Option<crate::model::ClientDevice>,
 }
 
 impl Request for Hello {

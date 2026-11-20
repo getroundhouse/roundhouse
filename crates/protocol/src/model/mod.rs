@@ -4,6 +4,7 @@ mod account;
 mod agent;
 mod branches;
 mod cache;
+mod client_device;
 mod compaction_line;
 mod context;
 mod counters;
@@ -36,6 +37,7 @@ pub use account::{
 pub use agent::{AgentDescription, LoginDescription, NotOffered, RunCapabilities};
 pub use branches::{Apart, Branch, Branches, Head, Upstream};
 pub use cache::{CACHE_WORTH_TELLING_TOKENS, CacheRequest, CacheState, CacheTtl, PromptCache};
+pub use client_device::ClientDevice;
 pub use compaction_line::CompactionLine;
 pub use context::{ContextPart, ContextPartKind, ContextUsage, MaxSetBy};
 pub use counters::{Place, Rev, RunId, Seq};

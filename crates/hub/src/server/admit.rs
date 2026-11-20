@@ -4,10 +4,13 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use protocol::client::{ApiError, ClientRequest, ClientResponse, ErrorCode, ReplyOutcome};
+use protocol::client::{ApiError, ClientRequest, ClientResponse, ErrorCode, Hello, ReplyOutcome};
 use protocol::frame;
+use protocol::model::ClientDevice;
+use protocol::pairing::device_name_from;
 use tokio::sync::{OwnedSemaphorePermit, watch};
 use tokio::time::Instant;
+use tracing::warn;
 
 use super::counted::Counted;
 use crate::hub::Hub;
@@ -46,6 +49,8 @@ pub(super) struct Gate {
     stage: Stage,
     /// The device a connection from the network authenticated as.
     pub(super) device: Option<DeviceLink>,
+    /// The device a client on the hub's machine said in its hello it's on, if it said one the hub can show.
+    said: Option<ClientDevice>,
     /// Set if the device the connection authenticated as is revoked.
     revoke: Revoke,
 }
@@ -67,6 +72,7 @@ impl Gate {
             origin: Origin::Local,
             stage: Stage::Admitted { greeted: false, _counted: Counted::client(hub) },
             device: None,
+            said: None,
             revoke: Arc::new(watch::Sender::new(false)),
         }
     }
@@ -78,7 +84,17 @@ impl Gate {
             origin: Origin::Network,
             stage: Stage::Authenticating { deadline, _unproven: unproven },
             device: None,
+            said: None,
             revoke: Arc::new(watch::Sender::new(false)),
+        }
+    }
+
+    /// The device the connection's client is on: the one it authenticated as, from the network, and otherwise the one
+    /// it said in its hello, if any.
+    pub(super) fn client_device(&self) -> Option<ClientDevice> {
+        match &self.device {
+            Some(link) => Some(ClientDevice { id: link.device_id.clone(), name: link.device_name.clone() }),
+            None => self.said.clone(),
         }
     }
 
@@ -112,6 +128,10 @@ impl Gate {
             Stage::Admitted { greeted: greeted @ false, .. } => match hello(hub, &request) {
                 Ok(response) => {
                     *greeted = true;
+                    // Over the network, the device is the one the connection authenticated as, whatever it says.
+                    if origin == Origin::Local {
+                        self.said = said_device(&request);
+                    }
                     Admit::Answer(ReplyOutcome::Response(response))
                 }
                 Err(error) => Admit::Refuse(ReplyOutcome::Error(error)),
@@ -150,6 +170,26 @@ impl Gate {
                 Admit::Answer(ReplyOutcome::Response(response))
             }
             Err(error) => Admit::Refuse(ReplyOutcome::Error(error)),
+        }
+    }
+}
+
+/// The device a hello says its client is on, if it says one with an ID and a name the hub can show, by the rules a
+/// paired device's name follows. A hello isn't refused for it, since a hello only finds a version both sides speak, so
+/// one the hub can't show is as good as none, and a request that needs a device says so.
+fn said_device(request: &ClientRequest) -> Option<ClientDevice> {
+    let ClientRequest::Hello(Hello { device: Some(device), .. }) = request else { return None };
+    match device_name_from(&device.name) {
+        Ok(name) if !device.id.as_str().trim().is_empty() => {
+            Some(ClientDevice { id: device.id.clone(), name: name.to_string() })
+        }
+        Ok(_) => {
+            warn!("a client said it's on a device with no ID, so it's taken to be on none");
+            None
+        }
+        Err(e) => {
+            warn!("a client said it's on a device whose name can't be shown, so it's taken to be on none: {e}");
+            None
         }
     }
 }
@@ -259,6 +299,8 @@ fn local_only(request: &ClientRequest) -> bool {
         | R::SessionReopen(..)
         | R::SessionMarkRead(..)
         | R::SessionMarkUnread(..)
+        | R::SessionConversationStart(..)
+        | R::SessionConversationEnd(..)
         | R::SessionCallOffWait(..)
         | R::SessionDraft(..)
         | R::SessionDecisionDraft(..)

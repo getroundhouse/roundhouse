@@ -68,6 +68,7 @@ impl Printer {
         self.line(seq, &format!("agent ready: model {model}, permissions {mode}, in {cwd}"));
     }
 
+    #[expect(clippy::too_many_lines, reason = "a flat match, with one short arm for each kind of event")]
     pub(crate) fn event(&mut self, event: &SessionEvent) {
         match &event.body {
             EventBody::UserPrompt { prompt, from, .. } => self.prompt(event.seq, from, &prompt.text, &prompt.files),
@@ -120,6 +121,9 @@ impl Printer {
             EventBody::AgentCompacted { outcome, .. } => self.line(event.seq, &compacted(outcome)),
             EventBody::CacheExpired { idle_ms, written_tokens, .. } => {
                 self.line(event.seq, &cache_expired(*idle_ms, *written_tokens));
+            }
+            EventBody::ConversationStarted { device } => {
+                self.line(event.seq, &format!("conversation mode turned on, on {}", device.name));
             }
             EventBody::OwnTurn(_)
             | EventBody::PromptTaken { .. }

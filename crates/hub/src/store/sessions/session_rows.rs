@@ -26,7 +26,7 @@ pub(crate) struct Moved {
 /// What a session's row holds, as it's written.
 macro_rules! session_row_columns {
     () => {
-        "id, workspace_id, agent, model, mode, status, last_seq, created_at_ms, updated_at_ms, agent_session_id, agent_opened, title, closed_at_ms, reply_seq, read_seq, background_tasks, title_source, queued, queue_held, turn_started_at_ms, effort, context, account_id, user_active_at_ms, prompt_cache, draft, decision_draft, untaken, open_approvals, reply_outcome, agent_capabilities, account_source, todos, placed_automatically, needs_an_account"
+        "id, workspace_id, agent, model, mode, status, last_seq, created_at_ms, updated_at_ms, agent_session_id, agent_opened, title, closed_at_ms, reply_seq, read_seq, background_tasks, title_source, queued, queue_held, turn_started_at_ms, effort, context, account_id, user_active_at_ms, prompt_cache, draft, decision_draft, untaken, open_approvals, reply_outcome, agent_capabilities, account_source, todos, placed_automatically, needs_an_account, conversation"
     };
 }
 
@@ -63,7 +63,7 @@ pub(in super::super) fn draft_column(draft: &Draft) -> serde_json::Result<Option
 }
 
 pub(in super::super) fn session_from_row(row: &Row) -> rusqlite::Result<StoredSession> {
-    let waits = waits_from(&row.get::<_, String>(35)?)?;
+    let waits = waits_from(&row.get::<_, String>(36)?)?;
     let account: Option<AccountId> = row.get::<_, Option<String>>(22)?.map(Into::into);
     let account_source: Option<AccountSource> = row.get::<_, Option<String>>(31)?.map(from_text).transpose()?;
     Ok(StoredSession {
@@ -90,6 +90,8 @@ pub(in super::super) fn session_from_row(row: &Row) -> rusqlite::Result<StoredSe
             queue_held: row.get(18)?,
             placed_automatically: row.get(33)?,
             needs_an_account: row.get(34)?,
+            // Written only by this hub, as JSON. One it can't read is as good as the mode being off.
+            conversation: json_at(row, 35)?,
             turn_started_at_ms: row.get(19)?,
             effort: from_text(row.get(20)?)?,
             // Written only by this hub, as JSON. One it can't read is as good as none, until the agent next says.
@@ -114,7 +116,7 @@ pub(in super::super) fn session_from_row(row: &Row) -> rusqlite::Result<StoredSe
             // Written by the query, from the waits table, so one it can't read is a query that doesn't match `Wait`.
             wait: waits.first().cloned(),
             waits: Some(waits),
-            rev: rev_of(row, 36)?,
+            rev: rev_of(row, 37)?,
         },
         agent_session_id: row.get::<_, Option<String>>(9)?.map(Into::into),
         agent_opened: row.get(10)?,
@@ -140,7 +142,7 @@ impl Store {
                 "INSERT INTO sessions (",
                 session_row_columns!(),
                 ", client_request_id)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
             ),
             params![
                 session.id.as_str(),
@@ -178,6 +180,7 @@ impl Store {
                 session.todos.as_ref().map(serde_json::to_string).transpose()?,
                 session.placed_automatically,
                 session.needs_an_account,
+                session.conversation.as_ref().map(serde_json::to_string).transpose()?,
                 client_request_id.map(ClientRequestId::as_str),
             ],
         )?;

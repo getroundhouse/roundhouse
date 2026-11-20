@@ -92,6 +92,9 @@ fn paired_clients_read_records_but_cannot_administer_and_revocation_closes_them(
     assert_eq!(code(remote.pairing_start().unwrap_err()), ErrorCode::LocalOnly);
     assert_eq!(code(client_core::pair(&pairing.link, "Second use").unwrap_err()), ErrorCode::Unauthorized);
     assert_eq!(running.local.pairing_wait(&pairing.code).unwrap().id, hub.device_id);
+    // It said no device in its hello, and is taken to be the one it paired as: past the device, to the chat.
+    let no_chat = remote.session_conversation_start(&"no-such-chat".into()).unwrap_err();
+    assert_eq!(code(no_chat), ErrorCode::NotFound);
 
     running.local.device_revoke(&hub.device_id).unwrap();
     let deadline = Instant::now() + Duration::from_secs(3);

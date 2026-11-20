@@ -46,6 +46,7 @@ pub fn session(id: &str) -> Session {
         queue_held: false,
         placed_automatically: false,
         needs_an_account: false,
+        conversation: None,
         draft: Draft::default(),
         decision_draft: None,
         open_approvals: None,

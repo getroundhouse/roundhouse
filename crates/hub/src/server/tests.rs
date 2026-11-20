@@ -173,3 +173,33 @@ async fn a_hub_greets_refuses_or_closes_a_connection_by_its_first_frames() {
         }
     }
 }
+
+/// A client on the hub's machine says in its hello which device it's on, which a request that needs one reads. One
+/// that says none, or one the hub can't show, is greeted all the same, and refused what needs a device.
+#[tokio::test]
+async fn a_request_that_needs_a_device_takes_the_one_its_hello_said() {
+    let dir = tempfile::tempdir().unwrap();
+    let hub = hub_in(dir.path());
+    let ours = CLIENT_PROTOCOL_VERSION;
+    let on =
+        |device: &str| format!(r#"{{"method":"hello","client":"test","protocol_version":{ours},"device":{device}}}"#);
+    let start = r#"{"method":"session_conversation_start","id":"no-such-chat"}"#;
+    let no_device = || Then::Refuses(ErrorCode::InvalidRequest, "which device".to_string());
+    // Past the device, to the chat, which isn't there.
+    let on_one = Then::Refuses(ErrorCode::NotFound, String::new());
+    let cases = [
+        ("no device", hello(ours, None), no_device()),
+        ("a device", on(r#"{"id":"d1","name":"Mac Studio"}"#), on_one),
+        ("a device whose name can't be shown", on(r#"{"id":"d1","name":"Mac\u0007Studio"}"#), no_device()),
+        ("a device with no ID", on(r#"{"id":" ","name":"Mac Studio"}"#), no_device()),
+    ];
+
+    for (case, hello, then) in cases {
+        let mut connection = Connection::open(&hub);
+        for (line, id, then) in calls(vec![(&hello, Then::Greets(ours)), (start, then)]) {
+            let reply = connection.send(&line, case).await;
+
+            assert!(then.holds(reply.as_ref(), id), "{case}, call {id}: {reply:?}");
+        }
+    }
+}

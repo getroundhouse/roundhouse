@@ -349,6 +349,12 @@ pub enum EventBody {
         #[serde(default)]
         written_tokens: u64,
     },
+    /// The person turned conversation mode on, on `device`, to talk with the agent out loud, which the transcript draws
+    /// as a rule across the chat. The hub records it, and the agent hears nothing of it: every prompt said out loud
+    /// tells it how to talk. Moving the conversation to another device, or turning the mode off, records nothing.
+    ConversationStarted {
+        device: crate::model::ClientDevice,
+    },
     #[serde(other)]
     Unknown,
 }

@@ -3,6 +3,7 @@
 
 use protocol::client::{self, ClientRequest, ClientResponse};
 use protocol::frame;
+use protocol::model::ClientDevice;
 use protocol::worker::{Hello, HelloReply, WorkerRequest, WorkerResponse};
 
 #[test]
@@ -11,6 +12,7 @@ fn a_clients_hello_keeps_its_form_with_its_range_and_without() {
         protocol_version: 4,
         client: "c".into(),
         oldest_protocol_version: Some(3),
+        device: None,
     });
     let line = br#"{"method":"hello","protocol_version":4,"client":"c","oldest_protocol_version":3}"#;
     assert_eq!(frame::encode(&ranges).unwrap(), [&line[..], b"\n"].concat());
@@ -19,11 +21,31 @@ fn a_clients_hello_keeps_its_form_with_its_range_and_without() {
         frame::decode(br#"{"method":"hello","protocol_version":3,"client":"c"}"#).unwrap();
     assert_eq!(
         before_ranges,
-        ClientRequest::Hello(client::Hello { protocol_version: 3, client: "c".into(), oldest_protocol_version: None })
+        ClientRequest::Hello(client::Hello {
+            protocol_version: 3,
+            client: "c".into(),
+            oldest_protocol_version: None,
+            device: None
+        })
     );
 
     let reply: ClientResponse = frame::decode(br#"{"result":"hello","protocol_version":3,"hub_version":"a"}"#).unwrap();
     assert_eq!(reply, ClientResponse::Hello(client::HelloReply { protocol_version: 3, hub_version: "a".into() }));
+}
+
+/// A hello can only gain fields that older peers ignore, so one saying which device the client runs on still finds a
+/// version with every hub, which reads only the versions, and the forms above still read as they did.
+#[test]
+fn a_clients_hello_that_says_its_device_keeps_the_rest_of_its_form() {
+    let hello = ClientRequest::Hello(client::Hello {
+        protocol_version: 4,
+        client: "desktop".into(),
+        oldest_protocol_version: Some(4),
+        device: Some(ClientDevice { id: "d1".into(), name: "Ada's MacBook Air".into() }),
+    });
+    let line = br#"{"method":"hello","protocol_version":4,"client":"desktop","oldest_protocol_version":4,"device":{"id":"d1","name":"Ada's MacBook Air"}}"#;
+    assert_eq!(frame::encode(&hello).unwrap(), [&line[..], b"\n"].concat());
+    assert_eq!(frame::decode::<ClientRequest>(line).unwrap(), hello);
 }
 
 #[test]

@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 
 use super::race::{self, Lost};
 use crate::client::transport::Transport;
-use crate::client::{Client, ClientError, Result};
+use crate::client::{Client, ClientError, Introduction, Result};
 use protocol::client::devices;
 
 /// Authentication and hello are small exchanges; a connected but unresponsive peer must not leave the UI joining
@@ -59,15 +59,15 @@ impl Client {
     /// Connects to a hub over the network, as the device that paired with it, and checks the protocol version.
     /// Tries every host at once, favouring them in order. Once connected, it's like any other `Client`, except that
     /// a hub refuses what only its own machine may ask, such as stopping it.
-    pub fn connect_remote(hub: &RemoteHub, client_name: &str) -> Result<Client> {
-        Self::connect_remote_with(hub, client_name, OPERATION_TIMEOUT)
+    pub fn connect_remote(hub: &RemoteHub, introduction: impl Into<Introduction>) -> Result<Client> {
+        Self::connect_remote_with(hub, introduction.into(), OPERATION_TIMEOUT)
     }
 
-    fn connect_remote_with(hub: &RemoteHub, client_name: &str, timeout: Duration) -> Result<Client> {
+    fn connect_remote_with(hub: &RemoteHub, introduction: Introduction, timeout: Duration) -> Result<Client> {
         let client = open(&hub.hosts, &hub.fingerprint, timeout)?;
         let deadline = Some(Instant::now() + timeout);
         client.call_until(devices::Authenticate { token: hub.token.clone() }, deadline)?;
-        client.hello_until(client_name, deadline)?;
+        client.hello_until(introduction, deadline)?;
         Ok(client)
     }
 
@@ -80,7 +80,7 @@ impl Client {
     /// The same connection path with short operation budgets for controlled-peer tests.
     #[cfg(feature = "testing")]
     pub fn connect_remote_with_timeout(hub: &RemoteHub, client_name: &str, timeout: Duration) -> Result<Client> {
-        Self::connect_remote_with(hub, client_name, timeout)
+        Self::connect_remote_with(hub, client_name.into(), timeout)
     }
 
     /// An unauthenticated test connection whose outgoing frames have the supplied budget.

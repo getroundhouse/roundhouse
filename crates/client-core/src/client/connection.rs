@@ -3,8 +3,8 @@ use super::transport::{Closer, Transport};
 use super::{commands, lines, queueing};
 use parking_lot::Mutex;
 use protocol::client::{
-    ApiError, CLIENT_PROTOCOL_VERSION, ClientFrame, ClientRequest, ClientResponse, ErrorCode, Hello, HelloReply,
-    HubFrame, HubNotice, Reply as _, ReplyOutcome, Request, subscriptions,
+    ApiError, ClientFrame, ClientRequest, ClientResponse, ErrorCode, HubFrame, HubNotice, Reply as _, ReplyOutcome,
+    Request, subscriptions,
 };
 use protocol::event::SessionEvent;
 use protocol::frame;
@@ -177,37 +177,6 @@ pub struct Client {
 }
 
 impl Client {
-    /// Connects and checks the protocol version.
-    pub fn connect(socket: &Path, client_name: &str) -> Result<Client> {
-        let client = Client::open(socket)?;
-        client.hello(client_name)?;
-        Ok(client)
-    }
-
-    pub(super) fn hello(&self, client_name: &str) -> Result<()> {
-        self.hello_until(client_name, None)
-    }
-
-    pub(super) fn hello_until(&self, client_name: &str, deadline: Option<Instant>) -> Result<()> {
-        let HelloReply { protocol_version, hub_version } = self.call_until(
-            Hello {
-                protocol_version: CLIENT_PROTOCOL_VERSION,
-                client: client_name.to_string(),
-                // A client speaks only its own version, and a hub the one before its own as well after a break.
-                oldest_protocol_version: Some(CLIENT_PROTOCOL_VERSION),
-            },
-            deadline,
-        )?;
-        // A client speaks only its own version, so it can't follow a hub that chose another.
-        if protocol_version != CLIENT_PROTOCOL_VERSION {
-            let message =
-                format!("the hub chose protocol {protocol_version}, and this client speaks {CLIENT_PROTOCOL_VERSION}");
-            return Err(ApiError::new(ErrorCode::VersionMismatch, message).into());
-        }
-        let _ = self.inner.hub_version.set(hub_version);
-        Ok(())
-    }
-
     /// A connection that hasn't said hello, which a hub only answers a little on. See [`HubAdmin`](super::HubAdmin).
     pub(super) fn open(socket: &Path) -> Result<Client> {
         Self::from_transport(Transport::local(socket)?)

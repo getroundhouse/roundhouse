@@ -83,6 +83,7 @@ fn note<'a>(held: &'a mut Vec<Subagent>, event: &SessionEvent) -> Vec<&'a mut Su
         | EventBody::AgentCompacting { .. }
         | EventBody::AgentCompacted { .. }
         | EventBody::CacheExpired { .. }
+        | EventBody::ConversationStarted { .. }
         | EventBody::Unknown => Vec::new(),
     }
 }

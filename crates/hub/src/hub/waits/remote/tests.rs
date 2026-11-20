@@ -49,6 +49,7 @@ async fn outages_keep_the_last_snapshot_and_access_loss_ends_with_it() {
         recorded: None,
         initialized: None,
         claims: None,
+        conversation: None,
     };
     hub.store
         .append(
@@ -98,6 +99,7 @@ async fn a_shared_reads_pr_access_failure_does_not_end_an_unrelated_wait() {
         recorded: None,
         initialized: None,
         claims: None,
+        conversation: None,
     };
     hub.store
         .append(

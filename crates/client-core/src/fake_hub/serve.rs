@@ -295,6 +295,8 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
         | R::SessionCallOffWait(_)
         | R::SessionMarkRead(_)
         | R::SessionMarkUnread(_)
+        | R::SessionConversationStart(_)
+        | R::SessionConversationEnd(_)
         | R::SessionRename(_)
         | R::AccountConnect(_)
         | R::AccountSetDefault(_)
