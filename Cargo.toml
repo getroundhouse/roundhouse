@@ -14,6 +14,7 @@ members = [
     "apps/daemon",
     "apps/cli",
     "apps/desktop",
+    "apps/mobile-ios",
     "crates/transcript",
     "crates/look",
     "crates/terminal-state",
@@ -72,6 +73,7 @@ exclude = [
     "mobile-poc",
     "third_party/gpui-kit/vendor",
     "third_party/gpui-pre-apple",
+    "third_party/gpui-pre-ios",
     "third_party/zed-font-kit",
 ]
 
@@ -102,6 +104,7 @@ waiting = { path = "crates/waiting" }
 terminal-state = { path = "crates/terminal-state" }
 terminal-view = { path = "crates/terminal-view" }
 desktop = { path = "apps/desktop" }
+mobile-ios = { path = "apps/mobile-ios" }
 kit-sync = { path = "tools/kit-sync" }
 
 anyhow = "1.0.104"
@@ -125,6 +128,9 @@ gpui-kit = { path = "third_party/gpui-kit/vendor/crates/kit", version = "=0.10.0
 # Moves with gpui-kit, as `tools/kit-sync` moves it: the version its GPUI uses. Only for drawing off the main thread,
 # which tests run on.
 gpui-pre-apple = { version = "=0.3.12", features = ["font-kit"] }
+# Zed's iOS backend for GPUI, for the iOS app, on the version gpui-pre-apple is. Our copy, with two changes, as
+# `third_party/README.md` says, which `[patch.crates-io]` below puts in its place.
+gpui_ios = { package = "gpui-pre-ios", version = "=0.3.12", features = ["runtime_shaders"] }
 # The same as GPUI's, which hands its screenshots back as this crate's images.
 image = { version = "0.25.10", default-features = false }
 # Already under Octocrab. Names the header that asks GitHub's device flow to answer in JSON, on a request Octocrab sends.
@@ -201,6 +207,8 @@ ring = "0.17.14"
 # SQLite bundled, with its statement cache and checked `u64` and `usize` conversions, and without the WASM bindings 0.42
 # turns on by default.
 rusqlite = { version = "0.42.0", default-features = false, features = ["bundled", "cache", "fallible_uint"] }
+# Already under GPUI on a Mac. The Keychain on iOS, which keeps the token a hub gave the phone.
+security-framework = "3.7.0"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 # Already under gpui-kit, whose diff uses it. Works out an edit's lines before its patch comes back, and what changed
@@ -278,8 +286,9 @@ debug = "line-tables-only"
 opt-level = 2
 debug = false
 
-# Our copies of GPUI's Apple text system and Zed's font-kit, with the changes `third_party/README.md` lists, in place
-# of the ones on crates.io.
+# Our copies of Zed's iOS backend, GPUI's Apple text system and Zed's font-kit, with the changes `third_party/README.md`
+# lists, in place of the ones on crates.io.
 [patch.crates-io]
 gpui-pre-apple = { path = "third_party/gpui-pre-apple" }
+gpui-pre-ios = { path = "third_party/gpui-pre-ios" }
 zed-font-kit = { path = "third_party/zed-font-kit" }

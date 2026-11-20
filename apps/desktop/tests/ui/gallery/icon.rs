@@ -1,7 +1,8 @@
 //! The app icon, in each style and at every size macOS keeps a drawing for, checked against its images in the
 //! style's iconset in `apps/desktop/icons/`. `iconutil` packs the app's, `working.iconset`, into the `.icns` the app
 //! is packaged with, and `tools/package/ico.py` packs five of its drawings into `AppIcon.ico` beside it, for Windows,
-//! which `tools/package/test_ico.py` fails on once the drawings change, until it's made again.
+//! which `tools/package/test_ico.py` fails on once the drawings change, until it's made again. The iOS app's icon is
+//! drawn and checked here too, against its asset catalog's.
 
 #![cfg(test)]
 
@@ -74,6 +75,43 @@ fn every_size_of_the_icon_looks_as_approved() {
         "{}\n\nWhat each size looks like now is in .context/gallery/. If a change is meant, {UPDATE}=1 accepts it.",
         problems.join("\n")
     );
+}
+
+/// The iOS app's, which is opaque, and kept without an alpha channel, since App Store Connect refuses an icon with one.
+#[test]
+fn the_phone_icon_looks_as_approved() {
+    let text_system: Arc<dyn PlatformTextSystem> = Arc::new(gpui_apple::AppleTextSystem::new());
+    let mut cx = headless::app(&text_system);
+    let picture = headless::draw(&mut cx, size(px(512.), px(512.)), |_| PhoneIcon);
+    assert!(picture.settled, "the phone's icon keeps changing");
+    let drawn = picture.image;
+    assert_eq!(drawn.dimensions(), (1024, 1024), "drawn at 2x, so each point is two pixels");
+    assert!(drawn.pixels().all(|pixel| pixel.0[3] == 255), "opaque");
+    let out = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../.context/gallery");
+    std::fs::create_dir_all(&out).unwrap();
+    drawn.save(out.join("icon-phone-1024.png")).unwrap();
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../mobile-ios/ios/Assets.xcassets/AppIcon.appiconset/icon-1024.png");
+    if std::env::var_os(UPDATE).is_some() {
+        image::DynamicImage::ImageRgba8(drawn).to_rgb8().save(&path).unwrap();
+        return;
+    }
+    let kept = image::open(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+    assert!(!kept.color().has_alpha(), "{} has an alpha channel", path.display());
+    assert!(
+        matches!(approved::compare_file(&path, &drawn), Verdict::Matches),
+        "{} no longer matches the phone's icon. What it looks like now is in .context/gallery/. If a change is meant, \
+         {UPDATE}=1 accepts it.",
+        path.display()
+    );
+}
+
+struct PhoneIcon;
+
+impl Render for PhoneIcon {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        div().size_full().child(look::phone_icon(cx))
+    }
 }
 
 /// The icon over a backdrop of one colour.

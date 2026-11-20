@@ -50,6 +50,7 @@ const VENDORED: &[(&str, &str, &str, &[&str])] = &[
     ("third_party/gpui-kit/vendor/crates/component", "LICENSE-APACHE", "Apache-2.0", APACHE),
     // GPUI's crates and Zed's font-kit that the apps build from copies, as `third_party/README.md` says.
     ("third_party/gpui-pre-apple", "LICENSE-APACHE", "Apache-2.0", APACHE),
+    ("third_party/gpui-pre-ios", "LICENSE-APACHE", "Apache-2.0", APACHE),
     ("third_party/zed-font-kit", "LICENSE-APACHE", "MIT OR Apache-2.0", APACHE),
     ("third_party/zed-font-kit", "LICENSE-MIT", "MIT OR Apache-2.0", &["Permission is hereby granted, free of charge"]),
     // The icons the kit draws, which are Lucide's, but those Lucide took from Feather, which are under MIT.
@@ -135,7 +136,7 @@ fn shipped_packages(metadata: &Value, root: &str) -> BTreeMap<String, (String, O
 
 /// Checks what ships, on the platforms it ships on, rather than everything in `Cargo.lock`, which also
 /// holds build tools, proc macros and other platforms' crates. Add each platform here as it starts
-/// shipping, such as iOS.
+/// shipping.
 #[test]
 fn only_allowed_licenses_ship() {
     const MAC: [&str; 2] = ["aarch64-apple-darwin", "x86_64-apple-darwin"];
@@ -146,6 +147,7 @@ fn only_allowed_licenses_ship() {
         ("desktop", &[MAC[0], MAC[1], LINUX[0], LINUX[1], WINDOWS[0], WINDOWS[1]][..]),
         ("daemon", &[MAC[0], MAC[1], LINUX[0], LINUX[1], WINDOWS[0], WINDOWS[1]][..]),
         ("cli", &[MAC[0], MAC[1], LINUX[0], LINUX[1], WINDOWS[0], WINDOWS[1]][..]),
+        ("mobile-ios", &["aarch64-apple-ios"][..]),
     ] {
         for target in targets {
             // Each platform's graph is the same for every root, so it's read once.

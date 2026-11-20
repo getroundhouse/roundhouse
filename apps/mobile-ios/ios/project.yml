@@ -1,0 +1,36 @@
+# Packaging and signing only. The app is the Rust binary `roundhouse-ios`, which scripts/build.sh builds and this
+# project's last build phase puts in place of the stub, before Xcode signs it. xcodegen makes the Xcode project
+# from this file on each build, and the project isn't kept.
+name: Roundhouse
+options:
+  deploymentTarget:
+    iOS: "17.0"
+targets:
+  Roundhouse:
+    type: application
+    platform: iOS
+    sources:
+      - path: Stub.swift
+      - path: Assets.xcassets
+      - path: PrivacyInfo.xcprivacy
+        buildPhase: resources
+    settings:
+      base:
+        # The executable's name, which has to be the Rust binary's.
+        PRODUCT_NAME: roundhouse-ios
+        PRODUCT_BUNDLE_IDENTIFIER: ${BUNDLE_ID}
+        INFOPLIST_FILE: Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        TARGETED_DEVICE_FAMILY: "1"
+        SWIFT_VERSION: "5.0"
+        ENABLE_DEBUG_DYLIB: NO
+        ARCHS: arm64
+        ONLY_ACTIVE_ARCH: YES
+        CODE_SIGN_STYLE: Automatic
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+    postCompileScripts:
+      - name: Put the Rust binary in place of the stub
+        basedOnDependencyAnalysis: false
+        script: |
+          set -euo pipefail
+          cp "${RUST_BINARY:?scripts/build.sh sets this}" "${TARGET_BUILD_DIR}/${EXECUTABLE_PATH}"

@@ -44,6 +44,7 @@ The guide is the one kind written for someone using the product rather than buil
 | `docs/inspiration.md` | Reference | Agents | What Conductor does, as a source of ideas |
 | `AGENTS.md` | Instructions | Owner | How to build and test, and the rules for working here |
 | `docs/conformance.md` | Instructions | Agents | How a version of an agent's CLI is checked against what Roundhouse needs of it, and how to play the scenarios that check it |
+| `apps/mobile-ios/README.md` | Instructions | Agents | How the iPhone app is tested, built and run on a phone or in the Simulator, and how it's put together |
 | `mobile-poc/README.md` | Instructions | Agents | How to build and run the mobile proof of concept |
 | `mobile-poc/test-server/README.md` | Instructions | Agents | The simulated hub for testing clients on a phone |
 | `third_party/README.md` | Instructions | Agents | What the copies of other projects' code are, how each is changed, and how a change goes upstream and a release comes in |

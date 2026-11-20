@@ -8,7 +8,7 @@ pub(crate) const REM: Pixels = px(16.);
 /// How big a rem is on a handheld, where every kind of text has a size of its own in pixels: as big as makes the kit's
 /// own text, which is 0.875 rem as body text is at a desk, as big as body text is there.
 const HANDHELD_REM: Pixels = px(17. / 0.875);
-/// The code font. Every Mac has it, and Linux and Windows don't, so code there falls back to the system font.
+/// The code font. Every Mac and iPhone has it, and Linux and Windows don't, so code there falls back to the system font.
 pub(crate) const MONO: &str = "Menlo";
 /// How big code is at a desk, which the kit's theme is given too.
 pub(crate) const MONO_SIZE: Pixels = px(12.);

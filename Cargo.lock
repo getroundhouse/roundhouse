@@ -3443,8 +3443,6 @@ dependencies = [
 [[package]]
 name = "gpui-pre-ios"
 version = "0.3.12"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "10656f6db4bbedb60bd7fcbb8a70f7c7eeee45bc4582fb8933ca807d2ddf52ad"
 dependencies = [
  "anyhow",
  "block2 0.6.2",
@@ -5397,6 +5395,31 @@ dependencies = [
  "log",
  "wasi",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "mobile-ios"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "client-core",
+ "flume",
+ "gpui-kit",
+ "gpui-pre-apple",
+ "gpui-pre-ios",
+ "hub",
+ "look",
+ "mobile-ios",
+ "parking_lot",
+ "process",
+ "protocol",
+ "security-framework",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.21",
+ "transcript",
+ "waiting",
+ "worker",
 ]
 
 [[package]]

@@ -13,7 +13,8 @@ const KIT_DEFAULTS: &str = "third_party/gpui-kit/vendor/crates/assets/default-ic
 /// Where look lists the icons of what every client shares.
 const LOOK: &str = "crates/look/src/assets.rs";
 /// Each app's own list, by the folder its code is in.
-const APPS: &[(&str, &str)] = &[("apps/desktop/", "apps/desktop/src/assets.rs")];
+const APPS: &[(&str, &str)] =
+    &[("apps/desktop/", "apps/desktop/src/assets.rs"), ("apps/mobile-ios/", "apps/mobile-ios/src/assets.rs")];
 
 /// An icon's name, as code and a file name have it, such as `Columns2` and `columns-2`, made alike to compare.
 fn alike(name: &str) -> String {
