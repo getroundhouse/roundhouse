@@ -1,6 +1,6 @@
 # Agents' GitHub identity always comes from an account the hub holds
 
-**Status:** Decided, not built.
+**Status:** Replaced by [github-on-provisioned-machines.md](github-on-provisioned-machines.md), before it was built.
 **First recorded:** 2026-11-20, in #2061.
 
 Who agents are on GitHub is always an account the hub holds, on every machine. There's no mode in which each machine's own login is used instead. An account is one connected through Roundhouse's sign-in, a GitHub App's installation, or the `gh` login on the hub's own machine.
