@@ -54,8 +54,10 @@ fn a_default_installation_whose_next_token_github_wont_make_says_so_in_the_box_a
     assert_eq!(blocked_for(&ui), Some(UnusableLogin::Renewing));
     assert!(bot.held_login.unwrap().ends_at_ms.is_none(), "its record says nothing of its token's end");
     let says = box_says(&mut ui);
-    assert!(says.starts_with("Agents can't push. The token of Roundhouse's default GitHub account"), "{says}");
-    assert!(says.contains("ada-roundhouse[bot], installed on adalabs, has ended, and Roundhouse is making another"));
+    let lead = "Roundhouse can't use its GitHub account. The token of ada-roundhouse[bot], the default account, \
+                installed on adalabs, has ended, and Roundhouse is making another.";
+    assert!(says.starts_with(lead), "{says}");
+    assert_eq!(says.matches("can't push").count(), 1, "the reason says it once: {says}");
     assert!(!ui.shows_label(&row, "Installed on adalabs"));
 }
 
@@ -75,7 +77,7 @@ fn a_tokens_default_that_has_ended_says_so_in_the_box_and_its_row(cx: &mut TestA
 
     assert_eq!(blocked_for(&ui), Some(UnusableLogin::Ended));
     let says = box_says(&mut ui);
-    assert!(says.contains("default GitHub account, ada, has ended") && says.contains("Renew it"), "{says}");
+    assert!(says.contains("The token of ada, the default account, has ended") && says.contains("Renew it"), "{says}");
 }
 
 /// As after a Mac wakes past a sign-in's token's end, before the hub's next check has renewed it.
@@ -110,7 +112,7 @@ fn a_default_signed_in_whose_token_has_ended_says_its_being_renewed_in_amber(cx:
     });
 
     assert_eq!(blocked_for(&ui), Some(UnusableLogin::Renewing));
-    assert!(box_says(&mut ui).contains("ada, has ended, and Roundhouse is renewing it"));
+    assert!(box_says(&mut ui).contains("ada, the default account, has ended, and Roundhouse is renewing it"));
 }
 
 /// With a default that blocks, choosing each machine's own has the hub send workers that, and the box goes.

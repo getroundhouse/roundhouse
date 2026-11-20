@@ -152,7 +152,9 @@ fn an_installation_github_no_longer_lists_is_forgotten_and_a_default_that_was_it
     assert_eq!(files_in(dir.path()).len(), 1, "only the app's key is left");
     let reason = reason(sent(&logins));
     assert!(
-        reason.contains("ada-roundhouse[bot], installed on adalabs, was disconnected, or the app uninstalled"),
+        reason.contains(
+            "ada-roundhouse[bot], the default account, installed on adalabs, was disconnected, or the app uninstalled"
+        ),
         "{reason}"
     );
 }
@@ -285,7 +287,7 @@ fn an_installation_github_has_no_more_as_its_token_is_made_is_forgotten() {
     let forgot = logins.minted(&due, Minted::Gone, ENDS_AT_MS).unwrap().unwrap();
 
     assert_eq!((forgot.account.id, forgot.account.held_login), (account.id, None));
-    assert!(reason(sent(&logins)).contains("the app uninstalled there"));
+    assert!(reason(sent(&logins)).contains("the app uninstalled from adalabs"));
 }
 
 /// Its installations' logins go first, then its key, then its record, so a hub stopped between leaves no token or key
@@ -312,7 +314,7 @@ fn removing_an_app_forgets_its_installations_logins_its_key_and_its_record() {
         store.github_account(&account.id).unwrap().is_some(),
         "its accounts' records stay, as disconnecting keeps one"
     );
-    assert!(reason(sent(&logins)).contains("was disconnected, or the app uninstalled there"));
+    assert!(reason(sent(&logins)).contains("was disconnected, or the app uninstalled from adalabs"));
 }
 
 #[test]

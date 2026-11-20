@@ -11,14 +11,15 @@ use protocol::model::{
 };
 
 /// What a search finds the page by, besides its name.
-pub(super) const ABOUT: &str = "The GitHub accounts agents push and open pull requests as: signing in with GitHub, \
-                                tokens, apps of your own, the default account, and the gh login each machine already \
+pub(super) const ABOUT: &str = "Who Roundhouse is on GitHub: signing in with GitHub, tokens, apps of your own, gh's \
+                                login on this computer, the default account, and the gh login each machine already \
                                 has.";
 
-/// What Added says of itself under its heading.
-pub(super) const ADDED_SAYS: &str = "GitHub accounts you've given the hub. Agents push and open pull requests as the \
-                                     default on the providers Roundhouse sets up GitHub on. On the hub's own machine, \
-                                     they use its git and gh as they are.";
+/// What Added says of itself under its heading: as approved, but for Providers, which isn't built, so it says what the
+/// hub's own machine does in place of where to see it. *Unconfirmed.*
+pub(super) const ADDED_SAYS: &str = "Who Roundhouse is on GitHub. It reads pull requests as the default, and agents on \
+                                     the providers it sets up push and open pull requests as it. On the hub's own \
+                                     machine, agents use its git and gh as they are.";
 
 /// What Added says of itself under its heading on a hub that keeps no GitHub accounts, which uses no default.
 pub(super) const ADDED_SAYS_OLDER: &str = "GitHub accounts you've given the hub.";
@@ -29,9 +30,15 @@ pub(super) const FOUND_SAYS: &str = "Who gh is logged in as on each machine a wo
                                      machine use its login, and elsewhere only while it's the default. Roundhouse \
                                      never copies it.";
 
-/// What Added says while the hub holds no GitHub account.
-pub(super) const NONE_ADDED: &str = "None yet, so agents use each machine's own login. Connect an account to push as it on the providers Roundhouse \
-     sets up GitHub on.";
+/// What Added says while the hub holds no GitHub account, so each machine's own login is the default, which Roundhouse
+/// reads pull requests as too, until Found goes. *Unconfirmed.*
+pub(super) fn none_added() -> String {
+    format!(
+        "None yet, so Roundhouse uses each machine's own gh login. Connect one, such as gh's login on this {}, for \
+         agents on the providers Roundhouse sets up to push as it.",
+        crate::names::MACHINE,
+    )
+}
 
 /// What Found says while the hub has asked no machine.
 pub(super) const NONE_FOUND: &str =
@@ -176,8 +183,8 @@ pub(super) fn use_gh(username: &GithubUsername) -> String {
 /// What Connect account's panel says of using `gh`'s login, which is `username`'s. *Unconfirmed.*
 pub(super) fn gh_choice_says(username: &GithubUsername) -> SharedString {
     format!(
-        "gh on this {} is logged in as {username}. The hub reads its token from gh and keeps no copy, so logging gh \
-         out stops agents too.",
+        "gh on this {} is logged in as {username}. Roundhouse reads its token from gh when it needs it and keeps no \
+         copy, so logging gh out stops Roundhouse too.",
         crate::names::MACHINE,
     )
     .into()

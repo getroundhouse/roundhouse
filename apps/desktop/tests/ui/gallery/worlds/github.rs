@@ -13,7 +13,7 @@ use client_core::fake_hub::{HOUR_MS, NOW_MS, World};
 
 const DAY_MS: i64 = 24 * HOUR_MS;
 /// Feb 3, 2027, at 3 PM in UTC, when a fine-grained token made for 90 days ends.
-const FEB_3_MS: i64 = 1_801_666_800_000;
+pub(super) const FEB_3_MS: i64 = 1_801_666_800_000;
 /// Oct 29, 2026, at 3 PM in UTC, three days before the pictures are taken.
 const OCT_29_MS: i64 = 1_793_286_000_000;
 
@@ -42,8 +42,9 @@ pub(in crate::gallery) fn no_github_accounts() -> World {
 /// `ada` signed in to choose instead. This Mac's `gh` is logged in with a token GitHub refused.
 pub(in crate::gallery) fn github_default_ended() -> World {
     let mut world = conversation();
-    let reason = "The token of Roundhouse's default GitHub account, ada_northwind, has ended, so this workspace's \
-                  agents push to GitHub as nobody. Renew it in Roundhouse's Settings, or choose another default there.";
+    let reason = "The token of ada_northwind, the default account, has ended. Until it's renewed, Roundhouse can't \
+                  read pull requests, and agents on the providers it sets up can't push. Renew it, or choose another \
+                  default.";
     world.github = Some(blocking(&northwind(OCT_29_MS), UnusableLogin::Ended, reason));
     world.github_accounts = vec![ada(), northwind(OCT_29_MS)];
     let refused = GhLogin::LoggedIn { username: "ada".into(), works: GhLoginWorks::Refused };
@@ -98,7 +99,7 @@ pub(in crate::gallery) fn ada() -> GithubAccount {
 }
 
 /// `ada_northwind`, a token made for 90 days, which ends at `ends_at_ms`.
-fn northwind(ends_at_ms: i64) -> GithubAccount {
+pub(super) fn northwind(ends_at_ms: i64) -> GithubAccount {
     held(
         "github-0002",
         2,

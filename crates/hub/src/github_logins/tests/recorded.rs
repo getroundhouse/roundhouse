@@ -74,7 +74,7 @@ fn the_settings_say_why_a_default_blocks_as_workers_are_told() {
     assert_eq!(before_its_end, Some(SentCredential::Account { account: "g1".into() }));
     assert_eq!(first.settings.and_then(|settings| settings.github).and_then(|github| github.sent), before_its_end);
     assert_eq!(ended.0, UnusableLogin::Ended);
-    assert!(ended.1.contains("ada, has ended") && ended.1.contains("Renew it"), "{}", ended.1);
+    assert!(ended.1.contains("ada, the default account, has ended") && ended.1.contains("Renew it"), "{}", ended.1);
     assert_eq!(renewed, before_its_end, "connecting a token to it again has it sent again");
     assert_eq!(disconnected, (UnusableLogin::Disconnected, reason(sent(&logins))), "with the reason workers are");
 }

@@ -65,11 +65,9 @@ impl Hub {
                 return Err(ApiError::new(ErrorCode::Unavailable, "the hub couldn't ask GitHub whose gh's token is"));
             }
             Said::NoLogin(why @ NoGhLogin::Refused) => {
-                return Err(ApiError::new(ErrorCode::InvalidRequest, format!("{why}; run gh auth login there again")));
+                return Err(ApiError::new(ErrorCode::InvalidRequest, refused(why)));
             }
-            Said::NoLogin(why) => {
-                return Err(ApiError::new(ErrorCode::Conflict, format!("{why}; run gh auth login there first")));
-            }
+            Said::NoLogin(why) => return Err(ApiError::new(ErrorCode::Conflict, refused(why))),
             Said::Unread(why) => return Err(ApiError::new(ErrorCode::Unavailable, why)),
         };
         let logins = Arc::clone(&self.github_logins);
@@ -135,4 +133,15 @@ impl Hub {
             Err(e) => Said::Unread(e.message),
         }
     }
+}
+
+/// Why connecting `gh`'s login was refused, as `why` says, and what to do about it, then try again. *Unconfirmed:* the
+/// words.
+fn refused(why: NoGhLogin) -> String {
+    let to_do = match why {
+        NoGhLogin::NotInstalled => "Install gh, run gh auth login",
+        NoGhLogin::LoggedOut | NoGhLogin::NoToken | NoGhLogin::Refused => "Run gh auth login",
+    };
+    // Each reason starts with gh's name, or GitHub's, so it starts a sentence as it is.
+    format!("{why}. {to_do}, then try again.")
 }

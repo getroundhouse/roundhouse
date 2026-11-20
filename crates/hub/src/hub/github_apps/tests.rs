@@ -161,7 +161,7 @@ async fn an_app_uninstalled_where_it_was_is_forgotten_by_the_next_check_which_te
     let told = told(&mut feed);
     let [HubNotice::GithubAccount(account)] = told.as_slice() else { panic!("{told:?}") };
     assert_eq!(account.held_login, None);
-    assert!(blocked(&hub).contains("the app uninstalled there"));
+    assert!(blocked(&hub).contains("the app uninstalled from"));
 }
 
 #[tokio::test]

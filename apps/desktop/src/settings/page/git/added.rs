@@ -28,9 +28,9 @@ pub(super) fn list(drawing: &Drawing<'_>, cx: &App) -> Div {
     let panel = at_top.map(|panel| div().py(look::Space::Large).child(draw_panel(drawing, panel, cx)));
     let accounts = listed(drawing.records.github_accounts(), drawing.github.and_then(|github| github.account.as_ref()));
     let said = if drawing.older {
-        Some(("git-older-hub", words::OLDER_HUB))
+        Some(("git-older-hub", words::OLDER_HUB.to_string()))
     } else {
-        (accounts.is_empty() && panel.is_none()).then_some(("git-none-added", words::NONE_ADDED))
+        (accounts.is_empty() && panel.is_none()).then(|| ("git-none-added", words::none_added()))
     };
     let said = said.map(|(id, said)| said_in_the_list(id, said.into(), cx));
     let rows = accounts.iter().map(|account| account_row(drawing, account, cx));
@@ -67,7 +67,7 @@ fn blocked(drawing: &Drawing<'_>, cx: &App) -> Option<AnyElement> {
         id: "git-blocked",
         icon: Lucide::TriangleAlert,
         tone: status_box::Tone::Problem,
-        lead: Some("Agents can't push.".into()),
+        lead: Some("Roundhouse can't use its GitHub account.".into()),
         detail: reason.clone().into(),
         progress: None,
         action: None,

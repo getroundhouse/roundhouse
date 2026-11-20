@@ -3,8 +3,10 @@
 
 use std::path::{Path, PathBuf};
 
+use protocol::model::{GithubAccount, GithubAppId, GithubInstallation, GithubInstallationId, Rev};
 use protocol::worker::{GitCredential, GitIdentity, GithubCredential};
 
+use super::super::blocks::{Unusable, lost};
 use super::super::*;
 use super::sign_ins::{approved, started};
 use super::{ada, connect, logins_in, owner};
@@ -77,8 +79,8 @@ fn a_disconnected_default_blocks_saying_to_connect_it_again() {
     logins.disconnect(&"g1".into(), 2000).unwrap();
 
     let reason = reason(sent(&logins));
-    assert!(reason.contains("default GitHub account, ada, was disconnected"), "{reason}");
-    assert!(reason.contains("Connect it again in Roundhouse's Settings"), "{reason}");
+    assert!(reason.contains("ada, the default account, was disconnected"), "{reason}");
+    assert!(reason.contains("Connect it again, or choose another default"), "{reason}");
 }
 
 #[test]
@@ -93,7 +95,7 @@ fn a_default_whose_token_has_ended_blocks_from_its_end_saying_to_renew_it() {
 
     assert_eq!(before_its_end, as_ada("a-token"));
     let reason = reason(sent(&logins));
-    assert!(reason.contains("ada, has ended") && reason.contains("Renew it"), "{reason}");
+    assert!(reason.contains("ada, the default account, has ended") && reason.contains("Renew it"), "{reason}");
 }
 
 #[test]
@@ -111,8 +113,8 @@ fn a_default_whose_tokens_file_is_gone_or_cant_be_read_blocks() {
     logins.check(2000).unwrap();
     let unreadable = reason(sent(&logins));
 
-    assert!(gone.contains("can't find the token of its default GitHub account, ada"), "{gone}");
-    assert!(unreadable.contains("can't read the token of its default GitHub account, ada ("), "{unreadable}");
+    assert!(gone.contains("can't find the token of ada, the default account"), "{gone}");
+    assert!(unreadable.contains("can't read the token of ada, the default account ("), "{unreadable}");
 }
 
 /// The sign-in `id` approved as ada, with `token`, which ends at 9000, as the account `g` if the hub holds no sign-in as
@@ -163,9 +165,9 @@ fn a_default_signed_in_blocks_from_its_tokens_end_saying_its_being_renewed_and_o
     let chosen_once_ended = logins.set_default(Some(&"g".into()), 90_000).unwrap_err();
 
     assert_eq!(before_its_end, as_ada("a-token"));
-    assert!(renewing.contains("default GitHub account, ada, has ended, and Roundhouse is renewing it"), "{renewing}");
+    assert!(renewing.contains("ada, the default account, has ended, and Roundhouse is renewing it"), "{renewing}");
     assert!(renewing.contains("If this goes on, sign in with GitHub again"), "{renewing}");
-    assert!(ended.contains("The sign-in of Roundhouse's default GitHub account, ada, has ended"), "{ended}");
+    assert!(ended.contains("The sign-in of ada, the default account, has ended"), "{ended}");
     assert!(ended.contains("Sign in with GitHub again") && !ended.contains("Renew"), "{ended}");
     assert_eq!((chosen_while_renewing.code, chosen_once_ended.code), (ErrorCode::Conflict, ErrorCode::Conflict));
     assert!(chosen_while_renewing.message.contains("is being renewed"), "{}", chosen_while_renewing.message);
@@ -182,7 +184,10 @@ fn a_default_that_needs_signing_in_again_blocks_before_its_access_token_ends() {
     logins.check(2000).unwrap();
 
     let reason = reason(sent(&logins));
-    assert!(reason.contains("ada, has ended") && reason.contains("Sign in with GitHub again"), "{reason}");
+    assert!(
+        reason.contains("ada, the default account, has ended") && reason.contains("Sign in with GitHub again"),
+        "{reason}"
+    );
 }
 
 /// Not as one whose file holds nothing, which says to connect it again, nor as the machine's own.
@@ -196,6 +201,48 @@ fn a_default_whose_file_only_a_newer_build_reads_blocks_saying_so() {
     logins.check(2000).unwrap();
 
     let reason = reason(sent(&logins));
-    assert!(reason.contains("ada, is one only a newer Roundhouse can read"), "{reason}");
+    assert!(reason.contains("ada, the default account, is one only a newer Roundhouse can read"), "{reason}");
     assert!(reason.contains("Update Roundhouse"), "{reason}");
+}
+
+/// Every block's words, for a token's account and an installation's, which git prints in a terminal on any provider
+/// Roundhouse sets up GitHub on, and Git's box shows on any device: each says once what Roundhouse can't do, and never
+/// says where it's read, as "this workspace" or "there" for the hub's machine would.
+#[test]
+fn every_block_says_once_what_roundhouse_cant_do_and_never_where_its_read() {
+    let user = |id, name: &str| GithubUser { id: GithubUserId::new(id), name: name.into() };
+    let account = GithubAccount {
+        id: "g".into(),
+        user: user(7, "ada"),
+        held_login: None,
+        installation: None,
+        rev: Rev::default(),
+    };
+    let installation =
+        GithubInstallation { app: GithubAppId::new(1), id: GithubInstallationId::new(1), on: user(8, "adalabs") };
+    let bot =
+        GithubAccount { user: user(9, "ada-roundhouse[bot]"), installation: Some(installation), ..account.clone() };
+    let every = || {
+        [
+            Unusable::Disconnected,
+            Unusable::Ended,
+            Unusable::SignInAgain,
+            Unusable::Renewing,
+            Unusable::Newer,
+            Unusable::Unreadable(None),
+            Unusable::Unreadable(Some(std::io::Error::other("e"))),
+            Unusable::GhLoggedOut(NoGhLogin::LoggedOut),
+            Unusable::GhLoggedOut(NoGhLogin::NotInstalled),
+            Unusable::GhOtherUser("grace".into()),
+            Unusable::GhUnread(None),
+            Unusable::GhUnread(Some("gh took more than 15s".into())),
+        ]
+    };
+
+    for of in [&account, &bot] {
+        for said in every().iter().map(|unusable| lost(of, unusable)) {
+            assert_eq!(said.matches("Roundhouse can't read pull requests").count(), 1, "{said}");
+            assert!(!said.contains("workspace") && !said.contains(" there") && !said.contains("this Mac"), "{said}");
+        }
+    }
 }

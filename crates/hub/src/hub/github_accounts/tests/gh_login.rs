@@ -4,6 +4,7 @@
 
 use std::path::Path;
 
+use protocol::client::ErrorCode;
 use protocol::model::{GhLogin, GhLoginWorks, GithubLoginKind, SentCredential, UnusableLogin};
 use protocol::worker::GithubCredential;
 
@@ -66,6 +67,37 @@ async fn who_gh_is_logged_in_as_is_said_with_whether_github_takes_its_token() {
     assert_eq!(ada, GhLogin::LoggedIn { username: "ada".into(), works: GhLoginWorks::Yes });
     assert_eq!(refused, GhLogin::LoggedIn { username: "ada".into(), works: GhLoginWorks::Refused });
     assert_eq!(hub.records_list().await.unwrap().github_accounts, [], "asking connects nothing");
+}
+
+/// Connecting `gh`'s login while it has none that works is refused, saying what's wrong with `gh` on the hub's machine,
+/// by what it is rather than as "this Mac" or "there", since the person may be asking from another device, and what to
+/// run before trying again.
+#[tokio::test]
+async fn connecting_gh_with_no_login_that_works_says_what_to_run_on_the_hubs_machine() {
+    let github = StandIn::start(vec![("ada-token", Answer::user(7, "ada", None))]).await;
+    let dir = tempfile::tempdir().unwrap();
+    let hub = hub_calling_github(dir.path(), github.api());
+
+    let none = hub.github_account_connect_gh().await.unwrap_err();
+    gh(dir.path());
+    let logged_out = hub.github_account_connect_gh().await.unwrap_err();
+    log_in(dir.path(), "ada", "a-revoked-token");
+    let refused = hub.github_account_connect_gh().await.unwrap_err();
+
+    let machine =
+        if cfg!(target_os = "macos") { "the Mac Roundhouse runs on" } else { "the computer Roundhouse runs on" };
+    assert_eq!(none.code, ErrorCode::Conflict);
+    assert_eq!(
+        none.message,
+        format!("gh isn't installed on {machine}. Install gh, run gh auth login, then try again.")
+    );
+    assert_eq!(logged_out.code, ErrorCode::Conflict);
+    assert_eq!(logged_out.message, format!("gh on {machine} is logged out. Run gh auth login, then try again."));
+    assert_eq!(refused.code, ErrorCode::InvalidRequest);
+    assert_eq!(
+        refused.message,
+        format!("GitHub refused the token of gh on {machine}. Run gh auth login, then try again.")
+    );
 }
 
 /// The hub never adopts it by itself, however its logins are checked, so only connecting it makes an account.

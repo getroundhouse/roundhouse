@@ -14,7 +14,7 @@ use super::files::ANSWER;
 /// Said when what the helper answers with can't be read, which only a worker that's stopping, or a file from a newer
 /// worker, leaves.
 const UNREADABLE: &str =
-    "Roundhouse couldn't read which GitHub account this workspace's agents push as, so they push as nobody.";
+    "Roundhouse couldn't read which GitHub account agents on this machine push as, so they push as nobody.";
 
 /// The program a worker's git config names as git's credential helper for github.com, and its arguments, after which
 /// it's given the worker's directory of files, and git the action it asks for. The worker's own binary, whose hidden

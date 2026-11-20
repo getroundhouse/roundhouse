@@ -149,7 +149,7 @@ Whichever way but `gh`'s, the hub keeps the login in its own data, as [Where dat
 
 If the default can't be used, because its token ended, it was disconnected, it needs signing in again, it's `gh`'s login and `gh` on this Mac is logged out or logged in as someone else, or it's an app's installation that was uninstalled on GitHub, or whose token ended before the hub could make the next, it stays the default, and agents can't push until you put it right or make another the default. They don't fall back on the machine's own login. On your own machine, agents push as they always do, as [Who agents are on GitHub](../concepts/who-agents-are-on-github.md) says. Git says so at the top of **Added**, with why and what to do, in the words a workspace's line says and git gives as it refuses a push.
 
-![Git saying agents can't push, since the default's token ended](../../spec/screens/settings-git-default-ended.png)
+![Git saying Roundhouse can't use its GitHub account, since the default's token ended](../../spec/screens/settings-git-default-ended.png)
 
 A hub from before hubs kept GitHub accounts can't connect one, and agents use each machine's own login. Update the hub to connect one.
 

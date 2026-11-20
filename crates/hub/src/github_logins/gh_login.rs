@@ -42,14 +42,19 @@ pub(crate) enum NoGhLogin {
     Refused,
 }
 
+/// What the hub's words call its own machine, which a person may be reading of on another device, or in a push's
+/// refusal on another provider's machine, so never "this Mac" or "there". *Unconfirmed.*
+pub(crate) const HUB_MACHINE: &str =
+    if cfg!(target_os = "macos") { "the Mac Roundhouse runs on" } else { "the computer Roundhouse runs on" };
+
 impl std::fmt::Display for NoGhLogin {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(match self {
-            NoGhLogin::NotInstalled => "there's no gh there",
-            NoGhLogin::LoggedOut => "gh there is logged out",
-            NoGhLogin::NoToken => "gh there printed no token for its login",
-            NoGhLogin::Refused => "GitHub refused gh's token there",
-        })
+        match self {
+            NoGhLogin::NotInstalled => write!(f, "gh isn't installed on {HUB_MACHINE}"),
+            NoGhLogin::LoggedOut => write!(f, "gh on {HUB_MACHINE} is logged out"),
+            NoGhLogin::NoToken => write!(f, "gh on {HUB_MACHINE} printed no token for its login"),
+            NoGhLogin::Refused => write!(f, "GitHub refused the token of gh on {HUB_MACHINE}"),
+        }
     }
 }
 

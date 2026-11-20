@@ -20,8 +20,9 @@ fn closing_a_chat_moves_to_the_next_still_open_or_else_the_last() {
 fn a_workspace_says_why_agents_cant_push_to_its_repository_and_nothing_while_they_can() {
     let repository = GithubRepositoryName::named("cli/cli");
     let ada = || GithubUsername::from("ada");
-    let reason = "Roundhouse's default GitHub account, ada, was disconnected, so this workspace's agents push to GitHub \
-                  as nobody. Connect it again in Roundhouse's Settings, or choose another default there.";
+    let reason = "ada, the default account, was disconnected. Until it's connected again, Roundhouse can't read pull \
+                  requests, and agents on the providers it sets up can't push. Connect it again, or choose another \
+                  default.";
     let said_of = |reach: Reach| {
         let said = said(&reach).unwrap();
         assert_eq!(said.install_at, None, "only an app's installation is given access on the app's page");
