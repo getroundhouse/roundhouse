@@ -60,6 +60,8 @@ impl Mirror {
 
     /// A copy that answers what the program asks of its terminal, such as where the cursor is, or what the terminal
     /// is, by giving `answer` what the program reads back. It's called as a write or a new size takes in a question.
+    /// Only the worker's copy answers, so each question is answered once, whether several clients are attached or
+    /// none, and a shell that asks as it starts doesn't wait for a client.
     pub fn answering(size: Size, mut answer: impl FnMut(&[u8]) + 'static) -> Result<Self, MirrorError> {
         let mut mirror = Self::new(size)?;
         mirror.terminal.on_pty_write(move |_, bytes| answer(bytes))?.on_device_attributes(|_| Some(ATTRIBUTES))?;

@@ -25,7 +25,8 @@ pub(crate) type Queued = Pin<Box<dyn Future<Output = Result<ClientResponse, ApiE
 #[derive(Default)]
 pub(crate) struct Terminals {
     /// Held while a terminal's record changes and takes its revision, and while every record is listed, so a list has
-    /// every terminal whose revision it takes in.
+    /// every terminal whose revision it takes in. A stored record gets that from the transaction it changes in, and
+    /// one kept in memory has no transaction.
     pub(super) changing: AsyncMutex<()>,
     pub(super) open: Mutex<HashMap<TerminalId, Open>>,
 }
