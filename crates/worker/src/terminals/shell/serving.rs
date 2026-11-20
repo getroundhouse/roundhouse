@@ -19,6 +19,7 @@ use tokio::time::Instant;
 use tracing::warn;
 
 use super::command;
+use super::front::{self, Front};
 use crate::Timers;
 use crate::serve::Outbox;
 use crate::terminals::process_records::ProcessRecords;
@@ -29,10 +30,6 @@ const READ_BYTES: usize = 64 * 1024;
 /// Reads waiting to be taken in. Few, so a program that writes faster than the hub reads waits in the PTY, as it would
 /// for a slow terminal, rather than here.
 const QUEUED_READS: usize = 4;
-/// How often to ask whether a job that has to end by a deadline has. Often enough that a stop takes barely longer than
-/// the job does to end, and asking is one system call.
-#[cfg(unix)]
-const STILL_RUNNING_EVERY: Duration = Duration::from_millis(20);
 /// How long after the shell ends to wait for the last of what it wrote, which a program it left running can hold the
 /// PTY open past. What the shell wrote as it ended is in the PTY already, so this is only for such a program, which
 /// would otherwise keep the terminal open as long as it ran.
@@ -116,7 +113,7 @@ pub(in crate::terminals) fn start(
     }
     let next = UpdateIndex::new(0);
     let (master, stop_grace, look_every) = (pty.master, timers.terminal_stop_grace, timers.look_in_front_every);
-    let front = None;
+    let front = Front::Looked(None);
     let shell =
         Shell { terminal, size, master, pid, front, process_records, look_every, stop_grace, outbox, next, exit: None };
     let (to_shell, told) = mpsc::unbounded_channel();
@@ -183,9 +180,7 @@ struct Shell {
     master: Box<dyn MasterPty + Send>,
     /// The shell's, which leads a process group of its own.
     pid: Option<u32>,
-    /// The group of the job the shell last ran in front, as it was last looked at, which an interactive shell starts
-    /// in a group of its own, and which can outlast the shell. Never the shell's own.
-    front: Option<u32>,
+    front: Front,
     process_records: ProcessRecords,
     /// How often to look at which job the shell runs in front, to record it.
     look_every: Duration,
@@ -216,7 +211,7 @@ impl Shell {
             Ok(mut mirror) => self.until_ended(&mut mirror, &mut read, &mut told, &mut exit).await,
             Err(e) => {
                 warn!("couldn't keep what terminal {} shows, so its shell is ended: {e}", self.terminal);
-                self.signal(process::Signal::Kill);
+                self.kill();
             }
         }
         self.process_records.finished();
@@ -257,7 +252,7 @@ impl Shell {
                 }
                 () = until(done_at) => break,
                 () = until(kill_at) => {
-                    self.signal(process::Signal::Kill);
+                    self.kill();
                     kill_at = None;
                 }
                 // Not on Windows, which has no groups to look at.
@@ -268,35 +263,32 @@ impl Shell {
                 },
             }
         }
+        // The job can outlast the shell, and the PTY, which a Mac closes as the shell ends.
         #[cfg(unix)]
         if let Some(kill_at) = kill_at {
-            self.outlasted_by_front(kill_at).await;
+            front::outlasted_by(self.front, kill_at).await;
         }
     }
 
-    /// Waits for the job the shell ran in front, which can outlast the shell, and the PTY, which a Mac closes as the
-    /// shell ends, and kills it if it hasn't ended by `kill_at`.
-    #[cfg(unix)]
-    #[expect(
-        clippy::disallowed_methods,
-        reason = "the pace a job that outlasted its shell is looked at again until it ends or its grace is up"
-    )]
-    async fn outlasted_by_front(&self, kill_at: Instant) {
-        let Some(front) = self.front else { return };
-        while process::group_running(front) {
-            if Instant::now() >= kill_at {
-                process::signal_group(front, process::Signal::Kill);
-                return;
-            }
-            tokio::time::sleep(STILL_RUNNING_EVERY).await;
-        }
-    }
-
-    /// Asks the shell to end, and the job it runs, and kills them if they haven't by `kill_at`.
+    /// Asks the shell to end, and the job it runs in front now, and kills them if they haven't by `kill_at`.
     fn hang_up(&mut self, kill_at: &mut Option<Instant>) {
         if kill_at.is_none() && self.exit.is_none() {
+            // Before the shell is signalled, since the PTY says which it is only while the shell runs.
+            self.look_in_front();
+            self.front = Front::HungUpOn(self.front.group());
             self.signal(process::Signal::Hangup);
             *kill_at = Some(Instant::now() + self.stop_grace);
+        }
+    }
+
+    /// Kills the shell's group, the job it was hung up on, and whatever it runs in front now, such as its exit trap's
+    /// command.
+    fn kill(&self) {
+        // Before the shell is killed, as for a hangup.
+        let now = front::in_front(&*self.master).filter(|now| ![self.pid, self.front.group()].contains(&Some(*now)));
+        self.signal(process::Signal::Kill);
+        if let Some(now) = now {
+            process::signal_group(now, process::Signal::Kill);
         }
     }
 
@@ -343,33 +335,23 @@ impl Shell {
     /// Signals the shell's group, only before the shell has ended, since its PID can be another process's after, and
     /// the group of the job it runs in front. A shell that's hung up on sends it on to the jobs it runs behind, so
     /// those end too, but for one started to outlive the terminal, such as with `nohup`.
-    fn signal(&mut self, signal: process::Signal) {
-        // Before the shell is signalled, since the PTY says which it is only while the shell runs.
-        self.look_in_front();
+    fn signal(&self, signal: process::Signal) {
         if let Some(pid) = self.pid.filter(|_| self.exit.is_none()) {
             process::signal_group(pid, signal);
         }
-        if let Some(front) = self.front {
+        if let Some(front) = self.front.group() {
             process::signal_group(front, signal);
         }
     }
 
-    /// Notes which job the shell runs in front, but for the shell itself, and records it, since it can outlast the shell.
+    /// Notes which job the shell runs in front, but for the shell itself, and records it, since it can outlast the
+    /// shell. Once the shell has been hung up on, the job it ran then is the one recorded, as [`Front::HungUpOn`] says.
     fn look_in_front(&mut self) {
-        let Some(front) = in_front(&*self.master) else { return };
-        self.front = Some(front).filter(|front| Some(*front) != self.pid);
-        self.process_records.front(self.front);
-    }
-}
-
-/// The group in front, which a PTY says only while its shell runs, and only on Unix, as Windows has no groups.
-fn in_front(master: &dyn MasterPty) -> Option<u32> {
-    #[cfg(unix)]
-    return master.process_group_leader().and_then(|group| u32::try_from(group).ok());
-    #[cfg(windows)]
-    {
-        let _ = master;
-        None
+        let Front::Looked(_) = self.front else { return };
+        let Some(front) = front::in_front(&*self.master) else { return };
+        let front = Some(front).filter(|front| Some(*front) != self.pid);
+        self.front = Front::Looked(front);
+        self.process_records.front(front);
     }
 }
 
