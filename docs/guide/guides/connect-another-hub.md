@@ -11,7 +11,7 @@ Add projects on the machine that owns the hub. The remote workspace list then sh
 3. On this machine, open the hub switcher and choose **Connect another hub…**.
 4. Paste the `roundhouse://pair?…` link, check the previewed hub name and addresses, and choose **Connect**.
 
-The link expires after ten minutes and works once. Once this machine connects, the other machine's dialog confirms the paired device by this computer's name. Pairing grants control of the hub's workspaces, so share a link only with a device you mean to connect. The app saves the connection and returns to the selected hub when reopened. Its token stays in the operating system's credential store.
+The link expires after ten minutes and works once. Once this machine connects, the other machine's dialog confirms the paired device by this computer's name. A paired device can do what you can in the app on the hub's machine: work in its workspaces, change the hub's settings and accounts, and open a terminal there. So share a link only with a device you trust with that machine. The app saves the connection and returns to the selected hub when reopened. Its token stays in the operating system's credential store.
 
 Choose **Create new link** if the link expired before a device connected. Each link keeps its own expiry; creating another does not invalidate earlier links. You can also generate a link and QR code from a terminal on the hub's machine with `roundhouse phone pair`.
 
