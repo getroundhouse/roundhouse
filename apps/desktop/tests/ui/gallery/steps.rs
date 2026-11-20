@@ -38,6 +38,9 @@ pub(crate) enum Step {
     OpenSetupLog,
     /// Presses a button, such as one that opens a menu.
     Click(&'static str),
+    /// Gives the proposal tab its proposal's record as this world holds it, as the hub's feed would once the agent had
+    /// revised it, since a screen's hub holds one world from start to finish.
+    ProposalRevised(fn() -> World),
     /// Moves the pointer somewhere with no hover of its own, so the picture shows what's open rather than what's
     /// under the pointer.
     MoveAway,

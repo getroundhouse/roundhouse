@@ -6,6 +6,7 @@ mod dictating;
 mod files;
 mod finding;
 mod opening;
+mod proposals;
 mod scrollbar;
 
 pub(crate) use finding::{FoundBothWays, copied_whole, found_both_ways};

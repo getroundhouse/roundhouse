@@ -69,6 +69,21 @@ pub(crate) const SCREENS: &[Screen] = &[
         ],
     },
     Screen {
+        name: "proposal-held",
+        spec: "proposals.md",
+        world: Some(world),
+        frame: PROPOSAL,
+        steps: &[
+            Step::Select(FOCUS),
+            Step::Click("open-proposal/8d0c6a5e-proposal"),
+            Step::Click("choose-0-0"),
+            Step::Click("input-state"),
+            Step::Type("The signal, as long as its count survives a restart."),
+            Step::ProposalRevised(revised_unasked_world),
+            Step::MoveAway,
+        ],
+    },
+    Screen {
         name: "proposal-answered",
         spec: "proposals.md",
         world: Some(answered_world),
@@ -168,6 +183,19 @@ fn revised_world() -> World {
         replied("I'll drop B, which can't survive a restart, and write up the dispatcher's board.", 63, 0.31),
     ]);
     let first = first(Some(another_round()));
+    let second = second(&first);
+    with_proposal(events, vec![first, second])
+}
+
+/// After the agent revised the proposal without being asked to, while it waited for the person.
+fn revised_unasked_world() -> World {
+    let first = first(None);
+    let second = second(&first);
+    with_proposal(events(), vec![first, second])
+}
+
+/// The second revision, after `first`: B dropped, C keeping its letter, and D added.
+fn second(first: &ProposalRevision) -> ProposalRevision {
     let mut proposed = proposed();
     let question = &mut proposed.questions[0];
     let board = ProposalOption {
@@ -187,7 +215,7 @@ fn revised_world() -> World {
         option: OptionPlace(2),
         why: "It keeps the signal free of state, as you asked, and survives a restart.".into(),
     });
-    let second = ProposalRevision {
+    ProposalRevision {
         number: RevisionNumber(2),
         changed:
             "Dropped B, the train, which loses a hold on a restart. Added D, the dispatcher's board, as you asked. \
@@ -197,8 +225,7 @@ fn revised_world() -> World {
         proposed,
         response: None,
         ..first.clone()
-    };
-    with_proposal(events, vec![first, second])
+    }
 }
 
 /// The first revision, which the person responded to with `response`, if they did.

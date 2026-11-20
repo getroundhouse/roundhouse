@@ -1,5 +1,7 @@
 //! The bar at a proposal's tab's foot, which `answering` keeps the state of, and the banner over its page: the note and
-//! what's chosen, with Another round and Send, while it waits for the person, and otherwise what was said to it.
+//! what's chosen, with Another round and Send, while it waits for the person, and otherwise what was said to it. While
+//! a newer revision is held back, as `held` says, the bar stays, with Another round and Send off, and the banner says
+//! why.
 
 use gpui_kit::component::input::Textarea;
 use gpui_kit::component::{h_flex, v_flex};
@@ -134,10 +136,20 @@ impl ProposalView {
             .into_any_element()
     }
 
-    /// The banner over the page while there's nothing to choose. While another round is asked for, that the next
-    /// revision shows here once the agent writes it, which says nothing of whether it's started, since the request may
-    /// still wait in the queue. Once the agent's withdrawn the proposal, that it has, and why.
-    pub(super) fn banner(&self) -> Option<look::Banner> {
+    /// The banner over the page while nothing can be sent. While a newer revision is held back, that the agent wrote
+    /// it, with a button that shows it. While another round is asked for, that the next revision shows here once the
+    /// agent writes it, which says nothing of whether it's started, since the request may still wait in the queue. Once
+    /// the agent's withdrawn the proposal, that it has, and why.
+    pub(super) fn banner(&self, cx: &mut Context<Self>) -> Option<look::Banner> {
+        if let Some(newest) = self.held_back() {
+            let show = format!("Show revision {newest}");
+            let show =
+                look::button("show-newest-revision", look::ButtonKind::Borderless, look::ControlSize::Small, show)
+                    .off(self.answering.going())
+                    .on_click(cx.listener(|this, _, _, cx| this.show_newest(cx)));
+            let said = format!("The agent wrote revision {newest}, so this one can't be answered.");
+            return Some(look::banner(look::BannerKind::Note).id("proposal-revised-since").child(said).answer(show));
+        }
         let (id, said) = match self.proposal.standing() {
             RevisionStanding::AnotherRound(_) => {
                 let next = self.proposal.current.number.next();

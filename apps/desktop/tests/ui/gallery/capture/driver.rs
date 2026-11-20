@@ -110,6 +110,7 @@ impl Driver {
             Step::WaitFor(id) => self.wait_for(&gpui_kit::SharedString::from(*id).into()),
             Step::StartComment(line) => self.start_comment(*line),
             Step::Click(id) => self.click(*id),
+            Step::ProposalRevised(world) => self.proposal_revised(*world),
             Step::MoveAway => self.move_away(),
             Step::HoverTab(position) => self.hover_tab(*position),
             Step::Point(id) => self.point(*id),

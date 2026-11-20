@@ -7,7 +7,8 @@
 //! What the agent wrote is drawn and selected as a chat's texts are, through `crate::texts` and `crate::selection`, so
 //! a text the Markdown parser panics on doesn't end the app, and what's selected is copied as it was written. The page
 //! is drawn whole, since a proposal is at most 128 KiB, so it scrolls by GPUI's own handle, with the kit's scrollbar
-//! and its bounce at the ends, and `page` does for it what the chat's list does for its rows' texts.
+//! and its bounce at the ends, and `page` does for it what the chat's list does for its rows' texts. A revision the
+//! agent writes while the person reads the one before it waits to be shown, as `held` says.
 
 #[cfg(test)]
 mod tests;
@@ -16,6 +17,7 @@ mod answering;
 mod bar;
 mod dictating;
 mod document;
+mod held;
 mod page;
 mod view;
 

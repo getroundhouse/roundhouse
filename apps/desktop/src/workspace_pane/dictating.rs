@@ -35,7 +35,7 @@ impl WorkspacePane {
         let showing_chat = self.drawn() && self.showing() == Showing::Chat;
         if let Some(view) = self.proposals.view() {
             let showing = self.drawn() && self.showing() == Showing::Proposal;
-            view.update(cx, |view, cx| view.set_dictation_enabled(showing, cx));
+            view.update(cx, |view, cx| view.set_in_sight(showing, cx));
         }
         if let Some(diff) = &self.diff {
             let showing =

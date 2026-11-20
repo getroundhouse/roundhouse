@@ -3,7 +3,8 @@
 //! for another round without choosing, once the note says what to change. The app sends it, as
 //! [`ProposalEvent::Send`] asks, and the hub keeps it on the proposal, so once its record says it's answered, the bar
 //! says what was chosen, or that another round was asked for, instead. What's chosen and written before it's sent is
-//! this view's alone. The note can be dictated into, as `dictating` says, and `bar` draws the bar.
+//! this view's alone. The note can be dictated into, as `dictating` says, and `bar` draws the bar. Nothing is sent
+//! while a newer revision is held back, as `held` says.
 
 use gpui_kit::component::input::{InputEvent, TextareaState};
 use gpui_kit::{
@@ -52,6 +53,21 @@ pub(super) struct Answering {
     /// doesn't take it for the one it kept and leave the change unsaid.
     request: Option<ProposalRequest>,
     pub(super) sending: Sending,
+}
+
+impl Answering {
+    /// Goes on to another revision with the note as it is, and `chosen` for its questions, as something not sent
+    /// yet: what was asked of the revision before isn't asked again of this one.
+    pub(super) fn carry_to(&mut self, chosen: Vec<Option<OptionPlace>>) {
+        self.chosen = chosen;
+        self.request = None;
+        self.sending = Sending::Idle;
+    }
+
+    /// Whether an answer, or a request for another round, is on its way to the hub.
+    pub(super) fn going(&self) -> bool {
+        matches!(self.sending, Sending::Going)
+    }
 }
 
 /// The note, made the first time the bar is drawn, since an input needs the window, and what dictates into it.
@@ -144,9 +160,15 @@ impl ProposalView {
         self.proposal.standing() == RevisionStanding::Waiting
     }
 
-    /// Whether an answer or a request for another round can be sent: while it's not answered and not being sent.
+    /// Whether the note can be written in: while the revision shown isn't responded to and nothing is being sent.
+    pub(super) fn takes_a_note(&self) -> bool {
+        self.waits() && !self.answering.going()
+    }
+
+    /// Whether an answer or a request for another round can be sent: while the note can be written in, and the
+    /// revision shown is the newest, since the hub refuses a response to one the agent has replaced.
     pub(super) fn open(&self) -> bool {
-        self.waits() && !matches!(self.answering.sending, Sending::Going)
+        self.takes_a_note() && self.newest.is_none()
     }
 
     /// One option for each question, when one is chosen for each, while an answer can be sent.
@@ -220,6 +242,9 @@ impl ProposalView {
             Ok(()) => Sending::Idle,
             Err(why) => Sending::Failed(why),
         };
+        if matches!(self.answering.sending, Sending::Idle) {
+            self.sent_before_a_revision(cx);
+        }
         self.follow_dictation(cx);
         cx.notify();
     }
