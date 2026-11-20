@@ -43,6 +43,8 @@ pub struct SessionChange {
     pub initialized: Option<Initialized>,
     /// What the current run said it claims, which the record holds until it exits.
     pub claims: Option<protocol::model::RunCapabilities>,
+    /// Conversation mode turned on, with the conversation on this device, as the event that draws its rule says.
+    pub conversation: Option<protocol::model::ClientDevice>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -53,7 +55,11 @@ pub struct Initialized {
 impl SessionChange {
     /// Whether nothing on the session's record changes. Which number from its worker it has recorded isn't there.
     pub fn is_none(&self) -> bool {
-        self.status.is_none() && self.queue_held.is_none() && self.initialized.is_none() && self.claims.is_none()
+        self.status.is_none()
+            && self.queue_held.is_none()
+            && self.initialized.is_none()
+            && self.claims.is_none()
+            && self.conversation.is_none()
     }
 }
 
@@ -86,6 +92,9 @@ pub(super) fn change_session(
     }
     if let Some(claims) = change.claims {
         super::super::claims::set_claims(tx, session_id, &claims)?;
+    }
+    if let Some(device) = change.conversation {
+        tx.execute("UPDATE sessions SET conversation = ? WHERE id = ?", params![serde_json::to_string(&device)?, id])?;
     }
     if let Some(held) = change.queue_held {
         tx.execute("UPDATE sessions SET queue_held = ? WHERE id = ?", params![held, id])?;

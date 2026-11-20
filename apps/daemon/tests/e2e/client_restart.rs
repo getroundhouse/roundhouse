@@ -222,6 +222,7 @@ fn a_client_that_stalled_during_a_message_ends_with_nothing_left_in_its_tail() {
             protocol_version: protocol::client::CLIENT_PROTOCOL_VERSION,
             client: "stalled".into(),
             oldest_protocol_version: None,
+            device: None,
         }),
         ClientRequest::SessionSubscribe(subscriptions::SessionSubscribe {
             id: session.id.clone(),

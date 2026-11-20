@@ -7,6 +7,7 @@ mod activity;
 mod agent_runs;
 mod cache;
 mod comments;
+mod conversations;
 mod devices;
 mod drafts;
 mod event_kinds;

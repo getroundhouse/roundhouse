@@ -161,7 +161,7 @@ where
         };
         let (outcome, close) = match gate.admit(hub, asked).await {
             Admit::Handle(handled) => {
-                let (hub, connection) = (hub.clone(), connection.clone());
+                let (hub, connection, device) = (hub.clone(), connection.clone(), gate.client_device());
                 // Then held by the request's task, so the count comes down however the request ends, even if the
                 // connection stops reading before the task starts, as it can while typing waits for room at its worker.
                 let under_way = Counted::request(&hub);
@@ -175,7 +175,7 @@ where
                 tokio::spawn(async move {
                     let answered = match answering {
                         Answering::Queued(queued) => queued.await,
-                        Answering::OnATask(Ok(request)) => dispatch::handle(&hub, &connection, request).await,
+                        Answering::OnATask(Ok(request)) => dispatch::handle(&hub, &connection, device, request).await,
                         Answering::OnATask(Err(error)) => Err(hub.unsupported(Some(&error))),
                     };
                     let outcome = match answered {

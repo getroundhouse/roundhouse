@@ -11,8 +11,12 @@ use super::asked;
 
 #[test]
 fn every_request_of_the_hub_itself_or_for_its_records_keeps_its_form() {
-    let ranges =
-        ClientRequest::Hello(Hello { protocol_version: 4, client: "c".into(), oldest_protocol_version: Some(3) });
+    let ranges = ClientRequest::Hello(Hello {
+        protocol_version: 4,
+        client: "c".into(),
+        oldest_protocol_version: Some(3),
+        device: None,
+    });
     asked(ranges, r#"{"method":"hello","protocol_version":4,"client":"c","oldest_protocol_version":3}"#);
     asked(ClientRequest::HubStatus, r#"{"method":"hub_status"}"#);
     asked(ClientRequest::HubShutdown, r#"{"method":"hub_shutdown"}"#);

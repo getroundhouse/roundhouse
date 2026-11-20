@@ -6,6 +6,7 @@
 mod asking;
 mod background;
 mod chats;
+mod conversations;
 mod launching;
 mod reading;
 mod settings;

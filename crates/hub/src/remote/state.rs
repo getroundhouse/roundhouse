@@ -14,6 +14,7 @@ use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use parking_lot::Mutex;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::model::DeviceId;
+use protocol::pairing::Device;
 use protocol::pairing::Fingerprint;
 use protocol::paths::ENV_LISTEN;
 use ring::rand::SecureRandom;
@@ -72,6 +73,8 @@ pub(crate) type Revoke = Arc<watch::Sender<bool>>;
 /// One connection's claim to be a device.
 pub(crate) struct DeviceLink {
     pub(crate) device_id: DeviceId,
+    /// What the device called itself when it paired.
+    pub(crate) device_name: String,
     connection: u64,
 }
 
@@ -153,10 +156,10 @@ impl Remote {
     }
 
     /// Notes a connection as this device's, so revoking the device sets the connection's `revoke`.
-    pub(crate) fn connected(&self, device_id: &DeviceId, revoke: &Revoke) -> DeviceLink {
+    pub(crate) fn connected(&self, device: &Device, revoke: &Revoke) -> DeviceLink {
         let connection = self.next_connection.fetch_add(1, Ordering::Relaxed);
-        self.connections.lock().entry(device_id.clone()).or_default().insert(connection, revoke.clone());
-        DeviceLink { device_id: device_id.clone(), connection }
+        self.connections.lock().entry(device.id.clone()).or_default().insert(connection, revoke.clone());
+        DeviceLink { device_id: device.id.clone(), device_name: device.name.clone(), connection }
     }
 
     pub(crate) fn disconnected(&self, link: &DeviceLink) {

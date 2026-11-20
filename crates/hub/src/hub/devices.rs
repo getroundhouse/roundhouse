@@ -131,7 +131,7 @@ impl Hub {
         let (saving, hash) = (device.clone(), TokenHash::of(&token));
         self.blocking(move |store| store.add_device(&saving, &hash)).await?;
         info!(device = %device.id, name = device.name, "paired a device");
-        let link = self.remote.connected(&device.id, revoke);
+        let link = self.remote.connected(&device, revoke);
         self.remote.codes.lock().paired(code, device);
         self.remote.paired.notify_waiters();
         Ok((token, link))
@@ -151,7 +151,7 @@ impl Hub {
         if !self.blocking(move |store| store.device_seen(&id, now)).await? {
             return Err(not_paired());
         }
-        Ok(self.remote.connected(&device.id, revoke))
+        Ok(self.remote.connected(&device, revoke))
     }
 
     pub(crate) async fn device_disconnected(&self, link: &DeviceLink) {

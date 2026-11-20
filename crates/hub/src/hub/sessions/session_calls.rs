@@ -9,8 +9,8 @@ use protocol::client::{ApiError, ErrorCode, HubNotice, log, records};
 use protocol::event::SessionEvent;
 use protocol::find::{Found, Needle};
 use protocol::model::{
-    ApprovalId, AttachmentId, ClientMessageId, CompactionLine, DecisionDraft, DraftToKeep, Place, PromptLine,
-    RecordKey, Seq, Session, SessionId, SubagentId, WorkspaceId,
+    ApprovalId, AttachmentId, ClientDevice, ClientMessageId, CompactionLine, DecisionDraft, DraftToKeep, Place,
+    PromptLine, RecordKey, Seq, Session, SessionId, SubagentId, WorkspaceId,
 };
 use protocol::prompt::Prompt;
 use std::collections::{HashMap, HashSet};
@@ -238,6 +238,19 @@ impl Hub {
 
     pub(crate) async fn session_reopen(self: &Arc<Self>, id: SessionId) -> Result<Session, ApiError> {
         self.live_session(&id).await?.reopen().await
+    }
+
+    /// Turns conversation mode on in the chat `id`, with the conversation on `device`, or moves it there.
+    pub(crate) async fn session_conversation_start(
+        self: &Arc<Self>,
+        id: SessionId,
+        device: ClientDevice,
+    ) -> Result<Session, ApiError> {
+        self.live_session(&id).await?.start_conversation(device).await
+    }
+
+    pub(crate) async fn session_conversation_end(self: &Arc<Self>, id: SessionId) -> Result<Session, ApiError> {
+        self.live_session(&id).await?.end_conversation().await
     }
 
     pub(crate) async fn session_mark_read(&self, id: SessionId, through_seq: Seq) -> Result<Session, ApiError> {

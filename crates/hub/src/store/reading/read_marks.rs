@@ -30,7 +30,7 @@ impl Store {
     }
 
     /// Runs `update` and reads the session back on the writer, so what comes back is what the update left.
-    pub(super) fn change_reading(
+    pub(in super::super) fn change_reading(
         &self,
         id: &SessionId,
         update: &str,

@@ -109,6 +109,8 @@ pub(super) struct LiveState {
     /// of it runs under is, which puts it on that.
     pub(super) login: SessionLogin,
     pub(super) closed_at_ms: Option<i64>,
+    /// The device that has the chat's conversation, as its record says, while conversation mode is on.
+    pub(super) conversation: Option<protocol::model::ClientDevice>,
     /// Prompts recorded for the agent that it's sent once its turn ends, oldest first, as
     /// [`super::commands::Sendable`]'s module says. Only this hub has them, so a hub that goes before the turn ends
     /// loses them, and they stay untaken.
@@ -199,6 +201,7 @@ impl LiveSession {
                 settings: ChatSettings::of(&stored.session),
                 login: SessionLogin::of_record(&stored.session),
                 closed_at_ms: stored.session.closed_at_ms,
+                conversation: stored.session.conversation.as_deref().cloned(),
                 after_the_turn: Vec::new(),
                 live: None,
             }),

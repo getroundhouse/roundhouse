@@ -27,9 +27,9 @@ These rules keep a client's copy of a hub's state correct through lag, reconnect
   | ID | Allocator | Unique within |
   |---|---|---|
   | Repository, workspace, session, comment | The hub, as a UUID | Everything, so one sidebar can merge several hubs |
-  | Child worktree, wait, proposal | The hub, as a UUID | Everything |
+  | Child worktree, wait, proposal, paired device | The hub, as a UUID | Everything |
   | GitHub account | The hub, as a UUID, because one GitHub user can be connected more than once | Everything |
-  | Terminal | A client, as a UUID, so opening one again opens it once | Everything |
+  | Terminal, device on the hub's machine | A client, as a UUID, so a terminal opened again opens once | Everything |
   | `seq`, run | The hub | A session |
   | Place | The hub | The agent's own events, or one subagent's, in a session |
   | Revision | The hub | A hub |

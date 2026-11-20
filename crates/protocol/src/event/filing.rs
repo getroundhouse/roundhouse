@@ -35,6 +35,7 @@ impl EventBody {
             EventBody::AgentCompacting { .. } => "agent_compacting",
             EventBody::AgentCompacted { .. } => "agent_compacted",
             EventBody::CacheExpired { .. } => "cache_expired",
+            EventBody::ConversationStarted { .. } => "conversation_started",
             EventBody::Unknown => "unknown",
         }
     }
@@ -78,6 +79,7 @@ impl EventBody {
             | EventBody::AgentCompacting { .. }
             | EventBody::AgentCompacted { .. }
             | EventBody::CacheExpired { .. }
+            | EventBody::ConversationStarted { .. }
             | EventBody::Unknown => None,
         }
     }

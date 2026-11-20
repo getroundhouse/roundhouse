@@ -167,6 +167,7 @@ async fn follow(session: &Arc<LiveSession>, run: RunId, current: bool, body: &Ev
         | EventBody::AgentCompacting { .. }
         | EventBody::AgentCompacted { .. }
         | EventBody::CacheExpired { .. }
+        | EventBody::ConversationStarted { .. }
         | EventBody::Unknown => {}
     }
 }

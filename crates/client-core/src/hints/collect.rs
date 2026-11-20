@@ -245,6 +245,7 @@ impl HintCollector {
             | EventBody::CompactionAsked { .. }
             | EventBody::AgentCompacted { .. }
             | EventBody::CacheExpired { .. }
+            | EventBody::ConversationStarted { .. }
             | EventBody::Unknown => {}
         }
     }

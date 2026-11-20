@@ -135,6 +135,12 @@ impl Progress {
             status: changed.then_some(StatusChange { status, turn, background_tasks: changed_tasks }),
             queue_held: held,
             recorded: None,
+            // Turning conversation mode on puts the conversation on the device that turned it on.
+            conversation: if let EventBody::ConversationStarted { device } = &body {
+                Some(device.clone())
+            } else {
+                None
+            },
         };
         let waits = after_background(self.status, status, self.background_tasks.len(), background_tasks.len());
         let of_the_turn = origin.run().is_some() && of_the_turn(&body, known);

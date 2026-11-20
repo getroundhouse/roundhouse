@@ -122,6 +122,7 @@ pub(crate) fn next_status(current: SessionStatus, body: &EventBody, open: Open, 
         | EventBody::AgentCompacting { .. }
         | EventBody::AgentCompacted { .. }
         | EventBody::CacheExpired { .. }
+        | EventBody::ConversationStarted { .. }
         | EventBody::Unknown => current,
     }
 }
@@ -225,6 +226,7 @@ pub(crate) fn open_after(
         | EventBody::AgentCompacting { .. }
         | EventBody::AgentCompacted { .. }
         | EventBody::CacheExpired { .. }
+        | EventBody::ConversationStarted { .. }
         | EventBody::Unknown => {}
     }
     (approvals, tasks)

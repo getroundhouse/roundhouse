@@ -8,6 +8,7 @@ use protocol::model::{QueuedPrompt, RunId, SessionStatus};
 #[cfg(test)]
 mod tests;
 
+mod conversations;
 mod session_login;
 pub(crate) use session_login::SessionLogin;
 pub(super) use session_login::{on_the_hubs, session_login_of};

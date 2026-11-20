@@ -238,6 +238,7 @@ impl Tail {
             | EventBody::TaskChanged { .. }
             | EventBody::AgentOther { .. }
             | EventBody::CacheExpired { .. }
+            | EventBody::ConversationStarted { .. }
             | EventBody::Unknown => {}
         }
     }

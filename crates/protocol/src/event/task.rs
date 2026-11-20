@@ -107,6 +107,7 @@ impl EventBody {
             | EventBody::AgentCompacting { .. }
             | EventBody::AgentCompacted { .. }
             | EventBody::CacheExpired { .. }
+            | EventBody::ConversationStarted { .. }
             | EventBody::Unknown => None,
         }
     }

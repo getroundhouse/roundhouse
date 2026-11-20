@@ -173,3 +173,15 @@ fn a_turn_the_agent_started_by_itself_keeps_the_form_and_the_kind_its_stored_und
     let EventBody::OwnTurn(OwnTurn::TaskEnded { ended }) = serde_json::from_str(&board).unwrap() else { panic!() };
     assert_eq!(ended[1].wait.as_ref().map(|wait| &wait.watching), Some(&Watching::Unknown));
 }
+
+/// The hub keeps conversation mode's start in the form it sends, and an older client reads it as an event it can't
+/// draw, as `Unknown` does.
+#[test]
+fn conversation_mode_turned_on_keeps_its_form() {
+    let started = EventBody::ConversationStarted {
+        device: protocol::model::ClientDevice { id: "d1".into(), name: "Mac Studio".into() },
+    };
+    let stored = r#"{"type":"conversation_started","device":{"id":"d1","name":"Mac Studio"}}"#;
+    assert_eq!(serde_json::to_string(&started).unwrap(), stored);
+    assert_eq!(serde_json::from_str::<EventBody>(stored).unwrap(), started);
+}

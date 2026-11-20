@@ -26,6 +26,7 @@ mod selection;
 mod settings;
 pub(crate) mod share_hub;
 mod shortcuts;
+mod this_device;
 mod title_bar;
 mod view;
 mod window_buttons;

@@ -6,16 +6,17 @@ use crate::attachment_files::FileFor;
 use crate::hub::Hub;
 use crate::store::AddedBy;
 use protocol::client::{
-    ApiError, ClientRequest, ClientResponse, ErrorCode, accounts, admin, agent, attachments, comments, drafts, files,
-    github_accounts, github_apps, log, new_workspace, queue, records, references, sessions, subscriptions, waits,
-    workspaces,
+    ApiError, ClientRequest, ClientResponse, ErrorCode, accounts, admin, agent, attachments, comments, conversation,
+    drafts, files, github_accounts, github_apps, log, new_workspace, queue, records, references, sessions,
+    subscriptions, waits, workspaces,
 };
-use protocol::model::{Place, Seq};
+use protocol::model::{ClientDevice, Place, Seq};
 use std::sync::Arc;
 #[expect(clippy::too_many_lines, reason = "a flat dispatch, with one short arm per request")]
 pub(super) async fn handle(
     hub: &Arc<Hub>,
     connection: &Arc<Connection>,
+    device: Option<ClientDevice>,
     request: ClientRequest,
 ) -> Result<ClientResponse, ApiError> {
     use ClientRequest as R;
@@ -249,6 +250,15 @@ pub(super) async fn handle(
         }
         R::SessionClose(sessions::SessionClose { id }) => C::Session(hub.session_close(id).await?),
         R::SessionReopen(sessions::SessionReopen { id }) => C::Session(hub.session_reopen(id).await?),
+        R::SessionConversationStart(conversation::SessionConversationStart { id }) => {
+            let device = device.ok_or_else(|| {
+                ApiError::new(ErrorCode::InvalidRequest, "this client didn't say in its hello which device it's on")
+            })?;
+            C::Session(hub.session_conversation_start(id, device).await?)
+        }
+        R::SessionConversationEnd(conversation::SessionConversationEnd { id }) => {
+            C::Session(hub.session_conversation_end(id).await?)
+        }
         R::SessionMarkRead(sessions::SessionMarkRead { id, through_seq }) => {
             C::Session(hub.session_mark_read(id, through_seq).await?)
         }

@@ -42,6 +42,18 @@ impl LiveSession {
         refused: impl FnOnce(&LiveState) -> Option<ApiError>,
     ) -> Result<(SessionEvent, bool), ApiError> {
         let _in_order = self.recording.lock().await;
+        self.record_in_order(origin, body, raw, refused).await
+    }
+
+    /// Records `body` as [`LiveSession::record_unless`] does, for a caller that holds `recording` already, so it can
+    /// decide what to record from what everything recorded before it left.
+    pub(super) async fn record_in_order(
+        &self,
+        origin: Origin,
+        body: EventBody,
+        raw: Option<String>,
+        refused: impl FnOnce(&LiveState) -> Option<ApiError>,
+    ) -> Result<(SessionEvent, bool), ApiError> {
         let hub = self.hub()?;
         let run = origin.run();
         let (Step { body, mut change, next, waits }, still_current) = {

@@ -27,6 +27,12 @@ fn override_name(_: &App) -> Option<String> {
     None
 }
 
+/// This computer's name, read now, as it's shown. On a Mac `scutil` runs a child process, so it's called off the main
+/// thread.
+pub(crate) fn read_now() -> String {
+    clean_device_name(&super::system::computer_name(), FALLBACK)
+}
+
 /// Reads this computer's name off the main thread, since on a Mac `scutil` runs a child process.
 pub(crate) fn read_in_background(cx: &App) -> Task<String> {
     let fixed = override_name(cx);

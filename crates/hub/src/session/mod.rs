@@ -15,6 +15,7 @@ mod cache;
 mod chat_settings;
 mod commands;
 mod controls;
+mod conversation;
 mod decisions;
 mod ingest;
 mod limits;

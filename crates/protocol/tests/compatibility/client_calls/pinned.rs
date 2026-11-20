@@ -40,7 +40,8 @@ pinned! {
     ],
     "client_calls/session_requests.rs" => [
         SessionCreate(_), SessionEnsure(_), SessionList(_), SessionGet(_), SessionConfigure(_), SessionClose(_),
-        SessionReopen(_), SessionMarkRead(_), SessionMarkUnread(_), SessionRename(_), SessionAccount(_),
+        SessionReopen(_), SessionMarkRead(_), SessionMarkUnread(_), SessionConversationStart(_),
+        SessionConversationEnd(_), SessionRename(_), SessionAccount(_),
         SessionCallOffWait(_), SessionAssignAccount(_), SessionRead(_), SessionPromptList(_), SessionCompactionList(_),
         SessionFind(_), SessionReadPlaces(_), SessionSubscribe(_), SessionSubscribePlaces(_), SessionUnsubscribe(_),
         FeedSubscribe(_), SessionPrompt(_), SessionQueue(_), SessionChangeQueued(_), SessionUnqueue(_),

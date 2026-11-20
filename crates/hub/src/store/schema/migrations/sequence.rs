@@ -377,4 +377,6 @@ pub(in super::super) const MIGRATIONS: &[Migration] = &[
     Sql(super::proposals::REVISIONS),
     // The agent's withdrawal of each proposal it withdrew, in `proposals`.
     Sql(super::proposals::WITHDRAWALS),
+    // Which device has each chat's conversation, in conversation mode, in `conversations`.
+    Sql(super::conversations::CONVERSATION),
 ];

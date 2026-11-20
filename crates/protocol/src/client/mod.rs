@@ -9,6 +9,7 @@ pub mod admin;
 pub mod agent;
 pub mod attachments;
 pub mod comments;
+pub mod conversation;
 pub mod devices;
 pub mod drafts;
 mod feed;

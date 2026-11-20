@@ -3,7 +3,7 @@
 use std::path::PathBuf;
 
 use anyhow::Context as _;
-use client_core::{Client, ClientError, IdleStop, Restart};
+use client_core::{Client, ClientError, IdleStop, Introduction, Restart};
 use gpui_kit::Result;
 use local_hub::Daemon;
 use protocol::Build;
@@ -106,8 +106,13 @@ impl HubSource {
         Ok((client, Some(status)))
     }
 
+    /// Says in its hello which device this is, so the hub knows which has a chat's conversation.
     fn connect_or_start(&self) -> Result<Client, ClientError> {
-        local_hub::connect_or_start(&self.paths, &self.daemon, "desktop")
+        let introduction = match super::this_device::this_device(&self.paths.data_dir) {
+            Some(device) => Introduction::on("desktop", device),
+            None => Introduction::from("desktop"),
+        };
+        local_hub::connect_or_start(&self.paths, &self.daemon, introduction)
     }
 }
 

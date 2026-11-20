@@ -113,6 +113,7 @@ pub(super) fn keeps(body: &EventBody) -> bool {
         | EventBody::AgentCompacting { .. }
         | EventBody::AgentCompacted { .. }
         | EventBody::CacheExpired { .. }
+        | EventBody::ConversationStarted { .. }
         | EventBody::Unknown => false,
     }
 }

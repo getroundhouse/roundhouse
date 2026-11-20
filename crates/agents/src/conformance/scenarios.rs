@@ -216,6 +216,7 @@ pub static PLAN_APPROVED: Scenario = Scenario {
                     | EventBody::CompactionAsked { .. }
                     | EventBody::AgentCompacted { .. }
                     | EventBody::CacheExpired { .. }
+                    | EventBody::ConversationStarted { .. }
                     | EventBody::Unknown => false,
                 });
                 holds(asked, || {
@@ -250,6 +251,7 @@ pub static PLAN_APPROVED: Scenario = Scenario {
                             | EventBody::CompactionAsked { .. }
                             | EventBody::AgentCompacted { .. }
                             | EventBody::CacheExpired { .. }
+                            | EventBody::ConversationStarted { .. }
                             | EventBody::Unknown => None,
                         })
                         .collect();
