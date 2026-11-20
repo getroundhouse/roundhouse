@@ -26,6 +26,7 @@ mod questions;
 mod rows;
 mod scroll_area;
 mod selection;
+mod signal;
 mod task_lines;
 mod texts;
 mod transcript;
@@ -40,6 +41,7 @@ pub use rows::{
     ABOVE_THE_COMPOSER, ProposalResponseLine, around_column, in_column, proposal_response_line, subagent_standing,
 };
 pub use selection::KEY_CONTEXT;
+pub use signal::{chat_signal, recorded_work, waiting_on_you, work, workspace_signal};
 pub use transcript::{Transcript, TranscriptEvent};
 
 /// What the app adds to the words a field dictated into here favours, such as the workspace's, after the field's own.

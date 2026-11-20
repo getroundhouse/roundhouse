@@ -115,7 +115,7 @@ crates/
   providers/       The trait a provider adapter written in Rust implements, the loop that serves it over the provider protocol, and the local provider
   client-core/     Connection, and each hub's records, open sessions and open terminals, kept in sync. Shared by every Rust client. No UI
   local-hub/       Starting a hub on this machine when there's none, and removing the copies of the daemon nothing runs from, for the desktop app and the CLI. A phone never starts one
-  transcript/      A session's history and live output, in a list of its own, on the kit's Markdown blocks
+  transcript/      A session's history and live output, in a list of its own, on the kit's Markdown blocks, and what a chat's and a workspace's status marks say, which every app shows the same
   look/            How the app looks: every colour it draws with, by what it's for, the theme made from them, code's colours, the words that changed in a diff's lines, the components screens are built from, such as buttons, the status mark and the app icon, the file icons and the other icons every client draws, and the parts of the window tests find
   terminal-state/  What a terminal shows, kept from what the program in it writes on Ghostty's terminal core, the bytes that draw it again in another terminal, a plain copy of it to draw, and what its program reads for a key or a paste. No IO and no UI
   dictation-ui/    GPUI dictation attached to an opted-in text field: recording, shortcuts, live text, insertion and cancellation; shared by desktop and transcript

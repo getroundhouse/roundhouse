@@ -221,8 +221,7 @@ impl WorkspacePane {
         };
         this.take_kept_drafts(cx);
         // The chat last worked in.
-        let latest =
-            this.open_sessions().max_by_key(|s| (s.last_active_at_ms(), s.created_at_ms)).map(|s| s.id.clone());
+        let latest = Session::last_worked_in(this.open_sessions()).map(|s| s.id.clone());
         match latest {
             Some(id) => this.activate(id, cx),
             None => this.ensure_chat(cx),
@@ -301,6 +300,10 @@ impl WorkspacePane {
         let earlier = std::mem::replace(&mut self.shown, shown);
         let (id, now) = (self.workspace().id.clone(), self.shown.all().clone());
         let changes = now.changes_since(earlier.all());
+        // Each transcript takes what changed of its chat's records, before the pane decides which chats and tabs stay.
+        for transcript in self.every_transcript() {
+            transcript.update(cx, |t, cx| t.records_changed(&now, cx));
+        }
         if changes.workspace(&id) {
             if let Some(recorded) = Lookup::recorded(self.workspace()) {
                 self.pull_request = recorded;
@@ -316,7 +319,7 @@ impl WorkspacePane {
             // Such as the comment being written, changed elsewhere, which a change to the sessions takes too.
             self.take_drafts_from_elsewhere(cx);
         }
-        self.pass_on_subagents(&changes, cx);
+        self.name_the_tab_s_subagent();
         self.pass_on_proposals(&changes, cx);
         if changes.terminals(&id) {
             self.set_terminals(cx);

@@ -9,5 +9,4 @@ mod words;
 pub use words::{Action, Ask};
 
 mod status_bar;
-pub(crate) use status_bar::recorded_work;
 pub use status_bar::{Lookup, READ_AGAIN, bar, controls};

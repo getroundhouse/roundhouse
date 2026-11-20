@@ -1,6 +1,6 @@
-use crate::sidebar::signal::waiting_on_you;
 use protocol::model::{Seq, Session, SessionId, Title, WorkspaceId};
 use std::collections::{HashMap, HashSet};
+use transcript::waiting_on_you;
 
 /// What the app is known by to the system's notifications: the identifier its Mac bundle has, which Windows takes as
 /// the app's own for its notifications too. A Mac reads it from the bundle, so it's for the other systems.

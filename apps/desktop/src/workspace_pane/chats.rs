@@ -151,13 +151,11 @@ impl WorkspacePane {
     }
 
     fn make_transcript(&mut self, session: Session, cx: &mut Context<Self>) {
-        let (client, subagents) = (self.client.clone(), self.subagents_of(&session.id).to_vec());
-        let proposals = self.shown.all().proposals(&session.id).to_vec();
+        let (client, records) = (self.client.clone(), self.shown.all().clone());
         let view = cx.new(|cx| {
             let mut transcript = Transcript::new(client, &session, cx);
             transcript.set_thinking_open(crate::settings::get(cx).always_expand_thinking, cx);
-            transcript.set_subagents(&subagents, cx);
-            transcript.set_proposals(&proposals, cx);
+            transcript.records_changed(&records, cx);
             transcript
         });
         Self::attach_transcript_hints(&view, cx);
@@ -277,11 +275,6 @@ impl WorkspacePane {
     pub(super) fn set_sessions(&mut self, earlier: &InWorkspace, cx: &mut Context<Self>) {
         let was_open = earlier.sessions().iter().filter(|s| s.is_open()).map(|s| s.id.clone());
         let was_open: Vec<SessionId> = was_open.collect();
-        for session in self.shown.sessions() {
-            if let Some((transcript, _)) = self.chats.get(&session.id).and_then(|chat| chat.transcript.as_ref()) {
-                transcript.update(cx, |t, cx| t.set_session(session, cx));
-            }
-        }
         // While the chat that shows is still the one that did, so a draft taken for the chat that shows next goes to
         // that chat's own, and moves into the composer with it.
         self.take_drafts_from_elsewhere(cx);

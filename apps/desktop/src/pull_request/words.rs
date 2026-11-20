@@ -1,6 +1,6 @@
-//! What the bar says for each standing, its colour, and the one thing it offers to do about it.
+//! What the bar says for each standing, and the one thing it offers to do about it. Its colour is
+//! [`transcript::work`]'s, which a workspace's mark shows in every app.
 
-use look::Work;
 use protocol::model::Standing;
 
 /// The bar's main action.
@@ -25,31 +25,6 @@ pub enum Ask {
     MarkReady,
     FixChecks,
     Merge,
-}
-
-/// The colour it's shown in, on the bar and the workspace's mark.
-pub(crate) fn work(standing: Standing) -> Work {
-    match standing {
-        Standing::NoPullRequest => Work::NoPr,
-        Standing::Merged => Work::Merged,
-        Standing::Closed => Work::Closed,
-        Standing::Queued(_) => Work::Queued,
-        Standing::Draft => Work::Draft,
-        Standing::Ready => Work::Ready,
-        // What can't be told is neither good nor bad news, as far as anyone here knows.
-        Standing::Unknown
-        | Standing::Uncommitted(_)
-        | Standing::Diverged
-        | Standing::Behind(_)
-        | Standing::Unpushed(_)
-        | Standing::Conflicts
-        | Standing::ChangesRequested
-        | Standing::ChecksFailed(_)
-        | Standing::ChecksRunning(_)
-        | Standing::ReviewRequired
-        | Standing::Blocked
-        | Standing::Checking => Work::Open,
-    }
 }
 
 /// What there is to do, if anything is ours to do. What waits on GitHub or on someone else offers nothing, and so

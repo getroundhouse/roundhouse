@@ -9,7 +9,6 @@ mod kept;
 mod nav;
 mod project;
 mod row;
-pub(crate) mod signal;
 mod standing;
 
 pub(crate) use kept::Kept;
