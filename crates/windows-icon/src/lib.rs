@@ -7,7 +7,10 @@
 //! It's what `rc.exe` compiles from `LANGUAGE 0, 0` and `1 ICON "AppIcon.ico"`, byte for byte, which is how to check a
 //! change to it.
 //!
-//! The desktop app's own tests take this module in too, since a build script's tests never run.
+//! The desktop app's build script uses it, and it's a crate of its own so its tests run, since a build script's never
+//! do.
+
+#![warn(clippy::wildcard_enum_match_arm)]
 
 use std::error::Error;
 use std::fmt;
@@ -61,7 +64,7 @@ impl Kind {
 
 /// Why a file isn't an icon a `.res` can be made from.
 #[derive(Debug, PartialEq, Eq)]
-pub(crate) enum NotAnIcon {
+pub enum NotAnIcon {
     /// It doesn't start as an icon does.
     Header,
     /// It lists no pictures.
@@ -86,7 +89,7 @@ impl fmt::Display for NotAnIcon {
 impl Error for NotAnIcon {}
 
 /// The `.res` that holds the icon an `.ico` holds, as icon `ICON`.
-pub(crate) fn from_ico(ico: &[u8]) -> Result<Vec<u8>, NotAnIcon> {
+pub fn from_ico(ico: &[u8]) -> Result<Vec<u8>, NotAnIcon> {
     let header = ico.get(..ICO_HEADER).ok_or(NotAnIcon::CutShort)?;
     if header[..4] != ICO_START {
         return Err(NotAnIcon::Header);
@@ -144,8 +147,9 @@ mod tests {
 
     use super::*;
 
-    /// The app's icon, which `tools/package/ico.py` made.
-    const APP_ICON: &[u8] = include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/icons/AppIcon.ico"));
+    /// The desktop app's icon, which `tools/package/ico.py` made.
+    const APP_ICON: &[u8] =
+        include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../apps/desktop/icons/AppIcon.ico"));
 
     /// A picture in an `.ico`, with the start of its entry in the list: width, height, colours, a reserved byte,
     /// planes and bits a pixel.

@@ -23,6 +23,7 @@ members = [
     "crates/now-playing",
     "crates/fetching",
     "crates/update-feed",
+    "crates/windows-icon",
     "crates/waiting",
     "crates/terminal-view",
     "tools/policy",
@@ -56,6 +57,7 @@ default-members = [
     "crates/now-playing",
     "crates/fetching",
     "crates/update-feed",
+    "crates/windows-icon",
     "crates/waiting",
     "tools/policy",
     "tools/guide",
@@ -104,6 +106,7 @@ dictation-ui = { path = "crates/dictation-ui" }
 fetching = { path = "crates/fetching" }
 now-playing = { path = "crates/now-playing" }
 update-feed = { path = "crates/update-feed" }
+windows-icon = { path = "crates/windows-icon" }
 waiting = { path = "crates/waiting" }
 terminal-state = { path = "crates/terminal-state" }
 terminal-view = { path = "crates/terminal-view" }
@@ -202,6 +205,9 @@ portable-pty = "0.9.0"
 # and the code GitHub sends the desktop app back with once an app of your own is made.
 percent-encoding = "2.3.2"
 proptest = "1.12.0"
+# Already under every derive. Reads the workspace's Rust as tokens, so a policy test finds attributes and macros in
+# its code, not in its strings and comments.
+proc-macro2 = "1.0.107"
 # Already under GPUI. The window's handle on Windows, for asking Windows to do what a window button does.
 raw-window-handle = "0.6.2"
 # The Fourier transform dictation's model's features are made with.

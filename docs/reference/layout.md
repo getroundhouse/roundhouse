@@ -81,6 +81,7 @@ crates/
   now-playing/     Pausing what's playing while dictating, on a Mac from inside perl
   fetching/        Downloading files over HTTP
   update-feed/     What a release adds to the update feed
+  windows-icon/    An icon as the resource a Windows program carries, for the desktop app's build
   waiting/         How tests wait
 apps/
   daemon/          `roundhoused`, which runs as a hub or a worker
