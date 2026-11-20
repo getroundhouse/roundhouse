@@ -271,6 +271,11 @@ impl LiveSession {
     /// Saved only once a running agent has agreed, so what's shown is never ahead of what's true. A running agent reports
     /// a change of mode itself, and with none running, it goes in the log here, so the log says when every change was
     /// made.
+    ///
+    /// It's refused unless the chat's kind takes the settings the change leaves it with, which hold every setting the
+    /// change names, so this is the only check a change needs. For a kind that discovers its models, those are judged
+    /// by what the agent offers where the chat runs. They're judged under the lock that keeps changes in order, against
+    /// the settings the change before left.
     pub(crate) async fn configure(&self, mut change: Settings) -> Result<Session, ApiError> {
         let hub = self.hub()?;
         // Before the lock, which a launch takes, since the agent may be asked what it offers, which can take a while.

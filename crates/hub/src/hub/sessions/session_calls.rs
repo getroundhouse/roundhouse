@@ -211,7 +211,6 @@ impl Hub {
     ) -> Result<Session, ApiError> {
         crate::session::ChatSettings::keeps(&change)?;
         let session = self.live_session(&id).await?;
-        self.offered(session.agent(), &change)?;
         // Not through the session's queue, because a prompt waiting on setup holds that. The choice
         // has to apply when that prompt finally starts the agent.
         session.configure(change).await
