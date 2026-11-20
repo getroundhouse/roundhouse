@@ -66,7 +66,7 @@ pub(super) fn buttons() -> Div {
 /// One of a panel's buttons, known to tests by `id`: its main one when it's `primary`, which can be `off`.
 pub(super) fn button(
     id: &'static str,
-    label: &'static str,
+    label: impl Into<SharedString>,
     primary: bool,
     off: bool,
     act: impl Fn(&mut Window, &mut App) + 'static,

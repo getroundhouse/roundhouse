@@ -1,0 +1,81 @@
+//! The `gh` login on the hub's machine as a GitHub account: offered in Connect account's panel, refused as it's
+//! connected, added as the default, and the default when `gh` there is logged out, or logged in as someone else, as the
+//! hub words why agents can't push, and while the hub hasn't read it lately. Its token is `gh`'s, so none is here.
+
+use protocol::client::{ApiError, ErrorCode};
+use protocol::fixtures::github_account;
+use protocol::model::{
+    GhLogin, GhLoginWorks, GithubAccount, GithubLoginKind, GithubUser, GithubUserId, HeldGithubLogin, UnusableLogin,
+};
+
+use super::conversation;
+use super::github::{blocking, github_accounts, sending};
+use client_core::fake_hub::{HOUR_MS, NOW_MS, World};
+
+/// [`github_accounts`], whose hub's `gh` is logged in as `ada`, with a token GitHub takes, so Connect account offers it.
+pub(in crate::gallery) fn github_gh_offered() -> World {
+    let mut world = github_accounts();
+    world.hub_gh_login = Some(GhLogin::LoggedIn { username: "ada".into(), works: GhLoginWorks::Yes });
+    world
+}
+
+/// [`github_gh_offered`], whose hub refuses to use `gh`'s login, as GitHub refused its token as it was connected.
+pub(in crate::gallery) fn github_gh_refused() -> World {
+    let mut world = github_gh_offered();
+    let why = "GitHub refused gh's token there; run gh auth login there again";
+    world.gh_connect_refused = Some(ApiError::new(ErrorCode::InvalidRequest, why));
+    world
+}
+
+/// The conversation, on a hub whose only GitHub account, the default, is `gh`'s login on its machine, as `ada`.
+pub(in crate::gallery) fn github_gh_default() -> World {
+    let mut world = conversation();
+    world.github = Some(sending(&gh_ada()));
+    world.github_accounts = vec![gh_ada()];
+    world
+}
+
+/// [`github_gh_default`], once `gh` there has logged out, so agents can't push.
+pub(in crate::gallery) fn github_gh_logged_out() -> World {
+    let reason = "Roundhouse's default GitHub account, ada, is gh's login on Roundhouse's machine, and gh there is \
+                  logged out, so this workspace's agents push to GitHub as nobody. Run gh auth login there as ada, or \
+                  choose another default in Roundhouse's Settings.";
+    blocked_by_gh(UnusableLogin::GhLoggedOut, reason)
+}
+
+/// [`github_gh_default`], once `gh` there has switched to `grace`, so agents can't push.
+pub(in crate::gallery) fn github_gh_other_user() -> World {
+    let reason = "Roundhouse's default GitHub account, ada, is gh's login on Roundhouse's machine, which is grace now, \
+                  so this workspace's agents push to GitHub as nobody. Run gh auth switch there to ada, connect grace \
+                  in Roundhouse's Settings, or choose another default there.";
+    blocked_by_gh(UnusableLogin::GhOtherUser, reason)
+}
+
+/// [`github_gh_default`], while the hub hasn't read `gh` there lately, as when `gh` doesn't answer.
+pub(in crate::gallery) fn github_gh_unread() -> World {
+    let reason = "Roundhouse's default GitHub account, ada, is gh's login on Roundhouse's machine, which it couldn't \
+                  read lately (couldn't tell who gh is logged in to github.com as: gh took more than 15s), so this \
+                  workspace's agents push to GitHub as nobody. It tries again within a minute.";
+    blocked_by_gh(UnusableLogin::GhUnread, reason)
+}
+
+fn blocked_by_gh(why: UnusableLogin, reason: &str) -> World {
+    let mut world = github_gh_default();
+    world.github = Some(blocking(&gh_ada(), why, reason));
+    world
+}
+
+/// `ada`, as the login `gh` has on the hub's machine, connected an hour ago.
+fn gh_ada() -> GithubAccount {
+    let held = HeldGithubLogin {
+        how: GithubLoginKind::Gh,
+        connected_at_ms: NOW_MS - HOUR_MS,
+        ends_at_ms: None,
+        needs_sign_in: false,
+    };
+    GithubAccount {
+        user: GithubUser { id: GithubUserId::new(1), name: "ada".into() },
+        held_login: Some(held),
+        ..github_account("github-0004")
+    }
+}

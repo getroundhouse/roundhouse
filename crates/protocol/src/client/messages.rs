@@ -6,7 +6,7 @@ use crate::attachment::Attachment;
 use crate::event::SessionEvent;
 use crate::find::Found;
 use crate::model::{
-    Account, DiffComment, FileContents, FileOpened, FilePages, GitDiff, GitStatus, GithubAccount, GithubApp,
+    Account, DiffComment, FileContents, FileOpened, FilePages, GhLogin, GitDiff, GitStatus, GithubAccount, GithubApp,
     GithubSignIn, HubSettings, NewWorkspaceDraft, Proposal, Records, Repo, Session, SessionAccount, Terminal,
     TitleError, Workspace, WorktreeFiles,
 };
@@ -102,6 +102,7 @@ pub enum ClientResponse {
     Account(Account),
     GithubAccount(GithubAccount),
     GithubSignIn(GithubSignIn),
+    GhLogin(GhLogin),
     GithubApp(GithubApp),
     GithubAppManifest(github_apps::GithubAppManifest),
     WorktreeFiles(WorktreeFiles),

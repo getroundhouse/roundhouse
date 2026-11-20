@@ -130,6 +130,9 @@ fn what_workers_are_sent_keeps_its_form_on_the_settings_and_one_from_a_hub_from_
         (UnusableLogin::SignInAgain, "sign_in_again"),
         (UnusableLogin::Newer, "newer"),
         (UnusableLogin::Unreadable, "unreadable"),
+        (UnusableLogin::GhLoggedOut, "gh_logged_out"),
+        (UnusableLogin::GhOtherUser, "gh_other_user"),
+        (UnusableLogin::GhUnread, "gh_unread"),
     ];
     let older: GithubSettings = serde_json::from_str(r#"{"account":"g"}"#).unwrap();
 

@@ -136,6 +136,8 @@ fn every_request_about_a_github_account_keeps_its_form() {
         ClientRequest::GithubSignInCancel(github_accounts::GithubSignInCancel { id: "s".into() }),
         r#"{"method":"github_sign_in_cancel","id":"s"}"#,
     );
+    asked(ClientRequest::HubGhLogin, r#"{"method":"hub_gh_login"}"#);
+    asked(ClientRequest::GithubAccountConnectGh, r#"{"method":"github_account_connect_gh"}"#);
 }
 
 #[test]

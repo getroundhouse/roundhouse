@@ -17,7 +17,8 @@ use crate::store::now_ms;
 impl Hub {
     /// Checks the GitHub logins at `now_ms` by the wall clock, as `GithubLogins::check` says, tells every client of
     /// each account the check changed, and renews each sign-in it found due, makes each installation it found due a
-    /// token, looks for where each app is installed, and asks GitHub who each account it found due is, all at once, and
+    /// token, looks for where each app is installed, asks GitHub who each account it found due is, and reads `gh` while
+    /// an account holds its login, all at once, and
     /// waits for them, each call within GitHub's time limit. Only [`Hub::watch_github_logins`] checks, once the last
     /// check has finished, so no check finds a sign-in due while it's being renewed, and none is renewed twice at once,
     /// which would send GitHub what renews its token after GitHub had revoked it. Each is a task of its own, so one
@@ -26,7 +27,8 @@ impl Hub {
     /// *Unconfirmed:* a check waiting for its renewals, so they run one at a time.
     pub(in super::super) async fn check_github_logins(self: &Arc<Self>, now_ms: i64) {
         let logins = Arc::clone(&self.github_logins);
-        let Checked { due, changed, minting, apps, profiles } = match off_thread(move || logins.check(now_ms)).await {
+        let Checked { due, changed, minting, apps, profiles, gh } = match off_thread(move || logins.check(now_ms)).await
+        {
             Ok(checked) => checked,
             Err(e) => {
                 error!("couldn't check the GitHub logins: {}", e.message);
@@ -59,13 +61,18 @@ impl Hub {
                 let hub = Arc::clone(self);
                 unwaited.spawn(async move { hub.read_profile(due).await });
             }
+            if gh {
+                let hub = Arc::clone(self);
+                unwaited.spawn(async move { hub.read_gh().await });
+            }
         }
         let stopping = stopped(self.github_checks_stopped.subscribe());
         tokio::join!(joined(&mut renewing, "renewing a sign-in with GitHub"), async {
             // A stop doesn't wait for these, since GitHub revokes nothing as it makes an installation's token or says
             // who a token is, so what it gave and the hub dropped costs only another call, at the next hub's first
             // check.
-            let what = "making an installation's token, looking for an app's, or asking GitHub who an account is";
+            let what =
+                "making an installation's token, looking for an app's, asking GitHub who an account is, or reading gh";
             tokio::select! {
                 () = joined(&mut unwaited, what) => {}
                 () = stopping => {}

@@ -6,19 +6,14 @@ use process::{ProcessRecord, Signal, signal_group};
 use protocol::model::{InstanceId, ProviderName};
 use protocol::paths::{AGENTS_DIR, WORKER_RECORD_FILE};
 use std::path::{Path, PathBuf};
-use std::process::Stdio;
-use std::sync::Arc;
 use std::time::Duration;
-use tokio::io::{AsyncRead, AsyncReadExt};
-use tokio::process::Command;
-use tokio::sync::OnceCell;
-use tracing::{debug, warn};
+use tracing::warn;
 
-const LOGIN_SHELL_TIMEOUT: Duration = Duration::from_secs(5);
+use super::MachinePath;
+
 /// How long what a killed worker left running, such as an agent, or a worker still running when its instance is
 /// stopped, gets to stop by itself, with all it started. An agent stops its own tools if given this.
 const ORPHAN_GRACE: Duration = Duration::from_secs(3);
-pub(super) const PATH_MARKER: &str = "__ROUNDHOUSE_LOGIN_PATH__";
 /// How the hub reaches a worker. Through its socket, so the worker can outlive its hub, but on Windows, where there's
 /// no Unix socket to serve it on, on the pipes of the hub, which it stops with.
 const TRANSPORT: &str = if cfg!(unix) { "--attach" } else { "--stdio" };
@@ -26,9 +21,10 @@ const TRANSPORT: &str = if cfg!(unix) { "--attach" } else { "--stdio" };
 const KILLED_GRACE: Duration = Duration::from_secs(2);
 /// How long starting or stopping an instance takes at most. Either stops each process left there within its
 /// [`ORPHAN_GRACE`] and then [`KILLED_GRACE`], and the first start reads the login shell's `PATH` within
-/// [`LOGIN_SHELL_TIMEOUT`]. So this is that, with three processes left there.
-const STARTS_OR_STOPS_WITHIN: Duration =
-    Duration::from_secs(3 * (ORPHAN_GRACE.as_secs() + KILLED_GRACE.as_secs()) + LOGIN_SHELL_TIMEOUT.as_secs());
+/// [`LOGIN_SHELL_TIMEOUT`](super::machine_path::LOGIN_SHELL_TIMEOUT). So this is that, with three processes left there.
+const STARTS_OR_STOPS_WITHIN: Duration = Duration::from_secs(
+    3 * (ORPHAN_GRACE.as_secs() + KILLED_GRACE.as_secs()) + super::machine_path::LOGIN_SHELL_TIMEOUT.as_secs(),
+);
 
 pub struct LocalConfig {
     /// The binary that runs a worker, as `worker --attach` or `worker --stdio`.
@@ -38,35 +34,21 @@ pub struct LocalConfig {
     pub workspaces_root: PathBuf,
     /// Where every worker keeps its clones, which they share.
     pub clones_dir: PathBuf,
-    /// The user's shell, which has the real `PATH`. Found from the user's account if this is `None`.
-    pub shell: Option<String>,
-    /// This process's own `PATH`, which workers get as well as the login shell's.
-    pub path: Option<String>,
+    /// The machine's `PATH`, which workers are given.
+    pub path: MachinePath,
 }
 
 pub struct LocalProvider {
     pub(super) config: LocalConfig,
-    pub(super) login_path: Arc<OnceCell<Option<String>>>,
 }
 
 impl LocalProvider {
     async fn worker_env(&self) -> Vec<(String, String)> {
-        let login = self.login_path.get_or_init(|| read_login_path(self.config.shell.clone())).await;
-        merge_paths(login.as_deref(), self.config.path.as_deref())
-            .map(|path| ("PATH".to_string(), path))
-            .into_iter()
-            .collect()
+        self.config.path.path().await.map(|path| ("PATH".to_string(), path)).into_iter().collect()
     }
 
     pub fn new(config: LocalConfig) -> Self {
-        let login_path = Arc::new(OnceCell::new());
-        // Read it up front, so the first workspace doesn't pay for a slow shell startup.
-        let early = login_path.clone();
-        let shell = config.shell.clone();
-        tokio::spawn(async move {
-            early.get_or_init(|| read_login_path(shell)).await;
-        });
-        Self { config, login_path }
+        Self { config }
     }
 
     pub(super) fn instance_dir(&self, instance_id: &InstanceId) -> PathBuf {
@@ -137,81 +119,6 @@ fn create_dir(dir: &Path) -> Result<(), ProviderError> {
     std::fs::create_dir_all(dir).map_err(|e| ProviderError::io(format!("creating {}", dir.display()), e))
 }
 
-/// An app started from Finder gets a minimal `PATH`, without Homebrew or anything from the user's
-/// shell setup. The agent's tools need the real one, so ask the login shell for it.
-pub(super) async fn read_login_path(shell: Option<String>) -> Option<String> {
-    // Every process on Windows gets the user's whole `PATH` already, and a shell that could be asked there, such
-    // as Git's, would give it in a form of its own.
-    if cfg!(windows) {
-        return None;
-    }
-    let shell = shell.or_else(account_shell)?;
-    // rc files can print anything, so the value is marked. `printenv` works in every shell, which
-    // matters for fish, where `$PATH` expands to a list.
-    let script = format!("printf '{PATH_MARKER}'; printenv PATH; printf '{PATH_MARKER}'");
-    let mut command = Command::new(&shell);
-    command
-        .args(["-i", "-l", "-c", &script])
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .kill_on_drop(true);
-    let mut child = command.spawn().ok()?;
-    let stdout = child.stdout.take()?;
-    let out = tokio::time::timeout(LOGIN_SHELL_TIMEOUT, read_until_second_marker(stdout)).await.ok().flatten();
-    let path = out.as_deref().and_then(parse_marked_path);
-    if path.is_some() {
-        debug!("read PATH from login shell {shell}");
-    } else {
-        warn!("could not read PATH from login shell {shell}");
-    }
-    path
-}
-
-/// Stops as soon as both markers have arrived rather than waiting for the stream to end, because a
-/// process started by an rc file can hold it open indefinitely.
-pub(super) async fn read_until_second_marker<R: AsyncRead + Unpin>(mut reader: R) -> Option<String> {
-    let mut seen = Vec::new();
-    let mut chunk = [0u8; 4096];
-    loop {
-        let read = reader.read(&mut chunk).await.ok()?;
-        if read == 0 {
-            return Some(String::from_utf8_lossy_owned(seen));
-        }
-        seen.extend_from_slice(&chunk[..read]);
-        let text = String::from_utf8_lossy(&seen);
-        if text.matches(PATH_MARKER).count() >= 2 {
-            return Some(text.into_owned());
-        }
-    }
-}
-
-/// Windows gives an account no shell.
-#[cfg(windows)]
-fn account_shell() -> Option<String> {
-    None
-}
-
-#[cfg(unix)]
-fn account_shell() -> Option<String> {
-    // SAFETY: getpwuid returns a pointer to static storage or null. The string is copied before
-    // anything else can overwrite it, and this runs on one thread at a time in this process.
-    unsafe {
-        let entry = libc::getpwuid(libc::getuid());
-        if entry.is_null() || (*entry).pw_shell.is_null() {
-            return None;
-        }
-        Some(std::ffi::CStr::from_ptr((*entry).pw_shell).to_string_lossy().into_owned())
-    }
-}
-
-pub(super) fn parse_marked_path(output: &str) -> Option<String> {
-    let start = output.find(PATH_MARKER)? + PATH_MARKER.len();
-    let end = start + output[start..].find(PATH_MARKER)?;
-    let path = output[start..end].trim();
-    (!path.is_empty()).then(|| path.to_string())
-}
-
 async fn still_running(agent: &ProcessRecord) -> bool {
     let agent = agent.clone();
     tokio::task::spawn_blocking(move || agent.is_running()).await.unwrap_or(false)
@@ -243,22 +150,6 @@ pub(super) async fn stop_orphans(instance_dir: &Path, grace: Duration) {
     for file in files {
         let _ = std::fs::remove_file(&file);
     }
-}
-
-/// The login shell's entries first, then anything else this process had. Ours may hold tools the
-/// user added for this launch.
-pub(super) fn merge_paths(login: Option<&str>, own: Option<&str>) -> Option<String> {
-    let mut seen = Vec::new();
-    for entry in login.into_iter().chain(own).flat_map(std::env::split_paths) {
-        if !entry.as_os_str().is_empty() && !seen.contains(&entry) {
-            seen.push(entry);
-        }
-    }
-    if seen.is_empty() {
-        return None;
-    }
-    // Both came in as text and were split where a `PATH` is, so the entries join again, and into text.
-    std::env::join_paths(seen).ok()?.into_string().ok()
 }
 
 #[async_trait]

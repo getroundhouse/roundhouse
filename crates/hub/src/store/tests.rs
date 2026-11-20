@@ -10,7 +10,7 @@ use super::*;
 
 /// The store in `dir`, with its backups beside it. One that isn't there yet starts as a copy of one already migrated,
 /// as `migrated` says.
-pub(super) fn open_in(dir: &Path) -> Store {
+pub(crate) fn open_in(dir: &Path) -> Store {
     let path = dir.join("hub.db");
     migrated::copy_to(&path);
     Store::open(&path, &dir.join("backups")).unwrap()

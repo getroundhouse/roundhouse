@@ -30,7 +30,9 @@ mod blocks;
 pub(crate) use apps::{AppChange, AppRemoved};
 mod credential;
 mod default_credential;
+mod gh_login;
 pub(crate) use default_credential::DefaultCredential;
+pub(crate) use gh_login::{GhSaid, NoGhLogin};
 mod installations;
 #[cfg(test)]
 pub(crate) use installations::MINTED_WITH_LEFT;

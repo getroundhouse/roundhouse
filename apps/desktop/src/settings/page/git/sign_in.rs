@@ -78,7 +78,7 @@ impl Kept {
     /// Shows a sign-in that waits, whether it was started here or anywhere else, such as in another window or before
     /// the app last quit, while no panel but Connect account's is open, unless its panel was put away here.
     pub(super) fn show_waiting(&mut self, records: &Snapshot, cx: &mut Context<Self>) {
-        if !matches!(self.panel.as_ref().map(|panel| &panel.shows), None | Some(Shows::Choosing)) {
+        if !matches!(self.panel.as_ref().map(|panel| &panel.shows), None | Some(Shows::Choosing(_))) {
             return;
         }
         let waiting = records.github_sign_ins().filter(|sign_in| sign_in.status.is_waiting());

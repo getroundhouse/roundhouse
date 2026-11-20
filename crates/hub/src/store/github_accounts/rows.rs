@@ -132,14 +132,17 @@ impl Store {
         self.lasting(|tx| connect_login(tx, connecting))
     }
 
-    /// Every sign-in with GitHub the hub holds as an account's login, oldest first, with the account's record and the
-    /// login's file, for renewing each before its token ends.
-    pub(crate) fn held_github_sign_ins(&self) -> Result<Vec<(GithubAccount, LoginFile)>, StoreError> {
+    /// Every login of kind `how` the hub holds as an account's, oldest first, with the account's record and the login's
+    /// file: sign-ins with GitHub, for renewing each before its token ends, and `gh`'s, for reading its token.
+    pub(crate) fn held_github_logins_of(
+        &self,
+        how: GithubLoginKind,
+    ) -> Result<Vec<(GithubAccount, LoginFile)>, StoreError> {
         let conn = lock(&self.reader);
         let mut statement = conn.prepare_cached(&format!(
             "SELECT {COLUMNS} WHERE login_kind = ? AND login_file IS NOT NULL ORDER BY rowid"
         ))?;
-        let rows = statement.query_map([text_of(&GithubLoginKind::SignIn)], account_at)?;
+        let rows = statement.query_map([text_of(&how)], account_at)?;
         let rows = rows.collect::<rusqlite::Result<Vec<_>>>()?;
         Ok(rows.into_iter().filter_map(|(account, file)| Some((account, file?))).collect())
     }

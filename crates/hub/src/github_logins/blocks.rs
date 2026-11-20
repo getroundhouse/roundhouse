@@ -5,6 +5,8 @@ use std::io;
 
 use protocol::model::{GithubAccount, GithubUsername, UnusableLogin};
 
+use super::gh_login::NoGhLogin;
+
 /// Why the login the hub holds for an account can't be used now.
 pub(super) enum Unusable {
     /// It holds none, as once it was disconnected.
@@ -22,6 +24,13 @@ pub(super) enum Unusable {
     Newer,
     /// Its file holds no token, or, with the error, can't be read.
     Unreadable(Option<io::Error>),
+    /// It's the login `gh` has on the hub's machine, and `gh` there has no login that works, as the reason says: it's
+    /// logged out, there's no `gh`, or GitHub refused its token.
+    GhLoggedOut(NoGhLogin),
+    /// It's the login `gh` has on the hub's machine, which is logged in as this other GitHub user now.
+    GhOtherUser(GithubUsername),
+    /// It's the login `gh` has on the hub's machine, which the hub hasn't read lately, with why, if a read failed.
+    GhUnread(Option<String>),
 }
 
 impl Unusable {
@@ -34,6 +43,9 @@ impl Unusable {
             Unusable::Renewing => UnusableLogin::Renewing,
             Unusable::Newer => UnusableLogin::Newer,
             Unusable::Unreadable(_) => UnusableLogin::Unreadable,
+            Unusable::GhLoggedOut(_) => UnusableLogin::GhLoggedOut,
+            Unusable::GhOtherUser(_) => UnusableLogin::GhOtherUser,
+            Unusable::GhUnread(_) => UnusableLogin::GhUnread,
         }
     }
 }
@@ -65,9 +77,13 @@ pub(super) fn lost(account: &GithubAccount, unusable: &Unusable) -> String {
                 "It tries every minute until GitHub answers. If this goes on, check the app is still on GitHub, {elsewhere}"
             ),
         ),
-        Unusable::Ended | Unusable::SignInAgain | Unusable::Newer | Unusable::Unreadable(_) => {
-            lost_login(&name.into(), unusable)
-        }
+        Unusable::Ended
+        | Unusable::SignInAgain
+        | Unusable::Newer
+        | Unusable::Unreadable(_)
+        | Unusable::GhLoggedOut(_)
+        | Unusable::GhOtherUser(_)
+        | Unusable::GhUnread(_) => lost_login(&name.into(), unusable),
     }
 }
 
@@ -106,5 +122,29 @@ fn lost_login(name: &GithubUsername, unusable: &Unusable) -> String {
             &format!("Roundhouse can't read the token of its default GitHub account, {name} ({e})"),
             connect_again,
         ),
+        Unusable::GhLoggedOut(why) => reason(
+            &format!("Roundhouse's default GitHub account, {name}, is gh's login on Roundhouse's machine, and {why}"),
+            &format!("Run gh auth login there as {name}, or choose another default in Roundhouse's Settings."),
+        ),
+        Unusable::GhOtherUser(now) => reason(
+            &format!(
+                "Roundhouse's default GitHub account, {name}, is gh's login on Roundhouse's machine, which is {now} now"
+            ),
+            &format!(
+                "Run gh auth switch there to {name}, connect {now} in Roundhouse's Settings, or choose another default \
+                 there."
+            ),
+        ),
+        Unusable::GhUnread(why) => reason(&gh_unread(name, why.as_deref()), "It tries again within a minute."),
+    }
+}
+
+/// Why a default, `name`, that's `gh`'s login can't be used while the hub hasn't read `gh` lately, for the reason `why`
+/// a read failed, if one did.
+fn gh_unread(name: &GithubUsername, why: Option<&str>) -> String {
+    let unread = format!("Roundhouse's default GitHub account, {name}, is gh's login on Roundhouse's machine");
+    match why {
+        Some(why) => format!("{unread}, which it couldn't read lately ({why})"),
+        None => format!("{unread}, which it hasn't read yet"),
     }
 }

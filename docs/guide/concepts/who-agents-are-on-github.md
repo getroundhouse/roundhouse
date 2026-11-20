@@ -1,6 +1,6 @@
 # Who agents are on GitHub
 
-When an agent pushes, opens a pull request or comments, GitHub records someone as doing it. You choose who on the Git page in [Settings](../reference/settings.md#git): a GitHub account you've added, the bot of an app of your own, or each machine's own login. The account you make the default is used for every repository on GitHub, on every machine Roundhouse sets up GitHub on.
+When an agent pushes, opens a pull request or comments, GitHub records someone as doing it. You choose who on the Git page in [Settings](../reference/settings.md#git): a GitHub account you've added, `gh`'s login on the Mac Roundhouse runs on, the bot of an app of your own, or each machine's own login. The account you make the default is used for every repository on GitHub, on every machine Roundhouse sets up GitHub on.
 
 On your own machine, where the hub runs, Roundhouse sets up nothing of GitHub: agents use your `git` and `gh` as they are, as your own terminal does, SSH key and all. On another provider's machines, which are made for workspaces and rarely have a login for GitHub of their own, Roundhouse sets up GitHub as the default, and sends a push to GitHub over SSH over HTTPS instead, unless that provider's settings say `"set_up_github": false`.
 
@@ -18,6 +18,17 @@ Signing in shows a code, which you type on GitHub and approve there. Agents can 
 A token does the same. Use one when an organization hasn't approved Roundhouse but allows tokens, or to keep agents to a few repositories: a fine-grained token reaches only the repositories you choose, of one owner. It ends when you said it would, and you renew it yourself, with a new one, from its row's `…` menu.
 
 The hub keeps either in its own data, as [Where data is kept](../reference/where-data-is-kept.md) says, and hands the default's to every machine, where agents' `git` and `gh` use it. The app writes it nowhere.
+
+## `gh`'s login on this Mac
+
+If `gh` on the Mac Roundhouse runs on is logged in to github.com, **Connect account** offers that login first, by its username, and agents act as you, as they do once you sign in. Roundhouse uses it only once you choose it there, never by itself.
+
+![Choosing how to connect a GitHub account, with gh's login on this Mac first](../../spec/screens/settings-git-choosing-gh.png)
+
+The hub keeps none of its token. It reads it from `gh` once a minute and hands it to every machine, so logging `gh` out, or switching it to another user with `gh auth switch`, stops agents pushing within a minute, until you log `gh` back in as the same user or make another account the default. `gh` renews its own login, so there's nothing to renew here.
+
+- `gh`'s login usually can't push a change to a workflow file, in `.github/workflows`, since `gh auth login` doesn't ask GitHub for that unless told to. Run `gh auth refresh -s workflow` to add it, or sign in instead, which asks for it.
+- It's the login on the hub's Mac only. Agents on other machines use it too, but `gh` there plays no part.
 
 ## An app of your own
 
@@ -43,7 +54,7 @@ A repository that isn't on GitHub, such as one on GitLab or GitHub Enterprise, i
 
 ## When the default can't be used
 
-If the default's token ends, you disconnect it, it needs signing in again, or it's an app's installation that was uninstalled on GitHub, it stays the default, and agents can't push until you renew it, sign in again, or make another the default. They don't fall back on the machine's own login, so nothing is pushed as someone you didn't choose. On your own machine, agents push as they always do. The Git page says what's wrong, and what to do, at the top of **Added**.
+If the default's token ends, you disconnect it, it needs signing in again, it's `gh`'s login and `gh` is logged out or logged in as someone else, or it's an app's installation that was uninstalled on GitHub, it stays the default, and agents can't push until you renew it, sign in again, or make another the default. They don't fall back on the machine's own login, so nothing is pushed as someone you didn't choose. On your own machine, agents push as they always do. The Git page says what's wrong, and what to do, at the top of **Added**.
 
 A signed-in account's token lasts 8 hours, and the hub renews it before it ends, so this happens only if the hub couldn't reach GitHub in time. Git says it's `Renewing` until the hub has. An app's installation's token lasts an hour, and the hub makes the next well before it ends, so the same goes for it: while GitHub doesn't make the next, a default installation says `Renewing` once the last has ended.
 
@@ -71,6 +82,7 @@ You can add more than one account, but only the default is used.
 
 - **Your own repositories:** sign in.
 - **Repositories you don't own, such as open source:** sign in.
+- **Whoever `gh` on this Mac is logged in as, with nothing new to approve:** `gh`'s login.
 - **A few repositories, or an organization that hasn't approved Roundhouse:** a fine-grained token.
 - **Agents' work told apart from yours, in pull requests you can approve:** an app of your own.
 - **An organization's repositories, as a bot of the organization's own:** an app of your own, made under it.

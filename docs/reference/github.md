@@ -83,12 +83,13 @@ Git gives GitHub an installation's token with the username `x-access-token`, as 
 
 ## `gh`'s own login
 
-A worker reads its machine's own `gh` login for the hub, as `FindGithubLogin` says, and these decide how.
+A worker reads its machine's own `gh` login for the hub, as `FindGithubLogin` says, and the hub reads the one on its own machine, for an account that's `gh`'s login (`crates/hub/src/gh/`), and these decide how.
 
-- **`gh` uses a `GH_TOKEN` or `GITHUB_TOKEN` from its environment over its own login.** Every process a worker starts under the machine's own login inherits the worker's environment, so such a token is who those processes push as.
+- **`gh` uses a `GH_TOKEN` or `GITHUB_TOKEN` from its environment over its own login.** Every process a worker starts under the machine's own login inherits the worker's environment, so such a token is who those processes push as. The hub takes both out of what it gives the `gh` it reads, so an account that's `gh`'s login is the login `gh auth login` and `gh auth switch` change.
 - **`gh auth status` names the login from `gh`'s own config, even when GitHub can't be reached.** `gh` 2.81 is the first to print it as JSON.
 - **`gh` 2.103 renews a token that it renews by itself whenever it reads the token.** Renewing rotates the refresh token, and `gh` forgets the login if GitHub refuses it. So reading the login could change it. `--no-refresh`, on `gh auth status` and `gh auth token`, reads without renewing.
 - **GitHub answers 401 for such a token once its time is up, until `gh` next runs and renews it.** So that 401 doesn't mean `gh` needs logging in again (`Github::found_login_works`).
+- **`gh`'s login usually lacks the `workflow` scope, so GitHub refuses a push over HTTPS with its token that changes a file in `.github/workflows`.** `gh auth login --help`, in `gh` 2.103.3, says the least it needs is `repo`, `read:org` and `gist`, and `-s workflow`, or `gh auth refresh -s workflow` later, adds it. *Not checked here:* which scopes the browser login asks for when given none.
 
 ## The login `gh` uses in a config directory it's given
 

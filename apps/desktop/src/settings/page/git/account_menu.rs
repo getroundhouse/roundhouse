@@ -1,6 +1,7 @@
 //! An added account's `…` menu: Make default, but on the default, which is off while its login can't be used; then
-//! Renew for a token, Sign in again for a sign-in, or both ways of connecting it again once it was disconnected; then
-//! Disconnect, while the hub holds a login for it. The menu is off with no hub to ask.
+//! Renew for a token, Sign in again for a sign-in, nothing for `gh`'s login, which `gh` renews, or both ways of
+//! connecting it again once it was disconnected; then Disconnect, while the hub holds a login for it. The menu is off
+//! with no hub to ask.
 
 use gpui_kit::{AnyElement, App, Context, SharedString, Window};
 use protocol::model::{GithubAccount, GithubLoginKind};
@@ -29,6 +30,8 @@ pub(super) fn menu(drawing: &Drawing<'_>, account: &GithubAccount, works: bool, 
         let menu = if default { menu } else { menu.row(item("Make default", make_default).off(!works)) };
         let menu = match account.held_login.map(|held| held.how) {
             Some(GithubLoginKind::SignIn) => menu.row(item("Sign in again", sign_in_again)),
+            // `gh` renews its own login, so the hub has nothing to renew.
+            Some(GithubLoginKind::Gh) => menu,
             // An app's installation has a menu of its own, in `app_menu`, so one here is from a hub whose record says
             // it's no installation, and a token can renew it, as it can one connected a way this app doesn't know.
             Some(GithubLoginKind::Token | GithubLoginKind::App | GithubLoginKind::Unknown) => {

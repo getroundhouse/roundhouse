@@ -47,8 +47,15 @@ impl GithubLogins {
             // One whose file holds no token, one in a form only a newer build reads, or one that can't be read, which
             // blocks as it is while it's the default's, as `token_of` says.
             let Ok(Stored::Secret(login)) = files.read(&file) else { continue };
-            let Some(token) = login.token() else { continue };
-            due.push(ProfileDue { account: account.id, user: account.user.id, token: token.clone() });
+            let token = match login {
+                GithubLogin::Gh { user } => self.gh_token(user, now_ms).ok(),
+                login @ (GithubLogin::Token(_)
+                | GithubLogin::SignIn(_)
+                | GithubLogin::Installation(_)
+                | GithubLogin::App(_)) => login.token().cloned(),
+            };
+            let Some(token) = token else { continue };
+            due.push(ProfileDue { account: account.id, user: account.user.id, token });
         }
         Ok(due)
     }

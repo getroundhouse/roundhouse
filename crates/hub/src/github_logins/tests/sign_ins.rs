@@ -117,7 +117,7 @@ fn a_second_sign_in_as_the_same_user_renews_its_login_in_place_keeping_the_defau
         .map(|kept| match kept {
             Stored::Secret(GithubLogin::Token(token)) => token.as_str().to_string(),
             Stored::Secret(GithubLogin::SignIn(signed_in)) => signed_in.token.as_str().to_string(),
-            other @ (Stored::Secret(GithubLogin::Installation(_) | GithubLogin::App(_))
+            other @ (Stored::Secret(GithubLogin::Installation(_) | GithubLogin::App(_) | GithubLogin::Gh { .. })
             | Stored::Newer
             | Stored::Nothing) => {
                 panic!("{other:?}")

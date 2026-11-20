@@ -11,6 +11,7 @@ use protocol::model::{GithubAccountId, GithubAppId, GithubSignInId};
 use super::super::redraw::{RedrawAt, bring_into_sight};
 use super::Asking;
 use super::app_panel::AppPanel;
+use super::gh_choice::ChoosingPanel;
 use super::sign_in::SignInPanel;
 use super::token::TokenPanel;
 use super::words;
@@ -60,7 +61,7 @@ pub(super) struct Panel {
 
 pub(super) enum Shows {
     /// Connect account, choosing how to connect one.
-    Choosing,
+    Choosing(ChoosingPanel),
     Token(TokenPanel),
     SignIn(SignInPanel),
     /// Making an app of your own, or installing one.
@@ -72,7 +73,7 @@ impl Panel {
     pub(super) fn under(&self) -> Option<&GithubAccountId> {
         match &self.shows {
             Shows::Token(token) => token.renewing.as_ref().map(|renewing| &renewing.id),
-            Shows::Choosing | Shows::SignIn(_) | Shows::App(_) => None,
+            Shows::Choosing(_) | Shows::SignIn(_) | Shows::App(_) => None,
         }
     }
 }

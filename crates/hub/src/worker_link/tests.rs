@@ -32,8 +32,7 @@ fn provider_running(dir: &Path, script: &str) -> Arc<dyn Provider> {
         instances_dir: dir.join("instances"),
         workspaces_root: dir.join("workspaces"),
         clones_dir: dir.join("clones"),
-        shell: Some("/bin/sh".into()),
-        path: None,
+        path: providers::local::MachinePath::new(Some("/bin/sh".to_string()), None),
     }))
 }
 
@@ -56,7 +55,17 @@ fn hub_reading(dir: &Path, provider: &Arc<dyn Provider>, api: String) -> Arc<Hub
     let providers = ProviderSet::only(provider.clone());
     let github = Github::new(github::GithubConfig::at(api));
     let (dirs, timers) = (HubDirs::in_dir(dir), Timers::FOR_TESTS);
-    let hub = Arc::new(Hub::new(Build::UNSTAMPED, store, dirs, providers, github, Vec::new(), false, timers));
+    let hub = Arc::new(Hub::new(
+        Build::UNSTAMPED,
+        store,
+        dirs,
+        providers,
+        github,
+        providers::local::MachinePath::only(None),
+        Vec::new(),
+        false,
+        timers,
+    ));
     handed_a_token(&hub);
     hub
 }
@@ -68,7 +77,17 @@ fn hub_timed(dir: &Path, provider: &Arc<dyn Provider>, timers: Timers) -> Arc<Hu
     store.read_repo_url(&"r".into(), "/repo", None).unwrap();
     let providers = ProviderSet::only(provider.clone());
     let github = Github::new(github::GithubConfig::at(NO_GITHUB.to_string()));
-    Arc::new(Hub::new(Build::UNSTAMPED, store, HubDirs::in_dir(dir), providers, github, Vec::new(), false, timers))
+    Arc::new(Hub::new(
+        Build::UNSTAMPED,
+        store,
+        HubDirs::in_dir(dir),
+        providers,
+        github,
+        providers::local::MachinePath::only(None),
+        Vec::new(),
+        false,
+        timers,
+    ))
 }
 
 /// Writes each frame to a file in `dir` by its name, for a script to send.

@@ -43,11 +43,18 @@ impl Hub {
     }
 
     /// Makes the GitHub logins' files and the GitHub accounts' rows agree, as the hub starts, as
-    /// [`Hub::tidy_logins`] says.
+    /// [`Hub::tidy_logins`] says. Then reads `gh` while an account holds its login, since its token is kept only in
+    /// memory, so the agents an earlier hub left aren't blocked until the first check.
     pub(in super::super) async fn tidy_github_logins(&self) {
         let logins = Arc::clone(&self.github_logins);
         if let Err(e) = off_thread(move || logins.tidy(now_ms())).await {
             error!("couldn't make the GitHub logins' files and the GitHub accounts agree: {}", e.message);
+        }
+        let logins = Arc::clone(&self.github_logins);
+        match off_thread(move || logins.holds_gh()).await {
+            Ok(true) => self.read_gh().await,
+            Ok(false) => {}
+            Err(e) => error!("couldn't tell whether an account holds gh's login: {}", e.message),
         }
     }
 

@@ -169,7 +169,7 @@ The app's own settings, and where they're shown.
 
 ## Git
 
-- **Git lists the GitHub accounts agents push and open pull requests as, from the hub's records and settings, in two lists, Added and then Found, in a column 720 wide.** Each is a row of columns that line up from row to row: a picture, the name, with a `Default` badge on the default, how it was connected, `Signed in`, `Token` or `App`, what else there is to say, and a `…` menu. A row says only what isn't plain. The picture is the name's first letter in a circle, since the app fetches nothing from GitHub, or for an app of your own, its mark. A row is a table's, 44px tall, with a small `…`, which opens under it towards the left, so it stays inside the column. *Unconfirmed:* the row's height, and the menu's size and the way it opens.
+- **Git lists the GitHub accounts agents push and open pull requests as, from the hub's records and settings, in two lists, Added and then Found, in a column 720 wide.** Each is a row of columns that line up from row to row: a picture, the name, with a `Default` badge on the default, how it was connected, `Signed in`, `Token`, `App` or `gh on this Mac`, what else there is to say, and a `…` menu. A row says only what isn't plain. The picture is the name's first letter in a circle, since the app fetches nothing from GitHub, or for an app of your own, its mark. A row is a table's, 44px tall, with a small `…`, which opens under it towards the left, so it stays inside the column. *Unconfirmed:* the row's height, and the menu's size and the way it opens.
 
   **Git, with three accounts added, the default signed in, and the logins found on this Mac and a server.** *Unconfirmed.*
 
@@ -201,6 +201,36 @@ The app's own settings, and where they're shown.
   **Connect account, open, with the three ways.** *Unconfirmed.*
 
   ![Choosing how to connect a GitHub account](screens/settings-git-choosing.png)
+
+- **While `gh` on the hub's machine is logged in to github.com with a token GitHub takes, Connect account's panel offers that login first, as Use gh's login, unless an account holds it already.** The panel asks the hub who `gh` is each time it opens, and the hub runs `gh` and asks GitHub then, so the choice shows once the hub has said. It says who `gh` is logged in as, that the hub reads its token from `gh` and keeps no copy, so logging `gh` out stops agents too. Its button says `Use ada's login`, by the username. While `gh` there is logged out, there's no `gh`, or GitHub refuses its token, and on a hub from before it read `gh`, the panel has only the other three ways. The hub never uses `gh`'s login by itself: only this button does. What the hub refuses is said in red in the panel, which stays open. *Unconfirmed:* the words, its place first, and asking each time the panel opens.
+
+  **Connect account, open, with `gh` on this Mac logged in as `ada`.** *Unconfirmed.*
+
+  ![Choosing how to connect a GitHub account, with gh's login on this Mac first](screens/settings-git-choosing-gh.png)
+
+  **Using `gh`'s login, refused, since GitHub refused its token.** *Unconfirmed.*
+
+  ![Using gh's login, refused in red in the panel](screens/settings-git-gh-refused.png)
+
+- **An account that's `gh`'s login on the hub's machine says `gh on this Mac` as how it was connected, and the hub keeps none of its token.** It reads the token from `gh` at each check of its logins, once a minute, and uses one it read at most five minutes before, so logging `gh` out, or switching it to another user, reaches agents within a minute. A token `gh` renews by itself, once GitHub refuses it, is renewed as a run of `gh` the person made would. Only `gh` on the hub's own machine can be such an account, since the hub reads GitHub with no worker running, and hands the token to workers on other machines. Its menu has Make default and Disconnect, since `gh` renews its own login. *Unconfirmed:* a minute, and five minutes.
+
+  **Git, with `gh`'s login on this Mac as the default.** *Unconfirmed.*
+
+  ![Git, with gh's login on this Mac as the only account, the default](screens/settings-git-gh.png)
+
+- **While `gh`'s login is the default and `gh` there has no login that works for it, the row says why and the box at the top of Added says the hub's reason.** `gh is logged out` in red once `gh` there is logged out, there's no `gh`, or GitHub refused its token, with what to do, `gh auth login`. `gh is another account now` in red once `gh` there is logged in as another GitHub user, with `gh auth switch` back, or connecting the other user. `Can't read gh` in amber while the hub hasn't read it lately, as when `gh` doesn't answer. *Unconfirmed:* the words.
+
+  **Git, with `gh` on this Mac logged out.** *Unconfirmed.*
+
+  ![Git saying agents can't push, since gh on this Mac is logged out](screens/settings-git-gh-logged-out.png)
+
+  **Git, with `gh` on this Mac switched to `grace`.** *Unconfirmed.*
+
+  ![Git saying agents can't push, since gh on this Mac is grace's now](screens/settings-git-gh-other-user.png)
+
+  **Git, while the hub hasn't read `gh` on this Mac lately.** *Unconfirmed.*
+
+  ![Git saying in amber that the hub can't read gh on this Mac](screens/settings-git-gh-unread.png)
 
 - **Sign in with GitHub has the hub start a sign-in, and its panel shows it as the hub's record of it says.** While it waits, the panel has the code, in code's font, with a button that copies it, `Open github.com/login/device`, which opens where it's typed, and that it waits for the person to approve it on GitHub, until the time the code ends. Cancel has the hub cancel it, and puts the panel away. Then the panel says how it ended: signed in as the account, and that it's the default when it is, with Done; refused, ended before it was approved, or failed, with why, each with Close and Sign in again; or cancelled, with Close. One the hub couldn't start says why, with the same buttons. *Unconfirmed:* the words.
 

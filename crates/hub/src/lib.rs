@@ -8,6 +8,7 @@ mod calls;
 mod child_process;
 mod error;
 mod frames;
+mod gh;
 mod github_logins;
 mod hub;
 mod jobs;

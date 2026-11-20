@@ -135,10 +135,11 @@ Click **Connect account**, then:
 - **Sign in:** the hub asks GitHub for a code, which the panel shows. Copy it, click **Open github.com/login/device**, type it there, and approve Roundhouse. The panel says when you're signed in, or why not, with **Sign in again**. The hub renews the login by itself, so there's no end to watch for.
 - **Paste a token:** click **Make one on GitHub**, make a token for the repositories agents should reach, paste it, and click **Connect**. The hub asks GitHub whose it is and when it ends.
 - **Make an app:** agents act as its bot, as the next section says.
+- **Use gh's login:** first in the panel while `gh` on this Mac is logged in to github.com and no account holds its login. Click **Use ada's login**, by its username, and its row says `gh on this Mac`. The hub reads the token from `gh` once a minute and keeps no copy, as [Who agents are on GitHub](../concepts/who-agents-are-on-github.md#ghs-login-on-this-mac) says.
 
 ![Signing in with GitHub, with the code to type](../../spec/screens/settings-git-signing-in.png)
 
-Whichever way, the hub keeps the login in its own data, as [Where data is kept](where-data-is-kept.md) says, and the app writes it nowhere. A sign-in that waits shows on Git in every window until it's approved or cancelled, so you can finish one you started before the app quit.
+Whichever way but `gh`'s, the hub keeps the login in its own data, as [Where data is kept](where-data-is-kept.md) says, and the app writes it nowhere. A sign-in that waits shows on Git in every window until it's approved or cancelled, so you can finish one you started before the app quit.
 
 ### Renew and disconnect
 
@@ -146,7 +147,7 @@ Whichever way, the hub keeps the login in its own data, as [Where data is kept](
 - **A sign-in says `Renewing`** while the hub renews a token that has ended, and `Needs signing in again` once GitHub won't renew it. Choose **Sign in again** in its menu, and approve it as the same GitHub user.
 - **Disconnect,** in the same menu, has the hub forget the login, and asks first. The account stays, with **Connect again** and **Sign in again**. It doesn't revoke the token on GitHub.
 
-If the default can't be used, because its token ended, it was disconnected, it needs signing in again, or it's an app's installation that was uninstalled on GitHub, or whose token ended before the hub could make the next, it stays the default, and agents can't push until you put it right or make another the default. They don't fall back on the machine's own login. On your own machine, agents push as they always do, as [Who agents are on GitHub](../concepts/who-agents-are-on-github.md) says. Git says so at the top of **Added**, with why and what to do, in the words a workspace's line says and git gives as it refuses a push.
+If the default can't be used, because its token ended, it was disconnected, it needs signing in again, it's `gh`'s login and `gh` on this Mac is logged out or logged in as someone else, or it's an app's installation that was uninstalled on GitHub, or whose token ended before the hub could make the next, it stays the default, and agents can't push until you put it right or make another the default. They don't fall back on the machine's own login. On your own machine, agents push as they always do, as [Who agents are on GitHub](../concepts/who-agents-are-on-github.md) says. Git says so at the top of **Added**, with why and what to do, in the words a workspace's line says and git gives as it refuses a push.
 
 ![Git saying agents can't push, since the default's token ended](../../spec/screens/settings-git-default-ended.png)
 

@@ -170,8 +170,7 @@ fn provider(dir: &Path) -> LocalProvider {
         instances_dir: dir.join("instances"),
         workspaces_root: dir.join("workspaces"),
         clones_dir: dir.join("clones"),
-        shell: Some("/bin/sh".into()),
-        path: Some("/opt/tools".into()),
+        path: MachinePath::new(Some("/bin/sh".into()), Some("/opt/tools".into())),
     })
 }
 

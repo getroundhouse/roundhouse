@@ -41,7 +41,7 @@ impl Store {
         Ok(found.optional()?)
     }
 
-    /// Every GitHub account the hub holds a token's or a sign-in's login for whose user's profile it last asked GitHub
+    /// Every GitHub account the hub holds a token's, a sign-in's or `gh`'s login for whose user's profile it last asked GitHub
     /// for at `last_asked_by_ms` or before, or never, oldest first, with the login's file. An app's installation has
     /// none, since its bot's commit identity is made from its username alone.
     pub(crate) fn github_profiles_due(
@@ -50,12 +50,13 @@ impl Store {
     ) -> Result<Vec<(GithubAccount, LoginFile)>, StoreError> {
         let conn = lock(&self.reader);
         let mut statement = conn.prepare_cached(&format!(
-            "SELECT {COLUMNS} WHERE login_file IS NOT NULL AND login_kind IN (?1, ?2) AND NOT EXISTS (
-                 SELECT 1 FROM github_profiles WHERE account_id = github_accounts.id AND read_at_ms > ?3
+            "SELECT {COLUMNS} WHERE login_file IS NOT NULL AND login_kind IN (?1, ?2, ?3) AND NOT EXISTS (
+                 SELECT 1 FROM github_profiles WHERE account_id = github_accounts.id AND read_at_ms > ?4
              ) ORDER BY rowid"
         ))?;
-        let (token, sign_in) = (text_of(&GithubLoginKind::Token), text_of(&GithubLoginKind::SignIn));
-        let rows = statement.query_map(params![token, sign_in, last_asked_by_ms], account_at)?;
+        let [token, sign_in, gh] =
+            [GithubLoginKind::Token, GithubLoginKind::SignIn, GithubLoginKind::Gh].map(|how| text_of(&how));
+        let rows = statement.query_map(params![token, sign_in, gh, last_asked_by_ms], account_at)?;
         let rows = rows.collect::<rusqlite::Result<Vec<_>>>()?;
         Ok(rows.into_iter().filter_map(|(account, file)| Some((account, file?))).collect())
     }

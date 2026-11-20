@@ -109,8 +109,17 @@ fn hub_with(dir: &Path, fake: Fake) -> (Arc<Hub>, Arc<Fake>) {
     let providers = ProviderSet::only(fake.clone());
     let store = Arc::new(store_with_session(dir));
     let github = Github::new(github::GithubConfig::at(NO_GITHUB.to_string()));
-    let hub =
-        Hub::new(Build::UNSTAMPED, store, HubDirs::in_dir(dir), providers, github, Vec::new(), false, Timers::DEFAULT);
+    let hub = Hub::new(
+        Build::UNSTAMPED,
+        store,
+        HubDirs::in_dir(dir),
+        providers,
+        github,
+        providers::local::MachinePath::only(None),
+        Vec::new(),
+        false,
+        Timers::DEFAULT,
+    );
     (Arc::new(hub), fake)
 }
 

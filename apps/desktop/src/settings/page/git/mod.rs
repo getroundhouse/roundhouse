@@ -18,6 +18,7 @@ mod app_rows;
 mod app_words;
 mod connect_panels;
 mod found;
+mod gh_choice;
 mod git_page;
 mod kept;
 mod panel;

@@ -9,8 +9,9 @@ use super::frame::Frame;
 use super::screens::FOCUS;
 use super::steps::{Screen, Step};
 use super::worlds::{
-    ada, conversation, github_accounts, github_default_ended, github_signing_in, github_signing_in_to,
-    no_github_accounts,
+    ada, conversation, github_accounts, github_default_ended, github_gh_default, github_gh_logged_out,
+    github_gh_offered, github_gh_other_user, github_gh_refused, github_gh_unread, github_signing_in,
+    github_signing_in_to, no_github_accounts,
 };
 use client_core::fake_hub::World;
 
@@ -39,6 +40,27 @@ pub(crate) const SCREENS: &[Screen] = &[
         github_accounts,
         &[Step::Select(FOCUS), Step::OpenSettings, GIT, Step::Click("git-connect")],
     ),
+    git(
+        "settings-git-choosing-gh",
+        github_gh_offered,
+        &[Step::Select(FOCUS), Step::OpenSettings, GIT, Step::Click("git-connect"), Step::WaitFor("git-use-gh")],
+    ),
+    git(
+        "settings-git-gh-refused",
+        github_gh_refused,
+        &[
+            Step::Select(FOCUS),
+            Step::OpenSettings,
+            GIT,
+            Step::Click("git-connect"),
+            Step::Click("git-use-gh"),
+            Step::WaitFor("git-refused"),
+        ],
+    ),
+    git("settings-git-gh", github_gh_default, &[Step::Select(FOCUS), Step::OpenSettings, GIT]),
+    git("settings-git-gh-logged-out", github_gh_logged_out, &[Step::Select(FOCUS), Step::OpenSettings, GIT]),
+    git("settings-git-gh-other-user", github_gh_other_user, &[Step::Select(FOCUS), Step::OpenSettings, GIT]),
+    git("settings-git-gh-unread", github_gh_unread, &[Step::Select(FOCUS), Step::OpenSettings, GIT]),
     git(
         "settings-git-token",
         github_accounts,

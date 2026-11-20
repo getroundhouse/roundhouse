@@ -15,6 +15,7 @@ use protocol::client::{ErrorCode, HubNotice};
 mod tests;
 
 mod credential;
+mod gh_login;
 mod github_calls;
 mod profiles;
 mod renewals;

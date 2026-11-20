@@ -310,6 +310,11 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
         | R::GithubSignInCancel(_)
         | R::GithubAppMake(_)
         | R::GithubAppRemove(_) => Err(read_only("change anything")),
+        R::GithubAccountConnectGh => Err(world.gh_connect_refused.clone().unwrap_or_else(|| read_only("connect"))),
+        R::HubGhLogin => match &world.hub_gh_login {
+            Some(login) => reply(C::GhLogin(login.clone())),
+            None => Err(ApiError::new(ErrorCode::Unsupported, "an older hub doesn't read gh's login")),
+        },
         R::GithubAppInstallationsConnect(_) => Err(world.app_look_refused.clone().unwrap_or_else(|| read_only("look"))),
         // As a hub writes it, which changes nothing the hub holds, though with only what the app reads of it, its name
         // and where GitHub sends the person back, since nothing here posts it to GitHub.

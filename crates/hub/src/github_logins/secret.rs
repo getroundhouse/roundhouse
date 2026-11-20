@@ -1,6 +1,6 @@
 use std::io;
 
-use protocol::model::GithubToken;
+use protocol::model::{GithubToken, GithubUserId};
 use serde::{Deserialize, Serialize};
 
 use crate::login_files::{LoginSecret, Stored};
@@ -19,6 +19,9 @@ pub(crate) enum GithubLogin {
     Installation(InstallationToken),
     /// An app of your own's key, which is no account's login, as the app's row names it.
     App(GithubAppKey),
+    /// The login `gh` has on the hub's machine, as the GitHub user `user`, which holds no secret: the hub reads the
+    /// token from `gh` as it checks its logins, and keeps it only in memory.
+    Gh { user: GithubUserId },
 }
 
 impl GithubLogin {
@@ -29,7 +32,7 @@ impl GithubLogin {
             GithubLogin::Token(token) => Some(token),
             GithubLogin::SignIn(signed_in) => Some(&signed_in.token),
             GithubLogin::Installation(installation) => Some(&installation.token),
-            GithubLogin::App(_) => None,
+            GithubLogin::App(_) | GithubLogin::Gh { .. } => None,
         }
     }
 }
@@ -86,6 +89,9 @@ enum Form {
     App {
         key: GithubAppKey,
     },
+    Gh {
+        user: GithubUserId,
+    },
     #[serde(other)]
     Newer,
 }
@@ -101,6 +107,7 @@ impl LoginSecret for GithubLogin {
             GithubLogin::SignIn(signed_in) => Form::SignIn(signed_in.clone()),
             GithubLogin::Installation(installation) => Form::Installation(installation.clone()),
             GithubLogin::App(key) => Form::App { key: key.clone() },
+            GithubLogin::Gh { user } => Form::Gh { user: *user },
         };
         Ok(serde_json::to_vec(&form)?)
     }
@@ -113,6 +120,7 @@ impl LoginSecret for GithubLogin {
                 Ok(Form::SignIn(signed_in)) => Stored::Secret(GithubLogin::SignIn(signed_in)),
                 Ok(Form::Installation(installation)) => Stored::Secret(GithubLogin::Installation(installation)),
                 Ok(Form::App { key }) => Stored::Secret(GithubLogin::App(key)),
+                Ok(Form::Gh { user }) => Stored::Secret(GithubLogin::Gh { user }),
                 Ok(Form::Newer) => Stored::Newer,
                 Err(_) => Stored::Nothing,
             };

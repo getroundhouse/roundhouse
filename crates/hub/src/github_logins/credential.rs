@@ -76,6 +76,7 @@ impl GithubLogins {
             Ok(Stored::Secret(GithubLogin::Installation(made))) if made.token_ends_at_ms <= now_ms => {
                 Err(Unusable::Renewing)
             }
+            Ok(Stored::Secret(GithubLogin::Gh { user })) => self.gh_token(user, now_ms),
             Ok(Stored::Secret(login)) => login.token().cloned().ok_or(Unusable::Unreadable(None)),
             Ok(Stored::Newer) => Err(Unusable::Newer),
             Ok(Stored::Nothing) => Err(Unusable::Unreadable(None)),

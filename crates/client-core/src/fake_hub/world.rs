@@ -80,6 +80,12 @@ pub struct World {
     pub github_accounts: Vec<GithubAccount>,
     pub github_sign_ins: Vec<GithubSignIn>,
     pub found_github_logins: Vec<FoundGithubLogin>,
+    /// Who `gh` on the hub's machine is logged in as, as the hub answers each time it's asked. `None` refuses it, as a hub
+    /// from before it read `gh` does.
+    pub hub_gh_login: Option<protocol::model::GhLogin>,
+    /// Why the hub couldn't use `gh`'s login as an account's, as it answers each time it's asked. `None` refuses it, as the
+    /// rest of what would change what the hub holds.
+    pub gh_connect_refused: Option<ApiError>,
     /// How a sign-in with GitHub the app starts stands as the hub answers, which it does with the ID the app gave it,
     /// though it keeps no record of it. `None` refuses it, as the rest of what would change what the hub holds.
     pub sign_in_answer: Option<GithubSignInStatus>,
