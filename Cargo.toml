@@ -204,9 +204,9 @@ raw-window-handle = "0.6.2"
 realfft = "3.5.1"
 # Already under rustls. Checks the update feed's signature.
 ring = "0.17.14"
-# SQLite bundled, with its statement cache and checked `u64` and `usize` conversions, and without the WASM bindings 0.42
+# SQLite bundled, with its statement cache and checked `u64` and `usize` conversions, and without the WASM bindings it
 # turns on by default.
-rusqlite = { version = "0.42.0", default-features = false, features = ["bundled", "cache", "fallible_uint"] }
+rusqlite = { version = "0.43.0", default-features = false, features = ["bundled", "cache", "fallible_uint"] }
 # Already under GPUI on a Mac. The Keychain on iOS, which keeps the token a hub gave the phone.
 security-framework = "3.7.0"
 serde = { version = "1.0.229", features = ["derive"] }
