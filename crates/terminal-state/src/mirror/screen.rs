@@ -12,7 +12,13 @@ use crate::drawn::Rgb;
 /// Abandons any sequence a copy was partway through, then goes back to the shell's screen, as vim does as it quits.
 pub(super) const TO_SHELL_SCREEN: &[u8] = b"\x18\x1b[?1049l";
 /// Lines kept above the screen, as most terminals keep by default.
-const HISTORY_LINES: usize = 10_000;
+pub(super) const HISTORY_LINES: usize = 10_000;
+/// The most the lines kept above the screen take, which [`HISTORY_LINES`] fill at the widths people use, so it stops
+/// only a wide or colourful terminal short of them. Without it, Ghostty's own limit of about one page, 400 KiB, would
+/// keep about a thousand lines at 80 columns and two hundred at 200. Each copy of a terminal holds its history, the
+/// worker's and every client's, and a screen sent to a client carries it. At `TerminalSize::MOST`, with a colour in
+/// every cell, its history would otherwise take 171 MiB, and a screen of it would pass a frame's limit.
+pub(super) const HISTORY_BYTES: usize = 32 * 1024 * 1024;
 /// The longest unfinished sequence a snapshot carries over, which covers everything but a large image or clipboard
 /// write cut off partway.
 const LONGEST_UNFINISHED_BYTES: usize = 64 * 1024;
@@ -52,7 +58,7 @@ impl Mirror {
     /// A copy that answers nothing the program asks, as a client's is, since the worker's answers.
     pub fn new(size: Size) -> Result<Self, MirrorError> {
         let mut terminal = Terminal::new(size.cols, size.rows)?;
-        terminal.set_scrollback_max_lines(Some(HISTORY_LINES))?;
+        terminal.set_scrollback_max_lines(Some(HISTORY_LINES))?.set_scrollback_max_bytes(Some(HISTORY_BYTES))?;
         // From the start, since only bytes written after it's on can be carried over by a snapshot.
         terminal.set_continuation_max_bytes(LONGEST_UNFINISHED_BYTES)?;
         Ok(Self { terminal, drawing: None, typing: None, selecting: None })
