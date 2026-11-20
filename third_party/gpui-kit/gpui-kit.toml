@@ -32,4 +32,5 @@ patches = [
     "markdown-link-node",
     "core-text-22",
     "dialog-focus-ring-room",
+    "attachment-card-radius",
 ]

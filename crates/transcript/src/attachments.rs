@@ -200,6 +200,7 @@ pub fn file_card(id: impl Into<ElementId>, attachment: &Attachment) -> Card {
     Card::new()
         .id(id)
         .small()
+        .corners(look::Corner::Control)
         .tooltip(name.clone())
         .media(AttachmentMedia::new().child(Icon::new(IconName::FileText).sized(look::IconSize::Large)))
         .content(

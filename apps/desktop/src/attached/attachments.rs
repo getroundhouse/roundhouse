@@ -3,6 +3,7 @@ use client_core::{FileToSend, FilesFor};
 use gpui_kit::component::Sizable as _;
 use gpui_kit::component::attachment::{Attachment as Card, AttachmentGroup, AttachmentMedia};
 use gpui_kit::{Axis, Context, ElementId, ExternalPaths, Image, InteractiveElement, ParentElement, Styled};
+use look::Shaped as _;
 use protocol::attachment::MAX_PER_PROMPT;
 use protocol::model::AttachmentId;
 use protocol::prompt::PromptProblem;
@@ -141,6 +142,7 @@ impl Attachments {
                 Some(preview) => Card::new()
                     .id(element)
                     .small()
+                    .corners(look::Corner::Control)
                     .tooltip(attachment.name.clone())
                     .axis(Axis::Vertical)
                     .media(AttachmentMedia::new().src(preview.clone()))
