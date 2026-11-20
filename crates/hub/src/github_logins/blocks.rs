@@ -61,9 +61,17 @@ pub(super) fn reason(what: &str, until: &str, to_do: &str) -> String {
     )
 }
 
-/// What the block while the hub has no default says: that Roundhouse has no GitHub account, and to connect one.
+/// What the block while the hub has no default says: that Roundhouse has no GitHub account, and to connect one, or,
+/// while it has accounts, as once the default was disconnected, that none is the default, and to choose one.
 /// *Unconfirmed:* the words.
-pub(super) fn no_account() -> String {
+pub(super) fn no_account(has_accounts: bool) -> String {
+    if has_accounts {
+        return reason(
+            "Roundhouse has no default GitHub account",
+            "one is chosen",
+            "Make one the default in Roundhouse's Settings, or connect another.",
+        );
+    }
     reason(
         "Roundhouse has no GitHub account",
         "one is connected",

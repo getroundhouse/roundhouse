@@ -149,3 +149,18 @@ pub(super) const GITHUB_SET_UP: &str = r"
     ALTER TABLE hub_settings ADD COLUMN github_set_up TEXT;
     DROP TABLE found_github_logins;
 ";
+
+/// A GitHub account's removal moves the records' revision, as disconnecting any but an app's installation removes it,
+/// so the feed's word that it's gone supersedes every copy of it. And no record of an account the person disconnected
+/// before, with what GitHub's profile of its user said, nor the hub's settings' naming it as the default: an account
+/// with no login that isn't an app's installation, whose record stays until its app is removed.
+pub(super) const GITHUB_ACCOUNT_REMOVAL: &str = r"
+    CREATE TRIGGER github_accounts_rev_on_delete AFTER DELETE ON github_accounts BEGIN
+        UPDATE counters SET value = value + 1 WHERE name = 'rev';
+    END;
+    UPDATE hub_settings SET github_account_id = NULL WHERE github_account_id IN
+        (SELECT id FROM github_accounts WHERE login_kind IS NULL AND app_id IS NULL);
+    DELETE FROM github_profiles WHERE account_id IN
+        (SELECT id FROM github_accounts WHERE login_kind IS NULL AND app_id IS NULL);
+    DELETE FROM github_accounts WHERE login_kind IS NULL AND app_id IS NULL;
+";

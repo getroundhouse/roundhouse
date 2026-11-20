@@ -1,11 +1,11 @@
 use super::super::hub_settings::hub_settings;
-use super::super::{Store, StoreError, from_text, lock, rev_of, text_of};
+use super::super::{Store, StoreError, current_rev, from_text, lock, rev_of, text_of};
 use super::profiles::keep_profile;
 use crate::login_files::LoginFile;
 use github::GithubProfile;
 use protocol::model::{
     GithubAccount, GithubAccountId, GithubAppId, GithubInstallation, GithubInstallationId, GithubLoginKind, GithubUser,
-    GithubUserId, HeldGithubLogin, HubSettings,
+    GithubUserId, HeldGithubLogin, HubSettings, Rev,
 };
 use rusqlite::{Connection, OptionalExtension as _, Row, Transaction, params};
 
@@ -91,6 +91,12 @@ pub(super) fn row_of(
 }
 
 impl Store {
+    /// Whether the hub has any GitHub account's record.
+    pub(crate) fn has_github_accounts(&self) -> Result<bool, StoreError> {
+        let conn = lock(&self.reader);
+        Ok(conn.query_row("SELECT EXISTS (SELECT 1 FROM github_accounts)", [], |row| row.get::<_, bool>(0))?)
+    }
+
     pub(crate) fn github_account(&self, id: &GithubAccountId) -> Result<Option<GithubAccount>, StoreError> {
         Ok(row_of(&lock(&self.reader), id)?.map(|(account, _)| account))
     }
@@ -199,6 +205,34 @@ impl Store {
         }
         Ok(row_of(&conn, id)?.map(|(account, _)| account))
     }
+
+    /// Forgets the GitHub account `id`, as disconnecting any but an app's installation does: its record, what GitHub's
+    /// profile of its user said, and the hub's settings' naming it as the default, in one transaction. Returns the
+    /// record as it last was, the revision its removal moved the records to, and the settings when it was the default,
+    /// or `None` when there's no such account. The hub lets go of the login's file first, so a power cut that takes
+    /// this back leaves a row naming a file that's gone, which is removed as the hub next starts.
+    pub(crate) fn remove_github_account(&self, id: &GithubAccountId) -> Result<Option<GithubRemoved>, StoreError> {
+        let mut conn = lock(&self.writer);
+        let tx = conn.transaction()?;
+        let Some((account, _)) = row_of(&tx, id)? else { return Ok(None) };
+        let was_default =
+            tx.execute("UPDATE hub_settings SET github_account_id = NULL WHERE github_account_id = ?", [id.as_str()])?;
+        tx.execute("DELETE FROM github_profiles WHERE account_id = ?", [id.as_str()])?;
+        tx.execute("DELETE FROM github_accounts WHERE id = ?", [id.as_str()])?;
+        let rev = current_rev(&tx)?;
+        let settings = if was_default > 0 { Some(hub_settings(&tx)?) } else { None };
+        tx.commit()?;
+        Ok(Some(GithubRemoved { account, rev, settings }))
+    }
+}
+
+/// A GitHub account the hub has forgotten: its record as it last was, the revision its removal moved the records to,
+/// and the hub's settings when it was the default, which then name none.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) struct GithubRemoved {
+    pub(crate) account: GithubAccount,
+    pub(crate) rev: Rev,
+    pub(crate) settings: Option<HubSettings>,
 }
 
 /// Has `connecting.account` hold the login whose token is in `connecting.file`, as `connecting.user`, which needs no

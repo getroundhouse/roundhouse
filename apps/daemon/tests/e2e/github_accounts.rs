@@ -1,7 +1,7 @@
 //! A GitHub account connected through a real hub, which asks a stand-in for GitHub whose its token is, as what a
 //! workspace's git uses for github.com on a provider where Roundhouse sets up GitHub, which these reach through an
 //! adapter: the hub makes it the default and sets it on the workspace's worker, whose setup script's git gets it, and
-//! commits as it, and a block once it's disconnected, and the next token the hub's check of its logins makes an app's
+//! commits as it, and a block once it's disconnected, which leaves no account, and the next token the hub's check of its logins makes an app's
 //! installation. On the local provider, the worker is given none of it. And who `gh` and the SSH key on the hub's own
 //! machine are, as a client asks, and whether the default can push to a workspace's repository.
 
@@ -54,7 +54,7 @@ fn a_workspaces_git_gets_the_default_github_accounts_token_and_a_block_once_its_
     assert!(first.contains(&format!("username=ada\npassword={TOKEN}\n")), "{first}");
     assert_eq!(wait_for_setup(&client, &workspace.id), SetupStatus::Succeeded, "git was blocked");
     let said = std::fs::read_to_string(worktree.join("said")).unwrap();
-    assert!(said.contains("ada, the default account, was disconnected. Until"), "{said}");
+    assert!(said.contains("Roundhouse has no GitHub account. Until"), "{said}");
 }
 
 /// Says what of the worker's git credential the setup script was given: the git config git is to include, and the

@@ -5,7 +5,8 @@
 use std::path::Path;
 
 use protocol::client::ErrorCode;
-use protocol::model::{GhLogin, GhLoginWorks, GithubLoginKind, SentCredential, UnusableLogin};
+use protocol::client::github_accounts::GithubAccountConnect;
+use protocol::model::{GhLogin, GhLoginWorks, GithubLoginKind, GithubToken, SentCredential, UnusableLogin};
 use protocol::worker::GithubCredential;
 
 use crate::github_logins::GhSaid;
@@ -189,4 +190,30 @@ async fn a_token_read_from_gh_works_only_for_a_few_minutes_without_another_read(
 
     assert_eq!(still, None);
     assert_eq!(after, Some(UnusableLogin::GhUnread));
+}
+
+/// As when the person connected `gh`'s login beside the account they signed in, then disconnected it: the account goes,
+/// the default stays, and connecting `gh`'s login again makes a new account.
+#[tokio::test]
+async fn disconnecting_gh_s_login_removes_its_account_and_leaves_the_default_and_it_can_be_connected_again() {
+    let users = [("ada-token", Answer::user(7, "ada", None)), ("signed-in-token", Answer::user(7, "ada", None))];
+    let github = StandIn::start(users.to_vec()).await;
+    let dir = tempfile::tempdir().unwrap();
+    let hub = hub_calling_github(dir.path(), github.api());
+    gh(dir.path());
+    log_in(dir.path(), "ada", "ada-token");
+    let asking = |token: &str| GithubAccountConnect { token: GithubToken::new(token), id: None };
+    let default = hub.github_account_connect(asking("signed-in-token")).await.unwrap();
+    let from_gh = hub.github_account_connect_gh().await.unwrap();
+
+    hub.github_account_disconnect(from_gh.id.clone()).await.unwrap();
+    let after = hub.records_list().await.unwrap();
+    let token_kept = hub.github_logins.gh_known(now_ms()).is_some();
+    let again = hub.github_account_connect_gh().await.unwrap();
+
+    assert_eq!(after.github_accounts, std::slice::from_ref(&default), "only gh's account went");
+    assert_eq!(after.hub_settings.unwrap().github.unwrap().account, Some(default.id));
+    assert!(!token_kept, "the token gh gave is forgotten with the last account that held it");
+    assert_ne!(again.id, from_gh.id, "connecting it again makes a new account");
+    assert_eq!(again.held_login.map(|held| held.how), Some(GithubLoginKind::Gh));
 }

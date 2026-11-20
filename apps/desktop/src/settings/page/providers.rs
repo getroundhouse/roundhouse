@@ -317,6 +317,10 @@ fn gh_warning(gh: Option<&GhLogin>) -> Option<StatusBox> {
 fn hub_line(hub: Option<&str>) -> String {
     match hub {
         Some(hub) => format!("Roundhouse itself reads pull requests as {hub}, the default account in Git."),
-        None => "Roundhouse itself has no GitHub account, so it can't read pull requests. Connect one in Git.".into(),
+        None => {
+            "Roundhouse itself has no default GitHub account, so it can't read pull requests. Choose or connect one \
+                 in Git."
+                .into()
+        }
     }
 }

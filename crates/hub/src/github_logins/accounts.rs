@@ -16,7 +16,7 @@ use super::{DefaultCredential, GithubLogin};
 use crate::error::internal;
 use crate::login_files::{Locked, LoginFiles};
 use crate::pasted_token::pasted_token;
-use crate::store::{GithubConnected, GithubConnecting, Store, StoreError};
+use crate::store::{GithubConnected, GithubConnecting, GithubRemoved, Store, StoreError};
 use github::TokenOwner;
 
 /// Connects, disconnects and tidies the logins of GitHub accounts, chooses the default, and approves and ends sign-ins
@@ -81,6 +81,14 @@ impl GithubAccountChange {
         let settings = self.settings.map(|_| store.hub_settings()).transpose()?;
         Ok(Self { settings, ..self })
     }
+}
+
+/// What disconnecting a GitHub account came to: an app's installation's record, kept with no login, or any other
+/// account's removal.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum Disconnected {
+    Kept(GithubAccountChange),
+    Removed(GithubRemoved),
 }
 
 /// What a file in the GitHub logins' directory is kept for, as tidying names it: an account's login, or an app's key.
@@ -163,17 +171,42 @@ impl GithubLogins {
         .settled(&self.store)
     }
 
-    /// Has the hub forget the login it holds for `id`, keeping the record, as `GithubAccountDisconnect` says, at
-    /// `now_ms`. The file goes first, and then the row, as [`Locked::disconnect`] says.
-    pub(crate) fn disconnect(&self, id: &GithubAccountId, now_ms: i64) -> Result<GithubAccountChange, ApiError> {
-        self.changing(now_ms, |files| {
-            if let Some(file) = self.store.github_login_file(id)?
-                && let Some(account) = files.disconnect(&file, || Ok(self.store.clear_github_login(id)?))?
-            {
-                return Ok(GithubAccountChange { account, changed: true, settings: None });
+    /// Has the hub forget the login it holds for `id`, as `GithubAccountDisconnect` says, at `now_ms`, and the account
+    /// with it, unless it's an app's installation, whose record stays until its app is removed, so the hub doesn't
+    /// connect it again by itself. The file goes first, and then the row, as [`Locked::disconnect`] says. An account
+    /// that's gone is refused as not found, as one removed before is.
+    pub(crate) fn disconnect(&self, id: &GithubAccountId, now_ms: i64) -> Result<Disconnected, ApiError> {
+        let disconnected = self.changing(now_ms, |files| {
+            let account = self.record(id)?;
+            let file = self.store.github_login_file(id)?;
+            if account.installation.is_some() {
+                if let Some(file) = file
+                    && let Some(account) = files.disconnect(&file, || Ok(self.store.clear_github_login(id)?))?
+                {
+                    return Ok(Disconnected::Kept(GithubAccountChange { account, changed: true, settings: None }));
+                }
+                return Ok(Disconnected::Kept(GithubAccountChange::unchanged(account)));
             }
-            Ok(GithubAccountChange::unchanged(self.record(id)?))
-        })
+            let remove = || {
+                let gone = || StoreError::NotFound { kind: "GitHub account", id: id.to_string() };
+                Ok(self.store.remove_github_account(id)?.ok_or_else(gone)?)
+            };
+            let removed = match file {
+                Some(file) => files.disconnect(&file, remove)?,
+                None => remove()?,
+            };
+            if !self.holds_gh()? {
+                *self.gh.lock() = None;
+            }
+            Ok(Disconnected::Removed(removed))
+        })?;
+        match disconnected {
+            Disconnected::Removed(GithubRemoved { account, rev, settings }) => {
+                let settings = settings.map(|_| self.store.hub_settings()).transpose()?;
+                Ok(Disconnected::Removed(GithubRemoved { account, rev, settings }))
+            }
+            kept @ Disconnected::Kept(_) => Ok(kept),
+        }
     }
 
     /// Makes `account` the default, or each machine's own login with `None`, as `GithubAccountSetDefault` says, under
@@ -197,8 +230,15 @@ impl GithubLogins {
             let accounts = self.store.github_login_files()?.into_iter().map(|(id, file)| (KeptFor::Account(id), file));
             let apps = self.store.github_app_keys()?.into_iter().map(|(id, file)| (KeptFor::App(id), file));
             files.tidy(accounts.chain(apps).collect(), |kept_for| match kept_for {
+                // As disconnecting it would have, had the hub not stopped between letting go of its file and its row.
                 KeptFor::Account(id) => {
-                    self.store.clear_github_login(id)?;
+                    let installation =
+                        self.store.github_account(id)?.is_some_and(|account| account.installation.is_some());
+                    if installation {
+                        self.store.clear_github_login(id)?;
+                    } else {
+                        self.store.remove_github_account(id)?;
+                    }
                     Ok(())
                 }
                 // As removing it would have, had the hub not stopped between letting go of its key and its record.
