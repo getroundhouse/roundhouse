@@ -11,8 +11,7 @@
   ],
   ignorePaths: [
     '**/node_modules/**',
-    'third_party/gpui-kit/vendor/Cargo.toml',
-    'third_party/gpui-kit/vendor/crates/**',
+    'third_party/**',
   ],
   dependencyDashboard: {
     labels: [
@@ -81,11 +80,16 @@
     {
       description: [
         'tools/kit-sync moves gpui-kit to the version of our copy of it, and gpui-pre-apple to the GPUI the kit pins,',
-        'which may not be its newest, so Renovate leaves both alone.',
+        'which may not be its newest. gpui-pre-ios has to be on that GPUI too, and moves when its copy in third_party/',
+        'is replaced with that release. So Renovate leaves all three alone in Cargo.toml.',
+      ],
+      matchFileNames: [
+        'Cargo.toml',
       ],
       matchPackageNames: [
         'gpui-kit',
         'gpui-pre-apple',
+        'gpui-pre-ios',
       ],
       enabled: false,
     },
