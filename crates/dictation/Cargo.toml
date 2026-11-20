@@ -16,6 +16,8 @@ testing = []
 [dependencies]
 fetching = { workspace = true, optional = true }
 flume.workspace = true
+# Pausing what's playing while something is dictated, each platform its own way.
+now-playing.workspace = true
 parking_lot.workspace = true
 # The Fourier transform the model's features are made with.
 realfft.workspace = true

@@ -3,7 +3,8 @@
 # `tools/package/package.sh` source this, so they build and stamp the same way, and the release workflow runs it, on a
 # Mac, on Windows and on Linux. Needs `jq`, which macOS has.
 #
-#   tools/build.sh DIR                  Build this commit, put the binaries in DIR, and print the build
+#   tools/build.sh DIR                  Build this commit, put the binaries in DIR, and print the build. On a Mac, the
+#                                       library that pauses what's playing while dictating goes beside them
 #   tools/build.sh --package DIR        The same, stamped as a package, with the version people download, and
 #                                       DIR/worker-versions.json, which the release workflow says of it in the feed
 #   tools/build.sh --allow-dirty ...    Either, with uncommitted changes in the build
@@ -14,6 +15,9 @@
 # different changes.
 
 BINARIES=(roundhouse-desktop roundhoused roundhouse)
+# The library `/usr/bin/perl` loads to pause what's playing while something is dictated, which
+# `crates/now-playing/build.rs` makes on a Mac, and the app looks for beside its binary.
+NOW_PLAYING=libroundhouse_now_playing.dylib
 # What a program's file ends in where this runs, which is Git's bash on Windows.
 case "$(uname -s)" in
   MINGW* | MSYS* | CYGWIN*) EXE=.exe ;;
@@ -62,18 +66,29 @@ target_dir() {
   (cd "$ROOT" && cargo metadata --no-deps --format-version 1 --locked) | jq -r .target_directory
 }
 
-# Builds the binaries in release with the stamp `stamp` set, and copies them into DEST. For another target than this
-# machine's, CARGO_BUILD_TARGET names it, as cargo takes it, and cargo keeps what it builds for one under its name.
+# Builds the binaries in release with the stamp `stamp` set, and copies them into DEST, with NOW_PLAYING on a Mac.
+# For another target than this machine's, CARGO_BUILD_TARGET names it, as cargo takes it, and cargo keeps what it
+# builds for one under its name.
 build_release() {
-  local dest=$1 target bin
+  local dest=$1 target bin messages out_dir
   : "${BUILD:?stamp comes first}" "${NUMBER:?stamp comes first}"
-  (cd "$ROOT" && ROUNDHOUSE_BUILD="$BUILD" ROUNDHOUSE_BUILD_NUMBER="$NUMBER" \
-    cargo build --release --locked -p desktop -p daemon -p cli --bins)
+  # Cargo's messages, on stdout, say where each build script put what it made. What it reports goes to stderr.
+  messages="$(cd "$ROOT" && ROUNDHOUSE_BUILD="$BUILD" ROUNDHOUSE_BUILD_NUMBER="$NUMBER" \
+    cargo build --release --locked -p desktop -p daemon -p cli --bins --message-format=json-render-diagnostics)"
   target="$(target_dir)${CARGO_BUILD_TARGET:+/$CARGO_BUILD_TARGET}"
   mkdir -p "$dest"
   for bin in "${BINARIES[@]}"; do
     cp "$target/release/$bin$EXE" "$dest/$bin$EXE"
   done
+  if [ "$(uname -s)" = Darwin ]; then
+    out_dir="$(jq -r 'select(.reason == "build-script-executed" and (.package_id | contains("/crates/now-playing#")))
+      | .out_dir' <<< "$messages")"
+    [ -f "$out_dir/$NOW_PLAYING" ] || {
+      echo "error: crates/now-playing/build.rs didn't make $NOW_PLAYING" >&2
+      return 1
+    }
+    cp "$out_dir/$NOW_PLAYING" "$dest/$NOW_PLAYING"
+  fi
 }
 
 if [ "${BASH_SOURCE[0]}" = "$0" ]; then

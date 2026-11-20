@@ -42,9 +42,8 @@ pub(super) fn page(hub: &OfHub) -> Page {
     if dictation::HEARS {
         settings.push(super::dictation_row::setting());
         settings.push(super::dictation_row::language());
-        if dictation::MUTES_OUTPUT {
-            settings.push(super::dictation_row::muting());
-        }
+        let possible = dictation::Quieting::ALL.into_iter().filter(|how| how.is_possible());
+        settings.extend(possible.map(super::dictation_row::quieting));
     }
     Page { id: PageId::General, name: "General", icon: Lucide::Settings2, body: Body::Settings(settings) }
 }

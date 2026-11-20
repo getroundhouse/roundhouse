@@ -30,5 +30,5 @@ pub use pending::Pending;
 pub use recording::NOTHING_HEARD;
 pub use source::{Source, install, unavailable};
 #[cfg(feature = "testing")]
-pub use source::{hear, mutes_output_while_dictating};
+pub use source::{hear, quiets_while_dictating};
 pub use view::LIVE_LINE;

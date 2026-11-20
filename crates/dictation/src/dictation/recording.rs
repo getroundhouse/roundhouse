@@ -6,8 +6,8 @@ use std::sync::Arc;
 use parking_lot::Mutex;
 
 use super::buffer::Buffer;
-use crate::audio::{MutedOutput, mute_output};
-use crate::{AudioIn, EngineError};
+use crate::audio::Quieted;
+use crate::{AudioIn, EngineError, Quieting};
 
 /// One recording, from the moment it's asked for. Dropping it before [`Recording::stop`] cancels it.
 pub struct Recording {
@@ -15,17 +15,8 @@ pub struct Recording {
     audio: AudioIn,
     stopped: Cell<bool>,
     cancelled: Cancelled,
-    /// What [`Recording::mute_output`] muted, put back as it was when this lets go of it.
-    muted: RefCell<Option<Muted>>,
-}
-
-/// What a recording muted while it's dictated to.
-enum Muted {
-    /// The system's sound output, which a recording from the microphone mutes.
-    Output { _until_dropped: MutedOutput },
-    /// Nothing, since the recording hears only what a test feeds it, which [`Recording::mutes_output`] tells the test.
-    #[cfg(any(test, feature = "testing"))]
-    Fed,
+    /// What [`Recording::quiet`] did, each put back as it was when this lets go of it.
+    quieted: RefCell<Vec<Quieted>>,
 }
 
 /// Whether a recording has been cancelled, which its loop reads before each thing it does, since what's already
@@ -64,28 +55,33 @@ pub(super) enum Input {
 
 impl Recording {
     pub(super) fn new(input: Buffer, audio: AudioIn, cancelled: Cancelled) -> Self {
-        Self { input, audio, stopped: Cell::new(false), cancelled, muted: RefCell::new(None) }
+        Self { input, audio, stopped: Cell::new(false), cancelled, quieted: RefCell::new(Vec::new()) }
     }
 
-    /// Mutes the system's sound output until the recording is stopped or dropped, and then unmutes it, unless it was
-    /// muted already. Once it's stopped, or where [`crate::MUTES_OUTPUT`] is false, this mutes nothing. A recording a
-    /// test feeds mutes nothing either, and [`Recording::mutes_output`] says whether it would.
-    pub fn mute_output(&self) {
-        if self.stopped.get() || self.muted.borrow().is_some() {
+    /// Quiets what's playing `how` says until the recording is stopped or dropped, and then puts it back as it was:
+    /// unmutes the sound output, unless it was muted already, or plays what it paused again. Once it's stopped, this
+    /// does nothing, and where [`Quieting::is_possible`] is false, a recording from the microphone quiets nothing. A
+    /// recording a test feeds quiets nothing either, and [`Recording::quiets`] says whether it was asked to.
+    pub fn quiet(&self, how: Quieting) {
+        if self.stopped.get() || self.has_quieted(how) {
             return;
         }
-        let muted = match self.audio {
-            AudioIn::Microphone => mute_output().map(|muted| Muted::Output { _until_dropped: muted }),
+        let quieted = match self.audio {
+            AudioIn::Microphone => how.quiet(),
             #[cfg(any(test, feature = "testing"))]
-            AudioIn::Fed => Some(Muted::Fed),
+            AudioIn::Fed => Some(Quieted::Fed(how)),
         };
-        *self.muted.borrow_mut() = muted;
+        self.quieted.borrow_mut().extend(quieted);
     }
 
-    /// Whether the recording has the sound output muted, for a test of a recording it feeds.
+    /// Whether the recording quiets what's playing `how` says, for a test of a recording it feeds.
     #[cfg(any(test, feature = "testing"))]
-    pub fn mutes_output(&self) -> bool {
-        self.muted.borrow().is_some()
+    pub fn quiets(&self, how: Quieting) -> bool {
+        self.has_quieted(how)
+    }
+
+    fn has_quieted(&self, how: Quieting) -> bool {
+        self.quieted.borrow().iter().any(|quieted| quieted.how() == how)
     }
 
     /// A single consumer reads the latest loudness independently of recognition. A slow reader skips old levels.
@@ -101,7 +97,7 @@ impl Recording {
         self.stopped.set(true);
         self.input.end(Input::Stop);
         // The microphone has closed, so what's playing can be heard again while the last words go in.
-        self.muted.borrow_mut().take();
+        self.quieted.borrow_mut().clear();
     }
 
     /// Ends the recording at once, and nothing more is heard of it, not even of what was already said: no more

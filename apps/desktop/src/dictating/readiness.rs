@@ -273,14 +273,15 @@ fn hears_the_microphone(cx: &App) -> bool {
     dictating(cx).audio == AudioIn::Microphone
 }
 
-/// Whether a recording mutes the sound output while it's dictated to: where this platform can, once it's chosen.
-fn mutes_output(cx: &App) -> bool {
-    dictation::MUTES_OUTPUT && crate::settings::get(cx).mute_while_dictating
+/// Whether a recording quiets what's playing `how` says while it's dictated to: where this platform can, once it's
+/// chosen.
+fn quiets(how: dictation::Quieting, cx: &App) -> bool {
+    how.is_possible() && crate::settings::get(cx).quiets_while_dictating(how)
 }
 
 /// What fields dictate with: this app's model, as it stands, and the person's choices.
 pub(crate) fn source() -> dictation_ui::Source {
-    dictation_ui::Source { ready, record, uses_microphone: hears_the_microphone, mutes_output }
+    dictation_ui::Source { ready, record, uses_microphone: hears_the_microphone, quiets }
 }
 
 /// Starts a recording biased toward `hints`, in the language chosen, once dictation is ready, and gives it and what's

@@ -1,6 +1,6 @@
 //! The app's recording source and the one field hearing it. Model setup and settings stay with the app.
 
-use dictation::{Hints, Recording, Update};
+use dictation::{Hints, Quieting, Recording, Update};
 use gpui_kit::{App, Context, Global, WeakEntity};
 
 use crate::Field;
@@ -12,8 +12,9 @@ pub struct Source {
     pub ready: fn(&App) -> bool,
     pub record: Record,
     pub uses_microphone: fn(&App) -> bool,
-    /// Whether a recording mutes the sound output while it's dictated to, as the person has chosen.
-    pub mutes_output: fn(&App) -> bool,
+    /// Whether a recording quiets what's playing in the way it's given, while it's dictated to, as the person has
+    /// chosen.
+    pub quiets: fn(Quieting, &App) -> bool,
 }
 
 impl Global for Source {}
@@ -27,14 +28,11 @@ impl Global for Active {}
 pub fn install(source: Source, cx: &mut App) {
     if !cx.has_global::<Source>() {
         crate::keys::install(cx);
-        // Quitting drops no field, so this ends the one dictated to, which unmutes what it muted, and waits for the
-        // sound to be unmuted, as long as quitting waits for anything.
+        // Quitting drops no field, so this ends the one dictated to, which puts back what it quieted, and waits for
+        // that, as long as quitting waits for anything.
         cx.on_app_quit(|cx| {
             unavailable(cx);
-            let restored = dictation::output_restored();
-            async move {
-                let _ = restored.recv_async().await;
-            }
+            dictation::restored()
         })
         .detach();
     }
@@ -49,8 +47,8 @@ pub(crate) fn uses_microphone(cx: &App) -> bool {
     cx.try_global::<Source>().is_some_and(|source| (source.uses_microphone)(cx))
 }
 
-pub(crate) fn mutes_output(cx: &App) -> bool {
-    cx.try_global::<Source>().is_some_and(|source| (source.mutes_output)(cx))
+pub(crate) fn quiets(how: Quieting, cx: &App) -> bool {
+    cx.try_global::<Source>().is_some_and(|source| (source.quiets)(how, cx))
 }
 
 pub(crate) fn record(hints: Hints, cx: &App) -> Option<(Recording, flume::Receiver<Update>)> {
@@ -88,8 +86,8 @@ pub fn hear(audio: &[f32], cx: &App) {
     }
 }
 
-/// Whether what's being dictated has the sound output muted, or a recording listening towards held Space has.
+/// Whether what's being dictated quiets what's playing `how` says, or a recording listening towards held Space does.
 #[cfg(feature = "testing")]
-pub fn mutes_output_while_dictating(cx: &App) -> bool {
-    active(cx).and_then(|field| field.upgrade()).is_some_and(|field| field.read(cx).mutes_output())
+pub fn quiets_while_dictating(how: Quieting, cx: &App) -> bool {
+    active(cx).and_then(|field| field.upgrade()).is_some_and(|field| field.read(cx).quiets(how))
 }

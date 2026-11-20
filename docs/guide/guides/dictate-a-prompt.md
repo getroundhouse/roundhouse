@@ -54,9 +54,11 @@ Focus the note at the foot of the proposal tab and use the same shortcuts. `Ente
 
 Focus a comment on a diff and use the same shortcuts. Finish dictation keeps the text in the box; `Enter` finishes the last words and saves the comment. Cancel dictation restores what you had before recording and leaves the comment open.
 
-## Mute what's playing
+## Mute or pause what's playing
 
 Turn on **Mute sound while dictating**, under Dictation in Settings, and the Mac's sound is muted while you dictate, so music or a video doesn't drown you out. It's unmuted once you stop, before the last of what you said goes in. Held Space mutes only once it starts dictating, at half a second, so a press you let go of sooner doesn't cut what's playing. Sound you'd muted already stays muted. Outputs whose volume the Mac can't set, such as many displays' speakers and some USB speakers and amps, play on.
+
+Turn on **Pause media while dictating**, beside it, and the music or video playing is paused while you dictate, whatever speakers it plays from, and played again once you stop. It pauses only what the Mac shows as Now Playing, the app your keyboard's play key controls. If you've played it again yourself, or something else has started playing in its place, it's left as it is. It uses a part of macOS that Apple doesn't publish, so a macOS update could stop it working, and then nothing is paused.
 
 ## When it stops by itself
 

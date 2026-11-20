@@ -1883,6 +1883,7 @@ dependencies = [
  "dictation",
  "fetching",
  "flume",
+ "now-playing",
  "objc2 0.6.5",
  "objc2-av-foundation",
  "objc2-core-audio",
@@ -5641,6 +5642,10 @@ checksum = "cbd044e85df3d939d8e32a1c35a3b737c7d0a4eeb7acd737bd207644e00f4e5f"
 dependencies = [
  "bitflags 2.13.2",
 ]
+
+[[package]]
+name = "now-playing"
+version = "0.1.0"
 
 [[package]]
 name = "ntapi"

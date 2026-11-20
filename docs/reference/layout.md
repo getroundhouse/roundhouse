@@ -78,6 +78,7 @@ crates/
   look/            The design system: colours, type, sizes, components and icons
   dictation/       Speech to text on the device
   dictation-ui/    Dictation in a text field, in GPUI
+  now-playing/     Pausing what's playing while dictating, on a Mac from inside perl
   fetching/        Downloading files over HTTP
   update-feed/     What a release adds to the update feed
   waiting/         How tests wait

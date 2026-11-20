@@ -19,6 +19,7 @@ The app's own settings. A repository's are in [Repository settings](repository-s
 | Dictation | On a Mac with macOS 14 or later, lets you dictate prompts, written answers and diff comments, once it has downloaded the model, 2.4 GB, and prepared it. Ask first shows a microphone in the composer and new-workspace dialog, which offers to turn it on. Under it, Settings says how it stands, with Retry, and Delete the model. See [Dictate a prompt](../guides/dictate-a-prompt.md) | Ask first |
 | Dictation language | The language you dictate in. Auto tells which from what you say. Choosing yours hears it better, and never writes it in another alphabet, as Auto can a short phrase said quickly, such as English in Cyrillic | Auto |
 | Mute sound while dictating | On a Mac, mutes its sound while you dictate, and unmutes it once you stop. Speakers that set their own volume, such as a display's, play on | Off |
+| Pause media while dictating | On a Mac, pauses the music or video the Mac shows as Now Playing while you dictate, and plays it again once you stop, whatever speakers it plays from | Off |
 
 Work is a turn, something an agent left running in the background, or a workspace being set up. An agent that's only waiting on you isn't, since it could wait all night. The display still sleeps, and closing the lid or a low battery still puts the Mac to sleep.
 
