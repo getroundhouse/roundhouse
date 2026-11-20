@@ -1,5 +1,5 @@
 //! What a recording does to what's playing while it's dictated to, as the person chooses, so what's said isn't drowned
-//! out, or heard with it: it mutes the sound output, pauses what the Now Playing app plays, or both.
+//! out, or heard with it: it mutes the sound output, pauses what the app the media keys control plays, or both.
 
 use super::media::{PAUSES_MEDIA, PausedMedia, media_restored, pause_media};
 use super::output::{MUTES_OUTPUT, MutedOutput, mute_output, output_restored};
@@ -10,7 +10,8 @@ pub enum Quieting {
     /// Mutes the system's sound output, which silences everything but an output whose volume only the device sets,
     /// such as many displays' speakers.
     MuteOutput,
-    /// Pauses what the Now Playing app plays, such as music or a video, whatever it plays from, but nothing else.
+    /// Pauses what the app the keyboard's media keys control plays, such as music or a video, whatever it plays from,
+    /// and plays it again after, if it's still that app and still paused. Nothing else pauses.
     PauseMedia,
 }
 

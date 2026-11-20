@@ -1,4 +1,4 @@
-//! Everywhere but a Mac, such as Windows and Linux, which don't pause what's playing yet, so [`PAUSES`] is false and
+//! Everywhere but a Mac and Windows, such as Linux, which doesn't pause what's playing yet, so [`PAUSES`] is false and
 //! the app doesn't offer to.
 
 /// Whether this platform can pause what's playing while it's dictated to. These can't yet.

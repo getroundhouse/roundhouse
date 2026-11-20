@@ -58,7 +58,7 @@ pub(super) fn quieting(how: Quieting) -> Setting {
         Quieting::PauseMedia => (
             "Pause media while dictating",
             "Pause the music or video playing while you dictate, and play it again once you stop, whatever speakers \
-             it plays from. Only what the Mac shows as Now Playing pauses.",
+             it plays from. Only the app your keyboard's play key controls pauses.",
         ),
     };
     Setting {

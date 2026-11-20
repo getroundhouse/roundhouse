@@ -3,8 +3,9 @@
 use std::ffi::{CStr, c_char, c_int, c_void};
 use std::ptr;
 
+use super::app::App;
 use super::block::Block;
-use crate::now_playing::{App, NowPlaying};
+use crate::now_playing::NowPlaying;
 
 const FRAMEWORK: &CStr = c"/System/Library/PrivateFrameworks/MediaRemote.framework/MediaRemote";
 
@@ -68,7 +69,7 @@ impl MediaRemote {
 
     /// The Now Playing app, and whether it's playing. `None` where `MediaRemote` doesn't answer in time. A program that
     /// isn't Apple's is answered as if no app were the Now Playing app.
-    pub(crate) fn now_playing(&self) -> Option<NowPlaying> {
+    pub(crate) fn now_playing(&self) -> Option<NowPlaying<App>> {
         let app = self.ask::<c_int>(self.app)?;
         let playing = self.ask::<u8>(self.playing)?;
         Some(NowPlaying { app: App::from_pid(app), playing: playing != 0 })
