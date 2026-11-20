@@ -8,7 +8,7 @@ use std::{fmt, fs, io};
 use tracing::warn;
 
 /// How many schema versions keep a copy. Each copy is a whole database, so they can't pile up, and three
-/// steps back through the last three updates that migrated.
+/// steps back through the last three updates that migrated. *Unconfirmed.*
 pub(super) const KEPT: usize = 3;
 
 /// Where a copy is written before it gets its name, so a file with a backup's name is always complete.

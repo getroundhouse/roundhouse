@@ -1,5 +1,6 @@
-//! A wait on a workspace's pull request, which an agent asks for through the worker's tools, and the hub keeps until it
-//! ends. It ends once, as against a monitor, which wakes the agent each time.
+//! A wait on the pull requests an agent names, and on the lower ones of a stack they're in, which the agent asks for
+//! through the worker's tools, and the hub keeps until it ends. A chat can have several open, each apart from the rest.
+//! A wait ends once, as against a monitor, which wakes the agent each time.
 
 use serde::{Deserialize, Serialize};
 

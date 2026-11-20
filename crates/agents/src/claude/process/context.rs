@@ -15,9 +15,9 @@ use crate::claude::context::{ModelWindows, context_usage};
 use crate::claude::normalize::value_of;
 use crate::{AgentError, AgentOutput};
 
-/// The least time between two asks in the middle of a turn. Each report that differs is an event in the session's
-/// log, and a turn's requests to the model can come every few seconds, so this keeps them to a few a minute while
-/// the ring still moves as the agent works.
+/// The least time between two asks in the middle of a turn. Each report that differs changes the session's record,
+/// which the hub announces to every client, and a turn's requests to the model can come every few seconds, so this
+/// keeps them to a few a minute while the ring still moves as the agent works.
 const MID_TURN_GAP: Duration = Duration::from_secs(15);
 
 /// Where asking has got to.

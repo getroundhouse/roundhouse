@@ -68,12 +68,12 @@ The owner hears about a review once, when it's done, in one report from the buil
 Before any code is written, the reviewer reads the change's design: parts 2 and 3 of its PR, written first, where each approach the builder weighed and didn't take has a paragraph of its own, such as **Why X, not Y:**. Changing course costs least now. It asks:
 
 - Is the problem the cause, or a symptom of something deeper?
-- Who owns the state, by the test in "State ownership" in `docs/architecture.md`?
+- Who owns the state, by the test in `docs/principles/state.md`?
 - How does a failure spread? For each thing the design waits on that can be slow, fail or never answer, what limits the wait, and what else waits behind it?
 - Which requirement makes the design hard, and would dropping it, and accepting what that costs, be simpler?
 - Was the approach that's most structurally right considered? If a smaller one was chosen, is the reason good? A smaller diff isn't a reason on its own.
 - Does something in the repo already do this, or could it be extended to?
-- Does it fit `docs/architecture.md`, including the parts that aren't built, such as workers on other machines and the iPhone app?
+- Does it fit `docs/principles/` and `docs/architecture.md`, including the parts that aren't built, such as workers on other machines and the iPhone app?
 - Does it change what an owner doc says, without saying so?
 - What does it commit, and in which PR: the forms it stores or sends, any migration, and any protocol break, as `docs/principles/protocol.md` says?
 - For a stack, are its splits and their order right, by `docs/standards/stacks.md`?
@@ -108,7 +108,7 @@ Whether the tests would notice the change breaking. It looks for:
 
 Whether the change is built the way a strong engineer would build it, not only whether it works, and is as small and clear as it can be. Findings that remove code come first. In the change's structure, it looks for:
 
-- State with the wrong owner, or more than one writer, by "State ownership" in `docs/architecture.md`, such as a client keeping or working out what the hub should record.
+- State with the wrong owner, or more than one writer, by `docs/principles/state.md`, such as a client keeping or working out what the hub should record.
 - A failure that spreads: a wait with no limit on something that can be slow or never answer, such as a worker, GitHub, the store or a lock, or something parts meant to be independent share, such as a loop, a task or a budget, so one stuck part holds up the rest.
 - Something with no owner to end it: a process, worker, subscription, task or record kept after nothing needs it.
 - An interface that's easy to call wrong, or an abstraction that leaks what it should hide.
@@ -146,7 +146,7 @@ Once a stack is built, the reviewer reads it as one change, against its design. 
 
 - Where the built change departs from its design, and whether it was right to.
 - A shape that suits what fills it but not what reads it, or the reverse: a field nothing reads, a reader working out what the writer knew, a value converted twice, or one thing named differently in two layers.
-- State with the wrong owner, by "State ownership" in `docs/architecture.md`, that only shows with both layers in view.
+- State with the wrong owner, by `docs/principles/state.md`, that only shows with both layers in view.
 - Code that exists only for the middle of the stack, beyond what `docs/standards/stacks.md` lets in, and any of it left at the top.
 - Two forms of one shape at the top, where "Each message type has one serialized form" in `docs/principles/protocol.md` asks for one, and readers of an old form the top no longer needs.
 - A pairing of versions in `docs/principles/protocol.md` that the stack breaks, and a migration that makes a different form from the live path given the same input.

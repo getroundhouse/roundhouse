@@ -9,6 +9,8 @@
 //! It's frozen, as Claude's tools and words were when the adapter stopped recording them, and it never changes, while
 //! the adapter's own table follows the CLI, so they aren't one. A result is read only from what the adapter kept of it,
 //! since what the CLI said beside it is only in the event's raw line, which nothing reads again.
+//!
+//! *Unconfirmed:* typing what was recorded before in the hub, once, rather than in every client.
 
 mod calls;
 mod lately;

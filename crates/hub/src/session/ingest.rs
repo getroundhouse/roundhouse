@@ -87,7 +87,8 @@ fn allowed_by_the_hub(session: &LiveSession, body: &EventBody) -> Option<Approva
 
 /// Whether the hub allows `request` itself, in a session in `mode`, when its settings are `set_to`: a call asked about
 /// with full access, which comes whatever the mode, as Claude's CLI asks before a command it can't check. Anything
-/// else is the person's to decide whatever the settings say, and so is anything asked in plan mode.
+/// else is the person's to decide whatever the settings say, and so is anything asked in plan mode. The hub decides
+/// this, and not an agent's adapter, since every agent's requests reach the hub and the setting is the hub's.
 pub(super) fn the_hub_allows(mode: ApprovalMode, request: &Request, set_to: bool) -> bool {
     set_to && mode.is_full_access() && matches!(request.asks, Asks::Call { .. })
 }

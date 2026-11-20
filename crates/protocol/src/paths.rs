@@ -217,7 +217,7 @@ fn socket_in(data_dir: &Path) -> Result<PathBuf, String> {
 /// The named pipe of the hub that keeps its files in `data_dir`. A pipe has no place in a directory, so its name is
 /// made from the directory's, one pipe for each as there's one socket in each elsewhere, and a checkout's hub is
 /// still out of an installed app's reach. Windows ignores case in a path and takes either slash, so those don't
-/// change the name. Any other two spellings of one directory do, such as one that goes through `..`.
+/// change the name. Any other two spellings of one directory do, such as one that goes through `..`. *Unconfirmed.*
 fn pipe(data_dir: &Path) -> PathBuf {
     let spelled = data_dir.to_string_lossy().to_lowercase().replace('/', "\\");
     PathBuf::from(format!(r"\\.\pipe\{DIR_NAME}-{:016x}", fnv1a(spelled.trim_end_matches('\\').as_bytes())))

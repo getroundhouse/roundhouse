@@ -6,6 +6,9 @@
 //! [`Dictation`] holds the thread. Each [`Recording`] is heard twice: as it's said, for live text, and a sentence at a
 //! time, cut at the pauses where the live text ends one, for each sentence's final text, which can change words the
 //! live text had. An [`Engine`] is the model that does both. The desktop app's composer dictates with it.
+//!
+//! A recording's audio and its loudness are held in memory, and only while it's heard. Nothing here writes either to
+//! disk or sends it off the device, because `docs/spec/chats.md` says that what's said never leaves the device.
 
 #![warn(clippy::wildcard_enum_match_arm)]
 

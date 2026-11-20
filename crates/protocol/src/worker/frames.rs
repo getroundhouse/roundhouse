@@ -49,7 +49,7 @@ pub enum WorkerFrame {
     /// What the agent of `run` is writing, as the deltas the worker has sent make it, with the subagents it runs in the
     /// background and its compaction under way. Sent to a hub as it says hello, after what the worker kept for it and
     /// before anything new, since the deltas that wrote it went to the hub before, or to none, so this hub's tail of
-    /// `run` is this from here on. Only for a run with something in it.
+    /// `run` is this from here on. Only for a run with something in it. *Unconfirmed.*
     AgentTail {
         session_id: SessionId,
         run: RunId,

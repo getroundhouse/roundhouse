@@ -1,6 +1,6 @@
 # Layout
 
-A map for finding your way before reading code: the parts and what connects them, then what each crate is. `docs/principles/parts.md` has the rules the parts follow, and `docs/principles/layers.md` which crate can depend on which.
+A map for finding your way before reading code: the parts and what connects them, what each crate is, and who owns each piece of state. `docs/principles/parts.md` has the rules the parts follow, and `docs/principles/layers.md` which crate can depend on which.
 
 ## The parts
 
@@ -89,3 +89,15 @@ apps/
 tools/             Checks, builds and packaging, as `docs/reference/commands.md` lists
 third_party/       Copies of other projects' code, as `third_party/README.md` says
 ```
+
+## Who owns what
+
+`docs/principles/state.md` has the rule and its test. This is where each piece of state ends up.
+
+| Owner | What it owns |
+|---|---|
+| The hub | Sessions and their logs, workspaces, comments, proposals, waits, drafts, what's read, its settings, and which instances it asked for |
+| A workspace's worker, and its machine | Running agents and terminals, and the worktree's files |
+| A provider | Whether an instance exists, and whether it's running |
+| A client | What's open and scrolled where, the app's settings, the window's place, and dictation |
+| Git and GitHub | Code, pull requests and CI |
