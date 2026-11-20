@@ -1,0 +1,24 @@
+# Agents, their adapters and the worker's tools
+
+These rules say how the hub and clients deal with each kind of agent through its adapter, what a chat can ask of an agent, and how an agent uses Roundhouse's own tools. `docs/reference/` has what each agent's CLI does.
+
+## Adapters
+
+- **Only an agent's adapter knows that agent's protocol and its tools' names.** The adapter records each fact as a typed event or field, and the hub and clients read the typed form. For example, the adapter stores a tool call as a `Call` and its result as a `CallOutput`, so every client draws every agent's calls the same way. A tool with no kind of its own is a `Call::Other`.
+- **An adapter drops a line only by naming its kind and why, never by a pattern.** A dropped line is gone. A line the adapter doesn't recognize becomes an `AgentOther` event with its raw line, for a later build to translate. So `AgentOther` holds only what isn't understood yet.
+- **Agent output is untrusted input.** A normalizer, such as `agents::claude::normalize`, takes any line without panicking. When an agent's text names a file, the worker resolves every symlink before it checks that the file is inside the worktree.
+- **What's specific to one kind of agent is in its adapter's description, and neither the hub nor a client branches on the kind.** The `agents` crate writes each kind's `AgentDescription` beside its adapter. The hub doesn't depend on `agents`, so the daemon's `main` passes the descriptions in, and clients get them from the hub with `agent_list`. No client keeps a list of its own of what an agent offers. For example, the command a person runs to make an agent's login token is a fact about the agent's CLI, so it's in the description.
+- **An adapter turns off state its agent keeps past its process, where the agent allows it.** An agent's memories and schedules carry from one conversation to the next on the worker's machine. Roundhouse has no record of them, and an instance that's destroyed and created again loses them.
+
+## What a chat asks of an agent
+
+- **The hub checks what a client asks of an agent against what the agent's run claims, and rejects it before sending it.** A request the agent can't take is then rejected, and not lost on its way. For example, each `Control`, which is a request to a running agent, names the capabilities it needs, and the hub rejects one that the run doesn't claim. A client reads a run's claims from the session's record, and offers only what they allow.
+- **What Roundhouse owns isn't a capability.** The queue, how conversations are named, worktrees and signing in to an account are Roundhouse's, so no agent keeps a second record of them.
+- **Every session names its model, approval mode and effort, and every launch passes all three.** None is left to the agent's CLI.
+
+## The worker's tools
+
+- **A worker serves Roundhouse's tools to its agents, and the hub replies to each call from its own records.** The worker sends the hub an ask for each tool call. For example, the hub replies to `get_diff_comments` because the hub stores the comments.
+- **A tool call reaches only the workspace of the worker that served it.** The hub knows which workspace each worker belongs to, and replies to an ask only for that workspace's sessions. A tool reaches more only if it's given more.
+- **A tool's result is written for the agent, in full, separately from what the app shows.** An agent reads the result as text and misreads what a person wouldn't. For example, an agent reads a pull request that's in the merge queue as merged.
+- **The instructions every agent gets don't depend on which of the worker's tools the agent has.** The system prompt states only what's true with or without the tools, because the Claude CLI keeps a chat's first system prompt until the chat is compacted, and an agent's tools are set at every launch. The system prompt and the tool server's instructions describe the tools as a group, so adding a tool changes neither.

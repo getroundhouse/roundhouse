@@ -1,0 +1,33 @@
+# Changing a protocol
+
+These rules let peers on different builds keep working together. They hold for all three protocols that cross between processes: the client protocol, between clients and a hub, the worker protocol, between a hub and its workers, and the provider protocol, between a hub and its provider adapters. All three have the same problem, so nobody has to remember which rule applies where. *Not built:* the provider protocol.
+
+## Changes that need no new version
+
+- **Each message type has one serialized form: its serde form in `protocol`, on the wire and in the hub's SQLite columns.** So a change to a type also changes how stored rows deserialize.
+- **A new field is `Option` or `#[serde(default)]`.** A message from an older peer, which lacks the field, still deserializes. So does a row stored before the field existed.
+- **Every enum that's read as data has a `#[serde(other)] Unknown` variant, and an envelope type has none.** Statuses, kinds, events and blocks are read as data. Without the variant, one new value fails the whole frame. Envelope types, such as `HubFrame` and `ClientResponse`, have none, because a reader could do nothing sensible with an unknown one. A client receives a new kind of response only by sending a new request.
+- **Code that receives `Unknown` never treats it as a value this build knows.** It skips the value, shows something neutral or rejects it, and it never panics. It checks that a value is known before comparing it with another that could also be unknown, because two `Unknown`s compare equal whatever they stood for. It doesn't send an unknown value to a peer to act on, because the peer would read only `Unknown`.
+- **A new request needs no new version, and its caller handles `ErrorCode::Unsupported`.** A hub, a worker or a provider adapter returns `Unsupported` for a request it doesn't know or can't deserialize, and keeps the connection open. A client checks `is_unsupported()` and hides or disables the feature that needed the request. A hub does without the request, or passes the error to whoever asked. No peer sends a list of what it supports until something needs one. For example, a client that gets `Unsupported` for `session_find` doesn't send it again until its next connection.
+- **A request that changes something is safe to send twice, and its reply reports only what the hub has recorded.** A sender can then retry after a disconnect or a lost reply. The request either has the same effect however often it's applied, such as `session_close`, or carries an ID its sender chose, which the receiver records once, as a prompt carries `client_msg_id`. Whatever happens after the reply reaches clients through the log and the records. A worker's asks to its hub follow the same rule, because a worker that outlives its hub sends each unanswered ask to the next one. Terminal input is the one request that's never safe to send twice. *Not built:* cancelling a turn and running setup again carry no ID.
+
+## Versions
+
+- **A new version means a break: a change that a peer on the previous version can't read under the rules above.** Those rules cover most changes, so a break is rare. Each protocol has its own version, so a break in one doesn't break another.
+- **A hello gives the newest and the oldest version its sender speaks, and both sides use the newest version they share.** The reply names the chosen version. A hello that names one version speaks only that one, which is what a peer built before version ranges sends.
+- **The hub speaks the current and the previous version of each protocol, and clients, workers and provider adapters speak only their own.** The hub is the only party that meets older and newer peers. A client talks only to hubs, a worker talks only to the hub that started it, from that hub's build, and a provider adapter talks only to the hub that runs it. So the code for an old version is in one place, and only until the next break.
+- **A protocol breaks whenever a change needs a break, however soon after the last one, and a peer two breaks behind its hub is cut off.** The hub stops a worker that's two breaks behind, with its agents, as the hub starts. A client that's two breaks behind reports that it can't talk to the hub. The app's update crosses one break at a time, and the app updates together with the hub it starts, so the app's update cuts off neither.
+- **The hellos, `hub_status`, `hub_shutdown`, `hub_restart` and the `Unsupported` error reply never change form, even in a break.** The hellos are how two versions find one they share. The three requests work before a hello, so a client of any version can see a hub and stop or restart it. For example, `roundhouse hub stop` works across a break this way, and so does the app when it restarts a hub to update it. `crates/protocol/tests/compatibility/` writes out each form, so a change to one fails a test.
+
+## Which versions work together
+
+The table follows from the rules above.
+
+| Pairing | After a change that needs no new version | After a break |
+|---|---|---|
+| Older client, newer hub | Works. The client ignores what it doesn't know | Works. The hub speaks the client's version until the hub's next break |
+| Newer client, older hub | Works. The client hides each feature whose request the hub rejects | Doesn't work. The client reports that the hub is too old. The desktop app replaces a local hub that it started, using `hub_status` and `hub_shutdown` |
+| Newer hub, older worker | Works. The hub does without what the worker rejects | Works. The hub speaks the worker's version |
+| Older hub, newer worker, after a rollback | Works | Doesn't work. The hub stops the worker and its agents |
+
+Wherever a hub works with a worker of another build, it replaces that worker with one of its own build once the worker's workspace is idle. So updating a hub never stops an agent, as long as the update crosses one break at a time.
