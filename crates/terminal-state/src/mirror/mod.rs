@@ -10,6 +10,7 @@ use libghostty_vt::screen::Screen;
 mod tests;
 
 mod drawing;
+mod place;
 mod screen;
 mod selecting;
 mod typing;

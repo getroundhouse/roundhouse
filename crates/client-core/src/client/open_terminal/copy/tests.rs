@@ -56,6 +56,23 @@ fn a_new_screen_replaces_what_the_copy_had() {
     assert_eq!((text(&frame, 0), frame.size), ("new".to_owned(), BIG));
 }
 
+/// As when it attaches again after missing some output. Which places are kept is `terminal_state`'s to say.
+#[test]
+fn a_new_screen_keeps_where_the_history_was_scrolled_to_and_whats_selected() {
+    let lines = |count: usize| (0..count).flat_map(|at| format!("line {at}\r\n").into_bytes()).collect::<Vec<u8>>();
+    let mut copy = TerminalCopy::new();
+    copy.take_in(screen(SMALL, &lines(30))).unwrap();
+    copy.wheel(-10).unwrap();
+    copy.press(Pointer { col: 0., row: 1. }, SelectBy::Cells).unwrap();
+    copy.drag(Pointer { col: 19.99, row: 1. }).unwrap();
+    let (was, selected) = (copy.frame().unwrap().unwrap(), copy.selected_text().unwrap());
+
+    copy.take_in(screen(SMALL, &lines(35))).unwrap();
+
+    let frame = copy.frame().unwrap().unwrap();
+    assert_eq!((text(&frame, 0), copy.selected_text().unwrap()), (text(&was, 0), selected));
+}
+
 /// So a view that attaches, or attaches again, takes the terminal back to its own size.
 #[test]
 fn a_screen_of_another_size_asks_for_the_one_the_view_has_room_for() {
@@ -188,18 +205,6 @@ fn select_all_selects_everything_shown() {
     copy.select_all().unwrap();
 
     assert_eq!(copy.selected_text().unwrap().as_deref(), Some("one\ntwo"));
-}
-
-/// What's selected is this copy's, so a new screen, such as on attaching again, starts with nothing selected.
-#[test]
-fn a_new_screen_has_nothing_selected() {
-    let mut copy = TerminalCopy::new();
-    copy.take_in(screen(SMALL, b"one")).unwrap();
-    copy.select_all().unwrap();
-
-    copy.take_in(screen(SMALL, b"one")).unwrap();
-
-    assert_eq!(copy.selected_text().unwrap(), None);
 }
 
 /// Whatever modes the program set, as Command-Left on a Mac sends Ctrl-A, for the start of the line, even to a program

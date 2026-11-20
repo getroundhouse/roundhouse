@@ -1,6 +1,7 @@
 //! The client's copy of a terminal, kept from what the hub sends of it, and what that has the client send the hub:
-//! what's typed, by the modes the program set, and the size the view has room for. What's selected is the copy's alone,
-//! as it's this device's, so it goes with a new copy.
+//! what's typed, by the modes the program set, and the size the view has room for. Where the history is scrolled to,
+//! and what's selected, are the copy's alone, as they're this device's, and a new copy keeps them while it has their
+//! rows.
 
 use std::sync::Arc;
 
@@ -51,9 +52,10 @@ impl TerminalCopy {
         Ok(())
     }
 
-    /// Takes in what the hub sent. A screen starts a new copy, which asks for the size the view has room for if it
-    /// isn't that size already, so a view that attaches, or attaches again, takes the terminal back to its own size. A
-    /// new size from elsewhere is kept, though, since the client that gave it is showing it too.
+    /// Takes in what the hub sent. A screen starts a new copy, which keeps the place the old one was scrolled to and
+    /// what was selected, as [`Mirror::keep_place_of`] says. It asks for the size the view has room for if it isn't
+    /// that size already, so a view that attaches, or attaches again, takes the terminal back to its own size. A new
+    /// size from elsewhere is kept, though, since the client that gave it is showing it too.
     pub(in crate::client::open_terminal) fn take_in(&mut self, update: TerminalUpdate) -> Result<ToHub, MirrorError> {
         let mut to_hub = ToHub::default();
         match update {
@@ -64,6 +66,11 @@ impl TerminalCopy {
                     mirror.set_colors(foreground, background)?;
                 }
                 mirror.write(screen.bytes.as_slice());
+                if let Some(old) = &self.mirror {
+                    // Ghostty fails only when it can't allocate, which leaves the new copy at the bottom with nothing
+                    // selected, as it is with no old one.
+                    let _ = mirror.keep_place_of(old);
+                }
                 self.mirror = Some(mirror);
                 self.asked = self.fit.filter(|fit| *fit != size);
                 to_hub.resize = self.asked.map(terminal_size);
