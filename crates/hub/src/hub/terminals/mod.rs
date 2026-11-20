@@ -1,6 +1,6 @@
 //! A workspace's terminals as the hub keeps them: each one's record, in memory, since its shell lasts only as long as
 //! its worker, and what the worker sends of it, for every client attached. The shells and what they show are the
-//! workers', as "Terminals" in `docs/architecture.md` says.
+//! workers', since a worker does a workspace's work, as `docs/principles/parts.md` says.
 
 #[cfg(test)]
 mod tests;

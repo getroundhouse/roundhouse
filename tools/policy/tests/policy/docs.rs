@@ -19,7 +19,7 @@ const LIMITS: &[(&str, usize)] = &[
 /// down: it stays within [`SLACK`] of the doc as the doc is shortened, and the doc comes off this list once it's within
 /// its kind's limit, or gone.
 const OVER: &[(&str, usize)] = &[
-    ("docs/architecture.md", 46_200),
+    ("docs/architecture.md", 44_500),
     ("docs/ui.md", 3_700),
     ("docs/standards/components.md", 4_500),
     ("docs/standards/gpui.md", 3_000),
