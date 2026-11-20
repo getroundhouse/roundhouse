@@ -217,7 +217,7 @@ Errors follow the layers:
 
 Each piece of state has one owner, and every other copy is a cache.
 
-**What every client shows alike is the hub's, recorded rather than worked out or fetched live.** The test: should a second client, or this one after a restart, show the same thing? Then the hub owns it, and a client only draws it. A client keeps or works something out only when it's about its own device, as the table says. A fix that finds a client doing more than that moves the state to the hub, even when that's the bigger change. A protocol change is the normal way to do it, and "Changing the protocol" says how to make one, mostly without a version bump.
+**What every client shows alike is the hub's, recorded rather than worked out or fetched live.** The test: should a second client, or this one after a restart, show the same thing? Then the hub owns it, and a client only draws it. So decide who owns the state before choosing where a change goes: a bug in what a client shows often comes from a client keeping or working out what the hub should record. When the cause is an *Unconfirmed* design, question the design, not just the bug. A client keeps or works something out only when it's about its own device, as the table says. A fix that finds a client doing more than that moves the state to the hub, even when that's the bigger change. A protocol change is the normal way to do it, and "Changing the protocol" says how to make one, mostly without a version bump.
 
 | State | Examples | Owner |
 |---|---|---|

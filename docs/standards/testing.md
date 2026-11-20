@@ -1,6 +1,6 @@
 # Testing
 
-Where each kind of test goes, what a test runs in, which is its hub, its clocks and its environment, and how a test is written. The commands are in `AGENTS.md`, and what a person has to judge by hand is in `docs/standards/manual-checks.md`. Known gaps are GitHub issues.
+Where each kind of test goes, what a test runs in, which is its hub, its clocks and its environment, and how a test is written. The commands are in `docs/reference/commands.md`, and what a person has to judge by hand is in `docs/standards/manual-checks.md`. Known gaps are GitHub issues.
 
 ## Levels
 
@@ -65,3 +65,5 @@ Where each kind of test goes, what a test runs in, which is its hub, its clocks 
 - **Errors are asserted by variant or code, not by message.** The exception is text the user sees, which is what a UI test is about.
 - **Tests wait on a condition, not a duration,** as "Waiting" in `docs/standards/testing.md` says, and don't wait out one of the product's timers, as "Timers" there says.
 - **A test takes under 5 s in CI's test job, and CI fails one that takes over 10 s,** even if it passed, since every PR and the merge queue wait for the tests. The gap leaves room for a slower runner or a busier moment. There are no exceptions: a test that's big on purpose is made as small as still catches what it's for, or checks the same thing a cheaper way.
+
+Tests that can't fail prove nothing. When a behavior matters, break it on purpose once and confirm a test notices. Undo the break with an edit, not by copying a saved file back: some `cp`s, such as the one in Homebrew's `uutils-coreutils`, keep the saved file's older modification time, so cargo doesn't rebuild and goes on testing the broken code.

@@ -2,6 +2,8 @@
 
 How code makes and uses the components screens are built from. `docs/spec/components.md` says how each component looks and what each of its states means, `docs/spec/look.md` the foundations they're built on, and `docs/standards/gpui.md` everything else about how code that draws is written.
 
+**Draw only with `look`'s components, mocks included.** What they lack is added to them as "Adding a component, a kind or a size" in `docs/standards/components.md` says, in the spec's table and on the sheet before anything uses it, rather than made where it's drawn or sized from outside, and a change to what a rule the owner decided comes to, such as a component's size, is asked about first.
+
 ## What it is
 
 - **The components are in `look`, beside the foundations they're built on,** since both the app and `transcript` draw with them, and `transcript` can't depend on the app. Each is drawn with the kit's own part where the kit has one, from the kit's copy in `third_party/gpui-kit`. Where the kit doesn't do what a component needs, the kit's copy is changed if upstream would take the change, and the component draws that itself otherwise, as `docs/standards/gpui.md` says.
@@ -38,7 +40,7 @@ A new size or option of a component goes through these steps as a kind does, and
 1. Write its rules, its table and its sheet's caption in `docs/spec/components.md`, marked *Unconfirmed* until the owner confirms them.
 2. Make its type in `look`, with its kinds in a `named!` enum, the way to make one that takes what it can't be without, and its options.
 3. Hold the spec's table to the names with a test, and test what's built in.
-4. Draw its sheet in `apps/desktop/tests/ui/gallery`, with each kind's place for the design system's page, and accept it as `AGENTS.md` says.
+4. Draw its sheet in `apps/desktop/tests/ui/gallery`, with each kind's place for the design system's page, and accept it as `docs/reference/commands.md` says.
 5. Move every place that draws it with the kit onto it, and have the policy check refuse the kit's part outside `look`.
 
 ## Buttons

@@ -1,6 +1,6 @@
 # Pull requests
 
-How a pull request is written: its title, its description, its labels, and the commit it becomes on `main`. How a change is split into several is in `docs/standards/stacks.md`. What belongs in a PR rather than a doc is in `docs/standards/documentation.md`. Which checks to run and how PRs merge are in `AGENTS.md`.
+How a pull request is written: its title, its description, its labels, and the commit it becomes on `main`. How a change is split into several is in `docs/standards/stacks.md`. What belongs in a PR rather than a doc is in `docs/standards/documentation.md`. Which checks to run and how PRs merge are in `docs/standards/merging.md`.
 
 A PR is read twice. The owner reads it to decide whether it's right, and someone later finds its commit through `git log` or `git blame`. So it says what changed and why, then how it was checked. Every PR puts the same things in the same places, so neither reader has to learn each PR's own layout.
 
@@ -9,7 +9,7 @@ A PR is read twice. The owner reads it to decide whether it's right, and someone
 - **Start with a verb, and say what's true afterwards,** in the words of `docs/reference/terms.md`, such as "Let a hub refuse a request it doesn't know". If someone using the app would notice the change, say it the way they'd see it: "Show a downloaded update as a card at the bottom of the sidebar". Otherwise, say what the code or the repo does now.
 - **A fix says what works now, not "Fix".** "Stop setup even when Stop comes before its script has started" says what was broken and that it works now. "Fix setup race" says neither.
 - **No prefix, no issue number, and no full stop at the end.** No `feat:` and no area, since the diff shows those. GitHub adds the PR's number when it merges. Use sentence case, and write the interface's labels as they appear, such as "Check for Updates…".
-- **At most 70 characters.** It becomes the first line of the commit on `main`, and GitHub cuts that line off at about that length. A title that won't fit may be two changes, and `AGENTS.md` gives independent changes a PR each.
+- **At most 70 characters.** It becomes the first line of the commit on `main`, and GitHub cuts that line off at about that length. A title that won't fit may be two changes, and `docs/standards/stacks.md` gives independent changes a PR each.
 
 ## Description
 
@@ -23,7 +23,7 @@ The parts come in this order. The last four start with their label in bold, writ
 4. **A picture of what changes on screen.** Link a screen from the gallery at the PR's commit, so the link keeps working after the branch is deleted: `https://github.com/getroundhouse/roundhouse/blob/<commit>/docs/spec/screens/<screen>.png?raw=true`. Attach a screenshot of the app for anything the gallery can't show. Either way, the alt text says what the picture shows.
 5. **Needs the owner:** which owner docs, or files that enforce a standard, change, and what each change is, so the owner can approve without hunting through the diff. List what's marked *Unconfirmed*, and say which changes the owner already agreed to in conversation. This part is there exactly when the PR has the `needs/owner` label.
 6. **Checked:** what was run, and what it showed:
-   - the full checks from `AGENTS.md`, or that the PR changes only Markdown or the marketing site and needs none;
+   - the full checks from `docs/standards/merging.md`, or that the PR changes only Markdown or the marketing site and needs none;
    - for a change to what the product does, which pages of `docs/guide/` changed with it, or that none says what changed, since no test fails when a guide page goes stale;
    - each test that changed, and what it now covers, and for each new test, what it covers and why no test there already could take it as a case, as "Writing tests" in `docs/standards/testing.md` asks;
    - what was broken on purpose, and which test failed;

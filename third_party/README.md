@@ -30,7 +30,7 @@ The code is under Apache-2.0. The icons in `crates/assets` are Lucide's, under I
 ### Changing the kit
 
 - **Write it as upstream would,** as `docs/standards/rust.md` says, so it can go upstream as it is.
-- **Change it in the same pull request as the app code that needs it,** or in a stack with the kit's change at the bottom, as `AGENTS.md` says of layers.
+- **Change it in the same pull request as the app code that needs it,** or in a stack with the kit's change at the bottom, as `docs/standards/stacks.md` says of layers.
 - **Record it in its own patch,** after editing `third_party/gpui-kit/vendor/`, by running `cargo run -p kit-sync -- patch <name>`. That writes `third_party/gpui-kit/patches/<name>.patch` (adding `<name>` to `gpui-kit.toml`, or updating it in place when it's already listed, and refreshing any patches after it) and puts `Changed in Roundhouse's copy of gpui-kit, as third_party/README.md lists.` in a comment at the top of each `.rs` and `.toml` file that differs from upstream, as Apache-2.0 asks of a changed file. `cargo run -p kit-sync -- drop <name>` takes a patch out of the copy and deletes its file. A file that can't hold a comment, such as a JSON theme, is named in its entry under "Our changes" instead.
 - **List it under "Our changes",** with its patch file, the files it changes, why, and the issue that tracks offering it upstream, or where it was offered.
 - **Leave no warnings.** Our builds show the compiler's warnings in the kit, but our `-D warnings` and clippy don't reach it. Upstream's own clippy and tests do, which CI's `kit` job runs on `gpui-base` and `gpui-component` for a pull request that changes the copy, and which fail on a warning. Run them before pushing, in the copy's workspace:
@@ -61,7 +61,7 @@ The newest release is taken at least once a week, since upstream tags about one 
 
 1. Set `RELEASE` and `COMMIT` in `tools/kit-sync/src/pin.rs` to the release's tag and the commit the tag points at.
 2. Run `cargo run -p kit-sync`. It cherry-picks each patch in `gpui-kit.toml` onto the release, rewrites each file in `third_party/gpui-kit/patches/` against it (dropping any whose change is now upstream), stamps the notice lines on the copy, and moves `gpui-kit` and `gpui-pre-apple` in `Cargo.toml` to the versions the copy has. Where a patch conflicts with the release, git marks the conflict in `third_party/gpui-kit/vendor/`, and the tool names the patch and its files. Settle them there, then run `cargo run -p kit-sync` again, which refuses while a mark is left, writes that patch, and applies any patches after it.
-3. Run `cargo check`, which moves `Cargo.lock`, then the full checks and the gallery, as `AGENTS.md` says.
+3. Run `cargo check`, which moves `Cargo.lock`, then the full checks and the gallery, as `docs/standards/merging.md` says.
 
 When a release adds a crate under gpui-kit, or drops one, `KEPT` in `tools/kit-sync/src/pin.rs` changes with it, and so does `VENDORED` in `tools/policy` if the crate has a license file of its own. An entry of `KEPT` that starts with `!` is a folder of a kept crate to leave out, as `gpui-base`'s examples are, whose members the workspace stops listing, and whose code isn't checked for files it reads. The tool refuses one that upstream no longer has.
 

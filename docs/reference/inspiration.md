@@ -2,6 +2,8 @@
 
 What we've learned from Conductor, the app that inspired this one, from its docs, screenshots of it and its installed app. It's a source of ideas, not a spec, and no code or assets are copied. New users can no longer sign up or download it, so the installed copy is the only way left to try it.
 
+**Conductor is an inspiration, not a spec.** This is a new product, so describe it on its own terms, and don't call it a clone or a replacement. Its look is a starting point for ours, so it feels familiar. Don't copy its code, icons or other assets, or use its name. Reading its settings and variables is a compatibility feature, nothing more.
+
 ## Product model
 
 From Conductor's docs (`/docs/concepts/workflow`):

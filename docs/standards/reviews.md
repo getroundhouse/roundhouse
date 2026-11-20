@@ -101,7 +101,7 @@ Whether the tests would notice the change breaking. It looks for:
 - A fake that hides what the real program does, such as the fake agent where the Claude CLI behaves otherwise. `docs/reference/claude-cli.md` and the CLI's captured output in `crates/agents/tests/` say how it behaves.
 - A guarantee tested at the wrong one of the levels in `docs/standards/testing.md`, or tested again at a higher one beyond one example of the wiring, which "Writing tests" in `docs/standards/testing.md` rules out.
 - A new test that's a case of one already there, with the same setup and one input or assertion changed, or that tests again, for one more caller, what's tested where it's defined, both of which "Writing tests" in `docs/standards/testing.md` rules out. It names the test that should have taken the case.
-- A test made to pass rather than fixed: a sleep, retry or longer timeout that `docs/standards/workarounds.md` lists, without a reason, or what `AGENTS.md` says isn't a fix for a flaky test, such as loosening what it checks.
+- A test made to pass rather than fixed: a sleep, retry or longer timeout that `docs/standards/workarounds.md` lists, without a reason, or what `docs/standards/merging.md` says isn't a fix for a flaky test, such as loosening what it checks.
 - No test of the case the change was built for, or of a failure the structure is meant to contain, such as one part that never answers while the rest carry on.
 
 ### Architecture
