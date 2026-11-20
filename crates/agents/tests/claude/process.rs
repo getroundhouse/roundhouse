@@ -10,7 +10,7 @@ use agents::claude::spawn_at;
 use agents::{AgentError, AgentOptions, AgentOutput};
 use protocol::capability::approvals::ApprovalMode;
 use protocol::capability::settings::{Effort, Settings};
-use protocol::event::{CompactedBy, CompactionOutcome, ContentBlock, EventBody, NoticeLevel};
+use protocol::event::{AgentRunState, CompactedBy, CompactionOutcome, ContentBlock, EventBody, NoticeLevel};
 use protocol::fixtures;
 use protocol::model::{AgentKind, RunId, Seq};
 use protocol::prompt::Prompt;
@@ -87,6 +87,38 @@ printf '{"type":"assistant","message":{"id":"m","content":[{"type":"text","text"
         _ => false,
     });
     assert!(got_it, "{seen:?}");
+}
+
+/// The CLI reports `init` only as a turn starts, so stopping the agent before its first turn gets none, and the prompt
+/// it dropped has to be said without one, while the process is still up, or its chat stays at work on a prompt no
+/// agent has.
+#[tokio::test]
+async fn a_prompt_cancelled_before_the_first_turn_is_said_to_be_dropped_without_the_agent_exiting() {
+    let dir = tempfile::tempdir().unwrap();
+    let (tx, mut rx) = mpsc::channel(16);
+    // What the CLI wrote when it was sent a prompt, then an interrupt, as it started, then stays up as it did.
+    let body = r#"
+while read -r line; do case "$line" in *'"type":"user"'*) break;; esac; done
+uuid=$(printf '%s' "$line" | sed 's/.*"uuid":"\([^"]*\)".*/\1/')
+printf '{"type":"system","subtype":"session_state_changed","state":"running"}\n'
+printf '{"type":"command_lifecycle","command_uuid":"%s","state":"queued"}\n' "$uuid"
+printf '{"type":"command_lifecycle","command_uuid":"%s","state":"cancelled"}\n' "$uuid"
+printf '{"type":"system","subtype":"session_state_changed","state":"idle"}\n'
+exec sleep 100"#;
+    let agent = spawn_at(script(dir.path(), body), spec(dir.path()), tx, AgentOptions::default()).await.unwrap();
+
+    agent.prompt(Seq::new(1), &Prompt::new("go")).await.unwrap();
+
+    let mut said = Vec::new();
+    while said.len() < 3 {
+        let item = timeout(Duration::from_secs(10), rx.recv()).await.expect("what the CLI said").expect("output");
+        let AgentOutput::Event { body, .. } = item else { panic!("{item:?}") };
+        said.push(body);
+    }
+    let state = |state| EventBody::AgentState { state };
+    let dropped = EventBody::PromptDropped { prompt: Seq::new(1) };
+    assert_eq!(said, [state(AgentRunState::Running), dropped, state(AgentRunState::Idle)]);
+    agent.stop().await;
 }
 
 fn in_plan_mode(dir: &Path) -> AgentSpec {

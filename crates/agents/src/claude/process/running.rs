@@ -50,8 +50,9 @@ pub(super) struct Shared {
     /// Either a prompt is on the list before the swap or it's written after, never both.
     pub(super) stdin: tokio::sync::Mutex<Option<ChildStdin>>,
     pub(super) pid: AtomicU32,
-    /// True once the CLI has reported `init`, meaning the conversation opened. Before that, output
-    /// is held back and prompts are kept, because the launch may still need retrying.
+    /// True once the CLI has opened the conversation, which its `init` says, and so does its taking or dropping a
+    /// prompt, since a launch with the wrong conversation flag exits without reading one. Before that, output is held
+    /// back and prompts are kept, because the launch may still need retrying.
     pub(super) confirmed: AtomicBool,
     pub(super) held_output: Mutex<Vec<AgentOutput>>,
     /// Each as the line that was written, ready to write again.
