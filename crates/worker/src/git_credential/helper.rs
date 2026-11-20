@@ -1,5 +1,6 @@
 //! The worker's credential helper, which git runs for github.com in every process the worker gives its git config,
-//! as a hidden command of the worker's own binary, so pushing doesn't need `gh` installed.
+//! as a hidden command of the worker's own binary, and not `gh auth git-credential`, so pushing doesn't need `gh`
+//! installed.
 
 use std::collections::HashMap;
 use std::ffi::OsString;
@@ -38,7 +39,8 @@ impl CredentialHelper {
 /// from `asked`. For `get` of `https://github.com`, it answers with the account the worker was given, whatever
 /// username the remote names. For a block, it says why on `said`, and tells git to stop, so git asks no other helper
 /// and prompts for nothing. With nothing given, as once the worker has gone, it answers nothing. `store`, `erase` and
-/// anything else git asks are only acknowledged, since what's given is the worker's to change.
+/// anything else git asks are only acknowledged, since what's given is the worker's to change. *Unconfirmed:* telling
+/// git to stop, with `quit=1`.
 pub fn answer_credential_request(
     dir: &Path,
     action: &str,

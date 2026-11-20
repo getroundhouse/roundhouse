@@ -1,5 +1,5 @@
 //! Setting the hub's git credential on a worker's link: the one it has as the link opens, before anything else, and
-//! each it has after, in turn, as "The worker's git credential" in `docs/architecture.md` says.
+//! each it has after, in turn. `docs/decisions/git-credential-set-by-hub.md` says why the hub sets it on the link.
 
 #[cfg(test)]
 mod tests;

@@ -4,7 +4,7 @@
 //! outlives it, which would otherwise hold the mount up for as long as it runs, and pass the rest on to every worker
 //! and agent, whose `roundhouse` would be the one inside whichever version started the hub. Velopack's updater is the
 //! one thing the app starts that needs the mount, which `sharing_mount` gives it. Which descriptors a process passes
-//! on is the process's own, so what this module finds is kept for the process, not handed around.
+//! on is the process's own, so what this module finds is kept for the process, not handed around. *Unconfirmed.*
 
 mod mount;
 #[cfg(target_os = "linux")]

@@ -20,7 +20,7 @@ impl Deleter {
 
     /// Starts deleting `paths`, with what the worker gives every process it starts, and returns without waiting. It's
     /// in a process group of its own, so nothing that stops this worker's group stops it. Its errors go to this
-    /// worker's log, since it shares its stderr.
+    /// worker's log, since it shares its stderr. *Unconfirmed:* giving it what every process is given.
     pub(crate) fn start(&self, given: &Environment, paths: &[PathBuf]) {
         let mut command = Command::new(&self.program);
         command.args(&self.args).args(paths).stdin(Stdio::null()).stdout(Stdio::null());

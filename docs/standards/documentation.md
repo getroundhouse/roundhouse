@@ -38,8 +38,6 @@ So no doc describes how a part works. The code says that, and an agent can expla
 
 A decision record is written once, with its date, and only its status changes afterwards. When the choice changes, a new record replaces it and the old one says which.
 
-`docs/architecture.md` and `docs/ui.md` are from before this rule, and hold all five kinds mixed together. They're being taken apart a section at a time, and a section holds until it's gone. Where one of them and a principle disagree, the principle holds.
-
 ## GitHub
 
 | Information | What it holds | Where |

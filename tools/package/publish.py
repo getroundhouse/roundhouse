@@ -101,7 +101,7 @@ STEPS = {"osx", "linux-amd64", "linux-arm64"}
 # The channel each one took over from. An app looks for updates in the channel it was packaged for, so one packaged
 # before the change still reads the older channel's feed. Each release also signs that feed, listing only its own full
 # package, which was packaged for the newer channel, so such an app takes it and looks there from then on. amd64
-# Windows was `win` before 0.1.245.
+# Windows was `win` before 0.1.245. *Unconfirmed.*
 TAKES_OVER = {"win-amd64": "win"}
 
 
@@ -363,9 +363,10 @@ def kept(assets: list[dict], keep: int) -> list[dict]:
 
 def steps_from(assets: list[dict], version: str, speaks: dict[str, int]) -> None:
     """Refuses `version`, on a channel whose apps step, if its hub doesn't speak the worker protocol of the newest
-    published release, which would leave no release for an app with those workers at work to step to, as "Updating the
-    app" in `docs/architecture.md` says. `tools/update-steps` holds such a break back in the merge queue, so this only
-    catches one that got past it. A release from before releases said what they speak says nothing to check."""
+    published release, which would leave no release for an app with those workers at work to step to, as "A break in
+    the worker protocol" in `docs/standards/merging.md` says. `tools/update-steps` holds such a break back in the merge
+    queue, so this only catches one that got past it. A release from before releases said what they speak says nothing
+    to check."""
     if CHANNEL not in STEPS:
         return
     fulls = [asset for asset in assets if asset["Type"] == "Full"]
@@ -374,8 +375,8 @@ def steps_from(assets: list[dict], version: str, speaks: dict[str, int]) -> None
     if speaks["oldest"] > latest[WORKER_VERSIONS]["newest"]:
         raise Refused(f"{version}'s hub doesn't speak workers of protocol {latest[WORKER_VERSIONS]['newest']}, which "
                       f"{latest['Version']}'s do, so an app with those at work could never update. tools/update-steps "
-                      "should have held the newer break back in the merge queue. \"Updating the app\" in "
-                      "docs/architecture.md says what's left to do")
+                      "should have held the newer break back in the merge queue. \"A break in the worker protocol\" "
+                      "in docs/standards/merging.md says what's left to do")
 
 
 def merge(version: str, keep: int, speaks: dict[str, int], work: Path) -> Path:

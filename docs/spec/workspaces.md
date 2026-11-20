@@ -79,6 +79,7 @@
 
 - **A project can hold more than one repository,** since one change can span several, even repositories with different owners. A workspace then has a worktree of each of its project's repositories, under the workspace's folder, all on one branch name and with one worker. *Not built:* a project is one repository.
 - **A project can be added by its repository's address alone, with no checkout on the hub's machine.** Roundhouse clones the repository the first time a workspace needs it, keeps the clone, and fetches it from then on. Each worktree is made from the clone as from a checkout, so branches, archiving and other worktrees work the same. A clone has none of the ignored files a checkout has, such as `.env`, and no `.conductor/settings.local.toml`, so setup copies no files from it and reads no settings from it. *Not built:* a project is added by its checkout on the hub's machine.
+- **The hub's settings name each provider, the command that runs its adapter, and the provider new workspaces go to.** With none named, workspaces run on the hub's own machine. *Not built:* the hub reads them from `providers.json` in its data directory instead, as it starts.
 
 ## Titles
 
@@ -139,7 +140,7 @@ A repository set up for Conductor works here unchanged, because Roundhouse reads
 - **Settings:** `.conductor/settings.local.toml` in the repository, then `.conductor/settings.toml` in the worktree, then `~/.conductor/settings.toml`. The first to set a value wins.
 - **Scripts:** `[scripts]` with `setup` and `archive`. Run scripts, `run_mode` and managed settings aren't read.
 - **Files to copy:** `.worktreeinclude`, then `file_include_globs`, then the default `.env*` pattern.
-- **Variables** for scripts and agents: `CONDUCTOR_WORKSPACE_NAME`, `CONDUCTOR_WORKSPACE_ID`, `CONDUCTOR_WORKSPACE_PATH`, `CONDUCTOR_ROOT_PATH`, `CONDUCTOR_DEFAULT_BRANCH`, `CONDUCTOR_PORT`, the first of ten ports for the workspace, and `CONDUCTOR_IS_LOCAL`.
+- **Variables** for scripts and agents: `CONDUCTOR_WORKSPACE_NAME`, `CONDUCTOR_WORKSPACE_ID`, `CONDUCTOR_WORKSPACE_PATH`, `CONDUCTOR_ROOT_PATH`, `CONDUCTOR_DEFAULT_BRANCH`, `CONDUCTOR_PORT`, the first of ten ports for the workspace, and `CONDUCTOR_IS_LOCAL`. `CONDUCTOR_IS_LOCAL` is `1` for a workspace on the hub's machine and `0` for one on another. `CONDUCTOR_ROOT_PATH` is the checkout the workspace was made from, and isn't set for a workspace made from a clone, which has none.
 
 ## Archiving
 
@@ -149,6 +150,7 @@ A repository set up for Conductor works here unchanged, because Roundhouse reads
 - **Archiving is done once the worktree is out of the way, and its files are deleted after,** since a build's output can be tens of thousands of files, which take seconds to delete. Moving the worktree aside on its own disk is instant, and frees its path and branch, so it can be restored at once. One with submodules is refused unless forced, as git refuses it, since a submodule's own commits are in it. *Unconfirmed.*
 - **A worktree that can't be moved aside is refused, and left as it was,** such as a disk of its own, or on Windows, one a program has a file open in, such as a hub built there and still running. It names each program running from the worktree, the likeliest to have one, so it's clear what to stop. Deleting it where it is could stop part way, and git forgets a worktree it was deleting even then, which would leave half of one.
 - **A worktree's folder that git has already forgotten is deleted only when forced,** since git can't say whether what's left of it holds work. Its branch is kept, as always. *Unconfirmed.*
+- **Archiving a workspace whose provider destroys its machine keeps its branches on the hub, and restoring puts them back.** A provider says whether a repository's clone outlasts a workspace, and it doesn't where each workspace has a machine of its own. Archiving a workspace made from such a clone saves every branch in it, with the commits that aren't on `origin`'s default branch, before the worktree and the machine go. Restoring makes a new machine and puts back each branch that isn't there, and leaves one that is. Archiving refuses more than 128 MiB of those commits, and says to push them first, unless forced. Forced past that, it saves the branches' names without the commits, and restoring a workspace whose branch went that way starts the branch from `origin`'s branch of the same name, or from `origin`'s default branch if there's none.
 
 ## Other worktrees
 

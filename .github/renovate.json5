@@ -91,7 +91,7 @@
     },
     {
       description: [
-        'docs/architecture.md: the app builds its own copy of gpui-kit, which tools/kit-sync brings to a release,',
+        'docs/decisions/gpui-kit-copy.md: the app builds its own copy of gpui-kit, which tools/kit-sync brings to a release,',
         'merged with our changes. The newest release is taken at least once a week, as third_party/README.md says, so',
         'its PR opens on the schedule, for a person to finish.',
       ],

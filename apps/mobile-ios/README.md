@@ -1,6 +1,6 @@
 # The iPhone app
 
-`docs/spec/mobile.md` says what it does. It's a Rust binary, `roundhouse-ios`, drawn with GPUI's iOS backend and the same kit, theme and transcript as the desktop app. `docs/ui.md` says why. Everything but the start-up in `src/main.rs` also builds on the Mac, which is where its tests run.
+`docs/spec/mobile.md` says what it does. It's a Rust binary, `roundhouse-ios`, drawn with GPUI's iOS backend and the same kit, theme and transcript as the desktop app. `docs/decisions/zed-ios-backend.md` says why. Everything but the start-up in `src/main.rs` also builds on the Mac, which is where its tests run.
 
 ## Testing
 

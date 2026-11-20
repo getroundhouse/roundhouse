@@ -1,6 +1,6 @@
-//! What a hub says to a provider's adapter, over the adapter's stdin and stdout. "Providers" in
-//! `docs/architecture.md` has the design: the adapter makes and ends the provider's instances, and the hub
-//! reaches each instance's worker itself, by running the command `Connect` answers with.
+//! What a hub says to a provider's adapter, over the adapter's stdin and stdout. The adapter makes and ends the
+//! provider's instances, and the hub reaches each instance's worker itself, by running the command `Connect` answers
+//! with, as "Workers and providers" in `docs/principles/parts.md` says.
 //!
 //! Requests are safe to repeat. An instance operation names its instance, and a preflight names its prospective
 //! launch. The hub can ask again if the adapter restarts before answering.

@@ -16,7 +16,7 @@ impl Paths {
     /// Where a Windows hub runs from, whichever build it is: a second name for the build's [`Paths::hub_copy`], which
     /// the client that starts the hub links there each time. The firewall gives a program leave to listen by its path,
     /// so the leave given once outlasts every update. The workers that hub starts run from its build's copy, as
-    /// "Updating the app" in `docs/architecture.md` says.
+    /// `workers_from` in the daemon's `hub_role` says.
     pub fn fixed_hub(&self) -> PathBuf {
         self.daemons_dir.join(program_file(HUB_COPY_NAME))
     }

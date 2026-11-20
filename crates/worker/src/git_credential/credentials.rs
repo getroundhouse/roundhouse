@@ -57,7 +57,8 @@ impl GitCredentials {
     /// Applies `credential`, so every process started once this returns has it, and every one started under one
     /// before reads it from its next `git` or `gh`. Refused as `Unavailable` where it can't be applied, as with a git
     /// older than 2.31, and then what the worker starts uses the machine's own. One of a kind this worker doesn't
-    /// know blocks pushing, and is refused as `Unsupported`, as a value a reader doesn't know is.
+    /// know blocks pushing, and is refused as `Unsupported`, as a value a reader doesn't know is. *Unconfirmed:*
+    /// refusing one it blocked for.
     pub(crate) async fn set(&self, credential: GithubCredential) -> Result<(), ApiError> {
         // Only what changes git's config needs a git that reads it, which is asked the first time it matters.
         let needs_no_git = Ok(());

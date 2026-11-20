@@ -1,6 +1,6 @@
 # GitHub
 
-How GitHub and `gh`, its command line, behave, where more than one place in the code depends on it. The `github` crate makes every call the hub makes to GitHub, and `docs/principles/outside-systems.md` has the rules for calling it.
+How GitHub and `gh`, its command line, behave, where more than one place in the code depends on it, or it took an experiment to find. The `github` crate makes every call the hub makes to GitHub, and `docs/principles/outside-systems.md` has the rules for calling it.
 
 ## The hourly limit on GraphQL
 
@@ -89,3 +89,10 @@ A worker reads its machine's own `gh` login for the hub, as `FindGithubLogin` sa
 - **`gh auth status` names the login from `gh`'s own config, even when GitHub can't be reached.** `gh` 2.81 is the first to print it as JSON.
 - **`gh` 2.103 renews a token that it renews by itself whenever it reads the token.** Renewing rotates the refresh token, and `gh` forgets the login if GitHub refuses it. So reading the login could change it. `--no-refresh`, on `gh auth status` and `gh auth token`, reads without renewing.
 - **GitHub answers 401 for such a token once its time is up, until `gh` next runs and renews it.** So that 401 doesn't mean `gh` needs logging in again (`Github::found_login_works`).
+
+## The login `gh` uses in a config directory it's given
+
+A worker gives every process it starts a `gh` config directory of its own, as `GH_CONFIG_DIR`, while the default GitHub account isn't each machine's own login. `Files::write`, in `crates/worker/src/git_credential/files.rs`, writes its `hosts.yml`.
+
+- **`gh` reads its config from the directory `GH_CONFIG_DIR` names, and none of the person's own.** So `gh` there has none of the person's settings, such as their aliases.
+- **`gh` takes a token in `hosts.yml` before the one it keeps in the system's keychain, and uses the keychain's when the file holds none,** as `gh` 2.103.3 does. So a config directory with no login leaves `gh` logged in as the machine's own. To log `gh` in as nobody, the worker writes a login whose token GitHub refuses (`BLOCKED_USER`).

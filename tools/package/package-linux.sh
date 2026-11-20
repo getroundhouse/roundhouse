@@ -28,7 +28,8 @@ source "$HERE/../build.sh"
 source "$HERE/vpk.sh"
 # The app's icon, at 512 pixels. `docs/spec/components.md` says which style it is.
 ICON="$ROOT/apps/desktop/icons/working.iconset/icon_256x256@2x.png"
-# Ubuntu 22.04's glibc, the newest any binary may need.
+# Ubuntu 22.04's glibc, the newest any binary may need. The binaries can't be wholly static, and so need none, since
+# GPUI loads the system's Vulkan driver, which is built against the system's glibc.
 GLIBC=2.35
 
 # Which processor a Linux program is built for, as this script names them, from the program's header.

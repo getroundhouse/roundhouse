@@ -3,7 +3,9 @@
 //!
 //! [`Provider`] is the provider protocol in `protocol::provider` as a Rust trait, one method for each request, with
 //! the same rules: every request is safe to repeat, and `connect` answers with the command the hub runs to reach the
-//! worker, so a provider is never in a worker's stream. "Providers" in `docs/architecture.md` has the design.
+//! worker, so a provider is never in a worker's stream. "Workers and providers" in `docs/principles/parts.md` has the
+//! rules a provider follows, and `docs/decisions/provider-adapters-over-stdio.md` why an adapter is a program of its
+//! own.
 
 #![warn(clippy::wildcard_enum_match_arm)]
 

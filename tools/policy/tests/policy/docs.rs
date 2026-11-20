@@ -21,8 +21,6 @@ const LIMITS: &[(&str, usize)] = &[
 /// down: it stays within [`SLACK`] of the doc as the doc is shortened, and the doc comes off this list once it's within
 /// its kind's limit, or gone.
 const OVER: &[(&str, usize)] = &[
-    ("docs/architecture.md", 6_700),
-    ("docs/ui.md", 3_700),
     ("docs/standards/components.md", 4_500),
     ("docs/standards/gpui.md", 3_000),
     ("docs/standards/reviews.md", 3_100),
@@ -47,7 +45,7 @@ const LONG_CELLS: &[(&str, usize)] = &[
 const FOLDERS: &[&str] = &["docs/standards", "docs/principles", "docs/decisions", "docs/reference"];
 
 /// The docs outside those folders that the limits cover.
-const FILES: &[&str] = &["AGENTS.md", "docs/README.md", "docs/architecture.md", "docs/ui.md"];
+const FILES: &[&str] = &["AGENTS.md", "docs/README.md"];
 
 /// Each covered doc that exists, as (path from the repo's root, its text).
 fn docs() -> BTreeMap<String, String> {

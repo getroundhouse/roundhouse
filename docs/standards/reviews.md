@@ -73,7 +73,7 @@ Before any code is written, the reviewer reads the change's design: parts 2 and 
 - Which requirement makes the design hard, and would dropping it, and accepting what that costs, be simpler?
 - Was the approach that's most structurally right considered? If a smaller one was chosen, is the reason good? A smaller diff isn't a reason on its own.
 - Does something in the repo already do this, or could it be extended to?
-- Does it fit `docs/principles/` and `docs/architecture.md`, including the parts that aren't built, such as workers on other machines and the iPhone app?
+- Does it fit `docs/principles/`, including the parts that aren't built, such as workers on other machines and the iPhone app?
 - Does it change what an owner doc says, without saying so?
 - What does it commit, and in which PR: the forms it stores or sends, any migration, and any protocol break, as `docs/principles/protocol.md` says?
 - For a stack, are its splits and their order right, by `docs/standards/stacks.md`?

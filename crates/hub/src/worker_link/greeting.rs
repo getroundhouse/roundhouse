@@ -14,7 +14,8 @@ impl WorkerLink {
     /// so nothing reaches the worker before the credential, not even what answers the worker's first ask, which can
     /// come with the hello's answer. The hello's answer has `within`, and the set's the limit
     /// [`Following::answered`] gives it after that. Returns `following` once both are answered, for the link to follow
-    /// from then on.
+    /// from then on. A worker whose hello then fails has been sent the credential too. *Unconfirmed:* queueing the set
+    /// before the hello's answer.
     pub(super) async fn greet(&self, within: Duration, mut following: Following) -> Result<Following, ApiError> {
         let hello = Hello {
             protocol_version: versions::WORKERS.newest,

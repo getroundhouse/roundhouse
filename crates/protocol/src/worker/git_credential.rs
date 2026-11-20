@@ -18,7 +18,7 @@ use crate::model::{GithubToken, GithubUsername};
 /// What a process started under one uses changes with each set after it, from its next `git` or `gh`, since the
 /// worker rewrites the files it reads: a renewal reaches an agent that's running, and so does a credential that's
 /// [`Blocked`](GithubCredential::Blocked). One started under [`MachineOwn`](GithubCredential::MachineOwn) is given
-/// none of it, so it keeps the machine's own until it next starts.
+/// none of it, so it keeps the machine's own until it next starts. *Unconfirmed:* a set reaching what's running.
 ///
 /// A worker from before this answers `Unsupported`, and goes on with the machine's own. One that can't apply it, such
 /// as one whose git is older than 2.31, the first to read `GIT_CONFIG_COUNT`, or that can't write its files, answers
@@ -70,10 +70,11 @@ pub struct GitCredential {
     /// Who commits are by, as the account the hub added, whichever way it was connected, so `git commit` works on a
     /// machine with no git config of its own, and commits say the account rather than whoever the machine's git does.
     /// A worker sets it as git's `user.name` and `user.email` for every process it starts, from their next `git`, over
-    /// the repository's and the person's own, and takes them out again with a credential that has none. A worker from
-    /// before it reads past it, so it pushes as the account, and commits as whoever the machine's git says. `None`
-    /// from a hub from before it, and from one that gives an account none, as this one does an account it hasn't asked
-    /// GitHub about, which commits as the machine's git says.
+    /// the repository's and the person's own, and takes them out again with a credential that has none. Only in a
+    /// repository with a remote on github.com, since the credential is only for github.com. A worker from before it
+    /// reads past it, so it pushes as the account, and commits as whoever the machine's git says. `None` from a hub
+    /// from before it, and from one that gives an account none, as this one does an account it hasn't asked GitHub
+    /// about, which commits as the machine's git says.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub identity: Option<GitIdentity>,
 }

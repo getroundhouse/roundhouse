@@ -1,6 +1,6 @@
 //! On Windows a worker can't outlive its hub, since it would listen on a Unix socket, which tokio has nowhere else. The
-//! local provider has its workers run on their hub's pipes there instead, as "Providers" in `docs/architecture.md`
-//! says, so only someone running `worker --attach` or `--listen` by hand reaches these.
+//! local provider has its workers run on their hub's pipes there instead, where they stop with it, as
+//! `docs/spec/updates.md` says, so only someone running `worker --attach` or `--listen` by hand reaches these.
 
 use crate::worker_role::Given;
 
