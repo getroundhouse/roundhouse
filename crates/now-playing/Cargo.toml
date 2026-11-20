@@ -1,0 +1,10 @@
+[package]
+name = "now-playing"
+description = "Pausing what the media keys' app plays while something is dictated, and playing it again after, on each platform that can. A Mac pauses through /usr/bin/perl, which loads a library the build script compiles from this crate alone, so its Mac code uses no crates."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true

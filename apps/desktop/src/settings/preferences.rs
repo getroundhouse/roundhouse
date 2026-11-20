@@ -2,6 +2,7 @@ use crate::dictating::DictationChoice;
 use crate::saving::{Failure, Saver, write_json};
 use crate::sounds::Sound;
 use crate::workspace_order::Sort;
+use dictation::Quieting;
 use gpui_kit::{App, BorrowAppContext as _, Context, Global, Subscription};
 use protocol::model::RepoId;
 use serde::{Deserialize, Serialize};
@@ -58,6 +59,10 @@ pub(crate) struct Settings {
     /// or get heard with it. Off unless chosen, since it changes the whole system's sound rather than the app's.
     #[serde(default)]
     pub(crate) mute_while_dictating: bool,
+    /// Whether what the Now Playing app plays is paused while something is dictated, and played again after. Off
+    /// unless chosen, since it pauses another app.
+    #[serde(default)]
+    pub(crate) pause_while_dictating: bool,
     /// Settings this build doesn't know, which a newer one wrote, kept so that saving here doesn't lose them.
     #[serde(flatten)]
     pub(super) others: Map<String, Value>,
@@ -78,7 +83,25 @@ impl Default for Settings {
             dictation: DictationChoice::default(),
             dictation_language: dictation::Language::default(),
             mute_while_dictating: false,
+            pause_while_dictating: false,
             others: Map::new(),
+        }
+    }
+}
+
+impl Settings {
+    /// Whether what's dictated quiets what's playing `how` says, as the person has chosen.
+    pub(crate) fn quiets_while_dictating(&self, how: Quieting) -> bool {
+        match how {
+            Quieting::MuteOutput => self.mute_while_dictating,
+            Quieting::PauseMedia => self.pause_while_dictating,
+        }
+    }
+
+    pub(crate) fn set_quiets_while_dictating(&mut self, how: Quieting, on: bool) {
+        match how {
+            Quieting::MuteOutput => self.mute_while_dictating = on,
+            Quieting::PauseMedia => self.pause_while_dictating = on,
         }
     }
 }

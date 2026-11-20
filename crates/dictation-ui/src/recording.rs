@@ -1,7 +1,7 @@
 //! One recording, from its start through the final words delivered after it stops. Dropping it cancels both the
 //! recording and the task that hears it, so a field can never receive a previous recording's late updates.
 
-use dictation::{DictationError, Ending, Permission, Recording, Update};
+use dictation::{DictationError, Ending, Permission, Quieting, Recording, Update};
 use gpui_kit::{Context, Task, Window};
 
 use crate::fine_line::FineLine;
@@ -62,8 +62,8 @@ impl Field {
         let before = Before::of(self.input.read(cx));
         // Only now, rather than as held Space starts to listen, so a press let go of before it dictates doesn't cut
         // what's playing.
-        if source::mutes_output(cx) {
-            recording.mute_output();
+        for how in Quieting::ALL.into_iter().filter(|how| source::quiets(*how, cx)) {
+            recording.quiet(how);
         }
         let hearing = cx.spawn_in(window, async move |this, cx| {
             while let Ok(update) = updates.recv_async().await {

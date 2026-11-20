@@ -20,6 +20,7 @@ members = [
     "crates/terminal-state",
     "crates/dictation",
     "crates/dictation-ui",
+    "crates/now-playing",
     "crates/fetching",
     "crates/update-feed",
     "crates/waiting",
@@ -52,6 +53,7 @@ default-members = [
     "apps/cli",
     "crates/terminal-state",
     "crates/dictation",
+    "crates/now-playing",
     "crates/fetching",
     "crates/update-feed",
     "crates/waiting",
@@ -79,6 +81,7 @@ exclude = [
 
 [workspace.package]
 version = "0.1.0"
+# `crates/now-playing/build.rs` gives `rustc` the same edition by hand, as it compiles its crate alone.
 edition = "2024"
 publish = false
 license = "Apache-2.0"
@@ -99,6 +102,7 @@ look = { path = "crates/look" }
 dictation = { path = "crates/dictation" }
 dictation-ui = { path = "crates/dictation-ui" }
 fetching = { path = "crates/fetching" }
+now-playing = { path = "crates/now-playing" }
 update-feed = { path = "crates/update-feed" }
 waiting = { path = "crates/waiting" }
 terminal-state = { path = "crates/terminal-state" }

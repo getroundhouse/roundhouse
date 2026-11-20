@@ -132,10 +132,11 @@ impl Field {
         true
     }
 
-    /// Whether what's being dictated has the sound output muted, or a recording listening towards held Space has.
+    /// Whether what's being dictated quiets what's playing the way `how` says, or a recording listening towards held
+    /// Space does.
     #[cfg(feature = "testing")]
-    pub(crate) fn mutes_output(&self) -> bool {
-        self.recording().is_some_and(dictation::Recording::mutes_output)
+    pub(crate) fn quiets(&self, how: dictation::Quieting) -> bool {
+        self.recording().is_some_and(|recording| recording.quiets(how))
     }
 
     /// Gives the field synthetic audio, including to a recording listening towards held Space.

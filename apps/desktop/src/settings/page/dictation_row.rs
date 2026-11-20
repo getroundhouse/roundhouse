@@ -1,9 +1,11 @@
 //! The Dictation row of General: Ask first, On or Off, and under it a box that says how dictation stands, the language
-//! what's dictated is heard in, and the switch that mutes the sound while dictating, as `docs/spec/settings.md` says.
-//! Only where `dictation::HEARS`, and the switch only where `dictation::MUTES_OUTPUT`.
+//! what's dictated is heard in, and the switches that mute the sound and pause what's playing while dictating, as
+//! `docs/spec/settings.md` says. Only where `dictation::HEARS`, and each switch only where its
+//! `Quieting::is_possible`.
 
 use std::rc::Rc;
 
+use dictation::Quieting;
 use gpui_kit::{App, Window};
 
 use super::{Control, Setting};
@@ -45,14 +47,26 @@ pub(super) fn language() -> Setting {
     }
 }
 
-pub(super) fn muting() -> Setting {
+/// The switch for one way of quieting what's playing while dictating.
+pub(super) fn quieting(how: Quieting) -> Setting {
+    let (name, does) = match how {
+        Quieting::MuteOutput => (
+            "Mute sound while dictating",
+            "Mute this Mac's sound while you dictate, and unmute it once you stop, so music or a video doesn't drown \
+             you out. A display's speakers, and some USB speakers and amps, whose volume only they can set, play on.",
+        ),
+        Quieting::PauseMedia => (
+            "Pause media while dictating",
+            "Pause the music or video playing while you dictate, and play it again once you stop, whatever speakers \
+             it plays from. Only what the Mac shows as Now Playing pauses.",
+        ),
+    };
     Setting {
-        name: "Mute sound while dictating",
-        does: "Mute this Mac's sound while you dictate, and unmute it once you stop, so music or a video doesn't drown \
-               you out. A display's speakers, and some USB speakers and amps, whose volume only they can set, play on.",
+        name,
+        does,
         control: Control::Switch {
-            is_on: Box::new(|cx| Some(get(cx).mute_while_dictating)),
-            set: Rc::new(|on, cx| change(cx, |settings| settings.mute_while_dictating = on)),
+            is_on: Box::new(move |cx| Some(get(cx).quiets_while_dictating(how))),
+            set: Rc::new(move |on, cx| change(cx, |settings| settings.set_quiets_while_dictating(how, on))),
         },
         status_box: None,
     }

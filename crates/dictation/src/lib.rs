@@ -25,7 +25,7 @@ pub mod nemotron;
 mod pauses;
 mod samples;
 
-pub use audio::{AudioIn, HEARS, MUTES_OUTPUT, Permission, ask_for_microphone, microphone_permission, output_restored};
+pub use audio::{AudioIn, HEARS, Permission, Quieting, ask_for_microphone, microphone_permission, restored};
 pub use dictation::{Dictation, DictationError, Ending, Recording, Update};
 pub use engine::{Engine, EngineError, Heard, Listening};
 pub use hints::Hints;

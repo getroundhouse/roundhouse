@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Packages this checkout as Roundhouse.app with Velopack's `vpk`: the three binaries, which `tools/build.sh` builds and
-# stamps with the version, in one bundle with Velopack's updater. It makes the portable zip people download, and the
-# update package and feed the release workflow publishes. Unsigned unless it's given an identity. It's macOS on Apple
-# silicon only, like the app, and needs `jq` and the .NET SDK 8, 9 or 10, which runs `vpk`.
+# stamps with the version, and the library beside them that pauses what's playing while dictating, in one bundle with
+# Velopack's updater. It makes the portable zip people download, and the update package and feed the release workflow
+# publishes. Unsigned unless it's given an identity. It's macOS on Apple silicon only, like the app, and needs `jq` and
+# the .NET SDK 8, 9 or 10, which runs `vpk`.
 #
 #   tools/package/package.sh                  Package this commit, unsigned
 #   tools/package/package.sh --allow-dirty    The same, with uncommitted changes in the build
@@ -38,15 +39,15 @@ source "$HERE/vpk.sh"
 # The app's icon, a drawing for each size. `docs/spec/components.md` says which style it is.
 ICONSET="$ROOT/apps/desktop/icons/working.iconset"
 
-# Puts the binaries in `bins/`, and the bundle's Info.plist and icon beside it, in a directory of their own. The
-# binaries come from `prebuilt` if it's set, and `check` makes sure they're this build.
+# Puts the binaries and NOW_PLAYING in `bins/`, and the bundle's Info.plist and icon beside it, in a directory of
+# their own. They come from `prebuilt` if it's set, and `check` makes sure the binaries are this build.
 stage() {
   local staging=$1 prebuilt=$2 bin
   if [ -z "$prebuilt" ]; then
     build_release "$staging/bins"
   else
     mkdir "$staging/bins"
-    for bin in "${BINARIES[@]}"; do
+    for bin in "${BINARIES[@]}" "$NOW_PLAYING"; do
       cp "$prebuilt/$bin" "$staging/bins/$bin"
     done
   fi
@@ -65,7 +66,7 @@ check() {
     value="$(plutil -extract "$key" raw "$app/Contents/Info.plist")"
     [ "$value" = "$VERSION" ] || die "the bundle's $key is $value, not $VERSION"
   done
-  for bin in "${BINARIES[@]}"; do
+  for bin in "${BINARIES[@]}" "$NOW_PLAYING"; do
     value="$(lipo -archs "$app/Contents/MacOS/$bin")"
     [ "$value" = arm64 ] || die "$bin is built for $value, not arm64"
   done
@@ -89,6 +90,11 @@ check() {
     value="$(codesign -d --entitlements - --xml "$file" 2> /dev/null | plutil -convert json -o - - 2> /dev/null || true)"
     [ "$value" = "$expected" ] || die "$(basename "$file") is signed with entitlements other than Roundhouse.entitlements"
   done
+  # vpk's deep signature signs it with the rest, which gives it the hardened runtime too. A library only the linker
+  # signed has none, and notarization would refuse it.
+  value="$(codesign -d --verbose=1 "$app/Contents/MacOS/$NOW_PLAYING" 2>&1)"
+  grep -Eq '^CodeDirectory .*flags=0x[0-9a-f]+\([^)]*runtime' <<< "$value" \
+    || die "$NOW_PLAYING isn't signed with the rest of the bundle"
   [ "$notarized" = yes ] || return 0
   # Gatekeeper's verdict, as a download gets it. Its `origin=` line names whose certificate it is, so it's left out.
   value="$(spctl --assess --type execute -vv "$app" 2>&1)" \

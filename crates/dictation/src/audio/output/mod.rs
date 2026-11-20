@@ -7,10 +7,6 @@ mod elsewhere;
 mod mac;
 
 #[cfg(not(target_os = "macos"))]
-pub use elsewhere::{MUTES_OUTPUT, output_restored};
-#[cfg(not(target_os = "macos"))]
-pub(crate) use elsewhere::{MutedOutput, mute_output};
+pub(crate) use elsewhere::{MUTES_OUTPUT, MutedOutput, mute_output, output_restored};
 #[cfg(target_os = "macos")]
-pub use mac::{MUTES_OUTPUT, output_restored};
-#[cfg(target_os = "macos")]
-pub(crate) use mac::{MutedOutput, mute_output};
+pub(crate) use mac::{MUTES_OUTPUT, MutedOutput, mute_output, output_restored};

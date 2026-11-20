@@ -3,5 +3,4 @@
 mod device;
 mod muting;
 
-pub use muting::{MUTES_OUTPUT, output_restored};
-pub(crate) use muting::{MutedOutput, mute_output};
+pub(crate) use muting::{MUTES_OUTPUT, MutedOutput, mute_output, output_restored};

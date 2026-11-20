@@ -2,7 +2,7 @@
 //! to.
 
 /// Whether this platform can mute its sound output while it's dictated to. Windows and Linux can't yet.
-pub const MUTES_OUTPUT: bool = false;
+pub(crate) const MUTES_OUTPUT: bool = false;
 
 /// Never made: nothing is muted here.
 pub(crate) enum MutedOutput {}
@@ -13,7 +13,7 @@ pub(crate) fn mute_output() -> Option<MutedOutput> {
 }
 
 /// Answers at once, since nothing is muted here.
-pub fn output_restored() -> flume::Receiver<()> {
+pub(crate) fn output_restored() -> flume::Receiver<()> {
     let (answer, answered) = flume::bounded(1);
     let _ = answer.send(());
     answered

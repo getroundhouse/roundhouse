@@ -7,7 +7,7 @@ mod capture;
 mod engine;
 mod joins;
 mod late_words;
-mod muting;
+mod quieting;
 mod sentences;
 mod support;
 mod watched;
