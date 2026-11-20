@@ -1,6 +1,6 @@
 # Writing
 
-How to word anything a person reads here: a doc, an issue, a pull request, a commit message, a comment in code, and a message to the owner. `docs/standards/documentation.md` says where each piece of information goes, `docs/standards/pull-requests.md` what a PR's description holds, and `tools/guide/README.md` how the guide's pages are written.
+How to word anything a person reads here: a doc, an issue, a pull request, a commit message, a comment in code, and a message to the owner. `docs/standards/documentation.md` says where each piece of information goes, `docs/standards/issues.md` what an issue's description holds, `docs/standards/pull-requests.md` what a PR's, and `tools/guide/README.md` how the guide's pages are written.
 
 **The reader** is an engineer who knows Roundhouse, its parts and its platforms, and hasn't read the code you're writing about. Often that's the owner, coming from other work.
 
@@ -16,30 +16,6 @@ How to word anything a person reads here: a doc, an issue, a pull request, a com
 - **Give each sentence one idea, and keep its nouns.** Write "changing only the mode", not "that chat's change of mode alone". A longer sentence that reads once is better than a shorter one that reads twice.
 - **Follow an abstract statement with an example,** as these rules do. If you can't find one, you may not know what the statement means. Find out, or say what you don't know.
 - **Give a title the same care.** It says what goes wrong, or what's true afterwards, in words someone would search for: "Changing a chat's mode fails if its effort is no longer offered".
-
-## An issue's description
-
-- **It's written for whoever builds it next,** so it holds what happens, why, what to build, and what's still open. How it was found, the evidence for each claim, and counts and dates go in a comment, such as which processes were found running and when, as `docs/standards/documentation.md` puts results there. A reader who wants the proof can find it, and one who's building doesn't have to read past it.
-- **Once something is decided, rewrite the description around it,** and take out the options that weren't chosen. Paragraphs added below leave the reader to work out which still holds. The comments keep who decided and when.
-- **Before filing, read it once as that reader, and cut whatever wouldn't change what they do.** One that runs past about 500 words is usually holding a plan, so split it into sub-issues, as `docs/standards/issues.md` says.
-
-## A bug's issue
-
-Its parts, in this order:
-
-1. What goes wrong and when, as someone who hit it would recognize it, and whether that was seen in the app or predicted from the code.
-2. How a person gets there, when it isn't obvious.
-3. Why it happens, naming the code.
-4. Ways to fix it, when you see any.
-5. A decision the owner has to make first, as a question, when there is one.
-
-For example, an issue that opens:
-
-> If a chat's saved effort or model is no longer offered, changing just its approval mode fails, with an error about the effort or the model rather than the mode.
->
-> **How a chat ends up like that.** An update stops offering the effort or model a chat was using.
->
-> **Why the change fails.** `LiveSession::configure` (`crates/hub/src/session/live.rs`) checks all three of the chat's settings after the change, not just the one being changed. So the effort that was already there fails the check, and the mode change is refused, though the new mode is fine.
 
 ## Text that's already here
 
