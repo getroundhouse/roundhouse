@@ -89,20 +89,19 @@ where
             }
             Ok(WorkerRequest::Stop) => {
                 asked_to_stop = true;
-                let _ = frames.send(reply(Ok(WorkerResponse::Ok))).await;
+                done(&frames, reply, Ok(())).await;
             }
             // Before the next frame is read, so sets apply in the order sent, and what's asked after one has it.
             Ok(WorkerRequest::GitCredentialSet(GitCredentialSet { credential })) => {
-                let answer = worker.state.credentials.set(credential).await;
-                let _ = frames.send(reply(answer.map(|()| WorkerResponse::Ok))).await;
+                done(&frames, reply, worker.state.credentials.set(credential).await).await;
             }
-            Ok(WorkerRequest::TerminalInput(typed)) => {
-                let typed = worker.state.terminals.input(typed);
-                let _ = frames.send(reply(typed.map(|()| WorkerResponse::Ok))).await;
-            }
+            Ok(WorkerRequest::TerminalInput(typed)) => done(&frames, reply, worker.state.terminals.input(typed)).await,
             Ok(WorkerRequest::TerminalResize(resize)) => {
-                let resized = worker.state.terminals.resize(resize);
-                let _ = frames.send(reply(resized.map(|()| WorkerResponse::Ok))).await;
+                done(&frames, reply, worker.state.terminals.resize(resize)).await;
+            }
+            // As it's read, so a screen asked for after it is taken after it.
+            Ok(WorkerRequest::TerminalAttached(attached)) => {
+                done(&frames, reply, worker.state.terminals.attached(attached)).await;
             }
             request => {
                 // Each call runs on a task of its own, so a stop read after this could otherwise be handled before the
@@ -122,6 +121,15 @@ where
     Closing { ended, frames, writer }
 }
 
+/// Replies that what was asked is done, or why it couldn't be.
+async fn done(
+    frames: &mpsc::Sender<Outgoing>,
+    reply: impl FnOnce(Result<WorkerResponse, ApiError>) -> Outgoing,
+    done: Result<(), ApiError>,
+) {
+    let _ = frames.send(reply(done.map(|()| WorkerResponse::Ok))).await;
+}
+
 /// Answers the hub's hello, and once the worker speaks the hub's version, sends it what's on its way and says whether
 /// it asked the worker to keep running without it.
 async fn greet(
@@ -139,6 +147,8 @@ async fn greet(
     }
     // After the reply, so the hub knows which version this is before anything else reaches it.
     worker.state.outbox.attach(frames.clone(), keep_running_without_hub).await;
+    // Until this hub says otherwise, which a hub from before it could say doesn't.
+    worker.state.terminals.all_attached();
     worker.state.asks.ask_again().await;
     Some(keep_running_without_hub)
 }

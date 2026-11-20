@@ -13,7 +13,7 @@ use tokio::sync::{OwnedSemaphorePermit, Semaphore, broadcast, mpsc};
 use tracing::warn;
 
 use super::backlog::too_far_behind;
-use crate::hub::{Hub, Numbered, Queued};
+use crate::hub::{Following, Hub, Numbered, Queued};
 use crate::server::subscribing::add_subscription;
 use crate::server::{Connection, Outgoing};
 
@@ -47,10 +47,10 @@ pub(in crate::server) fn attach(
     attach: TerminalAttach,
 ) -> Result<ClientResponse, ApiError> {
     let TerminalAttach { id, subscription_id } = attach;
-    let (link, updates) = hub.terminal_follow(&id)?;
+    let following = hub.terminal_follow(&id)?;
     add_subscription(connection, subscription_id, || {
         let attached = Attached { subscription_id, frames: connection.frames.clone() };
-        tokio::spawn(attached.follow(hub.clone(), link, id, updates)).abort_handle()
+        tokio::spawn(attached.follow(following, id)).abort_handle()
     })?;
     Ok(ClientResponse::Ok)
 }
@@ -70,33 +70,24 @@ enum Stopped {
 }
 
 impl Attached {
-    /// Sends what the terminal shows, from the worker on link `link`, then each update after it, until its shell ends
-    /// or the client stops following it. While a frame of it is still being written to the client, what comes is held,
+    /// Sends what the terminal shows, then each update after it, until its shell ends or the client stops following
+    /// it. While a frame of it is still being written to the client, what comes is held,
     /// so a slow client has at most one of its frames queued, and what's queued behind it, such as replies, waits for
-    /// little. A client too far behind is sent what it shows again instead. It follows `updates` from each screen on,
-    /// starting it again before it asks for each, so `updates` is only where it starts from.
-    pub(super) async fn follow(
-        self,
-        hub: Arc<Hub>,
-        link: u64,
-        id: TerminalId,
-        mut updates: broadcast::Receiver<Numbered>,
-    ) {
+    /// little. A client too far behind is sent what it shows again instead.
+    pub(super) async fn follow(self, mut following: Following, id: TerminalId) {
         let room = Arc::new(Semaphore::new(1));
         loop {
             // Room first, so the worker is asked for a screen only once it can be sent, and once each time the client
             // falls behind, rather than once for each frame's worth of output that comes meanwhile.
             let Ok(written) = room.clone().acquire_owned().await else { return };
-            // From what comes from here, which the screen takes in or is followed by.
-            updates = updates.resubscribe();
-            let Some(TerminalShown { screen, next }) = self.screen(&hub, link, &id).await else {
+            let Some(TerminalShown { screen, next }) = self.screen(&mut following, &id).await else {
                 let _ = self.send(TerminalUpdate::Exited(TerminalExit { code: None }), written).await;
                 return;
             };
             if !self.send(TerminalUpdate::Screen(screen), written).await {
                 return;
             }
-            match self.follow_from(&mut updates, next, &room).await {
+            match self.follow_from(following.updates(), next, &room).await {
                 Stopped::Behind => {}
                 Stopped::Ended => return,
             }
@@ -108,9 +99,9 @@ impl Attached {
         clippy::disallowed_methods,
         reason = "the pause before asking again what a terminal whose shell runs on shows"
     )]
-    async fn screen(&self, hub: &Hub, link: u64, id: &TerminalId) -> Option<TerminalShown> {
+    async fn screen(&self, following: &mut Following, id: &TerminalId) -> Option<TerminalShown> {
         loop {
-            match hub.terminal_screen(id, link).await {
+            match following.screen().await {
                 Ok(shown) => return Some(shown),
                 Err(e) if e.code == ErrorCode::NotFound => return None,
                 // Its shell runs on, so the client waits for what it shows.

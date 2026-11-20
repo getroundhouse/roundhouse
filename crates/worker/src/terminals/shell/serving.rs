@@ -237,6 +237,7 @@ impl Shell {
                 biased;
                 told = told.recv(), if !untold => match told {
                     Some(ToShell::Resize(size)) => self.resize(mirror, size),
+                    Some(ToShell::Attached(attached)) => self.sending.attached(attached),
                     Some(ToShell::Show(reply)) => {
                         let _ = reply.send(self.shown(mirror));
                     }

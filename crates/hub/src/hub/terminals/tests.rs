@@ -193,14 +193,14 @@ async fn what_another_worker_says_doesnt_reach_a_terminal() {
     let dir = tempfile::tempdir().unwrap();
     let (hub, link, _) = with_worker(dir.path());
     hub.terminal_open(open("t")).await.unwrap();
-    let (_, mut updates) = hub.terminal_follow(&"t".into()).unwrap();
+    let mut following = hub.terminal_follow(&"t".into()).unwrap();
     let other = WorkerLink::unconnected();
 
     hub.terminal_update(&other, "t".into(), UpdateIndex::new(0), output("theirs"));
     hub.terminal_ended(&"t".into(), other.id).await;
     hub.terminal_update(&link, "t".into(), UpdateIndex::new(0), output("ours"));
 
-    assert_eq!(updates.recv().await.unwrap().update, output("ours"));
+    assert_eq!(following.updates().recv().await.unwrap().update, output("ours"));
     assert_eq!(listed(&hub).await.terminals.len(), 1);
 }
 
@@ -261,19 +261,31 @@ async fn a_terminal_whose_worker_has_gone_is_removed() {
     assert_eq!(listed(&hub).await.terminals, Vec::new());
 }
 
-/// As a hub that starts carries on with what a worker an earlier hub left runs, each as it was opened.
+/// As a hub that starts carries on with what a worker an earlier hub left runs, each as it was opened, and with no
+/// client attached.
 #[tokio::test]
 async fn a_hub_carries_on_with_the_terminals_a_worker_it_finds_runs() {
     let dir = tempfile::tempdir().unwrap();
     let hub = hub_with_worktree(dir.path());
     let running = RunningTerminal { terminal: "t".into(), opened_at_ms: 5 };
     let reply = worker::RunningTerminalsReply { terminals: vec![running] };
-    let link = WorkerLink::answering(move |_| Some(Ok(WorkerResponse::RunningTerminals(reply.clone()))));
+    let told = Arc::new(Mutex::new(Vec::new()));
+    let telling = told.clone();
+    let link = WorkerLink::answering(move |request| {
+        Some(Ok(if let WorkerRequest::TerminalAttached(attached) = request {
+            telling.lock().push((attached.terminal, attached.attached));
+            WorkerResponse::Ok
+        } else {
+            WorkerResponse::RunningTerminals(reply.clone())
+        }))
+    });
     serving(&hub, &link);
 
     let carried_on = hub.carry_on_terminals(&"w".into(), &link).await;
 
     assert_eq!(carried_on, 1);
+    waiting::task::until(Duration::from_secs(10), "the worker was never told", || !told.lock().is_empty()).await;
+    assert_eq!(*told.lock(), [("t".into(), false)]);
     let records = listed(&hub).await.terminals;
     assert_eq!(records.iter().map(|record| (record.id.as_str(), record.opened_at_ms)).collect::<Vec<_>>(), [("t", 5)]);
     assert!(hub.open_terminal(&"t".into()).is_ok(), "it isn't the worker's");

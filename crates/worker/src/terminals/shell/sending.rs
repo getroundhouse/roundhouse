@@ -22,6 +22,8 @@ pub(super) struct Sending {
     /// The `at` of the oldest update held, which is how many it has sent.
     sent: UpdateIndex,
     held: HeldUpdates,
+    /// Whether any client is attached to the terminal. While none is, nothing but the shell's end is sent.
+    attached: bool,
     /// Room for the one frame that can be on its way to the hub.
     room: Arc<Semaphore>,
 }
@@ -29,7 +31,14 @@ pub(super) struct Sending {
 impl Sending {
     pub(super) fn new(terminal: TerminalId, outbox: Arc<Outbox>) -> Self {
         let (sent, held, room) = (UpdateIndex::new(0), HeldUpdates::default(), Arc::new(Semaphore::new(1)));
-        Self { terminal, outbox, sent, held, room }
+        Self { terminal, outbox, sent, held, attached: true, room }
+    }
+
+    /// Whether any client is attached to the terminal, which a client that attaches takes in what it missed of from the
+    /// screen it's sent. What's held already is still sent, since it's numbered.
+    pub(super) fn attached(&mut self, attached: bool) {
+        self.attached = attached;
+        self.held.fence();
     }
 
     /// The `at` of the next update, for a screen taken now, which takes in everything held, and is followed by what's
@@ -42,12 +51,17 @@ impl Sending {
     /// Holds `update` to send, after everything held already, numbered after it, unless it's output joined onto the
     /// output held last.
     pub(super) fn hold(&mut self, update: TerminalUpdate) {
+        // Neither takes a number, so the next screen is followed by what's held after it, with no gap.
+        if !self.attached && matches!(update, TerminalUpdate::Output { .. } | TerminalUpdate::Resized { .. }) {
+            return;
+        }
         self.held.hold(update);
     }
 
-    /// Whether it holds as much output as it takes in before the program waits.
+    /// Whether it holds as much output as it takes in before the program waits, which it never does with no client
+    /// attached, since then it holds nothing more.
     pub(super) fn full(&self) -> bool {
-        self.held.output_bytes() >= HELD_BYTES
+        self.attached && self.held.output_bytes() >= HELD_BYTES
     }
 
     pub(super) fn holds_any(&self) -> bool {

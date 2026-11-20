@@ -64,6 +64,10 @@ impl Hub {
             }
         }
         finished.send_replace(Some(opened.clone()));
+        if opened.is_ok() {
+            // That none is yet, so the worker sends nothing until one is.
+            self.terminal_attached_soon(&id);
+        }
         opened
     }
 

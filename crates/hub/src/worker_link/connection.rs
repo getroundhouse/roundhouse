@@ -43,6 +43,8 @@ pub(crate) struct WorkerLink {
     /// It didn't serve its tools when asked, as a worker that doesn't know how never answers, so its agents go without
     /// them from then on rather than each waiting for it.
     pub(super) tools_unserved: AtomicBool,
+    /// Whether it's from before it could be told whether a client is attached to a terminal, so it sends everything.
+    pub(super) terminals_attached_untold: AtomicBool,
     /// What the worker has sent, but for its replies, while it's held, which [`WorkerLink::release`] ends. `None` once
     /// it has been, or if it never was. Held while each frame is passed on, so they go in the order they came.
     pub(super) held: AsyncMutex<Option<Vec<WorkerFrame>>>,
@@ -89,6 +91,7 @@ impl WorkerLink {
             reads: AtomicUsize::new(0),
             process,
             tools_unserved: AtomicBool::new(false),
+            terminals_attached_untold: AtomicBool::new(false),
             held: AsyncMutex::new((opening == Opening::LeftRunning).then(Vec::new)),
             acks: Acks::default(),
             left: AtomicBool::new(false),
@@ -180,6 +183,7 @@ impl WorkerLink {
             reads: AtomicUsize::new(0),
             process: ChildProcess::already_exited(),
             tools_unserved: AtomicBool::new(false),
+            terminals_attached_untold: AtomicBool::new(false),
             held: AsyncMutex::new(None),
             acks: Acks::default(),
             left: AtomicBool::new(false),
@@ -247,6 +251,16 @@ impl WorkerLink {
     /// Whether it didn't serve its tools when asked.
     pub(crate) fn serves_no_tools(&self) -> bool {
         self.tools_unserved.load(Ordering::Relaxed)
+    }
+
+    /// For a worker from before it could be told whether a client is attached to a terminal.
+    pub(crate) fn cant_tell_terminals_attached(&self) {
+        self.terminals_attached_untold.store(true, Ordering::Relaxed);
+    }
+
+    /// Whether it can be told whether a client is attached to a terminal, which it can unless it said it couldn't.
+    pub(crate) fn tells_terminals_attached(&self) -> bool {
+        !self.terminals_attached_untold.load(Ordering::Relaxed)
     }
 
     /// Whether it's the workspace's worker in `workers`, rather than one that's been replaced or stopped.

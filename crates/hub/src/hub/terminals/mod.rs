@@ -5,10 +5,12 @@
 #[cfg(test)]
 mod tests;
 
+mod attaching;
 mod open_terminals;
 mod opening;
 mod terminal_calls;
 
+pub(crate) use attaching::Following;
 #[cfg(test)]
 pub(crate) use open_terminals::QUEUED_UPDATES;
 pub(crate) use open_terminals::{Numbered, Queued, Terminals};

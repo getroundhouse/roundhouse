@@ -10,8 +10,8 @@ use protocol::model::TerminalId;
 use protocol::paths::AGENTS_DIR;
 use protocol::terminal::{TerminalSize, TerminalUpdate, UpdateIndex};
 use protocol::worker::{
-    RunningTerminalsReply, TerminalInput, TerminalShow, TerminalShown, TerminalStart, WorkerCall, WorkerFrame,
-    WorkerOutcome, WorkerRequest, WorkerResponse,
+    RunningTerminalsReply, TerminalAttached, TerminalInput, TerminalShow, TerminalShown, TerminalStart, WorkerCall,
+    WorkerFrame, WorkerOutcome, WorkerRequest, WorkerResponse,
 };
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, DuplexStream, WriteHalf};
 use tokio::sync::{mpsc, watch};
@@ -153,6 +153,12 @@ impl Hub {
     /// Until the reply to call `id`, keeping everything that comes before it.
     pub(super) async fn reply(&mut self, id: u64) -> WorkerOutcome {
         self.until(|hub| hub.replies.remove(&id)).await
+    }
+
+    /// Tells the worker whether any client is attached to terminal `terminal`.
+    pub(super) async fn attached(&mut self, terminal: &str, attached: bool) {
+        let told = self.call(WorkerRequest::TerminalAttached(TerminalAttached { terminal: terminal.into(), attached }));
+        assert_eq!(told.await, WorkerOutcome::Response(WorkerResponse::Ok));
     }
 
     /// Stops reading what the worker sends, or starts again, as a hub on a slow link does.

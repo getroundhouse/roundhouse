@@ -7,7 +7,7 @@ use protocol::client::{ApiError, ClientResponse, ErrorCode, HubNotice};
 use protocol::model::{RecordKey, Terminal, TerminalId, WorkspaceId};
 use protocol::terminal::{TerminalUpdate, UpdateIndex};
 use protocol::worker::{self, Request, RunningTerminal, TerminalShown};
-use tokio::sync::{MutexGuard as AsyncMutexGuard, broadcast};
+use tokio::sync::MutexGuard as AsyncMutexGuard;
 use tracing::warn;
 
 use crate::hub::Hub;
@@ -48,19 +48,10 @@ impl Hub {
         Ok(Box::pin(async move { replied.await.map(|()| ClientResponse::Ok) }))
     }
 
-    /// The ID of the link to the worker of an open terminal, and the updates it sends of it from now on, for a client
-    /// that attaches.
-    pub(crate) fn terminal_follow(&self, id: &TerminalId) -> Result<(u64, broadcast::Receiver<Numbered>), ApiError> {
-        let (_, link) = self.open_terminal(id)?;
-        let open = self.terminals.open.lock();
-        let updates = open.get(id).ok_or_else(|| not_open(id))?.updates.subscribe();
-        Ok((link.id, updates))
-    }
-
     /// What an open terminal shows, as the worker on link `link` says, for a client that attaches. `NotFound` once the
     /// terminal has gone, as it has when the worker has let go of it, which it does only once the shell has ended, so
     /// that closes it.
-    pub(crate) async fn terminal_screen(&self, id: &TerminalId, link: u64) -> Result<TerminalShown, ApiError> {
+    pub(super) async fn terminal_screen(&self, id: &TerminalId, link: u64) -> Result<TerminalShown, ApiError> {
         let (_, on) = self.open_terminal(id).ok().filter(|(_, on)| on.id == link).ok_or_else(|| not_open(id))?;
         let shown = on.call(worker::TerminalShow { terminal: id.clone() }).await;
         if shown.as_ref().is_err_and(|e| e.code == ErrorCode::NotFound) {
@@ -120,7 +111,7 @@ impl Hub {
 
     /// Takes on the terminals that a worker an earlier hub left is running, announcing a record for each, and says how
     /// many it took on. One it can't give a record ends, so no shell runs that no client can see.
-    pub(crate) async fn carry_on_terminals(&self, workspace_id: &WorkspaceId, link: &WorkerLink) -> usize {
+    pub(crate) async fn carry_on_terminals(self: &Arc<Self>, workspace_id: &WorkspaceId, link: &WorkerLink) -> usize {
         // Across the call, so the end of a shell the worker lists, which can reach the hub before the list does, or
         // just after it, waits to remove the record this makes.
         let _changing = self.terminals.changing.lock().await;
@@ -146,9 +137,12 @@ impl Hub {
             };
             let record = Terminal { id: terminal.clone(), workspace_id: workspace_id.clone(), opened_at_ms, rev };
             let open = Open::new(workspace_id.clone(), Some(link.id), Stage::Open(record.clone()));
-            self.terminals.open.lock().insert(terminal, open);
+            self.terminals.open.lock().insert(terminal.clone(), open);
             self.notify(HubNotice::Terminal(record));
             carried_on += 1;
+            // That none is yet, which it took one to be at this hub's hello. On a task of its own, so nothing waits for
+            // the worker under `changing`, which every terminal's open and end waits for.
+            self.terminal_attached_soon(&terminal);
         }
         carried_on
     }
@@ -181,6 +175,6 @@ impl Hub {
     }
 }
 
-fn not_open(id: &TerminalId) -> ApiError {
+pub(super) fn not_open(id: &TerminalId) -> ApiError {
     ApiError::new(ErrorCode::NotFound, format!("terminal {id} isn't open"))
 }

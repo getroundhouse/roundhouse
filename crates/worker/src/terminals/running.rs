@@ -11,7 +11,8 @@ use protocol::model::TerminalId;
 use protocol::paths;
 use protocol::terminal::TerminalSize;
 use protocol::worker::{
-    RunningTerminal, RunningTerminalsReply, TerminalInput, TerminalResize, TerminalShown, TerminalStart,
+    RunningTerminal, RunningTerminalsReply, TerminalAttached, TerminalInput, TerminalResize, TerminalShown,
+    TerminalStart,
 };
 use tokio::sync::{mpsc, oneshot, watch};
 
@@ -57,6 +58,8 @@ pub(super) struct Running {
 /// What the thread that keeps a terminal's screen is told to do, in order with what its program writes.
 pub(super) enum ToShell {
     Resize(TerminalSize),
+    /// Whether any client is attached, which it sends what its program writes only while one is.
+    Attached(bool),
     Show(oneshot::Sender<Result<TerminalShown, ApiError>>),
     Stop,
 }
@@ -139,6 +142,20 @@ impl Terminals {
         let TerminalResize { terminal, size } = resize;
         allowed(size)?;
         self.tell(&terminal, ToShell::Resize(size))
+    }
+
+    /// Whether any client is attached to the terminal, as [`TerminalAttached`] says.
+    pub(crate) fn attached(&self, attached: TerminalAttached) -> Result<(), ApiError> {
+        let TerminalAttached { terminal, attached } = attached;
+        self.tell(&terminal, ToShell::Attached(attached))
+    }
+
+    /// Takes every terminal to have a client attached, as it does for a hub that hasn't said, such as one that has
+    /// just said hello.
+    pub(crate) fn all_attached(&self) {
+        for running in self.inner.lock().running.values() {
+            let _ = running.to_shell.send(ToShell::Attached(true));
+        }
     }
 
     /// What the terminal shows now, and which of its updates come after that.

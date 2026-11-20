@@ -98,3 +98,26 @@ async fn held_updates_are_numbered_with_no_gaps_and_not_joined_across_a_screen()
     let expected = [(0, output("ab")), (1, output("cd")), (2, resized), (3, output("e")), (4, ended)];
     assert_eq!(frames, expected);
 }
+
+/// While no client is attached, what the program writes and new sizes are neither held nor numbered, so the next
+/// screen is followed by what's held after it, with no gap, and the program is never held back. The shell's end is
+/// still held, which the hub closes the terminal by.
+#[tokio::test]
+async fn with_no_client_attached_only_the_shells_end_is_held() {
+    let mut sending = Sending::new("t".into(), Arc::new(Outbox::default()));
+    sending.hold(output("a"));
+    sending.hold(output(&"a".repeat(super::sending::HELD_BYTES)));
+    let full_while_attached = sending.full();
+
+    sending.attached(false);
+    sending.hold(output(&"b".repeat(super::sending::HELD_BYTES)));
+    sending.hold(TerminalUpdate::Resized { size: TerminalSize { cols: 90, rows: 30 } });
+    let next = sending.screen_taken();
+    let full = sending.full();
+    sending.hold(TerminalUpdate::Exited(TerminalExit { code: Some(0) }));
+
+    assert!(full_while_attached);
+    assert_eq!(next, UpdateIndex::new(2), "only what came while one was attached is numbered");
+    assert!(!full, "the last client has gone, so the program isn't held back by what's held still");
+    assert_eq!(sending.screen_taken(), UpdateIndex::new(3), "the shell's end wasn't held");
+}

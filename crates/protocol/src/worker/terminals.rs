@@ -64,6 +64,25 @@ impl Request for TerminalResize {
     }
 }
 
+/// Says whether any client is attached to the terminal, so the worker sends what its program writes only while one is.
+/// While none is, it sends no output or new size, which a client that attaches takes in from the screen it's sent, and
+/// numbers none, and it still sends the shell's end. Until a hub says, as one from before this doesn't, and again after
+/// each hello, the worker takes every terminal to have a client attached. It takes this as it reads it, so a
+/// [`TerminalShow`] sent after it is answered from what follows it. It sets a state, so a hub can send it again.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct TerminalAttached {
+    pub terminal: TerminalId,
+    pub attached: bool,
+}
+
+impl Request for TerminalAttached {
+    type Reply = ();
+
+    fn into_request(self) -> WorkerRequest {
+        WorkerRequest::TerminalAttached(self)
+    }
+}
+
 /// What the terminal shows now, for a client that attaches, or one that fell behind.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct TerminalShow {

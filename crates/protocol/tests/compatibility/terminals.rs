@@ -116,6 +116,11 @@ fn every_request_a_hub_makes_of_a_workers_terminal_keeps_its_form() {
     );
     let show = worker::TerminalShow { terminal: "t".into() };
     asked(WorkerRequest::TerminalShow(show), r#"{"method":"terminal_show","terminal":"t"}"#);
+    let attached = worker::TerminalAttached { terminal: "t".into(), attached: false };
+    asked(
+        WorkerRequest::TerminalAttached(attached),
+        r#"{"method":"terminal_attached","terminal":"t","attached":false}"#,
+    );
     let stop = worker::TerminalStop { terminal: "t".into() };
     asked(WorkerRequest::TerminalStop(stop), r#"{"method":"terminal_stop","terminal":"t"}"#);
     asked(WorkerRequest::RunningTerminals, r#"{"method":"running_terminals"}"#);

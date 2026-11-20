@@ -88,7 +88,8 @@ pub enum WorkerFrame {
     },
     /// What happens next in a terminal: what its program wrote, a new size, or its end, but never a screen, which
     /// comes only in a [`TerminalShown`](super::TerminalShown). It isn't kept for a hub that isn't there, since a hub
-    /// that connects asks what the terminal shows, and that takes it in.
+    /// that connects asks what the terminal shows, and that takes it in, and output and new sizes aren't sent while the
+    /// hub says no client is attached, as [`TerminalAttached`](super::TerminalAttached) says.
     Terminal {
         terminal: TerminalId,
         /// So a hub can tell which updates come after a screen it asked for.

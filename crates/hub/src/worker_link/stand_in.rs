@@ -75,6 +75,7 @@ impl WorkerLink {
             reads: std::sync::atomic::AtomicUsize::new(0),
             process,
             tools_unserved: AtomicBool::new(false),
+            terminals_attached_untold: AtomicBool::new(false),
             held: AsyncMutex::new(None),
             acks: Acks::default(),
             left: AtomicBool::new(false),

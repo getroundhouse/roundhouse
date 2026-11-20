@@ -9,6 +9,8 @@ use protocol::model::{Terminal, TerminalId, WorkspaceId};
 use protocol::terminal::{TerminalUpdate, UpdateIndex};
 use tokio::sync::{Mutex as AsyncMutex, broadcast, watch};
 
+use super::attaching::{Clients, Telling, untold};
+
 /// The updates held for the clients attached to a terminal. One that falls further behind gets a new screen.
 pub(crate) const QUEUED_UPDATES: usize = 256;
 
@@ -38,6 +40,9 @@ pub(super) struct Open {
     pub(super) link: Option<u64>,
     pub(super) stage: Stage,
     pub(super) updates: broadcast::Sender<Numbered>,
+    /// How many clients are attached, and what its worker was last told of whether any is.
+    pub(super) clients: Clients,
+    pub(super) told: Telling,
 }
 
 pub(super) enum Stage {
@@ -56,7 +61,8 @@ pub(super) type Outcome = watch::Receiver<Option<Result<Terminal, ApiError>>>;
 
 impl Open {
     pub(super) fn new(workspace_id: WorkspaceId, link: Option<u64>, stage: Stage) -> Self {
-        Self { workspace_id, link, stage, updates: broadcast::channel(QUEUED_UPDATES).0 }
+        let (updates, clients) = (broadcast::channel(QUEUED_UPDATES).0, Clients::default());
+        Self { workspace_id, link, stage, updates, clients, told: untold() }
     }
 
     pub(super) fn record(&self) -> Option<&Terminal> {
