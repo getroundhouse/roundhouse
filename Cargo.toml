@@ -113,7 +113,7 @@ async-trait = "0.1.92"
 base64 = "0.23.1"
 # Already under objc2's crates. The block a Mac calls with whether the app may use the microphone.
 block2 = "0.6.2"
-clap = { version = "4.6.7", features = ["derive"] }
+clap = { version = "4.6.8", features = ["derive"] }
 # Hears the microphone. On a Mac it's Core Audio through objc2's bindings, with nothing generated as it builds.
 cpal = "0.18.2"
 # Already under GPUI. Picks the names the hub gives workspaces at random.
@@ -224,7 +224,7 @@ tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 two-face = { version = "0.4.5", default-features = false }
 # The one Velopack uses, with its TLS, which `fetching` fetches the update feed and dictation's model with.
 ureq = "3.5.2"
-uuid = { version = "1.29.2", features = ["v4"] }
+uuid = { version = "1.29.3", features = ["v4"] }
 # Exact, because tools/package/dotnet-tools.json pins vpk, which makes the packages this reads, to the same version.
 # `public-utils` makes public a type that its `UpdateSource` trait names, so another crate can implement it. Its
 # `file-logging` would add a log file and a panic hook, so it stays off.
