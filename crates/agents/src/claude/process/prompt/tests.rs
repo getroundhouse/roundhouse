@@ -140,3 +140,16 @@ fn images_past_what_one_prompt_takes_go_by_where_they_are() {
     assert_eq!(content[2]["text"], format!("<attachment name=\"second.png\" path=\"{}\" />", second.path));
     assert_eq!(content.len(), 3);
 }
+
+#[test]
+fn a_spoken_prompt_has_how_to_talk_in_a_block_before_its_files_and_words() {
+    let dir = tempfile::tempdir().unwrap();
+    let log = file(&dir, "build.log", MediaType::Text, b"error at line 42");
+
+    let message = user_message(&Prompt::carrying("why does this fail?", vec![log]).said_out_loud());
+
+    let said = texts(&message);
+    assert!(said[0].starts_with("(Roundhouse: the person said this out loud"), "{said:?}");
+    assert!(said[1].starts_with("<attachment name=\"build.log\""), "{said:?}");
+    assert_eq!(said[2..], ["why does this fail?"]);
+}

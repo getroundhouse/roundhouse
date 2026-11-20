@@ -106,9 +106,9 @@ impl LiveSession {
         client_msg_id: Option<ClientMessageId>,
         prompt: Prompt<AttachmentId>,
     ) -> Result<(Seq, bool, Prompt<Attachment>), ApiError> {
-        let Prompt { text, files } = prompt;
         let id = self.id.clone();
-        let prompt = Prompt::carrying(text, hub.blocking(move |store| store.attachments(&id, &files)).await?);
+        let asked = prompt.files.clone();
+        let prompt = prompt.with_files(hub.blocking(move |store| store.attachments(&id, &asked)).await?);
         let (seq, duplicate) = self.record_carrying(hub, client_msg_id, &prompt, PromptFrom::Person).await?;
         Ok((seq, duplicate, prompt))
     }

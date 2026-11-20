@@ -230,7 +230,7 @@ impl NewWorkspaceDialog {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let Prompt { text, files } = prompt;
+        let Prompt { text, files, .. } = prompt;
         if mode.is_some_and(|mode| mode.plan) {
             self.plan(true);
         }

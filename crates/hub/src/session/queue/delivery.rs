@@ -94,8 +94,8 @@ impl LiveSession {
         let id = self.id.clone();
         let ((), queued) = self
             .queue_with(move |store| {
-                let Prompt { text, files } = prompt;
-                let prompt = Prompt::carrying(text, store.attachments(&id, &files)?);
+                let files = store.attachments(&id, &prompt.files)?;
+                let prompt = prompt.with_files(files);
                 let queued =
                     store.queue_prompt(&id, &QueuedPrompt { client_msg_id, prompt, from: PromptFrom::Person })?;
                 Ok(((), queued.queuing()))

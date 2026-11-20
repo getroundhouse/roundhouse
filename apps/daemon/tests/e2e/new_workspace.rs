@@ -57,7 +57,7 @@ fn a_workspace_made_from_the_dialog_has_what_it_said_and_the_dialog_is_emptied()
         (&ModelName::named("sonnet"), Effort::Low, protocol::fixtures::plan_mode())
     );
     wait_until("the prompt", || !prompts(&client, &session.id).is_empty());
-    let [Prompt { text, files }] = prompts(&client, &session.id).try_into().unwrap();
+    let [Prompt { text, files, .. }] = prompts(&client, &session.id).try_into().unwrap();
     assert_eq!(text, "fix the login");
     assert_eq!(
         files.iter().map(|file| (&file.id, file.name.as_str())).collect::<Vec<_>>(),

@@ -90,14 +90,7 @@ fn took_nothing(error: &AgentError) -> bool {
 }
 
 async fn prompt_to(shared: &Shared, seq: Seq, prompt: &Prompt<AttachmentFile>) -> Result<(), AgentError> {
-    let mut input = vec![json!({"type":"text","text":prompt.text,"text_elements":[]})];
-    for file in &prompt.files {
-        input.push(if file.attachment.media_type.is_bitmap() {
-            json!({"type":"localImage","path":file.path})
-        } else {
-            json!({"type":"text","text":format!("Attached file: {}",file.path),"text_elements":[]})
-        });
-    }
+    let input = turn_input(prompt);
     {
         let mut state = shared.state.lock();
         if state.asking() {
@@ -291,4 +284,39 @@ pub(super) async fn report_state(shared: &Shared) {
         }
     };
     shared.event(EventBody::AgentState { state }, None).await;
+}
+
+/// What a turn is started with for `prompt`: how to talk, if it was spoken, then what it says, then its files.
+fn turn_input(prompt: &Prompt<AttachmentFile>) -> Vec<Value> {
+    let told = crate::spoken::how_to_talk(prompt).map(|told| json!({"type":"text","text":told,"text_elements":[]}));
+    let mut input: Vec<Value> = told.into_iter().collect();
+    input.push(json!({"type":"text","text":prompt.text,"text_elements":[]}));
+    for file in &prompt.files {
+        input.push(if file.attachment.media_type.is_bitmap() {
+            json!({"type":"localImage","path":file.path})
+        } else {
+            json!({"type":"text","text":format!("Attached file: {}",file.path),"text_elements":[]})
+        });
+    }
+    input
+}
+
+#[cfg(test)]
+mod tests {
+    use protocol::prompt::Prompt;
+
+    use super::turn_input;
+
+    #[test]
+    fn a_spoken_prompt_starts_its_turn_with_how_to_talk_and_a_typed_one_doesnt() {
+        let texts = |prompt: Prompt<_>| -> Vec<String> {
+            turn_input(&prompt).iter().map(|block| block["text"].as_str().unwrap().to_string()).collect()
+        };
+
+        let spoken = texts(Prompt::new("is it done?").said_out_loud());
+
+        assert!(spoken[0].starts_with("(Roundhouse: the person said this out loud"), "{spoken:?}");
+        assert_eq!(spoken[1..], ["is it done?"]);
+        assert_eq!(texts(Prompt::new("is it done?")), ["is it done?"]);
+    }
 }

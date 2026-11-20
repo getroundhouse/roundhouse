@@ -77,7 +77,7 @@ async fn a_workspace_made_from_the_dialog_has_what_it_said_and_the_dialog_is_emp
         (&session.model, session.effort.clone(), session.mode),
         (&ModelName::named("sonnet"), Effort::Low, protocol::fixtures::plan_mode())
     );
-    let [Prompt { text, files }] = prompts(&hub, &session.id).try_into().unwrap();
+    let [Prompt { text, files, .. }] = prompts(&hub, &session.id).try_into().unwrap();
     assert_eq!(text, "fix the login");
     assert_eq!(
         files.iter().map(|file| (file.id.as_str(), file.name.as_str())).collect::<Vec<_>>(),

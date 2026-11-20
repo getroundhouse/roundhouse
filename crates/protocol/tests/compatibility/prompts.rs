@@ -36,6 +36,15 @@ fn a_prompt_sent_keeps_its_form() {
         ClientRequest::SessionPrompt(agent::SessionPrompt { id: "s".into(), client_msg_id: Some("m".into()), prompt });
     keeps_its_json_form(&sent, &ClientFrame { id: 1, request });
 
+    // One said out loud says so, and one typed leaves it out, as above, so a prompt from before was typed.
+    let spoken = json!({"id": 1, "request": {
+        "method": "session_prompt", "id": "s", "client_msg_id": "m", "text": "is it done?", "spoken": true,
+    }});
+    let prompt = Prompt::new("is it done?").said_out_loud();
+    let request =
+        ClientRequest::SessionPrompt(agent::SessionPrompt { id: "s".into(), client_msg_id: Some("m".into()), prompt });
+    keeps_its_json_form(&spoken, &ClientFrame { id: 1, request });
+
     // As a client from before attachments, or one that sends no ID, writes it.
     let older = br#"{"id":2,"request":{"method":"session_prompt","id":"s","text":"hi","client_msg_id":null}}"#;
     let request = ClientRequest::SessionPrompt(agent::SessionPrompt {
