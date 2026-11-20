@@ -1,3 +1,4 @@
+# Changed in Roundhouse's copy of gpui-kit, as third_party/README.md lists.
 [package]
 description = "GPUI Component: the styled component library of GPUI Kit, with 60+ desktop UI components for GPUI."
 keywords = ["desktop", "gpui", "shadcn", "ui", "uikit"]
@@ -204,7 +205,7 @@ tree-sitter-yaml = { version = "0.7.1", optional = true }
 tree-sitter-zig = { version = "1.1.2", optional = true }
 
 [target.'cfg(target_os = "macos")'.dependencies]
-core-text = "=21.0.0"
+core-text = "=22.0.0"
 # Native menu (NativeMenu) — drives AppKit NSMenu via objc2.
 raw-window-handle = { workspace = true }
 objc2 = "0.6"

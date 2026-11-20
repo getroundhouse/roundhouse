@@ -1429,6 +1429,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "core-graphics"
+version = "0.25.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "064badf302c3194842cf2c5d61f56cc88e54a759313879cdf03abdd27d0c3b97"
+dependencies = [
+ "bitflags 2.13.2",
+ "core-foundation 0.10.1",
+ "core-graphics-types 0.2.0",
+ "foreign-types",
+ "libc",
+]
+
+[[package]]
 name = "core-graphics-helmer-fork"
 version = "0.24.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1473,6 +1486,17 @@ dependencies = [
  "core-graphics 0.24.0",
  "foreign-types",
  "libc",
+]
+
+[[package]]
+name = "core-text"
+version = "22.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "333dab512ce710ca2d08574c373d246dbeac8b22769e47da4c0e72730ce442b7"
+dependencies = [
+ "core-foundation 0.10.1",
+ "core-graphics 0.25.0",
+ "foreign-types",
 ]
 
 [[package]]
@@ -2859,7 +2883,7 @@ version = "0.10.0"
 dependencies = [
  "anyhow",
  "chrono",
- "core-text",
+ "core-text 22.0.0",
  "enum-iterator",
  "gpui-base",
  "gpui-component-macros",
@@ -2995,7 +3019,7 @@ dependencies = [
  "core-foundation 0.10.1",
  "core-foundation-sys",
  "core-graphics 0.24.0",
- "core-text",
+ "core-text 21.0.0",
  "dispatch2",
  "etagere",
  "futures",
@@ -3328,8 +3352,6 @@ dependencies = [
 [[package]]
 name = "gpui-pre-apple"
 version = "0.3.12"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a460605ec4e8cbcc9b213462a84b1d6cc3efe4ed8f0e18669659f07b2d5c6aec"
 dependencies = [
  "anyhow",
  "async-task",
@@ -3337,8 +3359,8 @@ dependencies = [
  "cbindgen",
  "core-foundation 0.10.1",
  "core-foundation-sys",
- "core-graphics 0.24.0",
- "core-text",
+ "core-graphics 0.25.0",
+ "core-text 22.0.0",
  "dispatch2",
  "etagere",
  "futures",
@@ -11277,14 +11299,12 @@ dependencies = [
 [[package]]
 name = "zed-font-kit"
 version = "0.14.1-zed"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a3898e450f36f852edda72e3f985c34426042c4951790b23b107f93394f9bff5"
 dependencies = [
  "bitflags 2.13.2",
  "byteorder",
  "core-foundation 0.10.1",
- "core-graphics 0.24.0",
- "core-text",
+ "core-graphics 0.25.0",
+ "core-text 22.0.0",
  "dirs 5.0.1",
  "dwrote",
  "float-ord",

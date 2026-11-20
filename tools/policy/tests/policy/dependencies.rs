@@ -175,6 +175,31 @@ fn gpui_pre_apple_is_the_kit_s_gpui() {
     assert_eq!(locked("gpui-pre-apple"), gpui, "run `cargo run -p kit-sync`, which moves gpui-pre-apple");
 }
 
+/// Each crate copied whole into `third_party/`, as that folder's README says, is the one every build takes, rather than
+/// the release on crates.io. A copy whose version no longer matches what's asked for, such as GPUI's after
+/// `tools/kit-sync` moves it, only has Cargo warn that the patch went unused, and the build takes the release without
+/// our changes. GPUI's copies are on the GPUI the app builds, since each would have types of its own.
+#[test]
+fn every_copied_crate_is_the_one_the_app_builds() {
+    let root = Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."));
+    let lock: toml::Table = std::fs::read_to_string(root.join("Cargo.lock")).unwrap().parse().unwrap();
+    let gpui = locked("gpui-pre");
+    for (name, folder, on_gpui) in [("gpui-pre-apple", "gpui-pre-apple", true), ("zed-font-kit", "zed-font-kit", false)]
+    {
+        let manifest: toml::Table =
+            std::fs::read_to_string(root.join("third_party").join(folder).join("Cargo.toml")).unwrap().parse().unwrap();
+        let copy = manifest["package"]["version"].as_str().unwrap();
+        let built: Vec<_> = (lock["package"].as_array().unwrap().iter())
+            .filter(|package| package["name"].as_str() == Some(name))
+            .map(|package| (package["version"].as_str().unwrap(), package.get("source").is_none()))
+            .collect();
+        assert_eq!(built, [(copy, true)], "the app builds {name} from crates.io, not the copy in third_party/{folder}");
+        if on_gpui {
+            assert_eq!(gpui, [copy], "third_party/{folder} isn't on the GPUI the app builds: take its release again");
+        }
+    }
+}
+
 /// The copy of gpui-kit is on the release `tools/kit-sync` pins, with only the patches in `third_party/gpui-kit/patches`
 /// on top, notices on the files they change, and no conflict left to settle, so neither an unfinished sync nor an
 /// unrecorded change to the copy can merge.

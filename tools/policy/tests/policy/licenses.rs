@@ -48,6 +48,10 @@ const VENDORED: &[(&str, &str, &str, &[&str])] = &[
     ("third_party/gpui-kit/vendor", "LICENSE-APACHE", "Apache-2.0", APACHE),
     ("third_party/gpui-kit/vendor/crates/base", "LICENSE-APACHE", "Apache-2.0", APACHE),
     ("third_party/gpui-kit/vendor/crates/component", "LICENSE-APACHE", "Apache-2.0", APACHE),
+    // GPUI's crates and Zed's font-kit that the apps build from copies, as `third_party/README.md` says.
+    ("third_party/gpui-pre-apple", "LICENSE-APACHE", "Apache-2.0", APACHE),
+    ("third_party/zed-font-kit", "LICENSE-APACHE", "MIT OR Apache-2.0", APACHE),
+    ("third_party/zed-font-kit", "LICENSE-MIT", "MIT OR Apache-2.0", &["Permission is hereby granted, free of charge"]),
     // The icons the kit draws, which are Lucide's, but those Lucide took from Feather, which are under MIT.
     ("third_party/gpui-kit/vendor/crates/assets", "LICENSE-LUCIDE", "ISC AND MIT", &["ISC License", "The MIT License"]),
 ];
