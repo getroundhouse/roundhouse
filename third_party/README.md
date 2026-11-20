@@ -1,6 +1,6 @@
 # Code from other projects
 
-Other projects' code that the app builds from a copy kept here, on a release of the project's own, with our changes on top. There's one, gpui-kit, in `gpui-kit/`.
+Other projects' code that the apps build from a copy kept here, on a release of the project's own, with our changes on top: gpui-kit, in `gpui-kit/`, and two crates of GPUI's and Zed's, in `gpui-pre-apple/` and `zed-font-kit/`.
 
 ## gpui-kit
 
@@ -84,3 +84,20 @@ Renovate opens a pull request for each new release, on its weekly schedule. It c
 | `inline-object-fallback-line.patch` | An inline object drawn as its text is as tall as the flow's body line, snapped to device pixels, rather than `line_height_in_pixels`, which rounds to whole ones | `crates/base/src/text/inline_object.rs` | A custom node a plugin leaves as text, such as a link to a pull request the hub hasn't found, made its line half a pixel taller at 2x, so a reply that linked to one moved everything under it | Not offered yet |
 | `markdown-link-node.patch` | A node an inline plugin makes of a link keeps the link's mark, so it's drawn and opened as that link, and its own Markdown is the link's words, around which the mark writes the link | `crates/base/src/text/format/markdown.rs` | A plugin that made a node of a link lost the link, so the node, drawn as its text, was neither coloured nor opened as one, and a copy as Markdown lost where it went. The transcript makes a node of a link to an issue or a pull request, to draw it as a chip, and leaves it the link while it's looked up | Not offered yet |
 | `layout-direction-fmt.patch` | Formats `LogicalStyledExt`'s `logical_edge!` calls with `rustfmt` | `crates/base/src/layout_direction.rs` | `v0.10.0` shipped `layout_direction.rs` unformatted under upstream's `.rustfmt.toml`, which `cargo fmt --all --check` checks | Drops once upstream formats it |
+| `core-text-22.patch` | `gpui-component` pins `core-text` 22.0.0 rather than 21.0.0 | `crates/component/Cargo.toml` | GPUI's copy of its text system, below, is on 22, which reads a font trait CoreText gives as a boolean. The kit pins it on macOS without using it, so the pin only keeps one `core-text` in the build | Drops once upstream's GPUI is on 22, as the kit follows it |
+
+## GPUI's and Zed's crates
+
+Two crates the apps build from crates.io are kept here as copies, each at the release the app's `Cargo.toml` asks for, which it puts in place of the published one under `[patch.crates-io]`:
+
+- `gpui-pre-apple/`, GPUI's text system for Apple's systems, which both apps build.
+- `zed-font-kit/`, Zed's fork of Servo's font-kit, which that text system finds and loads fonts with.
+
+They're copied whole and changed in place, rather than patched as the kit is, since their changes are few and each goes once a release has it. Each is marked `Changed for Roundhouse` where it's made, with why. Taking a new release, as `tools/kit-sync` moves GPUI with the kit, means replacing each GPUI copy with the release's crate, and making again each change it doesn't have yet. The policy test fails while the app builds a release rather than a copy, which is what Cargo does, with only a warning, when the two versions differ.
+
+### Our changes
+
+| Change | Copy | Files | Why | Upstream |
+|---|---|---|---|---|
+| `core-text` 22 and the `core-graphics` 0.25 it takes, rather than 21 and 0.24 | `gpui-pre-apple`, `zed-font-kit` | `Cargo.toml` | CoreText gives a font's trait that's zero as a boolean on iOS, as macOS Ventura does for some fonts, and 21 panics reading it. 22 reads it as 0 or 1 | Zed's Renovate update to 22 waits for approval |
+| A trait CoreText gives as a boolean counts as read | `gpui-pre-apple` | `src/text_system.rs` | The text system skipped any face whose traits weren't all numbers, to avoid 21's panic. Every face of Menlo has one on iOS, so none loaded, and with no font found GPUI stopped the app | Not offered yet |

@@ -65,9 +65,15 @@ default-members = [
     "tools/stand-ins/recording-adapter",
     "tools/stand-ins/stand-in-hub",
 ]
-# The mobile proof of concept is a standalone project with its own lockfiles and pinned GPUI snapshots. The copy of
-# gpui-kit is upstream's workspace, cut down, whose crates keep upstream's manifests and lints rather than ours.
-exclude = ["mobile-poc", "third_party/gpui-kit/vendor"]
+# The mobile proof of concept is a standalone project with its own lockfiles and pinned GPUI snapshots. The copies in
+# `third_party/` are upstream's code, gpui-kit's its workspace cut down, and each keeps upstream's manifests and lints
+# rather than ours.
+exclude = [
+    "mobile-poc",
+    "third_party/gpui-kit/vendor",
+    "third_party/gpui-pre-apple",
+    "third_party/zed-font-kit",
+]
 
 [workspace.package]
 version = "0.1.0"
@@ -271,3 +277,9 @@ debug = "line-tables-only"
 [profile.dev.package."*"]
 opt-level = 2
 debug = false
+
+# Our copies of GPUI's Apple text system and Zed's font-kit, with the changes `third_party/README.md` lists, in place
+# of the ones on crates.io.
+[patch.crates-io]
+gpui-pre-apple = { path = "third_party/gpui-pre-apple" }
+zed-font-kit = { path = "third_party/zed-font-kit" }

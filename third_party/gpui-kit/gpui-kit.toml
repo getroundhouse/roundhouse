@@ -30,4 +30,5 @@ patches = [
     "a11y-disabled-ext",
     "inline-object-fallback-line",
     "markdown-link-node",
+    "core-text-22",
 ]
