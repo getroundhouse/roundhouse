@@ -1,52 +1,52 @@
-//! What `MediaRemote` says of the Now Playing app, and what pausing it and playing it again decide from that.
+//! What the system says of the app the keyboard's media keys control, and what pausing it and playing it again decide
+//! from that, on every platform that pauses, by whatever names an app there: a Mac's Now Playing app by its process,
+//! and Windows' current media session by its app.
 
 use std::time::{Duration, Instant};
 
-/// The Now Playing app, as `MediaRemote` says it is at one moment.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct NowPlaying {
-    /// `None` while no app is the Now Playing app.
-    pub(crate) app: Option<App>,
+/// How long a pause is given to show in what the system says, which a player does in a moment.
+#[cfg(any(target_os = "macos", windows))]
+pub(crate) const PAUSE_SHOWS_WITHIN: Duration = Duration::from_secs(2);
+
+/// How often the system is asked meanwhile.
+#[cfg(any(target_os = "macos", windows))]
+pub(crate) const ASKED_EVERY: Duration = Duration::from_millis(20);
+
+/// The app the media keys control, as the system says it is at one moment.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct NowPlaying<A> {
+    /// `None` while no app is.
+    pub(crate) app: Option<A>,
     pub(crate) playing: bool,
 }
 
-/// An app, by the ID of its process, as `MediaRemote` names the Now Playing app.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct App(i32);
-
-impl App {
-    /// The app `MediaRemote` names with `pid`, which is 0 when it names none.
-    pub(crate) fn from_pid(pid: i32) -> Option<Self> {
-        (pid > 0).then_some(Self(pid))
-    }
-}
-
-impl NowPlaying {
-    /// The app to pause, which is the Now Playing app while it plays.
-    pub(crate) fn to_pause(self) -> Option<App> {
+impl<A: PartialEq> NowPlaying<A> {
+    /// The app to pause, which is the app while it plays.
+    pub(crate) fn app_to_pause(self) -> Option<A> {
         self.app.filter(|_| self.playing)
     }
 
-    /// Whether to play `paused` again, which is only while it's still the Now Playing app and isn't playing. So an app
-    /// that has taken its place isn't started, and one played again meanwhile is left as it is.
-    pub(crate) fn plays_again(self, paused: App) -> bool {
-        self.app == Some(paused) && !self.playing
+    /// Whether to play `paused` again, which is only while it's still the app the media keys control and isn't
+    /// playing. So an app that has taken its place isn't started, and one played again meanwhile is left as it is.
+    pub(crate) fn plays_again(&self, paused: &A) -> bool {
+        self.app.as_ref() == Some(paused) && !self.playing
     }
 
     /// Whether `paused` still shows as playing, as the system goes on saying for a moment after the pause is sent.
-    fn shows_playing(self, paused: App) -> bool {
-        self.app == Some(paused) && self.playing
+    fn shows_playing(&self, paused: &A) -> bool {
+        self.app.as_ref() == Some(paused) && self.playing
     }
 }
 
-/// Waits until `now` no longer says `paused` plays, asking every `every`, for no longer than `within`. The system says
-/// an app has paused a moment after the pause is sent, so without this, a dictation let go of at once would find what
-/// it paused still playing, and leave it paused. Returns at once where `now` can't say. An app still playing after
-/// `within` is taken not to have paused, so there's nothing to play again.
+/// Waits until `now` no longer says `paused` plays, asking every `every`, for no longer than `within`, which a platform
+/// that pauses gives as `ASKED_EVERY` and `PAUSE_SHOWS_WITHIN`. The system says an app has paused a moment after the
+/// pause is sent, so without this, a dictation let go of at once would find what it paused still playing, and leave it
+/// paused. Returns at once where `now` can't say. An app still playing after `within` is taken not to have paused, so
+/// there's nothing to play again.
 #[expect(clippy::disallowed_methods, reason = "the pace the system is asked at while a pause takes")]
-pub(crate) fn wait_until_paused(
-    paused: App,
-    mut now: impl FnMut() -> Option<NowPlaying>,
+pub(crate) fn wait_until_paused<A: PartialEq>(
+    paused: &A,
+    mut now: impl FnMut() -> Option<NowPlaying<A>>,
     every: Duration,
     within: Duration,
 ) {
@@ -61,10 +61,10 @@ mod tests {
     use std::cell::Cell;
     use std::time::Duration;
 
-    use super::{App, NowPlaying, wait_until_paused};
+    use super::{NowPlaying, wait_until_paused};
 
-    const MUSIC: App = App(501);
-    const BROWSER: App = App(502);
+    const MUSIC: &str = "music";
+    const BROWSER: &str = "browser";
 
     #[test]
     fn only_an_app_that_plays_is_paused() {
@@ -75,7 +75,7 @@ mod tests {
         ];
 
         for (now, paused) in cases {
-            assert_eq!(now.to_pause(), paused, "{now:?}");
+            assert_eq!(now.clone().app_to_pause(), paused, "{now:?}");
         }
     }
 
@@ -89,19 +89,19 @@ mod tests {
         ];
 
         for (now, plays) in cases {
-            assert_eq!(now.plays_again(MUSIC), plays, "{now:?}");
+            assert_eq!(now.plays_again(&MUSIC), plays, "{now:?}");
         }
     }
 
     /// How many times `wait_until_paused` asks, given what the system says each time, and how long it's given.
-    fn asked(says: &[Option<NowPlaying>], within: Duration) -> usize {
+    fn asked(says: &[Option<NowPlaying<&'static str>>], within: Duration) -> usize {
         let asked = Cell::new(0);
         let now = || {
             asked.set(asked.get() + 1);
-            says.get(asked.get() - 1).copied().flatten()
+            says.get(asked.get() - 1).cloned().flatten()
         };
 
-        wait_until_paused(MUSIC, now, Duration::ZERO, within);
+        wait_until_paused(&MUSIC, now, Duration::ZERO, within);
 
         asked.get()
     }
@@ -113,15 +113,9 @@ mod tests {
         let another = Some(NowPlaying { app: Some(BROWSER), playing: true });
         let long = Duration::from_secs(60);
 
-        assert_eq!(asked(&[playing, playing, paused], long), 3, "until it shows paused");
-        assert_eq!(asked(&[playing, another], long), 2, "until another app takes its place");
-        assert_eq!(asked(&[playing, None], long), 2, "until the system can't say");
-        assert_eq!(asked(&[playing, playing, playing], Duration::ZERO), 1, "no longer than it's given");
-    }
-
-    #[test]
-    fn no_process_is_no_app() {
-        assert_eq!(App::from_pid(0), None);
-        assert_eq!(App::from_pid(501), Some(MUSIC));
+        assert_eq!(asked(&[playing.clone(), playing.clone(), paused], long), 3, "until it shows paused");
+        assert_eq!(asked(&[playing.clone(), another], long), 2, "until another app takes its place");
+        assert_eq!(asked(&[playing.clone(), None], long), 2, "until the system can't say");
+        assert_eq!(asked(&[playing.clone(), playing.clone(), playing], Duration::ZERO), 1, "no longer than it's given");
     }
 }

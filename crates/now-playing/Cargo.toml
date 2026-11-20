@@ -6,5 +6,9 @@ edition.workspace = true
 publish.workspace = true
 license.workspace = true
 
+# The media sessions, pausing the one the media keys control, through WinRT.
+[target.'cfg(windows)'.dependencies]
+windows = { workspace = true, features = ["Media_Control"] }
+
 [lints]
 workspace = true

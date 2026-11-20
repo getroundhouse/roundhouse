@@ -16,3 +16,4 @@ macOS has no public way to pause another app's music or video. MediaRemote, the 
 - Apple can close the route in any update, by no longer answering perl, by stopping perl loading a library, or by taking perl out of macOS, as it took Python 2 out in macOS 12.3. Then the switch pauses nothing, and says nothing.
 - `now-playing`'s Mac code uses no crates, since its build script compiles the crate a second time with `rustc` alone, as the library perl loads. So it lays out MediaRemote's callbacks itself, in unsafe code. Cargo compiles the part perl runs only into the crate's tests, where its lints and tests run.
 - A Mac's package carries the library beside the binaries, which `tools/build.sh` puts there, and `tools/package/package.sh` checks is signed with them.
+- Windows has a public API for media sessions, so it needs no helper. `now-playing` pauses through it in the app, by the same rule for playing again that perl follows on a Mac.
