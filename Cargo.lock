@@ -1870,6 +1870,7 @@ dependencies = [
  "update-feed",
  "velopack",
  "waiting",
+ "windows-icon",
  "windows-sys 0.61.2",
  "worker",
 ]
@@ -6805,6 +6806,7 @@ name = "policy"
 version = "0.1.0"
 dependencies = [
  "kit-sync",
+ "proc-macro2",
  "serde_json",
  "toml 1.2.1+spec-1.1.0",
 ]
@@ -10468,6 +10470,13 @@ dependencies = [
  "windows-core 0.62.2",
  "windows-link 0.2.1",
  "windows-threading 0.2.1",
+]
+
+[[package]]
+name = "windows-icon"
+version = "0.1.0"
+dependencies = [
+ "proptest",
 ]
 
 [[package]]

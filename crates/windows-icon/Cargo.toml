@@ -1,0 +1,13 @@
+[package]
+name = "windows-icon"
+description = "Turns an .ico into the compiled resource file, a .res, that a Windows program carries its icon in, as rc.exe would, so building for Windows needs no resource compiler. The desktop app's build script uses it."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+license.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true
+
+[lints]
+workspace = true
