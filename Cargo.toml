@@ -109,8 +109,8 @@ kit-sync = { path = "tools/kit-sync" }
 
 anyhow = "1.0.104"
 async-trait = "0.1.92"
-# Already under GPUI. Carries an attachment's bytes as text, the way JSON has to.
-base64 = "0.22.1"
+# Already under ureq. Carries an attachment's bytes as text, the way JSON has to.
+base64 = "0.23.1"
 # Already under objc2's crates. The block a Mac calls with whether the app may use the microphone.
 block2 = "0.6.2"
 clap = { version = "4.6.7", features = ["derive"] }
