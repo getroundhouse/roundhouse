@@ -26,6 +26,7 @@ A decision record holds one large, one-off choice among real alternatives, such 
 | [linux-appimage.md](linux-appimage.md) | The Linux app is an AppImage |
 | [publish-every-merge.md](publish-every-merge.md) | Every merge to `main` is published, as version `0.1.<commits on main>` |
 | [hub-runs-from-its-own-copy.md](hub-runs-from-its-own-copy.md) | A hub that a client starts runs from a copy of the daemon outside the app's install directory |
+| [hub-package.md](hub-package.md) | A hub on a machine of its own is installed from an archive as a service, and a client updates it. Not built |
 | [no-strong-copyleft.md](no-strong-copyleft.md) | Nothing that ships is under GPL, AGPL or LGPL |
 | [gpui-not-web-view.md](gpui-not-web-view.md) | The desktop app is native Rust on GPUI, not a web view |
 | [gpui-kit.md](gpui-kit.md) | The apps are built on gpui-kit, Longbridge's component kit for GPUI |
