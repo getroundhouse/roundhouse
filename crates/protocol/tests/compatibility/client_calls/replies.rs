@@ -14,8 +14,8 @@ use protocol::fixtures;
 use protocol::model::{
     Account, CompactionLine, DiffComment, DiffSide, FileContents, FileOpened, FilePages, GhLogin, GhLoginWorks,
     GitDiff, GitStatus, GithubAccount, GithubLoginKind, GithubSettings, GithubSignIn, GithubUser, GithubUserId,
-    HeldGithubLogin, HubSettings, NewWorkspaceDraft, Place, PromptLine, Records, Repo, Reserve, Rev, Seq,
-    SessionAccount, WorktreeFiles,
+    HeldGithubLogin, HubSettings, MachineLogins, NewWorkspaceDraft, Place, PromptLine, Records, Repo, Reserve, Rev,
+    Seq, SessionAccount, SshLogin, WorktreeFiles,
 };
 
 use super::answered;
@@ -46,15 +46,17 @@ fn a_hubs_settings_keep_their_form_and_one_from_a_hub_from_before_says_nothing_o
             account: Some("g".into()),
             sent: None,
             left_to_machine: Vec::new(),
+            set_up: Vec::new(),
         }))),
         r#"{"result":"hub_settings","keep_awake":false,"allow_asked_in_full_access":true,"github":{"account":"g"},"rev":3}"#,
     );
-    // Each machine's own login the default, on a hub that keeps GitHub accounts.
+    // No default, on a hub that keeps GitHub accounts.
     answered(
         ClientResponse::HubSettings(settings(Some(GithubSettings {
             account: None,
             sent: None,
             left_to_machine: Vec::new(),
+            set_up: Vec::new(),
         }))),
         r#"{"result":"hub_settings","keep_awake":false,"allow_asked_in_full_access":true,"github":{"account":null},"rev":3}"#,
     );
@@ -103,6 +105,21 @@ fn who_gh_on_the_hubs_machine_is_keeps_its_form() {
         r#"{"result":"gh_login","state":"logged_in","username":"ada","works":"yes"}"#,
     );
     answered(ClientResponse::GhLogin(GhLogin::LoggedOut), r#"{"result":"gh_login","state":"logged_out"}"#);
+}
+
+/// Who `gh` and the SSH key on the hub's machine are, with `gh` left out when the hub couldn't tell.
+#[test]
+fn who_gh_and_the_ssh_key_on_the_hubs_machine_are_keeps_its_form() {
+    let gh = GhLogin::LoggedIn { username: "ada".into(), works: GhLoginWorks::Yes };
+    let ssh = SshLogin::Key { username: "ada".into() };
+    answered(
+        ClientResponse::MachineLogins(MachineLogins { gh: Some(gh), ssh }),
+        r#"{"result":"machine_logins","gh":{"state":"logged_in","username":"ada","works":"yes"},"ssh":{"state":"key","username":"ada"}}"#,
+    );
+    answered(
+        ClientResponse::MachineLogins(MachineLogins { gh: None, ssh: SshLogin::CouldntTell }),
+        r#"{"result":"machine_logins","ssh":{"state":"couldnt_tell"}}"#,
+    );
 }
 
 #[test]

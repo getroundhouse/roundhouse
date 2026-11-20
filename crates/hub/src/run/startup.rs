@@ -57,7 +57,6 @@ pub(super) fn recover(store: &Store) -> Result<LeftHalfDone, StoreError> {
     store.fail_interrupted_setups()?;
     store.end_waiting_github_sign_ins()?;
     store.forget_worker_builds()?;
-    store.forget_found_github_logins()?;
     store.github_reach_left_by_the_last_run()?;
     let moves = store.moves_left()?;
     for workspace in store.take_unfinished_workspaces()? {
@@ -113,7 +112,8 @@ fn load_providers(
     let hub_id = store.hub_id().map_err(HubError::OpenDatabase)?;
     let providers = ProviderSet::load(local, &paths.providers, &hub_id, build, timers.adapter_hello_within);
     // Before any client reads the settings, so none is told of the providers an earlier run had.
-    store.record_github_left_to_machine(&providers.left_to_machine()).map_err(HubError::OpenDatabase)?;
+    let (left, set_up) = (providers.left_to_machine(), providers.set_up_github());
+    store.record_github_providers(&left, &set_up).map_err(HubError::OpenDatabase)?;
     Ok(providers)
 }
 

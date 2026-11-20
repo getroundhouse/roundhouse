@@ -27,8 +27,10 @@ pub struct HubSettings {
 /// What the settings of a hub that keeps GitHub accounts say of them.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct GithubSettings {
-    /// The default: the [`GithubAccount`](super::GithubAccount) agents push and open pull requests as, on every
-    /// provider where Roundhouse sets up GitHub, for every repository on GitHub. `None` is each machine's own login. Connecting the first GitHub account
+    /// The default: the [`GithubAccount`](super::GithubAccount) the hub reads GitHub as, and agents push and open pull
+    /// requests as, on every provider where Roundhouse sets up GitHub, for every repository on GitHub. `None` is none,
+    /// so the hub reads nothing of GitHub, which a hub from before it had an identity of its own took as each machine's
+    /// own login. Connecting the first GitHub account
     /// the hub has a record of makes it the default. Otherwise only
     /// [`GithubAccountSetDefault`](crate::client::github_accounts::GithubAccountSetDefault) changes it, so a default
     /// whose login is disconnected or has ended stays the default, holding no login that can be used, until it's
@@ -46,6 +48,10 @@ pub struct GithubSettings {
     /// given the default. Empty from a hub from before it said, which gave the default to every worker. *Unconfirmed.*
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub left_to_machine: Vec<ProviderName>,
+    /// The providers whose machines Roundhouse sets up GitHub on, in the order the hub has them, so Settings' Providers
+    /// lists each. Empty from a hub from before it said. *Unconfirmed.*
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub set_up: Vec<ProviderName>,
 }
 
 impl GithubSettings {

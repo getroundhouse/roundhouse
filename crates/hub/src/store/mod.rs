@@ -19,7 +19,6 @@ mod drafts;
 mod error;
 mod events;
 mod find;
-mod found_github_logins;
 mod github_accounts;
 mod github_apps;
 mod github_reach;

@@ -28,7 +28,8 @@ impl World {
             new_workspace_draft: None,
             github_accounts: self.github_accounts.clone(),
             github_sign_ins: self.github_sign_ins.clone(),
-            found_github_logins: self.found_github_logins.clone(),
+            // As from a hub since Settings' Providers.
+            found_github_logins: Vec::new(),
             github_apps: self.github_apps.clone(),
             github_reach: self.github_reach.clone(),
             terminals: self.terminals.iter().map(|(terminal, _)| terminal.clone()).collect(),

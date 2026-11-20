@@ -65,8 +65,12 @@ pub(super) fn holding_logins(accounts: Vec<Account>) -> World {
 pub(super) fn with_ada(world: &mut World) -> GithubAccount {
     let ada = github_account("github-0001");
     let sent = SentCredential::Account { account: ada.id.clone() };
-    world.github =
-        Some(GithubSettings { account: Some(ada.id.clone()), sent: Some(sent), left_to_machine: Vec::new() });
+    world.github = Some(GithubSettings {
+        account: Some(ada.id.clone()),
+        sent: Some(sent),
+        left_to_machine: Vec::new(),
+        set_up: Vec::new(),
+    });
     world.github_accounts = vec![ada.clone()];
     ada
 }

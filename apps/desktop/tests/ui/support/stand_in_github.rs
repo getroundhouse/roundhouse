@@ -4,11 +4,15 @@
 #![cfg(test)]
 
 use hub::{GithubAnswer, GithubPullRequests, GithubScript, GithubStandIn};
-use protocol::model::WorkspaceId;
+use protocol::model::{GithubToken, WorkspaceId};
 
 use super::hub_ahead::HubAhead;
 use super::stand_in_gh::StandInGh;
 use super::{Stack, Ui, git, hub_environment};
+
+/// The token the hub reading a stand-in for GitHub is given, as its default account's, `ada`'s, which `gh` there uses
+/// too.
+const TOKEN: &str = "gho_made_up_for_ada";
 
 /// The hub, and the stand-in it calls, which serves until the test ends. The hub is stopped first, as the fields are
 /// dropped in order, so it never calls a stand-in that has gone.
@@ -29,9 +33,9 @@ impl Stack {
 }
 
 /// The hub, which reads the pull requests of example/project from a stand-in for GitHub that answers from
-/// `pull_requests`, as they are when it's asked, with the token the machine's own `gh` hands it. That `gh` is a stand-in
-/// too, as [`Stack::start_hub_with_stand_in_gh`] starts one, but logged in. The hub goes first, as with
-/// [`StandInGithub`].
+/// `pull_requests`, as they are when it's asked, as its default GitHub account, `ada`, whose token it was given. The
+/// machine's own `gh` is a stand-in too, logged in as `ada`, so nothing an agent asks `gh` reaches GitHub. The hub goes
+/// first, as with [`StandInGithub`].
 pub(crate) struct ReadingStandInGithub {
     _gh: StandInGh,
     pub(crate) pull_requests: GithubPullRequests,
@@ -46,8 +50,8 @@ impl Stack {
         git(&self.repo(), &["remote", "add", "origin", "https://github.com/example/project.git"]);
         let serving = tokio::runtime::Runtime::new().unwrap();
         let pull_requests = GithubPullRequests::default();
-        // As GitHub knows the token the machine's own `gh` hands the hub, so the hub keeps it.
-        let users = vec![("gho_made_up_for_ada", GithubAnswer::user(1, "ada", None))];
+        // As GitHub knows the token the hub is given as its default account's.
+        let users = vec![(TOKEN, GithubAnswer::user(1, "ada", None))];
         let script = GithubScript { users, pull_requests: Some(pull_requests.clone()), ..GithubScript::default() };
         let github = serving.block_on(GithubStandIn::with(script));
         // Logged in as ada, as `gh` 2.103 prints it, with only what's read of it, and the token it uses for that.
@@ -56,6 +60,7 @@ impl Stack {
         let mut environment = hub_environment();
         environment.set(protocol::paths::ENV_TEST_GITHUB_API, github.api());
         let gh = self.start_hub_with_gh(&mut environment, logged_in);
+        self.client().github_account_connect(GithubToken::new(TOKEN), None).unwrap();
         ReadingStandInGithub { _gh: gh, pull_requests, _github: github, _serving: serving }
     }
 }

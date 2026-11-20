@@ -51,7 +51,7 @@ pub(super) fn installation_menu(
     let mut items = Vec::new();
     if !default {
         let id = account.id.clone();
-        let act: Act = Rc::new(move |kept, _, cx| kept.make_default(Some(id.clone()), cx));
+        let act: Act = Rc::new(move |kept, _, cx| kept.make_default(id.clone(), cx));
         items.push(Item { label: "Make default", off: !works, act });
     }
     if account.held_login.is_some() {

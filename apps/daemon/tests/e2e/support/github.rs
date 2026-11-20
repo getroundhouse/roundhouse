@@ -3,7 +3,8 @@
 
 use client_core::Client;
 use hub::{GithubAnswer, GithubPullRequestState, GithubPullRequests, GithubScript, GithubStandIn};
-use protocol::model::{Session, Workspace};
+use protocol::client::github_accounts::GithubAccountConnect;
+use protocol::model::{GithubToken, Session, Workspace};
 use protocol::paths::ENV_TEST_GITHUB_API;
 
 use super::gh::{LOGGED_IN_AS, LOGGED_IN_WITH, StandInGh};
@@ -20,7 +21,7 @@ impl StandInGithub {
     pub(crate) fn start() -> Self {
         let runtime = tokio::runtime::Runtime::new().unwrap();
         let pull_requests = GithubPullRequests::default();
-        // As GitHub knows the token the machine's own `gh` hands the hub, so the hub keeps it.
+        // As GitHub knows the token a stack's hub is given as its default account's.
         let users = vec![(LOGGED_IN_WITH, GithubAnswer::user(1, LOGGED_IN_AS, None))];
         let script = GithubScript { users, pull_requests: Some(pull_requests.clone()), ..GithubScript::default() };
         let stand_in = runtime.block_on(GithubStandIn::with(script));
@@ -61,12 +62,14 @@ impl StandInGithub {
         self.pull_requests.release();
     }
 
-    /// A stack whose hub reads GitHub from this, whose repository's `origin` is example/project on github.com, and
-    /// whose machine's own `gh` is a stand-in, which hands the hub the token it reads with while that's the default.
+    /// A stack whose hub reads GitHub from this, as its default account, whose token is [`LOGGED_IN_WITH`], whose
+    /// repository's `origin` is example/project on github.com, and whose machine's own `gh` is a stand-in.
     pub(crate) fn stack(&self) -> (Stack, StandInGh) {
         let mut stack = Stack::start_with(vec![(ENV_TEST_GITHUB_API, self.stand_in.api())]);
         git(&stack.repo(), &["remote", "add", "origin", "https://github.com/example/project.git"]);
         let gh = StandInGh::start(&mut stack);
+        let connect = GithubAccountConnect { token: GithubToken::new(LOGGED_IN_WITH), id: None };
+        stack.client().call(connect).unwrap();
         (stack, gh)
     }
 }

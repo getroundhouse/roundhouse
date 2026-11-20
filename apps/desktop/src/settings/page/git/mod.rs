@@ -1,8 +1,8 @@
-//! Git, the page of the GitHub accounts agents push and open pull requests as, in two lists. Added has the accounts the
-//! person gave the hub, by signing in with GitHub, with a token, or as an app of your own's installation, one of which
-//! can be the default, which git and gh use for github.com on every provider where Roundhouse sets up GitHub, and each
-//! app installed nowhere yet. Found has the `gh` login each provider's machines already have, as the hub found it,
-//! which agents on the hub's own machine always use, and elsewhere only while the default is each machine's own. The page shows the hub's records and settings as they are: which is the
+//! Git, the page of who Roundhouse is on GitHub. Added has the accounts the person gave the hub, by signing in with
+//! GitHub, with a token, as an app of your own's installation, or as `gh`'s login on the hub's machine, one of which
+//! can be the default, which the hub reads GitHub as and hands to agents on the providers it sets up GitHub on, and
+//! each app installed nowhere yet. Who agents are on a provider whose machines are their owner's is on Providers. The
+//! page shows the hub's records and settings as they are: which is the
 //! default, how each login stands, how a sign-in goes and where an app's installed are the hub's to say.
 
 use super::{Asking, Body, OfHub, Page, PageId, Within};
@@ -17,7 +17,6 @@ mod app_panel_drawn;
 mod app_rows;
 mod app_words;
 mod connect_panels;
-mod found;
 mod gh_choice;
 mod git_page;
 mod kept;

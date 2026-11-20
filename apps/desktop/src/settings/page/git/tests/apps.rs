@@ -4,10 +4,9 @@
 use client_core::ClientError;
 use gpui_kit::TestAppContext;
 use protocol::client::{ApiError, ErrorCode};
-use protocol::fixtures::found_github_login;
 use protocol::model::{
-    FoundGithubLogin, GhLogin, GhLoginWorks, GithubAccount, GithubAccountId, GithubAppId, GithubInstallation,
-    GithubInstallationId, GithubLoginKind, GithubUser, GithubUserId, Records, SentCredential, UnusableLogin,
+    GithubAccount, GithubAccountId, GithubAppId, GithubInstallation, GithubInstallationId, GithubLoginKind, GithubUser,
+    GithubUserId, Records, SentCredential, UnusableLogin,
 };
 
 use super::super::app_words;
@@ -26,25 +25,17 @@ pub(super) fn installed(id: &str, name: &str) -> GithubAccount {
 }
 
 #[test]
-fn an_app_is_first_named_after_someone_added_or_else_after_who_gh_is_logged_in_as() {
-    let named_for = |accounts, found, default: Option<&str>| {
-        let listing = Records { github_accounts: accounts, found_github_logins: found, ..Records::default() };
+fn an_app_is_first_named_after_someone_added() {
+    let named_for = |accounts, default: Option<&str>| {
+        let listing = Records { github_accounts: accounts, ..Records::default() };
         app_words::default_name(&listed(listing, default), default.map(GithubAccountId::from).as_ref())
     };
     let bot = installed("g0", "ada-roundhouse[bot]");
-    let logged_in = |name: &str| FoundGithubLogin {
-        login: GhLogin::LoggedIn { username: name.into(), works: GhLoginWorks::Yes },
-        ..found_github_login("local")
-    };
 
     let added = vec![bot.clone(), named("g1", "bea", false), named("g2", "ada", false)];
-    assert_eq!(named_for(added.clone(), Vec::new(), Some("g2")), "ada-roundhouse", "the default first");
-    let both = named_for(added.clone(), vec![logged_in("grace")], Some("g1"));
-    assert_eq!(both, "bea-roundhouse", "someone added before who gh is logged in as");
-    assert_eq!(named_for(added, Vec::new(), Some("g0")), "ada-roundhouse", "but never a bot");
-    assert_eq!(named_for(vec![bot], vec![logged_in("grace")], Some("g0")), "grace-roundhouse");
-    let logged_out = FoundGithubLogin { login: GhLogin::LoggedOut, ..found_github_login("local") };
-    assert_eq!(named_for(Vec::new(), vec![logged_out], None), "", "with nobody to name it after");
+    assert_eq!(named_for(added.clone(), Some("g2")), "ada-roundhouse", "the default first");
+    assert_eq!(named_for(added, Some("g0")), "ada-roundhouse", "but never a bot");
+    assert_eq!(named_for(vec![bot], Some("g0")), "", "with nobody to name it after");
 }
 
 /// Its record says nothing of when its token ends, as the hub keeps it, so only the hub can say it's making the next,

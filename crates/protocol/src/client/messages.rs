@@ -7,8 +7,8 @@ use crate::event::SessionEvent;
 use crate::find::Found;
 use crate::model::{
     Account, DiffComment, FileContents, FileOpened, FilePages, GhLogin, GitDiff, GitStatus, GithubAccount, GithubApp,
-    GithubSignIn, HubSettings, NewWorkspaceDraft, Proposal, Records, Repo, Session, SessionAccount, Terminal,
-    TitleError, Workspace, WorktreeFiles,
+    GithubSignIn, HubSettings, MachineLogins, NewWorkspaceDraft, Proposal, Records, Repo, Session, SessionAccount,
+    Terminal, TitleError, Workspace, WorktreeFiles,
 };
 use crate::tail::{StreamDelta, Tail};
 use crate::terminal::TerminalUpdate;
@@ -103,6 +103,7 @@ pub enum ClientResponse {
     GithubAccount(GithubAccount),
     GithubSignIn(GithubSignIn),
     GhLogin(GhLogin),
+    MachineLogins(MachineLogins),
     GithubApp(GithubApp),
     GithubAppManifest(github_apps::GithubAppManifest),
     WorktreeFiles(WorktreeFiles),

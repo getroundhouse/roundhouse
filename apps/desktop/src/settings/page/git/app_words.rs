@@ -5,7 +5,7 @@
 use client_core::records::Snapshot;
 use client_core::{ClientError, refusals};
 use protocol::client::ErrorCode;
-use protocol::model::{GhLogin, GithubAccountId, GithubApp};
+use protocol::model::{GithubAccountId, GithubApp};
 
 use super::added::listed;
 use crate::manifest_flow::{NotAnOrganization, Under};
@@ -175,8 +175,8 @@ pub(super) fn remove_asks(name: &str) -> String {
 pub(super) fn remove_says(default: bool) -> &'static str {
     if default {
         "The hub forgets its key and its installation's login, so agents can't act as its bot. Nothing is deleted on \
-         GitHub: delete the app there to be rid of it. Its installation stays the default, so agents can't push until \
-         you make another account the default."
+         GitHub: delete the app there to be rid of it. Its installation stays the default, so agents on the providers \
+         Roundhouse sets up can't push until you make another account the default."
     } else {
         "The hub forgets its key and its installation's login, so agents can't act as its bot. Nothing is deleted on \
          GitHub: delete the app there to be rid of it."
@@ -187,21 +187,16 @@ pub(super) fn remove_says(default: bool) -> &'static str {
 pub(super) fn disconnect_says(default: bool) -> &'static str {
     if default {
         "The hub forgets its token, and makes no more until you connect it again. The app stays installed on GitHub. \
-         It stays the default, so agents can't push until you connect it again or make another account the default."
+         It stays the default, so agents on the providers Roundhouse sets up can't push until you connect it again or \
+         make another account the default."
     } else {
         "The hub forgets its token, and makes no more until you connect it again. The app stays installed on GitHub."
     }
 }
 
 /// The name an app is first given: the username of the first account added that's someone's rather than an app's, in
-/// the order Added lists them, or else of the first `gh` login found, with `-roundhouse` after it, or nothing when
-/// there's neither.
+/// the order Added lists them, with `-roundhouse` after it, or nothing when there's none.
 pub(super) fn default_name(records: &Snapshot, default: Option<&GithubAccountId>) -> String {
     let added = listed(records.github_accounts(), default).into_iter().find(|account| account.installation.is_none());
-    let found = records.found_github_logins().iter().find_map(|found| match &found.login {
-        GhLogin::LoggedIn { username, .. } => Some(username.to_string()),
-        GhLogin::LoggedOut | GhLogin::NotInstalled | GhLogin::Unknown => None,
-    });
-    let name = added.map(|account| account.user.name.to_string()).or(found);
-    name.map_or_else(String::new, |name| format!("{name}-roundhouse"))
+    added.map_or_else(String::new, |account| format!("{}-roundhouse", account.user.name))
 }

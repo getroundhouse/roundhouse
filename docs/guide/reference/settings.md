@@ -118,12 +118,12 @@ A hub from before account defaults cannot change them. Update the hub to choose 
 
 ## Git
 
-The GitHub accounts agents push and open pull requests as. [Who agents are on GitHub](../concepts/who-agents-are-on-github.md) says which to choose.
+The GitHub accounts Roundhouse reads GitHub as, and agents push and open pull requests as on the machines it sets up. [Who agents are on GitHub](../concepts/who-agents-are-on-github.md) says which to choose.
 
-![Git, with three accounts added and the logins found on two machines](../../spec/screens/settings-git.png)
+![Git, with three accounts added](../../spec/screens/settings-git.png)
 
 - **Added** has the accounts you've given the hub, the default first. On every machine Roundhouse sets up GitHub on, `git` and `gh` use the default for github.com, so agents push and open pull requests as it, and Roundhouse reads pull requests with it, wherever they run. On your own machine, agents use your `git` and `gh` as they are, as [Who agents are on GitHub](../concepts/who-agents-are-on-github.md) says.
-- **Found** has who `gh` is logged in as on each machine where a workspace has run since the hub last started, and whether GitHub took its token then. Roundhouse asks GitHub with that token, and while it's the default reads pull requests with it, keeping it only in memory. While you've added no account, agents use each machine's own login, and Found has the Default badge. **Make default**, by Found's heading, goes back to each machine's own login once you have.
+- **With none added,** Roundhouse reads nothing of GitHub, so it can't say a workspace's pull request, and agents on the machines it sets up GitHub on can't push or use `gh` until you connect one. Agents on your own machine work as they always do.
 - **Each row** says how the account was connected, `Signed in`, `Token` or `App`, and only what else needs saying, such as when a token ends, or where an app is installed.
 
 The first account you connect becomes the default. To use another, choose **Make default** in its row's **…** menu.
@@ -152,6 +152,15 @@ If the default can't be used, because its token ended, it was disconnected, it n
 ![Git saying Roundhouse can't use its GitHub account, since the default's token ended](../../spec/screens/settings-git-default-ended.png)
 
 A hub from before hubs kept GitHub accounts can't connect one, and agents use each machine's own login. Update the hub to connect one.
+
+## Providers
+
+Where agents run, and who they are on GitHub there.
+
+- **This Mac** is your own, so Roundhouse hands agents nothing for GitHub there: their `git` and `gh` are yours, as in your terminal. Its rows say who `gh` is logged in as and whose SSH key GitHub takes, which the hub reads each time you open the page, and that a key isn't `gh`'s account when it isn't. Under them, it says who Roundhouse itself reads pull requests as, the default in Git. While `gh` is logged out or not there, it says agents there can't use `gh`, and what to run.
+- **A provider Roundhouse sets up GitHub on** says its agents are the default in Git, or that there's none to connect.
+
+![Providers, with gh and the SSH key on this Mac both ada's](../../spec/screens/settings-providers.png)
 
 ## Whose setting it is
 

@@ -313,6 +313,7 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
         | R::GithubAppRemove(_) => Err(read_only("change anything")),
         R::GithubAccountConnectGh => github::connect_gh(world),
         R::HubGhLogin => github::gh_login(world),
+        R::HubMachineLogins => github::machine_logins(world),
         R::GithubAppInstallationsConnect(_) => github::look_for_installations(world),
         R::GithubAppManifestWrite(write) => reply(github::manifest(write)),
         // So a screen can show the app waiting on a workspace it asked for, or on a new title. The workspace's record

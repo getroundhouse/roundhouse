@@ -11,7 +11,6 @@ use protocol::model::{BranchName, PullRequest, PullRequestFound, Workspace, Work
 use schedule::{Schedule, Went};
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::sync::atomic::AtomicBool;
 use std::time::Duration;
 use tokio::sync::{Mutex as AsyncMutex, OwnedMutexGuard};
 use tokio::time::Instant;
@@ -93,7 +92,7 @@ pub(in super::super) struct Reading {
     pub(super) limits: TokenLimits,
     /// Held while an agent's read of pull requests from GitHub, and a wait it starts, go, so the wait is recorded
     /// before another of the workspace's agents' reads can judge it. Apart from [`Reading::gates`], since these need
-    /// no worker, and so don't wait behind one stuck in `gh`.
+    /// no worker, and so don't wait behind a workspace's read whose worker is slow to say how its worktree stands.
     pub(super) agent_gates: Mutex<HashMap<WorkspaceId, Arc<AsyncMutex<()>>>>,
     pub(super) remote_read_at: Mutex<HashMap<WorkspaceId, Instant>>,
 }
@@ -191,20 +190,19 @@ impl Hub {
         let read_at = Instant::now();
         // One whose branch needs nothing of GitHub, such as one pushed nowhere yet, needs no token.
         let asking = self.asking(vec![workspace.clone()]).await;
-        let took_worker = AtomicBool::new(false);
-        let read = match self.reads_as(&workspace) {
+        let read = match self.reads_as() {
             _ if !asking.needs_github() => asking.settled(),
             Err(e) => asking.failed(&super::polling::no_login(&e)),
             Ok(reads_as) => {
                 if self.pull_requests.limits.allows(&reads_as, asked, now_ms()).is_err() {
                     return Ok(Answer::Known(known, limit_used_up()));
                 }
-                match self.token_for_own_reads(&reads_as, id, &took_worker).await {
+                match self.token_of(&reads_as) {
                     Err(e) => asking.failed(&e),
                     Ok(token) => {
                         self.pull_requests.schedules.lock().insert(id.clone(), Schedule::starting(read_at));
                         let read = self.read_own(&token, asking, asked).await;
-                        self.github_said(&reads_as, read.rate_limit, read.refused);
+                        self.github_said(&reads_as, read.rate_limit);
                         read.found
                     }
                 }
@@ -212,16 +210,8 @@ impl Hub {
         };
         let read = read.into_iter().next().map_or_else(|| WorkspaceRead::unread(couldnt_read()), |(_, read)| read);
         // However the job this is in goes on, so what's recorded and what's said of it agree.
-        let (hub, took_worker) = (self.clone(), took_worker.into_inner());
-        jobs::uncut(async move {
-            let id = workspace.id.clone();
-            let answered = hub.clone().take_answer(workspace, read, last, read_at, asked, held).await;
-            if took_worker {
-                hub.let_go_after_read(&id).await;
-            }
-            answered
-        })
-        .await
+        let hub = self.clone();
+        jobs::uncut(async move { hub.take_answer(workspace, read, last, read_at, asked, held).await }).await
     }
 
     /// What a read does once GitHub has answered: records what it found, schedules the next read, judges the waits on

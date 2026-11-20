@@ -6,7 +6,8 @@ use protocol::model::{
 use rusqlite::{Connection, params};
 
 pub(in super::super) fn hub_settings(conn: &Connection) -> rusqlite::Result<HubSettings> {
-    let columns = "keep_awake, allow_asked_in_full_access, rev, github_account_id, github_sent, github_left_to_machine";
+    let columns = "keep_awake, allow_asked_in_full_access, rev, github_account_id, github_sent, github_left_to_machine, \
+                   github_set_up";
     conn.query_row(&format!("SELECT {columns} FROM hub_settings"), [], |row| {
         // The outer SELECT remains active while the defaults are read, keeping one SQLite snapshot.
         let mut defaults =
@@ -28,6 +29,7 @@ pub(in super::super) fn hub_settings(conn: &Connection) -> rusqlite::Result<HubS
                 account: row.get::<_, Option<String>>(3)?.map(GithubAccountId::from),
                 sent: json_at(row, 4)?,
                 left_to_machine: json_at(row, 5)?.unwrap_or_default(),
+                set_up: json_at(row, 6)?.unwrap_or_default(),
             }),
             rev: rev_of(row, 2)?,
         })
@@ -66,7 +68,7 @@ impl Store {
         })
     }
 
-    /// Makes `account` the default GitHub account, or each machine's own login with `None`. Called with the GitHub
+    /// Makes `account` the default GitHub account, or none with `None`. Called with the GitHub
     /// logins' lock held, after checking the account and its login. Only a default that ends up different gives the
     /// settings a newer revision.
     pub(crate) fn set_github_default(&self, account: Option<&GithubAccountId>) -> Result<HubSettings, StoreError> {
@@ -90,18 +92,21 @@ impl Store {
         Ok(if changed == 0 { None } else { Some(hub_settings(&conn)?) })
     }
 
-    /// Records `providers` as the ones whose machines Roundhouse leaves GitHub to, on the hub's settings, in order of
-    /// name, and returns the settings when that changed them.
-    pub(crate) fn record_github_left_to_machine(
+    /// Records `left` as the providers whose machines Roundhouse leaves GitHub to, in order of name, and `set_up` as
+    /// the ones it sets up GitHub on, in the order given, on the hub's settings, and returns the settings when that
+    /// changed them.
+    pub(crate) fn record_github_providers(
         &self,
-        providers: &[ProviderName],
+        left: &[ProviderName],
+        set_up: &[ProviderName],
     ) -> Result<Option<HubSettings>, StoreError> {
-        let mut providers = providers.to_vec();
-        providers.sort();
-        let providers = serde_json::to_string(&providers)?;
+        let mut left = left.to_vec();
+        left.sort();
+        let (left, set_up) = (serde_json::to_string(&left)?, serde_json::to_string(set_up)?);
         let conn = lock(&self.writer);
-        let sql = "UPDATE hub_settings SET github_left_to_machine = ?1 WHERE github_left_to_machine IS NOT ?1";
-        let changed = conn.execute(sql, [&providers])?;
+        let sql = "UPDATE hub_settings SET github_left_to_machine = ?1, github_set_up = ?2
+                   WHERE github_left_to_machine IS NOT ?1 OR github_set_up IS NOT ?2";
+        let changed = conn.execute(sql, [&left, &set_up])?;
         Ok(if changed == 0 { None } else { Some(hub_settings(&conn)?) })
     }
 

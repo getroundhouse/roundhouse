@@ -86,7 +86,7 @@ async fn an_installations_answer_names_its_bot_and_where_its_installed_not_the_u
     );
 }
 
-/// Each machine's own login, which the hub holds no token for, a block, and a repository on no GitHub, none of which
+/// No default, which the hub holds no token for, a block, and a repository on no GitHub, none of which
 /// asks GitHub, and a GitHub that can't be reached.
 #[tokio::test]
 async fn what_the_hub_cant_check_with_says_why_without_asking_github() {
@@ -96,12 +96,13 @@ async fn what_the_hub_cant_check_with_says_why_without_asking_github() {
     let blocked = DefaultCredential::Blocked { reason: "ada was disconnected".into(), account: Some("g".into()), why };
     let nowhere = Github::new(GithubConfig::at(NO_GITHUB.to_string()));
 
-    let machines_own = reach(&calls, Some(CLI), &DefaultCredential::MachineOwn).await;
+    let none = DefaultCredential::NoAccount { reason: "Connect one".into() };
+    let no_account = reach(&calls, Some(CLI), &none).await;
     let block = reach(&calls, Some(CLI), &blocked).await;
     let not_on_github = reach(&calls, None, &account("ada", "a-token")).await;
     let unreachable = reach(&nowhere, Some(CLI), &account("ada", "a-token")).await;
 
-    assert_eq!(machines_own, Reach::MachineOwn { repository: CLI });
+    assert_eq!(no_account, Reach::Blocked { repository: CLI, reason: "Connect one".into() });
     assert_eq!(block, Reach::Blocked { repository: CLI, reason: "ada was disconnected".into() });
     assert_eq!(not_on_github, Reach::NotOnGithub);
     assert!(github.asked().is_empty(), "{:?}", github.asked());

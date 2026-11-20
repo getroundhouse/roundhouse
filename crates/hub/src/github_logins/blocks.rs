@@ -61,6 +61,16 @@ pub(super) fn reason(what: &str, until: &str, to_do: &str) -> String {
     )
 }
 
+/// What the block while the hub has no default says: that Roundhouse has no GitHub account, and to connect one.
+/// *Unconfirmed:* the words.
+pub(super) fn no_account() -> String {
+    reason(
+        "Roundhouse has no GitHub account",
+        "one is connected",
+        "Connect one in Roundhouse's Settings, such as gh's login on the machine Roundhouse runs on.",
+    )
+}
+
 /// What the block for a default, `account`, whose login can't be used, as `unusable` says, says. An app's installation
 /// is named with where it's installed, and is connected again, and renewed, with the app.
 pub(super) fn lost(account: &GithubAccount, unusable: &Unusable) -> String {

@@ -6,6 +6,7 @@ use std::sync::Arc;
 use protocol::Build;
 use protocol::capability::Capabilities;
 use protocol::capability::settings::Effort;
+use protocol::client::github_accounts::GithubAccountConnect;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::model::{
     AgentDescription, AgentKind, Apart, Branch, BranchName, Branches, Checks, CommitId, Head, Local, LoginDescription,
@@ -17,6 +18,7 @@ use providers::local::{LocalConfig, LocalProvider};
 use tokio::sync::oneshot;
 
 use super::{Hub, HubDirs};
+use crate::github_logins::Connect;
 use crate::provider_set::ProviderSet;
 use crate::session::{CarriedOver, Item, LiveSession, Starting};
 use crate::store::Store;
@@ -216,28 +218,37 @@ pub(crate) fn hub_with_worktree(dir: &Path) -> Arc<Hub> {
 }
 
 /// A hub as [`hub_with_worktree`] makes one, which calls GitHub's API at `api`, such as a stand-in's, whose repository
-/// `r` is example/project on github.com, and whose workspaces' machines' own `gh`, the default while the hub holds no
-/// account, handed it the token `a-token`. It runs with a test's timers, so a test that calls a stand-in, and can't
-/// pause tokio's clock, waits out no spacing or pace.
+/// `r` is example/project on github.com, and whose default GitHub account, which it reads GitHub as, is `ada`, whose
+/// token is `a-token`. It runs with a test's timers, so a test that calls a stand-in, and can't pause tokio's clock,
+/// waits out no spacing or pace.
 pub(crate) fn hub_reading_github(dir: &Path, api: String) -> Arc<Hub> {
     hub_reading_github_timed(dir, api, Timers::FOR_TESTS)
 }
 
 /// The same, with `timers`.
 pub(crate) fn hub_reading_github_timed(dir: &Path, api: String, timers: Timers) -> Arc<Hub> {
+    let hub = hub_without_account(dir, api, timers);
+    reading_as_ada(&hub);
+    hub
+}
+
+/// The same, with no GitHub account, so it reads nothing of GitHub.
+pub(crate) fn hub_without_account(dir: &Path, api: String, timers: Timers) -> Arc<Hub> {
     let hub = hub_timed(dir, vec![described()], Github::new(GithubConfig::at(api)), timers);
     hub.store.workspace_ready(&"w".into(), "/w", &"alder".into(), "main", None).unwrap();
     let address = protocol::model::RepoUrl::try_from("https://github.com/example/project".to_string()).unwrap();
     hub.store.read_repo_url(&"r".into(), "/repo", Some(&address)).unwrap();
-    handed_a_token(&hub);
     hub
 }
 
-/// Has `w`'s machines' own `gh` have handed the hub the token `a-token`.
-pub(crate) fn handed_a_token(hub: &Hub) {
-    let provider = hub.store.get_workspace(&"w".into()).unwrap().provider;
-    let token = protocol::worker::FoundToken { token: protocol::model::GithubToken::new("a-token"), renews: false };
-    hub.found_tokens.found(provider, Some(token));
+/// Has the hub hold `ada`'s token, `a-token`, as its first GitHub account, so its default, as connecting it would,
+/// without asking GitHub whose it is.
+pub(crate) fn reading_as_ada(hub: &Hub) {
+    let asked = GithubAccountConnect { token: protocol::model::GithubToken::new("a-token"), id: None };
+    let connect = Connect::new(asked, crate::store::now_ms()).unwrap();
+    let user = protocol::model::GithubUser { id: protocol::model::GithubUserId::new(7), name: "ada".into() };
+    let owner = github::TokenOwner { user, profile: github::GithubProfile::default(), ends_at_ms: None };
+    hub.github_logins.connect(&connect, &owner).unwrap();
 }
 
 /// An open pull request whose checks are running.

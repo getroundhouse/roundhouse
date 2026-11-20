@@ -1,6 +1,6 @@
 //! Git in Settings, against a real hub that calls a stand-in for GitHub: connecting a token, which becomes the
 //! default, one GitHub refuses, disconnecting, which asks first and leaves the default blocked, renewing an account's
-//! token and connecting it again from its menu, and choosing the default, an account or each machine's own login.
+//! token and connecting it again from its menu, and choosing the default from an account's menu.
 //! Every token is plainly made up.
 
 #![cfg(test)]
@@ -34,7 +34,7 @@ pub(super) fn in_git<'a>(cx: &'a mut TestAppContext, stack: &Stack) -> Ui<'a> {
     ui
 }
 
-/// The default GitHub account, as the app shows it, or `None` for each machine's own login.
+/// The default GitHub account, as the app shows it, or `None` for none.
 pub(super) fn default(ui: &Ui<'_>) -> Option<GithubAccountId> {
     ui.view().records().hub_settings()?.github.as_ref()?.account.clone()
 }
@@ -67,7 +67,6 @@ fn a_token_connected_here_becomes_the_default_only_the_hub_keeps_it_and_one_gith
     let _github = stack.start_hub_with_stand_in_github(knowing_two());
     let mut ui = in_git(cx, &stack);
     assert!(ui.has("git-none-added"));
-    assert!(ui.has("git-none-found"), "with no workspace, no machine has been asked");
 
     ui.click("git-connect");
     ui.click("git-use-token");
@@ -168,7 +167,7 @@ fn renew_and_connect_again_from_an_accounts_menu_put_the_token_in_place_of_the_a
 }
 
 #[gpui_kit::test]
-fn the_default_is_chosen_from_an_accounts_menu_or_as_each_machines_own_by_found(cx: &mut TestAppContext) {
+fn the_default_is_chosen_from_an_accounts_menu(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let _github = stack.start_hub_with_stand_in_github(knowing_two());
     let ada = connected(&stack, TOKEN);
@@ -182,11 +181,4 @@ fn the_default_is_chosen_from_an_accounts_menu_or_as_each_machines_own_by_found(
 
     ui.wait("grace the default", |ui| default(ui) == Some(grace.clone()));
     assert_eq!(the_hubs_default(&stack), Some(grace));
-
-    // The hub's notice of the new default can come before its reply, and Make default stays off until the reply.
-    ui.wait("Make default to be on", |ui| ui.on("git-machines-own-default"));
-    ui.click("git-machines-own-default");
-
-    ui.wait("each machine's own the default", |ui| default(ui).is_none() && !ui.has("git-machines-own-default"));
-    assert_eq!(the_hubs_default(&stack), None);
 }

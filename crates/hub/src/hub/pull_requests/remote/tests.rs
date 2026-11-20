@@ -1,10 +1,10 @@
 use super::*;
-use crate::hub::tests::hub_reading_github;
+use crate::hub::tests::{hub_reading_github, hub_without_account};
+use crate::timers::Timers;
 use github::{Answer, Script, StandIn};
 use protocol::client::github_accounts::GithubAccountConnect;
 use protocol::fixtures::{observed_pull_request, pull_request_wait};
 use protocol::model::{GithubToken, PullRequestNumber, Wait};
-use std::time::Duration;
 
 fn wait(id: &str, numbers: &[u64]) -> Wait {
     let mut wait = pull_request_wait(id);
@@ -41,48 +41,42 @@ fn read_with(asked: &[String]) -> Vec<String> {
         .collect()
 }
 
-/// As nobody while this machine's own `gh` has handed the hub no token and the hub has no account, then as that login
-/// once its worker has handed one, then as the default account once one is connected.
+/// As nobody while the hub has no GitHub account, then as the default once one is connected.
 #[tokio::test]
-async fn an_agents_read_goes_as_the_default_account_or_else_the_machines_own_gh_and_fails_without_either() {
+async fn an_agents_read_goes_as_the_default_account_and_fails_without_one() {
     let dir = tempfile::tempdir().unwrap();
-    let answers = [Answer::pull_request_read(7, false), Answer::pull_request_read(7, false)].concat();
-    let script =
-        Script { users: vec![("an-accounts", Answer::user(7, "ada", None))], graphql: answers, ..Script::default() };
+    let script = Script {
+        users: vec![("an-accounts", Answer::user(7, "ada", None))],
+        graphql: Answer::pull_request_read(7, false),
+        ..Script::default()
+    };
     let github = StandIn::with(script).await;
-    let hub = hub_reading_github(dir.path(), github.api());
+    let hub = hub_without_account(dir.path(), github.api(), Timers::FOR_TESTS);
     let selection = pull_request_wait("a").watch.unwrap().requested;
-    let provider = hub.store.get_workspace(&"w".into()).unwrap().provider;
-    let handed = hub.found_tokens.of(&provider, Duration::ZERO).await;
-    hub.found_tokens.found(provider.clone(), None);
 
     let as_nobody = hub.read_remote_for_agent(&"w".into(), selection.clone()).await.map(|read| read.0);
-    hub.found_tokens.found(provider, handed);
-    let as_machines = hub.read_remote_for_agent(&"w".into(), selection.clone()).await.map(|read| read.0);
     let connect = GithubAccountConnect { token: GithubToken::new("an-accounts"), id: None };
     hub.github_account_connect(connect).await.unwrap();
     let as_account = hub.read_remote_for_agent(&"w".into(), selection).await.map(|read| read.0);
 
-    // As a read that may work later, once `gh` there logs in.
-    assert_eq!(as_nobody.unwrap_err().code, ErrorCode::Worker);
-    assert_eq!(as_machines.unwrap().pull_requests[0].pull_request.number, 7);
+    // As a read that may work later, once an account is connected, saying so.
+    let refused = as_nobody.unwrap_err();
+    assert_eq!(refused.code, ErrorCode::Worker);
+    assert!(refused.message.contains("Connect one"), "{}", refused.message);
     assert_eq!(as_account.unwrap().pull_requests[0].pull_request.number, 7);
-    assert_eq!(read_with(&github.asked()), ["a-token", "a-token", "an-accounts", "an-accounts"]);
+    assert_eq!(read_with(&github.asked()), ["an-accounts", "an-accounts"]);
 }
 
-/// GitHub refusing it, as once `gh` has logged in again, so it's no longer the machine's token. The worker is asked
-/// for it again by the next link to the provider.
+/// GitHub refusing the default's token, which renewing it or connecting it again may get past.
 #[tokio::test]
-async fn a_machines_token_github_refuses_is_forgotten_and_asked_for_again() {
+async fn a_read_github_refuses_the_defaults_token_for_may_work_later() {
     let dir = tempfile::tempdir().unwrap();
     let github = StandIn::with(Script { graphql: vec![Answer::status(401, Vec::new())], ..Script::default() }).await;
     let hub = hub_reading_github(dir.path(), github.api());
-    let provider = hub.store.get_workspace(&"w".into()).unwrap().provider;
     let selection = pull_request_wait("a").watch.unwrap().requested;
 
     let refused = hub.read_remote_for_agent(&"w".into(), selection).await.map(|read| read.0);
 
     assert_eq!(refused.unwrap_err().code, ErrorCode::Worker, "a read that may work later");
-    assert_eq!(hub.found_tokens.of(&provider, Duration::ZERO).await, None);
-    assert!(!hub.github_logins_asked.has(&provider), "the next link to it asks again");
+    assert_eq!(read_with(&github.asked()), ["a-token"]);
 }

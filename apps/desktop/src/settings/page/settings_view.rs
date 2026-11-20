@@ -1,4 +1,4 @@
-use super::{agents, general, git, notifications, rows, sidebar};
+use super::{agents, general, git, notifications, providers, rows, sidebar};
 use crate::FindSetting;
 use crate::app::TOP_STRIP;
 use crate::status_box::StatusBox;
@@ -159,6 +159,7 @@ pub(crate) enum PageId {
     Notifications,
     Agents,
     Git,
+    Providers,
 }
 
 impl PageId {
@@ -169,6 +170,7 @@ impl PageId {
             PageId::Notifications => "settings-page-notifications",
             PageId::Agents => "settings-page-agents",
             PageId::Git => "settings-page-git",
+            PageId::Providers => "settings-page-providers",
         }
     }
 }
@@ -221,7 +223,8 @@ pub(super) struct Section {
 
 /// Every page, under its heading.
 pub(super) fn sections(hub: &OfHub) -> Vec<Section> {
-    let pages = vec![general::page(hub), notifications::page(), agents::page(hub), git::page(hub)];
+    let pages =
+        vec![general::page(hub), notifications::page(), agents::page(hub), git::page(hub), providers::page(hub)];
     vec![Section { heading: "Personal", pages }]
 }
 

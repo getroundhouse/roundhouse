@@ -162,7 +162,7 @@ impl Checks {
             let (hub, credential) = (Arc::clone(&self.hub), credential.clone());
             let asked_as = match &credential {
                 DefaultCredential::Account { username, .. } => Some(username.clone()),
-                DefaultCredential::MachineOwn | DefaultCredential::Blocked { .. } => None,
+                DefaultCredential::NoAccount { .. } | DefaultCredential::Blocked { .. } => None,
             };
             self.under_way.spawn(async move {
                 let reach = super::reaching::reach(&hub.github, pushes_to, &credential).await;

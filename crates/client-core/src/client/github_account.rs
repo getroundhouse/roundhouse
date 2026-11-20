@@ -5,7 +5,7 @@
 
 use protocol::client::github_accounts;
 use protocol::model::{
-    GhLogin, GithubAccount, GithubAccountId, GithubSignIn, GithubSignInId, GithubToken, HubSettings,
+    GhLogin, GithubAccount, GithubAccountId, GithubSignIn, GithubSignInId, GithubToken, HubSettings, MachineLogins,
 };
 
 use super::{Client, Result};
@@ -26,6 +26,11 @@ impl Client {
     /// [`github_accounts::HubGhLogin`].
     pub fn hub_gh_login(&self) -> Result<GhLogin> {
         self.call(github_accounts::HubGhLogin)
+    }
+
+    /// Who `gh` and the SSH key on the hub's machine are on GitHub. See [`github_accounts::HubMachineLogins`].
+    pub fn hub_machine_logins(&self) -> Result<MachineLogins> {
+        self.call(github_accounts::HubMachineLogins)
     }
 
     /// Has the hub use the login `gh` has on its machine as a GitHub account's, and answers with the account's record.

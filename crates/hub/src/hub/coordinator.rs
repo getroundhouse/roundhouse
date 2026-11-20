@@ -1,6 +1,6 @@
 use super::agents::ModelLists;
 use super::terminals::Terminals;
-use super::{awake, feed, found_github_logins, pull_requests, sessions, setup};
+use super::{awake, feed, pull_requests, sessions, setup};
 use crate::attachment_files::AttachmentFiles;
 use crate::error::internal;
 use crate::gh::Gh;
@@ -9,6 +9,7 @@ use crate::jobs::Jobs;
 use crate::logins::Logins;
 use crate::provider_set::ProviderSet;
 use crate::session::{Item, LiveSession, Starting};
+use crate::ssh::Ssh;
 use crate::store::{MadeByRequest, Store, StoreError, now_ms};
 use crate::timers::Timers;
 use crate::versions;
@@ -39,15 +40,6 @@ use tracing::warn;
 /// since there are no Unix sockets there to serve them on, so they stop with it.
 pub(super) const KEEPS_WORKERS: bool = cfg!(unix);
 
-/// What a worker is wanted for, which says whether it's stopped again after.
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub(super) enum Wanted {
-    /// Anything, such as a session, so it's kept running.
-    ForAnything,
-    /// Only a read nobody asked for, after which it's stopped, unless something else has wanted it meanwhile.
-    OnlyToRead,
-}
-
 pub(crate) struct Hub {
     pub(super) build: Build,
     pub(super) store: Arc<Store>,
@@ -62,10 +54,8 @@ pub(crate) struct Hub {
     pub(super) github: Github,
     /// `gh` on the hub's own machine, whose login an account can use.
     pub(super) gh: Gh,
-    /// The providers whose machines' own GitHub login has been found since the hub started, or is being asked for.
-    pub(super) github_logins_asked: Arc<found_github_logins::ProvidersAsked>,
-    /// The token each provider's machines' own `gh` uses, as found since the hub started, in memory alone.
-    pub(super) found_tokens: found_github_logins::FoundTokens,
+    /// `ssh` on the hub's own machine, whose key GitHub takes as someone's.
+    pub(super) ssh: Ssh,
     /// Told each time a worker has read a repository's address, whatever it read, for the check of reach to look again
     /// at which repository on GitHub each repository's record names.
     pub(super) addresses_read: Notify,
@@ -189,9 +179,8 @@ impl Hub {
             logins: Arc::new(Logins::new(store.clone(), &dirs.data)),
             github_logins: Arc::new(GithubLogins::new(store.clone(), &dirs.data, now_ms())),
             github,
+            ssh: Ssh::new(machine.clone()),
             gh: Gh::new(machine, dirs.data.clone()),
-            github_logins_asked: Arc::default(),
-            found_tokens: found_github_logins::FoundTokens::default(),
             addresses_read: Notify::new(),
             store,
             attachment_files: AttachmentFiles::new(dirs.attachments),

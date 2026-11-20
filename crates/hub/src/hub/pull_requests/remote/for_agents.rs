@@ -23,7 +23,7 @@ impl Hub {
         self.pull_requests.remote_read_at.lock().insert(id.clone(), Instant::now());
         let workspace = self.workspace(id).await?;
         let repository = self.on_github(&workspace).await?;
-        let (reads_as, token) = self.reading_as(&workspace).await?;
+        let (reads_as, token) = self.reading_as()?;
         self.pull_requests.limits.allows(&reads_as, Asked::Agent, now_ms()).map_err(|_| {
             ApiError::new(
                 ErrorCode::Worker,
@@ -35,7 +35,7 @@ impl Hub {
             .github
             .read_pull_requests(&token, vec![PullRequestsAsk { repository, selection }], Asked::Agent.leaving())
             .await;
-        self.github_said(&reads_as, read.rate_limit, read.refused);
+        self.github_said(&reads_as, read.rate_limit);
         let answer = read.answers.into_iter().next().ok_or_else(|| ApiError::new(ErrorCode::Worker, "no answer"))?;
         let snapshot = answer.map_err(|unread| unread.error)?;
         Ok((snapshot, held))

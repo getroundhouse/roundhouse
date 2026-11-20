@@ -86,15 +86,15 @@ async fn a_repository_is_checked_once_a_worker_reads_its_address_and_every_clien
     let dir = tempfile::tempdir().unwrap();
     let hub = hub_calling_github(dir.path(), github.api());
     let mut feed = hub.subscribe_feed();
-    let (credential, following) = watch::channel(DefaultCredential::MachineOwn);
+    let (credential, following) = watch::channel(no_account());
     let _checking = checking(&hub, following);
 
     says_cli(&hub).await;
-    let machines_own = told(&mut feed).await;
+    let none = told(&mut feed).await;
     credential.send_replace(account("ada", "a-token"));
     let refused = told(&mut feed).await;
 
-    assert_eq!(machines_own.reach, Reach::MachineOwn { repository: CLI });
+    assert_eq!(none.reach, Reach::Blocked { repository: CLI, reason: "Connect one".into() });
     assert_eq!(refused.reach, refused_as("ada"));
     assert_eq!(github.asked().len(), 1, "only the account's was asked of GitHub");
 }
@@ -179,13 +179,13 @@ async fn an_answer_for_a_login_that_has_since_changed_is_let_go_of() {
     says_cli(&hub).await;
     github.until_asked(1).await;
 
-    credential.send_replace(DefaultCredential::MachineOwn);
-    let machines_own = told(&mut feed).await;
+    credential.send_replace(no_account());
+    let none = told(&mut feed).await;
     gate.open();
     credential.send_replace(account("grace", "g-token"));
     let grace = told(&mut feed).await;
 
-    assert_eq!(machines_own.reach, Reach::MachineOwn { repository: CLI });
+    assert_eq!(none.reach, Reach::Blocked { repository: CLI, reason: "Connect one".into() });
     assert_eq!(grace.reach, Reach::Pushes { repository: CLI, username: "grace".into() });
     assert_eq!(hub.records_list().await.unwrap().github_reach, [grace]);
 }
@@ -197,7 +197,7 @@ async fn every_half_hour_each_repository_is_checked_again() {
     let dir = tempfile::tempdir().unwrap();
     let hub = hub_calling_github(dir.path(), crate::hub::tests::NO_GITHUB.to_string());
     let mut feed = hub.subscribe_feed();
-    let (_credential, following) = watch::channel(DefaultCredential::MachineOwn);
+    let (_credential, following) = watch::channel(no_account());
     let _checking = checking(&hub, following);
     says_cli(&hub).await;
     told(&mut feed).await;
@@ -207,7 +207,7 @@ async fn every_half_hour_each_repository_is_checked_again() {
     let started = tokio::time::Instant::now();
     let again = told_within(&mut feed, CHECKED_AGAIN_EVERY * 2).await;
 
-    assert_eq!(again.reach, Reach::MachineOwn { repository: CLI });
+    assert_eq!(again.reach, Reach::Blocked { repository: CLI, reason: "Connect one".into() });
     assert!(started.elapsed() >= CHECKED_AGAIN_EVERY / 2, "checked again after {:?}", started.elapsed());
 }
 
@@ -261,4 +261,9 @@ async fn an_installation_the_default_refused_a_repository_is_named_as_its_bot() 
     let installation = Some(InstalledApp { slug: "ada-roundhouse".into(), on: "adalabs".into() });
     let username = "ada-roundhouse[bot]".into();
     assert_eq!(reach.reach, Reach::Refused { repository: CLI, username, reason: denied.into(), installation });
+}
+
+/// No default, whose block says to connect one.
+fn no_account() -> DefaultCredential {
+    DefaultCredential::NoAccount { reason: "Connect one".into() }
 }

@@ -25,6 +25,7 @@ mod provider_set;
 mod run;
 mod server;
 mod session;
+mod ssh;
 pub mod store;
 mod terminate;
 mod timers;

@@ -1,4 +1,5 @@
-//! The login `gh` has on the hub's own machine: who it is, as a client asks to offer it, connecting it as an account's
+//! The login `gh` has on the hub's own machine: who it is, as a client asks to offer it, or to show it beside whose SSH
+//! key the machine has, connecting it as an account's
 //! login, as only a person asks, and reading its token again at each check of the logins, for as long as an account
 //! holds it. `gh` is run and GitHub asked between two turns at the logins' lock, never under it. What `gh` prints is
 //! `crate::gh`'s to read, and what's kept of it `crate::github_logins`'s.
@@ -6,7 +7,7 @@
 use std::sync::Arc;
 
 use protocol::client::{ApiError, ErrorCode};
-use protocol::model::{GhLogin, GhLoginWorks, GithubAccount, GithubToken, GithubUser, GithubUsername};
+use protocol::model::{GhLogin, GhLoginWorks, GithubAccount, GithubToken, GithubUser, GithubUsername, MachineLogins};
 use tracing::warn;
 
 use super::super::{Hub, off_thread};
@@ -53,6 +54,14 @@ impl Hub {
             Said::NoLogin(_) | Said::Unread(_) => GhLoginWorks::CouldntTell,
         };
         Ok(GhLogin::LoggedIn { username, works })
+    }
+
+    /// Who `gh` and the SSH key on the hub's machine are, as `HubMachineLogins` says, read at once. `gh` is `None`
+    /// when it couldn't be read, which the log says.
+    pub(crate) async fn hub_machine_logins(&self) -> MachineLogins {
+        let (gh, ssh) = tokio::join!(self.hub_gh_login(), self.ssh.read());
+        let gh = gh.inspect_err(|e| warn!("couldn't read gh's login on this machine: {}", e.message)).ok();
+        MachineLogins { gh, ssh }
     }
 
     /// Has the hub hold the login `gh` has on its machine, as `GithubAccountConnectGh` says, and tells every client

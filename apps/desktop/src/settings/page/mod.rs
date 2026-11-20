@@ -10,6 +10,7 @@ mod general;
 mod git;
 mod lists;
 mod notifications;
+mod providers;
 mod redraw;
 mod rows;
 mod sidebar;

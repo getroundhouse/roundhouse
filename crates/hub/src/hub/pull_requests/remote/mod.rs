@@ -13,4 +13,4 @@ mod tests;
 
 mod for_agents;
 mod reading_as;
-pub(in crate::hub) use reading_as::{NoToken, ReadsAs};
+pub(in crate::hub) use reading_as::ReadsAs;

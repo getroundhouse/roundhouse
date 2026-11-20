@@ -2,18 +2,18 @@
 //! workspace's git uses for github.com on a provider where Roundhouse sets up GitHub, which these reach through an
 //! adapter: the hub makes it the default and sets it on the workspace's worker, whose setup script's git gets it, and
 //! commits as it, and a block once it's disconnected, and the next token the hub's check of its logins makes an app's
-//! installation. On the local provider, the worker is given none of it. And who a provider's machine's own `gh` is logged in as, which the hub
-//! records once a worker there has said, and whether the default can push to a workspace's repository.
+//! installation. On the local provider, the worker is given none of it. And who `gh` and the SSH key on the hub's own
+//! machine are, as a client asks, and whether the default can push to a workspace's repository.
 
 #![cfg(test)]
 
 use std::path::PathBuf;
 
 use hub::{GithubAnswer, GithubGate, GithubScript, GithubStandIn};
-use protocol::client::github_accounts::{GithubAccountConnect, GithubAccountDisconnect};
+use protocol::client::github_accounts::{GithubAccountConnect, GithubAccountDisconnect, HubMachineLogins};
 use protocol::client::github_apps::{GithubAppMake, GithubManifestCode};
 use protocol::model::{
-    FoundGithubLogin, GhLogin, GhLoginWorks, GithubReach, GithubRepositoryName, GithubToken, Reach, SetupStatus,
+    GhLogin, GhLoginWorks, GithubReach, GithubRepositoryName, GithubToken, MachineLogins, Reach, SetupStatus, SshLogin,
 };
 use protocol::paths::ENV_TEST_GITHUB_API;
 
@@ -150,25 +150,21 @@ fn a_workspaces_git_gets_the_token_the_check_makes_an_installation_as_the_hub_st
     assert_eq!(minted, 2, "as the app was made, and as the hub started again");
 }
 
-/// Through the real worker of the local provider, and a stand-in for `gh` on its `PATH`, whose token the hub checks
-/// against a stand-in for GitHub, to every client.
+/// Through a real hub, with stand-ins for `gh` and `ssh` on its `PATH`, and for GitHub, which takes `gh`'s token, as
+/// a client asks, which is all that has the hub read them.
 #[test]
-fn a_hub_records_who_its_machines_own_gh_is_logged_in_as_once_a_worker_there_has_said() {
+fn a_hub_says_who_gh_and_the_ssh_key_on_its_machine_are_as_a_client_asks() {
     let runtime = tokio::runtime::Runtime::new().unwrap();
     let github = runtime.block_on(GithubStandIn::start(vec![(LOGGED_IN_WITH, GithubAnswer::user(7, "ada", None))]));
     let mut stack = Stack::start_with(vec![(ENV_TEST_GITHUB_API, github.api())]);
     let _gh = StandInGh::start(&mut stack);
     let client = stack.client();
-    let listed = || client.records_list().unwrap().found_github_logins;
-    let before = listed();
 
-    stack.workspace(&client);
-    wait_until("a found login", || !listed().is_empty());
+    let said = client.call(HubMachineLogins).unwrap();
 
-    assert_eq!(before, []);
-    let [FoundGithubLogin { provider, login, .. }] = &listed()[..] else { panic!("{:?}", listed()) };
-    let works = GhLogin::LoggedIn { username: LOGGED_IN_AS.into(), works: GhLoginWorks::Yes };
-    assert_eq!((provider.as_str(), login), ("local", &works));
+    let gh = GhLogin::LoggedIn { username: LOGGED_IN_AS.into(), works: GhLoginWorks::Yes };
+    assert_eq!(said, MachineLogins { gh: Some(gh), ssh: SshLogin::Key { username: LOGGED_IN_AS.into() } });
+    assert!(client.records_list().unwrap().found_github_logins.is_empty(), "nothing's kept of them");
 }
 
 /// Through the real worker of the local provider, which reads the address of its repository's `origin`, checked with

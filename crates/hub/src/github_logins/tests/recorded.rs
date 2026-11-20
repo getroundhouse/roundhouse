@@ -36,9 +36,10 @@ fn the_settings_say_what_workers_are_sent_and_move_as_it_changes_but_not_as_a_re
     let renewing = told.borrow_and_update().clone().unwrap();
     let renewing_reason = reason(sent(&logins));
     logins.set_default(None, ENDS + 8 * HOUR).unwrap();
-    let machine_own = told.borrow_and_update().clone().unwrap();
+    let no_default = told.borrow_and_update().clone().unwrap();
 
-    assert_eq!(at_first.github.unwrap().sent, Some(SentCredential::MachineOwn), "as the logins started");
+    let first_sent = at_first.github.as_ref().unwrap().sent.as_ref();
+    assert!(matches!(first_sent, Some(SentCredential::NoAccount { .. })), "as the logins started: {first_sent:?}");
     assert_eq!(signed_in.github.as_ref().unwrap().sent, Some(SentCredential::Account { account: account.clone() }));
     assert!(signed_in.rev > at_first.rev);
     assert!(!renewal_told, "a renewal changes only the token");
@@ -46,8 +47,8 @@ fn the_settings_say_what_workers_are_sent_and_move_as_it_changes_but_not_as_a_re
     let blocked = SentCredential::Blocked { account, why: UnusableLogin::Renewing, reason: renewing_reason };
     assert_eq!(renewing.github.unwrap().sent, Some(blocked));
     assert!(renewing.rev > signed_in.rev);
-    assert_eq!(machine_own.github.as_ref().unwrap().sent, Some(SentCredential::MachineOwn));
-    assert_eq!(store.hub_settings().unwrap(), machine_own, "what's told is what the store has");
+    assert!(matches!(no_default.github.as_ref().unwrap().sent, Some(SentCredential::NoAccount { .. })));
+    assert_eq!(store.hub_settings().unwrap(), no_default, "what's told is what the store has");
 }
 
 /// A token's end is on its account's record, but one only a newer build can read, or that's gone, isn't, and the
