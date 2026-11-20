@@ -1,6 +1,52 @@
 # Issues
 
-How an issue is labelled, scheduled and linked to others. `docs/standards/documentation.md` says what goes in an issue rather than a doc, and `docs/standards/writing.md` how one is worded.
+How an issue is written, labelled, scheduled and linked to others. `docs/standards/documentation.md` says what goes in an issue rather than a doc, and `docs/standards/writing.md` how any text is worded.
+
+## The description
+
+- **It's written for whoever builds it next,** so it holds what happens, why, what to build, and what's still open. How it was found, the evidence for each claim, and counts and dates go in a comment, such as which processes were found running and when, as `docs/standards/documentation.md` puts results there. A reader who wants the proof can find it, and one who's building doesn't have to read past it.
+- **Once something is decided, rewrite the description around it,** and move the options that weren't chosen to the comment that records who decided and when. Paragraphs added below leave the reader to work out which still holds. A question is the exception, since its options are what it's about: the answer goes at the top, and the options stay.
+- **Before filing, read it once as that reader, and cut whatever wouldn't change what they do.** One that runs past about 500 words is usually holding a plan, so split it into sub-issues, as "What a plan holds" below says.
+
+## Each kind's outline
+
+Its parts come in this order. Leave out a part with nothing in it.
+
+**A bug:**
+
+1. What goes wrong and when, as someone who hit it would recognize it, and whether that was seen in the app or predicted from the code.
+2. How a person gets there, when it isn't obvious.
+3. Why it happens, naming the code.
+4. Ways to fix it, when you see any.
+5. A decision the owner has to make first, as a question, when there is one.
+
+For example, an issue that opens:
+
+> If a chat's saved effort or model is no longer offered, changing just its approval mode fails, with an error about the effort or the model rather than the mode.
+>
+> **How a chat ends up like that.** An update stops offering the effort or model a chat was using.
+>
+> **Why the change fails.** `LiveSession::configure` (`crates/hub/src/session/live.rs`) checks all three of the chat's settings after the change, not just the one being changed. So the effort that was already there fails the check, and the mode change is refused, though the new mode is fine.
+
+**A feature or a task:**
+
+1. What's true once it's done, in one concrete case: what a person sees, or what a caller gets back.
+2. What's there already that it builds on, naming the code.
+3. What to build, a bold-led bullet for each part.
+4. What's still to find out, and a decision the owner has to make first, as a question.
+5. When it's done, as something a test or a person could check.
+
+**A question:**
+
+1. What's undecided, and what waits on it.
+2. What's known, from the code, a test or a doc.
+3. Two to four options, each with what it costs, the recommended one first.
+
+**A risk:** what could go wrong, what would show it happening, and what would mitigate it.
+
+**A plan:** what the work achieves, in a paragraph, then its parts as sub-issues or a checklist, in the order they go, with why when the order isn't obvious.
+
+## Labels and fields
 
 Labels answer three questions, so any common search is one filter: what kind of issue it is, which part of the system it's in, and whether only the owner can move it.
 

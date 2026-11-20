@@ -25,7 +25,7 @@ A README beside code says how to build, run or change that code, and agents keep
 | `docs/guide/` | How to use Roundhouse, a page for each task and each thing, published as the site's `/docs/` pages |
 | `docs/standards/documentation.md` | Where each kind of information goes: a doc, GitHub, the code, or kept private |
 | `docs/standards/who-decides.md` | Which decisions are the owner's, how an owner doc changes, and how to propose a change to one |
-| `docs/standards/issues.md` | How an issue is labelled, scheduled and linked to others |
+| `docs/standards/issues.md` | How an issue is written, labelled, scheduled and linked to others |
 | `docs/standards/writing.md` | How to word what a person reads: docs, issues, pull requests, commit messages and comments |
 | `docs/standards/rust.md` | How Rust is written, whatever the crate |
 | `docs/standards/platforms.md` | How code is written so that it runs on macOS, Windows and Linux |

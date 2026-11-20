@@ -48,6 +48,7 @@ cargo run -p guide -- OUT         # Builds docs/guide, and refuses a link or a p
 | add a dependency | `docs/standards/dependencies.md` |
 | run a timing test | `docs/reference/performance.md` |
 | split a change | `docs/standards/stacks.md` |
+| file an issue | `docs/standards/issues.md` |
 | open a PR | `docs/standards/pull-requests.md` |
 | push, queue or merge | `docs/standards/merging.md` |
 | review a change | `docs/standards/reviews.md` |
