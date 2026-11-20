@@ -28,7 +28,8 @@ pub(super) enum Stands<'a> {
         default: bool,
     },
     Refused,
-    /// Its code ended first, or the hub stopped while it waited.
+    /// Its code ended first, or the hub stopped while it waited. The panel has one sentence for both, so it says
+    /// only that the sign-in ended, and not that its code did.
     Ended,
     Cancelled,
     /// The hub couldn't go on, as this says.
@@ -106,8 +107,8 @@ impl<'a> Stands<'a> {
             Stands::Approved { name: None, .. } => "Signed in.".to_string(),
             Stands::Refused => "You refused it on GitHub, so nothing was connected.".to_string(),
             Stands::Ended => {
-                "Its code ended before it was approved on GitHub, so nothing was connected. Sign in again for a new \
-                 code."
+                "The sign-in ended before it was approved on GitHub, so nothing was connected. Sign in again for a \
+                 new code."
                     .to_string()
             }
             Stands::Cancelled => "It was cancelled, so nothing was connected.".to_string(),
