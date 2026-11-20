@@ -111,7 +111,7 @@ fn command(made_with: &str, cx: &App) -> Div {
         .py(look::Space::XSmall)
         .gap(look::Space::Small)
         .corners(look::Corner::Control)
-        .border_1()
+        .border(look::EDGE)
         .border_color(colors.edge)
         .bg(colors.inset)
         .typeset(look::Type::Code)

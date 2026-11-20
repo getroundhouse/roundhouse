@@ -64,7 +64,7 @@ fn waiting(code: &GithubUserCode, address: &str, until: Option<&str>, cx: &App) 
         .py(look::Space::XSmall)
         .gap(look::Space::Small)
         .corners(look::Corner::Control)
-        .border_1()
+        .border(look::EDGE)
         .border_color(colors.edge)
         .bg(colors.inset)
         .child(

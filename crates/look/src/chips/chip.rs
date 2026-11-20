@@ -11,7 +11,7 @@ use crate::colors::colors;
 use crate::counts::lines_changed;
 use crate::file_icons::{file_icon_at, folder_icon};
 use crate::icon_sizes::IconSizing as _;
-use crate::shape::{Corner, Shaped as _};
+use crate::shape::{Corner, EDGE, Shaped as _};
 use crate::space::Space;
 use crate::typography::Typeset as _;
 
@@ -191,7 +191,7 @@ impl RenderOnce for Chip {
             .pl(INSIDE)
             .pr(Space::Small)
             .corners(Corner::Control)
-            .border_1()
+            .border(EDGE)
             .border_color(colors.control_edge)
             .bg(colors.raised)
             .text_color(colors.text)

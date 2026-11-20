@@ -75,7 +75,7 @@ pub(super) fn difference(outcome: Outcome<'_>, cx: &App) -> AnyElement {
                 .w(across(place.width))
                 .h(across(place.height))
                 .corners(look::Corner::Glyph)
-                .border_1()
+                .border(look::EDGE)
                 .border_color(colour.opacity(OUTLINE))
                 .bg(colour.opacity(WASH))
         });

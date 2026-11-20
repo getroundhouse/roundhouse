@@ -6,7 +6,7 @@ use gpui_kit::{
 };
 
 use super::KeyKind;
-use crate::{Corner, Shaped as _, Space, Type, Typeset as _, colors};
+use crate::{Corner, EDGE, Shaped as _, Space, Type, Typeset as _, colors};
 
 /// A key to press, as `binding` names it, such as `secondary-f` or `enter`, shown as `kind`. It's read for the system
 /// it's drawn on, so `secondary` is Cmd on a Mac and Ctrl elsewhere, and written as that system writes keys.
@@ -66,7 +66,7 @@ impl RenderOnce for Key {
                     .px(Space::XSmall)
                     .gap(Space::XSmall)
                     .corners(Corner::InlineControl)
-                    .border_1()
+                    .border(EDGE)
                     .border_color(colors.control_edge)
                     .bg(colors.raised)
                     .typeset(Type::Key)

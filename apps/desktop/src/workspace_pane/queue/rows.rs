@@ -55,7 +55,7 @@ impl WorkspacePane {
                 .region(Region::Queue)
                 .mx(look::Space::Medium)
                 .corners_top(look::Corner::Card)
-                .border_1()
+                .border(look::EDGE)
                 .border_b_0()
                 .border_color(border)
                 .bg(colors.pane)

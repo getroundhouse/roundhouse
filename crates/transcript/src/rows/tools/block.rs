@@ -40,7 +40,7 @@ pub(in crate::rows) fn frame(cx: &App) -> Div {
         .flex()
         .flex_col()
         .corners(look::Corner::Card)
-        .border_1()
+        .border(look::EDGE)
         .border_color(colors.edge)
         .bg(colors.inset)
         .overflow_hidden()

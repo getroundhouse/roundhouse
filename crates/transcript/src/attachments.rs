@@ -167,7 +167,7 @@ fn frame(file: &Carried, cx: &App) -> Stateful<Div> {
         .flex_none()
         .corners(look::Corner::Control)
         .overflow_hidden()
-        .border_1()
+        .border(look::EDGE)
         .border_color(colors.edge)
         .bg(colors.inset)
 }

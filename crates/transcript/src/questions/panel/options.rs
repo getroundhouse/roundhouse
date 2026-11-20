@@ -139,7 +139,7 @@ fn other_row(
         .items_center()
         .justify_center()
         .corners(look::Corner::InlineControl)
-        .border_1()
+        .border(look::EDGE)
         .border_color(colors.foreground)
         .hand()
         .on_click(cx.listener(|this, _, window, cx| {

@@ -50,7 +50,7 @@ pub(super) fn render(app: &AppView, cx: &mut Context<AppView>) -> impl IntoEleme
             .w_full()
             .h(look::ControlSize::Large.height())
             .px(ROW_PAD)
-            .border_1()
+            .border(look::EDGE)
             .border_color(colors.control_edge)
             .corners(look::Corner::Control)
             .child(switcher_face(icon, name, trailing, cx))

@@ -13,7 +13,7 @@ use gpui_kit::{
     ParentElement as _, Role, SharedString, StatefulInteractiveElement as _, Styled as _, Task, TestSupportExt as _,
     Window, div,
 };
-use look::{Corner, IconSize, IconSizing as _, Shaped as _, Space, TaskRing, Type, Typeset as _};
+use look::{Corner, EDGE, IconSize, IconSizing as _, Shaped as _, Space, TaskRing, Type, Typeset as _};
 use protocol::pairing::{Device, Pairing};
 
 use super::qr::{self, QrMatrix};
@@ -235,7 +235,7 @@ fn ready_row(link: &str, qr: Option<&QrMatrix>, cx: &App) -> AnyElement {
         .py(Space::Small)
         .items_center()
         .bg(colors.inset)
-        .border_1()
+        .border(EDGE)
         .border_color(colors.edge)
         .corners(Corner::Control)
         .child(
@@ -284,7 +284,7 @@ fn paired_body(device_name: &str, cx: &App) -> AnyElement {
                 .gap(Space::Small)
                 .items_center()
                 .bg(colors.inset)
-                .border_1()
+                .border(EDGE)
                 .border_color(colors.edge)
                 .corners(Corner::Control)
                 .child(Icon::new(Lucide::CircleCheck).sized(IconSize::Large).text_color(colors.done))

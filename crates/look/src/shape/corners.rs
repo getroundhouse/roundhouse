@@ -4,8 +4,8 @@ use gpui_kit::{Pixels, Styled, px};
 /// The width of every edge: around a card, along a header, between rows, and around something to use. A line between
 /// two things is drawn with `look::line` or `look::Lined`, at this width.
 pub const EDGE: Pixels = px(1.);
-/// The width of the rule at the left of a quote, such as what a subagent was asked, which stands for an edge on that
-/// side alone, so it's wider than one.
+/// The width of the rule at the left of a quote, such as what a subagent was asked or a block a document's revision
+/// changed, which stands for an edge on that side alone, so it's wider than one.
 pub const QUOTE_RULE: Pixels = px(2.);
 /// The width of the line under the tab that's showing.
 pub const TAB_LINE: Pixels = px(2.);

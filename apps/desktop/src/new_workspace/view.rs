@@ -19,7 +19,7 @@ use crate::model_picker::model_picker;
 impl Render for NewWorkspaceDialog {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         // An edge of its own inside the dialog's, which shows only while files are dragged over it.
-        let target = v_flex().id("new-workspace").w_full().border_1().border_color(transparent_black());
+        let target = v_flex().id("new-workspace").w_full().border(look::EDGE).border_color(transparent_black());
         let target = composing::place(target, self.planning(), look::Corner::Card, cx, Self::toggle_plan_mode);
         let target = attached::takes_drops(target, cx, |_, paths, cx| Self::attach_paths(paths, cx))
             .child(self.header(cx))
@@ -45,7 +45,7 @@ impl Render for NewWorkspaceDialog {
         // The composer's surface and corners, since it's where a prompt is written, and its edge, which the line under
         // the repository is too. A plain dialog is only what's in it, so this is its fill and edge.
         let (background, edge) = self.colors(cx);
-        div().w_full().bg(background).border_1().border_color(edge).corners(look::Corner::Card).child(target)
+        div().w_full().bg(background).border(look::EDGE).border_color(edge).corners(look::Corner::Card).child(target)
     }
 }
 
@@ -69,7 +69,7 @@ impl NewWorkspaceDialog {
             .w_full()
             .h(look::BarSize::Regular.height())
             .px(look::Space::Small)
-            .border_b_1()
+            .border_b(look::EDGE)
             .border_color(self.colors(cx).1)
             .child(
                 look::button("new-workspace-repo", look::ButtonKind::Borderless, look::ControlSize::Regular, name)

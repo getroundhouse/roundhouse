@@ -246,7 +246,7 @@ pub fn shown_dialog(dialog: Dialog, cx: &App) -> AnyElement {
         .p(Space::XLarge)
         .gap(Space::Large)
         .bg(colors.raised)
-        .border_1()
+        .border(crate::shape::EDGE)
         .border_color(colors.edge)
         .corners(Corner::Card)
         .typeset(Type::Body)

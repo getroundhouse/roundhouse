@@ -55,8 +55,12 @@ fn open(image: ImageSource, covers: (u32, u32), window: &mut Window, cx: &mut Ap
             .child(picture(image.clone()).size_full().rounded(corners).object_fit(ObjectFit::Contain))
             .test_support();
         let colors = look::colors(cx);
-        let framed =
-            div().bg(colors.inset).border_1().border_color(colors.edge).corners(look::Corner::Card).child(opened);
+        let framed = div()
+            .bg(colors.inset)
+            .border(look::EDGE)
+            .border_color(colors.edge)
+            .corners(look::Corner::Card)
+            .child(opened);
         look::plain_dialog(framed, shown.width + look::EDGE * 2.).centered().click_closes()
     });
 }

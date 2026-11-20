@@ -258,7 +258,7 @@ impl TranscriptList {
             .icon(IconName::ChevronDown)
             .accessibility_label("Jump to latest")
             .tooltip("Jump to latest")
-            .border_1()
+            .border(look::EDGE)
             .border_color(edge)
             .bg(colors.pane)
             .text_color(colors.text)

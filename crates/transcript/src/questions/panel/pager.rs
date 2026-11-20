@@ -47,7 +47,7 @@ pub(super) fn pager(
             let inner = div()
                 .size(px(8.))
                 .rounded_full()
-                .map(|d| if answer.is_some() { d.bg(foreground) } else { d.border_1().border_color(muted) });
+                .map(|d| if answer.is_some() { d.bg(foreground) } else { d.border(look::EDGE).border_color(muted) });
             div()
                 .id(ElementId::Name(format!("question-dot-{q}").into()))
                 .size(px(12.))
@@ -56,7 +56,7 @@ pub(super) fn pager(
                 .justify_center()
                 .rounded_full()
                 .hand()
-                .when(q == showing, |d| d.border_1().border_color(muted))
+                .when(q == showing, |d| d.border(look::EDGE).border_color(muted))
                 .on_click(cx.listener(move |this, _, window, cx| this.show(q, window, cx)))
                 .child(inner)
                 .test_support()

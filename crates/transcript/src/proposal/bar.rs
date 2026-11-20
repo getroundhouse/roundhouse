@@ -59,7 +59,7 @@ impl ProposalView {
             .max_w(px(COLUMN))
             .p(look::Space::Medium)
             .corners(look::Corner::Card)
-            .border_1()
+            .border(look::EDGE)
             .border_color(colors.edge)
             .bg(colors.raised)
             .typeset(look::Type::Body)
