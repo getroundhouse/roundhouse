@@ -112,6 +112,7 @@ mod tests {
             env: Vec::new(),
             tools_token: None,
             login: None,
+            repository: None,
         }
     }
 

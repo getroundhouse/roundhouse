@@ -172,6 +172,7 @@ fn title_spec(cwd: &Path) -> AgentSpec {
         env: Vec::new(),
         tools_token: None,
         login: None,
+        repository: None,
     }
 }
 

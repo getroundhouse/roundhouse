@@ -2,9 +2,7 @@
 //! while each machine's own login is the default, the one the workspace's provider's `gh` handed the hub.
 
 use protocol::client::{ApiError, ErrorCode};
-use protocol::model::{
-    GithubAccountId, GithubRepositoryName, GithubToken, ProviderName, RepoUrl, Workspace, WorkspaceId,
-};
+use protocol::model::{GithubAccountId, GithubRepositoryName, GithubToken, ProviderName, Workspace, WorkspaceId};
 use tracing::info;
 
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -188,10 +186,10 @@ impl Hub {
         })
     }
 
-    /// Which repository on GitHub the workspace's is, as its record's address names it.
+    /// Which repository on GitHub the workspace's is, as [`Hub::github_repository_of`] says, for reading its pull
+    /// requests, which one that isn't on github.com has none of.
     pub(in crate::hub) async fn on_github(&self, workspace: &Workspace) -> Result<GithubRepositoryName, ApiError> {
-        let repo = self.repo_of(workspace).await?;
-        repo.origin.url().and_then(RepoUrl::on_github).ok_or_else(|| {
+        self.github_repository_of(workspace).await?.ok_or_else(|| {
             let message = "the workspace's repository has no address on github.com the hub knows of, so the hub can't \
                            read its pull requests";
             ApiError::new(ErrorCode::Unavailable, message)

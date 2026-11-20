@@ -7,7 +7,7 @@ use super::{Reply, Request, ToolsToken, WorkerRequest, WorkerResponse};
 use crate::capability::Capabilities;
 use crate::capability::conversation::Start;
 use crate::capability::settings::Settings;
-use crate::model::{AgentKind, AgentLogin, RunId, SessionId};
+use crate::model::{AgentKind, AgentLogin, GithubRepositoryName, RunId, SessionId};
 
 /// Starts the session's agent, unless it's running already.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
@@ -33,6 +33,10 @@ pub struct AgentSpec {
     /// worker keeps only as long as the agent. `None` runs it under this machine's own login.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub login: Option<AgentLogin>,
+    /// The workspace's repository on GitHub, as its address names it, which the agent is told so it links to its issues
+    /// and pull requests by their real addresses. `None` for one that isn't on github.com.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub repository: Option<GithubRepositoryName>,
 }
 
 impl Request for AgentSpec {

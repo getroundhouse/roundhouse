@@ -290,6 +290,7 @@ fn agent_start(session_id: &str, cwd: &Path, tools_token: Option<ToolsToken>) ->
         env: vec![],
         tools_token,
         login: None,
+        repository: None,
     }
 }
 

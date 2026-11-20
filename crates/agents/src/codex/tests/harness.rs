@@ -42,6 +42,7 @@ impl Harness {
             env: Vec::new(),
             tools_token: None,
             login: None,
+            repository: None,
         };
         let options = AgentOptions { pid_file: Some(room.path().join("pid")), ..Default::default() };
         let (tx, rx) = mpsc::channel(1024);

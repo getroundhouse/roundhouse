@@ -55,6 +55,7 @@ impl Binding for Antigravity {
             env: Vec::new(),
             tools_token: None,
             login: None,
+            repository: None,
         };
         crate::antigravity::spawn_at(launch.bin, spec, output, AgentOptions::default())
             .await

@@ -81,6 +81,7 @@ impl Harness {
             env: Vec::new(),
             tools_token: None,
             login: None,
+            repository: None,
         };
         let options = AgentOptions {
             // `agy` keeps its conversations under the home, which the room stands in for.

@@ -6,8 +6,8 @@ use crate::store::{Made, Store, WorkspacePlacement, now_ms};
 use naming::{Names, name_taken};
 use protocol::client::{ApiError, ErrorCode, HubNotice};
 use protocol::model::{
-    AgentKind, BranchName, ClientRequestId, ProviderName, RecordKey, Repo, RepoId, Rev, SetupStatus, TitleSource,
-    Workspace, WorkspaceId, WorkspaceStatus,
+    AgentKind, BranchName, ClientRequestId, GithubRepositoryName, ProviderName, RecordKey, Repo, RepoId, RepoUrl, Rev,
+    SetupStatus, TitleSource, Workspace, WorkspaceId, WorkspaceStatus,
 };
 use protocol::worker::{PrepareWorkspace, RepoSource, WorkspaceReady};
 use providers::Provider;
@@ -222,6 +222,15 @@ impl Hub {
     pub(crate) async fn repo_of(&self, workspace: &Workspace) -> Result<Repo, ApiError> {
         let repo_id = workspace.repo_id.clone();
         self.blocking(move |store| store.get_repo(&repo_id)).await
+    }
+
+    /// Which repository on GitHub the workspace's is, as its record's address names it, or `None` for one with no
+    /// address on github.com.
+    pub(crate) async fn github_repository_of(
+        &self,
+        workspace: &Workspace,
+    ) -> Result<Option<GithubRepositoryName>, ApiError> {
+        Ok(self.repo_of(workspace).await?.origin.url().and_then(RepoUrl::on_github))
     }
 
     /// Tells everyone following the feed what the workspace is now, read back from the store, after something with no

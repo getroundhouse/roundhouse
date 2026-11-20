@@ -92,6 +92,7 @@ mod tests {
             env: vec![],
             tools_token: Some(ToolsToken::new(SECRET)),
             login: Some(login()),
+            repository: None,
         }
     }
 

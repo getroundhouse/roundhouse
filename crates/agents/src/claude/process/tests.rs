@@ -67,6 +67,7 @@ fn spec(model: Option<&'static str>, mode: ApprovalMode) -> AgentSpec {
         env: vec![],
         tools_token: None,
         login: None,
+        repository: None,
     }
 }
 

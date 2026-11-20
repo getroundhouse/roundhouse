@@ -154,7 +154,7 @@ A diagram the agent writes in Mermaid, in a code block whose language is `mermai
 
 ## Issues and pull requests in a reply
 
-A link to an issue or a pull request on GitHub in a reply shows as a chip, whatever the link's words: its state's mark in its state's colour, its number, and, the first time the reply links to it, its title. Roundhouse tells the agent to link to each one it mentions. A number written alone, such as `#1021`, stays as it's written, since it could be another repository's, or the number of something else. A subagent's report where its call shows it, a plan and a proposal show chips too. In a prompt and a thought, a link stays a link.
+A link to an issue or a pull request on GitHub in a reply shows as a chip, whatever the link's words: its state's mark in its state's colour, its number, and, the first time the reply links to it, its title. Roundhouse tells the agent to link to each one it mentions, and which repository on GitHub its workspace's is, so its links go to the right place. A number written alone, such as `#1021`, stays as it's written, since it could be another repository's, or the number of something else. A subagent's report where its call shows it, a plan and a proposal show chips too. In a prompt and a thought, a link stays a link.
 
 ![A reply's issues and pull requests as chips](../../../spec/screens/references.png)
 

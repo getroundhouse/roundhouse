@@ -100,7 +100,10 @@ pub(crate) async fn start_agent(
         binary: binary(state, spec.agent),
         pid_file: Some(agent_file("pid")),
         tools: tools_for(state, &mut spec, agent_file("mcp.json")).await,
-        instructions: Some(Instructions { text: instructions(spec.agent), file: agent_file("instructions.txt") }),
+        instructions: Some(Instructions {
+            text: instructions(spec.agent, spec.repository.as_ref()),
+            file: agent_file("instructions.txt"),
+        }),
         // Taken out of the launch, as the tools' token is, so it's in one place: what the agent is started with, and
         // started again with, which goes when the agent does.
         login: spec.login.take(),
