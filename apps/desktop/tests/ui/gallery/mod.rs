@@ -9,7 +9,8 @@
 //! of a row and of an icon. Each sheet also keeps where it draws each name beside its image, for the design system's
 //! page, as `gallery/places.rs` says. Text of each kind is drawn the same way at several scales, in
 //! `gallery/baselines.rs`, to check it lines up, and each weight the app asks for is found a face of its own, in
-//! `gallery/weights.rs`.
+//! `gallery/weights.rs`. Clips, short videos of the app opened the same way and recorded a frame at a time, are in
+//! `gallery/clips/`, and are recorded only by name.
 
 #![cfg(test)]
 
@@ -24,6 +25,7 @@ mod call_screens;
 mod capture;
 mod cards;
 mod chats;
+mod clips;
 mod code_lines;
 mod codex_screens;
 mod colours;

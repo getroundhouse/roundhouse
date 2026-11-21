@@ -100,6 +100,20 @@ waiting.workspace = true
 
 [target.'cfg(target_os = "macos")'.dev-dependencies]
 gpui-pre-apple.workspace = true
+# The gallery's clips, which it writes as videos.
+block2.workspace = true
+objc2.workspace = true
+objc2-av-foundation = { workspace = true, features = [
+    "AVAssetWriter",
+    "AVAssetWriterInput",
+    "AVVideoSettings",
+    "objc2-core-media",
+    "objc2-core-video",
+] }
+objc2-core-foundation.workspace = true
+objc2-core-media.workspace = true
+objc2-core-video = { workspace = true, features = ["CVBase"] }
+objc2-foundation = { workspace = true, features = ["NSDictionary", "NSError", "NSObject", "NSURL", "NSValue"] }
 
 [lints]
 workspace = true

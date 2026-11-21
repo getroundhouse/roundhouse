@@ -35,4 +35,5 @@ patches = [
     "attachment-card-radius",
     "ios-mono-font",
     "mono-font-without-a-font-list",
+    "test-input-between-frames",
 ]
