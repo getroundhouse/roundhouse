@@ -12,7 +12,9 @@ fn full(version: &str, oldest: u32, newest: u32) -> String {
 
 /// A full package with the archive of its hub, as `publish.py` lists one on a channel that publishes them.
 fn with_hub(version: &str, oldest: u32, newest: u32) -> String {
-    let hub = format!(r#""Hub":{{"FileName":"Roundhouse-{version}-osx-hub.tar.gz","Size":9,"SHA1":"A","SHA256":"B"}}"#);
+    let hub = format!(
+        r#""Hub":{{"FileName":"Roundhouse-{version}-macos-arm64-hub.tar.gz","Size":9,"SHA1":"A","SHA256":"B"}}"#
+    );
     format!(r#"{{"Version":"{version}","Type":"Full","WorkerVersions":{{"oldest":{oldest},"newest":{newest}}},{hub}}}"#)
 }
 
@@ -30,7 +32,7 @@ fn the_fixture_the_publisher_s_tests_check_says_what_its_hub_speaks_and_where_it
     let releases: Vec<_> = feed.releases().collect();
 
     let archive = HubArchive {
-        file_name: "Roundhouse-0.1.1-osx-hub.tar.gz".into(),
+        file_name: "Roundhouse-0.1.1-macos-arm64-hub.tar.gz".into(),
         size: 512,
         sha256: "89ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF01234567".into(),
     };
@@ -92,7 +94,7 @@ fn a_hub_updates_to_the_newest_release_with_an_archive() {
     let update = feed.hub_update("0.1.8", 3).unwrap().unwrap();
 
     assert_eq!(update.version, "0.1.10", "the newest with an archive");
-    assert_eq!(update.hub.unwrap().file_name, "Roundhouse-0.1.10-osx-hub.tar.gz");
+    assert_eq!(update.hub.unwrap().file_name, "Roundhouse-0.1.10-macos-arm64-hub.tar.gz");
 }
 
 #[test]

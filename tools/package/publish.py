@@ -6,15 +6,18 @@ bucket. It reads the published feed, uses it only once its signature matches the
 packages to it, and signs and uploads exactly that. Whoever can write to the bucket can then only offer apps a feed
 the workflow signed, such as an older one, and can't get a feed of theirs signed.
 
-Each step takes `--channel` first, for which platform's releases it publishes: `osx`, `win-amd64` for Windows on amd64,
-`win-arm64`, `linux-amd64` for Linux on amd64, or `linux-arm64`. It's osx if it's left out. A platform has a feed of its own,
-`releases.<channel>.json`, and all are in the one bucket.
+Each step takes `--channel` first, for which platform's releases it publishes: `macos-arm64`, `win-amd64` for Windows
+on amd64, `win-arm64`, `linux-amd64` for Linux on amd64, or `linux-arm64`. It's macos-arm64 if it's left out. A platform
+has a feed of its own, `releases.<channel>.json`, and all are in the one bucket.
 
   publish.py prepare --store STORE --key KEY --version VERSION --work DIR
       Reads the published feed and checks its signature. If it lists VERSION, a run already published it: this makes
       sure apps get that feed, and prints `published`. Otherwise it refuses a VERSION that isn't newer than every
       published release, which no app would take. It puts the feed in DIR/base, and in DIR/releases with its newest
-      full package, checked against it, for vpk to make a delta from, and prints `new`.
+      full package, checked against it, for vpk to make a delta from, and prints `new`. On a channel that took over
+      from an older one and has published nothing, the feed in DIR/base is the older channel's, so the releases it
+      keeps carry over, and DIR/releases is left empty, since no app could use a delta from a package of the older
+      channel.
   publish.py merge --version VERSION --keep COUNT --worker-versions FILE --work DIR
       Writes the feed to sign and prints its path: the feed in DIR/base and the packages vpk made for VERSION in
       DIR/releases, checked against their files, with VERSION's full package saying which versions of the worker
@@ -26,15 +29,16 @@ Each step takes `--channel` first, for which platform's releases it publishes: `
       old at work, so the update stops none of them.
   publish.py bridge --version VERSION --work DIR
       For a channel that took over from an older one, writes the older channel's feed to sign, listing only the full
-      package of VERSION the feed in DIR/feed has, and prints its path. Prints nothing for any other channel.
+      package of VERSION the feed in DIR/feed has and, on a channel whose apps step, the full packages that feed keeps
+      for them to step to, and prints its path. Prints nothing for any other channel.
   publish.py upload --store STORE --key KEY --version VERSION --work DIR
       Uploads the new packages, the hub's archive and what people download, then the signed feed, reads the feed
       back, then the older channel's feed, if `bridge` wrote one, and then deletes the packages and archives that left
       the feed.
   publish.py check --url URL --key KEY --version VERSION --work DIR
-      Checks that URL, where apps read the feed, serves the one in DIR/feed, the older channel's, if this run
-      published one, and VERSION's full package and hub archive. A host with a cache can take a while to, so it tries
-      for a minute.
+      Checks that URL, where apps read the feed, serves the one in DIR/feed, VERSION's full package and hub archive,
+      and the older channel's feed, if this run published one, with each full package and hub archive it lists. A host
+      with a cache can take a while to, so it tries for a minute.
 
 STORE is s3://BUCKET, with S3_ENDPOINT, S3_REGION and the AWS CLI's usual credentials, or a directory, to try it
 without a bucket. KEY is the app's public key, in the form `crates/update-feed/src/signature.rs` says.
@@ -91,7 +95,7 @@ def linux(channel: str) -> dict[str, str]:
 
 # What people download for each channel, which vpk makes anew for each release under the same names.
 CHANNELS = {
-    "osx": {PACK_ID + "-osx-Portable.zip": "application/zip"},
+    "macos-arm64": {PACK_ID + "-macos-arm64-Portable.zip": "application/zip"},
     "win-amd64": windows("win-amd64"),
     "win-arm64": windows("win-arm64"),
     "linux-amd64": linux("linux-amd64"),
@@ -102,20 +106,23 @@ CHANNELS = {
 # The channels whose apps step through each break in the worker protocol: those whose hubs keep their workers through
 # an update, as KEEPS_WORKERS in crates/hub/src/hub/coordinator.rs has it. A Windows hub's workers stop with it, so its
 # apps take the newest. tools/update-steps checks the same ones in the merge queue.
-STEPS = {"osx", "linux-amd64", "linux-arm64"}
+STEPS = {"macos-arm64", "linux-amd64", "linux-arm64"}
 
 
 # The channels whose releases publish the hub as an archive of its own, those where `roundhouse hub install` installs it
 # as a service. Each archive is `Roundhouse-<version>-<channel>-hub.tar.gz`, as `hub_archive` in vpk.sh makes it, and
 # the newest is also what people download, without the version.
-HUBS = {"osx", "linux-amd64", "linux-arm64"}
+HUBS = {"macos-arm64", "linux-amd64", "linux-arm64"}
 
 
-# The channel each one took over from. An app looks for updates in the channel it was packaged for, so one packaged
-# before the change still reads the older channel's feed. Each release also signs that feed, listing only its own full
-# package, which was packaged for the newer channel, so such an app takes it and looks there from then on. amd64
-# Windows was `win` before 0.1.245. *Unconfirmed.*
-TAKES_OVER = {"win-amd64": "win"}
+# The channel each one took over from. An app looks for updates in the channel it was packaged for, and a hub installed
+# as a service in the one it was built for, so one from before the change still reads the older channel's feed. Each
+# release also signs that feed, listing its own full package, which was packaged for the newer channel, so such an app
+# or hub takes it and looks there from then on. Where apps step, it also lists the full packages the newer channel keeps
+# for them to step to, so one with older workers at work steps as it would have. Those can be the older channel's,
+# since the newer channel's first release starts from that one's feed. amd64 Windows was `win` before 0.1.245, and the
+# Mac was `osx`, Velopack's default, before `macos-arm64`. *Unconfirmed.*
+TAKES_OVER = {"win-amd64": "win", "macos-arm64": "osx"}
 
 
 def use_channel(channel: str) -> None:
@@ -128,7 +135,7 @@ def use_channel(channel: str) -> None:
     OLDER_FEED = f"releases.{TAKES_OVER[channel]}.json" if channel in TAKES_OVER else None
 
 
-use_channel("osx")
+use_channel("macos-arm64")
 
 
 class Refused(Exception):
@@ -245,10 +252,12 @@ def assets_of(feed: bytes) -> list[dict]:
     return json.loads(feed)["Assets"]
 
 
-def published(store: DirStore | S3Store, key: str) -> tuple[bytes, bytes] | None:
-    """The published feed and its signature, once they match. None only when nothing has been published."""
+def published(store: DirStore | S3Store, key: str, feed_name: str | None = None) -> tuple[bytes, bytes] | None:
+    """The published feed, this channel's unless `feed_name` names another, and its signature, once they match. None
+    only when nothing has been published."""
+    feed_name = feed_name or FEED
     pairs, found = [], False
-    for name in (FEED, STAGED_FEED):
+    for name in (feed_name, "staging/" + feed_name):
         feed, signature = store.get(name), store.get(name + ".sig")
         found = found or feed is not None or signature is not None
         if feed is not None and signature is not None and signed(feed, signature, key):
@@ -330,8 +339,12 @@ def prepare(store: DirStore | S3Store, key: str, version: str, work: Path) -> st
     if any((work / name).exists() for name in ("base", "feed", "releases")):
         raise Refused(f"{work} has files from an earlier run, so start from an empty directory")
     base = published(store, key)
+    # A channel that took over from another and has published nothing starts from that one's feed, so the releases it
+    # keeps for apps to step to carry over, and the older channel's feed can go on listing them. Only once nothing is
+    # published, so a feed that doesn't match its signature is still refused.
+    seeded = base is None and OLDER_FEED is not None and (base := published(store, key, OLDER_FEED)) is not None
     assets = assets_of(base[0]) if base else []
-    if any(asset["Version"] == version for asset in assets):
+    if not seeded and any(asset["Version"] == version for asset in assets):
         # A run published it and stopped before it finished, maybe with the feed only under staging/.
         assert base is not None
         write_pair(work / "feed", base)
@@ -350,6 +363,10 @@ def prepare(store: DirStore | S3Store, key: str, version: str, work: Path) -> st
     if base is None:
         return "new"
     write_pair(work / "base", base)
+    # vpk would make a delta from the older channel's newest package, which an app on it never takes, since the older
+    # channel's feed lists only full packages, and an app on this one is past it.
+    if seeded:
+        return "new"
     (releases / FEED).write_bytes(base[0])
     fulls = [asset for asset in assets if asset["Type"] == "Full"]
     if fulls:
@@ -376,19 +393,24 @@ def worker_versions(path: Path) -> dict[str, int]:
     return said
 
 
-def kept(assets: list[dict], keep: int) -> list[dict]:
-    """The newest `keep` releases, and the full package of the newest release whose hub speaks each oldest worker
-    version, which an app with workers that old at work steps to. A hub speaks no worker version older than the one
-    before its own, so those are the last releases before each break."""
-    newest = set(sorted({version_of(asset) for asset in assets}, reverse=True)[:keep])
+def stepped_to(assets: list[dict]) -> set[tuple[int, ...]]:
+    """The version of the newest release whose hub speaks each oldest worker version, which an app with workers that
+    old at work steps to. A hub speaks no worker version older than the one before its own, so those are the last
+    releases before each break."""
     steps: dict[int, tuple[int, ...]] = {}
     for asset in assets:
         if asset["Type"] == "Full" and WORKER_VERSIONS in asset:
             oldest = asset[WORKER_VERSIONS]["oldest"]
             steps[oldest] = max(steps.get(oldest, ()), version_of(asset))
-    stepped_to = set(steps.values())
+    return set(steps.values())
+
+
+def kept(assets: list[dict], keep: int) -> list[dict]:
+    """The newest `keep` releases, and the full package of each release an app steps to."""
+    newest = set(sorted({version_of(asset) for asset in assets}, reverse=True)[:keep])
+    steps = stepped_to(assets)
     return [asset for asset in assets
-            if version_of(asset) in newest or (version_of(asset) in stepped_to and asset["Type"] == "Full")]
+            if version_of(asset) in newest or (version_of(asset) in steps and asset["Type"] == "Full")]
 
 
 def steps_from(assets: list[dict], version: str, speaks: dict[str, int]) -> None:
@@ -450,29 +472,40 @@ def full_of(feed: bytes, version: str) -> list[dict]:
     return [asset for asset in assets_of(feed) if asset["Version"] == version and asset["Type"] == "Full"]
 
 
+def offered_on_older(feed: bytes, version: str) -> list[dict]:
+    """What the older channel's feed offers, as `feed` has it: `version`'s full package and, on a channel whose apps
+    step, each release's they step to, which an app with older workers at work takes first. Only full packages, since a
+    delta starts from the release before it in this channel, not the app's."""
+    if len(full_of(feed, version)) != 1:
+        raise Refused(f"the feed to publish doesn't list one full package for {version}")
+    assets = assets_of(feed)
+    steps = stepped_to(assets) if CHANNEL in STEPS else set()
+    return [asset for asset in assets
+            if asset["Type"] == "Full" and (asset["Version"] == version or version_of(asset) in steps)]
+
+
 def bridge(version: str, work: Path) -> Path | None:
     if OLDER_FEED is None:
         return None
-    # Only the full package, since a delta starts from the release before it in this channel, not the app's.
-    fulls = full_of((work / "feed" / FEED).read_bytes(), version)
-    if len(fulls) != 1:
-        raise Refused(f"the feed to publish doesn't list one full package for {version}")
+    offered = offered_on_older((work / "feed" / FEED).read_bytes(), version)
     path = work / "bridge" / OLDER_FEED
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps({"Assets": fulls}, separators=(",", ":")))
+    path.write_text(json.dumps({"Assets": offered}, separators=(",", ":")))
     return path
 
 
 def bridged(key: str, version: str, feed: bytes, work: Path) -> tuple[bytes, bytes] | None:
-    """The older channel's feed that `bridge` wrote, and its signature, once it's signed and offers exactly what `feed`
-    has for `version`. None if it wrote none. What the older channel's feed held before isn't kept, or read."""
+    """The older channel's feed that `bridge` wrote, and its signature, once it's signed and offers exactly what
+    `offered_on_older` takes from `feed`. None if it wrote none. What the older channel's feed held before isn't kept,
+    or read."""
     older = read_pair(work / "bridge", OLDER_FEED) if OLDER_FEED else None
     if older is None:
         return None
     if not signed(*older, key):
         raise Refused(f"{OLDER_FEED} isn't signed with the app's key")
-    if assets_of(older[0]) != full_of(feed, version):
-        raise Refused(f"{OLDER_FEED} should offer only {version}'s full package, as the signed feed has it")
+    if assets_of(older[0]) != offered_on_older(feed, version):
+        raise Refused(f"{OLDER_FEED} should offer only {version}'s full package, and where apps step the ones they "
+                      "step to, as the signed feed has them")
     return older
 
 
@@ -542,7 +575,10 @@ def check(url: str, key: str, version: str, work: Path, attempts: int = 6, wait:
     fulls = full_of(pair[0], version)
     if not fulls:
         raise Refused(f"the published feed doesn't list {version}")
-    for file in files_of(fulls[0]):
+    # And each release the older channel's feed offers, which can be one this channel's first release took over.
+    offered = {file["FileName"]: file for asset in fulls[:1] + (assets_of(older[0]) if older else [])
+               for file in files_of(asset)}
+    for file in offered.values():
         found = fetch(f"{url}/{file['FileName']}", method="HEAD")
         if found is None or found[1] != file["Size"]:
             size = "missing" if found is None else f"{found[1]} bytes"
@@ -553,7 +589,7 @@ def check(url: str, key: str, version: str, work: Path, attempts: int = 6, wait:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--channel", choices=sorted(CHANNELS), default="osx")
+    parser.add_argument("--channel", choices=sorted(CHANNELS), default="macos-arm64")
     steps = parser.add_subparsers(dest="step", required=True)
     for name, options in {
         "prepare": ("--store", "--key", "--version", "--work"),
