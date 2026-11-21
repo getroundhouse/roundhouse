@@ -55,7 +55,7 @@ fn copied(mirror: &mut Mirror, numbering: Numbering, range: TerminalRange, recta
 }
 
 /// However small a page is, the pages joined are what one copy of everything would be, which is what Select All
-/// copies today, though a page ends at a line's end.
+/// copies today, though a page ends at a line's end. A line the terminal wrapped is one line, as it was written.
 #[test]
 fn the_pages_joined_are_what_copying_everything_at_once_is() {
     let (mut mirror, now) = written();
@@ -63,6 +63,7 @@ fn the_pages_joined_are_what_copying_everything_at_once_is() {
     let all = mirror.selected_text().unwrap();
     mirror.clear_selection();
 
+    assert!(all.contains("\na line that is longer than one row of twenty\n"), "{all:?}");
     for page in [1, 20, 30, 45, 64, 100, usize::MAX] {
         assert_eq!(copied(&mut mirror, now.numbering, everything(now), false, page), all, "pages of {page} bytes");
     }
