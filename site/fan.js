@@ -30,13 +30,13 @@ const HERO_SWEEP = { from: -0.3, span: 1.8 };
 
 const COLORS = {
   copper: "#d08a5c",
-  none: "#6f6964",
+  none: "#7c7671",
   draft: "#8b949e",
   open: "#3fb950",
   merged: "#a371f7",
   closed: "#b9605a",
   red: "#ee6f64",
-  light: "#ebe7e3",
+  light: "#eee6e1",
 };
 
 const rgb = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));

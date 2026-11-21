@@ -32,11 +32,12 @@ What a client is, at any moment, is three traits rather than one kind of device,
 
 Each colour means one thing.
 
-- **Three warm near-black surfaces,** so the app reads as one calm field with a few raised things on it. The pane is `#151312`, the sidebar `#1a1715`, and anything raised, such as a card or a popover, is `#24201e`. The composer and code blocks are `#1e1b19`. A prompt is a wash of the brand's copper, `#37281f`, so what was asked is easy to find when scrolling.
-- **Two edge colours.** The thin edge that separates, around a card, along a header or between rows, is `#2a2624`. Something to use, such as the composer, a chip, a key, a field or a button that opens something, has a lighter edge, `#353130`, so it reads as something to use rather than as a line between two things. So does the button back down to a chat's end, which sits over the chat's text, as `chats.md` says.
+- **The greys are one ramp,** so the steps between them look even, and they read as one set made on purpose rather than colours picked one at a time. There are eleven stops at even steps of lightness, as Oklab measures it, since its steps look even to the eye, from 0.175 to 0.304, all on the brand's hue at one faint chroma, 0.0105, so each is as warm as the next. Every surface, edge and grey under the pointer is a stop: the pane is the darkest and the sidebars the next, the composer and code blocks are four stops up, what's raised six, the thin edge eight, and the edge of something to use the lightest. `look::Colors` makes them from these few numbers, so tuning the palette is changing one of them.
+- **Three warm near-black surfaces,** so the app reads as one calm field with a few raised things on it. The pane is `#140f0c`, the sidebar `#17120f`, and anything raised, such as a card or a popover, is `#26211e`. The composer and code blocks are `#201b18`. A prompt is a wash of the brand's copper, 18% of it over the pane, `#36251a`, so what was asked is easy to find when scrolling.
+- **Two edge colours.** The thin edge that separates, around a card, along a header or between rows, is `#2d2724`. Something to use, such as the composer, a chip, a key, a field or a button that opens something, has a lighter edge, `#332d2a`, so it reads as something to use rather than as a line between two things. So does the button back down to a chat's end, which sits over the chat's text, as `chats.md` says.
 - **One shadow, under what opens over the rest,** such as a card, the outline, the find bar or what a hover shows, so it reads as on top of what it covers. It's soft, so it lifts what's over the rest without drawing the eye: black at 22.5%, 8px below and blurred by 12px, and black at 15%, 2px below and blurred by 3px, as GPUI measures a blur, which is half what CSS calls it. What's raised in place, such as a pill or the update card, has none. A menu, a tooltip and a dialog cast it too. *Not built:* the kit draws a dialog with a fainter shadow of its own.
 - **A dialog dims everything behind it to 40% of its brightness,** under 60% black, so it's plainly the one thing to deal with, and what's behind it reads as out of reach. *Unconfirmed.*
-- **Three text colours:** foreground `#ebe7e3`, muted `#a39d97`, and faint `#6f6964` for meta, line numbers and hints.
+- **Three text colours, each as readable on the pane as its job needs:** foreground `#eee6e1`, muted `#b8b1ac`, and faint `#7c7671` for meta, line numbers and hints. Each is made to a contrast on the pane as APCA measures it, which judges dark colours as the eye does where WCAG 2's ratio doesn't: the foreground at 92, where body text reads best, muted at 60, the least for text that's read, and faint at 30, the least for any text. They're on the greys' hue and chroma, past the lightest stop. On a lighter surface they have a little less, down to 89, 57 and 27 on something raised under the pointer.
 - **Copper, `#d08a5c`, is the brand.** It's for the mark over an empty pane, the app icon, keyboard focus, the edge of a comment being written, the wash behind a prompt and, quieter, a composer that's planning, and never a status.
 - **Pale copper, `#d8c2b3`, marks the chat showing,** as the line under its tab. It's the brand's hue, paled toward the text, so it says where you are without reading as a status.
 - **A composer that's planning is in a quieter copper.** Its surface takes a tenth of copper, its edge is copper at a little over half strength over that, and its texture's dots are copper. It's the brand's own colour, so plan mode reads as a way of working you chose rather than a status, and its edge stays quieter than keyboard focus, which the composer also shows while files are dragged over it. `chats.md` has the texture. *Unconfirmed.*
@@ -52,32 +53,32 @@ Each colour means one thing.
 | Name | Colour | For |
 |---|---|---|
 | **Surfaces** | | |
-| `pane` | `#151312` | The workspace's pane, Home's and Settings' pages, and the window's ground |
-| `sidebar` | `#1a1715` | The sidebars |
-| `inset` | `#1e1b19` | What's set into a surface: the composer, a prompt waiting in the queue, a call's output, a code block |
-| `raised` | `#24201e` | Anything raised, whether it opens over the rest, such as a card, a menu, a tooltip or what a hover shows, or sits in place, such as a pill, a file's header, the update card or an open pull request's bar with something to do |
-| `prompt` | `#37281f` | A prompt's bubble |
-| `icon_tile_top` | `#211d1b` | The top of the app icon's tile |
+| `pane` | `#140f0c` | The workspace's pane, Home's and Settings' pages, and the window's ground |
+| `sidebar` | `#17120f` | The sidebars |
+| `inset` | `#201b18` | What's set into a surface: the composer, a prompt waiting in the queue, a call's output, a code block |
+| `raised` | `#26211e` | Anything raised, whether it opens over the rest, such as a card, a menu, a tooltip or what a hover shows, or sits in place, such as a pill, a file's header, the update card or an open pull request's bar with something to do |
+| `prompt` | `#36251a` | A prompt's bubble |
+| `icon_tile_top` | `#211d1b` | The top of the app icon's tile, the icon's own colour rather than a stop on the ramp, since it's there to make the icon look right |
 | **Under the pointer, pressed or chosen** | | |
-| `row_hover` | `#211e1c` | The kit's list's row under the pointer. A list's rows, such as Home's, a file's or a question's option, were once this, and are now washed as a borderless button is, as `components.md` says |
-| `line_hover` | `#1e1b19` | A call's line under the pointer, and the compaction's |
-| `menu_hover` | `#282321` | Behind code within a line of text, which the kit draws in its accent's grey. A menu's row and a page in Settings' sidebar were once this, and are now washed as a borderless button is, as `components.md` says |
-| `raised_hover` | `#2b2724` | Something raised, under the pointer |
-| `raised_pressed` | `#322d2a` | Something raised, pressed, such as the hub switcher |
+| `row_hover` | `#201b18` | The kit's list's row under the pointer. A list's rows, such as Home's, a file's or a question's option, were once this, and are now washed as a borderless button is, as `components.md` says |
+| `line_hover` | `#1a1512` | A call's line under the pointer, and the compaction's |
+| `menu_hover` | `#2a2421` | Behind code within a line of text, which the kit draws in its accent's grey. A menu's row and a page in Settings' sidebar were once this, and are now washed as a borderless button is, as `components.md` says |
+| `raised_hover` | `#2d2724` | Something raised, under the pointer |
+| `raised_pressed` | `#332d2a` | Something raised, pressed, such as the hub switcher |
 | **Edges and the shadow** | | |
-| `edge` | `#2a2624` | The thin edge that separates: around a card, along a header, between rows |
-| `control_edge` | `#353130` | Something to use: the composer, a chip, a key, a field, a button that opens something, the button back down to a chat's end |
+| `edge` | `#2d2724` | The thin edge that separates: around a card, along a header, between rows |
+| `control_edge` | `#332d2a` | Something to use: the composer, a chip, a key, a field, a button that opens something, the button back down to a chat's end |
 | `shadow` | `#000000` | Under what opens over the rest, faint |
 | **Text** | | |
-| `text` | `#ebe7e3` | What to read |
-| `text_muted` | `#a39d97` | What's secondary, and a name that needs nothing from you |
-| `text_faint` | `#6f6964` | Line numbers, meta, hints, such as a field's placeholder, and a mark with no pull request |
+| `text` | `#eee6e1` | What to read |
+| `text_muted` | `#b8b1ac` | What's secondary, and a name that needs nothing from you |
+| `text_faint` | `#7c7671` | Line numbers, meta, hints, such as a field's placeholder, and a mark with no pull request |
 | **Buttons** | | |
-| `button` | `#211e1c` | A button with an edge, such as a dialog's Cancel |
+| `button` | `#201b18` | A button with an edge, such as a dialog's Cancel |
 | `main` | `#f2eee9` | An area's one main action, such as Send |
 | `main_hover` | `#ffffff` | The main action under the pointer |
 | `main_pressed` | `#ddd8d2` | The main action pressed |
-| `on_main` | `#1d1a18` | What's on the main action, and on any other light fill |
+| `on_main` | `#1a1512` | What's on the main action, and on any other light fill |
 | **The brand** | | |
 | `brand` | `#d08a5c` | Copper: the mark over an empty pane, the icon, keyboard focus, the caret, a comment being written, a composer that's planning |
 | `current` | `#d8c2b3` | Pale copper: the line under the tab showing, and, faint, under a tab the pointer's over, and what's found |

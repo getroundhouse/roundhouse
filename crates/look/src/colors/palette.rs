@@ -1,9 +1,16 @@
 use gpui_kit::{App, Global, Hsla, rgba};
 
-/// Declares the roles once, with their dark values as `0xrrggbbaa`, so the struct, the list the spec's table and the
-/// sheet are checked against, and the dark theme can't disagree about which roles there are.
+use super::contrast::Contrast;
+use super::made::Made::{Grey, Text, Wash};
+use super::made::{Recipe, color};
+use super::ramp::{Chroma, Lightness, Ramp, Stop};
+use super::srgb::Srgb;
+
+/// Declares the roles once, with how the dark theme makes each, so the struct, the list the spec's table and the
+/// sheet are checked against, and the dark theme can't disagree about which roles there are. A role is a stop on the
+/// ramp of greys, text at a contrast on the page, a wash of the brand over it, or a value of its own, as `0xrrggbbaa`.
 macro_rules! colors {
-    ($($group:literal { $($(#[doc = $doc:literal])+ $role:ident = $dark:literal,)+ })+) => {
+    ($($group:literal { $($(#[doc = $doc:literal])+ $role:ident = $made:expr,)+ })+) => {
         /// The colours of the theme the app draws with, which [`colors`](fn@crate::colors) gives.
         #[derive(Clone, Debug, PartialEq)]
         pub struct Colors {
@@ -11,9 +18,9 @@ macro_rules! colors {
         }
 
         impl Colors {
-            /// The dark theme's, which is the app's.
+            /// The dark theme's, which is the app's, made from `DARK`.
             pub fn dark() -> Self {
-                Self { $($($role: hsla($dark),)+)+ }
+                Self { $($($role: color($made, &DARK),)+)+ }
             }
 
             /// Each role, in the order they're declared, which is the spec table's, for the sheet that shows them.
@@ -42,57 +49,79 @@ impl NamedColor {
     }
 }
 
+/// The brand's copper, whose hue the greys take, and which a prompt's bubble is washed with.
+const BRAND: Srgb = Srgb::from_hex(0xd0_8a5c);
+/// The pane's stop, the darkest, so everything else is lighter than the page.
+const PAGE: Stop = Stop(0);
+/// How much of the brand's copper a prompt's bubble takes over the pane.
+const PROMPT: f64 = 0.18;
+/// What the dark theme's greys, text and prompt are made from, so tuning the palette is changing one of these: eleven
+/// stops on the brand's hue, at a chroma faint enough to read as warm rather than coloured, from near black to the
+/// lightest edge, a little over a hundredth of Oklab's lightness apart. The text is past the lightest stop, on the
+/// same hue and chroma, and each text's contrast on the page is set where the text is declared.
+pub(super) const DARK: Recipe = Recipe {
+    greys: Ramp {
+        tint: BRAND,
+        chroma: Chroma(0.0105),
+        darkest: Lightness(0.175),
+        lightest: Lightness(0.304),
+        stops: 11,
+    },
+    page: PAGE,
+    brand: BRAND,
+};
+
 colors! {
     "Surfaces" {
         /// The workspace's pane, Home and Settings' pages, and the window's ground.
-        pane = 0x1513_12ff,
+        pane = Grey(PAGE),
         /// The sidebars, the one with the workspaces and the one with a workspace's changes.
-        sidebar = 0x1a17_15ff,
+        sidebar = Grey(Stop(1)),
         /// What's set into a surface: the composer, a prompt waiting in the queue above it, and what a call shows, such
         /// as its output or a code block.
-        inset = 0x1e1b_19ff,
+        inset = Grey(Stop(4)),
         /// Anything raised over the pane, whether it opens over the rest, such as a card, a menu, a tooltip or what a
         /// hover shows, or sits in place, such as a pill, a file's header, the update card, or an open pull request's
         /// bar while there's something to do first.
-        raised = 0x2420_1eff,
+        raised = Grey(Stop(6)),
         /// A prompt's bubble: a wash of the brand's copper over the pane, so what was asked is easy to find when
         /// scrolling past the agent's work.
-        prompt = 0x3728_1fff,
+        prompt = Wash(PROMPT),
         /// The top of the app icon's tile, a step above the pane's colour it fades down to.
         icon_tile_top = 0x211d_1bff,
     }
     "Under the pointer, pressed or chosen" {
         /// The kit's list's row under the pointer. A list's rows are washed, as `look::ListRow` draws them.
-        row_hover = 0x211e_1cff,
+        row_hover = Grey(Stop(4)),
         /// A call's line under the pointer, and the compaction's.
-        line_hover = 0x1e1b_19ff,
+        line_hover = Grey(Stop(2)),
         /// Behind code within a line of text, which the kit draws in its accent's grey.
-        menu_hover = 0x2823_21ff,
+        menu_hover = Grey(Stop(7)),
         /// Something raised, under the pointer.
-        raised_hover = 0x2b27_24ff,
+        raised_hover = Grey(Stop(8)),
         /// Something raised, pressed, such as the hub switcher.
-        raised_pressed = 0x322d_2aff,
+        raised_pressed = Grey(Stop(10)),
     }
     "Edges and the shadow" {
         /// The one thin edge that separates, around a card, along a header or between rows.
-        edge = 0x2a26_24ff,
+        edge = Grey(Stop(8)),
         /// The edge of something to use: the composer, a chip, a key, a field such as Settings' search, a button that
         /// opens something, and the button back down to a chat's end.
-        control_edge = 0x3531_30ff,
+        control_edge = Grey(Stop(10)),
         /// Under what opens over the rest, faint, at the strengths `look::raised` gives it.
         shadow = 0x0000_00ff,
     }
     "Text" {
         /// What to read.
-        text = 0xebe7_e3ff,
+        text = Text(Contrast(92.0)),
         /// What's secondary: details beside the main text, and a name that needs nothing from you.
-        text_muted = 0xa39d_97ff,
+        text_muted = Text(Contrast(60.0)),
         /// Quieter than muted: line numbers, meta, hints, and a mark with no pull request.
-        text_faint = 0x6f69_64ff,
+        text_faint = Text(Contrast(30.0)),
     }
     "Buttons" {
         /// A button with an edge, such as a dialog's Cancel.
-        button = 0x211e_1cff,
+        button = Grey(Stop(4)),
         /// The one main action an area has, such as Send.
         main = 0xf2ee_e9ff,
         /// The main action under the pointer.
@@ -100,12 +129,12 @@ colors! {
         /// The main action pressed.
         main_pressed = 0xddd8_d2ff,
         /// What's on the main action, and on any other light fill, such as an action in its pull request's colour.
-        on_main = 0x1d1a_18ff,
+        on_main = Grey(Stop(2)),
     }
     "The brand" {
         /// The brand's copper: the mark over an empty pane, the app icon, keyboard focus, the caret, the edge of a
         /// comment being written, and, quieter, a composer that's planning. Never a status.
-        brand = 0xd08a_5cff,
+        brand = BRAND,
         /// The brand's copper paled toward the text, which marks the tab showing, as the line under it, and, faint, the
         /// tab the pointer's over and what's found.
         current = 0xd8c2_b3ff,
