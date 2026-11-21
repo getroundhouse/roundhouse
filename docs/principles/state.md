@@ -28,6 +28,8 @@ These rules say who owns a piece of state, what goes on a record and what goes i
 
 ## The database
 
+These rules hold for the hub's database, not for its cache of what it reads from GitHub, which is a file of its own that the hub empties rather than migrates, as `docs/principles/outside-systems.md` says.
+
 - **The database migrates forward only.** Migrations run in order, each in its own transaction. A hub rejects a database from a newer build, so it can't damage it.
 - **The hub copies the database before it migrates it, and doesn't start if the copy fails.** Any update can bring a migration that nobody chose, and the previous build can't open the migrated database. Because of the copy, the hub stores attachment bytes as files in its data directory, and not as rows.
 - **When what's stored changes form, the hub rewrites it once, in a migration, and converts what a worker of the previous build still sends as it arrives.** No client then reads an older form, and one module in the hub, `hub::untyped`, is the only code that knows the older forms. It reads them and never writes them. For example, a migration typed each tool call that Claude's adapter had recorded by its tool's name. *Unconfirmed.*
