@@ -2,6 +2,7 @@
 //! claims its runs are held to, what it adds to a turn the agent started by itself, and the failures it says repeat.
 
 mod capabilities;
+mod cover_lines;
 mod failing;
 mod ingest;
 mod own_turns;

@@ -15,6 +15,8 @@ mod carrying_on;
 #[cfg(test)]
 mod compacting;
 #[cfg(test)]
+mod covering;
+#[cfg(test)]
 mod laws;
 #[cfg(test)]
 mod retrying;
@@ -22,7 +24,10 @@ mod retrying;
 #[cfg(test)]
 mod tests;
 
+mod cover_line;
+mod parts;
 mod stream;
+pub use cover_line::Covering;
 pub use stream::{
     BlockKind, Compacting, DeltaChange, InBackground, Retrying, StreamDelta, Tail, TailBlock, TailMessage,
 };

@@ -46,6 +46,10 @@ area! { "the agent's output";
     /// The agent can ask for the person's attention in words of its own, as Claude's `PushNotification` does, which the
     /// hub records, and a client shows as it does a chat that needs the person.
     Notifications => notifications: Claimed,
+    /// While the agent can't answer what was said out loud, because it's busy or still thinking, the adapter opens a
+    /// wait, and says in it what the agent is doing, in the agent's voice, as [`CoverLine`] says, until it closes the
+    /// wait. Each line is shown, and said by the device that has the conversation, as it comes.
+    CoverLines => cover_lines: Claimed,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
@@ -181,6 +185,28 @@ pub struct Retrying {
     pub after_ms: Option<u64>,
     /// Why the last attempt failed.
     pub failure: crate::event::RequestFailure,
+}
+
+/// Which of a run's waits a cover line is in, as its adapter numbers them from 1, one after another.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[serde(transparent)]
+pub struct CoverWait(pub u32);
+
+/// What the agent is doing, in a sentence in its own voice, said for it while it can't answer what was said out loud,
+/// as [`Capability::CoverLines`] reports it. It says only what the agent is doing, never an answer, an opinion or
+/// anything the agent hasn't done.
+///
+/// The adapter opens a wait when something said out loud finds the agent busy or thinking, and numbers the lines in it
+/// from 1, so a device says each once, however often the tail is sent again. It closes the wait, with
+/// [`super::Report::Covered`], once the agent starts answering, the turn ends without an answer, or it gives up on the
+/// wait, so it alone says when the line is over. A later line takes the place of the one before, in the same wait or
+/// the next, and only the agent's exit ends a line otherwise.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct CoverLine {
+    pub wait: CoverWait,
+    /// Which line of its wait it is, from 1.
+    pub number: u32,
+    pub text: String,
 }
 
 /// Messages the agent took back, as [`Capability::Retractions`] reports them.

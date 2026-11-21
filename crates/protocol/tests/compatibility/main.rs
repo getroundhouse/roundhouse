@@ -23,6 +23,7 @@ mod capabilities;
 mod client_calls;
 mod comments;
 mod compactions;
+mod cover_lines;
 mod events;
 mod found_github_logins;
 mod git_credentials;

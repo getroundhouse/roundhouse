@@ -1,4 +1,4 @@
-use protocol::capability::Keeper;
+use protocol::capability::{Keeper, Report};
 use protocol::model::SessionId;
 use protocol::tail::{StreamDelta, Tail};
 use protocol::worker::WorkerFrame;
@@ -90,6 +90,13 @@ impl Writing {
             }
             WorkerFrame::AgentRetrying { session_id, run, retrying } => {
                 self.change(session_id, |tail| tail.retrying(*run, *retrying));
+            }
+            // Kept until the adapter closes its wait, so a hub that connects meanwhile has the line too.
+            WorkerFrame::AgentReport { session_id, run, report: Report::Covering(line), .. } => {
+                self.change(session_id, |tail| tail.covering(*run, line.clone()));
+            }
+            WorkerFrame::AgentReport { session_id, run, report: Report::Covered { wait }, .. } => {
+                self.change(session_id, |tail| tail.covered(*run, *wait));
             }
             WorkerFrame::AgentReport { .. }
             | WorkerFrame::AgentTail { .. }

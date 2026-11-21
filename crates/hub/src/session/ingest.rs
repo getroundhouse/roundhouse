@@ -187,10 +187,15 @@ impl LiveSession {
 
     /// Takes what the agent of `run` is writing from what its worker kept of it, in place of what this hub heard. Only
     /// the current run's reaches anyone, as with its deltas.
-    fn take_tail(&self, run: RunId, tail: Tail) {
+    fn take_tail(&self, run: RunId, mut tail: Tail) {
         let mut state = self.state.lock();
         if state.agent.is_none_or(|agent| agent.run != run) {
             return;
+        }
+        // The worker keeps the line said for the agent until its adapter closes the wait, which it may not have yet
+        // after the mode ended, but nobody is listening for it.
+        if state.interaction.is_typing() {
+            tail.covering = None;
         }
         state.tail.replace_run(run, tail);
         publish(&mut state, LiveItem::Rewritten);

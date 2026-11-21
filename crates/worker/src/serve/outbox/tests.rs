@@ -1,4 +1,5 @@
 use protocol::capability::Report;
+use protocol::capability::output::{CoverLine, CoverWait};
 use protocol::event::{EventBody, ExitReason};
 use protocol::model::RunId;
 use protocol::tail::{DeltaChange, StreamDelta};
@@ -185,4 +186,37 @@ async fn nothing_is_kept_of_a_session_once_its_message_finishes_or_its_agent_exi
     assert!(!after_finishing);
     assert!(while_writing);
     assert!(!kept_of_any().await, "the agent took what it was writing with it");
+}
+
+/// What the adapter of run 1 says of the line said for its agent.
+fn cover(report: Report) -> WorkerFrame {
+    WorkerFrame::AgentReport { session_id: "s".into(), run: RunId::new(1), report, seq: None }
+}
+
+/// The line a hub that connects is handed, if any.
+async fn handed_over(outbox: &Outbox) -> Option<CoverLine> {
+    let (hub, mut hub_hears) = mpsc::channel(8);
+    outbox.attach(hub, true).await;
+    let said = sent(&mut hub_hears).iter().find_map(|frame| {
+        let WorkerFrame::AgentTail { tail, .. } = frame.as_ref() else { return None };
+        tail.covering.as_ref().map(|covering| covering.line.clone())
+    });
+    outbox.detach().await;
+    said
+}
+
+/// A line said for the agent is kept until its adapter closes its wait, which a hub that missed it might never hear,
+/// so a hub that connects meanwhile has it, and one that connects after has none.
+#[tokio::test]
+async fn a_hub_that_connects_has_the_line_said_for_the_agent_until_its_wait_closes() {
+    let outbox = Outbox::default();
+    let line = CoverLine { wait: CoverWait(1), number: 2, text: "Hold on.".into() };
+
+    outbox.send(cover(Report::Covering(line.clone()))).await;
+    let while_open = handed_over(&outbox).await;
+    outbox.send(cover(Report::Covered { wait: CoverWait(1) })).await;
+
+    assert_eq!(while_open, Some(line));
+    assert_eq!(handed_over(&outbox).await, None);
+    assert!(outbox.0.lock().await.writing.0.is_empty(), "nothing is kept of it");
 }
