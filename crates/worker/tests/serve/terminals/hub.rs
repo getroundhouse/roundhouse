@@ -8,10 +8,10 @@ use protocol::client::ErrorCode;
 use protocol::frame;
 use protocol::model::TerminalId;
 use protocol::paths::AGENTS_DIR;
-use protocol::terminal::{Numbering, RowNumber, TerminalPicture, TerminalSize, TerminalUpdate, UpdateIndex};
+use protocol::terminal::{Numbering, RowNumber, TerminalPicture, TerminalSize, TerminalUpdate, Typed};
 use protocol::worker::{
-    RunningTerminalsReply, TerminalInput, TerminalShow, TerminalShown, TerminalStart, WorkerCall, WorkerFrame,
-    WorkerOutcome, WorkerRequest, WorkerResponse,
+    RunningTerminalsReply, TerminalStart, TerminalTyped, TerminalWatch, WorkerCall, WorkerFrame, WorkerOutcome,
+    WorkerRequest, WorkerResponse,
 };
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, DuplexStream, WriteHalf};
 use tokio::sync::mpsc;
@@ -33,18 +33,15 @@ pub(super) struct Hub {
     running: JoinHandle<()>,
     calls: u64,
     replies: HashMap<u64, WorkerOutcome>,
-    /// Everything the terminals' programs wrote, in order.
-    pub(super) output: Vec<u8>,
-    /// How much of `output` the waits so far have found what they waited for in.
-    searched: usize,
-    /// Every update but output, in order.
+    /// Every update of a terminal, which is its shell's end, in order.
     pub(super) updates: Vec<TerminalUpdate>,
     /// How many of `updates` the waits so far have found what they waited for in.
     updates_searched: usize,
-    /// The `at` each terminal's next update should have.
-    pub(super) next: HashMap<TerminalId, UpdateIndex>,
     /// Every frame of a picture, in order, with when it came.
     pub(super) pictures: Vec<(TerminalPicture, Instant)>,
+    /// Where the waits so far found what they waited for among the lines of `pictures`: the frame, and the line in it
+    /// after what was found.
+    shown_searched: (usize, usize),
 }
 
 impl Hub {
@@ -66,29 +63,37 @@ impl Hub {
                 let _ = sending.send(frame::decode(line.as_bytes()).unwrap());
             }
         });
-        let (replies, output, updates, next) = (HashMap::new(), Vec::new(), Vec::new(), HashMap::new());
-        let (searched, updates_searched, pictures) = (0, 0, Vec::new());
         let mut hub = Self {
             write,
             frames,
             running,
             calls: 0,
-            replies,
-            output,
-            searched,
-            updates,
-            updates_searched,
-            next,
-            pictures,
+            replies: HashMap::new(),
+            updates: Vec::new(),
+            updates_searched: 0,
+            pictures: Vec::new(),
+            shown_searched: (0, 0),
         };
         hub.call(hello()).await;
         hub
     }
 
-    /// Opens terminal `terminal` running `sh` in `dir`.
+    /// Opens terminal `terminal` running `sh` in `dir`, and watches it, so what it shows is sent as pictures.
     pub(super) async fn open(&mut self, terminal: &str, dir: &Path) {
+        self.open_unwatched(terminal, dir).await;
+        self.watch(terminal, true).await;
+    }
+
+    /// Opens terminal `terminal` running `sh` in `dir`, which sends nothing of what it shows until it's watched.
+    pub(super) async fn open_unwatched(&mut self, terminal: &str, dir: &Path) {
         let started = self.start_terminal(terminal, dir, SIZE).await;
         assert_eq!(started, WorkerOutcome::Response(WorkerResponse::Ok));
+    }
+
+    /// Watches `terminal`, or stops.
+    pub(super) async fn watch(&mut self, terminal: &str, watching: bool) {
+        let watch = WorkerRequest::TerminalWatch(TerminalWatch { terminal: terminal.into(), watching });
+        assert_eq!(self.call(watch).await, WorkerOutcome::Response(WorkerResponse::Ok));
     }
 
     /// Asks the worker to start terminal `terminal` running `sh` in `dir`, with `dir` for its home, so it reads no
@@ -120,14 +125,6 @@ impl Hub {
         terminals.into_iter().map(|running| (running.terminal, running.opened_at_ms)).collect()
     }
 
-    pub(super) async fn shown(&mut self, terminal: &str) -> TerminalShown {
-        let shown = self.call(WorkerRequest::TerminalShow(TerminalShow { terminal: terminal.into() })).await;
-        let WorkerOutcome::Response(WorkerResponse::TerminalShown(shown)) = shown else {
-            panic!("the terminal didn't say what it shows: {shown:?}");
-        };
-        shown
-    }
-
     /// Types `line` and Return.
     pub(super) async fn type_in(&mut self, terminal: &str, line: &str) {
         let typed = self.call(input(terminal, &format!("{line}\r"))).await;
@@ -141,40 +138,38 @@ impl Hub {
         self.until(|hub| hub.replies.remove(&id)).await
     }
 
-    /// Until a program writes `text`, after what the last wait found, and then how many updates have come of the
-    /// terminal, as there's one.
-    pub(super) async fn until_output(&mut self, text: &str) -> UpdateIndex {
-        // Where the search goes on from, so each frame's output is searched once, and a flood's reading isn't slowed.
-        let mut from = self.searched;
-        self.until(|hub| {
-            let Some(found) = hub.output[from..].windows(text.len()).position(|window| window == text.as_bytes())
-            else {
-                from = from.max((hub.output.len() + 1).saturating_sub(text.len()));
-                return None;
-            };
-            hub.searched = from + found + text.len();
-            Some(hub.next.values().copied().max().unwrap_or(UpdateIndex::new(0)))
-        })
-        .await
+    /// Until a line of a picture of a watched terminal, after the one the last wait found, has `text`.
+    pub(super) async fn until_shown(&mut self, text: &str) {
+        self.until_line(|line| line.contains(text).then_some(())).await;
     }
 
     /// The number a program writes after `label`, at the end of a line, as a PID it echoed.
     pub(super) async fn until_pid(&mut self, label: &str) -> u32 {
-        loop {
-            self.until_output(label).await;
-            let start = self.searched;
-            self.until(|hub| hub.output[start..].iter().position(|b| !b.is_ascii_digit())).await;
-            let after = &self.output[start..];
-            let digits = after.iter().take_while(|b| b.is_ascii_digit()).count();
-            // The echo of what was typed has the label too, followed by what the shell works out.
-            if digits > 0 && matches!(after[digits], b'\r' | b'\n') {
-                return std::str::from_utf8(&after[..digits]).unwrap().parse().unwrap();
-            }
-        }
+        // The echo of what was typed has the label too, followed by what the shell works out.
+        self.until_line(|line| line.rsplit_once(label)?.1.trim_end().parse().ok()).await
     }
 
-    /// Until the worker sends `update`, after what the last wait for an update found. It can come before the reply to
-    /// what caused it, as `Resized` does, since the worker replies once the terminal's thread is told.
+    /// What `found` finds in a line of the pictures, after the one the last wait found, searching each line once, so a
+    /// flood's pictures aren't searched again for each frame that comes.
+    async fn until_line<T>(&mut self, mut found: impl FnMut(&str) -> Option<T>) -> T {
+        self.until(|hub| {
+            let (mut frame, mut from) = hub.shown_searched;
+            while let Some((picture, _)) = hub.pictures.get(frame) {
+                for (at, line) in lines(picture).iter().enumerate().skip(from) {
+                    if let Some(found) = found(line) {
+                        hub.shown_searched = (frame, at + 1);
+                        return Some(found);
+                    }
+                }
+                (frame, from) = (frame + 1, 0);
+            }
+            hub.shown_searched = (frame, 0);
+            None
+        })
+        .await
+    }
+
+    /// Until the worker sends `update`, after what the last wait for an update found.
     pub(super) async fn until_update(&mut self, update: &TerminalUpdate) {
         self.until(|hub| {
             let found = hub.updates[hub.updates_searched..].iter().position(|came| came == update)?;
@@ -185,7 +180,7 @@ impl Hub {
     }
 
     /// Ends the hub's stream, as a hub that goes does, and waits for the worker to stop what it runs and exit. Every
-    /// update but output, including those the worker sent as it stopped.
+    /// update, including those the worker sent as it stopped.
     pub(super) async fn finish(mut self) -> Vec<TerminalUpdate> {
         self.write.shutdown().await.unwrap();
         let rest = timeout(WAIT, async {
@@ -198,7 +193,21 @@ impl Hub {
         self.updates
     }
 
-    /// Until `found` finds something in what has come, keeping each frame as it comes.
+    /// Keeps what comes for `long`, for what mustn't come.
+    pub(super) async fn keep_for(&mut self, long: Duration) {
+        let waited = waiting::task::for_what_mustnt_happen(long);
+        tokio::pin!(waited);
+        loop {
+            tokio::select! {
+                () = &mut waited => return,
+                frame = self.frames.recv() => match frame {
+                    Some(frame) => self.keep(frame),
+                    None => return,
+                },
+            }
+        }
+    }
+
     /// Until `found` says the pictures so far have what was waited for.
     pub(super) async fn until_pictures(&mut self, mut found: impl FnMut(&[(TerminalPicture, Instant)]) -> bool) {
         self.until(|hub| found(&hub.pictures).then_some(())).await;
@@ -215,7 +224,10 @@ impl Hub {
             }
         })
         .await
-        .unwrap_or_else(|_| panic!("what was waited for never came: {:?}", String::from_utf8_lossy(&self.output)))
+        .unwrap_or_else(|_| {
+            let shown: Vec<_> = self.pictures.iter().rev().take(3).map(|(picture, _)| lines(picture)).collect();
+            panic!("what was waited for never came, after the newest pictures, newest first: {shown:?}")
+        })
     }
 
     fn keep(&mut self, frame: WorkerFrame) {
@@ -223,15 +235,7 @@ impl Hub {
             WorkerFrame::Reply { id, outcome } => {
                 self.replies.insert(id, outcome);
             }
-            WorkerFrame::Terminal { terminal, at, update } => {
-                let next = self.next.entry(terminal).or_insert(UpdateIndex::new(0));
-                assert_eq!(at, *next, "an update came out of order: {update:?}");
-                *next = at.next();
-                match update {
-                    TerminalUpdate::Output { output } => self.output.extend_from_slice(output.as_slice()),
-                    update => self.updates.push(update),
-                }
-            }
+            WorkerFrame::Terminal { update, .. } => self.updates.push(update),
             WorkerFrame::TerminalPicture { picture, .. } => self.pictures.push((picture, Instant::now())),
             _ => {}
         }
@@ -247,13 +251,28 @@ pub(super) fn refused(outcome: &WorkerOutcome, code: ErrorCode) -> bool {
     matches!(outcome, WorkerOutcome::Error(error) if error.code == code)
 }
 
+/// Text typed into `terminal` as it is, as the bytes its program reads.
 pub(super) fn input(terminal: &str, typed: &str) -> WorkerRequest {
-    let terminal: TerminalId = terminal.into();
-    WorkerRequest::TerminalInput(TerminalInput { terminal, input: typed.as_bytes().into() })
+    WorkerRequest::TerminalTyped(TerminalTyped { terminal: terminal.into(), typed: Typed::Text { text: typed.into() } })
 }
 
-pub(super) fn contains(bytes: &[u8], text: &str) -> bool {
-    bytes.windows(text.len()).any(|window| window == text.as_bytes())
+/// The text of a picture's rows, as lines, each row that wraps joined to the next.
+fn lines(picture: &TerminalPicture) -> Vec<String> {
+    let mut lines = Vec::new();
+    for run in &picture.rows {
+        let mut line = String::new();
+        for row in &run.rows {
+            let row = row.row();
+            line.extend(row.spans.iter().map(|span| span.text.as_str()));
+            if !row.wraps {
+                lines.push(std::mem::take(&mut line));
+            }
+        }
+        if !line.is_empty() {
+            lines.push(line);
+        }
+    }
+    lines
 }
 
 /// The numbering and number of a row the worker sent a picture of that ends with `text`, as a row the shell's prompt

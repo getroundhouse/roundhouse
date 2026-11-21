@@ -21,4 +21,4 @@ mod world;
 
 pub use serve::serve;
 pub use stand_in::{BUILD, BUILD_NUMBER};
-pub use world::{HOUR_MS, HubBuild, LoginSupport, NOW_MS, PairingWorld, World};
+pub use world::{HOUR_MS, HubBuild, LoginSupport, NOW_MS, PairingWorld, TerminalShows, World};

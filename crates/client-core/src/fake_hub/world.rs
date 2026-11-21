@@ -14,7 +14,7 @@ use protocol::model::{
 };
 use protocol::prompt::Prompt;
 use protocol::tail::Tail;
-use protocol::terminal::{TerminalScreen, TerminalSize};
+use protocol::terminal::TerminalSize;
 
 /// When the first record was made: 1 November 2026, at 2 PM in UTC, which pictures show times in. Each one after it is
 /// a minute later, and each event a second.
@@ -105,8 +105,8 @@ pub struct World {
     pub saved_hubs: Vec<(&'static str, &'static str)>,
     /// What a push from each repository's workspaces would meet on GitHub, as the hub last checked.
     pub github_reach: Vec<protocol::model::GithubReach>,
-    /// Each open terminal, and what it shows, as the bytes that draw it in a fresh terminal of its size.
-    pub terminals: Vec<(Terminal, TerminalScreen)>,
+    /// Each open terminal, and what it shows.
+    pub terminals: Vec<(Terminal, TerminalShows)>,
     /// What the hub found in the update feed, as a hub installed as a service does. `None` as from one that doesn't
     /// read it.
     pub hub_update: Option<protocol::model::HubUpdate>,
@@ -134,6 +134,14 @@ pub struct HubBuild {
     pub number: u64,
     /// A client started it, rather than someone running it themselves.
     pub on_demand: bool,
+}
+
+/// What a fake hub's terminal shows: the bytes that draw it in a fresh terminal of its size, which a worker's copy of
+/// it would have taken in.
+#[derive(Clone, Debug)]
+pub struct TerminalShows {
+    pub size: TerminalSize,
+    pub bytes: Vec<u8>,
 }
 
 impl World {
@@ -175,7 +183,7 @@ impl World {
         let id = TerminalId::from(format!("term-{}", self.terminals.len() + 1));
         let opened_at_ms = self.next_time();
         let terminal = Terminal { id: id.clone(), workspace_id: workspace.clone(), opened_at_ms, rev: Rev::default() };
-        self.terminals.push((terminal, TerminalScreen { size, bytes: shows.into() }));
+        self.terminals.push((terminal, TerminalShows { size, bytes: shows.to_vec() }));
         id
     }
 

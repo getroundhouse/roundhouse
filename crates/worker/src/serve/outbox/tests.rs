@@ -231,7 +231,6 @@ async fn what_is_for_one_hub_goes_to_no_other() {
     // Any frame, as a terminal's picture is, that isn't numbered or kept.
     let frame = || WorkerFrame::Terminal {
         terminal: "t".into(),
-        at: protocol::terminal::UpdateIndex::new(0),
         update: protocol::terminal::TerminalUpdate::Exited(protocol::terminal::TerminalExit { code: None }),
     };
     let (first, mut first_hub) = mpsc::channel(8);

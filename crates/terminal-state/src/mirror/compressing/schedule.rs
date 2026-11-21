@@ -19,9 +19,9 @@ const STEPS: usize = 20;
 pub(in crate::mirror) struct Compressing {
     /// None until the copy's first asked when to compress.
     since: Option<Since>,
-    /// Whether the whole history has been read since, as a snapshot and a large selection's text read it. Reading it
-    /// decompresses it without changing Ghostty's token, so a read counts as a change. It's a `Cell` since reading
-    /// takes the copy as it is.
+    /// Whether the whole history has been read since, as a large selection's text and rows of history read it.
+    /// Reading it decompresses it without changing Ghostty's token, so a read counts as a change. It's a `Cell` since
+    /// reading takes the copy as it is.
     read: Cell<bool>,
 }
 

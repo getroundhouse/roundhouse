@@ -1,5 +1,5 @@
 //! One terminal's shell, in a PTY, and the threads that serve it: one reads what its program writes, one writes what's
-//! typed, one waits for the shell to end, and one keeps what the terminal shows and sends the hub what happens.
+//! typed, one waits for the shell to end, and one keeps what the terminal shows and sends the hub pictures of it.
 
 use std::path::Path;
 use std::sync::Arc;
@@ -10,8 +10,8 @@ use portable_pty::{MasterPty, PtyPair, PtySize, PtySystem, native_pty_system};
 use process::Environment;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::model::TerminalId;
-use protocol::terminal::{TerminalBytes, TerminalExit, TerminalScreen, TerminalSize, TerminalUpdate, UpdateIndex};
-use protocol::worker::{TerminalShown, TerminalStart, WorkerFrame};
+use protocol::terminal::{TerminalExit, TerminalSize, TerminalUpdate};
+use protocol::worker::{TerminalStart, WorkerFrame};
 use terminal_state::Mirror;
 use tokio::sync::{OwnedSemaphorePermit, Semaphore, mpsc, oneshot};
 use tokio::time::Instant;
@@ -88,7 +88,7 @@ pub(in crate::terminals) fn start(
     let reader = pty.master.try_clone_reader().map_err(|e| failed("couldn't read the terminal", &e))?;
     let writer = pty.master.take_writer().map_err(|e| failed("couldn't write to the terminal", &e))?;
     let (output, read) = mpsc::channel(QUEUED_READS);
-    let (typed, to_type) = std::sync::mpsc::channel();
+    let (to_program, to_type) = std::sync::mpsc::channel();
     // Before the shell, so a failure leaves nothing running. Each ends once the PTY or its channel has gone.
     spawn("terminal-reader", move || read_output(reader, &output)).map_err(|e| failed("couldn't read", &e))?;
     spawn("terminal-writer", move || write_typed(writer, &to_type)).map_err(|e| failed("couldn't write", &e))?;
@@ -109,7 +109,6 @@ pub(in crate::terminals) fn start(
         }
         return Err(failed("couldn't wait for the shell", &e));
     }
-    let next = UpdateIndex::new(0);
     let (master, stop_grace, look_every) = (pty.master, timers.terminal_stop_grace, timers.look_in_front_every);
     let front = Front::Looked(None);
     let watching = Watching::new(terminal.clone(), outbox.clone());
@@ -124,18 +123,11 @@ pub(in crate::terminals) fn start(
         stop_grace,
         outbox,
         watching,
-        to_program: typed.clone(),
-        next,
+        to_program,
         exit: None,
     };
     let (to_shell, told) = mpsc::unbounded_channel();
-    let running = Running {
-        number: ending.number,
-        opened_at_ms,
-        typed: typed.clone(),
-        to_shell,
-        ended: ending.ended.subscribe(),
-    };
+    let running = Running { number: ending.number, opened_at_ms, to_shell, ended: ending.ended.subscribe() };
     Ok((running, Serving { shell, runtime, read, told, exit, ending }))
 }
 
@@ -170,8 +162,6 @@ pub(super) struct Shell {
     pub(super) watching: Watching,
     /// To the thread that writes what the program reads: what's typed, and the copy's answers to what it asks.
     pub(super) to_program: std::sync::mpsc::Sender<Vec<u8>>,
-    /// The `at` the next update gets, which is how many it has sent.
-    next: UpdateIndex,
     /// How the shell ended, once it has.
     exit: Option<TerminalExit>,
 }
@@ -199,8 +189,8 @@ impl Shell {
         }
         self.process_records.finished();
         ending.forget();
-        let exited = self.exit.unwrap_or(TerminalExit { code: None });
-        self.send(TerminalUpdate::Exited(exited)).await;
+        let update = TerminalUpdate::Exited(self.exit.unwrap_or(TerminalExit { code: None }));
+        self.outbox.send(WorkerFrame::Terminal { terminal: self.terminal.clone(), update }).await;
     }
 
     async fn until_ended(
@@ -222,14 +212,10 @@ impl Shell {
             tokio::select! {
                 biased;
                 told = told.recv(), if !untold => match told {
-                    Some(ToShell::Resize(size)) => self.resize(mirror, size).await,
                     Some(ToShell::Fit(fit, reply)) => {
-                        let _ = reply.send(self.fit(mirror, fit).await);
+                        let _ = reply.send(self.fit(mirror, &fit));
                     }
                     Some(ToShell::Typed(typed)) => self.typed(mirror, &typed),
-                    Some(ToShell::Show(reply)) => {
-                        let _ = reply.send(self.shown(mirror));
-                    }
                     Some(ToShell::Asked(asked)) => asked.answer(mirror),
                     Some(ToShell::Watch(hub)) => self.watching.watch(hub),
                     Some(ToShell::Stop) => self.hang_up(&mut kill_at),
@@ -257,7 +243,7 @@ impl Shell {
                 // Not on Windows, which has no groups to look at.
                 _ = look.tick(), if cfg!(unix) && self.exit.is_none() => self.look_in_front(),
                 output = read.recv(), if !read_all => match output {
-                    Some(output) => self.wrote(mirror, output).await,
+                    Some(output) => self.wrote(mirror, &output),
                     None => read_all = true,
                 },
                 () = until(compress_at) => {
@@ -294,24 +280,9 @@ impl Shell {
         }
     }
 
-    async fn wrote(&mut self, mirror: &mut Mirror, output: Vec<u8>) {
-        mirror.write(&output);
+    fn wrote(&mut self, mirror: &mut Mirror, output: &[u8]) {
+        mirror.write(output);
         self.watching.changed(mirror);
-        self.send(TerminalUpdate::Output { output: TerminalBytes::new(output) }).await;
-    }
-
-    fn shown(&self, mirror: &Mirror) -> Result<TerminalShown, ApiError> {
-        let snapshot = mirror.snapshot().map_err(|e| {
-            ApiError::new(ErrorCode::Worker, format!("couldn't say what terminal {} shows: {e}", self.terminal))
-        })?;
-        let screen = TerminalScreen { size: self.size, bytes: TerminalBytes::new(snapshot) };
-        Ok(TerminalShown { screen, next: self.next })
-    }
-
-    pub(super) async fn send(&mut self, update: TerminalUpdate) {
-        let at = self.next;
-        self.next = at.next();
-        self.outbox.send(WorkerFrame::Terminal { terminal: self.terminal.clone(), at, update }).await;
     }
 
     /// Signals the shell's group, only before the shell has ended, since its PID can be another process's after, and

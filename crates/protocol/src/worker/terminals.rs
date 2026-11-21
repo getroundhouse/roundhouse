@@ -6,12 +6,13 @@ use serde::{Deserialize, Serialize};
 use super::{Reply, Request, WorkerRequest, WorkerResponse};
 use crate::model::TerminalId;
 use crate::terminal::{
-    Bounds, Numbering, RowNumber, TerminalBoundsReply, TerminalBytes, TerminalFitReply, TerminalPoint, TerminalRange,
-    TerminalRowsReply, TerminalScreen, TerminalSize, TerminalTextReply, Typed, UpdateIndex,
+    Bounds, Numbering, RowNumber, TerminalBoundsReply, TerminalFitReply, TerminalPoint, TerminalRange,
+    TerminalRowsReply, TerminalSize, TerminalTextReply, Typed,
 };
 
 /// Starts a shell in `cwd`, in a terminal of `size`. Starting one that runs already changes nothing, so a hub can send
-/// it again. What the shell writes comes as [`WorkerFrame::Terminal`](super::WorkerFrame::Terminal)s.
+/// it again. What it shows comes as [`WorkerFrame::TerminalPicture`](super::WorkerFrame::TerminalPicture)s while the
+/// hub watches it, and its shell's end as a [`WorkerFrame::Terminal`](super::WorkerFrame::Terminal).
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct TerminalStart {
     pub terminal: TerminalId,
@@ -33,25 +34,9 @@ impl Request for TerminalStart {
     }
 }
 
-/// Writes what was typed into the terminal, for its program to read. A worker takes what's typed in the order it was
-/// sent, unlike other requests, so a hub needn't wait for each reply.
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
-pub struct TerminalInput {
-    pub terminal: TerminalId,
-    pub input: TerminalBytes,
-}
-
-impl Request for TerminalInput {
-    type Reply = ();
-
-    fn into_request(self) -> WorkerRequest {
-        WorkerRequest::TerminalInput(self)
-    }
-}
-
-/// What's pressed in the terminal, turned into what the program reads by the modes it has set, in the order it was
-/// sent, after the sizes sent before it. Not in order with [`TerminalInput`], which reaches the program by another
-/// way, so a hub sends a terminal one or the other.
+/// What's pressed in the terminal, turned into what the program reads by the modes it has set. A worker takes what's
+/// pressed in the order it was sent, after the sizes sent before it, unlike other requests, so a hub needn't wait for
+/// each reply.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct TerminalTyped {
     pub terminal: TerminalId,
@@ -90,54 +75,6 @@ impl Reply for TerminalFitReply {
     fn read(response: WorkerResponse) -> Result<Self, WorkerResponse> {
         let WorkerResponse::TerminalFit(fit) = response else { return Err(response) };
         Ok(fit)
-    }
-}
-
-/// Gives the terminal a new size, which the worker says in order with what the program writes, as a
-/// [`TerminalUpdate::Resized`](crate::terminal::TerminalUpdate::Resized). A worker takes the sizes it's given in the
-/// order they were sent, as it takes what's typed, but not in order with what's typed, which reaches the program by
-/// another way, so keys typed just after a new size can reach it first. Sent again, it sets the same again.
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
-pub struct TerminalResize {
-    pub terminal: TerminalId,
-    pub size: TerminalSize,
-}
-
-impl Request for TerminalResize {
-    type Reply = ();
-
-    fn into_request(self) -> WorkerRequest {
-        WorkerRequest::TerminalResize(self)
-    }
-}
-
-/// What the terminal shows now, for a client that attaches, or one that fell behind.
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
-pub struct TerminalShow {
-    pub terminal: TerminalId,
-}
-
-impl Request for TerminalShow {
-    type Reply = TerminalShown;
-
-    fn into_request(self) -> WorkerRequest {
-        WorkerRequest::TerminalShow(self)
-    }
-}
-
-/// What a terminal shows, and which of its updates come after that, so a hub sends a client only those, whichever
-/// arrives first.
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
-pub struct TerminalShown {
-    pub screen: TerminalScreen,
-    /// The `at` of the first update the screen doesn't take in, which is how many it does.
-    pub next: UpdateIndex,
-}
-
-impl Reply for TerminalShown {
-    fn read(response: WorkerResponse) -> Result<Self, WorkerResponse> {
-        let WorkerResponse::TerminalShown(shown) = response else { return Err(response) };
-        Ok(shown)
     }
 }
 

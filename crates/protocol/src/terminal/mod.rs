@@ -1,8 +1,8 @@
-//! What goes between a client, its hub and a workspace's worker for a terminal: what the program in it writes, how big
-//! it is, and what it shows, for a client that attaches partway through.
+//! What goes between a client, its hub and a workspace's worker for a terminal: what it shows, as rows, how big it is,
+//! and what's pressed in it.
 //!
-//! The shell runs in its worker, which keeps what the terminal shows. A client that attaches gets that as a screen,
-//! then everything after it, in order, so its own terminal shows the same as the worker's.
+//! The shell runs in its worker, which keeps the only copy of what the terminal shows. A client that watches is sent
+//! pictures of its rows, and asks the worker for the rest, such as rows of its history and the text of a selection.
 
 #[cfg(test)]
 mod tests;
@@ -27,4 +27,4 @@ pub use sending::{MOST_PICTURE_BYTES, PictureSending, Shown};
 pub use size::TerminalSize;
 pub use text::{Bounds, MOST_TEXT_BYTES, TerminalBoundsReply, TerminalPoint, TerminalRange, TerminalTextReply};
 pub use typed::{Key, KeyPress, Mods, Typed};
-pub use updates::{TerminalBytes, TerminalExit, TerminalScreen, TerminalUpdate, UpdateIndex};
+pub use updates::{TerminalExit, TerminalUpdate};

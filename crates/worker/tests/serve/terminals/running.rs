@@ -3,14 +3,19 @@
 use std::path::Path;
 use std::time::Duration;
 
-use super::hub::{Hub, OPENED_AT_MS, SIZE, WAIT, contains, input, process_records_dir, refused};
+use super::hub::{Hub, OPENED_AT_MS, SIZE, WAIT, input, process_records_dir, refused};
 use protocol::client::ErrorCode;
 use protocol::model::GithubToken;
 use protocol::terminal::{Numbering, RowNumber, TerminalExit, TerminalRowsReply, TerminalSize, TerminalUpdate};
 use protocol::worker::{
-    GitCredential, GitCredentialSet, GithubCredential, RunningTerminalsReply, TerminalResize, TerminalRows,
-    TerminalShow, TerminalShown, TerminalStop, WorkerOutcome, WorkerRequest, WorkerResponse,
+    GitCredential, GitCredentialSet, GithubCredential, RunningTerminalsReply, TerminalFit, TerminalRows, TerminalStop,
+    WorkerOutcome, WorkerRequest, WorkerResponse,
 };
+
+/// A new size for `t`, keeping no cells.
+fn fit(size: TerminalSize) -> WorkerRequest {
+    WorkerRequest::TerminalFit(TerminalFit { terminal: "t".into(), size, numbering: Numbering::new(0), keep: vec![] })
+}
 
 /// As every process a worker starts is, so `git` and `gh` typed in a terminal use the default GitHub account, as its
 /// agents do, rather than the machine's own login, and a token the shell would have had doesn't reach them.
@@ -25,7 +30,7 @@ async fn a_terminal_is_given_the_git_credential_its_hub_set() {
 
     hub.type_in("t", r#"echo "given ${GIT_CONFIG_COUNT:-none} ${GH_CONFIG_DIR:+dir} ${GH_TOKEN:-none}""#).await;
 
-    hub.until_output("given 1 dir none").await;
+    hub.until_shown("given 1 dir none").await;
     hub.finish().await;
 }
 
@@ -46,25 +51,8 @@ async fn a_terminal_runs_a_shell_in_the_worktree_that_does_what_is_typed() {
     .await;
 
     let worktree = dir.path().canonicalize().unwrap();
-    hub.until_output(&format!("42 xterm-256color 55000 none none none {}", worktree.display())).await;
+    hub.until_shown(&format!("42 xterm-256color 55000 none none none {}", worktree.display())).await;
     assert_eq!(hub.listed().await, [("t".into(), OPENED_AT_MS)]);
-    hub.finish().await;
-}
-
-/// A hub asks what a terminal shows as a client attaches, and sends the client what comes after.
-#[tokio::test]
-async fn what_a_terminal_shows_takes_in_everything_its_program_wrote_before() {
-    let dir = tempfile::tempdir().unwrap();
-    let mut hub = Hub::start(dir.path()).await;
-    hub.open("t", dir.path()).await;
-    hub.type_in("t", "echo $((6*7))").await;
-    let seen = hub.until_output("42").await;
-
-    let TerminalShown { screen, next } = hub.shown("t").await;
-
-    assert_eq!(screen.size, SIZE);
-    assert!(contains(screen.bytes.as_slice(), "42"), "{:?}", String::from_utf8_lossy(screen.bytes.as_slice()));
-    assert!(next >= seen, "the screen takes in {next:?} updates, and {seen:?} had been sent");
     hub.finish().await;
 }
 
@@ -76,7 +64,7 @@ async fn rows_of_history_are_sent_by_number() {
     let mut hub = Hub::start(dir.path()).await;
     hub.open("t", dir.path()).await;
     hub.type_in("t", "stty -echo; seq -f 'li''ne %g' 1 60; printf 'do''ne'; sleep 60").await;
-    hub.until_output("done").await;
+    hub.until_shown("done").await;
     let rows = |numbering| {
         let ask = TerminalRows { terminal: "t".into(), numbering, from: RowNumber::new(0), count: 200 };
         WorkerRequest::TerminalRows(ask)
@@ -107,36 +95,8 @@ async fn rows_of_history_are_sent_by_number() {
     hub.finish().await;
 }
 
-/// A screen says the first update it doesn't take in is the next the worker sends, so a hub sends a client neither one
-/// it has twice nor less than everything. Here nothing is written after `ready`, so the next update is the one after
-/// the last that came, and the same size again sends none.
-#[tokio::test]
-async fn a_screen_takes_in_every_update_before_it_and_none_after() {
-    let dir = tempfile::tempdir().unwrap();
-    let mut hub = Hub::start(dir.path()).await;
-    hub.open("t", dir.path()).await;
-    // Split, so the echo of what's typed isn't what's waited for, and `sleep` keeps the shell from writing a prompt.
-    hub.type_in("t", "stty -echo; printf 'rea''dy'; sleep 60").await;
-    hub.until_output("ready").await;
-    let size = TerminalSize { cols: 100, rows: 30 };
-    let resize = || WorkerRequest::TerminalResize(TerminalResize { terminal: "t".into(), size });
-    hub.call(resize()).await;
-    hub.until_update(&TerminalUpdate::Resized { size }).await;
-
-    let first = hub.shown("t").await;
-    hub.call(resize()).await;
-    let again = hub.shown("t").await;
-
-    assert_eq!(first.next, hub.next[&"t".into()]);
-    assert_eq!(first.screen.size, size);
-    let shows = String::from_utf8_lossy(first.screen.bytes.as_slice());
-    assert!(contains(first.screen.bytes.as_slice(), "ready"), "{shows:?}");
-    assert_eq!(again.next, first.next);
-    hub.finish().await;
-}
-
-/// The program is told of the new size, and so is every client, in order with what the program writes. The worker's
-/// copy takes it too, and answers where the cursor is from it: as far down and right as it goes, at the new size.
+/// The program is told of the new size, and so is the hub, in a picture at it. The worker's copy takes it too, and
+/// answers where the cursor is from it: as far down and right as it goes, at the new size.
 #[tokio::test]
 async fn a_new_size_reaches_the_program_the_workers_copy_and_the_hub() {
     let dir = tempfile::tempdir().unwrap();
@@ -144,9 +104,8 @@ async fn a_new_size_reaches_the_program_the_workers_copy_and_the_hub() {
     hub.open("t", dir.path()).await;
     let size = TerminalSize { cols: 120, rows: 40 };
 
-    let resized = hub.call(WorkerRequest::TerminalResize(TerminalResize { terminal: "t".into(), size })).await;
-    // Every client is told once the PTY has it, and typing goes to the program by another way, which can be quicker.
-    hub.until_update(&TerminalUpdate::Resized { size }).await;
+    let resized = hub.call(fit(size)).await;
+    hub.until_pictures(|pictures| pictures.iter().any(|(picture, _)| picture.size == size && picture.whole)).await;
     hub.type_in("t", "stty size").await;
     // The answer is `ESC[40;120R`, read as it comes, with the escape made printable.
     hub.type_in(
@@ -155,9 +114,9 @@ async fn a_new_size_reaches_the_program_the_workers_copy_and_the_hub() {
     )
     .await;
 
-    assert_eq!(resized, WorkerOutcome::Response(WorkerResponse::Ok));
-    hub.until_output("40 120").await;
-    hub.until_output("E[40;120R").await;
+    assert!(matches!(resized, WorkerOutcome::Response(WorkerResponse::TerminalFit(_))), "{resized:?}");
+    hub.until_shown("40 120").await;
+    hub.until_shown("E[40;120R").await;
     hub.finish().await;
 }
 
@@ -172,13 +131,13 @@ async fn a_size_with_no_cells_or_too_many_is_refused() {
     let started = hub.start_terminal("t", dir.path(), none).await;
     let listed = hub.listed().await;
     hub.open("t", dir.path()).await;
-    let resized =
-        hub.call(WorkerRequest::TerminalResize(TerminalResize { terminal: "t".into(), size: too_many })).await;
+    let resized = hub.call(fit(too_many)).await;
+    hub.type_in("t", "stty size").await;
 
     assert!(refused(&started, ErrorCode::InvalidRequest), "{started:?}");
     assert_eq!(listed, []);
     assert!(refused(&resized, ErrorCode::InvalidRequest), "{resized:?}");
-    assert_eq!(hub.shown("t").await.screen.size, SIZE);
+    hub.until_shown(&format!("{} {}", SIZE.rows, SIZE.cols)).await;
     hub.finish().await;
 }
 
@@ -212,7 +171,7 @@ async fn a_terminal_that_cant_start_is_refused_and_the_next_still_starts() {
 
     assert!(refused(&started, ErrorCode::NotFound), "{started:?}");
     assert_eq!(listed, []);
-    hub.until_output("42").await;
+    hub.until_shown("42").await;
     hub.finish().await;
 }
 
@@ -233,7 +192,7 @@ async fn a_shell_that_exits_ends_its_terminal_with_its_code() {
     hub.finish().await;
 }
 
-/// So a hub can stop one again, and a hub asking what one shows that has ended hears it's gone.
+/// So a hub can stop one again, and a hub asking anything of one that has ended hears it's gone.
 #[tokio::test]
 async fn stopping_a_terminal_again_changes_nothing_and_it_shows_nothing_after() {
     let dir = tempfile::tempdir().unwrap();
@@ -243,7 +202,8 @@ async fn stopping_a_terminal_again_changes_nothing_and_it_shows_nothing_after() 
 
     let stopped = hub.call(stop()).await;
     let again = hub.call(stop()).await;
-    let shown = hub.call(WorkerRequest::TerminalShow(TerminalShow { terminal: "t".into() })).await;
+    let rows = TerminalRows { terminal: "t".into(), numbering: Numbering::new(0), from: RowNumber::new(0), count: 1 };
+    let shown = hub.call(WorkerRequest::TerminalRows(rows)).await;
 
     assert_eq!(
         (stopped, again),

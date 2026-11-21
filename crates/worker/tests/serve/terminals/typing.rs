@@ -32,10 +32,10 @@ async fn a_key_is_read_by_the_mode_the_program_set_just_before() {
     hub.open("t", dir.path()).await;
 
     hub.type_in("t", &reading(r"\033[?1h", 3)).await;
-    hub.until_output("ready").await;
+    hub.until_shown("ready").await;
     press(&mut hub, key(Key::Up)).await;
 
-    hub.until_output("1b 4f 41").await;
+    hub.until_shown("1b 4f 41").await;
     hub.finish().await;
 }
 
@@ -48,16 +48,16 @@ async fn the_wheel_is_read_as_arrows_only_on_a_programs_screen_that_asked() {
     hub.open("t", dir.path()).await;
 
     hub.type_in("t", &reading("", 2)).await;
-    hub.until_output("ready").await;
+    hub.until_shown("ready").await;
     press(&mut hub, Typed::Wheel { lines: -3 }).await;
     press(&mut hub, Typed::Text { text: "é".into() }).await;
-    hub.until_output("c3 a9").await;
-    hub.until_output("done").await;
+    hub.until_shown("c3 a9").await;
+    hub.until_shown("done").await;
 
     hub.type_in("t", &reading(r"\033[?1049h\033[?1007h", 7)).await;
-    hub.until_output("ready").await;
+    hub.until_shown("ready").await;
     press(&mut hub, Typed::Wheel { lines: 2 }).await;
     press(&mut hub, Typed::Paste { text: "x".into() }).await;
-    hub.until_output("1b 5b 42 1b 5b 42 78").await;
+    hub.until_shown("1b 5b 42 1b 5b 42 78").await;
     hub.finish().await;
 }

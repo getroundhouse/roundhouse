@@ -126,9 +126,7 @@ async fn hand_to_terminal(
 ) -> Option<Result<WorkerRequest, serde_json::Error>> {
     let terminals = &worker.state.terminals;
     let handed = match request {
-        Ok(WorkerRequest::TerminalInput(typed)) => terminals.input(typed),
         Ok(WorkerRequest::TerminalTyped(typed)) => terminals.typed(typed),
-        Ok(WorkerRequest::TerminalResize(resize)) => terminals.resize(resize),
         Ok(WorkerRequest::TerminalFit(fit)) => {
             let (fitted, frames) = (terminals.fit(fit), frames.clone());
             tokio::spawn(async move {

@@ -42,9 +42,8 @@ pub use one_off::{AccountFor, TitleFor, TitleReply};
 pub use repo_source::RepoSource;
 pub use repo_url::{PushRoute, ReadRepoUrl, RepoUrlReply};
 pub use terminals::{
-    RunningTerminal, RunningTerminals, RunningTerminalsReply, TerminalBounds, TerminalFit, TerminalInput,
-    TerminalResize, TerminalRows, TerminalShow, TerminalShown, TerminalStart, TerminalStop, TerminalText,
-    TerminalTyped, TerminalWatch,
+    RunningTerminal, RunningTerminals, RunningTerminalsReply, TerminalBounds, TerminalFit, TerminalRows, TerminalStart,
+    TerminalStop, TerminalText, TerminalTyped, TerminalWatch,
 };
 pub use tools::{ServeTools, ToolsServing, ToolsToken, WAIT_TOOL, WAITS_TOOL};
 pub use workspaces::{
