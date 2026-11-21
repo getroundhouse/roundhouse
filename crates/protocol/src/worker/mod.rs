@@ -43,7 +43,7 @@ pub use repo_source::RepoSource;
 pub use repo_url::{PushRoute, ReadRepoUrl, RepoUrlReply};
 pub use terminals::{
     MOST_ROWS, RunningTerminal, RunningTerminals, RunningTerminalsReply, TerminalInput, TerminalResize, TerminalRows,
-    TerminalRowsReply, TerminalShow, TerminalShown, TerminalStart, TerminalStop,
+    TerminalRowsReply, TerminalShow, TerminalShown, TerminalStart, TerminalStop, TerminalWatch,
 };
 pub use tools::{ServeTools, ToolsServing, ToolsToken, WAIT_TOOL, WAITS_TOOL};
 pub use workspaces::{

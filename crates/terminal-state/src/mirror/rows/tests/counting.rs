@@ -9,7 +9,7 @@ use protocol::terminal::{Numbering, RowNumber, TerminalRow};
 
 use crate::Size;
 use crate::mirror::HISTORY_LINES;
-use crate::mirror::rows::reading::row;
+use crate::mirror::rows::reading::{Place, row};
 
 use super::pair::{Pair, SIZE, lines};
 
@@ -186,7 +186,7 @@ proptest! {
                 if number < now.first || number >= now.top {
                     continue;
                 }
-                let read = row(&pair.copy.terminal, number.get() - now.first.get()).unwrap();
+                let read = row(&pair.copy.terminal, Place::Kept(number.get() - now.first.get())).unwrap();
                 let held = seen.entry((now.numbering, number)).or_insert_with(|| read.clone());
                 prop_assert_eq!(&*held, &read, "row {:?} changed under its number", number);
             }

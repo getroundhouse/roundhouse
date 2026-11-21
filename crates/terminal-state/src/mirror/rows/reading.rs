@@ -1,5 +1,7 @@
 //! What a row holds, read cell by cell from Ghostty, by the row's place among the screen's and its history's.
 
+use std::collections::HashMap;
+
 use libghostty_vt::Terminal;
 use libghostty_vt::grid_ref::GridRef;
 use libghostty_vt::point::{Coordinate, Point};
@@ -44,7 +46,7 @@ impl Mirror {
         let mut bytes = 0;
         let mut number = from;
         while number < end && bytes < MOST_BYTES {
-            let row = row(&self.terminal, number.get() - now.first.get())?;
+            let row = row(&self.terminal, Place::Kept(number.get() - now.first.get()))?;
             bytes += serde_json::to_vec(&row).map_or(0, |json| json.len());
             reply.rows.push(row);
             number = number.plus(1);
@@ -54,13 +56,30 @@ impl Mirror {
     }
 }
 
-/// The row `y` rows from the oldest the terminal keeps, of history and then of the screen showing.
-pub(in crate::mirror) fn row(terminal: &Terminal<'_, '_>, y: u64) -> Result<TerminalRow, MirrorError> {
-    let y = u32::try_from(y).unwrap_or(u32::MAX);
+/// Where a row is, which Ghostty finds by walking its pages from that end.
+#[derive(Clone, Copy, Debug)]
+pub(in crate::mirror) enum Place {
+    /// So many rows from the oldest the terminal keeps, of history and then of the screen showing.
+    Kept(u64),
+    /// So many rows from the screen's first, which is quicker to find than the same row from the oldest.
+    Screen(u16),
+}
+
+impl Place {
+    fn point(self, x: u16) -> Point {
+        match self {
+            Self::Kept(y) => Point::Screen(Coordinate { x, y: u32::try_from(y).unwrap_or(u32::MAX) }),
+            Self::Screen(y) => Point::Active(Coordinate { x, y: u32::from(y) }),
+        }
+    }
+}
+
+/// The row at `place`.
+pub(in crate::mirror) fn row(terminal: &Terminal<'_, '_>, place: Place) -> Result<TerminalRow, MirrorError> {
     let mut building = Building::default();
     let mut wraps = false;
     for x in 0..terminal.cols()? {
-        let at = terminal.grid_ref(Point::Screen(Coordinate { x, y }))?;
+        let at = terminal.grid_ref(place.point(x))?;
         if x == 0 {
             wraps = at.row()?.is_wrapped()?;
         }
@@ -72,23 +91,23 @@ pub(in crate::mirror) fn row(terminal: &Terminal<'_, '_>, y: u64) -> Result<Term
             // the row it wrapped from, neither of which holds anything of its own.
             CellWide::SpacerTail | CellWide::SpacerHead => continue,
         };
-        let (text, cluster) = match cell.content_tag()? {
+        let mut style = if cell.has_styling()? { cell_style(at.style()?) } else { CellStyle::default() };
+        let text = match cell.content_tag()? {
             CellContentTag::Codepoint => {
-                (char::from_u32(cell.codepoint()?).filter(|c| *c != '\0').map(String::from), false)
+                char::from_u32(cell.codepoint()?).filter(|c| *c != '\0').map_or(Text::None, Text::Char)
             }
-            CellContentTag::CodepointGrapheme => (Some(graphemes(&at)?), true),
-            CellContentTag::BgColorPalette | CellContentTag::BgColorRgb => (None, false),
-        };
-        let mut style = cell_style(at.style()?);
-        match cell.content_tag()? {
-            CellContentTag::BgColorPalette => style.background = Some(CellColor::Palette(cell.bg_color_palette()?.0)),
+            CellContentTag::CodepointGrapheme => Text::Cluster(graphemes(&at)?),
+            CellContentTag::BgColorPalette => {
+                style.background = Some(CellColor::Palette(cell.bg_color_palette()?.0));
+                Text::None
+            }
             CellContentTag::BgColorRgb => {
                 let rgb = cell.bg_color_rgb()?;
                 style.background = Some(CellColor::Rgb { r: rgb.r, g: rgb.g, b: rgb.b });
+                Text::None
             }
-            CellContentTag::Codepoint | CellContentTag::CodepointGrapheme => {}
-        }
-        building.cell(x, text, wide, cluster, style);
+        };
+        building.cell(x, text, wide, style);
     }
     let mut row = building.row;
     row.wraps = wraps;
@@ -145,51 +164,64 @@ fn color(color: StyleColor) -> Option<CellColor> {
     }
 }
 
+/// What a cell holds.
+enum Text {
+    None,
+    Char(char),
+    /// One cell's cluster, such as a letter with its accents.
+    Cluster(String),
+}
+
 /// A row as its cells are read, left to right, each joined to the span before it where they're alike.
 #[derive(Default)]
 struct Building {
     row: TerminalRow,
     /// The column after the last cell taken in.
     next_col: u16,
+    /// The place of each of the row's styles, which a row with a colour in every cell has hundreds of.
+    places: HashMap<CellStyle, u16>,
 }
 
 impl Building {
-    fn cell(&mut self, col: u16, text: Option<String>, wide: bool, cluster: bool, style: CellStyle) {
+    fn cell(&mut self, col: u16, text: Text, wide: bool, style: CellStyle) {
         let style = (style != CellStyle::default()).then(|| self.style(style));
         let cells = if wide { 2 } else { 1 };
         // A cell with nothing in it and nothing to draw ends the span before, and leaves a gap.
-        if text.is_none() && style.is_none() {
+        if matches!(text, Text::None) && style.is_none() {
             return;
         }
         let next = col == self.next_col;
         self.next_col = col + cells;
+        let cluster = matches!(text, Text::Cluster(_));
         let joins = next && !cluster;
         if let Some(last) = self.row.spans.last_mut().filter(|last| joins && last.style == style && !last.cluster) {
             match &text {
-                Some(text) if !last.text.is_empty() && last.wide == wide => {
-                    last.text.push_str(text);
+                Text::Char(one) if !last.text.is_empty() && last.wide == wide => {
+                    last.text.push(*one);
                     return;
                 }
-                None if last.text.is_empty() => {
+                Text::None if last.text.is_empty() => {
                     last.blank += cells;
                     return;
                 }
-                Some(_) | None => {}
+                Text::Char(_) | Text::None | Text::Cluster(_) => {}
             }
         }
         let col = (!next).then_some(col);
-        let blank = if text.is_none() { cells } else { 0 };
-        let text = text.unwrap_or_default();
+        let (text, blank) = match text {
+            Text::None => (String::new(), cells),
+            Text::Char(one) => (String::from(one), 0),
+            Text::Cluster(cluster) => (cluster, 0),
+        };
         self.row.spans.push(Span { col, text, blank, style, wide, cluster });
     }
 
     /// The place of `style` among the row's, added if it's new.
     fn style(&mut self, style: CellStyle) -> u16 {
         let styles = &mut self.row.styles;
-        let place = styles.iter().position(|known| *known == style).unwrap_or_else(|| {
+        *self.places.entry(style).or_insert_with(|| {
             styles.push(style);
-            styles.len() - 1
-        });
-        u16::try_from(place).unwrap_or(u16::MAX)
+            u16::try_from(styles.len() - 1).unwrap_or(u16::MAX)
+        })
     }
 }

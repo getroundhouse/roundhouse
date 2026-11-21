@@ -43,6 +43,9 @@ pub enum MirrorError {
     /// carry over.
     #[error(transparent)]
     Terminal(#[from] libghostty_vt::Error),
+    /// A row couldn't be written as JSON, which none that Ghostty holds fails.
+    #[error("couldn't write a row: {0}")]
+    Row(#[from] serde_json::Error),
 }
 
 /// What a terminal shows, kept from everything the program in it writes. It isn't `Send`, since Ghostty's terminal
@@ -56,6 +59,8 @@ pub struct Mirror {
     pub(super) compressing: Compressing,
     /// The count of its rows, once they've been asked for by number.
     pub(super) rows: Option<super::rows::Counting>,
+    /// What it reads to say how its cursor is drawn, once it's asked for a picture.
+    pub(super) picturing: Option<super::rows::Picturing>,
 }
 
 impl Mirror {
@@ -66,7 +71,7 @@ impl Mirror {
         // From the start, since only bytes written after it's on can be carried over by a snapshot.
         terminal.set_continuation_max_bytes(LONGEST_UNFINISHED_BYTES)?;
         let compressing = Compressing::default();
-        Ok(Self { terminal, drawing: None, typing: None, selecting: None, compressing, rows: None })
+        Ok(Self { terminal, drawing: None, typing: None, selecting: None, compressing, rows: None, picturing: None })
     }
 
     /// A copy that answers what the program asks of its terminal, such as where the cursor is, or what the terminal

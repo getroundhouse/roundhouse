@@ -5,7 +5,7 @@ use std::fmt::Write as _;
 use protocol::terminal::{CellAttributes, CellColor, CellStyle, RowNumber, Span, TerminalRow};
 use protocol::worker::MOST_ROWS;
 
-use crate::mirror::rows::reading::row;
+use crate::mirror::rows::reading::{Place, row};
 use crate::{Mirror, Size};
 
 use super::pair::{SIZE, lines};
@@ -29,7 +29,7 @@ fn span(text: &str) -> Span {
 fn a_row_is_its_runs_of_cells_in_one_style() {
     let mirror = written("\x1b[1;31mhi\x1b[0m \x1b[38;2;1;2;3mx\x1b[0m");
 
-    let read = row(&mirror.terminal, 0).unwrap();
+    let read = row(&mirror.terminal, Place::Kept(0)).unwrap();
 
     let bold_red = CellStyle {
         foreground: Some(CellColor::Palette(1)),
@@ -47,7 +47,7 @@ fn a_row_is_its_runs_of_cells_in_one_style() {
 fn cells_erased_in_a_colour_are_blank_in_it() {
     let mirror = written("ab\x1b[44m\x1b[K");
 
-    let read = row(&mirror.terminal, 0).unwrap();
+    let read = row(&mirror.terminal, Place::Kept(0)).unwrap();
 
     assert_eq!(read.styles, [CellStyle { background: Some(CellColor::Palette(4)), ..CellStyle::default() }]);
     assert_eq!(read.spans, [span("ab"), Span { blank: SIZE.cols - 2, style: Some(0), ..Span::default() }]);
@@ -59,7 +59,7 @@ fn wide_characters_clusters_and_gaps_say_where_their_cells_are() {
     let long = format!("a{}", "\u{301}".repeat(20));
     let mirror = written(&format!("\u{4e2d}e\u{301}x\x1b[12Gy{long}"));
 
-    let read = row(&mirror.terminal, 0).unwrap();
+    let read = row(&mirror.terminal, Place::Kept(0)).unwrap();
 
     assert_eq!(
         read.spans,
@@ -77,7 +77,8 @@ fn wide_characters_clusters_and_gaps_say_where_their_cells_are() {
 fn a_row_says_whether_its_line_goes_on_in_the_next() {
     let mirror = written(&"x".repeat(usize::from(SIZE.cols) + 5));
 
-    let (first, second) = (row(&mirror.terminal, 0).unwrap(), row(&mirror.terminal, 1).unwrap());
+    let (first, second) =
+        (row(&mirror.terminal, Place::Kept(0)).unwrap(), row(&mirror.terminal, Place::Kept(1)).unwrap());
 
     assert!(first.wraps);
     assert!(!second.wraps);

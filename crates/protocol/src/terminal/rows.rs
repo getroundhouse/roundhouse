@@ -1,7 +1,9 @@
 //! A terminal's rows, as its worker numbers them and says what they hold, so what's read of a terminal is a row by its
 //! number, rather than the bytes that rebuild the whole of it.
 //!
-//! The field names are a letter each, since a screen of rows is most of what a terminal sends.
+//! The field names are a letter each, since a screen of rows is most of what a terminal sends. Each type's are in the
+//! order of their letters, the order a JSON value read back writes them in, so a row's text is the same whether its
+//! worker wrote it or a hub read it and wrote it again, and two copies of a row can be compared as text.
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
@@ -57,13 +59,13 @@ impl Numbering {
 pub struct TerminalRow {
     #[serde(rename = "s", default, skip_serializing_if = "Vec::is_empty")]
     pub spans: Vec<Span>,
-    /// The styles its spans name, by their place here.
-    #[serde(rename = "y", default, skip_serializing_if = "Vec::is_empty")]
-    pub styles: Vec<CellStyle>,
     /// Whether its line goes on in the next row, as a line too long for one does, so the two are one line to select or
     /// copy.
     #[serde(rename = "w", default, skip_serializing_if = "is_false")]
     pub wraps: bool,
+    /// The styles its spans name, by their place here.
+    #[serde(rename = "y", default, skip_serializing_if = "Vec::is_empty")]
+    pub styles: Vec<CellStyle>,
 }
 
 /// A run of cells in one style.
@@ -72,40 +74,40 @@ pub struct Span {
     /// The column it starts at, when that isn't where the run before it ended, or 0 for the first.
     #[serde(rename = "c", default, skip_serializing_if = "Option::is_none")]
     pub col: Option<u16>,
-    /// Its text, a character to each cell, or two cells to each if it's `wide`, or one cell's if it's a `cluster`. Empty
-    /// for `blank` cells.
-    #[serde(rename = "t", default, skip_serializing_if = "String::is_empty")]
-    pub text: String,
-    /// How many cells with no text it covers, which only a background or a line under them shows.
-    #[serde(rename = "n", default, skip_serializing_if = "is_zero")]
-    pub blank: u16,
-    /// Its style, as a place in the row's `styles`, or `None` for the terminal's own.
-    #[serde(rename = "y", default, skip_serializing_if = "Option::is_none")]
-    pub style: Option<u16>,
     /// Whether each of its characters takes two cells, as most East Asian characters and emoji do.
     #[serde(rename = "d", default, skip_serializing_if = "is_false")]
     pub wide: bool,
     /// Whether its text is all one cell's, such as a letter with its accents, or emoji joined into one.
     #[serde(rename = "g", default, skip_serializing_if = "is_false")]
     pub cluster: bool,
+    /// How many cells with no text it covers, which only a background or a line under them shows.
+    #[serde(rename = "n", default, skip_serializing_if = "is_zero")]
+    pub blank: u16,
+    /// Its text, a character to each cell, or two cells to each if it's `wide`, or one cell's if it's a `cluster`. Empty
+    /// for `blank` cells.
+    #[serde(rename = "t", default, skip_serializing_if = "String::is_empty")]
+    pub text: String,
+    /// Its style, as a place in the row's `styles`, or `None` for the terminal's own.
+    #[serde(rename = "y", default, skip_serializing_if = "Option::is_none")]
+    pub style: Option<u16>,
 }
 
 /// How a cell is drawn, with its colours as the program gave them, so each client draws a colour from its own theme.
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub struct CellStyle {
+    #[serde(rename = "a", default, skip_serializing_if = "CellAttributes::is_empty")]
+    pub attributes: CellAttributes,
+    #[serde(rename = "b", default, skip_serializing_if = "Option::is_none")]
+    pub background: Option<CellColor>,
     /// The text's colour, or `None` for the terminal's own.
     #[serde(rename = "f", default, skip_serializing_if = "Option::is_none")]
     pub foreground: Option<CellColor>,
-    #[serde(rename = "b", default, skip_serializing_if = "Option::is_none")]
-    pub background: Option<CellColor>,
-    #[serde(rename = "a", default, skip_serializing_if = "CellAttributes::is_empty")]
-    pub attributes: CellAttributes,
-    /// The line under the text, if there is one.
-    #[serde(rename = "u", default, skip_serializing_if = "Option::is_none")]
-    pub underline: Option<Underline>,
     /// The underline's colour, or `None` for the text's.
     #[serde(rename = "k", default, skip_serializing_if = "Option::is_none")]
     pub underline_color: Option<CellColor>,
+    /// The line under the text, if there is one.
+    #[serde(rename = "u", default, skip_serializing_if = "Option::is_none")]
+    pub underline: Option<Underline>,
 }
 
 /// A colour as the program gave it.
@@ -191,7 +193,7 @@ pub enum Underline {
 }
 
 #[expect(clippy::trivially_copy_pass_by_ref, reason = "serde's skip_serializing_if passes a reference")]
-const fn is_false(value: &bool) -> bool {
+pub(super) const fn is_false(value: &bool) -> bool {
     !*value
 }
 

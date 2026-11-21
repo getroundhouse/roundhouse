@@ -25,7 +25,7 @@ use serde::{Deserialize, Serialize};
 use terminals::RunningTerminals;
 use terminals::{
     RunningTerminalsReply, TerminalInput, TerminalResize, TerminalRows, TerminalRowsReply, TerminalShow, TerminalShown,
-    TerminalStart, TerminalStop,
+    TerminalStart, TerminalStop, TerminalWatch,
 };
 use tools::{ServeTools, ToolsServing};
 #[cfg(test)]
@@ -130,6 +130,7 @@ pub enum WorkerRequest {
     TerminalResize(TerminalResize),
     TerminalShow(TerminalShow),
     TerminalRows(TerminalRows),
+    TerminalWatch(TerminalWatch),
     TerminalStop(TerminalStop),
     /// See [`RunningTerminals`](super::RunningTerminals).
     RunningTerminals,

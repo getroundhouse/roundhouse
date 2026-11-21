@@ -4,14 +4,36 @@ use protocol::tail::{StreamDelta, Tail};
 use protocol::worker::WorkerFrame;
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
-use tokio::sync::{Mutex, mpsc};
+use tokio::sync::{Mutex, OwnedSemaphorePermit, mpsc};
 
 #[derive(Default)]
 pub(crate) struct Outbox(pub(super) Mutex<Inner>);
 
+/// A frame on its way to the hub, and what it holds until it has been written, as a terminal holds its room for its
+/// next frame.
+#[derive(Debug)]
+pub(crate) struct Outgoing {
+    pub(crate) frame: Arc<WorkerFrame>,
+    pub(crate) written: Option<OwnedSemaphorePermit>,
+}
+
+impl From<Arc<WorkerFrame>> for Outgoing {
+    fn from(frame: Arc<WorkerFrame>) -> Self {
+        Self { frame, written: None }
+    }
+}
+
+/// Which of the hubs to connect to the worker one is, so what's only for the hub that asked for it, such as a
+/// terminal's pictures, goes to no other.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct HubConnection(u64);
+
 #[derive(Default)]
 pub(super) struct Inner {
-    pub(super) hub: Option<mpsc::Sender<Arc<WorkerFrame>>>,
+    pub(super) hub: Option<mpsc::Sender<Outgoing>>,
+    /// The connection `hub` is, and how many hubs have connected.
+    pub(super) connection: Option<HubConnection>,
+    pub(super) connections: u64,
     /// Whether to number and keep what's sent, as the last hub to say hello asked.
     pub(super) keeping: bool,
     /// The number the last frame kept was given. The first is 1.
@@ -25,7 +47,13 @@ pub(super) struct Inner {
 impl Outbox {
     /// Sends `frame` to the hub connected, after everything sent before it, and numbers and keeps it first if the hub
     /// asked. Under one lock, so frames reach the hub in the order they were numbered.
-    pub(crate) async fn send(&self, mut frame: WorkerFrame) {
+    pub(crate) async fn send(&self, frame: WorkerFrame) {
+        self.send_holding(frame, None).await;
+    }
+
+    /// Sends `frame`, as [`Outbox::send`] does, holding `written` until it has been written, or there's no hub to write
+    /// it to.
+    pub(crate) async fn send_holding(&self, mut frame: WorkerFrame, written: Option<OwnedSemaphorePermit>) {
         let mut inner = self.0.lock().await;
         let number = inner.keeping.then(|| number_of(&mut frame)).flatten().map(|seq| {
             inner.numbered += 1;
@@ -37,11 +65,28 @@ impl Outbox {
         if let Some(number) = number {
             inner.kept.push_back((number, frame.clone()));
         }
-        if let Some(hub) = &inner.hub
-            && hub.send(frame).await.is_err()
-        {
-            inner.hub = None;
+        inner.write(Outgoing { frame, written }).await;
+    }
+
+    /// The hub connected now, if one is.
+    pub(crate) async fn connection(&self) -> Option<HubConnection> {
+        self.0.lock().await.connection
+    }
+
+    /// Sends `frame`, which is never numbered or kept, holding `written` until it has been written, but only while the
+    /// hub connected is still `connection`. False once it isn't.
+    pub(crate) async fn send_to(
+        &self,
+        connection: HubConnection,
+        frame: WorkerFrame,
+        written: OwnedSemaphorePermit,
+    ) -> bool {
+        let mut inner = self.0.lock().await;
+        if inner.connection != Some(connection) {
+            return false;
         }
+        inner.write(Outgoing { frame: Arc::new(frame), written: Some(written) }).await;
+        inner.connection == Some(connection)
     }
 
     /// Lets go of what the hub has recorded, which is every frame through the one numbered `through`.
@@ -54,22 +99,38 @@ impl Outbox {
 
     /// Sends `hub` whatever is kept, oldest first, then what each agent is writing, and then each frame as it's sent,
     /// numbered and kept if `keeping`.
-    pub(crate) async fn attach(&self, hub: mpsc::Sender<Arc<WorkerFrame>>, keeping: bool) {
+    pub(crate) async fn attach(&self, hub: mpsc::Sender<Outgoing>, keeping: bool) {
         let mut inner = self.0.lock().await;
         inner.keeping = keeping;
         let kept = inner.kept.iter().map(|(_, frame)| frame.clone());
         let catching_up: Vec<_> = kept.chain(inner.writing.frames().map(Arc::new)).collect();
         for frame in catching_up {
-            if hub.send(frame).await.is_err() {
+            if hub.send(frame.into()).await.is_err() {
                 return;
             }
         }
         inner.hub = Some(hub);
+        inner.connections += 1;
+        inner.connection = Some(HubConnection(inner.connections));
     }
 
     /// So nothing more goes to the hub that was connected.
     pub(crate) async fn detach(&self) {
-        self.0.lock().await.hub = None;
+        let mut inner = self.0.lock().await;
+        inner.hub = None;
+        inner.connection = None;
+    }
+}
+
+impl Inner {
+    /// To the hub connected, and lets go of it if it has gone.
+    async fn write(&mut self, outgoing: Outgoing) {
+        if let Some(hub) = &self.hub
+            && hub.send(outgoing).await.is_err()
+        {
+            self.hub = None;
+            self.connection = None;
+        }
     }
 }
 
@@ -104,7 +165,8 @@ impl Writing {
             | WorkerFrame::Ask { .. }
             | WorkerFrame::Branches { .. }
             | WorkerFrame::ChildBranches { .. }
-            | WorkerFrame::Terminal { .. } => {}
+            | WorkerFrame::Terminal { .. }
+            | WorkerFrame::TerminalPicture { .. } => {}
         }
     }
 
@@ -141,8 +203,8 @@ fn number_of(frame: &mut WorkerFrame) -> Option<&mut Option<u64>> {
         WorkerFrame::AgentReport { report, seq, .. } if kept(report.keeper()) => Some(seq),
         // A reply is only for the hub that asked, an ask is asked again of each hub until it's answered, the branches
         // are read again for each hub that watches them, what an agent is writing is sent again to each hub that
-        // connects, a report kept nowhere is only for the hub there, and a hub asks what a terminal shows as a client
-        // attaches to it.
+        // connects, a report kept nowhere is only for the hub there, a hub asks what a terminal shows as a client
+        // attaches to it, and one that connects watches a terminal again, and is sent a whole picture.
         WorkerFrame::AgentDelta { .. }
         | WorkerFrame::AgentRetrying { .. }
         | WorkerFrame::AgentReport { .. }
@@ -151,7 +213,8 @@ fn number_of(frame: &mut WorkerFrame) -> Option<&mut Option<u64>> {
         | WorkerFrame::Ask { .. }
         | WorkerFrame::Branches { .. }
         | WorkerFrame::ChildBranches { .. }
-        | WorkerFrame::Terminal { .. } => None,
+        | WorkerFrame::Terminal { .. }
+        | WorkerFrame::TerminalPicture { .. } => None,
     }
 }
 

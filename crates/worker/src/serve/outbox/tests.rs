@@ -71,8 +71,8 @@ fn number(frame: &WorkerFrame) -> Option<u64> {
 }
 
 /// What a hub on a channel of its own has been sent so far.
-fn sent(hub: &mut mpsc::Receiver<Arc<WorkerFrame>>) -> Vec<Arc<WorkerFrame>> {
-    std::iter::from_fn(|| hub.try_recv().ok()).collect()
+fn sent(hub: &mut mpsc::Receiver<Outgoing>) -> Vec<Arc<WorkerFrame>> {
+    std::iter::from_fn(|| hub.try_recv().ok().map(|sent| sent.frame)).collect()
 }
 
 #[tokio::test]
@@ -219,4 +219,34 @@ async fn a_hub_that_connects_has_the_line_said_for_the_agent_until_its_wait_clos
     assert_eq!(while_open, Some(line));
     assert_eq!(handed_over(&outbox).await, None);
     assert!(outbox.0.lock().await.writing.0.is_empty(), "nothing is kept of it");
+}
+
+/// A terminal's pictures are for the hub that watches it, so one that connects after is sent none until it watches
+/// too, and the room each held is let go of either way.
+#[tokio::test]
+async fn what_is_for_one_hub_goes_to_no_other() {
+    let outbox = Outbox::default();
+    // One for each frame, since one held in a channel nothing reads holds its room.
+    let room = Arc::new(tokio::sync::Semaphore::new(3));
+    // Any frame, as a terminal's picture is, that isn't numbered or kept.
+    let frame = || WorkerFrame::Terminal {
+        terminal: "t".into(),
+        at: protocol::terminal::UpdateIndex::new(0),
+        update: protocol::terminal::TerminalUpdate::Exited(protocol::terminal::TerminalExit { code: None }),
+    };
+    let (first, mut first_hub) = mpsc::channel(8);
+    outbox.attach(first, true).await;
+    let watched = outbox.connection().await.unwrap();
+
+    let to_first = outbox.send_to(watched, frame(), room.clone().acquire_owned().await.unwrap()).await;
+    outbox.detach().await;
+    let with_none = outbox.send_to(watched, frame(), room.clone().acquire_owned().await.unwrap()).await;
+    let (next, mut next_hub) = mpsc::channel(8);
+    outbox.attach(next, true).await;
+    let to_next = outbox.send_to(watched, frame(), room.clone().acquire_owned().await.unwrap()).await;
+
+    assert_eq!((to_first, with_none, to_next), (true, false, false));
+    assert_ne!(outbox.connection().await, Some(watched));
+    assert_eq!((sent(&mut first_hub).len(), sent(&mut next_hub).len()), (1, 0));
+    assert_eq!(room.available_permits(), 3, "a frame read, or not sent, holds no room");
 }

@@ -1,4 +1,4 @@
-use super::TerminalSize;
+use crate::terminal::TerminalSize;
 
 #[test]
 fn a_worker_gives_a_terminal_any_size_from_one_cell_to_the_most() {
