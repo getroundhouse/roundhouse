@@ -248,7 +248,8 @@ pub(super) async fn handle(
         | WorkerRequest::GitCredentialSet(_)
         | WorkerRequest::TerminalInput(_)
         | WorkerRequest::TerminalTyped(_)
-        | WorkerRequest::TerminalResize(_) => {
+        | WorkerRequest::TerminalResize(_)
+        | WorkerRequest::TerminalFit(_) => {
             Err(ApiError::new(ErrorCode::Internal, "the connection answers this itself"))
         }
         WorkerRequest::Received(Received { through }) => {

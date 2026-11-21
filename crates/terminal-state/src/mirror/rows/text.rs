@@ -193,7 +193,12 @@ impl Mirror {
     }
 
     /// Where `at` is in the terminal, if it's in `numbering`, the one it's in now, and among the rows it keeps.
-    fn kept(&self, now: Numbered, numbering: Numbering, at: TerminalPoint) -> Result<Option<Point>, MirrorError> {
+    pub(super) fn kept(
+        &self,
+        now: Numbered,
+        numbering: Numbering,
+        at: TerminalPoint,
+    ) -> Result<Option<Point>, MirrorError> {
         let last = now.top.plus(u64::from(self.terminal.rows()?));
         let kept =
             numbering == now.numbering && at.row >= now.first && at.row < last && at.col < self.terminal.cols()?;
@@ -208,7 +213,7 @@ fn place(now: Numbered, at: TerminalPoint) -> Point {
 }
 
 /// The cell a reference is to, by number.
-fn numbered(
+pub(super) fn numbered(
     terminal: &Terminal<'_, '_>,
     now: Numbered,
     at: &libghostty_vt::grid_ref::GridRef<'_>,

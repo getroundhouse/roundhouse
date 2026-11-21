@@ -10,4 +10,4 @@
 pub mod drawn;
 mod mirror;
 
-pub use mirror::{Mirror, MirrorError, Pointer, QUIET_BEFORE_COMPRESSING, SelectBy, Size};
+pub use mirror::{Mirror, MirrorError, Pointer, QUIET_BEFORE_COMPRESSING, SelectBy, Size, Tracked};

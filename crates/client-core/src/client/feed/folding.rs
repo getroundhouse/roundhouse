@@ -76,6 +76,7 @@ fn carried(response: &ClientResponse) -> Vec<Record> {
         | ClientResponse::TerminalRows(_)
         | ClientResponse::TerminalBounds(_)
         | ClientResponse::TerminalText(_)
+        | ClientResponse::TerminalFit(_)
         | ClientResponse::Paired(_)
         | ClientResponse::Devices(_)
         | ClientResponse::Pairing(_)

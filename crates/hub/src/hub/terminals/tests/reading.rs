@@ -3,12 +3,12 @@
 use std::time::Duration;
 
 use protocol::client::ErrorCode;
-use protocol::client::terminals::{TerminalBounds, TerminalRows, TerminalText};
+use protocol::client::terminals::{TerminalBounds, TerminalFit, TerminalRows, TerminalText};
 use protocol::terminal::{
-    Bounds, Numbering, RowNumber, TerminalBoundsReply, TerminalPoint, TerminalRange, TerminalTextReply,
+    Bounds, Numbering, RowNumber, TerminalBoundsReply, TerminalPoint, TerminalRange, TerminalSize, TerminalTextReply,
 };
 use protocol::worker::{WorkerRequest, WorkerResponse};
-use tokio::time::Instant;
+use tokio::time::{Instant, timeout};
 
 use crate::hub::tests::{hub_with_worktree, serving, terminal_in_w};
 use crate::worker_link::WorkerLink;
@@ -62,9 +62,31 @@ async fn a_read_the_worker_doesnt_answer_fails_after_a_while() {
     let began = Instant::now();
 
     let asked = TerminalRows { id: "t".into(), numbering: Numbering::new(2), from: RowNumber::new(40), count: 10 };
-    let failed = hub.terminal_rows(asked).await.unwrap_err();
+    let failed = timeout(Duration::from_mins(1), hub.terminal_rows(asked)).await.expect("a time limit").unwrap_err();
 
     assert_eq!(failed.code, ErrorCode::Worker);
     let waited = began.elapsed();
+    assert!(waited >= Duration::from_secs(10) && waited < Duration::from_secs(11), "{waited:?}");
+}
+
+/// A fit is answered with where the worker says the cells went, and given as long as a read for it.
+#[tokio::test(start_paused = true)]
+async fn a_fit_the_worker_doesnt_answer_fails_after_a_while() {
+    let dir = tempfile::tempdir().unwrap();
+    let hub = hub_with_worktree(dir.path());
+    let link = WorkerLink::answering(|request| {
+        (!matches!(request, WorkerRequest::TerminalFit(_))).then_some(Ok(WorkerResponse::Ok))
+    });
+    serving(&hub, &link);
+    hub.terminal_open(terminal_in_w("t")).await.unwrap();
+    let began = Instant::now();
+
+    let size = TerminalSize { cols: 100, rows: 30 };
+    let fit = TerminalFit { id: "t".into(), size, numbering: Numbering::new(2), keep: vec![AT] };
+    let queued = hub.terminal_fit(fit).await.unwrap();
+    let failed = timeout(Duration::from_mins(1), queued).await.expect("a time limit").unwrap_err();
+
+    let waited = began.elapsed();
+    assert_eq!(failed.code, ErrorCode::Worker);
     assert!(waited >= Duration::from_secs(10) && waited < Duration::from_secs(11), "{waited:?}");
 }

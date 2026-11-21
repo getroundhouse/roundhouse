@@ -11,7 +11,9 @@ use crate::model::{
     Terminal, Workspace, WorktreeFiles,
 };
 use crate::tail::{StreamDelta, Tail};
-use crate::terminal::{TerminalBoundsReply, TerminalPicture, TerminalRowsReply, TerminalTextReply, TerminalUpdate};
+use crate::terminal::{
+    TerminalBoundsReply, TerminalFitReply, TerminalPicture, TerminalRowsReply, TerminalTextReply, TerminalUpdate,
+};
 use feed::HubNotice;
 use hello::HelloReply;
 use request::ClientRequest;
@@ -115,6 +117,7 @@ pub enum ClientResponse {
     TerminalRows(TerminalRowsReply),
     TerminalBounds(TerminalBoundsReply),
     TerminalText(TerminalTextReply),
+    TerminalFit(TerminalFitReply),
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]

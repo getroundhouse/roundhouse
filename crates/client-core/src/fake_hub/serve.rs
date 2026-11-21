@@ -334,6 +334,7 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
         | R::TerminalTyped(_)
         | R::TerminalBounds(_)
         | R::TerminalText(_)
+        | R::TerminalFit(_)
         | R::Unknown => Err(ApiError::new(ErrorCode::Unsupported, "a fake hub doesn't know that request")),
         R::TerminalAttach(attach) => super::terminals::attach(world, &attach),
         R::TerminalOpen(_) | R::TerminalInput(_) | R::TerminalResize(_) | R::TerminalClose(_) => {

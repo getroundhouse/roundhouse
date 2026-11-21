@@ -7,7 +7,7 @@ use std::sync::{Arc, OnceLock, Weak};
 use parking_lot::Mutex;
 use protocol::client::terminals::{self as client, TerminalClose, TerminalInput, TerminalResize};
 use protocol::client::{ApiError, ClientRequest, ErrorCode, HubFrame, ReplyOutcome};
-use protocol::terminal::{TerminalExit, TerminalSize, TerminalUpdate, Typed, UpdateIndex};
+use protocol::terminal::{Numbering, TerminalExit, TerminalFitReply, TerminalSize, TerminalUpdate, Typed, UpdateIndex};
 use protocol::worker::{TerminalTyped, WorkerRequest, WorkerResponse};
 use tokio::time::timeout;
 
@@ -133,8 +133,9 @@ async fn a_worker_that_cant_say_what_a_terminal_shows_is_asked_again() {
 }
 
 /// Typing in a burst sends a request for each key, as bytes or as what was pressed, which the connection reads in
-/// order, and has to pass on in order, along with new sizes, so the last a client gives is the one the terminal keeps,
-/// though each other request runs on a task of its own. On several threads, where those tasks run in any order.
+/// order, and has to pass on in order, along with new sizes and fits, so the last a client gives is the one the
+/// terminal keeps, though each other request runs on a task of its own. On several threads, where those tasks run in
+/// any order.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn whats_typed_and_new_sizes_reach_the_worker_in_the_order_they_were_sent() {
     let dir = tempfile::tempdir().unwrap();
@@ -148,6 +149,12 @@ async fn whats_typed_and_new_sizes_reach_the_worker_in_the_order_they_were_sent(
             reaching.lock().push_str(text);
         } else if let WorkerRequest::TerminalResize(resize) = &request {
             write!(reaching.lock(), "{}x,", resize.size.cols).unwrap();
+        } else if let WorkerRequest::TerminalFit(fit) = &request {
+            write!(reaching.lock(), "{}x,", fit.size.cols).unwrap();
+            return Some(Ok(WorkerResponse::TerminalFit(TerminalFitReply {
+                numbering: fit.numbering,
+                kept: Vec::new(),
+            })));
         }
         Some(Ok(WorkerResponse::Ok))
     });
@@ -160,6 +167,15 @@ async fn whats_typed_and_new_sizes_reach_the_worker_in_the_order_they_were_sent(
             write!(sent, "{}x,", key + 1).unwrap();
             let size = TerminalSize { cols: key + 1, rows: 24 };
             ClientRequest::TerminalResize(TerminalResize { id: "t".into(), size })
+        } else if key % 10 == 5 {
+            write!(sent, "{}x,", key + 1).unwrap();
+            let size = TerminalSize { cols: key + 1, rows: 24 };
+            ClientRequest::TerminalFit(client::TerminalFit {
+                id: "t".into(),
+                size,
+                numbering: Numbering::new(0),
+                keep: Vec::new(),
+            })
         } else if key % 3 == 0 {
             write!(sent, "{key},").unwrap();
             let typed = Typed::Text { text: format!("{key},") };

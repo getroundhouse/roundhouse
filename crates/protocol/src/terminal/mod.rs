@@ -7,6 +7,7 @@
 #[cfg(test)]
 mod tests;
 
+mod fit;
 mod history;
 mod picture;
 mod rows;
@@ -16,6 +17,7 @@ mod text;
 mod typed;
 mod updates;
 
+pub use fit::{MOST_KEPT_POINTS, TerminalFitReply};
 pub use history::{MOST_ROWS, TerminalRowsReply};
 pub use picture::{CursorShape, PaletteColor, RowJson, RowRun, ScreenState, TerminalCursor, TerminalPicture, Wheel};
 pub use rows::{CellAttributes, CellColor, CellStyle, Numbering, RowNumber, Span, TerminalRow, Underline};

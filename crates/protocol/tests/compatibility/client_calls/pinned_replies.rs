@@ -39,6 +39,7 @@ pinned! {
     "references.rs" => [References(_)],
     "terminals.rs" => [Terminal(_), TerminalRows(_)],
     "terminal_text.rs" => [TerminalBounds(_), TerminalText(_)],
+    "terminal_fit.rs" => [TerminalFit(_)],
     "model_lists.rs" => [ModelList(_)],
 }
 

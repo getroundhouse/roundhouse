@@ -95,8 +95,12 @@ impl Mirror {
         }
     }
 
-    /// Gives the terminal a new size, which rewraps the shell's screen and its history, as the program's terminal has.
+    /// Gives the terminal a new size, which rewraps the shell's screen and its history, as the program's terminal has,
+    /// and starts its rows' numbering again. The size it has already changes nothing.
     pub fn resize(&mut self, size: Size) -> Result<(), MirrorError> {
+        if self.size()? == size {
+            return Ok(());
+        }
         // Nothing here knows how big a cell is, so a program that asks the size in pixels is told nothing.
         let resized = self.terminal.resize(size.cols, size.rows, 0, 0).map_err(MirrorError::from);
         let Some(counting) = &mut self.rows else { return resized };

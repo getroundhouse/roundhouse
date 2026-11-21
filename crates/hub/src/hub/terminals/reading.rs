@@ -37,8 +37,16 @@ impl Hub {
 
     async fn read_terminal<R: Request>(&self, id: &TerminalId, request: R) -> Result<R::Reply, ApiError> {
         let (_, link) = self.open_terminal(id)?;
-        tokio::time::timeout(READ_WITHIN, link.call(request)).await.unwrap_or_else(|_| {
-            Err(ApiError::new(ErrorCode::Worker, format!("terminal {id}'s worker didn't answer in {READ_WITHIN:?}")))
-        })
+        within_a_read(id, link.call(request)).await
     }
+}
+
+/// The worker's answer about terminal `id`, or an error once it has taken longer than [`READ_WITHIN`].
+pub(super) async fn within_a_read<T>(
+    id: &TerminalId,
+    answer: impl Future<Output = Result<T, ApiError>>,
+) -> Result<T, ApiError> {
+    tokio::time::timeout(READ_WITHIN, answer).await.unwrap_or_else(|_| {
+        Err(ApiError::new(ErrorCode::Worker, format!("terminal {id}'s worker didn't answer in {READ_WITHIN:?}")))
+    })
 }
