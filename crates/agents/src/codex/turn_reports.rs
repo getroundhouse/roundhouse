@@ -17,7 +17,7 @@ pub(super) async fn plan(shared: &Shared, params: &Value, scope: &Scope) -> Resu
     }
     let Plan { explanation, plan } = Plan::deserialize(params)?;
     let items = plan.into_iter().map(todo).collect();
-    shared.emit(AgentOutput::Report(Report::Todos(TodoList { items, note: explanation }))).await;
+    shared.run.emit(AgentOutput::Report(Report::Todos(TodoList { items, note: explanation }))).await;
     Ok(())
 }
 

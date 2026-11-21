@@ -51,6 +51,7 @@ pub(in crate::codex) async fn activity(shared: &Shared, scope: &Scope, activity:
                 state.subagents.runs.insert(subagent.clone(), run);
             }
             shared
+                .run
                 .event(
                     EventBody::Assistant {
                         message_id: Some(call.to_string().into()),
@@ -99,6 +100,7 @@ pub(in crate::codex) async fn turn_started(shared: &Shared, params: &Value) -> R
 /// now.
 async fn started(shared: &Shared, subagent: SubagentId, call: ToolUseId, details: StartSubagent) {
     shared
+        .run
         .event(
             EventBody::SubagentStarted {
                 subagent: Some(subagent),
@@ -138,6 +140,7 @@ pub(in crate::codex) async fn complete(shared: &Shared, subagent: &SubagentId, t
     };
     let (call, parent, report, answers) = ended;
     shared
+        .run
         .event(
             EventBody::SubagentEnded {
                 subagent: subagent.clone(),
@@ -150,6 +153,7 @@ pub(in crate::codex) async fn complete(shared: &Shared, subagent: &SubagentId, t
         .await;
     if answers {
         shared
+            .run
             .event(
                 EventBody::AgentUser {
                     subagent: parent,
@@ -188,7 +192,7 @@ pub(in crate::codex) async fn tasks(shared: &Shared) {
         (tasks, idle)
     };
     tasks.sort_by(|a, b| a.id.as_str().cmp(b.id.as_str()));
-    shared.event(EventBody::AgentTasks { tasks, stopped: Vec::new() }, None).await;
+    shared.run.event(EventBody::AgentTasks { tasks, stopped: Vec::new() }, None).await;
     if idle {
         control::report_state(shared).await;
     }

@@ -12,20 +12,20 @@ pub(super) async fn warning(shared: &Shared, params: &Value, scope: &Scope, raw:
         Some(message) => notice(NoticeLevel::Warning, message.into(), scope),
         None => EventBody::AgentOther { kind: "warning".into(), subagent: scope.parent.clone() },
     };
-    shared.event(body, Some(raw)).await;
+    shared.run.event(body, Some(raw)).await;
 }
 
 /// `error`: a request of Codex's that failed, as it says.
 pub(super) async fn error(shared: &Shared, params: &Value, scope: &Scope, raw: String) {
     let message = params["error"]["message"].as_str().unwrap_or("Codex's request failed");
-    shared.event(notice(NoticeLevel::Error, message.into(), scope), Some(raw)).await;
+    shared.run.event(notice(NoticeLevel::Error, message.into(), scope), Some(raw)).await;
 }
 
 /// `mcpServer/startupStatus/updated`: an MCP server starting, ready, stopped or failed. Only its failing is the
 /// person's to know, since its tools are then missing. The rest is state Codex keeps for its own interfaces.
 pub(super) async fn mcp_server(shared: &Shared, params: &Value, scope: &Scope, raw: String) {
     let Some(message) = mcp_failure(params) else { return };
-    shared.event(notice(NoticeLevel::Warning, message, scope), Some(raw)).await;
+    shared.run.event(notice(NoticeLevel::Warning, message, scope), Some(raw)).await;
 }
 
 /// What to say of a failed MCP server, or `None` for one that didn't fail.

@@ -11,24 +11,26 @@ use protocol::event::{EventBody, NoticeLevel};
 use protocol::model::AgentSessionId;
 use tokio::sync::watch;
 
-use super::running::{ChildSlot, STOP_GRACE, Shared};
+use super::running::{ChildSlot, Shared};
 use super::{launch, supervise};
+use crate::AgentError;
 use crate::jsonrpc::{Dialect, Rpc};
-use crate::{AgentError, AgentOutput};
+use crate::run::stop_group;
+use crate::starting::start_piped;
 
 /// Restarts the underlying `agy acp` child via `session/resume` once idle so `--dangerously-skip-permissions` matches
 /// `state.mode`. Callers hold `shared.controls`.
 pub(super) async fn ensure_mode_process(shared: &Arc<Shared>) -> Result<(), AgentError> {
     let swap = {
         let state = shared.state.lock();
-        if shared.gone.load(Ordering::SeqCst) {
+        if shared.run.is_gone() {
             return Err(AgentError::Exited);
         }
         state.needs_mode_swap().then(|| state.session_id.clone().map(|id| (state.mode, id))).flatten()
     };
     let Some((target_mode, session_id)) = swap else { return Ok(()) };
     stop_current_for_swap(shared).await;
-    if shared.requested.load(Ordering::SeqCst) {
+    if shared.run.requested() {
         finish_stopped_during_swap(shared).await;
         return Err(AgentError::Exited);
     }
@@ -36,19 +38,12 @@ pub(super) async fn ensure_mode_process(shared: &Arc<Shared>) -> Result<(), Agen
 }
 
 async fn stop_current_for_swap(shared: &Shared) {
-    let (pid, mut exited) = {
+    let exited = {
         let slot = shared.child.lock();
         slot.replacing.store(true, Ordering::SeqCst);
-        (slot.pid, slot.exited.clone())
+        slot.exited.clone()
     };
-    if *exited.borrow() {
-        return;
-    }
-    process::signal_group(pid, process::Signal::Terminate);
-    if tokio::time::timeout(STOP_GRACE, exited.wait_for(|done| *done)).await.is_err() {
-        process::signal_group(pid, process::Signal::Kill);
-        let _ = exited.wait_for(|done| *done).await;
-    }
+    stop_group(|| shared.run.pid(), exited).await;
 }
 
 async fn spawn_swapped_child(
@@ -61,13 +56,8 @@ async fn spawn_swapped_child(
         let owned: Vec<String> = args.iter().map(|s| (*s).to_owned()).collect();
         tap.launched(true, Some(session_id), &owned);
     }
-    let launched = match launch::launch(
-        &shared.context.bin,
-        args,
-        &shared.context.cwd,
-        &shared.context.env,
-        &shared.context.options,
-    ) {
+    let context = &shared.context;
+    let launched = match start_piped("Antigravity", &context.bin, args, &context.cwd, &context.env, &context.options) {
         Ok(launched) => launched,
         Err(error) => {
             fail_unspawned_swap(shared, &error).await;
@@ -78,9 +68,9 @@ async fn spawn_swapped_child(
     let replacing = Arc::new(AtomicBool::new(false));
     let child_gone = Arc::new(AtomicBool::new(false));
     let (exited_tx, exited_rx) = watch::channel(false);
-    shared.pid.store(launched.pid, Ordering::SeqCst);
+    shared.run.replaced(launched.pid);
     *shared.rpc_slot.lock() = rpc.clone();
-    *shared.child.lock() = ChildSlot { pid: launched.pid, replacing: replacing.clone(), exited: exited_rx };
+    *shared.child.lock() = ChildSlot { replacing: replacing.clone(), exited: exited_rx };
     tokio::spawn(supervise::supervise(
         supervise::ChildPipes {
             child: launched.child,
@@ -105,38 +95,27 @@ async fn spawn_swapped_child(
 }
 
 async fn finish_stopped_during_swap(shared: &Shared) {
-    shared.gone.store(true, Ordering::SeqCst);
+    shared.run.mark_gone();
     super::turn::settle_all(shared).await;
-    if let Some(path) = &shared.context.options.pid_file {
-        let _ = tokio::fs::remove_file(path).await;
-    }
-    shared.emit(AgentOutput::Exited { code: Some(0), signal: None, stderr_tail: Vec::new(), requested: true }).await;
-    shared.exited.send_replace(true);
+    shared.run.exit(Some(0), None, Vec::new(), true).await;
 }
 
 async fn fail_unspawned_swap(shared: &Shared, error: &AgentError) {
-    shared.gone.store(true, Ordering::SeqCst);
+    shared.run.mark_gone();
     super::turn::settle_all(shared).await;
-    if let Some(path) = &shared.context.options.pid_file {
-        let _ = tokio::fs::remove_file(path).await;
-    }
     shared
+        .run
         .event(EventBody::Notice { level: NoticeLevel::Error, message: error.to_string(), subagent: None }, None)
         .await;
-    shared
-        .emit(AgentOutput::Exited { code: None, signal: None, stderr_tail: vec![error.to_string()], requested: false })
-        .await;
-    shared.exited.send_replace(true);
+    shared.run.exit(None, None, vec![error.to_string()], false).await;
 }
 
 async fn fail_spawned_swap(shared: &Shared, error: &AgentError) {
     shared
+        .run
         .event(EventBody::Notice { level: NoticeLevel::Error, message: error.to_string(), subagent: None }, None)
         .await;
-    let (pid, mut exited) = {
-        let slot = shared.child.lock();
-        (slot.pid, slot.exited.clone())
-    };
-    process::signal_group(pid, process::Signal::Kill);
+    let mut exited = shared.child.lock().exited.clone();
+    process::signal_group(shared.run.pid(), process::Signal::Kill);
     let _ = exited.wait_for(|done| *done).await;
 }

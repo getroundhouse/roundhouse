@@ -219,7 +219,7 @@ pub(super) async fn watch(shared: Arc<Shared>, child_gone: Arc<AtomicBool>) {
     let mut interval = tokio::time::interval(POLL_INTERVAL);
     interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
     let mut tracker: Option<(std::path::PathBuf, TranscriptWatch)> = None;
-    while !shared.gone.load(Ordering::SeqCst) && !child_gone.load(Ordering::SeqCst) {
+    while !shared.run.is_gone() && !child_gone.load(Ordering::SeqCst) {
         interval.tick().await;
         let (transcript, paused, skip_permissions, delivery) = {
             let state = shared.state.lock();
@@ -304,7 +304,7 @@ pub(super) async fn read_since(path: &Path, offset: u64) -> Option<Vec<u8>> {
 
 async fn trigger_drain(shared: &Arc<Shared>, action: DrainAction) -> bool {
     let _ordered = shared.controls.lock().await;
-    if shared.gone.load(Ordering::SeqCst) {
+    if shared.run.is_gone() {
         return false;
     }
     let keep_open = action == DrainAction::RunTurn;

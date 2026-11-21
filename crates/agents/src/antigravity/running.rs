@@ -1,14 +1,9 @@
 use std::path::{Path, PathBuf};
-use std::sync::{
-    Arc,
-    atomic::{AtomicBool, AtomicU32, Ordering},
-};
-use std::time::Duration;
+use std::sync::{Arc, atomic::AtomicBool};
 
 use parking_lot::Mutex;
 use protocol::capability::approvals::ApprovalMode;
 use protocol::capability::settings;
-use protocol::event::EventBody;
 use protocol::model::ModelName;
 use protocol::paths::ENV_ANTIGRAVITY_BIN;
 use protocol::worker::AgentSpec;
@@ -17,9 +12,8 @@ use tokio::sync::{mpsc, watch};
 use super::state::{Conversation, Ending};
 use super::{launch, supervise};
 use crate::jsonrpc::{Dialect, Rpc};
+use crate::run::Run;
 use crate::{AgentError, AgentOptions, AgentOutput, AgentProcess, acp};
-
-pub(super) const STOP_GRACE: Duration = Duration::from_secs(3);
 
 pub(super) struct LaunchContext {
     pub(super) bin: PathBuf,
@@ -29,8 +23,8 @@ pub(super) struct LaunchContext {
     pub(super) purpose: launch::Purpose,
 }
 
+/// The CLI the run is in now: whether it's being replaced, and whether it has exited.
 pub(super) struct ChildSlot {
-    pub(super) pid: u32,
     pub(super) replacing: Arc<AtomicBool>,
     pub(super) exited: watch::Receiver<bool>,
 }
@@ -41,15 +35,11 @@ pub(super) struct Shared {
     pub(super) context: LaunchContext,
     pub(super) state: Mutex<Conversation>,
     pub(super) controls: tokio::sync::Mutex<()>,
-    pub(super) pid: AtomicU32,
-    pub(super) gone: AtomicBool,
-    pub(super) requested: AtomicBool,
-    pub(super) exited: watch::Sender<bool>,
+    pub(super) run: Run,
     /// How many times a turn's end, or its plan, has been recorded, for whatever waits on one. It changes only under
     /// the lock on `state`, with `Conversation.ending`, by `count_end`.
     pub(super) turn_done: watch::Sender<u64>,
     pub(super) tap: Option<crate::tap::Tap>,
-    emission: tokio::sync::Mutex<Option<mpsc::Sender<AgentOutput>>>,
 }
 
 impl Shared {
@@ -57,41 +47,11 @@ impl Shared {
         self.rpc_slot.lock().clone()
     }
 
-    pub(super) async fn emit(&self, output: AgentOutput) {
-        let mut sender = self.emission.lock().await;
-        let closes = matches!(output, AgentOutput::Exited { .. });
-        if let Some(sender) = sender.as_ref() {
-            let _ = sender.send(output).await;
-        }
-        if closes {
-            *sender = None;
-        }
-    }
-
-    pub(super) async fn event(&self, body: EventBody, raw: Option<String>) {
-        self.emit(AgentOutput::event(body, raw)).await;
-    }
-
     /// Sets how far the turn has got to ending, once its end or its plan is recorded, and counts that for whatever
     /// waits on it, under the lock `state` is held by, so whoever reads both under it finds them agree.
     pub(super) fn count_end(&self, state: &mut Conversation, ending: Ending) {
         state.ending = ending;
         self.turn_done.send_modify(|n| *n = n.saturating_add(1));
-    }
-
-    pub(super) async fn stop(&self) {
-        self.requested.store(true, Ordering::SeqCst);
-        let mut exited = self.exited.subscribe();
-        if *exited.borrow() {
-            return;
-        }
-        let pid = self.child.lock().pid;
-        process::signal_group(pid, process::Signal::Terminate);
-        if tokio::time::timeout(STOP_GRACE, exited.wait_for(|done| *done)).await.is_err() {
-            let pid = self.child.lock().pid;
-            process::signal_group(pid, process::Signal::Kill);
-            let _ = exited.wait_for(|done| *done).await;
-        }
     }
 }
 
@@ -101,10 +61,7 @@ pub(super) struct AntigravityProcess {
 
 impl Drop for AntigravityProcess {
     fn drop(&mut self) {
-        if !self.shared.gone.load(Ordering::SeqCst) {
-            self.shared.requested.store(true, Ordering::SeqCst);
-            process::signal_group(self.shared.child.lock().pid, process::Signal::Kill);
-        }
+        self.shared.run.kill_unless_gone();
     }
 }
 
@@ -186,7 +143,7 @@ pub(super) async fn start_conversation(
     let (process, agent_version) =
         transport(context, args, (model, mode, effort, hold_plans, skip_permissions), output, tap).await?;
     if let Err(error) = launch::conversation(&process.shared, spec, options, purpose, agent_version).await {
-        process.shared.stop().await;
+        process.shared.run.stop().await;
         return Err(error);
     }
     Ok(process)
@@ -199,24 +156,22 @@ async fn transport(
     output: mpsc::Sender<AgentOutput>,
     tap: Option<crate::tap::Tap>,
 ) -> Result<(Arc<AntigravityProcess>, Option<String>), AgentError> {
-    let launched = launch::launch(&context.bin, args, &context.cwd, &context.env, &context.options)?;
+    let launched =
+        crate::starting::start_piped("Antigravity", &context.bin, args, &context.cwd, &context.env, &context.options)?;
+    let run = Run::new(launched.pid, context.options.pid_file.clone(), output);
     let rpc = Arc::new(Rpc::new(launched.stdin, Dialect::JsonRpc2, "Antigravity", tap.clone()));
     let replacing = Arc::new(AtomicBool::new(false));
     let child_gone = Arc::new(AtomicBool::new(false));
     let (exited_tx, exited_rx) = watch::channel(false);
     let shared = Arc::new(Shared {
         rpc_slot: Mutex::new(rpc.clone()),
-        child: Mutex::new(ChildSlot { pid: launched.pid, replacing: replacing.clone(), exited: exited_rx }),
+        child: Mutex::new(ChildSlot { replacing: replacing.clone(), exited: exited_rx }),
         context,
         state: Mutex::new(Conversation::new(initial.0, initial.1, initial.2, initial.3, initial.4)),
         controls: tokio::sync::Mutex::new(()),
-        pid: AtomicU32::new(launched.pid),
-        gone: AtomicBool::new(false),
-        requested: AtomicBool::new(false),
-        exited: watch::channel(false).0,
+        run,
         turn_done: watch::channel(0).0,
         tap,
-        emission: tokio::sync::Mutex::new(Some(output)),
     });
     tokio::spawn(supervise::supervise(
         supervise::ChildPipes {
@@ -234,7 +189,7 @@ async fn transport(
     let agent_version = match launch::initialize(&process.shared).await {
         Ok(version) => version,
         Err(error) => {
-            process.shared.stop().await;
+            process.shared.run.stop().await;
             return Err(error);
         }
     };

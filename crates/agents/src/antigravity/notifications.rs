@@ -33,6 +33,7 @@ pub(super) async fn read(shared: Arc<Shared>, mut input: mpsc::Receiver<(Value, 
         let line = raw.clone();
         if let Err(error) = incoming(&shared, &value, raw).await {
             shared
+                .run
                 .event(
                     EventBody::Notice {
                         level: NoticeLevel::Error,
@@ -54,7 +55,7 @@ async fn incoming(shared: &Arc<Shared>, value: &Value, raw: String) -> Result<()
         return approvals::requested(shared, method, &value["id"], params, raw).await;
     }
     if method != "session/update" {
-        shared.event(EventBody::AgentOther { kind: method.into(), subagent: None }, Some(raw)).await;
+        shared.run.event(EventBody::AgentOther { kind: method.into(), subagent: None }, Some(raw)).await;
         return Ok(());
     }
     session_update(shared, acp::parse_session_update(params), raw).await;
@@ -94,6 +95,7 @@ async fn session_update(shared: &Shared, update: SessionUpdate, raw: String) {
                 return;
             }
             shared
+                .run
                 .emit(AgentOutput::Report(Report::Context {
                     context: ContextUsage {
                         used_tokens: used,
@@ -142,16 +144,16 @@ async fn finish_prompt_intake(shared: &Shared, prompt: Option<Seq>, raw: Option<
         state.ended_tasks.clear();
     }
     if let Some(prompt) = prompt {
-        shared.event(EventBody::PromptTaken { prompt }, raw).await;
-        shared.event(EventBody::AgentState { state: AgentRunState::Running }, None).await;
+        shared.run.event(EventBody::PromptTaken { prompt }, raw).await;
+        shared.run.event(EventBody::AgentState { state: AgentRunState::Running }, None).await;
     }
 }
 
 pub(super) async fn ensure_own_turn_started(shared: &Shared) {
     let started = shared.state.lock().begin_own_turn();
     if let Some(why) = started {
-        shared.event(EventBody::AgentState { state: AgentRunState::Running }, None).await;
-        shared.event(EventBody::OwnTurn(why), None).await;
+        shared.run.event(EventBody::AgentState { state: AgentRunState::Running }, None).await;
+        shared.run.event(EventBody::OwnTurn(why), None).await;
     }
 }
 
@@ -197,6 +199,7 @@ async fn stream_chunk(shared: &Shared, thinking: bool, text: &str) {
     if started {
         let kind = if thinking { BlockKind::Thinking } else { BlockKind::Text };
         shared
+            .run
             .emit(AgentOutput::Delta(StreamDelta {
                 run: None,
                 message_id: id.clone().into(),
@@ -210,7 +213,7 @@ async fn stream_chunk(shared: &Shared, thinking: bool, text: &str) {
     } else {
         DeltaChange::Text { index: 0, text: text.to_owned() }
     };
-    shared.emit(AgentOutput::Delta(StreamDelta { run: None, message_id: id.into(), subagent: None, change })).await;
+    shared.run.emit(AgentOutput::Delta(StreamDelta { run: None, message_id: id.into(), subagent: None, change })).await;
 }
 
 pub(super) async fn flush_streams(shared: &Shared) {
@@ -225,6 +228,7 @@ async fn flush_thought(shared: &Shared) {
     };
     if let Some((id, text, model)) = flushed {
         shared
+            .run
             .event(
                 EventBody::Assistant {
                     message_id: Some(id.into()),
@@ -250,6 +254,7 @@ async fn flush_text(shared: &Shared) {
     };
     if let Some((id, text, model)) = flushed {
         shared
+            .run
             .event(
                 EventBody::Assistant {
                     message_id: Some(id.into()),
@@ -295,6 +300,7 @@ pub(super) async fn ensure_call_emitted(shared: &Shared, wire: &ToolCallWire, ra
         ensure_prompt_taken(shared).await;
         ensure_own_turn_started(shared).await;
         shared
+            .run
             .event(
                 EventBody::Assistant {
                     message_id: Some(format!("agy-call-{id}").into()),
@@ -330,6 +336,7 @@ async fn on_tool(shared: &Shared, wire: ToolCallWire, raw: String) {
     let task_outcome = task_outcome_of(&output, is_error);
     let denied = (is_error && was_denied).then_some(Denied { said: None });
     shared
+        .run
         .event(
             EventBody::AgentUser {
                 subagent: None,
@@ -346,7 +353,7 @@ async fn on_tool(shared: &Shared, wire: ToolCallWire, raw: String) {
         .await;
     let updated_tasks = shared.state.lock().finish_listed_task(&id, task_outcome);
     if let Some((tasks, stopped)) = updated_tasks {
-        shared.event(EventBody::AgentTasks { tasks, stopped }, None).await;
+        shared.run.event(EventBody::AgentTasks { tasks, stopped }, None).await;
     }
 }
 
@@ -382,6 +389,6 @@ async fn on_mode(shared: &Shared, mode_id: &str, raw: String) {
         }
     };
     if changed {
-        shared.event(EventBody::AgentMode { mode }, Some(raw)).await;
+        shared.run.event(EventBody::AgentMode { mode }, Some(raw)).await;
     }
 }

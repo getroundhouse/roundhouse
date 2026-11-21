@@ -79,6 +79,7 @@ async fn ask(shared: &Shared, id: ApprovalId, waiting: Waiting, call: Option<Too
     let (request, parent) = (waiting.request.clone(), waiting.parent.clone());
     shared.state.lock().waiting.insert(id.clone(), waiting);
     shared
+        .run
         .event(
             EventBody::ApprovalRequested {
                 approval_id: id,
@@ -89,7 +90,7 @@ async fn ask(shared: &Shared, id: ApprovalId, waiting: Waiting, call: Option<Too
             raw,
         )
         .await;
-    shared.event(EventBody::AgentState { state: AgentRunState::RequiresAction }, None).await;
+    shared.run.event(EventBody::AgentState { state: AgentRunState::RequiresAction }, None).await;
 }
 
 /// Passes the person's decision on to Codex. The hub has recorded it already, with any secret answer taken out, so
@@ -115,10 +116,11 @@ pub(super) async fn decide(shared: &Shared, id: &ApprovalId, decision: &Decision
             return Err(error);
         }
         shared
+            .run
             .event(EventBody::Notice { level: NoticeLevel::Error, message: error.to_string(), subagent: None }, None)
             .await;
         if !refused {
-            shared.stop().await;
+            shared.run.stop().await;
         }
         control::report_state(shared).await;
         return Err(error);
@@ -144,13 +146,13 @@ async fn answer(shared: &Shared, waiting: &Waiting, decision: &Decision) -> Resu
     match (&waiting.native, decision) {
         (NativeRequest::Plan, Decision::ApprovePlan { context: PlanContext::Kept, .. }) => {
             shared.state.lock().settings.mode = super::claims::full_access();
-            shared.event(EventBody::AgentMode { mode: super::claims::full_access() }, None).await;
+            shared.run.event(EventBody::AgentMode { mode: super::claims::full_access() }, None).await;
             control::turn(shared, vec![json!({"type":"text","text":"Implement the approved plan.","text_elements":[]})])
                 .await
         }
         (NativeRequest::Plan, Decision::KeepPlanning { words }) => {
             shared.state.lock().settings.mode = super::claims::plan();
-            shared.event(EventBody::AgentMode { mode: super::claims::plan() }, None).await;
+            shared.run.event(EventBody::AgentMode { mode: super::claims::plan() }, None).await;
             control::turn(shared, vec![json!({"type":"text","text":words.as_deref().unwrap_or("Keep planning; the plan is not approved."),"text_elements":[]})]).await
         }
         (NativeRequest::Command(id) | NativeRequest::File(id), Decision::Allow { remember }) => {
@@ -202,7 +204,10 @@ pub(super) async fn resolved(shared: &Shared, native: &Value) {
         id
     };
     if let Some(id) = id {
-        shared.event(EventBody::ApprovalResolved { approval_id: id, decision: None, by_setting: false }, None).await;
+        shared
+            .run
+            .event(EventBody::ApprovalResolved { approval_id: id, decision: None, by_setting: false }, None)
+            .await;
         control::report_state(shared).await;
     }
 }
@@ -222,6 +227,7 @@ fn unsupported_decision() -> AgentError {
 
 pub(super) async fn unsupported(shared: &Shared, id: &Value, method: &str) -> Result<(), AgentError> {
     shared
+        .run
         .event(
             EventBody::Notice {
                 level: NoticeLevel::Warning,

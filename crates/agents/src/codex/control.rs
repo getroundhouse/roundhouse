@@ -1,5 +1,3 @@
-use std::sync::atomic::Ordering;
-
 use async_trait::async_trait;
 use protocol::attachment::AttachmentFile;
 use protocol::capability::Control;
@@ -21,10 +19,10 @@ impl AgentProcess for CodexProcess {
         super::claims::claims()
     }
     fn pid(&self) -> u32 {
-        self.shared.pid
+        self.shared.run.pid()
     }
     fn is_gone(&self) -> bool {
-        self.shared.gone.load(Ordering::SeqCst)
+        self.shared.run.is_gone()
     }
 
     async fn control(&self, control: &Control) -> Result<(), AgentError> {
@@ -65,7 +63,7 @@ impl AgentProcess for CodexProcess {
     }
 
     async fn stop(&self) {
-        self.shared.stop().await;
+        self.shared.run.stop().await;
     }
 }
 
@@ -81,7 +79,7 @@ async fn change(shared: &Shared, settings: &protocol::capability::settings::Sett
         settings.mode.inspect(|&mode| state.settings.mode = mode)
     };
     if let Some(mode) = mode {
-        shared.event(EventBody::AgentMode { mode }, None).await;
+        shared.run.event(EventBody::AgentMode { mode }, None).await;
     }
     Ok(())
 }
@@ -121,7 +119,7 @@ async fn prompt_to(shared: &Shared, seq: Seq, prompt: &Prompt<AttachmentFile>) -
                 dropped
             };
             if dropped {
-                shared.event(EventBody::PromptDropped { prompt: seq }, None).await;
+                shared.run.event(EventBody::PromptDropped { prompt: seq }, None).await;
             }
             Ok(())
         }
@@ -130,6 +128,7 @@ async fn prompt_to(shared: &Shared, seq: Seq, prompt: &Prompt<AttachmentFile>) -
             // A failed write or missing reply does not prove nonacceptance. Stop and drain native observations;
             // supervision settles this delivery once, instead of telling the hub it is safe to send again.
             shared
+                .run
                 .event(
                     EventBody::Notice {
                         level: protocol::event::NoticeLevel::Error,
@@ -139,7 +138,7 @@ async fn prompt_to(shared: &Shared, seq: Seq, prompt: &Prompt<AttachmentFile>) -
                     None,
                 )
                 .await;
-            shared.stop().await;
+            shared.run.stop().await;
             Ok(())
         }
     }
@@ -168,9 +167,10 @@ async fn compact(shared: &Shared, asked: Seq) -> Result<(), AgentError> {
         Err(error) => {
             let message = error.to_string();
             shared
+                .run
                 .event(EventBody::Notice { level: protocol::event::NoticeLevel::Error, message, subagent: None }, None)
                 .await;
-            shared.stop().await;
+            shared.run.stop().await;
             Ok(())
         }
     }
@@ -198,19 +198,19 @@ async fn cancel(shared: &Shared) -> Result<(), AgentError> {
         if let Err(error) = interrupted
             && !super::rpc::no_active_turn(&error)
         {
-            shared.stop().await;
+            shared.run.stop().await;
             return Err(error);
         }
         if tokio::time::timeout(super::turn::END_WAIT, done.wait_for(|ended| ended.as_ref() == Some(turn)))
             .await
             .is_err()
         {
-            shared.stop().await;
+            shared.run.stop().await;
             return Err(AgentError::NoAnswer);
         }
     }
     if let Err(error) = super::terminals::stop(shared, thread.as_ref()).await {
-        shared.stop().await;
+        shared.run.stop().await;
         return Err(error);
     }
     settle(shared, None).await;
@@ -260,16 +260,16 @@ pub(super) async fn settle(shared: &Shared, parent: Option<&protocol::model::Sub
         )
     };
     for prompt in prompts {
-        shared.event(EventBody::PromptDropped { prompt }, None).await;
+        shared.run.event(EventBody::PromptDropped { prompt }, None).await;
     }
     for approval_id in requests {
-        shared.event(EventBody::ApprovalResolved { approval_id, decision: None, by_setting: false }, None).await;
+        shared.run.event(EventBody::ApprovalResolved { approval_id, decision: None, by_setting: false }, None).await;
     }
     // SubagentEnded ends a child's unfinished work. ToolCallDropped is a root-only event, used when the
     // agent went on without a call; inventing child results here would claim output the CLI never supplied.
     if parent.is_none() {
         for tool_use_id in calls {
-            shared.event(EventBody::ToolCallDropped { tool_use_id }, None).await;
+            shared.run.event(EventBody::ToolCallDropped { tool_use_id }, None).await;
         }
     }
 }
@@ -286,7 +286,7 @@ pub(super) async fn report_state(shared: &Shared) {
             AgentRunState::Idle
         }
     };
-    shared.event(EventBody::AgentState { state }, None).await;
+    shared.run.event(EventBody::AgentState { state }, None).await;
 }
 
 /// What a turn is started with for `prompt`: how to talk, if it was spoken, then what it says, then its files.

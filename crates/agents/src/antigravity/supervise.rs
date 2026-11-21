@@ -8,7 +8,7 @@ use tokio::sync::{mpsc, watch};
 
 use super::{notifications, running::Shared};
 use crate::jsonrpc::Rpc;
-use crate::{AgentOutput, stdio};
+use crate::stdio;
 
 pub(super) struct ChildPipes {
     pub(super) child: Child,
@@ -21,7 +21,7 @@ pub(super) struct ChildPipes {
 }
 
 /// Waits for one `agy` child to exit. When `replacing` is set for a mode-switch respawn, settles only that child's
-/// background tasks without ending the run; otherwise settles the run and emits [`AgentOutput::Exited`].
+/// background tasks without ending the run; otherwise settles the run and ends it.
 pub(super) async fn supervise(pipes: ChildPipes, shared: Arc<Shared>) {
     let ChildPipes { mut child, stdout, stderr, rpc, replacing, child_gone, exited_tx } = pipes;
     let (tx, rx) = mpsc::channel(256);
@@ -33,7 +33,7 @@ pub(super) async fn supervise(pipes: ChildPipes, shared: Arc<Shared>) {
     child_gone.store(true, Ordering::SeqCst);
     let replaced = replacing.load(Ordering::SeqCst);
     if !replaced {
-        shared.gone.store(true, Ordering::SeqCst);
+        shared.run.mark_gone();
     }
     wakeup.abort();
     let _ = wakeup.await;
@@ -51,14 +51,10 @@ pub(super) async fn supervise(pipes: ChildPipes, shared: Arc<Shared>) {
         return;
     }
     super::turn::settle_all(&shared).await;
-    if let Some(path) = &shared.context.options.pid_file {
-        let _ = tokio::fs::remove_file(path).await;
-    }
-    let requested = shared.requested.load(Ordering::SeqCst);
+    let requested = shared.run.requested();
     if let Some(tap) = &shared.tap {
         tap.exited(code, signal, requested);
     }
-    shared.emit(AgentOutput::Exited { code, signal, stderr_tail, requested }).await;
+    shared.run.exit(code, signal, stderr_tail, requested).await;
     exited_tx.send_replace(true);
-    shared.exited.send_replace(true);
 }

@@ -1,5 +1,10 @@
+use std::path::Path;
+
+use protocol::attachment::{AttachmentFile, NewAttachment};
 use protocol::event::{ContentBlock, EventBody, TurnOutcome};
 use protocol::model::Title;
+use protocol::prompt::Prompt;
+use tempfile::TempDir;
 use tokio::sync::mpsc;
 
 use crate::{AgentError, AgentOutput, NoTitle};
@@ -43,6 +48,26 @@ pub(crate) async fn read_title(rx: &mut mpsc::Receiver<AgentOutput>) -> Result<T
         }
     }
     Err(AgentError::Exited)
+}
+
+/// A directory of its own in `scratch_dir` for naming `prompt` in, holding the prompt's files, each named for its
+/// place in the prompt, and where each is. It's removed when it's dropped.
+pub(crate) async fn room(
+    prompt: &Prompt<NewAttachment>,
+    scratch_dir: &Path,
+) -> Result<(TempDir, Vec<AttachmentFile>), AgentError> {
+    let scratch_dir = scratch_dir.to_owned();
+    let room = tokio::task::spawn_blocking(move || tempfile::tempdir_in(scratch_dir))
+        .await
+        .map_err(|_| AgentError::Exited)?
+        .map_err(NoTitle::NoRoom)?;
+    let mut files = Vec::new();
+    for (i, file) in prompt.files.iter().enumerate() {
+        let path = room.path().join(format!("image-{i}"));
+        tokio::fs::write(&path, file.data.as_slice()).await?;
+        files.push(AttachmentFile { attachment: file.attachment.clone(), path: path.to_string_lossy().into_owned() });
+    }
+    Ok((room, files))
 }
 
 #[cfg(test)]

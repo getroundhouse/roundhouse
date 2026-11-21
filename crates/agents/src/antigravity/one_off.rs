@@ -2,7 +2,7 @@ use std::path::Path;
 use std::process::Stdio;
 use std::time::Duration;
 
-use protocol::attachment::{AttachmentFile, NewAttachment};
+use protocol::attachment::NewAttachment;
 use protocol::capability::conversation::Start;
 use protocol::capability::settings::{Effort, Settings};
 use protocol::model::{AgentAccount, AgentKind, ModelName, RunId, Title};
@@ -110,17 +110,7 @@ pub async fn title_for(
     options: &AgentOptions,
     scratch_dir: &Path,
 ) -> Result<Title, AgentError> {
-    let scratch_dir = scratch_dir.to_owned();
-    let room = tokio::task::spawn_blocking(move || tempfile::tempdir_in(scratch_dir))
-        .await
-        .map_err(|_| AgentError::Exited)?
-        .map_err(NoTitle::NoRoom)?;
-    let mut files = Vec::new();
-    for (i, file) in prompt.files.iter().enumerate() {
-        let path = room.path().join(format!("image-{i}"));
-        tokio::fs::write(&path, file.data.as_slice()).await?;
-        files.push(AttachmentFile { attachment: file.attachment.clone(), path: path.to_string_lossy().into_owned() });
-    }
+    let (room, files) = crate::title::room(prompt, scratch_dir).await?;
     let spec = title_spec(room.path());
     let (tx, mut rx) = mpsc::channel(128);
     let local_options = AgentOptions { tools: None, ..options.clone() };
