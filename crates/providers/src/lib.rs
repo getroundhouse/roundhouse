@@ -24,7 +24,9 @@ pub use protocol::provider::{
 
 pub use error::ProviderError;
 
-/// Instance IDs are chosen by the hub, one per workspace.
+/// Instance IDs are chosen by the hub, one per workspace. [`serve`](serve::serve) gives up on a request that takes too
+/// long, by dropping its future, so a provider ends whatever it started outside that future, such as a child process,
+/// when the future is dropped, or a request after it, such as a `destroy`, can race what it left.
 #[async_trait]
 pub trait Provider: Send + Sync {
     fn name(&self) -> &str;
@@ -34,22 +36,22 @@ pub trait Provider: Send + Sync {
     /// The longest it takes to start one of its instances, up to running its worker there, or to stop one, with what
     /// runs there, so whatever waits for either can tell one that's stuck.
     fn starts_or_stops_within(&self) -> Duration;
-    /// Makes the instance, as a copy of the base image `from` or a plain one, or does nothing if it's there.
+    /// Makes the instance, as a copy of the base image `from` or a plain one, or does nothing if it's there. Its ID is
+    /// the only name it's given.
     async fn create(
         &self,
         instance_id: &InstanceId,
         from: Option<&InstanceId>,
         size: Option<Size>,
-        display_name: &str,
     ) -> Result<(), ProviderError>;
     /// Starts it, or does nothing to one that's running, whatever runs there. First puts in place the one of `workers`
     /// built for the instance's target, if it holds a different one.
     async fn start(&self, instance_id: &InstanceId, workers: &[WorkerBinary]) -> Result<(), ProviderError>;
     /// Ends whatever runs on it, which can be a worker an earlier hub left, and leaves it awake. The hub has closed its
     /// own worker's stream and given it time to stop first. Safe on an instance that isn't running or doesn't exist.
-    async fn stop(&self, instance_id: &InstanceId) -> Result<(), ProviderError>;
-    /// Like `stop`, for a worker that isn't responding.
-    async fn kill(&self, instance_id: &InstanceId) -> Result<(), ProviderError>;
+    async fn end_worker(&self, instance_id: &InstanceId) -> Result<(), ProviderError>;
+    /// Like `end_worker`, for a worker that isn't responding.
+    async fn kill_worker(&self, instance_id: &InstanceId) -> Result<(), ProviderError>;
     /// Safe on an instance that doesn't exist.
     async fn destroy(&self, instance_id: &InstanceId) -> Result<(), ProviderError>;
     async fn list(&self) -> Result<Vec<Instance>, ProviderError>;

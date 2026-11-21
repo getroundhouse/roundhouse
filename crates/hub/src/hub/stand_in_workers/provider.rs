@@ -213,7 +213,6 @@ impl Provider for WithWorkers {
         instance_id: &InstanceId,
         _: Option<&InstanceId>,
         _: Option<Size>,
-        _: &str,
     ) -> Result<(), ProviderError> {
         self.asked.creates.fetch_add(1, Ordering::SeqCst);
         let hub = self.hub.upgrade().expect("a hub asks for an instance");
@@ -234,11 +233,11 @@ impl Provider for WithWorkers {
         Ok(())
     }
 
-    async fn stop(&self, _: &InstanceId) -> Result<(), ProviderError> {
+    async fn end_worker(&self, _: &InstanceId) -> Result<(), ProviderError> {
         Ok(())
     }
 
-    async fn kill(&self, _: &InstanceId) -> Result<(), ProviderError> {
+    async fn kill_worker(&self, _: &InstanceId) -> Result<(), ProviderError> {
         Ok(())
     }
 

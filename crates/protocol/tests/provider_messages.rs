@@ -9,9 +9,9 @@ use std::fmt::Debug;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::frame;
 use protocol::provider::{
-    Capabilities, ClonePersistence, Connect, Create, Destroy, Feature, Hello, HelloReply, Instance, InstanceState,
-    Instances, Kill, MakeBaseImage, OpenPreflight, ProviderCall, ProviderEvent, ProviderFrame, ProviderOutcome,
-    ProviderRequest, ProviderResponse, Size, Start, Stop, WorkerBinary, WorkerCommand, WorkerEnvironment,
+    Capabilities, ClonePersistence, Connect, Create, Destroy, EndWorker, Feature, Hello, HelloReply, Instance,
+    InstanceState, Instances, KillWorker, MakeBaseImage, OpenPreflight, ProviderCall, ProviderEvent, ProviderFrame,
+    ProviderOutcome, ProviderRequest, ProviderResponse, Size, Start, WorkerBinary, WorkerCommand, WorkerEnvironment,
     WorkerFilesystem,
 };
 use serde::Serialize;
@@ -33,9 +33,8 @@ fn every_request_keeps_its_form() {
             instance_id: "i".into(),
             from: Some("base".into()),
             size: Some(Size { cpus: 4, memory_mib: 8192 }),
-            display_name: "roundhouse-holly".into(),
         })),
-        r#"{"id":7,"request":{"method":"create","instance_id":"i","from":"base","size":{"cpus":4,"memory_mib":8192},"display_name":"roundhouse-holly"}}"#,
+        r#"{"id":7,"request":{"method":"create","instance_id":"i","from":"base","size":{"cpus":4,"memory_mib":8192}}}"#,
     );
     keeps_its_form(
         &call(ProviderRequest::Start(Start {
@@ -49,12 +48,12 @@ fn every_request_keeps_its_form() {
         r#"{"id":7,"request":{"method":"start","instance_id":"i","workers":[{"target":"x86_64-unknown-linux-gnu","path":"/opt/roundhouse/worker","sha256":"ab12"}]}}"#,
     );
     keeps_its_form(
-        &call(ProviderRequest::Stop(Stop { instance_id: "i".into() })),
-        r#"{"id":7,"request":{"method":"stop","instance_id":"i"}}"#,
+        &call(ProviderRequest::EndWorker(EndWorker { instance_id: "i".into() })),
+        r#"{"id":7,"request":{"method":"end_worker","instance_id":"i"}}"#,
     );
     keeps_its_form(
-        &call(ProviderRequest::Kill(Kill { instance_id: "i".into() })),
-        r#"{"id":7,"request":{"method":"kill","instance_id":"i"}}"#,
+        &call(ProviderRequest::KillWorker(KillWorker { instance_id: "i".into() })),
+        r#"{"id":7,"request":{"method":"kill_worker","instance_id":"i"}}"#,
     );
     keeps_its_form(
         &call(ProviderRequest::Destroy(Destroy { instance_id: "i".into() })),
@@ -92,11 +91,21 @@ fn every_response_and_event_keeps_its_form() {
     keeps_its_form(
         &reply(ProviderResponse::Instances(Instances {
             instances: vec![
-                Instance { instance_id: "i".into(), state: InstanceState::Running, base_image: false },
-                Instance { instance_id: "base".into(), state: InstanceState::Stopped, base_image: true },
+                Instance {
+                    instance_id: "i".into(),
+                    state: InstanceState::Running,
+                    base_image: false,
+                    worker_running: true,
+                },
+                Instance {
+                    instance_id: "base".into(),
+                    state: InstanceState::Stopped,
+                    base_image: true,
+                    worker_running: false,
+                },
             ],
         })),
-        r#"{"frame":"reply","id":7,"response":{"result":"instances","instances":[{"instance_id":"i","state":"running","base_image":false},{"instance_id":"base","state":"stopped","base_image":true}]}}"#,
+        r#"{"frame":"reply","id":7,"response":{"result":"instances","instances":[{"instance_id":"i","state":"running","base_image":false,"worker_running":true},{"instance_id":"base","state":"stopped","base_image":true,"worker_running":false}]}}"#,
     );
     keeps_its_form(
         &ProviderFrame::Event {
@@ -210,11 +219,15 @@ fn a_list_reads_with_fields_it_doesnt_know() {
     assert_eq!(call, ProviderCall { id: 4, request: ProviderRequest::List });
 }
 
+/// What an adapter leaves out of its capabilities it can't do, and an instance it lists without saying whether a worker
+/// serves it has none, so a starting hub carries on with no worker there.
 #[test]
-fn what_an_older_adapter_leaves_out_of_its_capabilities_it_cant_do() {
+fn what_an_adapter_leaves_out_it_doesnt_have() {
     let capabilities: Capabilities = frame::decode(b"{}").unwrap();
+    let instance: Instance = frame::decode(br#"{"instance_id":"i","state":"running"}"#).unwrap();
 
     assert_eq!(capabilities, Capabilities::default());
+    assert!(!instance.worker_running);
 }
 
 #[test]
@@ -247,17 +260,12 @@ fn an_event_state_or_feature_from_a_newer_adapter_reads_as_unknown() {
 fn a_create_leaves_out_what_it_doesnt_set() {
     let create = ProviderCall {
         id: 2,
-        request: ProviderRequest::Create(Create {
-            instance_id: "i".into(),
-            from: None,
-            size: None,
-            display_name: "roundhouse-holly".into(),
-        }),
+        request: ProviderRequest::Create(Create { instance_id: "i".into(), from: None, size: None }),
     };
 
     assert_eq!(
         frame::encode(&create).unwrap(),
-        b"{\"id\":2,\"request\":{\"method\":\"create\",\"instance_id\":\"i\",\"display_name\":\"roundhouse-holly\"}}\n"
+        b"{\"id\":2,\"request\":{\"method\":\"create\",\"instance_id\":\"i\"}}\n"
     );
 }
 

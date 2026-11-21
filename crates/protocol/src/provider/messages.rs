@@ -2,14 +2,25 @@ use super::{hello, instances};
 use crate::client::Outcome;
 use crate::model::InstanceId;
 use hello::{Hello, HelloReply};
-use instances::{Connect, Create, Destroy, Instances, Kill, MakeBaseImage, Start, Stop};
+use instances::{Connect, Create, Destroy, EndWorker, Instances, KillWorker, MakeBaseImage, Start};
 #[cfg(test)]
 use instances::{List, WorkerCommand};
 use serde::{Deserialize, Serialize};
+use std::time::Duration;
 
 /// The provider protocol's own version, apart from the client and worker protocols', so a break in one doesn't break
 /// the other.
 pub const PROVIDER_PROTOCOL_VERSION: u32 = 1;
+
+/// How long an adapter has to answer the hub's hello, which it can do at once, since it needn't reach its provider to.
+pub const HELLO_ANSWERED_WITHIN: Duration = Duration::from_secs(10);
+/// How long an adapter has to answer any other request, after which the hub gives up on it. Far longer than a request
+/// should take, even a cloud's VM starting, so an adapter that has lost a request can't keep the hub waiting forever.
+pub const ANSWERED_WITHIN: Duration = Duration::from_mins(10);
+/// How long a hub that's starting gives an adapter, before it serves, to answer `list`, its start and its hello
+/// included, and `connect` to a worker an earlier hub left there. The hub interrupts the sessions of a slower one, as if
+/// their workers had gone, so one slow provider doesn't keep every client waiting.
+pub const ANSWERED_AS_THE_HUB_STARTS_WITHIN: Duration = Duration::from_secs(5);
 
 /// A request to a provider's adapter, which names what the adapter answers it with.
 pub trait Request {
@@ -48,8 +59,8 @@ pub enum ProviderRequest {
     Hello(Hello),
     Create(Create),
     Start(Start),
-    Stop(Stop),
-    Kill(Kill),
+    EndWorker(EndWorker),
+    KillWorker(KillWorker),
     Destroy(Destroy),
     /// See [`List`](super::List).
     List,

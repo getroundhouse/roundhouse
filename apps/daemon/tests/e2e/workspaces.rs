@@ -219,8 +219,9 @@ fn a_workspace_with_no_pull_request_reports_none_rather_than_failing() {
 /// A name git has a branch by, or a folder of branches, is refused before anything is made, so the workspace takes
 /// another name in place, and a client following the feed sees one workspace on its way throughout, rather than one
 /// going and another coming. That's the same station with a number, which the worker's list of every name git has,
-/// whatever their case, shows is free, though here git has every station. Its instance is made again under it, since a
-/// provider's own tools call it by the name it was made with, and recorded as made, like any other.
+/// whatever their case, shows is free, though here git has every station. Its instance and its worker stay as they are
+/// through the rename, since an instance is known by its ID alone, and the instance is recorded as made, like any
+/// other.
 #[test]
 fn a_workspace_whose_name_git_has_takes_its_station_with_a_number_keeping_its_id() {
     let mut stack = Stack::start();
@@ -244,8 +245,8 @@ fn a_workspace_whose_name_git_has_takes_its_station_with_a_number_keeping_its_id
     assert_eq!(made.name, renamed.name);
     assert_eq!(made.name, format!("{}-2", first.name));
     assert_eq!(made.branch.as_str(), format!("{}/start", made.name));
-    let made_as: Vec<String> = [&first.name, &made.name].iter().map(|name| format!("roundhouse-{name}")).collect();
-    assert_eq!(stack.instances_made(), made_as);
+    assert_eq!(stack.instances_made(), [made.instance_id.to_string()]);
+    assert_eq!(stack.workers_reached(), [made.instance_id.to_string()]);
     stack.kill_hub();
     let paths = stack.paths();
     let store = hub::store::Store::open(&paths.database, &paths.backups_dir).unwrap();

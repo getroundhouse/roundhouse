@@ -24,8 +24,6 @@ mod tests;
 
 mod connection;
 
-#[cfg(test)]
-use connection::REQUEST_TIMEOUT;
 pub(crate) use connection::{ADAPTER_GRACE, AdapterCommand, AdapterProvider, process};
 #[cfg(test)]
 pub(crate) use connection::{Open, Opened};

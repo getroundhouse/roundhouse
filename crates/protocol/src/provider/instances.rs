@@ -5,7 +5,9 @@ use serde::{Deserialize, Serialize};
 use super::{ProviderRequest, ProviderResponse, Reply, Request};
 use crate::model::{InstanceId, WorkerTarget};
 
-/// Makes the instance, as a copy of the base image `from` or a plain one, or does nothing if it's there.
+/// Makes the instance, as a copy of the base image `from` or a plain one, or does nothing if it's there. Its ID is the
+/// only name it's given, so a provider's own tools call it by that, which is its workspace's ID: a workspace's name can
+/// change while it's being made, and its instance stays as it is.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct Create {
     pub instance_id: InstanceId,
@@ -14,8 +16,6 @@ pub struct Create {
     /// Ignored by a provider without [`Feature::Sizes`](super::Feature::Sizes).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub size: Option<Size>,
-    /// What the instance is called in the provider's own tools, such as `roundhouse-euston`.
-    pub display_name: String,
 }
 
 impl Request for Create {
@@ -42,34 +42,34 @@ impl Request for Start {
     }
 }
 
-/// Ends whatever runs on it, which can be a worker an earlier hub left, and leaves it awake. Putting it to sleep is a
-/// request of its own, which is yet to come. Does nothing to one that's stopped or gone. The hub closes its own
-/// worker's stream and gives it time to stop first, since that's the same over any transport, so an adapter only ends
-/// what's left.
+/// Ends whatever runs on it, which can be a worker an earlier hub left, and leaves it awake, so it's never what an
+/// adapter's own tools call stopping an instance. Putting it to sleep is a request of its own, which is yet to come.
+/// Does nothing to one that's stopped or gone. The hub closes its own worker's stream and gives it time to stop first,
+/// since that's the same over any transport, so an adapter only ends what's left.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
-pub struct Stop {
+pub struct EndWorker {
     pub instance_id: InstanceId,
 }
 
-impl Request for Stop {
+impl Request for EndWorker {
     type Reply = ();
 
     fn into_request(self) -> ProviderRequest {
-        ProviderRequest::Stop(self)
+        ProviderRequest::EndWorker(self)
     }
 }
 
-/// Like [`Stop`], without giving a worker that isn't responding time to finish.
+/// Like [`EndWorker`], without giving a worker that isn't responding time to finish.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
-pub struct Kill {
+pub struct KillWorker {
     pub instance_id: InstanceId,
 }
 
-impl Request for Kill {
+impl Request for KillWorker {
     type Reply = ();
 
     fn into_request(self) -> ProviderRequest {
-        ProviderRequest::Kill(self)
+        ProviderRequest::KillWorker(self)
     }
 }
 
@@ -164,8 +164,14 @@ pub struct Instance {
     pub state: InstanceState,
     #[serde(default)]
     pub base_image: bool,
+    /// Whether a worker serves it, which a hub that starts carries on with. Apart from its state, since an instance can
+    /// be awake with no worker on it, as every instance is once its worker has ended. One an adapter lists without
+    /// saying has none.
+    #[serde(default)]
+    pub worker_running: bool,
 }
 
+/// The instance's own state, such as whether its machine is on, whatever runs there.
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum InstanceState {

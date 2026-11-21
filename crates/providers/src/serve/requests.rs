@@ -4,12 +4,13 @@ use protocol::frame;
 use protocol::frame::Call;
 use protocol::model::HubId;
 use protocol::provider::{
-    Connect, Create, Destroy, Hello, HelloReply, Instances, Kill, MakeBaseImage, PROVIDER_PROTOCOL_VERSION,
-    ProviderFrame, ProviderOutcome, ProviderRequest, ProviderResponse, Start, Stop,
+    ANSWERED_WITHIN, Connect, Create, Destroy, EndWorker, Hello, HelloReply, Instances, KillWorker, MakeBaseImage,
+    PROVIDER_PROTOCOL_VERSION, ProviderFrame, ProviderOutcome, ProviderRequest, ProviderResponse, Start,
 };
 use protocol::versions::Versions;
 use std::io;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader};
 use tokio::sync::mpsc;
 use tracing::warn;
@@ -70,7 +71,13 @@ where
     Ok(())
 }
 
-/// So a slow request, such as starting a VM, doesn't hold up the rest, and one whose answer panics is still answered.
+/// How long a provider gets to answer a request before it's answered as having failed: half a minute short of how long
+/// the hub waits, so the hub hears why, rather than only that the adapter took too long. A hub that's starting gives a
+/// few of them less, as `ANSWERED_AS_THE_HUB_STARTS_WITHIN` says, which a provider meets by itself.
+const GIVES_UP_AFTER: Duration = Duration::from_secs(ANSWERED_WITHIN.as_secs() - 30);
+
+/// So a slow request, such as starting a VM, doesn't hold up the rest, and one whose answer panics or never comes is
+/// still answered. Giving up drops the provider's future, as the [`Provider`] trait says.
 fn answer_on_a_task(
     provider: Arc<dyn Provider>,
     request: ProviderRequest,
@@ -78,10 +85,15 @@ fn answer_on_a_task(
     frames: mpsc::Sender<ProviderFrame>,
 ) {
     tokio::spawn(async move {
-        let answering = tokio::spawn(async move { answer(provider.as_ref(), request).await });
+        let answering =
+            tokio::spawn(async move { tokio::time::timeout(GIVES_UP_AFTER, answer(provider.as_ref(), request)).await });
         let outcome = match answering.await {
-            Ok(Ok(response)) => ProviderOutcome::Response(response),
-            Ok(Err(e)) => ProviderOutcome::Error(e.to_api_error()),
+            Ok(Ok(Ok(response))) => ProviderOutcome::Response(response),
+            Ok(Ok(Err(e))) => ProviderOutcome::Error(e.to_api_error()),
+            Ok(Err(_)) => ProviderOutcome::Error(ApiError::new(
+                ErrorCode::Worker,
+                format!("the provider didn't finish within {GIVES_UP_AFTER:?}, so the adapter gave up on it"),
+            )),
             Err(e) => ProviderOutcome::Error(ApiError::new(ErrorCode::Internal, format!("answering: {e}"))),
         };
         let _ = frames.send(ProviderFrame::Reply { id, outcome }).await;
@@ -154,12 +166,12 @@ fn hello(
 
 async fn answer(provider: &dyn Provider, request: ProviderRequest) -> Result<ProviderResponse, ProviderError> {
     match request {
-        ProviderRequest::Create(Create { instance_id, from, size, display_name }) => {
-            provider.create(&instance_id, from.as_ref(), size, &display_name).await?;
+        ProviderRequest::Create(Create { instance_id, from, size }) => {
+            provider.create(&instance_id, from.as_ref(), size).await?;
         }
         ProviderRequest::Start(Start { instance_id, workers }) => provider.start(&instance_id, &workers).await?,
-        ProviderRequest::Stop(Stop { instance_id }) => provider.stop(&instance_id).await?,
-        ProviderRequest::Kill(Kill { instance_id }) => provider.kill(&instance_id).await?,
+        ProviderRequest::EndWorker(EndWorker { instance_id }) => provider.end_worker(&instance_id).await?,
+        ProviderRequest::KillWorker(KillWorker { instance_id }) => provider.kill_worker(&instance_id).await?,
         ProviderRequest::Destroy(Destroy { instance_id }) => provider.destroy(&instance_id).await?,
         ProviderRequest::MakeBaseImage(MakeBaseImage { instance_id }) => provider.make_base_image(&instance_id).await?,
         ProviderRequest::List => {

@@ -12,7 +12,7 @@ use crate::{Capabilities, Feature, Instance, Size, WorkerBinary, WorkerCommand, 
 
 const TIMEOUT: Duration = Duration::from_secs(5);
 
-/// Answers everything at once, but for `start`, which waits until it's let go, and `kill`, which panics.
+/// Answers everything at once, but for `start`, which waits until it's let go, and `kill_worker`, which panics.
 #[derive(Default)]
 struct Fake {
     let_start_go: Notify,
@@ -33,30 +33,29 @@ impl Provider for Fake {
     async fn environment(&self) -> Result<WorkerEnvironment, ProviderError> {
         Ok(self.environment)
     }
-    async fn create(
-        &self,
-        _: &InstanceId,
-        _: Option<&InstanceId>,
-        _: Option<Size>,
-        _: &str,
-    ) -> Result<(), ProviderError> {
+    async fn create(&self, _: &InstanceId, _: Option<&InstanceId>, _: Option<Size>) -> Result<(), ProviderError> {
         Ok(())
     }
     async fn start(&self, _: &InstanceId, _: &[WorkerBinary]) -> Result<(), ProviderError> {
         self.let_start_go.notified().await;
         Ok(())
     }
-    async fn stop(&self, _: &InstanceId) -> Result<(), ProviderError> {
+    async fn end_worker(&self, _: &InstanceId) -> Result<(), ProviderError> {
         Ok(())
     }
-    async fn kill(&self, _: &InstanceId) -> Result<(), ProviderError> {
+    async fn kill_worker(&self, _: &InstanceId) -> Result<(), ProviderError> {
         panic!("a provider with a bug");
     }
     async fn destroy(&self, id: &InstanceId) -> Result<(), ProviderError> {
         Err(ProviderError::NotFound(id.clone()))
     }
     async fn list(&self) -> Result<Vec<Instance>, ProviderError> {
-        Ok(vec![Instance { instance_id: "i".into(), state: InstanceState::Running, base_image: false }])
+        Ok(vec![Instance {
+            instance_id: "i".into(),
+            state: InstanceState::Running,
+            base_image: false,
+            worker_running: true,
+        }])
     }
     async fn connect(&self, _: &InstanceId) -> Result<WorkerCommand, ProviderError> {
         Ok(WorkerCommand { program: "true".into(), args: vec![], env: vec![] })
@@ -77,7 +76,11 @@ impl Hub {
     }
 
     async fn reply(&mut self) -> Value {
-        let line = tokio::time::timeout(TIMEOUT, self.replies.next_line()).await.unwrap().unwrap().unwrap();
+        self.reply_within(TIMEOUT).await
+    }
+
+    async fn reply_within(&mut self, within: Duration) -> Value {
+        let line = tokio::time::timeout(within, self.replies.next_line()).await.unwrap().unwrap().unwrap();
         serde_json::from_str(&line).unwrap()
     }
 
@@ -121,7 +124,7 @@ async fn nothing_is_answered_before_hello() {
     let mut hub = serving(Arc::default());
     hub.send(json!({"id": 1, "request": {"method": "list"}})).await;
     assert_eq!(hub.reply().await["error"]["code"], "version_mismatch");
-    hub.send(json!({"id": 2, "request": {"method": "stop", "instance_id": 3}})).await;
+    hub.send(json!({"id": 2, "request": {"method": "end_worker", "instance_id": 3}})).await;
     assert_eq!(hub.reply().await["error"]["code"], "version_mismatch", "nor is one it can't read");
 }
 
@@ -189,7 +192,7 @@ async fn it_returns_when_the_hub_goes() {
 async fn a_request_whose_answer_panics_is_still_answered() {
     let mut hub = serving(Arc::default());
     hub.hello("h").await;
-    hub.send(json!({"id": 1, "request": {"method": "kill", "instance_id": "i"}})).await;
+    hub.send(json!({"id": 1, "request": {"method": "kill_worker", "instance_id": "i"}})).await;
     assert_eq!(hub.reply().await["error"]["code"], "internal");
     hub.send(json!({"id": 2, "request": {"method": "list"}})).await;
     assert_eq!(hub.reply().await["id"], 2, "it goes on serving");
@@ -200,10 +203,27 @@ async fn a_request_whose_answer_panics_is_still_answered() {
 async fn a_request_that_doesnt_parse_is_refused_if_it_says_its_id() {
     let mut hub = serving(Arc::default());
     hub.hello("h").await;
-    hub.send(json!({"id": 1, "request": {"method": "stop", "instance_id": 3}})).await;
-    hub.send(json!({"request": {"method": "stop"}})).await;
+    hub.send(json!({"id": 1, "request": {"method": "end_worker", "instance_id": 3}})).await;
+    hub.send(json!({"request": {"method": "end_worker"}})).await;
     hub.send(json!({"id": 2, "request": {"method": "list"}})).await;
     let refused = hub.reply().await;
     assert_eq!((&refused["id"], &refused["error"]["code"]), (&json!(1), &json!("unsupported")), "{refused}");
     assert_eq!(hub.reply().await["id"], 2, "one without an ID is passed over");
+}
+
+/// A provider that never finishes, such as one waiting on a VM that never boots, is answered as having failed before
+/// the hub would give up on it, so the hub hears why. On tokio's paused clock, which moves on whenever nothing else can.
+#[tokio::test(start_paused = true)]
+async fn a_request_the_provider_never_finishes_is_given_up_on_before_the_hub_would() {
+    let mut hub = serving(Arc::default());
+    hub.hello("h").await;
+    let asked = tokio::time::Instant::now();
+
+    hub.send(json!({"id": 1, "request": {"method": "start", "instance_id": "i", "workers": []}})).await;
+    let reply = hub.reply_within(protocol::provider::ANSWERED_WITHIN).await;
+
+    assert_eq!((&reply["id"], &reply["error"]["code"]), (&json!(1), &json!("worker")), "{reply}");
+    let waited = asked.elapsed();
+    let before_the_hub = protocol::provider::ANSWERED_WITHIN.saturating_sub(Duration::from_mins(1));
+    assert!(waited >= before_the_hub && waited < protocol::provider::ANSWERED_WITHIN, "{waited:?}");
 }

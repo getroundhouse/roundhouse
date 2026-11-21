@@ -7,8 +7,9 @@ use parking_lot::Mutex;
 use protocol::client::{ApiError, ErrorCode, error_chain};
 use protocol::model::{HubId, InstanceId};
 use protocol::provider::{
-    Connect, Create, Destroy, Hello, HelloReply, Kill, List, MakeBaseImage, ProviderCall, ProviderEvent, ProviderFrame,
-    ProviderOutcome, ProviderRequest, ProviderResponse, Reply, Request, Start, Stop,
+    ANSWERED_WITHIN, Connect, Create, Destroy, EndWorker, Hello, HelloReply, KillWorker, List, MakeBaseImage,
+    ProviderCall, ProviderEvent, ProviderFrame, ProviderOutcome, ProviderRequest, ProviderResponse, Reply, Request,
+    Start,
 };
 use protocol::{Build, frame};
 use providers::{
@@ -21,9 +22,6 @@ use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::sync::{Mutex as AsyncMutex, watch};
 use tracing::{info, warn};
 
-/// Far longer than a request should take, even a cloud's VM starting, so an adapter that has lost one can't keep the
-/// hub waiting for it forever.
-pub(super) const REQUEST_TIMEOUT: Duration = Duration::from_mins(10);
 /// How long an adapter gets to exit once its stdin closes.
 pub(crate) const ADAPTER_GRACE: Duration = Duration::from_secs(5);
 
@@ -144,7 +142,7 @@ impl AdapterProvider {
         let mut asked_again = false;
         loop {
             let connection = self.connection().await?;
-            let answer = tokio::time::timeout(REQUEST_TIMEOUT, connection.call(&request))
+            let answer = tokio::time::timeout(ANSWERED_WITHIN, connection.call(&request))
                 .await
                 .map_err(|_| failed(timed_out()))?;
             match answer? {
@@ -304,7 +302,7 @@ impl Provider for AdapterProvider {
     fn starts_or_stops_within(&self) -> Duration {
         // Each request to the adapter has as long, which is meant for a cloud's VM starting, since an adapter doesn't
         // say how long it takes. A start, up to its worker running, is two of them, a start and a connect.
-        REQUEST_TIMEOUT.saturating_mul(2)
+        ANSWERED_WITHIN.saturating_mul(2)
     }
 
     async fn create(
@@ -312,22 +310,20 @@ impl Provider for AdapterProvider {
         instance_id: &InstanceId,
         from: Option<&InstanceId>,
         size: Option<Size>,
-        display_name: &str,
     ) -> Result<(), ProviderError> {
-        let (instance_id, from, display_name) = (instance_id.clone(), from.cloned(), display_name.to_string());
-        self.call(Create { instance_id, from, size, display_name }).await
+        self.call(Create { instance_id: instance_id.clone(), from: from.cloned(), size }).await
     }
 
     async fn start(&self, instance_id: &InstanceId, workers: &[WorkerBinary]) -> Result<(), ProviderError> {
         self.call(Start { instance_id: instance_id.clone(), workers: workers.to_vec() }).await
     }
 
-    async fn stop(&self, instance_id: &InstanceId) -> Result<(), ProviderError> {
-        self.call(Stop { instance_id: instance_id.clone() }).await
+    async fn end_worker(&self, instance_id: &InstanceId) -> Result<(), ProviderError> {
+        self.call(EndWorker { instance_id: instance_id.clone() }).await
     }
 
-    async fn kill(&self, instance_id: &InstanceId) -> Result<(), ProviderError> {
-        self.call(Kill { instance_id: instance_id.clone() }).await
+    async fn kill_worker(&self, instance_id: &InstanceId) -> Result<(), ProviderError> {
+        self.call(KillWorker { instance_id: instance_id.clone() }).await
     }
 
     async fn destroy(&self, instance_id: &InstanceId) -> Result<(), ProviderError> {
