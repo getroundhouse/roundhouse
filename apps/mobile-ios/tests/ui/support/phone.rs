@@ -83,14 +83,20 @@ impl<'a> Phone<'a> {
 
     /// Runs the app until `done`, on real time, because a real hub is on the other end of the socket. The app's own
     /// timers run on the test's clock, so that moves on with it. The wait before connecting again is client-core's, on
-    /// the system's clock, which [`RETRY_WAITS`] shortens.
+    /// the system's clock, which [`RETRY_WAITS`] shortens. One that times out says how the link to the hub stood, such
+    /// as why its last try to connect failed.
+    #[track_caller]
     pub(crate) fn wait(&mut self, what: &str, mut done: impl FnMut(&mut Self) -> bool) {
-        waiting::thread::until(TIMEOUT, format!("timed out waiting for {what}"), || {
-            self.frame();
-            let done = done(self);
-            self.cx.executor().advance_clock(STEP);
+        let look = |phone: &mut Self| {
+            phone.frame();
+            let done = done(phone);
+            phone.cx.executor().advance_clock(STEP);
             done
-        });
+        };
+        let said = |phone: &mut Self| {
+            format!("the link to the hub was {}", phone.cx.read_entity(&phone.app, MobileApp::link_state))
+        };
+        waiting::thread::until_or_say(TIMEOUT, what, self, look, said);
     }
 
     pub(crate) fn frame(&mut self) {

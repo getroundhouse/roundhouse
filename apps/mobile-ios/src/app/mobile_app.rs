@@ -274,6 +274,16 @@ impl MobileApp {
         self.link().is_some_and(|link| link.read(cx).client().is_some())
     }
 
+    /// How the link to the hub stands, with why its last try to connect failed, if it did, for a test that timed out
+    /// waiting on it to say.
+    #[cfg(any(test, feature = "testing"))]
+    pub fn link_state(&self, cx: &App) -> String {
+        match self.link() {
+            Some(link) => format!("{:?}", link.read(cx).state()),
+            None => "none, since the phone follows no hub".to_string(),
+        }
+    }
+
     /// Connects to the hub again now, as coming back to the app after a while away does.
     #[cfg(feature = "testing")]
     pub fn connect_again(&mut self, cx: &mut Context<Self>) {
