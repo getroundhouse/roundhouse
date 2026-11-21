@@ -22,6 +22,7 @@ members = [
     "crates/dictation-ui",
     "crates/now-playing",
     "crates/fetching",
+    "crates/models",
     "crates/update-feed",
     "crates/windows-icon",
     "crates/waiting",
@@ -56,6 +57,7 @@ default-members = [
     "crates/dictation",
     "crates/now-playing",
     "crates/fetching",
+    "crates/models",
     "crates/update-feed",
     "crates/windows-icon",
     "crates/waiting",
@@ -104,6 +106,7 @@ look = { path = "crates/look" }
 dictation = { path = "crates/dictation" }
 dictation-ui = { path = "crates/dictation-ui" }
 fetching = { path = "crates/fetching" }
+models = { path = "crates/models" }
 now-playing = { path = "crates/now-playing" }
 update-feed = { path = "crates/update-feed" }
 windows-icon = { path = "crates/windows-icon" }

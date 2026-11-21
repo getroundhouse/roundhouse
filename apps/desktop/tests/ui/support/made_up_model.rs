@@ -3,7 +3,7 @@
 
 use std::path::Path;
 
-use dictation::model::{ModelFile, ModelFiles};
+use models::{ModelFile, ModelFiles};
 use ring::digest::{SHA256, digest};
 
 /// A model of a file at each of `paths`, of `bytes` each, and what's in each.

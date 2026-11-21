@@ -3,9 +3,9 @@
 
 use std::io;
 
-use dictation::model::{CheckError, DownloadError, FetchError};
 use gpui_kit::App;
 use gpui_kit::assets::IconName as Lucide;
+use models::{CheckError, DownloadError, FetchError};
 
 use super::readiness::{self, Failure, Readiness};
 use super::{deleting, downloading};

@@ -1,0 +1,29 @@
+[package]
+name = "models"
+description = "A model's files on this device, such as dictation's and the voice's: which they are, with their sizes and SHA-256, whether they're all here, and downloading and deleting them. No UI and no async runtime."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+license.workspace = true
+
+[features]
+# Downloading a model and deleting it, which brings in `fetching`, and through it HTTP and TLS. A feature, so a client
+# that downloads it another way, as an iPhone app might in the background, needn't build them.
+download = ["dep:fetching", "dep:objc2-foundation", "dep:thiserror"]
+
+[dependencies]
+fetching = { workspace = true, optional = true }
+thiserror = { workspace = true, optional = true }
+
+# Keeping a model's folder out of backups.
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2-foundation = { workspace = true, optional = true, features = ["NSError", "NSURL", "NSValue"] }
+
+[dev-dependencies]
+fetching = { workspace = true, features = ["testing"] }
+models = { workspace = true, features = ["download"] }
+ring.workspace = true
+tempfile.workspace = true
+
+[lints]
+workspace = true

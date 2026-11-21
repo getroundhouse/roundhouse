@@ -107,11 +107,18 @@ fn needs_none_of_ours_no_async_runtime_and_no_ui(package: &str, but: &[&str]) {
 }
 
 /// Dictation is the device's alone, with threads rather than a runtime and no UI, so any client on any device can hear
-/// with it. It downloads its model with `fetching`, and pauses what's playing with `now-playing`, which are free of the
-/// same.
+/// with it. It keeps its model's files with `models`, which downloads them with `fetching`, and pauses what's playing
+/// with `now-playing`, which are free of the same.
 #[test]
-fn dictation_needs_none_of_our_other_crates_but_fetching_and_now_playing_no_async_runtime_and_no_ui() {
-    needs_none_of_ours_no_async_runtime_and_no_ui("dictation", &["fetching", "now-playing"]);
+fn dictation_needs_none_of_our_other_crates_but_models_and_now_playing_no_async_runtime_and_no_ui() {
+    needs_none_of_ours_no_async_runtime_and_no_ui("dictation", &["models", "fetching", "now-playing"]);
+}
+
+/// A model's files know nothing of what the model does, and are downloaded on the caller's thread, so any client on any
+/// device can keep a model with them.
+#[test]
+fn models_need_none_of_our_other_crates_but_fetching_no_async_runtime_and_no_ui() {
+    needs_none_of_ours_no_async_runtime_and_no_ui("models", &["fetching"]);
 }
 
 /// Fetching knows nothing of what it fetches, and runs on the caller's thread, so any client on any device can fetch

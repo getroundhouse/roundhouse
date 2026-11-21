@@ -4,7 +4,7 @@
 //! under the OpenMDW-1.1 licence, which lets it be used, and passed on with the licence and its notices. The app
 //! downloads them, as "Dictation" in `docs/spec/settings.md` says, rather than pass them on.
 
-use crate::model::{ModelFile, ModelFiles};
+use models::{ModelFile, ModelFiles};
 
 /// The files the engine loads.
 pub const MODEL: ModelFiles = ModelFiles {
