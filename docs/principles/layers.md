@@ -3,7 +3,7 @@
 These rules say which crate can depend on which, how code is layered inside the hub and the worker, and how an error crosses the layers. `tools/policy` checks most of the rules about crates against the real dependency graph, so `cargo test` fails when a new dependency breaks one. `docs/standards/rust.md` has the rules that apply to every crate and module.
 
 - **`protocol` does no IO and has no UI.** Every crate depends on it, so it has to stay small and stable.
-- **`terminal-state` does no IO and has no UI.** The worker and `client-core` both build it, and each gets a terminal's bytes its own way.
+- **`terminal-state` does no IO and has no UI, and only the worker builds it.** It's the worker's copy of each terminal, from Ghostty's `libghostty-vt`, and no client builds either, so a client shows only the rows the worker sends, and no client needs Zig to build. Tests may, such as the fake hub's, which makes a terminal's pictures as a worker would.
 - **`hub` and `worker` don't depend on each other, and `hub` doesn't depend on `agents`.** A hub and a worker talk only over the worker protocol, so a worker on another machine changes only the transport. Only `apps/daemon` builds both, since `roundhoused` runs as either.
 - **No client depends on `hub`, `github`, `worker`, `agents` or `providers`.** A client reaches a hub only through `protocol`, so the compiler enforces that clients talk only to hubs, as `docs/principles/parts.md` says.
 - **GPUI stays in `transcript`, `dictation-ui`, `terminal-view`, `look` and `apps/`.** Nothing under `hub`, `github`, `worker`, `agents` or `providers` depends on GPUI or gpui-kit, so the hub and the worker build on Linux without it.
