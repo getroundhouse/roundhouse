@@ -1,5 +1,5 @@
 use super::super::hub_settings::hub_settings;
-use super::super::{Store, StoreError, current_rev, from_text, lock, rev_of, text_of};
+use super::super::{ByColumn, Columns, Store, StoreError, columns, current_rev, lock, rev_of, text_from, text_of};
 use super::profiles::keep_profile;
 use crate::login_files::LoginFile;
 use github::GithubProfile;
@@ -9,10 +9,13 @@ use protocol::model::{
 };
 use rusqlite::{Connection, OptionalExtension as _, Row, Transaction, params};
 
-/// The columns every read of a GitHub account's row takes, in this order, as [`account_at`] reads them.
-pub(super) const COLUMNS: &str = "id, user_id, username, login_kind, login_file, login_connected_at_ms, \
-                                  login_ends_at_ms, rev, login_needs_sign_in, app_id, installation_id, \
-                                  installed_on_id, installed_on FROM github_accounts";
+columns! {
+    /// The columns every read of a GitHub account's row takes, as [`account_at`] reads them.
+    pub(super) struct GithubAccountColumns {
+        id, user_id, username, login_kind, login_file, login_connected_at_ms, login_ends_at_ms, rev,
+        login_needs_sign_in, app_id, installation_id, installed_on_id, installed_on,
+    }
+}
 
 /// A login being connected to a GitHub account, which is made if the hub has no record of it.
 #[derive(Clone, Copy)]
@@ -42,32 +45,39 @@ pub(crate) struct GithubConnected {
 /// says how and when it was connected, so every read takes the same to be held. One that names another file is cleared
 /// as the hub starts.
 pub(super) fn account_at(row: &Row<'_>) -> rusqlite::Result<(GithubAccount, Option<LoginFile>)> {
-    let file = row.get::<_, Option<String>>(4)?.as_deref().and_then(LoginFile::parse);
-    let held = match (file, row.get::<_, Option<String>>(3)?, row.get::<_, Option<i64>>(5)?) {
+    let c = GithubAccountColumns::at(0);
+    let file = row.at::<Option<String>>(c.login_file)?.as_deref().and_then(LoginFile::parse);
+    let held = match (file, row.at::<Option<String>>(c.login_kind)?, row.at::<Option<i64>>(c.login_connected_at_ms)?) {
         (Some(file), Some(how), Some(connected_at_ms)) => {
             let held = HeldGithubLogin {
-                how: from_text(how)?,
+                how: text_from(c.login_kind, how)?,
                 connected_at_ms,
-                ends_at_ms: row.get(6)?,
-                needs_sign_in: row.get(8)?,
+                ends_at_ms: row.at(c.login_ends_at_ms)?,
+                needs_sign_in: row.at(c.login_needs_sign_in)?,
             };
             Some((file, held))
         }
         _ => None,
     };
     let account = GithubAccount {
-        id: row.get::<_, String>(0)?.into(),
-        user: GithubUser { id: GithubUserId::new(row.get(1)?), name: row.get::<_, String>(2)?.into() },
+        id: row.at::<String>(c.id)?.into(),
+        user: GithubUser { id: GithubUserId::new(row.at(c.user_id)?), name: row.at::<String>(c.username)?.into() },
         held_login: held.as_ref().map(|(_, held)| *held),
         installation: installation_at(row)?,
-        rev: rev_of(row, 7)?,
+        rev: rev_of(row, c.rev)?,
     };
     Ok((account, held.map(|(file, _)| file)))
 }
 
 /// Where a row's account is installed, when it's an app's installation, as all four of its columns say.
 fn installation_at(row: &Row<'_>) -> rusqlite::Result<Option<GithubInstallation>> {
-    let columns = (row.get::<_, Option<u64>>(9)?, row.get(10)?, row.get(11)?, row.get::<_, Option<String>>(12)?);
+    let c = GithubAccountColumns::at(0);
+    let columns = (
+        row.at::<Option<u64>>(c.app_id)?,
+        row.at(c.installation_id)?,
+        row.at(c.installed_on_id)?,
+        row.at::<Option<String>>(c.installed_on)?,
+    );
     let (Some(app), Some(id), Some(on_id), Some(on)) = columns else { return Ok(None) };
     Ok(Some(GithubInstallation {
         app: GithubAppId::new(app),
@@ -78,7 +88,8 @@ fn installation_at(row: &Row<'_>) -> rusqlite::Result<Option<GithubInstallation>
 
 /// Every GitHub account, oldest first, for a list of every record.
 pub(in super::super) fn github_accounts(conn: &Connection) -> rusqlite::Result<Vec<GithubAccount>> {
-    let mut statement = conn.prepare_cached(&format!("SELECT {COLUMNS} ORDER BY rowid"))?;
+    let mut statement =
+        conn.prepare_cached(&format!("SELECT {} FROM github_accounts ORDER BY rowid", GithubAccountColumns::LIST))?;
     statement.query_map([], |row| account_at(row).map(|(account, _)| account))?.collect()
 }
 
@@ -87,7 +98,12 @@ pub(super) fn row_of(
     conn: &Connection,
     id: &GithubAccountId,
 ) -> rusqlite::Result<Option<(GithubAccount, Option<LoginFile>)>> {
-    conn.query_row(&format!("SELECT {COLUMNS} WHERE id = ?"), [id.as_str()], account_at).optional()
+    conn.query_row(
+        &format!("SELECT {} FROM github_accounts WHERE id = ?", GithubAccountColumns::LIST),
+        [id.as_str()],
+        account_at,
+    )
+    .optional()
 }
 
 impl Store {
@@ -113,7 +129,10 @@ impl Store {
     /// token.
     pub(crate) fn held_github_logins(&self) -> Result<Vec<(GithubAccountId, LoginFile)>, StoreError> {
         let conn = lock(&self.reader);
-        let mut statement = conn.prepare_cached(&format!("SELECT {COLUMNS} WHERE login_file IS NOT NULL"))?;
+        let mut statement = conn.prepare_cached(&format!(
+            "SELECT {} FROM github_accounts WHERE login_file IS NOT NULL",
+            GithubAccountColumns::LIST
+        ))?;
         let rows = statement.query_map([], account_at)?.collect::<rusqlite::Result<Vec<_>>>()?;
         Ok(rows.into_iter().filter_map(|(account, file)| Some((account.id, file?))).collect())
     }
@@ -122,7 +141,10 @@ impl Store {
     /// `None` for a row that names one but doesn't hold it, as [`account_at`] says, which tidying clears.
     pub(crate) fn github_login_files(&self) -> Result<Vec<(GithubAccountId, Option<LoginFile>)>, StoreError> {
         let conn = lock(&self.reader);
-        let mut statement = conn.prepare_cached(&format!("SELECT {COLUMNS} WHERE login_file IS NOT NULL"))?;
+        let mut statement = conn.prepare_cached(&format!(
+            "SELECT {} FROM github_accounts WHERE login_file IS NOT NULL",
+            GithubAccountColumns::LIST
+        ))?;
         let rows = statement.query_map([], |row| account_at(row).map(|(account, file)| (account.id, file)))?;
         Ok(rows.collect::<rusqlite::Result<_>>()?)
     }
@@ -146,7 +168,8 @@ impl Store {
     ) -> Result<Vec<(GithubAccount, LoginFile)>, StoreError> {
         let conn = lock(&self.reader);
         let mut statement = conn.prepare_cached(&format!(
-            "SELECT {COLUMNS} WHERE login_kind = ? AND login_file IS NOT NULL ORDER BY rowid"
+            "SELECT {} FROM github_accounts WHERE login_kind = ? AND login_file IS NOT NULL ORDER BY rowid",
+            GithubAccountColumns::LIST
         ))?;
         let rows = statement.query_map([text_of(&how)], account_at)?;
         let rows = rows.collect::<rusqlite::Result<Vec<_>>>()?;

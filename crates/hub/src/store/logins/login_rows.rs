@@ -1,5 +1,5 @@
 use super::super::accounts::account_or_missing;
-use super::super::{Store, StoreError, from_text, lock, text_of};
+use super::super::{ByColumn, Columns, Store, StoreError, columns, lock, maybe_text_at, text_of};
 use crate::login_files::LoginFile;
 use protocol::model::{Account, AccountId, AgentKind, HeldLogin, HubSettings};
 use rusqlite::{OptionalExtension as _, Row, params};
@@ -46,26 +46,46 @@ pub(crate) struct Connecting<'a> {
     pub(crate) ends_at_ms: Option<i64>,
 }
 
-/// The columns every read of a row's login takes, in this order, from `LOGIN_COLUMNS`.
-pub(in super::super) const LOGIN_COLUMNS: &str = "login_agent, login_file, login_connected_at_ms, login_ends_at_ms";
+columns! {
+    /// The columns every read of a row's login takes, as [`login_at`] reads them.
+    #[expect(clippy::struct_field_names, reason = "each is a column's name, as the table spells it")]
+    pub(in super::super) struct LoginColumns { login_agent, login_file, login_connected_at_ms, login_ends_at_ms }
+}
 
-/// A row's login, as its [`LOGIN_COLUMNS`] say from `first` on: whose ID it has, and the login the hub holds for it
-/// with its file. It holds one only when the file is one the hub names and it says when it was connected, so every
-/// read takes the same to be held. One that names another file is cleared as the hub starts.
+columns! {
+    /// Whose login a read of [`LoginColumns`] after it is.
+    struct OwnerColumns { id }
+}
+
+/// A row's login, in its columns `c`: whose ID it has, and the login the hub holds for it with its file. It holds one
+/// only when the file is one the hub names and it says when it was connected, so every read takes the same to be held.
+/// One that names another file is cleared as the hub starts.
 pub(in super::super) fn login_at(
     row: &Row<'_>,
-    first: usize,
+    c: LoginColumns,
 ) -> rusqlite::Result<(IdFrom, Option<(LoginFile, HeldLogin)>)> {
-    let id_from = match row.get::<_, Option<String>>(first)? {
-        Some(agent) => IdFrom::Hub(from_text(agent)?),
+    let id_from = match maybe_text_at(row, c.login_agent)? {
+        Some(agent) => IdFrom::Hub(agent),
         None => IdFrom::Adapter,
     };
-    let file = row.get::<_, Option<String>>(first + 1)?.as_deref().and_then(LoginFile::parse);
-    let connected_at_ms: Option<i64> = row.get(first + 2)?;
-    let ends_at_ms: Option<i64> = row.get(first + 3)?;
+    let file = row.at::<Option<String>>(c.login_file)?.as_deref().and_then(LoginFile::parse);
+    let connected_at_ms: Option<i64> = row.at(c.login_connected_at_ms)?;
+    let ends_at_ms: Option<i64> = row.at(c.login_ends_at_ms)?;
     let held =
         file.zip(connected_at_ms).map(|(file, connected_at_ms)| (file, HeldLogin { connected_at_ms, ends_at_ms }));
     Ok((id_from, held))
+}
+
+/// What a read of an account's ID and then its login selects, as [`owned_login_at`] reads it.
+fn owned_login_columns() -> String {
+    format!("{}, {}", OwnerColumns::LIST, LoginColumns::LIST)
+}
+
+/// The account in a row of [`owned_login_columns`], and the login the hub holds for it, as [`login_at`] says.
+fn owned_login_at(row: &Row<'_>) -> rusqlite::Result<(AccountId, Option<(LoginFile, HeldLogin)>)> {
+    let id = row.at::<String>(OwnerColumns::at(0).id)?.into();
+    let (_, held) = login_at(row, LoginColumns::at(OwnerColumns::COUNT))?;
+    Ok((id, held))
 }
 
 impl Store {
@@ -73,14 +93,15 @@ impl Store {
     pub(crate) fn held_logins(&self, agent: AgentKind) -> Result<Vec<Held>, StoreError> {
         let conn = lock(&self.reader);
         let mut statement = conn.prepare_cached(&format!(
-            "SELECT id, {LOGIN_COLUMNS} FROM accounts WHERE login_agent = ? AND login_file IS NOT NULL
-                 ORDER BY login_connected_at_ms DESC, id"
+            "SELECT {} FROM accounts WHERE login_agent = ? AND login_file IS NOT NULL
+                 ORDER BY login_connected_at_ms DESC, id",
+            owned_login_columns()
         ))?;
-        let rows = statement.query_map([text_of(&agent)], |row| Ok((row.get::<_, String>(0)?, login_at(row, 1)?.1)))?;
+        let rows = statement.query_map([text_of(&agent)], owned_login_at)?;
         let mut held = Vec::new();
         for row in rows {
             if let (account, Some((file, login))) = row? {
-                held.push(Held { account: account.into(), file, login });
+                held.push(Held { account, file, login });
             }
         }
         Ok(held)
@@ -90,8 +111,8 @@ impl Store {
     pub(crate) fn login_row(&self, id: &AccountId) -> Result<LoginRow, StoreError> {
         let conn = lock(&self.reader);
         let row = conn
-            .query_row(&format!("SELECT {LOGIN_COLUMNS} FROM accounts WHERE id = ?"), [id.as_str()], |row| {
-                login_at(row, 0)
+            .query_row(&format!("SELECT {} FROM accounts WHERE id = ?", LoginColumns::LIST), [id.as_str()], |row| {
+                login_at(row, LoginColumns::at(0))
             })
             .optional()?;
         let (id_from, held) = row.ok_or_else(|| no_account(id))?;
@@ -154,11 +175,10 @@ impl Store {
     /// `None` for a row that names one but doesn't hold it, as [`login_at`] says, which tidying clears.
     pub(crate) fn login_files(&self) -> Result<Vec<(AccountId, Option<LoginFile>)>, StoreError> {
         let conn = lock(&self.reader);
-        let mut statement =
-            conn.prepare_cached(&format!("SELECT id, {LOGIN_COLUMNS} FROM accounts WHERE login_file IS NOT NULL"))?;
-        let rows = statement.query_map([], |row| {
-            Ok((AccountId::from(row.get::<_, String>(0)?), login_at(row, 1)?.1.map(|(file, _)| file)))
-        })?;
+        let mut statement = conn
+            .prepare_cached(&format!("SELECT {} FROM accounts WHERE login_file IS NOT NULL", owned_login_columns()))?;
+        let rows =
+            statement.query_map([], |row| owned_login_at(row).map(|(id, held)| (id, held.map(|(file, _)| file))))?;
         Ok(rows.collect::<rusqlite::Result<_>>()?)
     }
 }

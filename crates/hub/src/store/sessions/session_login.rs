@@ -3,7 +3,7 @@
 use protocol::model::{AccountId, AccountSource, Session, SessionId};
 use rusqlite::{Connection, OptionalExtension as _};
 
-use super::super::from_text;
+use super::super::{ByColumn, Columns, columns, maybe_text_at};
 
 /// Which login a chat's launches, resumes and title calls take, as [`Session::account_source`] and the account its
 /// record names say together. The record keeps the two apart, as the protocol does, and this is where the hub reads
@@ -53,9 +53,13 @@ pub(in super::super) fn session_login_of(
     conn: &Connection,
     session: &SessionId,
 ) -> rusqlite::Result<Option<SessionLogin>> {
-    conn.query_row("SELECT account_source, account_id FROM sessions WHERE id = ?", [session.as_str()], |row| {
-        let source = row.get::<_, Option<String>>(0)?.map(from_text).transpose()?;
-        let account = row.get::<_, Option<String>>(1)?.map(AccountId::from);
+    columns! {
+        struct LoginColumns { account_source, account_id }
+    }
+    let c = LoginColumns::at(0);
+    conn.query_row(&format!("SELECT {} FROM sessions WHERE id = ?", LoginColumns::LIST), [session.as_str()], |row| {
+        let source = maybe_text_at(row, c.account_source)?;
+        let account = row.at::<Option<String>>(c.account_id)?.map(AccountId::from);
         Ok(SessionLogin::of(source, account.as_ref()))
     })
     .optional()

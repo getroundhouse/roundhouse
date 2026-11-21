@@ -1,4 +1,5 @@
-use super::{COLUMNS, Store, StoreError, Wait, WorkspaceId, lock, params, text_of, wait_from_row};
+use super::super::super::Columns;
+use super::{Store, StoreError, Wait, WaitColumns, WorkspaceId, lock, params, text_of, wait_from_row};
 
 impl Store {
     /// Deadline expiry reads only due rows, rather than deserializing every open observation on each timer tick.
@@ -6,7 +7,8 @@ impl Store {
         let conn = lock(&self.writer);
         let mut query = conn.prepare_cached(&format!(
             "UPDATE waits SET ended_at_ms = ?1, ended = 'timed_out' WHERE ended_at_ms IS NULL AND watch IS NOT NULL
-             AND json_extract(watch, '$.deadline_at_ms') <= ?1 RETURNING {COLUMNS}"
+             AND json_extract(watch, '$.deadline_at_ms') <= ?1 RETURNING {}",
+            WaitColumns::LIST
         ))?;
         Ok(query.query_map([at_ms], wait_from_row)?.collect::<rusqlite::Result<_>>()?)
     }
@@ -15,7 +17,8 @@ impl Store {
     pub fn remote_waits(&self) -> Result<Vec<Wait>, StoreError> {
         let conn = lock(&self.reader);
         let mut query = conn.prepare_cached(&format!(
-            "SELECT {COLUMNS} FROM waits WHERE ended_at_ms IS NULL AND watch IS NOT NULL ORDER BY started_at_ms, id"
+            "SELECT {} FROM waits WHERE ended_at_ms IS NULL AND watch IS NOT NULL ORDER BY started_at_ms, id",
+            WaitColumns::LIST
         ))?;
         Ok(query.query_map([], wait_from_row)?.collect::<rusqlite::Result<_>>()?)
     }
@@ -29,7 +32,7 @@ impl Store {
     ) -> Result<Vec<Wait>, StoreError> {
         let mut conn = lock(&self.writer);
         let tx = conn.transaction()?;
-        let waits = tx.prepare_cached(&format!("SELECT {COLUMNS} FROM waits WHERE ended_at_ms IS NULL AND watch IS NOT NULL AND (?1 IS NULL OR workspace_id = ?1) ORDER BY started_at_ms, id"))?
+        let waits = tx.prepare_cached(&format!("SELECT {} FROM waits WHERE ended_at_ms IS NULL AND watch IS NOT NULL AND (?1 IS NULL OR workspace_id = ?1) ORDER BY started_at_ms, id", WaitColumns::LIST))?
             .query_map([workspace.map(WorkspaceId::as_str)], wait_from_row)?.collect::<rusqlite::Result<Vec<_>>>()?;
         let mut changed = Vec::new();
         for mut wait in waits {

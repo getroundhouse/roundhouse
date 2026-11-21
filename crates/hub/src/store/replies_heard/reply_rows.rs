@@ -1,8 +1,11 @@
-use super::super::{Store, StoreError, current_rev, from_text, lock, rev_of, text_of};
+use super::super::{ByColumn, Columns, Store, StoreError, columns, current_rev, lock, maybe_text_at, rev_of, text_of};
 use protocol::model::{Ending, MessageId, ReplyHeard, Rev, SessionId, SettledBy};
 use rusqlite::{Connection, OptionalExtension, Row, params};
 
-const REPLY_HEARD_COLUMNS: &str = "session_id, message, ending, rev, settled_by";
+columns! {
+    /// The columns every read of a reply heard takes, as [`reply_heard_from_row`] reads them.
+    struct ReplyHeardColumns { session_id, message, ending, rev, settled_by }
+}
 
 impl Store {
     /// Keeps how the reply `message` ended, as `by` said it, unless how it ended is kept already, since the first that's
@@ -67,7 +70,8 @@ impl Store {
         let tx = conn.transaction()?;
         let heard = tx
             .prepare_cached(&format!(
-                "SELECT {REPLY_HEARD_COLUMNS} FROM replies_heard WHERE session_id = ? ORDER BY rev"
+                "SELECT {} FROM replies_heard WHERE session_id = ? ORDER BY rev",
+                ReplyHeardColumns::LIST
             ))?
             .query_map([session_id.as_str()], reply_heard_from_row)?
             .collect::<rusqlite::Result<Vec<_>>>()?;
@@ -85,7 +89,7 @@ fn reply_heard_on(
 ) -> Result<Option<ReplyHeard>, StoreError> {
     let heard = conn
         .query_row(
-            &format!("SELECT {REPLY_HEARD_COLUMNS} FROM replies_heard WHERE session_id = ? AND message = ?"),
+            &format!("SELECT {} FROM replies_heard WHERE session_id = ? AND message = ?", ReplyHeardColumns::LIST),
             params![session_id.as_str(), message.as_str()],
             reply_heard_from_row,
         )
@@ -100,11 +104,12 @@ fn settled_by_column(by: SettledBy) -> Option<String> {
 
 /// Written only by this hub, as JSON. An ending it can't read is one it doesn't know.
 fn reply_heard_from_row(row: &Row<'_>) -> rusqlite::Result<ReplyHeard> {
+    let c = ReplyHeardColumns::at(0);
     Ok(ReplyHeard {
-        session_id: SessionId::from(row.get::<_, String>(0)?),
-        message: MessageId::from(row.get::<_, String>(1)?),
-        ending: serde_json::from_str(&row.get::<_, String>(2)?).unwrap_or(Ending::Unknown),
-        settled_by: row.get::<_, Option<String>>(4)?.map_or(Ok(SettledBy::Device), from_text)?,
-        rev: rev_of(row, 3)?,
+        session_id: SessionId::from(row.at::<String>(c.session_id)?),
+        message: MessageId::from(row.at::<String>(c.message)?),
+        ending: serde_json::from_str(&row.at::<String>(c.ending)?).unwrap_or(Ending::Unknown),
+        settled_by: maybe_text_at(row, c.settled_by)?.unwrap_or(SettledBy::Device),
+        rev: rev_of(row, c.rev)?,
     })
 }

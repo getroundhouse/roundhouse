@@ -1,10 +1,14 @@
-use super::super::{Store, StoreError, from_text, lock, text_of};
+use super::super::{ByColumn, Columns, Store, StoreError, columns, json_from, lock, text_at, text_from, text_of};
 use protocol::model::{SessionId, ToolUseId, Wait, WaitEnd, WaitEnded, WaitId, WorkspaceId, WorkspaceStatus};
 use rusqlite::{Connection, OptionalExtension, Row, params};
 use std::collections::HashSet;
 
-pub(super) const COLUMNS: &str =
-    "id, session_id, workspace_id, number, call, until, started_at_ms, ended_at_ms, ended, watch";
+columns! {
+    /// What a wait's row holds, as it's written and read.
+    pub(super) struct WaitColumns {
+        id, session_id, workspace_id, number, call, until, started_at_ms, ended_at_ms, ended, watch,
+    }
+}
 
 impl Store {
     /// Starts an independent wait in an open chat. Retrying a tool call returns its original wait, even after it ends.
@@ -29,8 +33,8 @@ impl Store {
                 id: wait.session_id.to_string(),
             });
         }
-        tx.prepare_cached(&format!("INSERT INTO waits ({COLUMNS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"))?.execute(
-            params![
+        tx.prepare_cached(&format!("INSERT INTO waits ({}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", WaitColumns::LIST))?
+            .execute(params![
                 wait.id.as_str(),
                 wait.session_id.as_str(),
                 wait.workspace_id.as_str(),
@@ -41,8 +45,7 @@ impl Store {
                 wait.ended.map(|ended| ended.at_ms),
                 wait.ended.map(|ended| text_of(&ended.how)),
                 wait.watch.as_ref().map(serde_json::to_string).transpose()?,
-            ],
-        )?;
+            ])?;
         tx.commit()?;
         Ok(wait.clone())
     }
@@ -51,7 +54,8 @@ impl Store {
     pub fn call_off_workspace_waits(&self, workspace_id: &WorkspaceId, at_ms: i64) -> Result<Vec<Wait>, StoreError> {
         let conn = lock(&self.writer);
         let mut query = conn.prepare_cached(&format!(
-            "UPDATE waits SET ended_at_ms = ?, ended = ? WHERE workspace_id = ? AND ended_at_ms IS NULL RETURNING {COLUMNS}"
+            "UPDATE waits SET ended_at_ms = ?, ended = ? WHERE workspace_id = ? AND ended_at_ms IS NULL RETURNING {}",
+            WaitColumns::LIST
         ))?;
         let waits =
             query.query_map(params![at_ms, text_of(&WaitEnd::Cancelled), workspace_id.as_str()], wait_from_row)?;
@@ -71,7 +75,7 @@ impl Store {
 
     pub fn wait(&self, id: &WaitId) -> Result<Wait, StoreError> {
         let conn = lock(&self.reader);
-        let mut query = conn.prepare_cached(&format!("SELECT {COLUMNS} FROM waits WHERE id = ?"))?;
+        let mut query = conn.prepare_cached(&format!("SELECT {} FROM waits WHERE id = ?", WaitColumns::LIST))?;
         let wait = query.query_row([id.as_str()], wait_from_row).optional()?;
         wait.ok_or_else(|| StoreError::NotFound { kind: "wait", id: id.to_string() })
     }
@@ -85,7 +89,8 @@ impl Store {
     pub fn end_wait(&self, id: &WaitId, ended: WaitEnded) -> Result<Option<Wait>, StoreError> {
         let conn = lock(&self.writer);
         let mut update = conn.prepare_cached(&format!(
-            "UPDATE waits SET ended_at_ms = ?, ended = ? WHERE id = ? AND ended_at_ms IS NULL RETURNING {COLUMNS}"
+            "UPDATE waits SET ended_at_ms = ?, ended = ? WHERE id = ? AND ended_at_ms IS NULL RETURNING {}",
+            WaitColumns::LIST
         ))?;
         Ok(update.query_row(params![ended.at_ms, text_of(&ended.how), id.as_str()], wait_from_row).optional()?)
     }
@@ -96,7 +101,8 @@ impl Store {
     pub fn call_off_unwatched_waits(&self, at_ms: i64) -> Result<Vec<Wait>, StoreError> {
         let conn = lock(&self.writer);
         let mut update = conn.prepare_cached(&format!(
-            "UPDATE waits SET ended_at_ms = ?, ended = ? WHERE ended_at_ms IS NULL AND watch IS NULL RETURNING {COLUMNS}"
+            "UPDATE waits SET ended_at_ms = ?, ended = ? WHERE ended_at_ms IS NULL AND watch IS NULL RETURNING {}",
+            WaitColumns::LIST
         ))?;
         let ended = update.query_map(params![at_ms, text_of(&WaitEnd::Cancelled)], wait_from_row)?;
         Ok(ended.collect::<rusqlite::Result<_>>()?)
@@ -138,34 +144,31 @@ fn call_off(
     .map(|id| id.map(WaitId::from))
 }
 
+/// The wait in a row of [`WaitColumns`].
 pub(super) fn wait_from_row(row: &Row<'_>) -> rusqlite::Result<Wait> {
-    let ended = match (row.get(7)?, row.get::<_, Option<String>>(8)?) {
-        (Some(at_ms), Some(how)) => Some(WaitEnded { at_ms, how: from_text(how)? }),
+    let c = WaitColumns::at(0);
+    let ended = match (row.at(c.ended_at_ms)?, row.at::<Option<String>>(c.ended)?) {
+        (Some(at_ms), Some(how)) => Some(WaitEnded { at_ms, how: text_from(c.ended, how)? }),
         _ => None,
     };
     Ok(Wait {
-        id: row.get::<_, String>(0)?.into(),
-        session_id: row.get::<_, String>(1)?.into(),
-        workspace_id: row.get::<_, String>(2)?.into(),
-        number: row.get(3)?,
-        call: row.get::<_, Option<String>>(4)?.map(Into::into),
-        until: from_text(row.get(5)?)?,
-        started_at_ms: row.get(6)?,
+        id: row.at::<String>(c.id)?.into(),
+        session_id: row.at::<String>(c.session_id)?.into(),
+        workspace_id: row.at::<String>(c.workspace_id)?.into(),
+        number: row.at(c.number)?,
+        call: row.at::<Option<String>>(c.call)?.map(Into::into),
+        until: text_at(row, c.until)?,
+        started_at_ms: row.at(c.started_at_ms)?,
         ended,
-        watch: row
-            .get::<_, Option<String>>(9)?
-            .map(|s| {
-                serde_json::from_str(&s)
-                    .map_err(|e| rusqlite::Error::FromSqlConversionFailure(9, rusqlite::types::Type::Text, Box::new(e)))
-            })
-            .transpose()?,
+        watch: row.at::<Option<String>>(c.watch)?.map(|json| json_from(c.watch, &json)).transpose()?,
     })
 }
 
 /// Historical databases can contain duplicate call IDs, so both retry paths choose the newest recorded one.
 fn wait_by_call(conn: &Connection, session_id: &SessionId, call: &ToolUseId) -> Result<Option<Wait>, StoreError> {
     let mut query = conn.prepare_cached(&format!(
-        "SELECT {COLUMNS} FROM waits WHERE session_id = ? AND call = ? ORDER BY started_at_ms DESC, id DESC LIMIT 1"
+        "SELECT {} FROM waits WHERE session_id = ? AND call = ? ORDER BY started_at_ms DESC, id DESC LIMIT 1",
+        WaitColumns::LIST
     ))?;
     Ok(query.query_row([session_id.as_str(), call.as_str()], wait_from_row).optional()?)
 }

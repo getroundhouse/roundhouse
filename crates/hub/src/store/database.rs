@@ -166,7 +166,8 @@ pub(super) fn current_rev(conn: &Connection) -> rusqlite::Result<Rev> {
 }
 
 /// An enum from its `snake_case` serde name, as [`text_of`] writes it. An error says it's from the first column, so a
-/// reader of a row's own column takes [`text_at`] instead, whose error names it.
+/// reader of a declared column takes [`text_at`] instead, whose error names it. Only `subagents`' rows read with this,
+/// until #2241 declares them.
 pub(super) fn from_text<T: DeserializeOwned>(text: String) -> rusqlite::Result<T> {
     serde_json::from_value(Value::String(text))
         .map_err(|e| rusqlite::Error::FromSqlConversionFailure(0, rusqlite::types::Type::Text, Box::new(e)))
@@ -174,22 +175,28 @@ pub(super) fn from_text<T: DeserializeOwned>(text: String) -> rusqlite::Result<T
 
 /// The enum in `column`, as [`text_of`] writes it.
 pub(super) fn text_at<T: DeserializeOwned>(row: &Row<'_>, column: Column) -> rusqlite::Result<T> {
-    parsed_at(column, row.at(column)?)
+    text_from(column, row.at(column)?)
 }
 
 /// The enum in `column`, as [`text_of`] writes it, or `None` where it holds NULL.
 pub(super) fn maybe_text_at<T: DeserializeOwned>(row: &Row<'_>, column: Column) -> rusqlite::Result<Option<T>> {
-    row.at::<Option<String>>(column)?.map(|text| parsed_at(column, text)).transpose()
+    row.at::<Option<String>>(column)?.map(|text| text_from(column, text)).transpose()
 }
 
-fn parsed_at<T: DeserializeOwned>(column: Column, text: String) -> rusqlite::Result<T> {
+/// The enum `text`, read from `column`, as [`text_of`] writes it, so one it can't read is an error that names the
+/// column.
+pub(super) fn text_from<T: DeserializeOwned>(column: Column, text: String) -> rusqlite::Result<T> {
     serde_json::from_value(Value::String(text)).map_err(|e| column.unreadable(rusqlite::types::Type::Text, Box::new(e)))
 }
 
 /// What a column holds as JSON, which its reader can't do without, so one it can't read is an error that names it.
 pub(super) fn required_json_at<T: DeserializeOwned>(row: &Row<'_>, column: impl At) -> rusqlite::Result<T> {
-    serde_json::from_str(&row.get::<_, String>(column.index())?)
-        .map_err(|e| column.unreadable(rusqlite::types::Type::Text, Box::new(e)))
+    json_from(column, &row.get::<_, String>(column.index())?)
+}
+
+/// What `json`, from `column`, holds, so one it can't read is an error that names the column.
+pub(super) fn json_from<T: DeserializeOwned>(column: impl At, json: &str) -> rusqlite::Result<T> {
+    serde_json::from_str(json).map_err(|e| column.unreadable(rusqlite::types::Type::Text, Box::new(e)))
 }
 
 /// What a column holds as JSON, which only a hub writes, or `None` when it holds nothing, or what this build can't

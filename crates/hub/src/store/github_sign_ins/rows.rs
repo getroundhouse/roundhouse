@@ -1,5 +1,8 @@
 use super::super::github_accounts::{connect_login, signed_in_as};
-use super::super::{GithubConnected, GithubConnecting, Store, StoreError, current_rev, json_at, lock, rev_of};
+use super::super::{
+    ByColumn, Columns, GithubConnected, GithubConnecting, Store, StoreError, columns, current_rev, json_at, lock,
+    rev_of,
+};
 use crate::login_files::LoginFile;
 use github::GithubProfile;
 use protocol::model::{
@@ -7,8 +10,10 @@ use protocol::model::{
 };
 use rusqlite::{Connection, OptionalExtension as _, Row, params};
 
-/// The columns every read of a sign-in's row takes, in this order, as [`sign_in_at`] reads them.
-const COLUMNS: &str = "id, status, rev FROM github_sign_ins";
+columns! {
+    /// The columns every read of a sign-in's row takes, as [`sign_in_at`] reads them.
+    struct SignInColumns { id, status, rev }
+}
 
 /// What starting a sign-in did.
 #[derive(Debug)]
@@ -44,21 +49,28 @@ pub(crate) struct GithubApproved {
 
 /// A row's record. A status this build can't read, which only a newer build's row could hold, is `Unknown`.
 fn sign_in_at(row: &Row<'_>) -> rusqlite::Result<GithubSignIn> {
+    let c = SignInColumns::at(0);
     Ok(GithubSignIn {
-        id: row.get::<_, String>(0)?.into(),
-        status: json_at(row, 1)?.unwrap_or(GithubSignInStatus::Unknown),
-        rev: rev_of(row, 2)?,
+        id: row.at::<String>(c.id)?.into(),
+        status: json_at(row, c.status)?.unwrap_or(GithubSignInStatus::Unknown),
+        rev: rev_of(row, c.rev)?,
     })
 }
 
 /// Every sign-in, oldest first, for a list of every record.
 pub(in super::super) fn github_sign_ins(conn: &Connection) -> rusqlite::Result<Vec<GithubSignIn>> {
-    let mut statement = conn.prepare_cached(&format!("SELECT {COLUMNS} ORDER BY rowid"))?;
+    let mut statement =
+        conn.prepare_cached(&format!("SELECT {} FROM github_sign_ins ORDER BY rowid", SignInColumns::LIST))?;
     statement.query_map([], sign_in_at)?.collect()
 }
 
 fn row_of(conn: &Connection, id: &GithubSignInId) -> rusqlite::Result<Option<GithubSignIn>> {
-    conn.query_row(&format!("SELECT {COLUMNS} WHERE id = ?"), [id.as_str()], sign_in_at).optional()
+    conn.query_row(
+        &format!("SELECT {} FROM github_sign_ins WHERE id = ?", SignInColumns::LIST),
+        [id.as_str()],
+        sign_in_at,
+    )
+    .optional()
 }
 
 /// Returns the sign-in as it is then, which is as it was if it had got to `status` already.

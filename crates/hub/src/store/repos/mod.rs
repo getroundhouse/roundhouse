@@ -5,4 +5,4 @@ mod tests;
 
 mod rows;
 pub use rows::RepoToRead;
-pub(super) use rows::{REPO_COLUMNS, repo_from_row};
+pub(super) use rows::{RepoColumns, repo_from_row};

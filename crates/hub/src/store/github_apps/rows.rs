@@ -2,11 +2,13 @@ use protocol::client::github_apps::GithubManifestCode;
 use protocol::model::{GithubApp, GithubAppId, GithubAppSlug, GithubUser, GithubUserId, Rev};
 use rusqlite::{Connection, OptionalExtension as _, Row, params};
 
-use super::super::{Store, StoreError, current_rev, lock, rev_of};
+use super::super::{ByColumn, Columns, Store, StoreError, columns, current_rev, lock, rev_of};
 use crate::login_files::LoginFile;
 
-/// The columns every read of an app's row takes, in this order, as [`app_at`] reads them.
-const COLUMNS: &str = "id, slug, name, owner_id, owner, bot_id, bot, rev, key_file FROM github_apps";
+columns! {
+    /// The columns every read of an app's row takes, as [`app_at`] reads them.
+    struct AppColumns { id, slug, name, owner_id, owner, bot_id, bot, rev, key_file }
+}
 
 /// An app of your own GitHub has just made, to keep.
 #[derive(Clone, Copy)]
@@ -23,29 +25,30 @@ pub(crate) struct GithubAppMaking<'a> {
 
 /// A row's record, and the file of its key, `None` for a row that names a file the hub doesn't make.
 fn app_at(row: &Row<'_>) -> rusqlite::Result<(GithubApp, Option<LoginFile>)> {
-    let bot = match (row.get::<_, Option<u64>>(5)?, row.get::<_, Option<String>>(6)?) {
+    let c = AppColumns::at(0);
+    let bot = match (row.at::<Option<u64>>(c.bot_id)?, row.at::<Option<String>>(c.bot)?) {
         (Some(id), Some(name)) => Some(GithubUser { id: GithubUserId::new(id), name: name.into() }),
         _ => None,
     };
     let app = GithubApp {
-        id: GithubAppId::new(row.get(0)?),
-        slug: row.get::<_, String>(1)?.into(),
-        name: row.get(2)?,
-        owner: GithubUser { id: GithubUserId::new(row.get(3)?), name: row.get::<_, String>(4)?.into() },
+        id: GithubAppId::new(row.at(c.id)?),
+        slug: row.at::<String>(c.slug)?.into(),
+        name: row.at(c.name)?,
+        owner: GithubUser { id: GithubUserId::new(row.at(c.owner_id)?), name: row.at::<String>(c.owner)?.into() },
         bot,
-        rev: rev_of(row, 7)?,
+        rev: rev_of(row, c.rev)?,
     };
-    Ok((app, LoginFile::parse(&row.get::<_, String>(8)?)))
+    Ok((app, LoginFile::parse(&row.at::<String>(c.key_file)?)))
 }
 
 /// Every app, oldest first, for a list of every record.
 pub(in super::super) fn github_apps(conn: &Connection) -> rusqlite::Result<Vec<GithubApp>> {
-    let mut statement = conn.prepare_cached(&format!("SELECT {COLUMNS} ORDER BY rowid"))?;
+    let mut statement = conn.prepare_cached(&format!("SELECT {} FROM github_apps ORDER BY rowid", AppColumns::LIST))?;
     statement.query_map([], |row| app_at(row).map(|(app, _)| app))?.collect()
 }
 
 fn row_of(conn: &Connection, id: GithubAppId) -> rusqlite::Result<Option<(GithubApp, Option<LoginFile>)>> {
-    conn.query_row(&format!("SELECT {COLUMNS} WHERE id = ?"), [id.get()], app_at).optional()
+    conn.query_row(&format!("SELECT {} FROM github_apps WHERE id = ?", AppColumns::LIST), [id.get()], app_at).optional()
 }
 
 impl Store {
@@ -56,7 +59,11 @@ impl Store {
     /// The app GitHub made from `code`, if the hub keeps one.
     pub(crate) fn github_app_made_from(&self, code: &GithubManifestCode) -> Result<Option<GithubApp>, StoreError> {
         let conn = lock(&self.reader);
-        let found = conn.query_row(&format!("SELECT {COLUMNS} WHERE made_from = ?"), [code.as_str()], app_at);
+        let found = conn.query_row(
+            &format!("SELECT {} FROM github_apps WHERE made_from = ?", AppColumns::LIST),
+            [code.as_str()],
+            app_at,
+        );
         Ok(found.optional()?.map(|(app, _)| app))
     }
 
@@ -69,7 +76,7 @@ impl Store {
     /// The file of every app's key, by app, for the hub to make the files and the rows agree as it starts.
     pub(crate) fn github_app_keys(&self) -> Result<Vec<(GithubAppId, Option<LoginFile>)>, StoreError> {
         let conn = lock(&self.reader);
-        let mut statement = conn.prepare_cached(&format!("SELECT {COLUMNS}"))?;
+        let mut statement = conn.prepare_cached(&format!("SELECT {} FROM github_apps", AppColumns::LIST))?;
         let rows = statement.query_map([], |row| app_at(row).map(|(app, file)| (app.id, file)))?;
         Ok(rows.collect::<rusqlite::Result<_>>()?)
     }

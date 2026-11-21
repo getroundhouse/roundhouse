@@ -15,4 +15,4 @@ mod tests;
 
 mod attachment_rows;
 pub use attachment_rows::AddedBy;
-pub(super) use attachment_rows::named_on;
+pub(super) use attachment_rows::{FileColumns, file_from_row, named_on};

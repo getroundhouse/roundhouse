@@ -1,6 +1,6 @@
-use super::super::logins::{IdFrom, LOGIN_COLUMNS, login_at};
+use super::super::logins::{IdFrom, LoginColumns, login_at};
 use super::super::sessions::on_the_hubs;
-use super::super::{Store, StoreError, from_text, lock, rev_of, text_of};
+use super::super::{ByColumn, Columns, Store, StoreError, columns, lock, rev_of, text_at, text_of};
 use protocol::model::{Account, AccountId, AgentAccount, LimitWindow, ModelLabel, Reserve, Rev, SessionId, UsageLimit};
 use rusqlite::{Connection, OptionalExtension as _, params};
 
@@ -26,38 +26,46 @@ pub(in super::super) fn accounts(conn: &Connection) -> rusqlite::Result<Vec<Acco
     ids.iter().filter_map(|id| account(conn, id).transpose()).collect()
 }
 
+columns! {
+    /// What an account's record reads of its row, before its [`LoginColumns`].
+    struct AccountColumns { id, model_provider, plan, login, email, rev, name, used_at_ms, reserve_percent }
+}
+
 /// The record of `id`, with what's left of its limits. `None` for an account with none.
 pub(in super::super) fn account(conn: &Connection, id: &AccountId) -> rusqlite::Result<Option<Account>> {
     let Some(mut account) = conn
         .query_row(
             &format!(
-                "SELECT id, model_provider, plan, login, email, rev, name, used_at_ms, reserve_percent, {LOGIN_COLUMNS}
+                "SELECT {}, {}
                      FROM accounts
-                     WHERE id = ?"
+                     WHERE id = ?",
+                AccountColumns::LIST,
+                LoginColumns::LIST
             ),
             [id.as_str()],
             |row| {
-                let (id_from, held) = login_at(row, 9)?;
+                let c = AccountColumns::at(0);
+                let (id_from, held) = login_at(row, LoginColumns::at(AccountColumns::COUNT))?;
                 Ok(Account {
-                    id: row.get::<_, String>(0)?.into(),
-                    model_provider: row.get(1)?,
-                    plan: row.get(2)?,
-                    login: row.get(3)?,
-                    email: row.get(4)?,
-                    name: row.get(6)?,
+                    id: row.at::<String>(c.id)?.into(),
+                    model_provider: row.at(c.model_provider)?,
+                    plan: row.at(c.plan)?,
+                    login: row.at(c.login)?,
+                    email: row.at(c.email)?,
+                    name: row.at(c.name)?,
                     login_agent: match id_from {
                         IdFrom::Hub(agent) => Some(agent),
                         IdFrom::Adapter => None,
                     },
                     limits: Vec::new(),
                     held_login: held.map(|(_, held)| held),
-                    used_at_ms: row.get(7)?,
+                    used_at_ms: row.at(c.used_at_ms)?,
                     // Only a reserve the hub took is kept, so one it can't read is as good as none.
                     reserve: row
-                        .get::<_, Option<i64>>(8)?
+                        .at::<Option<i64>>(c.reserve_percent)?
                         .and_then(|percent| u8::try_from(percent).ok())
                         .and_then(Reserve::new),
-                    rev: rev_of(row, 5)?,
+                    rev: rev_of(row, c.rev)?,
                 })
             },
         )
@@ -73,18 +81,21 @@ pub(in super::super) fn account(conn: &Connection, id: &AccountId) -> rusqlite::
 /// What's been heard of `account`'s limits, shortest window first, and models' weeks by their models, each with when
 /// it was heard.
 fn limits_of(conn: &Connection, account: &AccountId) -> rusqlite::Result<Vec<UsageLimit>> {
-    let mut statement = conn.prepare_cached(
-        "SELECT window, model, used_percent, resets_at_ms, heard_at_ms FROM account_limits WHERE account_id = ?",
-    )?;
+    columns! {
+        struct LimitColumns { window, model, used_percent, resets_at_ms, heard_at_ms }
+    }
+    let c = LimitColumns::at(0);
+    let mut statement =
+        conn.prepare_cached(&format!("SELECT {} FROM account_limits WHERE account_id = ?", LimitColumns::LIST))?;
     let rows = statement.query_map([account.as_str()], |row| {
-        let model: String = row.get(1)?;
+        let model: String = row.at(c.model)?;
         Ok(UsageLimit {
-            window: from_text(row.get(0)?)?,
+            window: text_at(row, c.window)?,
             // Empty for a window of no model's, as the table says.
             model: (!model.is_empty()).then(|| ModelLabel::new(model)),
-            used_percent: row.get(2)?,
-            resets_at_ms: row.get(3)?,
-            heard_at_ms: Some(row.get(4)?),
+            used_percent: row.at(c.used_percent)?,
+            resets_at_ms: row.at(c.resets_at_ms)?,
+            heard_at_ms: Some(row.at(c.heard_at_ms)?),
         })
     })?;
     let mut limits = rows.collect::<rusqlite::Result<Vec<_>>>()?;

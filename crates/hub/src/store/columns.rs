@@ -4,7 +4,7 @@
 //! nothing looks a column up by its name as the hub runs.
 
 use rusqlite::Row;
-use rusqlite::types::{FromSql, Type};
+use rusqlite::types::{FromSql, Type, ValueRef};
 use std::error::Error;
 use std::fmt;
 
@@ -20,6 +20,11 @@ impl Column {
     pub(super) const fn declared(index: usize, name: &'static str) -> Self {
         Self { index, name }
     }
+
+    /// Its name, as its declaration spells it.
+    pub(super) fn name(self) -> &'static str {
+        self.name
+    }
 }
 
 /// What a declaration of columns gives, besides a [`Column`] for each, as [`columns!`] makes it.
@@ -29,6 +34,8 @@ pub(super) trait Columns {
     /// The row's own columns, before those a read adds after them, such as a session's waits, for a statement that
     /// writes the row, or that reads the row and then adds its own.
     const ROW: &'static str;
+    /// How many columns [`Columns::LIST`] has, which is where a list read after it starts.
+    const COUNT: usize;
 }
 
 /// Where a reader finds the value it reads: a declared [`Column`], or a bare number. A number is for a query that
@@ -63,11 +70,17 @@ impl At for usize {
 /// Reads a row's values by their declared [`Column`].
 pub(super) trait ByColumn {
     fn at<T: FromSql>(&self, column: Column) -> rusqlite::Result<T>;
+    /// What `column` holds, borrowed from the row rather than copied.
+    fn borrowed_at(&self, column: Column) -> rusqlite::Result<ValueRef<'_>>;
 }
 
 impl ByColumn for Row<'_> {
     fn at<T: FromSql>(&self, column: Column) -> rusqlite::Result<T> {
         self.get(column.index)
+    }
+
+    fn borrowed_at(&self, column: Column) -> rusqlite::Result<ValueRef<'_>> {
+        self.get_ref(column.index)
     }
 }
 
@@ -120,6 +133,7 @@ macro_rules! columns {
             const ROW: &'static str = $crate::store::columns::columns!(
                 @join $($crate::store::columns::columns!(@sql $column $(= $sql)?)),+
             );
+            const COUNT: usize = [$(stringify!($column),)+ $($(stringify!($added),)+)?].len();
         }
 
         impl $name {
@@ -189,6 +203,7 @@ mod tests {
     fn a_declaration_gives_its_list_and_a_place_for_each_name() {
         assert_eq!(Sample::LIST, "id, number * 2, status, upper(status)");
         assert_eq!(Sample::ROW, "id, number * 2, status");
+        assert_eq!(Sample::COUNT, 4);
 
         let conn = sample();
         let c = Sample::at(0);

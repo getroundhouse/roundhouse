@@ -1,5 +1,5 @@
-use super::super::attachments::named_on;
-use super::super::{Store, StoreError, from_text, lock, now_ms, rev_of, text_of};
+use super::super::attachments::{FileColumns, file_from_row, named_on};
+use super::super::{ByColumn, Columns, Store, StoreError, columns, lock, now_ms, rev_of, text_of};
 use crate::attachment_files::FileFor;
 use protocol::attachment::Attachment;
 use protocol::model::{AttachmentId, NewWorkspaceDraft, NewWorkspaceDraftToKeep, Rev};
@@ -12,9 +12,14 @@ const UNNAMED: &str = "NOT EXISTS (
     WHERE json_extract(named.value, '$.id') = new_workspace_draft_files.id)";
 
 pub(in super::super) fn new_workspace_draft(conn: &Connection) -> rusqlite::Result<NewWorkspaceDraft> {
-    let (draft, rev) = conn.query_row("SELECT draft, rev FROM new_workspace_draft", [], |row| {
-        Ok((row.get::<_, Option<String>>(0)?, rev_of(row, 1)?))
-    })?;
+    columns! {
+        struct DraftColumns { draft, rev }
+    }
+    let c = DraftColumns::at(0);
+    let (draft, rev) =
+        conn.query_row(&format!("SELECT {} FROM new_workspace_draft", DraftColumns::LIST), [], |row| {
+            Ok((row.at::<Option<String>>(c.draft)?, rev_of(row, c.rev)?))
+        })?;
     // Written only by this hub, as JSON. One it can't read is as good as none.
     let draft: NewWorkspaceDraft = draft.and_then(|json| serde_json::from_str(&json).ok()).unwrap_or_default();
     Ok(NewWorkspaceDraft { rev, ..draft })
@@ -137,16 +142,9 @@ pub(in super::super) fn read_draft_file(
 ) -> Result<Option<Attachment>, StoreError> {
     let file = conn
         .query_row(
-            "SELECT name, media_type, size_bytes FROM new_workspace_draft_files WHERE id = ?",
+            &format!("SELECT {} FROM new_workspace_draft_files WHERE id = ?", FileColumns::LIST),
             [id.as_str()],
-            |row| {
-                Ok(Attachment {
-                    id: id.clone(),
-                    name: row.get(0)?,
-                    media_type: from_text(row.get(1)?)?,
-                    size_bytes: row.get::<_, i64>(2)?.cast_unsigned(),
-                })
-            },
+            |row| file_from_row(row, id),
         )
         .optional()?;
     Ok(file)

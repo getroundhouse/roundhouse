@@ -1,9 +1,9 @@
 use super::super::new_workspace_draft::read_draft_file;
-use super::super::{Store, StoreError, from_text, lock, now_ms, text_of};
+use super::super::{ByColumn, Columns, Store, StoreError, columns, lock, now_ms, text_at, text_of};
 use crate::attachment_files::FileFor;
 use protocol::attachment::{Attachment, MAX_PER_PROMPT};
 use protocol::model::{AttachmentId, SessionId, WorkspaceId};
-use rusqlite::{Connection, OptionalExtension, params};
+use rusqlite::{Connection, OptionalExtension, Row, params};
 
 /// Who added a file to a session. Only a client's can be in a draft, so only those can a client have the hub let go of.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -87,18 +87,23 @@ impl Store {
         workspace_id: &WorkspaceId,
     ) -> Result<Vec<(SessionId, Attachment)>, StoreError> {
         let conn = lock(&self.reader);
-        let mut statement = conn.prepare_cached(
-            "SELECT e.session_id, a.value FROM sessions s \
+        columns! {
+            struct ImageColumns { session_id = "e.session_id", attachment = "a.value" }
+        }
+        let c = ImageColumns::at(0);
+        let mut statement = conn.prepare_cached(&format!(
+            "SELECT {} FROM sessions s \
              JOIN events e ON e.session_id = s.id AND e.kind = 'user_prompt' \
              JOIN json_each(e.body, '$.attachments') a \
              WHERE s.workspace_id = ? ORDER BY e.ts_ms, s.created_at_ms, e.seq, a.key",
-        )?;
+            ImageColumns::LIST
+        ))?;
         let mut rows = statement.query([workspace_id.as_str()])?;
         let mut images = Vec::new();
         while let Some(row) = rows.next()? {
-            let attachment: Attachment = serde_json::from_str(&row.get::<_, String>(1)?)?;
+            let attachment: Attachment = serde_json::from_str(&row.at::<String>(c.attachment)?)?;
             if attachment.media_type.is_bitmap() {
-                images.push((SessionId::from(row.get::<_, String>(0)?), attachment));
+                images.push((SessionId::from(row.at::<String>(c.session_id)?), attachment));
             }
         }
         Ok(images)
@@ -160,6 +165,23 @@ pub(in super::super) fn named_on(
     Ok(files)
 }
 
+columns! {
+    /// What a file added to a composer holds, in the files of a chat's or of the new workspace's, as
+    /// [`file_from_row`] reads it.
+    pub(in super::super) struct FileColumns { name, media_type, size_bytes }
+}
+
+/// The file `id` in a row of [`FileColumns`].
+pub(in super::super) fn file_from_row(row: &Row<'_>, id: &AttachmentId) -> rusqlite::Result<Attachment> {
+    let c = FileColumns::at(0);
+    Ok(Attachment {
+        id: id.clone(),
+        name: row.at(c.name)?,
+        media_type: text_at(row, c.media_type)?,
+        size_bytes: row.at::<i64>(c.size_bytes)?.cast_unsigned(),
+    })
+}
+
 pub(in super::super) fn read_attachment(
     conn: &Connection,
     session_id: &SessionId,
@@ -167,16 +189,9 @@ pub(in super::super) fn read_attachment(
 ) -> Result<Option<Attachment>, StoreError> {
     let attachment = conn
         .query_row(
-            "SELECT name, media_type, size_bytes FROM attachments WHERE session_id = ? AND id = ?",
+            &format!("SELECT {} FROM attachments WHERE session_id = ? AND id = ?", FileColumns::LIST),
             params![session_id.as_str(), id.as_str()],
-            |row| {
-                Ok(Attachment {
-                    id: id.clone(),
-                    name: row.get(0)?,
-                    media_type: from_text(row.get(1)?)?,
-                    size_bytes: row.get::<_, i64>(2)?.cast_unsigned(),
-                })
-            },
+            |row| file_from_row(row, id),
         )
         .optional()?;
     Ok(attachment)

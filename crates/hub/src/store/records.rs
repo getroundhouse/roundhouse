@@ -11,7 +11,7 @@ use super::github_reach::github_reach;
 use super::github_sign_ins::github_sign_ins;
 use super::hub_settings::hub_settings;
 use super::new_workspace_draft::new_workspace_draft;
-use super::repos::{REPO_COLUMNS, repo_from_row};
+use super::repos::{RepoColumns, repo_from_row};
 use super::sessions::{SessionColumns, session_from_row};
 use super::workspaces::{WorkspaceColumns, workspace_from_row};
 use super::{Columns, Store, StoreError, current_rev, lock};
@@ -30,7 +30,7 @@ impl Store {
                 session_from_row(row).map(|stored| stored.session)
             })?;
         let records = Records {
-            repos: rows(&tx, &format!("SELECT {REPO_COLUMNS}, rev FROM repos ORDER BY name, id"), repo_from_row)?,
+            repos: rows(&tx, &format!("SELECT {} FROM repos ORDER BY name, id", RepoColumns::LIST), repo_from_row)?,
             workspaces: rows(
                 &tx,
                 &format!("SELECT {} FROM workspaces ORDER BY created_at_ms, id", WorkspaceColumns::LIST),
