@@ -121,6 +121,16 @@ fn sound_needs_none_of_our_other_crates_but_now_playing_no_async_runtime_and_no_
     needs_none_of_ours_no_async_runtime_and_no_ui("sound", &["now-playing"]);
 }
 
+/// Reading out knows nothing of chats or the hub, with threads rather than a runtime and no UI, so any client on any
+/// device can read with it. It speaks with `phonon` and plays through `sound`, which are free of the same.
+#[test]
+fn speaking_needs_none_of_our_other_crates_but_phonon_and_sound_no_async_runtime_and_no_ui() {
+    needs_none_of_ours_no_async_runtime_and_no_ui(
+        "speaking",
+        &["phonon", "sound", "models", "fetching", "now-playing"],
+    );
+}
+
 /// Phonon knows nothing of what it says or where the audio goes, with no runtime and no UI, so any client on any device
 /// can speak with it. It keeps its model's files with `models`, which downloads them with `fetching`.
 #[test]

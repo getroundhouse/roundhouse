@@ -1,0 +1,19 @@
+[package]
+name = "speaking"
+description = "Reading text out on this device: phrases cut as the text comes, said with Phonon through the speakers, how far each text has been heard, and stopping. No UI and no async runtime."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+license.workspace = true
+
+[dependencies]
+flume.workspace = true
+phonon.workspace = true
+sound.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+parking_lot.workspace = true
+
+[lints]
+workspace = true

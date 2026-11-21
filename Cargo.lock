@@ -8897,6 +8897,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "speaking"
+version = "0.1.0"
+dependencies = [
+ "flume",
+ "parking_lot",
+ "phonon",
+ "sound",
+ "thiserror 2.0.21",
+]
+
+[[package]]
 name = "spec-page"
 version = "0.1.0"
 dependencies = [
