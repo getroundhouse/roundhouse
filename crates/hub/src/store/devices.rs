@@ -4,7 +4,7 @@ use protocol::model::DeviceId;
 use protocol::pairing::{Device, DeviceToken};
 use rusqlite::{OptionalExtension, Row, params};
 
-use super::{Store, StoreError, lock};
+use super::{ByColumn, Columns, Store, StoreError, columns, lock};
 
 /// A token's SHA-256, which is all the hub keeps of it. A token is 32 random bytes, so a hash with no salt is as
 /// hard to reverse as guessing the token.
@@ -20,14 +20,18 @@ impl TokenHash {
     }
 }
 
-const DEVICE_COLUMNS: &str = "id, name, paired_at_ms, last_seen_ms";
+columns! {
+    /// What a device's row holds, but for its token's hash, as it's written and read.
+    struct DeviceColumns { id, name, paired_at_ms, last_seen_ms }
+}
 
 fn device_from_row(row: &Row<'_>) -> rusqlite::Result<Device> {
+    let c = DeviceColumns::at(0);
     Ok(Device {
-        id: row.get::<_, String>(0)?.into(),
-        name: row.get(1)?,
-        paired_at_ms: row.get(2)?,
-        last_seen_ms: row.get(3)?,
+        id: row.at::<String>(c.id)?.into(),
+        name: row.at(c.name)?,
+        paired_at_ms: row.at(c.paired_at_ms)?,
+        last_seen_ms: row.at(c.last_seen_ms)?,
         connections: 0,
     })
 }
@@ -35,7 +39,7 @@ fn device_from_row(row: &Row<'_>) -> rusqlite::Result<Device> {
 impl Store {
     pub(crate) fn add_device(&self, device: &Device, token: &TokenHash) -> Result<(), StoreError> {
         lock(&self.writer).execute(
-            &format!("INSERT INTO devices ({DEVICE_COLUMNS}, token_sha256) VALUES (?, ?, ?, ?, ?)"),
+            &format!("INSERT INTO devices ({}, token_sha256) VALUES (?, ?, ?, ?, ?)", DeviceColumns::LIST),
             params![device.id.as_str(), device.name, device.paired_at_ms, device.last_seen_ms, &token.0[..]],
         )?;
         Ok(())
@@ -43,7 +47,7 @@ impl Store {
 
     /// The device this token belongs to, if one does.
     pub(crate) fn device_with_token(&self, token: &TokenHash) -> Result<Option<Device>, StoreError> {
-        let query = format!("SELECT {DEVICE_COLUMNS} FROM devices WHERE token_sha256 = ?");
+        let query = format!("SELECT {} FROM devices WHERE token_sha256 = ?", DeviceColumns::LIST);
         Ok(lock(&self.reader).query_row(&query, [&token.0[..]], device_from_row).optional()?)
     }
 
@@ -57,7 +61,7 @@ impl Store {
     pub(crate) fn list_devices(&self) -> Result<Vec<Device>, StoreError> {
         let conn = lock(&self.reader);
         let mut statement =
-            conn.prepare_cached(&format!("SELECT {DEVICE_COLUMNS} FROM devices ORDER BY paired_at_ms, id"))?;
+            conn.prepare_cached(&format!("SELECT {} FROM devices ORDER BY paired_at_ms, id", DeviceColumns::LIST))?;
         let rows = statement.query_map([], device_from_row)?;
         rows.collect::<rusqlite::Result<_>>().map_err(StoreError::from)
     }

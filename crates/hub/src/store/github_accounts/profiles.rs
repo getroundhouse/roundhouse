@@ -6,8 +6,8 @@ use github::GithubProfile;
 use protocol::model::{GithubAccount, GithubAccountId, GithubLoginKind, GithubUser};
 use rusqlite::{Connection, OptionalExtension as _, params};
 
-use super::super::{Store, StoreError, lock, text_of};
-use super::rows::{COLUMNS, account_at, row_of};
+use super::super::{ByColumn, Columns, Store, StoreError, columns, lock, text_of};
+use super::rows::{GithubAccountColumns, account_at, row_of};
 use crate::login_files::LoginFile;
 
 /// Keeps `profile` as what GitHub said of `account`'s user when the hub asked at `asked_at_ms`, in `conn`, unless what's
@@ -33,10 +33,14 @@ impl Store {
     /// What GitHub's profile of `id`'s user said as the hub last asked, or `None` when it hasn't asked, as for an
     /// account from before it did.
     pub(crate) fn github_profile(&self, id: &GithubAccountId) -> Result<Option<GithubProfile>, StoreError> {
+        columns! {
+            struct ProfileColumns { name, email }
+        }
+        let c = ProfileColumns::at(0);
         let found = lock(&self.reader).query_row(
-            "SELECT name, email FROM github_profiles WHERE account_id = ?",
+            &format!("SELECT {} FROM github_profiles WHERE account_id = ?", ProfileColumns::LIST),
             [id.as_str()],
-            |row| Ok(GithubProfile { name: row.get(0)?, email: row.get(1)? }),
+            |row| Ok(GithubProfile { name: row.at(c.name)?, email: row.at(c.email)? }),
         );
         Ok(found.optional()?)
     }
@@ -50,9 +54,9 @@ impl Store {
     ) -> Result<Vec<(GithubAccount, LoginFile)>, StoreError> {
         let conn = lock(&self.reader);
         let mut statement = conn.prepare_cached(&format!(
-            "SELECT {COLUMNS} WHERE login_file IS NOT NULL AND login_kind IN (?1, ?2, ?3) AND NOT EXISTS (
+            "SELECT {} FROM github_accounts WHERE login_file IS NOT NULL AND login_kind IN (?1, ?2, ?3) AND NOT EXISTS (
                  SELECT 1 FROM github_profiles WHERE account_id = github_accounts.id AND read_at_ms > ?4
-             ) ORDER BY rowid"
+             ) ORDER BY rowid", GithubAccountColumns::LIST
         ))?;
         let [token, sign_in, gh] =
             [GithubLoginKind::Token, GithubLoginKind::SignIn, GithubLoginKind::Gh].map(|how| text_of(&how));

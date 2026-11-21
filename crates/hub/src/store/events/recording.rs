@@ -4,7 +4,8 @@ use super::super::prompts::note_prompts;
 use super::super::sent::{Sent, note_sent};
 use super::super::subagents::note_subagents;
 use super::super::{
-    Appended, Store, StoreError, from_text, lock, now_ms, place_column, place_of, seq_column, seq_of, text_of,
+    Appended, ByColumn, Columns, Store, StoreError, columns, lock, maybe_text_at, now_ms, place_column, place_of,
+    seq_column, seq_of, text_of,
 };
 use super::change::{SessionChange, change_session};
 use protocol::client::log::ReadLimit;
@@ -185,7 +186,8 @@ impl Store {
         let conn = lock(&self.reader);
         let raw_column = if include_raw { "raw" } else { "NULL" };
         let mut statement = conn.prepare_cached(&format!(
-            "SELECT {EVENT_COLUMNS}, {raw_column} FROM events WHERE session_id = ? AND seq >= ? ORDER BY seq LIMIT ?"
+            "SELECT {}, {raw_column} FROM events WHERE session_id = ? AND seq >= ? ORDER BY seq LIMIT ?",
+            EventColumns::ROW
         ))?;
         let rows = statement.query(params![session_id.as_str(), seq_column(from_seq), limit])?;
         events_in(session_id, rows, limit, max_bytes)
@@ -210,8 +212,9 @@ impl Store {
         let raw_column = if include_raw { "raw" } else { "NULL" };
         let events = {
             let mut statement = tx.prepare_cached(&format!(
-                "SELECT {EVENT_COLUMNS}, {raw_column} FROM events
-                 WHERE session_id = ? AND subagent IS ? AND place >= ? AND seq <= ? ORDER BY place LIMIT ?"
+                "SELECT {}, {raw_column} FROM events
+                 WHERE session_id = ? AND subagent IS ? AND place >= ? AND seq <= ? ORDER BY place LIMIT ?",
+                EventColumns::ROW
             ))?;
             let (from, through) = (place_column(from), through.map_or(i64::MAX, seq_column));
             let rows = statement.query(params![
@@ -244,11 +247,12 @@ impl Store {
     }
 }
 
-/// The agent's own newest failed request, as [`EVENT_COLUMNS`] then a NULL raw line.
+/// The agent's own newest failed request, as [`EventColumns`] with a NULL raw line.
 pub(super) fn newest_own_failure() -> String {
     format!(
-        "SELECT {EVENT_COLUMNS}, NULL FROM events
-         WHERE session_id = ? AND kind = 'request_failed' AND subagent IS NULL ORDER BY seq DESC LIMIT 1"
+        "SELECT {}, NULL FROM events
+         WHERE session_id = ? AND kind = 'request_failed' AND subagent IS NULL ORDER BY seq DESC LIMIT 1",
+        EventColumns::ROW
     )
 }
 
@@ -268,14 +272,15 @@ fn recorded_with(
     client_msg_id: &ClientMessageId,
 ) -> Result<Option<SessionEvent>, StoreError> {
     let mut statement = tx.prepare_cached(&format!(
-        "SELECT {EVENT_COLUMNS}, NULL FROM events WHERE session_id = ? AND client_msg_id = ?"
+        "SELECT {}, NULL FROM events WHERE session_id = ? AND client_msg_id = ?",
+        EventColumns::ROW
     ))?;
     let mut rows = statement.query(params![session_id.as_str(), client_msg_id.as_str()])?;
     let Some(row) = rows.next()? else { return Ok(None) };
     Ok(Some(event_in(session_id, row)?.0))
 }
 
-/// The events in `rows`, which each have [`EVENT_COLUMNS`] then the raw line, as far as a read of `limit` of them and
+/// The events in `rows` of [`EventColumns`], as far as a read of `limit` of them and
 /// `max_bytes` goes, as [`ReadLimit::cut`] says.
 fn events_in(
     session_id: &SessionId,
@@ -286,22 +291,30 @@ fn events_in(
     ReadLimit { events: limit, bytes: max_bytes }.cut(rows.and_then(|row| event_in(session_id, row)))
 }
 
-/// What [`event_in`] reads, before the raw line or NULL.
-const EVENT_COLUMNS: &str = "seq, ts_ms, run, subagent, place, interaction, body";
+columns! {
+    /// What [`event_in`] reads of an event's row, then its raw line, which a query reads as `raw` or leaves out as
+    /// `NULL`, after [`Columns::ROW`].
+    struct EventColumns {
+        seq, ts_ms, run, subagent, place, interaction, body,
+    } then {
+        raw,
+    }
+}
 
-/// The event in a row of [`EVENT_COLUMNS`] and then its raw line, and how many bytes its body and raw line take.
+/// The event in a row of [`EventColumns`], and how many bytes its body and raw line take.
 fn event_in(session_id: &SessionId, row: &rusqlite::Row<'_>) -> Result<(SessionEvent, u64), StoreError> {
-    let body: String = row.get(6)?;
-    let raw: Option<String> = row.get(7)?;
+    let c = EventColumns::at(0);
+    let body: String = row.at(c.body)?;
+    let raw: Option<String> = row.at(c.raw)?;
     let size = (body.len() + raw.as_ref().map_or(0, String::len)) as u64;
     let event = SessionEvent {
         session_id: session_id.clone(),
-        seq: seq_of(row, 0)?,
-        ts_ms: row.get(1)?,
-        run: row.get::<_, Option<i64>>(2)?.map(|run| RunId::new(run.cast_unsigned())),
-        subagent: row.get::<_, Option<String>>(3)?.map(SubagentId::from),
-        place: place_of(row, 4)?,
-        interaction: row.get::<_, Option<String>>(5)?.map_or(Ok(InteractionMode::Typing), from_text)?,
+        seq: seq_of(row, c.seq)?,
+        ts_ms: row.at(c.ts_ms)?,
+        run: row.at::<Option<i64>>(c.run)?.map(|run| RunId::new(run.cast_unsigned())),
+        subagent: row.at::<Option<String>>(c.subagent)?.map(SubagentId::from),
+        place: place_of(row, c.place)?,
+        interaction: maybe_text_at(row, c.interaction)?.unwrap_or(InteractionMode::Typing),
         body: serde_json::from_str(&body)?,
         raw,
     };

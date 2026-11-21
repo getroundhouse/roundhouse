@@ -2,33 +2,35 @@ use protocol::model::{Repo, RepoId, RepoOrigin, RepoUrl};
 use rusqlite::types::Type;
 use rusqlite::{OptionalExtension, Row, params};
 
-use super::super::{Store, StoreError, lock, rev_of};
+use super::super::{At, ByColumn, Column, Columns, Store, StoreError, columns, lock, rev_of};
 
-/// The columns every read of a repository's record takes, in this order, before its revision, as [`repo_from_row`]
-/// reads them.
-pub(in super::super) const REPO_COLUMNS: &str = "id, name, path, url, created_at_ms";
+columns! {
+    /// The columns every read of a repository's record takes, as [`repo_from_row`] reads them.
+    pub(in super::super) struct RepoColumns { id, name, path, url, created_at_ms, rev }
+}
 
 /// A row's record: its checkout, with the address a worker read from it, where one has. Every row has a checkout,
 /// since a repository is added by one.
 pub(in super::super) fn repo_from_row(row: &Row) -> rusqlite::Result<Repo> {
-    let path = row.get(2)?;
-    let origin = match row.get::<_, Option<String>>(3)? {
-        Some(url) => RepoOrigin::Linked { path, url: url_at(3, url)? },
+    let c = RepoColumns::at(0);
+    let path = row.at(c.path)?;
+    let origin = match row.at::<Option<String>>(c.url)? {
+        Some(url) => RepoOrigin::Linked { path, url: url_at(c.url, url)? },
         None => RepoOrigin::Checkout { path },
     };
     Ok(Repo {
-        id: row.get::<_, String>(0)?.into(),
-        name: row.get(1)?,
+        id: row.at::<String>(c.id)?.into(),
+        name: row.at(c.name)?,
         origin,
-        created_at_ms: row.get(4)?,
-        rev: rev_of(row, 5)?,
+        created_at_ms: row.at(c.created_at_ms)?,
+        rev: rev_of(row, c.rev)?,
     })
 }
 
 /// The address in `column`, which is refused as a row that can't be read if it holds a credential, though only a
 /// database changed by hand could hold one, since none is ever written.
-fn url_at(column: usize, url: String) -> rusqlite::Result<RepoUrl> {
-    RepoUrl::try_from(url).map_err(|e| rusqlite::Error::FromSqlConversionFailure(column, Type::Text, Box::new(e)))
+fn url_at(column: Column, url: String) -> rusqlite::Result<RepoUrl> {
+    RepoUrl::try_from(url).map_err(|e| column.unreadable(Type::Text, Box::new(e)))
 }
 
 /// A repository whose checkout's address is to be read, as [`Store::repos_to_read`] lists them.
@@ -50,21 +52,22 @@ impl Store {
                  ON CONFLICT (path) DO UPDATE SET url_to_read = 1",
             params![id.as_str(), name, checkout, created_at_ms],
         )?;
-        conn.query_row(&format!("SELECT {REPO_COLUMNS}, rev FROM repos WHERE path = ?"), [checkout], repo_from_row)
+        conn.query_row(&format!("SELECT {} FROM repos WHERE path = ?", RepoColumns::LIST), [checkout], repo_from_row)
             .map_err(StoreError::from)
     }
 
     /// Every repository, as [`Repo::by_name`] orders them.
     pub fn list_repos(&self) -> Result<Vec<Repo>, StoreError> {
         let conn = lock(&self.reader);
-        let mut statement = conn.prepare_cached(&format!("SELECT {REPO_COLUMNS}, rev FROM repos ORDER BY name, id"))?;
+        let mut statement =
+            conn.prepare_cached(&format!("SELECT {} FROM repos ORDER BY name, id", RepoColumns::LIST))?;
         let rows = statement.query_map([], repo_from_row)?;
         rows.collect::<rusqlite::Result<_>>().map_err(StoreError::from)
     }
 
     pub fn get_repo(&self, id: &RepoId) -> Result<Repo, StoreError> {
         lock(&self.reader)
-            .query_row(&format!("SELECT {REPO_COLUMNS}, rev FROM repos WHERE id = ?"), [id.as_str()], repo_from_row)
+            .query_row(&format!("SELECT {} FROM repos WHERE id = ?", RepoColumns::LIST), [id.as_str()], repo_from_row)
             .optional()?
             .ok_or_else(|| StoreError::NotFound { kind: "repository", id: id.to_string() })
     }
@@ -72,10 +75,14 @@ impl Store {
     /// Each repository whose checkout's address is to be read, by name.
     pub fn repos_to_read(&self) -> Result<Vec<RepoToRead>, StoreError> {
         let conn = lock(&self.reader);
+        columns! {
+            struct ToRead { id, name, path }
+        }
+        let c = ToRead::at(0);
         let mut statement =
-            conn.prepare_cached("SELECT id, name, path FROM repos WHERE url_to_read = 1 ORDER BY name")?;
+            conn.prepare_cached(&format!("SELECT {} FROM repos WHERE url_to_read = 1 ORDER BY name", ToRead::LIST))?;
         let rows = statement.query_map([], |row| {
-            Ok(RepoToRead { id: row.get::<_, String>(0)?.into(), name: row.get(1)?, checkout: row.get(2)? })
+            Ok(RepoToRead { id: row.at::<String>(c.id)?.into(), name: row.at(c.name)?, checkout: row.at(c.path)? })
         })?;
         rows.collect::<rusqlite::Result<_>>().map_err(StoreError::from)
     }
@@ -99,7 +106,7 @@ impl Store {
         let changed = was_to_read > 0
             && tx.execute("UPDATE repos SET url = ?2 WHERE id = ?1 AND url IS NOT ?2", params![id.as_str(), url])? > 0;
         let repo = if changed {
-            let select = format!("SELECT {REPO_COLUMNS}, rev FROM repos WHERE id = ?");
+            let select = format!("SELECT {} FROM repos WHERE id = ?", RepoColumns::LIST);
             Some(tx.query_row(&select, [id.as_str()], repo_from_row)?)
         } else {
             None

@@ -1,26 +1,30 @@
 use protocol::model::{GithubReach, Reach, RepoId};
 use rusqlite::{Connection, OptionalExtension as _, Row, params};
 
-use super::super::{Store, StoreError, json_at, lock, rev_of};
+use super::super::{ByColumn, Columns, Store, StoreError, columns, json_at, lock, rev_of};
 
-/// The columns every read of a reach's row takes, in this order, as [`reach_at`] reads them.
-const COLUMNS: &str = "repo_id, reach, answered_at_ms, stale, rev FROM github_reach";
+columns! {
+    /// The columns every read of a reach's row takes, as [`reach_at`] reads them.
+    struct ReachColumns { repo_id, reach, answered_at_ms, stale, rev }
+}
 
 /// A row's record. A reach this build can't read, which only a newer build could have written, reads as
 /// [`Reach::Unknown`], and is checked again as the hub starts.
 fn reach_at(row: &Row<'_>) -> rusqlite::Result<GithubReach> {
+    let c = ReachColumns::at(0);
     Ok(GithubReach {
-        repo: row.get::<_, String>(0)?.into(),
-        reach: json_at(row, 1)?.unwrap_or(Reach::Unknown),
-        answered_at_ms: row.get(2)?,
-        stale: row.get(3)?,
-        rev: rev_of(row, 4)?,
+        repo: row.at::<String>(c.repo_id)?.into(),
+        reach: json_at(row, c.reach)?.unwrap_or(Reach::Unknown),
+        answered_at_ms: row.at(c.answered_at_ms)?,
+        stale: row.at(c.stale)?,
+        rev: rev_of(row, c.rev)?,
     })
 }
 
 /// Every repository's reach, by repository, for a list of every record.
 pub(in super::super) fn github_reach(conn: &Connection) -> rusqlite::Result<Vec<GithubReach>> {
-    let mut statement = conn.prepare_cached(&format!("SELECT {COLUMNS} ORDER BY repo_id"))?;
+    let mut statement =
+        conn.prepare_cached(&format!("SELECT {} FROM github_reach ORDER BY repo_id", ReachColumns::LIST))?;
     statement.query_map([], reach_at)?.collect()
 }
 
@@ -43,13 +47,23 @@ impl Store {
                  WHERE reach != excluded.reach OR answered_at_ms IS NOT excluded.answered_at_ms OR stale != 0",
             params![repo.as_str(), reach, answered_at_ms],
         )?;
-        Ok(conn.query_row(&format!("SELECT {COLUMNS} WHERE repo_id = ?"), [repo.as_str()], reach_at)?)
+        Ok(conn.query_row(
+            &format!("SELECT {} FROM github_reach WHERE repo_id = ?", ReachColumns::LIST),
+            [repo.as_str()],
+            reach_at,
+        )?)
     }
 
     /// `repo`'s reach, if it has one.
     pub(crate) fn github_reach_of(&self, repo: &RepoId) -> Result<Option<GithubReach>, StoreError> {
         let conn = lock(&self.reader);
-        Ok(conn.query_row(&format!("SELECT {COLUMNS} WHERE repo_id = ?"), [repo.as_str()], reach_at).optional()?)
+        Ok(conn
+            .query_row(
+                &format!("SELECT {} FROM github_reach WHERE repo_id = ?", ReachColumns::LIST),
+                [repo.as_str()],
+                reach_at,
+            )
+            .optional()?)
     }
 
     /// Every repository's reach, as the hub last recorded it, which it checks again as it starts.

@@ -5,7 +5,7 @@ use protocol::provider::WorkerEnvironment;
 use protocol::worker::RepoSource;
 use rusqlite::OptionalExtension;
 
-use super::super::{Store, StoreError, json_at, lock};
+use super::super::{At, Column, Columns, Store, StoreError, columns, json_at, lock};
 
 /// The repository source and worker environment settled when a workspace is created. Stored on the workspace row so
 /// later operations (launches, terminals, setup, archiving, restoring, child worktrees) never query the provider's
@@ -26,10 +26,16 @@ impl WorkspacePlacement {
 impl Store {
     /// The repository source and worker environment settled when workspace `id` was created.
     pub fn workspace_placement(&self, id: &WorkspaceId) -> Result<WorkspacePlacement, StoreError> {
+        columns! {
+            struct PlacementColumns { repo_source, worker_environment }
+        }
+        let c = PlacementColumns::at(0);
         let conn = lock(&self.reader);
-        conn.query_row("SELECT repo_source, worker_environment FROM workspaces WHERE id = ?", [id.as_str()], |row| {
-            let source = json_at::<RepoSource>(row, 0)?.ok_or_else(|| missing("repo_source", 0))?;
-            let environment = json_at::<WorkerEnvironment>(row, 1)?.ok_or_else(|| missing("worker_environment", 1))?;
+        let select = format!("SELECT {} FROM workspaces WHERE id = ?", PlacementColumns::LIST);
+        conn.query_row(&select, [id.as_str()], |row| {
+            let source = json_at::<RepoSource>(row, c.repo_source)?.ok_or_else(|| missing(c.repo_source))?;
+            let environment = json_at::<WorkerEnvironment>(row, c.worker_environment)?
+                .ok_or_else(|| missing(c.worker_environment))?;
             Ok(WorkspacePlacement { source, environment })
         })
         .optional()?
@@ -37,6 +43,6 @@ impl Store {
     }
 }
 
-fn missing(column: &str, index: usize) -> rusqlite::Error {
-    rusqlite::Error::FromSqlConversionFailure(index, rusqlite::types::Type::Null, format!("missing {column}").into())
+fn missing(column: Column) -> rusqlite::Error {
+    column.unreadable(rusqlite::types::Type::Null, format!("missing {}", column.name()).into())
 }

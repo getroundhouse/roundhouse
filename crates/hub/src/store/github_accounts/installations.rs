@@ -1,8 +1,8 @@
 use protocol::model::{GithubAccount, GithubAccountId, GithubAppId, GithubInstallation, GithubLoginKind, GithubUserId};
 use rusqlite::{OptionalExtension as _, params};
 
-use super::super::{GithubConnected, GithubConnecting, Store, StoreError, lock, text_of};
-use super::rows::{COLUMNS, account_at, connect_login};
+use super::super::{Columns, GithubConnected, GithubConnecting, Store, StoreError, lock, text_of};
+use super::rows::{GithubAccountColumns, account_at, connect_login};
 use crate::login_files::LoginFile;
 
 impl Store {
@@ -13,7 +13,10 @@ impl Store {
         app: GithubAppId,
     ) -> Result<Vec<(GithubAccount, Option<LoginFile>)>, StoreError> {
         let conn = lock(&self.reader);
-        let mut statement = conn.prepare_cached(&format!("SELECT {COLUMNS} WHERE app_id = ? ORDER BY rowid"))?;
+        let mut statement = conn.prepare_cached(&format!(
+            "SELECT {} FROM github_accounts WHERE app_id = ? ORDER BY rowid",
+            GithubAccountColumns::LIST
+        ))?;
         Ok(statement.query_map([app.get()], account_at)?.collect::<rusqlite::Result<_>>()?)
     }
 
@@ -22,7 +25,7 @@ impl Store {
     pub(crate) fn held_github_installations(&self) -> Result<Vec<(GithubAccount, LoginFile)>, StoreError> {
         let conn = lock(&self.reader);
         let mut statement = conn.prepare_cached(&format!(
-            "SELECT {COLUMNS} WHERE login_kind = ? AND login_file IS NOT NULL AND app_id IS NOT NULL ORDER BY rowid"
+            "SELECT {} FROM github_accounts WHERE login_kind = ? AND login_file IS NOT NULL AND app_id IS NOT NULL ORDER BY rowid", GithubAccountColumns::LIST
         ))?;
         let rows = statement.query_map([text_of(&GithubLoginKind::App)], account_at)?;
         let rows = rows.collect::<rusqlite::Result<Vec<_>>>()?;
@@ -54,7 +57,10 @@ impl Store {
     pub(crate) fn installed_on(&self, app: GithubAppId, on: GithubUserId) -> Result<Option<GithubAccount>, StoreError> {
         let conn = lock(&self.reader);
         let found = conn.query_row(
-            &format!("SELECT {COLUMNS} WHERE app_id = ? AND installed_on_id = ? ORDER BY rowid LIMIT 1"),
+            &format!(
+                "SELECT {} FROM github_accounts WHERE app_id = ? AND installed_on_id = ? ORDER BY rowid LIMIT 1",
+                GithubAccountColumns::LIST
+            ),
             params![app.get(), on.get()],
             account_at,
         );

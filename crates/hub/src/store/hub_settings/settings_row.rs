@@ -1,37 +1,50 @@
-use super::super::{Store, StoreError, from_text, json_at, lock, rev_of, text_of};
+use super::super::{ByColumn, Columns, Store, StoreError, columns, json_at, lock, rev_of, text_at, text_of};
 use protocol::model::{
     AccountDefault, AccountId, AgentKind, GithubAccountId, GithubSettings, HubId, HubSettings, HubSettingsChange,
     ProviderName, SentCredential,
 };
 use rusqlite::{Connection, params};
 
+columns! {
+    /// What the hub's settings read of their row.
+    struct SettingsColumns {
+        keep_awake, allow_asked_in_full_access, rev, github_account_id, github_sent, github_left_to_machine,
+        github_set_up,
+    }
+}
+
+columns! {
+    /// What the hub's settings read of each kind's default account.
+    struct DefaultColumns { agent, account_id, automatic }
+}
+
 pub(in super::super) fn hub_settings(conn: &Connection) -> rusqlite::Result<HubSettings> {
-    let columns = "keep_awake, allow_asked_in_full_access, rev, github_account_id, github_sent, github_left_to_machine, \
-                   github_set_up";
-    conn.query_row(&format!("SELECT {columns} FROM hub_settings"), [], |row| {
+    let c = SettingsColumns::at(0);
+    conn.query_row(&format!("SELECT {} FROM hub_settings", SettingsColumns::LIST), [], |row| {
         // The outer SELECT remains active while the defaults are read, keeping one SQLite snapshot.
+        let d = DefaultColumns::at(0);
         let mut defaults =
-            conn.prepare_cached("SELECT agent, account_id, automatic FROM account_defaults ORDER BY agent")?;
+            conn.prepare_cached(&format!("SELECT {} FROM account_defaults ORDER BY agent", DefaultColumns::LIST))?;
         let account_defaults = defaults
             .query_map([], |row| {
                 Ok(AccountDefault {
-                    agent: from_text(row.get(0)?)?,
-                    account: row.get::<_, String>(1)?.into(),
-                    automatic: row.get(2)?,
+                    agent: text_at(row, d.agent)?,
+                    account: row.at::<String>(d.account_id)?.into(),
+                    automatic: row.at(d.automatic)?,
                 })
             })?
             .collect::<rusqlite::Result<Vec<_>>>()?;
         Ok(HubSettings {
             account_defaults: Some(account_defaults),
-            keep_awake: row.get(0)?,
-            allow_asked_in_full_access: Some(row.get(1)?),
+            keep_awake: row.at(c.keep_awake)?,
+            allow_asked_in_full_access: Some(row.at(c.allow_asked_in_full_access)?),
             github: Some(GithubSettings {
-                account: row.get::<_, Option<String>>(3)?.map(GithubAccountId::from),
-                sent: json_at(row, 4)?,
-                left_to_machine: json_at(row, 5)?.unwrap_or_default(),
-                set_up: json_at(row, 6)?.unwrap_or_default(),
+                account: row.at::<Option<String>>(c.github_account_id)?.map(GithubAccountId::from),
+                sent: json_at(row, c.github_sent)?,
+                left_to_machine: json_at(row, c.github_left_to_machine)?.unwrap_or_default(),
+                set_up: json_at(row, c.github_set_up)?.unwrap_or_default(),
             }),
-            rev: rev_of(row, 2)?,
+            rev: rev_of(row, c.rev)?,
         })
     })
 }

@@ -1,4 +1,4 @@
-use super::super::{Store, StoreError, lock};
+use super::super::{ByColumn, Columns, Store, StoreError, columns, lock};
 use protocol::event::EventBody;
 use protocol::model::{Seq, SessionId};
 use rusqlite::{Connection, params};
@@ -38,9 +38,14 @@ impl Store {
     /// Every session with prompts its agent has yet to take, and those prompts, oldest first.
     pub fn untaken_prompts(&self) -> Result<Vec<(SessionId, Vec<Seq>)>, StoreError> {
         let conn = lock(&self.reader);
-        let mut statement = conn.prepare("SELECT id, untaken FROM sessions WHERE untaken <> '[]'")?;
-        let rows =
-            statement.query_map([], |row| Ok((SessionId::from(row.get::<_, String>(0)?), row.get::<_, String>(1)?)))?;
+        columns! {
+            struct UntakenColumns { id, untaken }
+        }
+        let c = UntakenColumns::at(0);
+        let mut statement =
+            conn.prepare(&format!("SELECT {} FROM sessions WHERE untaken <> '[]'", UntakenColumns::LIST))?;
+        let rows = statement
+            .query_map([], |row| Ok((SessionId::from(row.at::<String>(c.id)?), row.at::<String>(c.untaken)?)))?;
         let mut untaken = Vec::new();
         for row in rows {
             let (id, json) = row?;

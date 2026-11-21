@@ -1,10 +1,14 @@
 use super::super::made::Made;
-use super::super::{Store, StoreError, json_at, lock, now_ms, rev_of};
+use super::super::{ByColumn, Columns, Store, StoreError, columns, json_at, lock, now_ms, rev_of};
 use protocol::model::{AskKey, Branches, ChildStatus, ChildWorktree, ChildWorktreeId, MadeBy, SessionId, WorkspaceId};
 use rusqlite::{Connection, OptionalExtension, Row, params};
 
-const CHILD_COLUMNS: &str =
-    "id, workspace_id, path, branch, session_id, made_by, created_at_ms, state, removed_at_ms, branches, rev";
+columns! {
+    /// The columns every read of a child worktree's row takes, as [`child_from_row`] reads them.
+    struct ChildColumns {
+        id, workspace_id, path, branch, session_id, made_by, created_at_ms, state, removed_at_ms, branches, rev,
+    }
+}
 
 /// How `state` spells a record that isn't removed.
 const THERE: &str = "state != 'removed'";
@@ -13,31 +17,36 @@ const THERE: &str = "state != 'removed'";
 const BY_ASK: &str = "WHERE session_id = ? AND ask_key = ?";
 
 fn child_from_row(row: &Row<'_>) -> rusqlite::Result<ChildWorktree> {
-    let status = match (row.get::<_, String>(7)?.as_str(), row.get::<_, Option<i64>>(8)?) {
+    let c = ChildColumns::at(0);
+    let status = match (row.at::<String>(c.state)?.as_str(), row.at::<Option<i64>>(c.removed_at_ms)?) {
         ("creating", _) => ChildStatus::Creating,
         ("ready", _) => ChildStatus::Ready,
         ("removed", Some(removed_at_ms)) => ChildStatus::Removed { removed_at_ms },
         _ => ChildStatus::Unknown,
     };
     Ok(ChildWorktree {
-        id: row.get::<_, String>(0)?.into(),
-        workspace_id: row.get::<_, String>(1)?.into(),
-        path: row.get(2)?,
-        branch: row.get::<_, String>(3)?.as_str().into(),
-        session_id: row.get::<_, String>(4)?.into(),
-        made_by: json_at(row, 5)?.unwrap_or(MadeBy::Unknown),
-        created_at_ms: row.get(6)?,
+        id: row.at::<String>(c.id)?.into(),
+        workspace_id: row.at::<String>(c.workspace_id)?.into(),
+        path: row.at(c.path)?,
+        branch: row.at::<String>(c.branch)?.as_str().into(),
+        session_id: row.at::<String>(c.session_id)?.into(),
+        made_by: json_at(row, c.made_by)?.unwrap_or(MadeBy::Unknown),
+        created_at_ms: row.at(c.created_at_ms)?,
         status,
-        branches: json_at(row, 9)?,
-        rev: rev_of(row, 10)?,
+        branches: json_at(row, c.branches)?,
+        rev: rev_of(row, c.rev)?,
     })
 }
 
 /// The record as `conn` reads it, such as the writer inside a change, so its revision is that change's.
 fn child_on(conn: &Connection, id: &ChildWorktreeId) -> Result<ChildWorktree, StoreError> {
-    conn.query_row(&format!("SELECT {CHILD_COLUMNS} FROM child_worktrees WHERE id = ?"), [id.as_str()], child_from_row)
-        .optional()?
-        .ok_or_else(|| StoreError::NotFound { kind: "worktree", id: id.to_string() })
+    conn.query_row(
+        &format!("SELECT {} FROM child_worktrees WHERE id = ?", ChildColumns::LIST),
+        [id.as_str()],
+        child_from_row,
+    )
+    .optional()?
+    .ok_or_else(|| StoreError::NotFound { kind: "worktree", id: id.to_string() })
 }
 
 impl Store {
@@ -46,7 +55,7 @@ impl Store {
     /// path.
     pub fn insert_child(&self, child: &ChildWorktree, key: &AskKey) -> Result<Option<Made<ChildWorktree>>, StoreError> {
         let conn = lock(&self.writer);
-        let select = format!("SELECT {CHILD_COLUMNS} FROM child_worktrees {BY_ASK}");
+        let select = format!("SELECT {} FROM child_worktrees {BY_ASK}", ChildColumns::LIST);
         let asked = params![child.session_id.as_str(), key.as_str()];
         if let Some(earlier) = conn.query_row(&select, asked, child_from_row).optional()? {
             return Ok(Some(Made::Earlier(earlier)));
@@ -75,7 +84,7 @@ impl Store {
 
     /// The record the session's ask with `key` made, if it made one.
     pub fn child_for_ask(&self, session_id: &SessionId, key: &AskKey) -> Result<Option<ChildWorktree>, StoreError> {
-        let select = format!("SELECT {CHILD_COLUMNS} FROM child_worktrees {BY_ASK}");
+        let select = format!("SELECT {} FROM child_worktrees {BY_ASK}", ChildColumns::LIST);
         let asked = params![session_id.as_str(), key.as_str()];
         Ok(lock(&self.reader).query_row(&select, asked, child_from_row).optional()?)
     }
@@ -129,8 +138,9 @@ impl Store {
     ) -> Result<Vec<ChildWorktree>, StoreError> {
         let conn = lock(&self.reader);
         let select = format!(
-            "SELECT {CHILD_COLUMNS} FROM child_worktrees
-                 WHERE workspace_id = ? AND {which} ORDER BY created_at_ms, rowid"
+            "SELECT {} FROM child_worktrees
+                 WHERE workspace_id = ? AND {which} ORDER BY created_at_ms, rowid",
+            ChildColumns::LIST
         );
         let mut statement = conn.prepare_cached(&select)?;
         let rows = statement.query_map([workspace_id.as_str()], child_from_row)?;
@@ -139,8 +149,10 @@ impl Store {
 
     /// The one of the workspace's other worktrees at `path` that's there or being made.
     pub fn child_at(&self, workspace_id: &WorkspaceId, path: &str) -> Result<Option<ChildWorktree>, StoreError> {
-        let select =
-            format!("SELECT {CHILD_COLUMNS} FROM child_worktrees WHERE workspace_id = ? AND path = ? AND {THERE}");
+        let select = format!(
+            "SELECT {} FROM child_worktrees WHERE workspace_id = ? AND path = ? AND {THERE}",
+            ChildColumns::LIST
+        );
         let conn = lock(&self.reader);
         Ok(conn.query_row(&select, params![workspace_id.as_str(), path], child_from_row).optional()?)
     }

@@ -1,4 +1,4 @@
-use super::super::{Store, StoreError, from_text, lock, now_ms, text_of};
+use super::super::{ByColumn, Columns, Store, StoreError, columns, lock, now_ms, text_at, text_of};
 use protocol::model::{InstanceId, ProviderName};
 use rusqlite::{Connection, OptionalExtension, Row, params};
 use serde::{Deserialize, Serialize};
@@ -24,14 +24,18 @@ pub struct RecordedInstance {
     pub created_at_ms: i64,
 }
 
-const INSTANCE_COLUMNS: &str = "id, provider, stage, created_at_ms";
+columns! {
+    /// What an instance's row holds, as it's written and read.
+    struct InstanceColumns { id, provider, stage, created_at_ms }
+}
 
 fn instance_from_row(row: &Row<'_>) -> rusqlite::Result<RecordedInstance> {
+    let c = InstanceColumns::at(0);
     Ok(RecordedInstance {
-        id: row.get::<_, String>(0)?.into(),
-        provider: row.get::<_, String>(1)?.into(),
-        stage: from_text(row.get(2)?)?,
-        created_at_ms: row.get(3)?,
+        id: row.at::<String>(c.id)?.into(),
+        provider: row.at::<String>(c.provider)?.into(),
+        stage: text_at(row, c.stage)?,
+        created_at_ms: row.at(c.created_at_ms)?,
     })
 }
 
@@ -45,7 +49,7 @@ pub(in super::super) fn record_instance(
     created_at_ms: i64,
 ) -> rusqlite::Result<()> {
     conn.execute(
-        &format!("INSERT INTO instances ({INSTANCE_COLUMNS}) VALUES (?, ?, ?, ?)"),
+        &format!("INSERT INTO instances ({}) VALUES (?, ?, ?, ?)", InstanceColumns::LIST),
         params![id.as_str(), provider.as_str(), text_of(&stage), created_at_ms],
     )?;
     Ok(())
@@ -91,7 +95,8 @@ impl Store {
         tx.execute("UPDATE instances SET stage = ?1 WHERE stage = ?2", params![destroying, creating])?;
         let unfinished = {
             let mut statement = tx.prepare_cached(&format!(
-                "SELECT {INSTANCE_COLUMNS} FROM instances WHERE stage = ? ORDER BY created_at_ms, id"
+                "SELECT {} FROM instances WHERE stage = ? ORDER BY created_at_ms, id",
+                InstanceColumns::LIST
             ))?;
             let rows = statement.query_map([&destroying], instance_from_row)?;
             rows.collect::<rusqlite::Result<Vec<_>>>()?
@@ -104,7 +109,7 @@ impl Store {
     pub fn recorded_instance(&self, id: &InstanceId) -> Result<Option<RecordedInstance>, StoreError> {
         let conn = lock(&self.reader);
         conn.query_row(
-            &format!("SELECT {INSTANCE_COLUMNS} FROM instances WHERE id = ?"),
+            &format!("SELECT {} FROM instances WHERE id = ?", InstanceColumns::LIST),
             [id.as_str()],
             instance_from_row,
         )
@@ -115,8 +120,8 @@ impl Store {
     /// Every instance the hub has recorded, oldest first.
     pub fn recorded_instances(&self) -> Result<Vec<RecordedInstance>, StoreError> {
         let conn = lock(&self.reader);
-        let mut statement =
-            conn.prepare_cached(&format!("SELECT {INSTANCE_COLUMNS} FROM instances ORDER BY created_at_ms, id"))?;
+        let mut statement = conn
+            .prepare_cached(&format!("SELECT {} FROM instances ORDER BY created_at_ms, id", InstanceColumns::LIST))?;
         let rows = statement.query_map([], instance_from_row)?;
         rows.collect::<rusqlite::Result<_>>().map_err(StoreError::from)
     }

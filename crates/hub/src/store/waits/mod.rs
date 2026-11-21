@@ -13,4 +13,4 @@ mod tests;
 mod wait_rows;
 
 mod remote;
-use wait_rows::{COLUMNS, wait_from_row};
+use wait_rows::{WaitColumns, wait_from_row};

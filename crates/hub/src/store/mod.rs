@@ -77,12 +77,12 @@ pub use titles::{Retitle, Retitled};
 pub use workspaces::{BranchesSet, Ended, Move, WorkspacePlacement};
 
 mod database;
-use columns::{ByColumn, Columns, columns};
+use columns::{At, ByColumn, Column, Columns, columns};
 pub(crate) use database::later_ms;
 pub use database::{Appended, Store, StoredSession, now_ms};
 use database::{
-    current_rev, from_text, json_at, lock, maybe_text_at, place_column, place_of, required_json_at, rev_of, seq_column,
-    seq_of, text_at, text_of,
+    current_rev, from_text, json_at, json_from, lock, maybe_text_at, place_column, place_of, required_json_at, rev_of,
+    seq_column, seq_of, text_at, text_from, text_of,
 };
 #[cfg(any(test, feature = "testing"))]
 pub use migrated::give_a_migrated_database;
