@@ -120,3 +120,15 @@ fn a_hub_whose_version_isnt_a_release_s_is_refused() {
     assert!(feed.hub_update("4421741972d8", 3).is_err(), "a build of a commit, not a release");
     assert!(feed.hub_update("0.1.8-dirty-20261120234543", 3).is_err());
 }
+
+#[test]
+fn an_archive_s_checksum_reads_as_its_bytes_in_either_case_and_anything_else_is_refused() {
+    let archive = |sha256: &str| HubArchive { file_name: "hub.tar.gz".into(), size: 1, sha256: sha256.into() };
+    let lower = "00ff".repeat(16);
+
+    assert_eq!(archive(&lower).sha256_bytes().unwrap(), [0x00, 0xff].repeat(16).as_slice());
+    assert_eq!(archive(&lower.to_uppercase()).sha256_bytes().unwrap(), archive(&lower).sha256_bytes().unwrap());
+    for bad in ["", "00ff", &format!("{lower}00"), &"zz".repeat(32), &"é".repeat(32), &"+f".repeat(32)] {
+        assert!(archive(bad).sha256_bytes().is_err(), "{bad}");
+    }
+}

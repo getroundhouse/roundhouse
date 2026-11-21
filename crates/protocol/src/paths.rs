@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 
 use crate::client::{ApiError, ErrorCode};
 pub use crate::hub_copies::{hub_copy_files, linking_hub_prefix};
-pub use crate::service_builds::{cli_file, service_programs};
+pub use crate::service_builds::{SERVICE_UPDATE_DIR, cli_file, service_programs};
 
 /// A debug build keeps its data apart from a release build's, so one run from a checkout can't reach the
 /// installed app's hub, or migrate its database.
@@ -72,6 +72,12 @@ pub fn file_name_id<'a>(whose: &str, id: &'a str) -> Result<&'a str, ApiError> {
     }
     let why = format!("{whose} ID can only be lowercase letters, digits, - and _");
     Err(ApiError::new(ErrorCode::InvalidRequest, why))
+}
+
+/// What the daemon of `version` prints for `--version`, by which whatever is about to run it checks it's that build. A
+/// hub updating to a newer release reads it from that release, so every release has to print it the same way.
+pub fn daemon_version_line(version: &str) -> String {
+    format!("{DAEMON_NAME} {version}")
 }
 
 /// The daemon's file.

@@ -20,6 +20,8 @@ webpki.workspace = true
 async-trait.workspace = true
 fastrand.workspace = true
 fetching.workspace = true
+# Reads the archive of the release an update goes to.
+flate2.workspace = true
 github.workspace = true
 memchr.workspace = true
 parking_lot.workspace = true
@@ -31,6 +33,7 @@ thiserror.workspace = true
 rusqlite.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+tar.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 update-feed.workspace = true

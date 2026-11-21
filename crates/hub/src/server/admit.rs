@@ -218,7 +218,10 @@ fn local_only(request: &ClientRequest) -> bool {
         | R::HubShutdown
         | R::HubShutdownIfIdle
         | R::HubRestart => true,
-        R::Pair(..)
+        // A hub installed as a service is used from other machines, so any paired device can update it, which
+        // restarts it, as `docs/spec/hubs.md` says.
+        R::HubUpdateTo(..)
+        | R::Pair(..)
         | R::Authenticate(..)
         | R::Hello(..)
         | R::HubConfigure(..)

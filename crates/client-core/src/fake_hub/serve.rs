@@ -267,6 +267,7 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
         }
         R::HubShutdown
         | R::HubRestart
+        | R::HubUpdateTo(_)
         | R::HubShutdownIfIdle
         | R::HubConfigure(_)
         | R::RepoAdd(_)

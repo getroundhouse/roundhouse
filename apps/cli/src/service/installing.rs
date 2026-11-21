@@ -48,14 +48,9 @@ pub(crate) fn uninstall() -> anyhow::Result<()> {
 
 /// Refuses a daemon beside this program that's missing, or another build, since the service would run it.
 fn check_daemon(daemon: &Path) -> anyhow::Result<()> {
-    let output = Command::new(daemon)
-        .arg("--version")
-        .output()
-        .with_context(|| format!("running {}, which this build's hub runs from", daemon.display()))?;
-    let said = String::from_utf8_lossy(&output.stdout);
-    let expected = format!("{} {}", paths::DAEMON_NAME, crate::BUILD.version());
-    anyhow::ensure!(said.trim() == expected, "{} is \"{}\", not {expected}", daemon.display(), said.trim());
-    Ok(())
+    let expected = paths::daemon_version_line(crate::BUILD.version());
+    process::check_version(daemon, &expected)
+        .with_context(|| format!("checking {}, which the service would run", daemon.display()))
 }
 
 /// Where `account`'s hub keeps its files, as their own commands find it, from their home directory alone.

@@ -62,7 +62,7 @@ tar -xzf Roundhouse-osx-hub.tar.gz -C roundhouse-hub
 sudo roundhouse-hub/roundhouse hub install --user <name>
 ```
 
-It says how to pair a device with it once it's running. It doesn't update itself yet, so to update it, download the newest and install that the same way. [The command line](../reference/command-line.md#the-hub) says what else `roundhouse hub` does.
+It says how to pair a device with it once it's running. It looks for a newer release every hour. To update it, run `roundhouse hub update` on its machine as its user, which downloads the release `hub status` says it would update to and restarts on it, and agents at work keep going. Installing a newer download the same way updates it too. [The command line](../reference/command-line.md#the-hub) says what else `roundhouse hub` does.
 
 ## No account
 

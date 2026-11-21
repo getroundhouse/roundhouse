@@ -33,6 +33,7 @@ pub enum ClientRequest {
     HubShutdownIfIdle,
     /// See [`admin::HubRestart`].
     HubRestart,
+    HubUpdateTo(admin::HubUpdateTo),
     HubConfigure(admin::HubConfigure),
 
     RepoAdd(records::RepoAdd),

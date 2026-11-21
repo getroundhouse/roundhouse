@@ -1,5 +1,5 @@
-//! What a client asks of the hub itself: how it stands, stopping or restarting it, its own settings, and what each
-//! kind of agent it runs offers.
+//! What a client asks of the hub itself: how it stands, stopping, restarting or updating it, its own settings, and what
+//! each kind of agent it runs offers.
 
 use serde::{Deserialize, Serialize};
 
@@ -65,6 +65,28 @@ impl Request for HubRestart {
 
     fn into_request(self) -> ClientRequest {
         ClientRequest::HubRestart
+    }
+}
+
+/// Updates a hub installed as a service to `version`, the release its [`HubUpdate`] says it would update to, so it
+/// takes the one the client showed. The hub answers once it has taken the request, and then downloads the release,
+/// checks it against the feed's signature, places it beside the one it runs, and restarts on it, which stops no agent
+/// whose worker outlives the hub. Its record says how that's going, and why it failed if it does. Any paired device can
+/// ask, as `docs/spec/hubs.md` says. A hub that doesn't read the feed, as any but a release of one installed as a
+/// service, refuses with `InvalidRequest`. Another version, or a request while it's updating, is refused with
+/// `Conflict`, so sending it again changes nothing. *Unconfirmed.*
+///
+/// [`HubUpdate`]: crate::model::HubUpdate
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct HubUpdateTo {
+    pub version: String,
+}
+
+impl Request for HubUpdateTo {
+    type Reply = ();
+
+    fn into_request(self) -> ClientRequest {
+        ClientRequest::HubUpdateTo(self)
     }
 }
 

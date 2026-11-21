@@ -1,13 +1,15 @@
 //! The builds a hub installed as a service runs from, which each update leaves another of, beside the last.
 
 use protocol::StampedBuild;
-use protocol::paths::{Paths, service_programs};
+use protocol::paths::{Paths, SERVICE_UPDATE_DIR, service_programs};
 
 /// Removes each build in the service's directory that nothing runs from, as [`process::Builds::remove_unused`] says,
-/// but `own` and the one the service's link names, which may have been placed since this hub started. A hub of the
-/// service starts once the one before has gone, which is when a build goes out of use, so it removes them as it starts.
+/// but `own` and the one the service's link names, which may have been placed since this hub started, and what an
+/// update cut short left. A hub of the service starts once the one before has gone, which is when a build goes out of
+/// use and no update is under way, so it removes them as it starts.
 pub(crate) fn remove_unused(paths: &Paths, own: &StampedBuild) {
     let builds = paths.service_builds_dir();
+    let _ = std::fs::remove_dir_all(builds.join(SERVICE_UPDATE_DIR));
     let mut keep = vec![paths.service_build(own)];
     // Named from beside it, as placing a build links it.
     keep.extend(std::fs::read_link(paths.service_current()).ok().map(|named| builds.join(named)));

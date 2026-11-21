@@ -8,6 +8,10 @@ use std::path::PathBuf;
 use crate::StampedBuild;
 use crate::paths::{Paths, daemon_file, program_file};
 
+/// The folder beside a service's builds that an update downloads and unpacks the next in, which no build is named, and
+/// which goes once the update is done, or as the next hub starts after one cut short.
+pub const SERVICE_UPDATE_DIR: &str = ".update";
+
 /// The command line's file, which it has beside the daemon in each build the service runs.
 pub fn cli_file() -> String {
     program_file("roundhouse")

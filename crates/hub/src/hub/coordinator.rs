@@ -89,7 +89,7 @@ pub(crate) struct Hub {
     /// What the agents that discover their own models offer, where the hub has been asked.
     pub(super) model_lists: ModelLists,
     /// What the hub last found in the update feed, which it reads only as a service.
-    pub(super) updates: Updates,
+    pub(crate) updates: Updates,
     pub(super) pull_requests: pull_requests::Reading,
     /// What the hub last read from GitHub, for every part of it that reads GitHub, and every client.
     pub(super) github_cache: Arc<GithubCache>,
@@ -131,6 +131,8 @@ pub(crate) struct HubDirs {
     /// The data directory itself, in which the files of each kind of login have a directory of their own, as
     /// `LoginSecret::DIR` says.
     pub(crate) data: PathBuf,
+    /// Where a hub installed as a service keeps its builds, beside which an update places the next.
+    pub(crate) service_builds: PathBuf,
     pub(crate) network_address: std::net::SocketAddr,
 }
 
@@ -143,6 +145,7 @@ impl HubDirs {
             worker_logs: paths.worker_logs_dir.clone(),
             github_cache: paths.github_cache.clone(),
             data: paths.data_dir.clone(),
+            service_builds: paths.service_builds_dir(),
             network_address: std::net::SocketAddr::from(([127, 0, 0, 1], 0)),
         }
     }
@@ -156,6 +159,7 @@ impl HubDirs {
             worker_logs: dir.join("worker-logs"),
             github_cache: dir.join("github-cache.db"),
             data: dir.to_path_buf(),
+            service_builds: dir.join("service"),
             network_address: std::net::SocketAddr::from(([127, 0, 0, 1], 0)),
         }
     }
@@ -207,7 +211,7 @@ impl Hub {
             setup_gates: Mutex::new(HashMap::new()),
             terminals: Terminals::default(),
             model_lists: ModelLists::default(),
-            updates: Updates::default(),
+            updates: Updates::new(dirs.service_builds),
             pull_requests: pull_requests::Reading::new(),
             github_cache: Arc::new(GithubCache::open(&dirs.github_cache)),
             own_reads: Jobs::new(),

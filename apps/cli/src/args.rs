@@ -100,6 +100,9 @@ pub(crate) enum Cmd {
 pub(crate) enum HubCmd {
     Status,
     Stop,
+    /// Update a hub installed as a service to the release `hub status` says it would update to. It downloads it, checks
+    /// it, and restarts on it, and agents at work keep running.
+    Update,
     /// Make this build's hub a service that starts at boot as USER, with nobody logged in, and start it. Run it as an
     /// administrator, with sudo, from where a hub's archive was unpacked. Run again, it moves the service to the build
     /// it's run from.
@@ -111,7 +114,9 @@ pub(crate) enum HubCmd {
     /// Remove the service `hub install` made, which stops its hub. Its data and its builds stay where they are.
     Uninstall,
     /// Put this build where a hub installed as a service runs it from, and point the service at it. `hub install` runs
-    /// it as the hub's user, so what it makes is that user's.
+    /// it as the hub's user, so what it makes is that user's. An older hub runs a newer release's to update to it, so it
+    /// keeps taking no arguments and finding where to place the build from its environment, as `docs/principles/protocol.md`
+    /// says.
     #[command(hide = true)]
     Place,
 }
@@ -257,6 +262,14 @@ mod tests {
 
         assert_eq!(from(&["roundhouse", "attach", "s", "--from", &printed]), Seq::new(7));
         assert_eq!(from(&["roundhouse", "attach", "s"]), Seq::FIRST);
+    }
+
+    /// An older hub runs a newer release's `hub place` to update to it, as `docs/principles/protocol.md` says.
+    #[test]
+    fn hub_place_takes_no_arguments() {
+        let parsed = Args::try_parse_from(["roundhouse", "hub", "place"]).unwrap();
+
+        assert!(matches!(parsed.command, Cmd::Hub(HubCmd::Place)));
     }
 
     #[test]
