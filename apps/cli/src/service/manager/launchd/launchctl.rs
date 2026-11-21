@@ -2,6 +2,8 @@
 
 use std::path::Path;
 use std::process::Command;
+use std::thread;
+use std::time::{Duration, Instant};
 
 use anyhow::Context;
 
@@ -15,6 +17,9 @@ const LABEL: &str = "dev.getroundhouse.hub";
 /// The system's domain, where a launch daemon runs, and the service's name in it.
 const TARGET: &str = "system/dev.getroundhouse.hub";
 const PLIST: &str = "/Library/LaunchDaemons/dev.getroundhouse.hub.plist";
+/// How long `bootstrap` keeps trying, and how long it waits between tries.
+const BOOTSTRAP_FOR: Duration = Duration::from_secs(10);
+const BOOTSTRAP_EVERY: Duration = Duration::from_millis(500);
 
 /// Writes the launch daemon and starts it, stopping the one it replaces first. The workers of the hub it stops keep
 /// running, since each runs in a session of its own, which launchd leaves alone, as `docs/reference/launchd.md` says.
@@ -25,7 +30,21 @@ pub(crate) fn register(service: &Service) -> anyhow::Result<()> {
     }
     // In case someone disabled it, which would keep it from starting at boot.
     run("launchctl", &["enable", TARGET])?;
-    run("launchctl", &["bootstrap", "system", PLIST])
+    bootstrap()
+}
+
+/// Loads the launch daemon, which starts it. launchd can refuse a bootstrap just after a bootout, with only
+/// "Input/output error", and take the same one a moment later, as `docs/reference/launchd.md` says. So this tries
+/// again for a few seconds, and then fails with launchctl's last error.
+#[expect(clippy::disallowed_methods, reason = "the pace of trying again while launchd refuses the bootstrap")]
+fn bootstrap() -> anyhow::Result<()> {
+    let until = Instant::now() + BOOTSTRAP_FOR;
+    loop {
+        match run("launchctl", &["bootstrap", "system", PLIST]) {
+            Err(_) if Instant::now() < until => thread::sleep(BOOTSTRAP_EVERY),
+            done => return done,
+        }
+    }
 }
 
 /// Stops the launch daemon and removes it.
