@@ -1,6 +1,6 @@
 # A hub on a machine of its own is installed from an archive as a service, and a client updates it
 
-**Status:** Decided, not built.
+**Status:** Decided. Each release's archive, and installing from it, are built. A client updating the hub isn't.
 **First recorded:** 2026-11-20, in #2119.
 
 A hub that runs on a machine with no desktop app, such as a server, is installed from an archive of its own. Each release publishes one for each OS and processor, listed in the signed update feed beside the app's packages. It holds `roundhoused`, `roundhouse`, and the Linux workers a provider puts in its instances.

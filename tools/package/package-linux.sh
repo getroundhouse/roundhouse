@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Packages Linux binaries as Roundhouse's AppImage and its update package, with Velopack's `vpk`. It runs on Linux, and
-# takes the three binaries already built, which `tools/build.sh --package` makes in an Ubuntu 22.04 container and
-# stamps with the version. Needs `jq`, `unzip`, `readelf`, and the .NET SDK 8, 9 or 10, which runs `vpk`, and
+# Packages Linux binaries as Roundhouse's AppImage and its update package, with Velopack's `vpk`, and the hub's
+# archive, for a machine with no app on it. It runs on Linux, and takes the three binaries already built, which
+# `tools/build.sh --package` makes in an Ubuntu 22.04 container and stamps with the version. Needs `jq`, `unzip`, `readelf`, and the .NET SDK 8, 9 or 10, which runs `vpk`, and
 # `mksquashfs` and `unsquashfs`, which make and read the AppImage, from Ubuntu's `squashfs-tools`.
 #
 #   tools/package/package-linux.sh --prebuilt DIR              Package the binaries in DIR, built from this commit
@@ -9,9 +9,9 @@
 #   tools/package/package-linux.sh --prebuilt DIR --out DIR    Write to DIR rather than target/package-linux-ARCH
 #   tools/package/package-linux.sh --print-version             Print the version this commit packages as, and stop
 #
-# Writes `releases/`: the AppImage people download, the full package and the feed. The default directory's
-# `releases/` starts empty. Another directory's keeps what's there, and a package from an earlier version gets a delta
-# to this one.
+# Writes `releases/`: the AppImage people download, the full package, the feed and the hub's archive,
+# `Roundhouse-VERSION-CHANNEL-hub.tar.gz`. The default directory's `releases/` starts empty. Another directory's keeps
+# what's there, and a package from an earlier version gets a delta to this one.
 #
 # The version is `0.1.<commits>`, as for the Mac, and each platform publishes to a feed of its own. An app looks for
 # updates in the channel it was packaged for, which is `linux-amd64` for amd64 and `linux-arm64` for ARM64, so each gets
@@ -23,7 +23,8 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 # BINARIES, ROOT, version, stamp and target_dir.
 # shellcheck source=SCRIPTDIR/../build.sh
 source "$HERE/../build.sh"
-# PACK_ID, die, dotnet_tools, dotnet_here, refuse_vpk_variables, check_newer and full_package.
+# PACK_ID, die, dotnet_tools, dotnet_here, refuse_vpk_variables, check_newer, full_package, hub_archive_name and
+# hub_archive.
 # shellcheck source=SCRIPTDIR/vpk.sh
 source "$HERE/vpk.sh"
 # The app's icon, at 512 pixels. `docs/spec/components.md` says which style it is.
@@ -109,8 +110,10 @@ package() {
     --runtime "$RUNTIME" --channel "$CHANNEL" --packDir "$staging/bins" --mainExe roundhouse-desktop \
     --icon "$ICON" --categories Development --outputDir "$out/releases"
   check "$out/releases"
+  hub_archive "$staging/bins" "$out/releases/$(hub_archive_name "$CHANNEL")"
   echo "Packaged $VERSION for Linux on $ARCH, build $BUILD:"
   echo "  $out/releases/$PACK_ID-$CHANNEL.AppImage"
+  echo "  $out/releases/$(hub_archive_name "$CHANNEL")"
 }
 
 out="" prebuilt="" ARCH=amd64

@@ -18,6 +18,7 @@ import tempfile
 import threading
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import publish
 from publish import DirStore, Refused
@@ -47,6 +48,15 @@ def package_name(version: str, kind: str) -> str:
     """As vpk names a package, which says its channel."""
     channel = publish.FEED.removeprefix("releases.").removesuffix(".json")
     return f"Roundhouse-{version}-{channel}-{kind.lower()}.nupkg"
+
+
+def hub_name(version: str) -> str:
+    """As `hub_archive` in vpk.sh names the archive of a release's hub."""
+    return f"Roundhouse-{version}-{publish.CHANNEL}-hub.tar.gz"
+
+
+def publishes_hubs() -> bool:
+    return publish.CHANNEL in publish.HUBS
 
 
 def asset(version: str, kind: str, content: bytes) -> dict:
@@ -143,6 +153,9 @@ class Publishing(unittest.TestCase):
             (releases / entry["FileName"]).write_bytes(f"{entry['Type'].lower()} {version} of run {self.runs}".encode())
         for download in publish.DOWNLOADS:
             (releases / download).write_bytes(f"{download} {version}".encode())
+        # What the packaging script makes beside vpk's.
+        if publishes_hubs():
+            (releases / hub_name(version)).write_bytes(f"hub {version} of run {self.runs}".encode())
         feed.write_text(json.dumps({"Assets": assets + made}))
 
     def sign(self, work: Path) -> None:
@@ -183,7 +196,14 @@ class Publishing(unittest.TestCase):
 
     def assert_packages_match(self) -> None:
         for entry in json.loads(self.store.get(publish.FEED))["Assets"]:
-            self.assertTrue(publish.file_matches(self.bucket / entry["FileName"], entry), entry["FileName"])
+            for file in publish.files_of(entry):
+                self.assertTrue(publish.file_matches(self.bucket / file["FileName"], file), file["FileName"])
+
+    def hub_of(self, version: str) -> dict | None:
+        """What the published feed says of `version`'s hub archive."""
+        assets = json.loads(self.store.get(publish.FEED))["Assets"]
+        return next(entry for entry in assets if entry["Version"] == version and entry["Type"] == "Full").get(
+            publish.HUB)
 
     def test_the_first_release_publishes_a_signed_feed_with_its_package(self) -> None:
         work = self.release("0.1.1")
@@ -192,7 +212,8 @@ class Publishing(unittest.TestCase):
         self.assertEqual(self.store.get(publish.FEED), (work / "feed" / publish.FEED).read_bytes())
         self.assert_packages_match()
         self.assertEqual(list(publish.DOWNLOADS), ["Roundhouse-osx-Portable.zip"])
-        self.assertTrue((self.bucket / "Roundhouse-osx-Portable.zip").exists())
+        for download in ("Roundhouse-osx-Portable.zip", "Roundhouse-osx-hub.tar.gz"):
+            self.assertTrue((self.bucket / download).exists(), download)
 
     def test_the_next_release_starts_from_the_newest_full_package_and_adds_to_the_feed(self) -> None:
         self.release("0.1.1")
@@ -217,7 +238,57 @@ class Publishing(unittest.TestCase):
         self.assertEqual(self.published(), [("0.1.2", "Delta"), ("0.1.2", "Full"), ("0.1.3", "Delta"),
                                             ("0.1.3", "Full")])
         self.assertFalse((self.bucket / package_name("0.1.1", "Full")).exists())
+        self.assertFalse((self.bucket / hub_name("0.1.1")).exists())
         self.assert_packages_match()
+
+    def test_a_release_s_full_package_lists_its_hub_s_archive_which_people_also_download(self) -> None:
+        work = self.release("0.1.1")
+        self.release("0.1.2")
+
+        if not publishes_hubs():
+            self.assertIsNone(self.hub_of("0.1.2"))
+            self.assertEqual(list(self.bucket.glob("*-hub.tar.gz")), [])
+            return
+        hub = self.hub_of("0.1.2")
+        self.assertEqual(hub, publish.described(self.bucket / hub_name("0.1.2")))
+        self.assertEqual(hub["FileName"], hub_name("0.1.2"))
+        self.assertEqual(self.hub_of("0.1.1"), publish.described(work / "releases" / hub_name("0.1.1")))
+        # The newest, under the name that stays the same.
+        self.assertEqual(publish.hub_download(), f"Roundhouse-{publish.CHANNEL}-hub.tar.gz")
+        self.assertEqual((self.bucket / publish.hub_download()).read_bytes(),
+                         (self.bucket / hub_name("0.1.2")).read_bytes())
+
+    def test_a_release_after_ones_from_before_hubs_were_published_lists_its_own(self) -> None:
+        with mock.patch.object(publish, "HUBS", set()):
+            self.release("0.1.1")
+        self.release("0.1.2")
+        work = self.release("0.1.3", keep=1)
+
+        self.assertEqual(self.published(), [("0.1.3", "Delta"), ("0.1.3", "Full")])
+        self.assertEqual(self.hub_of("0.1.3") is not None, publishes_hubs())
+        self.assertFalse((self.bucket / hub_name("0.1.2")).exists())
+        self.assert_packages_match()
+        self.assertEqual(publish.prepare(self.store, self.key, "0.1.3", self.work()), "published")
+        publish.check(self.serve(), self.key, "0.1.3", work, wait=0)
+
+    def test_a_hub_archive_packaging_didnt_make_or_that_changed_is_refused(self) -> None:
+        if not publishes_hubs():
+            self.skipTest("this channel publishes no hub archive")
+        work = self.work()
+        publish.prepare(self.store, self.key, "0.1.1", work)
+        self.pack(work, "0.1.1")
+        archive = work / "releases" / hub_name("0.1.1")
+        archive.unlink()
+        with self.assertRaisesRegex(Refused, f"packaging made no {hub_name('0.1.1')}"):
+            publish.merge("0.1.1", 10, SPEAKS, work)
+
+        archive.write_bytes(b"hub")
+        publish.merge("0.1.1", 10, SPEAKS, work)
+        self.sign(work)
+        archive.write_bytes(b"changed")
+        with self.assertRaisesRegex(Refused, "doesn't match the signed feed"):
+            publish.upload(self.store, self.key, "0.1.1", work)
+        self.assertIsNone(self.store.get(publish.FEED))
 
     def test_a_release_s_full_package_says_which_worker_versions_its_hub_speaks(self) -> None:
         self.release("0.1.1")
@@ -320,6 +391,15 @@ class Publishing(unittest.TestCase):
         self.assertEqual(before, after)
         self.assertEqual((work / "feed" / publish.FEED).read_bytes(), self.store.get(publish.FEED))
 
+    def test_a_version_published_without_its_hub_archive_in_the_bucket_is_refused(self) -> None:
+        if not publishes_hubs():
+            self.skipTest("this channel publishes no hub archive")
+        self.release("0.1.1")
+        (self.bucket / hub_name("0.1.1")).unlink()
+
+        with self.assertRaisesRegex(Refused, f"{hub_name('0.1.1')} is published in the feed but missing"):
+            publish.prepare(self.store, self.key, "0.1.1", self.work())
+
     def test_running_again_after_only_the_packages_went_up_publishes_the_new_ones(self) -> None:
         self.release("0.1.1")
         with self.assertRaises(ConnectionError):
@@ -396,9 +476,12 @@ class Publishing(unittest.TestCase):
         self.release("0.1.1")
         work = self.release("0.1.2")
 
+        hubs = publishes_hubs()
         self.assertEqual(publish.check(self.serve(), self.key, "0.1.2", work, wait=0), [
             f"0.1.1 Full {package_name('0.1.1', 'Full')} 19",
+            *([f"0.1.1 Hub {hub_name('0.1.1')} 18"] if hubs else []),
             f"0.1.2 Full {package_name('0.1.2', 'Full')} 19",
+            *([f"0.1.2 Hub {hub_name('0.1.2')} 18"] if hubs else []),
             f"0.1.2 Delta {package_name('0.1.2', 'Delta')} 20",
         ])
 
@@ -418,6 +501,13 @@ class Publishing(unittest.TestCase):
         (self.bucket / package_name("0.1.2", "Full")).unlink()
         with self.assertRaisesRegex(Refused, f"{package_name('0.1.2', 'Full')} is missing"):
             publish.check(url, self.key, "0.1.2", work, wait=0)
+
+        if publishes_hubs():
+            shutil.copyfile(work / "releases" / package_name("0.1.2", "Full"),
+                            self.bucket / package_name("0.1.2", "Full"))
+            (self.bucket / hub_name("0.1.2")).unlink()
+            with self.assertRaisesRegex(Refused, f"{hub_name('0.1.2')} is missing"):
+                publish.check(url, self.key, "0.1.2", work, wait=0)
 
         _, other = make_key(self.dir)
         with self.assertRaisesRegex(Refused, "doesn't match the app's key"):
@@ -556,7 +646,7 @@ class Linux(BesideAnother, Publishing):
     CHANNEL = "linux-amd64"
     BESIDE = "win-amd64"
     PACKAGE = "Roundhouse-0.1.1-linux-amd64-full.nupkg"
-    DOWNLOADS = ("Roundhouse-linux-amd64.AppImage",)
+    DOWNLOADS = ("Roundhouse-linux-amd64.AppImage", "Roundhouse-linux-amd64-hub.tar.gz")
 
 
 class LinuxOnArm(BesideAnother, Publishing):
@@ -565,7 +655,7 @@ class LinuxOnArm(BesideAnother, Publishing):
     CHANNEL = "linux-arm64"
     BESIDE = "linux-amd64"
     PACKAGE = "Roundhouse-0.1.1-linux-arm64-full.nupkg"
-    DOWNLOADS = ("Roundhouse-linux-arm64.AppImage",)
+    DOWNLOADS = ("Roundhouse-linux-arm64.AppImage", "Roundhouse-linux-arm64-hub.tar.gz")
 
 
 if __name__ == "__main__":

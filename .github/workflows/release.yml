@@ -4,6 +4,8 @@
 #
 # Each Windows and Linux build, amd64 and ARM64, is packaged by vpk on Linux and published to a feed of its own, apart
 # from the others. The Windows app is unsigned. The Linux app is an AppImage built in Ubuntu 22.04, for its older glibc.
+# The Mac and each Linux release also publish the hub as an archive, for a machine with no app on it, which the feed
+# lists.
 #
 # The `release` environment's secrets:
 #   APPLE_DEVELOPER_ID_P12, APPLE_DEVELOPER_ID_P12_PASSWORD  The Developer ID Application certificate and key, a .p12
@@ -118,9 +120,19 @@ jobs:
           BUILD: ${{ steps.build.outputs.build }}
         run: |
           tools/package/smoke.sh "$RUNNER_TEMP/package/Roundhouse.app/Contents/MacOS" "$BUILD" "$RUNNER_TEMP/smoke"
-      - name: Show the hub's log
+      # The same binaries, out of the bundle, as a machine with no app on it installs them.
+      - name: Run the CLI and a hub from the hub's archive
+        timeout-minutes: 5
+        env:
+          BUILD: ${{ steps.build.outputs.build }}
+        run: |
+          mkdir "$RUNNER_TEMP/hub"
+          version="$(tools/package/package.sh --print-version)"
+          tar -xzf "$RUNNER_TEMP/package/releases/Roundhouse-$version-osx-hub.tar.gz" -C "$RUNNER_TEMP/hub"
+          tools/package/smoke.sh "$RUNNER_TEMP/hub" "$BUILD" "$RUNNER_TEMP/smoke-hub"
+      - name: Show the hubs' logs
         if: always()
-        run: cat "$RUNNER_TEMP/smoke/home/hub.log" || true
+        run: cat "$RUNNER_TEMP/smoke/home/hub.log" "$RUNNER_TEMP/smoke-hub/home/hub.log" || true
       - name: Keep the binaries for the release job
         if: github.ref == 'refs/heads/main'
         run: tar -cf "$RUNNER_TEMP/binaries.tar" -C "$RUNNER_TEMP/binaries" .

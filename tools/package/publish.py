@@ -18,7 +18,8 @@ Each step takes `--channel` first, for which platform's releases it publishes: `
   publish.py merge --version VERSION --keep COUNT --worker-versions FILE --work DIR
       Writes the feed to sign and prints its path: the feed in DIR/base and the packages vpk made for VERSION in
       DIR/releases, checked against their files, with VERSION's full package saying which versions of the worker
-      protocol its hub speaks, from FILE, which `tools/build.sh --package` wrote beside the binaries. It refuses one
+      protocol its hub speaks, from FILE, which `tools/build.sh --package` wrote beside the binaries, and, on a
+      channel that publishes the hub as an archive of its own, which archive that is. It refuses one
       whose hub doesn't speak the newest published release's workers, since an app with those at work could never
       update past them. It leaves out releases older than the newest COUNT, but for the newest whose hub speaks each
       oldest worker version, as its full package, since that's the release an app steps to while it has workers that
@@ -27,11 +28,13 @@ Each step takes `--channel` first, for which platform's releases it publishes: `
       For a channel that took over from an older one, writes the older channel's feed to sign, listing only the full
       package of VERSION the feed in DIR/feed has, and prints its path. Prints nothing for any other channel.
   publish.py upload --store STORE --key KEY --version VERSION --work DIR
-      Uploads the new packages and what people download, then the signed feed, reads the feed back, then the older
-      channel's feed, if `bridge` wrote one, and then deletes the packages that left the feed.
+      Uploads the new packages, the hub's archive and what people download, then the signed feed, reads the feed
+      back, then the older channel's feed, if `bridge` wrote one, and then deletes the packages and archives that left
+      the feed.
   publish.py check --url URL --key KEY --version VERSION --work DIR
       Checks that URL, where apps read the feed, serves the one in DIR/feed, the older channel's, if this run
-      published one, and VERSION's full package. A host with a cache can take a while to, so it tries for a minute.
+      published one, and VERSION's full package and hub archive. A host with a cache can take a while to, so it tries
+      for a minute.
 
 STORE is s3://BUCKET, with S3_ENDPOINT, S3_REGION and the AWS CLI's usual credentials, or a directory, to try it
 without a bucket. KEY is the app's public key, in the form `apps/desktop/src/updates/source/mod.rs` says.
@@ -69,6 +72,10 @@ VERSION = re.compile(r"^\d+\.\d+\.\d+$")
 # `{"oldest": 3, "newest": 4}`. Velopack reads only the fields it knows, so an app that doesn't read this reads the feed
 # as before.
 WORKER_VERSIONS = "WorkerVersions"
+# On a release's full package in the feed, the archive a hub on a machine of its own is installed and updated from, as
+# `docs/decisions/hub-package.md` says, described as the feed describes a package: `FileName`, `Size`, `SHA1` and
+# `SHA256`. The feed's signature covers it, so a hub can check what it downloads. Velopack doesn't read it either.
+HUB = "Hub"
 
 
 def windows(channel: str) -> dict[str, str]:
@@ -96,6 +103,12 @@ CHANNELS = {
 # an update, as KEEPS_WORKERS in crates/hub/src/hub/coordinator.rs has it. A Windows hub's workers stop with it, so its
 # apps take the newest. tools/update-steps checks the same ones in the merge queue.
 STEPS = {"osx", "linux-amd64", "linux-arm64"}
+
+
+# The channels whose releases publish the hub as an archive of its own, those where `roundhouse hub install` installs it
+# as a service. Each archive is `Roundhouse-<version>-<channel>-hub.tar.gz`, as `hub_archive` in vpk.sh makes it, and
+# the newest is also what people download, without the version.
+HUBS = {"osx", "linux-amd64", "linux-arm64"}
 
 
 # The channel each one took over from. An app looks for updates in the channel it was packaged for, so one packaged
@@ -250,16 +263,33 @@ def published(store: DirStore | S3Store, key: str) -> tuple[bytes, bytes] | None
     return max(pairs, key=lambda pair: newest(assets_of(pair[0])))
 
 
-def file_matches(path: Path, asset: dict) -> bool:
-    if not path.is_file() or path.stat().st_size != asset["Size"]:
-        return False
+def described(path: Path) -> dict:
+    """A file as the feed describes a package: its name, size and checksums, the checksums in capitals as vpk writes
+    them."""
     sha1, sha256 = hashlib.sha1(), hashlib.sha256()
     with path.open("rb") as file:
         for block in iter(lambda: file.read(1 << 20), b""):
             sha1.update(block)
             sha256.update(block)
-    return (sha1.hexdigest().upper() == asset["SHA1"].upper()
-            and sha256.hexdigest().upper() == asset.get("SHA256", "").upper())
+    return {"FileName": path.name, "Size": path.stat().st_size, "SHA1": sha1.hexdigest().upper(),
+            "SHA256": sha256.hexdigest().upper()}
+
+
+def file_matches(path: Path, asset: dict) -> bool:
+    if not path.is_file() or path.stat().st_size != asset["Size"]:
+        return False
+    found = described(path)
+    return found["SHA1"] == asset["SHA1"].upper() and found["SHA256"] == asset.get("SHA256", "").upper()
+
+
+def files_of(asset: dict) -> list[dict]:
+    """The files the feed lists for `asset`: its package, and the archive of its hub if it's a full package with one,
+    each with its `FileName`, `Size` and checksums. A release from before releases published the hub has none."""
+    return [asset, *([asset[HUB]] if HUB in asset else [])]
+
+
+def names_of(assets: list[dict]) -> set[str]:
+    return {file["FileName"] for asset in assets for file in files_of(asset)}
 
 
 def write_pair(directory: Path, pair: tuple[bytes, bytes]) -> None:
@@ -307,9 +337,9 @@ def prepare(store: DirStore | S3Store, key: str, version: str, work: Path) -> st
         write_pair(work / "feed", base)
         if (store.get(FEED), store.get(FEED + ".sig")) != base:
             put_pair(store, FEED, work / "feed")
-        for asset in assets:
-            if asset["Version"] == version and store.size(asset["FileName"]) != asset["Size"]:
-                raise Refused(f"{asset['FileName']} is published in the feed but missing from the bucket")
+        for file in (file for asset in assets if asset["Version"] == version for file in files_of(asset)):
+            if store.size(file["FileName"]) != file["Size"]:
+                raise Refused(f"{file['FileName']} is published in the feed but missing from the bucket")
         return "published"
     # Publishing's one check that the version is newer, before the job builds anything or sets up a key. package.sh
     # has its own for a local --out, and vpk checks too, but only after a build.
@@ -393,12 +423,27 @@ def merge(version: str, keep: int, speaks: dict[str, int], work: Path) -> Path:
             raise Refused(f"{asset['FileName']} doesn't match what vpk's feed says of it")
         if asset["Type"] == "Full":
             asset[WORKER_VERSIONS] = speaks
+            if CHANNEL in HUBS:
+                asset[HUB] = packaged_hub(version, work)
     steps_from(assets, version, speaks)
     feed = {"Assets": kept(assets + made, keep)}
     path = work / "feed" / FEED
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(feed, separators=(",", ":")))
     return path
+
+
+def hub_download() -> str:
+    """What people download to install the newest release's hub, by a name that stays the same."""
+    return f"{PACK_ID}-{CHANNEL}-hub.tar.gz"
+
+
+def packaged_hub(version: str, work: Path) -> dict:
+    """The archive of `version`'s hub that packaging put in DIR/releases, as the feed describes it."""
+    path = work / "releases" / f"{PACK_ID}-{version}-{CHANNEL}-hub.tar.gz"
+    if not path.is_file():
+        raise Refused(f"packaging made no {path.name}, the archive of the hub this channel publishes")
+    return described(path)
 
 
 def full_of(feed: bytes, version: str) -> list[dict]:
@@ -445,13 +490,17 @@ def upload(store: DirStore | S3Store, key: str, version: str, work: Path) -> Non
         raise Refused(f"the feed to publish should add {version}'s packages to the published one, and change "
                       "nothing else")
     older = bridged(key, version, pair[0], work)
-    for asset in added:
-        path = work / "releases" / asset["FileName"]
-        if not file_matches(path, asset):
+    for file in (file for asset in added for file in files_of(asset)):
+        path = work / "releases" / file["FileName"]
+        if not file_matches(path, file):
             raise Refused(f"{path} doesn't match the signed feed")
-        store.put(asset["FileName"], path, "application/octet-stream")
+        store.put(file["FileName"], path, "application/octet-stream")
     for name, content_type in DOWNLOADS.items():
         store.put(name, work / "releases" / name, content_type)
+    # The archive just checked against the signed feed, under the name that stays the same from release to release.
+    for asset in added:
+        if HUB in asset:
+            store.put(hub_download(), work / "releases" / asset[HUB]["FileName"], "application/gzip")
     put_pair(store, STAGED_FEED, work / "feed")
     put_pair(store, FEED, work / "feed")
     if (store.get(FEED), store.get(FEED + ".sig")) != pair:
@@ -463,7 +512,7 @@ def upload(store: DirStore | S3Store, key: str, version: str, work: Path) -> Non
         put_pair(store, OLDER_FEED, work / "bridge", OLDER_FEED)
         if (store.get(OLDER_FEED), store.get(OLDER_FEED + ".sig")) != older:
             raise Refused(f"{OLDER_FEED} doesn't read back as what was signed")
-    for name in before.keys() - {asset["FileName"] for asset in after}:
+    for name in names_of(list(before.values())) - names_of(after):
         store.delete(name)
 
 
@@ -493,11 +542,13 @@ def check(url: str, key: str, version: str, work: Path, attempts: int = 6, wait:
     fulls = full_of(pair[0], version)
     if not fulls:
         raise Refused(f"the published feed doesn't list {version}")
-    package = fetch(f"{url}/{fulls[0]['FileName']}", method="HEAD")
-    if package is None or package[1] != fulls[0]["Size"]:
-        size = "missing" if package is None else f"{package[1]} bytes"
-        raise Refused(f"{fulls[0]['FileName']} is {size} at {url}, not {fulls[0]['Size']} bytes")
-    return [f"{asset['Version']} {asset['Type']} {asset['FileName']} {asset['Size']}" for asset in assets]
+    for file in files_of(fulls[0]):
+        found = fetch(f"{url}/{file['FileName']}", method="HEAD")
+        if found is None or found[1] != file["Size"]:
+            size = "missing" if found is None else f"{found[1]} bytes"
+            raise Refused(f"{file['FileName']} is {size} at {url}, not {file['Size']} bytes")
+    return [f"{asset['Version']} {kind} {file['FileName']} {file['Size']}"
+            for asset in assets for kind, file in zip((asset["Type"], HUB), files_of(asset))]
 
 
 def main() -> int:
