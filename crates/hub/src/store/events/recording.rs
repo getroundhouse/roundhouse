@@ -4,8 +4,8 @@ use super::super::prompts::note_prompts;
 use super::super::sent::{Sent, note_sent};
 use super::super::subagents::note_subagents;
 use super::super::{
-    Appended, ByColumn, Columns, Store, StoreError, columns, lock, maybe_text_at, now_ms, place_column, place_of,
-    seq_column, seq_of, text_of,
+    Appended, ByColumn, Columns, OneValue, Store, StoreError, columns, lock, maybe_text_at, now_ms, place_column,
+    place_of, seq_column, seq_of, text_of,
 };
 use super::change::{SessionChange, change_session};
 use protocol::client::log::ReadLimit;
@@ -70,7 +70,7 @@ struct Recording<'a> {
 fn append_in(tx: &Connection, session_id: &SessionId, recording: Recording<'_>) -> Result<Appended, StoreError> {
     let Recording { run, body, raw, client_msg_id, change } = recording;
     let last_seq = tx
-        .query_row("SELECT last_seq FROM sessions WHERE id = ?", [session_id.as_str()], |row| seq_of(row, 0))
+        .query_row("SELECT last_seq FROM sessions WHERE id = ?", [session_id.as_str()], |row| seq_of(row, OneValue))
         .optional()?;
     let last_seq = last_seq.ok_or_else(|| StoreError::NotFound { kind: "session", id: session_id.to_string() })?;
     let seq = last_seq.next();
@@ -261,7 +261,7 @@ fn last_place(conn: &Connection, session_id: &SessionId, subagent: Option<&Subag
     conn.query_row(
         "SELECT ifnull(max(place), 0) FROM events WHERE session_id = ? AND subagent IS ?",
         params![session_id.as_str(), subagent.map(SubagentId::as_str)],
-        |row| place_of(row, 0),
+        |row| place_of(row, OneValue),
     )
 }
 

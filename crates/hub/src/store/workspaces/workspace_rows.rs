@@ -1,6 +1,8 @@
 use super::super::instances::{InstanceStage, record_instance};
 use super::super::made::{Made, inserted, made_by};
-use super::super::{ByColumn, Columns, Store, StoreError, columns, json_at, lock, now_ms, rev_of, text_at, text_of};
+use super::super::{
+    ByColumn, Columns, OneValue, Store, StoreError, columns, json_at, lock, now_ms, rev_of, text_at, text_of,
+};
 use protocol::model::{
     BranchName, Branches, ClientRequestId, PORTS_PER_WORKSPACE, PullRequestLinked, RepoId, Rev, SetupStatus, Title,
     Workspace, WorkspaceId, WorkspaceStatus,
@@ -309,7 +311,7 @@ impl Store {
             let conn = lock(&self.writer);
             let select = "SELECT branches FROM workspaces WHERE id = ?";
             // Ones that no longer read are as good as none recorded before.
-            let before = conn.query_row(select, [id.as_str()], |row| json_at(row, 0))?;
+            let before = conn.query_row(select, [id.as_str()], |row| json_at(row, OneValue))?;
             let update = "UPDATE workspaces SET branches = ?1 WHERE id = ?2 AND branches IS NOT ?1";
             (before, conn.execute(update, params![text, id.as_str()])? > 0)
         };

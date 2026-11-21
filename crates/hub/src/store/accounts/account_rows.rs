@@ -1,6 +1,6 @@
 use super::super::logins::{IdFrom, LoginColumns, login_at};
 use super::super::sessions::on_the_hubs;
-use super::super::{ByColumn, Columns, Store, StoreError, columns, lock, rev_of, text_at, text_of};
+use super::super::{ByColumn, Columns, OneValue, Store, StoreError, columns, lock, rev_of, text_at, text_of};
 use protocol::model::{Account, AccountId, AgentAccount, LimitWindow, ModelLabel, Reserve, Rev, SessionId, UsageLimit};
 use rusqlite::{Connection, OptionalExtension as _, params};
 
@@ -135,7 +135,7 @@ impl Store {
         let mut conn = lock(&self.writer);
         let tx = conn.transaction()?;
         let before: Option<Rev> = tx
-            .query_row("SELECT rev FROM accounts WHERE id = ?", [account.as_str()], |row| rev_of(row, 0))
+            .query_row("SELECT rev FROM accounts WHERE id = ?", [account.as_str()], |row| rev_of(row, OneValue))
             .optional()?;
         tx.execute("INSERT INTO accounts (id) VALUES (?) ON CONFLICT DO NOTHING", [account.as_str()])?;
         for (limit, model) in limits.iter().filter_map(|limit| Some((limit, kept_by(limit)?))) {

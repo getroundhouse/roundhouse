@@ -165,14 +165,6 @@ pub(super) fn current_rev(conn: &Connection) -> rusqlite::Result<Rev> {
     ))
 }
 
-/// An enum from its `snake_case` serde name, as [`text_of`] writes it. An error says it's from the first column, so a
-/// reader of a declared column takes [`text_at`] instead, whose error names it. Only `subagents`' rows read with this,
-/// until #2241 declares them.
-pub(super) fn from_text<T: DeserializeOwned>(text: String) -> rusqlite::Result<T> {
-    serde_json::from_value(Value::String(text))
-        .map_err(|e| rusqlite::Error::FromSqlConversionFailure(0, rusqlite::types::Type::Text, Box::new(e)))
-}
-
 /// The enum in `column`, as [`text_of`] writes it.
 pub(super) fn text_at<T: DeserializeOwned>(row: &Row<'_>, column: Column) -> rusqlite::Result<T> {
     text_from(column, row.at(column)?)
