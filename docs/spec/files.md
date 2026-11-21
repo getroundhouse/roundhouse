@@ -42,6 +42,7 @@ All files, the sidebar on the right's list of every file in a workspace's worktr
 
   ![A Markdown file's source](screens/markdown-source.png)
 
+- **A rendered Markdown file scrolls with the keys a chat does, and `Option-Up` and `Option-Down` step it to the heading before and the one after, with the heading at the top,** as they step a chat between its prompts. Up and down scroll it a line, Page Up and Page Down a screen, and Home and End go to its top and bottom. With Shift, `Option-Up` and `Option-Down` move the end of what's selected to that heading. *Not built.* *Unconfirmed.*
 - **A file shown is read again when a turn ends,** keeping where it's scrolled to, and its colours until the new ones are ready, so it shows what the agent changed. *Unconfirmed.*
 - **An image shows as itself, as big as it is or smaller to fit the tab, never bigger,** with what kind it is, how many pixels it has and how big a file it is at the other end of its path, so a screenshot an agent saved can be looked at without leaving the app. What it is goes by what the file starts with, not its name, as an attachment's does. It's sent whole up to 64 MB, since half an image is no use, where text stops at 4 MB. It sits on a checkerboard, so what's clear in it shows as clear, inside a thin edge, so one the colour of the pane still shows where it ends. A GIF holds still on its first frame, so an idle window draws nothing. *Unconfirmed.*
 
