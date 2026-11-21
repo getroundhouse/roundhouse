@@ -4,6 +4,7 @@
 //! agent's raw output line, and the hub stores it beside the event, so that this view can be
 //! rebuilt if the normalization turns out to be wrong.
 
+pub use approving::ApprovalChange;
 pub use compaction::{CompactedBy, CompactionOutcome};
 pub use content::{ContentBlock, Denied, LinkedImage};
 pub use ending::{ExitReason, TaskOutcome, TurnOutcome};
@@ -12,6 +13,7 @@ pub use file_change::{FileChange, Hunk, HunkLine, LineMark};
 pub use task::{AgentTask, EndedTask, TaskChange, TaskKind};
 pub use tokens::TokenUsage;
 
+mod approving;
 mod claims;
 mod compaction;
 mod content;

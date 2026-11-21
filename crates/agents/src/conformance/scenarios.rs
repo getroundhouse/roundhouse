@@ -3,6 +3,7 @@
 
 use std::time::Duration;
 
+use protocol::capability::approvals::Asks;
 use protocol::capability::calls::{Call, CallKind};
 use protocol::event::{ContentBlock, EventBody, TurnOutcome};
 
@@ -186,75 +187,9 @@ pub static PLAN_APPROVED: Scenario = Scenario {
         Check {
             name: "the agent asked for the plan to be approved",
             check: |trial| {
-                let asked = trial.events().any(|event| match event {
-                    EventBody::ApprovalRequested { request, .. } => matches!(&request.asks,
-                            protocol::capability::approvals::Asks::Plan { plan, .. } if plan.contains(PLAN)),
-                    EventBody::UserPrompt { .. }
-                    | EventBody::PromptTaken { .. }
-                    | EventBody::PromptDropped { .. }
-                    | EventBody::AgentStarted { .. }
-                    | EventBody::AgentInit { .. }
-                    | EventBody::AgentState { .. }
-                    | EventBody::AgentTasks { .. }
-                    | EventBody::OwnTurn(_)
-                    | EventBody::AgentLimits { .. }
-                    | EventBody::SubagentStarted { .. }
-                    | EventBody::SubagentContext { .. }
-                    | EventBody::SubagentEnded { .. }
-                    | EventBody::Assistant { .. }
-                    | EventBody::AgentUser { .. }
-                    | EventBody::ToolCallDropped { .. }
-                    | EventBody::TurnEnded { .. }
-                    | EventBody::RequestFailed { .. }
-                    | EventBody::ApprovalResolved { .. }
-                    | EventBody::AgentExited { .. }
-                    | EventBody::Notice { .. }
-                    | EventBody::AgentMode { .. }
-                    | EventBody::TaskChanged { .. }
-                    | EventBody::AgentOther { .. }
-                    | EventBody::AgentCompacting { .. }
-                    | EventBody::CompactionAsked { .. }
-                    | EventBody::AgentCompacted { .. }
-                    | EventBody::CacheExpired { .. }
-                    | EventBody::ConversationStarted { .. }
-                    | EventBody::Unknown => false,
-                });
+                let asked = asks_of(trial).any(|asks| matches!(asks, Asks::Plan { plan, .. } if plan.contains(PLAN)));
                 holds(asked, || {
-                    let plans: Vec<_> = trial
-                        .events()
-                        .filter_map(|e| match e {
-                            EventBody::ApprovalRequested { request, .. } => Some(format!("{:?}", request.asks)),
-                            EventBody::UserPrompt { .. }
-                            | EventBody::PromptTaken { .. }
-                            | EventBody::PromptDropped { .. }
-                            | EventBody::AgentStarted { .. }
-                            | EventBody::AgentInit { .. }
-                            | EventBody::AgentState { .. }
-                            | EventBody::AgentTasks { .. }
-                            | EventBody::OwnTurn(_)
-                            | EventBody::AgentLimits { .. }
-                            | EventBody::SubagentStarted { .. }
-                            | EventBody::SubagentContext { .. }
-                            | EventBody::SubagentEnded { .. }
-                            | EventBody::Assistant { .. }
-                            | EventBody::AgentUser { .. }
-                            | EventBody::ToolCallDropped { .. }
-                            | EventBody::TurnEnded { .. }
-                            | EventBody::RequestFailed { .. }
-                            | EventBody::ApprovalResolved { .. }
-                            | EventBody::AgentExited { .. }
-                            | EventBody::Notice { .. }
-                            | EventBody::AgentMode { .. }
-                            | EventBody::TaskChanged { .. }
-                            | EventBody::AgentOther { .. }
-                            | EventBody::AgentCompacting { .. }
-                            | EventBody::CompactionAsked { .. }
-                            | EventBody::AgentCompacted { .. }
-                            | EventBody::CacheExpired { .. }
-                            | EventBody::ConversationStarted { .. }
-                            | EventBody::Unknown => None,
-                        })
-                        .collect();
+                    let plans: Vec<_> = asks_of(trial).map(|asks| format!("{asks:?}")).collect();
                     format!("no approval asked of the exact plan; requests: {plans:?}")
                 })
             },
@@ -291,4 +226,12 @@ fn holds(condition: bool, otherwise: impl FnOnce() -> String) -> Result<(), Stri
 fn turns(trial: &Trial, outcomes: &[TurnOutcome]) -> Result<(), String> {
     let ended = trial.outcomes();
     holds(ended == outcomes, || format!("the turns ended {ended:?}"))
+}
+
+/// What each of the trial's requests for approval asks, in order.
+fn asks_of(trial: &Trial) -> impl Iterator<Item = &Asks> {
+    trial.events().filter_map(|event| {
+        let EventBody::ApprovalRequested { request, .. } = event else { return None };
+        Some(&request.asks)
+    })
 }

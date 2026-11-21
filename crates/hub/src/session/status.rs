@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 
-use protocol::event::{AgentRunState, AgentTask, EventBody};
+use protocol::event::{AgentRunState, AgentTask, ApprovalChange, EventBody};
 use protocol::model::{ApprovalId, RunId, SessionStatus};
 
 use crate::store::TurnEdge;
@@ -184,7 +184,8 @@ pub(crate) fn turn_edge(current: SessionStatus, next: SessionStatus, body: &Even
 pub(crate) type Approvals = HashMap<ApprovalId, Option<RunId>>;
 
 /// What the agent has left open once this event, from `run`, is applied to what was open before it: the approvals it's
-/// waiting on, and what it's running in the background, as [`EventBody::sets_background`] says.
+/// waiting on, as [`EventBody::approval_change`] says, and what it's running in the background, as
+/// [`EventBody::sets_background`] says.
 pub(crate) fn open_after(
     approvals: &Approvals,
     tasks: &[AgentTask],
@@ -193,41 +194,14 @@ pub(crate) fn open_after(
 ) -> (Approvals, Vec<AgentTask>) {
     let mut approvals = approvals.clone();
     let tasks = body.sets_background().unwrap_or(tasks).to_vec();
-    match body {
-        EventBody::ApprovalRequested { approval_id, .. } => {
+    match body.approval_change() {
+        Some(ApprovalChange::Opens { approval_id, .. }) => {
             approvals.insert(approval_id.clone(), run);
         }
-        EventBody::ApprovalResolved { approval_id, .. } => {
+        Some(ApprovalChange::Closes(approval_id)) => {
             approvals.remove(approval_id);
         }
-        EventBody::AgentTasks { .. }
-        | EventBody::AgentStarted { .. }
-        | EventBody::AgentExited { .. }
-        | EventBody::UserPrompt { .. }
-        | EventBody::CompactionAsked { .. }
-        | EventBody::PromptTaken { .. }
-        | EventBody::PromptDropped { .. }
-        | EventBody::ToolCallDropped { .. }
-        | EventBody::AgentInit { .. }
-        | EventBody::OwnTurn(_)
-        | EventBody::AgentState { .. }
-        | EventBody::AgentLimits { .. }
-        | EventBody::Assistant { .. }
-        | EventBody::AgentUser { .. }
-        | EventBody::TurnEnded { .. }
-        | EventBody::Notice { .. }
-        | EventBody::RequestFailed { .. }
-        | EventBody::AgentMode { .. }
-        | EventBody::SubagentStarted { .. }
-        | EventBody::SubagentContext { .. }
-        | EventBody::SubagentEnded { .. }
-        | EventBody::TaskChanged { .. }
-        | EventBody::AgentOther { .. }
-        | EventBody::AgentCompacting { .. }
-        | EventBody::AgentCompacted { .. }
-        | EventBody::CacheExpired { .. }
-        | EventBody::ConversationStarted { .. }
-        | EventBody::Unknown => {}
+        None => {}
     }
     (approvals, tasks)
 }

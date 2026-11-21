@@ -1,5 +1,5 @@
 use super::super::{Position, SessionLog};
-use protocol::event::{EventBody, SessionEvent};
+use protocol::event::{ApprovalChange, EventBody, SessionEvent};
 use protocol::model::{ApprovalId, OpenApproval, Seq, Session};
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
@@ -143,43 +143,17 @@ impl SessionLog {
     }
 }
 
-/// Takes `event` into `open`: a request opens its approval, unless it's open already, and an answer closes it.
+/// Takes `event` into `open`, as [`EventBody::approval_change`] says: a request opens its approval, unless it's open
+/// already, and an answer closes it.
 fn follow<'a>(open: &mut Vec<&'a SessionEvent>, event: &'a SessionEvent) {
-    match &event.body {
-        EventBody::ApprovalRequested { approval_id, .. } => {
+    match event.body.approval_change() {
+        Some(ApprovalChange::Opens { approval_id, .. }) => {
             if !open.iter().any(|request| asks(request, approval_id)) {
                 open.push(event);
             }
         }
-        EventBody::ApprovalResolved { approval_id, .. } => open.retain(|request| !asks(request, approval_id)),
-        EventBody::UserPrompt { .. }
-        | EventBody::CompactionAsked { .. }
-        | EventBody::PromptTaken { .. }
-        | EventBody::PromptDropped { .. }
-        | EventBody::ToolCallDropped { .. }
-        | EventBody::AgentStarted { .. }
-        | EventBody::AgentInit { .. }
-        | EventBody::AgentState { .. }
-        | EventBody::AgentTasks { .. }
-        | EventBody::OwnTurn(_)
-        | EventBody::AgentLimits { .. }
-        | EventBody::Assistant { .. }
-        | EventBody::AgentUser { .. }
-        | EventBody::TurnEnded { .. }
-        | EventBody::AgentExited { .. }
-        | EventBody::Notice { .. }
-        | EventBody::RequestFailed { .. }
-        | EventBody::AgentMode { .. }
-        | EventBody::SubagentStarted { .. }
-        | EventBody::SubagentContext { .. }
-        | EventBody::SubagentEnded { .. }
-        | EventBody::TaskChanged { .. }
-        | EventBody::AgentOther { .. }
-        | EventBody::AgentCompacting { .. }
-        | EventBody::AgentCompacted { .. }
-        | EventBody::CacheExpired { .. }
-        | EventBody::ConversationStarted { .. }
-        | EventBody::Unknown => {}
+        Some(ApprovalChange::Closes(approval_id)) => open.retain(|request| !asks(request, approval_id)),
+        None => {}
     }
 }
 
