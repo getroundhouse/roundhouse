@@ -3,13 +3,13 @@
 
 #![cfg(test)]
 
-use client_core::fake_hub::events::{taken, typed_call, user_prompt};
+use client_core::fake_hub::events::{first_turn, typed_call, user_prompt};
 use gpui_kit::{AppContext as _, TestAppContext};
 use protocol::capability::asking::Question;
 use protocol::capability::calls::Call;
 use protocol::fixtures::{ApprovalRequest, approval_request, asking, question};
 use protocol::model::{
-    AnswerSoFar, CommentDraft, DecisionDraft, DiffSide, Seq, SessionStatus, SoFar, UseChoice, WorkspaceId,
+    AnswerSoFar, CommentDraft, DecisionDraft, DiffSide, SessionStatus, SoFar, UseChoice, WorkspaceId,
 };
 
 use crate::support::{Diff, Stack, Ui, id, one_chat, open_on_the_chat};
@@ -107,7 +107,7 @@ fn whats_kept_in_answer_is_taken_as_the_question_is_asked_though_no_record_chang
     let request =
         ApprovalRequest { tool_use_id: Some("toolu-1".into()), ..approval_request("approval-1", asking(vec![asked])) };
     let asking = typed_call("msg-1", "toolu-1", Call::Questions);
-    let events = vec![user_prompt("Ask me"), taken(Seq::new(1)), asking, request.into()];
+    let events = first_turn(user_prompt("Ask me"), [asking, request.into()]);
     let (mut world, chat) = one_chat(SessionStatus::WaitingApproval, events);
     let typed = AnswerSoFar { picked: Vec::new(), typed: "Friday".to_string(), other: true };
     let kept = answering(&"approval-1".into(), typed);

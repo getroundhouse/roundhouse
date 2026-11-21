@@ -8,11 +8,10 @@ use protocol::capability::calls::call::{FindFiles, Search, Shows};
 use protocol::capability::calls::output::{Found, FoundLine, Paths};
 use protocol::capability::calls::{Call, CallOutput};
 use protocol::event::{EventBody, FileChange, Hunk, HunkLine, LineMark};
-use protocol::model::Seq;
 
 use super::tool_chats::ASK;
 use client_core::fake_hub::events::{
-    changed, edit, failed, finished_turn, images, read, read_back, read_lines, replied, taken, text, typed_call,
+    changed, edit, failed, finished_turn, first_turn, images, read, read_back, read_lines, replied, text, typed_call,
     typed_result, user_prompt, write,
 };
 const SIGNAL: &str = "/workspaces/aspen/crates/signals/src/signal.rs";
@@ -65,14 +64,15 @@ fn clear_and_caution_may_pass() {
 /// Each kind of file call closed, and an edit opened, with the file's own line numbers.
 pub(crate) fn files() -> Vec<EventBody> {
     let reply = "The signal can say whether a train may pass, with a test.";
-    let mut events = vec![
+    let mut events = first_turn(
         user_prompt(ASK),
-        taken(Seq::new(1)),
-        text("msg-1", "I'll read the signal first."),
-        read("msg-2", "toolu-1", SIGNAL),
-        read_back("toolu-1", 1, SIGNAL_RS),
-        text("msg-3", "A method on `Aspect` is enough, since only the train matches on it."),
-    ];
+        [
+            text("msg-1", "I'll read the signal first."),
+            read("msg-2", "toolu-1", SIGNAL),
+            read_back("toolu-1", 1, SIGNAL_RS),
+            text("msg-3", "A method on `Aspect` is enough, since only the train matches on it."),
+        ],
+    );
     events.extend(may_pass_edit("msg-4", "toolu-2"));
     events.extend([
         write("msg-5", "toolu-3", SIGNAL_TEST, SIGNAL_TEST_RS),
@@ -109,30 +109,32 @@ fn changelog_write(message: &str, id: &str) -> [EventBody; 2] {
 
 /// A read and a new file, opened to their lines.
 pub(crate) fn file_contents() -> Vec<EventBody> {
-    vec![
+    first_turn(
         user_prompt(ASK),
-        taken(Seq::new(1)),
-        read_lines("msg-1", "toolu-1", SIGNAL, 11, 10),
-        read_back("toolu-1", 11, &SIGNAL_RS.lines().skip(10).take(10).collect::<Vec<_>>().join("\n")),
-        write("msg-2", "toolu-2", SIGNAL_TEST, SIGNAL_TEST_RS),
-        changed("toolu-2", SIGNAL_TEST, FileChange::Created),
-        finished_turn(12, 0.06),
-    ]
+        [
+            read_lines("msg-1", "toolu-1", SIGNAL, 11, 10),
+            read_back("toolu-1", 11, &SIGNAL_RS.lines().skip(10).take(10).collect::<Vec<_>>().join("\n")),
+            write("msg-2", "toolu-2", SIGNAL_TEST, SIGNAL_TEST_RS),
+            changed("toolu-2", SIGNAL_TEST, FileChange::Created),
+            finished_turn(12, 0.06),
+        ],
+    )
 }
 
 /// The agent reading a screenshot, which the hub keeps as `image`.
 pub(crate) fn read_image(image: Attachment) -> Vec<EventBody> {
     let shot = "/workspaces/aspen/.context/attachments/narrow-sidebar.png";
-    vec![
+    first_turn(
         user_prompt(
             "Is the badge still over the name? I saved how it looks in .context/attachments/narrow-sidebar.png",
         ),
-        taken(Seq::new(1)),
-        read("msg-1", "toolu-1", shot),
-        images("toolu-1", vec![image]),
-        text("msg-2", "It is: the badge still sits over the end of the second workspace's name."),
-        finished_turn(9, 0.04),
-    ]
+        [
+            read("msg-1", "toolu-1", shot),
+            images("toolu-1", vec![image]),
+            text("msg-2", "It is: the badge still sits over the end of the second workspace's name."),
+            finished_turn(9, 0.04),
+        ],
+    )
 }
 
 /// Searches: by what's in files, listing files and then lines, and by name.
@@ -153,40 +155,42 @@ pub(crate) fn searches() -> Vec<EventBody> {
         let paths = paths.iter().map(|path| format!("/workspaces/aspen/crates/signals/src/{path}")).collect();
         CallOutput::Found(Found::Files(Paths { paths, truncated: false }))
     };
-    vec![
+    first_turn(
         user_prompt("Where does anything check for a stop signal?"),
-        taken(Seq::new(1)),
-        typed_call("msg-1", "toolu-1", search("Stop\\b", None, Shows::Lines)),
-        typed_result("toolu-1", CallOutput::Found(Found::Lines { lines, truncated: false }), false),
-        typed_call("msg-2", "toolu-2", search("Aspect::", Some("/workspaces/aspen/crates"), Shows::Files)),
-        typed_result("toolu-2", files(&["signal.rs", "train.rs", "depot.rs"]), false),
-        typed_call("msg-3", "toolu-3", Call::FindFiles(FindFiles { pattern: "**/*_test.rs".into(), path: None })),
-        typed_result("toolu-3", files(&["signal_test.rs", "depot_test.rs"]), false),
-        text("msg-4", reply),
-        replied(reply, 9, 0.03),
-    ]
+        [
+            typed_call("msg-1", "toolu-1", search("Stop\\b", None, Shows::Lines)),
+            typed_result("toolu-1", CallOutput::Found(Found::Lines { lines, truncated: false }), false),
+            typed_call("msg-2", "toolu-2", search("Aspect::", Some("/workspaces/aspen/crates"), Shows::Files)),
+            typed_result("toolu-2", files(&["signal.rs", "train.rs", "depot.rs"]), false),
+            typed_call("msg-3", "toolu-3", Call::FindFiles(FindFiles { pattern: "**/*_test.rs".into(), path: None })),
+            typed_result("toolu-3", files(&["signal_test.rs", "depot_test.rs"]), false),
+            text("msg-4", reply),
+            replied(reply, 9, 0.03),
+        ],
+    )
 }
 
 /// An edit and a search that failed, whose errors run past their first line.
 pub(crate) fn failures() -> Vec<EventBody> {
-    vec![
+    first_turn(
         user_prompt("Use may_pass in the depot too."),
-        taken(Seq::new(1)),
-        edit(
-            "msg-1",
-            "toolu-1",
-            "/workspaces/aspen/crates/signals/src/depot.rs",
-            "    if aspect == Aspect::Stop {\n        return None;\n    }",
-            "    if !aspect.may_pass() {\n        return None;\n    }",
-        ),
-        failed(
-            "toolu-1",
-            "String to replace not found in file.\nString:     if aspect == Aspect::Stop {\n        return None;\n    }",
-        ),
-        text("msg-2", "The depot's check is on one line. I'll find every check like it."),
-        typed_call("msg-3", "toolu-2", search("Aspect::Stop)", None, Shows::Lines)),
-        failed("toolu-2", "regex parse error:\n    Aspect::Stop)\n                ^\nerror: unopened group"),
-    ]
+        [
+            edit(
+                "msg-1",
+                "toolu-1",
+                "/workspaces/aspen/crates/signals/src/depot.rs",
+                "    if aspect == Aspect::Stop {\n        return None;\n    }",
+                "    if !aspect.may_pass() {\n        return None;\n    }",
+            ),
+            failed(
+                "toolu-1",
+                "String to replace not found in file.\nString:     if aspect == Aspect::Stop {\n        return None;\n    }",
+            ),
+            text("msg-2", "The depot's check is on one line. I'll find every check like it."),
+            typed_call("msg-3", "toolu-2", search("Aspect::Stop)", None, Shows::Lines)),
+            failed("toolu-2", "regex parse error:\n    Aspect::Stop)\n                ^\nerror: unopened group"),
+        ],
+    )
 }
 
 fn may_pass_change() -> FileChange {

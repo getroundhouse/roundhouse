@@ -8,15 +8,15 @@ use protocol::capability::calls::output::Ended;
 use protocol::capability::calls::{Call, CallOutput};
 use protocol::event::EventBody;
 use protocol::fixtures::{command_output, typed_command};
-use protocol::model::{ModelName, Seq, SessionStatus};
+use protocol::model::{ModelName, SessionStatus};
 
 use super::frame::{CHAT, TABS_AND_CHAT};
 use super::screens::FOCUS;
 use super::steps::{Screen, Step};
 use super::worlds::chat_world;
 use client_core::fake_hub::events::{
-    command, launched, on, printed, read, read_back, replied, subagent, subagent_context, subagent_ended,
-    subagent_started, subagents_listed, taken, text, typed_call, typed_result, user_prompt, within,
+    command, first_turn, launched, on, printed, read, read_back, replied, subagent, subagent_context, subagent_ended,
+    subagent_started, subagents_listed, text, typed_call, typed_result, user_prompt, within,
 };
 
 /// The screens about subagents.
@@ -141,15 +141,16 @@ const REVIEW_PROMPT: &str = "Check that train.rs and depot.rs now use `may_pass`
 /// checks the change, with the agent's word on when each started and ended, and what was in the background, as the hub
 /// records it. With `working`, the second is still at its tests, and the agent waits on it.
 pub(crate) fn subagents(working: bool) -> Vec<EventBody> {
-    let mut events = vec![
+    let mut events = first_turn(
         user_prompt("Find every place that treats a stop signal specially, and make them use `may_pass`."),
-        taken(Seq::new(1)),
-        text("msg-1", "I'll have an agent find them while I read the signal."),
-        subagent("msg-2", "toolu-1", "Explore", "Find checks for a stop signal", FIND_PROMPT, Runs::Background),
-        subagent_started("toolu-1", "Explore", "Find checks for a stop signal", FIND_PROMPT),
-        subagents_listed(&[("toolu-1", "Find checks for a stop signal")]),
-        launched("toolu-1"),
-    ];
+        [
+            text("msg-1", "I'll have an agent find them while I read the signal."),
+            subagent("msg-2", "toolu-1", "Explore", "Find checks for a stop signal", FIND_PROMPT, Runs::Background),
+            subagent_started("toolu-1", "Explore", "Find checks for a stop signal", FIND_PROMPT),
+            subagents_listed(&[("toolu-1", "Find checks for a stop signal")]),
+            launched("toolu-1"),
+        ],
+    );
     events.extend(finding("toolu-1"));
     events.extend([
         subagent_ended("toolu-1", REPORT, 18_240),
@@ -219,23 +220,24 @@ pub(crate) fn typed_subagent() -> Vec<EventBody> {
     let report = "Both checks use `may_pass` now, and the signal tests pass.";
     let tested = command_output("test result: ok. 5 passed; 0 failed", Some(0), Ended::Exited);
     let reply = "The reviewer says both checks use `may_pass`, and the tests pass.";
-    vec![
+    first_turn(
         user_prompt("Have someone check that train.rs and depot.rs use `may_pass` now."),
-        taken(Seq::new(1)),
-        text("msg-1", "I'll have a reviewer check the change."),
-        typed_call("msg-2", "spawn-1", Call::Subagent(start)),
-        codex_started("spawn-1", "thread-1", REVIEWER),
-        on(
-            LUNA,
-            within("thread-1", typed_call("sub-1", "run-1", Call::Command(typed_command("cargo test -p signals")))),
-        ),
-        within("thread-1", typed_result("run-1", tested, false)),
-        on(LUNA, within("thread-1", text("sub-2", report))),
-        subagent_ended("thread-1", report, 9_840),
-        typed_result("spawn-1", CallOutput::Report { report: report.into() }, false),
-        text("msg-3", reply),
-        replied(reply, 41, 0.12),
-    ]
+        [
+            text("msg-1", "I'll have a reviewer check the change."),
+            typed_call("msg-2", "spawn-1", Call::Subagent(start)),
+            codex_started("spawn-1", "thread-1", REVIEWER),
+            on(
+                LUNA,
+                within("thread-1", typed_call("sub-1", "run-1", Call::Command(typed_command("cargo test -p signals")))),
+            ),
+            within("thread-1", typed_result("run-1", tested, false)),
+            on(LUNA, within("thread-1", text("sub-2", report))),
+            subagent_ended("thread-1", report, 9_840),
+            typed_result("spawn-1", CallOutput::Report { report: report.into() }, false),
+            text("msg-3", reply),
+            replied(reply, 41, 0.12),
+        ],
+    )
 }
 
 /// A subagent an agent that types its calls started, at work, as Codex's adapter records it: it's run the tests, and
@@ -244,18 +246,19 @@ fn typed_subagent_working() -> Vec<EventBody> {
     let tested = command_output("test result: ok. 5 passed; 0 failed", Some(0), Ended::Exited);
     let read = Read { path: "/workspaces/aspen/crates/signals/src/depot.rs".into(), lines: None, pages: None };
     let sub = |event| on(LUNA, within("thread-1", event));
-    vec![
+    first_turn(
         user_prompt("Have someone check that train.rs and depot.rs use `may_pass` now."),
-        taken(Seq::new(1)),
-        text("msg-1", "I'll have a reviewer check the change."),
-        typed_call("msg-2", "spawn-1", Call::Subagent(codex_subagent(REVIEWER))),
-        codex_started("spawn-1", "thread-1", REVIEWER),
-        sub(text("sub-1", "I'll run the signal tests first.")),
-        sub(typed_call("sub-2", "run-1", Call::Command(typed_command("cargo test -p signals")))),
-        within("thread-1", typed_result("run-1", tested, false)),
-        sub(text("sub-3", "They pass. Now the checks themselves.")),
-        sub(typed_call("sub-4", "read-1", Call::Read(read))),
-    ]
+        [
+            text("msg-1", "I'll have a reviewer check the change."),
+            typed_call("msg-2", "spawn-1", Call::Subagent(codex_subagent(REVIEWER))),
+            codex_started("spawn-1", "thread-1", REVIEWER),
+            sub(text("sub-1", "I'll run the signal tests first.")),
+            sub(typed_call("sub-2", "run-1", Call::Command(typed_command("cargo test -p signals")))),
+            within("thread-1", typed_result("run-1", tested, false)),
+            sub(text("sub-3", "They pass. Now the checks themselves.")),
+            sub(typed_call("sub-4", "read-1", Call::Read(read))),
+        ],
+    )
 }
 
 /// Two subagents an agent that types its calls started, as Codex's adapter records them, partway through the turn:
@@ -267,16 +270,20 @@ fn messaged_subagents() -> Vec<EventBody> {
                   as train.rs does now."
             .into(),
     };
-    vec![
+    first_turn(
         user_prompt("Have someone check that train.rs uses `may_pass` now, and that the docs say so."),
-        taken(Seq::new(1)),
-        text("msg-1", "I'll have one reviewer check the code, and another the docs."),
-        typed_call("msg-2", "spawn-1", Call::Subagent(codex_subagent(REVIEWER))),
-        typed_call("msg-3", "spawn-2", Call::Subagent(codex_subagent(DOCS))),
-        codex_started("spawn-1", "thread-1", REVIEWER),
-        codex_started("spawn-2", "thread-2", DOCS),
-        text("msg-4", "The docs never name the check, so I'll stop that one, and have the reviewer look at depot.rs."),
-        typed_call("msg-5", "stop-1", Call::StopSubagent(StopSubagent { subagent: "thread-2".into() })),
-        typed_call("msg-6", "tell-1", Call::MessageSubagent(message)),
-    ]
+        [
+            text("msg-1", "I'll have one reviewer check the code, and another the docs."),
+            typed_call("msg-2", "spawn-1", Call::Subagent(codex_subagent(REVIEWER))),
+            typed_call("msg-3", "spawn-2", Call::Subagent(codex_subagent(DOCS))),
+            codex_started("spawn-1", "thread-1", REVIEWER),
+            codex_started("spawn-2", "thread-2", DOCS),
+            text(
+                "msg-4",
+                "The docs never name the check, so I'll stop that one, and have the reviewer look at depot.rs.",
+            ),
+            typed_call("msg-5", "stop-1", Call::StopSubagent(StopSubagent { subagent: "thread-2".into() })),
+            typed_call("msg-6", "tell-1", Call::MessageSubagent(message)),
+        ],
+    )
 }

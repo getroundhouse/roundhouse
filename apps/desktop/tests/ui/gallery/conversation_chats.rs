@@ -7,8 +7,7 @@
 use protocol::capability::output::{CoverLine, CoverWait};
 use protocol::event::EventBody;
 use protocol::model::{
-    ClientDevice, Ending, Interaction, ReplyHeard, ReplyPlace, Rev, Seq, SessionId, SessionStatus, SettledBy,
-    SpokenThrough,
+    ClientDevice, Ending, Interaction, ReplyHeard, ReplyPlace, Rev, SessionId, SessionStatus, SettledBy, SpokenThrough,
 };
 use protocol::prompt::{Prompt, PromptFrom};
 use protocol::tail::{Covering, Tail};
@@ -21,7 +20,7 @@ use super::screens::FOCUS;
 use super::steps::{Screen, Step};
 use super::worlds::{conversation, sidebar};
 use client_core::fake_hub::World;
-use client_core::fake_hub::events::{replied, taken, text, user_prompt};
+use client_core::fake_hub::events::{replied, start_turn, text, turn_ending_with, user_prompt};
 
 /// The screens about conversation mode.
 pub(crate) const SCREENS: &[Screen] = &[
@@ -142,13 +141,9 @@ const ANSWER: &str = "Sure, the parser agent's on it.";
 fn waiting(device: ClientDevice) -> World {
     let mut world = World::default();
     let focus = sidebar(&mut world);
-    let events = vec![
-        turned_on_on(device.clone()),
-        said_out_loud("Can you get a subagent on the parser bug?"),
-        taken(Seq::new(2)),
-        text("msg-1", ANSWER),
-        replied(ANSWER, 6, 0.02),
-    ];
+    let mut events = vec![turned_on_on(device.clone())];
+    let asked = said_out_loud("Can you get a subagent on the parser bug?");
+    turn_ending_with(&mut events, asked, [text("msg-1", ANSWER)], replied(ANSWER, 6, 0.02));
     let chat = world.chat(&focus, SessionStatus::Idle, events);
     on(&mut world, &chat, device);
     world
@@ -159,11 +154,8 @@ fn waiting(device: ClientDevice) -> World {
 fn working(device: ClientDevice, speaking: bool) -> World {
     let mut world = World::default();
     let focus = sidebar(&mut world);
-    let mut events = vec![
-        turned_on_on(device.clone()),
-        said_out_loud("Can you get a subagent on the parser bug?"),
-        taken(Seq::new(2)),
-    ];
+    let mut events = vec![turned_on_on(device.clone())];
+    start_turn(&mut events, said_out_loud("Can you get a subagent on the parser bug?"));
     if speaking {
         events.push(text("msg-1", ANSWER));
     }
@@ -208,17 +200,11 @@ const WRITTEN: &str = "Done. Below 200px the row draws `look::chat_mark` where t
 fn talked_over_and_speaking() -> World {
     let mut world = World::default();
     let focus = sidebar(&mut world);
-    let events = vec![
-        turned_on(),
-        said_out_loud("Can you get a subagent on the parser bug while we sort out the sidebar?"),
-        taken(Seq::new(2)),
-        text("msg-1", TALKED_OVER),
-        replied(TALKED_OVER, 9, 0.04),
-        said_out_loud("Wait, what about narrow windows? Does the badge still fit?"),
-        taken(Seq::new(6)),
-        text("msg-2", SPEAKING),
-        replied(SPEAKING, 5, 0.02),
-    ];
+    let mut events = vec![turned_on()];
+    let asked = said_out_loud("Can you get a subagent on the parser bug while we sort out the sidebar?");
+    turn_ending_with(&mut events, asked, [text("msg-1", TALKED_OVER)], replied(TALKED_OVER, 9, 0.04));
+    let asked = said_out_loud("Wait, what about narrow windows? Does the badge still fit?");
+    turn_ending_with(&mut events, asked, [text("msg-2", SPEAKING)], replied(SPEAKING, 5, 0.02));
     let chat = world.chat(&focus, SessionStatus::Idle, events);
     let talked_over = Ending::TalkedOver { through: through(TALKED_OVER, "then") };
     world.replies_heard.insert(chat.clone(), vec![heard(&chat, "msg-1", talked_over)]);
@@ -232,21 +218,13 @@ fn talked_over_and_speaking() -> World {
 fn stopped_and_not_read_out() -> World {
     let mut world = World::default();
     let focus = sidebar(&mut world);
-    let events = vec![
-        turned_on(),
-        said_out_loud("What should we call the badge once it's smaller?"),
-        taken(Seq::new(2)),
-        text("msg-1", STOPPED),
-        replied(STOPPED, 12, 0.03),
-        said_out_loud("And in narrow windows?"),
-        taken(Seq::new(6)),
-        text("msg-2", NOT_READ_OUT),
-        replied(NOT_READ_OUT, 4, 0.01),
-        user_prompt("Do that. Use the mark the sidebar already draws, not a new icon."),
-        taken(Seq::new(10)),
-        text("msg-3", WRITTEN),
-        replied(WRITTEN, 41, 0.11),
-    ];
+    let mut events = vec![turned_on()];
+    let asked = said_out_loud("What should we call the badge once it's smaller?");
+    turn_ending_with(&mut events, asked, [text("msg-1", STOPPED)], replied(STOPPED, 12, 0.03));
+    let asked = said_out_loud("And in narrow windows?");
+    turn_ending_with(&mut events, asked, [text("msg-2", NOT_READ_OUT)], replied(NOT_READ_OUT, 4, 0.01));
+    let asked = user_prompt("Do that. Use the mark the sidebar already draws, not a new icon.");
+    turn_ending_with(&mut events, asked, [text("msg-3", WRITTEN)], replied(WRITTEN, 41, 0.11));
     let chat = world.chat(&focus, SessionStatus::Idle, events);
     let stopped = Ending::Stopped { through: through(STOPPED, "count") };
     let heard = vec![heard(&chat, "msg-1", stopped), heard(&chat, "msg-2", Ending::NotReadOut)];

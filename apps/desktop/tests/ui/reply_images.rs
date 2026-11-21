@@ -8,13 +8,13 @@ use std::io::Cursor;
 use std::path::Path;
 
 use client_core::fake_hub::World;
-use client_core::fake_hub::events::{finished_turn, taken, text_pointing, typed_call, user_prompt};
+use client_core::fake_hub::events::{finished_turn, first_turn, text_pointing, typed_call, user_prompt};
 use gpui_kit::{AppContext as _, Pixels, TestAppContext, px};
 use protocol::attachment::{Attachment, MediaType};
 use protocol::capability::calls::Call;
 use protocol::event::{ContentBlock, EventBody, LinkedImage};
 use protocol::fixtures::{ApprovalRequest, approval_request, plan};
-use protocol::model::{AttachmentId, Seq, SessionStatus, ToolUseId};
+use protocol::model::{AttachmentId, SessionStatus, ToolUseId};
 
 use crate::support::{FakeHub, Gate, Stack, Ui};
 
@@ -76,12 +76,7 @@ fn replied_with<'a>(cx: &'a mut TestAppContext, reply: &str, kept: &[(&str, Medi
     }
     let repo = world.repo("signals");
     let workspace = world.workspace(&repo, "ledger");
-    let events = vec![
-        user_prompt("Show me."),
-        taken(Seq::new(1)),
-        text_pointing("shown", reply, images),
-        finished_turn(3, 0.01),
-    ];
+    let events = first_turn(user_prompt("Show me."), [text_pointing("shown", reply, images), finished_turn(3, 0.01)]);
     world.chat(&workspace, SessionStatus::Idle, events);
     let fake = FakeHub::holding(world);
     let mut ui = Ui::open_on(cx, &fake);
@@ -200,8 +195,7 @@ fn a_diagram_in_a_plan_to_approve_is_drawn(cx: &mut TestAppContext) {
     let planned = "1. Ask.\n\n```mermaid\nflowchart TD\n  A[Ask] --> B[Build]\n```";
     let asked =
         ApprovalRequest { tool_use_id: Some(ToolUseId::from("toolu-1")), ..approval_request("ask-1", plan(planned)) };
-    let events =
-        vec![user_prompt("Plan it."), taken(Seq::new(1)), typed_call("msg-1", "toolu-1", Call::Plan), asked.into()];
+    let events = first_turn(user_prompt("Plan it."), [typed_call("msg-1", "toolu-1", Call::Plan), asked.into()]);
     world.chat(&workspace, SessionStatus::WaitingApproval, events);
     let fake = FakeHub::holding(world);
     let mut ui = Ui::open_on(cx, &fake);

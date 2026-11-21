@@ -4,7 +4,7 @@
 #![cfg(test)]
 
 use client_core::fake_hub::World;
-use client_core::fake_hub::events::{finished_turn, taken, text, user_prompt};
+use client_core::fake_hub::events::{finished_turn, text, turn_ending_with, user_prompt};
 use gpui_kit::TestAppContext;
 use protocol::event::{EventBody, SessionEvent};
 use protocol::model::{Seq, SessionStatus};
@@ -42,10 +42,8 @@ pub(super) fn open_on_a_chat_saying(
     let workspace = world.workspace(&repo, "ledger");
     let mut events = Vec::new();
     for said in Vec::from_iter(0..count).chunks(TO_A_PROMPT) {
-        let prompt = Seq::new(u64::try_from(events.len() + 1).unwrap());
-        events.extend([user_prompt("Keep the ledger."), taken(prompt)]);
-        events.extend(said.iter().map(|&i| text(&format!("msg-{i}"), &say(i))));
-        events.push(finished_turn(12, 0.04));
+        let said = said.iter().map(|&i| text(&format!("msg-{i}"), &say(i)));
+        turn_ending_with(&mut events, user_prompt("Keep the ledger."), said, finished_turn(12, 0.04));
     }
     let chat = world.chat(&workspace, SessionStatus::Idle, events);
     let newest = world.events_from(&chat, Seq::default()).last().cloned().unwrap();
@@ -105,10 +103,7 @@ pub(super) fn open_on_a_chat(cx: &mut TestAppContext, events: Vec<EventBody>) ->
 pub(super) fn turns(turns: Vec<(String, Vec<EventBody>)>) -> Vec<EventBody> {
     let mut events = Vec::new();
     for (asked, did) in turns {
-        let prompt = Seq::new(u64::try_from(events.len() + 1).unwrap());
-        events.extend([user_prompt(&asked), taken(prompt)]);
-        events.extend(did);
-        events.push(finished_turn(12, 0.04));
+        turn_ending_with(&mut events, user_prompt(&asked), did, finished_turn(12, 0.04));
     }
     events
 }

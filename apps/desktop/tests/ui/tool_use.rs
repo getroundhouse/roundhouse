@@ -3,7 +3,7 @@
 #![cfg(test)]
 
 use client_core::fake_hub::World;
-use client_core::fake_hub::events::{command, taken, user_prompt};
+use client_core::fake_hub::events::{command, first_turn, user_prompt};
 use gpui_kit::test::TestWindowExt as _;
 use gpui_kit::{AppContext as _, ClipboardItem, TestAppContext, point, px};
 use protocol::capability::approvals::{Asks, Decision};
@@ -11,7 +11,7 @@ use protocol::capability::calls::Call;
 use protocol::capability::calls::call::Command;
 use protocol::event::EventBody;
 use protocol::fixtures::{ApprovalRequest, allow_once, approval_request, deny, typed_command};
-use protocol::model::{Seq, SessionStatus};
+use protocol::model::SessionStatus;
 
 use crate::support::{FakeHub, Stack, Ui, id};
 
@@ -143,12 +143,10 @@ fn asked_to_remove(cx: &mut TestAppContext) -> (FakeHub, Ui<'_>) {
     };
     let request =
         request.because("Dangerous rm operation on statically-unresolvable target: command substitution output");
-    let events = vec![
+    let events = first_turn(
         user_prompt(&format!("tool:{REMOVAL}")),
-        taken(Seq::new(1)),
-        command("msg-1", "toolu-1", REMOVAL, Some(says_its_for)),
-        request.into(),
-    ];
+        [command("msg-1", "toolu-1", REMOVAL, Some(says_its_for)), request.into()],
+    );
     let mut world = World::default();
     let repo = world.repo("signals");
     let workspace = world.workspace(&repo, "ledger");

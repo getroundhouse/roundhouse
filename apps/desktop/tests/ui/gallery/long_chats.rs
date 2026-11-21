@@ -8,7 +8,7 @@ use protocol::event::EventBody;
 use protocol::model::{Place, PromptLine, Seq, SessionStatus};
 
 use client_core::fake_hub::World;
-use client_core::fake_hub::events::{replied, taken, text, user_prompt};
+use client_core::fake_hub::events::{replied, text, turn_ending_with, user_prompt};
 
 /// What each turn was asked, and what the agent said.
 pub(crate) const TURNS: [(&str, &str); 20] = [
@@ -57,9 +57,6 @@ pub(crate) const TURNS: [(&str, &str); 20] = [
     ("Is CI happy?", "The checks passed, and it's ready for review."),
 ];
 
-/// Events each turn takes: its prompt, the agent taking it, the reply, and the turn's end.
-const EVENTS_A_TURN: usize = 4;
-
 /// The fourteenth prompt's row in the outline's list, which is the row of the event that took it, where it's drawn. The
 /// list shows it when it opens at the end of the chat, and it has more than a screen of chat above it, so it can come
 /// to the bottom.
@@ -69,8 +66,12 @@ pub(crate) const FOURTEENTH_PROMPT: &str = "outline-prompt/53";
 pub(crate) fn many_turns() -> Vec<EventBody> {
     let mut events = Vec::new();
     for (turn, (asked, said)) in (1..).zip(TURNS) {
-        let prompt = Seq::new((EVENTS_A_TURN * (turn - 1) + 1).try_into().unwrap());
-        events.extend([user_prompt(asked), taken(prompt), text(&format!("msg-{turn}"), said), replied(said, 12, 0.04)]);
+        turn_ending_with(
+            &mut events,
+            user_prompt(asked),
+            [text(&format!("msg-{turn}"), said)],
+            replied(said, 12, 0.04),
+        );
     }
     events
 }

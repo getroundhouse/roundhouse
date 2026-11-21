@@ -17,8 +17,8 @@ use super::steps::{Screen, Step};
 use super::worlds::chat_world;
 use client_core::fake_hub::events::user_prompt;
 use client_core::fake_hub::events::{
-    command, in_background, launched, mcp, mcp_said, printed, replied, subagent, subagent_ended, subagent_started,
-    taken, task, text,
+    command, first_turn, in_background, launched, mcp, mcp_said, printed, replied, start_turn, subagent,
+    subagent_ended, subagent_started, task, text,
 };
 use client_core::fake_hub::{NOW_MS, World};
 
@@ -82,11 +82,10 @@ fn failing(events: Vec<EventBody>) -> World {
 /// finished, which the account's usage limit refused before it did anything.
 fn refused_picking_up() -> Vec<EventBody> {
     let reply = "The review is going. I'll pick up when it reports.";
-    let mut events = vec![
+    let mut events = first_turn(
         user_prompt("Have an agent review the depot's design."),
-        taken(Seq::new(1)),
-        text("msg-1", "I'll have an agent review the depot in the background."),
-    ];
+        [text("msg-1", "I'll have an agent review the depot in the background.")],
+    );
     events.extend(review("msg-1", "toolu-1"));
     events.extend([text("msg-2", reply), replied(reply, 9, 0.04), subagent_ended("toolu-1", FOUND, 31_400)]);
     picks_up_refused(&mut events, ended(TaskKind::Subagent, "toolu-1", REVIEW, TaskOutcome::Finished));
@@ -96,11 +95,10 @@ fn refused_picking_up() -> Vec<EventBody> {
 /// A turn that left a review and the tests in the background, and was refused partway through, then a turn the agent
 /// started by itself as each ended, both refused the same way.
 fn refused_partway_then_twice() -> Vec<EventBody> {
-    let mut events = vec![
+    let mut events = first_turn(
         user_prompt("Have an agent review the depot's design, and run the tests while you look at what #7 changes."),
-        taken(Seq::new(1)),
-        text("msg-1", "I'll start a review and the tests in the background, then look at what #7 changes."),
-    ];
+        [text("msg-1", "I'll start a review and the tests in the background, then look at what #7 changes.")],
+    );
     events.extend(review("msg-1", "toolu-1"));
     events.extend([
         in_background("msg-1", "toolu-2", "cargo test --workspace", "Run the tests"),
@@ -124,11 +122,10 @@ fn refused_six_times() -> Vec<EventBody> {
         ("toolu-3", "cargo test --workspace", "Run the full test suite"),
     ];
     let reply = "They're all going. I'll pick up as each one reports.";
-    let mut events = vec![
+    let mut events = first_turn(
         user_prompt("Build the app, check the guide's links, run the tests and review the depot, then queue #7."),
-        taken(Seq::new(1)),
-        text("msg-1", "I'll start each of them in the background."),
-    ];
+        [text("msg-1", "I'll start each of them in the background.")],
+    );
     for (call, command, what_for) in commands {
         events
             .extend([in_background("msg-1", call, command, what_for), printed(call, "Command running in background.")]);
@@ -136,8 +133,7 @@ fn refused_six_times() -> Vec<EventBody> {
     events.extend(review("msg-1", "toolu-4"));
     events.extend(wait("msg-1", "toolu-5"));
     events.extend([text("msg-2", reply), replied(reply, 41, 0.12)]);
-    let prompt = Seq::new(u64::try_from(events.len()).unwrap() + 1);
-    events.extend([user_prompt("How are they going?"), taken(prompt)]);
+    start_turn(&mut events, user_prompt("How are they going?"));
     refuse(&mut events);
     picks_up_refused(&mut events, ended(TaskKind::Command, "toolu-1", "Build the desktop app", TaskOutcome::Finished));
     picks_up_refused(

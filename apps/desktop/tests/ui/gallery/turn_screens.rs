@@ -12,7 +12,7 @@ use super::screens::FOCUS;
 use super::steps::{Screen, Step, Target};
 use super::worlds::{chat_world, conversation, queued};
 use client_core::fake_hub::World;
-use client_core::fake_hub::events::{command, printed, taken, text, user_prompt};
+use client_core::fake_hub::events::{command, printed, text, turn_ending_with, user_prompt};
 
 /// The tab of the chat nothing has been asked in yet, the seventh made in [`untitled`].
 const UNTITLED_TAB: &str = "chat-chat-7";
@@ -67,25 +67,23 @@ fn endings() -> Vec<EventBody> {
         "Which colours does GitHub use for a PR's state?",
         "Green for open, purple for merged, red for closed, and grey for a draft.",
     );
-    let second = next_seq(&events);
-    events.extend([
+    turn_ending_with(
+        &mut events,
         user_prompt("Run the sidebar's tests, to see where they stand."),
-        taken(second),
-        text("msg-2", "I'll run the desktop app's sidebar tests first."),
-        command("msg-3", "toolu-1", "cargo test -p desktop --test ui sidebar", None),
-        printed("toolu-1", "test result: ok. 41 passed; 0 failed; 0 ignored"),
+        [
+            text("msg-2", "I'll run the desktop app's sidebar tests first."),
+            command("msg-3", "toolu-1", "cargo test -p desktop --test ui sidebar", None),
+            printed("toolu-1", "test result: ok. 41 passed; 0 failed; 0 ignored"),
+        ],
         ended(TurnOutcome::Cancelled, Vec::new(), 14_200),
-    ]);
-    let third = next_seq(&events);
-    events.extend([
+    );
+    let overloaded = "API Error: 529 the servers are overloaded, try again in a minute";
+    turn_ending_with(
+        &mut events,
         user_prompt("Then run the whole UI suite."),
-        taken(third),
-        ended(
-            TurnOutcome::Error,
-            vec!["API Error: 529 the servers are overloaded, try again in a minute".into()],
-            1_200,
-        ),
-    ]);
+        [],
+        ended(TurnOutcome::Error, vec![overloaded.into()], 1_200),
+    );
     events
 }
 
@@ -103,11 +101,6 @@ fn untitled() -> World {
     let focus = world.workspaces.iter().find(|workspace| workspace.name == FOCUS).unwrap().id.clone();
     world.chat(&focus, SessionStatus::Idle, Vec::new());
     world
-}
-
-/// The seq the next event pushed onto `events` will have, as [`World::chat`] numbers them.
-fn next_seq(events: &[EventBody]) -> Seq {
-    Seq::new(u64::try_from(events.len() + 1).unwrap())
 }
 
 /// The end of a turn that went no further than `outcome` says, with what went wrong, after `took_ms`.

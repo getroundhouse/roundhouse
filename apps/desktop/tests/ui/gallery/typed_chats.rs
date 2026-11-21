@@ -12,11 +12,10 @@ use protocol::capability::calls::output::{Ended, FileOutcome, Found, Lines, McpC
 use protocol::capability::calls::{Call, CallOutput};
 use protocol::event::{EventBody, FileChange, Hunk, HunkLine, LineMark};
 use protocol::fixtures::{command_output, typed_command};
-use protocol::model::Seq;
 use serde_json::json;
 
 use super::tool_chats::ASK;
-use client_core::fake_hub::events::{replied, taken, text, typed_call, typed_result, user_prompt};
+use client_core::fake_hub::events::{first_turn, replied, text, typed_call, typed_result, user_prompt};
 
 /// What the agent said its command in the background is for.
 pub(crate) const BACKGROUND_LINE: &str = "Start the depot simulator";
@@ -26,23 +25,32 @@ pub(crate) const BACKGROUND_LINE: &str = "Start the depot simulator";
 pub(crate) fn commands_that_ended() -> Vec<EventBody> {
     let reply = "The slow tests ran past their time, so I stopped the benchmark too. The simulator is still running.";
     let backgrounded = Ended::Backgrounded { task: "simulator".into() };
-    vec![
+    first_turn(
         user_prompt(ASK),
-        taken(Seq::new(1)),
-        text("msg-1", "I'll start the depot's simulator, then run the slow signal tests against it."),
-        typed_call("msg-2", "call-1", command("cargo run -p depot --bin simulator", BACKGROUND_LINE, Runs::Background)),
-        typed_result("call-1", command_output(SIMULATOR, None, backgrounded), false),
-        typed_call(
-            "msg-3",
-            "call-2",
-            command("cargo test -p signals --release -- --ignored", "Run the slow signal tests", Runs::Waits),
-        ),
-        typed_result("call-2", command_output(SLOW_TESTS, None, Ended::TimedOut), true),
-        typed_call("msg-4", "call-3", command("cargo bench -p signals may_pass", "Benchmark may_pass", Runs::Waits)),
-        typed_result("call-3", command_output(BENCHMARK, None, Ended::Stopped), true),
-        text("msg-5", reply),
-        replied(reply, 214, 0.38),
-    ]
+        [
+            text("msg-1", "I'll start the depot's simulator, then run the slow signal tests against it."),
+            typed_call(
+                "msg-2",
+                "call-1",
+                command("cargo run -p depot --bin simulator", BACKGROUND_LINE, Runs::Background),
+            ),
+            typed_result("call-1", command_output(SIMULATOR, None, backgrounded), false),
+            typed_call(
+                "msg-3",
+                "call-2",
+                command("cargo test -p signals --release -- --ignored", "Run the slow signal tests", Runs::Waits),
+            ),
+            typed_result("call-2", command_output(SLOW_TESTS, None, Ended::TimedOut), true),
+            typed_call(
+                "msg-4",
+                "call-3",
+                command("cargo bench -p signals may_pass", "Benchmark may_pass", Runs::Waits),
+            ),
+            typed_result("call-3", command_output(BENCHMARK, None, Ended::Stopped), true),
+            text("msg-5", reply),
+            replied(reply, 214, 0.38),
+        ],
+    )
 }
 
 /// What the simulator printed before it went on in the background.
@@ -92,25 +100,26 @@ pub(crate) fn files_changed() -> Vec<EventBody> {
         source: "plot(headways(trains, may_pass=True))".into(),
         does: CellEdit::Replace,
     };
-    vec![
+    first_turn(
         user_prompt(ASK),
-        taken(Seq::new(1)),
-        text("msg-1", "I'll read the signal, then add `may_pass` to it and use it in the depot."),
-        typed_call("msg-2", "sed-1", sed),
-        typed_result("sed-1", command_output(SIGNAL_START, Some(0), Ended::Exited), false),
-        typed_call("msg-3", "read-1", read),
-        typed_result("read-1", CallOutput::Lines(lines), false),
-        typed_call("msg-4", "patch-1", Call::Patch(patch())),
-        typed_result(
-            "patch-1",
-            CallOutput::Changed { files: vec![changed(SIGNAL, true), changed(DEPOT, false)] },
-            false,
-        ),
-        typed_call("msg-5", "cell-1", Call::NotebookEdit(notebook)),
-        typed_result("cell-1", CallOutput::Words { text: "Updated cell cell-4".into() }, false),
-        text("msg-6", reply),
-        replied(reply, 96, 0.21),
-    ]
+        [
+            text("msg-1", "I'll read the signal, then add `may_pass` to it and use it in the depot."),
+            typed_call("msg-2", "sed-1", sed),
+            typed_result("sed-1", command_output(SIGNAL_START, Some(0), Ended::Exited), false),
+            typed_call("msg-3", "read-1", read),
+            typed_result("read-1", CallOutput::Lines(lines), false),
+            typed_call("msg-4", "patch-1", Call::Patch(patch())),
+            typed_result(
+                "patch-1",
+                CallOutput::Changed { files: vec![changed(SIGNAL, true), changed(DEPOT, false)] },
+                false,
+            ),
+            typed_call("msg-5", "cell-1", Call::NotebookEdit(notebook)),
+            typed_result("cell-1", CallOutput::Words { text: "Updated cell cell-4".into() }, false),
+            text("msg-6", reply),
+            replied(reply, 96, 0.21),
+        ],
+    )
 }
 
 /// What the signal's first lines are.
@@ -174,21 +183,22 @@ pub(crate) fn one_file_patches() -> Vec<EventBody> {
         moved_to: Some(format!("{DEPOT_DIR}/sidings.rs")),
         diagnostics: Vec::new(),
     };
-    vec![
+    first_turn(
         user_prompt(ASK),
-        taken(Seq::new(1)),
-        text("msg-1", "I'll give the depot a module of its own, and tidy the yard away."),
-        typed_call("msg-2", "add-1", one(DEPOT, PatchChange::Add { content: DEPOT_RS.into() })),
-        typed_result("add-1", CallOutput::Changed { files: vec![changed(DEPOT, false)] }, false),
-        typed_call("msg-3", "edit-1", one(SIGNAL, update)),
-        typed_result("edit-1", CallOutput::Changed { files: vec![changed(SIGNAL, true)] }, false),
-        typed_call("msg-4", "move-1", one(&format!("{DEPOT_DIR}/yard/sidings.rs"), moved)),
-        typed_result("move-1", CallOutput::Changed { files: vec![moved_back] }, false),
-        typed_call("msg-5", "delete-1", one(&format!("{DEPOT_DIR}/yard.rs"), PatchChange::Delete)),
-        typed_result("delete-1", CallOutput::Changed { files: Vec::new() }, false),
-        text("msg-6", reply),
-        replied(reply, 41, 0.09),
-    ]
+        [
+            text("msg-1", "I'll give the depot a module of its own, and tidy the yard away."),
+            typed_call("msg-2", "add-1", one(DEPOT, PatchChange::Add { content: DEPOT_RS.into() })),
+            typed_result("add-1", CallOutput::Changed { files: vec![changed(DEPOT, false)] }, false),
+            typed_call("msg-3", "edit-1", one(SIGNAL, update)),
+            typed_result("edit-1", CallOutput::Changed { files: vec![changed(SIGNAL, true)] }, false),
+            typed_call("msg-4", "move-1", one(&format!("{DEPOT_DIR}/yard/sidings.rs"), moved)),
+            typed_result("move-1", CallOutput::Changed { files: vec![moved_back] }, false),
+            typed_call("msg-5", "delete-1", one(&format!("{DEPOT_DIR}/yard.rs"), PatchChange::Delete)),
+            typed_result("delete-1", CallOutput::Changed { files: Vec::new() }, false),
+            text("msg-6", reply),
+            replied(reply, 41, 0.09),
+        ],
+    )
 }
 
 const DEPOT_DIR: &str = "/workspaces/aspen/crates/depot/src";
@@ -211,26 +221,27 @@ pub(crate) fn searched() -> Vec<EventBody> {
     let query = "flashing yellow railway signal";
     let web = WebSearch { query: query.into(), only_domains: Vec::new(), not_domains: Vec::new() };
     let url = "https://example.org/signals/aspects";
-    vec![
+    first_turn(
         user_prompt("Where is may_pass asked, and should a flashing yellow pass?"),
-        taken(Seq::new(1)),
-        typed_call("msg-1", "call-1", rg),
-        typed_result("call-1", command_output(FOUND, Some(0), Ended::Exited), false),
-        typed_call("msg-2", "call-2", Call::Search(counted)),
-        typed_result("call-2", CallOutput::Found(Found::Count { matches: 12, files: 4 }), false),
-        typed_call("msg-3", "call-3", Call::FindFiles(find)),
-        typed_result(
-            "call-3",
-            CallOutput::Paths(Paths { paths: tests.map(Into::into).into(), truncated: false }),
-            false,
-        ),
-        typed_call("msg-4", "call-4", Call::WebSearch(web)),
-        typed_result("call-4", CallOutput::Words { text: WEB_WORDS.into() }, false),
-        typed_call("msg-5", "call-5", Call::Fetch(Fetch { url: url.into(), asking: None })),
-        typed_result("call-5", CallOutput::Page { url: url.into(), status: Some(200), text: PAGE.into() }, false),
-        text("msg-6", reply),
-        replied(reply, 31, 0.12),
-    ]
+        [
+            typed_call("msg-1", "call-1", rg),
+            typed_result("call-1", command_output(FOUND, Some(0), Ended::Exited), false),
+            typed_call("msg-2", "call-2", Call::Search(counted)),
+            typed_result("call-2", CallOutput::Found(Found::Count { matches: 12, files: 4 }), false),
+            typed_call("msg-3", "call-3", Call::FindFiles(find)),
+            typed_result(
+                "call-3",
+                CallOutput::Paths(Paths { paths: tests.map(Into::into).into(), truncated: false }),
+                false,
+            ),
+            typed_call("msg-4", "call-4", Call::WebSearch(web)),
+            typed_result("call-4", CallOutput::Words { text: WEB_WORDS.into() }, false),
+            typed_call("msg-5", "call-5", Call::Fetch(Fetch { url: url.into(), asking: None })),
+            typed_result("call-5", CallOutput::Page { url: url.into(), status: Some(200), text: PAGE.into() }, false),
+            text("msg-6", reply),
+            replied(reply, 31, 0.12),
+        ],
+    )
 }
 
 /// What the command that searched printed, as ripgrep prints its matches.
@@ -258,17 +269,18 @@ pub(crate) fn mcp_tools() -> Vec<EventBody> {
         "labels": ["kind/feature"],
     });
     let reply = "Filed as #271.";
-    vec![
+    first_turn(
         user_prompt("File the idea about saying why a train stopped."),
-        taken(Seq::new(1)),
-        text("msg-1", "I'll look for an existing issue first, then file one."),
-        typed_call("msg-2", "mcp-1", mcp("sentry", "search_issues", search)),
-        typed_result("mcp-1", said("No issues match."), false),
-        typed_call("msg-3", "mcp-2", mcp("github", "create_issue", issue)),
-        typed_result("mcp-2", said("Created issue #271: https://github.com/example/signals/issues/271"), false),
-        text("msg-4", reply),
-        replied(reply, 14, 0.05),
-    ]
+        [
+            text("msg-1", "I'll look for an existing issue first, then file one."),
+            typed_call("msg-2", "mcp-1", mcp("sentry", "search_issues", search)),
+            typed_result("mcp-1", said("No issues match."), false),
+            typed_call("msg-3", "mcp-2", mcp("github", "create_issue", issue)),
+            typed_result("mcp-2", said("Created issue #271: https://github.com/example/signals/issues/271"), false),
+            text("msg-4", reply),
+            replied(reply, 14, 0.05),
+        ],
+    )
 }
 
 /// A prompt set for later and a workflow left running, as Antigravity's adapter types them, neither done yet: what the
@@ -279,14 +291,15 @@ pub(crate) fn later() -> Vec<EventBody> {
         when: When::After { seconds: 1200 },
     };
     let reply = "I'll check on #182 in 20 minutes, while the release checks run.";
-    vec![
+    first_turn(
         user_prompt("Run the release checks, and tell me how #182's CI did once it's had time."),
-        taken(Seq::new(1)),
-        typed_call("msg-1", "later-1", Call::Schedule(schedule)),
-        typed_call("msg-2", "flow-1", Call::Workflow(Workflow { name: Some("Release checks".into()) })),
-        text("msg-3", reply),
-        replied(reply, 9, 0.02),
-    ]
+        [
+            typed_call("msg-1", "later-1", Call::Schedule(schedule)),
+            typed_call("msg-2", "flow-1", Call::Workflow(Workflow { name: Some("Release checks".into()) })),
+            text("msg-3", reply),
+            replied(reply, 9, 0.02),
+        ],
+    )
 }
 
 /// What the agent was asked to make an image of, as Codex says it once the image is made.
@@ -298,14 +311,19 @@ pub(crate) const MADE_FROM: &str = "A flat railway signal at caution on a slate 
 pub(crate) fn images(looked_at: Attachment, made: Attachment) -> Vec<EventBody> {
     let shot = "/workspaces/aspen/.context/attachments/signal-board.png";
     let reply = "Made it from the board's amber: it's in Codex's generated images, ready to copy into the README.";
-    vec![
+    first_turn(
         user_prompt("Make a signal at caution for the README, in the amber the board uses. The board's in .context."),
-        taken(Seq::new(1)),
-        typed_call("msg-1", "look-1", Call::ViewImage(ViewImage { path: shot.into() })),
-        typed_result("look-1", CallOutput::Image { image: looked_at, prompt: None }, false),
-        typed_call("msg-2", "make-1", Call::GenerateImage(GenerateImage { prompt: String::new(), from: Vec::new() })),
-        typed_result("make-1", CallOutput::Image { image: made, prompt: Some(MADE_FROM.into()) }, false),
-        text("msg-3", reply),
-        replied(reply, 21, 0.06),
-    ]
+        [
+            typed_call("msg-1", "look-1", Call::ViewImage(ViewImage { path: shot.into() })),
+            typed_result("look-1", CallOutput::Image { image: looked_at, prompt: None }, false),
+            typed_call(
+                "msg-2",
+                "make-1",
+                Call::GenerateImage(GenerateImage { prompt: String::new(), from: Vec::new() }),
+            ),
+            typed_result("make-1", CallOutput::Image { image: made, prompt: Some(MADE_FROM.into()) }, false),
+            text("msg-3", reply),
+            replied(reply, 21, 0.06),
+        ],
+    )
 }

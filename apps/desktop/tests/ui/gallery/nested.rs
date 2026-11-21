@@ -6,12 +6,14 @@ use std::sync::Arc;
 
 use gpui_kit::PlatformTextSystem;
 use protocol::capability::calls::call::Runs;
-use protocol::model::{Seq, SessionStatus};
+use protocol::model::SessionStatus;
 
 use super::capture;
 use super::worlds::chat_world;
 use client_core::fake_hub::World;
-use client_core::fake_hub::events::{command, failed, printed, reported, subagent, taken, text, user_prompt, within};
+use client_core::fake_hub::events::{
+    command, failed, first_turn, printed, reported, subagent, text, user_prompt, within,
+};
 
 /// A text the `markdown` crate panics on, which the kit's text view ended the app on.
 const PANICS: &str = "a\n===\n---\nb\n===";
@@ -26,22 +28,23 @@ fn a_subagent_s_work_with_another_s_in_it() -> World {
     let agent = |message: &str, call: &str, description: &str, prompt: &str| {
         subagent(message, call, "general-purpose", description, prompt, Runs::Waits)
     };
-    let events = vec![
+    let events = first_turn(
         user_prompt("Have the signals looked at."),
-        taken(Seq::new(1)),
-        agent("msg-1", "outer", "Look at the signals", "Ask of the outer one."),
-        within("outer", text("sub-1", "The outer one starts.")),
-        within("outer", command("sub-c", "check", "echo checked", Some(CHECK))),
-        within("outer", printed("check", "checked\n")),
-        within("outer", agent("sub-2", "inner", "Look at one signal", "Ask of the inner one.")),
-        within("inner", text("in-1", "The inner one works.")),
-        // In the log before the inner one's last words, and shown after them.
-        within("outer", text("sub-3", "The outer one ends.")),
-        within("inner", text("in-2", PANICS)),
-        within("outer", failed("inner", STOPPED)),
-        reported("outer", "The outer one is done."),
-        text("msg-2", "Both have looked."),
-    ];
+        [
+            agent("msg-1", "outer", "Look at the signals", "Ask of the outer one."),
+            within("outer", text("sub-1", "The outer one starts.")),
+            within("outer", command("sub-c", "check", "echo checked", Some(CHECK))),
+            within("outer", printed("check", "checked\n")),
+            within("outer", agent("sub-2", "inner", "Look at one signal", "Ask of the inner one.")),
+            within("inner", text("in-1", "The inner one works.")),
+            // In the log before the inner one's last words, and shown after them.
+            within("outer", text("sub-3", "The outer one ends.")),
+            within("inner", text("in-2", PANICS)),
+            within("outer", failed("inner", STOPPED)),
+            reported("outer", "The outer one is done."),
+            text("msg-2", "Both have looked."),
+        ],
+    );
     let mut world = chat_world(SessionStatus::Idle, events);
     world.reads_every_event_together = true;
     world

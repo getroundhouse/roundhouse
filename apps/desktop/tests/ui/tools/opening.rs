@@ -3,14 +3,14 @@
 use crate::support::{FakeHub, Stack, Ui};
 use client_core::fake_hub::World;
 use client_core::fake_hub::events::{
-    self, advice_failed, advised, advised_encrypted, finished_turn, taken, text, typed_call, user_prompt,
+    self, advice_failed, advised, advised_encrypted, finished_turn, first_turn, text, typed_call, user_prompt,
 };
 use gpui_kit::test::ElementSnapshot;
 use gpui_kit::{AppContext as _, ElementId, Pixels, TestAppContext, px};
 use image::ImageFormat;
 use protocol::capability::calls::Call;
 use protocol::event::EventBody;
-use protocol::model::{Seq, SessionStatus};
+use protocol::model::SessionStatus;
 use std::io::Cursor;
 use std::time::Duration;
 
@@ -148,7 +148,7 @@ pub(super) fn open_on_words_around(cx: &mut TestAppContext, did: Vec<EventBody>)
 /// A chat held by a fake hub, of one turn in which the agent did what `did` records. It's open at its end, with the
 /// turn's end drawn. The hub goes with the test, so it's returned to be kept.
 pub(super) fn open_on_a_turn(cx: &mut TestAppContext, did: Vec<EventBody>) -> (FakeHub, Ui<'_>) {
-    let mut events = vec![user_prompt("Check the signals."), taken(Seq::new(1))];
+    let mut events = first_turn(user_prompt("Check the signals."), []);
     events.extend(did);
     events.push(finished_turn(12, 0.04));
     let mut world = World::default();

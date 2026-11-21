@@ -9,13 +9,13 @@ use protocol::capability::calls::Call;
 use protocol::capability::calls::call::Command;
 use protocol::event::{AgentRunState, AgentTask, EventBody, TaskKind, TurnOutcome};
 use protocol::fixtures::{self, ApprovalRequest, approval_request};
-use protocol::model::{MessageId, Seq, TaskId, ToolUseId};
+use protocol::model::{MessageId, TaskId, ToolUseId};
 use protocol::prompt::Prompt;
 use protocol::tail::{BlockKind, Tail, TailBlock, TailMessage};
 use serde_json::json;
 
 use client_core::fake_hub::events::{
-    command, in_background, mcp, mcp_said, monitor, printed, read, read_back, replied, said, taken, text, thought,
+    command, first_turn, in_background, mcp, mcp_said, monitor, printed, read, read_back, replied, said, text, thought,
     user_prompt,
 };
 use protocol::prompt::PromptFrom;
@@ -91,26 +91,27 @@ pub(crate) fn waiting() -> Vec<EventBody> {
         call: Some("toolu-1".into()),
         subagent: None,
     };
-    vec![
+    first_turn(
         user_prompt("Open a PR for this, and queue it once its checks pass."),
-        taken(Seq::new(1)),
-        mcp(
-            "msg-1",
-            "toolu-1",
-            "roundhouse",
-            "wait_for_pull_requests",
-            json!({ "pull_requests": [182], "until": "required_checks" }),
-        ),
-        EventBody::AgentTasks { tasks: vec![wait], stopped: Vec::new() },
-        mcp_said("toolu-1", "The task w1 was moved to the background.", false),
-        text("msg-2", reply),
-        replied(reply, 41, 0.12),
-    ]
+        [
+            mcp(
+                "msg-1",
+                "toolu-1",
+                "roundhouse",
+                "wait_for_pull_requests",
+                json!({ "pull_requests": [182], "until": "required_checks" }),
+            ),
+            EventBody::AgentTasks { tasks: vec![wait], stopped: Vec::new() },
+            mcp_said("toolu-1", "The task w1 was moved to the background.", false),
+            text("msg-2", reply),
+            replied(reply, 41, 0.12),
+        ],
+    )
 }
 
 /// A short turn that's over: a prompt and a reply, and nothing else.
 pub(crate) fn answered(prompt: &str, reply: &str) -> Vec<EventBody> {
-    vec![user_prompt(prompt), taken(Seq::new(1)), text("msg-1", reply), replied(reply, 9, 0.04)]
+    first_turn(user_prompt(prompt), [text("msg-1", reply), replied(reply, 9, 0.04)])
 }
 
 /// The reply that ends [`attached`].
@@ -120,7 +121,7 @@ const ATTACHED_REPLY: &str = "The badge comes after the name in the row, but the
 
 /// A prompt carrying a screenshot and a log, and the reply to it.
 pub(crate) fn attached(attachments: Vec<Attachment>) -> Vec<EventBody> {
-    vec![
+    first_turn(
         EventBody::UserPrompt {
             client_msg_id: None,
             prompt: Prompt::carrying(
@@ -131,10 +132,8 @@ pub(crate) fn attached(attachments: Vec<Attachment>) -> Vec<EventBody> {
             ),
             from: PromptFrom::Person,
         },
-        taken(Seq::new(1)),
-        text("msg-1", ATTACHED_REPLY),
-        replied(ATTACHED_REPLY, 21, 0.08),
-    ]
+        [text("msg-1", ATTACHED_REPLY), replied(ATTACHED_REPLY, 21, 0.08)],
+    )
 }
 
 pub(crate) const LAYOUT_LOG: &str = "\
@@ -277,34 +276,36 @@ pub(crate) fn thinking_tail() -> Tail {
 
 /// The prompt, a thought about it, and a look at the code it's about.
 fn thought_then_read() -> Vec<EventBody> {
-    vec![
+    first_turn(
         user_prompt("Why does the train stop at a caution signal in the depot test?"),
-        taken(Seq::new(1)),
-        thought("msg-1", FIRST_THOUGHT),
-        read("msg-2", "toolu-1", "/workspaces/aspen/crates/signals/src/train.rs"),
-        read_back(
-            "toolu-1",
-            52,
-            "    fn approach(&mut self, signal: Aspect) {\n        if signal != Aspect::Clear {\n            self.brake();",
-        ),
-    ]
+        [
+            thought("msg-1", FIRST_THOUGHT),
+            read("msg-2", "toolu-1", "/workspaces/aspen/crates/signals/src/train.rs"),
+            read_back(
+                "toolu-1",
+                52,
+                "    fn approach(&mut self, signal: Aspect) {\n        if signal != Aspect::Clear {\n            self.brake();",
+            ),
+        ],
+    )
 }
 
 /// The start every chat here shares: the prompt, a search and a file read.
 pub(crate) fn looked_around() -> Vec<EventBody> {
-    let mut events = vec![
+    let mut events = first_turn(
         user_prompt(ASK),
-        taken(Seq::new(1)),
-        EventBody::AgentInit {
-            capabilities: None,
-            agent_session_id: None,
-            model: Some("claude-opus".to_string()),
-            cwd: Some("/workspaces/aspen".to_string()),
-            mode: Some(protocol::fixtures::full_access()),
-            agent_version: None,
-        },
-        text("msg-1", "I'll start with how the sidebar gets its records."),
-    ];
+        [
+            EventBody::AgentInit {
+                capabilities: None,
+                agent_session_id: None,
+                model: Some("claude-opus".to_string()),
+                cwd: Some("/workspaces/aspen".to_string()),
+                mode: Some(protocol::fixtures::full_access()),
+                agent_version: None,
+            },
+            text("msg-1", "I'll start with how the sidebar gets its records."),
+        ],
+    );
     events.push(command(
         "msg-1",
         "toolu-1",

@@ -3,7 +3,7 @@
 
 #![cfg(test)]
 
-use client_core::fake_hub::events::{replied, taken, text, user_prompt};
+use client_core::fake_hub::events::{first_turn, replied, text, user_prompt};
 use gpui_kit::{AppContext as _, TestAppContext};
 use protocol::event::EventBody;
 use protocol::fixtures::account;
@@ -121,7 +121,7 @@ fn the_cards_button_and_typing_compact_ask_the_agent_to_compact_except_while_it_
 /// A chat whose agent has said how full its context is, a fifth of what its model holds, as the agent's settings make
 /// it, under an account whose agent has heard of the week's limit, as the fake agent says them after a turn.
 fn after_a_turn_on_a_fake_hub(cx: &mut TestAppContext) -> (crate::support::FakeHub, Ui<'_>) {
-    let events = vec![user_prompt("say:hello"), taken(Seq::new(1)), text("msg-1", "hello"), replied("hello", 2, 0.01)];
+    let events = first_turn(user_prompt("say:hello"), [text("msg-1", "hello"), replied("hello", 2, 0.01)]);
     let (mut world, chat) = one_chat(SessionStatus::Idle, events);
     let week = UsageLimit {
         window: LimitWindow::SevenDays,

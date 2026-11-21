@@ -12,7 +12,7 @@ use super::frame::{CHAT, Frame, Part, SIDEBAR, SIDEBAR_MENU, WORKSPACE_CARD};
 use super::screens::FOCUS;
 use super::steps::{Screen, Step, Target};
 use super::worlds::{chat_world, conversation, diff, finishing_update, hub_update_found, own_hub};
-use client_core::fake_hub::events::{replied, taken, text, user_prompt};
+use client_core::fake_hub::events::{next_seq, replied, taken, text, user_prompt};
 use client_core::fake_hub::{BUILD, World};
 
 pub(crate) const UPDATE_SCREENS: &[Screen] = &[
@@ -198,17 +198,21 @@ fn updated() -> World {
     };
     let answer = "Yes. Each workspace's row has a badge for its pull request, from the workspace's record.";
     let reply = "Yes. The badge reads the state from the workspace's record, so it's right as soon as the feed says.";
-    let events = vec![
+    // The hub starts the agent between each prompt and the agent taking it.
+    let mut events = vec![
         user_prompt("Does the sidebar show each workspace's pull request?"),
         started(4100, false, "0.9.0", None),
         taken(Seq::new(1)),
         text("msg-1", answer),
         replied(answer, 14, 0.09),
+    ];
+    let asked = next_seq(&events);
+    events.extend([
         user_prompt("Does the badge update when the PR merges?"),
         started(4242, true, BUILD, Some("0.9.0")),
-        taken(Seq::new(6)),
+        taken(asked),
         text("msg-2", reply),
         replied(reply, 9, 0.12),
-    ];
+    ]);
     chat_world(SessionStatus::Idle, events)
 }

@@ -5,7 +5,7 @@
 #![cfg(test)]
 
 use client_core::fake_hub::World;
-use client_core::fake_hub::events::{finished_turn, taken, text, user_prompt};
+use client_core::fake_hub::events::{finished_turn, next_seq, start_turn, text, turn_ending_with, user_prompt};
 use gpui_kit::TestAppContext;
 use protocol::event::{CompactedBy, CompactionOutcome, EventBody, SessionEvent};
 use protocol::model::{Seq, SessionId, SessionStatus};
@@ -19,12 +19,10 @@ pub(super) struct Turns(Vec<EventBody>);
 impl Turns {
     /// A turn with the agent saying each of `said`, as the fake agent's `say:` does.
     pub(super) fn turn(mut self, said: &[&str]) -> Self {
-        let prompt = self.next();
+        let prompt = next_seq(&self.0);
         let number = self.0.iter().filter(|event| matches!(event, EventBody::UserPrompt { .. })).count() + 1;
-        self.0.extend([user_prompt(&format!("Turn {number}.")), taken(prompt)]);
         let messages = said.iter().enumerate().map(|(i, said)| text(&format!("msg-{}-{i}", prompt.get()), said));
-        self.0.extend(messages);
-        self.0.push(finished_turn(12, 0.04));
+        turn_ending_with(&mut self.0, user_prompt(&format!("Turn {number}.")), messages, finished_turn(12, 0.04));
         self
     }
 
@@ -47,7 +45,6 @@ impl Turns {
 
     /// A compaction someone asked for, as the hub and the agent's adapter record it: a turn of its own, with no prompt.
     pub(super) fn compacted(mut self) -> Self {
-        let asked = self.next();
         let outcome = CompactionOutcome::Compacted {
             by: CompactedBy::Asked,
             before_tokens: Some(226_869),
@@ -59,18 +56,9 @@ impl Turns {
         if let EventBody::TurnEnded { only_compacted, .. } = &mut ended {
             *only_compacted = true;
         }
-        self.0.extend([
-            EventBody::CompactionAsked { keeping: None },
-            taken(asked),
-            EventBody::AgentCompacted { asked: Some(asked), keeping: None, outcome },
-            ended,
-        ]);
+        let asked = start_turn(&mut self.0, EventBody::CompactionAsked { keeping: None });
+        self.0.extend([EventBody::AgentCompacted { asked: Some(asked), keeping: None, outcome }, ended]);
         self
-    }
-
-    /// The seq the next event gets.
-    fn next(&self) -> Seq {
-        Seq::new(u64::try_from(self.0.len()).unwrap() + 1)
     }
 }
 

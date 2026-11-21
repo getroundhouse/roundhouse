@@ -9,8 +9,7 @@ use std::time::Duration;
 
 use client_core::fake_hub::World;
 use client_core::fake_hub::events::{
-    command, finished_turn, launched, printed, subagent, subagent_ended, subagent_started, taken, text, user_prompt,
-    within,
+    command, launched, printed, subagent, subagent_ended, subagent_started, text, turn, user_prompt, within,
 };
 use gpui_kit::AppContext as _;
 use gpui_kit::test::ElementSnapshot;
@@ -42,17 +41,9 @@ fn command_open(ui: &mut Ui<'_>) -> Option<bool> {
     ui.labelled(COMMAND_LINE).first().and_then(ElementSnapshot::expanded)
 }
 
-/// A turn as the hub records one: the prompt, the agent taking it, what the agent did, and the turn's end.
-fn turn(events: &mut Vec<EventBody>, prompt: &str, then: impl IntoIterator<Item = EventBody>) {
-    let seq = Seq::new(u64::try_from(events.len()).unwrap() + 1);
-    events.extend([user_prompt(prompt), taken(seq)]);
-    events.extend(then);
-    events.push(finished_turn(3, 0.01));
-}
-
 /// A turn in which the agent says `count` messages, each of its own, whose words are only `message` and a number.
 fn messages(events: &mut Vec<EventBody>, count: usize) {
-    turn(events, "Count.", Vec::from_fn(count, |i| text(&format!("count-{i}"), &format!("message {i}"))));
+    turn(events, user_prompt("Count."), Vec::from_fn(count, |i| text(&format!("count-{i}"), &format!("message {i}"))));
 }
 
 /// A world of one workspace, with a chat holding `events`, and the chat's first `loaded` events as the hub holds them.
@@ -100,12 +91,12 @@ fn cmd_f_finds_in_the_whole_chat_and_opens_what_a_match_is_in(cx: &mut TestAppCo
     let mut events = Vec::new();
     turn(
         &mut events,
-        "Echo a needle.",
+        user_prompt("Echo a needle."),
         [command("echo", "toolu-1", "echo a-needle-printed", None), printed("toolu-1", "a-needle-printed")],
     );
     // Far more events than the transcript loads to start with, so the call isn't among them.
     messages(&mut events, 700);
-    turn(&mut events, "Say the last needle.", [text("last", "the last needle")]);
+    turn(&mut events, user_prompt("Say the last needle."), [text("last", "the last needle")]);
     let (world, events) = chat_of(events, 50);
     let (_hub, mut ui) = open(cx, world);
     let transcript = ui.transcript().unwrap();
@@ -156,9 +147,13 @@ fn a_match_in_a_reply_far_up_the_chat_is_brought_into_view_below_the_bar(cx: &mu
     let paragraphs =
         |reply: usize, parts: usize| Vec::from_fn(parts, |part| format!("Reply {reply}, part {part}.")).join("\n\n");
     let reply = format!("{}\n\nThe **needle** is in [this reply](https://example.com/needle), once", paragraphs(0, 40));
-    turn(&mut events, "Where's the needle?", [text("found", &reply)]);
+    turn(&mut events, user_prompt("Where's the needle?"), [text("found", &reply)]);
     // Enough replies after it to put it well above the window.
-    turn(&mut events, "Go on.", Vec::from_fn(10, |reply| text(&format!("on-{reply}"), &paragraphs(reply + 1, 5))));
+    turn(
+        &mut events,
+        user_prompt("Go on."),
+        Vec::from_fn(10, |reply| text(&format!("on-{reply}"), &paragraphs(reply + 1, 5))),
+    );
     let (world, _) = chat_of(events, 0);
     let (_hub, mut ui) = open(cx, world);
     let transcript = ui.transcript().unwrap();
@@ -187,7 +182,11 @@ fn a_match_in_a_reply_far_up_the_chat_is_brought_into_view_below_the_bar(cx: &mu
 fn a_match_below_the_window_in_a_row_it_shows_is_brought_into_view_with_frames_of_its_own(cx: &mut TestAppContext) {
     let mut events = Vec::new();
     let between = Vec::from_fn(60, |part| format!("Part {part}.")).join("\n\n");
-    turn(&mut events, "Where are they?", [text("found", &format!("A needle here.\n\n{between}\n\nA needle there."))]);
+    turn(
+        &mut events,
+        user_prompt("Where are they?"),
+        [text("found", &format!("A needle here.\n\n{between}\n\nA needle there."))],
+    );
     let (world, _) = chat_of(events, 0);
     let (_hub, mut ui) = open(cx, world);
     let transcript = ui.transcript().unwrap();
@@ -211,7 +210,7 @@ fn a_match_below_the_window_in_a_row_it_shows_is_brought_into_view_with_frames_o
 #[gpui_kit::test]
 fn a_match_the_chat_can_t_scroll_to_asks_for_no_more_frames_once_that_s_moved_nothing(cx: &mut TestAppContext) {
     let mut events = Vec::new();
-    turn(&mut events, "Where's the needle?", [text("found", "Nowhere else.")]);
+    turn(&mut events, user_prompt("Where's the needle?"), [text("found", "Nowhere else.")]);
     let (world, _) = chat_of(events, 0);
     let (_hub, mut ui) = open(cx, world);
     find(&mut ui, "needle");
@@ -227,7 +226,7 @@ fn a_match_the_chat_can_t_scroll_to_asks_for_no_more_frames_once_that_s_moved_no
 #[gpui_kit::test]
 fn off_the_mac_f3_and_shift_f3_step_through_the_matches_too(cx: &mut TestAppContext) {
     let mut events = Vec::new();
-    turn(&mut events, "Say a needle.", [text("said", "a needle")]);
+    turn(&mut events, user_prompt("Say a needle."), [text("said", "a needle")]);
     let (world, _) = chat_of(events, 0);
     let (_hub, mut ui) = open(cx, world);
     find(&mut ui, "needle");
@@ -243,7 +242,7 @@ fn off_the_mac_f3_and_shift_f3_step_through_the_matches_too(cx: &mut TestAppCont
 #[gpui_kit::test]
 fn what_s_typed_is_found_as_it_s_typed_and_the_bar_says_when_nothing_is(cx: &mut TestAppContext) {
     let mut events = Vec::new();
-    turn(&mut events, "Is the **parser** at work?", [text("said", "Here is the **parser** at work")]);
+    turn(&mut events, user_prompt("Is the **parser** at work?"), [text("said", "Here is the **parser** at work")]);
     let (world, _) = chat_of(events, 0);
     let (_hub, mut ui) = open(cx, world);
 
@@ -260,7 +259,11 @@ fn what_s_typed_is_found_as_it_s_typed_and_the_bar_says_when_nothing_is(cx: &mut
 #[gpui_kit::test]
 fn one_letter_is_found_only_in_what_s_loaded_and_the_count_says_so(cx: &mut TestAppContext) {
     let mut events = Vec::new();
-    turn(&mut events, "Where's the zebra crossing?", [text("said", "the zebra crossing, which isn't loaded")]);
+    turn(
+        &mut events,
+        user_prompt("Where's the zebra crossing?"),
+        [text("said", "the zebra crossing, which isn't loaded")],
+    );
     messages(&mut events, 700);
     let (world, _) = chat_of(events, 0);
     let (_hub, mut ui) = open(cx, world);
@@ -284,7 +287,7 @@ fn a_match_in_what_a_subagent_was_asked_opens_its_call_and_is_drawn_with_its_mar
     let mut events = Vec::new();
     turn(
         &mut events,
-        "Send a subagent.",
+        user_prompt("Send a subagent."),
         [
             subagent("send", "toolu-1", "Explore", SUBAGENT_LINE, &asked, Runs::Background),
             subagent_started("toolu-1", "Explore", SUBAGENT_LINE, &asked),

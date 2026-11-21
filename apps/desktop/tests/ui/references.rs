@@ -3,7 +3,7 @@
 
 #![cfg(test)]
 
-use client_core::fake_hub::events::{replied, taken, text, user_prompt};
+use client_core::fake_hub::events::{first_turn, replied, text, user_prompt};
 use gpui_kit::{AppContext as _, TestAppContext};
 use protocol::model::{GithubRepositoryName, IssueNumber, IssueState, Reference, ReferenceKind, SessionStatus};
 
@@ -29,7 +29,7 @@ fn issue() -> Reference {
 /// chat's end.
 #[gpui_kit::test]
 fn a_reference_is_shown_while_it_is_in_view_and_not_once_it_is_out_of_it(cx: &mut TestAppContext) {
-    let mut events = vec![user_prompt("Where's the signal's state kept?"), taken(protocol::model::Seq::new(1))];
+    let mut events = first_turn(user_prompt("Where's the signal's state kept?"), []);
     events.push(text(
         "msg-1",
         "It's on the client for now, which [#1](https://github.com/example/signals/issues/1) is to change.",

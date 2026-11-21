@@ -4,10 +4,10 @@
 
 #![cfg(test)]
 
-use client_core::fake_hub::events::{finished_turn, taken, text, user_prompt};
+use client_core::fake_hub::events::{finished_turn, first_turn, text, user_prompt};
 use client_core::fake_hub::{NOW_MS, World};
 use gpui_kit::{SharedString, TestAppContext, px};
-use protocol::model::{Seq, SessionStatus};
+use protocol::model::SessionStatus;
 
 use crate::support::{FakeHub, Ui, open_on_the_world};
 
@@ -18,7 +18,7 @@ fn resting_on_a_turn<'a>(cx: &'a mut TestAppContext, said: &[&str]) -> (FakeHub,
     let mut world = World::default();
     let repo = world.repo("signals");
     let workspace = world.workspace(&repo, "ledger");
-    let mut events = vec![user_prompt("Say something"), taken(Seq::new(1))];
+    let mut events = first_turn(user_prompt("Say something"), []);
     events.extend(said.iter().enumerate().map(|(i, said)| text(&format!("msg-{i}"), said)));
     events.push(finished_turn(4, 0.01));
     let line = SharedString::from(format!("turn-end/event/{}/0", events.len()));

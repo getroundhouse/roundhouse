@@ -4,12 +4,12 @@
 
 #![cfg(test)]
 
-use client_core::fake_hub::events::{taken, user_prompt};
+use client_core::fake_hub::events::{first_turn, user_prompt};
 use gpui_kit::{
     AppContext as _, ClipboardItem, ElementId, Image, ImageFormat, ScrollDelta, SharedString, TestAppContext, point, px,
 };
 use protocol::event::EventBody;
-use protocol::model::{QueuedPrompt, Seq, SessionStatus};
+use protocol::model::{QueuedPrompt, SessionStatus};
 use protocol::prompt::Prompt;
 
 use crate::steering::working;
@@ -173,7 +173,7 @@ fn cmd_enter_queues_a_prompt_with_its_files_which_shows_while_they_re_added_and_
 
 #[gpui_kit::test]
 fn a_long_queue_scrolls_rather_than_pushing_the_composer_out_of_the_window(cx: &mut TestAppContext) {
-    let (mut world, chat) = one_chat(SessionStatus::Running, vec![user_prompt("Work on it."), taken(Seq::new(1))]);
+    let (mut world, chat) = one_chat(SessionStatus::Running, first_turn(user_prompt("Work on it."), []));
     world.sessions.last_mut().unwrap().queued = Vec::from_fn(30, |i| QueuedPrompt {
         client_msg_id: format!("q{i}").into(),
         prompt: Prompt::new(format!("say:queued {i}")),

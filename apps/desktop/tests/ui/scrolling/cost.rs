@@ -1,10 +1,10 @@
 //! How few of a long session's rows a frame draws: the ones that show, and a few more whose heights are out of date.
 
-use client_core::fake_hub::events::{taken, text, user_prompt};
+use client_core::fake_hub::events::{first_turn, text, user_prompt};
 use desktop::workspace_pane::WorkspacePane;
 use gpui_kit::test::TestWindowExt as _;
 use gpui_kit::{AppContext as _, ScrollDelta, TestAppContext, point, px};
-use protocol::model::{Seq, SessionStatus};
+use protocol::model::SessionStatus;
 
 use super::{A_FRAME, long_reply, open_on_a_chat_saying, session_saying, wait_for_the_list_to_settle};
 use crate::support::{Stack, Ui, one_chat, open_on_the_chat};
@@ -120,7 +120,7 @@ fn a_row_the_agent_adds_puts_no_other_rows_height_out_of_date(cx: &mut TestAppCo
 fn a_working_chats_marks_move_without_drawing_its_rows_again(cx: &mut TestAppContext) {
     /// Frames of the display, over which the time so far goes on twice.
     const FRAMES: u32 = 12;
-    let events = vec![user_prompt("Keep the ledger."), taken(Seq::new(1)), text("msg-0", "Reading the ledger.")];
+    let events = first_turn(user_prompt("Keep the ledger."), [text("msg-0", "Reading the ledger.")]);
     let (mut world, chat) = one_chat(SessionStatus::Running, events);
     world.working_for(&chat, 31_600);
     let (_fake, mut ui) = open_on_the_chat(cx, world, &chat);

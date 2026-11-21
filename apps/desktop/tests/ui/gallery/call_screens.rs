@@ -7,7 +7,7 @@ use look::Region;
 use protocol::capability::calls::Call;
 use protocol::event::EventBody;
 use protocol::fixtures::{ApprovalRequest, approval_request, plan};
-use protocol::model::{Seq, SessionStatus, ToolUseId};
+use protocol::model::{SessionStatus, ToolUseId};
 
 use super::frame::{CHAT, CONTEXT};
 use super::screens::FOCUS;
@@ -15,7 +15,7 @@ use super::steps::{Screen, Step, Target};
 use super::worlds::{chat_world, context, in_plan_mode};
 use super::{chats, tool_chats};
 use client_core::fake_hub::World;
-use client_core::fake_hub::events::{printed, replied, taken, text, typed_call, user_prompt};
+use client_core::fake_hub::events::{first_turn, printed, replied, text, typed_call, user_prompt};
 
 pub(crate) const SCREENS: &[Screen] = &[
     Screen {
@@ -67,23 +67,21 @@ test result: FAILED. 41 passed; 1 failed; 0 ignored";
 fn output_alone() -> Vec<EventBody> {
     let reply = "One failed: `badge_keeps_its_width`. The badge is drawn after the name, which doesn't shrink, so at \
                  this width it runs over the name.";
-    vec![
+    first_turn(
         user_prompt("Did the sidebar's tests pass in the run you started?"),
-        taken(Seq::new(1)),
-        printed("toolu-0", TEST_OUTPUT),
-        text("msg-1", reply),
-        replied(reply, 6, 0.02),
-    ]
+        [printed("toolu-0", TEST_OUTPUT), text("msg-1", reply), replied(reply, 6, 0.02)],
+    )
 }
 
 /// The agent at work, having asked the advisor, which hasn't replied yet.
 fn advisor_waiting() -> World {
-    let events = vec![
+    let events = first_turn(
         user_prompt(tool_chats::ASK),
-        taken(Seq::new(1)),
-        text("msg-1", "Before I change `Aspect`, I'll ask the advisor whether the plan holds up."),
-        typed_call("msg-2", "srvtoolu-1", Call::Advisor),
-    ];
+        [
+            text("msg-1", "Before I change `Aspect`, I'll ask the advisor whether the plan holds up."),
+            typed_call("msg-2", "srvtoolu-1", Call::Advisor),
+        ],
+    );
     let mut world = chat_world(SessionStatus::Running, events);
     let chat = world.sessions.last().unwrap().id.clone();
     world.working_for(&chat, 64_200);
