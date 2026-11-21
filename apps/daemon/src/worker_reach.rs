@@ -32,16 +32,20 @@ impl WorkerReach {
         self.attach
     }
 
-    /// Clap refuses more than one, and none. A worker dials its hub only where there are Unix sockets, as for the other
+    /// Clap refuses more than one, and none. `detach` is whether a worker that dials starts in a session of its own. A worker dials its hub only where there are Unix sockets, as for the other
     /// workers that outlive their hub, since what claims an instance is there only.
     #[cfg_attr(unix, expect(clippy::unnecessary_wraps, reason = "only Windows refuses one"))]
-    pub(crate) fn transport(self) -> anyhow::Result<Transport> {
+    #[cfg_attr(
+        not(unix),
+        expect(unused_variables, reason = "only a worker that dials detaches, and that's only on Unix")
+    )]
+    pub(crate) fn transport(self, detach: bool) -> anyhow::Result<Transport> {
         Ok(match self {
             Self { attach: true, .. } => Transport::Attach,
             Self { listen: true, .. } => Transport::Listen,
             #[cfg(unix)]
             Self { ticket: Some(ticket), port, advertise, .. } => {
-                Transport::Dial(crate::worker_role::Dial { ticket: ticket.into(), port, advertise })
+                Transport::Dial(crate::worker_role::Dial { ticket: ticket.into(), port, advertise, detach })
             }
             #[cfg(not(unix))]
             Self { ticket: Some(_), .. } => anyhow::bail!("a worker dials its hub only on Unix"),

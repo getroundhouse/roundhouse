@@ -22,4 +22,4 @@ mod provider;
 
 #[cfg(test)]
 use provider::stop_orphans;
-pub use provider::{LocalConfig, LocalProvider};
+pub use provider::{LocalConfig, LocalProvider, end_worker_in};

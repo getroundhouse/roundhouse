@@ -14,9 +14,12 @@ use protocol::worker::{
 
 use crate::support::TIMEOUT;
 
+/// In a process group of its own, as a provider starts one, so ending it ends what it started too.
 fn start_worker(dir: &Path, ticket: &WorkerTicket) -> Child {
+    use std::os::unix::process::CommandExt as _;
     WholeEnvironment::for_a_test(&dir.join("home"))
         .command(crate::support::daemon())
+        .process_group(0)
         .args(["worker", "--ticket", ticket.as_str(), "--log"])
         .arg(dir.join("worker.log"))
         .arg("--workspaces-root")
@@ -99,4 +102,69 @@ fn a_worker_given_a_ticket_dials_its_hub_and_dials_again_once_the_connection_dro
         let log = std::fs::read_to_string(dir.path().join("worker.log")).unwrap();
         assert!(log.contains("\"event\":\"hub.admitted\""), "{log}");
     });
+}
+
+/// As a provider starts one in a VM, from a command whose session ends with it: the command returns at once, and the
+/// worker it started dials from the port it's given, and keeps its log.
+#[test]
+fn a_worker_started_detached_returns_at_once_and_dials_from_its_port() {
+    let dir = tempfile::tempdir().unwrap();
+    let port = std::net::UdpSocket::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    runtime.block_on(async {
+        let hub = HubEndpoint::bind(&dir.path().join("endpoint.json"), Relays::None).await.unwrap();
+        let ticket = WorkerTicket::from(&Ticket {
+            hub: hub.address().await,
+            secret: TicketSecret::from("the-secret".to_string()),
+        });
+
+        let started = WholeEnvironment::for_a_test(&dir.path().join("home"))
+            .command(env!("CARGO_BIN_EXE_roundhoused"))
+            .args(["worker", "--ticket", ticket.as_str(), "--port", &port.to_string(), "--advertise"])
+            .arg(format!("127.0.0.1:{port}"))
+            .arg("--detach")
+            .arg("--log")
+            .arg(dir.path().join("worker.log"))
+            .arg("--workspaces-root")
+            .arg(dir.path().join("workspaces"))
+            .arg("--state-dir")
+            .arg(dir.path().join("instance"))
+            .arg("--clones-dir")
+            .arg(dir.path().join("clones"))
+            .output()
+            .unwrap();
+        let (_connection, mut send, mut recv, _, _) = tokio::time::timeout(TIMEOUT, admit(&hub)).await.unwrap();
+        let bound = std::net::UdpSocket::bind(("127.0.0.1", port));
+        let stopped = call(&mut send, &mut recv, 1, WorkerRequest::Stop).await;
+        send.finish().unwrap();
+
+        assert!(started.status.success(), "{started:?}");
+        assert!(bound.is_err(), "the worker holds the port it was given");
+        assert_eq!(stopped, WorkerOutcome::Response(WorkerResponse::Ok));
+        assert!(std::fs::read_to_string(dir.path().join("worker.log")).unwrap().contains("\"event\":\"hub.dialing\""));
+    });
+}
+
+/// So a provider ends a worker that dials, and what it left, as the worker finds them, rather than by a script of its
+/// own.
+#[test]
+fn end_worker_ends_the_worker_serving_its_state_directory() {
+    let dir = tempfile::tempdir().unwrap();
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    let hub = runtime.block_on(HubEndpoint::bind(&dir.path().join("endpoint.json"), Relays::None)).unwrap();
+    let secret = TicketSecret::from("the-secret".to_string());
+    let ticket = WorkerTicket::from(&Ticket { hub: runtime.block_on(hub.address()), secret });
+    let mut worker = start_worker(dir.path(), &ticket);
+    let _admitted = runtime.block_on(async { tokio::time::timeout(TIMEOUT, admit(&hub)).await.unwrap() });
+
+    let ended = WholeEnvironment::for_a_test(&dir.path().join("home"))
+        .command(env!("CARGO_BIN_EXE_roundhoused"))
+        .args(["end-worker", "--now", "--state-dir"])
+        .arg(dir.path().join("instance"))
+        .output()
+        .unwrap();
+
+    assert!(ended.status.success(), "{ended:?}");
+    let exited = waiting::thread::until_ok(TIMEOUT, || worker.try_wait().unwrap().ok_or("the worker is still running"));
+    assert!(!exited.success(), "it was killed: {exited:?}");
 }

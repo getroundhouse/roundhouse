@@ -69,6 +69,7 @@ A README beside code says how to build, run or change that code, and agents keep
 | `docs/reference/file-watching.md` | What the OS's file watchers do through `notify`, as found by experiment or read from its source |
 | `docs/reference/github.md` | How GitHub and `gh` behave, where more than one place in the code depends on it, or it took an experiment to find |
 | `docs/reference/launchd.md` | What launchd does to a hub run as a launch daemon, and to the processes it starts, as found by experiment |
+| `docs/reference/microsandbox.md` | How microsandbox behaves under the adapter, and how to set the adapter up on a hub's machine |
 | `docs/reference/media-remote.md` | What MediaRemote, the private framework that says what a Mac is playing, does, as found by experiment |
 | `docs/reference/conformance.md` | How a version of an agent's CLI is checked against what Roundhouse needs of it, and how to play the scenarios that check it |
 | `docs/reference/performance.md` | How to measure the desktop app's speed, and what helps it meet the bars |
