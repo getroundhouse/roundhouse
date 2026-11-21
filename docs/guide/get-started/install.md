@@ -10,7 +10,7 @@ Roundhouse runs on a Mac with Apple silicon. Windows and Linux have first previe
 
 ## On a Mac
 
-1. [Download Roundhouse](https://f001.backblazeb2.com/file/getroundhouse-releases/Roundhouse-osx-Portable.zip) and unzip it.
+1. [Download Roundhouse](https://f001.backblazeb2.com/file/getroundhouse-releases/Roundhouse-macos-arm64-Portable.zip) and unzip it.
 2. Move it to Applications, and open it.
 
 It's signed and notarized, and it updates itself as changes are published. [Updates](../reference/updates.md) says what an update does to running agents, which is nothing.
@@ -54,11 +54,11 @@ What differs from the Mac:
 
 ## A hub on a machine of its own
 
-A Mac or a Linux machine with no app on it, such as a server, can run a hub that starts at boot, with nobody logged in, for the app on your other machines to [connect to](../guides/connect-another-hub.md). Download the hub for a [Mac](https://f001.backblazeb2.com/file/getroundhouse-releases/Roundhouse-osx-hub.tar.gz), or for Linux on [amd64](https://f001.backblazeb2.com/file/getroundhouse-releases/Roundhouse-linux-amd64-hub.tar.gz) or [ARM64](https://f001.backblazeb2.com/file/getroundhouse-releases/Roundhouse-linux-arm64-hub.tar.gz), unpack it, and install it to run as the user whose files and credentials its agents should use:
+A Mac or a Linux machine with no app on it, such as a server, can run a hub that starts at boot, with nobody logged in, for the app on your other machines to [connect to](../guides/connect-another-hub.md). Download the hub for a [Mac](https://f001.backblazeb2.com/file/getroundhouse-releases/Roundhouse-macos-arm64-hub.tar.gz), or for Linux on [amd64](https://f001.backblazeb2.com/file/getroundhouse-releases/Roundhouse-linux-amd64-hub.tar.gz) or [ARM64](https://f001.backblazeb2.com/file/getroundhouse-releases/Roundhouse-linux-arm64-hub.tar.gz), unpack it, and install it to run as the user whose files and credentials its agents should use:
 
 ```sh
 mkdir roundhouse-hub
-tar -xzf Roundhouse-osx-hub.tar.gz -C roundhouse-hub
+tar -xzf Roundhouse-macos-arm64-hub.tar.gz -C roundhouse-hub
 sudo roundhouse-hub/roundhouse hub install --user <name>
 ```
 

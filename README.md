@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <a href="https://f001.backblazeb2.com/file/getroundhouse-releases/Roundhouse-osx-Portable.zip"><b>Download for Mac</b></a>
+  <a href="https://f001.backblazeb2.com/file/getroundhouse-releases/Roundhouse-macos-arm64-Portable.zip"><b>Download for Mac</b></a>
   &nbsp;·&nbsp; <a href="#where-it-stands">Windows and Linux previews</a>
   &nbsp;·&nbsp; <a href="https://getroundhouse.dev">Website</a>
   &nbsp;·&nbsp; <a href="#get-started">Get started</a>
@@ -75,7 +75,7 @@ You need:
 
 Then:
 
-1. [Download Roundhouse](https://f001.backblazeb2.com/file/getroundhouse-releases/Roundhouse-osx-Portable.zip), unzip it, and move it to Applications. It's signed and notarized, and it updates itself as changes land on `main`.
+1. [Download Roundhouse](https://f001.backblazeb2.com/file/getroundhouse-releases/Roundhouse-macos-arm64-Portable.zip), unzip it, and move it to Applications. It's signed and notarized, and it updates itself as changes land on `main`.
 2. Click `Add project` at the top of the sidebar, and choose a repository.
 3. Click the `+` beside the project, or press `Cmd-N`, choose Claude, Codex or Antigravity, say what to work on, and press Return.
 4. To review the changes, click a file in the sidebar on the right. To comment, hover a changed line and click its add button.

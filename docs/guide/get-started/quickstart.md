@@ -16,7 +16,7 @@ You need:
 
 ## 1. Install
 
-[Download Roundhouse](https://f001.backblazeb2.com/file/getroundhouse-releases/Roundhouse-osx-Portable.zip), unzip it, move it to Applications, and open it.
+[Download Roundhouse](https://f001.backblazeb2.com/file/getroundhouse-releases/Roundhouse-macos-arm64-Portable.zip), unzip it, move it to Applications, and open it.
 
 ## 2. Add a project
 
