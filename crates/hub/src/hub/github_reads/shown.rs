@@ -3,6 +3,7 @@
 
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
+use std::time::Instant;
 
 use parking_lot::Mutex;
 use protocol::client::github::GithubShown;
@@ -28,6 +29,11 @@ impl Shown {
     /// The workspaces whose pull requests some client shows in full.
     pub(crate) fn closely(&self) -> HashSet<WorkspaceId> {
         self.0.lock().values().flat_map(|shown| shown.closely.iter().cloned()).collect()
+    }
+
+    /// The workspaces some client shows the pull requests of.
+    pub(super) fn workspaces(&self) -> HashSet<WorkspaceId> {
+        self.0.lock().values().flat_map(|shown| shown.workspaces.iter().cloned()).collect()
     }
 
     /// The issues and pull requests some client shows as chips, each once.
@@ -75,15 +81,22 @@ impl Hub {
 
     /// Reads again what clients show as chips once what the cache has of it is [`FRESH_FOR`] old, so one on screen says
     /// it's merged within a minute or two of it merging, each time as soon as it's due. A pull request a read for its
-    /// workspace keeps the summary of is due no sooner. Runs until the hub stops.
+    /// workspace keeps the summary of is due no sooner. And, as often as it tries one again, the pull requests of
+    /// archived workspaces clients show that the cache has forgotten, as [`Hub::read_forgotten`] says. Runs until the
+    /// hub stops.
     #[expect(clippy::disallowed_methods, reason = "the pace what clients show is looked at")]
     pub(crate) async fn watch_shown_references(self: Arc<Self>) {
         let pace = self.timers.read_pace;
+        let mut looked_for_forgotten = Instant::now();
         loop {
             tokio::time::sleep(pace).await;
             let shown = self.github_shown.references();
             if !shown.is_empty() {
                 self.read_summaries(&shown, FRESH_FOR).await;
+            }
+            if looked_for_forgotten.elapsed() >= self.timers.read_forgotten_again {
+                looked_for_forgotten = Instant::now();
+                self.read_forgotten_shown().await;
             }
         }
     }

@@ -5,7 +5,7 @@ use std::collections::HashSet;
 
 use protocol::capability::asking::Question;
 use protocol::event::{ContentBlock, EventBody};
-use protocol::model::Proposed;
+use protocol::model::{Proposed, PullRequest};
 
 use super::english::{all_common_english, is_boilerplate};
 use crate::calls::{EditFile, ReadFile, Recorded, ToSubagents, ToolCall, WriteFile};
@@ -131,7 +131,7 @@ impl HintCollector {
         }
     }
 
-    /// Adds the workspace's name, branches, repository name, pull request title terms and commented diff paths.
+    /// Adds the workspace's name, branches, repository name and commented diff paths.
     pub fn add_workspace(&mut self, shown: &InWorkspace) {
         let workspace = shown.workspace();
         self.add_proper_noun(&workspace.name);
@@ -147,12 +147,14 @@ impl HintCollector {
         if let Some(repo) = shown.all().repo(&workspace.repo_id) {
             self.add_proper_noun(&repo.name);
         }
-        if let Some(pr) = workspace.known_pull_request() {
-            self.add_prose(&pr.title);
-        }
         for comment in shown.comments().iter().rev() {
             self.add_path(&comment.path);
         }
+    }
+
+    /// The workspace's pull request, by its title.
+    pub fn add_pull_request(&mut self, pull_request: &PullRequest) {
+        self.add_prose(&pull_request.title);
     }
 
     /// Walks `log` newest-first with separate budgets for conversation messages and tool calls, so a turn with dozens

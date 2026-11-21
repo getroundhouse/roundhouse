@@ -134,3 +134,6 @@ pub(crate) const BEFORE_GITHUB_SET_UP: usize = 85;
 
 /// How many migrations there were before disconnecting a GitHub account removed it, but for an app's installation.
 pub(crate) const BEFORE_GITHUB_ACCOUNT_REMOVAL: usize = 86;
+
+/// How many migrations there were before each workspace's record kept only which pull request is its own.
+pub(crate) const BEFORE_PULL_REQUEST_LINKS: usize = 90;

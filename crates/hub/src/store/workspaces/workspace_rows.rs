@@ -2,7 +2,7 @@ use super::super::instances::{InstanceStage, record_instance};
 use super::super::made::{Made, inserted, made_by};
 use super::super::{Store, StoreError, from_text, json_at, lock, now_ms, rev_of, text_of};
 use protocol::model::{
-    BranchName, Branches, ClientRequestId, PORTS_PER_WORKSPACE, PullRequestFound, RepoId, Rev, SetupStatus, Title,
+    BranchName, Branches, ClientRequestId, PORTS_PER_WORKSPACE, PullRequestLinked, RepoId, Rev, SetupStatus, Title,
     Workspace, WorkspaceId, WorkspaceStatus,
 };
 use rusqlite::{Connection, OptionalExtension, Row, params};
@@ -59,7 +59,7 @@ pub enum Ended {
     PutBack,
 }
 
-pub(in super::super) const WORKSPACE_COLUMNS: &str = "id, repo_id, name, branch, base_ref, path, status, provider, instance_id, created_at_ms, archived_at_ms, setup, port_base, title, title_source, pull_request, user_active_at_ms, comment_draft, branches, pull_request_branch, worker_build";
+pub(in super::super) const WORKSPACE_COLUMNS: &str = "id, repo_id, name, branch, base_ref, path, status, provider, instance_id, created_at_ms, archived_at_ms, setup, port_base, title, title_source, pull_request_link, user_active_at_ms, comment_draft, branches, pull_request_branch, worker_build";
 
 /// The workspace's record as `conn` reads it, such as the writer inside a change, so its revision is that change's.
 pub(in super::super) fn workspace_on(conn: &Connection, id: &WorkspaceId) -> Result<Workspace, StoreError> {
@@ -89,8 +89,10 @@ pub(in super::super) fn workspace_from_row(row: &Row) -> rusqlite::Result<Worksp
         port_base: row.get(12)?,
         title: row.get::<_, Option<String>>(13)?.as_deref().and_then(Title::tidied),
         title_source: from_text(row.get(14)?)?,
-        // One that no longer reads, from a build whose idea of a pull request this one doesn't share, is looked for again.
-        pull_request: json_at(row, 15)?,
+        // What GitHub says of it is the hub's cache's, which it sends to a client that shows it.
+        pull_request: None,
+        // One that no longer reads, from a build whose idea of a link this one doesn't share, is looked for again.
+        pull_request_link: json_at(row, 15)?,
         // Written only by this hub, as JSON. One it can't read is as good as none.
         comment_draft: json_at(row, 17)?,
         user_active_at_ms: row.get(16)?,
@@ -102,9 +104,9 @@ pub(in super::super) fn workspace_from_row(row: &Row) -> rusqlite::Result<Worksp
     })
 }
 
-/// What the hub found, as the column holds it: `None` until it has looked, which is SQL's NULL.
-fn found_text(found: Option<&PullRequestFound>) -> Result<Option<String>, StoreError> {
-    Ok(found.map(serde_json::to_string).transpose()?)
+/// Which pull request the hub found, as the column holds it: `None` until it has looked, which is SQL's NULL.
+fn linked_text(linked: Option<&PullRequestLinked>) -> Result<Option<String>, StoreError> {
+    Ok(linked.map(serde_json::to_string).transpose()?)
 }
 
 impl Store {
@@ -143,7 +145,7 @@ impl Store {
                 i64::from(workspace.port_base),
                 workspace.title.as_deref(),
                 text_of(&workspace.title_source),
-                found_text(workspace.pull_request.as_ref())?,
+                linked_text(workspace.pull_request_link.as_ref())?,
                 workspace.user_active_at_ms,
                 workspace.comment_draft.as_ref().map(serde_json::to_string).transpose()?,
                 workspace.branches.as_ref().map(serde_json::to_string).transpose()?,
@@ -265,19 +267,20 @@ impl Store {
         Ok(left)
     }
 
-    /// Records what the hub found of the workspace's pull request, and on which branch it looked. Returns the workspace
-    /// only when that changed it, so finding the same again moves no revision and announces nothing.
+    /// Records which pull request the hub found is the workspace's, or that it has none, and on which branch it looked.
+    /// Returns the workspace only when that changed it, so finding the same again moves no revision and announces
+    /// nothing.
     pub fn set_workspace_pull_request(
         &self,
         id: &WorkspaceId,
-        found: &PullRequestFound,
+        linked: &PullRequestLinked,
         branch: Option<&BranchName>,
     ) -> Result<Option<Workspace>, StoreError> {
-        let found = found_text(Some(found))?;
+        let linked = linked_text(Some(linked))?;
         let changed = lock(&self.writer).execute(
-            "UPDATE workspaces SET pull_request = ?1, pull_request_branch = ?2
-                 WHERE id = ?3 AND (pull_request IS NOT ?1 OR pull_request_branch IS NOT ?2)",
-            params![found, branch.map(BranchName::as_str), id.as_str()],
+            "UPDATE workspaces SET pull_request_link = ?1, pull_request_branch = ?2
+                 WHERE id = ?3 AND (pull_request_link IS NOT ?1 OR pull_request_branch IS NOT ?2)",
+            params![linked, branch.map(BranchName::as_str), id.as_str()],
         )?;
         if changed == 0 {
             return Ok(None);

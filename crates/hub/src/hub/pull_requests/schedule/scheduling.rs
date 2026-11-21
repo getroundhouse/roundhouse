@@ -75,24 +75,24 @@ fn moving(pr: &PullRequest) -> bool {
         && (pr.checks.pending > 0 || pr.queue.is_some() || pr.merge_state == MergeState::Computing)
 }
 
-/// The ready workspaces that are due to be read, in the order to read them. One not read since the hub started comes
-/// first, those with an open pull request first among them, since they're the likeliest to have moved. Then whichever
-/// has been due longest. A merged or closed pull request is done, so it's left until someone shows it or an agent's turn ends,
+/// The ready workspaces of `listed` that are due to be read, in the order to read them, each beside the state of its
+/// pull request as the hub knows it, `None` where it knows none. One not read since the hub started comes first, those
+/// with an open pull request first among them, since they're the likeliest to have moved. Then whichever has been due
+/// longest. A merged or closed pull request is done, so it's left until someone shows it or an agent's turn ends,
 /// unless it was found on another branch than the one checked out, so it isn't the workspace's now, as when the read
 /// that should have followed the worktree checking out another failed. One an agent waits on, in `waited`, is due at
 /// the soonest, however long it has come back the same, even when it was last read as done, since a read that came
 /// before the wait started didn't end it. One a client shows in full, in `shown`, is due every [`SHOWN`] while it's
 /// not done.
 pub(in super::super) fn due<'a>(
-    workspaces: &'a [Workspace],
+    listed: &'a [(Workspace, Option<PrState>)],
     schedules: &HashMap<WorkspaceId, Schedule>,
     waited: &HashSet<WorkspaceId>,
     shown: &HashSet<WorkspaceId>,
     now: Instant,
 ) -> Vec<&'a Workspace> {
-    let state = |w: &Workspace| w.known_pull_request().map(|pr| pr.state);
-    let done = |w: &Workspace| {
-        matches!(state(w), Some(PrState::Merged | PrState::Closed))
+    let done = |w: &Workspace, state: Option<PrState>| {
+        matches!(state, Some(PrState::Merged | PrState::Closed))
             && !w.pull_request_found_on_another_branch()
             && !waited.contains(&w.id)
     };
@@ -100,12 +100,12 @@ pub(in super::super) fn due<'a>(
         let due_at = if waited.contains(&w.id) { schedule.due_at_soonest() } else { schedule.due_at() };
         if shown.contains(&w.id) { due_at.min(schedule.read_at + SHOWN) } else { due_at }
     };
-    let mut due: Vec<_> = workspaces
+    let mut due: Vec<_> = listed
         .iter()
-        .filter(|w| w.status == WorkspaceStatus::Ready && !done(w))
-        .map(|w| (w, schedules.get(&w.id).map(|schedule| due_at(w, schedule))))
-        .filter(|(_, due_at)| due_at.is_none_or(|due_at| due_at <= now))
+        .filter(|(w, state)| w.status == WorkspaceStatus::Ready && !done(w, *state))
+        .map(|(w, state)| (w, *state, schedules.get(&w.id).map(|schedule| due_at(w, schedule))))
+        .filter(|(_, _, due_at)| due_at.is_none_or(|due_at| due_at <= now))
         .collect();
-    due.sort_by_key(|(w, due_at)| (due_at.is_some(), state(w) != Some(PrState::Open), *due_at));
-    due.into_iter().map(|(w, _)| w).collect()
+    due.sort_by_key(|(_, state, due_at)| (due_at.is_some(), *state != Some(PrState::Open), *due_at));
+    due.into_iter().map(|(w, _, _)| w).collect()
 }

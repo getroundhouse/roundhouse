@@ -4,8 +4,10 @@
 #[cfg(test)]
 mod tests;
 
+mod link;
 mod status;
-pub(crate) use status::deserialize_found;
+pub use link::{PullRequestLink, PullRequestLinked};
+pub(crate) use status::deserialize_looked;
 pub use status::{
     Checks, LeftQueue, Local, MergeState, PrState, PullRequest, PullRequestFound, QueueState, Review, Standing,
 };

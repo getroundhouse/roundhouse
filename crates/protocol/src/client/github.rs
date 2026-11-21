@@ -56,7 +56,7 @@ pub enum GithubUpdate {
         #[serde(
             default,
             skip_serializing_if = "Option::is_none",
-            deserialize_with = "crate::model::deserialize_found"
+            deserialize_with = "crate::model::deserialize_looked"
         )]
         found: Option<PullRequestFound>,
     },

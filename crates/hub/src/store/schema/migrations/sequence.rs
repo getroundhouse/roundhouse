@@ -392,4 +392,6 @@ pub(in super::super) const MIGRATIONS: &[Migration] = &[
     Sql(super::conversations::REPLIES_HEARD),
     // Who said how each reply ended, in `conversations`.
     Sql(super::conversations::SETTLED_BY),
+    // Each workspace's record keeping only which pull request is its own, in `workspaces`.
+    Rust(workspaces::pull_request_links),
 ];

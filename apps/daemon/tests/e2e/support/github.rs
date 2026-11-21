@@ -88,7 +88,7 @@ pub(crate) fn workspace_on_github(stack: &Stack, client: &Client) -> (Workspace,
 pub(crate) fn pushed_workspace(stack: &Stack, client: &Client) -> (Workspace, Session) {
     let (workspace, session) = workspace_on_github(stack, client);
     push(client, &workspace);
-    wait_until("the read the push brings", || super::workspace(client, &workspace.id).pull_request.is_some());
+    wait_until("the read the push brings", || super::workspace(client, &workspace.id).pull_request_link.is_some());
     (workspace, session)
 }
 

@@ -324,3 +324,16 @@ pub(crate) fn pushed(tip: &str, pushed: &str, apart: (u32, u32)) -> Branches {
     let branch = Branch { name: name.clone(), tip: CommitId::from(tip), upstream: Some(upstream) };
     Branches { head: Head::Branch { name }, had: vec![branch] }
 }
+
+/// Records the workspace `w` as archived, as archiving it does once it's done, with nothing else archiving does.
+pub(crate) fn archived(hub: &Hub) {
+    use crate::store::{Ended, Move};
+    hub.store.start_move(&"w".into(), Move::Archive).unwrap().unwrap();
+    hub.store.end_move(&"w".into(), Move::Archive, Ended::Done).unwrap();
+}
+
+/// Has the hub's cache forget all it has of GitHub, as it does what's too old, or as after its file was deleted.
+pub(crate) fn forget_github(hub: &Hub) {
+    hub.github_cache.age(std::time::Duration::from_hours(24 * 8));
+    hub.github_cache.keep(Vec::new(), crate::store::now_ms());
+}

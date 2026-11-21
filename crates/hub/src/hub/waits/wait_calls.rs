@@ -103,7 +103,7 @@ impl Hub {
     pub(super) async fn with_pull_request(&self, wait: Wait) -> Result<WaitAnswer, ApiError> {
         let pull_request = match &wait.watch {
             Some(watch) => watch.snapshot.pull_requests.first().map(|row| row.pull_request.clone()),
-            None => self.workspace(&wait.workspace_id).await?.known_pull_request().cloned(),
+            None => self.known_of(&self.workspace(&wait.workspace_id).await?).and_then(|found| found.pull_request),
         };
         Ok(WaitAnswer { wait, pull_request })
     }

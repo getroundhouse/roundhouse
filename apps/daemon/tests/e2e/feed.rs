@@ -6,7 +6,7 @@ use client_core::records::{HubRecords, Snapshot};
 use client_core::{RecordsFeed, Subscription};
 use protocol::client::HubNotice;
 use protocol::model::{
-    AgentKind, DiffSide, Head, PullRequestFound, RecordKey, Rev, Seq, Session, SessionStatus, WorkspaceStatus,
+    AgentKind, DiffSide, Head, PullRequestLinked, RecordKey, Rev, Seq, Session, SessionStatus, WorkspaceStatus,
 };
 
 use crate::support::{Stack, next_notice_of, session_of, wait_for_setup, wait_for_turn_end, wait_until, workspace_of};
@@ -112,8 +112,8 @@ fn the_feed_reports_what_a_sidebar_shows() {
     assert_eq!(client.session_get(&session.id).unwrap().status, SessionStatus::Idle);
     // The turn's end reads its pull request, which a repository with no GitHub remote doesn't have.
     let looked = workspace_of(sidebar.next_notice(&feed, "its pull request"));
-    let none = Some(PullRequestFound { pull_request: None });
-    assert_eq!((looked.id.as_str(), looked.pull_request), (workspace.id.as_str(), none));
+    let none = Some(PullRequestLinked { link: None });
+    assert_eq!((looked.id.as_str(), looked.pull_request_link), (workspace.id.as_str(), none));
 
     // Each is announced as it starts, so every client shows it on its way out or back, and again once it's done.
     let archived = client.workspace_archive(&workspace.id, true).unwrap();

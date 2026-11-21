@@ -105,6 +105,9 @@ impl WorkspacePane {
 
     fn collect_workspace_hints(&self, collector: &mut HintCollector, cx: &App) {
         collector.add_workspace(&self.shown);
+        if let Some(pull_request) = self.pull_request.pull_request() {
+            collector.add_pull_request(pull_request);
+        }
         if let Some(files) = self.diff.as_ref().and_then(|diff| diff.review.read(cx).files.as_ref()) {
             for patch in files {
                 collector.add_path(patch.path());

@@ -1,5 +1,5 @@
-//! Each workspace's pull request, which the hub keeps on the workspace's record, read from a stand-in for GitHub by
-//! the branch there that the workspace's branch is pushed to.
+//! Each workspace's pull request, which the hub keeps the link to on the workspace's record, read from a stand-in for
+//! GitHub by the branch there that the workspace's branch is pushed to.
 
 #![cfg(test)]
 
@@ -8,14 +8,14 @@ use std::path::Path;
 use client_core::{Client, ClientError};
 use hub::GithubPullRequestState::{Merged, Open};
 use protocol::client::ErrorCode;
-use protocol::model::{BranchName, Head, PrState, PullRequestFound, WorkspaceId};
+use protocol::model::{BranchName, Head, PrState, PullRequestLinked, WorkspaceId};
 
 use crate::support::github::{StandInGithub, push, pushed_workspace, workspace_on_github};
 use crate::support::{self, is_alive, started_pid, wait_for_turn_end, wait_until};
 
-/// The number of the pull request on the workspace's record, as every client gets it.
+/// The number of the pull request the workspace's record links to, as every client gets it.
 fn recorded(client: &Client, id: &WorkspaceId) -> Option<u64> {
-    support::workspace(client, id).known_pull_request().map(|pr| pr.number)
+    support::workspace(client, id).pull_request_linked().map(|link| link.number.get())
 }
 
 #[test]
@@ -48,8 +48,8 @@ fn which_pull_request_is_the_workspaces_goes_by_the_branch_its_pushed_to() {
     let (workspace, _) = workspace_on_github(&stack, &client);
     let branch = workspace.branch.as_str();
     let read = || client.workspace_pull_request(&workspace.id).unwrap();
-    let found = || support::workspace(&client, &workspace.id).pull_request;
-    let looked_and_found_none = Some(PullRequestFound { pull_request: None });
+    let found = || support::workspace(&client, &workspace.id).pull_request_link;
+    let looked_and_found_none = Some(PullRequestLinked { link: None });
 
     // Pushed nowhere, so there's none, which needs nothing of GitHub to say.
     github.say_from(7, Merged, branch);
@@ -96,7 +96,7 @@ fn with_nothing_known_a_read_github_cant_answer_fails() {
     let failed = client.workspace_pull_request(&workspace.id);
 
     assert!(matches!(&failed, Err(ClientError::Api(e)) if e.code == ErrorCode::Worker), "{failed:?}");
-    assert_eq!(support::workspace(&client, &workspace.id).pull_request, None, "still not looked at");
+    assert_eq!(support::workspace(&client, &workspace.id).pull_request_link, None, "still not looked at");
 }
 
 /// As after an update, when nobody has opened any workspace yet. Both are read as the machine's own `gh`, together.
@@ -249,7 +249,7 @@ fn with_githubs_limit_spent_a_read_says_what_is_known_without_asking_github() {
 
     assert!(matches!(&answer, Err(ClientError::Api(e)) if e.code == ErrorCode::Unavailable), "{answer:?}");
     assert_eq!(github.queries(), asked, "nothing asked GitHub for it");
-    assert_eq!(support::workspace(&client, &workspace.id).pull_request, None, "it still hasn't been looked at");
+    assert_eq!(support::workspace(&client, &workspace.id).pull_request_link, None, "it still hasn't been looked at");
 }
 
 /// Asked for again while a read is on its way, the next read is still needed, since the first began before the ask.

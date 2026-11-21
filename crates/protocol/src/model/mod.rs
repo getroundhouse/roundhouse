@@ -68,9 +68,10 @@ pub use proposal::{
     ProposalQuestion, ProposalRevision, Proposed, Recommendation, Response, ResponseSummary, RevisionNumber,
     RevisionStanding, RevisionSummary, Round, Withdrawal, chosen_in_words,
 };
-pub(crate) use pull_request::deserialize_found;
+pub(crate) use pull_request::deserialize_looked;
 pub use pull_request::{
-    Checks, LeftQueue, Local, MergeState, PrState, PullRequest, PullRequestFound, QueueState, Review, Standing,
+    Checks, LeftQueue, Local, MergeState, PrState, PullRequest, PullRequestFound, PullRequestLink, PullRequestLinked,
+    QueueState, Review, Standing,
 };
 pub use queue::QueuedPrompt;
 pub use record::{Record, RecordKey, Records};

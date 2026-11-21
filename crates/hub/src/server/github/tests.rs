@@ -20,7 +20,7 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, DuplexStream, Lines, 
 use tokio::time::timeout;
 
 use crate::hub::Hub;
-use crate::hub::tests::hub_on_github_with;
+use crate::hub::tests::{archived, forget_github, hub_on_github_with};
 use crate::server::admit::Gate;
 use crate::server::connection::serve_connection;
 
@@ -244,4 +244,56 @@ async fn a_workspace_not_looked_at_yet_is_sent_as_that() {
             })
         })
         .await;
+}
+
+/// An archived workspace, which the hub doesn't read in turn, whose pull request the cache has forgotten, as after it
+/// was emptied, is read by the number its record links to once a client shows it, and sent as GitHub says it is now.
+#[tokio::test]
+async fn an_archived_workspaces_pull_request_the_cache_forgot_is_read_again_once_shown() {
+    let dir = tempfile::tempdir().unwrap();
+    let (hub, pull_requests, _github) = hub_on_github_with(dir.path(), &References::default()).await;
+    pull_requests.set(7, PullRequestState::Open);
+    hub.workspace_pull_request("w".into()).await.unwrap();
+    archived(&hub);
+    forget_github(&hub);
+    pull_requests.set(7, PullRequestState::Merged);
+    let mut client = Client::of(&hub).await;
+
+    client.show(1, GithubShown { workspaces: vec!["w".into()], ..GithubShown::default() }).await;
+
+    client
+        .until("the pull request, merged", |sent| pull_request(sent, "w").is_some_and(|pr| pr.state == PrState::Merged))
+        .await;
+    assert_eq!(linked_to(&hub).await, Some(7), "the record keeps its link");
+}
+
+/// One whose first read fails, as while GitHub is down, is tried again while it's shown, until it's read.
+#[tokio::test]
+async fn an_archived_workspaces_pull_request_that_couldnt_be_read_again_is_tried_again() {
+    let dir = tempfile::tempdir().unwrap();
+    let (hub, pull_requests, github) = hub_on_github_with(dir.path(), &References::default()).await;
+    pull_requests.set(7, PullRequestState::Open);
+    hub.workspace_pull_request("w".into()).await.unwrap();
+    archived(&hub);
+    forget_github(&hub);
+    pull_requests.set(7, PullRequestState::Merged);
+    pull_requests.fail(true);
+    let asked = github.asked().len();
+    tokio::spawn(hub.clone().watch_shown_references());
+    let mut client = Client::of(&hub).await;
+
+    client.show(1, GithubShown { workspaces: vec!["w".into()], ..GithubShown::default() }).await;
+    waiting::task::until(WAIT, "a read that fails", || github.asked().len() > asked).await;
+    pull_requests.fail(false);
+
+    client
+        .until("the pull request, merged", |sent| pull_request(sent, "w").is_some_and(|pr| pr.state == PrState::Merged))
+        .await;
+    assert_eq!(linked_to(&hub).await, Some(7), "the record keeps its link");
+}
+
+/// The number of the pull request the record of the workspace `w` links to.
+async fn linked_to(hub: &Arc<Hub>) -> Option<u64> {
+    let workspace = hub.workspace(&"w".into()).await.unwrap();
+    workspace.pull_request_linked().map(|link| link.number.get())
 }

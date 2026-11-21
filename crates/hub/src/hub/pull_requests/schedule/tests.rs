@@ -2,8 +2,8 @@ use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 
 use protocol::model::{
-    BranchName, Branches, Checks, Head, Local, MergeState, PrState, PullRequest, PullRequestFound, Review, Workspace,
-    WorkspaceId, WorkspaceStatus,
+    BranchName, Branches, Checks, GithubRepositoryName, Head, IssueNumber, Local, MergeState, PrState, PullRequest,
+    PullRequestLink, PullRequestLinked, Review, Workspace, WorkspaceId, WorkspaceStatus,
 };
 use tokio::time::Instant;
 
@@ -27,9 +27,18 @@ fn pull_request(state: PrState) -> PullRequest {
     }
 }
 
-fn workspace(id: &str, status: WorkspaceStatus, state: Option<PrState>) -> Workspace {
-    let pull_request = Some(PullRequestFound { pull_request: state.map(pull_request) });
-    Workspace { status, pull_request, ..protocol::fixtures::workspace(id) }
+/// A workspace whose pull request the hub found to be #7, beside its state as the hub knows it, or that has none.
+fn workspace(id: &str, status: WorkspaceStatus, state: Option<PrState>) -> (Workspace, Option<PrState>) {
+    let link = state.map(|_| PullRequestLink {
+        repository: GithubRepositoryName::named("o/r"),
+        number: IssueNumber::try_from(7).unwrap(),
+        url: "https://github.com/o/r/pull/7".to_string(),
+        uncommitted: 0,
+    });
+    (
+        Workspace { status, pull_request_link: Some(PullRequestLinked { link }), ..protocol::fixtures::workspace(id) },
+        state,
+    )
 }
 
 /// Each workspace read at this long ago, waiting the soonest.
@@ -37,7 +46,11 @@ fn read(ago: &[(&str, Duration)], now: Instant) -> HashMap<WorkspaceId, Schedule
     ago.iter().map(|(id, ago)| (WorkspaceId::from(*id), Schedule::starting(now.checked_sub(*ago).unwrap()))).collect()
 }
 
-fn next(workspaces: &[Workspace], schedules: &HashMap<WorkspaceId, Schedule>, now: Instant) -> Option<String> {
+fn next(
+    workspaces: &[(Workspace, Option<PrState>)],
+    schedules: &HashMap<WorkspaceId, Schedule>,
+    now: Instant,
+) -> Option<String> {
     due(workspaces, schedules, &HashSet::new(), &HashSet::new(), now).first().map(|w| w.id.to_string())
 }
 
@@ -203,10 +216,10 @@ fn a_read_that_fails_waits_longer_each_time_however_it_was_asked_for() {
 fn a_merged_pull_request_found_on_another_branch_is_read_again_in_turn() {
     let now = Instant::now();
     let on = |name: &str| Branches { head: Head::Branch { name: BranchName::from(name) }, had: Vec::new() };
-    let merged_on = |id: &str, found_on: Option<&str>, checked_out: &str| Workspace {
-        branches: Some(on(checked_out)),
-        pull_request_branch: found_on.map(BranchName::from),
-        ..workspace(id, WorkspaceStatus::Ready, Some(PrState::Merged))
+    let merged_on = |id: &str, found_on: Option<&str>, checked_out: &str| {
+        let (merged, state) = workspace(id, WorkspaceStatus::Ready, Some(PrState::Merged));
+        let pull_request_branch = found_on.map(BranchName::from);
+        (Workspace { branches: Some(on(checked_out)), pull_request_branch, ..merged }, state)
     };
     let schedules = read(&[("moved", SOONEST), ("stayed", SOONEST), ("before", SOONEST)], now);
 

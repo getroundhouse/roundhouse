@@ -207,13 +207,7 @@ impl<W: Waiter> References<W> {
         let snapshot = records.snapshot();
         // Its own, then one that isn't archived, then the newest archived, since a pull request can be in several.
         let Some(workspace) = (snapshot.workspaces().iter())
-            .filter(|workspace| {
-                workspace
-                    .pull_request
-                    .as_ref()
-                    .and_then(|found| found.pull_request.as_ref())
-                    .is_some_and(|pull_request| pull_request.url == reference.url)
-            })
+            .filter(|workspace| workspace.pull_request_linked().is_some_and(|link| link.url == reference.url))
             .max_by_key(|workspace| {
                 (workspace.id == self.0.workspace, workspace.archived_at_ms.is_none(), workspace.archived_at_ms)
             })

@@ -37,11 +37,12 @@ impl WorkspacePane {
     }
 
     /// Takes the pull request as the hub sent it, or as the workspace's record has it from a hub too old to send it,
-    /// once the hub has looked.
+    /// once the hub has said anything of it: looking where it said it hasn't looked, as once its cache has forgotten
+    /// it. Until then the bar keeps what it showed, as between connecting and the hub's first word.
     pub(crate) fn take_pull_request(&mut self, cx: &mut Context<Self>) {
-        let found = self.records.github().pull_request(self.workspace());
-        if found.is_some() {
-            let lookup = Lookup::of(found);
+        let github = self.records.github();
+        if github.said_pull_request(self.workspace()) {
+            let lookup = Lookup::of(github.pull_request(self.workspace()));
             if lookup != self.pull_request {
                 self.pull_request = lookup;
                 cx.notify();
