@@ -8,6 +8,7 @@ use protocol::capability::calls::{Call, CallKind, CallOutput};
 use protocol::capability::{Capabilities, laws};
 use protocol::event::{ContentBlock, EventBody, SessionEvent, TurnOutcome};
 use protocol::model::{AgentSessionId, ModelName, Place, RunId, Seq};
+use serde_json::Value;
 
 use super::scenario::{Against, Failed, Scenario};
 use crate::AgentOutput;
@@ -187,6 +188,16 @@ impl fmt::Display for Played {
             Played::Replayed => f.write_str("replayed"),
         }
     }
+}
+
+/// How a trial on the real CLI went.
+pub struct Live {
+    pub report: Report,
+    /// The fixture its capture makes, on the scripted model. One on the real model says what the account is and has
+    /// used, so it's never kept.
+    pub fixture: Option<String>,
+    /// What the scripted model was asked, in order.
+    pub requests: Vec<Value>,
 }
 
 /// How a trial went.

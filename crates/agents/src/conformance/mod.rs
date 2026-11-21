@@ -9,6 +9,8 @@ pub mod capture;
 pub mod driver;
 #[cfg(unix)]
 pub(crate) mod http;
+#[cfg(unix)]
+pub(crate) mod json_rpc;
 pub mod lines;
 #[cfg(unix)]
 pub mod replay;

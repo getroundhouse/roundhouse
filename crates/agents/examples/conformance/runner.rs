@@ -169,16 +169,12 @@ async fn play_one(agent: AgentKind, scenario: &'static Scenario, against: Agains
         AgentKind::Claude => live(scenario, against, options).await,
         AgentKind::Codex => {
             let options = agents::codex::conformance::Options { cli: options.cli.clone(), home: options.home.clone() };
-            let agents::codex::conformance::Live { report, fixture, requests } =
-                agents::codex::conformance::live(scenario, against, &options).await;
-            Live { report, fixture, requests }
+            agents::codex::conformance::live(scenario, against, &options).await
         }
         AgentKind::Antigravity => {
             let options =
                 agents::antigravity::conformance::Options { cli: options.cli.clone(), home: options.home.clone() };
-            let agents::antigravity::conformance::Live { report, fixture, requests } =
-                agents::antigravity::conformance::live(scenario, against, &options).await;
-            Live { report, fixture, requests }
+            agents::antigravity::conformance::live(scenario, against, &options).await
         }
         AgentKind::Unknown => unreachable!("parsed agent kind is known"),
     }

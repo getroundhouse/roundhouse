@@ -1,8 +1,24 @@
 use serde_json::{Value, json};
 
 use crate::conformance::lines::Lines;
+use crate::jsonrpc::Dialect;
 
-pub(super) struct JsonRpc;
+/// The lines of a JSON-RPC conversation in `dialect`, where a reply names the request it answers by its ID.
+pub(super) struct JsonRpc {
+    dialect: Dialect,
+}
+
+static BARE: JsonRpc = JsonRpc { dialect: Dialect::Bare };
+static JSON_RPC_2: JsonRpc = JsonRpc { dialect: Dialect::JsonRpc2 };
+
+impl JsonRpc {
+    pub(super) fn of(dialect: Dialect) -> &'static JsonRpc {
+        match dialect {
+            Dialect::Bare => &BARE,
+            Dialect::JsonRpc2 => &JSON_RPC_2,
+        }
+    }
+}
 
 impl Lines for JsonRpc {
     fn kind(&self, line: &Value) -> String {
@@ -20,7 +36,7 @@ impl Lines for JsonRpc {
     fn answer(&self, captured: Option<&Value>, request: &Value) -> Value {
         let mut answer = captured
             .cloned()
-            .unwrap_or_else(|| json!({ "jsonrpc": "2.0", "error": { "code": -32601, "message": "not captured" } }));
+            .unwrap_or_else(|| self.dialect.framed(json!({ "error": { "code": -32601, "message": "not captured" } })));
         answer["id"] = request["id"].clone();
         answer
     }
