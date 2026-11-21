@@ -1,5 +1,5 @@
-//! Each subagent's record, changed in the transaction that records the event that changes it. What it's done lately is
-//! kept as `protocol`'s `Lately::add` says.
+//! Each subagent's record, changed in the transaction that records the event that changes it, as `protocol`'s
+//! `Subagent::note` says.
 
 #[cfg(test)]
 use super::Store;

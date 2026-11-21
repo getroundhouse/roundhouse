@@ -1,4 +1,5 @@
 use super::super::*;
+use crate::store::lock;
 use crate::store::now_ms;
 use crate::store::tests::store_with_session;
 use protocol::capability::calls::call::Read;
@@ -120,10 +121,10 @@ fn a_subagent_that_starts_again_after_it_ended_works_again_under_the_call_that_f
     record(&store, &message(Some("task-1"), vec![reading("read")]));
     record(&store, &ended("task-1", TaskOutcome::Finished, Some("They're in tests/.")));
     let finished = subagent(&store, "task-1");
-    // So it starts again later than it ended, as it would after any time finished.
-    let ended_at = finished.ended_at_ms.unwrap();
-    let later = || now_ms() > ended_at;
-    waiting::thread::until(std::time::Duration::from_secs(10), "the clock never passed when it ended", later);
+    let (between, _) = record(&store, &started("between"));
+    // So it starts again later than it ended, as it would after any time finished, and than another started since.
+    let later = || now_ms() > between.ts_ms;
+    waiting::thread::until(std::time::Duration::from_secs(10), "the clock stood still", later);
 
     let (restart, changed) = record(&store, &start("toolu_send", true));
     assert_eq!(changed, ["task-1"]);
@@ -135,7 +136,12 @@ fn a_subagent_that_starts_again_after_it_ended_works_again_under_the_call_that_f
     assert_eq!(again.started_at_ms, restart.ts_ms, "at it from when it started again");
     assert!(again.rev > finished.rev);
     let (subagents, _) = store.list_subagents(&"s".into()).unwrap();
-    assert_eq!(subagents.len(), 1, "no record for the call that messaged it");
+    let listed: Vec<SubagentId> = subagents.iter().map(Subagent::id).collect();
+    assert_eq!(
+        listed,
+        [SubagentId::from("between"), "task-1".into()],
+        "by when each last started, and none for the call that messaged it"
+    );
     let mut other = started("toolu_agent");
     if let EventBody::SubagentStarted { subagent, .. } = &mut other {
         *subagent = Some("task-2".into());
@@ -218,6 +224,7 @@ fn a_subagents_record_counts_what_its_conversation_holds_and_changes_only_when_t
     let counted = subagent(&store, "agent");
     assert_eq!(counted.context_tokens, Some(1_200));
 
+    assert_eq!(record(&store, &holds("agent", 1_200)).1, unchanged, "the count it had");
     assert_eq!(record(&store, &holds("nobody", 7)).1, unchanged, "one the agent never said it started");
     assert_eq!(subagent(&store, "agent"), counted, "it keeps its revision, so it isn't sent again");
     assert_eq!(record(&store, &holds("agent", 900)).1, ["agent"]);
@@ -240,6 +247,38 @@ fn a_subagents_record_counts_what_its_conversation_holds_and_changes_only_when_t
     };
     record(&store, &end);
     assert_eq!(subagent(&store, "other").context_tokens, Some(2_000), "the count as it ended");
+}
+
+/// A record that changes keeps what a newer build stored in it that this one can't read, such as a status it doesn't
+/// know or what it's done lately in another form, unless the rule sets that itself.
+#[test]
+fn a_record_keeps_what_a_newer_build_stored_in_it_when_another_field_of_it_changes() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = store_with_session(dir.path());
+    record(&store, &started("newer"));
+    record(&store, &started("working"));
+    let stored = |id: &str| -> (String, Option<String>) {
+        let sql = "SELECT status, lately FROM subagents WHERE id = ?";
+        lock(&store.writer).query_row(sql, [id], |row| Ok((row.get(0)?, row.get(1)?))).unwrap()
+    };
+    let newer_form = r#""a newer form""#;
+    lock(&store.writer)
+        .execute_batch(&format!(
+            "UPDATE subagents SET lately = '{newer_form}';
+             UPDATE subagents SET status = 'pondering' WHERE id = 'newer';"
+        ))
+        .unwrap();
+
+    let reply = reply(Some("newer"), "claude-haiku-5-5", vec![reading("read")]);
+    assert_eq!(record(&store, &reply).1, ["newer"]);
+    let holds = EventBody::SubagentContext { subagent: "working".into(), tokens: 1_200 };
+    assert_eq!(record(&store, &holds).1, ["working"]);
+
+    let newer = subagent(&store, "newer");
+    assert_eq!((newer.calls, model(&store, "newer").as_deref()), (1, Some("claude-haiku-5-5")));
+    assert_eq!(stored("newer"), ("pondering".into(), Some(newer_form.into())), "its status and what it did");
+    assert_eq!(subagent(&store, "working").context_tokens, Some(1_200));
+    assert_eq!(stored("working"), ("working".into(), Some(newer_form.into())), "what it did");
 }
 
 fn said(text: &str) -> ContentBlock {
@@ -292,6 +331,9 @@ fn a_working_subagents_record_keeps_what_it_has_done_lately_and_lets_go_of_it_wh
     let finished = subagent(&store, "agent");
     assert_eq!((finished.lately, finished.calls), (None, 1), "it's only shown while it works");
     assert_eq!(record(&store, &message(Some("agent"), vec![said("Late.")])).1, Vec::<String>::new());
+    assert_eq!(record(&store, &message(Some("agent"), vec![reading("late")])).1, ["agent"], "a call it made late");
+    let late = subagent(&store, "agent");
+    assert_eq!((late.lately, late.calls), (None, 2), "counted, but not shown");
     record(&store, &exited());
     assert_eq!(subagent(&store, "other").lately, None, "nor once it's gone with its agent");
 }

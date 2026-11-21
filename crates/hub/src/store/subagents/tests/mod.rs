@@ -1,7 +1,6 @@
 use super::*;
 use protocol::event::TaskOutcome;
 
-mod as_recorded;
 mod migrated;
 
 mod recording;

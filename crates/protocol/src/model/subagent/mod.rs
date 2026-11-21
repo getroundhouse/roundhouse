@@ -3,9 +3,9 @@
 
 mod lately;
 mod record;
-#[cfg(any(test, feature = "testing"))]
 mod recorded;
 #[cfg(test)]
 mod tests;
 
 pub use record::{Lately, LatelyCall, LatelyResult, Said, Subagent, SubagentStatus};
+pub use recorded::TouchedSubagents;
