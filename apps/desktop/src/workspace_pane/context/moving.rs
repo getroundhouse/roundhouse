@@ -2,10 +2,8 @@
 //! whichever card says that. The hub decides whether moving needs the person's say, since only it knows whether the
 //! chat's agent is at work, so this asks them only once it's refused.
 
-use client_core::ClientError;
 use gpui_kit::{Anchor, AnyElement, Context, IntoElement, SharedString, WeakEntity, Window};
 use look::HoldOpen;
-use protocol::client::ErrorCode;
 use protocol::model::{Account, AccountId, AgentKind, Session, SessionId};
 
 use super::super::composer::Hub;
@@ -87,16 +85,16 @@ impl WorkspacePane {
         let moving = self.client.start(move |client| client.session_assign_account(&id, &account, force));
         cx.spawn_in(window, async move |this, cx| {
             let moved = moving.recv().await;
-            let _ = this.update_in(cx, |_, _, cx| match moved {
-                Ok(_) => {}
-                Err(ClientError::Api(e)) if e.code == ErrorCode::NeedsForce && !force => {
-                    let pane = cx.weak_entity();
-                    cx.emit(PaneEvent::Present(std::rc::Rc::new(move |window, cx| {
-                        let _ =
-                            pane.update(cx, |_, cx| Self::confirm_forced_move(session.clone(), to.clone(), window, cx));
-                    })));
+            let _ = this.update_in(cx, |_, _, cx| {
+                let Err(e) = moved else { return };
+                if force || e.would_lose().is_none() {
+                    cx.emit(PaneEvent::Error(client_core::refusals::couldnt("move the chat", &e)));
+                    return;
                 }
-                Err(e) => cx.emit(PaneEvent::Error(client_core::refusals::couldnt("move the chat", &e))),
+                let pane = cx.weak_entity();
+                cx.emit(PaneEvent::Present(std::rc::Rc::new(move |window, cx| {
+                    let _ = pane.update(cx, |_, cx| Self::confirm_forced_move(session.clone(), to.clone(), window, cx));
+                })));
             });
         })
         .detach();

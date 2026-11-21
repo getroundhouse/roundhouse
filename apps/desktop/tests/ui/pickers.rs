@@ -5,7 +5,7 @@
 use gpui_kit::test::ElementSnapshot;
 use gpui_kit::{AppContext as _, ElementId, SharedString, TestAppContext};
 use protocol::capability::approvals::ApprovalMode;
-use protocol::capability::settings::Effort;
+use protocol::capability::settings::{Effort, Settings};
 use protocol::event::EventBody;
 use protocol::fixtures::{full_access, plan_mode};
 use protocol::model::{ModelName, SessionStatus};
@@ -164,7 +164,9 @@ fn a_change_the_agent_refuses_is_shown_and_changes_nothing(cx: &mut TestAppConte
     ui.press("enter");
     ui.wait_idle_with("the agent to be up", |text| text.contains("running"));
     let pane = ui.pane().unwrap();
-    ui.cx.update_entity(&pane, |p, cx| p.configure(Some(ModelName::named("not-a-model")), None, cx));
+    ui.cx.update_entity(&pane, |p, cx| {
+        p.configure(Settings { model: Some(ModelName::named("not-a-model")), ..Settings::default() }, cx);
+    });
     ui.wait("the refusal", |ui| ui.view().error.as_deref().is_some_and(|e| e.contains("not found")));
     let model = ui.cx.read_entity(&pane, |p, _| p.session().map(|s| s.model.clone()));
     assert_eq!(model, Some(CLAUDE_STARTS_WITH.0));

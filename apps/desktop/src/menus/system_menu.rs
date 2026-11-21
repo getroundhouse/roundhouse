@@ -1,9 +1,10 @@
-use crate::workspace_pane::{Mark, Showing};
+use crate::workspace_pane::Showing;
 use crate::{
     About, AddRepository, ArchiveWorkspace, CheckForUpdates, CloseChat, FindInChat, FindNext, FindPrevious, GoBack,
     GoForward, Hide, HideOthers, MarkWorkspace, Minimize, NewChat, NewTerminal, NewWorkspace, NextChat, NextWorkspace,
     OpenSettings, PreviousChat, PreviousWorkspace, Quit, ShowAll, ToggleDiff, ToggleSidebar, Zoom,
 };
+use client_core::marking::Mark;
 use gpui_kit::component::input::{Copy, Cut, Paste, Redo, SelectAll, Undo};
 use gpui_kit::{App, Menu, MenuItem, OsAction, SystemMenuType, Window};
 

@@ -1,19 +1,11 @@
 //! Which chats have a reply that hasn't been read, and reading the one showing.
 
+use client_core::marking::{self, Mark};
 use gpui_kit::Context;
-use protocol::model::{Seq, Session, SessionId};
+use protocol::model::{Session, SessionId};
 
 use super::composer::Hub;
 use super::{PaneEvent, Showing, WorkspacePane};
-
-/// What marking a chat does.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Mark {
-    /// Marks every reply so far read.
-    Read,
-    /// Marks the newest reply unread again.
-    Unread,
-}
 
 /// Whether a pane is drawn, and whether its window is in front. What's drawn in front is read while there's a hub to
 /// mark it read on, which the pane knows as its [`Hub`].
@@ -31,9 +23,8 @@ pub(crate) enum OnScreen {
 #[derive(Default)]
 pub(super) struct Reading {
     on_screen: OnScreen,
-    /// The chat read last while on screen, and its newest reply then. A reply that comes while it's still showing is
-    /// read too, and one marked unread again stays unread until the chat is shown again.
-    shown: Option<(SessionId, Seq)>,
+    /// The chat read last while on screen, as client-core reads one for every client.
+    read: marking::Reading,
 }
 
 impl WorkspacePane {
@@ -87,20 +78,16 @@ impl WorkspacePane {
                 .active
                 .as_ref()
                 .filter(|_| self.reading.on_screen == OnScreen::InFront && self.showing() == Showing::Chat);
-            if self.drawn() && self.reading.shown.as_ref().is_some_and(|(id, _)| Some(id) != in_front) {
-                self.reading.shown = None;
+            if self.drawn() {
+                self.reading.read.forget_unless(in_front);
             }
             return;
         }
         // The file tab covers the chat while it shows.
         let showing = self.session().filter(|_| self.being_read() && self.showing() == Showing::Chat).cloned();
-        let Some(session) = showing else {
-            self.reading.shown = None;
-            return;
-        };
-        let shown_with = self.reading.shown.as_ref().filter(|(id, _)| *id == session.id).map(|(_, reply)| *reply);
-        self.reading.shown = Some((session.id.clone(), session.reply_seq));
-        if session.unread() && shown_with.is_none_or(|reply| session.reply_seq > reply) {
+        if self.reading.read.read(showing.as_ref())
+            && let Some(session) = showing
+        {
             self.held(&session.id).marking = Some(session.reply_seq);
             self.mark(&session, Mark::Read, cx);
         }
@@ -115,11 +102,8 @@ impl WorkspacePane {
     /// Marks a chat, from what client-core's copy says of it.
     pub(crate) fn mark(&mut self, session: &Session, mark: Mark, cx: &mut Context<Self>) {
         let (id, reply) = (session.id.clone(), session.reply_seq);
-        let target = id.clone();
-        let marking = self.client.start(move |client| match mark {
-            Mark::Read => client.session_mark_read(&target, reply),
-            Mark::Unread => client.session_mark_unread(&target),
-        });
+        let marked = session.clone();
+        let marking = self.client.start(move |client| mark.chat(client, &marked));
         cx.spawn(async move |this, cx| {
             let marked = marking.recv().await;
             let _ = this.update(cx, |t, cx| {
@@ -128,28 +112,12 @@ impl WorkspacePane {
                 {
                     chat.marking = None;
                 }
-                // A hub older than this app keeps no replies, so it has none to mark.
-                if let Err(e) = marked
-                    && !e.is_unsupported()
-                {
-                    cx.emit(PaneEvent::Error(client_core::refusals::couldnt(
-                        &format!("mark the chat {}", mark.word()),
-                        &e,
-                    )));
+                if let Err(e) = marked {
+                    cx.emit(PaneEvent::Error(mark.couldnt_mark_the_chat(&e)));
                 }
                 cx.notify();
             });
         })
         .detach();
-    }
-}
-
-impl Mark {
-    /// What a chat becomes, in words.
-    pub(crate) fn word(self) -> &'static str {
-        match self {
-            Mark::Read => "read",
-            Mark::Unread => "unread",
-        }
     }
 }

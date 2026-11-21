@@ -5,7 +5,6 @@ use std::time::Duration;
 use client_core::ClientError;
 use client_core::records::InWorkspace;
 use gpui_kit::{AppContext, Context, Result, Window};
-use protocol::capability::settings::Settings;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::model::{Session, SessionId};
 use transcript::{Transcript, TranscriptEvent};
@@ -57,14 +56,7 @@ impl WorkspacePane {
         }
         self.creating_chat = true;
         let id = self.workspace().id.clone();
-        // It keeps the model and effort, but not plan mode, which belongs to the task at hand.
-        let (model, effort) = (
-            self.session().filter(|s| s.agent == agent).map(|s| s.model.clone()),
-            self.session().filter(|s| s.agent == agent).and_then(|s| s.effort.known()),
-        );
-        // A level this app can't name, such as a newer hub's, can't be asked for, so the new chat gets what its agent
-        // starts a chat with.
-        let options = Settings { model, effort, ..Settings::default() };
+        let options = client_core::new_chat_settings(self.session(), agent);
         let creating = self
             .client
             .start(move |client| client.session_create(&id, agent, options, Some(client_core::new_request_id())));

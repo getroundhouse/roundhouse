@@ -6,7 +6,7 @@
 
 use std::sync::Arc;
 
-use desktop::busy::{self, Busy};
+use desktop::busy::Busy;
 use desktop::pull_request::{self, Lookup};
 use gpui_kit::component::{h_flex, v_flex};
 use gpui_kit::{
@@ -143,7 +143,7 @@ impl Render for Sheet {
         let colors = look::colors(cx);
         let (pane, sidebar) = (colors.pane, colors.sidebar);
         let rows = self.states.iter().enumerate().map(|(index, (lookup, busy, status))| {
-            let doing = busy::doing(*status);
+            let doing = client_core::moving::doing(*status);
             let bar = pull_request::bar(lookup, busy, doing, |_, _, _| {}, cx);
             let controls = pull_request::controls(lookup, busy, doing, |_, _, _| {});
             h_flex()

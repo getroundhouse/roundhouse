@@ -1,6 +1,6 @@
 [package]
 name = "client-ui"
-description = "What every app draws of a hub's workspaces and chats, other than a chat's transcript: their marks, and the picker of a chat's model."
+description = "What every app draws of a hub's workspaces and chats, other than a chat's transcript: their marks, a workspace's menu, and the picker of a chat's model."
 version.workspace = true
 edition.workspace = true
 publish.workspace = true

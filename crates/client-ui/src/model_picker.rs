@@ -5,7 +5,7 @@ use std::rc::Rc;
 
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{Anchor, App, IntoElement, ParentElement as _, RenderOnce, SharedString, Styled as _, Window, div};
-use protocol::capability::settings::Effort;
+use protocol::capability::settings::{Effort, Settings};
 use protocol::model::{AgentDescription, ModelName};
 
 /// What was picked in the model picker's menu.
@@ -13,6 +13,20 @@ use protocol::model::{AgentDescription, ModelName};
 pub enum Picked {
     Model(ModelName),
     Effort(Effort),
+}
+
+impl Picked {
+    /// What it changes of a chat at `effort` on `agent`: another model, at the effort `agent` says goes with it from
+    /// the one the chat is at, or another effort.
+    pub fn change(self, agent: Option<&AgentDescription>, effort: &Effort) -> Settings {
+        match self {
+            Picked::Model(model) => {
+                let effort = agent.map(|agent| agent.effort_for_choice(&model, Some(effort)));
+                Settings { model: Some(model), effort, ..Settings::default() }
+            }
+            Picked::Effort(effort) => Settings { effort: Some(effort), ..Settings::default() },
+        }
+    }
 }
 
 /// What the picker calls a model: what its agent's description calls it, or for any other, such as a full ID, the name

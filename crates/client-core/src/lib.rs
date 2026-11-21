@@ -22,6 +22,8 @@ pub mod drawn;
 pub mod file_text;
 pub mod hints;
 pub mod link;
+pub mod marking;
+pub mod moving;
 pub mod records;
 pub mod refusals;
 pub mod session_log;
@@ -35,6 +37,7 @@ mod client;
 mod drafts;
 #[cfg(any(test, feature = "testing"))]
 pub mod fake_hub;
+mod new_chat;
 mod sending;
 #[cfg(any(test, feature = "testing"))]
 pub mod stand_in_hub;
@@ -43,6 +46,7 @@ pub use agents::Agents;
 pub use approval::{Answered, Approval, Given, ToolUseAnswer, ToolUseAsked, claims_of_the_asker};
 pub use attachments::{FileToSend, NotAttached};
 pub use drafts::{CameBack, DraftChange, DraftKey, Drafts, FilesFor, KeptDraft, NotReadBack, ReadBack};
+pub use new_chat::new_chat_settings;
 pub use sending::{NotTaken, Taking, Written};
 
 pub use client::{

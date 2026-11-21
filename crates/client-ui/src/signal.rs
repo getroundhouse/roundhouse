@@ -1,7 +1,9 @@
-//! What a chat's mark says of its agent, which chat's a workspace's mark shows, the colour it's in for how the
-//! workspace's pull request is getting on, and whether a chat is waiting on the person, which its name says rather than
-//! its mark. Every app shows them the same way.
+//! What a chat's mark says of its agent, which chat's a workspace's mark shows, and the colour it's in for how the
+//! workspace's pull request is getting on. Whether a chat is waiting on the person its name says rather than its
+//! mark, as `client_core::marking` works out. Every app shows them the same way.
 
+use client_core::marking::Mark;
+use gpui_kit::assets::IconName;
 use look::{Signal, Work};
 use protocol::event::TaskKind;
 use protocol::model::{PullRequestFound, Session, SessionStatus, SetupStatus, Standing, Workspace};
@@ -75,10 +77,14 @@ pub fn work(standing: Standing) -> Work {
     }
 }
 
-/// Whether an open chat is waiting on the person, for an answer or an approval. It needs a look as a reply nobody has
-/// read does, so a name stands out for either.
-pub fn waiting_on_you<'a>(chats: impl IntoIterator<Item = &'a Session>) -> bool {
-    chats.into_iter().any(|chat| chat.is_open() && chat.status == SessionStatus::WaitingApproval)
+/// The row of a chat's or a workspace's menu that marks it as `mark` says, in words, with an open envelope to mark it
+/// read and a closed one to mark it unread again, as Mail's are. What choosing it does is the menu's.
+pub fn mark_row(mark: Mark) -> look::MenuRow {
+    let icon = match mark {
+        Mark::Read => IconName::MailOpen,
+        Mark::Unread => IconName::Mail,
+    };
+    look::menu_row(format!("Mark as {}", mark.word())).icon(icon)
 }
 
 #[cfg(test)]
@@ -87,7 +93,7 @@ mod tests {
     use protocol::event::{AgentTask, TaskKind, TurnOutcome};
     use protocol::model::{Checks, QueueState, Seq, Session, SessionStatus, SetupStatus, Standing, Workspace};
 
-    use super::{chat_signal as chat, waiting_on_you, work};
+    use super::{chat_signal as chat, work};
 
     fn workspace(chats: &[Session]) -> Signal {
         super::workspace_signal(&protocol::fixtures::workspace("w"), chats)
@@ -163,13 +169,8 @@ mod tests {
     }
 
     #[test]
-    fn a_chat_waiting_on_the_person_holds_its_mark_still_and_says_so_apart_from_it() {
-        use SessionStatus::{Idle, Running, WaitingApproval};
-        assert_eq!(chat(&session(WaitingApproval)), Signal::Idle);
-
-        assert!(waiting_on_you(&[session(Running), session(WaitingApproval)]));
-        assert!(!waiting_on_you(&[session(Running), session(Idle)]));
-        assert!(!waiting_on_you(&[closed(WaitingApproval)]), "a closed chat doesn't count");
+    fn a_chat_waiting_on_the_person_holds_its_mark_still_since_its_name_says_so() {
+        assert_eq!(chat(&session(SessionStatus::WaitingApproval)), Signal::Idle);
     }
 
     /// The hub says a reply is unread on the same record, and the mark says the same either way.

@@ -14,7 +14,6 @@ use look::{Hand as _, IconSizing as _, Sizing as _};
 use protocol::model::SessionId;
 
 use super::WorkspacePane;
-use super::view::chat_title;
 
 /// Room for a title of a few words beside how long ago, which a tab's width doesn't leave, so a long one is cut short
 /// rather than widening the menu.
@@ -43,7 +42,7 @@ impl WorkspacePane {
             .iter()
             .filter_map(|session| {
                 let closed_at_ms = session.closed_at_ms?;
-                Some(ClosedChat { id: session.id.clone(), title: chat_title(session).to_string().into(), closed_at_ms })
+                Some(ClosedChat { id: session.id.clone(), title: session.label().to_string().into(), closed_at_ms })
             })
             .collect();
         if closed.is_empty() {
@@ -77,7 +76,7 @@ impl WorkspacePane {
                     menu = menu.width(MENU_WIDTH);
                     for chat in &closed {
                         let (this, id) = (this.clone(), chat.id.clone());
-                        let row = row(chat.title.clone(), crate::ago::ago(chat.closed_at_ms, now_ms));
+                        let row = row(chat.title.clone(), look::ago(chat.closed_at_ms, now_ms));
                         menu = menu.row(row.on_choose(move |_, cx| {
                             let _ = this.update(cx, |t, cx| t.reopen_chat(id.clone(), cx));
                         }));

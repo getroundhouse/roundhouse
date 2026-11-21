@@ -1,9 +1,9 @@
 use std::collections::BTreeSet;
 
+use client_core::marking::Mark;
 use gpui_kit::{Action, Menu, OwnedMenuItem};
 
 use super::{Says, System, menus};
-use crate::workspace_pane::Mark;
 use crate::{Hide, HideOthers, Minimize, ShowAll, Zoom};
 
 /// Every action `system`'s menus hold, by name, in submenus too.

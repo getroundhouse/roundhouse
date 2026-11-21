@@ -3,7 +3,7 @@
 
 use gpui_kit::App;
 use look::{Signal, Work};
-use protocol::model::{Workspace, WorkspaceStatus};
+use protocol::model::Workspace;
 
 use crate::app::AppView;
 
@@ -26,8 +26,8 @@ pub(crate) fn standing(app: &AppView, workspace: &Workspace, cx: &App) -> Standi
 
 /// Whether a workspace needs a look: it has a reply nobody has read, or a chat waiting on an answer or an approval.
 pub(super) fn needs_a_look(app: &AppView, workspace: &Workspace, cx: &App) -> bool {
-    let unread = workspace.status != WorkspaceStatus::Archived && !app.unread_chats(&workspace.id, cx).is_empty();
-    unread || client_ui::waiting_on_you(app.records().sessions(&workspace.id))
+    let chats = app.records().sessions(&workspace.id);
+    client_core::marking::needs_a_look(workspace, chats, app.shows_unread(&workspace.id, cx))
 }
 
 /// How many listed workspaces on `app` need a look.

@@ -10,10 +10,10 @@ use gpui_kit::{
     AnyElement, App, AppContext as _, Context, Div, Entity, Focusable as _, IntoElement, ParentElement, Styled,
     Subscription, Window, div, px,
 };
-use look::{InRegion as _, Region, Shaped as _};
+use look::{InRegion as _, Region};
 use protocol::capability::approvals::ApprovalMode;
-use protocol::capability::settings::{Effort, Settings};
-use protocol::model::{ModelName, SessionId};
+use protocol::capability::settings::Settings;
+use protocol::model::SessionId;
 use protocol::prompt::Prompt;
 
 use super::dictating::Then;
@@ -102,9 +102,8 @@ impl WorkspacePane {
 
     /// Changes the showing chat's model or effort. The hub only agrees once a running agent has, so the picker changes
     /// when this comes back, and a refusal leaves it as it was.
-    pub fn configure(&mut self, model: Option<ModelName>, effort: Option<Effort>, cx: &mut Context<Self>) {
+    pub fn configure(&mut self, change: Settings, cx: &mut Context<Self>) {
         let Some(id) = self.active.clone() else { return };
-        let change = Settings { model, effort, ..Settings::default() };
         self.configure_chat(id, change, cx, |_, _, _| {});
     }
 
@@ -153,8 +152,7 @@ impl WorkspacePane {
     fn mode_planning(&self, session: &SessionId, planning: bool) -> Option<ApprovalMode> {
         let agent = self.sessions().iter().find(|s| s.id == *session)?.agent;
         let held = self.records.snapshot();
-        let described = held.agents().of(agent)?;
-        if planning { described.plan_mode() } else { described.default_mode() }
+        held.agents().of(agent)?.mode_for(planning)
     }
 
     /// Plan mode on or off for the chat showing, as Shift-Tab does. It changes once the agent has agreed. A press while
@@ -203,15 +201,10 @@ impl WorkspacePane {
         let model_and_effort =
             self.session().map(|s| (s.model.clone(), s.effort.clone(), prompt_cache::switching_note(s, now_ms)));
         let this = cx.weak_entity();
-        let models = move |picked, _: &mut Window, cx: &mut gpui_kit::App| {
-            let _ = this.update(cx, |t, cx| match picked {
-                Picked::Model(model) => {
-                    let effort = t
-                        .session()
-                        .and_then(|s| t.picker_agent().map(|agent| agent.effort_for_choice(&model, Some(&s.effort))));
-                    t.configure(Some(model), effort, cx);
-                }
-                Picked::Effort(effort) => t.configure(None, Some(effort), cx),
+        let models = move |picked: Picked, _: &mut Window, cx: &mut gpui_kit::App| {
+            let _ = this.update(cx, |t, cx| {
+                let Some(effort) = t.session().map(|s| s.effort.clone()) else { return };
+                t.configure(picked.change(t.picker_agent().as_ref(), &effort), cx);
             });
         };
         h_flex()
@@ -302,7 +295,6 @@ impl WorkspacePane {
         let working = self.session().is_some_and(|s| s.status.in_turn());
         if working {
             stop_button("stop", cx)
-                .accessibility_label("Stop")
                 .tooltip_with_action("Stop", &StopAgent, None)
                 .on_click(cx.listener(|t, _, _, cx| t.stop_agent(cx)))
                 .into_any_element()
@@ -320,8 +312,7 @@ impl WorkspacePane {
 /// Stop as the main action, the same square as Send, with a filled square rather than an icon, which would only be
 /// outlined. Conversation mode's bar has it too.
 pub(super) fn stop_button(id: &'static str, cx: &App) -> look::Button {
-    let square = div().size_2p5().corners(look::Corner::Glyph).bg(look::colors(cx).on_main);
-    look::glyph_button(id, look::ButtonKind::Main, Slot::SIZE, square)
+    look::stop_button(id, Slot::SIZE, cx)
 }
 
 /// A place beside the main action: a square as big as it, with what it holds in its middle, or filling it if it's
