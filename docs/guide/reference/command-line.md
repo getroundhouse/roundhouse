@@ -85,6 +85,7 @@ Wherever a command takes a session, give it one of:
 |---|---|
 | `roundhouse hub status` | Says which version the hub is, how many workers, running sessions and clients it has, and whether it was started by hand, by a client that needed one, or as a service. For a service, it says which release the hub would update to |
 | `roundhouse hub stop` | Stops it, and any agents at work on it, which pick up their conversations at their next prompts |
+| `roundhouse hub update` | Updates a hub installed as a service to the release `hub status` says it would update to. It downloads and checks it, places it beside the one it runs, and restarts on it, and agents at work keep going |
 | `sudo roundhouse hub install --user <name>` | On a Mac or Linux, makes this build's hub a service that starts at boot as that user, with nobody logged in, and starts it. Run it from where the hub's files are, and run it again to move the service to another build |
 | `sudo roundhouse hub uninstall` | Removes the service, which stops its hub. Its data stays in its user's data directory |
 

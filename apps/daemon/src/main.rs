@@ -184,3 +184,19 @@ fn main() -> anyhow::Result<ExitCode> {
     };
     ran.map(|()| ExitCode::SUCCESS)
 }
+
+#[cfg(test)]
+mod tests {
+    use clap::CommandFactory as _;
+
+    use super::*;
+
+    /// What a client checks a daemon is before it runs it, and what an older hub reads of a newer release to update to
+    /// it, as `docs/principles/protocol.md` says.
+    #[test]
+    fn the_version_the_daemon_says_is_the_line_its_checked_by() {
+        let said = Args::command().render_version();
+
+        assert_eq!(said.trim_end(), protocol::paths::daemon_version_line(BUILD.version()));
+    }
+}

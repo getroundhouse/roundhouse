@@ -91,6 +91,9 @@ fn paired_clients_read_records_but_cannot_administer_and_revocation_closes_them(
     assert_eq!(code(remote.hub_shutdown().unwrap_err()), ErrorCode::LocalOnly);
     assert_eq!(code(remote.device_list().unwrap_err()), ErrorCode::LocalOnly);
     assert_eq!(code(remote.pairing_start().unwrap_err()), ErrorCode::LocalOnly);
+    // A paired device may update a hub installed as a service, which this one isn't, so it's past what's local only.
+    let update = remote.call(protocol::client::admin::HubUpdateTo { version: "0.1.9".into() }).unwrap_err();
+    assert_eq!(code(update), ErrorCode::InvalidRequest);
     assert_eq!(code(client_core::pair(&pairing.link, "Second use").unwrap_err()), ErrorCode::Unauthorized);
     assert_eq!(running.local.pairing_wait(&pairing.code).unwrap().id, hub.device_id);
     // It said no device in its hello, and is taken to be the one it paired as: past the device, to the chat.

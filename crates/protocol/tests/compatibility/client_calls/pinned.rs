@@ -27,7 +27,8 @@ macro_rules! pinned {
 pinned! {
     "client_calls/devices.rs" => [Pair(_), Authenticate(_), PairingStart, PairingWait(_), DeviceList, DeviceRevoke(_)],
     "client_calls/requests.rs" => [
-        Hello(_), HubStatus, HubShutdown, HubShutdownIfIdle, HubRestart, HubConfigure(_), RepoAdd(_), RepoList,
+        Hello(_), HubStatus, HubShutdown, HubShutdownIfIdle, HubRestart, HubUpdateTo(_), HubConfigure(_), RepoAdd(_),
+        RepoList,
         RecordsList, AgentList, ModelsFor(_), SessionSubagents(_), SessionProposals(_), AccountConnect(_),
         AccountSetDefault(_), AccountSetAutomatic(_), AccountDisconnect(_), AccountSetReserve(_),
         GithubAccountConnect(_), GithubAccountDisconnect(_),

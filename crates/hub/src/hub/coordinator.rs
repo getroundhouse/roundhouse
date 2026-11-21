@@ -88,7 +88,7 @@ pub(crate) struct Hub {
     /// What the agents that discover their own models offer, where the hub has been asked.
     pub(super) model_lists: ModelLists,
     /// What the hub last found in the update feed, which it reads only as a service.
-    pub(super) updates: Updates,
+    pub(crate) updates: Updates,
     pub(super) pull_requests: pull_requests::Reading,
     /// What the hub found on GitHub of the issues and pull requests chats name, for every client.
     pub(super) references: super::references::Kept,
@@ -128,6 +128,8 @@ pub(crate) struct HubDirs {
     /// The data directory itself, in which the files of each kind of login have a directory of their own, as
     /// `LoginSecret::DIR` says.
     pub(crate) data: PathBuf,
+    /// Where a hub installed as a service keeps its builds, beside which an update places the next.
+    pub(crate) service_builds: PathBuf,
     pub(crate) network_address: std::net::SocketAddr,
 }
 
@@ -139,6 +141,7 @@ impl HubDirs {
             bundles: paths.bundles_dir.clone(),
             worker_logs: paths.worker_logs_dir.clone(),
             data: paths.data_dir.clone(),
+            service_builds: paths.service_builds_dir(),
             network_address: std::net::SocketAddr::from(([127, 0, 0, 1], 0)),
         }
     }
@@ -151,6 +154,7 @@ impl HubDirs {
             bundles: dir.join("bundles"),
             worker_logs: dir.join("worker-logs"),
             data: dir.to_path_buf(),
+            service_builds: dir.join("service"),
             network_address: std::net::SocketAddr::from(([127, 0, 0, 1], 0)),
         }
     }
@@ -202,7 +206,7 @@ impl Hub {
             setup_gates: Mutex::new(HashMap::new()),
             terminals: Terminals::default(),
             model_lists: ModelLists::default(),
-            updates: Updates::default(),
+            updates: Updates::new(dirs.service_builds),
             pull_requests: pull_requests::Reading::new(),
             references: super::references::Kept::default(),
             own_reads: Jobs::new(),

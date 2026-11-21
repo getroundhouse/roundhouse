@@ -187,7 +187,9 @@ fn kinds() -> [Kind; 6] {
             name: "what a hub found in the update feed",
             copy: |version, rev| {
                 let found = Some(format!("0.1.{version}"));
-                Record::HubUpdate(HubUpdate { version: found, looked_at_ms: 1, problem: None, rev: Rev::new(rev) })
+                let update =
+                    HubUpdate { version: found, looked_at_ms: 1, problem: None, attempt: None, rev: Rev::new(rev) };
+                Record::HubUpdate(update)
             },
             other: None,
             shown: |held, _| held.snapshot().hub_update().cloned().map(Record::HubUpdate),

@@ -2,12 +2,18 @@
 //! different build.
 
 use protocol::client::HubNotice;
-use protocol::model::{HubUpdate, Records, Rev};
+use protocol::model::{HubUpdate, Records, Rev, UpdateAttempt};
 
 use crate::keeps_its_form;
 
 fn found() -> HubUpdate {
-    HubUpdate { version: Some("0.1.9".into()), looked_at_ms: 1_795_230_000_000, problem: None, rev: Rev::new(5) }
+    HubUpdate {
+        version: Some("0.1.9".into()),
+        looked_at_ms: 1_795_230_000_000,
+        problem: None,
+        attempt: None,
+        rev: Rev::new(5),
+    }
 }
 
 #[test]
@@ -18,6 +24,23 @@ fn what_a_hub_found_keeps_its_form_as_a_notice_and_in_a_list() {
     let listed = Records { hub_update: Some(found()), ..Records::default() };
     let json = serde_json::to_string(&listed).unwrap();
     assert!(json.contains(&format!(r#""hub_update":{{{record}}}"#)), "{json}");
+}
+
+/// How an update a client asked for is going, as a client reads it. One from before it could update reads as none,
+/// and a state a newer hub adds as one this client doesn't know.
+#[test]
+fn an_update_under_way_or_failed_keeps_its_form_and_one_from_before_reads_as_none() {
+    let under_way = HubUpdate { attempt: Some(UpdateAttempt::UnderWay { to: "0.1.9".into() }), ..found() };
+    let failed = UpdateAttempt::Failed { to: "0.1.9".into(), why: "offline".into() };
+    let before: HubUpdate =
+        serde_json::from_str(r#"{"version":"0.1.9","looked_at_ms":1795230000000,"problem":null,"rev":5}"#).unwrap();
+    let newer: UpdateAttempt = serde_json::from_str(r#"{"state":"paused","to":"0.1.9"}"#).unwrap();
+
+    let json = serde_json::to_string(&under_way).unwrap();
+    assert!(json.contains(r#""attempt":{"state":"under_way","to":"0.1.9"}"#), "{json}");
+    keeps_its_form(&failed, r#"{"state":"failed","to":"0.1.9","why":"offline"}"#);
+    assert_eq!(before, found());
+    assert_eq!(newer, UpdateAttempt::Unknown);
 }
 
 /// A hub from before it read the feed, or that doesn't, lists none, and a client from before reads the notice as one it

@@ -12,9 +12,6 @@ use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
-/// Far longer than a forked child takes to exec, which is all a busy copy waits for. See [`waiting_out_busy`].
-const BUSY_TIMEOUT: Duration = Duration::from_secs(5);
-
 /// Connects, starting a hub first if none is running. The hub is a separate process that outlives this client, which
 /// is why closing a client doesn't stop its agents. Once a hub this started is up, it removes the copies of the daemon
 /// in the data directory that nothing runs from anymore.
@@ -152,7 +149,7 @@ pub(super) fn start_hub(paths: &Paths, daemon: &Daemon) -> io::Result<()> {
         .stdout(Stdio::from(log.try_clone()?))
         .stderr(Stdio::from(log));
     process::detach(&mut command);
-    waiting_out_busy(|| command.spawn())
+    process::run_once_not_busy(|| command.spawn())
         .map_err(|e| io::Error::new(e.kind(), format!("starting {}: {e}", exe.display())))?;
     Ok(())
 }
@@ -183,24 +180,6 @@ fn whole(path: &Path) -> io::Result<PathBuf> {
     }
     std::path::absolute(path)
         .map_err(|e| io::Error::new(e.kind(), format!("finding {} from here: {e}", path.display())))
-}
-
-/// Runs a freshly written copy, waiting out its being busy. Linux won't run a file while anything has it open for
-/// writing, and a fork on another thread while the copy was being written leaves its child holding it until it execs.
-#[expect(
-    clippy::disallowed_methods,
-    reason = "the pace a copy that's busy is run again at, until whatever holds it open for writing lets go"
-)]
-fn waiting_out_busy<T>(mut run: impl FnMut() -> io::Result<T>) -> io::Result<T> {
-    let deadline = Instant::now() + BUSY_TIMEOUT;
-    loop {
-        match run() {
-            Err(e) if e.kind() == io::ErrorKind::ExecutableFileBusy && Instant::now() < deadline => {
-                std::thread::sleep(Duration::from_millis(10));
-            }
-            ran => return ran,
-        }
-    }
 }
 
 /// Writes the copy under a temporary name beside it, checks that it's `build`, and only then links it in as `copy`,
@@ -269,16 +248,5 @@ fn let_run(_file: &File) -> io::Result<()> {
 /// The daemon beside a client can be another build: one still running after an update replaced its install directory
 /// would find the new build's daemon there.
 fn check_build(file: &Path, build: &StampedBuild) -> io::Result<()> {
-    let mut command = Command::new(file);
-    command.arg("--version").stderr(Stdio::null());
-    // The app has no console, so without this the copy, a console program, would flash one up on Windows each time a
-    // build's copy is made, which is after every update.
-    process::without_window(&mut command);
-    let output = waiting_out_busy(|| command.output())?;
-    let expected = format!("{DAEMON_NAME} {}", build.version());
-    let reported = String::from_utf8_lossy(&output.stdout);
-    if output.status.success() && reported.trim_end() == expected {
-        return Ok(());
-    }
-    Err(io::Error::other(format!("it's {:?} rather than this build, {expected:?}", reported.trim_end())))
+    process::check_version(file, &protocol::paths::daemon_version_line(build.version()))
 }

@@ -1,15 +1,18 @@
-//! Reading the feed as the hub starts and every hour after, and keeping what it found as a record every client follows.
+//! Reading the feed as the hub starts and every hour after, and keeping what it found, with how an update a client
+//! asked for is going, as a record every client follows.
 
 use std::future::Future;
-use std::sync::Arc;
+use std::path::PathBuf;
+use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
 use parking_lot::Mutex;
-use protocol::client::HubNotice;
-use protocol::model::{HubUpdate, Rev};
+use protocol::client::{ApiError, ErrorCode, HubNotice};
+use protocol::model::{HubUpdate, Rev, UpdateAttempt};
 use tokio::sync::Mutex as AsyncMutex;
 use tokio::time::MissedTickBehavior;
 use tracing::warn;
+use update_feed::HubArchive;
 
 use super::reading::{UpdateFeed, read};
 use crate::hub::Hub;
@@ -19,72 +22,204 @@ use crate::store::{Store, now_ms};
 /// app waits.
 const RETRY_AFTER: Duration = Duration::from_secs(5);
 
-/// What the hub last found in the feed, which only a hub installed as a service reads.
-#[derive(Default)]
+/// What the hub last found in the feed, which only a hub installed as a service reads, and how an update a client
+/// asked for is going.
 pub(crate) struct Updates {
     /// Held while what was found changes and takes its revision, and while every record is listed, so a list of
     /// records has what was found as of the revision it takes in.
     changing: AsyncMutex<()>,
-    found: Mutex<Option<HubUpdate>>,
+    found: Mutex<Found>,
+    /// Where the hub reads the feed, which it's given before it serves anyone.
+    source: OnceLock<Source>,
+    /// Where the service keeps its builds, beside which an update places the next.
+    pub(super) service_builds: PathBuf,
+}
+
+/// The feed a hub reads, and the release it runs, which what it finds there has to be newer than.
+#[derive(Clone, Debug)]
+pub(crate) struct Source {
+    pub(super) feed: UpdateFeed,
+    pub(super) running: &'static str,
+}
+
+/// What the hub's reads of the feed found, and how an update is going, each changed only by its own, and told of
+/// together, as one record.
+#[derive(Default)]
+struct Found {
+    /// What the last read found, once there's been one.
+    look: Option<Look>,
+    /// The update a client last asked for, which reads of the feed leave as it is.
+    attempt: Option<UpdateAttempt>,
+    rev: Rev,
+}
+
+/// What a read of the feed found.
+struct Look {
+    /// The release the hub would update to, with its archive, which came under the feed's signature. `None` when none
+    /// is newer.
+    newer: Option<(String, HubArchive)>,
+    looked_at_ms: i64,
+    /// Why the read failed, which left `newer` as the read before found it.
+    problem: Option<String>,
+}
+
+impl Found {
+    /// The record every client follows, once the hub has read the feed.
+    fn record(&self) -> Option<HubUpdate> {
+        let look = self.look.as_ref()?;
+        Some(HubUpdate {
+            version: look.newer.as_ref().map(|(version, _)| version.clone()),
+            looked_at_ms: look.looked_at_ms,
+            problem: look.problem.clone(),
+            attempt: self.attempt.clone(),
+            rev: self.rev,
+        })
+    }
 }
 
 impl Updates {
+    pub(crate) fn new(service_builds: PathBuf) -> Self {
+        Self { changing: AsyncMutex::new(()), found: Mutex::default(), source: OnceLock::new(), service_builds }
+    }
+
     /// Lists the records along with what was found, under the lock a change takes.
     pub(crate) async fn listed_with<T>(&self, list: impl Future<Output = T>) -> (T, Option<HubUpdate>) {
         let _changing = self.changing.lock().await;
         let listed = list.await;
-        (listed, self.found.lock().clone())
+        (listed, self.found.lock().record())
+    }
+
+    /// Says where the hub reads the feed, and which release it runs, before it serves anyone, so a client can have it
+    /// update to a release found there as soon as it's found. Only the first is kept.
+    pub(crate) fn read_from(&self, feed: UpdateFeed, running: &'static str) {
+        let _ = self.source.set(Source { feed, running });
+    }
+
+    /// Where the hub reads the feed, if it does.
+    pub(super) fn source(&self) -> Option<&Source> {
+        self.source.get()
     }
 }
 
 impl Hub {
-    /// Reads `feed` as the hub starts, and every hour after while it serves, for the release a hub on `running`, a
-    /// release's version, would update to. Each read tells every client, so a client knows when the hub last read it.
-    pub(crate) async fn look_for_updates(self: Arc<Self>, feed: UpdateFeed, running: &'static str) {
+    /// Reads the feed it was given as the hub starts, and every hour after while it serves, for the release it would
+    /// update to. Each read tells every client, so a client knows when the hub last read it.
+    pub(crate) async fn look_for_updates(self: Arc<Self>) {
+        let Some(source) = self.updates.source().cloned() else { return };
         let mut every = tokio::time::interval(self.timers.look_for_updates_every);
         // Tokio's timers don't count the time a machine sleeps, so a hub that slept reads it an hour after it woke.
         every.set_missed_tick_behavior(MissedTickBehavior::Delay);
         loop {
             every.tick().await;
-            self.look_for_update(&feed, running, RETRY_AFTER).await;
+            self.look_for_update(&source, RETRY_AFTER).await;
         }
     }
 
-    /// Reads `feed` once, and records what it found.
-    pub(crate) async fn look_for_update(&self, feed: &UpdateFeed, running: &str, retry_after: Duration) {
+    /// Reads the feed once, and records what it found.
+    pub(crate) async fn look_for_update(&self, source: &Source, retry_after: Duration) {
         let (_, oldest) = self.workers_running();
-        let (feed, running_now) = (feed.clone(), running.to_owned());
+        let (feed, running) = (source.feed.clone(), source.running);
         let read = tokio::task::spawn_blocking(move || {
             let read = read(&feed, retry_after).map_err(|e| e.to_string())?;
-            let update = read.hub_update(&running_now, oldest).map_err(|e| e.to_string())?;
-            Ok::<_, String>(update.map(|release| release.version.to_owned()))
+            let update = read.hub_update(running, oldest).map_err(|e| e.to_string())?;
+            // The release it picks always has an archive.
+            Ok::<_, String>(update.and_then(|release| Some((release.version.to_owned(), release.hub?.clone()))))
         })
         .await
         .unwrap_or_else(|e| Err(format!("reading the update feed stopped: {e}")));
+        let recorded = self
+            .change_update(|found| {
+                found.read(read);
+                Ok(())
+            })
+            .await;
+        if let Err(e) = recorded {
+            warn!("recording what the update feed says: {}", e.message);
+        }
+    }
+
+    /// Changes what the hub found, as `change` does, gives it the next revision, and tells every client. `change`
+    /// refuses by giving an error, which changes nothing.
+    pub(super) async fn change_update<T>(
+        &self,
+        change: impl FnOnce(&mut FoundNow<'_>) -> Result<T, ApiError>,
+    ) -> Result<T, ApiError> {
         let _changing = self.updates.changing.lock().await;
-        let rev = match self.blocking(Store::next_rev).await {
-            Ok(rev) => rev,
-            Err(e) => return warn!("recording what the update feed says: {}", e.message),
+        let rev = self.blocking(Store::next_rev).await?;
+        let (outcome, record) = {
+            let mut found = self.updates.found.lock();
+            let outcome = change(&mut FoundNow { found: &mut found })?;
+            found.rev = rev;
+            (outcome, found.record())
         };
-        let update = self.updates.found(read, rev);
-        self.notify(HubNotice::HubUpdate(update));
+        // There's none to tell of only before the hub has read the feed, when no update can have started.
+        if let Some(record) = record {
+            self.notify(HubNotice::HubUpdate(record));
+        }
+        Ok(outcome)
     }
 }
 
-impl Updates {
-    /// Keeps what a read found, at `rev`. A read that failed leaves the version as the one before found it.
-    fn found(&self, read: Result<Option<String>, String>, rev: Rev) -> HubUpdate {
-        let mut found = self.found.lock();
-        let before = found.as_ref().and_then(|update| update.version.clone());
-        let (version, problem) = match read {
-            Ok(version) => (version, None),
+/// What the hub has found, while it's being changed.
+pub(super) struct FoundNow<'a> {
+    found: &'a mut Found,
+}
+
+/// What a client's request to update to a version comes to.
+pub(super) enum Starting {
+    /// The update to `version` starts, from `archive`.
+    Starts { version: String, archive: HubArchive },
+    /// It's already updating to that version, as a request sent again after its reply was lost finds.
+    UnderWay,
+}
+
+impl FoundNow<'_> {
+    /// Keeps what a read found: the release it would update to, with its archive. A read that failed leaves that as
+    /// the one before found it, and says why.
+    fn read(&mut self, read: Result<Option<(String, HubArchive)>, String>) {
+        let before = self.found.look.take().and_then(|look| look.newer);
+        let (newer, problem) = match read {
+            Ok(newer) => (newer, None),
             Err(problem) => {
                 warn!("reading the update feed: {problem}");
                 (before, Some(problem))
             }
         };
-        let update = HubUpdate { version, looked_at_ms: now_ms(), problem, rev };
-        *found = Some(update.clone());
-        update
+        self.found.look = Some(Look { newer, looked_at_ms: now_ms(), problem });
+    }
+
+    /// Starts updating to `version`, unless that isn't the release the hub would update to, or it's updating to
+    /// another.
+    pub(super) fn start_updating(&mut self, version: &str) -> Result<Starting, ApiError> {
+        let refused = |why: String| ApiError::new(ErrorCode::Conflict, why);
+        match &self.found.attempt {
+            Some(UpdateAttempt::UnderWay { to }) if to == version => return Ok(Starting::UnderWay),
+            Some(UpdateAttempt::UnderWay { to }) => {
+                return Err(refused(format!("the hub is already updating to {to}")));
+            }
+            Some(UpdateAttempt::Failed { .. } | UpdateAttempt::Unknown) | None => {}
+        }
+        let newer = self.found.look.as_ref().map(|look| look.newer.as_ref());
+        let (found, archive) = match newer {
+            None => return Err(refused("the hub hasn't read the update feed yet".to_owned())),
+            Some(None) => {
+                return Err(refused(format!("the hub has found no release newer than it, such as {version}")));
+            }
+            Some(Some((found, _))) if found != version => {
+                return Err(refused(format!("the hub would update to {found}, not {version}")));
+            }
+            Some(Some(newer)) => newer.clone(),
+        };
+        self.found.attempt = Some(UpdateAttempt::UnderWay { to: found.clone() });
+        Ok(Starting::Starts { version: found, archive })
+    }
+
+    /// Says the update under way failed, and why, which leaves the release the hub would update to as it was, to try
+    /// again.
+    pub(super) fn failed(&mut self, why: String) {
+        warn!("updating the hub: {why}");
+        if let Some(UpdateAttempt::UnderWay { to }) = self.found.attempt.take() {
+            self.found.attempt = Some(UpdateAttempt::Failed { to, why });
+        }
     }
 }

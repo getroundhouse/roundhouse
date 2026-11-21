@@ -26,13 +26,15 @@ impl Hub {
         self.request_shutdown();
     }
 
-    /// Stops once no setup script is running, and no request but this is under way, leaving the workers running for
-    /// the next hub, so their agents carry on.
+    /// Stops once no setup script is running, and no request under way but the caller's `own`, leaving the workers
+    /// running for the next hub, so their agents carry on. A request counts as under way until its reply has gone, so
+    /// a request that restarts the hub has one of its own, and work that goes on after its request was answered has
+    /// none.
     #[expect(
         clippy::disallowed_methods,
         reason = "the pace a restart looks again whether the setup scripts and requests it waits for have ended"
     )]
-    pub(crate) fn request_restart(self: &Arc<Self>) -> Result<(), ApiError> {
+    pub(crate) fn request_restart(self: &Arc<Self>, own: u32) -> Result<(), ApiError> {
         if !KEEPS_WORKERS {
             return Err(ApiError::new(ErrorCode::Unsupported, "a restart would stop this hub's agents, so it stops"));
         }
@@ -41,8 +43,7 @@ impl Hub {
         }
         let hub = self.clone();
         tokio::spawn(async move {
-            // Counted as it's read, so this request is among them until its reply has gone.
-            while !hub.setup_gates.lock().is_empty() || hub.requests.load(Ordering::SeqCst) > 1 {
+            while !hub.setup_gates.lock().is_empty() || hub.requests.load(Ordering::SeqCst) > own {
                 tokio::time::sleep(Duration::from_millis(50)).await;
             }
             hub.request_shutdown();

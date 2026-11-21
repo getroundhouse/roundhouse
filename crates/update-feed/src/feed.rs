@@ -36,6 +36,29 @@ pub struct HubArchive {
     pub sha256: String,
 }
 
+/// An archive's SHA-256 that isn't 64 hexadecimal digits.
+#[derive(Debug, thiserror::Error)]
+#[error("the archive's SHA-256 in the update feed, {0}, isn't 64 hexadecimal digits")]
+pub struct BadChecksum(String);
+
+impl HubArchive {
+    /// Its SHA-256, as the bytes a download is checked against.
+    pub fn sha256_bytes(&self) -> Result<[u8; 32], BadChecksum> {
+        let bad = || BadChecksum(self.sha256.clone());
+        let hex = self.sha256.as_bytes();
+        // `from_str_radix` would take a sign too.
+        if hex.len() != 64 || !hex.iter().all(u8::is_ascii_hexdigit) {
+            return Err(bad());
+        }
+        let mut bytes = [0; 32];
+        for (byte, pair) in bytes.iter_mut().zip(hex.as_chunks::<2>().0) {
+            let pair = std::str::from_utf8(pair).map_err(|_| bad())?;
+            *byte = u8::from_str_radix(pair, 16).map_err(|_| bad())?;
+        }
+        Ok(bytes)
+    }
+}
+
 #[derive(Debug, Deserialize, PartialEq, Eq)]
 enum Kind {
     Full,

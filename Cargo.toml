@@ -240,6 +240,9 @@ serde_json = "1.0.154"
 # within a line of a diff.
 similar = "2.7.0"
 syntect = { version = "5.3.0", default-features = false }
+# A hub installed as a service unpacks the archive of the release it updates to. Without xattr, which reads and sets
+# extended attributes nothing here wants.
+tar = { version = "0.4.46", default-features = false }
 tempfile = "3.27.0"
 thiserror = "2.0.21"
 toml = "1.2.1"

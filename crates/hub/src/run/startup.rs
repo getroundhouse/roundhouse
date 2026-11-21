@@ -152,6 +152,8 @@ pub async fn run(config: HubConfig) -> Result<Ended, HubError> {
     let github = Github::new(github);
     let dirs = HubDirs { network_address, ..HubDirs::of(&paths) };
     let hub = Arc::new(Hub::new(build, store, dirs, providers, github, machine, agents, start, timers));
+    // Before any client is served, so none is told the hub doesn't read the feed while it's starting to.
+    read_update_feed(&hub, update_feed, build);
     // Before clients are served, so none is told the hub holds a login whose token is gone.
     hub.tidy_logins().await;
     // Before carrying on with the agents an earlier hub left, since what they asked meanwhile comes in as soon as
@@ -180,7 +182,7 @@ pub async fn run(config: HubConfig) -> Result<Ended, HubError> {
         let hub = hub.clone();
         tokio::spawn(crate::server::accept_loop(hub, listener))
     };
-    watch_while_serving(&hub, &mut serving, update_feed, build);
+    watch_while_serving(&hub, &mut serving);
     let watching_github_logins = tokio::spawn(hub.clone().watch_github_logins());
     let mut terminate = Terminate::listen().map_err(|e| HubError::io("listening for a signal to stop", e))?;
     let signalled = asked_to_go(&hub, &mut terminate).await;
@@ -214,17 +216,20 @@ async fn end_workers(hub: &Arc<Hub>, signalled: bool) -> Ended {
 }
 
 /// What `hub` watches while it serves, each a task of `serving`: its waits' deadlines, its pull requests, its reach on
-/// GitHub, and `update_feed`, if it has one and this build is a release, since a build of a commit has no version to
-/// compare with the feed's.
-fn watch_while_serving(hub: &Arc<Hub>, serving: &mut JoinSet<()>, update_feed: Option<UpdateFeed>, build: Build) {
+/// GitHub, and the update feed, if it reads one.
+fn watch_while_serving(hub: &Arc<Hub>, serving: &mut JoinSet<()>) {
     serving.spawn(Arc::clone(hub).watch_wait_deadlines());
     serving.spawn(Arc::clone(hub).watch_pull_requests());
     // What it would record is checked again as the next hub starts.
     serving.spawn(Arc::clone(hub).watch_github_reach());
+    serving.spawn(Arc::clone(hub).look_for_updates());
+}
+
+/// Gives `hub` the update feed, if it has one and this build is a release, since a build of a commit has no version
+/// to compare with the feed's.
+fn read_update_feed(hub: &Hub, update_feed: Option<UpdateFeed>, build: Build) {
     match update_feed {
-        Some(feed) if update_feed::is_release(build.version()) => {
-            serving.spawn(Arc::clone(hub).look_for_updates(feed, build.version()));
-        }
+        Some(feed) if update_feed::is_release(build.version()) => hub.updates.read_from(feed, build.version()),
         Some(_) => info!(build = build.version(), "not reading the update feed, since this build isn't a release"),
         None => {}
     }

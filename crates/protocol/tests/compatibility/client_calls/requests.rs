@@ -22,6 +22,8 @@ fn every_request_of_the_hub_itself_or_for_its_records_keeps_its_form() {
     asked(ClientRequest::HubShutdown, r#"{"method":"hub_shutdown"}"#);
     asked(ClientRequest::HubShutdownIfIdle, r#"{"method":"hub_shutdown_if_idle"}"#);
     asked(ClientRequest::HubRestart, r#"{"method":"hub_restart"}"#);
+    let update = admin::HubUpdateTo { version: "0.1.9".into() };
+    asked(ClientRequest::HubUpdateTo(update), r#"{"method":"hub_update_to","version":"0.1.9"}"#);
     let settings = HubSettingsChange { keep_awake: Some(false), allow_asked_in_full_access: None };
     asked(
         ClientRequest::HubConfigure(admin::HubConfigure { settings }),
