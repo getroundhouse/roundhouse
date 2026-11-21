@@ -2,11 +2,11 @@ use crate::dictating::DictationChoice;
 use crate::saving::{Failure, Saver, write_json};
 use crate::sounds::Sound;
 use crate::workspace_order::Sort;
-use dictation::Quieting;
 use gpui_kit::{App, BorrowAppContext as _, Context, Global, Subscription};
 use protocol::model::RepoId;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
+use sound::Quieting;
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 

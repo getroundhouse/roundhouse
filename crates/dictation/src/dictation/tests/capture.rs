@@ -2,6 +2,8 @@
 
 use std::sync::Arc;
 
+use sound::MicrophoneError;
+
 use super::support::{KEEP, SCRIPT, TIMEOUT, final_text, the_rest};
 use super::watched::{Gate, Watch, Watched};
 use crate::dictation::buffer::{Buffer, MAX_SAMPLES};
@@ -137,8 +139,8 @@ fn overflow_and_device_failure_release_capture_while_the_model_is_blocked() {
             audio.audio(vec![0.1]);
             DictationError::AudioBacklog
         } else {
-            audio.end(Input::Failed(DictationError::NoMicrophone));
-            DictationError::NoMicrophone
+            audio.end(Input::Failed(DictationError::Microphone(MicrophoneError::Missing)));
+            DictationError::Microphone(MicrophoneError::Missing)
         };
 
         gone.recv_timeout(TIMEOUT).expect("failed capture doesn't wait for the model");

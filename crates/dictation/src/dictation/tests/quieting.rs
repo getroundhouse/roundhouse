@@ -2,9 +2,11 @@
 //! playing is heard again while its last words go in. These recordings are fed, so they say whether they'd quiet it
 //! rather than quieting it.
 
+use sound::Quieting;
+
 use super::support::{SCRIPT, dictation};
 use crate::fake::FakeEngine;
-use crate::{AudioIn, Hints, Quieting};
+use crate::{AudioIn, Hints};
 
 #[test]
 fn a_recording_quiets_each_way_asked_until_it_is_stopped() {

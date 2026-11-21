@@ -2,8 +2,8 @@
 //! which for held Space is once it dictates rather than once it listens, so a press let go of before then doesn't cut
 //! what's playing.
 
-use dictation::Quieting;
 use gpui_kit::{ScrollDelta, TestAppContext, point, px};
+use sound::Quieting;
 
 use super::support::{dictating, hold_option_space, let_go, press_space, ready};
 use crate::settings::open_settings;

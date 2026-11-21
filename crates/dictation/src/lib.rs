@@ -13,7 +13,7 @@
 
 #![warn(clippy::wildcard_enum_match_arm)]
 
-mod audio;
+mod audio_in;
 mod dictation;
 mod engine;
 #[cfg(any(test, feature = "testing"))]
@@ -25,7 +25,7 @@ pub mod nemotron;
 mod pauses;
 mod samples;
 
-pub use audio::{AudioIn, HEARS, Permission, Quieting, ask_for_microphone, microphone_permission, restored};
+pub use audio_in::AudioIn;
 pub use dictation::{Dictation, DictationError, Ending, Recording, Update};
 pub use engine::{Engine, EngineError, Heard, Listening};
 pub use hints::Hints;

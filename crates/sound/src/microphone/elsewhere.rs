@@ -1,17 +1,19 @@
-//! Windows and Linux, where the microphone isn't heard yet, so [`crate::HEARS`] is false and the app offers no
-//! dictation.
+//! Windows and Linux, where the microphone isn't heard yet, so [`crate::HEARS`] is false and the app offers nothing
+//! that hears it.
 
-use crate::{DictationError, Permission};
+use super::MicrophoneError;
+use crate::Permission;
 
 /// Never opens: there's no microphone to hear here.
-pub(crate) struct Microphone;
+pub struct Microphone;
 
 impl Microphone {
-    pub(crate) fn open(
+    pub fn open(
+        _rate: u32,
         _heard: impl FnMut(Vec<f32>) + Send + 'static,
-        _failed: impl FnMut(DictationError) + Send + 'static,
-    ) -> Result<Self, DictationError> {
-        Err(DictationError::NoMicrophone)
+        _failed: impl FnMut(MicrophoneError) + Send + 'static,
+    ) -> Result<Self, MicrophoneError> {
+        Err(MicrophoneError::Missing)
     }
 }
 

@@ -1,6 +1,6 @@
 [package]
 name = "dictation"
-description = "Hearing speech and turning it into text on this device: the microphone, cutting a recording at its pauses, and the engines that hear it. No UI and no async runtime."
+description = "Hearing speech and turning it into text on this device: recordings, cutting them at their pauses, and the engines that hear them. No UI and no async runtime."
 version.workspace = true
 edition.workspace = true
 publish.workspace = true
@@ -14,22 +14,18 @@ testing = []
 flume.workspace = true
 # Nemotron's files, which say what to download.
 models.workspace = true
-# Pausing what's playing while something is dictated, each platform its own way.
-now-playing.workspace = true
 parking_lot.workspace = true
 # The Fourier transform the model's features are made with.
 realfft.workspace = true
 serde_json.workspace = true
+# The microphone a recording hears, and quieting what's playing while it does.
+sound.workspace = true
 thiserror.workspace = true
 
-# The microphone, through Core Audio, and asking whether the app may use it, muting the sound output, and the model, on
-# Core ML.
+# The model, on Core ML.
 [target.'cfg(target_os = "macos")'.dependencies]
 block2.workspace = true
-cpal.workspace = true
 objc2.workspace = true
-objc2-av-foundation.workspace = true
-objc2-core-audio.workspace = true
 objc2-core-ml.workspace = true
 objc2-foundation = { workspace = true, features = ["NSDictionary", "NSError", "NSProcessInfo", "NSURL", "NSValue"] }
 

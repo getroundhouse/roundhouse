@@ -4,10 +4,11 @@
 use std::any::Any;
 use std::sync::Arc;
 
+use sound::{Microphone, MicrophoneError};
+
 use super::buffer::Buffer;
 use super::recording::Input;
-use crate::DictationError;
-use crate::audio::Microphone;
+use crate::{DictationError, SAMPLE_RATE};
 
 /// Opens a capture resource on its owning thread. Its concrete type matters only to its destructor. Tests supply
 /// a watched resource through the same path, without opening the person's microphone.
@@ -37,8 +38,8 @@ impl Capture {
                     }
                 }
             })
-            .map_err(|error| DictationError::Microphone(error.to_string()))?;
-        ready.recv().map_err(|_| DictationError::Microphone("capture stopped while opening".to_string()))??;
+            .map_err(|error| MicrophoneError::Failed(error.to_string()))?;
+        ready.recv().map_err(|_| MicrophoneError::Failed("capture stopped while opening".to_string()))??;
         Ok(Self(buffer))
     }
 }
@@ -51,6 +52,11 @@ impl Drop for Capture {
 
 pub(super) fn microphone(buffer: Buffer) -> Result<Box<dyn Any>, DictationError> {
     let failed = buffer.clone();
-    Microphone::open(move |audio| buffer.audio(audio), move |error| failed.end(Input::Failed(error)))
-        .map(|microphone| Box::new(microphone) as Box<dyn Any>)
+    Microphone::open(
+        SAMPLE_RATE,
+        move |audio| buffer.audio(audio),
+        move |error| failed.end(Input::Failed(error.into())),
+    )
+    .map(|microphone| Box::new(microphone) as Box<dyn Any>)
+    .map_err(DictationError::from)
 }

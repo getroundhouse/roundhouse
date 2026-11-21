@@ -7,30 +7,32 @@ use objc2::runtime::Bool;
 use objc2_av_foundation::{AVAuthorizationStatus, AVCaptureDevice, AVMediaTypeAudio};
 use parking_lot::Mutex;
 
-use crate::audio::resample::Resampler;
-use crate::{DictationError, Permission};
+use super::MicrophoneError;
+use crate::Permission;
+use crate::resample::Resampler;
 
 /// The system's default input device, heard until this is dropped.
-pub(crate) struct Microphone {
+pub struct Microphone {
     _stream: cpal::Stream,
 }
 
 impl Microphone {
     /// Starts hearing the default input device. Core Audio calls `heard` on a thread of its own with each buffer, at
-    /// 16 kHz in one channel, and `failed` if the device stops working, such as when it's unplugged.
-    pub(crate) fn open(
+    /// `rate` in one channel, and `failed` if the device stops working, such as when it's unplugged.
+    pub fn open(
+        rate: u32,
         mut heard: impl FnMut(Vec<f32>) + Send + 'static,
-        mut failed: impl FnMut(DictationError) + Send + 'static,
-    ) -> Result<Self, DictationError> {
+        mut failed: impl FnMut(MicrophoneError) + Send + 'static,
+    ) -> Result<Self, MicrophoneError> {
         // Without permission, Core Audio records silence rather than failing, which would read as a quiet room.
         match microphone_permission() {
             Permission::Allowed => {}
-            Permission::Denied => return Err(DictationError::MicrophoneDenied),
-            Permission::NotAsked => return Err(DictationError::MicrophoneNotAsked),
+            Permission::Denied => return Err(MicrophoneError::Denied),
+            Permission::NotAsked => return Err(MicrophoneError::NotAsked),
         }
-        let device = cpal::default_host().default_input_device().ok_or(DictationError::NoMicrophone)?;
+        let device = cpal::default_host().default_input_device().ok_or(MicrophoneError::Missing)?;
         let config = device.default_input_config().map_err(|e| failure(&e))?;
-        let mut resampler = Resampler::new(config.sample_rate(), config.channels());
+        let mut resampler = Resampler::new(config.sample_rate(), config.channels(), rate);
         let on_error = move |e: cpal::Error| {
             // A few samples lost, and the stream carries on. Anything else ends it, a change of device included, since
             // the resampler is for this device's rate and channels.
@@ -57,7 +59,7 @@ impl Microphone {
                 None,
             )
         } else {
-            return Err(DictationError::Microphone(format!("it gives its samples as {format}")));
+            return Err(MicrophoneError::Failed(format!("it gives its samples as {format}")));
         }
         .map_err(|e| failure(&e))?;
         stream.play().map_err(|e| failure(&e))?;
@@ -66,14 +68,14 @@ impl Microphone {
 }
 
 /// What `cpal`'s error means here.
-fn failure(e: &cpal::Error) -> DictationError {
+fn failure(e: &cpal::Error) -> MicrophoneError {
     // Compared rather than matched, since `cpal` can add kinds, and every other is the device failing.
     if e.kind() == ErrorKind::PermissionDenied {
-        DictationError::MicrophoneDenied
+        MicrophoneError::Denied
     } else if e.kind() == ErrorKind::DeviceNotAvailable {
-        DictationError::NoMicrophone
+        MicrophoneError::Missing
     } else {
-        DictationError::Microphone(e.to_string())
+        MicrophoneError::Failed(e.to_string())
     }
 }
 

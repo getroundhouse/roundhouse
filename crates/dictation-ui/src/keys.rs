@@ -38,7 +38,7 @@ pub(crate) fn held(cx: &mut App) {
 
 /// Bound after the input kit's keys, so Escape cancels a recording before it leaves a field or closes a dialog.
 pub fn bind_keys(cx: &mut App) {
-    if !dictation::HEARS {
+    if !sound::HEARS {
         return;
     }
     let context = match KeyBindingContextPredicate::parse(CONTEXT) {

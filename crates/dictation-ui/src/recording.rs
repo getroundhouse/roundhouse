@@ -1,8 +1,9 @@
 //! One recording, from its start through the final words delivered after it stops. Dropping it cancels both the
 //! recording and the task that hears it, so a field can never receive a previous recording's late updates.
 
-use dictation::{DictationError, Ending, Permission, Quieting, Recording, Update};
+use dictation::{DictationError, Ending, Recording, Update};
 use gpui_kit::{Context, Task, Window};
+use sound::{MicrophoneError, Permission, Quieting};
 
 use crate::fine_line::FineLine;
 use crate::text::Before;
@@ -36,9 +37,9 @@ impl Field {
         self.space_down = None;
         source::claim(cx);
         if source::uses_microphone(cx) {
-            match dictation::microphone_permission() {
+            match sound::microphone_permission() {
                 Permission::Allowed => {}
-                Permission::NotAsked => return dictation::ask_for_microphone(|_| {}),
+                Permission::NotAsked => return sound::ask_for_microphone(|_| {}),
                 Permission::Denied => return cx.emit(Event::Error(ALLOW_THE_MICROPHONE.to_string())),
             }
         }
@@ -142,12 +143,14 @@ impl Field {
 
 fn failure(error: &DictationError) -> String {
     match error {
-        DictationError::MicrophoneDenied => ALLOW_THE_MICROPHONE.to_string(),
-        DictationError::MicrophoneNotAsked => {
+        DictationError::Microphone(MicrophoneError::Denied) => ALLOW_THE_MICROPHONE.to_string(),
+        DictationError::Microphone(MicrophoneError::NotAsked) => {
             "Dictate again, and allow Roundhouse to use the microphone when asked.".to_string()
         }
-        DictationError::NoMicrophone => "There's no microphone to dictate with.".to_string(),
-        DictationError::Microphone(_) | DictationError::Engine(_) | DictationError::AudioBacklog => {
+        DictationError::Microphone(MicrophoneError::Missing) => "There's no microphone to dictate with.".to_string(),
+        DictationError::Microphone(MicrophoneError::Failed(_))
+        | DictationError::Engine(_)
+        | DictationError::AudioBacklog => {
             format!("Dictation stopped: {error}.")
         }
     }

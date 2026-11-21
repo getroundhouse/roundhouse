@@ -1,10 +1,10 @@
-//! What a recording does to what's playing while it's dictated to, as the person chooses, so what's said isn't drowned
-//! out, or heard with it: it mutes the sound output, pauses what the app the media keys control plays, or both.
+//! What's done to what's playing while something is heard, as the person chooses, so what's said isn't drowned out, or
+//! heard with it: the sound output is muted, what the app the media keys control plays is paused, or both.
 
 use super::media::{PAUSES_MEDIA, PausedMedia, media_restored, pause_media};
-use super::output::{MUTES_OUTPUT, MutedOutput, mute_output, output_restored};
+use super::muting::{MUTES_OUTPUT, MutedOutput, mute_output, output_restored};
 
-/// One way a recording quiets what's playing while it's dictated to.
+/// One way of quieting what's playing while something is heard.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Quieting {
     /// Mutes the system's sound output, which silences everything but an output whose volume only the device sets,
@@ -15,17 +15,16 @@ pub enum Quieting {
     PauseMedia,
 }
 
-/// What a recording did to quiet what's playing, in one way, put back as it was once this is dropped.
-pub(crate) enum Quieted {
-    Output {
-        _until_dropped: MutedOutput,
-    },
-    Media {
-        _until_dropped: PausedMedia,
-    },
-    /// Nothing, since the recording hears only what a test feeds it, which [`crate::Recording::quiets`] tells the test.
-    #[cfg(any(test, feature = "testing"))]
-    Fed(Quieting),
+/// What was done to quiet what's playing, in one way, put back as it was once this is dropped.
+pub struct Quieted {
+    how: Quieting,
+    _until_dropped: Undone,
+}
+
+/// What puts back what was quieted, once it's dropped.
+enum Undone {
+    Output { _until_dropped: MutedOutput },
+    Media { _until_dropped: PausedMedia },
 }
 
 impl Quieting {
@@ -41,26 +40,23 @@ impl Quieting {
 
     /// Quiets what's playing this way, without waiting for it, until what this returns is dropped. `None` where it
     /// won't, since the thread that would couldn't start.
-    pub(crate) fn quiet(self) -> Option<Quieted> {
-        match self {
-            Self::MuteOutput => mute_output().map(|muted| Quieted::Output { _until_dropped: muted }),
-            Self::PauseMedia => pause_media().map(|paused| Quieted::Media { _until_dropped: paused }),
-        }
+    pub fn quiet(self) -> Option<Quieted> {
+        let undone = match self {
+            Self::MuteOutput => Undone::Output { _until_dropped: mute_output()? },
+            Self::PauseMedia => Undone::Media { _until_dropped: pause_media()? },
+        };
+        Some(Quieted { how: self, _until_dropped: undone })
     }
 }
 
 impl Quieted {
-    pub(crate) fn how(&self) -> Quieting {
-        match self {
-            Self::Output { .. } => Quieting::MuteOutput,
-            Self::Media { .. } => Quieting::PauseMedia,
-            #[cfg(any(test, feature = "testing"))]
-            Self::Fed(how) => *how,
-        }
+    /// The way it quieted what's playing.
+    pub fn how(&self) -> Quieting {
+        self.how
     }
 }
 
-/// Waits until everything recordings quieted, and have let go of, is put back: the sound output unmuted and what was
+/// Waits until everything quieted, and let go of, is put back: the sound output unmuted and what was
 /// paused playing again. It's for the app to wait for as it quits, since the threads that put them back end with the
 /// app. What's let go of after this is called isn't waited for.
 pub fn restored() -> impl Future<Output = ()> + Send + 'static {

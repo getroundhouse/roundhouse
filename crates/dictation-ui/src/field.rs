@@ -135,7 +135,7 @@ impl Field {
     /// Whether what's being dictated quiets what's playing the way `how` says, or a recording listening towards held
     /// Space does.
     #[cfg(feature = "testing")]
-    pub(crate) fn quiets(&self, how: dictation::Quieting) -> bool {
+    pub(crate) fn quiets(&self, how: sound::Quieting) -> bool {
         self.recording().is_some_and(|recording| recording.quiets(how))
     }
 
