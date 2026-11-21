@@ -67,6 +67,7 @@ impl Client {
         let client = open(&hub.hosts, &hub.fingerprint, timeout)?;
         let deadline = Some(Instant::now() + timeout);
         client.call_until(devices::Authenticate { token: hub.token.clone() }, deadline)?;
+        let _ = client.inner.device.set(hub.device_id.clone());
         client.hello_until(introduction, deadline)?;
         Ok(client)
     }

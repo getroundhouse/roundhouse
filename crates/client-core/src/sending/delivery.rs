@@ -22,7 +22,7 @@ impl Written {
         let files = self.prompt.files.iter().map(|file| file.attachment.clone()).collect();
         QueuedPrompt {
             client_msg_id: self.client_msg_id.clone(),
-            prompt: Prompt::carrying(&*self.prompt.text, files),
+            prompt: self.prompt.carrying_too(files),
             from: PromptFrom::Person,
         }
     }
@@ -38,8 +38,8 @@ pub struct NotTaken {
 /// The reply to a prompt started with [`OpenSession::start_sending`] or [`Client::start_queueing`].
 pub struct Taking<T> {
     pub(super) reply: Reply<std::result::Result<T, NotTaken>>,
-    /// What it said, for when the call never ran and took its files with it.
-    pub(super) text: String,
+    /// What it said, and whether it was said out loud, for when the call never ran and took its files with it.
+    pub(super) said: Prompt<FileToSend>,
     /// A prompt being queued, which [`Client::queueing`] shows until this is received or let go of.
     pub(super) _shown: Option<Shown>,
 }
@@ -50,7 +50,7 @@ impl<T> Taking<T> {
         match self.reply.recv().await {
             Ok(taken) => taken,
             // Only a call that never ran ends here, and its files went with it.
-            Err(error) => Err(NotTaken { error, prompt: Prompt::new(self.text) }),
+            Err(error) => Err(NotTaken { error, prompt: self.said }),
         }
     }
 
@@ -59,7 +59,7 @@ impl<T> Taking<T> {
     pub fn wait(self) -> std::result::Result<T, NotTaken> {
         match self.reply.wait() {
             Ok(taken) => taken,
-            Err(error) => Err(NotTaken { error, prompt: Prompt::new(self.text) }),
+            Err(error) => Err(NotTaken { error, prompt: self.said }),
         }
     }
 }
@@ -127,12 +127,12 @@ impl Client {
         call: impl FnOnce(&Client, &Place, &SessionId, &Written) -> Result<T> + Send + 'static,
     ) -> Taking<T> {
         let place = self.line_up(id);
-        let (id, text) = (id.clone(), written.prompt.text.clone());
+        let (id, said) = (id.clone(), written.prompt.carrying_too(Vec::new()));
         let reply = self.start(move |client| {
             let taken = call(client, &place, &id, &written);
             Ok(taken.map_err(|error| NotTaken { error, prompt: written.prompt }))
         });
-        Taking { reply, text, _shown: None }
+        Taking { reply, said, _shown: None }
     }
 
     pub(super) fn send_in_line(&self, place: &Place, id: &SessionId, written: &Written) -> Result<(Seq, bool)> {
@@ -161,7 +161,7 @@ impl Client {
         let files = &prompt.files;
         let given: Vec<&FileToSend> = files.iter().filter(|file| self.has_given(id, &file.attachment.id)).collect();
         self.add_files(id, files.iter().filter(|file| !self.has_given(id, &file.attachment.id)))?;
-        let carried = Prompt::carrying(&*prompt.text, files.iter().map(|file| file.attachment.id.clone()).collect());
+        let carried = prompt.carrying_too(files.iter().map(|file| file.attachment.id.clone()).collect());
         place.wait_turn();
         match call(carried.clone()) {
             Err(e) if e.is_not_found() && !given.is_empty() => {

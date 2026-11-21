@@ -1,20 +1,20 @@
 use super::feed::Folding;
+use super::frames::{end_connection, read_frames};
 use super::sent_call::SentCall;
 use super::transport::{Closer, Transport};
 use super::{commands, lines, queueing};
 use parking_lot::Mutex;
 use protocol::client::github::GithubUpdate;
 use protocol::client::{
-    ApiError, ClientFrame, ClientRequest, ClientResponse, ErrorCode, HubFrame, HubNotice, Reply as _, ReplyOutcome,
-    Request, subscriptions,
+    ApiError, ClientFrame, ClientRequest, ClientResponse, ErrorCode, HubNotice, Reply as _, Request, subscriptions,
 };
 use protocol::event::SessionEvent;
 use protocol::frame;
-use protocol::model::{AttachmentId, SessionId};
+use protocol::model::{AttachmentId, DeviceId, SessionId};
 use protocol::tail::{StreamDelta, Tail};
 use protocol::terminal::{TerminalPicture, TerminalUpdate};
 use std::collections::{HashMap, HashSet};
-use std::io::{BufRead, BufReader, Write};
+use std::io::Write;
 use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, OnceLock};
@@ -136,6 +136,9 @@ pub(super) struct Inner {
     pub(super) disconnected: Mutex<bool>,
     /// Set by the hello, before anyone else has this connection.
     pub(super) hub_version: OnceLock<String>,
+    /// The device the hub takes this connection to be on, set before anyone else has it: the one it paired as, over the
+    /// network, or the one its hello named.
+    pub(super) device: OnceLock<DeviceId>,
     pub(super) running: Arc<commands::Running>,
     /// Each chat's prompts, in the order they were written.
     pub(super) lines: Arc<lines::Lines>,
@@ -199,6 +202,7 @@ impl Client {
             next_id: AtomicU64::new(1),
             disconnected: Mutex::new(false),
             hub_version: OnceLock::new(),
+            device: OnceLock::new(),
             running: Arc::default(),
             lines: Arc::default(),
             given: Mutex::default(),
@@ -215,6 +219,13 @@ impl Client {
     /// Which build the hub is, as it said when this connected.
     pub fn hub_version(&self) -> &str {
         self.inner.hub_version.get().map_or("", String::as_str)
+    }
+
+    /// The device the hub takes this connection to be on, which a chat's conversation is on when its record names it:
+    /// the one it paired as, over the network, or the one its hello named. `None` for a client on no device, such as
+    /// the command line.
+    pub fn device(&self) -> Option<&DeviceId> {
+        self.inner.device.get()
     }
 
     /// Whether the hub has closed this connection, or gone. It's set before any request fails with
@@ -283,87 +294,6 @@ impl Client {
     pub(super) fn disconnect(&self) {
         self.closer.close();
         end_connection(&self.inner);
-    }
-}
-
-fn read_frames(inner: &Arc<Inner>, stream: impl std::io::Read) {
-    let mut reader = BufReader::new(stream);
-    let mut line = Vec::new();
-    loop {
-        frame::clear_buffer(&mut line);
-        match reader.read_until(b'\n', &mut line) {
-            Ok(0) | Err(_) => break,
-            Ok(_) => {}
-        }
-        let parsed = match frame::decode::<HubFrame>(&line) {
-            Ok(parsed) => parsed,
-            Err(e) => {
-                fail_unreadable_reply(inner, &line, &e);
-                continue;
-            }
-        };
-        match parsed {
-            HubFrame::Reply { id, outcome } => {
-                if let Some(reply) = inner.pending.lock().remove(&id) {
-                    let _ = reply.send(match outcome {
-                        ReplyOutcome::Response(response) => Ok(response),
-                        ReplyOutcome::Error(error) => Err(ClientError::Api(error)),
-                    });
-                }
-            }
-            HubFrame::Event { subscription_id, event } => {
-                deliver(inner, subscription_id, SubscriptionItem::Event(Box::new(event)));
-            }
-            HubFrame::Tail { subscription_id, tail } => deliver(inner, subscription_id, SubscriptionItem::Tail(tail)),
-            HubFrame::Delta { subscription_id, delta } => {
-                deliver(inner, subscription_id, SubscriptionItem::Delta(delta));
-            }
-            HubFrame::Notice { subscription_id, notice } => {
-                deliver(inner, subscription_id, SubscriptionItem::Notice(Box::new(notice)));
-            }
-            HubFrame::Terminal { subscription_id, update } => {
-                deliver(inner, subscription_id, SubscriptionItem::Terminal(update));
-            }
-            HubFrame::Github { subscription_id, update } => {
-                deliver(inner, subscription_id, SubscriptionItem::Github(update));
-            }
-            HubFrame::TerminalPicture { subscription_id, picture } => {
-                deliver(inner, subscription_id, SubscriptionItem::TerminalPicture(Box::new(picture)));
-            }
-        }
-    }
-    end_connection(inner);
-}
-
-fn end_connection(inner: &Inner) {
-    *inner.disconnected.lock() = true;
-    let pending: Vec<_> = inner.pending.lock().drain().collect();
-    for (_, reply) in pending {
-        let _ = reply.send(Err(ClientError::Disconnected));
-    }
-    // Dropping the senders closes each channel once what's in it has been read, and `ended` says why.
-    inner.subscriptions.lock().clear();
-}
-
-/// A hub can be a different version, so a reply might not decode, and without this whoever made the
-/// call would wait forever. Anything else this can't read gets skipped.
-fn fail_unreadable_reply(inner: &Inner, line: &[u8], error: &serde_json::Error) {
-    let Some(id) = frame::reply_id(line) else { return };
-    if let Some(reply) = inner.pending.lock().remove(&id) {
-        let _ = reply.send(Err(ClientError::Unexpected(format!("a reply this client can't read: {error}"))));
-    }
-}
-
-fn deliver(inner: &Inner, subscription_id: u64, item: SubscriptionItem) {
-    let mut subscriptions = inner.subscriptions.lock();
-    let Some(subscription) = subscriptions.get(&subscription_id) else { return };
-    if let Err(flume::TrySendError::Full(_)) = subscription.try_send(item) {
-        // Its reader has fallen behind. Marked first, so its reader never sees the channel close
-        // without knowing why. Ending it closes the channel once what's in it has been read.
-        inner.lagged.lock().insert(subscription_id);
-        subscriptions.remove(&subscription_id);
-        drop(subscriptions);
-        let _ = inner.unsubscribe(subscription_id);
     }
 }
 

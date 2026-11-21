@@ -1,0 +1,120 @@
+//! Conversation mode in one chat on this device: reading its replies out while the conversation is here, from when the
+//! chat's record says it came here until it says it went, and what the bar shows meanwhile.
+
+use protocol::model::{DeviceId, Session, SessionId};
+use protocol::tail::Tail;
+
+use super::bar::{Bar, HereNow, Shows};
+use super::reading_out::{ReadingOut, Voice};
+use crate::client::Client;
+
+/// One chat's conversation on this device, while the chat is in conversation mode.
+pub struct Conversation {
+    /// The device the connection is on, as the hub takes it, once there's been one.
+    this: Option<DeviceId>,
+    session: SessionId,
+    reading: Option<ReadingOut>,
+    /// This device turned the mode off, and the chat's record doesn't say so yet, so it doesn't read again meanwhile.
+    left: bool,
+    bar: Bar,
+}
+
+impl Conversation {
+    pub fn new(session: SessionId) -> Self {
+        Self { this: None, session, reading: None, left: false, bar: Bar::default() }
+    }
+
+    /// Follows the chat's record, `session`, on `client`: once the conversation is on the device the connection is on,
+    /// starts reading its replies out with the voice `voice` makes, saying on `tell` when what it reads changes, and
+    /// once it isn't, stops. Once the chat is closed here, turns the mode off, as closing its tab stops the
+    /// conversation. Returns whether the conversation came here.
+    pub fn follow<V: Voice>(
+        &mut self,
+        client: &Client,
+        session: &Session,
+        voice: impl FnOnce() -> V,
+        tell: &flume::Sender<()>,
+    ) -> bool {
+        debug_assert_eq!(session.id, self.session);
+        self.this = client.device().cloned();
+        self.bar.saw(session, self.this.as_ref());
+        let here = session.interaction.device().is_some_and(|device| Some(&device.id) == self.this.as_ref());
+        self.left &= here;
+        if here && !session.is_open() && !self.left {
+            self.end(client);
+            return false;
+        }
+        let reads = here && !self.left;
+        if reads == self.reading.is_some() {
+            return false;
+        }
+        self.reading = reads.then(|| ReadingOut::start(client, session, voice(), tell.clone()));
+        reads
+    }
+
+    /// Turns the mode off, as typing, Type and ✕ do, on `client`: how far the voice got, and how each reply ended,
+    /// reach the hub first, so it needn't settle them. Until the chat's record says the mode is off, the conversation
+    /// isn't read here again. Asked again meanwhile, as when the hub never heard, it asks the hub again.
+    pub fn end(&mut self, client: &Client) {
+        self.left = true;
+        if let Some(reading) = self.reading.take() {
+            reading.leave();
+            return;
+        }
+        let (client, id) = (client.clone(), self.session.clone());
+        // Nothing is being read, so there's nothing to say first. A thread that can't start leaves the mode on.
+        let _ = std::thread::Builder::new()
+            .name("ending-conversation-mode".into())
+            .spawn(move || client.session_conversation_end(&id));
+    }
+
+    /// Whether the conversation is here, so this device hears and reads.
+    pub fn is_here(&self) -> bool {
+        self.reading.is_some()
+    }
+
+    /// Carries on, on a new connection to the hub.
+    pub fn reconnect(&self, client: &Client) {
+        if let Some(reading) = &self.reading {
+            reading.reconnect(client);
+        }
+    }
+
+    /// The person started talking: what's being read is talked over, and nothing is read over them.
+    pub fn talk(&self) {
+        if let Some(reading) = &self.reading {
+            reading.talk();
+        }
+    }
+
+    /// The person stopped talking, having `sent` what they said, or dropped it.
+    pub fn let_go(&self, sent: bool) {
+        if let Some(reading) = &self.reading {
+            reading.let_go(sent);
+        }
+    }
+
+    /// The person stopped the voice, or the agent.
+    pub fn stop_voice(&self) {
+        if let Some(reading) = &self.reading {
+            reading.stop();
+        }
+    }
+
+    /// Whether the voice has something it hasn't finished reading.
+    pub fn reading(&self) -> bool {
+        self.reading.as_ref().is_some_and(ReadingOut::reading)
+    }
+
+    /// What the bar shows, as the record `session` and its tail `tail` say, and this device's `here`.
+    pub fn shows(&self, session: &Session, tail: &Tail, here: &HereNow) -> Shows {
+        debug_assert_eq!(session.id, self.session);
+        self.bar.shows(session, tail, self.this.as_ref(), here)
+    }
+
+    /// Whether the voice is reading a reply, rather than nothing or only a line said for the agent, which the bar
+    /// shows as the agent at work.
+    pub fn reading_a_reply(&self) -> bool {
+        self.reading.as_ref().is_some_and(ReadingOut::reading_a_reply)
+    }
+}
