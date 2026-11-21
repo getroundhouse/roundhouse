@@ -144,9 +144,15 @@ impl Hub {
     /// Until a program writes `text`, after what the last wait found, and then how many updates have come of the
     /// terminal, as there's one.
     pub(super) async fn until_output(&mut self, text: &str) -> UpdateIndex {
+        // Where the search goes on from, so each frame's output is searched once, and a flood's reading isn't slowed.
+        let mut from = self.searched;
         self.until(|hub| {
-            let found = hub.output[hub.searched..].windows(text.len()).position(|window| window == text.as_bytes())?;
-            hub.searched += found + text.len();
+            let Some(found) = hub.output[from..].windows(text.len()).position(|window| window == text.as_bytes())
+            else {
+                from = from.max((hub.output.len() + 1).saturating_sub(text.len()));
+                return None;
+            };
+            hub.searched = from + found + text.len();
             Some(hub.next.values().copied().max().unwrap_or(UpdateIndex::new(0)))
         })
         .await
