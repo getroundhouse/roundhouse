@@ -1,101 +1,20 @@
-//! A client's terminal on its connection, open on a hub with a stand-in for the worker that runs it.
+//! Following a terminal for a client: the screen, then what comes after it, until the terminal ends, and what's typed
+//! and new sizes passed on in order.
 
 use std::fmt::Write as _;
-use std::path::Path;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, OnceLock, Weak};
-use std::time::Duration;
 
 use parking_lot::Mutex;
 use protocol::client::terminals::{TerminalClose, TerminalInput, TerminalResize};
-use protocol::client::{
-    ApiError, CLIENT_PROTOCOL_VERSION, ClientFrame, ClientRequest, ErrorCode, Hello, HubFrame, ReplyOutcome,
-};
-use protocol::frame;
-use protocol::terminal::{TerminalBytes, TerminalExit, TerminalScreen, TerminalSize, TerminalUpdate, UpdateIndex};
-use protocol::worker::{TerminalShown, WorkerRequest, WorkerResponse};
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-use tokio::sync::mpsc;
-use tokio::task::JoinHandle;
+use protocol::client::{ApiError, ClientRequest, ErrorCode, HubFrame, ReplyOutcome};
+use protocol::terminal::{TerminalExit, TerminalSize, TerminalUpdate, UpdateIndex};
+use protocol::worker::{WorkerRequest, WorkerResponse};
 use tokio::time::timeout;
 
-use super::following::Attached;
+use super::stand_in::{Client, Connected, WAIT, exited, joined, open_on, output, screen, shown};
 use crate::hub::tests::{hub_with_worktree, serving, terminal_in_w};
 use crate::hub::{Hub, QUEUED_UPDATES};
 use crate::worker_link::WorkerLink;
-
-const SIZE: TerminalSize = TerminalSize { cols: 80, rows: 24 };
-/// Long enough for anything here on a busy machine.
-const WAIT: Duration = Duration::from_secs(10);
-
-fn screen() -> TerminalScreen {
-    TerminalScreen { size: SIZE, bytes: b"screen".as_slice().into() }
-}
-
-/// What the worker says the terminal shows, taking in the updates before `next`.
-fn shown(next: u64) -> WorkerResponse {
-    WorkerResponse::TerminalShown(TerminalShown { screen: screen(), next: UpdateIndex::new(next) })
-}
-
-fn output(text: &str) -> TerminalUpdate {
-    TerminalUpdate::Output { output: TerminalBytes::from(text.as_bytes()) }
-}
-
-fn exited() -> TerminalUpdate {
-    TerminalUpdate::Exited(TerminalExit { code: Some(0) })
-}
-
-/// A hub with `t` open in `w`, on a stand-in worker that answers the `n`th time it's asked what the terminal shows with
-/// what `show(n)` says, and every other call with `Ok`.
-async fn open_on(
-    dir: &Path,
-    show: impl Fn(usize) -> Result<WorkerResponse, ApiError> + Send + 'static,
-) -> (Arc<Hub>, Arc<WorkerLink>) {
-    let hub = hub_with_worktree(dir);
-    let shows = AtomicUsize::new(0);
-    let link = WorkerLink::answering(move |request| {
-        Some(if matches!(request, WorkerRequest::TerminalShow(_)) {
-            show(shows.fetch_add(1, Ordering::SeqCst))
-        } else {
-            Ok(WorkerResponse::Ok)
-        })
-    });
-    serving(&hub, &link);
-    hub.terminal_open(terminal_in_w("t")).await.unwrap();
-    (hub, link)
-}
-
-/// A client attached to `t`, and what it's sent.
-struct Client {
-    following: JoinHandle<()>,
-    sent: mpsc::Receiver<HubFrame>,
-}
-
-impl Client {
-    fn attach(hub: &Arc<Hub>) -> Self {
-        let (link, updates) = hub.terminal_follow(&"t".into()).unwrap();
-        let (frames, sent) = mpsc::channel(1024);
-        let attached = Attached { subscription_id: 3, frames };
-        Self { following: tokio::spawn(attached.follow(hub.clone(), link, "t".into(), updates)), sent }
-    }
-
-    async fn next(&mut self) -> TerminalUpdate {
-        let frame = timeout(WAIT, self.sent.recv()).await.expect("an update").expect("the following to go on");
-        let HubFrame::Terminal { subscription_id: 3, update } = frame else { panic!("sent {frame:?}") };
-        update
-    }
-
-    /// Everything it's sent from here until the following ends.
-    async fn rest(mut self) -> Vec<TerminalUpdate> {
-        let mut rest = Vec::new();
-        while let Some(frame) = timeout(WAIT, self.sent.recv()).await.expect("the following to end") {
-            let HubFrame::Terminal { subscription_id: 3, update } = frame else { panic!("sent {frame:?}") };
-            rest.push(update);
-        }
-        timeout(WAIT, self.following).await.unwrap().unwrap();
-        rest
-    }
-}
 
 /// Including a new size that came before the screen, which it took in.
 #[tokio::test]
@@ -153,7 +72,7 @@ async fn an_update_that_reaches_the_hub_before_the_screen_comes_after_it() {
 async fn a_client_too_far_behind_gets_what_the_terminal_shows_again() {
     let dir = tempfile::tempdir().unwrap();
     let many = u64::try_from(QUEUED_UPDATES).unwrap() + 40;
-    let (hub, link) = open_on(dir.path(), move |shows| Ok(shown(if shows == 0 { 0 } else { many - 2 }))).await;
+    let (hub, link) = open_on(dir.path(), move |shows| Ok(shown(if shows == 0 { 0 } else { many }))).await;
     let mut client = Client::attach(&hub);
     assert_eq!(client.next().await, TerminalUpdate::Screen(screen()));
 
@@ -163,10 +82,11 @@ async fn a_client_too_far_behind_gets_what_the_terminal_shows_again() {
     }
 
     assert_eq!(client.next().await, TerminalUpdate::Screen(screen()));
-    assert_eq!(client.next().await, output(&(many - 2).to_string()));
-    assert_eq!(client.next().await, output(&(many - 1).to_string()));
+    hub.terminal_update(&link, "t".into(), UpdateIndex::new(many), output("after"));
+    hub.terminal_update(&link, "t".into(), UpdateIndex::new(many + 1), output(" it"));
     hub.terminal_close(TerminalClose { id: "t".into() }).await.unwrap();
-    assert_eq!(client.rest().await, [TerminalUpdate::Exited(TerminalExit { code: None })]);
+    let ended = TerminalUpdate::Exited(TerminalExit { code: None });
+    assert_eq!(joined(client.rest().await), ("after it".to_owned(), vec![ended]));
 }
 
 /// As its worker has, which takes its shell with it.
@@ -231,17 +151,7 @@ async fn whats_typed_and_new_sizes_reach_the_worker_in_the_order_they_were_sent(
     });
     serving(&hub, &link);
     hub.terminal_open(terminal_in_w("t")).await.unwrap();
-    let (client, served) = tokio::io::duplex(1 << 20);
-    let (read, write) = tokio::io::split(served);
-    let gate = crate::server::admit::Gate::local(&hub);
-    tokio::spawn(crate::server::connection::serve_connection(hub, read, write, gate));
-    let hello = ClientRequest::Hello(Hello {
-        protocol_version: CLIENT_PROTOCOL_VERSION,
-        client: "t".into(),
-        oldest_protocol_version: None,
-        device: None,
-    });
-    let mut lines = frame::encode(&ClientFrame { id: 0, request: hello }).unwrap();
+    let mut connected = Connected::to(&hub, 1 << 20).await;
     let mut sent = String::new();
     for (id, key) in (1..).zip(0..500_u16) {
         let request = if key % 10 == 0 {
@@ -252,16 +162,12 @@ async fn whats_typed_and_new_sizes_reach_the_worker_in_the_order_they_were_sent(
             write!(sent, "{key},").unwrap();
             ClientRequest::TerminalInput(TerminalInput { id: "t".into(), input: format!("{key},").as_bytes().into() })
         };
-        lines.extend(frame::encode(&ClientFrame { id, request }).unwrap());
+        connected.send(id, request).await;
     }
-    let (client_read, mut client_write) = tokio::io::split(client);
 
-    client_write.write_all(&lines).await.unwrap();
-
-    let mut replies = BufReader::new(client_read).lines();
     let answered = async {
-        for _ in 0..=500 {
-            let reply: HubFrame = frame::decode(replies.next_line().await.unwrap().unwrap().as_bytes()).unwrap();
+        for _ in 0..500 {
+            let reply = connected.next().await;
             assert!(matches!(reply, HubFrame::Reply { outcome: ReplyOutcome::Response(_), .. }), "{reply:?}");
         }
     };

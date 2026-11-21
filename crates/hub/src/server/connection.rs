@@ -14,7 +14,7 @@ use parking_lot::Mutex;
 use protocol::client::{HubFrame, ReplyOutcome};
 use protocol::frame;
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader};
-use tokio::sync::{mpsc, watch};
+use tokio::sync::{OwnedSemaphorePermit, mpsc, watch};
 use tokio::task::{AbortHandle, JoinHandle};
 use tokio::time::Instant;
 use tracing::{debug, warn};
@@ -48,7 +48,7 @@ pub(crate) async fn accept_loop(hub: Arc<Hub>, mut listener: Listener) {
 }
 
 pub(super) struct Connection {
-    pub(super) frames: mpsc::Sender<HubFrame>,
+    pub(super) frames: mpsc::Sender<Outgoing>,
     pub(super) subscriptions: Mutex<HashMap<u64, AbortHandle>>,
     /// True once nothing more will be read, so a request that only waits, with nothing to carry on with, can stop.
     pub(super) closed: Arc<watch::Sender<bool>>,
@@ -59,6 +59,20 @@ impl Drop for Connection {
         for (_, subscription) in self.subscriptions.lock().drain() {
             subscription.abort();
         }
+    }
+}
+
+/// A frame queued for a connection, and what it holds until it has been written, as a terminal's follower holds its
+/// room for its next frame.
+#[derive(Debug)]
+pub(super) struct Outgoing {
+    pub(super) frame: HubFrame,
+    pub(super) written: Option<OwnedSemaphorePermit>,
+}
+
+impl From<HubFrame> for Outgoing {
+    fn from(frame: HubFrame) -> Self {
+        Self { frame, written: None }
     }
 }
 
@@ -76,7 +90,7 @@ pub(super) async fn serve_connection(
     write: impl AsyncWrite + Unpin + Send + 'static,
     mut gate: Gate,
 ) {
-    let (frames, queued) = mpsc::channel::<HubFrame>(CONNECTION_QUEUE);
+    let (frames, queued) = mpsc::channel::<Outgoing>(CONNECTION_QUEUE);
     let mut writer = tokio::spawn(write_frames(write, queued));
     let closed = Arc::new(watch::Sender::new(false));
     let connection = Arc::new(Connection { frames, subscriptions: Mutex::new(HashMap::new()), closed: closed.clone() });
@@ -183,14 +197,14 @@ where
                         Err(error) => ReplyOutcome::Error(error),
                     };
                     drop(under_way);
-                    let _ = connection.frames.send(HubFrame::Reply { id: request.id, outcome }).await;
+                    let _ = connection.frames.send(HubFrame::Reply { id: request.id, outcome }.into()).await;
                 });
                 continue;
             }
             Admit::Answer(outcome) => (outcome, false),
             Admit::Refuse(outcome) => (outcome, true),
         };
-        let _ = connection.frames.send(HubFrame::Reply { id: request.id, outcome }).await;
+        let _ = connection.frames.send(HubFrame::Reply { id: request.id, outcome }.into()).await;
         if close {
             return Ending::Closed;
         }
@@ -212,13 +226,15 @@ where
     matches!(read, Ok(n) if n > 0 && line.len() <= limit)
 }
 
-async fn write_frames<W: AsyncWrite + Unpin>(mut write: W, mut queued: mpsc::Receiver<HubFrame>) {
-    while let Some(item) = queued.recv().await {
-        let Ok(line) = frame::encode(&item) else { continue };
+/// Writes each frame queued, and only then lets go of what it holds.
+async fn write_frames<W: AsyncWrite + Unpin>(mut write: W, mut queued: mpsc::Receiver<Outgoing>) {
+    while let Some(Outgoing { frame, written }) = queued.recv().await {
+        let Ok(line) = frame::encode(&frame) else { continue };
         // Flushed each time, because TLS can hold a write back until the next one.
         if write.write_all(&line).await.is_err() || write.flush().await.is_err() {
             return;
         }
+        drop(written);
     }
     // Says it's finished, which TLS needs to tell a close from a connection that was cut.
     let _ = write.shutdown().await;
