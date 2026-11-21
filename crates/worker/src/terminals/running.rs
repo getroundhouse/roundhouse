@@ -251,7 +251,7 @@ impl Terminals {
             terminal: terminal.clone(),
             opened_at_ms: running.opened_at_ms,
         });
-        RunningTerminalsReply { terminals: listed.collect() }
+        RunningTerminalsReply { terminals: listed.collect(), rows: true }
     }
 
     fn tell(&self, terminal: &TerminalId, told: ToShell) -> Result<(), ApiError> {

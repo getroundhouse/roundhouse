@@ -267,7 +267,7 @@ async fn a_hub_carries_on_with_the_terminals_a_worker_it_finds_runs() {
     let dir = tempfile::tempdir().unwrap();
     let hub = hub_with_worktree(dir.path());
     let running = RunningTerminal { terminal: "t".into(), opened_at_ms: 5 };
-    let reply = worker::RunningTerminalsReply { terminals: vec![running] };
+    let reply = worker::RunningTerminalsReply { terminals: vec![running], rows: true };
     let link = WorkerLink::answering(move |_| Some(Ok(WorkerResponse::RunningTerminals(reply.clone()))));
     serving(&hub, &link);
 
@@ -290,7 +290,10 @@ async fn a_shell_that_ends_as_a_hub_carries_on_with_it_takes_its_record_with_it(
         let (hub, link) = reached(&ends);
         hub.terminal_update(&link, "t".into(), UpdateIndex::new(0), exited());
         let running = RunningTerminal { terminal: "t".into(), opened_at_ms: 5 };
-        Some(Ok(WorkerResponse::RunningTerminals(worker::RunningTerminalsReply { terminals: vec![running] })))
+        Some(Ok(WorkerResponse::RunningTerminals(worker::RunningTerminalsReply {
+            terminals: vec![running],
+            rows: true,
+        })))
     });
     reaching.set((Arc::downgrade(&hub), Arc::downgrade(&link))).unwrap();
     serving(&hub, &link);

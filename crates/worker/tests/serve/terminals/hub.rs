@@ -113,7 +113,7 @@ impl Hub {
     /// What the worker lists as running, with when the hub opened each.
     pub(super) async fn listed(&mut self) -> Vec<(TerminalId, i64)> {
         let listed = self.call(WorkerRequest::RunningTerminals).await;
-        let WorkerOutcome::Response(WorkerResponse::RunningTerminals(RunningTerminalsReply { terminals })) = listed
+        let WorkerOutcome::Response(WorkerResponse::RunningTerminals(RunningTerminalsReply { terminals, .. })) = listed
         else {
             panic!("the worker didn't list its terminals: {listed:?}");
         };
