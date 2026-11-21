@@ -14,6 +14,7 @@ pub mod devices;
 pub mod drafts;
 mod feed;
 pub mod files;
+pub mod github;
 pub mod github_accounts;
 pub mod github_apps;
 mod hello;

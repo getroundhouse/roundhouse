@@ -5,7 +5,7 @@ use std::time::Duration;
 use parking_lot::Mutex;
 use protocol::model::{Reference, ReferenceRead};
 use serde::{Deserialize, Serialize};
-use tokio::sync::watch;
+use tokio::sync::{broadcast, watch};
 use tracing::warn;
 
 use github::{FacetsRead, PullFacets, Rules};
@@ -32,7 +32,12 @@ pub(crate) struct GithubCache {
     rules: KeptRules,
     pulls: KeptPulls,
     file: CacheFile,
+    /// Tells of each read kept, by the issues and pull requests it was of.
+    kept: broadcast::Sender<Vec<Item>>,
 }
+
+/// How many reads kept a subscriber can fall behind by before it's told it missed some, and sends everything again.
+const KEPT_TOLD: usize = 64;
 
 /// What's kept of one issue or pull request.
 struct Kept {
@@ -119,7 +124,14 @@ impl GithubCache {
             let summary = LastRead { said: Some(said), failed: None, read_at_ms };
             items.insert(item, Kept { summary, asked_at_ms: read_at_ms });
         }
-        Self { items: Mutex::new(items), reading: Mutex::new(HashMap::new()), rules, pulls, file }
+        let kept = broadcast::Sender::new(KEPT_TOLD);
+        Self { items: Mutex::new(items), reading: Mutex::new(HashMap::new()), rules, pulls, file, kept }
+    }
+
+    /// Tells of each read kept from now on, by the issues and pull requests it was of, whether or not what it found
+    /// changed.
+    pub(crate) fn changes(&self) -> broadcast::Receiver<Vec<Item>> {
+        self.kept.subscribe()
     }
 
     /// Which of `items` have a `facet` older than `fresh_for`, each once: those this ask is to read itself, which no
@@ -160,12 +172,14 @@ impl GithubCache {
         let now_ms = now_ms();
         let forgotten = self.forget_unasked(now_ms);
         let mut rows = Vec::new();
+        let mut told = Vec::new();
         {
             let mut items = self.items.lock();
             for (item, said) in read {
                 if items.get(&item).is_some_and(|kept| kept.summary.read_at_ms > read_at_ms) {
                     continue;
                 }
+                told.push(item.clone());
                 let summary = match said {
                     Ok(found) => {
                         let said = Said::from(found);
@@ -181,6 +195,8 @@ impl GithubCache {
             }
         }
         self.write(&forgotten, &rows);
+        // Only once it's kept, so what's told finds it. Nobody may be listening.
+        let _ = self.kept.send(told);
     }
 
     /// Forgets `forgotten` in the file, and writes `rows` to it, at once.

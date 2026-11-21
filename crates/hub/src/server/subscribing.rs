@@ -37,7 +37,9 @@ pub(super) fn follow_feed(hub: &Hub, connection: &Connection, subscription_id: u
 
 /// Ends any kind of subscription. One that isn't there is already ended.
 pub(super) fn unsubscribe(connection: &Connection, subscription_id: u64) {
-    if let Some(subscription) = connection.subscriptions.lock().remove(&subscription_id) {
+    let mut subscriptions = connection.subscriptions.lock();
+    connection.github.lock().remove(&subscription_id);
+    if let Some(subscription) = subscriptions.remove(&subscription_id) {
         subscription.abort();
     }
 }

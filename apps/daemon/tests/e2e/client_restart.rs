@@ -174,7 +174,9 @@ fn clients_attaching_during_a_burst_never_see_a_chunk_twice_or_miss_one() {
                                 tail = snapshot;
                             }
                             SubscriptionItem::Event(event) => tail.on_event(event.seq, event.run, &event.body),
-                            SubscriptionItem::Notice(_) | SubscriptionItem::Terminal(_) => {}
+                            SubscriptionItem::Notice(_)
+                            | SubscriptionItem::Terminal(_)
+                            | SubscriptionItem::Github(_) => {}
                         }
                     }
                     let held: String = tail.messages.iter().flat_map(|m| &m.blocks).map(|b| b.text.as_str()).collect();
@@ -259,7 +261,7 @@ fn a_client_that_stalled_during_a_message_ends_with_nothing_left_in_its_tail() {
             }
             HubFrame::Delta { delta, .. } => tail.apply(&delta),
             HubFrame::Tail { tail: snapshot, .. } => tail = snapshot,
-            HubFrame::Reply { .. } | HubFrame::Notice { .. } | HubFrame::Terminal { .. } => {}
+            HubFrame::Reply { .. } | HubFrame::Notice { .. } | HubFrame::Terminal { .. } | HubFrame::Github { .. } => {}
         }
     }
     assert!(ended, "the client should have read through the agent's exit");

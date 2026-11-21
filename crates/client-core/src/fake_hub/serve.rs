@@ -234,7 +234,7 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
             };
             reply(C::ProposalRevisions(proposals::ProposalRevisions { revisions, newest: current.number }))
         }
-        R::FeedSubscribe(_) | R::SessionUnsubscribe(_) => reply(C::Ok),
+        R::FeedSubscribe(_) | R::GithubSubscribe(_) | R::SessionUnsubscribe(_) => reply(C::Ok),
         R::AttachmentRead(attachments::AttachmentRead { id, .. }) => {
             let data = world.attachments.get(&id).ok_or_else(|| ApiError::new(ErrorCode::NotFound, "no such file"))?;
             reply(C::AttachmentData(attachments::AttachmentData { data: AttachmentBytes::new(data.clone()) }))

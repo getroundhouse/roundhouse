@@ -58,6 +58,7 @@ pinned! {
     "replies_heard.rs" => [SessionReplyHeard(_), SessionRepliesHeard(_), SessionSpeaking(_)],
     "proposals.rs" => [ProposalAnswer(_), ProposalAnotherRound(_), ProposalRevisionsRead(_)],
     "references.rs" => [ReferencesRead(_)],
+    "github_shown.rs" => [GithubSubscribe(_)],
     "terminals.rs" => [TerminalOpen(_), TerminalAttach(_), TerminalInput(_), TerminalResize(_), TerminalClose(_)],
 }
 
