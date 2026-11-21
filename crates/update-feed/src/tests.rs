@@ -14,7 +14,7 @@ fn full(version: &str, oldest: u32, newest: u32) -> String {
 /// can't come to call it different things, which would have every app that steps drop every release.
 #[test]
 fn the_fixture_the_publisher_s_tests_check_says_what_its_hub_speaks() {
-    let fixture = include_bytes!("../../../apps/desktop/src/updates/source/fixture/releases.osx.json");
+    let fixture = include_bytes!("../fixture/releases.osx.json");
     let feed: Feed = serde_json::from_slice(fixture).unwrap();
 
     let releases: Vec<_> = feed.releases().collect();

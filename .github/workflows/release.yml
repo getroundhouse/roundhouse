@@ -16,7 +16,7 @@
 #   B2_RELEASES_KEY_ID, B2_RELEASES_KEY                      A Backblaze key that can read and write the bucket
 # The repository's variables:
 #   RELEASES_BUCKET, RELEASES_S3_ENDPOINT, RELEASES_REGION   The bucket, through its S3 API
-# The feed's address and key are apps/desktop/src/updates/update-feed.url and update-feed.key.
+# The feed's address and key are crates/update-feed/update-feed.url and update-feed.key.
 name: Release
 
 on:
@@ -36,7 +36,7 @@ on:
       - rust-toolchain.toml
       - .cargo/config.toml
       - apps/desktop/icons/**
-      - apps/desktop/src/updates/update-feed.*
+      - crates/update-feed/update-feed.*
       - .github/workflows/release.yml
       - .github/install-linux-packages.sh
   workflow_dispatch:
@@ -190,9 +190,9 @@ jobs:
           version="$(tools/package/package.sh --print-version)"
           echo "VERSION=$version" >> "$GITHUB_ENV"
           # The feed address and key the app builds in.
-          key="$(cat apps/desktop/src/updates/update-feed.key)"
+          key="$(cat crates/update-feed/update-feed.key)"
           echo "FEED_PUBLIC_KEY=$key" >> "$GITHUB_ENV"
-          url="$(cat apps/desktop/src/updates/update-feed.url)"
+          url="$(cat crates/update-feed/update-feed.url)"
           echo "UPDATE_URL=$url" >> "$GITHUB_ENV"
           mkdir "$RUNNER_TEMP/binaries"
           tar -xf "$RUNNER_TEMP/binaries.tar" -C "$RUNNER_TEMP/binaries"
@@ -481,9 +481,9 @@ jobs:
           echo "PACKAGE=$RUNNER_TEMP/package" >> "$GITHUB_ENV"
           version="$(tools/package/package-windows.sh --print-version)"
           echo "VERSION=$version" >> "$GITHUB_ENV"
-          key="$(cat apps/desktop/src/updates/update-feed.key)"
+          key="$(cat crates/update-feed/update-feed.key)"
           echo "FEED_PUBLIC_KEY=$key" >> "$GITHUB_ENV"
-          url="$(cat apps/desktop/src/updates/update-feed.url)"
+          url="$(cat crates/update-feed/update-feed.url)"
           echo "UPDATE_URL=$url" >> "$GITHUB_ENV"
 
       # As for the Mac.
@@ -760,9 +760,9 @@ jobs:
           echo "PACKAGE=$RUNNER_TEMP/package" >> "$GITHUB_ENV"
           version="$(tools/package/package-linux.sh --print-version)"
           echo "VERSION=$version" >> "$GITHUB_ENV"
-          key="$(cat apps/desktop/src/updates/update-feed.key)"
+          key="$(cat crates/update-feed/update-feed.key)"
           echo "FEED_PUBLIC_KEY=$key" >> "$GITHUB_ENV"
-          url="$(cat apps/desktop/src/updates/update-feed.url)"
+          url="$(cat crates/update-feed/update-feed.url)"
           echo "UPDATE_URL=$url" >> "$GITHUB_ENV"
           mkdir "$RUNNER_TEMP/binaries"
           tar -xf "$RUNNER_TEMP/binaries.tar" -C "$RUNNER_TEMP/binaries"

@@ -87,8 +87,7 @@ jobs:
           # What the worker protocol's versions are defined in, and the check and what it reads them with.
           # *Unconfirmed:* that the check runs for a change to these alone.
           if $based && git diff --quiet FETCH_HEAD HEAD -- \
-            crates/protocol/src/worker crates/update-feed tools/update-steps \
-            apps/desktop/src/updates/update-feed.url; then
+            crates/protocol/src/worker crates/update-feed tools/update-steps; then
             steps=false
           fi
           if $based &&

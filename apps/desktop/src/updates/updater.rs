@@ -4,24 +4,10 @@ use answer::Answer;
 use flume::RecvTimeoutError;
 use gpui_kit::{App, BorrowAppContext as _, Context, Global, Subscription};
 use problem::{Kind, OutOfReach, Problem, Said, Shown, Step};
-use source::{Kept, SignedSource, UpdateFeedKey, WorkersToKeep};
+use source::{Kept, SignedSource, WorkersToKeep};
 use std::path::Path;
 use std::time::{Duration, SystemTime};
 use velopack::{UpdateCheck, UpdateInfo, UpdateManager, UpdateOptions, VelopackApp};
-
-/// Where updates come from. The release workflow publishes to the URL in `update-feed.url`. A build can name another
-/// in `ROUNDHOUSE_UPDATE_URL`, such as a server on this Mac.
-const UPDATE_URL: &str = match option_env!("ROUNDHOUSE_UPDATE_URL") {
-    Some(url) => url,
-    None => include_str!("update-feed.url").trim_ascii(),
-};
-
-/// The update feed's public key, in the form `source` says. The release workflow signs with the private half of the
-/// one in `update-feed.key`. A build can name another in `ROUNDHOUSE_UPDATE_KEY`, such as one made for a test.
-const UPDATE_FEED_KEY: UpdateFeedKey = UpdateFeedKey::from_base64(match option_env!("ROUNDHOUSE_UPDATE_KEY") {
-    Some(key) => key,
-    None => include_str!("update-feed.key").trim_ascii(),
-});
 
 /// How long to wait before looking again. An update only installs when someone restarts the app for it or quits it, so
 /// looking more often would mostly download versions that nobody runs.
@@ -66,7 +52,7 @@ pub(super) fn options() -> UpdateOptions {
 pub fn start(data_dir: &Path, cx: &mut App) {
     let paths = location::paths(data_dir);
     let workers = WorkersToKeep::until_heard();
-    let source = SignedSource::new(UPDATE_URL, UPDATE_FEED_KEY, workers.clone());
+    let source = SignedSource::new(update_feed::URL, update_feed::KEY, workers.clone());
     let manager = match UpdateManager::new(source, Some(options()), paths.clone()) {
         Ok(manager) => manager,
         Err(velopack::Error::NotInstalled(_)) => return,

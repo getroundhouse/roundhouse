@@ -25,7 +25,7 @@ from publish import DirStore, Refused
 
 HERE = Path(__file__).resolve().parent
 # A throwaway key, and a feed it signed, which the app's tests check too, so the two sides can't disagree on the form.
-FIXTURE = HERE.parent.parent / "apps" / "desktop" / "src" / "updates" / "source" / "fixture"
+FIXTURE = HERE.parent.parent / "crates" / "update-feed" / "fixture"
 THROWAWAY_KEY = FIXTURE / "throwaway-key.pem"
 # Which versions of the worker protocol a release's hub speaks, unless a test says otherwise.
 SPEAKS = {"oldest": 3, "newest": 4}
