@@ -20,7 +20,7 @@ use crate::worker_link::WorkerLink;
     clippy::disallowed_methods,
     reason = "on tokio's paused clock, which moves on once everything else is waiting"
 )]
-async fn settled() {
+pub(super) async fn settled() {
     tokio::time::sleep(Duration::from_millis(1)).await;
 }
 
@@ -172,6 +172,7 @@ async fn a_reply_to_a_slow_client_waits_behind_little_of_a_terminals_output() {
             // The reply to attaching, and the screen.
             HubFrame::Reply { .. }
             | HubFrame::Terminal { .. }
+            | HubFrame::TerminalPicture { .. }
             | HubFrame::Event { .. }
             | HubFrame::Tail { .. }
             | HubFrame::Delta { .. }

@@ -81,6 +81,9 @@ impl Hub {
     ) {
         let ended = matches!(update, TerminalUpdate::Exited(_));
         if let Some(open) = self.terminals.open.lock().get(&id).filter(|open| open.on(link.id)) {
+            if let TerminalUpdate::Exited(exit) = &update {
+                open.watch.copy.lock().exited(*exit);
+            }
             // None may be attached.
             let _ = open.updates.send(Numbered { at, update });
         }
@@ -181,6 +184,6 @@ impl Hub {
     }
 }
 
-fn not_open(id: &TerminalId) -> ApiError {
+pub(super) fn not_open(id: &TerminalId) -> ApiError {
     ApiError::new(ErrorCode::NotFound, format!("terminal {id} isn't open"))
 }

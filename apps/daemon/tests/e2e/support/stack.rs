@@ -323,7 +323,10 @@ impl Follower {
             }
             SubscriptionItem::Tail(tail) => self.tail = tail,
             SubscriptionItem::Delta(delta) => self.tail.apply(&delta),
-            SubscriptionItem::Notice(_) | SubscriptionItem::Terminal(_) | SubscriptionItem::Github(_) => {}
+            SubscriptionItem::Notice(_)
+            | SubscriptionItem::Terminal(_)
+            | SubscriptionItem::TerminalPicture(_)
+            | SubscriptionItem::Github(_) => {}
         }
     }
 

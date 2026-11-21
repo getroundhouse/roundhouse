@@ -74,6 +74,7 @@ impl WorkerLink {
             kept: AtomicBool::new(false),
             process,
             tools_unserved: AtomicBool::new(false),
+            terminals_unwatched: AtomicBool::new(false),
             held: AsyncMutex::new(None),
             acks: Acks::default(),
             left: AtomicBool::new(false),

@@ -35,8 +35,10 @@ pub use feed::{HubNotice, RecordNotice};
 pub use hello::{Hello, HelloReply};
 pub use request::ClientRequest;
 
+mod errors;
 mod messages;
+pub use errors::{ApiError, ErrorCode, error_chain};
 pub use messages::{
-    ApiError, CLIENT_PROTOCOL_VERSION, ClientFrame, ClientResponse, ErrorCode, HubFrame, HubStart, HubStatus, Outcome,
-    Reply, ReplyOutcome, Request, error_chain,
+    CLIENT_PROTOCOL_VERSION, ClientFrame, ClientResponse, HubFrame, HubStart, HubStatus, Outcome, Reply, ReplyOutcome,
+    Request,
 };

@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use super::{ClientRequest, ClientResponse, Reply, Request};
 use crate::model::{Terminal, TerminalId, WorkspaceId};
-use crate::terminal::{TerminalBytes, TerminalSize};
+use crate::terminal::{Numbering, RowNumber, TerminalBytes, TerminalRowsReply, TerminalSize};
 
 /// Opens a terminal in the workspace: a shell in its worktree, of `size`, which the workspace's worker runs, starting
 /// the worker if none is. Answers with the terminal's record, which the feed also announces. Opening one with the same
@@ -49,6 +49,54 @@ impl Request for TerminalAttach {
 
     fn into_request(self) -> ClientRequest {
         ClientRequest::TerminalAttach(self)
+    }
+}
+
+/// Watches the terminal: what it shows, as frames of `HubFrame::TerminalPicture` for `subscription_id`, which the
+/// client picks, as for a session's, since a frame can arrive before the reply. The first is fresh and whole, from the
+/// hub's copy of the screen if it has one, and each after it has only what the client lacks of the newest the hub has,
+/// with at most one frame on its way at a time, so a client on a slow link is sent the newest of what the terminal
+/// shows rather than all that came between. Its shell's end comes as a `HubFrame::Terminal` with
+/// [`TerminalUpdate::Exited`], after which nothing more does. `SessionUnsubscribe` stops it. Answers with nothing.
+///
+/// [`TerminalUpdate::Exited`]: crate::terminal::TerminalUpdate::Exited
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct TerminalWatch {
+    pub id: TerminalId,
+    pub subscription_id: u64,
+}
+
+impl Request for TerminalWatch {
+    type Reply = ();
+
+    fn into_request(self) -> ClientRequest {
+        ClientRequest::TerminalWatch(self)
+    }
+}
+
+/// Rows of the terminal's history, by their numbers in `numbering`, as its worker sends them, for a client scrolled
+/// back past the rows it holds. The hub keeps none, and asks the worker. In another numbering, the reply has no rows,
+/// and says which numbering the terminal's rows are in now.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct TerminalRows {
+    pub id: TerminalId,
+    pub numbering: Numbering,
+    pub from: RowNumber,
+    pub count: u32,
+}
+
+impl Request for TerminalRows {
+    type Reply = TerminalRowsReply;
+
+    fn into_request(self) -> ClientRequest {
+        ClientRequest::TerminalRows(self)
+    }
+}
+
+impl Reply for TerminalRowsReply {
+    fn read(response: ClientResponse) -> Result<Self, ClientResponse> {
+        let ClientResponse::TerminalRows(rows) = response else { return Err(response) };
+        Ok(rows)
     }
 }
 

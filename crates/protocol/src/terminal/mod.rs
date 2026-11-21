@@ -7,12 +7,14 @@
 #[cfg(test)]
 mod tests;
 
+mod history;
 mod picture;
 mod rows;
 mod sending;
 mod size;
 mod updates;
 
+pub use history::{MOST_ROWS, TerminalRowsReply};
 pub use picture::{CursorShape, PaletteColor, RowJson, RowRun, ScreenState, TerminalCursor, TerminalPicture, Wheel};
 pub use rows::{CellAttributes, CellColor, CellStyle, Numbering, RowNumber, Span, TerminalRow, Underline};
 pub use sending::{MOST_PICTURE_BYTES, PictureSending, Shown};

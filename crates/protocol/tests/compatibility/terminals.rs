@@ -1,17 +1,18 @@
 //! Every message about a terminal, spelled out, since a client, its hub and the hub's workers can each be a different
 //! build, and a worker outlives the hub that started it.
 
-use protocol::client::terminals::{TerminalAttach, TerminalClose, TerminalInput, TerminalOpen, TerminalResize};
+use protocol::client::terminals::{
+    TerminalAttach, TerminalClose, TerminalInput, TerminalOpen, TerminalResize, TerminalRows, TerminalWatch,
+};
 use protocol::client::{ClientFrame, ClientRequest, ClientResponse, HubFrame, HubNotice, HubStatus, ReplyOutcome};
 use protocol::frame;
 use protocol::model::{RecordKey, Records, Rev, Terminal};
 use protocol::terminal::{
-    Numbering, RowNumber, Span, TerminalBytes, TerminalExit, TerminalRow, TerminalScreen, TerminalSize, TerminalUpdate,
-    UpdateIndex,
+    CellColor, CellStyle, Numbering, RowJson, RowNumber, RowRun, Span, TerminalBytes, TerminalExit, TerminalPicture,
+    TerminalRow, TerminalRowsReply, TerminalScreen, TerminalSize, TerminalUpdate, UpdateIndex,
 };
 use protocol::worker::{
-    self, RunningTerminal, RunningTerminalsReply, TerminalRowsReply, TerminalShown, WorkerFrame, WorkerRequest,
-    WorkerResponse,
+    self, RunningTerminal, RunningTerminalsReply, TerminalShown, WorkerFrame, WorkerRequest, WorkerResponse,
 };
 
 use crate::keeps_its_form;
@@ -36,6 +37,13 @@ fn every_request_a_client_makes_of_a_terminal_keeps_its_form() {
     );
     let attach = TerminalAttach { id: "t".into(), subscription_id: 3 };
     client_asked(ClientRequest::TerminalAttach(attach), r#"{"method":"terminal_attach","id":"t","subscription_id":3}"#);
+    let watch = TerminalWatch { id: "t".into(), subscription_id: 4 };
+    client_asked(ClientRequest::TerminalWatch(watch), r#"{"method":"terminal_watch","id":"t","subscription_id":4}"#);
+    let rows = TerminalRows { id: "t".into(), numbering: Numbering::new(2), from: RowNumber::new(40), count: 100 };
+    client_asked(
+        ClientRequest::TerminalRows(rows),
+        r#"{"method":"terminal_rows","id":"t","numbering":2,"from":40,"count":100}"#,
+    );
     let input = TerminalInput { id: "t".into(), input: b"ls\r".as_slice().into() };
     client_asked(ClientRequest::TerminalInput(input), r#"{"method":"terminal_input","id":"t","input":"bHMN"}"#);
     let resize = TerminalResize { id: "t".into(), size: TerminalSize { cols: 120, rows: 40 } };
@@ -62,6 +70,50 @@ fn a_terminals_record_keeps_its_form_as_a_reply_a_notice_and_a_removal() {
     );
     let removed = HubNotice::Removed { record: RecordKey::Terminal { id: "t".into() }, rev: Rev::new(10) };
     keeps_its_form(&removed, r#"{"notice":"removed","record":{"kind":"terminal","id":"t"},"rev":10}"#);
+}
+
+/// What a hub sends a client that watches: a frame of a picture, a row in it as the worker wrote it, inside a frame whose
+/// tag serde reads first, and the rows a client asks for.
+#[test]
+fn what_a_hub_sends_a_client_that_watches_keeps_its_form() {
+    let span = Span { text: "hi".into(), style: Some(0), ..Span::default() };
+    let style = CellStyle { foreground: Some(CellColor::Palette(2)), ..CellStyle::default() };
+    let row = TerminalRow { spans: vec![span], styles: vec![style], wraps: true };
+    let picture = TerminalPicture {
+        numbering: Numbering::new(3),
+        size: SIZE,
+        top: RowNumber::new(900),
+        first: RowNumber::new(30),
+        rows: vec![RowRun { from: RowNumber::new(901), rows: vec![RowJson::new(&row).unwrap()] }],
+        kept_from: RowNumber::new(800),
+        whole: false,
+        fresh: false,
+        cursor: None,
+        state: None,
+    };
+    keeps_its_form(
+        &HubFrame::TerminalPicture { subscription_id: 4, picture },
+        concat!(
+            r#"{"frame":"terminal_picture","subscription_id":4,"picture":{"numbering":3,"size":{"cols":80,"rows":24},"#,
+            r#""top":900,"first":30,"rows":[{"from":901,"rows":[{"s":[{"t":"hi","y":0}],"w":true,"y":[{"f":2}]}]}],"#,
+            r#""kept_from":800}}"#,
+        ),
+    );
+
+    let rows = TerminalRowsReply {
+        numbering: Numbering::new(3),
+        first: RowNumber::new(30),
+        top: RowNumber::new(900),
+        from: RowNumber::new(40),
+        rows: vec![row],
+    };
+    keeps_its_form(
+        &HubFrame::Reply { id: 7, outcome: ReplyOutcome::Response(ClientResponse::TerminalRows(rows)) },
+        concat!(
+            r#"{"frame":"reply","id":7,"response":{"result":"terminal_rows","numbering":3,"first":30,"top":900,"#,
+            r#""from":40,"rows":[{"s":[{"t":"hi","y":0}],"w":true,"y":[{"f":2}]}]}}"#,
+        ),
+    );
 }
 
 /// A hub from before terminals lists none, and a list with none has the form it had before, for a client from then.

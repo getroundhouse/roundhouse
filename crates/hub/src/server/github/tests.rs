@@ -74,7 +74,8 @@ impl Client {
                 | HubFrame::Delta { .. }
                 | HubFrame::Notice { .. }
                 | HubFrame::Github { .. }
-                | HubFrame::Terminal { .. }) => self.keep(frame),
+                | HubFrame::Terminal { .. }
+                | HubFrame::TerminalPicture { .. }) => self.keep(frame),
             }
         }
     }

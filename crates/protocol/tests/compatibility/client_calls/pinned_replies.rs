@@ -37,7 +37,7 @@ pinned! {
     "replies_heard.rs" => [RepliesHeard(_)],
     "proposals.rs" => [Proposal(_), ProposalRevisions(_)],
     "references.rs" => [References(_)],
-    "terminals.rs" => [Terminal(_)],
+    "terminals.rs" => [Terminal(_), TerminalRows(_)],
     "model_lists.rs" => [ModelList(_)],
 }
 

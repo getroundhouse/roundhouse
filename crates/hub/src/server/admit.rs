@@ -323,6 +323,8 @@ fn local_only(request: &ClientRequest) -> bool {
         | R::SessionRename(..)
         | R::TerminalOpen(..)
         | R::TerminalAttach(..)
+        | R::TerminalWatch(..)
+        | R::TerminalRows(..)
         | R::TerminalInput(..)
         | R::TerminalResize(..)
         | R::TerminalClose(..)

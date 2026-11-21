@@ -8,7 +8,7 @@ use libghostty_vt::point::{Coordinate, Point};
 use libghostty_vt::screen::{CellContentTag, CellWide};
 use libghostty_vt::style::{self, StyleColor};
 use protocol::terminal::{CellAttributes, CellColor, CellStyle, Numbering, RowNumber, Span, TerminalRow, Underline};
-use protocol::worker::{MOST_ROWS, TerminalRowsReply};
+use protocol::terminal::{MOST_ROWS, TerminalRowsReply};
 
 use super::Counting;
 use super::counting::Numbered;

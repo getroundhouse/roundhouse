@@ -93,8 +93,8 @@ pub(in super::super) async fn read_frames(
             hub.terminal_update(&link, terminal, at, update);
             continue;
         }
-        // This hub watches no terminal yet, so a picture is one it didn't ask for.
-        if let WorkerFrame::TerminalPicture { .. } = parsed {
+        if let WorkerFrame::TerminalPicture { terminal, picture } = parsed {
+            hub.terminal_picture(&link, &terminal, picture);
             continue;
         }
         let mut held = link.held.lock().await;

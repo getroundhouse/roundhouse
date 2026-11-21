@@ -6,10 +6,10 @@ use std::time::Duration;
 use super::hub::{Hub, OPENED_AT_MS, SIZE, WAIT, contains, input, process_records_dir, refused};
 use protocol::client::ErrorCode;
 use protocol::model::GithubToken;
-use protocol::terminal::{Numbering, RowNumber, TerminalExit, TerminalSize, TerminalUpdate};
+use protocol::terminal::{Numbering, RowNumber, TerminalExit, TerminalRowsReply, TerminalSize, TerminalUpdate};
 use protocol::worker::{
     GitCredential, GitCredentialSet, GithubCredential, RunningTerminalsReply, TerminalResize, TerminalRows,
-    TerminalRowsReply, TerminalShow, TerminalShown, TerminalStop, WorkerOutcome, WorkerRequest, WorkerResponse,
+    TerminalShow, TerminalShown, TerminalStop, WorkerOutcome, WorkerRequest, WorkerResponse,
 };
 
 /// As every process a worker starts is, so `git` and `gh` typed in a terminal use the default GitHub account, as its

@@ -40,6 +40,8 @@ pub(crate) struct WorkerLink {
     /// It didn't serve its tools when asked, as a worker that doesn't know how never answers, so its agents go without
     /// them from then on rather than each waiting for it.
     pub(super) tools_unserved: AtomicBool,
+    /// It's from before a hub could watch a terminal, so it sends no pictures.
+    pub(super) terminals_unwatched: AtomicBool,
     /// What the worker has sent, but for its replies, while it's held, which [`WorkerLink::release`] ends. `None` once
     /// it has been, or if it never was. Held while each frame is passed on, so they go in the order they came.
     pub(super) held: AsyncMutex<Option<Vec<WorkerFrame>>>,
@@ -84,6 +86,7 @@ impl WorkerLink {
             kept: AtomicBool::new(false),
             process,
             tools_unserved: AtomicBool::new(false),
+            terminals_unwatched: AtomicBool::new(false),
             held: AsyncMutex::new((opening == Opening::LeftRunning).then(Vec::new)),
             acks: Acks::default(),
             left: AtomicBool::new(false),
@@ -173,6 +176,7 @@ impl WorkerLink {
             kept: AtomicBool::new(false),
             process: ChildProcess::already_exited(),
             tools_unserved: AtomicBool::new(false),
+            terminals_unwatched: AtomicBool::new(false),
             held: AsyncMutex::new(None),
             acks: Acks::default(),
             left: AtomicBool::new(false),
@@ -228,6 +232,16 @@ impl WorkerLink {
     /// Whether it didn't serve its tools when asked.
     pub(crate) fn serves_no_tools(&self) -> bool {
         self.tools_unserved.load(Ordering::Relaxed)
+    }
+
+    /// For a worker from before a hub could watch a terminal.
+    pub(crate) fn cant_watch_terminals(&self) {
+        self.terminals_unwatched.store(true, Ordering::Relaxed);
+    }
+
+    /// Whether a hub can watch its terminals, which it can unless it said it couldn't.
+    pub(crate) fn watches_terminals(&self) -> bool {
+        !self.terminals_unwatched.load(Ordering::Relaxed)
     }
 
     /// Whether it's the workspace's worker in `workers`, rather than one that's been replaced or stopped.

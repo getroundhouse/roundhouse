@@ -129,6 +129,7 @@ impl Source for RecordsSource {
             | SubscriptionItem::Tail(_)
             | SubscriptionItem::Delta(_)
             | SubscriptionItem::Terminal(_)
+            | SubscriptionItem::TerminalPicture(_)
             | SubscriptionItem::Github(_) => false,
         })
     }

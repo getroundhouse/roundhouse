@@ -9,10 +9,10 @@ use process::Environment;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::model::TerminalId;
 use protocol::paths;
-use protocol::terminal::TerminalSize;
+use protocol::terminal::{TerminalRowsReply, TerminalSize};
 use protocol::worker::{
-    RunningTerminal, RunningTerminalsReply, TerminalInput, TerminalResize, TerminalRows, TerminalRowsReply,
-    TerminalShown, TerminalStart, TerminalWatch,
+    RunningTerminal, RunningTerminalsReply, TerminalInput, TerminalResize, TerminalRows, TerminalShown, TerminalStart,
+    TerminalWatch,
 };
 use tokio::sync::{mpsc, oneshot, watch};
 
