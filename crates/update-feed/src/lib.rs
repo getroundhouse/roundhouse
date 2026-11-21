@@ -16,6 +16,6 @@ mod signature;
 #[cfg(test)]
 mod tests;
 
-pub use feed::{BadChecksum, BadVersion, Feed, HubArchive, Release, Running, is_release};
-pub use floor::{FLOOR, Floor};
+pub use feed::{BadChecksum, BadVersion, Feed, HubArchive, Release, Running, Stranded, is_release};
+pub use floor::{FLOOR, FLOORS, Floor, Floors};
 pub use signature::{HUB_CHANNEL, KEY, URL, Unsigned, UpdateFeedKey};

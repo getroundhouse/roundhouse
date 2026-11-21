@@ -52,8 +52,10 @@ enum Role {
         /// What git asks: `get`, `store` or `erase`.
         action: String,
     },
-    /// Prints the versions of the worker protocol this build's hub speaks, as JSON, which only the build can say. The
-    /// release workflow writes it in the update feed, as `tools/package/publish.py` says.
+    /// Prints this build's two floors, as JSON, which only the build can say: the versions of the worker protocol its
+    /// hub speaks, and the oldest release it updates from, once it says one, as `update_feed::Floors` has them. The
+    /// release workflow writes them in the update feed, as `tools/package/publish.py` says. It's named for the first,
+    /// as are the file the workflow keeps it in and the publisher's flag that reads it, until #2275 renames them.
     #[command(hide = true)]
     WorkerVersions,
     /// Answer one question about the prospective launch and exit.
@@ -100,7 +102,7 @@ fn forget_hub_variables() {
 }
 
 fn say_worker_versions() -> anyhow::Result<()> {
-    println!("{}", serde_json::to_string(&protocol::worker::HUB_SPEAKS)?);
+    println!("{}", serde_json::to_string(&update_feed::FLOORS)?);
     Ok(())
 }
 

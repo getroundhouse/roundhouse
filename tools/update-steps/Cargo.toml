@@ -8,7 +8,6 @@ publish.workspace = true
 [dependencies]
 anyhow.workspace = true
 fetching.workspace = true
-protocol.workspace = true
 serde_json.workspace = true
 update-feed.workspace = true
 

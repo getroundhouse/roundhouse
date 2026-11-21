@@ -1811,6 +1811,7 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
+ "update-feed",
  "waiting",
  "worker",
 ]
@@ -10070,7 +10071,6 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "fetching",
- "protocol",
  "serde_json",
  "update-feed",
 ]

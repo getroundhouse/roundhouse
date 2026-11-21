@@ -1,5 +1,9 @@
+use std::collections::{HashMap, HashSet};
+
 use protocol::versions::Versions;
 use serde::Deserialize;
+
+use crate::Floors;
 
 /// The feed's packages, each as far as what Velopack doesn't read goes, which serde reads as the feed has it.
 #[derive(Debug, Deserialize)]
@@ -130,10 +134,43 @@ impl Feed {
         Ok(newest.map(|(_, release)| release))
     }
 
-    /// The newest release, which is the one an app with that release's workers at work steps from, if a hub that
-    /// speaks `speaks` can't talk to those workers, so no release of that hub's build, or after it, can be the app's
-    /// next step. A release from before releases said what they speak leaves nothing to check.
-    pub fn stranded_by(&self, speaks: Versions) -> Result<Option<Release<'_>>, BadVersion> {
+    /// Why a build with `floors` would leave an app on some release in this feed with none to step to, so that no
+    /// release of that build, or after it, could be the app's next step, if it would. `keeps_workers` says whether
+    /// the feed's apps keep their workers through an update, so they step through each break in the worker protocol,
+    /// as on a Mac and on Linux. A release from before releases said what they speak leaves nothing to check of them.
+    pub fn stranded_by(&self, floors: Floors, keeps_workers: bool) -> Result<Option<Stranded<'_>>, BadVersion> {
+        let Some(newest) = self.newest()? else { return Ok(None) };
+        let newest_speaks = newest.worker_versions.map(|its| its.newest);
+        if keeps_workers && newest_speaks.is_some_and(|its| floors.workers.oldest > its) {
+            return Ok(Some(Stranded::Workers(newest)));
+        }
+        let Some(floor) = floors.release else { return Ok(None) };
+        if order_of(floor)? > order_of(newest.version)? {
+            return Ok(Some(Stranded::Release(newest)));
+        }
+        if !self.steps()?.contains(&order_of(floor)?) {
+            return Ok(Some(Stranded::NotKept));
+        }
+        if !keeps_workers {
+            return Ok(None);
+        }
+        let mut last: Option<([u64; 3], Release<'_>)> = None;
+        for release in self.releases() {
+            let order = order_of(release.version)?;
+            let before = release.worker_versions.is_some_and(|its| its.newest < floors.workers.oldest);
+            if before && last.is_none_or(|(at, _)| order > at) {
+                last = Some((order, release));
+            }
+        }
+        let past = match last {
+            Some((at, _)) => order_of(floor)? > at,
+            None => true,
+        };
+        Ok(past.then_some(Stranded::PastTheWorkerStep(last.map(|(_, release)| release))))
+    }
+
+    /// The newest release.
+    fn newest(&self) -> Result<Option<Release<'_>>, BadVersion> {
         let mut newest: Option<([u64; 3], Release<'_>)> = None;
         for release in self.releases() {
             let order = order_of(release.version)?;
@@ -141,10 +178,37 @@ impl Feed {
                 newest = Some((order, release));
             }
         }
-        Ok(newest
-            .map(|(_, release)| release)
-            .filter(|release| release.worker_versions.is_some_and(|its| speaks.oldest > its.newest)))
+        Ok(newest.map(|(_, release)| release))
     }
+
+    /// The newest release of each floor, which the publisher keeps for an app to step to while it can't take a newer
+    /// one, as `stepped_to` in `tools/package/publish.py` has them.
+    fn steps(&self) -> Result<HashSet<[u64; 3]>, BadVersion> {
+        let mut steps: HashMap<(u32, Option<[u64; 3]>), [u64; 3]> = HashMap::new();
+        for release in self.releases() {
+            let Some(speaks) = release.worker_versions else { continue };
+            let floor = (speaks.oldest, release.updates_from.map(order_of).transpose()?);
+            let order = order_of(release.version)?;
+            steps.entry(floor).and_modify(|newest| *newest = order.max(*newest)).or_insert(order);
+        }
+        Ok(steps.into_values().collect())
+    }
+}
+
+/// Why a build would leave an app with no release to step to, as [`Feed::stranded_by`] finds it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Stranded<'a> {
+    /// The build's hub can't talk to the workers of the newest release, which an app with those at work is on.
+    Workers(Release<'a>),
+    /// The newest release is older than the oldest release the build updates from.
+    Release(Release<'a>),
+    /// The oldest release the build updates from isn't one the feed keeps for an app to step to, so a person whose hub
+    /// refuses a database that old can't install it.
+    NotKept,
+    /// The oldest release the build updates from is past the last release whose hub doesn't speak the build's oldest
+    /// workers, or there's none. An app from before releases said what they update from takes the build once its hub's
+    /// workers are that new, which only a release after that last one runs, so a floor no newer carries it too.
+    PastTheWorkerStep(Option<Release<'a>>),
 }
 
 impl Release<'_> {
