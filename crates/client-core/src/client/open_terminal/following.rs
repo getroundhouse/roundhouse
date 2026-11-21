@@ -1,16 +1,15 @@
 //! A terminal someone has open, and the source it's followed from.
 
 use std::sync::Arc;
-use std::time::Instant;
 
 use parking_lot::Mutex;
 use protocol::model::TerminalId;
-use protocol::terminal::KeyPress;
-use protocol::terminal::TerminalUpdate;
+use protocol::terminal::{KeyPress, TerminalUpdate, Typed};
 use terminal_state::drawn::{Frame, Rgb};
 use terminal_state::{Pointer, SelectBy, Size};
 
-use super::copy::{TerminalCopy, ToHub};
+use super::asking::{self, Waiting};
+use super::window::{Ask, Replied, Window};
 use crate::client::follow::{Follow, Source};
 use crate::client::{Client, ClientError, FollowError, Result, Subscription, SubscriptionItem};
 
@@ -29,14 +28,14 @@ pub(super) struct Held {
     /// Whether the view has taken the last frame, so the next can be built. None is built until a view takes one, and
     /// then only once it has taken the one before, so frames never queue.
     wanted: bool,
-    /// What views gave the copy since its thread last looked, oldest first.
+    /// What views gave the window since its thread last looked, and the replies to what it asked, oldest first.
     pub(super) given: Vec<Given>,
     /// Whether its shell has ended, after which nothing more comes.
     ended: bool,
 }
 
-/// What a view gives the copy, which only the thread it's followed on can reach, since Ghostty's terminal can't leave
-/// the thread that makes it.
+/// What a view gives the window, which only the thread it's followed on reaches, and the replies that thread waits for
+/// elsewhere.
 pub(super) enum Given {
     Key(KeyPress),
     Paste(String),
@@ -50,19 +49,21 @@ pub(super) enum Given {
     Press(Pointer, SelectBy),
     /// The pointer moved with the button down, since a press on the grid.
     Drag(Pointer),
-    Release(Pointer),
+    Release,
     SelectAll,
     /// What's selected, as text, for the view to copy. Nothing is sent while nothing is.
     SelectedText(flume::Sender<String>),
+    Replied(Replied),
 }
 
 impl OpenTerminal {
     /// Follows the terminal `id` on a thread of its own, so this doesn't wait for the hub.
     pub fn start(client: &Client, id: &TerminalId) -> Self {
-        let followed = id.clone();
-        // Made on the thread it's followed on, since Ghostty's terminal can't leave the thread that makes it.
-        let source = move || TerminalSource { id: followed, copy: TerminalCopy::new() };
-        Self { id: id.clone(), follow: Follow::start(client, Held::default(), source) }
+        let (waiting, replies) = flume::unbounded();
+        let source = TerminalSource { id: id.clone(), window: Window::new(), waiting };
+        let follow = Follow::start(client, Held::default(), move || source);
+        asking::start(id.clone(), replies, follow.giver());
+        Self { id: id.clone(), follow }
     }
 
     pub fn id(&self) -> &TerminalId {
@@ -91,15 +92,15 @@ impl OpenTerminal {
         self.follow.read(|held| held.ended)
     }
 
-    /// A key, which the copy turns into what the program reads, by the modes it set, and sends, as
-    /// [`Client::terminal_input`] does, once. One the program reads anything for also goes back to the screen from
-    /// wherever the history is scrolled to. Nothing is sent before the first screen, whose modes it's read by.
+    /// A key, which the terminal's worker turns into what the program reads, by the modes it set, sent as
+    /// [`Client::terminal_typed`] sends it, once. It also takes the view back to the screen from wherever the history
+    /// is scrolled to. Nothing is sent before the first picture.
     pub fn key(&self, press: KeyPress) {
         self.give(Given::Key(press));
     }
 
-    /// Pastes `text`, marked as pasted for a program that asks, with the control characters that could end the marks
-    /// early swapped for spaces, as [`terminal_state::Mirror::paste`] says.
+    /// Pastes `text`, which the worker marks as pasted for a program that asks, with the control characters that could
+    /// end the marks early swapped for spaces, as `protocol::terminal::Typed::Paste` says.
     pub fn paste(&self, text: String) {
         self.give(Given::Paste(text));
     }
@@ -117,13 +118,15 @@ impl OpenTerminal {
     }
 
     /// The view has room for `size`, which the terminal is asked to take if it isn't that size already, and again
-    /// whenever it's attached at another size. A new size another client gives it is kept until the room changes.
+    /// whenever it's watched again at another size. A new size another client gives it is kept until the room changes.
+    /// The view's top and what's selected stay on their rows through a size it asked for, and go to the bottom with
+    /// nothing selected through one another client gave.
     pub fn fit(&self, size: Size) {
         self.give(Given::Fit(size));
     }
 
-    /// The colours a cell that sets none is drawn in, which a view takes from its own look, from now on. Ghostty's are
-    /// used until then.
+    /// The colours a cell that sets none is drawn in, which a view takes from its own look, from now on, unless the
+    /// program set its own. Ghostty's are used until then.
     pub fn set_colors(&self, foreground: Rgb, background: Rgb) {
         self.give(Given::Colors(foreground, background));
     }
@@ -139,8 +142,8 @@ impl OpenTerminal {
         self.give(Given::Drag(at));
     }
 
-    pub fn release(&self, at: Pointer) {
-        self.give(Given::Release(at));
+    pub fn release(&self) {
+        self.give(Given::Release);
     }
 
     /// Selects everything, the history too.
@@ -148,8 +151,8 @@ impl OpenTerminal {
         self.give(Given::SelectAll);
     }
 
-    /// What's selected, as text, once the thread it's followed on has read it, since only that thread can read the
-    /// copy. Nothing comes while nothing is selected.
+    /// What's selected, as text, once the hub has sent it all, as the terminal's worker copies it. Nothing comes while
+    /// nothing is selected, or without a connection.
     pub fn selected_text(&self) -> flume::Receiver<String> {
         let (reply, selected) = flume::bounded(1);
         self.give(Given::SelectedText(reply));
@@ -161,7 +164,7 @@ impl OpenTerminal {
         self.follow.wake();
     }
 
-    /// Carries on on a new connection, which starts again from what the terminal shows.
+    /// Carries on on a new connection, which starts again from a picture of what the terminal shows.
     pub fn reconnect(&self, client: &Client) {
         self.follow.reconnect(client);
     }
@@ -178,53 +181,63 @@ impl OpenTerminal {
 
 struct TerminalSource {
     id: TerminalId,
-    copy: TerminalCopy,
+    window: Window,
+    /// The replies to wait for, on the thread that waits for them.
+    waiting: flume::Sender<Waiting>,
 }
 
 impl Source for TerminalSource {
     type Held = Held;
 
     fn resume(&mut self, client: &Client, held: &Mutex<Held>) -> Result<Subscription> {
-        let attached = client.terminal_attach(&self.id);
-        // Its record has gone with its shell, which may have ended while there was no connection to hear it. The copy
-        // keeps what it showed.
-        if attached.as_ref().is_err_and(ClientError::is_not_found) {
+        let watched = client.terminal_watch(&self.id);
+        // Its record has gone with its shell, which may have ended while there was no connection to hear it. The
+        // window keeps what it showed.
+        if watched.as_ref().is_err_and(ClientError::is_not_found) {
             held.lock().ended = true;
         }
-        attached
+        watched
     }
 
     fn apply(&mut self, client: &Client, held: &Mutex<Held>, item: SubscriptionItem) -> Result<bool> {
-        let SubscriptionItem::Terminal(update) = item else { return Ok(false) };
-        let ended = matches!(update, TerminalUpdate::Exited(_));
-        // Ghostty fails only when it can't allocate, or for a size of zero, which a worker refuses, so a failure
-        // leaves what it shows as it was, until the next screen.
-        if let Ok(to_hub) = self.copy.take_in(update) {
-            self.send(Some(client), &to_hub);
-        }
+        let ended = match item {
+            SubscriptionItem::TerminalPicture(picture) => {
+                let asks = self
+                    .window
+                    .take(*picture)
+                    .map_err(|_| ClientError::Unexpected("a picture lacked rows the client didn't hold".to_string()))?;
+                self.send(Some(client), asks);
+                false
+            }
+            SubscriptionItem::Terminal(TerminalUpdate::Exited(_)) => true,
+            // What's sent of a terminal that isn't watched, and what a newer hub sends, change nothing.
+            SubscriptionItem::Terminal(_)
+            | SubscriptionItem::Event(_)
+            | SubscriptionItem::Tail(_)
+            | SubscriptionItem::Delta(_)
+            | SubscriptionItem::Notice(_)
+            | SubscriptionItem::Github(_) => return Ok(false),
+        };
         if ended {
             held.lock().ended = true;
         }
         Ok(self.settle(Some(client), held) || ended)
     }
 
-    /// What's given to the copy changes it whether or not there's a connection, as the wheel scrolls the history
-    /// without one. What that would send the hub is dropped while there's none, as typing over one that's gone is.
+    /// What's given to the window changes it whether or not there's a connection, as the wheel scrolls through the
+    /// rows it holds without one. What that would ask of the hub is dropped while there's none, as typing over one
+    /// that's gone is.
     fn asked(&mut self, connection: Option<&Client>, held: &Mutex<Held>, _: &dyn Fn()) -> Result<bool> {
         Ok(self.settle(connection, held))
     }
 
-    fn due_at(&mut self) -> Option<Instant> {
-        self.copy.compress_at(Instant::now())
-    }
-
-    fn due(&mut self) {
-        self.copy.compress(Instant::now());
+    fn reconnected(&mut self) {
+        self.window.disconnected();
     }
 }
 
 impl TerminalSource {
-    /// Does what views gave the copy, in order, then builds the next frame if the view has taken the last, and
+    /// Does what views gave the window, in order, then builds the next frame if the view has taken the last, and
     /// anything has changed since. Returns whether it built one.
     fn settle(&mut self, connection: Option<&Client>, held: &Mutex<Held>) -> bool {
         // Under one lock, so a view that gives something, then takes a frame, as it gives its colours, gets one with
@@ -234,55 +247,67 @@ impl TerminalSource {
             (std::mem::take(&mut held.given), held.wanted)
         };
         for given in given {
-            let to_hub = self.answer(given);
-            self.send(connection, &to_hub);
+            let asks = self.answer(connection, given);
+            self.send(connection, asks);
         }
         if !wanted {
             return false;
         }
-        // A frame fails only when Ghostty can't allocate, and the copy tries again with what comes next.
-        let Ok(Some(frame)) = self.copy.frame() else { return false };
+        let Some(frame) = self.window.frame() else { return false };
         let mut held = held.lock();
         held.frame = Some(frame);
         held.wanted = false;
         true
     }
 
-    /// Any of these fails only when Ghostty can't allocate, which leaves the copy as it was, so what failed is dropped,
-    /// as a key lost on the way would be, a copy copies nothing, and the next goes on.
-    fn answer(&mut self, given: Given) -> ToHub {
-        let to_hub = match given {
-            Given::Key(press) => self.copy.key(&press),
-            Given::Paste(text) => self.copy.paste(&text),
-            Given::Text(text) => self.copy.text(&text),
-            Given::Wheel(lines) => self.copy.wheel(lines),
-            Given::Fit(fit) => self.copy.fit(fit),
+    fn answer(&mut self, connection: Option<&Client>, given: Given) -> Vec<Ask> {
+        let window = &mut self.window;
+        match given {
+            Given::Key(press) => window.typed(Typed::Key(press)),
+            Given::Paste(text) => window.typed(Typed::Paste { text }),
+            Given::Text(text) => window.typed(Typed::Text { text }),
+            Given::Wheel(lines) => window.wheel(lines),
+            Given::Fit(room) => window.fit(room),
             Given::Colors(foreground, background) => {
-                self.copy.set_colors(foreground, background).map(|()| ToHub::default())
+                window.set_colors(foreground, background);
+                Vec::new()
             }
-            Given::Press(at, by) => self.copy.press(at, by).map(|()| ToHub::default()),
-            Given::Drag(at) => self.copy.drag(at).map(|()| ToHub::default()),
-            Given::Release(at) => self.copy.release(at).map(|()| ToHub::default()),
-            Given::SelectAll => self.copy.select_all().map(|()| ToHub::default()),
+            Given::Press(at, by) => window.press(at, by),
+            Given::Drag(at) => window.drag(at),
+            Given::Release => {
+                window.release();
+                Vec::new()
+            }
+            Given::SelectAll => {
+                window.select_all();
+                Vec::new()
+            }
             Given::SelectedText(reply) => {
-                if let Ok(Some(text)) = self.copy.selected_text() {
-                    let _ = reply.send(text);
+                if let (Some(client), Some((numbering, range))) = (connection, window.selected()) {
+                    let copy = Waiting::Copy { client: client.clone(), numbering, range, reply };
+                    let _ = self.waiting.send(copy);
                 }
-                return ToHub::default();
+                Vec::new()
             }
-        };
-        to_hub.unwrap_or_default()
+            Given::Replied(replied) => window.replied(replied),
+        }
     }
 
-    /// Sends what was typed, and a new size. Either is dropped while there's no connection, as typing over one that's
-    /// gone is, and the next screen asks for the size again.
-    fn send(&self, connection: Option<&Client>, to_hub: &ToHub) {
-        let Some(client) = connection else { return };
-        if !to_hub.input.is_empty() {
-            let _ = client.terminal_input(&self.id, &to_hub.input);
-        }
-        if let Some(size) = to_hub.resize {
-            let _ = client.terminal_resize(&self.id, size);
+    /// Sends what the window asked for. What can't be sent, as while there's no connection, is dropped, and the window
+    /// is told, so it asks again for what it still lacks.
+    fn send(&mut self, connection: Option<&Client>, asks: Vec<Ask>) {
+        for ask in asks {
+            let sent = connection.map(|client| asking::send(client, &self.id, ask));
+            match sent {
+                Some(Ok(Some(waiting))) => {
+                    let _ = self.waiting.send(waiting);
+                }
+                Some(Ok(None)) => {}
+                Some(Err(_)) | None => {
+                    let asks = self.window.replied(Replied::Failed);
+                    debug_assert!(asks.is_empty(), "a failure asks for nothing more");
+                }
+            }
         }
     }
 }

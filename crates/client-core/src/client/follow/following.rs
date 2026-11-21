@@ -112,6 +112,24 @@ impl<H> Reach<H> {
     }
 }
 
+/// A handle that gives what's followed something from another thread, such as a reply that thread waited for, and
+/// wakes its thread to look, without keeping it followed.
+pub(in crate::client) struct Giver<H> {
+    shared: Weak<Shared<H>>,
+    wake: flume::WeakSender<()>,
+}
+
+impl<H> Giver<H> {
+    /// Changes what's held without telling readers, then wakes the thread, as a reader that asks for something does.
+    /// Returns false, changing nothing, once every handle on it has gone.
+    pub(in crate::client) fn give(&self, change: impl FnOnce(&mut H)) -> bool {
+        let (Some(shared), Some(wake)) = (self.shared.upgrade(), self.wake.upgrade()) else { return false };
+        change(&mut shared.held.lock());
+        let _ = wake.try_send(());
+        true
+    }
+}
+
 impl<H: Send + 'static> Follow<H> {
     /// Starts following on a thread of its own, so this doesn't wait for the hub, with the source `source` makes there.
     pub(in crate::client) fn start<S: Source<Held = H>>(
@@ -163,6 +181,11 @@ impl<H: Send + 'static> Follow<H> {
     /// A handle on what's held that doesn't keep it followed.
     pub(in crate::client) fn reach(&self) -> Reach<H> {
         Reach(Arc::downgrade(&self.shared))
+    }
+
+    /// A handle for giving it what another thread waited for.
+    pub(in crate::client) fn giver(&self) -> Giver<H> {
+        Giver { shared: Arc::downgrade(&self.shared), wake: self.wake.downgrade() }
     }
 
     /// Has the thread look at what's been asked of it.

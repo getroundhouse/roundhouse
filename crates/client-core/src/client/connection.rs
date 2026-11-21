@@ -1,4 +1,5 @@
 use super::feed::Folding;
+use super::sent_call::SentCall;
 use super::transport::{Closer, Transport};
 use super::{commands, lines, queueing};
 use parking_lot::Mutex;
@@ -234,25 +235,37 @@ impl Client {
         R::Reply::read(response).map_err(|response| ClientError::Unexpected(format!("{response:?}")))
     }
 
-    /// Sends one request; an introduction deadline ends the whole connection if its reply never arrives.
-    fn exchange_until(&self, request: ClientRequest, deadline: Option<Instant>) -> Result<ClientResponse> {
+    /// Sends `request` now, in order with what's sent after it, and waits for its reply only when that's asked for,
+    /// so a thread that can't wait, as a terminal's can't, has another wait.
+    pub(super) fn send_call<R: Request>(&self, request: R) -> Result<SentCall<R>> {
+        let reply = self.send_waited(request.into_request())?;
+        Ok(SentCall::new(reply, self.clone()))
+    }
+
+    /// Sends one request, with what's to receive its reply.
+    fn send_waited(&self, request: ClientRequest) -> Result<flume::Receiver<Result<ClientResponse>>> {
         let id = self.inner.next_id.fetch_add(1, Ordering::Relaxed);
         let (reply_tx, reply_rx) = flume::bounded(1);
         // Before it's sent, so a reader that finishes after it was sent fails it, rather than leaving it to wait.
         self.inner.pending.lock().insert(id, reply_tx);
         match self.inner.send(id, request) {
-            Ok(()) => {}
+            Ok(()) => Ok(reply_rx),
             // Its socket goes too, whether the write failed or the connection had ended already.
             Err(ClientError::Disconnected) => {
                 self.disconnect();
-                return Err(ClientError::Disconnected);
+                Err(ClientError::Disconnected)
             }
             // One that couldn't be encoded, which leaves the connection as it was.
             Err(e) => {
                 self.inner.pending.lock().remove(&id);
-                return Err(e);
+                Err(e)
             }
         }
+    }
+
+    /// Sends one request; an introduction deadline ends the whole connection if its reply never arrives.
+    fn exchange_until(&self, request: ClientRequest, deadline: Option<Instant>) -> Result<ClientResponse> {
+        let reply_rx = self.send_waited(request)?;
         match deadline {
             None => reply_rx.recv().map_err(|_| ClientError::Disconnected)?,
             Some(deadline) => match reply_rx.recv_deadline(deadline) {
