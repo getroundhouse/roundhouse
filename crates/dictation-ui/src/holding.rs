@@ -1,5 +1,5 @@
-//! Plain Space first types, listens after 0.2 s, then dictates after 0.5 s. A short press or any other key cancels
-//! that preparation. The recording and timer belong to the field that received the press, not wherever focus goes.
+//! Plain Space first types, listens after 0.2 s, then dictates after 0.5 s, or talks after 0.2 s where it types
+//! nothing, as in conversation mode's bar. A short press or any other key cancels that preparation. The recording and timer belong to the field that received the press, not wherever focus goes.
 
 use std::time::Duration;
 
@@ -16,6 +16,9 @@ use crate::{Field, keys, source};
 pub const SPACE_LISTENS_AFTER: Duration = Duration::from_millis(200);
 /// Long enough to distinguish a held key, independent of the system's key-repeat setting.
 pub const SPACE_DICTATES_AFTER: Duration = Duration::from_millis(500);
+/// Where Space types nothing, as in conversation mode's bar, a held key is told from a brush of it as soon as the
+/// microphone listens, since waiting longer would only hold up what's said.
+pub const SPACE_TALKS_AFTER: Duration = SPACE_LISTENS_AFTER;
 
 pub(crate) struct SpaceDown {
     before: Before,
@@ -25,7 +28,14 @@ pub(crate) struct SpaceDown {
 }
 
 impl Field {
-    pub(crate) fn key_down(&mut self, event: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
+    /// Space down starts listening, and dictating once it's been held for `after`.
+    pub(crate) fn key_down(
+        &mut self,
+        event: &KeyDownEvent,
+        after: Duration,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         if !plain_space(&event.keystroke) {
             return;
         }
@@ -34,12 +44,13 @@ impl Field {
             if self.input.focus_handle(cx).is_focused(window) && self.underway.is_none() && self.can_dictate(cx) {
                 source::claim(cx);
                 let before = Before::of(self.input.read(cx));
+                let listens = SPACE_LISTENS_AFTER.min(after);
                 let timing = cx.spawn_in(window, async move |this, cx| {
-                    cx.background_executor().timer(SPACE_LISTENS_AFTER).await;
+                    cx.background_executor().timer(listens).await;
                     if this.update(cx, Field::listen).is_err() {
                         return;
                     }
-                    cx.background_executor().timer(SPACE_DICTATES_AFTER.saturating_sub(SPACE_LISTENS_AFTER)).await;
+                    cx.background_executor().timer(after.saturating_sub(listens)).await;
                     let _ = this.update_in(cx, Self::held_long_enough);
                 });
                 self.space_down = Some(SpaceDown { before, typed: None, listening: None, _timing: timing });

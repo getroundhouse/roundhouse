@@ -7,6 +7,9 @@ use gpui_kit::{
 };
 use look::Typeset as _;
 
+use std::time::Duration;
+
+use crate::holding::{SPACE_DICTATES_AFTER, SPACE_TALKS_AFTER};
 use crate::recording::Started;
 use crate::{CancelDictation, Field, HoldToDictate, keys};
 
@@ -16,6 +19,16 @@ impl Field {
     /// Gives a fresh wrapper around the input its dictation context and handlers. Keep other key contexts on their
     /// own ancestors, since an element has one context. A microphone button is optional.
     pub fn keys<E: InteractiveElement>(surface: E, field: &Entity<Self>) -> E {
+        Self::keys_held(surface, field, SPACE_DICTATES_AFTER)
+    }
+
+    /// The same, for a surface where Space types nothing, as conversation mode's bar, so holding it talks sooner.
+    pub fn keys_to_talk<E: InteractiveElement>(surface: E, field: &Entity<Self>) -> E {
+        Self::keys_held(surface, field, SPACE_TALKS_AFTER)
+    }
+
+    /// The handlers, with Space dictating once it's been held for `after`.
+    fn keys_held<E: InteractiveElement>(surface: E, field: &Entity<Self>, after: Duration) -> E {
         let (hold, cancel, down) = (field.downgrade(), field.downgrade(), field.downgrade());
         surface
             .key_context(keys::CONTEXT)
@@ -51,7 +64,7 @@ impl Field {
                 }
             })
             .capture_key_down(move |event, window, cx| {
-                let _ = down.update(cx, |field, cx| field.key_down(event, window, cx));
+                let _ = down.update(cx, |field, cx| field.key_down(event, after, window, cx));
             })
     }
 
