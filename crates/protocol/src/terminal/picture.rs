@@ -32,6 +32,11 @@ pub struct TerminalPicture {
     /// With this frame, the receiver has the screen as it was at one moment.
     #[serde(default, skip_serializing_if = "is_false")]
     pub whole: bool,
+    /// Sent from nothing, as to a receiver that has just begun to watch, on each frame of the picture. The receiver
+    /// lets go of all it holds of the terminal first, and of any picture it was gathering, since what came before it
+    /// was for a watch that has ended, which the frames of a picture can't otherwise say.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub fresh: bool,
     /// Where the cursor is, on a whole picture while it shows.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cursor: Option<TerminalCursor>,

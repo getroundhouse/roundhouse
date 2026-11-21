@@ -49,7 +49,8 @@ fn a_receiver_with_nothing_is_sent_the_whole_screen_and_then_only_what_changed()
     let changed = sending.next(shown(200, &["a", "B", "c"]), none).unwrap();
     let again = sending.next(shown(200, &["a", "B", "c"]), none);
 
-    assert!(first.whole && first.state.is_some() && first.cursor.is_some(), "{first:?}");
+    assert!(first.whole && first.fresh && first.state.is_some() && first.cursor.is_some(), "{first:?}");
+    assert!(!changed.fresh, "{changed:?}");
     assert_eq!(rows_of(&first), sent(&[(200, "a"), (201, "b"), (202, "c")]));
     assert_eq!(first.kept_from, RowNumber::new(100), "nothing it holds is known to be wrong");
     assert!(changed.whole && changed.state.is_none(), "{changed:?}");
@@ -100,6 +101,7 @@ fn a_new_numbering_or_size_is_sent_whole() {
     let resized = sending.next(shown(200, &["a", "b", "c"]), none).unwrap();
 
     assert_eq!(rows_of(&renumbered), sent(&[(200, "a"), (201, "b")]));
+    assert!(!renumbered.fresh, "the numbering says the receiver's rows are of another");
     assert_eq!(rows_of(&resized).len(), 3);
     assert!(renumbered.state.is_some(), "the receiver's state was of another picture");
 }
@@ -119,6 +121,19 @@ fn back_from_another_numbering_only_the_rows_kept_are_vouched_for() {
 
     assert_eq!(back.kept_from, back.first);
     assert_eq!(rows_of(&back), sent(&[(300, "$ ")]));
+}
+
+/// So a receiver that began to watch again lets go of what came before, which may have been sent before the reset.
+#[test]
+fn a_receiver_begun_again_is_sent_a_fresh_picture() {
+    let mut sending = PictureSending::default();
+    sending.next(shown(200, &["a"]), none).unwrap();
+
+    sending.reset();
+    let again = sending.next(shown(200, &["a"]), none).unwrap();
+
+    assert!(again.fresh && again.whole, "{again:?}");
+    assert_eq!(rows_of(&again), sent(&[(200, "a")]));
 }
 
 #[test]
@@ -167,4 +182,5 @@ fn a_picture_too_big_for_a_frame_is_finished_as_it_began() {
     let (last, before) = frames.split_last().unwrap();
     assert!(last.whole && last.cursor.is_some() && last.state.is_some(), "{last:?}");
     assert!(before.iter().all(|frame| !frame.whole && frame.cursor.is_none() && frame.state.is_none()));
+    assert!(frames.iter().all(|frame| frame.fresh), "each frame of a fresh picture says so");
 }

@@ -114,6 +114,7 @@ impl PictureSending {
             rows: Vec::new(),
             kept_from,
             whole: false,
+            fresh: self.has.is_none(),
             cursor: None,
             state: None,
         };

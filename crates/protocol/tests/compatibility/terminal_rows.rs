@@ -83,6 +83,7 @@ fn a_picture_keeps_its_form() {
         }],
         kept_from: RowNumber::new(800),
         whole: true,
+        fresh: true,
         cursor: Some(TerminalCursor { col: 2, row: 1, shape: CursorShape::Bar, blinking: true }),
         state: Some(state),
     };
@@ -91,7 +92,7 @@ fn a_picture_keeps_its_form() {
         &WorkerFrame::TerminalPicture { terminal: "t".into(), picture },
         concat!(
             r#"{"frame":"terminal_picture","terminal":"t","picture":{"numbering":3,"size":{"cols":80,"rows":24},"#,
-            r#""top":900,"first":30,"rows":[{"from":901,"rows":[{"s":[{"t":"hi"}]},{}]}],"kept_from":800,"whole":true,"#,
+            r#""top":900,"first":30,"rows":[{"from":901,"rows":[{"s":[{"t":"hi"}]},{}]}],"kept_from":800,"whole":true,"fresh":true,"#,
             r#""cursor":{"col":2,"row":1,"shape":"bar","blinking":true},"state":{"program":true,"wheel":"arrows","#,
             r#""title":"vim","palette":[{"i":1,"c":"ff0000"}],"foreground":"010203","reverse":true}}}"#,
         ),
