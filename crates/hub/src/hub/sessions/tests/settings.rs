@@ -194,7 +194,7 @@ async fn a_change_made_while_a_prompt_waits_on_setup_is_answered_at_once_and_the
         Some(held.map(|()| WorkerResponse::SetupDone(SetupDone { code: Some(0) })).map_err(never))
     });
     hub.workspace_rerun_setup(workspace.id.clone()).await.unwrap();
-    let (seq, _) = hub.session_prompt(chat.id.clone(), None, Prompt::new("go")).await.unwrap();
+    let (seq, _) = hub.session_prompt(chat.id.clone(), None, Prompt::new("go"), None).await.unwrap();
 
     let changing = hub.session_configure(chat.id.clone(), in_mode(protocol::fixtures::full_access()));
     let changed = tokio::time::timeout(TIMEOUT, changing).await.expect("the change waited for setup to finish");

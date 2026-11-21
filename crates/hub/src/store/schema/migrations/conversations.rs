@@ -9,3 +9,10 @@ pub(super) const CONVERSATION: &str = r"
         UPDATE sessions SET rev = (SELECT value FROM counters WHERE name = 'rev') WHERE rowid = NEW.rowid;
     END;
 ";
+
+/// How the person was talking with the agent as each event was recorded, as the event says: NULL for typing, and
+/// `conversation` in conversation mode. NULL in every event from before, as most were typed, and the mode's ends weren't
+/// recorded to stamp the rest by.
+pub(super) const INTERACTION: &str = r"
+    ALTER TABLE events ADD COLUMN interaction TEXT;
+";

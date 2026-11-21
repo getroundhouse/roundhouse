@@ -68,7 +68,7 @@ fn a_chat_that_only_waited_is_left_waiting_and_one_at_work_is_interrupted() {
             recorded: None,
             initialized: None,
             claims: None,
-            conversation: None,
+            interaction: None,
         };
         store.append(&"s".into(), None, &listed, None, None, Some(change)).unwrap();
         interrupt(&store, &"s".into(), Vec::new()).unwrap();

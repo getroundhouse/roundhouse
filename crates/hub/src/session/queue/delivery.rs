@@ -1,10 +1,11 @@
+use super::super::conversation::{Sending, may_say};
 use super::super::{Command, LiveSession, LiveState};
 use crate::hub::Hub;
 use crate::store::{Changed, Queuing, Reading, Store, StoreError, Unqueued};
 use protocol::attachment::Attachment;
 use protocol::client::{ApiError, ErrorCode, HubNotice};
 use protocol::event::{EventBody, TurnOutcome};
-use protocol::model::{AttachmentId, ClientMessageId, QueuedPrompt, Seq, Session, SessionStatus};
+use protocol::model::{AttachmentId, ClientDevice, ClientMessageId, QueuedPrompt, Seq, Session, SessionStatus};
 use protocol::prompt::PromptFrom;
 use protocol::prompt::{Prompt, PromptProblem};
 use std::sync::Arc;
@@ -85,12 +86,23 @@ impl QueueWatch {
 }
 
 impl LiveSession {
-    /// Queues a prompt the hub has checked can go. Each of its files has to be one of the session's.
+    /// Queues a prompt the hub has checked can go, which the person sent from `device`, if their client said one. Each
+    /// of its files has to be one of the session's. One said out loud has to come from the device that has the
+    /// conversation, as one sent straight away does.
     pub(crate) async fn queue(
         &self,
         client_msg_id: ClientMessageId,
         prompt: Prompt<AttachmentId>,
+        device: Option<&ClientDevice>,
     ) -> Result<Session, ApiError> {
+        let refused = if prompt.spoken { may_say(&self.state.lock().interaction, device).err() } else { None };
+        if let Some(refusal) = refused {
+            // Queued or sent already under its ID, so this is a retry, which gets what the first one got.
+            let (id, retried) = (self.id.clone(), client_msg_id.clone());
+            if !self.hub()?.blocking(move |store| store.queued_or_sent(&id, &retried)).await? {
+                return Err(refusal);
+            }
+        }
         let id = self.id.clone();
         let ((), queued) = self
             .queue_with(move |store| {
@@ -267,8 +279,8 @@ impl LiveSession {
         prompt: QueuedPrompt,
     ) -> Result<Option<Delivery>, ApiError> {
         let QueuedPrompt { client_msg_id, prompt, from } = prompt;
-        let (seq, duplicate) = self.record_carrying(hub, Some(client_msg_id), &prompt, from).await?;
-        Ok((!duplicate).then_some((seq, prompt)))
+        let (seq, prompt) = self.record_carrying(hub, Some(client_msg_id), prompt, from, Sending::Queued).await?;
+        Ok(prompt.map(|prompt| (seq, prompt)))
     }
 
     /// Tells everyone following the feed, if the queue changed.

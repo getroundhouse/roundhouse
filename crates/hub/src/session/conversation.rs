@@ -1,10 +1,56 @@
-//! Conversation mode: which device has a chat's conversation, the one that hears and speaks.
+//! Conversation mode: which device has a chat's conversation, the one that hears and speaks, and what the person
+//! sending a prompt does to it.
 
 use protocol::client::{ApiError, ErrorCode};
 use protocol::event::EventBody;
-use protocol::model::{ClientDevice, Session};
+use protocol::model::{ClientDevice, Interaction, Session};
+use protocol::prompt::Prompt;
 
-use super::{LiveSession, Origin};
+use super::{LiveSession, LiveState, Origin};
+
+/// How a prompt came to be recorded, which decides what it does to conversation mode.
+#[derive(Clone, Copy, Debug)]
+pub(crate) enum Sending<'a> {
+    /// The person sent it from `device`, the one their client said in its hello, if it said one. Typed, it turns
+    /// conversation mode off, so every prompt sent while it's on was said out loud. Said out loud, it has to come from
+    /// the device that has the conversation.
+    Sent { device: Option<&'a ClientDevice> },
+    /// From the queue, or written by the hub, which leaves the mode as it is, since nobody sent it just now. One said
+    /// out loud that waited until the mode was off goes as typed, so it gets a written reply, since nobody's listening
+    /// for one.
+    Queued,
+}
+
+impl Sending<'_> {
+    /// The prompt as it's recorded when sent this way, while the person talks with the agent as `interaction` says,
+    /// and what recording it does to that, or why it can't be recorded.
+    pub(super) fn admit<F>(
+        self,
+        interaction: &Interaction,
+        prompt: Prompt<F>,
+    ) -> Result<(Prompt<F>, Option<Interaction>), ApiError> {
+        match self {
+            Sending::Sent { device } if prompt.spoken => may_say(interaction, device).map(|()| (prompt, None)),
+            Sending::Sent { .. } => Ok((prompt, (!interaction.is_typing()).then_some(Interaction::Typing))),
+            Sending::Queued if prompt.spoken && interaction.is_typing() => {
+                Ok((Prompt { spoken: false, ..prompt }, None))
+            }
+            Sending::Queued => Ok((prompt, None)),
+        }
+    }
+}
+
+/// Whether something can be said out loud on `device`, which only the device that has the conversation can, while
+/// conversation mode is on. Devices are the same by their IDs, so a device that's been renamed still has it.
+pub(super) fn may_say(interaction: &Interaction, device: Option<&ClientDevice>) -> Result<(), ApiError> {
+    let has_it = interaction.device().zip(device).is_some_and(|(has_it, asking)| has_it.id == asking.id);
+    if has_it {
+        return Ok(());
+    }
+    let why =
+        if interaction.device().is_some() { "another device has the conversation" } else { "conversation mode is off" };
+    Err(ApiError::new(ErrorCode::Conflict, format!("this can't be said out loud here: {why}")))
+}
 
 impl LiveSession {
     /// Turns conversation mode on, with the conversation on `device`, which records the rule across the chat, or moves
@@ -14,22 +60,26 @@ impl LiveSession {
         let hub = self.hub()?;
         {
             let _in_order = self.recording.lock().await;
-            let on = self.state.lock().conversation.clone();
+            let on = self.state.lock().interaction.device().map(|on| on.id == device.id);
             match on {
                 None => {
-                    let started = EventBody::ConversationStarted { device: device.clone() };
-                    let closed = |state: &super::LiveState| {
-                        (!state.is_open()).then(|| ApiError::new(ErrorCode::Conflict, "this chat is closed"))
+                    let started = EventBody::ConversationStarted { device };
+                    let closed = |state: &LiveState| {
+                        if state.is_open() {
+                            Ok(None)
+                        } else {
+                            Err(ApiError::new(ErrorCode::Conflict, "this chat is closed"))
+                        }
                     };
                     self.record_in_order(Origin::Hub, started, None, closed).await?;
                 }
-                Some(on) if on == device => {}
-                Some(_) => {
+                Some(true) => {}
+                Some(false) => {
                     let (id, moving) = (self.id.clone(), device.clone());
                     hub.blocking(move |store| store.move_conversation(&id, &moving)).await?;
+                    self.state.lock().interaction = Interaction::Conversation { device: Box::new(device) };
                 }
             }
-            self.state.lock().conversation = Some(device);
         }
         self.announce(&hub).await
     }
@@ -41,7 +91,7 @@ impl LiveSession {
             let _in_order = self.recording.lock().await;
             let id = self.id.clone();
             hub.blocking(move |store| store.end_conversation(&id)).await?;
-            self.state.lock().conversation = None;
+            self.state.lock().interaction = Interaction::Typing;
         }
         self.announce(&hub).await
     }

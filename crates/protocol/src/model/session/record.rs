@@ -252,11 +252,10 @@ pub struct Session {
     /// [`AccountSetAutomatic`](crate::client::accounts::AccountSetAutomatic) says.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub needs_an_account: bool,
-    /// While conversation mode is on, the device that has the conversation, which hears and speaks. `None` while it's
-    /// off, and from a hub that doesn't keep it. Boxed, since it's off in nearly every chat, and every copy of the record
-    /// would otherwise carry room for two strings, which the feed's notices and the lists of records move by value.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub conversation: Option<Box<super::super::ClientDevice>>,
+    /// How the person is talking with the agent now: typing, or out loud in conversation mode, with the device that has
+    /// the conversation. Typing from a hub that doesn't keep it.
+    #[serde(default, skip_serializing_if = "super::super::Interaction::is_typing")]
+    pub interaction: super::super::Interaction,
     /// What's typed and attached in the chat's composer and not sent, as [`Draft`] says. Empty from a hub that doesn't
     /// keep it, and once the chat is closed.
     #[serde(default, skip_serializing_if = "Draft::is_empty")]

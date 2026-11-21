@@ -53,13 +53,13 @@ async fn a_prompt_sent_again_is_the_one_recorded_and_the_agent_is_given_it_once(
     let dir = tempfile::tempdir().unwrap();
     let (hub, asked) = hub_with_stand_in_workers(dir.path());
     let (_, chat) = a_chat(&hub).await;
-    let send = || hub.session_prompt(chat.id.clone(), Some("msg-1".into()), Prompt::new("once"));
+    let send = || hub.session_prompt(chat.id.clone(), Some("msg-1".into()), Prompt::new("once"), None);
 
     let (first, sent_before) = send().await.unwrap();
     let (again, sent_again) = send().await.unwrap();
     given(&asked, &chat.id, first).await;
     // Commands run in turn, so once the next prompt is given, a second of the first would have been.
-    let (next, _) = hub.session_prompt(chat.id.clone(), None, Prompt::new("next")).await.unwrap();
+    let (next, _) = hub.session_prompt(chat.id.clone(), None, Prompt::new("next"), None).await.unwrap();
     given(&asked, &chat.id, next).await;
 
     assert_eq!((first, sent_before), (Seq::new(1), false));
@@ -76,12 +76,12 @@ async fn the_feed_tells_of_a_prompt_sent_while_the_agent_works_until_the_agent_t
     let dir = tempfile::tempdir().unwrap();
     let (hub, asked) = hub_with_stand_in_workers(dir.path());
     let (_, chat) = a_chat(&hub).await;
-    let (working, _) = hub.session_prompt(chat.id.clone(), None, Prompt::new("work")).await.unwrap();
+    let (working, _) = hub.session_prompt(chat.id.clone(), None, Prompt::new("work"), None).await.unwrap();
     given(&asked, &chat.id, working).await;
     the_agent_says(&hub, &asked, &chat.id, [EventBody::PromptTaken { prompt: working }]).await;
     let mut feed = hub.subscribe_feed();
 
-    let (steered, _) = hub.session_prompt(chat.id.clone(), None, Prompt::new("steered")).await.unwrap();
+    let (steered, _) = hub.session_prompt(chat.id.clone(), None, Prompt::new("steered"), None).await.unwrap();
     let waiting = told(&mut feed, &chat.id, |told| told.untaken.as_deref() == Some(&[steered][..])).await;
     given(&asked, &chat.id, steered).await;
     the_agent_says(&hub, &asked, &chat.id, [EventBody::PromptTaken { prompt: steered }]).await;
@@ -100,7 +100,7 @@ async fn compacting_before_any_conversation_or_while_the_agent_is_on_a_turn_is_r
     let (_, chat) = a_chat(&hub).await;
 
     let before_any = hub.session_compact(chat.id.clone(), None).await.map_err(|e| e.code);
-    let (working, _) = hub.session_prompt(chat.id.clone(), None, Prompt::new("work")).await.unwrap();
+    let (working, _) = hub.session_prompt(chat.id.clone(), None, Prompt::new("work"), None).await.unwrap();
     given(&asked, &chat.id, working).await;
     the_agent_says(&hub, &asked, &chat.id, [EventBody::PromptTaken { prompt: working }]).await;
     let on_a_turn = hub.session_compact(chat.id.clone(), None).await.map_err(|e| e.code);
@@ -132,7 +132,7 @@ async fn a_hub_refuses_to_stop_if_idle_straight_after_a_prompt_and_the_turn_goes
     let (_, chat) = a_chat(&hub).await;
     waiting::task::until(TIMEOUT, "the hub to be idle", || hub.status().is_idle()).await;
 
-    let (seq, _) = hub.session_prompt(chat.id.clone(), None, Prompt::new("still here")).await.unwrap();
+    let (seq, _) = hub.session_prompt(chat.id.clone(), None, Prompt::new("still here"), None).await.unwrap();
     let stopped = hub.shutdown_if_idle().map_err(|e| e.code);
     given(&asked, &chat.id, seq).await;
     let ended = [EventBody::PromptTaken { prompt: seq }, turn_ended(TurnOutcome::Success), idle()];
@@ -172,7 +172,7 @@ async fn closing_a_chat_nothing_was_sent_in_deletes_it() {
     let listed: Vec<_> = hub.session_list(workspace.id.clone()).await.unwrap().into_iter().map(|s| s.id).collect();
     assert_eq!(listed, [used.id]);
     let again = hub.session_close(unused.id.clone()).await.map_err(|e| e.code);
-    let prompted = hub.session_prompt(unused.id.clone(), None, Prompt::new("hello?")).await.map_err(|e| e.code);
+    let prompted = hub.session_prompt(unused.id.clone(), None, Prompt::new("hello?"), None).await.map_err(|e| e.code);
     assert_eq!((again.err(), prompted.err()), (Some(ErrorCode::NotFound), Some(ErrorCode::NotFound)));
 }
 

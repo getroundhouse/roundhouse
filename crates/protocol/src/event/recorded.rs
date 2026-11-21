@@ -2,8 +2,8 @@ use super::{compaction, content, ending, failure, task, tokens};
 use crate::attachment::Attachment;
 use crate::capability::approvals::{ApprovalMode, Decision, Request};
 use crate::model::{
-    AgentSessionId, ApprovalId, ClientMessageId, MessageId, ModelName, Place, RunId, Seq, SessionId, SubagentId,
-    TaskId, ToolUseId, UsageLimit,
+    AgentSessionId, ApprovalId, ClientMessageId, InteractionMode, MessageId, ModelName, Place, RunId, Seq, SessionId,
+    SubagentId, TaskId, ToolUseId, UsageLimit,
 };
 use crate::prompt::{Prompt, PromptFrom};
 use compaction::CompactionOutcome;
@@ -30,6 +30,11 @@ pub struct SessionEvent {
     pub subagent: Option<SubagentId>,
     #[serde(default)]
     pub place: Place,
+    /// How the person was talking with the agent as it was recorded: typed, or out loud in conversation mode, as the
+    /// session's record said once the event had changed it, so the prompt that turns the mode off was typed. Typing from
+    /// a hub that doesn't record it, and for what was recorded before it did.
+    #[serde(default, skip_serializing_if = "InteractionMode::is_typing")]
+    pub interaction: InteractionMode,
     pub body: EventBody,
     /// The agent's original line. Only sent when a read asks for it.
     #[serde(default, skip_serializing_if = "Option::is_none")]

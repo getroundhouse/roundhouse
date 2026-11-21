@@ -60,7 +60,7 @@ impl Chats {
 
     /// Prompts a chat whose launch is refused, and says why, as the launch's failure does.
     pub(super) async fn refused_launch(&self, chat: &SessionId) -> String {
-        self.hub.session_prompt(chat.clone(), None, Prompt::new("go")).await.unwrap();
+        self.hub.session_prompt(chat.clone(), None, Prompt::new("go"), None).await.unwrap();
         let failed = || {
             let failed = self.log(chat).into_iter().find_map(|e| {
                 let EventBody::AgentExited { reason: ExitReason::StartFailed, stderr_tail, .. } = e.body else {

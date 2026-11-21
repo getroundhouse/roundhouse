@@ -5,9 +5,9 @@ use crate::event::{EventBody, FailureKind, RequestFailure, SessionEvent, TurnOut
 use crate::model::{
     Account, AccountDefault, AccountId, AgentKind, ApprovalId, BranchName, ChildStatus, ChildWorktree, Draft,
     FoundGithubLogin, GhLogin, GhLoginWorks, GithubAccount, GithubApp, GithubAppId, GithubLoginKind, GithubReach,
-    GithubRepositoryName, GithubSignIn, GithubSignInStatus, GithubUser, GithubUserId, HeldGithubLogin, MadeBy,
-    ModelName, Place, Reach, Rev, Seq, Session, SessionStatus, SetupStatus, Subagent, SubagentId, SubagentStatus,
-    TitleSource, ToolUseId, Workspace, WorkspaceStatus,
+    GithubRepositoryName, GithubSignIn, GithubSignInStatus, GithubUser, GithubUserId, HeldGithubLogin, Interaction,
+    InteractionMode, MadeBy, ModelName, Place, Reach, Rev, Seq, Session, SessionStatus, SetupStatus, Subagent,
+    SubagentId, SubagentStatus, TitleSource, ToolUseId, Workspace, WorkspaceStatus,
 };
 
 /// The session `id`, in the workspace `w`, idle with nothing in its log. Its agent is Claude, running Opus with full
@@ -46,7 +46,7 @@ pub fn session(id: &str) -> Session {
         queue_held: false,
         placed_automatically: false,
         needs_an_account: false,
-        conversation: None,
+        interaction: Interaction::Typing,
         draft: Draft::default(),
         decision_draft: None,
         open_approvals: None,
@@ -198,6 +198,7 @@ pub fn event(seq: Seq, body: EventBody) -> SessionEvent {
         run: None,
         subagent: None,
         place: Place::default(),
+        interaction: InteractionMode::Typing,
         body,
         raw: None,
     }

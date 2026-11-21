@@ -48,7 +48,7 @@ async fn a_chat_is_put_on_the_default_as_it_first_launches_and_stays_on_it_when_
     });
 
     // Its agent takes the prompt and is still at work on it.
-    chats.hub.session_prompt(fresh.clone(), None, protocol::prompt::Prompt::new("work")).await.unwrap();
+    chats.hub.session_prompt(fresh.clone(), None, protocol::prompt::Prompt::new("work"), None).await.unwrap();
     let announced = announced_on(&mut feed, &fresh).await;
     answer_the_launch.send(()).unwrap();
     let given = || !chats.asked.prompts_given(&fresh).is_empty();

@@ -144,7 +144,8 @@ impl Hub {
         let sent = match unchosen {
             None => {
                 let message = ClientMessageId::from(client_request_id.as_str());
-                self.session_prompt(session.id.clone(), Some(message), first_prompt_of(made_of)).await.map(drop)
+                // Typed, in a chat that's only now made, so no device has its conversation.
+                self.session_prompt(session.id.clone(), Some(message), first_prompt_of(made_of), None).await.map(drop)
             }
             Some(unchosen) => Err(unchosen),
         };

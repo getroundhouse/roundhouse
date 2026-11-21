@@ -1,7 +1,7 @@
 use super::super::proposals::take_back_answer_on;
 use super::super::sessions::queue_from;
-use super::super::{Reading, Store, StoreError, lock};
-use protocol::model::{Account, ClientMessageId, Proposal, QueuedPrompt, SessionId};
+use super::super::{Reading, Store, StoreError, lock, seq_of};
+use protocol::model::{Account, ClientMessageId, Proposal, QueuedPrompt, Seq, SessionId};
 use protocol::prompt::PromptFrom;
 use rusqlite::{Connection, OptionalExtension, params};
 
@@ -54,6 +54,19 @@ pub enum Changed {
 }
 
 impl Store {
+    /// Where the prompt sent under `client_msg_id` is recorded, if it has been, so a request sent again can be told
+    /// what the first one did.
+    pub fn sent_at(&self, id: &SessionId, client_msg_id: &ClientMessageId) -> Result<Option<Seq>, StoreError> {
+        sent_at(&lock(&self.reader), id, client_msg_id)
+    }
+
+    /// Whether a prompt with this ID is queued, or has been sent, so queuing it again is a retry.
+    pub fn queued_or_sent(&self, id: &SessionId, client_msg_id: &ClientMessageId) -> Result<bool, StoreError> {
+        let conn = lock(&self.reader);
+        let queued = read_queue(&conn, id)?.iter().any(|queued| queued.client_msg_id == *client_msg_id);
+        Ok(queued || was_sent(&conn, id, client_msg_id)?)
+    }
+
     /// Puts `prompt` at the end of the queue. If a prompt with its ID is queued already, this is a retry, and changes
     /// nothing. A prompt that's been recorded is refused, so a retry that comes after it was sent doesn't queue it
     /// again.
@@ -174,14 +187,19 @@ pub(in super::super) fn queue_on(
 
 /// Whether a prompt with this ID has been recorded, which takes it out of the queue in the same commit.
 fn was_sent(conn: &Connection, id: &SessionId, client_msg_id: &ClientMessageId) -> Result<bool, StoreError> {
-    let sent: Option<i64> = conn
+    Ok(sent_at(conn, id, client_msg_id)?.is_some())
+}
+
+/// Where the prompt with this ID is recorded, if it has been.
+fn sent_at(conn: &Connection, id: &SessionId, client_msg_id: &ClientMessageId) -> Result<Option<Seq>, StoreError> {
+    let sent = conn
         .query_row(
             "SELECT seq FROM events WHERE session_id = ? AND client_msg_id = ?",
             params![id.as_str(), client_msg_id.as_str()],
-            |row| row.get(0),
+            |row| seq_of(row, 0),
         )
         .optional()?;
-    Ok(sent.is_some())
+    Ok(sent)
 }
 
 fn read_queue(conn: &Connection, id: &SessionId) -> Result<Vec<QueuedPrompt>, StoreError> {

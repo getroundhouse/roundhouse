@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use protocol::client::ApiError;
-use protocol::model::{AttachmentId, ClientMessageId, Session, SessionId};
+use protocol::model::{AttachmentId, ClientDevice, ClientMessageId, Session, SessionId};
 use protocol::prompt::Prompt;
 use tokio::sync::oneshot;
 
@@ -18,9 +18,10 @@ impl Hub {
         id: SessionId,
         client_msg_id: ClientMessageId,
         prompt: Prompt<AttachmentId>,
+        device: Option<&ClientDevice>,
     ) -> Result<Session, ApiError> {
         prompt.check()?;
-        self.live_session(&id).await?.queue(client_msg_id, prompt).await
+        self.live_session(&id).await?.queue(client_msg_id, prompt, device).await
     }
 
     pub(crate) async fn session_change_queued(

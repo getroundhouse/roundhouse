@@ -2,7 +2,7 @@
 
 use super::super::{StoreError, seq_column, text_of};
 use protocol::event::{AgentTask, TurnOutcome};
-use protocol::model::{RunId, Seq, SessionId, SessionStatus};
+use protocol::model::{Interaction, RunId, Seq, SessionId, SessionStatus};
 use rusqlite::{Connection, params};
 
 /// What an event changes about where a session's agent has got to, which commits with the event that brings it.
@@ -43,8 +43,9 @@ pub struct SessionChange {
     pub initialized: Option<Initialized>,
     /// What the current run said it claims, which the record holds until it exits.
     pub claims: Option<protocol::model::RunCapabilities>,
-    /// Conversation mode turned on, with the conversation on this device, as the event that draws its rule says.
-    pub conversation: Option<protocol::model::ClientDevice>,
+    /// How the person talks with the agent from here on: conversation mode turned on, with the conversation on its
+    /// device, as the event that draws its rule says, or typing again, as a prompt they type says.
+    pub interaction: Option<Interaction>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -59,7 +60,7 @@ impl SessionChange {
             && self.queue_held.is_none()
             && self.initialized.is_none()
             && self.claims.is_none()
-            && self.conversation.is_none()
+            && self.interaction.is_none()
     }
 }
 
@@ -75,7 +76,8 @@ impl From<SessionStatus> for SessionChange {
     }
 }
 
-/// Makes `change` to the session, as part of the transaction that records the event at `seq`, at `ts_ms`.
+/// Makes `change` to the session, and moves its log on to `seq`, as part of the transaction that records the event
+/// there, at `ts_ms`.
 pub(super) fn change_session(
     tx: &Connection,
     session_id: &SessionId,
@@ -84,6 +86,10 @@ pub(super) fn change_session(
     change: SessionChange,
 ) -> Result<(), StoreError> {
     let id = session_id.as_str();
+    tx.execute(
+        "UPDATE sessions SET last_seq = ?, updated_at_ms = ? WHERE id = ?",
+        params![seq_column(seq), ts_ms, id],
+    )?;
     if let Some(init) = change.initialized {
         tx.execute(
             "UPDATE sessions SET agent_opened = 1, agent_session_id = coalesce(?, agent_session_id) WHERE id = ?",
@@ -93,8 +99,18 @@ pub(super) fn change_session(
     if let Some(claims) = change.claims {
         super::super::claims::set_claims(tx, session_id, &claims)?;
     }
-    if let Some(device) = change.conversation {
-        tx.execute("UPDATE sessions SET conversation = ? WHERE id = ?", params![serde_json::to_string(&device)?, id])?;
+    match change.interaction {
+        Some(Interaction::Conversation { device }) => {
+            tx.execute(
+                "UPDATE sessions SET conversation = ? WHERE id = ?",
+                params![serde_json::to_string(&device)?, id],
+            )?;
+        }
+        // Only while it's on, so a prompt typed in a chat that's typing anyway doesn't move the record's revision.
+        Some(Interaction::Typing) => {
+            tx.execute("UPDATE sessions SET conversation = NULL WHERE id = ? AND conversation IS NOT NULL", [id])?;
+        }
+        Some(Interaction::Unknown) | None => {}
     }
     if let Some(held) = change.queue_held {
         tx.execute("UPDATE sessions SET queue_held = ? WHERE id = ?", params![held, id])?;

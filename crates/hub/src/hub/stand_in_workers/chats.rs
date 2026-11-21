@@ -88,7 +88,7 @@ pub(in super::super) async fn a_turn(
     asking: Option<CacheRequest>,
 ) -> AgentSpec {
     let before = asked.launches(session).len();
-    let (seq, _) = hub.session_prompt(session.clone(), None, prompt).await.expect("a prompt the hub takes");
+    let (seq, _) = hub.session_prompt(session.clone(), None, prompt, None).await.expect("a prompt the hub takes");
     let given = || {
         let given = asked.prompts_given(session);
         if given.contains(&seq) { Ok(()) } else { Err(format!("the agent was given only {given:?}")) }
