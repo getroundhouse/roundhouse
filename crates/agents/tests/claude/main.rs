@@ -7,6 +7,7 @@ mod background;
 mod conformance;
 mod contract;
 mod controls;
+mod covering;
 mod process;
 mod results;
 mod run_files;

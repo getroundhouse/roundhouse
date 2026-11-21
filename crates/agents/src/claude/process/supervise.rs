@@ -128,6 +128,7 @@ async fn finish(
     stderr_tail: Vec<String>,
 ) {
     shared.gone.store(true, Ordering::SeqCst);
+    shared.covering.stop();
     *shared.stdin.lock().await = None;
     shared.pending_controls.lock().clear();
     drop(files);

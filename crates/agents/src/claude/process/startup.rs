@@ -10,6 +10,7 @@ use tokio::sync::mpsc;
 
 use super::compact::AskedToCompact;
 use super::context::ContextWatch;
+use super::covering::{Covering, Starting};
 use super::run_files::RunFiles;
 use super::running::{ClaudeProcess, Shared};
 use super::usage::UsageWatch;
@@ -53,6 +54,11 @@ pub(super) async fn begin(
         gone: AtomicBool::new(false),
         exited: tokio::sync::watch::channel(false).0,
         tap,
+        covering: Covering::new(
+            Starting { bin: bin.clone(), login: options.login.clone(), environment: options.environment.clone() },
+            spec.interaction,
+            &output,
+        ),
     });
     let mode = crate::registry::launch(&spec)?.mode;
     plan::start_in(mode, &shared, &mut *shared.stdin.lock().await, &output).await;

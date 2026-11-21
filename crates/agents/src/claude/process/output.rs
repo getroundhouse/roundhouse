@@ -141,8 +141,23 @@ async fn confirm(shared: &Shared, output: &mpsc::Sender<AgentOutput>) -> bool {
     true
 }
 
-/// Sends `item` on, or holds it until the CLI has confirmed the session. False once nobody is reading.
+/// Sends `item` on, or holds it until the CLI has confirmed the session, and then the closing of the wait it answers,
+/// if a line was said in it. False once nobody is reading. Under the cover line's `saying`, so a line is sent before
+/// the words that answer what it covers, or not at all.
 pub(super) async fn deliver(shared: &Shared, output: &mpsc::Sender<AgentOutput>, item: AgentOutput) -> bool {
+    let _saying = shared.covering.saying.lock().await;
+    let closed = shared.covering.took_in(&item);
+    if !send_on(shared, output, item).await {
+        return false;
+    }
+    match closed {
+        Some(closed) => send_on(shared, output, AgentOutput::Report(closed)).await,
+        None => true,
+    }
+}
+
+/// Sends `item` on, or holds it until the CLI has confirmed the session. False once nobody is reading.
+pub(super) async fn send_on(shared: &Shared, output: &mpsc::Sender<AgentOutput>, item: AgentOutput) -> bool {
     if !shared.confirmed.load(Ordering::SeqCst) {
         shared.held_output.lock().push(item);
         return true;
