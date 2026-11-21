@@ -18,7 +18,6 @@ mod bar;
 mod dictating;
 mod document;
 mod held;
-mod page;
 mod view;
 
 pub use answering::{ProposalEvent, ProposalRequest};

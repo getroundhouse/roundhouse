@@ -157,13 +157,11 @@ pub(in crate::rows) fn open_tab(id: ElementId, opens: Opens, title: &str, this: 
 
 /// What it was asked, as the item `key`'s, quieter than what it reported, which is the outcome: a quote, with a rule
 /// at its left and its text fainter, under the word Asked, since a prompt is what a person sends. It scrolls past a
-/// dozen lines or so, as a block's prose does, with the matches of what `find` looks for, and under a drag of `drags`.
-/// `text` draws it, in the area that scrolls it. The call and the subagent tab both start with
-/// it.
+/// dozen lines or so, as a block's prose does, and under a drag of `drags`. `text` draws it, with its matches, in the
+/// area that scrolls it. The call and the subagent tab both start with it.
 pub(in crate::rows) fn prompt_block(
     key: &ItemKey,
     text: impl FnOnce(ElementId) -> AnyElement,
-    find: &FindLook,
     drags: &Selection,
     cx: &App,
 ) -> AnyElement {
@@ -178,7 +176,7 @@ pub(in crate::rows) fn prompt_block(
         .border_l(look::QUOTE_RULE)
         .border_color(colors.edge)
         .child(div().typeset(look::Type::Detail).text_color(colors.text_faint).child("Asked"))
-        .child(block::scrolling(find, drags, &id, text.test_support()))
+        .child(block::scrolling(drags, &id, text.test_support()))
         .into_any_element()
 }
 
@@ -186,7 +184,7 @@ pub(in crate::rows) fn prompt_block(
 fn asked(call: &Agent, toggle: &Toggle, cx: &App) -> Option<AnyElement> {
     let prompt = call.prompt?;
     let text = |area| written(toggle, Text::Asked, prompt, Some(area), None);
-    Some(prompt_block(toggle.key, text, toggle.find, &toggle.shared.selection, cx))
+    Some(prompt_block(toggle.key, text, &toggle.shared.selection, cx))
 }
 
 /// What it reported, `text`, once it's done, as the subagent's answer, as the item `key`'s: the agent's own prose, in

@@ -23,4 +23,4 @@ The plain text a call shows, such as a command and what it printed, is in the sa
 
 ## What it costs
 
-The selection takes a mouse's press, drag and release. It doesn't take a touch screen's long press and handles, which the kit's selection does.
+The selection takes a mouse's press, drag and release, and Shift with an arrow key, which moves the end that moved last. It doesn't take a touch screen's long press and handles, which the kit's selection does.

@@ -8,7 +8,7 @@ use gpui_kit::{
 };
 
 use super::Marks;
-use super::reveal::{self, Reveal};
+use crate::reveal::{self, Reveal};
 
 /// `text` with `styles`, such as code's colours, and its matches behind it. The match being shown says where it was
 /// drawn, in `area` if it's in an area that scrolls.

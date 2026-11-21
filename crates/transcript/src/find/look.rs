@@ -11,8 +11,8 @@ use std::rc::Rc;
 use gpui_kit::{ElementId, HighlightStyle, Hsla};
 use protocol::find::Needle;
 
-use super::reveal::Reveal;
 use crate::item_key::ItemKey;
+use crate::reveal::Reveal;
 use crate::texts::Leaf;
 
 /// Which of an item's texts one is, such as a call's output, or the third link a search found. Ordered as declared,
@@ -172,10 +172,6 @@ impl FindLook {
     pub(crate) fn new(needle: Option<Needle>, here: Option<Spot>, reveal: Reveal, colors: &look::Colors) -> Self {
         let colors = MatchColors { found: colors.found(), here: colors.found_here() };
         Self { needle, here, found: RefCell::default(), reveal, colors }
-    }
-
-    pub(crate) fn reveal(&self) -> &Reveal {
-        &self.reveal
     }
 
     /// Which match in `id` is the one being shown, if it's in that text.

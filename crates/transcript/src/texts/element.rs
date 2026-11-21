@@ -17,6 +17,7 @@ use super::parsing::Apart;
 use super::{Leaf, Parsed, Style, TextAt, TextKey, Texts};
 use crate::find::Marks;
 use crate::linked_images::Images;
+use crate::reveal::Wanted;
 use crate::selection::{Geometry, Selection};
 
 pub(super) struct ProseElement {
@@ -158,7 +159,8 @@ impl ProseElement {
         let Some((leaf, range, reveal)) = here else { return };
         let Some(geometry) = leaves.get(&leaf) else { return };
         let at = geometry.position_for_index(range.start);
-        reveal.drawn_at(Bounds::new(at, size(px(1.), geometry.line_height())), self.area.clone());
+        let at = Bounds::new(at, size(px(1.), geometry.line_height()));
+        reveal.drawn_at(Wanted::Match, at, self.area.clone());
     }
 }
 

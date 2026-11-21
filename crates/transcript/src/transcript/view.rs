@@ -1,3 +1,4 @@
+use super::drawing::row_of;
 use super::{Model, events, find, outline, record};
 use crate::attachments::Picture;
 use crate::folds::Fold;
@@ -14,10 +15,10 @@ use client_core::{Client, OpenSession, View};
 use events::TranscriptEvent;
 use find::Finding;
 use gpui_kit::{
-    AnyElement, App, AppContext, Context, ElementId, Entity, EventEmitter, IntoElement, ParentElement as _, Render,
-    StyleRefinement, Styled as _, Task, Window, div,
+    App, AppContext, Context, Entity, EventEmitter, IntoElement, ParentElement as _, StyleRefinement, Styled as _,
+    Task, div,
 };
-use look::{LineText, MovingMarks};
+use look::MovingMarks;
 use protocol::attachment::Attachment;
 use protocol::event::SessionEvent;
 use protocol::model::{Seq, Session, SessionId, SubagentId};
@@ -279,13 +280,7 @@ impl Transcript {
 
     /// Measures the row `of` is drawn in again, since it draws what it drew another way, and draws it.
     pub(crate) fn redrawn(&mut self, of: Of, cx: &mut Context<Self>) {
-        let row = match of {
-            Of::Event(seq) => self.log.row_of(seq),
-            Of::Head | Of::Tail | Of::Foot | Of::Document(_) => {
-                self.list.row_count().checked_sub(1).and_then(|tail| crate::rows::list_row_of(of, tail))
-            }
-        };
-        if let Some(row) = row {
+        if let Some(row) = row_of(&self.log, self.list.row_count(), of) {
             self.remeasure_row(row, cx);
         }
     }
@@ -330,59 +325,6 @@ impl Transcript {
             });
         })
         .detach();
-    }
-}
-
-impl Transcript {
-    /// What draws each of the list's rows in this frame, by its index, from the version of the log the transcript last
-    /// caught up with, as `rows`' `render_row` says.
-    pub(super) fn frame_rows(
-        &self,
-        line_text: LineText,
-        cx: &mut Context<Self>,
-    ) -> impl Fn(usize, &mut App) -> Option<AnyElement> + 'static {
-        let (model, log) = (self.model.clone(), self.log.clone());
-        let shared = crate::rows::Shared {
-            this: cx.weak_entity(),
-            linked: self.linked.clone(),
-            references: self.references.clone(),
-            line_text,
-            texts: self.texts.clone(),
-            selection: self.selection.clone(),
-            moving: self.moving.clone(),
-        };
-        let tail = self.list.row_count().saturating_sub(1);
-        move |ix, cx| crate::rows::render_row(&model, &log, &shared, crate::rows::Item { ix, tail }, cx)
-    }
-}
-
-impl Render for Transcript {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        // Its rows leave room for the marks that move again as they're drawn.
-        self.moving.draw_again();
-        self.keep_revealing(window);
-        let wanted = self.session.clone();
-        let recorded = self.log.row_count();
-        let line_text = LineText::new(window, cx);
-        let row = self.frame_rows(line_text.clone(), cx);
-        let room_under = crate::rows::room_under(&self.model.borrow());
-        let rows = self.list.render(
-            ElementId::Name(self.list_id.clone().into()),
-            move |ix, _, cx| row(ix, cx),
-            move |rows, unfetched| {
-                // This frame's tail isn't a log row. Before the first catch-up it is row 0, even if history has
-                // arrived on the session's thread; asking for it there would fetch the start of a chat opened at its end.
-                if recorded > 0 {
-                    wanted.want(rows.start..rows.end.min(recorded), unfetched.filter(|row| *row < recorded));
-                }
-            },
-            room_under,
-            window,
-            cx,
-        );
-        let bar = self.find_bar(cx);
-        let chat = self.with_outline(rows.into_any_element(), line_text, window, cx).children(bar);
-        self.selection.with_keys(chat)
     }
 }
 

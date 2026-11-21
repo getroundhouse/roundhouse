@@ -101,7 +101,7 @@ fn answers(questions: &[Question], asked: &Asked, toggle: &Toggle, cx: &App) -> 
                 .children(answered(toggle, &area, i, answer, cx)),
         );
     }
-    let scrolling = block::scrolling(toggle.find, &toggle.shared.selection, &id, list.test_support());
+    let scrolling = block::scrolling(&toggle.shared.selection, &id, list.test_support());
     block::frame(cx).child(scrolling).into_any_element()
 }
 

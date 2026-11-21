@@ -75,6 +75,22 @@ impl Pieces {
         self.0.iter().any(|piece| piece.shows(bounds))
     }
 
+    /// Where the place at `byte` is drawn, the top of the row it's on, and how tall that row is: in the piece it's in,
+    /// or at the end of the last, for a byte past its end.
+    pub(in crate::selection) fn caret(&self, byte: usize) -> (Point<Pixels>, Pixels) {
+        let piece = self.0.iter().find(|piece| byte <= piece.end()).or(self.0.last());
+        piece.map_or((Point::default(), Pixels::ZERO), |piece| {
+            let (bounds, row) = (piece.layout.bounds(), piece.layout.line_height());
+            let within = byte.saturating_sub(piece.start).min(piece.layout.len());
+            (piece.layout.position_for_index(within).unwrap_or(bounds.origin), row)
+        })
+    }
+
+    /// Where each piece is, in order.
+    pub(in crate::selection) fn blocks(&self) -> Vec<Bounds<Pixels>> {
+        self.0.iter().map(|piece| piece.layout.bounds()).collect()
+    }
+
     /// The place in the text nearest `at`, in a piece that shows in `shows`: on the row across from it, or the nearest
     /// row. A point between two pieces is across from the first row of the one below it, if that shows, and otherwise
     /// is on the last row of the one above, so where an area cuts the text short in the space between two pieces, no

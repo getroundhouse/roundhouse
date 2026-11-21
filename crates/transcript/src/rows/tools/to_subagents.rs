@@ -45,7 +45,7 @@ pub(super) fn draw(
         // made.
         let asked = message.map(|message| {
             let text = |area| written(toggle, Text::Asked, message, Some(area), None);
-            agent::prompt_block(toggle.key, text, toggle.find, &toggle.shared.selection, cx)
+            agent::prompt_block(toggle.key, text, &toggle.shared.selection, cx)
         });
         let output = output
             .map(|text| block::frame(cx).child(block::output(toggle, Text::Output, text, look::colors(cx).text, cx)));

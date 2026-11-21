@@ -5,7 +5,6 @@
 //! way.
 
 mod changes;
-mod frames;
 #[cfg(test)]
 mod tests;
 mod view;

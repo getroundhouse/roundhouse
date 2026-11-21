@@ -15,7 +15,7 @@ use super::tools::agent;
 use super::turn_times;
 use super::{Shared, from_blocks, row};
 use crate::calls::count;
-use crate::find::{self, FindLook, Part};
+use crate::find::{self, Part};
 use crate::item_key::ItemKey;
 use crate::model_names::model_name;
 use crate::texts::{Of, TextAt, Written};
@@ -55,12 +55,10 @@ pub(super) fn head(m: &Model, shared: &Shared, cx: &App) -> Option<AnyElement> {
     let subagent = shown(m)?;
     let prompt = subagent.prompt.as_deref()?;
     let key = ItemKey::Call(subagent.call.clone());
-    // Nothing's looked for in the subagent tab, so the area that scrolls it has no match to bring into view.
-    let find = FindLook::default();
     let element = find::view_id(&(key.clone(), Part::Asked));
     let text =
         |area| from_blocks(&Written::unfound(TextAt::first_of(Of::Head), element, prompt).in_area(area), None, shared);
-    let asked = agent::prompt_block(&key, text, &find, &shared.selection, cx);
+    let asked = agent::prompt_block(&key, text, &shared.selection, cx);
     Some(row().child(asked).into_any_element())
 }
 

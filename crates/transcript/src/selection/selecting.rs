@@ -1,22 +1,24 @@
+use super::keys::Keyed;
 use super::{geometry, places};
+use crate::reveal::Reveal;
 use crate::texts::{Leaves, TextAt, TextKey, Texts};
 use geometry::Geometry;
 use gpui_kit::base::TextSelection;
 use gpui_kit::base::input::{Copy, SelectAll};
 use gpui_kit::{
     App, Bounds, ClickEvent, ClipboardItem, Div, ElementId, FocusHandle, InteractiveElement as _, MouseButton, Pixels,
-    Point, SharedString, Window, point, px,
+    Point, SharedString, Window,
 };
 use look::motion::ScrollingOn;
-use places::{copied, line_around, selected, spot_at, text_under, word_around};
+use places::{copied, line_around, selected, word_around};
 use std::cell::RefCell;
 use std::ops::{Range, RangeInclusive};
 use std::rc::Rc;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-/// Where the keys that copy what's selected and select everything are bound, which is the transcript once a press in it
-/// has focused it.
+/// Where the keys that copy what's selected, select everything and move an end of what's selected are bound, which is
+/// the transcript once a press in it has focused it.
 pub const KEY_CONTEXT: &str = "Transcript";
 
 /// A place in a text, between two characters, in the chat's order.
@@ -58,6 +60,9 @@ pub(crate) struct Selection {
     pub(super) texts: Texts,
     /// The transcript's, which a press on its text takes, so a copy and a select all come to it.
     pub(super) focus: FocusHandle,
+    /// What's to be brought into view in the view the texts are drawn in, which what scrolls them scrolls to, as
+    /// `Scrolled` has it.
+    pub(super) reveal: Reveal,
 }
 
 #[derive(Default)]
@@ -69,6 +74,8 @@ pub(super) struct Selecting {
     pub(super) drag: Option<Drag>,
     /// The texts drawn in this frame, in the order they were drawn, which is the chat's.
     pub(super) drawn: Vec<Drawn>,
+    /// What the keys that move an end have left to do.
+    pub(super) keyed: Keyed,
 }
 
 pub(super) struct Drag {
@@ -85,13 +92,21 @@ pub(super) struct Drag {
 }
 
 /// A text drawn in this frame, what it's known by and where it is, what shows of it, the area that scrolls it, if it's
-/// in one, and where each of its leaves is, by key.
+/// in one, and where each of its leaves was laid out, by key, whether it shows or not.
 pub(super) struct Drawn {
     pub(super) text: TextKey,
     pub(super) at: TextAt,
     pub(super) bounds: Bounds<Pixels>,
     pub(super) area: Option<ElementId>,
     pub(super) leaves: Vec<(u64, Geometry)>,
+}
+
+impl Drawn {
+    /// Its leaves that show, such as those an area that scrolls the text hasn't moved out of sight, which are the ones
+    /// a press can be on.
+    pub(super) fn showing(&self) -> impl Iterator<Item = &(u64, Geometry)> {
+        self.leaves.iter().filter(|(_, geometry)| geometry.shows(self.bounds))
+    }
 }
 
 impl Selecting {
@@ -103,17 +118,25 @@ impl Selecting {
 
 impl Selection {
     pub(crate) fn new(texts: Texts, focus: FocusHandle) -> Self {
-        Self { inner: Rc::default(), texts, focus }
+        Self { inner: Rc::default(), texts, focus, reveal: Reveal::default() }
     }
 
-    /// `chat`, the transcript's, with its focus, and the keys that copy what's selected and select everything. GPUI
-    /// gives focus to what tracks it on a press in it that nothing else takes, so a press anywhere in the chat gives
-    /// it the focus, rather than the window, which tracks it everywhere else.
+    /// What's to be brought into view in the view the texts are drawn in: the end of what's selected that a key moved,
+    /// or the match Find is showing.
+    pub(crate) fn reveal(&self) -> &Reveal {
+        &self.reveal
+    }
+
+    /// `chat`, the transcript's, with its focus, and the keys that copy what's selected, select everything, and move
+    /// the end of what's selected that moved last, as `keys` says. They're the actions a text box takes for the same
+    /// keys. GPUI gives focus to what tracks it on a press in it that nothing else takes, so a press anywhere in the
+    /// chat gives it the focus, rather than the window, which tracks it everywhere else.
     pub(crate) fn with_keys(&self, chat: Div) -> Div {
         let (copying, selecting) = (self.clone(), self.clone());
-        (chat.key_context(KEY_CONTEXT).track_focus(&self.focus))
+        let chat = (chat.key_context(KEY_CONTEXT).track_focus(&self.focus))
             .on_action(move |_: &Copy, _, cx| copying.copy(cx))
-            .on_action(move |_: &SelectAll, window, cx| selecting.select_all(window, cx))
+            .on_action(move |_: &SelectAll, window, cx| selecting.select_all(window, cx));
+        self.with_moving_keys(chat)
     }
 
     /// The list has started drawing a frame: forgets the texts drawn in the last, before this one's are, and tells the
@@ -125,7 +148,8 @@ impl Selection {
 
     /// Notes that the text known as `text`, at `at`, shows in `bounds`, in `area` if one scrolls it, with its leaves
     /// where `leaves` says. A leaf that doesn't show, such as one an area that scrolls the text has moved out of sight,
-    /// can't be pressed on or dragged to.
+    /// can't be pressed on or dragged to, but a key can move the end of what's selected into it, which the area then
+    /// scrolls into view.
     pub(crate) fn drawn(
         &self,
         text: TextKey,
@@ -134,8 +158,7 @@ impl Selection {
         area: Option<ElementId>,
         leaves: impl IntoIterator<Item = (u64, Geometry)>,
     ) {
-        let showing = leaves.into_iter().filter(|(_, geometry)| geometry.shows(bounds));
-        let mut leaves: Vec<(u64, Geometry)> = showing.collect();
+        let mut leaves: Vec<(u64, Geometry)> = leaves.into_iter().collect();
         leaves.sort_by_key(|(key, _)| *key);
         let mut selecting = self.inner.borrow_mut();
         debug_assert!(
@@ -182,85 +205,6 @@ impl Selection {
                 cx.open_url(url);
             }
         }
-    }
-
-    /// The button's come up, or the list it was pressed in has gone, so the drag's over, and what it selected stays.
-    pub(super) fn release(&self) {
-        self.inner.borrow_mut().drag = None;
-    }
-
-    /// Moves the far end of what's being dragged to the place under the pointer, or the nearest in the window to it
-    /// if it's past the window's edge, as the texts drawn in this frame have it. Says whether that changed what's
-    /// selected.
-    pub(super) fn follow(&self, bounds: Bounds<Pixels>) -> bool {
-        let (pointer, unit, chosen) = {
-            let selecting = self.inner.borrow();
-            let Some(drag) = selecting.drag.as_ref() else { return false };
-            (drag.pointer, drag.unit, drag.chosen.clone())
-        };
-        let Some(chosen_at) = self.spots(&chosen) else { return false };
-        let inside = point(pointer.x, pointer.y.clamp(bounds.top() + px(1.), bounds.bottom() - px(1.)));
-        let under = spot_at(&self.inner.borrow().drawn, inside).map(|(spot, text)| (spot, text.clone()));
-        let Some((spot, text)) = under else { return false };
-        let (from, to) = self.around(spot, &text, unit);
-        let (start, end) = chosen;
-        let ends = if spot < chosen_at.0 {
-            (end, End::at(text, from))
-        } else if to < chosen_at.1 {
-            (start, end)
-        } else {
-            (start, End::at(text, to))
-        };
-        let mut selecting = self.inner.borrow_mut();
-        let changed = selecting.ends.as_ref() != Some(&ends);
-        selecting.set(Some(ends));
-        changed
-    }
-
-    pub(super) fn is_dragging(&self) -> bool {
-        self.inner.borrow().drag.is_some()
-    }
-
-    /// A press of the button at `position`, the `clicks`th in a row. On a text, it starts a selection there, or with
-    /// `extend`, moves the far end of the one there is to there, and says so. Anywhere else, nothing's selected.
-    pub(super) fn press(&self, position: Point<Pixels>, clicks: usize, extend: bool) -> bool {
-        let mut selecting = self.inner.borrow_mut();
-        let on = text_under(&selecting.drawn, position);
-        let (on_text, area) = (on.is_some(), on.and_then(|drawn| drawn.area.clone()));
-        let Some((spot, text)) = spot_at(&selecting.drawn, position).filter(|_| on_text) else {
-            selecting.set(None);
-            selecting.drag = None;
-            return false;
-        };
-        let text = text.clone();
-        let unit = match clicks {
-            0 | 1 => Unit::Character,
-            2 => Unit::Word,
-            _ => Unit::Paragraph,
-        };
-        // Extending from where what's selected starts, if its text still has a place, and otherwise starting afresh.
-        let anchor = (selecting.ends.as_ref().map(|(anchor, _)| anchor.clone()))
-            .filter(|anchor| extend && unit == Unit::Character && self.texts.place_of(&anchor.text).is_some());
-        let chosen = if let Some(anchor) = anchor {
-            selecting.set(Some((anchor.clone(), End::at(text, spot))));
-            (anchor.clone(), anchor)
-        } else {
-            let (from, to) = self.around(spot, &text, unit);
-            let chosen = (End::at(text.clone(), from), End::at(text, to));
-            selecting.set(Some(chosen.clone()));
-            chosen
-        };
-        let (scrolling, area_scrolling) = (ScrollingOn::default(), ScrollingOn::default());
-        selecting.drag = Some(Drag { pointer: position, unit, chosen, scrolling, area, area_scrolling });
-        true
-    }
-
-    /// The pointer's moved to `position` with the button held, over a list in `bounds`.
-    pub(super) fn drag_to(&self, position: Point<Pixels>, bounds: Bounds<Pixels>) {
-        if let Some(drag) = self.inner.borrow_mut().drag.as_mut() {
-            drag.pointer = position;
-        }
-        self.follow(bounds);
     }
 
     /// Selects all of the texts the chat holds that `crate::texts` draws, from the start of the first to the end of the

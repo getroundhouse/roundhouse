@@ -205,6 +205,23 @@ fn a_match_below_the_window_in_a_row_it_shows_is_brought_into_view_with_frames_o
     settle_with_the_match_in_view(&mut ui);
 }
 
+/// A match in the chat's first line can't be brought below the bar with room above it, since the chat goes no further
+/// up, so the transcript stops trying once a scroll toward it moves nothing, rather than asking for frames that do
+/// nothing until it gives up.
+#[gpui_kit::test]
+fn a_match_the_chat_can_t_scroll_to_asks_for_no_more_frames_once_that_s_moved_nothing(cx: &mut TestAppContext) {
+    let mut events = Vec::new();
+    turn(&mut events, "Where's the needle?", [text("found", "Nowhere else.")]);
+    let (world, _) = chat_of(events, 0);
+    let (_hub, mut ui) = open(cx, world);
+    find(&mut ui, "needle");
+    ui.wait("the match to be counted", |ui| says(ui).as_deref() == Some("1 of 1"));
+
+    let frames = (0..200).take_while(|_| ui.play(FRAME) > 0).count();
+
+    assert!(frames < 10, "it stops once the chat can go no further, not after {frames} frames");
+}
+
 /// As Windows and Linux apps have them, besides Ctrl-G and Ctrl-Shift-G.
 #[cfg(not(target_os = "macos"))]
 #[gpui_kit::test]

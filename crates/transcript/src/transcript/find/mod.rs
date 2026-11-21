@@ -22,3 +22,4 @@ pub(crate) use query::Finding;
 use query::is_loaded;
 #[cfg(test)]
 use query::{More, changed_to_count, count_held, first_match, held_to_count, says};
+pub(super) use stepping::in_view;

@@ -14,11 +14,10 @@ use protocol::model::Proposal;
 
 use super::answering::{Answering, Choosing, ProposalEvent};
 use super::document::{self, Part, Writing};
-use super::page::PageElement;
 use crate::DictationHints;
 use crate::linked_images::LinkedImages;
 use crate::references::References;
-use crate::selection::Selection;
+use crate::selection::{Scrolled, Selection};
 use crate::texts::{Of, Texts};
 use client_core::{Client, RecordsFeed};
 
@@ -179,8 +178,7 @@ impl ProposalView {
             .children(parts.into_iter().map(column))
             .test_support();
         let bounce = ScrollBounce::new("proposal-bounce", &self.scroll, scrolled).into_any_element();
-        let page =
-            PageElement { id: area, scroll: self.scroll.clone(), selection: self.selection.clone(), scrolled: bounce };
+        let page = Scrolled::new(area, self.scroll.clone(), &self.selection, bounce);
         div()
             .relative()
             .flex_1()

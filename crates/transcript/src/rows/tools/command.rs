@@ -128,8 +128,7 @@ fn command_part(command: &Command, toggle: &Toggle, cx: &App) -> AnyElement {
     // All of it, the `$` and the space around the command too, so a press there is on the command.
     let selectable = block::selectable(toggle, Text::Command, &id, part, full.clone(), Pieces::whole(layout));
     // Half as tall as what it printed can be, so a long command leaves room for that.
-    let scrolling =
-        block::scrolling(toggle.find, &toggle.shared.selection, &id, selectable).max_height(px(block::MAX_HEIGHT / 2.));
+    let scrolling = block::scrolling(&toggle.shared.selection, &id, selectable).max_height(px(block::MAX_HEIGHT / 2.));
     div()
         .id(ElementId::from((id.clone(), "area")))
         .relative()

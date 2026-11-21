@@ -1,7 +1,8 @@
 use super::{element, state};
 use crate::around_column;
 use crate::scroll_area::hears_the_wheel;
-use crate::selection::Selection;
+use crate::selection::{Scrolled, Scroller, Selection};
+use crate::texts::Of;
 use crate::transcript::Transcript;
 use element::ListElement;
 use gpui_kit::base::motion::transition;
@@ -28,6 +29,16 @@ const EDGE: look::Space = look::Space::Small;
 const LATEST_BUTTON_ROOM: look::Space = look::Space::Small;
 /// How far the button back to the latest row rises to where it rests as it fades in.
 const LATEST_BUTTON_RISE: Pixels = px(4.);
+
+/// The rows a [`TranscriptList`] draws, as [`TranscriptList::render`] takes them.
+pub(crate) struct Rows<D, W, O> {
+    /// Draws the row at an index, giving `None` for one that hasn't been fetched.
+    pub(crate) draw: D,
+    /// Is told the whole range in and near the window to keep, and the lowest unfetched row to fetch around, if any.
+    pub(crate) want: W,
+    /// The row that draws what an `Of` says, if one does, for the list to go to it.
+    pub(crate) row_of: O,
+}
 
 #[derive(Clone)]
 pub struct TranscriptList {
@@ -99,7 +110,8 @@ impl TranscriptList {
         self.state.borrow().shown.contains(&row)
     }
 
-    /// Where the rows were drawn in the last frame, in the window.
+    /// Where the rows were drawn in the last frame, in the window, for a test of what shows.
+    #[cfg(feature = "testing")]
     pub(crate) fn viewport(&self) -> Bounds<Pixels> {
         self.state.borrow().viewport
     }
@@ -107,6 +119,12 @@ impl TranscriptList {
     /// Scrolls down by `by`, or up for less than nothing, as the wheel would.
     pub(crate) fn scroll_down(&self, by: Pixels) {
         self.state.borrow_mut().scroll_by(-by);
+    }
+
+    /// How far down the session the top of what's shown is, by the heights the list has for its rows, as it was last
+    /// laid out.
+    pub(crate) fn scrolled(&self) -> Pixels {
+        self.state.borrow().scrolled()
     }
 
     /// Goes to the latest row, and keeps to it as more arrives.
@@ -165,19 +183,24 @@ impl TranscriptList {
         self.state.borrow().is_scrolled_up()
     }
 
-    /// The list, drawing each row with `row`, which gives `None` for a row that hasn't been fetched. `want` is told
-    /// the whole range in and near the window to keep, and the lowest unfetched row to fetch around, if any.
-    /// `room_under` is what's left between the list and what's under it, such as the composer, which the button back
-    /// to the latest row counts as part of its own room.
+    /// The list, drawing `rows`. `in_view` says what of where it shows them is in view, which is less where something
+    /// lies over it, such as Find's bar, which the keys keep the end of what's selected out from under. `room_under` is
+    /// what's left between the list and what's under it, such as the composer, which the button back to the latest
+    /// row counts as part of its own room.
     pub(crate) fn render(
         &self,
         id: ElementId,
-        mut row: impl FnMut(usize, &mut Window, &mut App) -> Option<AnyElement> + 'static,
-        want: impl Fn(std::ops::Range<usize>, Option<usize>) + 'static,
+        rows: Rows<
+            impl FnMut(usize, &mut Window, &mut App) -> Option<AnyElement> + 'static,
+            impl Fn(Range<usize>, Option<usize>) + 'static,
+            impl Fn(Of) -> Option<usize> + 'static,
+        >,
+        in_view: impl Fn(Bounds<Pixels>) -> Bounds<Pixels> + 'static,
         room_under: Pixels,
         window: &mut Window,
         cx: &mut App,
     ) -> AnyElement {
+        let Rows { draw: mut row, want, row_of } = rows;
         let (rows, view) = (self.row_count(), self.view);
         // The space at each end is part of the first and last rows, so it scrolls with them.
         let spaced = move |ix: usize, window: &mut Window, cx: &mut App| {
@@ -194,9 +217,10 @@ impl TranscriptList {
             state: self.state.clone(),
             row: Box::new(spaced),
             want: Rc::new(want),
-            selection: self.selection.clone(),
         };
-        let bounce = ScrollBounce::new((id.clone(), "bounce"), self, element).on_scroll(move |_, cx| cx.notify(view));
+        let scrolling = ScrollingTexts { list: self.clone(), row_of: Box::new(row_of), in_view: Box::new(in_view) };
+        let selecting = Scrolled::new((id.clone(), "selecting"), scrolling, &self.selection, element);
+        let bounce = ScrollBounce::new((id.clone(), "bounce"), self, selecting).on_scroll(move |_, cx| cx.notify(view));
         let viewport = div()
             .id((id.clone(), "viewport"))
             // Read out as a log, where what's added is news.
@@ -310,5 +334,38 @@ impl ScrollbarHandle for TranscriptList {
 
     fn end_drag(&self) {
         self.state.borrow_mut().end_drag();
+    }
+}
+
+/// The chat's list as it scrolls its texts, for what's selected of them, with `row_of` saying which row draws what an
+/// `Of` says, and `in_view` what of where it shows them is in view.
+struct ScrollingTexts {
+    list: TranscriptList,
+    row_of: Box<dyn Fn(Of) -> Option<usize>>,
+    in_view: Box<dyn Fn(Bounds<Pixels>) -> Bounds<Pixels>>,
+}
+
+impl Scroller for ScrollingTexts {
+    fn in_view(&self, bounds: Bounds<Pixels>) -> Bounds<Pixels> {
+        (self.in_view)(bounds)
+    }
+
+    fn scroll_down(&self, by: Pixels) {
+        self.list.scroll_down(by);
+    }
+
+    fn scrolled(&self) -> Pixels {
+        self.list.scrolled()
+    }
+
+    /// Shows the row that draws `of` at the top if it's above those that showed, and at the bottom if it's below.
+    fn show(&self, of: Of) -> bool {
+        let Some(row) = (self.row_of)(of).filter(|row| !self.list.shows(*row)) else { return false };
+        if row < self.list.top().row {
+            self.list.go_to_row(row);
+        } else {
+            self.list.go_to_row_at_bottom(row);
+        }
+        true
     }
 }

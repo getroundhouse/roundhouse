@@ -3,6 +3,7 @@
 pub use events::TranscriptEvent;
 
 mod answers;
+mod drawing;
 mod events;
 mod find;
 mod model;

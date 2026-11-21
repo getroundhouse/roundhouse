@@ -104,7 +104,6 @@ fn pages(results: &Results, toggle: &Toggle, cx: &App) -> AnyElement {
     let frame = block::frame(cx).when(linked, |d| {
         let id = toggle.key.element("links");
         d.child(block::scrolling(
-            toggle.find,
             &toggle.shared.selection,
             &id,
             div().id(id.clone()).p(look::ROWS_INSET).children(links),

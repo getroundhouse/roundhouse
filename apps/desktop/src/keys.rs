@@ -24,7 +24,8 @@
 
 use std::rc::Rc;
 
-use gpui_kit::component::input::{Copy, SelectAll};
+use gpui_kit::base::actions::{SelectDown, SelectLeft, SelectRight, SelectUp};
+use gpui_kit::component::input::{Copy, SelectAll, SelectToNextWordEnd, SelectToPreviousWordStart};
 use gpui_kit::{Action, App, KeyBinding, KeyBindingContextPredicate};
 
 use crate::{
@@ -110,13 +111,30 @@ pub(crate) fn set(cx: &mut App) {
         key("secondary-f", FindInChat, outside_a_terminal, cx),
         key("secondary-g", FindNext, outside_a_terminal, cx),
         key("secondary-shift-g", FindPrevious, None, cx),
-        // Selects all of the agent's words in a chat that has focus, which a press on them gives it, with the keys the
-        // kit selects all with, and copies with the keys it copies with, from its own binding.
-        key("secondary-a", SelectAll, Some(transcript::KEY_CONTEXT), cx),
     ];
     cx.bind_keys(bindings);
+    bind_selecting(cx);
     dictation_ui::bind_keys(cx);
     terminal_view::bind_keys(cx);
+}
+
+/// The keys for what's selected in a chat, a rendered Markdown file or a proposal that has focus, which a press on its
+/// words gives it. Select All takes all of its words, with the keys the kit selects all with, and copies with the keys
+/// it copies with, from its own binding. The others move the end of what's selected that moved last, with the keys and
+/// actions the kit's text boxes move theirs with.
+fn bind_selecting(cx: &mut App) {
+    let focused = Some(transcript::KEY_CONTEXT);
+    // A word at a time is Option on a Mac, as in its text boxes, and Ctrl elsewhere, as in theirs.
+    let by_word = if cx.platform_info().is_mac() { "alt-shift" } else { "ctrl-shift" };
+    cx.bind_keys([
+        key("secondary-a", SelectAll, focused, cx),
+        key("shift-left", SelectLeft, focused, cx),
+        key("shift-right", SelectRight, focused, cx),
+        key(&format!("{by_word}-left"), SelectToPreviousWordStart, focused, cx),
+        key(&format!("{by_word}-right"), SelectToNextWordEnd, focused, cx),
+        key("shift-up", SelectUp, focused, cx),
+        key("shift-down", SelectDown, focused, cx),
+    ]);
 }
 
 /// `keys` doing `action` where `context` says, or wherever focus is. GPUI reads `secondary` only in a binding it

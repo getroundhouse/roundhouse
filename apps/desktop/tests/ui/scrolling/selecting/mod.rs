@@ -1,14 +1,16 @@
 //! Selecting what's written in a chat: by dragging, past the window's edge too, which scrolls the transcript on for as
 //! long as the pointer is held out there, either way, and keeps what's selected, and over a link, which a drag doesn't
-//! open; a word or a paragraph at a time; or all of it.
+//! open; a word or a paragraph at a time; or all of it; and with the keys, which move an end.
 
 use crate::tools::COMMAND_LINE;
 
 mod areas;
 mod end;
+mod keys;
 mod kinds;
 mod made_up;
 mod tab;
+mod views;
 
 mod dragging;
 use dragging::{

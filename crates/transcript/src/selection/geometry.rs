@@ -2,9 +2,12 @@
 //! kit says where it drew a leaf of Markdown, and a leaf of plain text is laid out by the transcript, in `Pieces`.
 
 use gpui_kit::base::text::editor_host::LeafGeometry;
-use gpui_kit::{Bounds, Pixels, Point};
+use gpui_kit::{Bounds, Pixels, Point, point, px, size};
 
 use super::Pieces;
+
+/// How near two places are to be on the same row, which GPUI can lay out a fraction of a pixel apart.
+pub(super) const SAME_ROW: Pixels = px(0.5);
 
 /// Where a leaf was laid out in this frame.
 pub(crate) enum Geometry {
@@ -37,6 +40,35 @@ impl Geometry {
         match self {
             Geometry::Markdown(leaf) => leaf.len(),
             Geometry::Plain(pieces) => pieces.len(),
+        }
+    }
+
+    /// Where the place at `byte` is drawn: a line as tall as the row it's on, from the row's top, as a caret there
+    /// would be.
+    pub(super) fn caret(&self, byte: usize) -> Bounds<Pixels> {
+        let (top, row) = match self {
+            Geometry::Markdown(leaf) => (leaf.position_for_index(byte), leaf.line_height()),
+            Geometry::Plain(pieces) => pieces.caret(byte),
+        };
+        Bounds::new(top, size(px(1.), row))
+    }
+
+    /// Where the place at `byte` is drawn on the row after the one [`Geometry::caret`] has it on, if a row wraps there,
+    /// with the character after it, which ends at `next`, on the next row: at that row's start, as a caret there would
+    /// be. GPUI draws a place where a row wraps at the end of the row before, and a selection that starts there is
+    /// painted from the next, as `Pieces` paints it.
+    pub(super) fn caret_on_the_next_row(&self, byte: usize, next: usize) -> Option<Bounds<Pixels>> {
+        let (here, after) = (self.caret(byte), self.caret(next));
+        let wraps = after.top() >= here.bottom() - SAME_ROW;
+        wraps.then(|| Bounds::new(point(self.bounds().left(), after.top()), here.size))
+    }
+
+    /// Where its rows are, in blocks with no space between the rows of each: the whole of a leaf of Markdown, and each
+    /// piece of a plain text, with the space between two pieces between their blocks.
+    pub(super) fn blocks(&self) -> Vec<Bounds<Pixels>> {
+        match self {
+            Geometry::Markdown(leaf) => vec![leaf.bounds()],
+            Geometry::Plain(pieces) => pieces.blocks(),
         }
     }
 
