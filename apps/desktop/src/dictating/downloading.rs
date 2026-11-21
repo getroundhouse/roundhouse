@@ -3,8 +3,8 @@
 use std::ops::ControlFlow;
 use std::path::PathBuf;
 
-use dictation::model::{DownloadError, Fetched, ModelFiles, Progress};
 use gpui_kit::{App, Context, Global, Subscription};
+use models::{DownloadError, Fetched, ModelFiles, Progress};
 
 /// How much more has to come before progress is told again, so telling doesn't cost more than reading.
 const TELL_EVERY_BYTES: u64 = 4 << 20;

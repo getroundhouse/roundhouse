@@ -106,6 +106,6 @@ fn exclude_from_backups(dir: &Path) {
     let _ = unsafe { url.setResourceValue_forKey_error(Some(&NSNumber::new_bool(true)), NSURLIsExcludedFromBackupKey) };
 }
 
-/// On Windows and Linux, no backup reads a mark like it, and dictation doesn't run.
+/// On Windows and Linux, no backup reads a mark like it.
 #[cfg(not(target_os = "macos"))]
 fn exclude_from_backups(_: &Path) {}

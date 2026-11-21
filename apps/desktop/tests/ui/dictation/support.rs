@@ -6,9 +6,9 @@ use desktop::dictating::STATUS;
 use desktop::workspace_pane::LIVE_LINE;
 use dictation::EngineError;
 use dictation::fake::FakeEngine;
-use dictation::model::ModelFiles;
 use gpui_kit::test::TestWindowExt as _;
 use gpui_kit::{AppContext as _, KeyDownEvent, KeyUpEvent, Keystroke, PlatformInput};
+use models::ModelFiles;
 use protocol::event::EventBody;
 use protocol::model::SessionId;
 

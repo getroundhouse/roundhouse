@@ -7,15 +7,13 @@ publish.workspace = true
 license.workspace = true
 
 [features]
-# Downloading the model and deleting it, which brings in `fetching`, and through it HTTP and TLS. A feature, so a client
-# that downloads it another way, as an iPhone app might in the background, needn't build them.
-download = ["dep:fetching"]
 # What only tests use: an engine that stands in for the model, and audio a test feeds a recording itself.
 testing = []
 
 [dependencies]
-fetching = { workspace = true, optional = true }
 flume.workspace = true
+# Nemotron's files, which say what to download.
+models.workspace = true
 # Pausing what's playing while something is dictated, each platform its own way.
 now-playing.workspace = true
 parking_lot.workspace = true
@@ -36,10 +34,8 @@ objc2-core-ml.workspace = true
 objc2-foundation = { workspace = true, features = ["NSDictionary", "NSError", "NSProcessInfo", "NSURL", "NSValue"] }
 
 [dev-dependencies]
-dictation = { workspace = true, features = ["download", "testing"] }
-fetching = { workspace = true, features = ["testing"] }
+dictation = { workspace = true, features = ["testing"] }
 proptest.workspace = true
-ring.workspace = true
 tempfile.workspace = true
 
 [lints]

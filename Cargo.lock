@@ -1851,6 +1851,7 @@ dependencies = [
  "libc",
  "local-hub",
  "look",
+ "models",
  "objc2 0.6.5",
  "objc2-app-kit 0.3.2",
  "objc2-foundation 0.3.2",
@@ -1885,8 +1886,8 @@ dependencies = [
  "block2 0.6.2",
  "cpal",
  "dictation",
- "fetching",
  "flume",
+ "models",
  "now-playing",
  "objc2 0.6.5",
  "objc2-av-foundation",
@@ -1896,7 +1897,6 @@ dependencies = [
  "parking_lot",
  "proptest",
  "realfft",
- "ring",
  "serde_json",
  "tempfile",
  "thiserror 2.0.21",
@@ -5426,6 +5426,18 @@ dependencies = [
  "transcript",
  "waiting",
  "worker",
+]
+
+[[package]]
+name = "models"
+version = "0.1.0"
+dependencies = [
+ "fetching",
+ "models",
+ "objc2-foundation 0.3.2",
+ "ring",
+ "tempfile",
+ "thiserror 2.0.21",
 ]
 
 [[package]]

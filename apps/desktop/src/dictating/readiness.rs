@@ -8,10 +8,10 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
-use dictation::model::{self, DownloadError, ModelFiles};
 use dictation::nemotron::{self, Nemotron};
 use dictation::{AudioIn, Dictation, Engine, EngineError, Recording, Update};
 use gpui_kit::{App, AsyncApp, Context, Global, Subscription, Task};
+use models::{DownloadError, ModelFiles};
 
 use super::DictationChoice;
 use super::downloading::{self, Downloaded, ModelDownload};
@@ -94,7 +94,7 @@ pub(crate) fn start(data_dir: &Path, cx: &mut App) {
 
 fn begin(model: Model, audio: AudioIn, cx: &mut App) {
     dictation_ui::unavailable(cx);
-    let bytes_on_disk = model::bytes_on_disk(&model.dir);
+    let bytes_on_disk = models::bytes_on_disk(&model.dir);
     let following_the_choice = crate::settings::observe_in_app(cx, follow_the_choice);
     let (readiness, following, deleting) = (Readiness::Off, None, None);
     let dictating = Dictating {
@@ -227,7 +227,7 @@ fn set(readiness: Readiness, following: Option<Task<()>>, cx: &mut App) {
 /// Reads again how much of the model is on this Mac, once the app has changed that.
 pub(super) fn reread_whats_on_disk(cx: &mut App) {
     let dictating = dictating_mut(cx);
-    dictating.bytes_on_disk = model::bytes_on_disk(&dictating.model.dir);
+    dictating.bytes_on_disk = models::bytes_on_disk(&dictating.model.dir);
 }
 
 /// Has a view hear whenever how dictation stands changes.

@@ -3,8 +3,8 @@
 
 use std::io;
 
-use dictation::model::{self, FolderError};
 use gpui_kit::{App, AsyncApp};
+use models::FolderError;
 
 use super::DictationChoice;
 use super::readiness::{dictating, dictating_mut, follow_the_choice, reread_whats_on_disk};
@@ -35,7 +35,7 @@ pub(super) fn delete_the_model(cx: &mut App) {
     }
     let (tell, told) = flume::bounded(1);
     let thread = std::thread::Builder::new().name("dictation-delete".to_string());
-    if let Err(e) = thread.spawn(move || drop(tell.send(model::delete(&model_dir)))) {
+    if let Err(e) = thread.spawn(move || drop(tell.send(models::delete(&model_dir)))) {
         return deleted(Err(NotDeleted::Start(e)), cx);
     }
     let deleting = cx.spawn(async move |cx: &mut AsyncApp| {

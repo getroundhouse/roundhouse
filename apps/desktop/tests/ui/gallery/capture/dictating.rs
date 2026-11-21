@@ -5,9 +5,9 @@ use std::path::Path;
 
 use desktop::workspace_pane::LIVE_LINE;
 use dictation::fake::FakeEngine;
-use dictation::model::{ModelFile, ModelFiles};
 use fetching::serving::{Reply, serve};
 use gpui_kit::test::TestWindowExt as _;
+use models::{ModelFile, ModelFiles};
 
 use super::super::steps::DictateWith;
 use super::Driver;
