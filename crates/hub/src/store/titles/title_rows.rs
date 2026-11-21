@@ -1,6 +1,6 @@
-use super::super::sessions::{SESSION_COLUMNS, session_from_row};
-use super::super::workspaces::{WORKSPACE_COLUMNS, workspace_from_row};
-use super::super::{Store, StoreError, from_text, lock, text_of};
+use super::super::sessions::{SessionColumns, session_from_row};
+use super::super::workspaces::{WorkspaceColumns, workspace_from_row};
+use super::super::{ByColumn, Columns, Store, StoreError, columns, lock, text_at, text_of};
 use protocol::model::{Session, SessionId, Title, TitleSource, Workspace, WorkspaceId};
 use rusqlite::{OptionalExtension, Row, params};
 
@@ -53,7 +53,7 @@ impl Store {
         title: &Title,
         how: Retitle<'_>,
     ) -> Result<Retitled<Workspace>, StoreError> {
-        let table = Table { name: "workspaces", kind: "workspace", columns: WORKSPACE_COLUMNS };
+        let table = Table { name: "workspaces", kind: "workspace", columns: WorkspaceColumns::LIST };
         self.retitle(table, id.as_str(), title, how, workspace_from_row)
     }
 
@@ -63,7 +63,7 @@ impl Store {
         title: &Title,
         how: Retitle<'_>,
     ) -> Result<Retitled<Session>, StoreError> {
-        let table = Table { name: "sessions", kind: "session", columns: SESSION_COLUMNS };
+        let table = Table { name: "sessions", kind: "session", columns: SessionColumns::LIST };
         self.retitle(table, id.as_str(), title, how, |row| session_from_row(row).map(|stored| stored.session))
     }
 
@@ -83,9 +83,13 @@ impl Store {
         // tidied, as a record reads its title, so one stored before titles were tidied still counts as itself.
         let still_there = match how {
             Retitle::Regenerated { over, set } => {
-                let read = format!("SELECT title, title_source FROM {name} WHERE id = ?");
+                columns! {
+                    struct Titled { title, title_source }
+                }
+                let c = Titled::at(0);
+                let read = format!("SELECT {} FROM {name} WHERE id = ?", Titled::LIST);
                 let now = conn.query_row(&read, [id], |row| {
-                    Ok((row.get::<_, Option<String>>(0)?, from_text::<TitleSource>(row.get(1)?)?))
+                    Ok((row.at::<Option<String>>(c.title)?, text_at::<TitleSource>(row, c.title_source)?))
                 });
                 // One that's missing is found missing below.
                 now.optional()?.is_none_or(|(title, source)| {
@@ -98,7 +102,7 @@ impl Store {
         let update = format!("UPDATE {name} SET title = ?1, title_source = ?2 WHERE id = ?3 AND ({})", how.replaces());
         let changed = still_there && conn.execute(&update, params![title.as_str(), text_of(&how.source()), id])? > 0;
         let record = conn
-            .query_row(&format!("SELECT {columns}, rev FROM {name} WHERE id = ?"), [id], from_row)
+            .query_row(&format!("SELECT {columns} FROM {name} WHERE id = ?"), [id], from_row)
             .optional()?
             .ok_or_else(|| StoreError::NotFound { kind, id: id.to_string() })?;
         Ok(Retitled { record, changed })

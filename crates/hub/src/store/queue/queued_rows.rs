@@ -1,6 +1,5 @@
 use super::super::proposals::take_back_answer_on;
-use super::super::sessions::queue_from;
-use super::super::{Reading, Store, StoreError, lock, seq_of};
+use super::super::{Reading, Store, StoreError, lock, required_json_at, seq_of};
 use protocol::model::{Account, ClientMessageId, Proposal, QueuedPrompt, Seq, SessionId};
 use protocol::prompt::PromptFrom;
 use rusqlite::{Connection, OptionalExtension, params};
@@ -203,11 +202,10 @@ fn sent_at(conn: &Connection, id: &SessionId, client_msg_id: &ClientMessageId) -
 }
 
 fn read_queue(conn: &Connection, id: &SessionId) -> Result<Vec<QueuedPrompt>, StoreError> {
-    let json: String = conn
-        .query_row("SELECT queued FROM sessions WHERE id = ?", [id.as_str()], |row| row.get(0))
-        .optional()?
-        .ok_or_else(|| StoreError::NotFound { kind: "session", id: id.to_string() })?;
-    Ok(queue_from(&json)?)
+    let queue = conn
+        .query_row("SELECT queued FROM sessions WHERE id = ?", [id.as_str()], |row| required_json_at(row, 0))
+        .optional()?;
+    queue.ok_or_else(|| StoreError::NotFound { kind: "session", id: id.to_string() })
 }
 
 /// Saves the queue only if it changed, so the revision moves only then, and says whether it did.

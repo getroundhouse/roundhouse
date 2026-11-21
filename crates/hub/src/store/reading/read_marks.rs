@@ -1,5 +1,5 @@
-use super::super::sessions::{SESSION_COLUMNS, session_from_row};
-use super::super::{Store, StoreError, StoredSession, lock, seq_column};
+use super::super::sessions::{SessionColumns, session_from_row};
+use super::super::{Columns, Store, StoreError, StoredSession, lock, seq_column};
 use protocol::model::{Seq, SessionId};
 use rusqlite::{Connection, OptionalExtension, params};
 
@@ -45,7 +45,7 @@ impl Store {
 /// The session as `conn` sees it, which on the writer is what its last change left.
 pub(in super::super) fn session_on(conn: &Connection, id: &SessionId) -> Result<StoredSession, StoreError> {
     conn.query_row(
-        &format!("SELECT {SESSION_COLUMNS}, rev FROM sessions WHERE id = ?"),
+        &format!("SELECT {} FROM sessions WHERE id = ?", SessionColumns::LIST),
         [id.as_str()],
         session_from_row,
     )

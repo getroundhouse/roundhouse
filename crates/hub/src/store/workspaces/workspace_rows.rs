@@ -1,6 +1,6 @@
 use super::super::instances::{InstanceStage, record_instance};
 use super::super::made::{Made, inserted, made_by};
-use super::super::{Store, StoreError, from_text, json_at, lock, now_ms, rev_of, text_of};
+use super::super::{ByColumn, Columns, Store, StoreError, columns, json_at, lock, now_ms, rev_of, text_at, text_of};
 use protocol::model::{
     BranchName, Branches, ClientRequestId, PORTS_PER_WORKSPACE, PullRequestLinked, RepoId, Rev, SetupStatus, Title,
     Workspace, WorkspaceId, WorkspaceStatus,
@@ -59,12 +59,21 @@ pub enum Ended {
     PutBack,
 }
 
-pub(in super::super) const WORKSPACE_COLUMNS: &str = "id, repo_id, name, branch, base_ref, path, status, provider, instance_id, created_at_ms, archived_at_ms, setup, port_base, title, title_source, pull_request_link, user_active_at_ms, comment_draft, branches, pull_request_branch, worker_build";
+columns! {
+    /// What a workspace's row holds, as it's written, then its revision.
+    pub(in super::super) struct WorkspaceColumns {
+        id, repo_id, name, branch, base_ref, path, status, provider, instance_id, created_at_ms, archived_at_ms, setup,
+        port_base, title, title_source, pull_request_link, user_active_at_ms, comment_draft, branches,
+        pull_request_branch, worker_build,
+    } then {
+        rev,
+    }
+}
 
 /// The workspace's record as `conn` reads it, such as the writer inside a change, so its revision is that change's.
 pub(in super::super) fn workspace_on(conn: &Connection, id: &WorkspaceId) -> Result<Workspace, StoreError> {
     conn.query_row(
-        &format!("SELECT {WORKSPACE_COLUMNS}, rev FROM workspaces WHERE id = ?"),
+        &format!("SELECT {} FROM workspaces WHERE id = ?", WorkspaceColumns::LIST),
         [id.as_str()],
         workspace_from_row,
     )
@@ -72,35 +81,37 @@ pub(in super::super) fn workspace_on(conn: &Connection, id: &WorkspaceId) -> Res
     .ok_or_else(|| StoreError::NotFound { kind: "workspace", id: id.to_string() })
 }
 
+/// The workspace in a row of [`WorkspaceColumns`].
 pub(in super::super) fn workspace_from_row(row: &Row) -> rusqlite::Result<Workspace> {
+    let c = WorkspaceColumns::at(0);
     Ok(Workspace {
-        id: row.get::<_, String>(0)?.into(),
-        repo_id: row.get::<_, String>(1)?.into(),
-        name: row.get(2)?,
-        branch: row.get::<_, String>(3)?.into(),
-        base_ref: row.get(4)?,
-        path: row.get(5)?,
-        status: from_text(row.get(6)?)?,
-        provider: row.get::<_, String>(7)?.into(),
-        instance_id: row.get::<_, String>(8)?.into(),
-        created_at_ms: row.get(9)?,
-        archived_at_ms: row.get(10)?,
-        setup: json_at(row, 11)?.unwrap_or(SetupStatus::Unknown),
-        port_base: row.get(12)?,
-        title: row.get::<_, Option<String>>(13)?.as_deref().and_then(Title::tidied),
-        title_source: from_text(row.get(14)?)?,
+        id: row.at::<String>(c.id)?.into(),
+        repo_id: row.at::<String>(c.repo_id)?.into(),
+        name: row.at(c.name)?,
+        branch: row.at::<String>(c.branch)?.into(),
+        base_ref: row.at(c.base_ref)?,
+        path: row.at(c.path)?,
+        status: text_at(row, c.status)?,
+        provider: row.at::<String>(c.provider)?.into(),
+        instance_id: row.at::<String>(c.instance_id)?.into(),
+        created_at_ms: row.at(c.created_at_ms)?,
+        archived_at_ms: row.at(c.archived_at_ms)?,
+        setup: json_at(row, c.setup)?.unwrap_or(SetupStatus::Unknown),
+        port_base: row.at(c.port_base)?,
+        title: row.at::<Option<String>>(c.title)?.as_deref().and_then(Title::tidied),
+        title_source: text_at(row, c.title_source)?,
         // What GitHub says of it is the hub's cache's, which it sends to a client that shows it.
         pull_request: None,
         // One that no longer reads, from a build whose idea of a link this one doesn't share, is looked for again.
-        pull_request_link: json_at(row, 15)?,
+        pull_request_link: json_at(row, c.pull_request_link)?,
         // Written only by this hub, as JSON. One it can't read is as good as none.
-        comment_draft: json_at(row, 17)?,
-        user_active_at_ms: row.get(16)?,
+        comment_draft: json_at(row, c.comment_draft)?,
+        user_active_at_ms: row.at(c.user_active_at_ms)?,
         // Read again by the next worker, so one that no longer reads is only missing until then.
-        branches: json_at(row, 18)?,
-        pull_request_branch: row.get::<_, Option<String>>(19)?.map(BranchName::from),
-        worker_build: row.get(20)?,
-        rev: rev_of(row, 21)?,
+        branches: json_at(row, c.branches)?,
+        pull_request_branch: row.at::<Option<String>>(c.pull_request_branch)?.map(BranchName::from),
+        worker_build: row.at(c.worker_build)?,
+        rev: rev_of(row, c.rev)?,
     })
 }
 
@@ -125,9 +136,10 @@ impl Store {
         let tx = conn.transaction()?;
         let added = tx.execute(
             &format!(
-                "INSERT INTO workspaces ({WORKSPACE_COLUMNS}, client_request_id, repo_source, worker_environment)
+                "INSERT INTO workspaces ({}, client_request_id, repo_source, worker_environment)
                      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                     ON CONFLICT (repo_id, name) DO NOTHING"
+                     ON CONFLICT (repo_id, name) DO NOTHING",
+                WorkspaceColumns::ROW
             ),
             params![
                 workspace.id.as_str(),
@@ -347,7 +359,8 @@ impl Store {
         let conn = lock(&self.reader);
         let filter = if include_archived { "" } else { "WHERE status != 'archived'" };
         let mut statement = conn.prepare_cached(&format!(
-            "SELECT {WORKSPACE_COLUMNS}, rev FROM workspaces {filter} ORDER BY created_at_ms, id"
+            "SELECT {} FROM workspaces {filter} ORDER BY created_at_ms, id",
+            WorkspaceColumns::LIST
         ))?;
         let rows = statement.query_map([], workspace_from_row)?;
         rows.collect::<rusqlite::Result<_>>().map_err(StoreError::from)
@@ -369,7 +382,7 @@ impl Store {
         let creating = text_of(&WorkspaceStatus::Creating);
         let workspaces = {
             let mut statement =
-                tx.prepare_cached(&format!("SELECT {WORKSPACE_COLUMNS}, rev FROM workspaces WHERE status = ?"))?;
+                tx.prepare_cached(&format!("SELECT {} FROM workspaces WHERE status = ?", WorkspaceColumns::LIST))?;
             let rows = statement.query_map([&creating], workspace_from_row)?;
             rows.collect::<rusqlite::Result<Vec<_>>>()?
         };

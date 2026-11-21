@@ -1,3 +1,4 @@
+use super::columns::{At, ByColumn, Column};
 use super::{error, schema};
 use error::StoreError;
 use parking_lot::{Mutex, MutexGuard};
@@ -72,18 +73,18 @@ pub(super) fn text_of<T: Serialize>(value: &T) -> String {
     }
 }
 
-pub(super) fn rev_of(row: &Row<'_>, column: usize) -> rusqlite::Result<Rev> {
-    Ok(Rev::new(row.get::<_, i64>(column)?.cast_unsigned()))
+pub(super) fn rev_of(row: &Row<'_>, column: impl At) -> rusqlite::Result<Rev> {
+    Ok(Rev::new(row.get::<_, i64>(column.index())?.cast_unsigned()))
 }
 
 /// The seq in `column`, as [`seq_column`] writes one.
-pub(super) fn seq_of(row: &Row<'_>, column: usize) -> rusqlite::Result<Seq> {
-    Ok(Seq::new(row.get::<_, i64>(column)?.cast_unsigned()))
+pub(super) fn seq_of(row: &Row<'_>, column: impl At) -> rusqlite::Result<Seq> {
+    Ok(Seq::new(row.get::<_, i64>(column.index())?.cast_unsigned()))
 }
 
 /// The place in `column`, as [`place_column`] writes one.
-pub(super) fn place_of(row: &Row<'_>, column: usize) -> rusqlite::Result<Place> {
-    Ok(Place::new(row.get::<_, i64>(column)?.cast_unsigned()))
+pub(super) fn place_of(row: &Row<'_>, column: impl At) -> rusqlite::Result<Place> {
+    Ok(Place::new(row.get::<_, i64>(column.index())?.cast_unsigned()))
 }
 
 /// `seq` as a column holds it, and as a query compares it, as [`column_number`] says.
@@ -164,15 +165,37 @@ pub(super) fn current_rev(conn: &Connection) -> rusqlite::Result<Rev> {
     ))
 }
 
+/// An enum from its `snake_case` serde name, as [`text_of`] writes it. An error says it's from the first column, so a
+/// reader of a row's own column takes [`text_at`] instead, whose error names it.
 pub(super) fn from_text<T: DeserializeOwned>(text: String) -> rusqlite::Result<T> {
     serde_json::from_value(Value::String(text))
         .map_err(|e| rusqlite::Error::FromSqlConversionFailure(0, rusqlite::types::Type::Text, Box::new(e)))
 }
 
+/// The enum in `column`, as [`text_of`] writes it.
+pub(super) fn text_at<T: DeserializeOwned>(row: &Row<'_>, column: Column) -> rusqlite::Result<T> {
+    parsed_at(column, row.at(column)?)
+}
+
+/// The enum in `column`, as [`text_of`] writes it, or `None` where it holds NULL.
+pub(super) fn maybe_text_at<T: DeserializeOwned>(row: &Row<'_>, column: Column) -> rusqlite::Result<Option<T>> {
+    row.at::<Option<String>>(column)?.map(|text| parsed_at(column, text)).transpose()
+}
+
+fn parsed_at<T: DeserializeOwned>(column: Column, text: String) -> rusqlite::Result<T> {
+    serde_json::from_value(Value::String(text)).map_err(|e| column.unreadable(rusqlite::types::Type::Text, Box::new(e)))
+}
+
+/// What a column holds as JSON, which its reader can't do without, so one it can't read is an error that names it.
+pub(super) fn required_json_at<T: DeserializeOwned>(row: &Row<'_>, column: impl At) -> rusqlite::Result<T> {
+    serde_json::from_str(&row.get::<_, String>(column.index())?)
+        .map_err(|e| column.unreadable(rusqlite::types::Type::Text, Box::new(e)))
+}
+
 /// What a column holds as JSON, which only a hub writes, or `None` when it holds nothing, or what this build can't
 /// read, such as one a build with another idea of it wrote. Each caller says what one it can't read means there.
-pub(super) fn json_at<T: DeserializeOwned>(row: &Row<'_>, column: usize) -> rusqlite::Result<Option<T>> {
-    Ok(row.get::<_, Option<String>>(column)?.and_then(|json| serde_json::from_str(&json).ok()))
+pub(super) fn json_at<T: DeserializeOwned>(row: &Row<'_>, column: impl At) -> rusqlite::Result<Option<T>> {
+    Ok(row.get::<_, Option<String>>(column.index())?.and_then(|json| serde_json::from_str(&json).ok()))
 }
 
 impl Store {
