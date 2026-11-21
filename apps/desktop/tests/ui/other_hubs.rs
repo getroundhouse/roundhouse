@@ -239,3 +239,27 @@ fn restarting_a_hub_that_has_already_gone_still_connects(cx: &mut TestAppContext
 
     ui.wait("a new hub", |ui| matches!(ui.view().connection(), Connection::Ready(_)));
 }
+
+/// A hub installed as a service that has found a newer release offers to update, and one from before it could update
+/// from a client, as the fake hub is, says to update it on its machine.
+#[gpui_kit::test]
+fn a_hub_that_found_an_update_offers_it_and_says_why_it_refused(cx: &mut TestAppContext) {
+    let mut world = World::default();
+    world.hub = Some(HubBuild { version: "0.9.0", number: fake_hub::BUILD_NUMBER - 1, on_demand: false });
+    world.hub_update = Some(protocol::model::HubUpdate {
+        version: Some(fake_hub::BUILD.to_owned()),
+        looked_at_ms: 1,
+        problem: None,
+        attempt: None,
+        rev: protocol::model::Rev::default(),
+    });
+    let (_fake, mut ui) = open_on_the_world(cx, world);
+    ui.wait("the card to offer the hub's update", |ui| ui.has("update-hub"));
+
+    ui.click("update-hub");
+
+    ui.wait("the card to say why", |ui| {
+        matches!(ui.build_line().update, Some(Updating::Hub { problem: Some(why), .. }) if why.contains("its machine"))
+    });
+    assert!(ui.has("update-hub"), "to try again");
+}

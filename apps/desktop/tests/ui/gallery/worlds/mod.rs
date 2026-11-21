@@ -37,5 +37,6 @@ mod scenarios;
 pub(super) use scenarios::{
     archiving, attachments, chat_tabs, chat_world, closed_chats, codex_images, context, context_capped,
     context_with_a_models_limit, context_without_limits, conversation, converse, diff, finished_chat, finishing_update,
-    in_plan_mode, made_image, own_hub, planning, read_image, setup_failed, sidebar, titled, unread, unread_titled,
+    hub_update_found, in_plan_mode, made_image, own_hub, planning, read_image, setup_failed, sidebar, titled, unread,
+    unread_titled,
 };

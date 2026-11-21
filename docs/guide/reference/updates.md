@@ -45,6 +45,14 @@ A hub from before agents could outlive a restart still has to wait for its agent
 - **`Waiting on other work` is a setup script, or something still under way,** such as creating or archiving a workspace. The app on another device, or the command line, being connected doesn't hold the update up. The app connects again once the hub has restarted, and `roundhouse attach` stops and says how to pick up where it was.
 - **`Restart now` restarts the hub without waiting,** which stops those agents, and ends those terminals. A dialog asks first, and says how many. Each stopped agent picks up its conversation at its next prompt.
 
+## A hub on a machine of its own
+
+A hub [installed as a service](../get-started/install.md#a-hub-on-a-machine-of-its-own) updates only when you say, since updating it ahead of your other devices could cut one off. It looks for a newer release every hour. Once it has found one, the card says `Hub update ready`, and `Update hub` updates it. The hub downloads the release, checks it, and restarts on it, and agents at work keep going. The card says `Updating hub` meanwhile, and the app connects again by itself.
+
+![The card once a hub on another machine has found a newer release](../../spec/screens/hub-update-ready.png)
+
+`roundhouse hub update`, on the hub's machine, does the same from a terminal.
+
 ## Problems
 
 A problem updating shows in the build's place at the bottom of the sidebar. Point at it for all of what it says, and the detail.
