@@ -5,7 +5,7 @@
 use protocol::attachment::{Attachment, AttachmentBytes, MediaType};
 use protocol::client::new_workspace::UnsentPrompt;
 use protocol::client::{
-    ApiError, ClientResponse, ErrorCode, HelloReply, HubStatus, admin, agent, attachments, comments, log,
+    ApiError, ClientResponse, ErrorCode, HelloReply, HubStart, HubStatus, admin, agent, attachments, comments, log,
     new_workspace, records, sessions, workspaces,
 };
 use protocol::event::{CompactedBy, SessionEvent};
@@ -199,6 +199,7 @@ fn the_hub_s_status_keeps_its_form() {
         running_sessions: 2,
         clients: 1,
         on_demand: true,
+        started_by: Some(HubStart::OnDemand),
         build_number: Some(42),
         running_setups: 1,
         requests: 3,
@@ -210,7 +211,7 @@ fn the_hub_s_status_keeps_its_form() {
     };
     answered(
         ClientResponse::HubStatus(status),
-        r#"{"result":"hub_status","pid":7,"hub_version":"0.1.9","protocol_version":3,"started_at_ms":1,"workers":4,"running_sessions":2,"clients":1,"on_demand":true,"build_number":42,"running_setups":1,"requests":3,"keeping_awake":true,"keeps_workers":true,"oldest_protocol_version":2,"oldest_running_worker_protocol":3,"open_terminals":1}"#,
+        r#"{"result":"hub_status","pid":7,"hub_version":"0.1.9","protocol_version":3,"started_at_ms":1,"workers":4,"running_sessions":2,"clients":1,"on_demand":true,"started_by":"on_demand","build_number":42,"running_setups":1,"requests":3,"keeping_awake":true,"keeps_workers":true,"oldest_protocol_version":2,"oldest_running_worker_protocol":3,"open_terminals":1}"#,
     );
 }
 

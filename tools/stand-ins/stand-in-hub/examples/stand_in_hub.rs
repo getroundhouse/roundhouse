@@ -147,6 +147,7 @@ fn status(args: &Args, paths: &Paths) -> HubStatus {
         running_sessions: running,
         clients: 1,
         on_demand: !args.not_on_demand,
+        started_by: None,
         build_number: args.build,
         running_setups: written(paths, SETUPS, args.setups),
         requests: 1 + written(paths, REQUESTS, args.requests),

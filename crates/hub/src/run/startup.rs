@@ -8,6 +8,7 @@ use crate::terminate::Terminate;
 use crate::timers::Timers;
 use github::{Github, GithubConfig};
 use protocol::Build;
+use protocol::client::HubStart;
 use protocol::model::{AgentDescription, WorkspaceId};
 use protocol::paths::Paths;
 use providers::Provider;
@@ -29,8 +30,8 @@ pub struct HubConfig {
     pub shell: Option<String>,
     /// This process's own `PATH`.
     pub path: Option<String>,
-    /// A client started this hub because it needed one.
-    pub on_demand: bool,
+    /// What started this hub, which its status says, so a client knows whether it may restart it.
+    pub start: HubStart,
     /// What each kind of agent this hub runs is called and offers, as its adapter describes it. A kind with none is one
     /// the hub doesn't run.
     pub agents: Vec<AgentDescription>,
@@ -119,8 +120,7 @@ fn load_providers(
 
 /// Runs until asked to stop or signalled. Returns an error if another hub is using these paths.
 pub async fn run(config: HubConfig) -> Result<(), HubError> {
-    let HubConfig { network_address, build, paths, worker_exe, shell, path, on_demand, agents, timers, github } =
-        config;
+    let HubConfig { network_address, build, paths, worker_exe, shell, path, start, agents, timers, github } = config;
     private_files::create_dir_all(&paths.data_dir)
         .map_err(|e| HubError::io(format!("creating {}", paths.data_dir.display()), e))?;
     let lock_file = take_lock(&paths)?;
@@ -135,7 +135,7 @@ pub async fn run(config: HubConfig) -> Result<(), HubError> {
     let providers = load_providers(build, &paths, worker_exe, machine.clone(), &store, &timers)?;
     let github = Github::new(github);
     let dirs = HubDirs { network_address, ..HubDirs::of(&paths) };
-    let hub = Arc::new(Hub::new(build, store, dirs, providers, github, machine, agents, on_demand, timers));
+    let hub = Arc::new(Hub::new(build, store, dirs, providers, github, machine, agents, start, timers));
     // Before clients are served, so none is told the hub holds a login whose token is gone.
     hub.tidy_logins().await;
     // Before carrying on with the agents an earlier hub left, since what they asked meanwhile comes in as soon as

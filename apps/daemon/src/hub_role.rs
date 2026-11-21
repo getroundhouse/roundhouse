@@ -1,13 +1,15 @@
 //! The daemon as a hub: what it's told from the environment and this build, and running it until it stops.
 
-use anyhow::Context;
 use std::path::PathBuf;
+
+use anyhow::Context;
+use protocol::client::HubStart;
 
 use super::BUILD;
 use crate::runtime::run_to_end;
 
-/// Runs a hub until it's asked to stop, saying whether a client started it because it needed one.
-pub(crate) fn run(on_demand: bool) -> anyhow::Result<()> {
+/// Runs a hub until it's asked to stop, saying what started it.
+pub(crate) fn run(start: HubStart) -> anyhow::Result<()> {
     let paths = protocol::paths::resolve(|name| std::env::var(name).ok()).map_err(anyhow::Error::msg)?;
     // Follows symlinks, so moving an install's `current` link can't change what later workers run.
     let running =
@@ -23,18 +25,8 @@ pub(crate) fn run(on_demand: bool) -> anyhow::Result<()> {
     let github = hub::GithubConfig::from_env(|name| std::env::var(name).ok());
     let network_address =
         protocol::paths::listen_address(|name| std::env::var(name).ok()).map_err(anyhow::Error::msg)?;
-    let config = hub::HubConfig {
-        network_address,
-        build: BUILD,
-        paths,
-        worker_exe,
-        shell,
-        path,
-        on_demand,
-        agents,
-        timers,
-        github,
-    };
+    let config =
+        hub::HubConfig { network_address, build: BUILD, paths, worker_exe, shell, path, start, agents, timers, github };
     run_to_end(hub::run(config))??;
     Ok(())
 }

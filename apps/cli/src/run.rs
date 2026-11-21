@@ -6,6 +6,7 @@ use anyhow::Context;
 use client_core::{Approval, Client, FileToSend, HubAdmin, Written};
 use local_hub::Daemon;
 use protocol::capability::approvals::Decision;
+use protocol::client::HubStart;
 use protocol::event::SessionEvent;
 use protocol::model::{ApprovalId, Repo, RepoOrigin, Session};
 use protocol::paths::Paths;
@@ -172,7 +173,11 @@ fn admin_command(paths: &Paths, command: Admin) -> anyhow::Result<()> {
                 status.workers,
                 status.running_sessions,
                 status.clients,
-                if status.on_demand { "started on demand" } else { "started by hand" }
+                match status.start() {
+                    HubStart::ByHand => "started by hand",
+                    HubStart::OnDemand => "started on demand",
+                    HubStart::AsService => "installed as a service",
+                }
             );
             if status.keeping_awake {
                 println!("keeping this machine awake while there's work");

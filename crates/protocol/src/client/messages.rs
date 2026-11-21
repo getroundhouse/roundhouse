@@ -131,6 +131,11 @@ pub struct HubStatus {
     /// like this can be restarted from a client.
     #[serde(default)]
     pub on_demand: bool,
+    /// What started it, which [`HubStatus::start`] reads. `None` from a hub from before this, which says only
+    /// `on_demand`. A new kind of start would leave a client from before it unable to read the status, across a break
+    /// too.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub started_by: Option<HubStart>,
     /// Which build it is, if it's one that has an order. See [`crate::Build::number`].
     #[serde(default)]
     pub build_number: Option<u64>,
@@ -166,7 +171,24 @@ pub struct HubStatus {
     pub open_terminals: u32,
 }
 
+/// What started a hub, which says who may restart it.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum HubStart {
+    /// Someone ran it themselves, so it's theirs to stop or update.
+    ByHand,
+    /// A client started it because it needed one, so a client may restart it.
+    OnDemand,
+    /// The machine's service manager, since `roundhouse hub install` made it a service, which starts it at boot and
+    /// again after a failure.
+    AsService,
+}
+
 impl HubStatus {
+    pub fn start(&self) -> HubStart {
+        self.started_by.unwrap_or(if self.on_demand { HubStart::OnDemand } else { HubStart::ByHand })
+    }
+
     /// Whether stopping the hub would cut nothing off: nothing is running on it, no terminal is open, and the request
     /// asking for this is the one thing it's doing. Other clients don't count. One that's only connected loses nothing,
     /// since it connects again to the next hub, and what's typed in it is kept by the hub, while counting it would keep

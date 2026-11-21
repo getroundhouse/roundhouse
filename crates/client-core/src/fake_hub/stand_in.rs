@@ -39,6 +39,7 @@ pub(super) fn status(world: &World) -> HubStatus {
         running_sessions: u32::try_from(running).unwrap(),
         clients: 1,
         on_demand: world.hub.is_some_and(|hub| hub.on_demand),
+        started_by: None,
         build_number: world.hub.map(|hub| hub.number),
         running_setups: 0,
         requests: 1,

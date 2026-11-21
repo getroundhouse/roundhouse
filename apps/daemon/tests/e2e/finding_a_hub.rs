@@ -8,6 +8,7 @@ use std::time::Duration;
 use client_core::{Client, HubAdmin};
 use protocol::StampedBuild;
 use protocol::capability::settings::Settings;
+use protocol::client::HubStart;
 use protocol::model::{AgentKind, WorkspaceStatus};
 
 use crate::support::{
@@ -96,6 +97,21 @@ fn a_client_can_start_a_new_hub_as_soon_as_stopping_the_last_one_returns() {
     stack.hub.take().unwrap().wait().unwrap();
     assert_ne!(status.pid, first);
     assert!(status.on_demand, "a client started this one because it needed it");
+}
+
+/// `roundhouse hub install` has the service manager start the hub with `--service`, and the hub's status says so, so
+/// a client leaves its restarts to the service.
+#[test]
+fn a_hub_its_service_manager_started_says_so() {
+    let mut stack = Stack::start();
+    HubAdmin::connect(&stack.socket()).unwrap().stop().unwrap();
+    stack.hub.take().unwrap().wait().unwrap();
+
+    stack.start_hub_with(&["--service"]);
+
+    let status = HubAdmin::connect(&stack.socket()).unwrap().status().unwrap();
+    assert_eq!(status.start(), HubStart::AsService);
+    assert!(!status.on_demand, "so a client doesn't restart it");
 }
 
 /// Installing a new version moves the `current` link, and a running hub stays on the one it came from.

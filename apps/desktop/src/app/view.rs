@@ -7,7 +7,7 @@ use gpui_kit::{
     Styled, TestSupportExt as _, Window, div,
 };
 use look::Typeset as _;
-use protocol::client::HubStatus;
+use protocol::client::{HubStart, HubStatus};
 
 use super::restarts::restart_note;
 use super::{AppView, Connection, ConnectionFailure, corner, hub_source, hubs, pairing, title_bar, window_buttons};
@@ -256,11 +256,19 @@ fn across_a_break(status: &HubStatus, app_version: &str, may_restart: bool, cx: 
     let versions = format!("The hub is version {}, and this app is {app_version}.", status.hub_version);
     let next = if may_restart {
         restart_note(status)
-    } else if status.on_demand {
-        "It's newer than this app, so the app needs updating.".to_string()
     } else {
-        "It was started by hand, so it's yours to update or stop. To stop it and its agents, run \"roundhouse hub stop\"."
-            .to_string()
+        let older = status.protocol_version < protocol::client::CLIENT_PROTOCOL_VERSION;
+        match status.start() {
+            HubStart::AsService if older => {
+                "It's installed as a service, so it's updated by installing a newer release's hub on its machine."
+            }
+            // A hub a client started that's older is one the app may restart.
+            HubStart::OnDemand | HubStart::AsService => "It's newer than this app, so the app needs updating.",
+            HubStart::ByHand => {
+                "It was started by hand, so it's yours to update or stop. To stop it and its agents, run \"roundhouse hub stop\"."
+            }
+        }
+        .to_string()
     };
     let action = if may_restart {
         let pid = status.pid;

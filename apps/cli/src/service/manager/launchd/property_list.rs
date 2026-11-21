@@ -3,7 +3,7 @@
 use std::fmt::Write as _;
 use std::path::Path;
 
-use crate::service::definition::Service;
+use crate::service::definition::{ARGUMENTS, Service};
 
 /// The launch daemon's property list. It starts the hub at boot, and again if it exits with a failure, but not when it
 /// stops because someone asked, so `roundhouse hub stop` keeps it stopped until the next boot.
@@ -21,7 +21,7 @@ pub(super) fn launch_daemon(service: &Service, label: &str) -> String {
   <key>Label</key>{label}
   <key>UserName</key>{user}
   <key>ProgramArguments</key>
-  <array>{program}{hub}</array>
+  <array>{program}{arguments}</array>
   <key>WorkingDirectory</key>{dir}
   <key>EnvironmentVariables</key>
   <dict>{environment}
@@ -39,7 +39,7 @@ pub(super) fn launch_daemon(service: &Service, label: &str) -> String {
         label = string(label),
         user = string(&service.user),
         program = path(&service.program),
-        hub = string("hub"),
+        arguments = ARGUMENTS.map(string).concat(),
         dir = path(&service.working_dir),
         log = path(&service.log),
     )
@@ -70,7 +70,10 @@ mod tests {
         assert!(plist.contains("<key>UserName</key><string>agent</string>"), "{plist}");
         let program =
             "<string>/Users/a &amp; b/Library/Application Support/roundhouse/service/current/roundhoused</string>";
-        assert!(plist.contains(&format!("<array>{program}<string>hub</string></array>")), "{plist}");
+        assert!(
+            plist.contains(&format!("<array>{program}<string>hub</string><string>--service</string></array>")),
+            "{plist}"
+        );
         assert!(plist.contains("<key>HOME</key><string>/Users/a &amp; b</string>"), "{plist}");
         assert!(plist.contains("<key>SuccessfulExit</key><false/>"), "{plist}");
         assert!(!plist.contains("a & b"), "{plist}");

@@ -36,6 +36,6 @@ pub use request::ClientRequest;
 
 mod messages;
 pub use messages::{
-    ApiError, CLIENT_PROTOCOL_VERSION, ClientFrame, ClientResponse, ErrorCode, HubFrame, HubStatus, Outcome, Reply,
-    ReplyOutcome, Request, error_chain,
+    ApiError, CLIENT_PROTOCOL_VERSION, ClientFrame, ClientResponse, ErrorCode, HubFrame, HubStart, HubStatus, Outcome,
+    Reply, ReplyOutcome, Request, error_chain,
 };

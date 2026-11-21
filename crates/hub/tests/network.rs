@@ -34,7 +34,7 @@ impl Running {
             paths,
             shell: None,
             path: None,
-            on_demand: false,
+            start: protocol::client::HubStart::ByHand,
             agents: Vec::new(),
             timers: hub::Timers::DEFAULT,
             github: hub::GithubConfig::from_env(|_| Some("http://127.0.0.1:9".into())),

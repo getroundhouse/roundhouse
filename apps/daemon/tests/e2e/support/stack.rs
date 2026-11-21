@@ -120,9 +120,14 @@ impl Stack {
     /// Starts a hub, and waits until it accepts connections. One that exits first fails the test at once, with what it
     /// wrote to its log, rather than once the wait has run out.
     pub(crate) fn start_hub(&mut self) {
+        self.start_hub_with(&[]);
+    }
+
+    /// Starts a hub with `args` after `hub`, as [`Stack::start_hub`] does.
+    pub(crate) fn start_hub_with(&mut self, args: &[&str]) {
         let (socket, log) = (self.socket(), self.hub_log());
         let logged_before = std::fs::metadata(&log).map_or(0, |log| log.len());
-        let hub = self.hub.insert(self.command().spawn().unwrap().into());
+        let hub = self.hub.insert(self.command().args(args).spawn().unwrap().into());
         wait_until("the hub to accept connections", || {
             if let Some(status) = hub.try_wait().unwrap() {
                 let logged = std::fs::read(&log).unwrap_or_default();

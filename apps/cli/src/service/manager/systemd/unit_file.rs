@@ -2,7 +2,7 @@
 
 use std::fmt::Write as _;
 
-use crate::service::definition::Service;
+use crate::service::definition::{ARGUMENTS, Service};
 
 /// The systemd unit. It starts the hub at boot, and again if it exits with a failure, but not when it stops because
 /// someone asked. `KillMode=process` stops only the hub with the service, since systemd otherwise stops every process
@@ -21,7 +21,7 @@ After=network-online.target
 
 [Service]
 User={user}
-ExecStart={program} hub
+ExecStart={program} {arguments}
 WorkingDirectory={dir}
 {environment}StandardOutput=append:{log}
 StandardError=append:{log}
@@ -33,6 +33,7 @@ WantedBy=multi-user.target
 ",
         user = unquoted(&service.user),
         program = quoted(&service.program.to_string_lossy()),
+        arguments = ARGUMENTS.map(quoted).join(" "),
         dir = unquoted(&service.working_dir.to_string_lossy()),
         log = unquoted(&service.log.to_string_lossy()),
     )
@@ -59,7 +60,7 @@ mod tests {
 
         assert!(unit.contains("\nUser=agent\n"), "{unit}");
         let program = "\"/Users/a & b/Library/Application Support/roundhouse/service/current/roundhoused\"";
-        assert!(unit.contains(&format!("\nExecStart={program} hub\n")), "{unit}");
+        assert!(unit.contains(&format!("\nExecStart={program} \"hub\" \"--service\"\n")), "{unit}");
         assert!(unit.contains("\nEnvironment=\"PATH=/usr/bin:/opt/100%%\\\"x\\\"\"\n"), "{unit}");
         assert!(unit.contains("\nRestart=on-failure\n"), "{unit}");
         assert!(unit.contains("\nKillMode=process\n"), "{unit}");
