@@ -84,6 +84,7 @@ look = { workspace = true, features = ["testing"] }
 process = { workspace = true, features = ["testing"] }
 protocol = { workspace = true, features = ["testing"] }
 transcript = { workspace = true, features = ["testing"] }
+update-feed = { workspace = true, features = ["testing"] }
 worker = { workspace = true, features = ["testing"] }
 terminal-view = { workspace = true, features = ["testing"] }
 gpui-kit = { workspace = true, features = ["test-support"] }

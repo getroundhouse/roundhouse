@@ -5,9 +5,11 @@
 //! break in the worker protocol" in `docs/standards/merging.md` says. It does no IO, so the app, a hub and the tools share it without the rest of any.
 
 mod feed;
+#[cfg(feature = "testing")]
+pub mod fixture;
 mod signature;
 #[cfg(test)]
 mod tests;
 
-pub use feed::{BadVersion, Feed, Release};
+pub use feed::{BadVersion, Feed, HubArchive, Release};
 pub use signature::{KEY, URL, Unsigned, UpdateFeedKey};

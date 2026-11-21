@@ -1,4 +1,4 @@
-use update_feed::{Feed, UpdateFeedKey};
+use update_feed::{Feed, UpdateFeedKey, fixture};
 
 use super::*;
 use crate::updates::signing::{key_pair, public};
@@ -34,6 +34,15 @@ fn source_error<T: std::fmt::Debug>(result: Result<T, velopack::Error>) -> Sourc
 
 fn asked_for_the_feed(server: &Server) -> usize {
     server.asked().iter().filter(|path| *path == "releases.osx.json").count()
+}
+
+/// Velopack reads the feed as the release workflow publishes it, whatever it says beyond what Velopack knows, such as
+/// which worker versions a release's hub speaks and where its hub's archive is.
+#[test]
+fn a_feed_openssl_signed_is_read() {
+    let releases = verified(fixture::FEED, fixture::SIGNATURE, &fixture::KEY).unwrap();
+
+    assert_eq!(releases.Assets[0].Version, "0.1.1");
 }
 
 #[test]

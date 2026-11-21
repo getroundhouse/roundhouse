@@ -9,8 +9,7 @@ use velopack::VelopackAssetFeed;
 /// break in the worker protocol is reverted, as `docs/standards/merging.md` says. A release from before releases said
 /// what they speak goes too, since its hub may not.
 pub(crate) fn only_speaking(mut releases: VelopackAssetFeed, feed: &Feed, oldest: u32) -> VelopackAssetFeed {
-    let speaking: HashSet<&str> =
-        feed.releases().filter(|release| release.speaks(oldest)).map(|release| release.version).collect();
+    let speaking: HashSet<&str> = feed.speaking(oldest).map(|release| release.version).collect();
     releases.Assets.retain(|package| speaking.contains(package.Version.as_str()));
     releases
 }
