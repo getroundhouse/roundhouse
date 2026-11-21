@@ -4,10 +4,11 @@
 use protocol::client::{ErrorCode, log};
 use protocol::event::{ContentBlock, EventBody, ExitReason, TaskKind};
 use protocol::model::{AgentKind, Place, Seq, SessionStatus, SubagentId, SubagentStatus};
+use protocol::terminal::{Bounds, TerminalPoint, TerminalRow, TerminalSize};
 
 use super::events::{subagent_ended, subagent_started, taken, task, text, user_prompt, within};
 use super::{World, serve};
-use crate::{Client, ClientError};
+use crate::{Client, ClientError, SubscriptionItem};
 
 /// A client of a fake hub serving `world`, and the directory its socket is in, which goes when the test ends.
 fn served(world: World) -> (tempfile::TempDir, Client) {
@@ -208,4 +209,35 @@ fn a_chat_s_prompts_are_listed_with_where_each_was_settled() {
 
     let settled: Vec<_> = prompts.iter().map(|line| line.settled().map(|at| at.seq.get())).collect();
     assert_eq!(settled, [Some(2), None]);
+}
+
+/// A client watching one of the world's terminals is shown its screen, and asks for its history, a word's ends and
+/// text in the picture's numbering, as it would of a worker's. Nothing can change it.
+#[test]
+fn a_terminal_is_watched_and_read_by_row_number_and_refuses_a_change() {
+    let mut world = World::default();
+    let repo = world.repo("aspen");
+    let workspace = world.workspace(&repo, "elm");
+    let lines: Vec<String> = (0..10).map(|at| format!("line {at}")).collect();
+    let terminal = world.terminal(&workspace, TerminalSize { cols: 20, rows: 4 }, lines.join("\r\n").as_bytes());
+    let (_dir, client) = served(world);
+    let text_of = |row: &TerminalRow| row.spans.iter().map(|span| span.text.as_str()).collect::<String>();
+
+    let watched = client.terminal_watch(&terminal).unwrap();
+    let picture = watched.items.recv_timeout(std::time::Duration::from_secs(10));
+    let Ok(SubscriptionItem::TerminalPicture(picture)) = picture else { panic!("no picture came") };
+    let (numbering, top) = (picture.numbering, picture.top);
+    let history = client.terminal_rows(&terminal, numbering, picture.first, 100).unwrap();
+    let at = TerminalPoint { row: top.plus(1), col: 1 };
+    let ends = client.terminal_bounds(&terminal, numbering, at, Bounds::Word).unwrap().range.unwrap();
+    let copied = client.terminal_text(&terminal, numbering, ends, false).unwrap();
+    let fit = client.terminal_fit(&terminal, TerminalSize { cols: 30, rows: 4 }, numbering, Vec::new());
+
+    assert!(picture.whole);
+    let screen: Vec<String> = picture.rows.iter().flat_map(|run| &run.rows).map(|row| text_of(&row.row())).collect();
+    assert_eq!(screen, ["line 6", "line 7", "line 8", "line 9"]);
+    let history: Vec<String> = history.rows.iter().map(text_of).collect();
+    assert_eq!(history, ["line 0", "line 1", "line 2", "line 3", "line 4", "line 5"]);
+    assert_eq!(copied.text, "line");
+    assert!(matches!(fit, Err(ClientError::Api(refused)) if refused.code == ErrorCode::Unsupported));
 }
