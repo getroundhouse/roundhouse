@@ -48,7 +48,7 @@ jobs:
       - id: zig
         uses: ./.github/actions/zig
         with:
-          cache-name: windows-2025-vs2026
+          cache-name: test-windows-amd64-windows-2025-vs2026
       - id: cache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -57,9 +57,9 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          # Named for the runner, since a target/ fits only its image and checkout path.
-          key: windows-2025-vs2026-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock', '**/Cargo.toml') }}
-          restore-keys: windows-2025-vs2026-
+          # Named as ci.yml's are, with `test` for a job that lints and tests.
+          key: test-windows-amd64-windows-2025-vs2026-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock', '**/Cargo.toml') }}
+          restore-keys: test-windows-amd64-windows-2025-vs2026-
       # Not --all-targets, since most tests only build on Unix.
       - run: cargo clippy --workspace --locked -- -D warnings
       # Tests of what Windows does differently below the hub, and of Ghostty's terminal core, built by Zig for MSVC,

@@ -50,7 +50,7 @@ jobs:
       # The Zig that builds Ghostty's terminal core. The tests' first runner saves Zig's global cache.
       - uses: ./.github/actions/zig
         with:
-          cache-name: mac
+          cache-name: test-mac-arm64-macos-26
       - id: cache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -59,10 +59,11 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: mac-lint-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock', '**/Cargo.toml') }}
+          # Named as ci.yml's are.
+          key: lint-mac-arm64-macos-26-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock', '**/Cargo.toml') }}
           # As in ci.yml, main rebuilds from nothing when the key changes, so a cache holds one lockfile's build. PRs
           # take any.
-          restore-keys: ${{ github.ref != 'refs/heads/main' && 'mac-lint-' || '' }}
+          restore-keys: ${{ github.ref != 'refs/heads/main' && 'lint-mac-arm64-macos-26-' || '' }}
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
       # Only the dependencies are worth keeping, as in ci.yml.
       - if: github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true'
@@ -94,7 +95,7 @@ jobs:
       - id: zig
         uses: ./.github/actions/zig
         with:
-          cache-name: mac
+          cache-name: test-mac-arm64-macos-26
       - uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
         with:
           tool: cargo-nextest@${{ env.NEXTEST_VERSION }}
@@ -107,11 +108,11 @@ jobs:
             ~/.cargo/git/db/
             target/
           # Named apart from lint's, since a prefix of one would restore the other.
-          key: mac-test-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock', '**/Cargo.toml') }}
+          key: test-mac-arm64-macos-26-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock', '**/Cargo.toml') }}
           # As in ci.yml, main rebuilds from nothing when the key changes, so a cache holds one lockfile's build. Built
           # on the last cache, each kept the builds of every lockfile before it, and two thirds of what it held,
           # compressed, was output no current build used. PRs take any.
-          restore-keys: ${{ github.ref != 'refs/heads/main' && 'mac-test-' || '' }}
+          restore-keys: ${{ github.ref != 'refs/heads/main' && 'test-mac-arm64-macos-26-' || '' }}
       # The gallery's images match the Mac that approved them, pixel for pixel.
       - run: >-
           cargo nextest run --profile mac --workspace --locked --partition slice:${{ matrix.part }}/4

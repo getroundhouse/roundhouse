@@ -120,7 +120,7 @@ jobs:
       - id: zig
         uses: ./.github/actions/zig
         with:
-          cache-name: linux-lint
+          cache-name: lint-linux-arm64-ubuntu-26.04-arm
       - id: cache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -129,11 +129,13 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
+          # Named for what it's for, as `lint`, `test`, `kit` or `release`, then the platform, the processor and the
+          # runner, as every workflow's target/ cache is, since a target/ fits only the image and path it was built on.
           # Every Cargo.toml too, since a profile or a dependency's features change what's built without changing
           # Cargo.lock.
-          key: linux-lint-deps-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock', '**/Cargo.toml') }}
+          key: lint-linux-arm64-ubuntu-26.04-arm-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock', '**/Cargo.toml') }}
           # Main rebuilds from nothing when the key changes, so a cache holds one lockfile's build. PRs take any.
-          restore-keys: ${{ github.ref != 'refs/heads/main' && 'linux-lint-deps-' || '' }}
+          restore-keys: ${{ github.ref != 'refs/heads/main' && 'lint-linux-arm64-ubuntu-26.04-arm-' || '' }}
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
       # As shipped, since the tests' `testing` features can hide what only tests use.
@@ -182,7 +184,7 @@ jobs:
       - id: zig
         uses: ./.github/actions/zig
         with:
-          cache-name: runs-on-arm64-16-gen8-test
+          cache-name: test-linux-arm64-runs-on-arm64-16-gen8
       # The tests make commits.
       - run: git config --global user.name ci && git config --global user.email ci@example.com
       - uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
@@ -196,10 +198,9 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          # As in lint. Our test binaries each link GPUI, so they're over half the build. Named for the runner, since a
-          # target/ fits only the image and path it was built on.
-          key: runs-on-arm64-16-gen8-test-deps-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock', '**/Cargo.toml') }}
-          restore-keys: ${{ github.ref != 'refs/heads/main' && 'runs-on-arm64-16-gen8-test-deps-' || '' }}
+          # As in lint. Our test binaries each link GPUI, so they're over half the build.
+          key: test-linux-arm64-runs-on-arm64-16-gen8-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock', '**/Cargo.toml') }}
+          restore-keys: ${{ github.ref != 'refs/heads/main' && 'test-linux-arm64-runs-on-arm64-16-gen8-' || '' }}
       # One pool for every binary's tests. It skips doc tests, so they run after. The report the cache brought back with
       # target/ goes first, so what reads it next reads only this run's.
       - run: rm -f target/nextest/ci/junit.xml && cargo nextest run --profile ci --workspace --locked
@@ -271,8 +272,9 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/gpui-kit/
-          key: linux-kit-deps-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock', 'third_party/gpui-kit/vendor/**/Cargo.toml') }}
-          restore-keys: ${{ github.ref != 'refs/heads/main' && 'linux-kit-deps-' || '' }}
+          # As in lint, with the copy's manifests rather than ours.
+          key: kit-linux-arm64-ubuntu-26.04-arm-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock', 'third_party/gpui-kit/vendor/**/Cargo.toml') }}
+          restore-keys: ${{ github.ref != 'refs/heads/main' && 'kit-linux-arm64-ubuntu-26.04-arm-' || '' }}
       # Our lockfile, so the kit is checked on the versions the app ships rather than a fresh resolve. Cargo drops what
       # the copy's workspace doesn't use.
       - run: cp Cargo.lock third_party/gpui-kit/vendor/Cargo.lock
