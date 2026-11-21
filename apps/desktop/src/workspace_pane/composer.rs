@@ -2,6 +2,7 @@
 //! picker at one end, and at the other what the agent says of itself and the microphone, then Send or Stop. Shift-Tab
 //! turns plan mode on and off, as the `+` menu does, and the composer shows it.
 
+use client_ui::{Picked, model_picker};
 use gpui_kit::component::input::{InputEvent, Textarea, TextareaState};
 use gpui_kit::component::{IconName, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
@@ -18,7 +19,6 @@ use protocol::prompt::Prompt;
 use super::dictating::Then;
 use super::{PaneEvent, WorkspacePane};
 use crate::composing::{self, Plan};
-use crate::model_picker::{Picked, model_picker};
 use crate::{StopAgent, attached, prompt_cache};
 
 /// Whether there's a hub to send what's typed to.

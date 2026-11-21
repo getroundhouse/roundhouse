@@ -42,7 +42,7 @@ pub(crate) enum DialogEvent {
 }
 
 pub struct NewWorkspaceDialog {
-    pub(super) model_lookup: crate::model_lookup::Lookup,
+    pub(super) model_lookup: client_ui::FollowedModels,
     /// Where the workspace will be made.
     pub(super) repo: RepoId,
     pub(super) offer: Offer,
@@ -151,7 +151,7 @@ impl NewWorkspaceDialog {
             repo,
             offer,
             prompt,
-            model_lookup: crate::model_lookup::Lookup::default(),
+            model_lookup: client_ui::FollowedModels::default(),
             dictation,
             shown: false,
             chosen_agent: None,

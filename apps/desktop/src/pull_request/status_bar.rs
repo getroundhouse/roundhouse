@@ -41,7 +41,7 @@ impl Lookup {
     }
 
     pub fn work(&self) -> Work {
-        self.standing().map_or(Work::NoPr, transcript::work)
+        self.standing().map_or(Work::NoPr, client_ui::work)
     }
 }
 

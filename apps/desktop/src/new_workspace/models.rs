@@ -1,7 +1,7 @@
 //! The first chat's agent and its selected model and effort.
 
 use super::NewWorkspaceDialog;
-use crate::model_picker::Picked;
+use client_ui::Picked;
 use gpui_kit::{AnyElement, Context};
 use protocol::capability::settings::Effort;
 use protocol::client::admin::ModelTarget;

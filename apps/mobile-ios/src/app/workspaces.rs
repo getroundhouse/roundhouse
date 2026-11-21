@@ -74,7 +74,7 @@ impl MobileApp {
 
     fn row(workspace: &Workspace, records: &Snapshot, work: Work, ready: bool, cx: &mut Context<Self>) -> AnyElement {
         let muted = look::colors(cx).text_muted;
-        let signal = transcript::workspace_signal(workspace, records.sessions(&workspace.id));
+        let signal = client_ui::workspace_signal(workspace, records.sessions(&workspace.id));
         let id = workspace.id.clone();
         let names = v_flex()
             .flex_1()
@@ -115,7 +115,7 @@ impl Works {
         Self(
             listed
                 .filter_map(|workspace| {
-                    let work = transcript::recorded_work(link.pull_request_of(workspace).as_ref())?;
+                    let work = client_ui::recorded_work(link.pull_request_of(workspace).as_ref())?;
                     Some((workspace.id.clone(), work))
                 })
                 .collect(),

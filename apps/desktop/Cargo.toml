@@ -25,6 +25,7 @@ protocol.workspace = true
 client-core.workspace = true
 local-hub.workspace = true
 transcript.workspace = true
+client-ui.workspace = true
 terminal-view.workspace = true
 gpui-kit.workspace = true
 look.workspace = true

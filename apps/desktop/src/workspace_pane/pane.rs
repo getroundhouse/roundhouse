@@ -102,7 +102,7 @@ pub(super) enum Next {
 }
 
 pub struct WorkspacePane {
-    pub(super) model_lookup: crate::model_lookup::Lookup,
+    pub(super) model_lookup: client_ui::FollowedModels,
     pub(super) client: Client,
     /// Client-core's copy of the hub's records, which keeps the subagents of each chat the pane shows.
     pub(super) records: RecordsFeed,
@@ -207,7 +207,7 @@ impl WorkspacePane {
             busy: Busy::Free,
             retitling: false,
             reading: Reading::default(),
-            model_lookup: crate::model_lookup::Lookup::default(),
+            model_lookup: client_ui::FollowedModels::default(),
             dictation,
             dictation_chat: None,
             typed_before_talking: None,
