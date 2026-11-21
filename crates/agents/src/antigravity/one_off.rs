@@ -173,6 +173,7 @@ fn title_spec(cwd: &Path) -> AgentSpec {
         tools_token: None,
         login: None,
         repository: None,
+        interaction: protocol::model::InteractionMode::Typing,
     }
 }
 

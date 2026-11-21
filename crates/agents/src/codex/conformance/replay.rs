@@ -48,6 +48,7 @@ impl Binding for Codex {
             tools_token: None,
             login: None,
             repository: None,
+            interaction: protocol::model::InteractionMode::Typing,
         };
         crate::codex::spawn_at(launch.bin, spec, output, AgentOptions::default())
             .await

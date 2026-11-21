@@ -82,6 +82,7 @@ impl Harness {
             tools_token: None,
             login: None,
             repository: None,
+            interaction: protocol::model::InteractionMode::Typing,
         };
         let options = AgentOptions {
             // `agy` keeps its conversations under the home, which the room stands in for.

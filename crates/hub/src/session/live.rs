@@ -114,6 +114,8 @@ pub(super) struct LiveState {
     pub(super) interaction: protocol::model::Interaction,
     /// The reply that device is reading out, if any.
     pub(super) reading_out: super::reading_out::ReadingOut,
+    /// How the run was last told the person talks with the agent, as [`super::mode_told`] says.
+    pub(super) mode_told: Option<(RunId, protocol::model::InteractionMode)>,
     /// Prompts recorded for the agent that it's sent once its turn ends, oldest first, as
     /// [`super::commands::Sendable`]'s module says. Only this hub has them, so a hub that goes before the turn ends
     /// loses them, and they stay untaken.
@@ -208,6 +210,7 @@ impl LiveSession {
                 closed_at_ms: stored.session.closed_at_ms,
                 interaction: stored.session.interaction.clone(),
                 reading_out: super::reading_out::ReadingOut::default(),
+                mode_told: None,
                 after_the_turn: Vec::new(),
                 live: None,
             }),

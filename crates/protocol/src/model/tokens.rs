@@ -93,6 +93,7 @@ mod tests {
             tools_token: Some(ToolsToken::new(SECRET)),
             login: Some(login()),
             repository: None,
+            interaction: crate::model::InteractionMode::Typing,
         }
     }
 

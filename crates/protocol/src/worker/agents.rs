@@ -7,7 +7,7 @@ use super::{Reply, Request, ToolsToken, WorkerRequest, WorkerResponse};
 use crate::capability::Capabilities;
 use crate::capability::conversation::Start;
 use crate::capability::settings::Settings;
-use crate::model::{AgentKind, AgentLogin, GithubRepositoryName, RunId, SessionId};
+use crate::model::{AgentKind, AgentLogin, GithubRepositoryName, InteractionMode, RunId, SessionId};
 
 /// Starts the session's agent, unless it's running already.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
@@ -37,6 +37,11 @@ pub struct AgentSpec {
     /// and pull requests by their real addresses. `None` for one that isn't on github.com.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub repository: Option<GithubRepositoryName>,
+    /// How the person talks with the agent as it starts, which an adapter that says lines for it, as
+    /// [`crate::capability::output::CoverLine`] says, needs to know, and is told as it changes with
+    /// [`crate::capability::Control::Interaction`]. Typing is left out, as in every launch from before.
+    #[serde(default, skip_serializing_if = "InteractionMode::is_typing")]
+    pub interaction: InteractionMode,
 }
 
 impl Request for AgentSpec {

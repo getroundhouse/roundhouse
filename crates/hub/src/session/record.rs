@@ -124,16 +124,20 @@ impl LiveSession {
     /// them together.
     async fn after_commit(&self, hub: &Arc<Hub>, recorded: Vec<(Origin, &Appended, Next)>, made: Made) {
         let appended: Vec<&Appended> = recorded.iter().map(|(_, appended, _)| *appended).collect();
-        let (ready, turn_ended, left) = {
+        let (ready, turn_ended, left, mode_changed) = {
             let mut state = self.state.lock();
             let was_ready = state.ready_for_queue();
             let was_in_turn = state.progress.status.in_turn();
-            let had = state.interaction.device().map(|had| had.id.clone());
+            let (had, was) = (state.interaction.device().map(|had| had.id.clone()), state.interaction.mode());
             take_all(&mut state, recorded);
             let turn_ended = was_in_turn && !state.progress.status.in_turn();
             let left = left_conversation(had.as_ref(), &state.interaction);
-            (!was_ready && state.ready_for_queue(), turn_ended && !state.after_the_turn.is_empty(), left)
+            let mode_changed = state.interaction.mode() != was;
+            (!was_ready && state.ready_for_queue(), turn_ended && !state.after_the_turn.is_empty(), left, mode_changed)
         };
+        if mode_changed {
+            self.wake_the_mode();
+        }
         // A prompt typed while the mode was on ended it, so what the device was reading out is settled.
         if left {
             self.settle_hearing(hub).await;

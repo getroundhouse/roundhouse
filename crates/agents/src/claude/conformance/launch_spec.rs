@@ -33,6 +33,7 @@ pub(super) fn spec(
         tools_token: None,
         login: None,
         repository: None,
+        interaction: protocol::model::InteractionMode::Typing,
     })
 }
 

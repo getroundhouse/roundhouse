@@ -74,6 +74,7 @@ pub async fn title_for(
         tools_token: None,
         login: None,
         repository: None,
+        interaction: protocol::model::InteractionMode::Typing,
     };
     let (tx, mut rx) = mpsc::channel(128);
     let options = AgentOptions { tools: None, ..options.clone() };

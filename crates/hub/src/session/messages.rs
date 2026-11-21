@@ -98,6 +98,9 @@ pub(crate) enum Command {
     },
     /// Starts the agent, if it's waiting on nothing but a wait, so it hears how the wait ended.
     WakeAgent,
+    /// Tells the run how the person talks with the agent, if that changed since it was last told, after whatever was
+    /// asked before, so a prompt said out loud reaches a run that knows the mode is on.
+    TellTheMode,
     /// Sends the prompts kept for the turn's end, which has come.
     SendAfterTheTurn,
     /// The session is gone. What's queued ahead of this is carried out, and then the task stops.

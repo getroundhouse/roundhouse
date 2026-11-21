@@ -200,6 +200,7 @@ impl Launcher for RealCli {
             tools_token: None,
             login: None,
             repository: None,
+            interaction: protocol::model::InteractionMode::Typing,
         };
         let (sender, mut receiver) = mpsc::channel(1024);
         let conversation = self.conversation.clone();

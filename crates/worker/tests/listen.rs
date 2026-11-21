@@ -75,6 +75,7 @@ impl Listening {
             tools_token: None,
             login: None,
             repository: None,
+            interaction: protocol::model::InteractionMode::Typing,
         })
     }
 

@@ -33,7 +33,8 @@ pub(super) async fn apply(process: &ClaudeProcess, control: &Control) -> Result<
         | Control::Review { .. }
         | Control::ReadRules
         | Control::ListModels
-        | Control::ListOutside => Err(unsupported()),
+        | Control::ListOutside
+        | Control::Interaction { .. } => Err(unsupported()),
     }
 }
 

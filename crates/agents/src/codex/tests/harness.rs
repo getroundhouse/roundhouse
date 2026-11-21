@@ -43,6 +43,7 @@ impl Harness {
             tools_token: None,
             login: None,
             repository: None,
+            interaction: protocol::model::InteractionMode::Typing,
         };
         let options = AgentOptions { pid_file: Some(room.path().join("pid")), ..Default::default() };
         let (tx, rx) = mpsc::channel(1024);

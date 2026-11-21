@@ -64,7 +64,8 @@ impl AgentProcess for AntigravityProcess {
             | Control::Review { .. }
             | Control::ReadRules
             | Control::ListModels
-            | Control::ListOutside => {
+            | Control::ListOutside
+            | Control::Interaction { .. } => {
                 Err(AgentError::UnknownRequest("Antigravity does not support that control".into()))
             }
         }
