@@ -19,10 +19,12 @@ pub(crate) const CHOSEN: f32 = 0.09;
 const _: () = assert!(UNDER_POINTER < CHOSEN && CHOSEN < PRESSED);
 
 /// Installs the app's colours, and its theme as the kit's dark theme, and switches to it, with the rem and code's size
-/// of the reach the process draws for, which [`Reach::choose`] chooses before this. Going through the kit,
+/// of the reach the process draws for, which [`Reach::choose`] chooses before this, and starts the clock its marks move
+/// by. Going through the kit,
 /// rather than setting colours on the theme directly, is what lets its other layers, such as rich text, pick the
 /// colours up too.
 pub fn apply(cx: &mut App) {
+    crate::clock::start(cx);
     let colors = Colors::dark();
     let config = Rc::new(config(&colors));
     cx.set_global(colors);

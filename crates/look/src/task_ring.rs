@@ -31,7 +31,7 @@ const WATCHING: f32 = 0.75;
 /// The ring for one background task, or a piece of the app's own work, as wide as a mark beside text, so what follows
 /// lines up with the working line's.
 pub fn task_ring(ring: TaskRing, cx: &App) -> impl IntoElement {
-    let t = (ring == TaskRing::Running && clock::moving(cx)).then(clock::elapsed);
+    let t = (ring == TaskRing::Running && clock::moving(cx)).then(|| clock::elapsed(cx));
     let drawn = canvas(
         |_, _, _| {},
         move |bounds, (), window, cx| {
@@ -47,7 +47,7 @@ pub fn task_ring(ring: TaskRing, cx: &App) -> impl IntoElement {
 /// A task's ring, painted within `bounds`, as [`task_ring`] draws it. Returns whether it moves, so what paints it asks
 /// for the next frame.
 pub(crate) fn paint_task_ring(ring: TaskRing, bounds: Bounds<Pixels>, window: &mut Window, cx: &App) -> bool {
-    let t = (ring == TaskRing::Running && clock::moving(cx)).then(clock::elapsed);
+    let t = (ring == TaskRing::Running && clock::moving(cx)).then(|| clock::elapsed(cx));
     paint_at(ring, t, bounds, window, cx)
 }
 
