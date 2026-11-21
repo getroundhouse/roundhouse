@@ -2,16 +2,15 @@ use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
 use parking_lot::Mutex;
-use protocol::model::IssueNumber;
 use rusqlite::{Connection, params};
 use tracing::warn;
 
-use super::keys::{Facet, Item};
+use super::keys::{Facet, Subject};
 
 /// The form of what the file keeps. Another, as a build that kept another form left it, is emptied, and the cache is
 /// read from GitHub again, rather than migrated. Raise it with any change to the table, or to the form of what's
 /// written in `said`.
-pub(super) const VERSION: i64 = 1;
+pub(super) const VERSION: i64 = 2;
 
 /// The file the cache is kept in, so a hub that starts again has it. Writes wait for no sync, since a power cut that
 /// takes the last of them back loses only what GitHub can say again.
@@ -23,7 +22,7 @@ pub(super) struct CacheFile {
 
 /// One facet of an issue or a pull request, as the file keeps it: what GitHub said, as JSON, and when it was read.
 pub(super) struct Row {
-    pub(super) item: Item,
+    pub(super) subject: Subject,
     pub(super) facet: Facet,
     pub(super) said: String,
     pub(super) read_at_ms: i64,
@@ -70,16 +69,17 @@ impl CacheFile {
         let conn = self.conn.lock();
         let Some(conn) = conn.as_ref() else { return Ok(Vec::new()) };
         conn.execute("DELETE FROM facets WHERE read_at_ms < ?", [since_ms])?;
-        let mut statement = conn.prepare("SELECT repository, number, facet, said, read_at_ms FROM facets")?;
+        let mut statement = conn.prepare("SELECT repository, subject, facet, said, read_at_ms FROM facets")?;
         let rows = statement.query_map([], |row| {
-            Ok((row.get::<_, String>(0)?, row.get::<_, u64>(1)?, row.get::<_, String>(2)?, row.get(3)?, row.get(4)?))
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?, row.get::<_, String>(2)?, row.get(3)?, row.get(4)?))
         })?;
         let mut kept = Vec::new();
         for row in rows {
-            let (repository, number, facet, said, read_at_ms) = row?;
-            let Ok(number) = IssueNumber::try_from(number) else { continue };
-            let Some(facet) = Facet::named(&facet) else { continue };
-            kept.push(Row { item: Item::from_kept(repository, number), facet, said, read_at_ms });
+            let (repository, subject, facet, said, read_at_ms) = row?;
+            let (Some(subject), Some(facet)) = (Subject::from_kept(repository, &subject), Facet::named(&facet)) else {
+                continue;
+            };
+            kept.push(Row { subject, facet, said, read_at_ms });
         }
         Ok(kept)
     }
@@ -89,23 +89,23 @@ impl CacheFile {
         let conn = self.conn.lock();
         let Some(conn) = conn.as_ref() else { return Ok(()) };
         conn.execute(
-            "INSERT INTO facets (repository, number, facet, said, read_at_ms) VALUES (?1, ?2, ?3, ?4, ?5)
-                 ON CONFLICT (repository, number, facet) DO UPDATE SET said = excluded.said,
+            "INSERT INTO facets (repository, subject, facet, said, read_at_ms) VALUES (?1, ?2, ?3, ?4, ?5)
+                 ON CONFLICT (repository, subject, facet) DO UPDATE SET said = excluded.said,
                      read_at_ms = excluded.read_at_ms",
-            params![row.item.repository(), row.item.number().get(), row.facet.name(), row.said, row.read_at_ms],
+            params![row.subject.repository(), row.subject.key(), row.facet.name(), row.said, row.read_at_ms],
         )?;
         Ok(())
     }
 
-    /// Forgets every facet of `items`.
-    pub(super) fn forget(&self, items: &[Item]) -> rusqlite::Result<()> {
+    /// Forgets every facet of `subjects`.
+    pub(super) fn forget(&self, subjects: &[Subject]) -> rusqlite::Result<()> {
         let mut conn = self.conn.lock();
         let Some(conn) = conn.as_mut() else { return Ok(()) };
         let tx = conn.transaction()?;
-        for item in items {
+        for subject in subjects {
             tx.execute(
-                "DELETE FROM facets WHERE repository = ?1 AND number = ?2",
-                params![item.repository(), item.number().get()],
+                "DELETE FROM facets WHERE repository = ?1 AND subject = ?2",
+                params![subject.repository(), subject.key()],
             )?;
         }
         tx.commit()
@@ -129,11 +129,11 @@ fn opened(path: &Path) -> Result<Connection, OpenError> {
              DROP TABLE IF EXISTS facets;
              CREATE TABLE facets (
                  repository TEXT NOT NULL,
-                 number INTEGER NOT NULL,
+                 subject TEXT NOT NULL,
                  facet TEXT NOT NULL,
                  said TEXT NOT NULL,
                  read_at_ms INTEGER NOT NULL,
-                 PRIMARY KEY (repository, number, facet)
+                 PRIMARY KEY (repository, subject, facet)
              ) WITHOUT ROWID;
              PRAGMA user_version = {VERSION};
              COMMIT;"

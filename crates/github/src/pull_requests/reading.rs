@@ -5,13 +5,13 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use protocol::client::{ApiError, ErrorCode};
 use protocol::model::{
-    GitHubRepository, GithubRepositoryName, ObservedPullRequest, PrState, PullRequestNumber, PullRequestsSnapshot,
-    Reference,
+    BranchName, GitHubRepository, GithubRepositoryName, ObservedPullRequest, PrState, PullRequestNumber,
+    PullRequestsSnapshot, Reference,
 };
 use serde_json::Value;
 
 use super::asked::{PullRequestsAsk, Unread};
-use super::facets::{self, Checks, Reviews, Stack, Status};
+use super::facets::{self, Checks, Reviews, Rules, Stack, Status};
 use super::parse::{self, Metadata, Policy, ReportedCheck};
 use super::query::Part;
 use super::said::{array, changed, incomplete, next, string};
@@ -51,6 +51,8 @@ struct Branch {
     policy: Policy,
     after: Option<String>,
     read: bool,
+    /// Whether the ask knew its rules, so they weren't read.
+    known: bool,
 }
 
 impl Reading {
@@ -209,7 +211,11 @@ impl Reading {
         let open = metadata.state == PrState::Open;
         if open && !self.branches.iter().any(|branch| branch.name == metadata.destination) {
             let name = metadata.destination.clone();
-            self.branches.push(Branch { name, policy: Policy::default(), after: None, read: false });
+            let known = self.ask.known_rules.iter().find(|(branch, _)| branch.as_str() == name);
+            self.branches.push(match known {
+                Some((_, rules)) => Branch { name, policy: rules.clone(), after: None, read: true, known: true },
+                None => Branch { name, policy: Policy::default(), after: None, read: false, known: false },
+            });
         }
         if let Some(looked) = self.looked.get_mut(&number) {
             looked.metadata = Some(metadata);
@@ -261,6 +267,12 @@ impl Reading {
     /// The summary of each pull request it looked at, or why it couldn't be read, apart from whether the rest could.
     pub(super) fn take_summaries(&mut self) -> Vec<(PullRequestNumber, Result<Reference, ApiError>)> {
         std::mem::take(&mut self.summaries)
+    }
+
+    /// The rules of each branch it read whole, which the ask didn't know.
+    pub(super) fn read_rules(&self) -> Vec<(BranchName, Rules)> {
+        let read = self.branches.iter().filter(|branch| branch.read && !branch.known);
+        read.map(|branch| (BranchName::from(branch.name.as_str()), branch.policy.clone())).collect()
     }
 
     /// What it found, once [`Reading::parts`] has nothing left to ask, or why it couldn't be read.

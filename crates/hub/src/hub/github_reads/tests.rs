@@ -191,3 +191,22 @@ async fn a_chip_of_a_pull_request_read_for_the_bar_is_what_that_read_found() {
     assert_eq!((reference.title.as_str(), pull_request.checks), ("Change 7", Some(ChecksRollup::Failed)));
     assert_eq!(github.asked().len(), asked, "GitHub wasn't asked again");
 }
+
+/// A branch's rules for required checks are read with the first read of a pull request into it, and taken as they were
+/// for the reads after, until they're as old as they're kept for.
+#[tokio::test]
+async fn a_branchs_rules_are_read_again_only_once_theyre_stale() {
+    let dir = tempfile::tempdir().unwrap();
+    let (hub, pull_requests, github) = crate::hub::tests::hub_on_github(dir.path()).await;
+    pull_requests.set(7, github::PullRequestState::Open);
+    let rules_read = || github.asked().iter().filter(|asked| asked.contains("refUpdateRule")).count();
+
+    hub.workspace_pull_request("w".into()).await.unwrap();
+    let again = hub.workspace_pull_request("w".into()).await.unwrap().unwrap();
+
+    assert_eq!(rules_read(), 1);
+    assert_eq!(again.checks.pending, 1, "the check main's rules require, as they were read");
+    hub.github_cache.age(super::reading::RULES_FRESH_FOR);
+    hub.workspace_pull_request("w".into()).await.unwrap();
+    assert_eq!(rules_read(), 2);
+}

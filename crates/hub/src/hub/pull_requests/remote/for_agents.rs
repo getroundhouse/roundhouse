@@ -31,12 +31,9 @@ impl Hub {
             )
         })?;
         jobs::step("waiting for GitHub to answer for the pull requests");
-        let read = self
-            .github
-            .read_pull_requests(&token, vec![PullRequestsAsk { repository, selection }], Asked::Agent.leaving())
-            .await;
+        let ask = PullRequestsAsk { repository, selection, known_rules: Vec::new() };
+        let read = self.read_pull_requests(&token, vec![ask], Asked::Agent.leaving()).await;
         self.github_said(&reads_as, read.rate_limit);
-        self.keep_read_summaries(read.summaries).await;
         let answer = read.answers.into_iter().next().ok_or_else(|| ApiError::new(ErrorCode::Worker, "no answer"))?;
         let snapshot = answer.map_err(|unread| unread.error)?;
         Ok((snapshot, held))

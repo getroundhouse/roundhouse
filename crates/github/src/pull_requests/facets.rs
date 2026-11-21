@@ -60,7 +60,7 @@ pub(crate) struct Checks {
 }
 
 /// A branch's rules for the checks a pull request into it needs.
-pub(crate) type Rules = Policy;
+pub type Rules = Policy;
 
 impl Status {
     /// What `pr`, as GitHub answered for its fields, says.

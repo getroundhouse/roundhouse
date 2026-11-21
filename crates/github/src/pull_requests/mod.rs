@@ -4,7 +4,8 @@
 
 mod asked;
 mod facets;
-pub use asked::{PullRequestsAsk, PullRequestsRead, SummaryRead, Unread};
+pub use asked::{PullRequestsAsk, PullRequestsRead, RulesRead, SummaryRead, Unread};
+pub use facets::Rules;
 mod graphql;
 mod heads;
 pub use heads::{BRANCHES_A_QUERY, Headed, HeadsAsk, HeadsRead};

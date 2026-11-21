@@ -46,7 +46,7 @@ pub(in crate::hub::pull_requests) fn scopes(
     for Waited { repository, selection } in waited {
         match on_github(&repository) {
             Ok(name) => {
-                let ask = PullRequestsAsk { repository: name, selection };
+                let ask = PullRequestsAsk { repository: name, selection, known_rules: Vec::new() };
                 scopes.push(Scope { ask, own: None, waited: Some(repository) });
             }
             Err(error) => unreadable.push(WaitsRead::failed(repository, error)),
@@ -60,7 +60,8 @@ pub(in crate::hub::pull_requests) fn scopes(
         if let Some(scope) = scopes.iter_mut().find(same) {
             scope.own = Some(number);
         } else {
-            let ask = PullRequestsAsk { repository, selection: PullRequestSelection::from(number) };
+            let ask =
+                PullRequestsAsk { repository, selection: PullRequestSelection::from(number), known_rules: Vec::new() };
             scopes.push(Scope { ask, own: Some(number), waited: None });
         }
     }

@@ -1,11 +1,15 @@
 use std::time::Duration;
 
-use github::{Leaving, SummaryRead};
-use protocol::model::{GithubRepositoryName, IssueNumber, Reference};
+use github::{Leaving, PullRequestsAsk, PullRequestsRead, SummaryRead};
+use protocol::model::{GithubRepositoryName, GithubToken, IssueNumber, Reference};
 
 use super::super::Hub;
 use crate::github_cache::{Facet, Item};
 use crate::jobs;
+
+/// How long a branch's rules for required checks, which change seldom, are taken as they were read, rather than read
+/// again with every read of pull requests into it, so a change to them reaches waits within this long. *Unconfirmed.*
+pub(in crate::hub) const RULES_FRESH_FOR: Duration = Duration::from_mins(10);
 
 impl Hub {
     /// Reads from GitHub the summaries of those of `asks` the cache has none of as fresh as `fresh_for`, and keeps what
@@ -35,9 +39,36 @@ impl Hub {
         }
     }
 
+    /// Reads `asks` as `token`, leaving what `leaving` leaves of GitHub's limit, as [`github::Github::read_pull_requests`]
+    /// does, but for the rules of their branches the cache has read within [`RULES_FRESH_FOR`], which it gives each ask
+    /// as known. Keeps the summaries and rules it read.
+    pub(in crate::hub) async fn read_pull_requests(
+        &self,
+        token: &GithubToken,
+        mut asks: Vec<PullRequestsAsk>,
+        leaving: Leaving,
+    ) -> PullRequestsRead {
+        for ask in &mut asks {
+            ask.known_rules = self.github_cache.rules_of(&ask.repository, RULES_FRESH_FOR);
+        }
+        let mut read = self.github.read_pull_requests(token, asks, leaving).await;
+        self.keep_read_summaries(std::mem::take(&mut read.summaries)).await;
+        let rules: Vec<_> = std::mem::take(&mut read.rules)
+            .into_iter()
+            .map(|read| (read.repository, read.branch, read.rules))
+            .collect();
+        if !rules.is_empty() {
+            let cache = self.github_cache.clone();
+            if let Err(error) = tokio::task::spawn_blocking(move || cache.keep_rules(rules)).await {
+                tracing::warn!("keeping the rules read from GitHub: {error}");
+            }
+        }
+        read
+    }
+
     /// Keeps the summaries a read of pull requests found as it read the rest of them, as a read of the summaries alone
     /// would, so a chip of one says what the bar's read, or a wait's, found.
-    pub(in crate::hub) async fn keep_read_summaries(&self, summaries: Vec<SummaryRead>) {
+    async fn keep_read_summaries(&self, summaries: Vec<SummaryRead>) {
         let read = summaries
             .into_iter()
             .filter_map(|SummaryRead { repository, number, summary }| {
