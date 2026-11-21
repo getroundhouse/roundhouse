@@ -143,3 +143,10 @@ pub(super) fn sent(ui: &Ui) -> bool {
 pub(super) fn kept(stack: &Stack, chat: &SessionId) -> String {
     stack.client().session_get(chat).unwrap().draft.text
 }
+
+/// Opens Settings at Voice, where dictation and speech are.
+pub(super) fn open_voice_settings(ui: &mut Ui<'_>) {
+    crate::settings::open_settings(ui);
+    ui.click("settings-page-voice");
+    ui.wait("the Voice page", |ui| ui.has("settings-dictation"));
+}

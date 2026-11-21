@@ -4,8 +4,8 @@
 use dictation::Language;
 use gpui_kit::{ScrollDelta, TestAppContext, point, px};
 
+use super::support::open_voice_settings;
 use super::support::{ended, hold_option_space, let_go, ready, say};
-use crate::settings::open_voice_settings;
 use crate::support::{Stack, Ui};
 
 /// Dictates into the composer, and waits for what's said to go in.

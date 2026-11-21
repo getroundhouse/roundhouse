@@ -15,5 +15,5 @@ mod made_up;
 mod search;
 
 mod changing;
+pub(crate) use changing::open_settings;
 use changing::{KEEP_AWAKE, settings_showing};
-pub(crate) use changing::{open_settings, open_voice_settings};

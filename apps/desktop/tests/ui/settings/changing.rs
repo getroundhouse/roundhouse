@@ -19,13 +19,6 @@ pub(crate) fn open_settings(ui: &mut Ui<'_>) {
     ui.wait("Settings", settings_showing);
 }
 
-/// Opens Settings at Voice, where dictation and speech are.
-pub(crate) fn open_voice_settings(ui: &mut Ui<'_>) {
-    open_settings(ui);
-    ui.click("settings-page-voice");
-    ui.wait("the Voice page", |ui| ui.has("settings-dictation"));
-}
-
 /// Flips the switch for "Always expand thinking".
 fn flip_always_expand_thinking(ui: &mut Ui<'_>) {
     ui.click_label("Always expand thinking");

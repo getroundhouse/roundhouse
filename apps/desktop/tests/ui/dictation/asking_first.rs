@@ -8,8 +8,8 @@ use dictation::fake::FakeEngine;
 use fetching::serving::{Reply, serve};
 use gpui_kit::TestAppContext;
 
+use super::support::open_voice_settings;
 use super::support::{SCRIPT, says, type_keys, use_model};
-use crate::settings::open_voice_settings;
 use crate::support::made_up_model::made_up;
 use crate::support::{Stack, Ui};
 

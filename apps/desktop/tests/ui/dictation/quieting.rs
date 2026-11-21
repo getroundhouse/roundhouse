@@ -5,8 +5,8 @@
 use gpui_kit::{ScrollDelta, TestAppContext, point, px};
 use sound::Quieting;
 
+use super::support::open_voice_settings;
 use super::support::{dictating, hold_option_space, let_go, press_space, ready};
-use crate::settings::open_voice_settings;
 use crate::support::{Stack, Ui};
 use desktop::workspace_pane::{SPACE_DICTATES_AFTER, SPACE_LISTENS_AFTER};
 
