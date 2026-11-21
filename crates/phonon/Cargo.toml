@@ -1,0 +1,21 @@
+[package]
+name = "phonon"
+description = "Gradium's Phonon 31m, which turns text into speech on this device's CPU, and its pinned files. It knows nothing of what it says or where the audio goes. No UI and no async runtime."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+license.workspace = true
+
+[dependencies]
+# Phonon's files, which say what to download.
+models.workspace = true
+ptts.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+# The example downloads the model when it isn't there, and plays what it says.
+models = { workspace = true, features = ["download"] }
+sound.workspace = true
+
+[lints]
+workspace = true

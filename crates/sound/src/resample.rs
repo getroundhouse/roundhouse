@@ -1,8 +1,8 @@
-//! Converting the microphone's audio to what its caller takes: one channel at the rate it asks for, such as the 16 kHz
-//! dictation's model takes.
+//! Converting audio between the device's rate and its caller's: the microphone's to one channel at the rate its caller
+//! asks for, such as the 16 kHz dictation's model takes, and what's played from its caller's rate to the speakers'.
 //!
-//! The microphone is heard at its own rate rather than asked for another, since on a Mac asking changes the device's
-//! rate for every app using it. Each sample out is the samples in around where it falls, weighed by a windowed sinc
+//! The device is heard and played at its own rate rather than asked for another, since on a Mac asking changes the
+//! device's rate for every app using it. Each sample out is the samples in around where it falls, weighed by a windowed sinc
 //! that passes what's under 87.5% of the slower rate's highest frequency and stops what's over 97.5% of it, which
 //! would otherwise fold back as noise: down to 16 kHz, what's under 7 kHz is passed and what's over 7.8 kHz stopped.
 //! The weights are worked out once, for 256 places between two samples in, so hearing is a few multiplications a
@@ -68,6 +68,12 @@ impl Resampler {
         self.kept.drain(..done);
         self.next -= real(done);
         out
+    }
+
+    /// What's kept back of the audio pushed so far, which the samples out near its end need what follows it to make,
+    /// as if silence followed. What's pushed after it follows that silence, a few milliseconds of it.
+    pub(crate) fn finish(&mut self) -> Vec<f32> {
+        self.push(&vec![0.0; (self.half + 1) * usize::from(self.channels)])
     }
 
     /// The sample out that falls at `at` in `kept`.
@@ -156,11 +162,11 @@ mod tests {
         (audio.iter().map(|x| x * x).sum::<f32>() / audio.len() as f32).sqrt()
     }
 
-    /// How many times a second it crosses zero going up.
+    /// How many times a second `audio`, at `rate`, crosses zero going up.
     #[expect(clippy::cast_precision_loss, reason = "a second of samples")]
-    fn frequency(audio: &[f32]) -> f64 {
+    fn frequency(audio: &[f32], rate: u32) -> f64 {
         let ups = audio.windows(2).filter(|w| w[0] < 0.0 && w[1] >= 0.0).count();
-        ups as f64 * f64::from(SAMPLE_RATE) / audio.len() as f64
+        ups as f64 * f64::from(rate) / audio.len() as f64
     }
 
     #[test]
@@ -169,13 +175,50 @@ mod tests {
             for hz in [200.0, 1000.0, 6000.0] {
                 let out = resampled(&tone(hz, 0.5, rate, 1, 1.0), rate, 1);
 
-                assert!(
-                    (frequency(&out) - hz).abs() < hz * 0.01,
-                    "{hz} Hz from {rate} came out at {}",
-                    frequency(&out)
-                );
+                let heard = frequency(&out, SAMPLE_RATE);
+                assert!((heard - hz).abs() < hz * 0.01, "{hz} Hz from {rate} came out at {heard}");
                 assert!((rms(&out) - 0.5 / 2f32.sqrt()).abs() < 0.01, "{hz} Hz from {rate} at {}", rms(&out));
             }
+        }
+    }
+
+    /// Phonon's 24 kHz, up to the rates speakers play at, keeps a voice's pitch and level.
+    #[test]
+    fn a_voice_keeps_its_pitch_and_level_up_to_every_common_rate() {
+        for to in [44_100, 48_000, 96_000] {
+            for hz in [200.0, 1000.0, 6000.0, 10_000.0] {
+                let mut resampler = Resampler::new(24_000, 1, to);
+                let out = resampler.push(&tone(hz, 0.5, 24_000, 1, 1.0));
+                let tenth = (to / 10) as usize;
+                let out = &out[tenth..out.len() - tenth];
+                let heard = frequency(out, to);
+
+                assert!((heard - hz).abs() < hz * 0.01, "{hz} Hz up to {to} came out at {heard}");
+                assert!((rms(out) - 0.5 / 2f32.sqrt()).abs() < 0.01, "{hz} Hz up to {to} at {}", rms(out));
+            }
+        }
+    }
+
+    /// Finishing gives the rest of what was pushed, so all of it is played, and nothing comes twice.
+    #[test]
+    fn finishing_gives_the_rest_of_what_was_pushed() {
+        for (rate, to) in [(24_000, 48_000), (24_000, 44_100), (48_000, SAMPLE_RATE)] {
+            let mut resampler = Resampler::new(rate, 1, to);
+            let pushed = resampler.push(&tone(440.0, 0.5, rate, 1, 1.0)).len();
+            let rest = resampler.finish().len();
+
+            let expected = to as usize;
+            assert!(pushed < expected, "some is kept back from {rate} to {to}");
+            assert!((pushed + rest).abs_diff(expected) <= 2, "{pushed} and {rest} from {rate} to {to}, for {expected}");
+            let after = resampler.push(&tone(440.0, 0.5, rate, 1, 0.1)).len() + resampler.finish().len();
+            // A tenth of a second, after the silence finishing put before it: as many samples in as the filter is
+            // wide on each side, which is wider going down.
+            let half = HALF_WIDTH * rate.div_ceil(to) as usize;
+            let silence = (half + 1) * to as usize / rate as usize + 2;
+            assert!(
+                (expected / 10..=expected / 10 + silence).contains(&after),
+                "{after} for a tenth of a second from {rate} to {to}: what was finished doesn't come again"
+            );
         }
     }
 

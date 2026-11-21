@@ -28,11 +28,12 @@ env:
   # The test runner, which Renovate raises.
   # renovate: datasource=crate depName=cargo-nextest
   NEXTEST_VERSION: 0.9.152
-  # What GPUI's Linux crates build against. Verified on 2026-11-08 in Docker, not minimized. Then lld, which
-  # .cargo/config.toml links with on ARM64.
+  # What GPUI's Linux crates build against. Verified on 2026-11-08 in Docker, not minimized. Then ALSA, which `cpal`
+  # plays the speakers through, and lld, which .cargo/config.toml links with on ARM64.
   LINUX_PACKAGES: >-
     pkg-config cmake clang libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev libx11-xcb-dev libxcb1-dev
     libfontconfig-dev libfreetype-dev libvulkan-dev libssl-dev libzstd-dev
+    libasound2-dev
     lld
 
 # The ruleset requires only `checks`. `changes` does the skipping, since a required check whose workflow never runs
