@@ -11,7 +11,7 @@ use protocol::model::{
 use serde_json::Value;
 
 use super::asked::{PullRequestsAsk, Unread};
-use super::facets::{self, Checks, Reviews, Rules, Stack, Status};
+use super::facets::{self, Checks, PullFacets, Reviews, Rules, Stack, Status};
 use super::parse::{self, Metadata, Policy, ReportedCheck};
 use super::query::Part;
 use super::said::{array, changed, incomplete, next, string};
@@ -276,7 +276,7 @@ impl Reading {
     }
 
     /// What it found, once [`Reading::parts`] has nothing left to ask, or why it couldn't be read.
-    pub(super) fn finish(mut self) -> Result<PullRequestsSnapshot, Unread> {
+    pub(super) fn finish(mut self) -> Result<(PullRequestsSnapshot, Vec<PullFacets>), Unread> {
         if let Some(failed) = self.failed.take() {
             return Err(failed);
         }
@@ -284,20 +284,20 @@ impl Reading {
             .into_iter()
             .map(|(number, looked)| self.observed(looked).map_err(|e| (e, number)));
         let observed: Result<Vec<_>, _> = observed.collect();
-        let pull_requests = match observed {
-            Ok(observed) => observed,
+        let (pull_requests, facets) = match observed {
+            Ok(observed) => observed.into_iter().unzip(),
             Err((error, number)) => {
                 self.fail(error, Some(number));
                 return Err(self.failed.take().unwrap_or_else(|| Unread { error: incomplete(), affected: Vec::new() }));
             }
         };
         let repository = self.repository.take().ok_or_else(|| Unread { error: incomplete(), affected: Vec::new() })?;
-        Ok(PullRequestsSnapshot { repository, observed_at_ms: self.began_ms, pull_requests })
+        Ok((PullRequestsSnapshot { repository, observed_at_ms: self.began_ms, pull_requests }, facets))
     }
 
     /// What one pull request is: what it was confirmed to be, with the checks read of it and which of them its
     /// branch's rules require.
-    fn observed(&self, looked: Looked) -> Result<ObservedPullRequest, ApiError> {
+    fn observed(&self, looked: Looked) -> Result<(ObservedPullRequest, PullFacets), ApiError> {
         let Looked { pr, metadata, checks, confirmed, .. } = looked;
         let (metadata, confirmed) = (metadata.ok_or_else(incomplete)?, confirmed.ok_or_else(incomplete)?);
         let revision = pr["statusCheckRollup"]["commit"]["oid"].as_str().map(Into::into);
@@ -307,12 +307,12 @@ impl Reading {
             .iter()
             .find(|branch| metadata.state == PrState::Open && branch.name == metadata.destination)
             .map(|branch| &branch.policy);
-        Ok(facets::observe(
-            Status::read(&confirmed)?,
-            Reviews::read(&confirmed)?,
-            Stack::read(&confirmed, &metadata)?,
-            Checks { revision, reported: checks },
-            rules,
-        ))
+        let facets = PullFacets {
+            status: Status::read(&confirmed)?,
+            reviews: Reviews::read(&confirmed)?,
+            stack: Stack::read(&confirmed, &metadata)?,
+            checks: Checks { revision, reported: checks },
+        };
+        Ok((facets::observe(facets.clone(), rules), facets))
     }
 }

@@ -6,6 +6,7 @@ use protocol::model::{
     BranchName, CheckState, Checks as CheckCounts, CommitId, LeftQueue, Local, MergeState, Mergeability,
     ObservedPullRequest, PrState, PullRequest, PullRequestNumber, QueueState, Review,
 };
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use super::parse::{Metadata, Policy, ReportedCheck, review, time};
@@ -13,50 +14,50 @@ use super::said::{array, changed, incomplete, string};
 
 /// Where a pull request stands on its own: what it is, the commits it's at, whether it can merge, and its place in
 /// the merge queue. Its plain fields, which cost no more than asking for it.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct Status {
-    pub(crate) number: u64,
-    pub(crate) url: String,
-    pub(crate) title: String,
-    pub(crate) state: PrState,
-    pub(crate) is_draft: bool,
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Status {
+    pub number: u64,
+    pub url: String,
+    pub title: String,
+    pub state: PrState,
+    pub is_draft: bool,
     /// The branch it merges into.
-    pub(crate) base_name: BranchName,
-    pub(crate) head: CommitId,
-    pub(crate) base: CommitId,
-    pub(crate) merge_state: MergeState,
-    pub(crate) mergeable: Mergeability,
-    pub(crate) review: Review,
-    pub(crate) queue: Option<QueueState>,
+    pub base_name: BranchName,
+    pub head: CommitId,
+    pub base: CommitId,
+    pub merge_state: MergeState,
+    pub mergeable: Mergeability,
+    pub review: Review,
+    pub queue: Option<QueueState>,
     /// The last time it left the merge queue without merging.
-    pub(crate) left_queue: Option<LeftQueue>,
+    pub left_queue: Option<LeftQueue>,
 }
 
 /// What its reviews say, beyond the decision its status has.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct Reviews {
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Reviews {
     /// When a review last asked for changes, unless it's been dismissed.
-    pub(crate) changes_requested_at_ms: Option<i64>,
+    pub changes_requested_at_ms: Option<i64>,
 }
 
 /// Where it is in its stack, if it's in one.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct Stack {
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Stack {
     /// Where it merges in the end: its stack's trunk, or the branch it merges into when it's in none.
-    pub(crate) destination: BranchName,
+    pub destination: BranchName,
     /// Those open under it, lowest first.
-    pub(crate) dependencies: Vec<PullRequestNumber>,
+    pub dependencies: Vec<PullRequestNumber>,
     /// Whether the one just under it is an ancestor of its head, or `None` when that couldn't be told.
-    pub(crate) linear: Option<bool>,
+    pub linear: Option<bool>,
 }
 
 /// The checks reported for the commit GitHub gives a pull request's checks on, which is its head, or the merge queue's
 /// test merge of it, with whether GitHub says each is required of it.
-#[derive(Debug)]
-pub(crate) struct Checks {
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Checks {
     /// The commit they ran on, or `None` when GitHub has none for it.
-    pub(crate) revision: Option<CommitId>,
-    pub(crate) reported: Vec<ReportedCheck>,
+    pub revision: Option<CommitId>,
+    pub reported: Vec<ReportedCheck>,
 }
 
 /// A branch's rules for the checks a pull request into it needs.
@@ -64,7 +65,7 @@ pub type Rules = Policy;
 
 impl Status {
     /// What `pr`, as GitHub answered for its fields, says.
-    pub(crate) fn read(pr: &Value) -> Result<Self, ApiError> {
+    pub(super) fn read(pr: &Value) -> Result<Self, ApiError> {
         let parse = |key: &str| pr.get(key).cloned().ok_or_else(incomplete);
         let entry = pr.get("mergeQueueEntry").ok_or_else(incomplete)?;
         let queue = if entry.is_null() {
@@ -102,7 +103,7 @@ impl Status {
 
 impl Reviews {
     /// What `pr`, as GitHub answered for its fields, says of its reviews.
-    pub(crate) fn read(pr: &Value) -> Result<Self, ApiError> {
+    pub(super) fn read(pr: &Value) -> Result<Self, ApiError> {
         let last = array(&pr["reviews"], "nodes")?.last();
         Ok(Self { changes_requested_at_ms: last.map(|review| time(&review["submittedAt"])).transpose()? })
     }
@@ -111,7 +112,7 @@ impl Reviews {
 impl Stack {
     /// Where `metadata`, read whole, puts it, and whether it's linear, as `pr`, its fields read again with how far its
     /// head is behind the one under it, says.
-    pub(crate) fn read(pr: &Value, metadata: &Metadata) -> Result<Self, ApiError> {
+    pub(super) fn read(pr: &Value, metadata: &Metadata) -> Result<Self, ApiError> {
         Ok(Self {
             destination: metadata.destination.as_str().into(),
             dependencies: metadata.dependencies.clone(),
@@ -138,16 +139,10 @@ fn linear(pr: &Value, metadata: &Metadata) -> Result<Option<bool>, ApiError> {
     Ok(Some(compare["behindBy"].as_u64().ok_or_else(incomplete)? == 0))
 }
 
-/// The pull request its facets make, as the bar and waits read it: `status`, `reviews` and `stack`, with `checks`,
-/// which `rules`, its destination's, say which are required, or none for one that's merged or closed, whose checks no
-/// longer matter.
-pub(crate) fn observe(
-    status: Status,
-    reviews: Reviews,
-    stack: Stack,
-    checks: Checks,
-    rules: Option<&Rules>,
-) -> ObservedPullRequest {
+/// The pull request its `facets` make, as the bar and waits read it, with the checks `rules`, its destination's, say
+/// are required, or none for one that's merged or closed, whose checks no longer matter.
+pub fn observe(facets: PullFacets, rules: Option<&Rules>) -> ObservedPullRequest {
+    let PullFacets { status, reviews, stack, checks } = facets;
     let done = matches!(status.state, PrState::Merged | PrState::Closed);
     let empty = Rules::default();
     let observed = if done { Vec::new() } else { rules.unwrap_or(&empty).checks(checks.reported) };
@@ -187,4 +182,13 @@ pub(crate) fn observe(
         checks_revision: checks.revision,
         requirements_known: true,
     }
+}
+
+/// What a read found of one pull request, in facets, each read at the same moment, which [`observe`] puts together.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PullFacets {
+    pub status: Status,
+    pub reviews: Reviews,
+    pub stack: Stack,
+    pub checks: Checks,
 }

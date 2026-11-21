@@ -33,6 +33,9 @@ pub struct Timers {
     pub look_every: Duration,
     /// How often the hub looks for a pull request to read that nobody asked for.
     pub read_pace: Duration,
+    /// How long after a read of a workspace's open pull request began a client that asks for it takes what that read
+    /// found, rather than having it read again.
+    pub fresh_for_clients: Duration,
     /// The least time between two asks after a sign-in's token, whatever GitHub says, so a code that says none between
     /// them isn't asked after in a loop.
     pub sign_in_pace: Duration,
@@ -70,6 +73,10 @@ impl Timers {
         // A read in turn is due minutes apart, so looking more often finds nothing new, and costs only a look at the
         // store.
         read_pace: Duration::from_secs(1),
+        // Long enough for what follows a read closely, such as a pane shown as its turn ends, or a second client
+        // showing it, and short enough that a pull request that's still moving looks no staler than the 30 seconds a
+        // client asks again in. *Unconfirmed.*
+        fresh_for_clients: Duration::from_secs(10),
         // GitHub's docs give five seconds between asks, so only a code that says less than this keeps to it.
         sign_in_pace: Duration::from_secs(1),
         // Tokio's timers don't count the time a Mac sleeps, so waiting until a token's end, or until it's due to be
@@ -107,8 +114,9 @@ impl Timers {
 #[cfg(feature = "testing")]
 impl Timers {
     /// What a test's hub runs with, unless the test is about one of them: the timers that only make a test wait
-    /// shortened, and the time limits as they are, since they guard against a process being slow, which one on a busy
-    /// runner can be. A test about a time limit sets it to a second or a few, which still outlasts a process
+    /// shortened, as is how long a client's ask takes what a read just before found, which a test would otherwise wait
+    /// out to see a change, and the time limits as they are, since they guard against a process being slow, which one
+    /// on a busy runner can be. A test about a time limit sets it to a second or a few, which still outlasts a process
     /// starting there. The GitHub logins are checked as seldom as the product checks them, since a check can call
     /// GitHub, whose stand-in gives a test's scripted answers in turn, so a check the test didn't ask for would take
     /// one. A test about a check after the first sets how often.
@@ -116,6 +124,7 @@ impl Timers {
         agent_spacing: Duration::from_millis(100),
         look_every: Duration::from_millis(100),
         read_pace: Duration::from_millis(100),
+        fresh_for_clients: Duration::ZERO,
         sign_in_pace: Duration::from_millis(100),
         ..Self::DEFAULT
     };
@@ -142,7 +151,7 @@ mod tests {
         #![proptest_config(Config { rng_seed: RngSeed::Fixed(1), failure_persistence: None, ..Config::default() })]
 
         #[test]
-        fn a_hub_takes_the_timers_a_test_gives_it(times in prop::array::uniform11(duration())) {
+        fn a_hub_takes_the_timers_a_test_gives_it(times in prop::array::uniform12(duration())) {
             let [
                 agent_spacing,
                 picks_up_within,
@@ -152,6 +161,7 @@ mod tests {
                 before_serving,
                 look_every,
                 read_pace,
+                fresh_for_clients,
                 sign_in_pace,
                 check_github_logins_every,
                 look_for_updates_every,
@@ -165,6 +175,7 @@ mod tests {
                 before_serving,
                 look_every,
                 read_pace,
+                fresh_for_clients,
                 sign_in_pace,
                 check_github_logins_every,
                 look_for_updates_every,

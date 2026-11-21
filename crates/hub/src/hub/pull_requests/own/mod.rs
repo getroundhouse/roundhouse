@@ -6,6 +6,7 @@
 //! waits go by one reading of each pull request.
 
 mod asking;
+mod cached;
 mod judging;
 mod reading;
 mod scopes;

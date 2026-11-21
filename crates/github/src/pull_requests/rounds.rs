@@ -6,7 +6,7 @@ use protocol::client::{ApiError, ErrorCode};
 use protocol::model::GithubToken;
 use serde_json::Value;
 
-use super::asked::{PullRequestsAsk, PullRequestsRead, RulesRead, SummaryRead, Unread};
+use super::asked::{FacetsRead, PullRequestsAsk, PullRequestsRead, RulesRead, SummaryRead, Unread};
 use super::graphql::NoAnswer;
 use super::query::{self, Asked, Part};
 use super::reading::Reading;
@@ -73,7 +73,7 @@ impl Github {
     ) -> PullRequestsRead {
         let mut spent = Spent::new(leaving);
         let mut answers: Vec<Option<Result<_, Unread>>> = asks.iter().map(|_| None).collect();
-        let (mut summaries, mut rules) = (Vec::new(), Vec::new());
+        let (mut summaries, mut rules, mut facets) = (Vec::new(), Vec::new(), Vec::new());
         let mut reading: Vec<(usize, Reading)> = asks.iter().cloned().map(Reading::new).enumerate().collect();
         for attempt in 1..=ATTEMPTS {
             self.read_rounds(token, &mut reading, &mut spent).await;
@@ -87,6 +87,15 @@ impl Github {
                     }
                     answer => {
                         let repository = &asks[index].repository;
+                        let answer = answer.map(|(snapshot, read)| {
+                            let read_at_ms = snapshot.observed_at_ms;
+                            facets.extend(read.into_iter().map(|read| FacetsRead {
+                                repository: repository.clone(),
+                                facets: read,
+                                read_at_ms,
+                            }));
+                            snapshot
+                        });
                         summaries.extend(read_summaries.into_iter().map(|(number, summary)| SummaryRead {
                             repository: repository.clone(),
                             number,
@@ -107,7 +116,7 @@ impl Github {
         }
         let unanswered = || Err(Unread { error: incomplete(), affected: Vec::new() });
         let answers = answers.into_iter().map(|answer| answer.unwrap_or_else(unanswered)).collect();
-        PullRequestsRead { answers, summaries, rules, rate_limit: spent.rate_limit, refused: spent.refused }
+        PullRequestsRead { answers, summaries, rules, facets, rate_limit: spent.rate_limit, refused: spent.refused }
     }
 
     /// Asks for what each of `reading` needs, round after round, until none needs more.

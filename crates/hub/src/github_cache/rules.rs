@@ -51,32 +51,33 @@ impl KeptRules {
             .collect()
     }
 
-    /// Keeps `read`, each branch's rules as read at `now_ms`, and returns the rows the file keeps them as.
-    pub(super) fn keep(&self, read: Vec<(BranchOf, Rules)>, now_ms: i64) -> Vec<Row> {
+    /// Keeps `read`, each branch's rules as a read that began at `read_at_ms` found them, by `now_ms`, but for those a
+    /// read begun since has kept, and returns the rows the file keeps them as.
+    pub(super) fn keep(&self, read: Vec<(BranchOf, Rules)>, read_at_ms: i64, now_ms: i64) -> Vec<Row> {
         let mut kept = self.0.lock();
         let mut rows = Vec::new();
         for (branch, rules) in read {
+            if kept.get(&branch).is_some_and(|kept| kept.read_at_ms > read_at_ms) {
+                continue;
+            }
             match serde_json::to_string(&rules) {
-                Ok(said) => rows.push(Row {
-                    subject: Subject::Branch(branch.clone()),
-                    facet: Facet::Rules,
-                    said,
-                    read_at_ms: now_ms,
-                }),
+                Ok(said) => {
+                    rows.push(Row { subject: Subject::Branch(branch.clone()), facet: Facet::Rules, said, read_at_ms });
+                }
                 Err(error) => warn!("writing a branch's rules for the cache's file: {error}"),
             }
-            kept.insert(branch, KeptRule { rules, read_at_ms: now_ms, asked_at_ms: now_ms });
+            kept.insert(branch, KeptRule { rules, read_at_ms, asked_at_ms: now_ms });
         }
         rows
     }
 
     /// Forgets what nothing has asked for in [`KEPT_FOR`] by `now_ms`, and returns it.
-    pub(super) fn forget_unasked(&self, now_ms: i64) -> Vec<Subject> {
+    pub(super) fn forget_unasked(&self, now_ms: i64) -> Vec<(Subject, Facet)> {
         let mut forgotten = Vec::new();
         self.0.lock().retain(|branch, kept| {
             let keep = now_ms - kept.asked_at_ms < millis(KEPT_FOR);
             if !keep {
-                forgotten.push(Subject::Branch(branch.clone()));
+                forgotten.push((Subject::Branch(branch.clone()), Facet::Rules));
             }
             keep
         });

@@ -50,6 +50,11 @@ pub(in super::super) enum When {
     /// Only while what's known was found on another branch than the one checked out, as just after the worktree
     /// checks out another, since a read that began meanwhile may have found the new one's already.
     OnAnotherBranch,
+    /// Only while the cache has no read of it that began within [`crate::Timers::fresh_for_clients`], for a client that
+    /// asks,
+    /// which takes what a read just before it found, as [`Hub::own_from_cache`] says. Never for a read that follows
+    /// something that may have changed it, such as a turn ending, which has to begin after it.
+    UnlessFresh,
 }
 
 /// What a read has to say.
@@ -135,13 +140,13 @@ impl Reading {
 }
 
 impl Hub {
-    /// Reads it now, records it and returns it, for a client that asks. Fails only when nothing is known of it and it
-    /// can't be read now.
+    /// Reads it now, unless a read just before found it, records it and returns it, for a client that asks. Fails only
+    /// when nothing is known of it and it can't be read now.
     pub(crate) async fn workspace_pull_request(
         self: &Arc<Self>,
         id: WorkspaceId,
     ) -> Result<Option<PullRequest>, ApiError> {
-        self.read_pull_request(&id, Asked::Waiting, When::Always).await?.or_known()
+        self.read_pull_request(&id, Asked::Waiting, When::UnlessFresh).await?.or_known()
     }
 
     /// Reads it for an agent, as an [`Asked::Agent`] read, so it fails rather than say what was known before.
@@ -186,6 +191,16 @@ impl Hub {
         // What's known is the branch's own, found since the worktree checked it out.
         if when == When::OnAnotherBranch && !workspace.pull_request_found_on_another_branch() {
             return Ok(Answer::Read(known.and_then(|found| found.pull_request)));
+        }
+        // A client asks, and a read just now, such as as a turn ended, or for another client, found it.
+        if when == When::UnlessFresh
+            && let Some(found) = self.own_from_cache(&workspace).await
+        {
+            let (_, changed) = self.record(&workspace, &Ok(found.clone())).await?;
+            if let Some(workspace) = changed {
+                self.notify(HubNotice::Workspace(workspace));
+            }
+            return Ok(Answer::Read(found.found.pull_request));
         }
         let read_at = Instant::now();
         // One whose branch needs nothing of GitHub, such as one pushed nowhere yet, needs no token.

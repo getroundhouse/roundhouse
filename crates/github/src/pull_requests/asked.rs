@@ -1,4 +1,4 @@
-use super::facets::Rules;
+use super::facets::{PullFacets, Rules};
 use super::said::RateLimit;
 use protocol::client::ApiError;
 use protocol::model::{
@@ -34,6 +34,8 @@ pub struct PullRequestsRead {
     pub summaries: Vec<SummaryRead>,
     /// The rules of each branch the read read, which a later ask can give as known.
     pub rules: Vec<RulesRead>,
+    /// The facets of each pull request of each ask that was read whole, all of an ask's at the same moment.
+    pub facets: Vec<FacetsRead>,
     /// What GitHub last said is left of its limit for the token, if it said.
     pub rate_limit: Option<RateLimit>,
     /// Whether GitHub refused the token, so whoever holds it can find out whether it's still the one to read with.
@@ -55,4 +57,14 @@ pub struct SummaryRead {
     pub repository: GithubRepositoryName,
     pub number: PullRequestNumber,
     pub summary: Result<Reference, ApiError>,
+}
+
+/// What a read found of one pull request, in facets.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FacetsRead {
+    /// The repository it was asked of, as it was asked.
+    pub repository: GithubRepositoryName,
+    pub facets: PullFacets,
+    /// When the read of them began, by the wall clock, since none of what it found is older.
+    pub read_at_ms: i64,
 }

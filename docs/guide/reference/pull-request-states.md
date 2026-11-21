@@ -67,6 +67,7 @@ Roundhouse reads the pull request from GitHub itself, as the default GitHub acco
 - When the worktree checks out another branch, or pushes.
 - On its own, for every workspace, so each row in the sidebar is up to date.
 
+- **An open pull request read in the last 10 seconds isn't read again,** such as when you show a workspace whose turn has just ended, so it shows what that read found.
 - **Each check counts once, as its latest run,** so a rerun that passed reads as passed.
 - **Reads nobody is waiting on stay within what GitHub can spare,** and leave the last fifth of its hourly limit to your agents. Every workspace's is read together, so many cost little.
 - **What was found is kept across restarts,** and GitHub failing, such as while offline, never takes away a pull request already found.
