@@ -9,8 +9,8 @@ use protocol::client::{ApiError, ErrorCode, HubNotice, log, records};
 use protocol::event::SessionEvent;
 use protocol::find::{Found, Needle};
 use protocol::model::{
-    ApprovalId, AttachmentId, ClientDevice, ClientMessageId, CompactionLine, DecisionDraft, DraftToKeep, Place,
-    PromptLine, RecordKey, Seq, Session, SessionId, SubagentId, WorkspaceId,
+    ApprovalId, AttachmentId, ClientDevice, ClientMessageId, CompactionLine, DecisionDraft, DraftToKeep, Ending,
+    MessageId, Place, PromptLine, RecordKey, Seq, Session, SessionId, SubagentId, WorkspaceId,
 };
 use protocol::prompt::Prompt;
 use std::collections::{HashMap, HashSet};
@@ -252,6 +252,25 @@ impl Hub {
 
     pub(crate) async fn session_conversation_end(self: &Arc<Self>, id: SessionId) -> Result<Session, ApiError> {
         self.live_session(&id).await?.end_conversation().await
+    }
+
+    pub(crate) async fn session_reply_heard(
+        self: &Arc<Self>,
+        id: SessionId,
+        device: Option<&ClientDevice>,
+        message: MessageId,
+        ending: Ending,
+    ) -> Result<(), ApiError> {
+        self.live_session(&id).await?.keep_reply_heard(device, message, ending).await
+    }
+
+    pub(crate) async fn session_replies_heard(&self, id: SessionId) -> Result<records::RepliesHeard, ApiError> {
+        self.blocking(move |store| {
+            store.get_session(&id)?;
+            let (replies, rev) = store.list_replies_heard(&id)?;
+            Ok(records::RepliesHeard { replies, rev })
+        })
+        .await
     }
 
     pub(crate) async fn session_mark_read(&self, id: SessionId, through_seq: Seq) -> Result<Session, ApiError> {

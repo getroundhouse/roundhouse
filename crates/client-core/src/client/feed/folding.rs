@@ -71,6 +71,7 @@ fn carried(response: &ClientResponse) -> Vec<Record> {
         | ClientResponse::Sessions(_)
         | ClientResponse::Subagents(_)
         | ClientResponse::Proposals(_)
+        | ClientResponse::RepliesHeard(_)
         // And what isn't a record.
         | ClientResponse::Paired(_)
         | ClientResponse::Devices(_)

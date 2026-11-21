@@ -34,6 +34,7 @@ pinned! {
         FileOpened(_), FilePages(_),
     ],
     "client_calls/github_apps.rs" => [GithubApp(_), GithubAppManifest(_)],
+    "replies_heard.rs" => [RepliesHeard(_)],
     "proposals.rs" => [Proposal(_), ProposalRevisions(_)],
     "references.rs" => [References(_)],
     "terminals.rs" => [Terminal(_)],

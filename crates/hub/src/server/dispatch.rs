@@ -262,6 +262,13 @@ pub(super) async fn handle(
         R::SessionConversationEnd(conversation::SessionConversationEnd { id }) => {
             C::Session(hub.session_conversation_end(id).await?)
         }
+        R::SessionReplyHeard(conversation::SessionReplyHeard { id, message, ending }) => {
+            hub.session_reply_heard(id, device.as_ref(), message, ending).await?;
+            C::Ok
+        }
+        R::SessionRepliesHeard(records::SessionRepliesHeard { id }) => {
+            C::RepliesHeard(hub.session_replies_heard(id).await?)
+        }
         R::SessionMarkRead(sessions::SessionMarkRead { id, through_seq }) => {
             C::Session(hub.session_mark_read(id, through_seq).await?)
         }

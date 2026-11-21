@@ -253,6 +253,9 @@ fn listed(records: impl IntoIterator<Item = Record>, rev: u64) -> Records {
             Record::ModelList(model_list) => list.model_lists.push(model_list),
             Record::Subagent(_) => panic!("a subagent is listed with its session, not in a list of everything"),
             Record::Proposal(_) => panic!("a proposal is listed with its session, not in a list of everything"),
+            Record::ReplyHeard(_) => {
+                panic!("how a reply was heard is listed with its session, not in a list of everything")
+            }
         }
     }
     list

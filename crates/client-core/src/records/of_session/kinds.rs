@@ -1,4 +1,4 @@
-use protocol::model::{Proposal, ProposalId, Rev, SessionId, Subagent, SubagentId};
+use protocol::model::{MessageId, Proposal, ProposalId, ReplyHeard, Rev, SessionId, Subagent, SubagentId};
 use std::cmp::Ordering;
 use std::fmt::Debug;
 use std::hash::Hash;
@@ -54,5 +54,26 @@ impl OfSession for Proposal {
     /// In the order they were made.
     fn order(&self, other: &Self) -> Ordering {
         (self.created_at_ms, &self.id).cmp(&(other.created_at_ms, &other.id))
+    }
+}
+
+impl OfSession for ReplyHeard {
+    type Id = MessageId;
+
+    fn session(&self) -> &SessionId {
+        &self.session_id
+    }
+
+    fn id(&self) -> MessageId {
+        self.message.clone()
+    }
+
+    fn rev(&self) -> Rev {
+        self.rev
+    }
+
+    /// By reply, since each is read by its reply rather than in a list.
+    fn order(&self, other: &Self) -> Ordering {
+        self.message.cmp(&other.message)
     }
 }

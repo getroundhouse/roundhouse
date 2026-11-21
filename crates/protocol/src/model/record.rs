@@ -6,9 +6,9 @@ use serde::{Deserialize, Serialize};
 
 use super::{
     Account, AccountId, CommentId, DiffComment, FoundGithubLogin, GithubAccount, GithubAccountId, GithubApp,
-    GithubAppId, GithubReach, GithubSignIn, GithubSignInId, HubSettings, ModelList, ModelListKey, NewWorkspaceDraft,
-    Proposal, ProposalId, ProviderName, Repo, RepoId, Rev, Session, SessionId, Subagent, SubagentId, Terminal,
-    TerminalId, Workspace, WorkspaceId,
+    GithubAppId, GithubReach, GithubSignIn, GithubSignInId, HubSettings, MessageId, ModelList, ModelListKey,
+    NewWorkspaceDraft, Proposal, ProposalId, ProviderName, ReplyHeard, Repo, RepoId, Rev, Session, SessionId, Subagent,
+    SubagentId, Terminal, TerminalId, Workspace, WorkspaceId,
 };
 
 /// Which record, of which kind. A kind this build doesn't know reads as `Unknown`.
@@ -75,6 +75,12 @@ pub enum RecordKey {
     Proposal {
         id: ProposalId,
     },
+    /// How one of a session's replies said out loud ended, by the reply. The hub never removes one while its chat is
+    /// there, so this isn't sent, and a peer from before it would read it as `Unknown`.
+    ReplyHeard {
+        session_id: SessionId,
+        message: MessageId,
+    },
     #[serde(other)]
     Unknown,
 }
@@ -100,6 +106,8 @@ pub enum Record {
     ModelList(ModelList),
     /// Listed by session, apart from [`Records`], as subagents are, since each holds what its agent wrote in full.
     Proposal(Proposal),
+    /// Listed by session, apart from [`Records`], as proposals are, since only the sessions a view shows need them.
+    ReplyHeard(ReplyHeard),
 }
 
 impl Record {
@@ -123,6 +131,9 @@ impl Record {
             Record::Terminal(terminal) => RecordKey::Terminal { id: terminal.id.clone() },
             Record::ModelList(list) => RecordKey::ModelList(list.key.clone()),
             Record::Proposal(proposal) => RecordKey::Proposal { id: proposal.id.clone() },
+            Record::ReplyHeard(heard) => {
+                RecordKey::ReplyHeard { session_id: heard.session_id.clone(), message: heard.message.clone() }
+            }
         }
     }
 
@@ -145,6 +156,7 @@ impl Record {
             Record::Terminal(terminal) => terminal.rev,
             Record::ModelList(list) => list.rev,
             Record::Proposal(proposal) => proposal.rev,
+            Record::ReplyHeard(heard) => heard.rev,
         }
     }
 }

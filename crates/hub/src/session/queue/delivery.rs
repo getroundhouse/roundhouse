@@ -1,4 +1,4 @@
-use super::super::conversation::{Sending, may_say};
+use super::super::conversation::{Sending, has_the_conversation};
 use super::super::{Command, LiveSession, LiveState};
 use crate::hub::Hub;
 use crate::store::{Changed, Queuing, Reading, Store, StoreError, Unqueued};
@@ -95,7 +95,8 @@ impl LiveSession {
         prompt: Prompt<AttachmentId>,
         device: Option<&ClientDevice>,
     ) -> Result<Session, ApiError> {
-        let refused = if prompt.spoken { may_say(&self.state.lock().interaction, device).err() } else { None };
+        let refused =
+            if prompt.spoken { has_the_conversation(&self.state.lock().interaction, device).err() } else { None };
         if let Some(refusal) = refused {
             // Queued or sent already under its ID, so this is a retry, which gets what the first one got.
             let (id, retried) = (self.id.clone(), client_msg_id.clone());

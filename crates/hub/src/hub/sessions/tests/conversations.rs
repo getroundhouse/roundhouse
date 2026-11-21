@@ -1,10 +1,10 @@
 //! Conversation mode: which device has a chat's conversation, as starting, taking over and ending it leave the chat's
 //! record and log.
 
-use protocol::client::ErrorCode;
+use protocol::client::{ErrorCode, HubNotice};
 use protocol::event::{AgentRunState, EventBody, TurnOutcome};
 use protocol::fixtures::turn_ended;
-use protocol::model::{ClientDevice, Interaction, InteractionMode, Seq};
+use protocol::model::{ClientDevice, Ending, Interaction, InteractionMode, ReplyPlace, Seq};
 use protocol::prompt::Prompt;
 
 use crate::hub::stand_in_workers::{TIMEOUT, a_chat, a_turn, hub_with_stand_in_workers, the_agent_says};
@@ -157,4 +157,35 @@ async fn only_the_device_with_the_conversation_can_say_a_prompt() {
     let record = hub.store.get_session(&chat.id).unwrap().session;
     assert!(record.queued.is_empty());
     assert_eq!(record.interaction.device(), Some(&studio), "a refusal leaves the mode on");
+}
+
+/// The device that has the conversation says how each reply it read out ended, which every device following the feed
+/// is told and can list. The first it says of a reply is kept, and another device, or one in a chat whose mode is off,
+/// is refused, with nothing kept.
+#[tokio::test]
+async fn the_device_with_the_conversation_says_how_each_reply_ended_once() {
+    let dir = tempfile::tempdir().unwrap();
+    let (hub, _) = hub_with_stand_in_workers(dir.path());
+    let (_, chat) = a_chat(&hub).await;
+    let (studio, air) = (device("d1", "Mac Studio"), device("d2", "Ada's MacBook Air"));
+    let cut = Ending::TalkedOver { through: ReplyPlace { block: 0, through: 12 } };
+    let while_off = hub.session_reply_heard(chat.id.clone(), Some(&studio), "m0".into(), Ending::ToTheEnd).await;
+    hub.session_conversation_start(chat.id.clone(), studio.clone()).await.unwrap();
+    let mut feed = hub.subscribe_feed();
+
+    hub.session_reply_heard(chat.id.clone(), Some(&studio), "m1".into(), cut).await.unwrap();
+    hub.session_reply_heard(chat.id.clone(), Some(&studio), "m1".into(), Ending::ToTheEnd).await.unwrap();
+    let elsewhere = hub.session_reply_heard(chat.id.clone(), Some(&air), "m2".into(), Ending::ToTheEnd).await;
+    let unnamed = hub.session_reply_heard(chat.id.clone(), None, "m2".into(), Ending::ToTheEnd).await;
+
+    for refused in [while_off, elsewhere, unnamed] {
+        assert_eq!(refused.map_err(|e| e.code).err(), Some(ErrorCode::Conflict));
+    }
+    let told: Vec<_> = std::iter::from_fn(|| feed.try_recv().ok())
+        .filter_map(|notice| if let HubNotice::ReplyHeard(heard) = notice { Some(heard) } else { None })
+        .collect();
+    let listed = hub.session_replies_heard(chat.id.clone()).await.unwrap();
+    let [heard] = &listed.replies[..] else { panic!("one reply: {listed:?}") };
+    assert_eq!((&heard.message, heard.ending), (&"m1".into(), cut));
+    assert_eq!(told, listed.replies, "told once, of the first");
 }

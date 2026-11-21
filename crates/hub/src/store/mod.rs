@@ -38,6 +38,7 @@ mod proposals;
 mod queue;
 mod reading;
 mod records;
+mod replies_heard;
 mod repos;
 mod run_logins;
 #[cfg(test)]

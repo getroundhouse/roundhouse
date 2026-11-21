@@ -88,6 +88,7 @@ pub enum ClientResponse {
     Events(log::Events),
     Subagents(records::Subagents),
     Proposals(records::Proposals),
+    RepliesHeard(records::RepliesHeard),
     References(super::references::References),
     Proposal(Proposal),
     ProposalRevisions(proposals::ProposalRevisions),

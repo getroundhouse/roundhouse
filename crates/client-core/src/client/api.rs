@@ -11,8 +11,9 @@ use protocol::event::SessionEvent;
 use protocol::find::Found;
 use protocol::model::{
     AgentKind, ApprovalId, AttachmentId, ClientMessageId, ClientRequestId, CommentId, DeviceId, DiffComment, DiffSide,
-    GitDiff, GitStatus, HubSettings, HubSettingsChange, Proposal, PullRequest, Records, ReferenceAsk, ReferenceRead,
-    Repo, RepoId, Rev, Seq, Session, SessionId, Subagent, SubagentId, TerminalId, WaitId, Workspace, WorkspaceId,
+    Ending, GitDiff, GitStatus, HubSettings, HubSettingsChange, MessageId, Proposal, PullRequest, Records,
+    ReferenceAsk, ReferenceRead, ReplyHeard, Repo, RepoId, Rev, Seq, Session, SessionId, Subagent, SubagentId,
+    TerminalId, WaitId, Workspace, WorkspaceId,
 };
 
 use super::{Client, Result, Subscription, hub_is_missing, subscription_channel};
@@ -216,6 +217,16 @@ impl Client {
         Ok((proposals, rev))
     }
 
+    /// How each of the session's replies said out loud ended, with the revision they're as of, which a
+    /// [`HubNotice::ReplyHeard`] newer than it replaces. A hub from before these refuses it, which
+    /// [`super::ClientError::is_unsupported`] says.
+    ///
+    /// [`HubNotice::ReplyHeard`]: protocol::client::HubNotice::ReplyHeard
+    pub fn session_replies_heard(&self, id: &SessionId) -> Result<(Vec<ReplyHeard>, Rev)> {
+        let records::RepliesHeard { replies, rev } = self.call(records::SessionRepliesHeard { id: id.clone() })?;
+        Ok((replies, rev))
+    }
+
     /// Answers the revision `revision` of the proposal `id`, choosing `chosen`, one option for each decision, with
     /// `note`, and the hub tells its agent. Sending the same `client_request_id` again answers with the proposal as it
     /// was answered.
@@ -274,6 +285,11 @@ impl Client {
     /// See [`conversation::SessionConversationEnd`]. A hub older than this refuses it, as `is_unsupported` says.
     pub fn session_conversation_end(&self, id: &SessionId) -> Result<Session> {
         self.call(conversation::SessionConversationEnd { id: id.clone() })
+    }
+
+    /// See [`conversation::SessionReplyHeard`]. A hub older than this refuses it, as `is_unsupported` says.
+    pub fn session_reply_heard(&self, id: &SessionId, message: MessageId, ending: Ending) -> Result<()> {
+        self.call(conversation::SessionReplyHeard { id: id.clone(), message, ending })
     }
 
     /// See [`sessions::SessionMarkRead`]. A hub older than this refuses it, as `is_unsupported` says.
