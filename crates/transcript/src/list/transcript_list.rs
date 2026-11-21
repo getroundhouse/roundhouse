@@ -21,6 +21,7 @@ use state::{Place, State};
 use std::cell::RefCell;
 use std::ops::Range;
 use std::rc::Rc;
+use std::time::Instant;
 
 /// The space above the first row and below the last.
 const EDGE: look::Space = look::Space::Small;
@@ -112,7 +113,7 @@ impl TranscriptList {
 
     /// Where the rows were drawn in the last frame, in the window, for a test of what shows.
     #[cfg(feature = "testing")]
-    pub(crate) fn viewport(&self) -> Bounds<Pixels> {
+    pub fn viewport(&self) -> Bounds<Pixels> {
         self.state.borrow().viewport
     }
 
@@ -123,7 +124,7 @@ impl TranscriptList {
 
     /// How far down the session the top of what's shown is, by the heights the list has for its rows, as it was last
     /// laid out.
-    pub(crate) fn scrolled(&self) -> Pixels {
+    pub fn scrolled(&self) -> Pixels {
         self.state.borrow().scrolled()
     }
 
@@ -132,10 +133,16 @@ impl TranscriptList {
         self.state.borrow_mut().go_to_latest();
     }
 
-    /// Scrolls down to the latest row over [`look::motion::SCROLL`], and keeps to it as more arrives. Under Reduce
-    /// Motion it's there in the next frame.
-    pub(super) fn scroll_to_latest(&self, cx: &App) {
-        self.state.borrow_mut().head_to_latest(Scrolling::set_off(cx));
+    /// Scrolls down to the latest row over [`look::motion::SCROLL`], by `scrolling`, and keeps to it as more arrives.
+    /// Under Reduce Motion it's there in the next frame.
+    pub(super) fn scroll_to_latest(&self, scrolling: Scrolling) {
+        self.state.borrow_mut().head_to_latest(scrolling);
+    }
+
+    /// The first row of the run of loaded rows the top of the list is in, or of the last run above it, which is as far
+    /// up as the list goes without loading more.
+    pub(super) fn first_loaded(&self) -> usize {
+        self.state.borrow().first_loaded()
     }
 
     /// How far down the scrollbar its thumb is, from 0 to 1, and how tall the list takes the session to be.
@@ -287,7 +294,7 @@ impl TranscriptList {
             .bg(colors.pane)
             .text_color(colors.text)
             .on_click(move |_, _, cx| {
-                list.scroll_to_latest(cx);
+                list.scroll_to_latest(Scrolling::set_off(cx));
                 cx.notify(list.view);
             })
             .off_while(!wanted);
@@ -356,6 +363,16 @@ impl Scroller for ScrollingTexts {
 
     fn scrolled(&self) -> Pixels {
         self.list.scrolled()
+    }
+
+    /// Goes up to the first row that's loaded, as the key does, where more of the chat loads above it, if there's more.
+    fn to_start(&self) {
+        self.list.go_to_row(self.list.first_loaded());
+    }
+
+    /// Scrolls down to the latest row, as the button back down does.
+    fn to_end(&self, now: Instant) {
+        self.list.scroll_to_latest(Scrolling::since(now));
     }
 
     /// Shows the row that draws `of` at the top if it's above those that showed, and at the bottom if it's below.

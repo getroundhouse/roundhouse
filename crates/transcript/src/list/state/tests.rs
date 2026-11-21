@@ -344,3 +344,19 @@ fn a_row_that_changes_or_a_new_width_puts_heights_out_of_date_but_keeps_them_as_
     state.all_out_of_date();
     assert_eq!(state.out_of_date_near_the_top(10).len(), 6);
 }
+
+/// Home goes up to the first row that's loaded: the first of the run the top is in, or of the last run above it,
+/// rather than past rows that aren't loaded to a run further up.
+#[test]
+fn the_first_row_loaded_is_the_start_of_the_run_the_top_is_in_or_the_last_above_it() {
+    let mut state = session(100, 50.);
+    state.set_rows(100, vec![10..30, 60..100]);
+    let first_loaded = |state: &mut State, top: usize| {
+        state.go_to_row(top);
+        state.first_loaded()
+    };
+
+    assert_eq!(first_loaded(&mut state, 80), 60, "the start of the run it's in");
+    assert_eq!(first_loaded(&mut state, 40), 10, "and between two, the start of the one above");
+    assert_eq!(first_loaded(&mut state, 5), 0, "and above them all, the first row");
+}

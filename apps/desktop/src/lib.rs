@@ -118,7 +118,10 @@ actions!(
         TogglePlanMode,
         FindInChat,
         FindNext,
-        FindPrevious
+        FindPrevious,
+        ChatPageUp,
+        ChatPageDown,
+        BackToComposer
     ]
 );
 

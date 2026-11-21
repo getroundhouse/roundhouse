@@ -1,11 +1,12 @@
 //! The element that holds whatever scrolls a selection's texts, such as the chat's list, a document's list of blocks
 //! or a page, and does for it in each frame what the selection needs, the same for each. Before what it holds lays
-//! the texts out, it ends a drag it wasn't drawn for, and scrolls: on under a pointer held past its top or bottom, for
-//! the keys, as `keys` says, a line on while a move waits for what shows, or toward what the view's `Reveal` is
-//! bringing into view, such as the end a key moved or Find's match. After, once the texts have said where they were
-//! drawn, a scroll for the keys or the `Reveal` that moved nothing ends what it was for, since it can't go further
-//! that way, a drag's far end moves to what's under the pointer, and a move by a key that waited goes on. It asks for
-//! the next frame while any of them has more to do. It hears the pointer under the texts, for a press to start a
+//! the texts out, it ends a drag it wasn't drawn for, and scrolls: on under a pointer held past its top or bottom, as
+//! the keys that scroll it as a page asked, as `paging` says, for the keys that move an end, as `keys` says, a line on
+//! while a move waits for what shows, or toward what the view's `Reveal` is bringing into view, such as the end a key
+//! moved or Find's match. After, once the texts have said where they were drawn, a scroll for the keys that move an end
+//! or the `Reveal` that moved nothing ends what it was for, since it can't go further that way, a drag's far end moves
+//! to what's under the pointer, and a move by a key that waited goes on. It asks for the next frame while any of them
+//! has more to do. It hears the pointer under the texts, for a press to start a
 //! selection.
 //! Only how what it holds scrolls is each one's own, as [`Scroller`] says.
 
@@ -41,6 +42,13 @@ pub(crate) trait Scroller: 'static {
         let _ = of;
         false
     }
+
+    /// Goes to the start of what it shows, for the key that goes there, as far up as it has.
+    fn to_start(&self);
+
+    /// Goes on to the end of what it shows, for the key that goes there, setting off `now` if it goes there over a
+    /// while.
+    fn to_end(&self, now: Instant);
 }
 
 /// What scrolls by GPUI's own handle, such as a page drawn whole.
@@ -52,6 +60,14 @@ impl Scroller for ScrollHandle {
 
     fn scrolled(&self) -> Pixels {
         -self.offset().y
+    }
+
+    fn to_start(&self) {
+        self.set_offset(point(self.offset().x, px(0.)));
+    }
+
+    fn to_end(&self, _: Instant) {
+        self.set_offset(point(self.offset().x, -self.max_offset().y));
     }
 }
 
@@ -147,7 +163,8 @@ impl<S: Scroller> Element for Scrolled<S> {
 }
 
 /// A frame of what scrolls the texts, as it started: what it scrolled for, which a scroll that moved nothing ends, from
-/// how far it was scrolled, and whether it scrolled for a drag, which goes on in the next.
+/// how far it was scrolled, and whether it scrolled for a drag, which goes on in the next. What the keys that scroll it
+/// as a page asked is done once, whatever it moves.
 #[derive(Clone, Copy, Debug)]
 pub(in crate::selection) struct Frame {
     scrolled_for: Option<ScrolledFor>,
@@ -168,8 +185,8 @@ enum ScrolledFor {
 impl Selection {
     /// Starts a frame of what scrolls the texts, `scroller`, in `bounds`, at `now`, before it lays them out: forgets
     /// the texts drawn in the last, before this one's are, and scrolls it for a drag held past its top or bottom, if
-    /// one is, or else for the keys, or else toward what the view's `Reveal` is bringing into view, or to its text's
-    /// row.
+    /// one is, or else as the keys that scroll it as a page asked, or else for the keys that move an end, or else
+    /// toward what the view's `Reveal` is bringing into view, or to its text's row.
     pub(in crate::selection) fn frame_started(
         &self,
         bounds: Bounds<Pixels>,
@@ -183,6 +200,11 @@ impl Selection {
             self.reveal.done();
             scroller.scroll_down(by);
             return Frame { scrolled_for: None, from, dragged: true };
+        }
+        if self.paging.scroll(scroller, scroller.in_view(bounds), now) {
+            // What was being brought into view gives way, as it does to a drag, rather than scroll back to it after.
+            self.reveal.done();
+            return Frame { scrolled_for: None, from, dragged: false };
         }
         let scrolled_for = if self.scroll_for_keys(scroller) {
             Some(ScrolledFor::Keys)

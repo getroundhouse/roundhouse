@@ -161,7 +161,7 @@ fn a_drawing_a_reply_points_to_is_drawn_as_tall_as_it_says(cx: &mut TestAppConte
 }
 
 /// A Mermaid diagram in a reply is drawn as a picture, as tall as it's drawn, which opens as an image does, and the
-/// reply's row grows to hold it once it's drawn.
+/// reply's row grows to hold it once it's drawn. Escape closes it, before it would go from the chat to the composer.
 #[gpui_kit::test]
 fn a_diagram_in_a_reply_is_drawn_as_a_picture_that_opens(cx: &mut TestAppContext) {
     let reply =
@@ -176,6 +176,8 @@ fn a_diagram_in_a_reply_is_drawn_as_a_picture_that_opens(cx: &mut TestAppContext
     assert!(ui.shown("code-block-actions").is_empty(), "drawn, not as its code");
     ui.click(diagram);
     assert!(ui.has_dialog() && ui.shown("opened-picture").len() == 1, "and a click opens it");
+    ui.press("escape");
+    assert!(!ui.has_dialog(), "and Escape closes it");
 }
 
 /// A diagram that can't be drawn, such as one with a mistake in it, is the code block it was written as.

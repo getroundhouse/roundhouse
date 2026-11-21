@@ -81,6 +81,15 @@ impl Scroller for Scrolling {
         self.scrolled.set(self.scrolled.get() + px(1.));
         true
     }
+
+    /// The keys that move an end never go to the start, nor the end.
+    fn to_start(&self) {
+        unreachable!("only the keys that scroll a page go to the start");
+    }
+
+    fn to_end(&self, _: Instant) {
+        unreachable!("only the keys that scroll a page go to the end");
+    }
 }
 
 /// A frame of `scrolling` showing what's in `bounds`, as the element that holds it has it: it scrolls as the frame

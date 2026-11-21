@@ -36,8 +36,7 @@ impl Scrolling {
         Self { since: cx.background_executor().now(), left: 1. }
     }
 
-    /// One that set off at `since`, for a test that keeps a clock of its own.
-    #[cfg(any(test, feature = "testing"))]
+    /// One that set off at `since`, such as when a frame started, or in a test that keeps a clock of its own.
     pub fn since(since: Instant) -> Self {
         Self { since, left: 1. }
     }
