@@ -7,7 +7,6 @@
 //! does, into the field, and letting go sends it, said out loud, leaving what was typed there before. Any other key
 //! typed turns the mode off and brings the composer back with it typed there.
 
-use client_core::Reply;
 use client_core::conversation::{Conversation, HereNow, Needs, Readiness, Shows, Stage};
 use gpui_kit::assets::IconName as Lucide;
 use gpui_kit::component::{Icon, IconName, h_flex};
@@ -54,27 +53,38 @@ impl WorkspacePane {
         }
         window.focus(&self.composer.focus_handle(cx), cx);
         let asking = self.client.start(move |client| client.session_conversation_start(&id).map(drop));
-        Self::say_if_refused(asking, "turn conversation mode on", cx);
-    }
-
-    /// Turns conversation mode off in the chat showing, as Type, ✕ and typing do, once the voice has stopped and the
-    /// hub has been told how far it got. The bar stays until it is, so a refusal says why.
-    fn end_conversation(&mut self, cx: &mut Context<Self>) {
-        let Some(id) = self.active.clone() else { return };
-        if let Some(ending) = self.conversations.update(cx, |conversations, _| conversations.end(&id)) {
-            Self::say_if_refused(ending, "turn conversation mode off", cx);
-        }
-    }
-
-    /// Says why the hub didn't do `what`, once `asking` answers, if it didn't.
-    fn say_if_refused(asking: Reply<()>, what: &'static str, cx: &mut Context<Self>) {
         cx.spawn(async move |this, cx| {
             if let Err(e) = asking.recv().await {
-                let couldnt = client_core::refusals::couldnt(what, &e);
+                let couldnt = client_core::refusals::couldnt("turn conversation mode on", &e);
                 let _ = this.update(cx, |_, cx| cx.emit(PaneEvent::Error(couldnt)));
             }
         })
         .detach();
+    }
+
+    /// Turns conversation mode off in the chat showing, as Type, ✕ and typing do, once the voice has stopped and the
+    /// hub has been told how far it got. The bar stays until it is. If the hub refuses, the mode is still on, so the
+    /// conversation carries on as before, and the app says why.
+    fn end_conversation(&mut self, cx: &mut Context<Self>) {
+        let Some(id) = self.active.clone() else { return };
+        let Some(ending) = self.conversations.update(cx, |conversations, _| conversations.end(&id)) else { return };
+        cx.spawn(async move |this, cx| {
+            let Err(e) = ending.recv().await else { return };
+            let _ = this.update(cx, |t, cx| {
+                if let (Some(session), Some(voices)) =
+                    (t.shown.session(&id).cloned(), crate::conversing::voices(cx).cloned())
+                {
+                    t.conversations.update(cx, |conversations, _| conversations.refused(&session, &voices));
+                }
+                cx.emit(PaneEvent::Error(client_core::refusals::couldnt("turn conversation mode off", &e)));
+            });
+        })
+        .detach();
+    }
+
+    /// Whether the conversation of the chat showing is on this Mac, so it hears and reads.
+    pub fn conversation_is_here(&self, cx: &App) -> bool {
+        self.conversation_here(cx).is_some()
     }
 
     /// Dictation began, so in conversation mode the person is talking: what's being read is talked over. What the
