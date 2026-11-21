@@ -132,8 +132,25 @@ fn place(repo: &Repo) -> String {
     }
 }
 
-/// Through [`HubAdmin`], so these work on a hub of any version.
 fn hub_command(paths: &Paths, command: &HubCmd) -> anyhow::Result<()> {
+    match command {
+        HubCmd::Status => admin_command(paths, Admin::Status),
+        HubCmd::Stop => admin_command(paths, Admin::Stop),
+        HubCmd::Install { user } => crate::service::install(user),
+        HubCmd::Uninstall => crate::service::uninstall(),
+        HubCmd::Place => crate::service::place(paths),
+    }
+}
+
+/// What a `hub` command asks of the running hub.
+#[derive(Clone, Copy)]
+enum Admin {
+    Status,
+    Stop,
+}
+
+/// Through [`HubAdmin`], so these work on a hub of any version.
+fn admin_command(paths: &Paths, command: Admin) -> anyhow::Result<()> {
     let hub = match HubAdmin::connect(&paths.socket) {
         Ok(hub) => hub,
         Err(client_core::ClientError::Io(e))
@@ -145,7 +162,7 @@ fn hub_command(paths: &Paths, command: &HubCmd) -> anyhow::Result<()> {
         Err(e) => return Err(e).context("connecting to the hub"),
     };
     match command {
-        HubCmd::Status => {
+        Admin::Status => {
             let status = hub.status()?;
             println!(
                 "pid {}  version {}  protocol {}  {} worker(s)  {} session(s) running, waits aside  {} client(s)  {}",
@@ -171,7 +188,7 @@ fn hub_command(paths: &Paths, command: &HubCmd) -> anyhow::Result<()> {
                 );
             }
         }
-        HubCmd::Stop => {
+        Admin::Stop => {
             // Asked first, since a hub that has stopped can't say.
             let agents = hub.status()?.running_sessions;
             hub.stop()?;

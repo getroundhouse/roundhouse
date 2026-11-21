@@ -6,6 +6,7 @@ mod modes;
 mod phone;
 mod render;
 mod run;
+mod service;
 mod session;
 mod workspace;
 
