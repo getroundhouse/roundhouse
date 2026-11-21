@@ -56,8 +56,9 @@ async fn a_watched_terminal_is_sent_its_screen_whole_and_then_what_changes() {
     let (first, after) = hub.pictures.split_first().unwrap();
     assert!(first.0.whole && first.0.cursor.is_some() && first.0.state.is_some(), "{first:?}");
     assert_eq!(rows_in(&first.0), usize::from(SIZE.rows));
-    // At most the line typed, what it wrote, and the next prompt.
-    assert!(!after.is_empty() && after.iter().all(|(picture, _)| rows_in(picture) <= 3), "{after:?}");
+    // The line typed, what it wrote, and the next prompt, any of which a machine's long name can wrap onto two rows.
+    let few = usize::from(SIZE.rows) / 4;
+    assert!(!after.is_empty() && after.iter().all(|(picture, _)| rows_in(picture) <= few), "{after:?}");
     hub.finish().await;
 }
 
