@@ -88,14 +88,20 @@ impl Hub {
     async fn uncommitted(&self, readings: &[Reading]) -> HashMap<WorkspaceId, u32> {
         let mut counted = HashMap::new();
         for workspace in readings.iter().filter(|reading| reading.on.is_some()).map(|reading| &reading.workspace) {
-            let running = self.workers.lock().get(&workspace.id).filter(|link| link.is_open()).cloned();
-            let (Some(link), Some(path)) = (running, workspace.path.clone()) else { continue };
-            jobs::step(format!("asking {link} how many files are uncommitted"));
-            if let Ok(Ok(status)) = tokio::time::timeout(STATUS_WITHIN, link.call(GitStatus { path })).await {
-                counted.insert(workspace.id.clone(), u32::try_from(status.files.len()).unwrap_or(u32::MAX));
+            if let Some(files) = self.uncommitted_in(workspace).await {
+                counted.insert(workspace.id.clone(), files);
             }
         }
         counted
+    }
+
+    /// How many files are uncommitted in `workspace`'s worktree, if its worker is running already and says.
+    pub(in crate::hub::pull_requests) async fn uncommitted_in(&self, workspace: &Workspace) -> Option<u32> {
+        let running = self.workers.lock().get(&workspace.id).filter(|link| link.is_open()).cloned();
+        let (link, path) = (running?, workspace.path.clone()?);
+        jobs::step(format!("asking {link} how many files are uncommitted"));
+        let status = tokio::time::timeout(STATUS_WITHIN, link.call(GitStatus { path })).await.ok()?.ok()?;
+        Some(u32::try_from(status.files.len()).unwrap_or(u32::MAX))
     }
 }
 
@@ -176,6 +182,6 @@ impl Reading {
 }
 
 /// The branch the workspace has checked out, as its record says.
-fn checked_out(workspace: &Workspace) -> Option<&Branch> {
+pub(super) fn checked_out(workspace: &Workspace) -> Option<&Branch> {
     workspace.branches.as_ref().and_then(|branches| branches.checked_out())
 }

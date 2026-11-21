@@ -6,6 +6,7 @@ use protocol::model::{GithubRepositoryName, GithubToken, IssueNumber, Reference}
 use super::super::Hub;
 use crate::github_cache::{Facet, Item};
 use crate::jobs;
+use crate::store::now_ms;
 
 /// How long a branch's rules for required checks, which change seldom, are taken as they were read, rather than read
 /// again with every read of pull requests into it, so a change to them reaches waits within this long. *Unconfirmed.*
@@ -25,8 +26,9 @@ impl Hub {
                     reading.push(ask.clone());
                 }
             }
+            let began_ms = now_ms();
             let read = self.summaries_from_github(&reading).await;
-            self.keep_summaries(read).await;
+            self.keep_summaries(read, began_ms).await;
             // Only now, so an ask that waited on these finds what was kept.
             drop(mine);
         }
@@ -41,7 +43,7 @@ impl Hub {
 
     /// Reads `asks` as `token`, leaving what `leaving` leaves of GitHub's limit, as [`github::Github::read_pull_requests`]
     /// does, but for the rules of their branches the cache has read within [`RULES_FRESH_FOR`], which it gives each ask
-    /// as known. Keeps the summaries and rules it read.
+    /// as known. Keeps the summaries, rules and facets it read.
     pub(in crate::hub) async fn read_pull_requests(
         &self,
         token: &GithubToken,
@@ -51,24 +53,32 @@ impl Hub {
         for ask in &mut asks {
             ask.known_rules = self.github_cache.rules_of(&ask.repository, RULES_FRESH_FOR);
         }
+        let began_ms = now_ms();
         let mut read = self.github.read_pull_requests(token, asks, leaving).await;
-        self.keep_read_summaries(std::mem::take(&mut read.summaries)).await;
+        self.keep_read_summaries(std::mem::take(&mut read.summaries), began_ms).await;
         let rules: Vec<_> = std::mem::take(&mut read.rules)
             .into_iter()
             .map(|read| (read.repository, read.branch, read.rules))
             .collect();
-        if !rules.is_empty() {
-            let cache = self.github_cache.clone();
-            if let Err(error) = tokio::task::spawn_blocking(move || cache.keep_rules(rules)).await {
-                tracing::warn!("keeping the rules read from GitHub: {error}");
+        let pulls = std::mem::take(&mut read.facets);
+        let cache = self.github_cache.clone();
+        let kept = tokio::task::spawn_blocking(move || {
+            if !rules.is_empty() {
+                cache.keep_rules(rules, began_ms);
             }
+            if !pulls.is_empty() {
+                cache.keep_pulls(pulls);
+            }
+        });
+        if let Err(error) = kept.await {
+            tracing::warn!("keeping what was read of pull requests: {error}");
         }
         read
     }
 
-    /// Keeps the summaries a read of pull requests found as it read the rest of them, as a read of the summaries alone
-    /// would, so a chip of one says what the bar's read, or a wait's, found.
-    async fn keep_read_summaries(&self, summaries: Vec<SummaryRead>) {
+    /// Keeps the summaries a read of pull requests that began at `began_ms` found as it read the rest of them, as a read
+    /// of the summaries alone would, so a chip of one says what the bar's read, or a wait's, found.
+    async fn keep_read_summaries(&self, summaries: Vec<SummaryRead>, began_ms: i64) {
         let read = summaries
             .into_iter()
             .filter_map(|SummaryRead { repository, number, summary }| {
@@ -76,16 +86,17 @@ impl Hub {
                 Some((Item::new(&repository, number), summary.map(Some).map_err(|error| error.message)))
             })
             .collect();
-        self.keep_summaries(read).await;
+        self.keep_summaries(read, began_ms).await;
     }
 
-    /// Keeps what GitHub said of each summary, as [`crate::github_cache::GithubCache::keep`] says.
-    async fn keep_summaries(&self, read: Vec<(Item, Result<Option<Reference>, String>)>) {
+    /// Keeps what GitHub said of each summary to a read that began at `began_ms`, as
+    /// [`crate::github_cache::GithubCache::keep`] says.
+    async fn keep_summaries(&self, read: Vec<(Item, Result<Option<Reference>, String>)>, began_ms: i64) {
         if read.is_empty() {
             return;
         }
         let cache = self.github_cache.clone();
-        if let Err(error) = tokio::task::spawn_blocking(move || cache.keep(read)).await {
+        if let Err(error) = tokio::task::spawn_blocking(move || cache.keep(read, began_ms)).await {
             tracing::warn!("keeping what was read from GitHub: {error}");
         }
     }

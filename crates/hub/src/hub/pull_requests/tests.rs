@@ -18,6 +18,10 @@ fn queries(github: &github::StandIn) -> Vec<String> {
 /// can be told from one that's slow.
 const SPACED: Timers = Timers { agent_spacing: Duration::from_secs(1), ..Timers::FOR_TESTS };
 
+/// A client's ask taking what a read began within the product's time found, for the tests about it.
+const CLIENTS_TAKE_A_READ: Timers =
+    Timers { fresh_for_clients: Timers::DEFAULT.fresh_for_clients, ..Timers::FOR_TESTS };
+
 fn known(hub: &Hub) -> Option<PullRequest> {
     hub.store.get_workspace(&"w".into()).unwrap().known_pull_request().cloned()
 }
@@ -226,11 +230,43 @@ async fn a_detached_head_has_no_pull_request_and_asks_github_nothing() {
 /// But a third, asked for while the second waits, has nothing to add once the second has read, so it shares its answer.
 #[tokio::test]
 async fn a_read_asked_for_while_another_waits_shares_its_answer() {
+    assert_eq!(reads_of_three_asks_while_one_is_held(Timers::FOR_TESTS).await, 2, "the third shared the second's read");
+}
+
+/// A client's two asks made while a read is on its way, as from two clients, both take what it found, which began
+/// within the time a client's ask takes a read.
+#[tokio::test]
+async fn asks_made_while_a_read_is_on_its_way_take_what_it_finds() {
+    assert_eq!(reads_of_three_asks_while_one_is_held(CLIENTS_TAKE_A_READ).await, 1, "the others shared the first's");
+}
+
+/// A client's ask just after the branch was pushed again reads GitHub, rather than take what a read from before the
+/// push found, however recent, since it found another head.
+#[tokio::test]
+async fn an_ask_after_a_push_reads_again_rather_than_take_a_read_from_before() {
     let dir = tempfile::tempdir().unwrap();
-    let (hub, pull_requests, github) = hub_on_github(dir.path()).await;
+    let (hub, pull_requests, github) = hub_on_github_timed(dir.path(), CLIENTS_TAKE_A_READ).await;
     pull_requests.set(7, PullRequestState::Open);
     hub.workspace_pull_request("w".into()).await.unwrap();
     let a_read = queries(&github).len();
+    hub.workspace_pull_request("w".into()).await.unwrap();
+    assert_eq!(queries(&github).len(), a_read, "an ask just after a read takes what it found");
+
+    hub.store.set_workspace_branches(&"w".into(), &pushed("pushed", "pushed", (0, 0))).unwrap();
+    hub.workspace_pull_request("w".into()).await.unwrap();
+
+    assert!(queries(&github).len() > a_read, "read again after the push");
+}
+
+/// How many reads three asks for the workspace's pull request make, the second and third made while the first's read
+/// is held on its way, in reads of it, with `timers`, after a read of it that's as old as a client's ask takes.
+async fn reads_of_three_asks_while_one_is_held(timers: Timers) -> usize {
+    let dir = tempfile::tempdir().unwrap();
+    let (hub, pull_requests, github) = hub_on_github_timed(dir.path(), timers).await;
+    pull_requests.set(7, PullRequestState::Open);
+    hub.workspace_pull_request("w".into()).await.unwrap();
+    let a_read = queries(&github).len();
+    hub.github_cache.age(timers.fresh_for_clients);
     pull_requests.hold();
     let ask = || {
         let hub = hub.clone();
@@ -247,7 +283,8 @@ async fn a_read_asked_for_while_another_waits_shares_its_answer() {
     let answers = [first.await.unwrap(), second.await.unwrap(), third.await.unwrap()];
 
     assert!(answers.iter().all(|pr| pr.as_ref().map(|pr| pr.number) == Some(7)), "{answers:?}");
-    assert_eq!(queries(&github).len(), 3 * a_read, "the third shared the second's read");
+    assert_eq!(queries(&github).len() % a_read, 0, "whole reads");
+    queries(&github).len() / a_read - 1
 }
 
 /// GitHub deleted the branch as its pull request merged, so the branch has none of its own to list, and the one the
@@ -317,4 +354,43 @@ async fn a_wait_on_a_stack_under_the_workspaces_pull_request_ends_with_its_read(
     hub.workspace_pull_request("w".into()).await.unwrap();
 
     assert_eq!(ended(&hub, &wait), Some(protocol::model::WaitEnd::Merged));
+}
+
+/// A client asking just after a read, as a pane shown as its turn ends, or a second client, is answered with what
+/// that read found, without asking GitHub again, until that's as old as a client's ask takes.
+#[tokio::test]
+async fn a_client_asking_just_after_a_read_is_answered_from_it() {
+    let dir = tempfile::tempdir().unwrap();
+    let (hub, pull_requests, github) = hub_on_github_timed(dir.path(), CLIENTS_TAKE_A_READ).await;
+    pull_requests.set(7, PullRequestState::Open);
+    hub.workspace_pull_request("w".into()).await.unwrap();
+    let a_read = queries(&github).len();
+    pull_requests.set(7, PullRequestState::Passed);
+
+    let soon = hub.workspace_pull_request("w".into()).await.unwrap().unwrap();
+    hub.github_cache.age(CLIENTS_TAKE_A_READ.fresh_for_clients);
+    let later = hub.workspace_pull_request("w".into()).await.unwrap().unwrap();
+
+    assert_eq!((soon.number, soon.checks.pending, soon.checks.passed), (7, 1, 0), "what the read found");
+    assert_eq!(later.checks.passed, 1, "read again");
+    assert_eq!(queries(&github).len(), 2 * a_read);
+}
+
+/// A turn that ends reads the pull request again even just after a read, since the agent may have pushed meanwhile.
+#[tokio::test]
+async fn a_turn_ending_just_after_a_read_reads_again() {
+    let dir = tempfile::tempdir().unwrap();
+    let (hub, pull_requests, _github) = hub_on_github_timed(dir.path(), CLIENTS_TAKE_A_READ).await;
+    pull_requests.set(7, PullRequestState::Open);
+    hub.workspace_pull_request("w".into()).await.unwrap();
+    pull_requests.set(7, PullRequestState::Passed);
+
+    hub.read_pull_request_after_turn(&"w".into());
+
+    let hub = &hub;
+    waiting::task::until_ok_async(Duration::from_secs(30), || async move {
+        let passed = known(hub).map(|pr| pr.checks.passed);
+        if passed == Some(1) { Ok(()) } else { Err(format!("read again, but {passed:?} checks passed")) }
+    })
+    .await;
 }

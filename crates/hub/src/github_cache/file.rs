@@ -10,7 +10,7 @@ use super::keys::{Facet, Subject};
 /// The form of what the file keeps. Another, as a build that kept another form left it, is emptied, and the cache is
 /// read from GitHub again, rather than migrated. Raise it with any change to the table, or to the form of what's
 /// written in `said`.
-pub(super) const VERSION: i64 = 2;
+pub(super) const VERSION: i64 = 3;
 
 /// The file the cache is kept in, so a hub that starts again has it. Writes wait for no sync, since a power cut that
 /// takes the last of them back loses only what GitHub can say again.
@@ -84,28 +84,24 @@ impl CacheFile {
         Ok(kept)
     }
 
-    /// Keeps `row`, in place of what was kept of its facet.
-    pub(super) fn write(&self, row: &Row) -> rusqlite::Result<()> {
-        let conn = self.conn.lock();
-        let Some(conn) = conn.as_ref() else { return Ok(()) };
-        conn.execute(
-            "INSERT INTO facets (repository, subject, facet, said, read_at_ms) VALUES (?1, ?2, ?3, ?4, ?5)
-                 ON CONFLICT (repository, subject, facet) DO UPDATE SET said = excluded.said,
-                     read_at_ms = excluded.read_at_ms",
-            params![row.subject.repository(), row.subject.key(), row.facet.name(), row.said, row.read_at_ms],
-        )?;
-        Ok(())
-    }
-
-    /// Forgets every facet of `subjects`.
-    pub(super) fn forget(&self, subjects: &[Subject]) -> rusqlite::Result<()> {
+    /// Forgets each of `forgotten`, a facet of what it's about, and keeps each of `rows` in place of what was kept of its
+    /// facet, all at once, so a pull request's facets are never from two reads, even after a crash part way.
+    pub(super) fn keep(&self, forgotten: &[(Subject, Facet)], rows: &[Row]) -> rusqlite::Result<()> {
         let mut conn = self.conn.lock();
         let Some(conn) = conn.as_mut() else { return Ok(()) };
         let tx = conn.transaction()?;
-        for subject in subjects {
+        for (subject, facet) in forgotten {
             tx.execute(
-                "DELETE FROM facets WHERE repository = ?1 AND subject = ?2",
-                params![subject.repository(), subject.key()],
+                "DELETE FROM facets WHERE repository = ?1 AND subject = ?2 AND facet = ?3",
+                params![subject.repository(), subject.key(), facet.name()],
+            )?;
+        }
+        for row in rows {
+            tx.execute(
+                "INSERT INTO facets (repository, subject, facet, said, read_at_ms) VALUES (?1, ?2, ?3, ?4, ?5)
+                     ON CONFLICT (repository, subject, facet) DO UPDATE SET said = excluded.said,
+                         read_at_ms = excluded.read_at_ms",
+                params![row.subject.repository(), row.subject.key(), row.facet.name(), row.said, row.read_at_ms],
             )?;
         }
         tx.commit()

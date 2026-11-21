@@ -155,8 +155,9 @@ impl Policy {
     }
 }
 
-#[derive(Debug)]
-pub(super) struct ReportedCheck {
+/// A check GitHub reported, as read, before a branch's rules say whether it's required.
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ReportedCheck {
     check: ObservedCheck,
     app: Option<i64>,
     started: String,
