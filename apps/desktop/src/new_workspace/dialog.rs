@@ -139,7 +139,7 @@ impl NewWorkspaceDialog {
         let on_event =
             |this: &mut Self, event: &dictation_ui::Event, _: &mut Window, cx: &mut Context<Self>| match event {
                 dictation_ui::Event::Ended { submit: true } => this.create(cx),
-                dictation_ui::Event::Ended { submit: false } => {}
+                dictation_ui::Event::Ended { submit: false } | dictation_ui::Event::Started => {}
                 dictation_ui::Event::Error(message) => cx.emit(DialogEvent::Error(message.clone())),
             };
         let corner = look::Corner::Card;

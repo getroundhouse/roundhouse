@@ -27,14 +27,14 @@ impl Conversation {
     /// Follows the chat's record, `session`, on `client`: once the conversation is on the device the connection is on,
     /// starts reading its replies out with the voice `voice` makes, saying on `tell` when what it reads changes, and
     /// once it isn't, stops. Once the chat is closed here, turns the mode off, as closing its tab stops the
-    /// conversation. Returns whether the conversation came here.
+    /// conversation.
     pub fn follow<V: Voice>(
         &mut self,
         client: &Client,
         session: &Session,
         voice: impl FnOnce() -> V,
         tell: &flume::Sender<()>,
-    ) -> bool {
+    ) {
         debug_assert_eq!(session.id, self.session);
         self.this = client.device().cloned();
         self.bar.saw(session, self.this.as_ref());
@@ -42,14 +42,12 @@ impl Conversation {
         self.left &= here;
         if here && !session.is_open() && !self.left {
             self.end(client);
-            return false;
+            return;
         }
         let reads = here && !self.left;
-        if reads == self.reading.is_some() {
-            return false;
+        if reads != self.reading.is_some() {
+            self.reading = reads.then(|| ReadingOut::start(client, session, voice(), tell.clone()));
         }
-        self.reading = reads.then(|| ReadingOut::start(client, session, voice(), tell.clone()));
-        reads
     }
 
     /// Turns the mode off, as typing, Type and ✕ do, on `client`: how far the voice got, and how each reply ended,

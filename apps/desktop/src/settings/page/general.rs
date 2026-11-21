@@ -44,6 +44,7 @@ pub(super) fn page(hub: &OfHub) -> Page {
         settings.push(super::dictation_row::language());
         let possible = sound::Quieting::ALL.into_iter().filter(|how| how.is_possible());
         settings.extend(possible.map(super::dictation_row::quieting));
+        settings.push(super::speech_row::setting());
     }
     Page { id: PageId::General, name: "General", icon: Lucide::Settings2, body: Body::Settings(settings) }
 }

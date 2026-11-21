@@ -4,6 +4,8 @@
 use protocol::model::{DeviceId, Session};
 use protocol::tail::Tail;
 
+use super::needs::Needs;
+
 /// What the conversation is at, on the device that has it, which every device showing the chat shows.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Stage {
@@ -17,23 +19,13 @@ pub enum Stage {
     Speaking,
 }
 
-/// Whether this device's voice can read.
-#[derive(Clone, Debug, PartialEq)]
-pub enum VoiceReady {
-    Ready,
-    /// Its files are being fetched, this far, from 0 to 1, when that's known.
-    Fetching(Option<f32>),
-    /// It can't read, for this reason, which a person can try again.
-    Failed(String),
-}
-
 /// What the bar shows.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Shows {
     /// The mode is off, so the composer shows.
     Composer,
-    /// The conversation is on this device.
-    Here { stage: Stage, voice: VoiceReady },
+    /// The conversation is on this device, which needs dictation and speech ready for it, as they stand.
+    Here { stage: Stage, needs: Needs },
     /// It's on another device, named so, which this one can take it over from, at `stage` there when the chat says,
     /// as while the agent works or the other device reads.
     Elsewhere { device: String, stage: Option<Stage> },
@@ -41,7 +33,7 @@ pub enum Shows {
     MovedTo { device: String },
 }
 
-/// What this device knows that the chat doesn't: whether it hears or reads, and whether its voice is ready.
+/// What this device knows that the chat doesn't: whether it hears or reads, and how its dictation and speech stand.
 #[derive(Clone, Debug, PartialEq)]
 pub struct HereNow {
     /// The person is holding to talk.
@@ -49,7 +41,7 @@ pub struct HereNow {
     /// The voice is reading a reply. While it reads only a line said for the agent, the bar shows the line, as every
     /// device does.
     pub reading: bool,
-    pub voice: VoiceReady,
+    pub needs: Needs,
 }
 
 /// The bar of one chat on this device. It remembers whether the conversation was here, so that once another device
@@ -81,14 +73,17 @@ impl Bar {
             .in_turn()
             .then(|| Stage::Working { line: tail.covering.as_deref().map(|covering| covering.line.text.clone()) });
         if Some(&device.id) == this {
-            let stage = if here.hearing {
+            // Until both are ready, the bar says what's missing, whatever the agent is doing.
+            let stage = if !here.needs.ready() {
+                Stage::Waiting
+            } else if here.hearing {
                 Stage::Hearing
             } else if here.reading {
                 Stage::Speaking
             } else {
                 working.unwrap_or(Stage::Waiting)
             };
-            return Shows::Here { stage, voice: here.voice.clone() };
+            return Shows::Here { stage, needs: here.needs.clone() };
         }
         if self.had_it {
             return Shows::MovedTo { device: device.name.clone() };
@@ -104,12 +99,7 @@ impl Shows {
     pub fn says(&self) -> Option<String> {
         match self {
             Shows::Composer | Shows::Here { stage: Stage::Hearing | Stage::Working { line: None }, .. } => None,
-            Shows::Here { stage: Stage::Waiting, voice } => match voice {
-                VoiceReady::Ready => None,
-                VoiceReady::Fetching(None) => Some("Getting the voice ready".into()),
-                VoiceReady::Fetching(Some(done)) => Some(format!("Getting the voice ready, {:.0}%", done * 100.)),
-                VoiceReady::Failed(why) => Some(format!("Couldn't get the voice ready: {why}")),
-            },
+            Shows::Here { stage: Stage::Waiting, needs } => needs.says(),
             Shows::Here { stage: Stage::Speaking, .. } | Shows::Elsewhere { stage: Some(Stage::Speaking), .. } => {
                 Some("Speaking".into())
             }

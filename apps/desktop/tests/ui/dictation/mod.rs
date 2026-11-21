@@ -8,6 +8,7 @@
 mod another_app;
 mod asking_first;
 mod composer_going;
+mod conversation;
 mod deleting;
 mod fields;
 mod hints;

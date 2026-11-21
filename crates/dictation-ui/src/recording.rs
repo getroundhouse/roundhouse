@@ -66,6 +66,7 @@ impl Field {
         for how in Quieting::ALL.into_iter().filter(|how| source::quiets(*how, cx)) {
             recording.quiet(how);
         }
+        cx.emit(Event::Started);
         let hearing = cx.spawn_in(window, async move |this, cx| {
             while let Ok(update) = updates.recv_async().await {
                 if this.update_in(cx, |field, window, cx| field.heard(update, window, cx)).is_err() {
@@ -116,7 +117,7 @@ impl Field {
         }
     }
 
-    pub(crate) fn cancel(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    pub fn cancel(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.space_down = None;
         let Some(underway) = self.underway.take() else { return };
         self.line.update(cx, FineLine::hide);

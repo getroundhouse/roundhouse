@@ -6,8 +6,8 @@ use std::io;
 use gpui_kit::{App, AsyncApp};
 use models::FolderError;
 
-use super::DictationChoice;
 use super::readiness::{dictating, dictating_mut, follow_the_choice, reread_whats_on_disk};
+use crate::settings::Choice;
 
 /// Why the model couldn't all be deleted.
 #[derive(Debug, thiserror::Error)]
@@ -29,8 +29,8 @@ pub(super) fn delete_the_model(cx: &mut App) {
         return;
     }
     let model_dir = dictating(cx).model.dir.clone();
-    if crate::settings::get(cx).dictation == DictationChoice::On {
-        crate::settings::change(cx, |settings| settings.dictation = DictationChoice::Off);
+    if crate::settings::get(cx).dictation == Choice::On {
+        crate::settings::change(cx, |settings| settings.dictation = Choice::Off);
         follow_the_choice(cx);
     }
     let (tell, told) = flume::bounded(1);

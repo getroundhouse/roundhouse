@@ -12,9 +12,9 @@ use crate::menus;
 use crate::sides::{Side, Sidebar};
 use crate::workspace_pane::{Showing, WorkspacePane};
 use crate::{
-    AddRepository, ArchiveWorkspace, CloseChat, CreatePullRequest, FindInChat, FindNext, FindPrevious, GoBack,
-    GoForward, MarkWorkspace, NewChat, NewTerminal, NewWorkspace, NextChat, NextWorkspace, PreviousChat,
-    PreviousWorkspace, StopAgent, ToggleDiff, ToggleSidebar,
+    AddRepository, ArchiveWorkspace, CloseChat, ConversationMode, CreatePullRequest, FindInChat, FindNext,
+    FindPrevious, GoBack, GoForward, MarkWorkspace, NewChat, NewTerminal, NewWorkspace, NextChat, NextWorkspace,
+    PreviousChat, PreviousWorkspace, StopAgent, ToggleDiff, ToggleSidebar,
 };
 
 impl AppView {
@@ -88,6 +88,9 @@ impl AppView {
 /// sight, and off the Mac a terminal's program has their keys, as `keys.rs` leaves them out of a terminal.
 fn with_chat_shortcuts(root: Div, cx: &mut Context<AppView>) -> Div {
     root.on_action(cx.listener(|t, _: &StopAgent, _, cx| t.update_selected_pane(cx, WorkspacePane::stop_agent)))
+        .on_action(cx.listener(|t, _: &ConversationMode, window, cx| {
+            t.update_selected_pane(cx, |pane, cx| pane.start_conversation(window, cx));
+        }))
         .on_action(cx.listener(|t, _: &FindInChat, window, cx| {
             t.update_selected_pane(cx, |pane, cx| pane.find_in_chat(window, cx));
         }))

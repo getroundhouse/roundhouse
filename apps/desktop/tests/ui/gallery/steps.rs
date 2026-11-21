@@ -73,6 +73,15 @@ pub(crate) enum Step {
     DictationModelHere,
     /// Gives dictation a made-up model from a server that doesn't have it, so turning dictation on fails.
     FailDictationDownload,
+    /// Has dictation ready, with a stand-in for its model, and speech on, with the voice's files here, so conversation
+    /// mode starts at once.
+    ConversationReady,
+    /// Turns speech on, with the voice fetching its files from a server that sends 40% of them and then nothing more,
+    /// so how speech stands shows them being fetched, getting no further.
+    StallVoiceDownload,
+    /// Turns speech on, with the voice fetching its files from a server that doesn't have them, so how speech stands
+    /// shows why they couldn't be fetched.
+    FailVoiceDownload,
     /// Pastes an image where focus is, and waits for the composer to take it.
     PasteImage(fn() -> Vec<u8>),
     /// Pastes a copied file with this name and text, and waits for the composer to take it.

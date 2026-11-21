@@ -238,6 +238,9 @@ impl WorkspacePane {
                 .pb(look::Space::Large)
                 .pt(transcript::ABOVE_THE_COMPOSER);
         }
+        if let Some(bar) = self.conversation_bar(cx) {
+            return around(bar).flex_none().pb(look::Space::Large).pt(transcript::ABOVE_THE_COMPOSER);
+        }
         let planning = self.planning();
         let attached = self.attached_tiles(cx);
         let bar = self.bar(cx).into_any_element();
@@ -281,13 +284,16 @@ impl WorkspacePane {
         bar.child(add).child(picker).child(agents).into_any_element()
     }
 
-    /// What sits beside the main action, in the order it's drawn: what the agent says of itself, then the microphone,
-    /// nearest Send, unless dictation is off or this Mac can't run its model. Something new for the bar's right end
-    /// goes here, and being a [`Slot`] is what lines it up and spaces it.
+    /// What sits beside the main action, in the order it's drawn: what the agent says of itself, then conversation
+    /// mode's button, unless dictation or speech is off, then the microphone, nearest Send, unless dictation is off or
+    /// this Mac can't run its model. Something new for the bar's right end goes here, and being a [`Slot`] is what
+    /// lines it up and spaces it.
     fn beside_the_main_action(&self, cx: &mut Context<Self>) -> Vec<Slot> {
         let usage = self.usage(cx);
         let agents = self.usage_bars(usage.as_ref(), cx).into_iter().chain(self.context_ring(usage.as_ref(), cx));
-        agents.chain(self.microphone(cx)).collect()
+        let conversation = crate::conversing::offered(cx).then(|| self.conversation_button(cx));
+        let microphone = self.microphone(cx);
+        agents.chain(conversation).chain(microphone).collect()
     }
 
     /// Send, or Stop while the agent is in a turn. Work left in the background isn't one, since stopping a turn

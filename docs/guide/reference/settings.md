@@ -20,6 +20,7 @@ The app's own settings. A repository's are in [Repository settings](repository-s
 | Dictation language | The language you dictate in. Auto tells which from what you say. Choosing yours hears it better, and never writes it in another alphabet, as Auto can a short phrase said quickly, such as English in Cyrillic | Auto |
 | Mute sound while dictating | On a Mac, mutes its sound while you dictate, and unmutes it once you stop. Speakers that set their own volume, such as a display's, play on | Off |
 | Pause media while dictating | On a Mac, pauses the music or video the Mac shows as Now Playing while you dictate, and plays it again once you stop, whatever speakers it plays from | Off |
+| Speech | On a Mac with macOS 14 or later, reads the agent's replies out in conversation mode, once it has downloaded the voice, about 65 MB. Ask first lets conversation mode's card offer to turn it on. Under it, Settings says how it stands, with Retry. See [Talk with the agent](../guides/talk-with-the-agent.md) | Ask first |
 
 Work is a turn, something an agent left running in the background, or a workspace being set up. An agent that's only waiting on you isn't, since it could wait all night. The display still sleeps, and closing the lid or a low battery still puts the Mac to sleep.
 

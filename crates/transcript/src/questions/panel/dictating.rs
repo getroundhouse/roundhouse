@@ -69,6 +69,7 @@ impl QuestionPanel {
             return;
         }
         match event {
+            dictation_ui::Event::Started => {}
             dictation_ui::Event::Error(message) => {
                 let _ = self.transcript.update(cx, |_, cx| cx.emit(TranscriptEvent::Error(message.clone())));
             }

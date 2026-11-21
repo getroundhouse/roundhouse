@@ -11,6 +11,7 @@ use crate::sidebar_tabs::TabShown;
 use attaching::{Composed, Waiting};
 use client_core::records::InWorkspace;
 use client_core::{Client, Drafts, RecordsFeed};
+use conversation::Conversations;
 use file_tab::FileTab;
 use gpui_kit::component::input::TextareaState;
 use gpui_kit::{AnyWindowHandle, Context, Entity, EventEmitter, Subscription, Task, Window};
@@ -134,6 +135,14 @@ pub struct WorkspacePane {
     /// What's being dictated into the composer, which ends with the pane.
     pub(super) dictation: Entity<dictation_ui::Field>,
     pub(super) dictation_chat: Option<SessionId>,
+    /// The chat the person started talking in, in conversation mode, and what the composer held then, which isn't part
+    /// of what they say, and is put back once it's sent.
+    pub(super) typed_before_talking: Option<(SessionId, String)>,
+    /// The hub's chats' conversations on this Mac, which the app follows whichever workspace shows.
+    pub(super) conversations: Entity<Conversations>,
+    /// The chat whose conversation mode is waiting on dictation and speech, while its card shows how they stand. The
+    /// mode starts once both are ready, unless the card has closed.
+    pub(super) setting_up: Option<super::setting_up::SettingUp>,
     pub(super) after_dictation: dictation_ui::Pending<dictating::Then>,
     pub composer: Entity<TextareaState>,
     pub diff: Option<Diff>,
@@ -163,6 +172,7 @@ impl WorkspacePane {
         client: Client,
         records: RecordsFeed,
         keeper: Drafts,
+        conversations: Entity<Conversations>,
         shown: InWorkspace,
         window: &mut Window,
         cx: &mut Context<Self>,
@@ -178,6 +188,7 @@ impl WorkspacePane {
         });
         // The microphone is as dictation stands.
         let on_dictation = crate::dictating::observe(cx, |_, cx| cx.notify());
+        let [needs_dictation, needs_speech] = crate::conversing::observe_needs(window, cx, Self::start_once_ready);
         let pull_request = Lookup::of(records.github().pull_request(shown.workspace()));
         let mut this = Self {
             client,
@@ -199,6 +210,9 @@ impl WorkspacePane {
             model_lookup: crate::model_lookup::Lookup::default(),
             dictation,
             dictation_chat: None,
+            typed_before_talking: None,
+            conversations,
+            setting_up: None,
             after_dictation: dictation_ui::Pending::default(),
             composer,
             diff: None,
@@ -212,7 +226,7 @@ impl WorkspacePane {
             behind: false,
             hub: composer::Hub::Here,
             window: window.window_handle(),
-            subscriptions: vec![on_enter, on_settings, on_dictation, dictated, live],
+            subscriptions: vec![on_enter, on_settings, on_dictation, needs_dictation, needs_speech, dictated, live],
         };
         this.take_kept_drafts(cx);
         // The chat last worked in.

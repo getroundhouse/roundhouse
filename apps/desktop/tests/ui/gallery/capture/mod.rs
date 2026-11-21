@@ -8,8 +8,10 @@ mod finding;
 mod opening;
 mod proposals;
 mod scrollbar;
+mod voice;
 
 pub(crate) use finding::{FoundBothWays, copied_whole, found_both_ways};
+pub(crate) use opening::THIS_MAC;
 use opening::open;
 
 mod driver;

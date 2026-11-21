@@ -125,6 +125,9 @@ impl Driver {
             Step::StallDictationDownload => self.stall_dictation_download(),
             Step::DictationModelHere => self.dictation_model_here(),
             Step::FailDictationDownload => self.fail_dictation_download(),
+            Step::ConversationReady => self.conversation_ready(),
+            Step::StallVoiceDownload => self.stall_voice_download(),
+            Step::FailVoiceDownload => self.fail_voice_download(),
             Step::PasteImage(image) => self.paste(ClipboardItem::from(Image::from_bytes(ImageFormat::Png, image()))),
             Step::PasteFile(name, text) => self.paste_file(name, text),
             Step::AskToFinish => {

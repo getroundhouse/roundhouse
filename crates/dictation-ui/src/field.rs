@@ -25,6 +25,9 @@ pub struct Field {
 
 /// Final text has already emitted the input's change event before an ending asks the host to submit it.
 pub enum Event {
+    /// A recording began to dictate, once held Space has been held long enough, rather than as it starts to listen,
+    /// so a press let go of sooner isn't taken for one.
+    Started,
     /// The recording is gone. Only a successful finish requested by the host permits its pending action.
     Ended {
         submit: bool,

@@ -55,12 +55,17 @@ pub(crate) const COMPOSER_MENU: Frame = Frame::Around(Part::Region(Region::Compo
 /// The composer, and what its microphone opens until dictation is ready.
 pub(crate) const DICTATION_CARD: Frame =
     Frame::Around(Part::Region(Region::Composer), &[Part::Region(Region::DictationCard)]);
+/// The composer, and what conversation mode's button opens until dictation and speech are ready.
+pub(crate) const CONVERSATION_CARD: Frame =
+    Frame::Around(Part::Region(Region::Composer), &[Part::Region(Region::ConversationCard)]);
 /// The composer, and the prompts queued above it.
 pub(crate) const QUEUE: Frame = Frame::Around(Part::Region(Region::Queue), &[Part::Region(Region::Composer)]);
 /// The composer, and the card about the chat's context that opens from it.
 pub(crate) const CONTEXT: Frame = Frame::Around(Part::Region(Region::Composer), &[Part::Region(Region::ContextCard)]);
 /// A question the agent asked, which shows in the composer's place.
 pub(crate) const QUESTION: Frame = Frame::Around(Part::Region(Region::Question), NOTHING_MORE);
+/// Conversation mode's bar, in the composer's place.
+pub(crate) const CONVERSATION_BAR: Frame = Frame::Around(Part::Region(Region::ConversationBar), NOTHING_MORE);
 /// The card a finished turn's line opens. It reaches past the chat's column, over the sidebar in a narrow window, and
 /// the line has an ID made from the screen's data, so the card is shown by itself.
 pub(crate) const TURN_CARD: Frame = Frame::Around(Part::Region(Region::TurnCard), NOTHING_MORE);
@@ -133,11 +138,13 @@ fn region_in_the_column(region: Region) -> bool {
         | Region::LatestButton
         | Region::Queue
         | Region::Question
+        | Region::ConversationBar
         | Region::EditPreview
         | Region::TurnCard
         | Region::ContextCard
         | Region::UsageCard
         | Region::DictationCard
+        | Region::ConversationCard
         | Region::ReferenceCard => true,
         Region::LeftSidebar
         | Region::RightSidebar

@@ -31,7 +31,7 @@ impl FileDiff {
         let on_event =
             |this: &mut Self, event: &dictation_ui::Event, window: &mut Window, cx: &mut Context<Self>| match event {
                 dictation_ui::Event::Ended { submit: true } => this.save_draft(window, cx),
-                dictation_ui::Event::Ended { submit: false } => {}
+                dictation_ui::Event::Ended { submit: false } | dictation_ui::Event::Started => {}
                 dictation_ui::Event::Error(message) => cx.emit(FileDiffEvent::Error(message.clone())),
             };
         let corner = look::Corner::Control;

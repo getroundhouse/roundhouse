@@ -9,7 +9,6 @@ use gpui_kit::{App, Window};
 use sound::Quieting;
 
 use super::{Control, Setting};
-use crate::dictating::DictationChoice;
 use crate::settings::{change, get};
 
 /// The button that opens the choices.
@@ -24,11 +23,11 @@ pub(super) fn setting() -> Setting {
         does: "Dictate prompts and written answers by holding Space in their text fields. Prompts also have a microphone button. \
                It needs a model of 2.4 GB, downloaded once, which hears you on this Mac, so nothing you say leaves \
                it. Ask first shows the microphone, and downloads the model once you click it and say so.",
-        control: Control::Choice {
-            id: CHOICE,
-            chosen: Box::new(|cx| get(cx).dictation.label().into()),
-            menu: Rc::new(choices),
-        },
+        control: Control::ask_first(
+            CHOICE,
+            |settings| settings.dictation,
+            |settings, choice| settings.dictation = choice,
+        ),
         status_box: Some(Box::new(crate::dictating::status_box)),
     }
 }
@@ -70,16 +69,6 @@ pub(super) fn quieting(how: Quieting) -> Setting {
         },
         status_box: None,
     }
-}
-
-/// Ask first, On and Off, with the one chosen ticked.
-fn choices(mut menu: look::Menu, _: &mut Window, cx: &mut App) -> look::Menu {
-    let chosen = get(cx).dictation;
-    for choice in DictationChoice::ALL {
-        let item = look::menu_row(choice.label()).chosen(choice == chosen);
-        menu = menu.row(item.on_choose(move |_, cx| change(cx, |settings| settings.dictation = choice)));
-    }
-    menu
 }
 
 /// Auto, then every language by name, with the one chosen ticked, in a menu that scrolls, since they're too many to

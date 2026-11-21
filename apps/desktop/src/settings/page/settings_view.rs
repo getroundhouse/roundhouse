@@ -139,6 +139,31 @@ pub(super) enum Control {
     Choice { id: &'static str, chosen: Chosen, menu: Menu },
 }
 
+impl Control {
+    /// Ask first, On or Off, from the button `id`, as `of` reads the choice from the app's settings and `set` changes
+    /// it, with the one chosen ticked.
+    pub(super) fn ask_first(
+        id: &'static str,
+        of: fn(&crate::settings::Settings) -> crate::settings::Choice,
+        set: fn(&mut crate::settings::Settings, crate::settings::Choice),
+    ) -> Self {
+        let menu = move |mut menu: look::Menu, _: &mut Window, cx: &mut App| {
+            let chosen = of(&crate::settings::get(cx));
+            for choice in crate::settings::Choice::ALL {
+                let item = look::menu_row(choice.label()).chosen(choice == chosen);
+                menu = menu
+                    .row(item.on_choose(move |_, cx| crate::settings::change(cx, |settings| set(settings, choice))));
+            }
+            menu
+        };
+        Self::Choice {
+            id,
+            chosen: Box::new(move |cx| of(&crate::settings::get(cx)).label().into()),
+            menu: Rc::new(menu),
+        }
+    }
+}
+
 impl Setting {
     /// Whether the search is in what it's called or what it does.
     pub(super) fn matches(&self, search: &str) -> bool {

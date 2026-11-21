@@ -1,5 +1,5 @@
-use crate::dictating::DictationChoice;
 use crate::saving::{Failure, Saver, write_json};
+use crate::settings::Choice;
 use crate::sounds::Sound;
 use crate::workspace_order::Sort;
 use gpui_kit::{App, BorrowAppContext as _, Context, Global, Subscription};
@@ -50,7 +50,7 @@ pub(crate) struct Settings {
     /// Whether prompts and written answers can be dictated to, once the model is downloaded and prepared. It asks first until the
     /// person chooses, since turning it on downloads 2.4 GB.
     #[serde(default)]
-    pub(crate) dictation: DictationChoice,
+    pub(crate) dictation: Choice,
     /// The language what's dictated is heard in. Auto unless chosen, since the model hears any of its languages under
     /// Auto, and a wrong one far worse.
     #[serde(default, with = "crate::dictating::language")]
@@ -63,6 +63,10 @@ pub(crate) struct Settings {
     /// unless chosen, since it pauses another app.
     #[serde(default)]
     pub(crate) pause_while_dictating: bool,
+    /// Whether the agent's replies can be read out, in conversation mode, once the voice is downloaded. It asks first
+    /// until the person chooses, as dictation does, since turning it on downloads the voice.
+    #[serde(default)]
+    pub(crate) speech: Choice,
     /// Settings this build doesn't know, which a newer one wrote, kept so that saving here doesn't lose them.
     #[serde(flatten)]
     pub(super) others: Map<String, Value>,
@@ -80,10 +84,11 @@ impl Default for Settings {
             notify: on(),
             play_sound: on(),
             sound: Sound::default(),
-            dictation: DictationChoice::default(),
+            dictation: Choice::default(),
             dictation_language: dictation::Language::default(),
             mute_while_dictating: false,
             pause_while_dictating: false,
+            speech: Choice::default(),
             others: Map::new(),
         }
     }

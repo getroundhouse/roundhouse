@@ -10,6 +10,7 @@ use serde_json::Value;
 #[cfg(test)]
 use std::collections::BTreeSet;
 
+mod choice;
 mod page;
 #[cfg(test)]
 mod tests;
@@ -18,6 +19,7 @@ mod tests;
 use crate::sounds::Sound;
 #[cfg(test)]
 use crate::workspace_order::Sort;
+pub(crate) use choice::Choice;
 pub(crate) use page::{Asking, FIND_KEY, KEY_CONTEXT, OfHub, PageId, page};
 
 mod preferences;
