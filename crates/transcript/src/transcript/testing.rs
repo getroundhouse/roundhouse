@@ -98,6 +98,12 @@ impl Transcript {
         row(ix, cx);
     }
 
+    /// Whether the end of what's selected that moved last is in sight, below Find's bar while it's open, if it's
+    /// drawn.
+    pub fn selected_end_in_sight(&self) -> Option<bool> {
+        self.selection.end_in(super::find::in_view(self.finding.is_some(), self.list.viewport()))
+    }
+
     /// What each text the transcript keeps the kit's blocks of was parsed from, which is what it shows.
     pub fn kept_texts(&self) -> Vec<String> {
         self.texts.sources()

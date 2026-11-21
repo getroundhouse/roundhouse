@@ -25,6 +25,7 @@ mod parser_panics;
 mod proposal;
 mod questions;
 mod references;
+mod reveal;
 mod rows;
 mod scroll_area;
 mod selection;

@@ -244,6 +244,9 @@ tokio = { version = "1.54.1", features = ["io-std", "io-util", "macros", "net", 
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 two-face = { version = "0.4.5", default-features = false }
+# Already under gpui-kit. Moves an end of what's selected in the transcript's texts by a character as a person sees
+# one, as the kit's text boxes do.
+unicode-segmentation = "1.13.3"
 # The one Velopack uses, with its TLS, which `fetching` fetches the update feed and dictation's model with.
 ureq = "3.5.2"
 uuid = { version = "1.29.3", features = ["v4"] }

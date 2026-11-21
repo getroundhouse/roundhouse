@@ -1,7 +1,6 @@
 use self::wheel::{Owner, Wheel};
 use super::wheel;
-use crate::find::reveal;
-use crate::find::reveal::Reveal;
+use crate::reveal::Reveal;
 use crate::selection::Selection;
 use gpui_kit::base::{InteractiveElementExt as _, Scrollbar};
 use gpui_kit::{
@@ -18,9 +17,8 @@ pub(crate) struct ScrollArea {
     pub(super) max_height: Pixels,
     pub(super) scrolls: Scrolls,
     pub(super) content: AnyElement,
-    /// Where the transcript's match being shown was drawn, to scroll to when it's in here.
-    pub(super) reveal: Option<Reveal>,
-    /// The transcript's selection, to scroll on under a drag that started in here.
+    /// The selection of the view it's in, to scroll on under a drag that started in here, and to what it's bringing
+    /// into view, when that's in here.
     pub(super) drags: Selection,
 }
 
@@ -34,7 +32,8 @@ pub(super) enum Scrolls {
 
 impl ScrollArea {
     /// `id` keeps the area's place from one frame to the next, so it's the area's alone. It scrolls on under a drag of
-    /// `drags` that started in a text in here, held past its top or bottom. The text says it's in here by its area, as
+    /// `drags` that started in a text in here, held past its top or bottom, and to what `drags` is bringing into view,
+    /// such as the match Find is showing, once it's drawn in here. The text says it's in here by its area, as
     /// `crate::texts::Written::in_area` and `crate::texts::Plain::area` say.
     pub(crate) fn new(
         id: impl Into<ElementId>,
@@ -43,13 +42,7 @@ impl ScrollArea {
         drags: &Selection,
     ) -> Self {
         let (content, drags) = (content.into_any_element(), drags.clone());
-        Self { id: id.into(), max_height, scrolls: Scrolls::Down, content, reveal: None, drags }
-    }
-
-    /// Scrolls to the match being shown when it's drawn in here.
-    pub(crate) fn follows(mut self, reveal: &Reveal) -> Self {
-        self.reveal = Some(reveal.clone());
-        self
+        Self { id: id.into(), max_height, scrolls: Scrolls::Down, content, drags }
     }
 
     pub(crate) fn max_height(mut self, max_height: Pixels) -> Self {
@@ -83,10 +76,9 @@ impl RenderOnce for ScrollArea {
         div()
             .relative()
             .child(area.test_support())
-            // After the area, so what it holds acts on the wheel first, and has said where a match it shows is.
-            .children(
-                self.reveal.map(|reveal| follows_the_match(self.id.clone(), self.scrolls, handle.clone(), reveal)),
-            )
+            // After the area, so what it holds acts on the wheel first, and has said where what's to be brought into
+            // view is.
+            .child(follows_the_reveal(self.id.clone(), self.scrolls, handle.clone(), self.drags.reveal().clone()))
             .child(follows_the_drag(self.id.clone(), handle.clone(), self.drags))
             .child(takes_the_wheel(self.id, self.scrolls, handle))
             .child(div().absolute().inset_0().child(bar))
@@ -102,26 +94,15 @@ pub(crate) fn holding_wide<E: ParentElement + Styled>(area: E, content: impl Int
     area.flex().items_start().child(div().flex_none().min_w_full().child(content))
 }
 
-/// Draws nothing, and scrolls the area `id` to the match being shown, if it's in the area and out of its view, down
-/// and, if it `scrolls` both ways, sideways. Until the match is drawn where it's scrolled to, the transcript leaves its
-/// list where it is.
-fn follows_the_match(id: ElementId, scrolls: Scrolls, handle: ScrollHandle, reveal: Reveal) -> impl IntoElement {
+/// Draws nothing, and scrolls the area `id` to what `reveal` is bringing into view, if it's in the area and out of its
+/// view, down and, if it `scrolls` both ways, sideways. Until that's drawn where it's scrolled to, what scrolls the
+/// texts leaves them where they are.
+fn follows_the_reveal(id: ElementId, scrolls: Scrolls, handle: ScrollHandle, reveal: Reveal) -> impl IntoElement {
     canvas(
         |_, _, _| {},
         move |_, (), window, _| {
-            let Some(drawn) = reveal.drawn().filter(|drawn| drawn.area.as_ref() == Some(&id)) else { return };
-            let (offset, max, visible) = (handle.offset(), handle.max_offset(), handle.bounds());
-            let mut to = offset;
-            if let Some(by) = reveal::scroll_by(visible, drawn.bounds) {
-                to.y = (offset.y - by).clamp(-max.y, px(0.));
-            }
-            if scrolls == Scrolls::BothWays
-                && let Some(by) = reveal::scroll_across(visible, drawn.bounds)
-            {
-                to.x = (offset.x - by).clamp(-max.x, px(0.));
-            }
-            if to != offset {
-                handle.set_offset(to);
+            let Some((down, across)) = reveal.in_area(&id, handle.bounds()) else { return };
+            if scroll(&handle, scrolls, down, across) {
                 reveal.moved();
                 // A refresh as the window paints brings no frame, so it asks for the one that draws the area where it's
                 // scrolled to.
@@ -141,19 +122,33 @@ fn follows_the_drag(id: ElementId, handle: ScrollHandle, selection: Selection) -
         move |_, (), window, cx| {
             let now = cx.background_executor().now();
             let Some(by) = selection.scroll_area_past_edge(&id, handle.bounds(), now) else { return };
-            let (offset, max) = (handle.offset(), handle.max_offset());
-            let to = (offset.y - by).clamp(-max.y, px(0.));
-            if to != offset.y {
-                handle.set_offset(point(offset.x, to));
-            }
             // The first frame only starts the clock, and one at the end has nothing to wait for.
-            if to != offset.y || by == px(0.) {
+            if scroll(&handle, Scrolls::Down, Some(by), None) || by == px(0.) {
                 window.request_animation_frame();
             }
         },
     )
     .absolute()
     .size_0()
+}
+
+/// Scrolls the area `handle` scrolls down by `down`, and right by `across` if it `scrolls` both ways, as far as it
+/// goes each way, up and left being less than nothing. Says whether it moved.
+fn scroll(handle: &ScrollHandle, scrolls: Scrolls, down: Option<Pixels>, across: Option<Pixels>) -> bool {
+    let (offset, max) = (handle.offset(), handle.max_offset());
+    let mut to = offset;
+    if let Some(by) = down {
+        to.y = (offset.y - by).clamp(-max.y, px(0.));
+    }
+    if scrolls == Scrolls::BothWays
+        && let Some(by) = across
+    {
+        to.x = (offset.x - by).clamp(-max.x, px(0.));
+    }
+    if to != offset {
+        handle.set_offset(to);
+    }
+    to != offset
 }
 
 /// Lies over the area `id`, and acts on each wheel event over it as [`turn`] says: down or up, and sideways too if it

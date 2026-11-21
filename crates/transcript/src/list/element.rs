@@ -9,13 +9,13 @@ use std::ops::Range;
 use std::rc::Rc;
 
 use gpui_kit::{
-    AnyElement, App, AvailableSpace, Bounds, ContentMask, Element, ElementId, GlobalElementId, Hitbox, HitboxBehavior,
-    InspectorElementId, IntoElement, LayoutId, Pixels, Style, Window, point, px, relative, size,
+    AnyElement, App, AvailableSpace, Bounds, ContentMask, Element, ElementId, GlobalElementId, InspectorElementId,
+    IntoElement, LayoutId, Pixels, Style, Window, point, px, relative, size,
 };
 
 use super::layout::{Layout, Rows, lay_out};
 use super::state::State;
-use crate::selection::Selection;
+use crate::selection::drawn_last_frame;
 
 /// How many windows' height a turn of the wheel can move the top by and still have its place found row by row, each
 /// measured as it's passed. Further than that goes by what the rows between are guessed to come to, which is what a
@@ -35,8 +35,6 @@ pub(super) struct ListElement {
     /// Told every row the viewport and its buffer need, so none can be evicted while in sight, and the lowest row
     /// that could not be drawn, to fetch around it. A fully loaded viewport asks for no more history.
     pub(super) want: Rc<dyn Fn(Range<usize>, Option<usize>)>,
-    /// What's selected of the rows' text, which a press on it starts and a drag past the list's edge scrolls on.
-    pub(super) selection: Selection,
 }
 
 /// The rows as a frame is laying them out, each drawn as wide as the list.
@@ -122,8 +120,8 @@ impl IntoElement for ListElement {
 
 impl Element for ListElement {
     type RequestLayoutState = ();
-    /// The rows that show, to paint, and where the list hears the pointer.
-    type PrepaintState = (Vec<AnyElement>, Hitbox);
+    /// The rows that show, to paint.
+    type PrepaintState = Vec<AnyElement>;
 
     fn id(&self) -> Option<ElementId> {
         Some(self.id.clone())
@@ -155,28 +153,22 @@ impl Element for ListElement {
         (): &mut (),
         window: &mut Window,
         cx: &mut App,
-    ) -> (Vec<AnyElement>, Hitbox) {
-        self.selection.new_frame();
-        let started = self.selection.frame_started(id, bounds, window, cx);
+    ) -> Vec<AnyElement> {
         // A drag of the scrollbar's thumb ends when the button comes up, which the scrollbar only hears while it's
         // drawn, as a selection's does.
-        if !started.drawn_last_frame {
+        if !drawn_last_frame(id, window) {
             self.state.borrow_mut().end_drag();
         }
         // What the rest of the transcript was drawn from in this frame: its button back to the latest row, which
         // shows while the list is scrolled up, and the row its outline marks a prompt by, which it goes by only then.
         let read = |state: &State| state.is_scrolled_up().then(|| state.bottom_row());
         let before = read(&self.state.borrow());
-        if let Some(by) = started.scroll_by {
-            self.state.borrow_mut().scroll_by(-by);
-        }
         let layout = self.lay_out(bounds, window, cx);
         self.measure_out_of_sight(bounds.size.width, window, cx);
         if read(&self.state.borrow()) != before {
             // Laying the rows out found another row at the bottom, or the end in sight, so those are drawn again.
             window.request_animation_frame();
         }
-        let hitbox = window.insert_hitbox(bounds, HitboxBehavior::Normal);
         let mut rows = Vec::new();
         window.with_content_mask(Some(ContentMask { bounds }), |window| {
             for row in layout.rows {
@@ -186,8 +178,7 @@ impl Element for ListElement {
                 }
             }
         });
-        self.selection.texts_laid_out(bounds, window);
-        (rows, hitbox)
+        rows
     }
 
     fn paint(
@@ -196,11 +187,10 @@ impl Element for ListElement {
         _: Option<&InspectorElementId>,
         bounds: Bounds<Pixels>,
         (): &mut (),
-        (rows, hitbox): &mut (Vec<AnyElement>, Hitbox),
+        rows: &mut Vec<AnyElement>,
         window: &mut Window,
         cx: &mut App,
     ) {
-        self.selection.hear_the_pointer(hitbox, bounds, window);
         window.with_content_mask(Some(ContentMask { bounds }), |window| {
             for row in rows {
                 row.paint(window, cx);

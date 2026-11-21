@@ -1,7 +1,7 @@
 use super::super::{Model, Transcript, TranscriptEvent};
-use super::{bar, count, stepping, stretch};
+use super::{bar, count, stretch};
 use crate::find::FindLook;
-use crate::find::reveal::Reveal;
+use crate::reveal::Wanted;
 use crate::rows::{NEAR, REACH, found_in_row, rows_drawing, rows_to_count};
 use bar::Bar;
 use client_core::session_log::{Position, Row, SessionLog};
@@ -12,16 +12,12 @@ use protocol::find::Needle;
 use std::collections::BTreeSet;
 use std::ops::Range;
 use std::rc::Rc;
-use stepping::Revealing;
 
 /// Where finding has got to in one chat, while its bar is open.
 pub(crate) struct Finding {
     pub(super) bar: Bar,
     /// What's typed, once it's been looked for.
     pub(super) query: Option<Query>,
-    /// Where the match being shown was drawn, which rows are drawn with.
-    pub(super) reveal: Reveal,
-    pub(super) revealing: Revealing,
 }
 
 /// Something typed, being looked for. Each is new, so nothing found for one typed before is kept.
@@ -113,8 +109,7 @@ impl Transcript {
     pub fn open_find(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.finding.is_none() {
             let bar = Bar::new(window, cx);
-            self.finding =
-                Some(Finding { bar, query: None, reveal: Reveal::default(), revealing: Revealing::default() });
+            self.finding = Some(Finding { bar, query: None });
         }
         if let Some(finding) = &self.finding {
             finding.bar.focus(window, cx);
@@ -144,6 +139,7 @@ impl Transcript {
         if self.finding.take().is_none() {
             return;
         }
+        self.selection.reveal().done_with(Wanted::Match);
         self.model.borrow_mut().find = Rc::default();
         cx.emit(TranscriptEvent::FindClosed);
         cx.notify();
@@ -153,10 +149,10 @@ impl Transcript {
     pub(crate) fn find_again(&mut self, cx: &mut Context<Self>) {
         let Some(finding) = &mut self.finding else { return };
         let needle = Needle::new(&finding.bar.query(cx)).ok();
-        finding.reveal.done();
+        let reveal = self.selection.reveal();
+        reveal.done_with(Wanted::Match);
         finding.query = needle.clone().map(|needle| Query::new(needle, &self.client, &self.session));
-        self.model.borrow_mut().find =
-            Rc::new(FindLook::new(needle.clone(), None, finding.reveal.clone(), look::colors(cx)));
+        self.model.borrow_mut().find = Rc::new(FindLook::new(needle.clone(), None, reveal.clone(), look::colors(cx)));
         if let Some(needle) = needle {
             let (found, rows) = {
                 let m = self.model.borrow();

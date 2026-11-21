@@ -67,7 +67,7 @@ pub(super) fn selected<'a>(
 
 /// The text drawn in this frame that `position` is on, if it's on one that shows any of its leaves.
 pub(super) fn text_under(drawn: &[Drawn], position: Point<Pixels>) -> Option<&Drawn> {
-    drawn.iter().find(|drawn| drawn.bounds.contains(&position) && !drawn.leaves.is_empty())
+    drawn.iter().find(|drawn| drawn.bounds.contains(&position) && drawn.showing().next().is_some())
 }
 
 /// The place in what shows of the texts drawn in this frame nearest `position`, and the text it's in: in the leaf
@@ -81,7 +81,7 @@ pub(super) fn spot_at(drawn: &[Drawn], position: Point<Pixels>) -> Option<(Spot,
     let mut nearest = None;
     for drawn in on.map_or(drawn, std::slice::from_ref) {
         let text = &drawn.text;
-        for (leaf, geometry) in &drawn.leaves {
+        for (leaf, geometry) in drawn.showing() {
             let (at, leaf, whole) = (drawn.at, *leaf, geometry.bounds());
             let shows = whole.intersect(&drawn.bounds);
             if position.y < shows.top() {
@@ -116,7 +116,6 @@ pub(super) fn spot_at(drawn: &[Drawn], position: Point<Pixels>) -> Option<(Spot,
 /// place before.
 pub(super) fn word_around(text: &str, byte: usize) -> Range<usize> {
     let byte = text.floor_char_boundary(byte);
-    let in_a_word = |c: char| c.is_alphanumeric() || c == '_';
     let (before, after) = text.split_at(byte);
     let Some(here) = after.chars().next().or_else(|| before.chars().next_back()) else { return byte..byte };
     if !in_a_word(here) {
@@ -128,6 +127,11 @@ pub(super) fn word_around(text: &str, byte: usize) -> Range<usize> {
     let start = byte - before.chars().rev().take_while(|c| in_a_word(*c)).map(char::len_utf8).sum::<usize>();
     let end = byte + after.chars().take_while(|c| in_a_word(*c)).map(char::len_utf8).sum::<usize>();
     start..end
+}
+
+/// Whether `c` is part of a word, which a double click selects and a key moves an end by.
+pub(super) fn in_a_word(c: char) -> bool {
+    c.is_alphanumeric() || c == '_'
 }
 
 /// The line `byte` is in, in `text`, without the line break that ends it, which a triple-click in plain text selects,

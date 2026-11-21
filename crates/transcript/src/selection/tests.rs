@@ -1,9 +1,14 @@
-use gpui_kit::{Bounds, TestAppContext, point, px};
+use std::cell::Cell;
+use std::time::Instant;
+
+use gpui_kit::{Bounds, Pixels, TestAppContext, point, px, size};
+use look::motion::ScrollingOn;
 use protocol::model::Seq;
 
 use super::test_layouts::in_pieces;
-use super::{End, Geometry, Selection};
-use crate::texts::{TextAt, TextKey, Texts};
+use super::{Drag, End, Geometry, Scroller, Selection, Unit};
+use crate::reveal::Wanted;
+use crate::texts::{Of, TextAt, TextKey, Texts};
 
 /// A text that's selected keeps what's selected of it as it moves, and is copied from where it is now.
 #[gpui_kit::test]
@@ -56,10 +61,50 @@ fn a_text_that_shows_only_the_space_between_its_lines_shows_none_of_its_leaves(c
     let draw = |shows| {
         selection.new_frame();
         selection.drawn(output.clone(), at, shows, None, [(0, Geometry::Plain(pieces.clone()))]);
-        selection.inner.borrow().drawn[0].leaves.len()
+        selection.inner.borrow().drawn[0].showing().count()
     };
 
     assert!(pieces.bounds().intersects(&space), "the space is within the text's bounds");
     assert_eq!(draw(space), 0, "but none of its leaves shows there");
     assert_eq!(draw(into_the_second), 1, "and its leaf shows once the second line does");
+}
+
+/// What scrolls the texts, which goes where it's asked.
+#[derive(Default)]
+struct Scrolling(Cell<Pixels>);
+
+impl Scroller for Scrolling {
+    fn scroll_down(&self, by: Pixels) {
+        self.0.set(self.0.get() + by);
+    }
+
+    fn scrolled(&self) -> Pixels {
+        self.0.get()
+    }
+
+    fn show(&self, _: Of) -> bool {
+        true
+    }
+}
+
+/// A drag held past the edge takes over from what was being brought into view, such as a match whose row loaded as it
+/// went, which would scroll back to it once the drag was done.
+#[gpui_kit::test]
+fn a_drag_held_past_the_edge_takes_over_from_what_was_being_brought_into_view(cx: &mut TestAppContext) {
+    let selection = Selection::new(Texts::alone(), cx.update(|cx| cx.focus_handle()));
+    let window = Bounds::new(point(px(0.), px(0.)), size(px(200.), px(200.)));
+    let pressed = End { text: TextKey::named("reply"), leaf: 0, byte: 0 };
+    selection.inner.borrow_mut().drag = Some(Drag {
+        pointer: point(px(10.), window.bottom() + px(40.)),
+        unit: Unit::Character,
+        chosen: (pressed.clone(), pressed),
+        scrolling: ScrollingOn::default(),
+        area: None,
+        area_scrolling: ScrollingOn::default(),
+    });
+    selection.reveal().want(Wanted::Match, Of::Event(Seq::new(1)));
+
+    selection.frame_started(window, &Scrolling::default(), Instant::now());
+
+    assert!(!selection.reveal().wants(Wanted::Match), "it isn't brought into view once the drag's done");
 }

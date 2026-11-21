@@ -1,25 +1,18 @@
-//! Going from one match to the next: loading its row if it isn't, opening what it's in, and bringing it into view.
+//! Going from one match to the next: loading its row if it isn't, opening what it's in, and having it brought into
+//! view, which what scrolls the chat does, as `crate::reveal` says.
 
 use std::rc::Rc;
 
-use gpui_kit::{Context, Window};
+use client_core::session_log::Row;
+use gpui_kit::{Bounds, Context, Pixels, Window, point, size};
 
 use super::count::At;
 use super::{bar, is_loaded};
-use crate::find::{FindLook, Spot, reveal};
+use crate::find::{FindLook, Spot};
+use crate::reveal::Wanted;
 use crate::rows::found_in_row;
+use crate::texts::Of;
 use crate::transcript::Transcript;
-
-/// How many frames the transcript goes on trying to bring a match into view, which only takes more than a couple
-/// while its row loads or an area in it scrolls.
-const FRAMES_TO_REVEAL: u32 = 120;
-
-/// How the match being shown is being brought into view.
-#[derive(Default)]
-pub(super) struct Revealing {
-    /// How many more frames to go on.
-    frames: u32,
-}
 
 impl Transcript {
     /// Shows the next match, or the previous one, going round from the last to the first. With the bar closed, it
@@ -90,7 +83,7 @@ impl Transcript {
         }
         let Some((found, nth)) = spots.get(at.nth).copied() else { return };
         let spot = Spot { text: found.id.clone(), nth };
-        let reveal = finding.reveal.clone();
+        let reveal = self.selection.reveal().clone();
         {
             let mut m = self.model.borrow_mut();
             for (key, fold) in &found.opens {
@@ -100,45 +93,23 @@ impl Transcript {
         }
         // What it opened makes its row taller.
         self.list.out_of_date(at.row..at.row + 1);
-        if !self.list.shows(at.row) {
-            self.list.go_to_row(at.row);
+        // What scrolls the chat goes to its row first, if it doesn't show, as the next frame starts.
+        if let Row::Event(event) = self.log.row(at.row) {
+            reveal.want(Wanted::Match, Of::Event(event.seq));
         }
-        reveal.want();
-        finding.revealing = Revealing { frames: FRAMES_TO_REVEAL };
         cx.notify();
     }
+}
 
-    /// Scrolls the list toward the match being shown, from where it was last drawn, until it's in view below the bar,
-    /// a frame at a time. It runs as the transcript renders, where a notify brings no frame, so it asks the window for
-    /// the next one for as long as there's more to do, and for none once the match is in view or it has given up.
-    pub(crate) fn keep_revealing(&mut self, window: &Window) {
-        let Some(finding) = &mut self.finding else { return };
-        let mut visible = self.list.viewport();
-        let under = bar::bottom().min(visible.size.height / 2.);
-        visible.origin.y += under;
-        visible.size.height -= under;
-        let (reveal, revealing) = (finding.reveal.clone(), &mut finding.revealing);
-        #[cfg(feature = "testing")]
-        reveal.set_visible(visible);
-        if revealing.frames == 0 || !reveal.is_wanted() {
-            return;
-        }
-        revealing.frames -= 1;
-        let Some(drawn) = reveal.drawn() else {
-            if revealing.frames == 0 {
-                reveal.done();
-            } else {
-                window.request_animation_frame();
-            }
-            return;
-        };
-        match reveal::scroll_by(visible, drawn.bounds) {
-            Some(by) if revealing.frames > 0 => {
-                self.list.scroll_down(by);
-                reveal.moved();
-                window.request_animation_frame();
-            }
-            Some(_) | None => reveal.done(),
-        }
+/// What of `visible`, where the chat shows its rows, is in view: what's below Find's bar while it's `open`, since the
+/// bar hides the chat's top, but at most half of it, and all of it otherwise.
+pub(in crate::transcript) fn in_view(open: bool, visible: Bounds<Pixels>) -> Bounds<Pixels> {
+    if !open {
+        return visible;
     }
+    let under = bar::bottom().min(visible.size.height / 2.);
+    Bounds::new(
+        point(visible.origin.x, visible.origin.y + under),
+        size(visible.size.width, visible.size.height - under),
+    )
 }

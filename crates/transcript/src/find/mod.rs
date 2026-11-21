@@ -5,7 +5,6 @@
 mod look;
 pub(crate) mod markdown;
 mod marked;
-pub(crate) mod reveal;
 
 pub(crate) use look::{FindLook, Marks, Part, Spot, TextId, behind, view_id};
 pub(crate) use marked::{marked, marked_with_layout, styled};

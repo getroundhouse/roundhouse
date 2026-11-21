@@ -20,6 +20,10 @@ Rest the pointer on that line for the turn's card: the details its agent reports
 
 ![A finished turn's card](../../../spec/screens/turn-card.png)
 
+## Selecting text
+
+- **Shift with an arrow key makes what's selected longer or shorter at the end you moved last,** a character at a time, or a line with up and down. With Option, or Ctrl on Windows and Linux, it goes a word at a time. The chat scrolls to bring that end into view, so held down, it goes on past the window's edge. The keys do the same in a proposal's page and in a Markdown file shown rendered.
+
 ## Tool calls
 
 Each call is a line: what it is, and what it's about. Click it to open it.

@@ -8,10 +8,13 @@ use std::time::Instant;
 
 use gpui_kit::base::GlobalState;
 use gpui_kit::{
-    Bounds, DispatchPhase, ElementId, Hitbox, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, Window,
+    Bounds, DispatchPhase, ElementId, Hitbox, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, Point,
+    Window, point, px,
 };
+use look::motion::ScrollingOn;
 
-use super::Selection;
+use super::places::{spot_at, text_under};
+use super::{Drag, End, Selection, Unit};
 
 impl Selection {
     /// Listens for a press in the list at `hitbox`, in `bounds`, to select the text it's on or let go of what's
@@ -54,6 +57,85 @@ impl Selection {
                 released.release();
             }
         });
+    }
+
+    /// The button's come up, or the list it was pressed in has gone, so the drag's over, and what it selected stays.
+    pub(super) fn release(&self) {
+        self.inner.borrow_mut().drag = None;
+    }
+
+    /// Moves the far end of what's being dragged to the place under the pointer, or the nearest in the window to it
+    /// if it's past the window's edge, as the texts drawn in this frame have it. Says whether that changed what's
+    /// selected.
+    pub(super) fn follow(&self, bounds: Bounds<Pixels>) -> bool {
+        let (pointer, unit, chosen) = {
+            let selecting = self.inner.borrow();
+            let Some(drag) = selecting.drag.as_ref() else { return false };
+            (drag.pointer, drag.unit, drag.chosen.clone())
+        };
+        let Some(chosen_at) = self.spots(&chosen) else { return false };
+        let inside = point(pointer.x, pointer.y.clamp(bounds.top() + px(1.), bounds.bottom() - px(1.)));
+        let under = spot_at(&self.inner.borrow().drawn, inside).map(|(spot, text)| (spot, text.clone()));
+        let Some((spot, text)) = under else { return false };
+        let (from, to) = self.around(spot, &text, unit);
+        let (start, end) = chosen;
+        let ends = if spot < chosen_at.0 {
+            (end, End::at(text, from))
+        } else if to < chosen_at.1 {
+            (start, end)
+        } else {
+            (start, End::at(text, to))
+        };
+        let mut selecting = self.inner.borrow_mut();
+        let changed = selecting.ends.as_ref() != Some(&ends);
+        selecting.set(Some(ends));
+        changed
+    }
+
+    fn is_dragging(&self) -> bool {
+        self.inner.borrow().drag.is_some()
+    }
+
+    /// A press of the button at `position`, the `clicks`th in a row. On a text, it starts a selection there, or with
+    /// `extend`, moves the far end of the one there is to there, and says so. Anywhere else, nothing's selected.
+    fn press(&self, position: Point<Pixels>, clicks: usize, extend: bool) -> bool {
+        let mut selecting = self.inner.borrow_mut();
+        let on = text_under(&selecting.drawn, position);
+        let (on_text, area) = (on.is_some(), on.and_then(|drawn| drawn.area.clone()));
+        let Some((spot, text)) = spot_at(&selecting.drawn, position).filter(|_| on_text) else {
+            selecting.set(None);
+            selecting.drag = None;
+            return false;
+        };
+        let text = text.clone();
+        let unit = match clicks {
+            0 | 1 => Unit::Character,
+            2 => Unit::Word,
+            _ => Unit::Paragraph,
+        };
+        // Extending from where what's selected starts, if its text still has a place, and otherwise starting afresh.
+        let anchor = (selecting.ends.as_ref().map(|(anchor, _)| anchor.clone()))
+            .filter(|anchor| extend && unit == Unit::Character && self.texts.place_of(&anchor.text).is_some());
+        let chosen = if let Some(anchor) = anchor {
+            selecting.set(Some((anchor.clone(), End::at(text, spot))));
+            (anchor.clone(), anchor)
+        } else {
+            let (from, to) = self.around(spot, &text, unit);
+            let chosen = (End::at(text.clone(), from), End::at(text, to));
+            selecting.set(Some(chosen.clone()));
+            chosen
+        };
+        let (scrolling, area_scrolling) = (ScrollingOn::default(), ScrollingOn::default());
+        selecting.drag = Some(Drag { pointer: position, unit, chosen, scrolling, area, area_scrolling });
+        true
+    }
+
+    /// The pointer's moved to `position` with the button held, over a list in `bounds`.
+    fn drag_to(&self, position: Point<Pixels>, bounds: Bounds<Pixels>) {
+        if let Some(drag) = self.inner.borrow_mut().drag.as_mut() {
+            drag.pointer = position;
+        }
+        self.follow(bounds);
     }
 
     /// How far to scroll a list in `bounds` down, at `now`, for a pointer held past its top or bottom, if it is.

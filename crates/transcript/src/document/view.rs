@@ -3,13 +3,12 @@ use std::rc::Rc;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, AppContext as _, Context, ElementId, FocusHandle, Focusable, IntoElement, ListAlignment,
-    ListState, ParentElement as _, Render, SharedString, Styled as _, Task, Window, div, list, px,
+    ListState, ParentElement as _, Pixels, Render, SharedString, Styled as _, Task, Window, div, list, px,
 };
 
 use super::changes::{Change, changed};
-use super::frames::Frames;
 use crate::rows::in_column;
-use crate::selection::Selection;
+use crate::selection::{Scrolled, Scroller, Selection};
 use crate::texts::{Of, TextAt, Texts, TopBlock, Written, top_blocks};
 
 /// How far past the window the list draws blocks, so one scrolled into sight is drawn already.
@@ -127,12 +126,33 @@ impl Document {
 
 impl Render for Document {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        // Before the blocks are drawn, so the texts and the selection forget what the last frame drew.
-        self.selection.new_frame();
         let blocks = list(self.list.clone(), cx.processor(|this, ix, _, cx| this.block(ix, cx))).size_full();
-        let frames =
-            Frames { scrolled: blocks.into_any_element(), list: self.list.clone(), selection: self.selection.clone() };
-        self.selection.with_keys(div().size_full().child(frames))
+        let selecting = Scrolled::new("document-frames", Blocks(self.list.clone()), &self.selection, blocks);
+        self.selection.with_keys(div().size_full().child(selecting))
+    }
+}
+
+/// The list of a document's blocks, as what scrolls its texts, each of which says it's in its block.
+struct Blocks(ListState);
+
+impl Scroller for Blocks {
+    fn scroll_down(&self, by: Pixels) {
+        self.0.scroll_by(by);
+    }
+
+    fn scrolled(&self) -> Pixels {
+        -self.0.scroll_px_offset_for_scrollbar().y
+    }
+
+    fn show(&self, of: Of) -> bool {
+        let Of::Document(block) = of else { return false };
+        let out_of_view = |out: Option<bool>| out != Some(false);
+        let shows =
+            !out_of_view(self.0.item_is_above_viewport(block)) && !out_of_view(self.0.item_is_below_viewport(block));
+        if !shows {
+            self.0.scroll_to_reveal_item(block);
+        }
+        !shows
     }
 }
 

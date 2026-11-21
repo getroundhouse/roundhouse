@@ -151,6 +151,13 @@ impl Texts {
         self.parsed(id, text, at.of, super::super::Whose::TheKits, None);
     }
 
+    /// As if the plain text known as `id`, saying `said`, were drawn at `at`.
+    pub(crate) fn said_as(&self, id: &TextKey, at: TextAt, said: &str) {
+        let mut store = self.0.borrow_mut();
+        store.placed(id, at);
+        store.texts.insert(id.clone(), super::super::Text::Plain { said: said.to_owned().into() });
+    }
+
     /// As if the text known by `at`, saying `text`, were drawn there.
     pub(crate) fn drawn_at(&self, at: TextAt, text: &str) {
         self.drawn_as(&TextKey::of(at), at, text);

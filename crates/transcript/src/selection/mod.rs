@@ -13,11 +13,13 @@
 //! the chat has loaded, and each it loaded as the selection was made, since the texts from one end to the other are
 //! kept, as is the one a press was on, for a shift-click to extend from. `crate::texts` draws them.
 //!
-//! It's the mouse's: a press, a drag and a release. The kit's selection also takes a touch screen's long press and
-//! handles, which a transcript on a phone will need here.
+//! It's the mouse's: a press, a drag and a release, and the keyboard's, which moves the end that moved last, as `keys`
+//! says. The kit's selection also takes a touch screen's long press and handles, which a transcript on a phone will
+//! need here.
 
 mod frames;
 mod geometry;
+mod keys;
 mod pieces;
 mod places;
 mod pointer;
@@ -26,12 +28,12 @@ mod test_layouts;
 #[cfg(test)]
 mod tests;
 
+pub(crate) use frames::{Scrolled, Scroller, drawn_last_frame};
 pub(crate) use geometry::Geometry;
+pub(crate) use keys::Way;
 pub(crate) use pieces::Pieces;
 
 mod selecting;
-#[cfg(test)]
-use selecting::End;
 pub use selecting::KEY_CONTEXT;
 pub(crate) use selecting::Selection;
-use selecting::{Drawn, Spot};
+use selecting::{Drag, Drawn, End, Selecting, Spot, Unit};

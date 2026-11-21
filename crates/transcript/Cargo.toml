@@ -43,6 +43,8 @@ merman = { workspace = true, features = [
 rustybuzz.workspace = true
 serde_json.workspace = true
 similar.workspace = true
+# Moves an end of what's selected by a character as a person sees one, such as a letter with its accent.
+unicode-segmentation.workspace = true
 # Reads a drawing a text points to before GPUI draws it, so it shows no file it names by its path.
 usvg.workspace = true
 

@@ -29,6 +29,8 @@ The app's keyboard shortcuts. They're written as a Mac's. On Windows and Linux, 
 | `F3`, `Shift-F3` | On Windows and Linux, the next match, and the one before, too |
 | `Enter`, `Shift-Enter` | In Find's bar, the next match, and the one before |
 | Escape | Close Find's bar, or an image opened from the chat |
+| `Shift` and an arrow | Make what's selected in the chat, a rendered Markdown file or a proposal longer or shorter, a character or a line at a time, at the end you moved last |
+| `Option-Shift` and left or right | The same, a word at a time. `Ctrl-Shift` on Windows and Linux |
 
 ## A terminal
 

@@ -126,6 +126,15 @@ impl Leaves {
         }
     }
 
+    /// The key of the last leaf, if there are any.
+    pub(crate) fn last_leaf(&self) -> Option<u64> {
+        let count = match self {
+            Leaves::Markdown(leaves) => leaves.len(),
+            Leaves::Plain(_) => 1,
+        };
+        u64::try_from(count.checked_sub(1)?).ok()
+    }
+
     /// What each leaf shows, in order.
     pub(crate) fn each(&self) -> impl Iterator<Item = &str> {
         let (markdown, plain) = match self {

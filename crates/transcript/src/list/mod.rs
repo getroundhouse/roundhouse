@@ -34,4 +34,5 @@ pub use state::Place;
 
 mod transcript_list;
 
+pub(crate) use transcript_list::Rows;
 pub use transcript_list::TranscriptList;

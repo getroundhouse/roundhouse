@@ -11,6 +11,7 @@ use gpui_kit::{
 };
 
 use crate::find::Marks;
+use crate::reveal::Wanted;
 
 const LINE_HEIGHT: Pixels = look::CodeLines::Chat.height();
 /// Keeps one very long line from costing more than the screen can show.
@@ -195,7 +196,7 @@ impl LogBlock {
         let (Some(here), Some(reveal)) = (self.marks.here(), self.marks.reveal()) else { return };
         let line = self.log.lines.partition_point(|start| *start as usize <= here.start).saturating_sub(1);
         let at = Bounds::new(point(bounds.left(), bounds.top() + line_top(line)), size(px(1.), LINE_HEIGHT));
-        reveal.drawn_at(at, self.area.clone());
+        reveal.drawn_at(Wanted::Match, at, self.area.clone());
     }
 }
 

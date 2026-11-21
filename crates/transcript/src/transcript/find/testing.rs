@@ -8,14 +8,15 @@ use protocol::find::Needle;
 
 use super::is_loaded;
 use crate::find::FindLook;
-use crate::find::reveal::Reveal;
+use crate::reveal::Reveal;
 use crate::rows::{Found, found_in_row};
 use crate::transcript::Transcript;
 
 impl Transcript {
     /// Whether the match being shown was last drawn in view below the bar.
     pub fn match_in_view(&self) -> Option<bool> {
-        self.finding.as_ref()?.reveal.shows_in_view()
+        self.finding.as_ref()?;
+        self.selection.reveal().shows_in_view()
     }
 
     /// How many matches of `query` each text of the rows the log holds has, `(drawn, counted)`: as the rows draw them,

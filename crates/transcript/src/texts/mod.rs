@@ -38,6 +38,7 @@ pub(crate) use plain::Plain;
 pub(crate) use style::Style;
 
 mod at;
+mod beside;
 mod budget;
 mod code_blocks;
 mod element;

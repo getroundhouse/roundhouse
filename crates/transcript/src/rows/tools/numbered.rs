@@ -101,7 +101,7 @@ fn fitted(sections: &[Section], room: usize) -> (Vec<usize>, usize) {
 
 /// A block's numbered lines, `part`, scrolling past a dozen, and sideways along a line too long for it.
 pub(super) fn scrolling(toggle: &Toggle, id: &ElementId, part: impl IntoElement) -> ScrollArea {
-    block::scrolling(toggle.find, &toggle.shared.selection, id, part).max_height(max_height()).both_ways()
+    block::scrolling(&toggle.shared.selection, id, part).max_height(max_height()).both_ways()
 }
 
 /// A row for each of these lines, without a block around them, with `marks`, which are where the matches are in

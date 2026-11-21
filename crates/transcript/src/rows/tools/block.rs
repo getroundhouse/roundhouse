@@ -13,7 +13,7 @@ use look::{Shaped as _, Typeset as _};
 use super::Toggle;
 use super::highlight::spans;
 use crate::attachments::{self, Carried};
-use crate::find::{self, FindLook, Part, marked};
+use crate::find::{self, Part, marked};
 use crate::log_block::{self, LogBlock, LogText};
 use crate::rows::text::place;
 use crate::rows::written;
@@ -83,12 +83,12 @@ pub(in crate::rows) fn output(toggle: &Toggle, part: Part, text: &str, color: Hs
     if text.len() > LOG_BLOCK_ABOVE {
         let font = look::Type::Code.family(cx);
         let log = LogBlock { log: LogText::new(&shown), color, font, marks, area: Some(area) };
-        return scrolling(toggle.find, drags, &id, printed(&id, log.into_any_element(), color)).into_any_element();
+        return scrolling(drags, &id, printed(&id, log.into_any_element(), color)).into_any_element();
     }
     let said: SharedString = shown.into_owned().into();
     let (drawn, layout) = find::marked_with_layout(said.clone(), &marks, &[], Some(area));
     let selectable = selectable(toggle, part, &id, printed(&id, drawn, color), said, Pieces::whole(layout));
-    scrolling(toggle.find, drags, &id, selectable).into_any_element()
+    scrolling(drags, &id, selectable).into_any_element()
 }
 
 /// What a command printed, the call's `part`, in the foreground colour, with a little space between its lines, so one
@@ -112,7 +112,7 @@ pub(super) fn lines(toggle: &Toggle, part: Part, text: &str, cx: &App) -> AnyEle
     let lines = v_flex().id(ElementId::from((id.clone(), "lines"))).gap(LINE_GAP).children(lines);
     let selectable =
         selectable(toggle, part, &id, printed(&id, lines.test_support().into_any_element(), color), said, pieces);
-    scrolling(toggle.find, &toggle.shared.selection, &id, selectable).into_any_element()
+    scrolling(&toggle.shared.selection, &id, selectable).into_any_element()
 }
 
 /// Plain text, the call's `part`, drawn in the part `id` of its block, which scrolls it: what `drawn` lays out of
@@ -204,7 +204,7 @@ pub(super) fn code(toggle: &Toggle, part: Part, language: &str, prompt: &str, te
         .text_color(colors.text)
         .child(marked(shown, &marks.moved(at), &styles, Some(scroll_id(&id))))
         .test_support();
-    scrolling(toggle.find, &toggle.shared.selection, &id, part).into_any_element()
+    scrolling(&toggle.shared.selection, &id, part).into_any_element()
 }
 
 /// What [`code`] draws of `text`, after its prompt.
@@ -224,21 +224,16 @@ pub(super) fn prose(toggle: &Toggle, part: Part, text: &str) -> AnyElement {
         .typeset(look::Type::Body)
         .child(view)
         .test_support();
-    scrolling(toggle.find, &toggle.shared.selection, &id, shown).into_any_element()
+    scrolling(&toggle.shared.selection, &id, shown).into_any_element()
 }
 
 /// A part of a block, such as its output, which keeps its own ID, in an area that scrolls it once it's taller than a
-/// dozen lines or so, scrolls to the match being shown in it, and scrolls on under a drag of `drags` that started in a
-/// text in it, held past its top or bottom. The area's ID comes from the part's, so each block keeps its own place, and
-/// a text in it says it's in it by [`scroll_id`]. At either end of the part, and over a part that fits, the wheel
-/// scrolls the transcript instead.
-pub(in crate::rows) fn scrolling(
-    find: &FindLook,
-    drags: &Selection,
-    id: &ElementId,
-    part: impl IntoElement,
-) -> ScrollArea {
-    ScrollArea::new(scroll_id(id), px(MAX_HEIGHT), part, drags).follows(find.reveal())
+/// dozen lines or so, scrolls to what `drags` has brought into view in it, such as the match being shown, and scrolls
+/// on under a drag of `drags` that started in a text in it, held past its top or bottom. The area's ID comes from the
+/// part's, so each block keeps its own place, and a text in it says it's in it by [`scroll_id`]. At either end of the
+/// part, and over a part that fits, the wheel scrolls the transcript instead.
+pub(in crate::rows) fn scrolling(drags: &Selection, id: &ElementId, part: impl IntoElement) -> ScrollArea {
+    ScrollArea::new(scroll_id(id), px(MAX_HEIGHT), part, drags)
 }
 
 /// The ID of the area that scrolls the part `id`.
