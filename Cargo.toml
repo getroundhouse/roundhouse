@@ -24,6 +24,7 @@ members = [
     "crates/fetching",
     "crates/models",
     "crates/sound",
+    "crates/phonon",
     "crates/update-feed",
     "crates/windows-icon",
     "crates/waiting",
@@ -60,6 +61,7 @@ default-members = [
     "crates/fetching",
     "crates/models",
     "crates/sound",
+    "crates/phonon",
     "crates/update-feed",
     "crates/windows-icon",
     "crates/waiting",
@@ -127,7 +129,8 @@ base64 = "0.23.1"
 # Already under objc2's crates. The block a Mac calls with whether the app may use the microphone.
 block2 = "0.6.2"
 clap = { version = "4.6.8", features = ["derive"] }
-# Hears the microphone. On a Mac it's Core Audio through objc2's bindings, with nothing generated as it builds.
+# Hears the microphone and plays through the speakers. On a Mac it's Core Audio through objc2's bindings, with nothing
+# generated as it builds, on Windows WASAPI, and on Linux ALSA, which builds against libasound2-dev.
 cpal = "0.18.2"
 # Already under GPUI. Picks the names the hub gives workspaces at random.
 fastrand = "2.5.0"
@@ -211,6 +214,9 @@ portable-pty = "0.9.0"
 # and the code GitHub sends the desktop app back with once an app of your own is made.
 percent-encoding = "2.3.2"
 proptest = "1.12.0"
+# Gradium's Phonon, which speaks a chat's replies on the CPU, as `docs/decisions/phonon-speaks-replies.md` says. `hf` reads
+# the model's tokenizer. Its own downloading, `hub`, stays off, so the model comes through `models`, checked.
+ptts = { version = "0.7.1", default-features = false, features = ["hf"] }
 # Already under every derive. Reads the workspace's Rust as tokens, so a policy test finds attributes and macros in
 # its code, not in its strings and comments.
 proc-macro2 = "1.0.107"
@@ -299,7 +305,10 @@ debug = "line-tables-only"
 # frames inside one have no line numbers, while our own crates' frames, and where any panic happened, keep theirs. Linux
 # links every crate's line tables into each test binary, so there `target` came out a third smaller, a cold build 26%
 # faster, and a rebuild after an edit wrote half as much. On a Mac, which leaves them in the object files, `target` came
-# out 15% smaller.
+# out 15% smaller. Optimized, `xn-gemm-common` 0.20.2, under Phonon, builds on Linux and Windows on arm64: four of its
+# half-precision functions don't enable the CPU feature their instructions need, so they assemble only once inlined into
+# callers that enable it, which run only on a CPU that has it. Unoptimized, they fail with `instruction requires:
+# fullfp16`.
 [profile.dev.package."*"]
 opt-level = 2
 debug = false

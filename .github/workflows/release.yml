@@ -564,6 +564,7 @@ jobs:
       PACKAGES: >-
         pkg-config cmake clang libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev libx11-xcb-dev libxcb1-dev
         libfontconfig-dev libfreetype-dev libvulkan-dev libssl-dev libzstd-dev
+        libasound2-dev
         lld
         build-essential ca-certificates curl git jq
         zstd xz-utils

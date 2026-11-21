@@ -1,6 +1,6 @@
 [package]
 name = "sound"
-description = "The device's sound: hearing the microphone at the rate its caller asks for, whether the app may, and quieting what's playing while something is heard. No UI and no async runtime."
+description = "The device's sound: hearing the microphone at the rate its caller asks for, whether the app may, playing through the speakers, and quieting what's playing while something is heard. No UI and no async runtime."
 version.workspace = true
 edition.workspace = true
 publish.workspace = true
@@ -12,11 +12,12 @@ flume.workspace = true
 now-playing.workspace = true
 parking_lot.workspace = true
 thiserror.workspace = true
+# Hears the microphone and plays through the speakers: Core Audio on a Mac, WASAPI on Windows and ALSA on Linux.
+cpal.workspace = true
 
-# The microphone, through Core Audio, asking whether the app may use it, and muting the sound output.
+# Asking whether the app may use the microphone, and muting the sound output.
 [target.'cfg(target_os = "macos")'.dependencies]
 block2.workspace = true
-cpal.workspace = true
 objc2.workspace = true
 objc2-av-foundation.workspace = true
 objc2-core-audio.workspace = true

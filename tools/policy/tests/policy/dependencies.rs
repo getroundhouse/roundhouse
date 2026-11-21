@@ -121,6 +121,13 @@ fn sound_needs_none_of_our_other_crates_but_now_playing_no_async_runtime_and_no_
     needs_none_of_ours_no_async_runtime_and_no_ui("sound", &["now-playing"]);
 }
 
+/// Phonon knows nothing of what it says or where the audio goes, with no runtime and no UI, so any client on any device
+/// can speak with it. It keeps its model's files with `models`, which downloads them with `fetching`.
+#[test]
+fn phonon_needs_none_of_our_other_crates_but_models_no_async_runtime_and_no_ui() {
+    needs_none_of_ours_no_async_runtime_and_no_ui("phonon", &["models", "fetching"]);
+}
+
 /// A model's files know nothing of what the model does, and are downloaded on the caller's thread, so any client on any
 /// device can keep a model with them.
 #[test]
