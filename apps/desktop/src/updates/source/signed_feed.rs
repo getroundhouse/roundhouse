@@ -4,7 +4,7 @@ use std::io;
 use std::path::Path;
 use std::sync::mpsc::Sender;
 use std::time::Duration;
-use update_feed::{Feed, Running, Unsigned, UpdateFeedKey};
+use update_feed::{Feed, Unsigned, UpdateFeedKey};
 use velopack::bundle::Manifest;
 use velopack::sources::UpdateSource;
 use velopack::{VelopackAsset, VelopackAssetFeed};
@@ -75,8 +75,7 @@ impl SignedSource {
         let signature = self.fetch(&format!("{name}.sig"), SIGNATURE_BYTES)?;
         let releases = verified(&feed, &signature, &self.key)?;
         let keeping = self.keeping.now();
-        let running = Running { version, hub: keeping.hub.as_deref(), workers: keeping.workers };
-        Ok(only_taking_over(releases, &serde_json::from_slice::<Feed>(&feed)?, running))
+        Ok(only_taking_over(releases, &serde_json::from_slice::<Feed>(&feed)?, keeping.running(version)))
     }
 
     pub(super) fn fetch(&self, name: &str, limit: u64) -> Result<Vec<u8>, SourceError> {

@@ -4,7 +4,7 @@ use answer::Answer;
 use flume::RecvTimeoutError;
 use gpui_kit::{App, BorrowAppContext as _, Context, Global, Subscription};
 use problem::{Kind, OutOfReach, Problem, Said, Shown, Step};
-use source::{Keeping, Kept, SignedSource, ToKeep};
+use source::{Heard, Kept, SignedSource, ToKeep};
 use std::path::Path;
 use std::time::{Duration, SystemTime};
 use velopack::{UpdateCheck, UpdateInfo, UpdateManager, UpdateOptions, VelopackApp};
@@ -87,14 +87,30 @@ pub fn check_now(cx: &mut App) {
     });
 }
 
-/// Says what the update has to keep, the hub's workers and its database, as the app learns it from its hub, as
+/// Says what the update has to keep, the hub's workers and its database, as the app hears it from its hub, as
 /// [`ToKeep`] says. A change looks again at once, rather than when the next look is due, so what's ready is the newest
 /// update that keeps them, whether that's newer than before or older. The look shows nothing until it's done, since
-/// nobody asked for it. Older workers to keep, or another hub, drop the update that's ready first, which may not keep
-/// them, so a quit before the look is done, or after it fails, installs nothing rather than ending them.
-pub(crate) fn keep(keeping: Keeping, cx: &mut App) {
+/// nobody asked for it. Older workers to keep, or a hub on an older release than before, drop the update that's ready
+/// first, which may not keep them, so a quit before the look is done, or after it fails, installs nothing rather than
+/// ending them.
+pub(crate) fn keep(heard: Heard, cx: &mut App) {
     let Some(updater) = cx.try_global::<Updater>() else { return };
-    let kept = updater.keeping.set(keeping);
+    let kept = updater.keeping.set(heard);
+    look_again(kept, cx);
+}
+
+/// Says that this computer's hub failed to start, so the update goes by the app's own release, `app`, alone, until the
+/// app hears from the hub, as [`ToKeep::failed_to_start`] says. It looks again at once, as [`keep`] does.
+pub(crate) fn keep_without_the_hub(app: &str, cx: &mut App) {
+    let Some(updater) = cx.try_global::<Updater>() else { return };
+    let kept = updater.keeping.failed_to_start(app);
+    look_again(kept, cx);
+}
+
+/// Looks again once what the update has to keep has changed, and first drops the update that's ready if it may not
+/// keep it.
+fn look_again(kept: Kept, cx: &mut App) {
+    let Some(updater) = cx.try_global::<Updater>() else { return };
     if kept == Kept::Same {
         return;
     }

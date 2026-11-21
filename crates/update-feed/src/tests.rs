@@ -32,7 +32,8 @@ fn with_hub_from(version: &str, oldest: u32, newest: u32, from: &str) -> String 
 
 /// The versions of the releases in `feed` an update from `running` can take.
 fn taken(feed: &Feed, version: &str, workers: Option<u32>) -> Vec<String> {
-    feed.taking_over(Running { version, hub: None, workers }).map(|release| release.version.to_owned()).collect()
+    let running = Running { version, hub: HubRelease::On(version), workers };
+    feed.taking_over(running).map(|release| release.version.to_owned()).collect()
 }
 
 fn assets(packages: &[String]) -> Feed {
@@ -197,7 +198,8 @@ fn a_release_is_taken_only_past_both_its_floors() {
     assert!(taken(&feed, "0.1.9", Some(3)).is_empty());
 }
 
-/// The hub's database is from its own release, which can be older than the app's while the hub waits to restart.
+/// The hub's database is from its own release, which can be older than the app's while the hub waits to restart, and
+/// may be older than any floor while the app hasn't heard from the hub.
 #[test]
 fn a_release_is_taken_only_from_the_oldest_release_it_updates_from_for_the_hub_too() {
     let feed = assets(&[full("0.1.9", 3, 4), updating_from("0.1.11", 3, 4, "0.1.10")]);
@@ -205,8 +207,24 @@ fn a_release_is_taken_only_from_the_oldest_release_it_updates_from_for_the_hub_t
         feed.taking_over(Running { version: "0.1.10", hub, workers: None }).map(|release| release.version).collect()
     };
 
-    assert_eq!(taken(Some("0.1.9")), ["0.1.9"]);
-    assert_eq!(taken(Some("0.1.10")), ["0.1.9", "0.1.11"]);
+    assert_eq!(taken(HubRelease::On("0.1.9")), ["0.1.9"]);
+    assert_eq!(taken(HubRelease::On("0.1.10")), ["0.1.9", "0.1.11"]);
+    assert_eq!(taken(HubRelease::NotHeard), ["0.1.9"], "not heard from yet");
+}
+
+/// So an app drops the update it has ready when it hears of a hub on an older release than before, whose database that
+/// update's hub may not migrate.
+#[test]
+fn only_a_hub_on_the_same_release_or_a_newer_one_is_past_every_floor_of_another() {
+    let (on, not_heard) = (HubRelease::On, HubRelease::<&str>::NotHeard);
+
+    assert!(on("0.1.10").past_every_floor_of(&on("0.1.9")), "by version, not as text");
+    assert!(on("0.1.9").past_every_floor_of(&on("0.1.9")));
+    assert!(!on("0.1.9").past_every_floor_of(&on("0.1.10")));
+    assert!(on("0.1.9").past_every_floor_of(&not_heard));
+    assert!(!not_heard.past_every_floor_of(&on("0.1.9")));
+    assert!(!on("4421741972d8").past_every_floor_of(&on("0.1.9")), "a build of a commit is past none");
+    assert!(on("0.1.9").past_every_floor_of(&on("4421741972d8")));
 }
 
 /// So a hub that's far behind steps through the release its update can't skip, as an app does.
