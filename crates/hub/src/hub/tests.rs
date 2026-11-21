@@ -7,7 +7,7 @@ use protocol::Build;
 use protocol::capability::Capabilities;
 use protocol::capability::settings::Effort;
 use protocol::client::github_accounts::GithubAccountConnect;
-use protocol::client::{ApiError, ErrorCode};
+use protocol::client::{ApiError, ErrorCode, HubStart};
 use protocol::model::{
     AgentDescription, AgentKind, Apart, Branch, BranchName, Branches, Checks, CommitId, Head, Local, LoginDescription,
     MergeState, PrState, PullRequest, RemoteName, RepoUrl, Review, RunId, SessionId, Upstream,
@@ -133,7 +133,17 @@ fn hub_on(
     let (store, providers) = (Arc::new(store), ProviderSet::only(provider));
     // Only `bin` in the test's directory, where a test about `gh` puts a stand-in for it, so no test runs the real one.
     let machine = providers::local::MachinePath::only(Some(dir.join("bin").display().to_string()));
-    Hub::new(Build::UNSTAMPED, store, HubDirs::in_dir(dir), providers, github, machine, agents, false, timers)
+    Hub::new(
+        Build::UNSTAMPED,
+        store,
+        HubDirs::in_dir(dir),
+        providers,
+        github,
+        machine,
+        agents,
+        HubStart::ByHand,
+        timers,
+    )
 }
 
 /// A hub as [`hub_describing`] makes one, before anything shares it, whose workspaces are all `provider`'s.

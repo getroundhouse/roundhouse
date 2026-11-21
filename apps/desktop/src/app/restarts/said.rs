@@ -102,6 +102,7 @@ mod tests {
             running_sessions: agents,
             clients: 1,
             on_demand: true,
+            started_by: None,
             build_number: Some(1),
             running_setups: setups,
             requests: 1,

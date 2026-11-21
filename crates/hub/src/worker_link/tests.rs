@@ -4,6 +4,7 @@ use std::os::unix::process::CommandExt;
 use std::path::Path;
 
 use process::ProcessRecord;
+use protocol::client::HubStart;
 use protocol::frame;
 use protocol::model::{self, GitFile};
 use protocol::paths::WORKER_RECORD_FILE;
@@ -63,7 +64,7 @@ fn hub_reading(dir: &Path, provider: &Arc<dyn Provider>, api: String) -> Arc<Hub
         github,
         providers::local::MachinePath::only(None),
         Vec::new(),
-        false,
+        HubStart::ByHand,
         timers,
     ));
     reading_as_ada(&hub);
@@ -85,7 +86,7 @@ fn hub_timed(dir: &Path, provider: &Arc<dyn Provider>, timers: Timers) -> Arc<Hu
         github,
         providers::local::MachinePath::only(None),
         Vec::new(),
-        false,
+        HubStart::ByHand,
         timers,
     ))
 }

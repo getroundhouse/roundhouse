@@ -19,7 +19,7 @@ use feed::Feed;
 use github::Github;
 use parking_lot::Mutex;
 use protocol::Build;
-use protocol::client::{ApiError, ErrorCode, HubNotice, HubStatus};
+use protocol::client::{ApiError, ErrorCode, HubNotice, HubStart, HubStatus};
 use protocol::model::{
     AgentDescription, AgentKind, ClientRequestId, GithubSignInId, ProviderName, Records, SessionId, Workspace,
     WorkspaceId,
@@ -103,7 +103,7 @@ pub(crate) struct Hub {
     /// Held while the hub's settings change.
     pub(super) configuring: AsyncMutex<()>,
     pub(super) feed: Feed,
-    pub(super) on_demand: bool,
+    pub(super) start: HubStart,
     pub(crate) timers: Timers,
     pub(super) started_at_ms: i64,
     pub(crate) shutdown: Notify,
@@ -166,7 +166,7 @@ impl Hub {
         github: Github,
         machine: MachinePath,
         agents: Vec<AgentDescription>,
-        on_demand: bool,
+        start: HubStart,
         timers: Timers,
     ) -> Self {
         Self {
@@ -186,7 +186,7 @@ impl Hub {
             attachment_files: AttachmentFiles::new(dirs.attachments),
             bundles_dir: dirs.bundles,
             worker_logs_dir: dirs.worker_logs,
-            on_demand,
+            start,
             timers,
             providers,
             agents,
@@ -327,7 +327,8 @@ impl Hub {
             workers,
             running_sessions: u32::try_from(running_sessions).unwrap_or(u32::MAX),
             clients: self.clients.load(Ordering::Relaxed),
-            on_demand: self.on_demand,
+            on_demand: self.start == HubStart::OnDemand,
+            started_by: Some(self.start),
             build_number: self.build.number(),
             running_setups: u32::try_from(self.setup_gates.lock().len()).unwrap_or(u32::MAX),
             requests: self.requests.load(Ordering::Relaxed),

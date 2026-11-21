@@ -5,7 +5,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use async_trait::async_trait;
 use protocol::Build;
-use protocol::client::ApiError;
+use protocol::client::{ApiError, HubStart};
 use protocol::model::{Workspace, WorkspaceId, WorkspaceStatus};
 use providers::{Capabilities, Instance, InstanceState, ProviderError, Size, WorkerBinary, WorkerCommand};
 use tokio::sync::Notify;
@@ -115,7 +115,7 @@ fn hub_with(dir: &Path, fake: Fake) -> (Arc<Hub>, Arc<Fake>) {
         github,
         providers::local::MachinePath::only(None),
         Vec::new(),
-        false,
+        HubStart::ByHand,
         Timers::DEFAULT,
     );
     (Arc::new(hub), fake)

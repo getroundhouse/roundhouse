@@ -2,6 +2,9 @@
 
 use std::path::PathBuf;
 
+/// What the service runs the daemon with, which tells the hub the service started it.
+pub(crate) const ARGUMENTS: [&str; 2] = ["hub", "--service"];
+
 /// What the service runs, as whom, where, and with what environment.
 #[cfg_attr(windows, expect(dead_code, reason = "Windows registers no service yet, so nothing reads it"))]
 pub(crate) struct Service {

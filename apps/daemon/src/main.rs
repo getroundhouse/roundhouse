@@ -10,6 +10,7 @@ mod worker_role;
 use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
+use protocol::client::HubStart;
 use tracing_subscriber::EnvFilter;
 use worker_role::Transport;
 
@@ -28,8 +29,11 @@ enum Role {
     /// Owns state and serves clients on a local socket.
     Hub {
         /// Say that a client started this because it needed one, so a client may restart it.
-        #[arg(long)]
+        #[arg(long, conflicts_with = "service")]
         on_demand: bool,
+        /// Say that the machine's service manager started this, as `roundhouse hub install` has it do.
+        #[arg(long)]
+        service: bool,
     },
     /// Deletes the worktrees a worker moved aside when archiving, in a process of its own so it can outlive the
     /// worker. Started by a worker.
@@ -98,6 +102,15 @@ fn say_worker_versions() -> anyhow::Result<()> {
     Ok(())
 }
 
+/// What started a hub, as its flags say. Clap refuses both at once.
+fn hub_start(on_demand: bool, service: bool) -> HubStart {
+    match (on_demand, service) {
+        (true, _) => HubStart::OnDemand,
+        (_, true) => HubStart::AsService,
+        _ => HubStart::ByHand,
+    }
+}
+
 fn main() -> anyhow::Result<()> {
     signals::unblock();
     // Before anything is started. A worker's input and output are its hub's pipes, and the hub learns that the worker
@@ -127,7 +140,7 @@ fn main() -> anyhow::Result<()> {
         forget_hub_variables();
     }
     match args.role {
-        Role::Hub { on_demand } => hub_role::run(on_demand),
+        Role::Hub { on_demand, service } => hub_role::run(hub_start(on_demand, service)),
         Role::GitCredential { dir, action } => Ok(worker::answer_credential_request(
             &dir,
             &action,

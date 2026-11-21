@@ -6,8 +6,8 @@
 use std::fmt::Debug;
 
 use protocol::client::{
-    ApiError, ClientFrame, ClientRequest, ClientResponse, ErrorCode, HubFrame, HubNotice, HubStatus, ReplyOutcome,
-    records,
+    ApiError, ClientFrame, ClientRequest, ClientResponse, ErrorCode, HubFrame, HubNotice, HubStart, HubStatus,
+    ReplyOutcome, records,
 };
 use protocol::event::{AgentTask, EventBody, SessionEvent, TaskKind};
 use protocol::frame;
@@ -92,6 +92,7 @@ fn a_status_from_a_hub_older_than_on_demand_reads_as_not_on_demand() {
     .unwrap();
 
     assert!(!status.on_demand);
+    assert_eq!(status.start(), HubStart::ByHand, "a hub from before it said it was a service");
     assert_eq!(status.oldest_running_worker_protocol, None, "a hub from before it said");
 }
 

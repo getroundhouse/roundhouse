@@ -131,6 +131,7 @@ mod tests {
             running_sessions: 0,
             clients: 1,
             on_demand: true,
+            started_by: None,
             build_number: Some(1),
             running_setups: 0,
             requests: 1,
