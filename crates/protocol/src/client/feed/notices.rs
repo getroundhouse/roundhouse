@@ -1,7 +1,7 @@
 use crate::model::{
     Account, DiffComment, FoundGithubLogin, GithubAccount, GithubApp, GithubReach, GithubSignIn, HubSettings,
-    ModelList, NewWorkspaceDraft, Proposal, Record, RecordKey, ReplyHeard, Repo, Rev, Session, Subagent, Terminal,
-    Workspace,
+    HubUpdate, ModelList, NewWorkspaceDraft, Proposal, Record, RecordKey, ReplyHeard, Repo, Rev, Session, Subagent,
+    Terminal, Workspace,
 };
 use serde::{Deserialize, Serialize};
 
@@ -37,6 +37,8 @@ pub enum HubNotice {
     /// How one of a session's replies said out loud ended changed, or was recorded. A client keeps those of the
     /// sessions it's showing, which it lists with `SessionRepliesHeard`.
     ReplyHeard(ReplyHeard),
+    /// What a hub installed as a service found in the update feed, each time it reads it.
+    HubUpdate(HubUpdate),
     /// The record is gone, as of `rev`.
     Removed {
         record: RecordKey,
@@ -103,6 +105,7 @@ impl TryFrom<HubNotice> for RecordNotice {
             HubNotice::ModelList(list) => Record::ModelList(list),
             HubNotice::Proposal(proposal) => Record::Proposal(proposal),
             HubNotice::ReplyHeard(heard) => Record::ReplyHeard(heard),
+            HubNotice::HubUpdate(update) => Record::HubUpdate(update),
             HubNotice::Removed { record, rev } => return Ok(RecordNotice::Removed { record, rev }),
             HubNotice::Resync | HubNotice::Unknown => return Err(notice),
         };
@@ -130,6 +133,7 @@ impl From<Record> for HubNotice {
             Record::ModelList(list) => HubNotice::ModelList(list),
             Record::Proposal(proposal) => HubNotice::Proposal(proposal),
             Record::ReplyHeard(heard) => HubNotice::ReplyHeard(heard),
+            Record::HubUpdate(update) => HubNotice::HubUpdate(update),
         }
     }
 }

@@ -25,8 +25,21 @@ pub(crate) fn run(start: HubStart) -> anyhow::Result<()> {
     let github = hub::GithubConfig::from_env(|name| std::env::var(name).ok());
     let network_address =
         protocol::paths::listen_address(|name| std::env::var(name).ok()).map_err(anyhow::Error::msg)?;
-    let config =
-        hub::HubConfig { network_address, build: BUILD, paths, worker_exe, shell, path, start, agents, timers, github };
+    // Only a hub installed as a service updates as a client says, so only that one reads the feed.
+    let update_feed = if start == HubStart::AsService { hub::UpdateFeed::published() } else { None };
+    let config = hub::HubConfig {
+        network_address,
+        build: BUILD,
+        paths,
+        worker_exe,
+        shell,
+        path,
+        start,
+        agents,
+        timers,
+        github,
+        update_feed,
+    };
     run_to_end(hub::run(config))??;
     Ok(())
 }

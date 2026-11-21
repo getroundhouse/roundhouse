@@ -34,6 +34,8 @@ impl World {
             github_reach: self.github_reach.clone(),
             terminals: self.terminals.iter().map(|(terminal, _)| terminal.clone()).collect(),
             model_lists: self.model_lists.clone(),
+            // As from a hub that doesn't read the update feed, as one a client started doesn't.
+            hub_update: None,
             rev: Rev::default(),
         }
     }

@@ -11,5 +11,5 @@ mod signature;
 #[cfg(test)]
 mod tests;
 
-pub use feed::{BadVersion, Feed, HubArchive, Release};
-pub use signature::{KEY, URL, Unsigned, UpdateFeedKey};
+pub use feed::{BadVersion, Feed, HubArchive, Release, is_release};
+pub use signature::{HUB_CHANNEL, KEY, URL, Unsigned, UpdateFeedKey};

@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use super::{
     Account, AccountId, CommentId, DiffComment, FoundGithubLogin, GithubAccount, GithubAccountId, GithubApp,
-    GithubAppId, GithubReach, GithubSignIn, GithubSignInId, HubSettings, MessageId, ModelList, ModelListKey,
+    GithubAppId, GithubReach, GithubSignIn, GithubSignInId, HubSettings, HubUpdate, MessageId, ModelList, ModelListKey,
     NewWorkspaceDraft, Proposal, ProposalId, ProviderName, ReplyHeard, Repo, RepoId, Rev, Session, SessionId, Subagent,
     SubagentId, Terminal, TerminalId, Workspace, WorkspaceId,
 };
@@ -70,6 +70,9 @@ pub enum RecordKey {
     },
     /// Sent once the hub has let go of it, as [`ModelList`] says.
     ModelList(ModelListKey),
+    /// A hub has at most one, which it never removes once it has it, as [`HubUpdate`] says, so this isn't sent, and a
+    /// peer from before it would read it as `Unknown`.
+    HubUpdate,
     /// A proposal. The hub never removes one while its chat is there, so this isn't sent, and a peer from before it
     /// would read it as `Unknown`.
     Proposal {
@@ -104,6 +107,7 @@ pub enum Record {
     GithubReach(GithubReach),
     Terminal(Terminal),
     ModelList(ModelList),
+    HubUpdate(HubUpdate),
     /// Listed by session, apart from [`Records`], as subagents are, since each holds what its agent wrote in full.
     Proposal(Proposal),
     /// Listed by session, apart from [`Records`], as proposals are, since only the sessions a view shows need them.
@@ -130,6 +134,7 @@ impl Record {
             Record::GithubReach(reach) => RecordKey::GithubReach { repo: reach.repo.clone() },
             Record::Terminal(terminal) => RecordKey::Terminal { id: terminal.id.clone() },
             Record::ModelList(list) => RecordKey::ModelList(list.key.clone()),
+            Record::HubUpdate(_) => RecordKey::HubUpdate,
             Record::Proposal(proposal) => RecordKey::Proposal { id: proposal.id.clone() },
             Record::ReplyHeard(heard) => {
                 RecordKey::ReplyHeard { session_id: heard.session_id.clone(), message: heard.message.clone() }
@@ -155,6 +160,7 @@ impl Record {
             Record::GithubReach(reach) => reach.rev,
             Record::Terminal(terminal) => terminal.rev,
             Record::ModelList(list) => list.rev,
+            Record::HubUpdate(update) => update.rev,
             Record::Proposal(proposal) => proposal.rev,
             Record::ReplyHeard(heard) => heard.rev,
         }
@@ -200,6 +206,10 @@ pub struct Records {
     /// before it kept them.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub model_lists: Vec<ModelList>,
+    /// The release the hub would update to, from a hub installed as a service, once it has read the feed, as
+    /// [`HubUpdate`] says. `None` from any other hub, and from one from before it read the feed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hub_update: Option<HubUpdate>,
     /// The hub's newest revision when this was read. A record missing from the list is gone, unless
     /// a client holds a copy newer than this.
     pub rev: Rev,
@@ -223,6 +233,7 @@ impl Records {
             github_reach,
             terminals,
             model_lists,
+            hub_update,
             rev: _,
         } = self;
         let records = repos.into_iter().map(Record::Repo);
@@ -238,7 +249,8 @@ impl Records {
         let records = records.chain(github_apps.into_iter().map(Record::GithubApp));
         let records = records.chain(github_reach.into_iter().map(Record::GithubReach));
         let records = records.chain(terminals.into_iter().map(Record::Terminal));
-        records.chain(model_lists.into_iter().map(Record::ModelList))
+        let records = records.chain(model_lists.into_iter().map(Record::ModelList));
+        records.chain(hub_update.into_iter().map(Record::HubUpdate))
     }
 }
 

@@ -3,9 +3,9 @@ use super::by_session::SessionsListed;
 use super::github::GithubListed;
 use crate::Agents;
 use protocol::model::{
-    Account, AccountId, DiffComment, HubSettings, MessageId, ModelList, ModelListKey, NewWorkspaceDraft, Proposal,
-    ProposalId, Reach, Record, ReplyHeard, Repo, RepoId, Session, SessionId, Subagent, SubagentId, Terminal, Workspace,
-    WorkspaceId,
+    Account, AccountId, DiffComment, HubSettings, HubUpdate, MessageId, ModelList, ModelListKey, NewWorkspaceDraft,
+    Proposal, ProposalId, Reach, Record, ReplyHeard, Repo, RepoId, Session, SessionId, Subagent, SubagentId, Terminal,
+    Workspace, WorkspaceId,
 };
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -39,6 +39,7 @@ pub(in super::super) struct Listed {
     pub(super) accounts: HashMap<AccountId, Account>,
     pub(super) model_lists: HashMap<ModelListKey, ModelList>,
     pub(super) hub_settings: Option<HubSettings>,
+    pub(super) hub_update: Option<HubUpdate>,
     pub(super) new_workspace_draft: Option<NewWorkspaceDraft>,
     pub(super) github: GithubListed,
 }
@@ -87,6 +88,7 @@ impl Listed {
                     its.push((comment.clone(), taken));
                 }
                 Record::HubSettings(settings) => listed.hub_settings = Some(settings.clone()),
+                Record::HubUpdate(update) => listed.hub_update = Some(update.clone()),
                 Record::Account(account) => {
                     listed.accounts.insert(account.id.clone(), account.clone());
                 }
@@ -214,6 +216,12 @@ impl Snapshot {
     /// The hub's own settings. `None` until they've arrived, and for good from a hub from before it kept any.
     pub fn hub_settings(&self) -> Option<&HubSettings> {
         self.records.hub_settings.as_ref()
+    }
+
+    /// The release the hub would update to, as it last found it in the update feed. `None` until it's arrived, and for
+    /// good from a hub that doesn't read the feed, as [`HubUpdate`] says.
+    pub fn hub_update(&self) -> Option<&HubUpdate> {
+        self.records.hub_update.as_ref()
     }
 
     /// What's in the new-workspace dialog and not made yet, as the hub keeps it. `None` until it's arrived, and for good

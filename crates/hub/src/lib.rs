@@ -34,6 +34,7 @@ mod versions;
 mod worker_link;
 
 pub use crate::error::HubError;
+pub use crate::hub::UpdateFeed;
 pub use crate::run::{HubConfig, run};
 pub use crate::timers::Timers;
 pub use github::GithubConfig;
