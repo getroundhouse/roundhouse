@@ -33,7 +33,7 @@ cargo run -p guide -- OUT         # Builds docs/guide, and refuses a link or a p
 
 - **Say why with `--note` whenever you open the app,** since copies from several checkouts can be open at once. As it quits, it says why on stderr. "Quit by whoever had it open" means they've finished with it, so don't look into it, and don't open it again unless they ask.
 - **Nothing run from a checkout reaches the installed app's hub.** `cargo run` and `cargo test` use this checkout's own, in `.context/dev`. A debug binary run directly uses `roundhouse-dev`, and only a release build uses the real data.
-- **Leave `dev`, `gallery`, `spec` and `site` in `.context/` to the tools that write them.** Put nothing of your own in them, and don't move or delete what's there.
+- **Leave `dev`, `gallery`, `clips`, `spec` and `site` in `.context/` to the tools that write them.** Put nothing of your own in them, and don't move or delete what's there.
 
 ## Read before you…
 

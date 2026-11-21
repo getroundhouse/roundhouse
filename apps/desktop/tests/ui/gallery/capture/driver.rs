@@ -287,25 +287,10 @@ impl Driver {
         self.cx.update_window(self.handle, |_, window, cx| window.hover(AWAY, cx)).unwrap();
     }
 
-    /// The ID of what's drawn now as `target`. A line found by its label is the first the chat shows with it, rather
-    /// than anything outside the chat with it, such as the sidebar's `Search`.
+    /// The ID of what's drawn now as `target`.
     pub(super) fn find(&mut self, target: Target) -> gpui_kit::ElementId {
         self.frame();
-        match target {
-            Target::Id(id) => gpui_kit::SharedString::from(id).into(),
-            Target::Label(label) => {
-                let found = self
-                    .cx
-                    .update_window(self.handle, |_, window, _| first_labelled_in(window, Region::Transcript, label))
-                    .unwrap();
-                found
-                    .unwrap_or_else(|| panic!("the chat shows nothing labelled {label}"))
-                    .path()
-                    .last()
-                    .unwrap()
-                    .clone()
-            }
-        }
+        self.cx.update_window(self.handle, |_, window, _| id_in(window, target)).unwrap()
     }
 
     pub(super) fn update_pane(
@@ -374,6 +359,20 @@ impl Driver {
     pub(super) fn close(mut self) {
         self.cx.update_window(self.handle, |_, window, _| window.remove_window()).unwrap();
         self.cx.run_until_parked();
+    }
+}
+
+/// The ID of what `window` drew as `target` in its last frame. A line found by its label is the first the chat shows
+/// with it, rather than anything outside the chat with it, such as the sidebar's `Search`.
+pub(super) fn id_in(window: &gpui_kit::Window, target: Target) -> gpui_kit::ElementId {
+    match target {
+        Target::Id(id) => gpui_kit::SharedString::from(id).into(),
+        Target::Label(label) => first_labelled_in(window, Region::Transcript, label)
+            .unwrap_or_else(|| panic!("the chat shows nothing labelled {label}"))
+            .path()
+            .last()
+            .unwrap()
+            .clone(),
     }
 }
 

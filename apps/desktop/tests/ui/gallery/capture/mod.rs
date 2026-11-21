@@ -7,13 +7,15 @@ mod files;
 mod finding;
 mod opening;
 mod proposals;
+mod recording;
 mod scrollbar;
 mod voice;
 
 pub(crate) use finding::{FoundBothWays, copied_whole, found_both_ways};
 pub(crate) use opening::THIS_MAC;
 use opening::open;
+pub(crate) use recording::{Done, Pointer, record};
 
 mod driver;
-use driver::{Driver, TIMEOUT, selected_pane};
+use driver::{Driver, TIMEOUT, id_in, selected_pane};
 pub(crate) use driver::{Picture, take};

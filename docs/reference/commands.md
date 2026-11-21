@@ -11,6 +11,7 @@ cargo run -p desktop --bin roundhouse-desktop -- --note "What to try"   # The ap
 cargo run -p desktop --example look -- <workspace> diff --note "What it shows"   # The app, opened on a view, for screenshots
 cargo test -p desktop --test ui gallery   # Every screen, from made-up data, against its image in docs/spec/screens, and every size of both styles of the app icon. No hub, no window
 ROUNDHOUSE_UPDATE_SCREENS=1 cargo test -p desktop --test ui gallery   # Accepts how they look now. A confirmed screen needs the owner
+cargo test -p desktop --test ui gallery::clips:: -- --ignored   # Records every clip, a short video of the app from made-up data, a frame at a time, into .context/clips/, as the gallery's clips/mod.rs says. Add the end of a clip's test's name to record only it. On a Mac, and never in CI
 cargo run -p guide -- OUT         # Builds docs/guide as the site's /docs/ pages in OUT, which mustn't exist, and refuses a link or a picture that isn't there. Run it after changing a page, as tools/guide/README.md says, since CI does
 cargo run -p spec-page            # The spec as a page in .context/spec/, each area's screens beside its rules, and which are confirmed, and the design system's page, its foundations to look one up and then its components. Open the paths it prints
 tools/install.sh                  # Installs this commit as the app to use every day, outside target/. Run it by hand
@@ -35,4 +36,4 @@ docker run --rm -v "$PWD":/src:ro -e CARGO_TARGET_DIR=/tmp/t -w /src rust:1.100.
 
 Roundhouse can be developed from inside Roundhouse, so nothing run from a checkout can reach the installed app's hub. `cargo run` and `cargo test` use this checkout's own hub, in `.context/dev`, through `.cargo/config.toml`. A debug binary run directly uses `roundhouse-dev`, and only a release build uses the real data, which is what `tools/install.sh` installs. Set `ROUNDHOUSE_HOME` and `ROUNDHOUSE_WORKSPACES` to choose another.
 
-This checkout's tools write to four folders of `.context/`: `dev`, for its own hub's data and worktrees, `gallery`, for the screens and icons as the gallery last drew them, `spec`, for the spec's page, and `site`, for the site as `tools/guide/README.md` builds it. Leave them to those tools: put nothing of your own in them, and don't move or delete what's in them.
+This checkout's tools write to five folders of `.context/`: `dev`, for its own hub's data and worktrees, `gallery`, for the screens and icons as the gallery last drew them, `clips`, for the clips as they were last recorded, `spec`, for the spec's page, and `site`, for the site as `tools/guide/README.md` builds it. Leave them to those tools: put nothing of your own in them, and don't move or delete what's in them.

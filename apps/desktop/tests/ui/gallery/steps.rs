@@ -1,4 +1,5 @@
-//! What a gallery screen is: what the hub holds, and the steps to take in the app before its picture is taken.
+//! What a gallery screen is: what the hub holds, and the steps to take in the app before its picture is taken. And
+//! what a clip is: the same, and then what happens in it, a frame at a time.
 
 #![cfg(test)]
 
@@ -130,4 +131,43 @@ pub(crate) enum DictateWith {
 pub(crate) enum Target {
     Id(&'static str),
     Label(&'static str),
+}
+
+/// A clip's frames a second, as a display draws them.
+pub(crate) const FPS: u32 = 60;
+
+/// A number of a clip's frames, each a 60th of a second.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) struct Frames(pub(crate) u32);
+
+/// A short video: the app on a world, made ready as a screen is, and then what happens in it, from its first frame.
+pub(crate) struct Clip {
+    /// Also its folder's name.
+    pub(crate) name: &'static str,
+    /// What the hub holds.
+    pub(crate) world: fn() -> World,
+    /// What's done before it starts, each once the one before has finished.
+    pub(crate) steps: &'static [Step],
+    /// What happens in it, in order.
+    pub(crate) shots: &'static [Shot],
+}
+
+/// Something that happens in a clip. What's done between two frames shows first in the frame after, so a clip holds
+/// for a frame or more after each.
+pub(crate) enum Shot {
+    /// This many frames, with nothing done.
+    Hold(Frames),
+    /// These keys, as GPUI writes them, such as `alt-up` for `Option-Up`: down between two frames, and up a few frames
+    /// later, as a person's are. A clip that ends sooner ends with them down.
+    Press(&'static str),
+    /// A click in the middle of what's drawn as this, between two frames: the pointer moves there, and its button goes
+    /// down and comes up, as a quick click does.
+    Click(Target),
+    /// The pointer moved onto the middle of what's drawn as this, between two frames, and left there.
+    Point(Target),
+    /// The wheel turned over what's drawn as this, scrolling it this far down, or up for less than nothing, a share in
+    /// each of these frames, as a trackpad's swipe does.
+    Scroll { over: Target, down: Pixels, frames: Frames },
+    /// This typed where focus is, a character every few frames, as a quick typist does.
+    Type(&'static str),
 }

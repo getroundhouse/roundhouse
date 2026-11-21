@@ -1,3 +1,4 @@
+// Changed in Roundhouse's copy of gpui-kit, as third_party/README.md lists.
 mod common;
 use gpui_kit::test::{TestSupportExt, TestWindowExt};
 use gpui_kit::{
@@ -82,8 +83,20 @@ fn saves_a_profile_through_the_ui(cx: &mut TestAppContext) {
         // Named keys share the same Window API and refresh the resulting frame.
         window.press("backspace", cx);
         assert_eq!(window.find("name").value(), Some("Ada Jos"));
+        // Input between frames shows once the next frame renders.
+        let held = window.between_frames().key_down("backspace", cx);
+        assert_eq!(window.find("name").value(), Some("Ada Jos"));
+        window.render_frame(cx);
+        assert_eq!(window.find("name").value(), Some("Ada Jo"));
+        window.between_frames().key_up(held, cx);
+        window.between_frames().type_character('s', cx);
+        assert_eq!(window.find("name").value(), Some("Ada Jo"));
+        window.render_frame(cx);
+        assert_eq!(window.find("name").value(), Some("Ada Jos"));
 
-        window.click("save", cx);
+        window.between_frames().click("save", cx);
+        assert_eq!(window.find("status").label(), Some("Not saved"));
+        window.render_frame(cx);
         let status = window.find("status");
         assert!(status.visible());
         assert_eq!(status.label(), Some("Saved: Ada Jos"));
