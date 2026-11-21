@@ -6,6 +6,7 @@ mod asked;
 mod cache_rule;
 mod column;
 pub(crate) mod compaction;
+mod conversation_rule;
 mod failed_request;
 mod line;
 mod message;
@@ -34,7 +35,7 @@ use message::render_block;
 use notices::exit_output;
 use plan_card::plan_card;
 pub(crate) use shown::{Found, of_row as found_in_row, rows_drawing, rows_to_count};
-use text::{from_blocks, written};
+use text::{from_blocks, reply, written};
 pub use tools::proposal::{ResponseLine as ProposalResponseLine, response_line as proposal_response_line};
 pub(crate) use tools::{ChangeAsked, agent::Opens};
 

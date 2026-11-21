@@ -3,7 +3,10 @@
 
 use protocol::client::{ErrorCode, log};
 use protocol::event::{ContentBlock, EventBody, ExitReason, TaskKind};
-use protocol::model::{AgentKind, Place, Seq, SessionStatus, SubagentId, SubagentStatus};
+use protocol::model::{
+    AgentKind, Ending, MessageId, Place, ReplyHeard, ReplyPlace, Rev, Seq, SessionStatus, SettledBy, SubagentId,
+    SubagentStatus,
+};
 use protocol::terminal::{Bounds, TerminalPoint, TerminalRow, TerminalSize};
 
 use super::events::{subagent_ended, subagent_started, taken, task, text, user_prompt, within};
@@ -35,6 +38,33 @@ fn a_client_reads_what_the_world_holds_and_is_refused_a_change() {
     assert_eq!(records.sessions.iter().map(|session| &session.id).collect::<Vec<_>>(), [&chat]);
     assert!(matches!(added, Err(ClientError::Api(refused)) if refused.code == ErrorCode::Unsupported));
     assert_eq!(client.records_list().unwrap().repos.len(), 1, "and nothing was added");
+}
+
+/// As a hub lists them for a chat a view shows, though it's refused recording another, as any change is.
+#[test]
+fn a_client_reads_how_a_chat_s_replies_were_heard_and_is_refused_saying_another() {
+    let mut world = World::default();
+    let repo = world.repo("aspen");
+    let workspace = world.workspace(&repo, "elm");
+    let chat = world.chat(&workspace, SessionStatus::Idle, Vec::new());
+    let other = world.chat(&workspace, SessionStatus::Idle, Vec::new());
+    let heard = ReplyHeard {
+        session_id: chat.clone(),
+        message: MessageId::from("msg-1"),
+        ending: Ending::TalkedOver { through: ReplyPlace { block: 0, through: 12 } },
+        settled_by: SettledBy::Device,
+        rev: Rev::new(1),
+    };
+    world.replies_heard.insert(chat.clone(), vec![heard.clone()]);
+    let (_dir, client) = served(world);
+
+    let (replies, _) = client.session_replies_heard(&chat).unwrap();
+    let (none, _) = client.session_replies_heard(&other).unwrap();
+    let said = client.session_reply_heard(&chat, MessageId::from("msg-2"), Ending::ToTheEnd);
+
+    assert_eq!(replies, [heard]);
+    assert_eq!(none, []);
+    assert!(matches!(said, Err(ClientError::Api(refused)) if refused.code == ErrorCode::Unsupported));
 }
 
 /// As `SessionStatus::counts_as_running` says: in a turn, or in the background on anything but waits.

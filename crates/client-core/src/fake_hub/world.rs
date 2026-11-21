@@ -9,8 +9,8 @@ use protocol::event::{EventBody, SessionEvent};
 use protocol::model::{
     Account, AttachmentId, CacheTtl, ContextUsage, DiffComment, FileContents, GitDiff, GithubAccount, GithubApp,
     GithubSettings, GithubSignIn, GithubSignInStatus, InstanceId, ModelName, PORTS_PER_WORKSPACE, Place, PromptCache,
-    Proposal, PullRequest, Repo, RepoId, RepoOrigin, Rev, Seq, Session, SessionId, SessionStatus, Subagent, SubagentId,
-    Terminal, TerminalId, Title, Workspace, WorkspaceId, WorktreeFiles,
+    Proposal, PullRequest, ReplyHeard, Repo, RepoId, RepoOrigin, Rev, Seq, Session, SessionId, SessionStatus, Subagent,
+    SubagentId, Terminal, TerminalId, Title, Workspace, WorkspaceId, WorktreeFiles,
 };
 use protocol::prompt::Prompt;
 use protocol::tail::Tail;
@@ -42,8 +42,10 @@ pub struct World {
     subagents: HashMap<SessionId, Vec<Subagent>>,
     /// Each session's proposals, in the order they were made.
     pub proposals: HashMap<SessionId, Vec<Proposal>>,
-    /// What's still streaming, for a chat caught mid-reply.
+    /// What's still streaming, for a chat caught mid-reply, and how far a reply being read out loud has got.
     pub tails: HashMap<SessionId, Tail>,
+    /// How each chat's replies read out loud ended, as the hub records them.
+    pub replies_heard: HashMap<SessionId, Vec<ReplyHeard>>,
     pub diffs: HashMap<WorkspaceId, GitDiff>,
     pub comments: HashMap<WorkspaceId, Vec<DiffComment>>,
     pub setup_logs: HashMap<WorkspaceId, String>,
@@ -309,6 +311,12 @@ impl World {
 
     pub fn session(&self, id: &SessionId) -> Result<&Session, ApiError> {
         self.sessions.iter().find(|s| &s.id == id).ok_or_else(|| ApiError::new(ErrorCode::NotFound, "no such chat"))
+    }
+
+    /// How each of the replies read out loud in the chat `id` ended.
+    pub fn replies_heard_of(&self, id: &SessionId) -> Result<Vec<ReplyHeard>, ApiError> {
+        self.session(id)?;
+        Ok(self.replies_heard.get(id).cloned().unwrap_or_default())
     }
 
     pub fn events_from(&self, id: &SessionId, from_seq: Seq) -> impl Iterator<Item = &SessionEvent> {

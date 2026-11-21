@@ -1,4 +1,4 @@
-use super::{at, element, moves, parse};
+use super::{at, dimming, element, moves, parse};
 use crate::find::{FindLook, TextId, view_id};
 use crate::images_apart::images_apart;
 use crate::linked_images::Images;
@@ -56,6 +56,8 @@ pub(super) struct Store {
     pub(super) parses: u32,
     /// What's being drawn, if anything is.
     pub(super) in_row: Option<Drawing>,
+    /// Where each text dimmed in part is dimmed from.
+    pub(super) dims: dimming::Dims,
 }
 
 pub(super) enum Text {
@@ -161,6 +163,8 @@ pub(crate) struct Written<'a> {
     /// How many of its bytes are its own, which it draws, if what's after them is only read, as the definitions a
     /// document's block refers to are.
     pub(crate) shown: Option<usize>,
+    /// The byte from which it's drawn dimmed, if it is, as what of a reply read out loud wasn't heard.
+    pub(crate) dimmed_from: Option<usize>,
 }
 
 impl<'a> Written<'a> {
@@ -175,6 +179,7 @@ impl<'a> Written<'a> {
             style: super::Style::for_part(id.1),
             flow: None,
             shown: None,
+            dimmed_from: None,
         }
     }
 
@@ -189,6 +194,7 @@ impl<'a> Written<'a> {
             style: super::Style::Markdown,
             flow: None,
             shown: None,
+            dimmed_from: None,
         }
     }
 
@@ -242,6 +248,7 @@ impl Texts {
             frame: 0,
             parses: 0,
             in_row: None,
+            dims: dimming::Dims::default(),
         })))
     }
 
@@ -294,10 +301,12 @@ impl Texts {
         let (parsed, apart) = self.parsed(&known, &source, at.of, whose, shown);
         let marks = (parsed.as_ref().zip(written.found))
             .map_or_default(|(parsed, (id, find))| find.marks_in_leaves(id, &parsed.leaves));
+        let dimmed = (written.dimmed_from.zip(parsed.as_ref()))
+            .map(|(from, parsed)| self.0.borrow_mut().dims.at(&known, written.text, from, parsed));
         let (texts, selection) = (self.clone(), selection.clone());
         let area = written.area.clone();
         let (style, flow) = (written.style, written.flow);
-        ProseElement { known, at, area, style, flow, text: parsed, apart, marks, images, texts, selection }
+        ProseElement { known, at, area, style, flow, text: parsed, apart, marks, dimmed, images, texts, selection }
             .into_any_element()
     }
 
@@ -333,11 +342,12 @@ impl Texts {
         };
         let held = |at: &TextAt| selected.is_some_and(|selected| selected.contains(at));
         let mut store = self.0.borrow_mut();
-        let Store { texts, places, hidden, .. } = &mut *store;
+        let Store { texts, places, hidden, dims, .. } = &mut *store;
         places.retain(|at| loaded(at) || held(at));
         places.keep_few_left_at_the_end(hidden, held);
         texts.retain(|id, _| places.last_at(id).is_some());
         hidden.retain(|id| places.last_at(id).is_some());
+        dims.keep(|id| texts.contains_key(id));
     }
 
     /// Whether every text drawn has been parsed, so each row has the height it will keep.

@@ -26,6 +26,14 @@ pub(super) fn written(
     from_blocks(&Written { area, ..Written::found(place(toggle, part), &id, find, text) }, images, shared)
 }
 
+/// The text of a reply of the agent's, drawn as [`written`] draws it, dimmed from its byte `unheard_from` on, if it
+/// was read out loud and not heard from there.
+pub(super) fn reply(toggle: &Toggle, text: &str, images: &[LinkedImage], unheard_from: Option<usize>) -> AnyElement {
+    let (id, find, shared) = ((toggle.key.clone(), Part::Text), toggle.find, toggle.shared);
+    let written = Written { dimmed_from: unheard_from, ..Written::found(place(toggle, Part::Text), &id, find, text) };
+    from_blocks(&written, Some(images), shared)
+}
+
 /// Where the `part` of the item the block `toggle` draws goes. In a row of its own, its part places it among the texts
 /// its block draws. Nested in a call's row, it's the next text that call nests, so a row makes its nested texts in the
 /// order it shows them.

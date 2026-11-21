@@ -1,12 +1,13 @@
 //! What a prompt looks like: what was typed, the files it carries, and whether the agent has it yet.
 
 use client_core::session_log::PromptState;
-use gpui_kit::component::v_flex;
+use gpui_kit::assets::IconName;
+use gpui_kit::component::{Icon, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, InteractiveElement as _, IntoElement, ParentElement, Styled, TestSupportExt as _, div, relative,
 };
-use look::{Shaped as _, Typeset as _};
+use look::{IconSizing as _, Shaped as _, Typeset as _};
 
 use super::{Shared, from_blocks, row};
 use crate::attachments::{self, Carried};
@@ -26,14 +27,17 @@ const GROUP: &str = "prompt";
 #[derive(Clone, Copy)]
 pub(super) struct Prompt<'a> {
     pub(super) text: &'a str,
+    /// Whether it was said out loud, in conversation mode, rather than typed.
+    pub(super) spoken: bool,
     pub(super) find: &'a FindLook,
     pub(super) at: TextAt,
 }
 
 /// What was sent, on a bubble at the right of the column, with the files it carries above its text, in the order the
-/// agent was given them, and where the agent has it once it's recorded, `state`, which is `None` while it's being sent.
-/// It's faint until the agent has it, so one sent mid-turn reads as not yet seen until the agent takes it, and one the
-/// agent never took says so. While it's hovered, a button over the bubble's lower right corner copies what it says.
+/// agent was given them, and a microphone at its text's start if it was said out loud, and where the agent has it once
+/// it's recorded, `state`, which is `None` while it's being sent. It's faint until the agent has it, so one sent
+/// mid-turn reads as not yet seen until the agent takes it, and one the agent never took says so. While it's hovered,
+/// a button over the bubble's lower right corner copies what it says.
 pub(super) fn prompt_bubble(
     key: &ItemKey,
     text: Prompt,
@@ -43,7 +47,7 @@ pub(super) fn prompt_bubble(
     cx: &App,
 ) -> AnyElement {
     let colors = look::colors(cx);
-    let Prompt { text, find, at } = text;
+    let Prompt { text, spoken, find, at } = text;
     let typed = !text.trim().is_empty();
     let faint = state != Some(PromptState::Taken);
     let dropped = state == Some(PromptState::Dropped);
@@ -60,7 +64,8 @@ pub(super) fn prompt_bubble(
         .when(typed, |d| {
             // Drawn from the kit's blocks, and selected by the transcript, from when it's sent.
             let id = (key.clone(), Part::Prompt);
-            d.child(from_blocks(&Written::found(at, &id, find, text), None, shared))
+            let text = from_blocks(&Written::found(at, &id, find, text), None, shared);
+            if spoken { d.child(said_out_loud(text, cx)) } else { d.child(text) }
         })
         .test_support();
     let bubble = v_flex().relative().max_w(relative(WIDEST_SHARE)).child(bubble).children(copy);
@@ -80,6 +85,14 @@ pub(super) fn prompt_bubble(
         })
         .test_support()
         .into_any_element()
+}
+
+/// `text`, after a microphone centred on its first line, which says it was said out loud.
+fn said_out_loud(text: AnyElement, cx: &App) -> impl IntoElement {
+    let microphone = Icon::new(IconName::Mic).sized(look::IconSize::Regular).text_color(look::colors(cx).text_muted);
+    // A line's height, so the microphone is centred on the first line.
+    let first_line = div().flex().items_center().child(div().w_0().child("\u{a0}")).child(microphone);
+    h_flex().items_start().gap(look::Space::Small).child(first_line).child(div().flex_1().min_w_0().child(text))
 }
 
 /// A cutout over the bubble's corner, one small step above it, so the whole hit target clears the following row.

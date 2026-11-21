@@ -202,6 +202,9 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
             world.session(&id)?;
             reply(C::Subagents(records::Subagents { subagents: world.subagents_of(&id), rev: Rev::default() }))
         }
+        R::SessionRepliesHeard(records::SessionRepliesHeard { id }) => {
+            reply(C::RepliesHeard(records::RepliesHeard { replies: world.replies_heard_of(&id)?, rev: Rev::default() }))
+        }
         R::SessionProposals(records::SessionProposals { id }) => {
             world.session(&id)?;
             let proposals = world.proposals.get(&id).cloned().unwrap_or_default();
@@ -287,7 +290,6 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
         | R::SessionConversationEnd(_)
         | R::SessionReplyHeard(_)
         | R::SessionSpeaking(_)
-        | R::SessionRepliesHeard(_)
         | R::SessionRename(_)
         | R::AccountConnect(_)
         | R::AccountSetDefault(_)

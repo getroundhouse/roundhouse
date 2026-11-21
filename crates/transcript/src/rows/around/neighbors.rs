@@ -1,4 +1,5 @@
 use super::failures::Failures;
+use super::heard::{self, Heard};
 use super::{nearby, reply, settled, subagent};
 use crate::attachments;
 use crate::attachments::Carried;
@@ -53,6 +54,9 @@ pub(in super::super) struct Around {
     pub(in super::super) retry: bool,
     /// Whether it's the card of the agent's failures in a row, or said in a later one's.
     pub(in super::super) failures: Failures,
+    /// For the agent's own message: how the reply it's part of was heard, read out loud. For a turn's end: how the
+    /// reply it ended on was, which its line says. `None` for one drawn as written.
+    pub(in super::super) heard: Option<Heard>,
 }
 
 /// The proposal a prompt the hub wrote tells the agent the answer to, and which revision of it was answered.
@@ -139,6 +143,8 @@ pub(in super::super) struct BlockAround {
     pub(in super::super) proposal: Option<ProposalCall>,
     /// For a result: whether it's drawn with its call instead.
     pub(in super::super) with_call: bool,
+    /// For a reply's text: the byte from which it wasn't heard, read out loud, which is dimmed.
+    pub(in super::super) unheard_from: Option<usize>,
 }
 
 /// Which blocks are read as open.
@@ -165,10 +171,13 @@ impl Around {
     }
 
     pub(in super::super) fn read_as(log: &SessionLog, m: &Model, seq: Seq, body: &EventBody, opening: Opening) -> Self {
-        let blocks = blocks_of(body)
-            .iter()
-            .enumerate()
-            .map(|(position, block)| BlockAround::read(log, m, seq, block, block_key(seq, body, position), opening))
+        let heard = heard::read(log, m, seq, body);
+        let blocks = (blocks_of(body).iter().enumerate())
+            .map(|(position, block)| {
+                let around = BlockAround::read(log, m, seq, block, block_key(seq, body, position), opening);
+                let unheard_from = heard.and_then(|heard| heard::unheard_in(heard, body, position, block));
+                BlockAround { unheard_from, ..around }
+            })
             .collect();
         let mut around = Around {
             blocks,
@@ -184,6 +193,7 @@ impl Around {
             open: false,
             retry: m.retry_at == Some(seq),
             failures: Failures::read(log, &m.folds, seq, body),
+            heard,
         };
         if let EventBody::AgentMode { .. } = body {
             around.mode_before = nearby::mode_before(log, seq);
@@ -266,7 +276,7 @@ impl BlockAround {
             | ContentBlock::Image { .. }
             | ContentBlock::Unknown => (Reply::Nothing, None, None, None),
         };
-        Self { key, fold, open, reply, subagent, names, proposal, with_call }
+        Self { key, fold, open, reply, subagent, names, proposal, with_call, unheard_from: None }
     }
 }
 

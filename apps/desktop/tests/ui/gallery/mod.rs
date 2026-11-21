@@ -31,6 +31,7 @@ mod compaction_chats;
 mod component_screens;
 mod components_approved;
 mod context_screens;
+mod conversation_chats;
 mod dialog_widths;
 mod dictation_screens;
 mod diff_screens;

@@ -8,7 +8,8 @@ use crate::rows::SubagentCalls;
 use client_core::session_log::RecordedApprovals;
 use gpui_kit::SharedString;
 use protocol::model::{
-    AttachmentId, Proposal, ProposalId, RevisionNumber, RunId, Seq, Subagent, SubagentId, ToolUseId,
+    AttachmentId, MessageId, Proposal, ProposalId, ReplyHeard, RevisionNumber, RunId, Seq, Subagent, SubagentId,
+    ToolUseId,
 };
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -48,6 +49,9 @@ pub(crate) struct Model {
     /// Each of the chat's proposals, by its ID, which the prompt that tells the agent of its answer names, and is
     /// drawn as its line.
     pub proposals_by_id: HashMap<ProposalId, Arc<Proposal>>,
+    /// How each of the agent's replies read out loud ended, by the reply, as the hub records it, shared with
+    /// client-core's snapshot. A reply that isn't here was heard to its end, or wasn't read out, or hasn't ended.
+    pub heard: HashMap<MessageId, Arc<ReplyHeard>>,
     /// In the subagent tab, the subagent it shows, alone.
     pub alone: Option<SubagentId>,
     /// What's being found in the chat, for rows to draw.
@@ -83,6 +87,7 @@ impl Model {
             subagent_rows: RefCell::default(),
             proposals: HashMap::new(),
             proposals_by_id: HashMap::new(),
+            heard: HashMap::new(),
             alone: None,
             find: Rc::default(),
         }
