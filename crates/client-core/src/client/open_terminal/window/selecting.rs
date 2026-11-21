@@ -27,6 +27,8 @@ struct Press {
     dragged: Option<(Step, TerminalPoint)>,
     /// Whether the button is still down.
     down: bool,
+    /// The newest press or drag by words or lines whose ends haven't come, until they do.
+    coming: Option<Step>,
 }
 
 #[derive(Debug, Default)]
@@ -81,12 +83,13 @@ impl Selecting {
     pub(super) fn press(&mut self, at: TerminalPoint, across: u32, by: SelectBy) -> Option<(Bounds, Step)> {
         let step = self.step();
         self.selected = None;
-        self.press = Some(Press { at, across, by, step, pressed: None, dragged: None, down: true });
-        match by {
-            SelectBy::Cells => None,
-            SelectBy::Words => Some((Bounds::Word, step)),
-            SelectBy::Lines => Some((Bounds::Line, step)),
-        }
+        let (asks, coming) = match by {
+            SelectBy::Cells => (None, None),
+            SelectBy::Words => (Some((Bounds::Word, step)), Some(step)),
+            SelectBy::Lines => (Some((Bounds::Line, step)), Some(step)),
+        };
+        self.press = Some(Press { at, across, by, step, pressed: None, dragged: None, down: true, coming });
+        asks
     }
 
     /// The pointer has moved to `at` with the button down since a press, in a terminal `cols` wide whose screen ends
@@ -101,8 +104,21 @@ impl Selecting {
             }
             SelectBy::Words | SelectBy::Lines => {
                 press.dragged = Some((step, at));
+                press.coming = Some(step);
                 Some((if press.by == SelectBy::Words { Bounds::Word } else { Bounds::Line }, step))
             }
+        }
+    }
+
+    /// Whether ends a press or a drag asked for are still to come, so what's selected isn't yet what it will be.
+    pub(super) fn coming(&self) -> bool {
+        self.press.as_ref().is_some_and(|press| press.coming.is_some())
+    }
+
+    /// The ends asked for won't come, as when the ask failed or the connection went, so what's selected stays.
+    pub(super) fn not_coming(&mut self) {
+        if let Some(press) = &mut self.press {
+            press.coming = None;
         }
     }
 
@@ -115,6 +131,9 @@ impl Selecting {
     /// The ends of the word or the line a press or a drag asked for. Returns whether what's selected changed.
     pub(super) fn bounds(&mut self, step: Step, range: Option<TerminalRange>) -> bool {
         let Some(press) = &mut self.press else { return false };
+        if press.coming == Some(step) {
+            press.coming = None;
+        }
         if step == press.step {
             press.pressed = range;
             self.selected = range.map(|range| (range.from, range.to));

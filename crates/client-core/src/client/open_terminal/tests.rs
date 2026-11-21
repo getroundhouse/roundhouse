@@ -255,6 +255,11 @@ fn rows_scrolled_back_to_are_fetched_and_what_is_selected_is_copied() {
     open.drag(terminal_state::Pointer { col: 6.9, row: 2.5 });
     open.release();
     let copied = open.selected_text().recv_timeout(WAIT);
+    // A copy asked at once after a double click, before the word's ends have come, waits for them.
+    open.press(terminal_state::Pointer { col: 1.5, row: 3.5 }, terminal_state::SelectBy::Words);
+    open.release();
+    let double_clicked = open.selected_text().recv_timeout(WAIT);
 
     assert_eq!(copied.as_deref(), Ok("line 18\nline 19"));
+    assert_eq!(double_clicked.as_deref(), Ok("line"));
 }

@@ -126,6 +126,7 @@ impl Window {
         self.rows.forget();
         self.fetching = false;
         self.fitting = None;
+        self.selecting.not_coming();
     }
 
     pub(in crate::client::open_terminal) fn replied(&mut self, replied: Replied) -> Vec<Ask> {
@@ -147,6 +148,7 @@ impl Window {
             Replied::Failed => {
                 self.fetching = false;
                 self.fitting = None;
+                self.selecting.not_coming();
                 Vec::new()
             }
         }

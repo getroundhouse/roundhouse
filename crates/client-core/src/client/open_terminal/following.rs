@@ -60,7 +60,7 @@ impl OpenTerminal {
     /// Follows the terminal `id` on a thread of its own, so this doesn't wait for the hub.
     pub fn start(client: &Client, id: &TerminalId) -> Self {
         let (waiting, replies) = flume::unbounded();
-        let source = TerminalSource { id: id.clone(), window: Window::new(), waiting };
+        let source = TerminalSource { id: id.clone(), window: Window::new(), waiting, copies: Vec::new() };
         let follow = Follow::start(client, Held::default(), move || source);
         asking::start(id.clone(), replies, follow.giver());
         Self { id: id.clone(), follow }
@@ -184,6 +184,8 @@ struct TerminalSource {
     window: Window,
     /// The replies to wait for, on the thread that waits for them.
     waiting: flume::Sender<Waiting>,
+    /// Where to send what's selected, asked while it was still to be settled, once it is.
+    copies: Vec<flume::Sender<String>>,
 }
 
 impl Source for TerminalSource {
@@ -233,6 +235,8 @@ impl Source for TerminalSource {
 
     fn reconnected(&mut self) {
         self.window.disconnected();
+        // Nothing is copied without a connection, as `OpenTerminal::selected_text` says.
+        self.copies.clear();
     }
 }
 
@@ -249,6 +253,11 @@ impl TerminalSource {
         for given in given {
             let asks = self.answer(connection, given);
             self.send(connection, asks);
+        }
+        if !self.window.selection_coming() {
+            for reply in std::mem::take(&mut self.copies) {
+                self.copy(connection, reply);
+            }
         }
         if !wanted {
             return false;
@@ -283,13 +292,23 @@ impl TerminalSource {
                 Vec::new()
             }
             Given::SelectedText(reply) => {
-                if let (Some(client), Some((numbering, range))) = (connection, window.selected()) {
-                    let copy = Waiting::Copy { client: client.clone(), numbering, range, reply };
-                    let _ = self.waiting.send(copy);
+                if window.selection_coming() {
+                    self.copies.push(reply);
+                } else {
+                    self.copy(connection, reply);
                 }
                 Vec::new()
             }
             Given::Replied(replied) => window.replied(replied),
+        }
+    }
+
+    /// Asks for the text of what's selected, for `reply`, which nothing is sent to while nothing is, or without a
+    /// connection.
+    fn copy(&self, connection: Option<&Client>, reply: flume::Sender<String>) {
+        if let (Some(client), Some((numbering, range))) = (connection, self.window.selected()) {
+            let copy = Waiting::Copy { client: client.clone(), numbering, range, reply };
+            let _ = self.waiting.send(copy);
         }
     }
 

@@ -59,6 +59,12 @@ impl Window {
         self.changed = true;
     }
 
+    /// Whether what's selected is still to be settled, by a word's or a line's ends or a fit's reply on their way, so
+    /// a copy asked now waits for them, as a person who double-clicks and copies at once means the word.
+    pub(in crate::client::open_terminal) fn selection_coming(&self) -> bool {
+        self.waiting() || self.selecting.coming()
+    }
+
     /// What's selected, by number, with the numbering it's in, for its text to be copied.
     /// None while the view waits for a fit's reply, since its ends are in the numbering before.
     pub(in crate::client::open_terminal) fn selected(&self) -> Option<(Numbering, TerminalRange)> {

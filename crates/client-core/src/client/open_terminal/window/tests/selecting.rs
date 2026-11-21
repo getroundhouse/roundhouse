@@ -119,3 +119,27 @@ fn the_ends_for_a_drag_a_later_one_has_passed_are_dropped() {
 
     assert_eq!(window.selected(), after_late, "\"one two\", not as far as \"four\"");
 }
+
+/// What's selected is still to come until the newest press or drag by words has its ends, so a copy waits for them, and
+/// not once the ask has failed, so a copy doesn't wait for ends that won't come.
+#[test]
+fn what_is_selected_is_coming_until_the_newest_ends_come() {
+    let mut worker = worker(SIZE, OUTPUT.as_bytes());
+    let mut window = watched(&mut worker, &mut PictureSending::default());
+
+    let pressed = window.press(Pointer { col: 0.5, row: 0.5 }, SelectBy::Words);
+    let while_pressed = window.selection_coming();
+    let early = window.drag(Pointer { col: 7.5, row: 1.5 });
+    let late = window.drag(Pointer { col: 5.5, row: 0.5 });
+    answered(&mut window, &mut worker, pressed);
+    answered(&mut window, &mut worker, early);
+    let before_the_newest = window.selection_coming();
+    answered(&mut window, &mut worker, late);
+    let after_the_newest = window.selection_coming();
+    let pressed_again = window.press(Pointer { col: 0.5, row: 2.5 }, SelectBy::Lines);
+    assert!(!pressed_again.is_empty());
+    assert!(window.replied(Replied::Failed).is_empty());
+
+    assert_eq!((while_pressed, before_the_newest, after_the_newest), (true, true, false));
+    assert!(!window.selection_coming(), "not after the ask failed");
+}
