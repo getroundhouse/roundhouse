@@ -1,8 +1,8 @@
 use super::super::{Store, StoreError, current_rev, from_text, json_at, lock, rev_of, text_of};
-use protocol::event::{ContentBlock, EventBody, SessionEvent};
-use protocol::model::{Lately, ModelName, Rev, SessionId, Subagent, SubagentId, SubagentStatus};
+use protocol::event::SessionEvent;
+use protocol::model::{ModelName, Rev, SessionId, Subagent, SubagentId, SubagentStatus, TouchedSubagents};
 use rusqlite::types::ValueRef;
-use rusqlite::{Connection, OptionalExtension, Row, params};
+use rusqlite::{Connection, OptionalExtension, Row, ToSql, params};
 
 const SUBAGENT_COLUMNS: &str = "session_id, call, kind, description, prompt, in_background, status, started_at_ms, \
      ended_at_ms, calls, report, rev, model, context_tokens, id, lately";
@@ -49,145 +49,117 @@ impl Store {
     }
 }
 
-// One that starts again after it ended, as Claude's does when it's messaged, works again, under the call that first
-// started it, with what it was first asked, from when it started again, so how long it's at it isn't the time it sat
-// finished, and its report is the one it gives next. Another call can't start one that's already a subagent's.
-const STARTED: &str = "INSERT INTO subagents
-     (session_id, id, call, kind, description, prompt, in_background, status, started_at_ms)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-     ON CONFLICT (session_id, id) DO UPDATE SET status = excluded.status, in_background = excluded.in_background,
-         started_at_ms = excluded.started_at_ms, ended_at_ms = NULL, report = NULL
-         WHERE status <> excluded.status
-     ON CONFLICT DO NOTHING";
-
-// What it's done lately is only shown while it works. An end that counts no tokens leaves the count it had.
-const ENDED: &str = "UPDATE subagents SET status = ?, ended_at_ms = ?, report = ?, lately = NULL,
-         context_tokens = coalesce(?, context_tokens)
-     WHERE session_id = ? AND id = ? AND status = ?";
-
-// Only while it works, since its end has the last word, and only a count that differs, so its record keeps its
-// revision and isn't sent again for one that says the same.
-const CONTEXT: &str = "UPDATE subagents SET context_tokens = ?1
-     WHERE session_id = ?2 AND id = ?3 AND status = ?4 AND context_tokens IS NOT ?1";
-
-/// Changes the records of the subagents `event` says something about, in the transaction that records it, and says
-/// which, as `protocol`'s `Subagent::recorded_from` makes the records of a log, which `tests::as_recorded` holds this
-/// to. A subagent's record starts with the agent's word that it started, ends with its word that it ended, or with the
-/// agent, which takes its subagents with it, works again if the agent says it started again, and counts the calls in
-/// between from the subagent's own events, which also say what it's done lately, and its replies the model it runs on.
-/// How many tokens its conversation holds is the agent's word too, as it works and as it ends.
+/// Changes the records of the subagents `event` says something about, in the transaction that records it, as
+/// `protocol`'s `Subagent::note` says, and says which. It reads only the records `Subagent::touched_by` says the event
+/// can change, and none for an event that says nothing of a subagent, as most don't. It writes back only those the
+/// rule changed, so one it leaves as it was keeps its revision and isn't sent again, and of each, only what the rule
+/// changed, so what a newer build stored that this one can't read is kept as it is.
 pub(in super::super) fn note_subagents(tx: &Connection, event: &SessionEvent) -> Result<Vec<SubagentId>, StoreError> {
-    let (session, at) = (event.session_id.as_str(), event.ts_ms);
-    let working = text_of(&SubagentStatus::Working);
-    match &event.body {
-        EventBody::SubagentStarted { call, kind, description, prompt, in_background, .. } => {
-            let Some(subagent) = event.body.subagent_started() else { return Ok(Vec::new()) };
-            let (id, call) = (subagent.as_str(), call.as_str());
-            let row = params![session, id, call, kind, description, prompt, in_background, working, at];
-            Ok(changed(tx.execute(STARTED, row)?, &subagent))
+    let Some(touched) = Subagent::touched_by(event) else { return Ok(Vec::new()) };
+    let mut held = touched_records(tx, &event.session_id, &touched)?;
+    let read = held.clone();
+    let changed = Subagent::note(&mut held, event);
+    for now in &changed {
+        match read.iter().find(|was| was.id() == now.id()) {
+            Some(was) => update(tx, was, now)?,
+            None => insert(tx, now)?,
         }
-        EventBody::SubagentContext { subagent, tokens } => {
-            let row = params![tokens.cast_signed(), session, subagent.as_str(), working];
-            Ok(changed(tx.prepare_cached(CONTEXT)?.execute(row)?, subagent))
-        }
-        EventBody::SubagentEnded { subagent, outcome, report, context_tokens } => {
-            let status = text_of(&SubagentStatus::ended(*outcome));
-            let tokens = context_tokens.map(u64::cast_signed);
-            let row = params![status, at, report, tokens, session, subagent.as_str(), working];
-            Ok(changed(tx.execute(ENDED, row)?, subagent))
-        }
-        EventBody::AgentExited { .. } => {
-            let mut statement = tx.prepare_cached(
-                "UPDATE subagents SET status = ?, ended_at_ms = ?, lately = NULL
-                 WHERE session_id = ? AND status = ?
-                 RETURNING id",
-            )?;
-            let stopped = text_of(&SubagentStatus::Stopped);
-            let ids = statement.query_map(params![stopped, at, session, working], |row| row.get::<_, String>(0))?;
-            Ok(ids.map(|id| id.map(SubagentId::from)).collect::<rusqlite::Result<_>>()?)
-        }
-        // Its calls and what it wrote come from its side, and what came back for its calls from the user's.
-        EventBody::Assistant { blocks, .. } | EventBody::AgentUser { blocks, .. } => match &event.subagent {
-            Some(subagent) => note_work(tx, event, subagent, blocks),
-            None => Ok(Vec::new()),
-        },
-        EventBody::UserPrompt { .. }
-        | EventBody::CompactionAsked { .. }
-        | EventBody::PromptTaken { .. }
-        | EventBody::PromptDropped { .. }
-        | EventBody::AgentStarted { .. }
-        | EventBody::AgentInit { .. }
-        | EventBody::AgentState { .. }
-        | EventBody::AgentTasks { .. }
-        | EventBody::OwnTurn(_)
-        | EventBody::AgentLimits { .. }
-        | EventBody::ToolCallDropped { .. }
-        | EventBody::TurnEnded { .. }
-        | EventBody::ApprovalRequested { .. }
-        | EventBody::ApprovalResolved { .. }
-        | EventBody::Notice { .. }
-        | EventBody::RequestFailed { .. }
-        | EventBody::AgentMode { .. }
-        | EventBody::TaskChanged { .. }
-        | EventBody::AgentOther { .. }
-        | EventBody::AgentCompacting { .. }
-        | EventBody::AgentCompacted { .. }
-        | EventBody::CacheExpired { .. }
-        | EventBody::ConversationStarted { .. }
-        | EventBody::Unknown => Ok(Vec::new()),
     }
+    Ok(changed.iter().map(|subagent| subagent.id()).collect())
 }
 
-/// `subagent`, if `rows` of the records were changed, which is at most its own.
-fn changed(rows: usize, subagent: &SubagentId) -> Vec<SubagentId> {
-    if rows == 0 { Vec::new() } else { vec![subagent.clone()] }
-}
-
-/// What `event`, one of `subagent`'s own, with `blocks`, adds to its record: the calls it made, what it's done lately,
-/// and from a reply, the model it runs on.
-fn note_work(
+/// The records in `session` that `touched` names.
+fn touched_records(
     tx: &Connection,
-    event: &SessionEvent,
-    subagent: &SubagentId,
-    blocks: &[ContentBlock],
-) -> Result<Vec<SubagentId>, StoreError> {
-    let session = event.session_id.as_str();
-    let model = note_model(tx, session, subagent, &event.body)?;
-    let made = blocks.iter().filter(|block| matches!(block, ContentBlock::Call { .. })).count();
-    let wrote = matches!(event.body, EventBody::Assistant { .. });
-    let mut lately = working_on(tx, session, subagent)?;
-    let added = lately.as_mut().is_some_and(|work| work.add(blocks, wrote));
-    if made == 0 && !added {
-        return Ok(changed(model, subagent));
-    }
-    let lately = lately.filter(|_| added).map(|work| serde_json::to_string(&work)).transpose()?;
-    let rows = tx.execute(
-        "UPDATE subagents SET calls = calls + ?, lately = coalesce(?, lately) WHERE session_id = ? AND id = ?",
-        params![made, lately, session, subagent.as_str()],
-    )?;
-    Ok(changed(rows + model, subagent))
+    session: &SessionId,
+    touched: &TouchedSubagents,
+) -> Result<Vec<Subagent>, StoreError> {
+    let read = |which: &str, values: &[&dyn ToSql]| -> rusqlite::Result<Vec<Subagent>> {
+        tx.prepare_cached(&format!("SELECT {SUBAGENT_COLUMNS} FROM subagents WHERE session_id = ?1 AND {which}"))?
+            .query_map(values, subagent_from_row)?
+            .collect()
+    };
+    let session = session.as_str();
+    Ok(match touched {
+        TouchedSubagents::One(id) => read("id = ?2", params![session, id.as_str()])?,
+        TouchedSubagents::Starting { subagent, call } => {
+            read("(id = ?2 OR call = ?3)", params![session, subagent.as_str(), call.as_str()])?
+        }
+        TouchedSubagents::Working => read("status = ?2", params![session, text_of(&SubagentStatus::Working)])?,
+    })
 }
 
-/// Notes the model a reply from `subagent` came from, if it names one, and says how many records that changed. Most of
-/// its replies name the model the last one did, which changes nothing, so its record keeps its revision and isn't sent
-/// again for it.
-fn note_model(tx: &Connection, session: &str, subagent: &SubagentId, body: &EventBody) -> Result<usize, StoreError> {
-    let EventBody::Assistant { model: Some(model), .. } = body else { return Ok(0) };
-    let Ok(model) = ModelName::try_from(model.clone()) else { return Ok(0) };
-    let sql = "UPDATE subagents SET model = ?1 WHERE session_id = ?2 AND id = ?3 AND model IS NOT ?1";
-    Ok(tx.prepare_cached(sql)?.execute(params![model.as_str(), session, subagent.as_str()])?)
+/// Records `subagent`, which a start made.
+fn insert(tx: &Connection, subagent: &Subagent) -> Result<(), StoreError> {
+    let sql = "INSERT INTO subagents
+         (session_id, id, call, kind, description, prompt, in_background, status, started_at_ms, ended_at_ms, calls,
+             report, model, context_tokens, lately)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+    tx.prepare_cached(sql)?.execute(params![
+        subagent.session_id.as_str(),
+        subagent.id().as_str(),
+        subagent.call.as_str(),
+        subagent.kind,
+        subagent.description,
+        subagent.prompt,
+        subagent.in_background,
+        text_of(&subagent.status),
+        subagent.started_at_ms,
+        subagent.ended_at_ms,
+        subagent.calls,
+        subagent.report,
+        subagent.model.as_ref().map(ModelName::as_str),
+        subagent.context_tokens.map(u64::cast_signed),
+        lately_column(subagent)?,
+    ])?;
+    Ok(())
 }
 
-/// What `subagent` has done lately, if it's still working, since that's only kept while it works.
-fn working_on(tx: &Connection, session: &str, subagent: &SubagentId) -> Result<Option<Lately>, StoreError> {
-    let working = text_of(&SubagentStatus::Working);
-    let sql = "SELECT lately FROM subagents WHERE session_id = ? AND id = ? AND status = ?";
-    let work = tx
-        .prepare_cached(sql)?
-        .query_row(params![session, subagent.as_str(), working], |row| json_at::<Lately>(row, 0))
-        .optional()?;
-    // Written only by this hub, as JSON. What it can't read is nothing it knows of.
-    Ok(work.map(Option::unwrap_or_default))
+// Each column the rule can change, set only when its flag says the rule changed it, so one this build read as
+// something it doesn't know, or couldn't read, keeps what it holds. Which subagent it is, its call and what it was
+// asked never change. Its revision is the triggers'.
+const UPDATE: &str = "UPDATE subagents SET
+         in_background = iif(?3, ?4, in_background),
+         status = iif(?5, ?6, status),
+         started_at_ms = iif(?7, ?8, started_at_ms),
+         ended_at_ms = iif(?9, ?10, ended_at_ms),
+         calls = iif(?11, ?12, calls),
+         report = iif(?13, ?14, report),
+         model = iif(?15, ?16, model),
+         context_tokens = iif(?17, ?18, context_tokens),
+         lately = iif(?19, ?20, lately)
+     WHERE session_id = ?1 AND id = ?2";
+
+/// Writes what the rule changed of the record that was `was` and is `now`.
+fn update(tx: &Connection, was: &Subagent, now: &Subagent) -> Result<(), StoreError> {
+    tx.prepare_cached(UPDATE)?.execute(params![
+        now.session_id.as_str(),
+        now.id().as_str(),
+        was.in_background != now.in_background,
+        now.in_background,
+        was.status != now.status,
+        text_of(&now.status),
+        was.started_at_ms != now.started_at_ms,
+        now.started_at_ms,
+        was.ended_at_ms != now.ended_at_ms,
+        now.ended_at_ms,
+        was.calls != now.calls,
+        now.calls,
+        was.report != now.report,
+        now.report,
+        was.model != now.model,
+        now.model.as_ref().map(ModelName::as_str),
+        was.context_tokens != now.context_tokens,
+        now.context_tokens.map(u64::cast_signed),
+        was.lately != now.lately,
+        lately_column(now)?,
+    ])?;
+    Ok(())
+}
+
+/// What `subagent` has done lately, as its column holds it.
+fn lately_column(subagent: &Subagent) -> Result<Option<String>, StoreError> {
+    Ok(subagent.lately.as_ref().map(serde_json::to_string).transpose()?)
 }
 
 fn subagent_from_row(row: &Row<'_>) -> rusqlite::Result<Subagent> {
@@ -208,7 +180,7 @@ fn subagent_from_row(row: &Row<'_>) -> rusqlite::Result<Subagent> {
         calls: row.get(9)?,
         report: text_at(row, 10)?,
         rev: rev_of(row, 11)?,
-        // Written only by this hub, as JSON, as in `working_on`.
+        // Written only by this hub, as JSON. What it can't read is nothing it knows of.
         lately: json_at(row, 15)?,
     })
 }

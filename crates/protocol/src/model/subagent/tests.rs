@@ -1,9 +1,9 @@
 use crate::capability::calls::call::Read;
 use crate::capability::calls::output::{FileOutcome, Found, Lines, McpContent};
 use crate::capability::calls::{Call, CallOutput};
-use crate::event::{ContentBlock, Denied, FileChange};
+use crate::event::{ContentBlock, Denied, EventBody, ExitReason, FileChange, SessionEvent, TaskOutcome};
 use crate::fixtures;
-use crate::model::{Lately, Subagent, SubagentId};
+use crate::model::{Lately, Seq, Subagent, SubagentId, SubagentStatus, TouchedSubagents};
 
 use super::lately::{CALLS_KEPT, RESULT_KEPT, TEXT_KEPT, kept};
 
@@ -150,4 +150,82 @@ fn a_typed_result_keeps_the_start_of_its_texts_between_them() {
     assert_eq!((texts(&mcp).iter().map(String::len).collect::<Vec<_>>(), cut), (vec![RESULT_KEPT - 10, 10], true));
     assert_eq!(kept(&changed(Some(FileChange::Created))), (changed(None), false), "what it changed is left off");
     assert_eq!(kept(&count), (count, false));
+}
+
+/// The hub reads only the records an event touches, as `Subagent::touched_by` says, notes the event over those, and
+/// writes back those it changed. So that has to change what noting it over every record would, and say the same
+/// changed.
+#[test]
+fn an_event_changes_only_the_records_it_touches() {
+    let start = |call: &str, id: &str| {
+        let mut start = fixtures::subagent_started(call, false);
+        if let EventBody::SubagentStarted { subagent, .. } = &mut start {
+            *subagent = Some(id.into());
+        }
+        start
+    };
+    let message = |blocks| EventBody::Assistant {
+        message_id: None,
+        subagent: None,
+        model: Some("claude-haiku-5-5".into()),
+        blocks,
+        first_index: None,
+    };
+    let ended = |id: &str| EventBody::SubagentEnded {
+        subagent: id.into(),
+        outcome: TaskOutcome::Finished,
+        report: Some("Done.".into()),
+        context_tokens: None,
+    };
+    let exited =
+        EventBody::AgentExited { reason: ExitReason::HubRestart, code: None, signal: None, stderr_tail: vec![] };
+    let log = [
+        (None, start("toolu_1", "thread-1")),
+        (None, start("toolu_2", "thread-2")),
+        (Some("thread-2"), message(vec![text("I'll read it."), call("read")])),
+        (Some("thread-2"), EventBody::AgentUser { subagent: None, blocks: vec![result("read", "fn main() {}")] }),
+        (None, EventBody::SubagentContext { subagent: "thread-1".into(), tokens: 1_200 }),
+        (None, EventBody::SubagentContext { subagent: "thread-1".into(), tokens: 1_200 }),
+        (None, start("toolu_3", "thread-1")),
+        (None, start("toolu_1", "thread-3")),
+        (None, ended("thread-2")),
+        (Some("thread-2"), message(vec![call("late")])),
+        (None, start("toolu_send", "thread-2")),
+        (None, exited),
+        (None, start("toolu_4", "thread-4")),
+    ];
+
+    let (mut every, mut kept) = (Vec::new(), Vec::new());
+    for (seq, (from, body)) in log.into_iter().enumerate() {
+        let event = SessionEvent {
+            subagent: from.map(Into::into),
+            ts_ms: i64::try_from(seq).unwrap(),
+            ..fixtures::event(Seq::new(u64::try_from(seq).unwrap()), body)
+        };
+        let noted: Vec<SubagentId> = Subagent::note(&mut every, &event).iter().map(|it| it.id()).collect();
+        assert_eq!(noted_as_the_hub_does(&mut kept, &event), noted, "{event:?}");
+        assert_eq!(kept, every, "{event:?}");
+    }
+    assert_eq!(kept.len(), 3, "a call starts only one");
+}
+
+/// Notes `event` in `kept` as the hub does, reading only the records it touches and writing back those it changed, and
+/// says which changed.
+fn noted_as_the_hub_does(kept: &mut Vec<Subagent>, event: &SessionEvent) -> Vec<SubagentId> {
+    let touches = |it: &&Subagent| match Subagent::touched_by(event) {
+        Some(TouchedSubagents::One(id)) => it.id() == id,
+        Some(TouchedSubagents::Starting { subagent, call }) => it.id() == subagent || it.call == call,
+        Some(TouchedSubagents::Working) => it.status == SubagentStatus::Working,
+        None => false,
+    };
+    let mut read: Vec<Subagent> = kept.iter().filter(touches).cloned().collect();
+    let changed: Vec<Subagent> = Subagent::note(&mut read, event).into_iter().map(|it| it.clone()).collect();
+    let ids = changed.iter().map(Subagent::id).collect();
+    for it in changed {
+        match kept.iter_mut().find(|held| held.id() == it.id()) {
+            Some(held) => *held = it,
+            None => kept.push(it),
+        }
+    }
+    ids
 }

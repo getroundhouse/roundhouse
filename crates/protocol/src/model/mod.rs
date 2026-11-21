@@ -81,7 +81,7 @@ pub use references::{
 };
 pub use reply_heard::{Ending, ReplyHeard, ReplyPlace, SettledBy, SpokenThrough};
 pub use session::{AgentKind, OpenApproval, Session, SessionStatus};
-pub use subagent::{Lately, LatelyCall, LatelyResult, Said, Subagent, SubagentStatus};
+pub use subagent::{Lately, LatelyCall, LatelyResult, Said, Subagent, SubagentStatus, TouchedSubagents};
 pub use terminal::Terminal;
 pub use title::{Title, TitleError, TitleSource};
 pub use wait::{EndedWait, Wait, WaitEnd, WaitEnded, WaitUntil, Watching};
