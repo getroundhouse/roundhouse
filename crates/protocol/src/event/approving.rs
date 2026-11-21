@@ -25,40 +25,17 @@ impl ApprovalChange<'_> {
 impl EventBody {
     /// The approval it opens or closes, if it does either. The hub keeps what's open by this, and so do a client that
     /// shows it and an agent's adapter that answers it.
+    #[expect(
+        clippy::wildcard_enum_match_arm,
+        reason = "only `ApprovalRequested` and `ApprovalResolved` open or close an approval"
+    )]
     pub fn approval_change(&self) -> Option<ApprovalChange<'_>> {
         match self {
             EventBody::ApprovalRequested { approval_id, request, .. } => {
                 Some(ApprovalChange::Opens { approval_id, request })
             }
             EventBody::ApprovalResolved { approval_id, .. } => Some(ApprovalChange::Closes(approval_id)),
-            EventBody::UserPrompt { .. }
-            | EventBody::CompactionAsked { .. }
-            | EventBody::PromptTaken { .. }
-            | EventBody::PromptDropped { .. }
-            | EventBody::ToolCallDropped { .. }
-            | EventBody::AgentStarted { .. }
-            | EventBody::AgentInit { .. }
-            | EventBody::AgentState { .. }
-            | EventBody::AgentTasks { .. }
-            | EventBody::OwnTurn(_)
-            | EventBody::AgentLimits { .. }
-            | EventBody::Assistant { .. }
-            | EventBody::AgentUser { .. }
-            | EventBody::TurnEnded { .. }
-            | EventBody::AgentExited { .. }
-            | EventBody::Notice { .. }
-            | EventBody::RequestFailed { .. }
-            | EventBody::AgentMode { .. }
-            | EventBody::SubagentStarted { .. }
-            | EventBody::SubagentContext { .. }
-            | EventBody::SubagentEnded { .. }
-            | EventBody::TaskChanged { .. }
-            | EventBody::AgentOther { .. }
-            | EventBody::AgentCompacting { .. }
-            | EventBody::AgentCompacted { .. }
-            | EventBody::CacheExpired { .. }
-            | EventBody::ConversationStarted { .. }
-            | EventBody::Unknown => None,
+            _ => None,
         }
     }
 }
