@@ -1,12 +1,13 @@
-//! The ends of a word or a line and the text of cells, as the worker's copy finds them by number, against what the
-//! client's copy selects with a click and copies today.
+//! The ends of a word or a line and the text of cells, as the worker's copy finds them by number, against what a
+//! click in Ghostty selects and copies.
 
-use protocol::terminal::{Bounds, Numbering, RowNumber, TerminalPoint, TerminalRange, TerminalTextReply};
+use libghostty_vt::selection::gesture::Behavior;
+use protocol::terminal::{Bounds, Numbering, RowNumber, TerminalPoint, TerminalRange, TerminalSize, TerminalTextReply};
 
+use crate::Mirror;
 use crate::mirror::rows::counting::Numbered;
-use crate::{Mirror, Pointer, SelectBy, Size};
 
-const SIZE: Size = Size { cols: 20, rows: 5 };
+const SIZE: TerminalSize = TerminalSize { cols: 20, rows: 5 };
 
 /// Lines a terminal wrapped, lines with spaces at their ends, a blank line, and a word cut by the wrap, in history and
 /// on the screen.
@@ -58,9 +59,9 @@ fn copied(mirror: &mut Mirror, numbering: Numbering, range: TerminalRange, recta
 #[test]
 fn the_pages_joined_are_what_copying_everything_at_once_is() {
     let (mut mirror, now) = written();
-    mirror.select_all().unwrap();
-    let all = mirror.selected_text().unwrap().unwrap();
-    mirror.clear_selection().unwrap();
+    mirror.select_all();
+    let all = mirror.selected_text().unwrap();
+    mirror.clear_selection();
 
     for page in [1, 20, 30, 45, 64, 100, usize::MAX] {
         assert_eq!(copied(&mut mirror, now.numbering, everything(now), false, page), all, "pages of {page} bytes");
@@ -74,8 +75,8 @@ fn blank_lines_are_copied_as_at_once_wherever_a_page_ends() {
     let mut mirror = Mirror::new(SIZE).unwrap();
     mirror.write(b"a\r\n\r\n\r\n\r\nb\r\n  \r\nc\r\n\r\n");
     let now = mirror.numbered().unwrap();
-    mirror.select_all().unwrap();
-    let all = mirror.selected_text().unwrap().unwrap();
+    mirror.select_all();
+    let all = mirror.selected_text().unwrap();
 
     assert_eq!(all, "a\n\n\n\nb\n\nc");
     for page in [1, 20, 40, 60, usize::MAX] {
@@ -88,7 +89,7 @@ fn blank_lines_are_copied_as_at_once_wherever_a_page_ends() {
         assert_eq!(copied(&mut mirror, now.numbering, blank_end, false, page), "", "pages of {page} bytes");
     }
     // To the spaces before a `c` written on the last row, which are kept, as what was written is.
-    mirror.clear_selection().unwrap();
+    mirror.clear_selection();
     mirror.write(b"  c");
     let row = mirror.numbered().unwrap().top.plus(u64::from(SIZE.rows) - 1);
     let before_c = TerminalRange { to: point(row, 1), ..everything(now) };
@@ -120,14 +121,14 @@ fn a_words_and_a_lines_ends_are_where_a_click_selects() {
     let (mut mirror, now) = written();
     // The screen's rows, as it shows them with no scrolling: the long word's second half, then `x`, two of `y`, `last`.
     for (row, col, by, of) in [
-        (0_u16, 3_u16, SelectBy::Words, Bounds::Word),
-        (2, 4, SelectBy::Words, Bounds::Word),
-        (2, 4, SelectBy::Lines, Bounds::Line),
-        (0, 1, SelectBy::Lines, Bounds::Line),
+        (0_u16, 3_u16, Behavior::Word, Bounds::Word),
+        (2, 4, Behavior::Word, Bounds::Word),
+        (2, 4, Behavior::Line, Bounds::Line),
+        (0, 1, Behavior::Line, Bounds::Line),
     ] {
-        mirror.press(Pointer { col: f32::from(col) + 0.5, row: f32::from(row) + 0.5 }, by).unwrap();
-        let clicked = mirror.selected_text().unwrap();
-        mirror.clear_selection().unwrap();
+        mirror.click(col, row, by);
+        let clicked = mirror.selected_text();
+        mirror.clear_selection();
         let at = point(now.top.plus(u64::from(row)), col);
 
         let found = mirror.bounds(now.numbering, at, of).unwrap().range.unwrap();

@@ -118,7 +118,7 @@ mod tests {
     /// GPUI gives Return the text `"\n"` on a Mac, and none elsewhere, and either way the program reads Return.
     #[test]
     fn return_is_read_as_a_carriage_return_whatever_text_it_comes_with() {
-        let mut mirror = terminal_state::Mirror::new(terminal_state::Size { cols: 20, rows: 4 }).unwrap();
+        let mut mirror = terminal_state::Mirror::new(protocol::terminal::TerminalSize { cols: 20, rows: 4 }).unwrap();
 
         for typed in [Some("\n"), None] {
             let press = key_press(&stroke("enter", typed, Modifiers::default()), MAC).unwrap();
@@ -130,7 +130,7 @@ mod tests {
     /// keys as keys, as Claude Code reads Shift-Return.
     #[test]
     fn shift_return_reaches_a_program_that_reads_keys_as_keys() {
-        let mut mirror = terminal_state::Mirror::new(terminal_state::Size { cols: 20, rows: 4 }).unwrap();
+        let mut mirror = terminal_state::Mirror::new(protocol::terminal::TerminalSize { cols: 20, rows: 4 }).unwrap();
         mirror.write(b"\x1b[>1u");
         let shifted = Modifiers { shift: true, ..Modifiers::default() };
 
@@ -144,7 +144,7 @@ mod tests {
     /// since it didn't go into typing anything.
     #[test]
     fn option_with_a_key_that_types_nothing_is_sent_as_alt_on_a_mac() {
-        let mut mirror = terminal_state::Mirror::new(terminal_state::Size { cols: 20, rows: 4 }).unwrap();
+        let mut mirror = terminal_state::Mirror::new(protocol::terminal::TerminalSize { cols: 20, rows: 4 }).unwrap();
         let option = Modifiers { alt: true, ..Modifiers::default() };
 
         for typed in [Some("\n"), None] {
@@ -159,7 +159,7 @@ mod tests {
     /// keyboard, so it's typed. Control and Alt that didn't are sent with the key.
     #[test]
     fn a_character_typed_with_altgr_is_typed() {
-        let mut mirror = terminal_state::Mirror::new(terminal_state::Size { cols: 20, rows: 4 }).unwrap();
+        let mut mirror = terminal_state::Mirror::new(protocol::terminal::TerminalSize { cols: 20, rows: 4 }).unwrap();
         let altgr = Modifiers { control: true, alt: true, ..Modifiers::default() };
 
         let altgr_q = KeyDownEvent { prefer_character_input: true, ..stroke("q", Some("@"), altgr) };

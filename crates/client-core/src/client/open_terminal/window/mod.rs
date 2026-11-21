@@ -12,4 +12,5 @@ mod tests;
 mod viewing;
 
 pub(super) use selecting::Step;
+pub use selecting::{Pointer, SelectBy};
 pub(super) use viewing::{Ask, Replied, Window};

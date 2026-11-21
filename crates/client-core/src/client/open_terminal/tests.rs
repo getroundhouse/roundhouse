@@ -7,15 +7,16 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use super::following::*;
+use super::window::{Pointer, SelectBy};
 use crate::client::Client;
+use crate::drawn::{Frame, Rgb};
 use crate::stand_in_hub::{Does, listen};
 use protocol::client::terminals::{TerminalFit, TerminalTyped};
 use protocol::client::{ApiError, ClientRequest, ClientResponse, ErrorCode, HubFrame, ReplyOutcome};
 use protocol::terminal::{
     Key, KeyPress, Mods, PictureSending, TerminalExit, TerminalPicture, TerminalSize, TerminalUpdate, Typed,
 };
-use terminal_state::drawn::{Frame, Rgb};
-use terminal_state::{Mirror, Size};
+use terminal_state::Mirror;
 
 const SIZE: TerminalSize = TerminalSize { cols: 80, rows: 24 };
 const WAIT: Duration = Duration::from_secs(10);
@@ -33,7 +34,7 @@ fn typed(typed: char) -> ClientRequest {
 
 /// The pictures a worker sends of a terminal that's written each of `writes` in turn, one after each.
 fn pictures(writes: &[&[u8]]) -> Vec<TerminalPicture> {
-    let mut worker = Mirror::new(Size { cols: SIZE.cols, rows: SIZE.rows }).unwrap();
+    let mut worker = Mirror::new(SIZE).unwrap();
     let mut sending = PictureSending::default();
     let mut pictures = Vec::new();
     for written in writes {
@@ -137,7 +138,7 @@ fn an_open_terminal_keeps_what_it_shows_for_a_view_to_draw() {
     open.set_colors(RED, BLUE);
     let frame = frame_when(&open, "what came after the first picture", |frame| text(frame)[1] == "a.rs");
     open.key(key('x'));
-    let room = Size { cols: 100, rows: 30 };
+    let room = TerminalSize { cols: 100, rows: 30 };
     open.fit(room);
 
     assert_eq!(text(&frame)[0], "$ ls");
@@ -251,12 +252,12 @@ fn rows_scrolled_back_to_are_fetched_and_what_is_selected_is_copied() {
 
     open.wheel(-60);
     frame_when(&open, "the history", |frame| text(frame)[0] == "line 17");
-    open.press(terminal_state::Pointer { col: 0.1, row: 1.5 }, terminal_state::SelectBy::Cells);
-    open.drag(terminal_state::Pointer { col: 6.9, row: 2.5 });
+    open.press(Pointer { col: 0.1, row: 1.5 }, SelectBy::Cells);
+    open.drag(Pointer { col: 6.9, row: 2.5 });
     open.release();
     let copied = open.selected_text().recv_timeout(WAIT);
     // A copy asked at once after a double click, before the word's ends have come, waits for them.
-    open.press(terminal_state::Pointer { col: 1.5, row: 3.5 }, terminal_state::SelectBy::Words);
+    open.press(Pointer { col: 1.5, row: 3.5 }, SelectBy::Words);
     open.release();
     let double_clicked = open.selected_text().recv_timeout(WAIT);
 

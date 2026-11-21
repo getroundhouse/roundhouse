@@ -1,13 +1,13 @@
-//! That a window scrolls through the history as the client's copy of Ghostty did, fetching the rows it lacks near its
-//! view, and keeps its place by row number as output comes.
+//! That a window scrolls through the history as Ghostty did, fetching the rows it lacks near its view, and keeps its
+//! place by row number as output comes.
 
-use protocol::terminal::{MOST_ROWS, PictureSending, RowNumber, TerminalRowsReply};
-use terminal_state::{Mirror, Size};
+use protocol::terminal::{MOST_ROWS, PictureSending, RowNumber, TerminalRowsReply, TerminalSize};
+use terminal_state::Mirror;
 
 use super::super::{Ask, Replied, Window};
-use super::feeding::{BACKGROUND, FOREGROUND, pictured, watched, worker};
+use super::feeding::{pictured, watched, worker};
 
-const SIZE: Size = Size { cols: 20, rows: 5 };
+const SIZE: TerminalSize = TerminalSize { cols: 20, rows: 5 };
 
 fn lines(count: usize) -> String {
     super::feeding::lines(0..count) + "$ "
@@ -32,20 +32,28 @@ fn text(window: &mut Window) -> Vec<String> {
 
 #[test]
 fn the_wheel_scrolls_through_the_history_as_ghostty_did_once_the_rows_have_come() {
-    let output = lines(100);
-    let mut ghostty = Mirror::new(SIZE).unwrap();
-    ghostty.set_colors(FOREGROUND, BACKGROUND).unwrap();
-    ghostty.write(output.as_bytes());
-    let mut worker = worker(SIZE, output.as_bytes());
+    let mut worker = worker(SIZE, lines(100).as_bytes());
     let mut window = watched(&mut worker, &mut PictureSending::default());
+    let from = |top: usize| (top..top + 5).map(|at| format!("line {at}")).collect::<Vec<_>>();
+    let bottom = ["line 96", "line 97", "line 98", "line 99", "$"].map(String::from).to_vec();
 
-    for lines in [-3, -40, 7, -200, 30, 400] {
-        assert!(ghostty.wheel(lines).unwrap().is_empty());
+    // What Ghostty showed after each turn, and where its cursor was, which is in sight only at the bottom, after the
+    // prompt.
+    for (lines, ghosttys, cursor) in [
+        (-3, from(93), None),
+        (-40, from(53), None),
+        (7, from(60), None),
+        (-200, from(0), None),
+        (30, from(30), None),
+        (400, bottom, Some((2, 4))),
+    ] {
         let asks = window.wheel(lines);
         fetched(&mut window, &mut worker, asks);
-        window.set_colors(FOREGROUND, BACKGROUND);
+        let frame = window.frame().unwrap();
 
-        assert_eq!(*window.frame().unwrap(), ghostty.frame().unwrap(), "after turning the wheel by {lines}");
+        let windows: Vec<String> = frame.rows.iter().map(|row| row.text()).collect();
+        assert_eq!(windows, ghosttys, "after turning the wheel by {lines}");
+        assert_eq!(frame.cursor.map(|at| (at.col, at.row)), cursor, "after turning the wheel by {lines}");
     }
 }
 

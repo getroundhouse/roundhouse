@@ -11,3 +11,4 @@ mod tests;
 mod window;
 
 pub use following::OpenTerminal;
+pub use window::{Pointer, SelectBy};

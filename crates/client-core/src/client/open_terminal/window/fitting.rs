@@ -2,7 +2,6 @@
 //! elsewhere, which takes the view to the bottom with nothing selected.
 
 use protocol::terminal::{Numbering, TerminalFitReply, TerminalPoint, TerminalSize};
-use terminal_state::Size;
 
 use super::viewing::{Ask, Window};
 
@@ -90,8 +89,7 @@ impl Window {
     }
 
     /// The view has room for `room`, which the terminal is asked to take if it isn't that size, or about to be.
-    pub(in crate::client::open_terminal) fn fit(&mut self, room: Size) -> Vec<Ask> {
-        let room = TerminalSize { cols: room.cols, rows: room.rows };
+    pub(in crate::client::open_terminal) fn fit(&mut self, room: TerminalSize) -> Vec<Ask> {
         let changed = self.room != Some(room);
         self.room = Some(room);
         self.fit_to_room(!changed)

@@ -1,10 +1,10 @@
 //! Cells kept through a new size, which must still be the same text after the terminal rewraps its rows.
 
-use protocol::terminal::{Numbering, RowNumber, TerminalPoint, TerminalRange};
+use protocol::terminal::{Numbering, RowNumber, TerminalPoint, TerminalRange, TerminalSize};
 
-use crate::{Mirror, Size};
+use crate::Mirror;
 
-const SIZE: Size = Size { cols: 20, rows: 5 };
+const SIZE: TerminalSize = TerminalSize { cols: 20, rows: 5 };
 
 /// The character in a cell, as the copy copies it.
 fn char_at(mirror: &mut Mirror, numbering: Numbering, at: TerminalPoint) -> String {
@@ -30,7 +30,7 @@ fn a_kept_cell_is_the_same_character_after_a_new_size() {
 
     let mut numbering = now.numbering;
     let mut points = points.map(Some);
-    for size in [Size { cols: 12, rows: 6 }, Size { cols: 40, rows: 4 }] {
+    for size in [TerminalSize { cols: 12, rows: 6 }, TerminalSize { cols: 40, rows: 4 }] {
         let tracked = mirror.track(numbering, &points.map(Option::unwrap)).unwrap();
         mirror.resize(size).unwrap();
         let fitted = mirror.tracked(&tracked).unwrap();

@@ -1,19 +1,18 @@
 //! A terminal someone has open, as a view: its grid, which takes the keys while it's focused, pastes, turns the wheel
 //! through its history, and selects with the pointer, and copies what's selected.
-
 use std::cell::Cell;
 use std::rc::Rc;
 use std::sync::Arc;
 
 use client_core::OpenTerminal;
+use client_core::drawn::{Frame, Rgb};
 use gpui_kit::component::input::{Copy, Paste, SelectAll};
 use gpui_kit::{
     App, ClipboardItem, Context, FocusHandle, Focusable, Hsla, InteractiveElement, IntoElement, KeyBinding,
     KeyDownEvent, MouseButton, MouseDownEvent, NoAction, OperatingSystem, ParentElement, Pixels, Render, ScrollEvent,
     Styled, Task, TestSupportExt as _, Window, div, font, px,
 };
-use terminal_state::Size;
-use terminal_state::drawn::{Frame, Rgb};
+use protocol::terminal::TerminalSize;
 
 use crate::grid::{Glyphs, Grid, Metrics, Pointing};
 use crate::keys::key_press;
@@ -75,7 +74,7 @@ pub struct TerminalView {
     glyphs: Glyphs,
     focus: FocusHandle,
     /// The size the view last said it had room for.
-    fit: Rc<Cell<Option<Size>>>,
+    fit: Rc<Cell<Option<TerminalSize>>>,
     /// The part of a line the wheel has turned that hasn't scrolled a line yet.
     wheel: Pixels,
     /// Draws the view again as client-core's copy changes, until the view has gone.
@@ -272,8 +271,8 @@ fn channel(value: f32) -> u8 {
 
 #[cfg(test)]
 mod tests {
+    use client_core::drawn::Rgb;
     use gpui_kit::px;
-    use terminal_state::drawn::Rgb;
 
     use super::{rgb_of, turned};
 

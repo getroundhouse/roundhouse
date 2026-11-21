@@ -7,9 +7,9 @@ use std::sync::Arc;
 use protocol::terminal::{
     Numbering, RowNumber, ScreenState, TerminalCursor, TerminalPicture, TerminalRow, TerminalRowsReply, TerminalSize,
 };
-use terminal_state::drawn::Row;
 
 use super::painting::Colors;
+use crate::drawn::Row;
 
 /// The most rows of history a client holds, and the most bytes of them, letting go of those furthest from its view
 /// first.

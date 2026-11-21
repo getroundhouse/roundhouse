@@ -7,7 +7,7 @@ use protocol::worker::TerminalFit;
 use terminal_state::Mirror;
 use tracing::warn;
 
-use super::serving::{Shell, mirror_size, pty_size};
+use super::serving::{Shell, pty_size};
 
 impl Shell {
     /// Writes what the program reads for what was pressed, by the modes it set in what it wrote before.
@@ -25,13 +25,13 @@ impl Shell {
         if size == self.size {
             return;
         }
-        if let Err(e) = mirror.resize(mirror_size(size)) {
+        if let Err(e) = mirror.resize(size) {
             warn!("couldn't resize the copy of terminal {}: {e}", self.terminal);
             return;
         }
         if let Err(e) = self.master.resize(pty_size(size)) {
             warn!("couldn't resize terminal {}: {e}", self.terminal);
-            if let Err(e) = mirror.resize(mirror_size(self.size)) {
+            if let Err(e) = mirror.resize(self.size) {
                 warn!("couldn't put the copy of terminal {} back to its size: {e}", self.terminal);
             }
             // Its rows are in a new numbering, which a picture says.

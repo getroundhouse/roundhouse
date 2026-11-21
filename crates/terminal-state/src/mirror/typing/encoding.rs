@@ -3,7 +3,6 @@
 use libghostty_vt::key::{self, Action, Encoder, Event};
 use libghostty_vt::mode::Mode;
 use libghostty_vt::screen::Screen;
-use libghostty_vt::terminal::ScrollViewport;
 
 use crate::{Mirror, MirrorError};
 use protocol::terminal::{Key, KeyPress, Mods, Typed};
@@ -46,7 +45,7 @@ impl Mirror {
     /// terminal acts on, such as Control-C, swapped for spaces, as xterm does, so it can't end its own marks early or
     /// stop the program, between the marks that say it's pasted if the program asked for them. Otherwise each line
     /// ends as Return does, so a shell runs each line of it.
-    pub fn paste(&self, text: &str) -> Result<Vec<u8>, MirrorError> {
+    pub(in crate::mirror) fn paste(&self, text: &str) -> Result<Vec<u8>, MirrorError> {
         let bracketed = self.terminal.mode(Mode::BRACKETED_PASTE)?;
         let mut text = text.as_bytes().to_vec();
         // The marks and the text, each byte of which is kept or swapped for one other.
@@ -73,16 +72,6 @@ impl Mirror {
         }
     }
 
-    /// Turns the wheel by `lines`, up for fewer than none. On the shell's screen it scrolls through the history, and
-    /// otherwise returns what the program reads for it.
-    pub fn wheel(&mut self, lines: isize) -> Result<Vec<u8>, MirrorError> {
-        let keys = self.wheel_keys(lines)?;
-        if keys.is_none() {
-            self.terminal.scroll_viewport(ScrollViewport::Delta(lines));
-        }
-        Ok(keys.unwrap_or_default())
-    }
-
     /// What the program reads for a turn of the wheel by `lines`, or `None` on the shell's screen, where it scrolls
     /// the history. A full-screen program's screen has none, so as terminal apps do, it's sent as the arrow keys
     /// instead, for the program to scroll itself. A program that asked for the mouse is sent nothing, until the mouse
@@ -102,11 +91,6 @@ impl Mirror {
             return Ok(Some(self.key(&arrow)?.repeat(lines.unsigned_abs())));
         }
         Ok(None)
-    }
-
-    /// Goes back to the screen from wherever the history is scrolled to, as typing does.
-    pub fn scroll_to_screen(&mut self) {
-        self.terminal.scroll_viewport(ScrollViewport::Bottom);
     }
 }
 

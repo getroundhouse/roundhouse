@@ -1,14 +1,50 @@
-//! That a window selects what the client's copy of Ghostty selected for the same presses and drags.
+//! That a window selects what Ghostty selected for the same presses and drags.
 
-use protocol::terminal::PictureSending;
-use terminal_state::drawn::Selected;
-use terminal_state::{Mirror, Pointer, SelectBy, Size};
+use std::sync::Arc;
 
-use super::super::{Ask, Replied, Window};
+use protocol::terminal::{PictureSending, TerminalSize};
+use terminal_state::Mirror;
+
+use super::super::{Ask, Pointer, Replied, SelectBy, Window};
 use super::feeding::{watched, worker};
+use crate::drawn::Row;
 
-const SIZE: Size = Size { cols: 10, rows: 4 };
+const SIZE: TerminalSize = TerminalSize { cols: 10, rows: 4 };
 const OUTPUT: &str = "one two\r\nthree four\r\n日本 five\r\nsix";
+
+/// What Ghostty selected of [`OUTPUT`] for each press at one of [`places`], a line each, dragged to each of them, in
+/// that order, as [`selected`] writes it.
+const BY_CELLS: &str = include_str!("drags_by_cells.txt");
+
+/// What Ghostty selected of [`OUTPUT`] for a press on a word by words or by lines, dragged to each word, in the order
+/// of [`ON_WORDS`].
+const BY_WORDS_AND_LINES: &str = "\
+Words 0.5,0.5: 0.0-0.2 0.0-0.6 0.0-1.4 0.0-1.9 0.0-2.3 0.0-2.8 0.0-3.2
+Words 5.5,0.5: 0.0-0.6 0.4-0.6 0.4-1.4 0.4-1.9 0.4-2.3 0.4-2.8 0.4-3.2
+Words 1.5,1.5: 0.0-1.4 0.4-1.4 1.0-1.4 1.0-1.9 1.0-2.3 1.0-2.8 1.0-3.2
+Words 7.5,1.5: 0.0-1.9 0.4-1.9 1.0-1.9 1.6-1.9 1.6-2.3 1.6-2.8 1.6-3.2
+Words 0.5,2.5: 0.0-2.3 0.4-2.3 1.0-2.3 1.6-2.3 2.0-2.3 2.0-2.8 2.0-3.2
+Words 6.5,2.5: 0.0-2.8 0.4-2.8 1.0-2.8 1.6-2.8 2.0-2.8 2.5-2.8 2.5-3.2
+Words 1.5,3.5: 0.0-3.2 0.4-3.2 1.0-3.2 1.6-3.2 2.0-3.2 2.5-3.2 3.0-3.2
+Lines 0.5,0.5: 0.0-0.6 0.0-0.6 0.0-1.9 0.0-1.9 0.0-2.8 0.0-2.8 0.0-3.2
+Lines 5.5,0.5: 0.0-0.6 0.0-0.6 0.0-1.9 0.0-1.9 0.0-2.8 0.0-2.8 0.0-3.2
+Lines 1.5,1.5: 0.0-1.9 0.0-1.9 1.0-1.9 1.0-1.9 1.0-2.8 1.0-2.8 1.0-3.2
+Lines 7.5,1.5: 0.0-1.9 0.0-1.9 1.0-1.9 1.0-1.9 1.0-2.8 1.0-2.8 1.0-3.2
+Lines 0.5,2.5: 0.0-2.8 0.0-2.8 1.0-2.8 1.0-2.8 2.0-2.8 2.0-2.8 2.0-3.2
+Lines 6.5,2.5: 0.0-2.8 0.0-2.8 1.0-2.8 1.0-2.8 2.0-2.8 2.0-2.8 2.0-3.2
+Lines 1.5,3.5: 0.0-3.2 0.0-3.2 1.0-3.2 1.0-3.2 2.0-3.2 2.0-3.2 3.0-3.2
+";
+
+/// A place on each word of [`OUTPUT`].
+const ON_WORDS: [Pointer; 7] = [
+    Pointer { col: 0.5, row: 0.5 },
+    Pointer { col: 5.5, row: 0.5 },
+    Pointer { col: 1.5, row: 1.5 },
+    Pointer { col: 7.5, row: 1.5 },
+    Pointer { col: 0.5, row: 2.5 },
+    Pointer { col: 6.5, row: 2.5 },
+    Pointer { col: 1.5, row: 3.5 },
+];
 
 /// Every place a pointer is tried at: either side of the six tenths of a cell, in cells along each row and the edges,
 /// and past each edge.
@@ -18,29 +54,42 @@ fn places() -> Vec<Pointer> {
     down.iter().flat_map(|row| along.iter().map(|col| Pointer { col: *col, row: *row })).collect()
 }
 
-fn selections(rows: &[std::sync::Arc<terminal_state::drawn::Row>]) -> Vec<Option<Selected>> {
-    rows.iter().map(|row| row.selected).collect()
+/// What's selected in `rows`, from its first cell to its last, each as its row and column, such as `0.4-1.9`, or `-`
+/// for nothing. What isn't one run of cells, which Ghostty never selected here, is written row by row, to fail.
+fn selected(rows: &[Arc<Row>]) -> String {
+    let runs: Vec<_> = rows.iter().enumerate().filter_map(|(at, row)| Some((at, row.selected?))).collect();
+    let (Some((first, from)), Some((last, to))) = (runs.first(), runs.last()) else { return "-".into() };
+    let one_run = runs.iter().enumerate().all(|(nth, (at, run))| {
+        let starts = nth == 0 || run.col == 0;
+        let ends = nth + 1 == runs.len() || run.col + run.cells == SIZE.cols;
+        *at == first + nth && starts && ends
+    });
+    if one_run { format!("{first}.{}-{last}.{}", from.col, to.col + to.cells - 1) } else { format!("{runs:?}") }
+}
+
+/// The line of `recorded` for a press at `press`, after `prefix`.
+fn recorded<'r>(recorded: &'r str, prefix: &str, press: Pointer) -> Vec<&'r str> {
+    let heading = format!("{prefix}{},{}:", press.col, press.row);
+    let line = recorded.lines().find(|line| line.starts_with(&heading));
+    let line = line.unwrap_or_else(|| panic!("nothing recorded for {heading}"));
+    line[heading.len()..].split_whitespace().collect()
 }
 
 #[test]
 fn a_drag_by_cells_selects_what_ghosttys_selected() {
-    let mut ghostty = Mirror::new(SIZE).unwrap();
-    ghostty.write(OUTPUT.as_bytes());
     let mut worker = worker(SIZE, OUTPUT.as_bytes());
     let mut window = watched(&mut worker, &mut PictureSending::default());
     let places = places();
 
     for press in &places {
-        for drag in &places {
-            ghostty.press(*press, SelectBy::Cells).unwrap();
-            ghostty.drag(*drag).unwrap();
-            let ghosttys = selections(&ghostty.frame().unwrap().rows);
+        let ghosttys = recorded(BY_CELLS, "", *press);
+        assert_eq!(ghosttys.len(), places.len());
+        for (drag, ghosttys) in places.iter().zip(ghosttys) {
             assert!(window.press(*press, SelectBy::Cells).is_empty());
             assert!(window.drag(*drag).is_empty());
-            let windows = window.frame().map(|frame| selections(&frame.rows)).unwrap();
+            let windows = window.frame().map(|frame| selected(&frame.rows)).unwrap();
 
             assert_eq!(windows, ghosttys, "a press at {press:?} dragged to {drag:?}");
-            ghostty.release(*drag).unwrap();
             window.release();
         }
     }
@@ -53,14 +102,14 @@ fn a_click_with_no_drag_clears_what_was_selected() {
     window.press(Pointer { col: 0.2, row: 0.5 }, SelectBy::Cells);
     window.drag(Pointer { col: 5.2, row: 1.5 });
     window.release();
-    let selected = window.selected();
+    let before = window.selected();
 
     window.press(Pointer { col: 3.2, row: 0.5 }, SelectBy::Cells);
     window.release();
 
-    assert!(selected.is_some());
+    assert!(before.is_some());
     assert_eq!(window.selected(), None);
-    assert!(selections(&window.frame().unwrap().rows).iter().all(Option::is_none));
+    assert_eq!(selected(&window.frame().unwrap().rows), "-");
 }
 
 /// Answers what a window asks for a word's or a line's ends from `worker`, as the hub would from the worker.
@@ -76,27 +125,21 @@ fn answered(window: &mut Window, worker: &mut Mirror, asks: Vec<Ask>) {
 /// finds none, and the selection stays as it was.
 #[test]
 fn a_drag_by_words_or_lines_selects_what_ghosttys_selected() {
-    let mut ghostty = Mirror::new(SIZE).unwrap();
-    ghostty.write(OUTPUT.as_bytes());
     let mut worker = worker(SIZE, OUTPUT.as_bytes());
     let mut window = watched(&mut worker, &mut PictureSending::default());
-    let on_words = [(0.5, 0.5), (5.5, 0.5), (1.5, 1.5), (7.5, 1.5), (0.5, 2.5), (6.5, 2.5), (1.5, 3.5)];
-    let on_words: Vec<_> = on_words.iter().map(|(col, row)| Pointer { col: *col, row: *row }).collect();
 
     for by in [SelectBy::Words, SelectBy::Lines] {
-        for press in &on_words {
-            for drag in &on_words {
-                ghostty.press(*press, by).unwrap();
-                ghostty.drag(*drag).unwrap();
-                let ghosttys = selections(&ghostty.frame().unwrap().rows);
+        for press in &ON_WORDS {
+            let ghosttys = recorded(BY_WORDS_AND_LINES, &format!("{by:?} "), *press);
+            assert_eq!(ghosttys.len(), ON_WORDS.len());
+            for (drag, ghosttys) in ON_WORDS.iter().zip(ghosttys) {
                 let asks = window.press(*press, by);
                 answered(&mut window, &mut worker, asks);
                 let asks = window.drag(*drag);
                 answered(&mut window, &mut worker, asks);
-                let windows = window.frame().map(|frame| selections(&frame.rows)).unwrap();
+                let windows = window.frame().map(|frame| selected(&frame.rows)).unwrap();
 
                 assert_eq!(windows, ghosttys, "a press by {by:?} at {press:?} dragged to {drag:?}");
-                ghostty.release(*drag).unwrap();
                 window.release();
             }
         }

@@ -1,13 +1,13 @@
 //! That a window keeps its place and what's selected through a new size it asked for, and goes to the bottom with
 //! nothing selected after one another device gave the terminal.
 
-use protocol::terminal::{PictureSending, TerminalPicture, Typed};
-use terminal_state::{Mirror, Pointer, SelectBy, Size};
+use protocol::terminal::{PictureSending, TerminalPicture, TerminalSize, Typed};
+use terminal_state::Mirror;
 
-use super::super::{Ask, Replied, Window};
+use super::super::{Ask, Pointer, Replied, SelectBy, Window};
 use super::feeding::{pictured, watched, worker};
 
-const SIZE: Size = Size { cols: 20, rows: 5 };
+const SIZE: TerminalSize = TerminalSize { cols: 20, rows: 5 };
 
 fn lines() -> String {
     super::feeding::lines(0..60) + "$ "
@@ -49,7 +49,7 @@ fn scrolled_and_selected() -> (Mirror, PictureSending, Window) {
 fn fit(worker: &mut Mirror, ask: &Ask) -> Replied {
     let Ask::Fit { size, numbering, keep } = ask else { panic!("asked for {ask:?}") };
     let tracked = worker.track(*numbering, keep).unwrap();
-    worker.resize(Size { cols: size.cols, rows: size.rows }).unwrap();
+    worker.resize(*size).unwrap();
     Replied::Fit { size: *size, asked: keep.clone(), reply: worker.tracked(&tracked).unwrap() }
 }
 
@@ -69,7 +69,7 @@ fn selected_text(window: &Window, worker: &mut Mirror) -> String {
 fn a_new_size_this_window_asked_for_keeps_its_place_and_selection_whichever_comes_first() {
     for reply_first in [true, false] {
         let (mut worker, mut sending, mut window) = scrolled_and_selected();
-        let asks = window.fit(Size { cols: 30, rows: 6 });
+        let asks = window.fit(TerminalSize { cols: 30, rows: 6 });
         let [ask] = asks.as_slice() else { panic!("asked for {asks:?}") };
         let replied = fit(&mut worker, ask);
         let picture = pictured(&mut worker, &mut sending);
@@ -92,7 +92,7 @@ fn a_new_size_this_window_asked_for_keeps_its_place_and_selection_whichever_come
 fn a_new_size_another_device_gave_takes_the_window_to_the_bottom_with_nothing_selected() {
     let (mut worker, mut sending, mut window) = scrolled_and_selected();
 
-    worker.resize(Size { cols: 30, rows: 6 }).unwrap();
+    worker.resize(TerminalSize { cols: 30, rows: 6 }).unwrap();
     let picture = pictured(&mut worker, &mut sending);
     take(&mut window, &mut worker, picture);
 
@@ -116,7 +116,7 @@ fn a_fresh_picture_at_another_size_than_the_views_room_asks_for_the_room() {
     let mut window = watched(&mut worker, &mut PictureSending::default());
     assert!(window.fit(SIZE).is_empty());
 
-    worker.resize(Size { cols: 30, rows: 6 }).unwrap();
+    worker.resize(TerminalSize { cols: 30, rows: 6 }).unwrap();
     let again = pictured(&mut worker, &mut PictureSending::default());
     let asks: Vec<Ask> = again.into_iter().flat_map(|frame| window.take(frame).unwrap()).collect();
 
@@ -151,7 +151,7 @@ fn the_wheel_on_a_programs_screen_is_sent_to_it() {
 fn room_that_goes_back_before_the_new_size_has_come_asks_for_its_size_again() {
     let (mut worker, _sending, mut window) = scrolled_and_selected();
     assert!(window.fit(SIZE).is_empty());
-    let wider = window.fit(Size { cols: 30, rows: 5 });
+    let wider = window.fit(TerminalSize { cols: 30, rows: 5 });
     let replied = fit(&mut worker, &wider[0]);
 
     let back = window.fit(SIZE);
@@ -181,7 +181,7 @@ fn a_picture_from_nothing_in_the_same_numbering_keeps_the_place_and_what_was_sel
 fn a_picture_at_the_new_size_before_the_fits_reply_waits_for_it() {
     let (mut worker, mut sending, mut window) = scrolled_and_selected();
     let _ = window.frame();
-    let asks = window.fit(Size { cols: 30, rows: 6 });
+    let asks = window.fit(TerminalSize { cols: 30, rows: 6 });
     let replied = fit(&mut worker, &asks[0]);
 
     let picture = pictured(&mut worker, &mut sending);
@@ -198,7 +198,7 @@ fn a_picture_at_the_new_size_before_the_fits_reply_waits_for_it() {
 #[test]
 fn typing_while_a_fit_is_on_its_way_isnt_undone_by_its_reply() {
     let (mut worker, mut sending, mut window) = scrolled_and_selected();
-    let asks = window.fit(Size { cols: 30, rows: 6 });
+    let asks = window.fit(TerminalSize { cols: 30, rows: 6 });
     let replied = fit(&mut worker, &asks[0]);
 
     window.typed(Typed::Text { text: "x".into() });

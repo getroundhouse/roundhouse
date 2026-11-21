@@ -6,7 +6,7 @@ use protocol::client::terminals::{TerminalAttach, TerminalBounds, TerminalRows, 
 use protocol::client::{ApiError, ClientResponse, ErrorCode, HubFrame};
 use protocol::model::TerminalId;
 use protocol::terminal::{PictureSending, TerminalScreen, TerminalUpdate};
-use terminal_state::{Mirror, MirrorError, Size};
+use terminal_state::{Mirror, MirrorError};
 
 use super::serve::{Answer, Outcome};
 use super::world::World;
@@ -58,7 +58,7 @@ fn screen<'w>(world: &'w World, id: &TerminalId) -> Result<&'w TerminalScreen, A
 /// The world's terminal, as a worker would keep it, from the bytes that draw it.
 fn mirror(world: &World, id: &TerminalId) -> Result<Mirror, ApiError> {
     let screen = screen(world, id)?;
-    let mut mirror = Mirror::new(Size { cols: screen.size.cols, rows: screen.size.rows }).map_err(|e| failed(&e))?;
+    let mut mirror = Mirror::new(screen.size).map_err(|e| failed(&e))?;
     mirror.write(screen.bytes.as_slice());
     Ok(mirror)
 }

@@ -14,6 +14,7 @@
 #![warn(clippy::wildcard_enum_match_arm)]
 
 pub mod calls;
+pub mod drawn;
 pub mod file_text;
 pub mod hints;
 pub mod records;
@@ -41,10 +42,10 @@ pub use sending::{NotTaken, Taking, Written};
 
 pub use client::{
     Client, ClientError, Commands, Ended, FollowError, GithubFeed, GithubView, HubAdmin, IdleStop, Introduction,
-    OpenFile, OpenSession, OpenTerminal, Opening, PairingWait, RecordsFeed, Reply, Restart, Result, Search, Searched,
-    Stretch, Subscription, SubscriptionItem, View, hub_is_missing, new_attachment_id, new_device_id,
-    new_github_sign_in_id, new_message_id, new_request_id, new_terminal_id, restart_hub, stop_hub, stop_hub_if_idle,
-    stop_hub_if_still,
+    OpenFile, OpenSession, OpenTerminal, Opening, PairingWait, Pointer, RecordsFeed, Reply, Restart, Result, Search,
+    Searched, SelectBy, Stretch, Subscription, SubscriptionItem, View, hub_is_missing, new_attachment_id,
+    new_device_id, new_github_sign_in_id, new_message_id, new_request_id, new_terminal_id, restart_hub, stop_hub,
+    stop_hub_if_idle, stop_hub_if_still,
 };
 
 #[cfg(feature = "testing")]

@@ -2,17 +2,17 @@
 
 use std::fmt::Write as _;
 
-use protocol::terminal::{PictureSending, TerminalPicture};
-use terminal_state::drawn::Rgb;
-use terminal_state::{Mirror, Size};
+use protocol::terminal::{PictureSending, TerminalPicture, TerminalSize};
+use terminal_state::Mirror;
 
 use super::super::{Ask, Replied, Window};
+use crate::drawn::Rgb;
 
 pub(super) const FOREGROUND: Rgb = Rgb { r: 0xe0, g: 0xe0, b: 0xd0 };
 pub(super) const BACKGROUND: Rgb = Rgb { r: 0x10, g: 0x12, b: 0x14 };
 
 /// A worker's copy of a terminal of `size` that `output` was written to.
-pub(super) fn worker(size: Size, output: &[u8]) -> Mirror {
+pub(super) fn worker(size: TerminalSize, output: &[u8]) -> Mirror {
     let mut mirror = Mirror::new(size).unwrap();
     mirror.write(output);
     mirror

@@ -7,8 +7,9 @@ license.workspace = true
 
 [features]
 # What only tests use, such as asking for a session's account as clients did before accounts were records, and the
-# fake hub, which makes its records from protocol's fixtures.
-testing = ["protocol/testing"]
+# fake hub, which makes its records from protocol's fixtures, and a terminal's pictures from its world's bytes with
+# Ghostty, as a worker does. Nothing else in a client builds Ghostty.
+testing = ["protocol/testing", "dep:terminal-state"]
 
 [dependencies]
 ring.workspace = true
@@ -20,7 +21,7 @@ protocol.workspace = true
 flume.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-terminal-state.workspace = true
+terminal-state = { workspace = true, optional = true }
 thiserror.workspace = true
 uuid.workspace = true
 
@@ -38,6 +39,7 @@ libc.workspace = true
 proptest.workspace = true
 protocol = { workspace = true, features = ["testing"] }
 tempfile.workspace = true
+terminal-state.workspace = true
 waiting.workspace = true
 
 [lints]

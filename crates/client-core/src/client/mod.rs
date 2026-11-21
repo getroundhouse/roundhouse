@@ -37,7 +37,7 @@ pub use introduction::Introduction;
 pub(crate) use lines::Place;
 pub use open_file::{OpenFile, Opening};
 pub use open_session::{OpenSession, Search, Searched, Stretch, View};
-pub use open_terminal::OpenTerminal;
+pub use open_terminal::{OpenTerminal, Pointer, SelectBy};
 #[cfg(test)]
 use protocol::client::{
     CLIENT_PROTOCOL_VERSION, ClientFrame, ClientRequest, ClientResponse, ErrorCode, HelloReply, HubFrame, HubNotice,

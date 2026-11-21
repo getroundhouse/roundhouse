@@ -1,8 +1,10 @@
 use std::time::{Duration, Instant};
 
-use crate::{Mirror, QUIET_BEFORE_COMPRESSING, Size};
+use protocol::terminal::TerminalSize;
 
-const SIZE: Size = Size { cols: 200, rows: 50 };
+use crate::{Mirror, QUIET_BEFORE_COMPRESSING};
+
+const SIZE: TerminalSize = TerminalSize { cols: 200, rows: 50 };
 
 /// A copy whose history is full, as one written to for a while is.
 fn full() -> Mirror {
@@ -61,7 +63,7 @@ fn a_copy_compresses_its_history_once_its_terminal_is_quiet() {
         mirror.snapshot().unwrap();
         assert_eq!(mirror.compress_at(later).unwrap(), Some(later + QUIET_BEFORE_COMPRESSING), "once it's read whole");
         compress_until_done(&mut mirror, later);
-        mirror.resize(Size { cols: 120, ..SIZE }).unwrap();
+        mirror.resize(TerminalSize { cols: 120, ..SIZE }).unwrap();
         assert_eq!(mirror.compress_at(later).unwrap(), Some(later + QUIET_BEFORE_COMPRESSING), "once it's resized");
         compress_until_done(&mut mirror, later);
     }
@@ -75,11 +77,9 @@ fn a_copy_compresses_its_history_once_its_terminal_is_quiet() {
 fn a_compressed_copy_shows_writes_and_copies_what_it_did() {
     let shown = |mirror: &mut Mirror| {
         mirror.write(b"more output\r\n");
-        mirror.resize(Size { cols: 120, ..SIZE }).unwrap();
-        mirror.wheel(-5000).unwrap();
-        let rows: Vec<String> = mirror.frame().unwrap().rows.iter().map(|row| row.text()).collect();
-        mirror.select_all().unwrap();
-        (rows, mirror.snapshot().unwrap(), mirror.selected_text().unwrap())
+        mirror.resize(TerminalSize { cols: 120, ..SIZE }).unwrap();
+        mirror.select_all();
+        (mirror.snapshot().unwrap(), mirror.selected_text())
     };
     let mut compressed = full();
     compress_until_done(&mut compressed, Instant::now());

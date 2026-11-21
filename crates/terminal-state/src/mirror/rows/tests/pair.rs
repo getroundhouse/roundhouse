@@ -2,17 +2,17 @@
 
 use std::fmt::Write as _;
 
-use protocol::terminal::Numbering;
+use protocol::terminal::{Numbering, TerminalSize};
 
+use crate::Mirror;
 use crate::mirror::HISTORY_LINES;
 use crate::mirror::rows::counting::Numbered;
-use crate::{Mirror, Size};
 
-pub(super) const SIZE: Size = Size { cols: 20, rows: 5 };
+pub(super) const SIZE: TerminalSize = TerminalSize { cols: 20, rows: 5 };
 
 /// A copy that never drops a row, against which another's count is checked: the rows that have scrolled into its
 /// history are the screen's first row's number in a numbering that started with none.
-pub(super) fn reference(size: Size) -> Mirror {
+pub(super) fn reference(size: TerminalSize) -> Mirror {
     let mut mirror = Mirror::new(size).unwrap();
     mirror
         .terminal
@@ -33,7 +33,7 @@ pub(super) struct Pair {
 impl Pair {
     /// With the history a terminal keeps. Ghostty drops rows a page at a time, so a smaller cap than a page of rows,
     /// about 1,300 at 20 columns, would lose the count on every write, and test nothing.
-    pub(super) fn new(size: Size) -> Self {
+    pub(super) fn new(size: TerminalSize) -> Self {
         let mut pair = Self {
             copy: Mirror::new(size).unwrap(),
             reference: reference(size),
@@ -44,7 +44,7 @@ impl Pair {
     }
 
     /// With its history nearly full, so what's written next drops the oldest rows.
-    pub(super) fn nearly_full(size: Size) -> Self {
+    pub(super) fn nearly_full(size: TerminalSize) -> Self {
         let mut pair = Self::new(size);
         pair.write(&lines(0, HISTORY_LINES - 50));
         pair
@@ -56,7 +56,7 @@ impl Pair {
         self.check()
     }
 
-    pub(super) fn resize(&mut self, size: Size) -> Numbered {
+    pub(super) fn resize(&mut self, size: TerminalSize) -> Numbered {
         self.copy.resize(size).unwrap();
         self.reference.resize(size).unwrap();
         self.check()
