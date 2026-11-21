@@ -183,6 +183,21 @@ async fn a_terminal_whose_shell_ends_is_removed() {
     assert!(!hub.terminals.open_in(&"w".into()));
 }
 
+/// A worker from before rows goes on sending what its programs write, which reads as an update this build doesn't
+/// know, and leaves the terminal open.
+#[tokio::test]
+async fn an_update_from_a_worker_before_rows_leaves_the_terminal_open() {
+    let dir = tempfile::tempdir().unwrap();
+    let (hub, link, _) = with_worker(dir.path());
+    hub.terminal_open(open("t")).await.unwrap();
+    let mut feed = hub.subscribe_feed();
+
+    hub.terminal_update(&link, "t".into(), &TerminalUpdate::Unknown);
+
+    assert!(timeout(Duration::from_millis(50), feed.recv()).await.is_err(), "the terminal changed");
+    assert_eq!(listed(&hub).await.terminals.len(), 1);
+}
+
 /// What one worker says of a terminal doesn't reach one another worker runs, such as its replacement's.
 #[tokio::test]
 async fn what_another_worker_says_doesnt_reach_a_terminal() {

@@ -2,7 +2,7 @@
 //! a new size, keeping the cells it names.
 
 use protocol::client::{ApiError, ErrorCode};
-use protocol::terminal::{TerminalFitReply, TerminalSize, TerminalUpdate, Typed};
+use protocol::terminal::{TerminalFitReply, TerminalSize, Typed};
 use protocol::worker::TerminalFit;
 use terminal_state::Mirror;
 use tracing::warn;
@@ -19,9 +19,9 @@ impl Shell {
         }
     }
 
-    /// Gives the worker's copy the new size, and the PTY, which tells the program, and says so in order with the
-    /// output. The same size again changes nothing, and so does one either can't take, so the two never differ.
-    pub(super) async fn resize(&mut self, mirror: &mut Mirror, size: TerminalSize) {
+    /// Gives the worker's copy the new size, and the PTY, which tells the program. The same size again changes
+    /// nothing, and so does one either can't take, so the two never differ.
+    fn resize(&mut self, mirror: &mut Mirror, size: TerminalSize) {
         if size == self.size {
             return;
         }
@@ -40,16 +40,15 @@ impl Shell {
         }
         self.size = size;
         self.watching.changed(mirror);
-        self.send(TerminalUpdate::Resized { size }).await;
     }
 
     /// Gives the terminal the new size, as [`Shell::resize`] does, and says where each cell the hub named went, in
     /// the numbering its rows are in after.
-    pub(super) async fn fit(&mut self, mirror: &mut Mirror, fit: TerminalFit) -> Result<TerminalFitReply, ApiError> {
+    pub(super) fn fit(&mut self, mirror: &mut Mirror, fit: &TerminalFit) -> Result<TerminalFitReply, ApiError> {
         let terminal = self.terminal.clone();
         let failed = move |e| ApiError::new(ErrorCode::Worker, format!("keeping cells of terminal {terminal}: {e}"));
         let tracked = mirror.track(fit.numbering, &fit.keep).map_err(failed.clone())?;
-        self.resize(mirror, fit.size).await;
+        self.resize(mirror, fit.size);
         mirror.tracked(&tracked).map_err(failed)
     }
 }

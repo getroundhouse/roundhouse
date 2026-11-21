@@ -25,8 +25,8 @@ use serde::{Deserialize, Serialize};
 #[cfg(test)]
 use terminals::RunningTerminals;
 use terminals::{
-    RunningTerminalsReply, TerminalBounds, TerminalFit, TerminalInput, TerminalResize, TerminalRows, TerminalShow,
-    TerminalShown, TerminalStart, TerminalStop, TerminalText, TerminalTyped, TerminalWatch,
+    RunningTerminalsReply, TerminalBounds, TerminalFit, TerminalRows, TerminalStart, TerminalStop, TerminalText,
+    TerminalTyped, TerminalWatch,
 };
 use tools::{ServeTools, ToolsServing};
 #[cfg(test)]
@@ -127,11 +127,8 @@ pub enum WorkerRequest {
     FindGithubLogin,
     ReadRepoUrl(ReadRepoUrl),
     TerminalStart(TerminalStart),
-    TerminalInput(TerminalInput),
     TerminalTyped(TerminalTyped),
-    TerminalResize(TerminalResize),
     TerminalFit(TerminalFit),
-    TerminalShow(TerminalShow),
     TerminalRows(TerminalRows),
     TerminalBounds(TerminalBounds),
     TerminalText(TerminalText),
@@ -176,7 +173,6 @@ pub enum WorkerResponse {
     ToolsServing(ToolsServing),
     GithubLogin(GithubLoginReply),
     RepoUrl(RepoUrlReply),
-    TerminalShown(TerminalShown),
     TerminalRows(TerminalRowsReply),
     TerminalBounds(TerminalBoundsReply),
     TerminalText(TerminalTextReply),

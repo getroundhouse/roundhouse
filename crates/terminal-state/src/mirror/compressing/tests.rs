@@ -1,5 +1,6 @@
 use std::time::{Duration, Instant};
 
+use libghostty_vt::fmt::{Extras, Format, Formatter};
 use protocol::terminal::TerminalSize;
 
 use crate::{Mirror, QUIET_BEFORE_COMPRESSING};
@@ -13,6 +14,13 @@ fn full() -> Mirror {
         mirror.write(format!("\x1b[32mline {line}\x1b[0m of a build's output, as long as most are\r\n").as_bytes());
     }
     mirror
+}
+
+/// The screen showing, with its history, and its colours, as escape sequences.
+fn styled(mirror: &Mirror) -> Vec<u8> {
+    let mut formatter = Formatter::new(&mirror.terminal).unwrap();
+    formatter.set_format(Format::Vt).unwrap().set_extras(Extras::ALL).unwrap().set_trim(false).unwrap();
+    formatter.format_alloc(None).unwrap().to_vec()
 }
 
 /// Whether Ghostty can compress here, which isn't so everywhere.
@@ -60,7 +68,8 @@ fn a_copy_compresses_its_history_once_its_terminal_is_quiet() {
         mirror.write(b"more output\r\n");
         assert_eq!(mirror.compress_at(later).unwrap(), Some(later + QUIET_BEFORE_COMPRESSING), "once it changes");
         compress_until_done(&mut mirror, later);
-        mirror.snapshot().unwrap();
+        mirror.select_all();
+        mirror.selected_text();
         assert_eq!(mirror.compress_at(later).unwrap(), Some(later + QUIET_BEFORE_COMPRESSING), "once it's read whole");
         compress_until_done(&mut mirror, later);
         mirror.resize(TerminalSize { cols: 120, ..SIZE }).unwrap();
@@ -79,7 +88,7 @@ fn a_compressed_copy_shows_writes_and_copies_what_it_did() {
         mirror.write(b"more output\r\n");
         mirror.resize(TerminalSize { cols: 120, ..SIZE }).unwrap();
         mirror.select_all();
-        (mirror.snapshot().unwrap(), mirror.selected_text())
+        (styled(mirror), mirror.selected_text())
     };
     let mut compressed = full();
     compress_until_done(&mut compressed, Instant::now());

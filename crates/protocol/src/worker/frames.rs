@@ -9,7 +9,7 @@ use crate::capability::Report;
 use crate::event::EventBody;
 use crate::model::{Branches, RunId, SessionId, TerminalId};
 use crate::tail::{Retrying, StreamDelta, Tail};
-use crate::terminal::{TerminalPicture, TerminalUpdate, UpdateIndex};
+use crate::terminal::{TerminalPicture, TerminalUpdate};
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(tag = "frame", rename_all = "snake_case")]
@@ -86,13 +86,10 @@ pub enum WorkerFrame {
         path: String,
         branches: Branches,
     },
-    /// What happens next in a terminal: what its program wrote, a new size, or its end, but never a screen, which
-    /// comes only in a [`TerminalShown`](super::TerminalShown). It isn't kept for a hub that isn't there, since a hub
-    /// that connects asks what the terminal shows, and that takes it in.
+    /// What happens next in a terminal besides what it shows: its shell's end. It isn't kept for a hub that isn't
+    /// there, since a hub that connects lists the terminals that run.
     Terminal {
         terminal: TerminalId,
-        /// So a hub can tell which updates come after a screen it asked for.
-        at: UpdateIndex,
         update: TerminalUpdate,
     },
     /// A frame of what a terminal shows, sent while the hub watches it, as `protocol::terminal::PictureSending`

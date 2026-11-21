@@ -4,14 +4,9 @@ use std::collections::HashMap;
 use std::time::Duration;
 
 use protocol::terminal::{RowJson, TerminalPicture};
-use protocol::worker::{TerminalWatch, WorkerOutcome, WorkerRequest, WorkerResponse};
 use tokio::time::Instant;
 
 use super::hub::{Hub, SIZE};
-
-fn watch(watching: bool) -> WorkerRequest {
-    WorkerRequest::TerminalWatch(TerminalWatch { terminal: "t".into(), watching })
-}
 
 fn text(row: &RowJson) -> String {
     row.row().spans.iter().map(|span| span.text.as_str()).collect()
@@ -43,11 +38,10 @@ fn screen(pictures: &[(TerminalPicture, Instant)]) -> Vec<String> {
 async fn a_watched_terminal_is_sent_its_screen_whole_and_then_what_changes() {
     let dir = tempfile::tempdir().unwrap();
     let mut hub = Hub::start(dir.path()).await;
-    hub.open("t", dir.path()).await;
+    hub.open_unwatched("t", dir.path()).await;
     hub.type_in("t", "echo be''fore").await;
-    hub.until_output("before").await;
 
-    assert_eq!(hub.call(watch(true)).await, WorkerOutcome::Response(WorkerResponse::Ok));
+    hub.watch("t", true).await;
     // The end of a row, since what the shell echoed of the first command can share the first line's row.
     hub.until_pictures(|pictures| screen(pictures).iter().any(|row| row.ends_with("before"))).await;
     hub.type_in("t", "echo af''ter").await;
@@ -62,31 +56,32 @@ async fn a_watched_terminal_is_sent_its_screen_whole_and_then_what_changes() {
     hub.finish().await;
 }
 
-/// Nothing is sent of a terminal no hub watches, and once the hub stops watching, nothing of what comes after.
+/// Nothing is sent of a terminal no hub watches, and once the hub stops watching, nothing of what comes after, until
+/// it watches again, and is sent what the terminal shows by then.
 #[tokio::test]
 async fn a_terminal_is_sent_as_pictures_only_while_its_hub_watches_it() {
     let dir = tempfile::tempdir().unwrap();
     let mut hub = Hub::start(dir.path()).await;
-    hub.open("t", dir.path()).await;
+    hub.open_unwatched("t", dir.path()).await;
     hub.type_in("t", "echo un''watched").await;
-    hub.until_output("unwatched").await;
-    let unwatched = hub.pictures.len();
-    hub.call(watch(true)).await;
-    hub.until_pictures(|pictures| !pictures.is_empty()).await;
-
-    hub.call(watch(false)).await;
-    hub.type_in("t", "echo un''watched again").await;
-    hub.until_output("unwatched again").await;
     // Longer than a picture takes to come, once it's due.
-    waiting::task::for_what_mustnt_happen(Duration::from_millis(300)).await;
-    hub.type_in("t", "echo ma''rk").await;
-    hub.until_output("mark").await;
+    hub.keep_for(Duration::from_millis(300)).await;
+    let unwatched = hub.pictures.len();
+    hub.watch("t", true).await;
+    hub.until_shown("unwatched").await;
 
-    assert_eq!(unwatched, 0);
+    hub.watch("t", false).await;
+    hub.type_in("t", "echo un''watched again").await;
+    hub.keep_for(Duration::from_millis(300)).await;
     let again = |(picture, _): &(TerminalPicture, Instant)| {
         picture.rows.iter().flat_map(|run| &run.rows).any(|row| text(row).contains("unwatched again"))
     };
-    assert!(!hub.pictures.iter().any(again), "a picture came after the hub stopped watching");
+    let sent_unwatched = hub.pictures.iter().any(again);
+    hub.watch("t", true).await;
+
+    assert_eq!(unwatched, 0);
+    assert!(!sent_unwatched, "a picture came after the hub stopped watching");
+    hub.until_shown("unwatched again").await;
     hub.finish().await;
 }
 
@@ -97,7 +92,6 @@ async fn after_a_flood_the_hub_is_sent_where_it_ended() {
     let dir = tempfile::tempdir().unwrap();
     let mut hub = Hub::start(dir.path()).await;
     hub.open("t", dir.path()).await;
-    hub.call(watch(true)).await;
 
     hub.type_in("t", "awk 'BEGIN{for(i=1;i<=200000;i++)print i}'; echo do''ne").await;
 
@@ -115,9 +109,8 @@ async fn after_a_flood_the_hub_is_sent_where_it_ended() {
 async fn pictures_come_at_most_about_60_a_second() {
     let dir = tempfile::tempdir().unwrap();
     let mut hub = Hub::start(dir.path()).await;
-    hub.open("t", dir.path()).await;
     let started = Instant::now();
-    hub.call(watch(true)).await;
+    hub.open("t", dir.path()).await;
 
     let counts = "awk 'BEGIN{for(i=1;i<=3000;i++){printf \"%d\\r\", i; fflush(); for(j=0;j<20000;j++);}}'";
     hub.type_in("t", &format!("{counts}; echo do''ne")).await;

@@ -5,11 +5,11 @@
 use protocol::client::terminals::{TerminalBounds, TerminalRows, TerminalText, TerminalWatch};
 use protocol::client::{ApiError, ClientResponse, ErrorCode, HubFrame};
 use protocol::model::TerminalId;
-use protocol::terminal::{PictureSending, TerminalScreen};
+use protocol::terminal::PictureSending;
 use terminal_state::{Mirror, MirrorError};
 
 use super::serve::{Answer, Outcome};
-use super::world::World;
+use super::world::{TerminalShows, World};
 
 /// A whole picture of what the world's terminal shows, in as many frames as it takes, after the reply.
 pub(super) fn watch(world: &World, watch: &TerminalWatch) -> Answer {
@@ -40,7 +40,7 @@ pub(super) fn text(world: &World, text: &TerminalText) -> Answer {
     Ok(Outcome::Reply(ClientResponse::TerminalText(reply), Vec::new()))
 }
 
-fn screen<'w>(world: &'w World, id: &TerminalId) -> Result<&'w TerminalScreen, ApiError> {
+fn screen<'w>(world: &'w World, id: &TerminalId) -> Result<&'w TerminalShows, ApiError> {
     world
         .terminals
         .iter()
@@ -53,7 +53,7 @@ fn screen<'w>(world: &'w World, id: &TerminalId) -> Result<&'w TerminalScreen, A
 fn mirror(world: &World, id: &TerminalId) -> Result<Mirror, ApiError> {
     let screen = screen(world, id)?;
     let mut mirror = Mirror::new(screen.size).map_err(|e| failed(&e))?;
-    mirror.write(screen.bytes.as_slice());
+    mirror.write(&screen.bytes);
     Ok(mirror)
 }
 

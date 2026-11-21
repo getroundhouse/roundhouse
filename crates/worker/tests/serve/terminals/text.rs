@@ -1,7 +1,7 @@
 //! The ends of a word and the text of cells, which a hub asks a worker of a terminal by number.
 
 use protocol::terminal::{Bounds, TerminalBoundsReply, TerminalPoint, TerminalRange, TerminalTextReply};
-use protocol::worker::{TerminalBounds, TerminalText, TerminalWatch, WorkerOutcome, WorkerRequest, WorkerResponse};
+use protocol::worker::{TerminalBounds, TerminalText, WorkerOutcome, WorkerRequest, WorkerResponse};
 
 use super::hub::{Hub, row_of};
 
@@ -11,8 +11,6 @@ async fn a_word_is_found_and_copied_by_its_rows_number() {
     let dir = tempfile::tempdir().unwrap();
     let mut hub = Hub::start(dir.path()).await;
     hub.open("t", dir.path()).await;
-    let watch = TerminalWatch { terminal: "t".into(), watching: true };
-    assert_eq!(hub.call(WorkerRequest::TerminalWatch(watch)).await, WorkerOutcome::Response(WorkerResponse::Ok));
     hub.type_in("t", "echo hel''lo world").await;
     hub.until_pictures(|pictures| row_of(pictures, "hello world").is_some()).await;
     let (numbering, row, col) = row_of(&hub.pictures, "hello world").unwrap();

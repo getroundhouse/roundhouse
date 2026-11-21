@@ -6,12 +6,10 @@ use protocol::client::{ClientFrame, ClientRequest, ClientResponse, HubFrame, Hub
 use protocol::frame;
 use protocol::model::{RecordKey, Records, Rev, Terminal};
 use protocol::terminal::{
-    CellColor, CellStyle, Numbering, RowJson, RowNumber, RowRun, Span, TerminalBytes, TerminalExit, TerminalPicture,
-    TerminalRow, TerminalRowsReply, TerminalScreen, TerminalSize, TerminalUpdate, UpdateIndex,
+    CellColor, CellStyle, Numbering, RowJson, RowNumber, RowRun, Span, TerminalExit, TerminalPicture, TerminalRow,
+    TerminalRowsReply, TerminalSize, TerminalUpdate,
 };
-use protocol::worker::{
-    self, RunningTerminal, RunningTerminalsReply, TerminalShown, WorkerFrame, WorkerRequest, WorkerResponse,
-};
+use protocol::worker::{self, RunningTerminal, RunningTerminalsReply, WorkerFrame, WorkerRequest, WorkerResponse};
 
 use crate::keeps_its_form;
 use crate::worker_calls::{answered, asked};
@@ -141,11 +139,6 @@ fn every_update_a_hub_sends_a_client_of_a_terminal_keeps_its_form() {
         keeps_its_form(&frame, &format!(r#"{{"frame":"terminal","subscription_id":3,"update":{form}}}"#));
     };
 
-    let screen = TerminalScreen { size: SIZE, bytes: b"\x1b[2J\x1b[Hhi".as_slice().into() };
-    sent(TerminalUpdate::Screen(screen), r#"{"update":"screen","size":{"cols":80,"rows":24},"bytes":"G1syShtbSGhp"}"#);
-    let output = TerminalBytes::from(b"\x1b[31mhi".as_slice());
-    sent(TerminalUpdate::Output { output }, r#"{"update":"output","output":"G1szMW1oaQ=="}"#);
-    sent(TerminalUpdate::Resized { size: SIZE }, r#"{"update":"resized","size":{"cols":80,"rows":24}}"#);
     sent(TerminalUpdate::Exited(TerminalExit { code: Some(0) }), r#"{"update":"exited","code":0}"#);
     sent(TerminalUpdate::Exited(TerminalExit { code: None }), r#"{"update":"exited","code":null}"#);
 }
@@ -167,15 +160,6 @@ fn every_request_a_hub_makes_of_a_workers_terminal_keeps_its_form() {
         WorkerRequest::TerminalStart(start),
         r#"{"method":"terminal_start","terminal":"t","size":{"cols":80,"rows":24},"cwd":"/w/aspen","env":[["PORT","55000"]],"opened_at_ms":5}"#,
     );
-    let input = worker::TerminalInput { terminal: "t".into(), input: b"\x03".as_slice().into() };
-    asked(WorkerRequest::TerminalInput(input), r#"{"method":"terminal_input","terminal":"t","input":"Aw=="}"#);
-    let resize = worker::TerminalResize { terminal: "t".into(), size: SIZE };
-    asked(
-        WorkerRequest::TerminalResize(resize),
-        r#"{"method":"terminal_resize","terminal":"t","size":{"cols":80,"rows":24}}"#,
-    );
-    let show = worker::TerminalShow { terminal: "t".into() };
-    asked(WorkerRequest::TerminalShow(show), r#"{"method":"terminal_show","terminal":"t"}"#);
     let rows = worker::TerminalRows {
         terminal: "t".into(),
         numbering: Numbering::new(2),
@@ -195,11 +179,6 @@ fn every_request_a_hub_makes_of_a_workers_terminal_keeps_its_form() {
 
 #[test]
 fn every_reply_and_update_a_worker_sends_of_its_terminals_keeps_its_form() {
-    let screen = TerminalScreen { size: SIZE, bytes: b"\x1b[2J\x1b[Hhi".as_slice().into() };
-    answered(
-        WorkerResponse::TerminalShown(TerminalShown { screen, next: UpdateIndex::new(12) }),
-        r#"{"result":"terminal_shown","screen":{"size":{"cols":80,"rows":24},"bytes":"G1syShtbSGhp"},"next":12}"#,
-    );
     let row = TerminalRow { spans: vec![Span { text: "hi".into(), ..Span::default() }], ..TerminalRow::default() };
     let rows = TerminalRowsReply {
         numbering: Numbering::new(2),
@@ -223,12 +202,42 @@ fn every_reply_and_update_a_worker_sends_of_its_terminals_keeps_its_form() {
         r#"{"result":"running_terminals","terminals":[{"terminal":"t","opened_at_ms":5}]}"#,
     );
 
-    let output = TerminalUpdate::Output { output: b"\x1b[31mhi".as_slice().into() };
-    let update = WorkerFrame::Terminal { terminal: "t".into(), at: UpdateIndex::new(12), update: output };
-    keeps_its_form(
-        &update,
-        r#"{"frame":"terminal","terminal":"t","at":12,"update":{"update":"output","output":"G1szMW1oaQ=="}}"#,
-    );
+    let ended = TerminalUpdate::Exited(TerminalExit { code: Some(3) });
+    let update = WorkerFrame::Terminal { terminal: "t".into(), update: ended };
+    keeps_its_form(&update, r#"{"frame":"terminal","terminal":"t","update":{"update":"exited","code":3}}"#);
+}
+
+/// A worker from before rows goes on sending what its programs write, numbered, which a hub skips, and its shells'
+/// ends, which a hub still reads.
+#[test]
+fn what_a_worker_from_before_rows_sends_of_a_terminal_still_reads() {
+    let wrote = br#"{"frame":"terminal","terminal":"t","at":12,"update":{"update":"output","output":"G1szMW1oaQ=="}}"#;
+    let resized =
+        br#"{"frame":"terminal","terminal":"t","at":13,"update":{"update":"resized","size":{"cols":80,"rows":24}}}"#;
+    let ended = br#"{"frame":"terminal","terminal":"t","at":14,"update":{"update":"exited","code":0}}"#;
+
+    let read = |line: &[u8]| frame::decode::<WorkerFrame>(line).unwrap();
+
+    let skipped = WorkerFrame::Terminal { terminal: "t".into(), update: TerminalUpdate::Unknown };
+    assert_eq!(read(wrote), skipped);
+    assert_eq!(read(resized), skipped);
+    let exited = TerminalUpdate::Exited(TerminalExit { code: Some(0) });
+    assert_eq!(read(ended), WorkerFrame::Terminal { terminal: "t".into(), update: exited });
+}
+
+/// The requests of the way before rows, from a hub that followed a terminal's bytes, are ones a worker no longer
+/// knows, so it refuses each as `Unsupported` and carries on.
+#[test]
+fn a_request_from_before_rows_is_one_a_worker_doesnt_know() {
+    let before = [
+        r#"{"method":"terminal_input","terminal":"t","input":"Aw=="}"#,
+        r#"{"method":"terminal_resize","terminal":"t","size":{"cols":80,"rows":24}}"#,
+        r#"{"method":"terminal_show","terminal":"t"}"#,
+    ];
+    for request in before {
+        let read = frame::decode::<WorkerRequest>(request.as_bytes());
+        assert!(matches!(read, Ok(WorkerRequest::Unknown)), "{request} read as {read:?}");
+    }
 }
 
 /// So a client can say what stopping the hub would end, and a hub from before terminals has none to count.

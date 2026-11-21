@@ -13,8 +13,8 @@ use protocol::terminal::{
     MOST_KEPT_POINTS, TerminalBoundsReply, TerminalFitReply, TerminalRowsReply, TerminalSize, TerminalTextReply, Typed,
 };
 use protocol::worker::{
-    RunningTerminal, RunningTerminalsReply, TerminalBounds, TerminalFit, TerminalInput, TerminalResize, TerminalRows,
-    TerminalShown, TerminalStart, TerminalText, TerminalTyped, TerminalWatch,
+    RunningTerminal, RunningTerminalsReply, TerminalBounds, TerminalFit, TerminalRows, TerminalStart, TerminalText,
+    TerminalTyped, TerminalWatch,
 };
 use tokio::sync::{mpsc, oneshot, watch};
 
@@ -49,8 +49,6 @@ struct Inner {
 pub(super) struct Running {
     pub(super) number: u64,
     pub(super) opened_at_ms: i64,
-    /// What's typed, to the thread that writes it, in the order it came.
-    pub(super) typed: std::sync::mpsc::Sender<Vec<u8>>,
     /// To the thread that keeps what it shows.
     pub(super) to_shell: mpsc::UnboundedSender<ToShell>,
     /// Becomes true once its shell has ended and the hub has been sent that.
@@ -59,11 +57,9 @@ pub(super) struct Running {
 
 /// What the thread that keeps a terminal's screen is told to do, in order with what its program writes.
 pub(super) enum ToShell {
-    Resize(TerminalSize),
     /// A new size, keeping the cells the hub names.
     Fit(TerminalFit, oneshot::Sender<Result<TerminalFitReply, ApiError>>),
     Typed(Typed),
-    Show(oneshot::Sender<Result<TerminalShown, ApiError>>),
     /// What the hub asks of what it shows.
     Asked(Asked),
     /// Watched by the hub on that connection from now, or by none.
@@ -135,16 +131,6 @@ impl Terminals {
         started.await.map_err(|e| ApiError::new(ErrorCode::Internal, format!("starting a shell failed: {e}")))?
     }
 
-    /// Writes what was typed, for the terminal's program to read, after everything typed before it.
-    pub(crate) fn input(&self, typed: TerminalInput) -> Result<(), ApiError> {
-        let TerminalInput { terminal, input } = typed;
-        let inner = self.inner.lock();
-        let running = inner.running.get(&terminal).ok_or_else(|| not_running(&terminal))?;
-        // Its writer has gone only once its program has, and the hub hears that next.
-        let _ = running.typed.send(input.into_vec());
-        Ok(())
-    }
-
     /// Writes what the program reads for what was pressed, after the sizes and everything pressed before it.
     pub(crate) fn typed(&self, typed: TerminalTyped) -> Result<(), ApiError> {
         let TerminalTyped { terminal, typed } = typed;
@@ -168,23 +154,10 @@ impl Terminals {
         Ok(async move { fitted.await.map_err(|_| not_running(&terminal))? })
     }
 
-    pub(crate) fn resize(&self, resize: TerminalResize) -> Result<(), ApiError> {
-        let TerminalResize { terminal, size } = resize;
-        allowed(size)?;
-        self.tell(&terminal, ToShell::Resize(size))
-    }
-
     /// Whether the hub on `hub` watches the terminal, as [`TerminalWatch`] says.
     pub(crate) fn watch(&self, watch: TerminalWatch, hub: Option<HubConnection>) -> Result<(), ApiError> {
         let TerminalWatch { terminal, watching } = watch;
         self.tell(&terminal, ToShell::Watch(hub.filter(|_| watching)))
-    }
-
-    /// What the terminal shows now, and which of its updates come after that.
-    pub(crate) async fn show(&self, terminal: &TerminalId) -> Result<TerminalShown, ApiError> {
-        let (reply, shown) = oneshot::channel();
-        self.tell(terminal, ToShell::Show(reply))?;
-        shown.await.map_err(|_| not_running(terminal))?
     }
 
     /// Rows of the terminal's history by number, as [`TerminalRows`] says.

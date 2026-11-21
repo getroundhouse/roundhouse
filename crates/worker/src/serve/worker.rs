@@ -21,8 +21,8 @@ use protocol::paths::AGENTS_DIR;
 use protocol::prompt::Prompt;
 use protocol::worker::{
     AccountFor, AgentStop, AttachmentWrite, AttachmentWritten, FileOpenAt, FilePages, FileRead, FileReadAt, FolderRead,
-    GitDiff, GitStatus, ReadRepoUrl, Received, RunningAgentsReply, ServeTools, SetupLog, SetupLogReply, TerminalShow,
-    TerminalStop, TitleFor, ToolsServing, WorkerFrame, WorkerRequest, WorkerResponse,
+    GitDiff, GitStatus, ReadRepoUrl, Received, RunningAgentsReply, ServeTools, SetupLog, SetupLogReply, TerminalStop,
+    TitleFor, ToolsServing, WorkerFrame, WorkerRequest, WorkerResponse,
 };
 use scripts::{Setup, run_archive_script, run_setup, stop_setup_script};
 use std::collections::HashMap;
@@ -246,9 +246,7 @@ pub(super) async fn handle(
         WorkerRequest::Hello(_)
         | WorkerRequest::Stop
         | WorkerRequest::GitCredentialSet(_)
-        | WorkerRequest::TerminalInput(_)
         | WorkerRequest::TerminalTyped(_)
-        | WorkerRequest::TerminalResize(_)
         | WorkerRequest::TerminalFit(_) => {
             Err(ApiError::new(ErrorCode::Internal, "the connection answers this itself"))
         }
@@ -259,9 +257,6 @@ pub(super) async fn handle(
         WorkerRequest::RunningAgents => Ok(running_agents(state)),
         WorkerRequest::Unknown => Err(unsupported(None)),
         WorkerRequest::TerminalStart(start) => state.terminals.start(start, given).await.map(|()| WorkerResponse::Ok),
-        WorkerRequest::TerminalShow(TerminalShow { terminal }) => {
-            Ok(WorkerResponse::TerminalShown(state.terminals.show(&terminal).await?))
-        }
         WorkerRequest::TerminalRows(asked) => Ok(WorkerResponse::TerminalRows(state.terminals.rows(asked).await?)),
         WorkerRequest::TerminalBounds(asked) => {
             Ok(WorkerResponse::TerminalBounds(state.terminals.bounds(asked).await?))

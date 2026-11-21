@@ -203,8 +203,8 @@ fn number_of(frame: &mut WorkerFrame) -> Option<&mut Option<u64>> {
         WorkerFrame::AgentReport { report, seq, .. } if kept(report.keeper()) => Some(seq),
         // A reply is only for the hub that asked, an ask is asked again of each hub until it's answered, the branches
         // are read again for each hub that watches them, what an agent is writing is sent again to each hub that
-        // connects, a report kept nowhere is only for the hub there, a hub asks what a terminal shows as a client
-        // attaches to it, and one that connects watches a terminal again, and is sent a whole picture.
+        // connects, a report kept nowhere is only for the hub there, a hub that connects lists the terminals that run
+        // rather than hearing which ended, and it watches a terminal again, and is sent a whole picture.
         WorkerFrame::AgentDelta { .. }
         | WorkerFrame::AgentRetrying { .. }
         | WorkerFrame::AgentReport { .. }

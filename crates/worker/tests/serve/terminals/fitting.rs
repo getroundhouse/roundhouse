@@ -5,7 +5,7 @@ use protocol::terminal::{
     MOST_KEPT_POINTS, Numbering, RowNumber, TerminalFitReply, TerminalPoint, TerminalRange, TerminalSize,
     TerminalTextReply,
 };
-use protocol::worker::{TerminalFit, TerminalText, TerminalWatch, WorkerOutcome, WorkerRequest, WorkerResponse};
+use protocol::worker::{TerminalFit, TerminalText, WorkerOutcome, WorkerRequest, WorkerResponse};
 
 use super::hub::{Hub, SIZE, refused, row_of};
 
@@ -21,8 +21,6 @@ async fn a_cell_kept_through_a_new_size_is_the_same_character_in_the_new_numberi
     let dir = tempfile::tempdir().unwrap();
     let mut hub = Hub::start(dir.path()).await;
     hub.open("t", dir.path()).await;
-    let watch = TerminalWatch { terminal: "t".into(), watching: true };
-    assert_eq!(hub.call(WorkerRequest::TerminalWatch(watch)).await, WorkerOutcome::Response(WorkerResponse::Ok));
     hub.type_in("t", "echo mar''ker; cat").await;
     hub.until_pictures(|pictures| row_of(pictures, "marker").is_some()).await;
     let (numbering, row, col) = row_of(&hub.pictures, "marker").unwrap();
