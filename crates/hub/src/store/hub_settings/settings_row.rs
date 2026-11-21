@@ -1,4 +1,4 @@
-use super::super::{ByColumn, Columns, Store, StoreError, columns, json_at, lock, rev_of, text_at, text_of};
+use super::super::{ByColumn, Columns, OneValue, Store, StoreError, columns, json_at, lock, rev_of, text_at, text_of};
 use protocol::model::{
     AccountDefault, AccountId, AgentKind, GithubAccountId, GithubSettings, HubId, HubSettings, HubSettingsChange,
     ProviderName, SentCredential,
@@ -75,7 +75,7 @@ impl Store {
                 || tx.query_row(
                     "SELECT EXISTS (SELECT 1 FROM account_defaults WHERE agent = ?)",
                     [text_of(&agent)],
-                    |row| row.get::<_, bool>(0),
+                    OneValue::read,
                 )?;
             chosen.then(|| hub_settings(tx)).transpose()
         })
@@ -125,7 +125,7 @@ impl Store {
 
     /// This hub's ID, made when its database was.
     pub fn hub_id(&self) -> Result<HubId, StoreError> {
-        let id: String = lock(&self.reader).query_row("SELECT hub_id FROM hub_identity", [], |row| row.get(0))?;
+        let id: String = lock(&self.reader).query_row("SELECT hub_id FROM hub_identity", [], OneValue::read)?;
         Ok(id.as_str().into())
     }
 

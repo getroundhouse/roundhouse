@@ -1,4 +1,4 @@
-use super::super::{Store, StoreError, lock};
+use super::super::{OneValue, Store, StoreError, lock};
 use protocol::model::{SessionId, WorkspaceId};
 use protocol::worker::ToolsToken;
 use rusqlite::{OptionalExtension, params};
@@ -7,7 +7,7 @@ impl Store {
     /// The port the workspace's worker last served its tools on, or `None` if it never has.
     pub fn tools_port(&self, id: &WorkspaceId) -> Result<Option<u16>, StoreError> {
         Ok(lock(&self.reader)
-            .query_row("SELECT port FROM tools_ports WHERE workspace_id = ?", [id.as_str()], |row| row.get(0))
+            .query_row("SELECT port FROM tools_ports WHERE workspace_id = ?", [id.as_str()], OneValue::read)
             .optional()?)
     }
 
@@ -28,7 +28,7 @@ impl Store {
             params![id.as_str(), made.as_str()],
         )?;
         let token: String =
-            conn.query_row("SELECT token FROM tools_tokens WHERE session_id = ?", [id.as_str()], |row| row.get(0))?;
+            conn.query_row("SELECT token FROM tools_tokens WHERE session_id = ?", [id.as_str()], OneValue::read)?;
         Ok(ToolsToken::new(token))
     }
 }

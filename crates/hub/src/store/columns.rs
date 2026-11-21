@@ -11,14 +11,14 @@ use std::fmt;
 
 /// A column of what a query reads: its place in the row, which its declaration gives, and its name there.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) struct Column {
+pub(crate) struct Column {
     index: usize,
     name: &'static str,
 }
 
 impl Column {
     /// Only [`columns!`] makes one, so a column's place is always the one its declaration gives it.
-    pub(super) const fn declared(index: usize, name: &'static str) -> Self {
+    pub(crate) const fn declared(index: usize, name: &'static str) -> Self {
         Self { index, name }
     }
 
@@ -29,7 +29,7 @@ impl Column {
 }
 
 /// What a declaration of columns gives, besides a [`Column`] for each, as [`columns!`] makes it.
-pub(super) trait Columns {
+pub(crate) trait Columns {
     /// Every column, as a statement selects them, in their order.
     const LIST: &'static str;
     /// The row's own columns, before those a read adds after them, such as an event's raw line, for a statement that
@@ -40,7 +40,7 @@ pub(super) trait Columns {
 }
 
 /// Where a reader finds the value it reads: a declared [`Column`], or [`OneValue`].
-pub(super) trait At: Copy {
+pub(crate) trait At: Copy {
     fn index(self) -> usize;
     /// The error for what this column holds that its reader can't read.
     fn unreadable(self, kind: Type, error: Box<dyn Error + Send + Sync>) -> rusqlite::Error;
@@ -59,7 +59,14 @@ impl At for Column {
 /// The one value a query reads, such as `SELECT rev FROM accounts WHERE id = ?`, whose read sits beside it with no
 /// order to keep, so it has no declaration. A reader takes no bare number, so a query of several values declares them.
 #[derive(Clone, Copy, Debug)]
-pub(super) struct OneValue;
+pub(crate) struct OneValue;
+
+impl OneValue {
+    /// Reads the one value, passed to a query in place of a closure: `conn.query_row(sql, params, OneValue::read)`.
+    pub(crate) fn read<T: FromSql>(row: &Row<'_>) -> rusqlite::Result<T> {
+        row.at(Self)
+    }
+}
 
 impl At for OneValue {
     fn index(self) -> usize {
@@ -71,16 +78,16 @@ impl At for OneValue {
     }
 }
 
-/// Reads a row's values by their declared [`Column`].
-pub(super) trait ByColumn {
-    fn at<T: FromSql>(&self, column: Column) -> rusqlite::Result<T>;
+/// Reads a row's values by their declared [`Column`], or its [`OneValue`].
+pub(crate) trait ByColumn {
+    fn at<T: FromSql>(&self, column: impl At) -> rusqlite::Result<T>;
     /// What `column` holds, borrowed from the row rather than copied.
     fn borrowed_at(&self, column: Column) -> rusqlite::Result<ValueRef<'_>>;
 }
 
 impl ByColumn for Row<'_> {
-    fn at<T: FromSql>(&self, column: Column) -> rusqlite::Result<T> {
-        self.get(column.index)
+    fn at<T: FromSql>(&self, column: impl At) -> rusqlite::Result<T> {
+        self.get(column.index())
     }
 
     fn borrowed_at(&self, column: Column) -> rusqlite::Result<ValueRef<'_>> {
@@ -204,12 +211,12 @@ macro_rules! columns {
         "?"
     };
 }
-pub(super) use columns;
+pub(crate) use columns;
 
 #[cfg(test)]
 mod tests {
     use super::super::database::text_at;
-    use super::{ByColumn, Columns, Unreadable};
+    use super::{ByColumn, Columns, OneValue, Unreadable};
     use rusqlite::Connection;
     use rusqlite::types::Type;
     use serde::Deserialize;
@@ -283,6 +290,10 @@ mod tests {
             })
             .unwrap();
         assert_eq!(shifted, ("a".to_owned(), "IDLE".to_owned()));
+
+        // A query of one value, which has no declaration.
+        let number: i64 = conn.query_row("SELECT number FROM samples WHERE id = 'a'", [], OneValue::read).unwrap();
+        assert_eq!(number, 21);
     }
 
     #[test]

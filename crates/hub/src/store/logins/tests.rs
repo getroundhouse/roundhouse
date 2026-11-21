@@ -2,6 +2,7 @@ use parking_lot::Mutex;
 use protocol::model::Rev;
 
 use super::*;
+use crate::store::OneValue;
 use crate::store::older::store_from_before;
 use crate::store::schema::BEFORE_LOGINS;
 use crate::store::tests::open_in;
@@ -80,7 +81,7 @@ fn every_connection_keeps_its_checkpoints_in_order_on_the_disk() {
     let dir = tempfile::tempdir().unwrap();
     let store = open_in(dir.path());
     let checkpoint_fullfsync = |conn: &Mutex<rusqlite::Connection>| -> i64 {
-        lock(conn).pragma_query_value(None, "checkpoint_fullfsync", |row| row.get(0)).unwrap()
+        lock(conn).pragma_query_value(None, "checkpoint_fullfsync", OneValue::read).unwrap()
     };
 
     let set = [&store.writer, &store.reader, &store.finder].map(checkpoint_fullfsync);
@@ -93,7 +94,7 @@ fn a_commit_that_has_to_last_is_made_with_full_syncs_and_the_writer_syncs_as_usu
     let dir = tempfile::tempdir().unwrap();
     let store = open_in(dir.path());
     let syncs = |conn: &rusqlite::Connection| -> (i64, i64) {
-        let read = |pragma: &str| conn.pragma_query_value(None, pragma, |row| row.get(0)).unwrap();
+        let read = |pragma: &str| conn.pragma_query_value(None, pragma, OneValue::read).unwrap();
         (read("synchronous"), read("fullfsync"))
     };
 

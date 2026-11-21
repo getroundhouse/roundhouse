@@ -3,7 +3,7 @@
 use protocol::model::{AccountId, AccountSource, Session, SessionId};
 use rusqlite::{Connection, OptionalExtension as _};
 
-use super::super::{ByColumn, Columns, columns, maybe_text_at};
+use super::super::{ByColumn, Columns, OneValue, columns, maybe_text_at};
 
 /// Which login a chat's launches, resumes and title calls take, as [`Session::account_source`] and the account its
 /// record names say together. The record keeps the two apart, as the protocol does, and this is where the hub reads
@@ -42,9 +42,8 @@ impl SessionLogin {
 /// names is the account the session is on, which only a move changes, so filing what a run under another login is
 /// under, such as one still running from before the move, leaves it. `false` without a row.
 pub(in super::super) fn on_the_hubs(conn: &Connection, session: &SessionId) -> rusqlite::Result<bool> {
-    let says = conn.query_row("SELECT account_source IS 'hub' FROM sessions WHERE id = ?", [session.as_str()], |row| {
-        row.get::<_, bool>(0)
-    });
+    let says =
+        conn.query_row("SELECT account_source IS 'hub' FROM sessions WHERE id = ?", [session.as_str()], OneValue::read);
     Ok(says.optional()?.unwrap_or(false))
 }
 

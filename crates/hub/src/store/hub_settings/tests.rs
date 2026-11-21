@@ -1,7 +1,7 @@
 use protocol::model::HubSettingsChange;
 
 use crate::store::tests::store_with_session;
-use crate::store::{lock, older, schema};
+use crate::store::{OneValue, lock, older, schema};
 
 fn keep_awake(on: bool) -> HubSettingsChange {
     HubSettingsChange { keep_awake: Some(on), ..HubSettingsChange::default() }
@@ -137,7 +137,7 @@ fn the_gh_logins_an_older_hub_found_are_forgotten() {
     assert_eq!(store.list_records().unwrap().found_github_logins, []);
     assert_eq!(store.hub_settings().unwrap().github.unwrap().set_up, Vec::<protocol::model::ProviderName>::new());
     let tables: i64 = lock(&store.reader)
-        .query_row("SELECT COUNT(*) FROM sqlite_master WHERE name = 'found_github_logins'", [], |row| row.get(0))
+        .query_row("SELECT COUNT(*) FROM sqlite_master WHERE name = 'found_github_logins'", [], OneValue::read)
         .unwrap();
     assert_eq!(tables, 0);
 }

@@ -1,4 +1,6 @@
-use super::super::{ByColumn, Columns, Store, StoreError, columns, json_from, lock, text_at, text_from, text_of};
+use super::super::{
+    ByColumn, Columns, OneValue, Store, StoreError, columns, json_from, lock, text_at, text_from, text_of,
+};
 use protocol::model::{SessionId, ToolUseId, Wait, WaitEnd, WaitEnded, WaitId, WorkspaceId, WorkspaceStatus};
 use rusqlite::{Connection, OptionalExtension, Row, params};
 use std::collections::HashSet;
@@ -26,7 +28,7 @@ impl Store {
             "SELECT EXISTS (SELECT 1 FROM sessions JOIN workspaces ON workspaces.id = sessions.workspace_id
                  WHERE sessions.id = ? AND workspaces.id = ? AND sessions.closed_at_ms IS NULL AND workspaces.status = ?)",
             params![wait.session_id.as_str(), wait.workspace_id.as_str(), text_of(&WorkspaceStatus::Ready)],
-            |row| row.get(0),
+            OneValue::read,
         )?;
         if !open {
             return Err(StoreError::NotFound {
@@ -113,7 +115,7 @@ impl Store {
     pub fn sessions_waiting(&self) -> Result<HashSet<SessionId>, StoreError> {
         let conn = lock(&self.reader);
         let mut query = conn.prepare_cached("SELECT DISTINCT session_id FROM waits WHERE ended_at_ms IS NULL")?;
-        let ids = query.query_map([], |row| row.get::<_, String>(0))?;
+        let ids = query.query_map([], OneValue::read::<String>)?;
         Ok(ids.map(|id| id.map(SessionId::from)).collect::<rusqlite::Result<_>>()?)
     }
 
@@ -121,7 +123,7 @@ impl Store {
     pub fn workspaces_waited_on(&self) -> Result<HashSet<WorkspaceId>, StoreError> {
         let conn = lock(&self.reader);
         let mut query = conn.prepare_cached("SELECT DISTINCT workspace_id FROM waits WHERE ended_at_ms IS NULL")?;
-        let ids = query.query_map([], |row| row.get::<_, String>(0))?;
+        let ids = query.query_map([], OneValue::read::<String>)?;
         Ok(ids.map(|id| id.map(WorkspaceId::from)).collect::<rusqlite::Result<_>>()?)
     }
 }
@@ -138,9 +140,7 @@ fn call_off(
         "UPDATE waits SET ended_at_ms = ?1, ended = ?2
              WHERE session_id = ?3 AND (?4 IS NULL OR id = ?4) AND ended_at_ms IS NULL RETURNING id",
     )?
-    .query_row(params![at_ms, text_of(&how), session_id.as_str(), wait.map(WaitId::as_str)], |row| {
-        row.get::<_, String>(0)
-    })
+    .query_row(params![at_ms, text_of(&how), session_id.as_str(), wait.map(WaitId::as_str)], OneValue::read::<String>)
     .optional()
     .map(|id| id.map(WaitId::from))
 }

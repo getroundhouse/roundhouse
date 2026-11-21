@@ -1,4 +1,4 @@
-use super::columns::{At, ByColumn, Column};
+use super::columns::{At, ByColumn, Column, OneValue};
 use super::{error, schema};
 use error::StoreError;
 use parking_lot::{Mutex, MutexGuard};
@@ -74,17 +74,17 @@ pub(super) fn text_of<T: Serialize>(value: &T) -> String {
 }
 
 pub(super) fn rev_of(row: &Row<'_>, column: impl At) -> rusqlite::Result<Rev> {
-    Ok(Rev::new(row.get::<_, i64>(column.index())?.cast_unsigned()))
+    Ok(Rev::new(row.at::<i64>(column)?.cast_unsigned()))
 }
 
 /// The seq in `column`, as [`seq_column`] writes one.
 pub(super) fn seq_of(row: &Row<'_>, column: impl At) -> rusqlite::Result<Seq> {
-    Ok(Seq::new(row.get::<_, i64>(column.index())?.cast_unsigned()))
+    Ok(Seq::new(row.at::<i64>(column)?.cast_unsigned()))
 }
 
 /// The place in `column`, as [`place_column`] writes one.
 pub(super) fn place_of(row: &Row<'_>, column: impl At) -> rusqlite::Result<Place> {
-    Ok(Place::new(row.get::<_, i64>(column.index())?.cast_unsigned()))
+    Ok(Place::new(row.at::<i64>(column)?.cast_unsigned()))
 }
 
 /// `seq` as a column holds it, and as a query compares it, as [`column_number`] says.
@@ -149,10 +149,11 @@ impl Store {
     /// Adds one to counter `name`, and returns what it is now.
     pub(super) fn bump(&self, name: &str) -> Result<u64, StoreError> {
         let conn = lock(&self.writer);
-        let value: i64 =
-            conn.query_row("UPDATE counters SET value = value + 1 WHERE name = ? RETURNING value", [name], |row| {
-                row.get(0)
-            })?;
+        let value: i64 = conn.query_row(
+            "UPDATE counters SET value = value + 1 WHERE name = ? RETURNING value",
+            [name],
+            OneValue::read,
+        )?;
         Ok(value.cast_unsigned())
     }
 }
@@ -160,8 +161,7 @@ impl Store {
 /// The newest revision, which on the writer is the one its last change made.
 pub(super) fn current_rev(conn: &Connection) -> rusqlite::Result<Rev> {
     Ok(Rev::new(
-        conn.query_row("SELECT value FROM counters WHERE name = 'rev'", [], |row| row.get::<_, i64>(0))?
-            .cast_unsigned(),
+        conn.query_row("SELECT value FROM counters WHERE name = 'rev'", [], OneValue::read::<i64>)?.cast_unsigned(),
     ))
 }
 
@@ -183,7 +183,7 @@ pub(super) fn text_from<T: DeserializeOwned>(column: Column, text: String) -> ru
 
 /// What a column holds as JSON, which its reader can't do without, so one it can't read is an error that names it.
 pub(super) fn required_json_at<T: DeserializeOwned>(row: &Row<'_>, column: impl At) -> rusqlite::Result<T> {
-    json_from(column, &row.get::<_, String>(column.index())?)
+    json_from(column, &row.at::<String>(column)?)
 }
 
 /// What `json`, from `column`, holds, so one it can't read is an error that names the column.
@@ -194,7 +194,7 @@ pub(super) fn json_from<T: DeserializeOwned>(column: impl At, json: &str) -> rus
 /// What a column holds as JSON, which only a hub writes, or `None` when it holds nothing, or what this build can't
 /// read, such as one a build with another idea of it wrote. Each caller says what one it can't read means there.
 pub(super) fn json_at<T: DeserializeOwned>(row: &Row<'_>, column: impl At) -> rusqlite::Result<Option<T>> {
-    Ok(row.get::<_, Option<String>>(column.index())?.and_then(|json| serde_json::from_str(&json).ok()))
+    Ok(row.at::<Option<String>>(column)?.and_then(|json| serde_json::from_str(&json).ok()))
 }
 
 impl Store {

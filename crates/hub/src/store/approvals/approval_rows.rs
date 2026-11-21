@@ -1,4 +1,4 @@
-use super::super::{Store, StoreError, lock};
+use super::super::{OneValue, Store, StoreError, lock};
 use protocol::capability::approvals::Request;
 use protocol::event::{ApprovalChange, EventBody};
 use protocol::model::{ApprovalId, OpenApproval, Seq, SessionId};
@@ -40,7 +40,7 @@ pub(in super::super) fn note_approvals(
 /// The approvals the session's agent is waiting on, oldest first, as its record has them.
 fn open_on(conn: &Connection, id: &SessionId) -> Result<Vec<OpenApproval>, StoreError> {
     let json: String =
-        conn.query_row("SELECT open_approvals FROM sessions WHERE id = ?", [id.as_str()], |row| row.get(0))?;
+        conn.query_row("SELECT open_approvals FROM sessions WHERE id = ?", [id.as_str()], OneValue::read)?;
     Ok(serde_json::from_str(&json)?)
 }
 
@@ -65,7 +65,7 @@ pub(in super::super) fn request_on(
     approval: &ApprovalId,
 ) -> Result<Option<Request>, StoreError> {
     let params = params![session.as_str(), approval.as_str()];
-    let body: Option<String> = conn.query_row(REQUEST, params, |row| row.get(0)).optional()?;
+    let body: Option<String> = conn.query_row(REQUEST, params, OneValue::read).optional()?;
     let Some(body) = body else { return Ok(None) };
     let EventBody::ApprovalRequested { request, .. } = serde_json::from_str(&body)? else { return Ok(None) };
     Ok(Some(*request))

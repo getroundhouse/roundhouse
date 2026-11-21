@@ -1,4 +1,6 @@
-use super::super::{ByColumn, Columns, Store, StoreError, columns, current_rev, lock, maybe_text_at, rev_of, text_of};
+use super::super::{
+    ByColumn, Columns, OneValue, Store, StoreError, columns, current_rev, lock, maybe_text_at, rev_of, text_of,
+};
 use protocol::model::{Ending, MessageId, ReplyHeard, Rev, SessionId, SettledBy};
 use rusqlite::{Connection, OptionalExtension, Row, params};
 
@@ -60,7 +62,7 @@ impl Store {
                 AND NOT EXISTS (SELECT 1 FROM replies_heard h WHERE h.session_id = ?1 AND h.message = r.message)
             ORDER BY r.first",
         )?;
-        let unheard = statement.query_map([session_id.as_str()], |row| row.get::<_, String>(0))?;
+        let unheard = statement.query_map([session_id.as_str()], OneValue::read::<String>)?;
         Ok(unheard.map(|message| message.map(MessageId::from)).collect::<rusqlite::Result<_>>()?)
     }
 

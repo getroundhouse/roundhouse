@@ -6,6 +6,7 @@ use rusqlite::{Connection, params};
 use tracing::warn;
 
 use super::keys::{Facet, Subject};
+use crate::store::columns::{ByColumn, Columns, OneValue, columns};
 
 /// The form of what the file keeps. Another, as a build that kept another form left it, is emptied, and the cache is
 /// read from GitHub again, rather than migrated. Raise it with any change to the table, or to the form of what's
@@ -26,6 +27,13 @@ pub(super) struct Row {
     pub(super) facet: Facet,
     pub(super) said: String,
     pub(super) read_at_ms: i64,
+}
+
+columns! {
+    /// The columns [`CacheFile::load`] reads of each facet the file keeps.
+    struct FacetColumns {
+        repository, subject, facet, said, read_at_ms,
+    }
 }
 
 /// Why the file couldn't be opened.
@@ -69,19 +77,15 @@ impl CacheFile {
         let conn = self.conn.lock();
         let Some(conn) = conn.as_ref() else { return Ok(Vec::new()) };
         conn.execute("DELETE FROM facets WHERE read_at_ms < ?", [since_ms])?;
-        let mut statement = conn.prepare("SELECT repository, subject, facet, said, read_at_ms FROM facets")?;
+        let mut statement = conn.prepare(&format!("SELECT {} FROM facets", FacetColumns::LIST))?;
+        let c = FacetColumns::at(0);
         let rows = statement.query_map([], |row| {
-            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?, row.get::<_, String>(2)?, row.get(3)?, row.get(4)?))
+            let subject = Subject::from_kept(row.at(c.repository)?, &row.at::<String>(c.subject)?);
+            let facet = Facet::named(&row.at::<String>(c.facet)?);
+            let (said, read_at_ms) = (row.at(c.said)?, row.at(c.read_at_ms)?);
+            Ok(subject.zip(facet).map(|(subject, facet)| Row { subject, facet, said, read_at_ms }))
         })?;
-        let mut kept = Vec::new();
-        for row in rows {
-            let (repository, subject, facet, said, read_at_ms) = row?;
-            let (Some(subject), Some(facet)) = (Subject::from_kept(repository, &subject), Facet::named(&facet)) else {
-                continue;
-            };
-            kept.push(Row { subject, facet, said, read_at_ms });
-        }
-        Ok(kept)
+        rows.filter_map(Result::transpose).collect()
     }
 
     /// Forgets each of `forgotten`, a facet of what it's about, and keeps each of `rows` in place of what was kept of its
@@ -118,7 +122,7 @@ fn opened(path: &Path) -> Result<Connection, OpenError> {
     conn.pragma_update(None, "synchronous", "NORMAL")?;
     // The hub before this one, from another build, can still be writing to it as this one starts.
     conn.busy_timeout(std::time::Duration::from_secs(5))?;
-    let version: i64 = conn.pragma_query_value(None, "user_version", |row| row.get(0))?;
+    let version: i64 = conn.pragma_query_value(None, "user_version", OneValue::read)?;
     if version != VERSION {
         conn.execute_batch(&format!(
             "BEGIN;

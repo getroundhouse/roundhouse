@@ -4,7 +4,7 @@ use protocol::event::EventBody;
 use protocol::model::{RunCapabilities, RunId, SessionId};
 use rusqlite::{Connection, OptionalExtension, params};
 
-use super::{Store, StoreError, lock};
+use super::{OneValue, Store, StoreError, lock};
 
 /// For a run's exit, takes its claims off the session's record, which holds those of the run that's running and nothing
 /// once it's gone, so a client offers a chat with no agent its kind's. An exit the hub records with no run is of
@@ -24,7 +24,7 @@ pub(super) fn clear_claims(
              WHERE id = ?1 AND agent_capabilities IS NOT NULL
                AND (?2 IS NULL OR json_extract(agent_capabilities, '$.run') = ?2)",
             params,
-            |row| row.get(0),
+            OneValue::read,
         )
         .optional()?;
     let Some(held) = held else { return Ok(None) };

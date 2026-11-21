@@ -6,6 +6,7 @@ use proptest::prelude::*;
 use proptest::test_runner::{Config, RngSeed};
 
 use super::*;
+use crate::store::OneValue;
 
 /// A database whose WAL holds what a second connection, returned with it, keeps from moving into its file, by reading
 /// the state from before it, as another program reading the database can. So a copy of it goes through SQLite.
@@ -23,7 +24,7 @@ fn held_back(path: &Path) -> (Connection, Connection) {
 fn notes(database: &Path) -> Vec<String> {
     let conn = Connection::open(database).unwrap();
     let mut notes = conn.prepare("SELECT text FROM notes ORDER BY rowid").unwrap();
-    notes.query_map([], |row| row.get(0)).unwrap().collect::<rusqlite::Result<_>>().unwrap()
+    notes.query_map([], OneValue::read).unwrap().collect::<rusqlite::Result<_>>().unwrap()
 }
 
 proptest! {

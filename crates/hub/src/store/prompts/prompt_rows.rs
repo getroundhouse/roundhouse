@@ -1,4 +1,4 @@
-use super::super::{ByColumn, Columns, Store, StoreError, columns, lock};
+use super::super::{ByColumn, Columns, OneValue, Store, StoreError, columns, lock};
 use protocol::event::EventBody;
 use protocol::model::{Seq, SessionId};
 use rusqlite::{Connection, params};
@@ -19,7 +19,7 @@ pub(in super::super) fn note_prompts(
     } else {
         return Ok(None);
     };
-    let json: String = conn.query_row("SELECT untaken FROM sessions WHERE id = ?", [id.as_str()], |row| row.get(0))?;
+    let json: String = conn.query_row("SELECT untaken FROM sessions WHERE id = ?", [id.as_str()], OneValue::read)?;
     let mut untaken: Vec<Seq> = serde_json::from_str(&json)?;
     match settled {
         None => untaken.push(seq),
