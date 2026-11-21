@@ -144,6 +144,7 @@ pub enum ClientRequest {
     TerminalWatch(terminals::TerminalWatch),
     TerminalRows(terminals::TerminalRows),
     TerminalInput(terminals::TerminalInput),
+    TerminalTyped(terminals::TerminalTyped),
     TerminalResize(terminals::TerminalResize),
     TerminalClose(terminals::TerminalClose),
     /// Any request this build doesn't know, from a client newer than it. A hub answers with

@@ -8,7 +8,6 @@
 #![warn(clippy::wildcard_enum_match_arm)]
 
 pub mod drawn;
-pub mod keys;
 mod mirror;
 
 pub use mirror::{Mirror, MirrorError, Pointer, QUIET_BEFORE_COMPRESSING, SelectBy, Size};

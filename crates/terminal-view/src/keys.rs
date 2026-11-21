@@ -1,7 +1,7 @@
 //! A key GPUI heard, as a key for the terminal, unless it's one the app keeps for itself.
 
 use gpui_kit::{KeyDownEvent, OperatingSystem};
-use terminal_state::keys::{Key, KeyPress, Mods};
+use protocol::terminal::{Key, KeyPress, Mods};
 
 /// The key for the terminal, or none for one that isn't the terminal's: Command with anything on a Mac, which is the
 /// app's, as in other Mac terminal apps, but for the keys `bind_keys` gives the meaning Ghostty does, which never come
@@ -61,7 +61,7 @@ fn named_or_char(name: &str) -> Option<Key> {
 #[cfg(test)]
 mod tests {
     use gpui_kit::{KeyDownEvent, Keystroke, Modifiers, OperatingSystem};
-    use terminal_state::keys::{Key, KeyPress, Mods};
+    use protocol::terminal::{Key, KeyPress, Mods};
 
     use super::key_press;
 

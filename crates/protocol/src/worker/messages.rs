@@ -26,7 +26,7 @@ use serde::{Deserialize, Serialize};
 use terminals::RunningTerminals;
 use terminals::{
     RunningTerminalsReply, TerminalInput, TerminalResize, TerminalRows, TerminalShow, TerminalShown, TerminalStart,
-    TerminalStop, TerminalWatch,
+    TerminalStop, TerminalTyped, TerminalWatch,
 };
 use tools::{ServeTools, ToolsServing};
 #[cfg(test)]
@@ -128,6 +128,7 @@ pub enum WorkerRequest {
     ReadRepoUrl(ReadRepoUrl),
     TerminalStart(TerminalStart),
     TerminalInput(TerminalInput),
+    TerminalTyped(TerminalTyped),
     TerminalResize(TerminalResize),
     TerminalShow(TerminalShow),
     TerminalRows(TerminalRows),

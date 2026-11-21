@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use super::{ClientRequest, ClientResponse, Reply, Request};
 use crate::model::{Terminal, TerminalId, WorkspaceId};
-use crate::terminal::{Numbering, RowNumber, TerminalBytes, TerminalRowsReply, TerminalSize};
+use crate::terminal::{Numbering, RowNumber, TerminalBytes, TerminalRowsReply, TerminalSize, Typed};
 
 /// Opens a terminal in the workspace: a shell in its worktree, of `size`, which the workspace's worker runs, starting
 /// the worker if none is. Answers with the terminal's record, which the feed also announces. Opening one with the same
@@ -115,6 +115,24 @@ impl Request for TerminalInput {
 
     fn into_request(self) -> ClientRequest {
         ClientRequest::TerminalInput(self)
+    }
+}
+
+/// What's pressed in the terminal, which its worker turns into what the program reads, by the modes the program has
+/// set. Like [`TerminalInput`], it isn't safe to send again, and a hub takes what one connection types in the order it
+/// was sent, so a client needn't wait for each reply. A hub or worker from before refuses it as `Unsupported`.
+/// Answers with nothing.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct TerminalTyped {
+    pub id: TerminalId,
+    pub typed: Typed,
+}
+
+impl Request for TerminalTyped {
+    type Reply = ();
+
+    fn into_request(self) -> ClientRequest {
+        ClientRequest::TerminalTyped(self)
     }
 }
 

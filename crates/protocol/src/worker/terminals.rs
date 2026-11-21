@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use super::{Reply, Request, WorkerRequest, WorkerResponse};
 use crate::model::TerminalId;
 use crate::terminal::{
-    Numbering, RowNumber, TerminalBytes, TerminalRowsReply, TerminalScreen, TerminalSize, UpdateIndex,
+    Numbering, RowNumber, TerminalBytes, TerminalRowsReply, TerminalScreen, TerminalSize, Typed, UpdateIndex,
 };
 
 /// Starts a shell in `cwd`, in a terminal of `size`. Starting one that runs already changes nothing, so a hub can send
@@ -45,6 +45,23 @@ impl Request for TerminalInput {
 
     fn into_request(self) -> WorkerRequest {
         WorkerRequest::TerminalInput(self)
+    }
+}
+
+/// What's pressed in the terminal, turned into what the program reads by the modes it has set, in the order it was
+/// sent, after the sizes sent before it. Not in order with [`TerminalInput`], which reaches the program by another
+/// way, so a hub sends a terminal one or the other.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct TerminalTyped {
+    pub terminal: TerminalId,
+    pub typed: Typed,
+}
+
+impl Request for TerminalTyped {
+    type Reply = ();
+
+    fn into_request(self) -> WorkerRequest {
+        WorkerRequest::TerminalTyped(self)
     }
 }
 

@@ -64,6 +64,7 @@ pinned! {
         TerminalOpen(_), TerminalAttach(_), TerminalWatch(_), TerminalRows(_), TerminalInput(_), TerminalResize(_),
         TerminalClose(_),
     ],
+    "terminal_typed.rs" => [TerminalTyped(_)],
 }
 
 /// A request's `method`, or a reply's `result`, as serde's `snake_case` makes it from the variant's name.

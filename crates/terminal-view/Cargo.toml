@@ -14,6 +14,7 @@ testing = []
 client-core.workspace = true
 gpui-kit.workspace = true
 look.workspace = true
+protocol.workspace = true
 terminal-state.workspace = true
 
 [lints]
