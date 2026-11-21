@@ -6,7 +6,7 @@ use gpui_kit::component::input::{InputEvent, Textarea, TextareaState};
 use gpui_kit::component::{IconName, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyElement, AppContext as _, Context, Div, Entity, Focusable as _, IntoElement, ParentElement, Styled,
+    AnyElement, App, AppContext as _, Context, Div, Entity, Focusable as _, IntoElement, ParentElement, Styled,
     Subscription, Window, div, px,
 };
 use look::{InRegion as _, Region, Shaped as _};
@@ -301,10 +301,7 @@ impl WorkspacePane {
     fn main_action(&self, cx: &mut Context<Self>) -> AnyElement {
         let working = self.session().is_some_and(|s| s.status.in_turn());
         if working {
-            let stop_mark = look::colors(cx).on_main;
-            // The same square as Send, with a filled square rather than an icon, which would only be outlined.
-            let square = div().size_2p5().corners(look::Corner::Glyph).bg(stop_mark);
-            look::glyph_button("stop", look::ButtonKind::Main, look::ControlSize::Small, square)
+            stop_button("stop", cx)
                 .accessibility_label("Stop")
                 .tooltip_with_action("Stop", &StopAgent, None)
                 .on_click(cx.listener(|t, _, _, cx| t.stop_agent(cx)))
@@ -318,6 +315,13 @@ impl WorkspacePane {
                 .into_any_element()
         }
     }
+}
+
+/// Stop as the main action, the same square as Send, with a filled square rather than an icon, which would only be
+/// outlined. Conversation mode's bar has it too.
+pub(super) fn stop_button(id: &'static str, cx: &App) -> look::Button {
+    let square = div().size_2p5().corners(look::Corner::Glyph).bg(look::colors(cx).on_main);
+    look::glyph_button(id, look::ButtonKind::Main, Slot::SIZE, square)
 }
 
 /// A place beside the main action: a square as big as it, with what it holds in its middle, or filling it if it's

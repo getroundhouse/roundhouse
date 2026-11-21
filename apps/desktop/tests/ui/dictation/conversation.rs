@@ -4,8 +4,8 @@
 
 use client_core::fake_hub::World;
 use desktop::workspace_pane::{
-    CONVERSATION_BAR, CONVERSATION_CARD, CONVERSATION_END, CONVERSATION_MODE, CONVERSATION_NOT_NOW, CONVERSATION_STOP,
-    CONVERSATION_TURN_ON, LIVE_LINE, SPACE_DICTATES_AFTER,
+    CONVERSATION_BAR, CONVERSATION_CARD, CONVERSATION_MODE, CONVERSATION_NOT_NOW, CONVERSATION_STOP,
+    CONVERSATION_TURN_ON, CONVERSATION_TYPE, LIVE_LINE, SPACE_DICTATES_AFTER,
 };
 use dictation::fake::FakeEngine;
 use gpui_kit::{AppContext as _, TestAppContext};
@@ -282,7 +282,7 @@ fn the_hub_refusing_to_turn_the_mode_off_says_why_and_it_can_be_asked_again(cx: 
     ui.wait("the conversation to be here", here);
 
     for asking in ["first", "again"] {
-        ui.click(CONVERSATION_END);
+        ui.click(CONVERSATION_TYPE);
         ui.wait(&format!("the refusal, asking {asking}"), |ui| ui.view().error.is_some());
         assert_eq!(
             ui.view().error.as_deref(),

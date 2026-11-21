@@ -9,7 +9,7 @@
 
 use client_core::conversation::{Conversation, HereNow, Needs, Readiness, Shows, Stage};
 use gpui_kit::assets::IconName as Lucide;
-use gpui_kit::component::{Icon, IconName, h_flex};
+use gpui_kit::component::{Icon, h_flex};
 use gpui_kit::{
     AnyElement, App, Context, Focusable as _, InteractiveElement, IntoElement, KeyDownEvent, ParentElement, Role,
     SharedString, StatefulInteractiveElement as _, Styled, Window, div, relative,
@@ -21,12 +21,11 @@ use protocol::prompt::Prompt;
 use super::composer::Slot;
 use super::setting_up::{self, CONVERSATION_RETRY, CONVERSATION_TURN_ON};
 use super::{PaneEvent, WorkspacePane};
-use crate::ConversationMode;
+use crate::{ConversationMode, StopAgent};
 
 /// The button that turns the mode on, and the bar's, for tests to find them by.
 pub const CONVERSATION_MODE: &str = "conversation-mode";
 pub const CONVERSATION_TYPE: &str = "conversation-type";
-pub const CONVERSATION_END: &str = "conversation-end";
 pub const CONVERSATION_STOP: &str = "conversation-stop";
 pub const TAKE_OVER: &str = "conversation-take-over";
 pub const CONVERSATION_BAR: &str = Region::ConversationBar.id();
@@ -169,16 +168,12 @@ impl WorkspacePane {
     /// ready, and another key types. `words` are what it says, where every client says the same.
     fn bar_here(&self, stage: &Stage, needs: &Needs, words: Option<AnyElement>, cx: &mut Context<Self>) -> AnyElement {
         let colors = look::colors(cx);
+        // The way out of the mode, whatever else the bar has.
         let type_ = look::button(CONVERSATION_TYPE, look::ButtonKind::Borderless, look::ControlSize::Small, "Type")
             .icon(Icon::new(Lucide::Keyboard))
-            .on_click(cx.listener(|t, _, window, cx| t.leave_to_type(None, window, cx)));
-        let end = || {
-            look::icon_button(CONVERSATION_END, look::ButtonKind::Borderless, look::ControlSize::Small, IconName::Close)
-                .accessibility_label("Leave conversation mode")
-                .tooltip("Leave conversation mode")
-                .on_click(cx.listener(|t, _, _, cx| t.end_conversation(cx)))
-                .into_any_element()
-        };
+            .tooltip("Leave conversation mode to type")
+            .on_click(cx.listener(|t, _, window, cx| t.leave_to_type(None, window, cx)))
+            .into_any_element();
         // How to talk on a Mac, where the bar says nothing more.
         let says = words.unwrap_or_else(|| {
             h_flex()
@@ -195,25 +190,25 @@ impl WorkspacePane {
                     .gap(look::Space::Small)
                     .child(says)
                     .child(div().text_color(colors.text_faint).child("· hold Space to talk over it"));
-                let stop =
-                    look::button(CONVERSATION_STOP, look::ButtonKind::Borderless, look::ControlSize::Small, "Stop Esc")
-                        .accessibility_label("Stop speaking")
-                        .on_click(cx.listener(|t, _, _, cx| t.stop_voice(cx)))
-                        .into_any_element();
-                (Lucide::AudioLines, says.into_any_element(), vec![stop, end()])
+                let stop = super::composer::stop_button(CONVERSATION_STOP, cx)
+                    .accessibility_label("Stop speaking")
+                    .tooltip("Stop speaking, or Esc")
+                    .on_click(cx.listener(|t, _, _, cx| t.stop_voice(cx)))
+                    .into_any_element();
+                (Lucide::AudioLines, says.into_any_element(), vec![type_, stop])
             }
             Stage::Working { .. } => {
-                let stop =
-                    look::button(CONVERSATION_STOP, look::ButtonKind::Borderless, look::ControlSize::Small, "Stop")
-                        .accessibility_label("Stop the agent")
-                        .on_click(cx.listener(|t, _, _, cx| {
-                            t.stop_voice(cx);
-                            t.stop_agent(cx);
-                        }))
-                        .into_any_element();
-                (Lucide::AudioLines, says, vec![type_.into_any_element(), stop])
+                let stop = super::composer::stop_button(CONVERSATION_STOP, cx)
+                    .accessibility_label("Stop the agent")
+                    .tooltip_with_action("Stop", &StopAgent, None)
+                    .on_click(cx.listener(|t, _, _, cx| {
+                        t.stop_voice(cx);
+                        t.stop_agent(cx);
+                    }))
+                    .into_any_element();
+                (Lucide::AudioLines, says, vec![type_, stop])
             }
-            Stage::Waiting => Self::waiting(needs, says, type_.into_any_element(), end()),
+            Stage::Waiting => Self::waiting(needs, says, type_),
         };
         let surface = bar(icon, says, actions, cx);
         // Holding Space, or Option-Space, talks only once dictation and speech are ready, and does nothing before.
@@ -248,18 +243,13 @@ impl WorkspacePane {
 
     /// The bar's icon and actions while it waits for the person to talk, or for dictation and speech to be ready, as
     /// when the conversation came here from another device first: Retry once one failed, and Turn on for what isn't.
-    fn waiting(
-        needs: &Needs,
-        says: AnyElement,
-        type_: AnyElement,
-        end: AnyElement,
-    ) -> (Lucide, AnyElement, Vec<AnyElement>) {
+    fn waiting(needs: &Needs, says: AnyElement, type_: AnyElement) -> (Lucide, AnyElement, Vec<AnyElement>) {
         if let Some(part) = needs.failed() {
             let retry =
                 look::button(CONVERSATION_RETRY, look::ButtonKind::Borderless, look::ControlSize::Small, "Retry")
                     .on_click(move |_, _, cx| setting_up::retry(part, cx))
                     .into_any_element();
-            return (Lucide::TriangleAlert, says, vec![retry, end]);
+            return (Lucide::TriangleAlert, says, vec![retry, type_]);
         }
         if needs.turn_on().is_some() {
             let not_on = needs.not_on();
@@ -267,11 +257,11 @@ impl WorkspacePane {
                 look::button(CONVERSATION_TURN_ON, look::ButtonKind::Borderless, look::ControlSize::Small, "Turn on")
                     .on_click(move |_, _, cx| setting_up::turn_on(&not_on, cx))
                     .into_any_element();
-            return (Lucide::AudioLines, says, vec![turn_on, type_, end]);
+            return (Lucide::AudioLines, says, vec![turn_on, type_]);
         }
         let getting_ready =
             [&needs.dictation, &needs.speech].into_iter().any(|readiness| *readiness != Readiness::Ready);
-        (if getting_ready { Lucide::Download } else { Lucide::AudioLines }, says, vec![type_, end])
+        (if getting_ready { Lucide::Download } else { Lucide::AudioLines }, says, vec![type_])
     }
 
     /// Take over or Take back, which moves the conversation here, with the card that sets up the mode opening from it
