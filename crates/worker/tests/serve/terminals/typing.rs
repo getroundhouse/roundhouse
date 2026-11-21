@@ -18,7 +18,9 @@ fn key(key: Key) -> Typed {
 /// said so, and says once the terminal is back as the shell reads lines, for what's typed next.
 fn reading(modes: &str, count: usize) -> String {
     // The quotes keep the shell's echo of the line from reading as its having said so.
-    format!("stty raw -echo; printf '{modes}rea''dy'; head -c {count} | od -An -tx1 | tr -s ' '; stty sane; echo do''ne")
+    format!(
+        "stty raw -echo; printf '{modes}rea''dy'; head -c {count} | od -An -tx1 | tr -s ' '; stty sane; echo do''ne"
+    )
 }
 
 /// The up arrow is read as the program asked in what it wrote just before, which only the worker's copy of the
