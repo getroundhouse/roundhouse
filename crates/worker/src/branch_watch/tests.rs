@@ -6,6 +6,7 @@ use tokio::sync::mpsc;
 
 use super::*;
 use crate::git::tests::{new_repo, run};
+use crate::serve::Outgoing;
 
 /// Long enough for a busy machine, and only waited out when the watcher has failed to send.
 pub(crate) const PATIENCE: Duration = Duration::from_secs(20);
@@ -16,7 +17,7 @@ const QUIET: Duration = Duration::from_millis(500);
 struct Watching {
     worktree: PathBuf,
     /// What reached the hub, through the worker's outbox.
-    frames: mpsc::Receiver<Arc<WorkerFrame>>,
+    frames: mpsc::Receiver<Outgoing>,
     _stopping: watch::Sender<bool>,
 }
 
@@ -39,7 +40,7 @@ impl Watching {
     }
 
     async fn next(&mut self) -> Branches {
-        let frame = tokio::time::timeout(PATIENCE, self.frames.recv()).await.expect("no frame came").unwrap();
+        let frame = tokio::time::timeout(PATIENCE, self.frames.recv()).await.expect("no frame came").unwrap().frame;
         let WorkerFrame::Branches { branches } = &*frame else { panic!("not the branches: {frame:?}") };
         branches.clone()
     }
@@ -135,7 +136,7 @@ async fn it_sends_the_branches_at_once_and_again_when_they_change() {
     run(&repo, &["worktree", "add", "-q", "--no-track", "-b", "aspen", worktree.to_str().unwrap(), "main"]);
     let mut watching = Watching::start(&worktree).await;
 
-    let at_once = watching.frames.try_recv().expect("sent before it said it was watching");
+    let at_once = watching.frames.try_recv().expect("sent before it said it was watching").frame;
     let WorkerFrame::Branches { branches: at_once } = &*at_once else { panic!() };
     watching.git(&["switch", "-q", "-c", "header"]);
     let switched = watching.next().await;
@@ -196,7 +197,7 @@ async fn another_worktree_s_branches_are_sent_naming_it() {
     let repo = new_repo(dir.path());
     let mut watching = Watching::start_as(&repo, Whose::Child).await;
 
-    let frame = tokio::time::timeout(PATIENCE, watching.frames.recv()).await.expect("no frame came").unwrap();
+    let frame = tokio::time::timeout(PATIENCE, watching.frames.recv()).await.expect("no frame came").unwrap().frame;
 
     let WorkerFrame::ChildBranches { path, branches } = &*frame else { panic!("not another's: {frame:?}") };
     assert_eq!(Path::new(path), repo);

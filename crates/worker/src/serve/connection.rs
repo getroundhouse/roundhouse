@@ -11,7 +11,7 @@ use tokio::task::JoinHandle;
 use tracing::{error, warn};
 
 use super::scripts::setup_requested;
-use super::{Worker, handle, hello};
+use super::{Outgoing, Worker, handle, hello};
 
 /// Enough for a burst of what agents say, without holding much for a hub that's slow to read.
 const QUEUED_FRAMES: usize = 1024;
@@ -29,7 +29,7 @@ pub(crate) enum Ended {
 pub(crate) struct Closing {
     #[cfg_attr(not(unix), expect(dead_code, reason = "only a worker on a socket carries on once its hub has gone"))]
     pub(crate) ended: Ended,
-    frames: mpsc::Sender<Arc<WorkerFrame>>,
+    frames: mpsc::Sender<Outgoing>,
     writer: JoinHandle<()>,
 }
 
@@ -75,7 +75,7 @@ where
         };
         let reply = move |answer: Result<WorkerResponse, ApiError>| {
             let outcome = answer.map_or_else(WorkerOutcome::Error, WorkerOutcome::Response);
-            Arc::new(WorkerFrame::Reply { id, outcome })
+            Outgoing::from(Arc::new(WorkerFrame::Reply { id, outcome }))
         };
         if let Some(reason) = &refused {
             let _ = frames.send(reply(Err(ApiError::new(ErrorCode::Conflict, reason.clone())))).await;
@@ -126,9 +126,9 @@ where
 /// it asked the worker to keep running without it.
 async fn greet(
     worker: &Worker,
-    frames: &mpsc::Sender<Arc<WorkerFrame>>,
+    frames: &mpsc::Sender<Outgoing>,
     asked: Hello,
-    reply: impl FnOnce(Result<WorkerResponse, ApiError>) -> Arc<WorkerFrame>,
+    reply: impl FnOnce(Result<WorkerResponse, ApiError>) -> Outgoing,
 ) -> Option<bool> {
     let Hello { protocol_version, oldest_protocol_version, keep_running_without_hub } = asked;
     let answer = hello(worker.state.config.build, protocol_version, oldest_protocol_version);
@@ -168,8 +168,9 @@ async fn next_line<R: AsyncRead + Unpin>(reader: &mut BufReader<R>, line: &mut V
     }
 }
 
-async fn write_frames<W: AsyncWrite + Unpin>(mut writer: W, mut frames: mpsc::Receiver<Arc<WorkerFrame>>) {
-    while let Some(item) = frames.recv().await {
+/// Writes each frame, and only then lets go of what it holds.
+async fn write_frames<W: AsyncWrite + Unpin>(mut writer: W, mut frames: mpsc::Receiver<Outgoing>) {
+    while let Some(Outgoing { frame: item, written }) = frames.recv().await {
         let line = match frame::encode(item.as_ref()) {
             Ok(line) => line,
             Err(e) => {
@@ -181,5 +182,6 @@ async fn write_frames<W: AsyncWrite + Unpin>(mut writer: W, mut frames: mpsc::Re
             // The hub is gone. Keep draining, so agents stop cleanly rather than blocking on us.
             warn!("writing to the hub failed: {e}");
         }
+        drop(written);
     }
 }

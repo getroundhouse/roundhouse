@@ -5,5 +5,7 @@ mod front;
 mod serving;
 #[cfg(test)]
 mod tests;
+mod threads;
+mod watching;
 
 pub(super) use serving::start;

@@ -12,7 +12,7 @@ mod worktrees;
 
 #[cfg(unix)]
 pub use listen::listen;
-pub(crate) use outbox::Outbox;
+pub(crate) use outbox::{HubConnection, Outbox, Outgoing};
 
 mod worker;
 

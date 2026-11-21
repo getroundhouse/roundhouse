@@ -130,6 +130,8 @@ fn every_request_a_hub_makes_of_a_workers_terminal_keeps_its_form() {
         WorkerRequest::TerminalRows(rows),
         r#"{"method":"terminal_rows","terminal":"t","numbering":2,"from":40,"count":100}"#,
     );
+    let watch = worker::TerminalWatch { terminal: "t".into(), watching: true };
+    asked(WorkerRequest::TerminalWatch(watch), r#"{"method":"terminal_watch","terminal":"t","watching":true}"#);
     let stop = worker::TerminalStop { terminal: "t".into() };
     asked(WorkerRequest::TerminalStop(stop), r#"{"method":"terminal_stop","terminal":"t"}"#);
     asked(WorkerRequest::RunningTerminals, r#"{"method":"running_terminals"}"#);

@@ -1,32 +1,31 @@
 //! One terminal's shell, in a PTY, and the threads that serve it: one reads what its program writes, one writes what's
 //! typed, one waits for the shell to end, and one keeps what the terminal shows and sends the hub what happens.
 
-use std::io::{Read, Write};
 use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 
 use parking_lot::Mutex;
-use portable_pty::{Child, MasterPty, PtyPair, PtySize, PtySystem, native_pty_system};
+use portable_pty::{MasterPty, PtyPair, PtySize, PtySystem, native_pty_system};
 use process::Environment;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::model::TerminalId;
 use protocol::terminal::{TerminalBytes, TerminalExit, TerminalScreen, TerminalSize, TerminalUpdate, UpdateIndex};
 use protocol::worker::{TerminalShown, TerminalStart, WorkerFrame};
 use terminal_state::{Mirror, Size};
-use tokio::sync::{mpsc, oneshot};
+use tokio::sync::{OwnedSemaphorePermit, Semaphore, mpsc, oneshot};
 use tokio::time::Instant;
 use tracing::warn;
 
 use super::command;
 use super::front::{self, Front};
+use super::threads::{read_output, wait, write_typed};
+use super::watching::Watching;
 use crate::Timers;
 use crate::serve::Outbox;
 use crate::terminals::process_records::ProcessRecords;
 use crate::terminals::running::{Ending, Running, ToShell};
 
-/// The most a read takes from the PTY at once.
-const READ_BYTES: usize = 64 * 1024;
 /// Reads waiting to be taken in. Few, so a program that writes faster than the hub reads waits in the PTY, as it would
 /// for a slow terminal, rather than here.
 const QUEUED_READS: usize = 4;
@@ -114,8 +113,21 @@ pub(in crate::terminals) fn start(
     let next = UpdateIndex::new(0);
     let (master, stop_grace, look_every) = (pty.master, timers.terminal_stop_grace, timers.look_in_front_every);
     let front = Front::Looked(None);
-    let shell =
-        Shell { terminal, size, master, pid, front, process_records, look_every, stop_grace, outbox, next, exit: None };
+    let watching = Watching::new(terminal.clone(), outbox.clone());
+    let shell = Shell {
+        terminal,
+        size,
+        master,
+        pid,
+        front,
+        process_records,
+        look_every,
+        stop_grace,
+        outbox,
+        watching,
+        next,
+        exit: None,
+    };
     let (to_shell, told) = mpsc::unbounded_channel();
     let running = Running {
         number: ending.number,
@@ -141,38 +153,6 @@ fn spawn(name: &str, run: impl FnOnce() + Send + 'static) -> std::io::Result<()>
     std::thread::Builder::new().name(name.to_string()).spawn(run).map(drop)
 }
 
-fn read_output(mut reader: Box<dyn Read + Send>, output: &mpsc::Sender<Vec<u8>>) {
-    let mut buffer = vec![0; READ_BYTES];
-    loop {
-        match reader.read(&mut buffer) {
-            Ok(0) => return,
-            Ok(read) => {
-                if output.blocking_send(buffer[..read].to_vec()).is_err() {
-                    return;
-                }
-            }
-            Err(e) if e.kind() == std::io::ErrorKind::Interrupted => {}
-            // Linux says so once every program in the terminal has closed it.
-            Err(_) => return,
-        }
-    }
-}
-
-/// Until the terminal has gone, and with it every way to type.
-fn write_typed(mut writer: Box<dyn Write + Send>, to_type: &std::sync::mpsc::Receiver<Vec<u8>>) {
-    for typed in to_type {
-        if writer.write_all(&typed).and_then(|()| writer.flush()).is_err() {
-            return;
-        }
-    }
-}
-
-fn wait(mut child: Box<dyn Child + Send + Sync>, exited: oneshot::Sender<TerminalExit>) {
-    let status = child.wait();
-    let code = status.ok().filter(|status| status.signal().is_none()).map(|status| status.exit_code().cast_signed());
-    let _ = exited.send(TerminalExit { code });
-}
-
 /// What the thread that keeps a terminal's screen holds.
 struct Shell {
     terminal: TerminalId,
@@ -187,6 +167,7 @@ struct Shell {
     /// How long the shell asked to end, and the job it runs, have to end by themselves before they're killed.
     stop_grace: Duration,
     outbox: Arc<Outbox>,
+    watching: Watching,
     /// The `at` the next update gets, which is how many it has sent.
     next: UpdateIndex,
     /// How the shell ended, once it has.
@@ -234,6 +215,7 @@ impl Shell {
             // By the clock this waits on, so the two agree. Ghostty fails only when it can't allocate, which leaves the
             // copy as it is, uncompressed.
             let compress_at = mirror.compress_at(Instant::now().into_std()).ok().flatten().map(Instant::from_std);
+            let picture_at = self.watching.due();
             // In this order, so neither a stop nor the end waits out a program that writes without a pause.
             tokio::select! {
                 biased;
@@ -246,6 +228,7 @@ impl Shell {
                         let rows = mirror.history_rows(asked.numbering, asked.from, asked.count);
                         let _ = reply.send(rows.map_err(|e| failed("reading the terminal's rows", &e)));
                     }
+                    Some(ToShell::Watch(hub)) => self.watching.watch(hub),
                     Some(ToShell::Stop) => self.hang_up(&mut kill_at),
                     // Nothing can tell it anything once the worker has let go of it.
                     None => {
@@ -261,6 +244,12 @@ impl Shell {
                 () = until(kill_at) => {
                     self.kill();
                     kill_at = None;
+                }
+                // Before what's read, so a flood doesn't hold the hub's picture back.
+                written = room_at(picture_at, self.watching.room()), if picture_at.is_some() => {
+                    if let Some(written) = written {
+                        self.watching.send(mirror, written).await;
+                    }
                 }
                 // Not on Windows, which has no groups to look at.
                 _ = look.tick(), if cfg!(unix) && self.exit.is_none() => self.look_in_front(),
@@ -304,6 +293,7 @@ impl Shell {
 
     async fn wrote(&mut self, mirror: &mut Mirror, output: Vec<u8>) {
         mirror.write(&output);
+        self.watching.changed(mirror);
         self.send(TerminalUpdate::Output { output: TerminalBytes::new(output) }).await;
     }
 
@@ -325,6 +315,7 @@ impl Shell {
             return;
         }
         self.size = size;
+        self.watching.changed(mirror);
         self.send(TerminalUpdate::Resized { size }).await;
     }
 
@@ -376,6 +367,12 @@ async fn until(deadline: Option<Instant>) {
         Some(deadline) => tokio::time::sleep_until(deadline).await,
         None => std::future::pending().await,
     }
+}
+
+/// Room for a terminal's next frame, once it's due.
+async fn room_at(due: Option<Instant>, room: Arc<Semaphore>) -> Option<OwnedSemaphorePermit> {
+    until(due).await;
+    room.acquire_owned().await.ok()
 }
 
 fn pty_size(size: TerminalSize) -> PtySize {

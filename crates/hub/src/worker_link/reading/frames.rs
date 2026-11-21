@@ -93,6 +93,10 @@ pub(in super::super) async fn read_frames(
             hub.terminal_update(&link, terminal, at, update);
             continue;
         }
+        // This hub watches no terminal yet, so a picture is one it didn't ask for.
+        if let WorkerFrame::TerminalPicture { .. } = parsed {
+            continue;
+        }
         let mut held = link.held.lock().await;
         match held.as_mut() {
             Some(held) => held.push(parsed),
@@ -119,7 +123,8 @@ pub(in super::super) async fn route(hub: &Arc<Hub>, link: &WorkerLink, frame: Wo
         | WorkerFrame::Ask { .. }
         | WorkerFrame::Branches { .. }
         | WorkerFrame::ChildBranches { .. }
-        | WorkerFrame::Terminal { .. } => return,
+        | WorkerFrame::Terminal { .. }
+        | WorkerFrame::TerminalPicture { .. } => return,
         WorkerFrame::AgentEvent { session_id, run, body, raw, attachments, seq } => {
             (session_id, Item::Event { run, body: Box::new(body), raw, attachments, seq }, seq)
         }
@@ -160,7 +165,8 @@ fn agent_of(frame: &WorkerFrame) -> Option<(SessionId, RunId)> {
         | WorkerFrame::Ask { .. }
         | WorkerFrame::Branches { .. }
         | WorkerFrame::ChildBranches { .. }
-        | WorkerFrame::Terminal { .. } => None,
+        | WorkerFrame::Terminal { .. }
+        | WorkerFrame::TerminalPicture { .. } => None,
         WorkerFrame::AgentEvent { session_id, run, .. }
         | WorkerFrame::AgentDelta { session_id, run, .. }
         | WorkerFrame::AgentReport { session_id, run, .. }

@@ -140,6 +140,23 @@ impl Reply for TerminalRowsReply {
     }
 }
 
+/// Whether the hub watches the terminal, as it does while any client does. While it does, the worker sends it
+/// pictures of what the terminal shows, a whole one first, at most about 60 a second, and one frame at a time. Only
+/// the hub that asked is sent them, so one that connects after watches again.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct TerminalWatch {
+    pub terminal: TerminalId,
+    pub watching: bool,
+}
+
+impl Request for TerminalWatch {
+    type Reply = ();
+
+    fn into_request(self) -> WorkerRequest {
+        WorkerRequest::TerminalWatch(self)
+    }
+}
+
 /// Ends the terminal's shell, and the job it runs in front. Ending one that's gone changes nothing, so a hub can send
 /// it again.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]

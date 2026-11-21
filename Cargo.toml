@@ -235,7 +235,8 @@ rusqlite = { version = "0.43.0", default-features = false, features = ["bundled"
 # Already under GPUI on a Mac. The Keychain on iOS, which keeps the token a hub gave the phone.
 security-framework = "3.7.0"
 serde = { version = "1.0.229", features = ["derive"] }
-serde_json = "1.0.154"
+# With `raw_value`, so a terminal's rows are kept, compared and passed on as JSON, rather than read into their types.
+serde_json = { version = "1.0.154", features = ["raw_value"] }
 # Already under gpui-kit, whose diff uses it. Works out an edit's lines before its patch comes back, and what changed
 # within a line of a diff.
 similar = "2.7.0"

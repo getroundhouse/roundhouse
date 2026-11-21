@@ -6,5 +6,7 @@ mod tests;
 
 mod counting;
 mod reading;
+mod showing;
 
 pub(super) use counting::Counting;
+pub(super) use showing::Picturing;

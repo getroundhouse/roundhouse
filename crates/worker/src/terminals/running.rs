@@ -12,13 +12,13 @@ use protocol::paths;
 use protocol::terminal::TerminalSize;
 use protocol::worker::{
     RunningTerminal, RunningTerminalsReply, TerminalInput, TerminalResize, TerminalRows, TerminalRowsReply,
-    TerminalShown, TerminalStart,
+    TerminalShown, TerminalStart, TerminalWatch,
 };
 use tokio::sync::{mpsc, oneshot, watch};
 
 use super::shell;
 use crate::Timers;
-use crate::serve::Outbox;
+use crate::serve::{HubConnection, Outbox};
 
 /// Every terminal the worker runs.
 pub(crate) struct Terminals {
@@ -60,6 +60,8 @@ pub(super) enum ToShell {
     Resize(TerminalSize),
     Show(oneshot::Sender<Result<TerminalShown, ApiError>>),
     Rows(TerminalRows, oneshot::Sender<Result<TerminalRowsReply, ApiError>>),
+    /// Watched by the hub on that connection from now, or by none.
+    Watch(Option<HubConnection>),
     Stop,
 }
 
@@ -141,6 +143,12 @@ impl Terminals {
         let TerminalResize { terminal, size } = resize;
         allowed(size)?;
         self.tell(&terminal, ToShell::Resize(size))
+    }
+
+    /// Whether the hub on `hub` watches the terminal, as [`TerminalWatch`] says.
+    pub(crate) fn watch(&self, watch: TerminalWatch, hub: Option<HubConnection>) -> Result<(), ApiError> {
+        let TerminalWatch { terminal, watching } = watch;
+        self.tell(&terminal, ToShell::Watch(hub.filter(|_| watching)))
     }
 
     /// What the terminal shows now, and which of its updates come after that.

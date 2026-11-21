@@ -8,7 +8,7 @@ use protocol::client::ErrorCode;
 use protocol::frame;
 use protocol::model::TerminalId;
 use protocol::paths::AGENTS_DIR;
-use protocol::terminal::{TerminalSize, TerminalUpdate, UpdateIndex};
+use protocol::terminal::{TerminalPicture, TerminalSize, TerminalUpdate, UpdateIndex};
 use protocol::worker::{
     RunningTerminalsReply, TerminalInput, TerminalShow, TerminalShown, TerminalStart, WorkerCall, WorkerFrame,
     WorkerOutcome, WorkerRequest, WorkerResponse,
@@ -16,7 +16,7 @@ use protocol::worker::{
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, DuplexStream, WriteHalf};
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
-use tokio::time::timeout;
+use tokio::time::{Instant, timeout};
 
 use super::super::{config, hello, start_worker};
 
@@ -43,6 +43,8 @@ pub(super) struct Hub {
     updates_searched: usize,
     /// The `at` each terminal's next update should have.
     pub(super) next: HashMap<TerminalId, UpdateIndex>,
+    /// Every frame of a picture, in order, with when it came.
+    pub(super) pictures: Vec<(TerminalPicture, Instant)>,
 }
 
 impl Hub {
@@ -65,8 +67,20 @@ impl Hub {
             }
         });
         let (replies, output, updates, next) = (HashMap::new(), Vec::new(), Vec::new(), HashMap::new());
-        let mut hub =
-            Self { write, frames, running, calls: 0, replies, output, searched: 0, updates, updates_searched: 0, next };
+        let (searched, updates_searched, pictures) = (0, 0, Vec::new());
+        let mut hub = Self {
+            write,
+            frames,
+            running,
+            calls: 0,
+            replies,
+            output,
+            searched,
+            updates,
+            updates_searched,
+            next,
+            pictures,
+        };
         hub.call(hello()).await;
         hub
     }
@@ -179,6 +193,11 @@ impl Hub {
     }
 
     /// Until `found` finds something in what has come, keeping each frame as it comes.
+    /// Until `found` says the pictures so far have what was waited for.
+    pub(super) async fn until_pictures(&mut self, mut found: impl FnMut(&[(TerminalPicture, Instant)]) -> bool) {
+        self.until(|hub| found(&hub.pictures).then_some(())).await;
+    }
+
     async fn until<T>(&mut self, mut found: impl FnMut(&mut Self) -> Option<T>) -> T {
         timeout(WAIT, async {
             loop {
@@ -207,6 +226,7 @@ impl Hub {
                     update => self.updates.push(update),
                 }
             }
+            WorkerFrame::TerminalPicture { picture, .. } => self.pictures.push((picture, Instant::now())),
             _ => {}
         }
     }
