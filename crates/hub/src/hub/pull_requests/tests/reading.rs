@@ -1,16 +1,18 @@
 //! Reading a workspace's own pull request for an agent and for a client, from a stand-in for GitHub, by the branch on
 //! GitHub that the branch checked out pushes to, on the real clock, since a call to the stand-in would race tokio's.
 
-use protocol::model::{Branches, GitFile, GitStatus, Head, Local, PrState, PullRequest, PullRequestFound};
+use protocol::model::{
+    Branches, GitFile, GitStatus, Head, Local, PrState, PullRequest, PullRequestFound, PullRequestLinked,
+};
 use protocol::worker::{WorkerRequest, WorkerResponse};
 
-use super::*;
+use super::super::*;
 use crate::hub::tests::{hub_on_github, hub_on_github_timed, hub_without_account, pushed};
 use crate::timers::Timers;
 use github::PullRequestState;
 
 /// The GraphQL queries the stand-in was asked.
-fn queries(github: &github::StandIn) -> Vec<String> {
+pub(super) fn queries(github: &github::StandIn) -> Vec<String> {
     github.asked().into_iter().filter(|asked| asked.starts_with("post /graphql ")).collect()
 }
 
@@ -19,11 +21,12 @@ fn queries(github: &github::StandIn) -> Vec<String> {
 const SPACED: Timers = Timers { agent_spacing: Duration::from_secs(1), ..Timers::FOR_TESTS };
 
 /// A client's ask taking what a read began within the product's time found, for the tests about it.
-const CLIENTS_TAKE_A_READ: Timers =
+pub(super) const CLIENTS_TAKE_A_READ: Timers =
     Timers { fresh_for_clients: Timers::DEFAULT.fresh_for_clients, ..Timers::FOR_TESTS };
 
-fn known(hub: &Hub) -> Option<PullRequest> {
-    hub.store.get_workspace(&"w".into()).unwrap().known_pull_request().cloned()
+/// The workspace's pull request as the hub knows it, from its record's link and the cache.
+pub(super) fn known(hub: &Hub) -> Option<PullRequest> {
+    hub.known_of(&hub.store.get_workspace(&"w".into()).unwrap()).and_then(|found| found.pull_request)
 }
 
 #[tokio::test]
@@ -101,16 +104,17 @@ async fn a_switch_reads_only_while_what_is_known_is_another_branchs() {
     let (hub, pull_requests, github) = hub_on_github(dir.path()).await;
     pull_requests.set(7, PullRequestState::Open);
     let id = WorkspaceId::from("w");
-    let found = PullRequestFound { pull_request: Some(crate::hub::tests::open()) };
+    hub.workspace_pull_request(id.clone()).await.unwrap();
+    let a_read = queries(&github).len();
+    let linked = hub.store.get_workspace(&id).unwrap().pull_request_link.unwrap();
 
-    hub.store.set_workspace_pull_request(&id, &found, Some(&BranchName::from("branch"))).unwrap();
     hub.read_pull_request(&id, Asked::Waiting, When::OnAnotherBranch).await.unwrap();
-    let found_on_it = queries(&github).len();
-    hub.store.set_workspace_pull_request(&id, &found, Some(&BranchName::from("aspen"))).unwrap();
+    let found_on_it = queries(&github).len() - a_read;
+    hub.store.set_workspace_pull_request(&id, &linked, Some(&BranchName::from("aspen"))).unwrap();
     hub.read_pull_request(&id, Asked::Waiting, When::OnAnotherBranch).await.unwrap();
 
     assert_eq!(found_on_it, 0, "what's known was found on the branch checked out");
-    assert!(!queries(&github).is_empty());
+    assert!(queries(&github).len() > a_read);
     assert_eq!(known(&hub).map(|pr| pr.title), Some("Change 7".into()));
 }
 
@@ -127,10 +131,9 @@ async fn a_workspace_has_the_pull_request_from_the_branch_its_branch_is_pushed_t
     let merged = hub.workspace_pull_request("w".into()).await.unwrap();
 
     assert_eq!(none, None, "#8 is from another branch");
-    assert_eq!(
-        hub.store.get_workspace(&"w".into()).unwrap().pull_request,
-        Some(PullRequestFound { pull_request: merged.clone() })
-    );
+    let workspace = hub.store.get_workspace(&"w".into()).unwrap();
+    assert_eq!(workspace.pull_request_linked().map(|link| link.number.get()), Some(7));
+    assert_eq!(hub.known_of(&workspace), Some(PullRequestFound { pull_request: merged.clone() }));
     assert_eq!(merged.map(|pr| (pr.number, pr.state)), Some((7, PrState::Merged)));
     let asked = queries(&github);
     assert!(asked[0].contains(r#"headRefName:\"branch\""#), "{asked:?}");
@@ -180,8 +183,8 @@ async fn with_no_account_to_read_as_a_workspace_with_nothing_known_has_none() {
     let found = hub.workspace_pull_request("w".into()).await;
 
     assert_eq!(found.unwrap(), None);
-    let recorded = hub.store.get_workspace(&"w".into()).unwrap().pull_request;
-    assert_eq!(recorded, Some(PullRequestFound { pull_request: None }));
+    let recorded = hub.store.get_workspace(&"w".into()).unwrap().pull_request_link;
+    assert_eq!(recorded, Some(PullRequestLinked { link: None }));
     assert!(queries(&github).is_empty(), "nothing to ask GitHub as");
 }
 
@@ -224,67 +227,6 @@ async fn a_detached_head_has_no_pull_request_and_asks_github_nothing() {
 
     assert_eq!(read, None);
     assert!(queries(&github).is_empty(), "{:?}", queries(&github));
-}
-
-/// Asked for again while a read is on its way, the next read is still needed, since the first began before the ask.
-/// But a third, asked for while the second waits, has nothing to add once the second has read, so it shares its answer.
-#[tokio::test]
-async fn a_read_asked_for_while_another_waits_shares_its_answer() {
-    assert_eq!(reads_of_three_asks_while_one_is_held(Timers::FOR_TESTS).await, 2, "the third shared the second's read");
-}
-
-/// A client's two asks made while a read is on its way, as from two clients, both take what it found, which began
-/// within the time a client's ask takes a read.
-#[tokio::test]
-async fn asks_made_while_a_read_is_on_its_way_take_what_it_finds() {
-    assert_eq!(reads_of_three_asks_while_one_is_held(CLIENTS_TAKE_A_READ).await, 1, "the others shared the first's");
-}
-
-/// A client's ask just after the branch was pushed again reads GitHub, rather than take what a read from before the
-/// push found, however recent, since it found another head.
-#[tokio::test]
-async fn an_ask_after_a_push_reads_again_rather_than_take_a_read_from_before() {
-    let dir = tempfile::tempdir().unwrap();
-    let (hub, pull_requests, github) = hub_on_github_timed(dir.path(), CLIENTS_TAKE_A_READ).await;
-    pull_requests.set(7, PullRequestState::Open);
-    hub.workspace_pull_request("w".into()).await.unwrap();
-    let a_read = queries(&github).len();
-    hub.workspace_pull_request("w".into()).await.unwrap();
-    assert_eq!(queries(&github).len(), a_read, "an ask just after a read takes what it found");
-
-    hub.store.set_workspace_branches(&"w".into(), &pushed("pushed", "pushed", (0, 0))).unwrap();
-    hub.workspace_pull_request("w".into()).await.unwrap();
-
-    assert!(queries(&github).len() > a_read, "read again after the push");
-}
-
-/// How many reads three asks for the workspace's pull request make, the second and third made while the first's read
-/// is held on its way, in reads of it, with `timers`, after a read of it that's as old as a client's ask takes.
-async fn reads_of_three_asks_while_one_is_held(timers: Timers) -> usize {
-    let dir = tempfile::tempdir().unwrap();
-    let (hub, pull_requests, github) = hub_on_github_timed(dir.path(), timers).await;
-    pull_requests.set(7, PullRequestState::Open);
-    hub.workspace_pull_request("w".into()).await.unwrap();
-    let a_read = queries(&github).len();
-    hub.github_cache.age(timers.fresh_for_clients);
-    pull_requests.hold();
-    let ask = || {
-        let hub = hub.clone();
-        tokio::spawn(async move { hub.workspace_pull_request("w".into()).await.unwrap() })
-    };
-
-    let first = ask();
-    waiting::task::until(Duration::from_secs(30), "the first to reach GitHub", || queries(&github).len() > a_read)
-        .await;
-    let (second, third) = (ask(), ask());
-    // Each asks before this test goes on, on a runtime of one thread, and waits for the first.
-    tokio::task::yield_now().await;
-    pull_requests.release();
-    let answers = [first.await.unwrap(), second.await.unwrap(), third.await.unwrap()];
-
-    assert!(answers.iter().all(|pr| pr.as_ref().map(|pr| pr.number) == Some(7)), "{answers:?}");
-    assert_eq!(queries(&github).len() % a_read, 0, "whole reads");
-    queries(&github).len() / a_read - 1
 }
 
 /// GitHub deleted the branch as its pull request merged, so the branch has none of its own to list, and the one the

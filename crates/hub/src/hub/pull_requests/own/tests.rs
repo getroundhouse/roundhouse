@@ -103,17 +103,16 @@ fn headed(number: u64, state: PrState, head: &str) -> Headed {
     }
 }
 
-fn known(number: u64) -> protocol::model::PullRequest {
-    let url = format!("https://github.com/example/project/pull/{number}");
-    protocol::model::PullRequest { number, url, state: PrState::Merged, ..crate::hub::tests::open() }
+/// The address of pull request `number` of `example/project`, as the workspace's record links to it.
+fn known(number: u64) -> String {
+    format!("https://github.com/example/project/pull/{number}")
 }
 
 #[test]
 fn the_workspaces_is_the_open_one_or_the_one_it_had_or_one_at_a_commit_the_branch_has() {
     let branch = birch("tip", Some(("origin", None, "pushed")));
-    let number = |headed: &[Headed], known: Option<&protocol::model::PullRequest>| {
-        chosen(headed, known, &branch).map(|found| found.number.get())
-    };
+    let number =
+        |headed: &[Headed], known: Option<&str>| chosen(headed, known, &branch).map(|found| found.number.get());
     let merged = |n, head| headed(n, PrState::Merged, head);
     let elsewhere = Headed { url: "https://github.com/example/other/pull/7".into(), ..merged(7, "else") };
 

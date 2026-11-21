@@ -193,18 +193,47 @@ fn workspace(pull_request: Option<PullRequestFound>) -> crate::model::Workspace 
 /// where `gh` can't work at all, says nothing of any branch.
 #[test]
 fn only_what_was_found_on_a_branch_can_be_another_branchs() {
-    use crate::model::{BranchName, Branches, Head};
-    let on = |pull_request: Option<PullRequest>, branch: Option<&str>| crate::model::Workspace {
+    use crate::model::{BranchName, Branches, GithubRepositoryName, Head, IssueNumber, PullRequestLink};
+    let link = PullRequestLink {
+        repository: GithubRepositoryName::named("o/r"),
+        number: IssueNumber::try_from(7).unwrap(),
+        url: "https://github.com/o/r/pull/7".into(),
+        uncommitted: 0,
+    };
+    let on = |link: Option<PullRequestLink>, branch: Option<&str>| crate::model::Workspace {
         branches: Some(Branches { head: Head::Branch { name: BranchName::from("next") }, had: Vec::new() }),
         pull_request_branch: branch.map(BranchName::from),
-        ..workspace(Some(PullRequestFound { pull_request }))
+        pull_request_link: Some(PullRequestLinked { link }),
+        ..crate::fixtures::workspace("w")
     };
 
-    assert!(on(Some(open()), Some("aspen")).pull_request_found_on_another_branch());
+    assert!(on(Some(link.clone()), Some("aspen")).pull_request_found_on_another_branch());
     assert!(on(None, Some("aspen")).pull_request_found_on_another_branch(), "the branch on now may have one");
-    assert!(on(Some(open()), None).pull_request_found_on_another_branch(), "found before branches were kept");
-    assert!(!on(Some(open()), Some("next")).pull_request_found_on_another_branch());
+    assert!(on(Some(link.clone()), None).pull_request_found_on_another_branch(), "found before branches were kept");
+    assert!(!on(Some(link), Some("next")).pull_request_found_on_another_branch());
     assert!(!on(None, None).pull_request_found_on_another_branch(), "as where gh can't work");
+}
+
+/// Not looked, looked and found none, and found one each read back as themselves on the record's link, as the
+/// whole pull request does.
+#[test]
+fn which_pull_request_the_hub_found_reads_back_as_it_was() {
+    use crate::model::{GithubRepositoryName, IssueNumber, PullRequestLink};
+    let link = PullRequestLink {
+        repository: GithubRepositoryName::named("o/r"),
+        number: IssueNumber::try_from(7).unwrap(),
+        url: "https://github.com/o/r/pull/7".into(),
+        uncommitted: 2,
+    };
+    for linked in [None, Some(PullRequestLinked { link: None }), Some(PullRequestLinked { link: Some(link) })] {
+        let workspace =
+            crate::model::Workspace { pull_request_link: linked.clone(), ..crate::fixtures::workspace("w") };
+        let written = serde_json::to_string(&workspace).unwrap();
+
+        let read: crate::model::Workspace = serde_json::from_str(&written).unwrap();
+
+        assert_eq!(read.pull_request_link, linked, "{written}");
+    }
 }
 
 proptest! {

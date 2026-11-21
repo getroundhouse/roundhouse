@@ -2,7 +2,7 @@
 //! workspace's, and how its worktree stands against it, each from what's known with nothing to run.
 
 use protocol::client::{ApiError, ErrorCode};
-use protocol::model::{Branch, BranchName, Local, PrState, PullRequest, RepoUrl, Upstream, Workspace};
+use protocol::model::{Branch, BranchName, Local, PrState, RepoUrl, Upstream, Workspace};
 
 use github::{Headed, HeadsAsk};
 
@@ -57,19 +57,15 @@ pub(in crate::hub) fn wanted(workspace: &Workspace, repository: Option<&RepoUrl>
 }
 
 /// Which of `headed`, the pull requests of the branch on GitHub `branch` pushes to, newest first, is the workspace's:
-/// an open one, or else the one it had, `known`, by its address, as one that has merged or closed since, or else the newest whose head
+/// an open one, or else the one it had, at the address `known`, as one that has merged or closed since, or else the newest whose head
 /// is where `branch` or its upstream is. GitHub keeps the pull requests of a branch name that's been used again, once
 /// the branch it was is merged and deleted, so a merged or closed one first seen now is the workspace's only if its
 /// head is a commit the branch has. `None` when it has none.
-pub(in crate::hub) fn chosen<'a>(
-    headed: &'a [Headed],
-    known: Option<&PullRequest>,
-    branch: &Branch,
-) -> Option<&'a Headed> {
+pub(in crate::hub) fn chosen<'a>(headed: &'a [Headed], known: Option<&str>, branch: &Branch) -> Option<&'a Headed> {
     if let Some(open) = headed.iter().find(|pr| pr.state == PrState::Open) {
         return Some(open);
     }
-    if let Some(known) = known.and_then(|known| headed.iter().find(|pr| pr.url == known.url)) {
+    if let Some(known) = known.and_then(|known| headed.iter().find(|pr| pr.url == known)) {
         return Some(known);
     }
     let upstream = branch.upstream.as_ref().and_then(|upstream| upstream.tip.as_ref());

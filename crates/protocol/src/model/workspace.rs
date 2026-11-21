@@ -1,6 +1,6 @@
 use super::{
-    BranchName, Branches, CommentDraft, Head, InstanceId, ProviderName, PullRequest, PullRequestFound, RepoId, Rev,
-    Title, TitleSource, WorkspaceId, pull_request,
+    BranchName, Branches, CommentDraft, Head, InstanceId, ProviderName, PullRequestFound, PullRequestLink,
+    PullRequestLinked, RepoId, Rev, Title, TitleSource, WorkspaceId, pull_request,
 };
 use serde::{Deserialize, Serialize};
 
@@ -60,10 +60,14 @@ pub struct Workspace {
     pub title: Option<Title>,
     #[serde(default)]
     pub title_source: TitleSource,
-    /// Its branch's pull request, as the hub last found it, kept across restarts so every client can show it at once.
-    /// `None` until the hub has looked, and from a hub too old to look.
-    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "pull_request::deserialize_found")]
+    /// Its branch's pull request, as a hub from before records kept only [`Workspace::pull_request_link`] last found it.
+    /// A newer hub never says, and sends what GitHub says of it to a client that shows it instead.
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "pull_request::deserialize_looked")]
     pub pull_request: Option<PullRequestFound>,
+    /// Which pull request its branch has, as the hub last found, kept across restarts, or that it has none. `None` until
+    /// the hub has looked, and from a hub too old to keep it.
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "pull_request::deserialize_looked")]
+    pub pull_request_link: Option<PullRequestLinked>,
     /// The comment being written on its diff and not saved, as [`CommentDraft`] says. `None` from a hub that doesn't
     /// keep it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -85,9 +89,9 @@ pub struct Workspace {
 }
 
 impl Workspace {
-    /// Its pull request, if the hub has found one.
-    pub fn known_pull_request(&self) -> Option<&PullRequest> {
-        self.pull_request.as_ref().and_then(|found| found.pull_request.as_ref())
+    /// Its pull request's link, if the hub has found one.
+    pub fn pull_request_linked(&self) -> Option<&PullRequestLink> {
+        self.pull_request_link.as_ref().and_then(|linked| linked.link.as_ref())
     }
 
     /// Whether what the hub last found of its pull request was for another branch than the one checked out, so it's
@@ -96,8 +100,8 @@ impl Workspace {
     /// branch, as where GitHub can't be read at all, such as without a login, which checking out another doesn't change.
     pub fn pull_request_found_on_another_branch(&self) -> bool {
         let Some(Head::Branch { name }) = self.branches.as_ref().map(|branches| &branches.head) else { return false };
-        let found_on_a_branch = self.pull_request.is_some() && self.pull_request_branch.is_some();
-        let found = self.known_pull_request().is_some() || found_on_a_branch;
+        let found_on_a_branch = self.pull_request_link.is_some() && self.pull_request_branch.is_some();
+        let found = self.pull_request_linked().is_some() || found_on_a_branch;
         found && self.pull_request_branch.as_ref() != Some(name)
     }
 

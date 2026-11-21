@@ -85,6 +85,31 @@ fn a_hub_too_old_to_say_leaves_the_pull_request_its_record_has() {
     assert_eq!(feed.pull_request(&recorded), recorded.pull_request);
 }
 
+/// That the hub hasn't looked at a workspace's pull request is held as said, apart from the hub not having said
+/// anything yet, so a bar that showed one it found can say it's looking once the hub's cache has forgotten it.
+#[test]
+fn that_the_hub_hasnt_looked_is_held_apart_from_it_not_having_said() {
+    let dir = tempfile::tempdir().unwrap();
+    let client = stand_in_hub::connect(&dir.path().join("hub.sock"), |request| {
+        let ClientRequest::GithubSubscribe(subscribe) = request else { return Does::Nothing };
+        let said = |found| HubFrame::Github {
+            subscription_id: subscribe.subscription_id,
+            update: GithubUpdate::PullRequest { workspace: "w".into(), found },
+        };
+        let none_found = Some(PullRequestFound { pull_request: None });
+        Does::AnswersThen(Box::new(ReplyOutcome::Response(ClientResponse::Ok)), vec![said(none_found), said(None)])
+    });
+    let feed = GithubFeed::start(&client);
+    let view = feed.view();
+    let workspace = protocol::fixtures::workspace("w");
+    assert!(!feed.said_pull_request(&workspace), "nothing's said before anything's shown");
+
+    view.show(GithubShown { workspaces: vec!["w".into()], ..GithubShown::default() });
+    waiting::thread::until(TIMEOUT, "the hub to say it hasn't looked", || {
+        feed.said_pull_request(&workspace) && feed.pull_request(&workspace).is_none()
+    });
+}
+
 /// Past the most chips a hub takes, those of the views made longest ago are left out, since the newest is likeliest to
 /// be what's in front.
 #[test]

@@ -78,7 +78,7 @@ impl Ui<'_> {
         self.wait("the push to be read", |ui| {
             let workspace = record(ui);
             let pushed = workspace.branches.as_ref().and_then(|branches| branches.checked_out());
-            pushed.is_some_and(|branch| branch.upstream.is_some()) && workspace.pull_request.is_some()
+            pushed.is_some_and(|branch| branch.upstream.is_some()) && workspace.pull_request_link.is_some()
         });
         let head = git(&path, &["rev-parse", "HEAD"]).trim().to_string();
         (branch, head)

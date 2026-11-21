@@ -79,6 +79,7 @@ pub fn workspace(id: &str) -> Workspace {
         title: None,
         title_source: TitleSource::default(),
         pull_request: None,
+        pull_request_link: None,
         comment_draft: None,
         branches: None,
         pull_request_branch: None,

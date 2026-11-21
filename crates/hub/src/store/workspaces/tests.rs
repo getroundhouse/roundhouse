@@ -1,28 +1,21 @@
 use protocol::model::{
-    BranchName, Branches, DiffComment, DiffSide, Head, PrState, PullRequest, PullRequestFound, Repo, Rev, Session,
-    Workspace, WorkspaceId, WorkspaceStatus,
+    BranchName, Branches, DiffComment, DiffSide, GithubRepositoryName, Head, IssueNumber, PullRequestLink,
+    PullRequestLinked, Repo, Rev, Session, Workspace, WorkspaceId, WorkspaceStatus,
 };
 
 use super::super::tests::{idle_session, store_with_session, workspace_w};
 use super::super::{Ended, Made, Move, WorkspacePlacement, now_ms};
 use super::super::{Store, StoredSession, older, schema};
 
-fn open() -> PullRequest {
-    PullRequest {
-        number: 7,
-        url: "https://example.com/pull/7".to_string(),
-        title: "T".to_string(),
-        state: PrState::Open,
-        is_draft: false,
-        base: Some("main".into()),
-        merge_state: protocol::model::MergeState::Clean,
-        review: protocol::model::Review::NotRequired,
-        checks: protocol::model::Checks { passed: 1, failed: 0, pending: 0 },
-        queue: None,
-        left_queue: None,
-        changes_requested_at_ms: None,
-        local: protocol::model::Local::default(),
-    }
+/// The link to pull request #7 of `o/r`, read with `uncommitted` files uncommitted.
+fn link(uncommitted: u32) -> PullRequestLinked {
+    let link = PullRequestLink {
+        repository: GithubRepositoryName::named("o/r"),
+        number: IssueNumber::try_from(7).unwrap(),
+        url: "https://github.com/o/r/pull/7".to_string(),
+        uncommitted,
+    };
+    PullRequestLinked { link: Some(link) }
 }
 
 /// Only a change moves the revision, so the hub announces what it found only when it's news, however often it reads.
@@ -31,8 +24,7 @@ fn finding_the_same_pull_request_again_changes_nothing() {
     let dir = tempfile::tempdir().unwrap();
     let store = store_with_session(dir.path());
     let id = WorkspaceId::from("w");
-    let pr = open();
-    let (nothing, something) = (PullRequestFound { pull_request: None }, PullRequestFound { pull_request: Some(pr) });
+    let (nothing, something) = (PullRequestLinked { link: None }, link(0));
 
     let none = store.set_workspace_pull_request(&id, &nothing, None).unwrap();
     let none_again = store.set_workspace_pull_request(&id, &nothing, None).unwrap();
@@ -40,10 +32,10 @@ fn finding_the_same_pull_request_again_changes_nothing() {
     let found_again = store.set_workspace_pull_request(&id, &something, None).unwrap();
 
     let none = none.expect("looking for the first time is a change, even finding none");
-    assert_eq!(none.pull_request, Some(nothing));
+    assert_eq!(none.pull_request_link, Some(nothing));
     assert_eq!(none_again, None);
     let found = found.unwrap();
-    assert_eq!(found.pull_request, Some(something));
+    assert_eq!(found.pull_request_link, Some(something));
     assert!(found.rev > none.rev);
     assert_eq!(found_again, None);
     assert_eq!(store.get_workspace(&id).unwrap().rev, found.rev);
@@ -54,13 +46,14 @@ fn finding_the_same_pull_request_again_changes_nothing() {
 fn a_pull_request_found_is_kept_through_reopening() {
     let dir = tempfile::tempdir().unwrap();
     let store = store_with_session(dir.path());
-    store.set_workspace_pull_request(&"w".into(), &PullRequestFound { pull_request: Some(open()) }, None).unwrap();
+    store.set_workspace_pull_request(&"w".into(), &link(2), None).unwrap();
     drop(store);
 
     let store = Store::open(&dir.path().join("hub.db"), &dir.path().join("backups")).unwrap();
 
     let listed = store.list_records().unwrap().workspaces;
-    assert_eq!(listed[0].pull_request, Some(PullRequestFound { pull_request: Some(open()) }));
+    assert_eq!(listed[0].pull_request_link, Some(link(2)));
+    assert_eq!(listed[0].pull_request, None, "what GitHub says of it is the cache's");
 }
 
 #[test]
@@ -69,7 +62,39 @@ fn a_workspace_from_before_pull_requests_were_kept_has_not_been_looked_at() {
 
     let store = older::store_from_before(dir.path(), schema::BEFORE_PULL_REQUESTS, "");
 
-    assert_eq!(store.get_workspace(&"w".into()).unwrap().pull_request, None);
+    assert_eq!(store.get_workspace(&"w".into()).unwrap().pull_request_link, None);
+}
+
+/// What an older hub kept of each workspace's pull request comes to its link: none where it found none, the pull
+/// request's where it found one, and not looked for where it hadn't, or where what it kept isn't one on github.com, so
+/// that one is looked for again. Each that changed moves its revision.
+#[test]
+fn a_workspace_from_before_records_kept_only_the_link_keeps_the_link_to_what_it_found() {
+    let dir = tempfile::tempdir().unwrap();
+    let found = r#"{"number":7,"url":"https://github.com/o/r/pull/7","title":"T","state":"OPEN","is_draft":false,
+        "local":{"uncommitted":2,"ahead":0,"behind":0}}"#;
+    let elsewhere =
+        r#"{"number":7,"url":"https://example.com/o/r/pull/7","title":"T","state":"OPEN","is_draft":false}"#;
+    let rows = format!(
+        "UPDATE workspaces SET pull_request = '{found}', pull_request_branch = 'alder' WHERE id = 'w';
+         INSERT INTO workspaces (id, repo_id, name, branch, status, provider, instance_id, created_at_ms, pull_request)
+             VALUES ('none', 'r', 'birch', 'birch', 'ready', 'local', 'none', 0, 'null'),
+                 ('unlooked', 'r', 'cedar', 'cedar', 'ready', 'local', 'unlooked', 0, NULL),
+                 ('elsewhere', 'r', 'elm', 'elm', 'ready', 'local', 'elsewhere', 0, '{elsewhere}');"
+    );
+
+    let store = older::store_from_before(dir.path(), schema::BEFORE_PULL_REQUEST_LINKS, &rows);
+
+    let linked = |id: &str| store.get_workspace(&id.into()).unwrap().pull_request_link;
+    assert_eq!(linked("w"), Some(link(2)));
+    assert_eq!(store.get_workspace(&"w".into()).unwrap().pull_request_branch, Some(BranchName::from("alder")));
+    assert_eq!(linked("none"), Some(PullRequestLinked { link: None }));
+    assert_eq!(linked("unlooked"), None);
+    assert_eq!(linked("elsewhere"), None);
+    let rev = |id: &str| store.get_workspace(&id.into()).unwrap().rev;
+    assert!(rev("w") > rev("unlooked"), "a record that changed moves its revision");
+    let again = store.set_workspace_pull_request(&"w".into(), &link(2), Some(&BranchName::from("alder"))).unwrap();
+    assert_eq!(again, None, "a read that finds the same after the update changes nothing");
 }
 
 #[test]
@@ -120,7 +145,7 @@ fn finding_the_same_pull_request_on_another_branch_records_that_branch() {
     let dir = tempfile::tempdir().unwrap();
     let store = store_with_session(dir.path());
     let id = WorkspaceId::from("w");
-    let found = PullRequestFound { pull_request: Some(open()) };
+    let found = link(0);
     let (aspen, header) = (BranchName::from("aspen"), BranchName::from("header"));
     store.set_workspace_pull_request(&id, &found, Some(&aspen)).unwrap();
 

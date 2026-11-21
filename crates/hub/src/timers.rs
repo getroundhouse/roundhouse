@@ -36,6 +36,9 @@ pub struct Timers {
     /// How long after a read of a workspace's open pull request began a client that asks for it takes what that read
     /// found, rather than having it read again.
     pub fresh_for_clients: Duration,
+    /// How long after the hub tried to read a pull request its cache had forgotten, of an archived workspace a client
+    /// shows, it tries again, where the read failed or found nothing.
+    pub read_forgotten_again: Duration,
     /// The least time between two asks after a sign-in's token, whatever GitHub says, so a code that says none between
     /// them isn't asked after in a loop.
     pub sign_in_pace: Duration,
@@ -77,6 +80,9 @@ impl Timers {
         // showing it, and short enough that a pull request that's still moving looks no staler than the 30 seconds a
         // client asks again in. *Unconfirmed.*
         fresh_for_clients: Duration::from_secs(10),
+        // As a chip's read that failed is tried again, so a GitHub that's down or slow is asked no more often for these
+        // than for those. *Unconfirmed.*
+        read_forgotten_again: Duration::from_secs(60),
         // GitHub's docs give five seconds between asks, so only a code that says less than this keeps to it.
         sign_in_pace: Duration::from_secs(1),
         // Tokio's timers don't count the time a Mac sleeps, so waiting until a token's end, or until it's due to be
@@ -125,6 +131,7 @@ impl Timers {
         look_every: Duration::from_millis(100),
         read_pace: Duration::from_millis(100),
         fresh_for_clients: Duration::ZERO,
+        read_forgotten_again: Duration::from_millis(100),
         sign_in_pace: Duration::from_millis(100),
         ..Self::DEFAULT
     };
@@ -151,7 +158,7 @@ mod tests {
         #![proptest_config(Config { rng_seed: RngSeed::Fixed(1), failure_persistence: None, ..Config::default() })]
 
         #[test]
-        fn a_hub_takes_the_timers_a_test_gives_it(times in prop::array::uniform12(duration())) {
+        fn a_hub_takes_the_timers_a_test_gives_it(times in prop::array::uniform13(duration())) {
             let [
                 agent_spacing,
                 picks_up_within,
@@ -162,6 +169,7 @@ mod tests {
                 look_every,
                 read_pace,
                 fresh_for_clients,
+                read_forgotten_again,
                 sign_in_pace,
                 check_github_logins_every,
                 look_for_updates_every,
@@ -176,6 +184,7 @@ mod tests {
                 look_every,
                 read_pace,
                 fresh_for_clients,
+                read_forgotten_again,
                 sign_in_pace,
                 check_github_logins_every,
                 look_for_updates_every,

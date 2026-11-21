@@ -95,6 +95,8 @@ pub(crate) struct Hub {
     pub(super) github_cache: Arc<GithubCache>,
     /// What clients show of GitHub, as their subscriptions say.
     pub(super) github_shown: github_reads::Shown,
+    /// When the hub last tried to read each pull request of an archived workspace that the cache had forgotten.
+    pub(super) github_forgotten: github_reads::Forgotten,
     /// The reads of workspaces' own pull requests nobody asked for that are running now, by whose token each reads
     /// as.
     pub(super) own_reads: Jobs<pull_requests::ReadsAs>,
@@ -217,6 +219,7 @@ impl Hub {
             pull_requests: pull_requests::Reading::new(),
             github_cache: Arc::new(GithubCache::open(&dirs.github_cache)),
             github_shown: github_reads::Shown::default(),
+            github_forgotten: github_reads::Forgotten::default(),
             own_reads: Jobs::new(),
             sign_ins: Jobs::new(),
             github_checks_stopped: watch::Sender::new(false),

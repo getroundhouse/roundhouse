@@ -11,7 +11,8 @@ pub(super) struct GithubHeld {
     /// By ID, which is in the order they were made, so all they show is said in the same order each time.
     views: BTreeMap<u64, Shown>,
     references: HashMap<ReferenceAsk, ReferenceRead>,
-    pull_requests: HashMap<WorkspaceId, PullRequestFound>,
+    /// `None` where the hub said it hasn't looked.
+    pull_requests: HashMap<WorkspaceId, Option<PullRequestFound>>,
     /// Whether the hub is too old to send what GitHub says, until a new connection.
     pub(super) unsupported: bool,
 }
@@ -70,13 +71,10 @@ impl GithubHeld {
                 Box::new(move |shown| shown.references.contains(&reference))
             }
             GithubUpdate::PullRequest { workspace, found } => {
-                if self.pull_requests.get(&workspace) == found.as_ref() {
+                if self.pull_requests.get(&workspace) == Some(&found) {
                     return false;
                 }
-                match found {
-                    Some(found) => self.pull_requests.insert(workspace.clone(), found),
-                    None => self.pull_requests.remove(&workspace),
-                };
+                self.pull_requests.insert(workspace.clone(), found);
                 Box::new(move |shown| shown.workspaces.contains(&workspace))
             }
             GithubUpdate::Unknown => return false,
@@ -99,7 +97,12 @@ impl GithubHeld {
     }
 
     pub(super) fn pull_request(&self, workspace: &WorkspaceId) -> Option<PullRequestFound> {
-        self.pull_requests.get(workspace).cloned()
+        self.pull_requests.get(workspace).cloned().flatten()
+    }
+
+    /// Whether the hub has said what it knows of `workspace`'s pull request, even that it hasn't looked.
+    pub(super) fn said_pull_request(&self, workspace: &WorkspaceId) -> bool {
+        self.pull_requests.contains_key(workspace)
     }
 }
 

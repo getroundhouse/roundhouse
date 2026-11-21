@@ -52,6 +52,13 @@ impl GithubFeed {
         })
     }
 
+    /// Whether the hub has said what it knows of `workspace`'s pull request while a view shows it, even that it hasn't
+    /// looked, as it does once the cache it reads from has forgotten it. A hub too old to say has said it on the
+    /// workspace's record.
+    pub fn said_pull_request(&self, workspace: &Workspace) -> bool {
+        self.follow.read(|held| held.unsupported || held.said_pull_request(&workspace.id))
+    }
+
     /// Whether the hub is too old to say what GitHub says of what's shown, until a new connection.
     pub fn unsupported(&self) -> bool {
         self.follow.read(|held| held.unsupported)

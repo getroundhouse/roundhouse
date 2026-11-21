@@ -215,12 +215,17 @@ impl GithubCache {
     /// since has kept, and forgets what nothing has asked for in [`KEPT_FOR`]. Blocks on the file.
     pub(crate) fn keep_pulls(&self, read: Vec<FacetsRead>) {
         let forgotten = self.forget_unasked(now_ms());
-        let read = read.into_iter().filter_map(|FacetsRead { repository, facets, read_at_ms }| {
-            let number = IssueNumber::try_from(facets.status.number).ok()?;
-            Some((Item::new(&repository, number), facets, read_at_ms))
-        });
-        let rows = self.pulls.keep(read.collect());
+        let read: Vec<_> = (read.into_iter())
+            .filter_map(|FacetsRead { repository, facets, read_at_ms }| {
+                let number = IssueNumber::try_from(facets.status.number).ok()?;
+                Some((Item::new(&repository, number), facets, read_at_ms))
+            })
+            .collect();
+        let told = read.iter().map(|(item, _, _)| item.clone()).collect();
+        let rows = self.pulls.keep(read);
         self.write(&forgotten, &rows);
+        // Only once it's kept, so what's told finds it. Nobody may be listening.
+        let _ = self.kept.send(told);
     }
 
     /// The rules of the branches of `repository` the cache has read within `fresh_for`, for a read of pull requests

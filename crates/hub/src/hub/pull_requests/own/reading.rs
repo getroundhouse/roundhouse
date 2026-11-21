@@ -8,7 +8,8 @@ use std::time::Duration;
 
 use protocol::client::{ApiError, ErrorCode};
 use protocol::model::{
-    Branch, BranchName, GithubToken, PullRequestFound, PullRequestNumber, PullRequestsSnapshot, Workspace, WorkspaceId,
+    Branch, BranchName, GithubRepositoryName, GithubToken, PullRequestNumber, PullRequestsSnapshot, Workspace,
+    WorkspaceId,
 };
 use protocol::worker::GitStatus;
 
@@ -36,8 +37,8 @@ struct Reading {
     workspace: Workspace,
     /// What its own comes to, when that's known without reading it, as for a branch with none.
     settled: Option<Result<Found, ApiError>>,
-    /// The branch its own was found on, when it's read.
-    on: Option<BranchName>,
+    /// The repository its own merges into, and the branch it was found on, when it's read.
+    own: Option<(GithubRepositoryName, BranchName)>,
     scopes: Vec<Scope>,
     waits: Vec<WaitsRead>,
 }
@@ -87,7 +88,7 @@ impl Hub {
     /// worker is running already, as it says.
     async fn uncommitted(&self, readings: &[Reading]) -> HashMap<WorkspaceId, u32> {
         let mut counted = HashMap::new();
-        for workspace in readings.iter().filter(|reading| reading.on.is_some()).map(|reading| &reading.workspace) {
+        for workspace in readings.iter().filter(|reading| reading.own.is_some()).map(|reading| &reading.workspace) {
             if let Some(files) = self.uncommitted_in(workspace).await {
                 counted.insert(workspace.id.clone(), files);
             }
@@ -123,7 +124,9 @@ fn reading(plan: Plan, headed: &mut impl Iterator<Item = Result<Vec<Headed>, Api
         Wanted::Unreadable { error, .. } => (Some(Err(error)), None),
         Wanted::Heads { on, .. } => {
             let answer = headed.next().unwrap_or_else(|| Err(couldnt_read()));
-            let known = workspace.known_pull_request().filter(|_| workspace.pull_request_branch.as_ref() == Some(&on));
+            let known = (workspace.pull_request_linked())
+                .filter(|_| workspace.pull_request_branch.as_ref() == Some(&on))
+                .map(|link| link.url.as_str());
             match answer
                 .map(|headed| checked_out(&workspace).and_then(|branch| chosen(&headed, known, branch)).cloned())
             {
@@ -134,7 +137,7 @@ fn reading(plan: Plan, headed: &mut impl Iterator<Item = Result<Vec<Headed>, Api
         }
     };
     let (scopes, waits) = scopes(own.as_ref().map(|(into, number, _)| (into.clone(), *number)), waited);
-    Reading { workspace, settled, on: own.map(|(_, _, on)| on), scopes, waits }
+    Reading { workspace, settled, own: own.map(|(into, _, on)| (into, on)), scopes, waits }
 }
 
 impl Reading {
@@ -149,8 +152,8 @@ impl Reading {
         let mut waits = std::mem::take(&mut self.waits);
         for scope in std::mem::take(&mut self.scopes) {
             let answer = answers.next().unwrap_or_else(|| Err(Unread { error: couldnt_read(), affected: Vec::new() }));
-            if let (Some(number), Some(on)) = (scope.own, self.on.clone()) {
-                own = Some(self.own_found(&answer, number, on, uncommitted));
+            if let (Some(number), Some((into, on))) = (scope.own, self.own.clone()) {
+                own = Some(self.own_found(&answer, number, into, on, uncommitted));
             }
             if let Some(repository) = scope.waited {
                 waits.push(WaitsRead { repository, read: answer });
@@ -159,12 +162,13 @@ impl Reading {
         WorkspaceRead { own: own.unwrap_or_else(|| Err(couldnt_read())), waits }
     }
 
-    /// The workspace's own pull request, `number`, found on `on`, as `answer` has it, with how its worktree stands
-    /// against it.
+    /// The workspace's own pull request, `number` of `into`, found on `on`, as `answer` has it, with how its worktree
+    /// stands against it.
     fn own_found(
         &self,
         answer: &Result<PullRequestsSnapshot, Unread>,
         number: PullRequestNumber,
+        into: GithubRepositoryName,
         on: BranchName,
         uncommitted: &HashMap<WorkspaceId, u32>,
     ) -> Result<Found, ApiError> {
@@ -172,12 +176,12 @@ impl Reading {
         let observed = snapshot.get(number).ok_or_else(|| ApiError::new(ErrorCode::Worker, "GitHub left it out"))?;
         let mut pull_request = observed.pull_request.clone();
         let workspace = &self.workspace;
-        let known = workspace.known_pull_request().filter(|known| known.url == pull_request.url);
-        let files = uncommitted.get(&workspace.id).copied().or(known.map(|known| known.local.uncommitted));
+        let known = workspace.pull_request_linked().filter(|known| known.url == pull_request.url);
+        let files = uncommitted.get(&workspace.id).copied().or(known.map(|known| known.uncommitted));
         if let Some(branch) = checked_out(workspace) {
             pull_request.local = local(&observed.head, branch, files.unwrap_or_default());
         }
-        Ok(Found { found: PullRequestFound { pull_request: Some(pull_request) }, on: Some(on) })
+        Ok(Found::of(pull_request, into, Some(on)))
     }
 }
 

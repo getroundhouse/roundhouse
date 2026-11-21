@@ -72,7 +72,8 @@ async fn workspaces_due_as_one_token_are_read_together_without_a_worker() {
     hub.store.set_workspace_branches(&v(), &pushed("head-7", "head-7", (0, 0))).unwrap();
     // As while a client is connected, so every workspace's pull request is read in turn.
     hub.clients.store(1, Ordering::Relaxed);
-    let number = |id: &WorkspaceId| hub.store.get_workspace(id).unwrap().known_pull_request().map(|pr| pr.number);
+    let number =
+        |id: &WorkspaceId| hub.store.get_workspace(id).unwrap().pull_request_linked().map(|link| link.number.get());
 
     let watching = tokio::spawn(hub.clone().watch_pull_requests());
     soon("both being read", || number(&"w".into()).is_some() && number(&v()).is_some()).await;

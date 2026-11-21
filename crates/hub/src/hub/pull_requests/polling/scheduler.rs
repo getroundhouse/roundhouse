@@ -8,7 +8,7 @@ use tokio::time::Instant;
 use tracing::debug;
 
 use crate::hub::pull_requests::own::WorkspaceRead;
-use crate::hub::pull_requests::reading::couldnt_read;
+use crate::hub::pull_requests::reading::{Taking, couldnt_read};
 use crate::hub::pull_requests::remote::{ReadsAs, waited};
 use crate::hub::pull_requests::{Asked, Hub, schedule};
 use crate::jobs::{self, Ended, JobKind, Limits};
@@ -54,7 +54,15 @@ impl Hub {
         let Ok(mut workspaces) = self.workspace_list(false).await else { return Vec::new() };
         workspaces.retain(|workspace| seen || waited.contains(&workspace.id));
         let shown = self.github_shown.closely();
-        let due = schedule::due(&workspaces, &self.pull_requests.schedules.lock(), &waited, &shown, Instant::now());
+        // One whose pull request the cache has forgotten, as after it was emptied, is known as none until it's read.
+        let listed: Vec<_> = workspaces
+            .into_iter()
+            .map(|workspace| {
+                let state = self.known_of(&workspace).and_then(|found| found.pull_request).map(|pr| pr.state);
+                (workspace, state)
+            })
+            .collect();
+        let due = schedule::due(&listed, &self.pull_requests.schedules.lock(), &waited, &shown, Instant::now());
         due.into_iter().cloned().collect()
     }
 
@@ -138,7 +146,8 @@ impl Hub {
                 continue;
             }
             match self.workspace(&listed.id).await {
-                Ok(workspace) => reading.push((workspace, held)),
+                // What's known before the read, which keeps what it finds where that's known.
+                Ok(workspace) => reading.push((self.known_of(&workspace), workspace, held)),
                 Err(e) => {
                     debug!(id = %listed.id, "reading a workspace's record to read its pull request: {}", e.message);
                 }
@@ -149,13 +158,13 @@ impl Hub {
             let mut schedules = self.pull_requests.schedules.lock();
             reading
                 .iter()
-                .map(|(workspace, _)| {
+                .map(|(_, workspace, _)| {
                     let last = schedules.insert(workspace.id.clone(), schedule::Schedule::starting(read_at));
                     (workspace.id.clone(), last)
                 })
                 .collect()
         };
-        let asking = self.asking(reading.iter().map(|(workspace, _)| workspace.clone()).collect()).await;
+        let asking = self.asking(reading.iter().map(|(_, workspace, _)| workspace.clone()).collect()).await;
         let read = match token {
             Some(Ok(token)) => {
                 let read = self.read_own(&token, asking, Asked::InTurn).await;
@@ -173,10 +182,11 @@ impl Hub {
         let mut found: HashMap<_, _> = read.into_iter().collect();
         let hub = self.clone();
         jobs::uncut(async move {
-            for (workspace, held) in reading {
+            for (known, workspace, held) in reading {
                 let answer = found.remove(&workspace.id).unwrap_or_else(|| WorkspaceRead::unread(couldnt_read()));
                 let last = last.get(&workspace.id).copied().flatten();
-                if let Err(e) = hub.clone().take_answer(workspace, answer, last, read_at, Asked::InTurn, held).await {
+                let taking = Taking { workspace, known, last, read_at, asked: Asked::InTurn, _held: held };
+                if let Err(e) = hub.clone().take_answer(taking, answer).await {
                     debug!("recording a workspace's pull request read in turn: {}", e.message);
                 }
             }
