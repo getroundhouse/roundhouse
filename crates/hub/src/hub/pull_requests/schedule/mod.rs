@@ -9,5 +9,5 @@ mod tests;
 
 mod scheduling;
 #[cfg(test)]
-use scheduling::{LATEST, SOONEST};
+use scheduling::{LATEST, SHOWN, SOONEST};
 pub(super) use scheduling::{Schedule, Went, due};

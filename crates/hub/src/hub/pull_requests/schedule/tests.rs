@@ -7,7 +7,7 @@ use protocol::model::{
 };
 use tokio::time::Instant;
 
-use super::{Asked, LATEST, SOONEST, Schedule, Went, due};
+use super::{Asked, LATEST, SHOWN, SOONEST, Schedule, Went, due};
 
 fn pull_request(state: PrState) -> PullRequest {
     PullRequest {
@@ -38,7 +38,7 @@ fn read(ago: &[(&str, Duration)], now: Instant) -> HashMap<WorkspaceId, Schedule
 }
 
 fn next(workspaces: &[Workspace], schedules: &HashMap<WorkspaceId, Schedule>, now: Instant) -> Option<String> {
-    due(workspaces, schedules, &HashSet::new(), now).first().map(|w| w.id.to_string())
+    due(workspaces, schedules, &HashSet::new(), &HashSet::new(), now).first().map(|w| w.id.to_string())
 }
 
 /// One an agent waits on is read at the soonest, however long it has come back the same, when others are due later.
@@ -54,12 +54,15 @@ fn one_an_agent_waits_on_is_due_at_the_soonest_however_long_it_has_come_back_the
     let schedules = HashMap::from([(WorkspaceId::from("waited"), schedule)]);
 
     assert_eq!(
-        due(&workspaces, &schedules, &HashSet::new(), now).first().map(|w| w.id.as_str()),
+        due(&workspaces, &schedules, &HashSet::new(), &HashSet::new(), now).first().map(|w| w.id.as_str()),
         None,
         "not waited on"
     );
     let waited = HashSet::from([WorkspaceId::from("waited")]);
-    assert_eq!(due(&workspaces, &schedules, &waited, now).first().map(|w| w.id.as_str()), Some("waited"));
+    assert_eq!(
+        due(&workspaces, &schedules, &waited, &HashSet::new(), now).first().map(|w| w.id.as_str()),
+        Some("waited")
+    );
 }
 
 /// One an agent waits on that GitHub couldn't be reached for waits longer each time, as any does.
@@ -72,9 +75,12 @@ fn one_an_agent_waits_on_that_failed_waits_longer_each_time() {
     let schedules = HashMap::from([(WorkspaceId::from("waited"), failed)]);
     let waited = HashSet::from([WorkspaceId::from("waited")]);
 
-    assert_eq!(due(&workspaces, &schedules, &waited, now).first(), None, "not yet");
+    assert_eq!(due(&workspaces, &schedules, &waited, &HashSet::new(), now).first(), None, "not yet");
     let later = read_at + SOONEST * 2;
-    assert_eq!(due(&workspaces, &schedules, &waited, later).first().map(|w| w.id.as_str()), Some("waited"));
+    assert_eq!(
+        due(&workspaces, &schedules, &waited, &HashSet::new(), later).first().map(|w| w.id.as_str()),
+        Some("waited")
+    );
 }
 
 /// As when a read records it merged between a wait's start reading it and the wait being kept, so the read didn't end
@@ -87,8 +93,15 @@ fn one_an_agent_waits_on_is_read_even_when_it_was_last_read_as_done() {
         HashMap::from([(WorkspaceId::from("merged"), Schedule::starting(now.checked_sub(SOONEST).unwrap()))]);
     let waited = HashSet::from([WorkspaceId::from("merged")]);
 
-    assert_eq!(due(&workspaces, &schedules, &HashSet::new(), now).first().map(|w| w.id.as_str()), None, "done");
-    assert_eq!(due(&workspaces, &schedules, &waited, now).first().map(|w| w.id.as_str()), Some("merged"));
+    assert_eq!(
+        due(&workspaces, &schedules, &HashSet::new(), &HashSet::new(), now).first().map(|w| w.id.as_str()),
+        None,
+        "done"
+    );
+    assert_eq!(
+        due(&workspaces, &schedules, &waited, &HashSet::new(), now).first().map(|w| w.id.as_str()),
+        Some("merged")
+    );
 }
 
 /// After a restart, what's open on GitHub is the likeliest to have moved, then whatever has waited longest.
@@ -204,4 +217,29 @@ fn a_merged_pull_request_found_on_another_branch_is_read_again_in_turn() {
     assert_eq!(moved.as_deref(), Some("moved"));
     assert_eq!(stayed, None, "it's still the branch's, and done");
     assert_eq!(before.as_deref(), Some("before"), "found before the hub kept where");
+}
+
+/// One a client shows in full is due every 30 seconds however long it has come back the same, while it's open, and
+/// left once it's done, as any is.
+#[test]
+fn one_a_client_shows_in_full_is_read_every_30_seconds_until_its_done() {
+    let now = Instant::now();
+    let workspaces = [
+        workspace("shown", WorkspaceStatus::Ready, Some(PrState::Open)),
+        workspace("merged", WorkspaceStatus::Ready, Some(PrState::Merged)),
+    ];
+    let read_at = now.checked_sub(SHOWN).unwrap();
+    let mut same = Schedule::starting(read_at);
+    for _ in 0..4 {
+        same = Schedule::after(Some(same), read_at, Asked::InTurn, Went::Same(None));
+    }
+    let schedules = HashMap::from([(WorkspaceId::from("shown"), same), (WorkspaceId::from("merged"), same)]);
+    let shown = HashSet::from([WorkspaceId::from("shown"), WorkspaceId::from("merged")]);
+    let due_now = |shown: &HashSet<WorkspaceId>, now: Instant| {
+        due(&workspaces, &schedules, &HashSet::new(), shown, now).iter().map(|w| w.id.to_string()).collect::<Vec<_>>()
+    };
+
+    assert_eq!(due_now(&HashSet::new(), now), Vec::<String>::new(), "not shown, so not due for minutes");
+    assert_eq!(due_now(&shown, now), ["shown"]);
+    assert_eq!(due_now(&shown, now.checked_sub(Duration::from_secs(1)).unwrap()), Vec::<String>::new(), "not yet");
 }
