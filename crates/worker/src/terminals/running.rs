@@ -9,10 +9,12 @@ use process::Environment;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::model::TerminalId;
 use protocol::paths;
-use protocol::terminal::{TerminalBoundsReply, TerminalRowsReply, TerminalSize, TerminalTextReply, Typed};
+use protocol::terminal::{
+    MOST_KEPT_POINTS, TerminalBoundsReply, TerminalFitReply, TerminalRowsReply, TerminalSize, TerminalTextReply, Typed,
+};
 use protocol::worker::{
-    RunningTerminal, RunningTerminalsReply, TerminalBounds, TerminalInput, TerminalResize, TerminalRows, TerminalShown,
-    TerminalStart, TerminalText, TerminalTyped, TerminalWatch,
+    RunningTerminal, RunningTerminalsReply, TerminalBounds, TerminalFit, TerminalInput, TerminalResize, TerminalRows,
+    TerminalShown, TerminalStart, TerminalText, TerminalTyped, TerminalWatch,
 };
 use tokio::sync::{mpsc, oneshot, watch};
 
@@ -58,6 +60,8 @@ pub(super) struct Running {
 /// What the thread that keeps a terminal's screen is told to do, in order with what its program writes.
 pub(super) enum ToShell {
     Resize(TerminalSize),
+    /// A new size, keeping the cells the hub names.
+    Fit(TerminalFit, oneshot::Sender<Result<TerminalFitReply, ApiError>>),
     Typed(Typed),
     Show(oneshot::Sender<Result<TerminalShown, ApiError>>),
     /// What the hub asks of what it shows.
@@ -145,6 +149,23 @@ impl Terminals {
     pub(crate) fn typed(&self, typed: TerminalTyped) -> Result<(), ApiError> {
         let TerminalTyped { terminal, typed } = typed;
         self.tell(&terminal, ToShell::Typed(typed))
+    }
+
+    /// Gives the terminal a new size, after the sizes and everything pressed before it, and answers with where the
+    /// cells the hub named went, once it has.
+    pub(crate) fn fit(
+        &self,
+        fit: TerminalFit,
+    ) -> Result<impl Future<Output = Result<TerminalFitReply, ApiError>> + use<>, ApiError> {
+        allowed(fit.size)?;
+        if fit.keep.len() > MOST_KEPT_POINTS {
+            let why = format!("a fit keeps at most {MOST_KEPT_POINTS} cells, not {}", fit.keep.len());
+            return Err(ApiError::new(ErrorCode::InvalidRequest, why));
+        }
+        let terminal = fit.terminal.clone();
+        let (reply, fitted) = oneshot::channel();
+        self.tell(&terminal, ToShell::Fit(fit, reply))?;
+        Ok(async move { fitted.await.map_err(|_| not_running(&terminal))? })
     }
 
     pub(crate) fn resize(&self, resize: TerminalResize) -> Result<(), ApiError> {

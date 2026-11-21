@@ -330,6 +330,7 @@ fn local_only(request: &ClientRequest) -> bool {
         | R::TerminalInput(..)
         | R::TerminalTyped(..)
         | R::TerminalResize(..)
+        | R::TerminalFit(..)
         | R::TerminalClose(..)
         | R::Unknown => false,
     }

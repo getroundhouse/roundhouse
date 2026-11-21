@@ -10,9 +10,7 @@ use portable_pty::{MasterPty, PtyPair, PtySize, PtySystem, native_pty_system};
 use process::Environment;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::model::TerminalId;
-use protocol::terminal::{
-    TerminalBytes, TerminalExit, TerminalScreen, TerminalSize, TerminalUpdate, Typed, UpdateIndex,
-};
+use protocol::terminal::{TerminalBytes, TerminalExit, TerminalScreen, TerminalSize, TerminalUpdate, UpdateIndex};
 use protocol::worker::{TerminalShown, TerminalStart, WorkerFrame};
 use terminal_state::{Mirror, Size};
 use tokio::sync::{OwnedSemaphorePermit, Semaphore, mpsc, oneshot};
@@ -156,10 +154,10 @@ fn spawn(name: &str, run: impl FnOnce() + Send + 'static) -> std::io::Result<()>
 }
 
 /// What the thread that keeps a terminal's screen holds.
-struct Shell {
-    terminal: TerminalId,
-    size: TerminalSize,
-    master: Box<dyn MasterPty + Send>,
+pub(super) struct Shell {
+    pub(super) terminal: TerminalId,
+    pub(super) size: TerminalSize,
+    pub(super) master: Box<dyn MasterPty + Send>,
     /// The shell's, which leads a process group of its own.
     pid: Option<u32>,
     front: Front,
@@ -169,9 +167,9 @@ struct Shell {
     /// How long the shell asked to end, and the job it runs, have to end by themselves before they're killed.
     stop_grace: Duration,
     outbox: Arc<Outbox>,
-    watching: Watching,
+    pub(super) watching: Watching,
     /// To the thread that writes what the program reads: what's typed, and the copy's answers to what it asks.
-    to_program: std::sync::mpsc::Sender<Vec<u8>>,
+    pub(super) to_program: std::sync::mpsc::Sender<Vec<u8>>,
     /// The `at` the next update gets, which is how many it has sent.
     next: UpdateIndex,
     /// How the shell ended, once it has.
@@ -225,6 +223,9 @@ impl Shell {
                 biased;
                 told = told.recv(), if !untold => match told {
                     Some(ToShell::Resize(size)) => self.resize(mirror, size).await,
+                    Some(ToShell::Fit(fit, reply)) => {
+                        let _ = reply.send(self.fit(mirror, fit).await);
+                    }
                     Some(ToShell::Typed(typed)) => self.typed(mirror, &typed),
                     Some(ToShell::Show(reply)) => {
                         let _ = reply.send(self.shown(mirror));
@@ -299,37 +300,6 @@ impl Shell {
         self.send(TerminalUpdate::Output { output: TerminalBytes::new(output) }).await;
     }
 
-    /// Writes what the program reads for what was pressed, by the modes it set in what it wrote before.
-    fn typed(&self, mirror: &mut Mirror, typed: &Typed) {
-        match mirror.typed(typed) {
-            // Its writer has gone only once its program has, and the hub hears that next.
-            Ok(bytes) => drop(self.to_program.send(bytes)),
-            Err(e) => warn!("couldn't say what terminal {} reads for {typed:?}: {e}", self.terminal),
-        }
-    }
-
-    /// Gives the worker's copy the new size, and the PTY, which tells the program, and says so in order with the
-    /// output. The same size again changes nothing, and so does one either can't take, so the two never differ.
-    async fn resize(&mut self, mirror: &mut Mirror, size: TerminalSize) {
-        if size == self.size {
-            return;
-        }
-        if let Err(e) = mirror.resize(mirror_size(size)) {
-            warn!("couldn't resize the copy of terminal {}: {e}", self.terminal);
-            return;
-        }
-        if let Err(e) = self.master.resize(pty_size(size)) {
-            warn!("couldn't resize terminal {}: {e}", self.terminal);
-            if let Err(e) = mirror.resize(mirror_size(self.size)) {
-                warn!("couldn't put the copy of terminal {} back to its size: {e}", self.terminal);
-            }
-            return;
-        }
-        self.size = size;
-        self.watching.changed(mirror);
-        self.send(TerminalUpdate::Resized { size }).await;
-    }
-
     fn shown(&self, mirror: &Mirror) -> Result<TerminalShown, ApiError> {
         let snapshot = mirror.snapshot().map_err(|e| {
             ApiError::new(ErrorCode::Worker, format!("couldn't say what terminal {} shows: {e}", self.terminal))
@@ -338,7 +308,7 @@ impl Shell {
         Ok(TerminalShown { screen, next: self.next })
     }
 
-    async fn send(&mut self, update: TerminalUpdate) {
+    pub(super) async fn send(&mut self, update: TerminalUpdate) {
         let at = self.next;
         self.next = at.next();
         self.outbox.send(WorkerFrame::Terminal { terminal: self.terminal.clone(), at, update }).await;
@@ -386,10 +356,10 @@ async fn room_at(due: Option<Instant>, room: Arc<Semaphore>) -> Option<OwnedSema
     room.acquire_owned().await.ok()
 }
 
-fn pty_size(size: TerminalSize) -> PtySize {
+pub(super) fn pty_size(size: TerminalSize) -> PtySize {
     PtySize { rows: size.rows, cols: size.cols, pixel_width: 0, pixel_height: 0 }
 }
 
-fn mirror_size(size: TerminalSize) -> Size {
+pub(super) fn mirror_size(size: TerminalSize) -> Size {
     Size { cols: size.cols, rows: size.rows }
 }

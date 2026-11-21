@@ -6,8 +6,8 @@ use serde::{Deserialize, Serialize};
 use super::{Reply, Request, WorkerRequest, WorkerResponse};
 use crate::model::TerminalId;
 use crate::terminal::{
-    Bounds, Numbering, RowNumber, TerminalBoundsReply, TerminalBytes, TerminalPoint, TerminalRange, TerminalRowsReply,
-    TerminalScreen, TerminalSize, TerminalTextReply, Typed, UpdateIndex,
+    Bounds, Numbering, RowNumber, TerminalBoundsReply, TerminalBytes, TerminalFitReply, TerminalPoint, TerminalRange,
+    TerminalRowsReply, TerminalScreen, TerminalSize, TerminalTextReply, Typed, UpdateIndex,
 };
 
 /// Starts a shell in `cwd`, in a terminal of `size`. Starting one that runs already changes nothing, so a hub can send
@@ -63,6 +63,33 @@ impl Request for TerminalTyped {
 
     fn into_request(self) -> WorkerRequest {
         WorkerRequest::TerminalTyped(self)
+    }
+}
+
+/// Gives the terminal a new size, keeping the cells in `keep`, which are in `numbering`, as
+/// [`TerminalFitReply`](crate::terminal::TerminalFitReply) says. A worker takes it in the order it was sent, with
+/// what's pressed and the sizes before it. Sent again, it sets the same again, and starts no new numbering.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct TerminalFit {
+    pub terminal: TerminalId,
+    pub size: TerminalSize,
+    pub numbering: Numbering,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub keep: Vec<TerminalPoint>,
+}
+
+impl Request for TerminalFit {
+    type Reply = TerminalFitReply;
+
+    fn into_request(self) -> WorkerRequest {
+        WorkerRequest::TerminalFit(self)
+    }
+}
+
+impl Reply for TerminalFitReply {
+    fn read(response: WorkerResponse) -> Result<Self, WorkerResponse> {
+        let WorkerResponse::TerminalFit(fit) = response else { return Err(response) };
+        Ok(fit)
     }
 }
 

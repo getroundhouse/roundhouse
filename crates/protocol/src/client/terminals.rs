@@ -6,8 +6,8 @@ use serde::{Deserialize, Serialize};
 use super::{ClientRequest, ClientResponse, Reply, Request};
 use crate::model::{Terminal, TerminalId, WorkspaceId};
 use crate::terminal::{
-    Bounds, Numbering, RowNumber, TerminalBoundsReply, TerminalBytes, TerminalPoint, TerminalRange, TerminalRowsReply,
-    TerminalSize, TerminalTextReply, Typed,
+    Bounds, Numbering, RowNumber, TerminalBoundsReply, TerminalBytes, TerminalFitReply, TerminalPoint, TerminalRange,
+    TerminalRowsReply, TerminalSize, TerminalTextReply, Typed,
 };
 
 /// Opens a terminal in the workspace: a shell in its worktree, of `size`, which the workspace's worker runs, starting
@@ -187,6 +187,35 @@ impl Request for TerminalTyped {
 
     fn into_request(self) -> ClientRequest {
         ClientRequest::TerminalTyped(self)
+    }
+}
+
+/// Gives the terminal a new size, keeping the cells in `keep`, which are in `numbering`, as [`TerminalFitReply`] says.
+/// Every client watching is sent what it shows at that size. A hub takes it in the order one connection sent it, with
+/// what's pressed, which the worker takes in the same order, so a key pressed after it reaches a program that has it.
+/// Sent again, it sets the same again, and starts no new numbering. Refused with more than
+/// [`MOST_KEPT_POINTS`](crate::terminal::MOST_KEPT_POINTS) cells to keep.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct TerminalFit {
+    pub id: TerminalId,
+    pub size: TerminalSize,
+    pub numbering: Numbering,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub keep: Vec<TerminalPoint>,
+}
+
+impl Request for TerminalFit {
+    type Reply = TerminalFitReply;
+
+    fn into_request(self) -> ClientRequest {
+        ClientRequest::TerminalFit(self)
+    }
+}
+
+impl Reply for TerminalFitReply {
+    fn read(response: ClientResponse) -> Result<Self, ClientResponse> {
+        let ClientResponse::TerminalFit(fit) = response else { return Err(response) };
+        Ok(fit)
     }
 }
 

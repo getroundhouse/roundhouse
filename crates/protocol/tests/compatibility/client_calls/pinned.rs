@@ -66,6 +66,7 @@ pinned! {
     ],
     "terminal_typed.rs" => [TerminalTyped(_)],
     "terminal_text.rs" => [TerminalBounds(_), TerminalText(_)],
+    "terminal_fit.rs" => [TerminalFit(_)],
 }
 
 /// A request's `method`, or a reply's `result`, as serde's `snake_case` makes it from the variant's name.

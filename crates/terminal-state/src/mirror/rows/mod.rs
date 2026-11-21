@@ -5,9 +5,11 @@
 mod tests;
 
 mod counting;
+mod fitting;
 mod reading;
 mod showing;
 mod text;
 
 pub(super) use counting::Counting;
+pub use fitting::Tracked;
 pub(super) use showing::Picturing;

@@ -60,7 +60,6 @@ where
     // `None` until the hub has said hello, and then whether it asked the worker to keep running without it.
     let mut keep_running = None;
     let mut asked_to_stop = false;
-    let terminals = &worker.state.terminals;
     let mut reader = BufReader::new(reader);
     let mut line = Vec::new();
     while let Some(line) = next_line(&mut reader, &mut line).await {
@@ -97,10 +96,8 @@ where
                 let answer = worker.state.credentials.set(credential).await;
                 let _ = frames.send(reply(answer.map(|()| WorkerResponse::Ok))).await;
             }
-            Ok(WorkerRequest::TerminalInput(typed)) => handed(&frames, reply, terminals.input(typed)).await,
-            Ok(WorkerRequest::TerminalTyped(typed)) => handed(&frames, reply, terminals.typed(typed)).await,
-            Ok(WorkerRequest::TerminalResize(resize)) => handed(&frames, reply, terminals.resize(resize)).await,
             request => {
+                let Some(request) = hand_to_terminal(worker, &frames, reply, request).await else { continue };
                 // Each call runs on a task of its own, so a stop read after this could otherwise be handled before the
                 // setup it's for has begun.
                 if matches!(request, Ok(WorkerRequest::SetupWorkspace(_))) {
@@ -118,14 +115,35 @@ where
     Closing { ended, frames, writer }
 }
 
-/// Answers what was handed to a terminal as it was read, as what's typed and new sizes are, so they reach it in the
-/// order they were sent.
-async fn handed(
+/// Hands what's typed, new sizes and fits to their terminal as they're read, so they reach it in the order they were
+/// sent, and answers once it has them, or for a fit, once it has fitted, on a task of its own, so other calls don't
+/// wait for that. Gives back any other request.
+async fn hand_to_terminal(
+    worker: &Worker,
     frames: &mpsc::Sender<Outgoing>,
-    reply: impl FnOnce(Result<WorkerResponse, ApiError>) -> Outgoing,
-    handed: Result<(), ApiError>,
-) {
+    reply: impl FnOnce(Result<WorkerResponse, ApiError>) -> Outgoing + Send + 'static,
+    request: Result<WorkerRequest, serde_json::Error>,
+) -> Option<Result<WorkerRequest, serde_json::Error>> {
+    let terminals = &worker.state.terminals;
+    let handed = match request {
+        Ok(WorkerRequest::TerminalInput(typed)) => terminals.input(typed),
+        Ok(WorkerRequest::TerminalTyped(typed)) => terminals.typed(typed),
+        Ok(WorkerRequest::TerminalResize(resize)) => terminals.resize(resize),
+        Ok(WorkerRequest::TerminalFit(fit)) => {
+            let (fitted, frames) = (terminals.fit(fit), frames.clone());
+            tokio::spawn(async move {
+                let answer = match fitted {
+                    Ok(fitted) => fitted.await.map(WorkerResponse::TerminalFit),
+                    Err(refused) => Err(refused),
+                };
+                let _ = frames.send(reply(answer)).await;
+            });
+            return None;
+        }
+        request => return Some(request),
+    };
     let _ = frames.send(reply(handed.map(|()| WorkerResponse::Ok))).await;
+    None
 }
 
 /// Answers the hub's hello, and once the worker speaks the hub's version, sends it what's on its way and says whether

@@ -36,6 +36,7 @@ pub(in crate::server) async fn in_order(hub: &Hub, request: Result<ClientRequest
         Ok(ClientRequest::TerminalInput(typed)) => hub.terminal_input(typed).await,
         Ok(ClientRequest::TerminalTyped(typed)) => hub.terminal_typed(typed).await,
         Ok(ClientRequest::TerminalResize(resize)) => hub.terminal_resize(resize).await,
+        Ok(ClientRequest::TerminalFit(fit)) => hub.terminal_fit(fit).await,
         request => return Answering::OnATask(request),
     };
     Answering::Queued(queued.unwrap_or_else(|refused| Box::pin(async move { Err(refused) })))

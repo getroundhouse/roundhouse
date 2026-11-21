@@ -148,6 +148,7 @@ pub enum ClientRequest {
     TerminalInput(terminals::TerminalInput),
     TerminalTyped(terminals::TerminalTyped),
     TerminalResize(terminals::TerminalResize),
+    TerminalFit(terminals::TerminalFit),
     TerminalClose(terminals::TerminalClose),
     /// Any request this build doesn't know, from a client newer than it. A hub answers with
     /// [`super::ErrorCode::Unsupported`] and carries on.

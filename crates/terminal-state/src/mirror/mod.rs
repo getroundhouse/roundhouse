@@ -17,6 +17,7 @@ mod screen;
 mod selecting;
 mod typing;
 pub use compressing::QUIET_BEFORE_COMPRESSING;
+pub use rows::Tracked;
 #[cfg(test)]
 use screen::{HISTORY_BYTES, HISTORY_LINES, TO_SHELL_SCREEN, screen};
 pub use screen::{Mirror, MirrorError, Size};

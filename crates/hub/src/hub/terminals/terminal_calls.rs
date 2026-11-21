@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use protocol::client::terminals::{TerminalClose, TerminalInput, TerminalResize, TerminalTyped};
+use protocol::client::terminals::{TerminalClose, TerminalFit, TerminalInput, TerminalResize, TerminalTyped};
 use protocol::client::{ApiError, ClientResponse, ErrorCode, HubNotice};
 use protocol::model::{RecordKey, Terminal, TerminalId, WorkspaceId};
 use protocol::terminal::{TerminalUpdate, UpdateIndex};
@@ -14,6 +14,7 @@ use crate::hub::Hub;
 use crate::store::Store;
 use crate::worker_link::WorkerLink;
 
+use super::reading::within_a_read;
 use super::{Numbered, Open, Queued, Stage};
 
 impl Hub {
@@ -40,6 +41,15 @@ impl Hub {
     /// A new size, sent on to the terminal's worker in order with what's typed and the sizes after it.
     pub(crate) async fn terminal_resize(&self, resize: TerminalResize) -> Result<Queued, ApiError> {
         self.pass_on(&resize.id, worker::TerminalResize { terminal: resize.id.clone(), size: resize.size }).await
+    }
+
+    /// A new size, sent on to the terminal's worker in order with what's pressed, answered with where the cells the
+    /// client named went, once the worker says, which it's given as long as a read of the terminal.
+    pub(crate) async fn terminal_fit(&self, fit: TerminalFit) -> Result<Queued, ApiError> {
+        let TerminalFit { id, size, numbering, keep } = fit;
+        let (_, link) = self.open_terminal(&id)?;
+        let replied = link.send(worker::TerminalFit { terminal: id.clone(), size, numbering, keep }).await?;
+        Ok(Box::pin(async move { within_a_read(&id, replied).await.map(ClientResponse::TerminalFit) }))
     }
 
     /// Sends `request` to the worker of open terminal `id`, after what was sent before it, and answers once the worker

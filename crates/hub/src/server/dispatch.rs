@@ -31,7 +31,7 @@ pub(super) async fn handle(
         R::TerminalRows(rows) => C::TerminalRows(hub.terminal_rows(rows).await?),
         R::TerminalBounds(asked) => C::TerminalBounds(hub.terminal_bounds(asked).await?),
         R::TerminalText(asked) => C::TerminalText(hub.terminal_text(asked).await?),
-        R::TerminalInput(_) | R::TerminalTyped(_) | R::TerminalResize(_) => {
+        R::TerminalInput(_) | R::TerminalTyped(_) | R::TerminalResize(_) | R::TerminalFit(_) => {
             unreachable!("sent on as they're read, by terminals::in_order")
         }
         R::TerminalClose(close) => C::Terminal(hub.terminal_close(close).await?),
