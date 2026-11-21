@@ -5,9 +5,9 @@ use std::time::Instant;
 
 use parking_lot::Mutex;
 use protocol::model::TerminalId;
+use protocol::terminal::KeyPress;
 use protocol::terminal::TerminalUpdate;
 use terminal_state::drawn::{Frame, Rgb};
-use terminal_state::keys::KeyPress;
 use terminal_state::{Pointer, SelectBy, Size};
 
 use super::copy::{TerminalCopy, ToHub};

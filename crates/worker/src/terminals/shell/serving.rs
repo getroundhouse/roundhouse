@@ -10,7 +10,9 @@ use portable_pty::{MasterPty, PtyPair, PtySize, PtySystem, native_pty_system};
 use process::Environment;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::model::TerminalId;
-use protocol::terminal::{TerminalBytes, TerminalExit, TerminalScreen, TerminalSize, TerminalUpdate, UpdateIndex};
+use protocol::terminal::{
+    TerminalBytes, TerminalExit, TerminalScreen, TerminalSize, TerminalUpdate, Typed, UpdateIndex,
+};
 use protocol::worker::{TerminalShown, TerminalStart, WorkerFrame};
 use terminal_state::{Mirror, Size};
 use tokio::sync::{OwnedSemaphorePermit, Semaphore, mpsc, oneshot};
@@ -40,16 +42,15 @@ pub(in crate::terminals) struct Serving {
     read: mpsc::Receiver<Vec<u8>>,
     told: mpsc::UnboundedReceiver<ToShell>,
     exit: oneshot::Receiver<TerminalExit>,
-    answers: std::sync::mpsc::Sender<Vec<u8>>,
     ending: Ending,
 }
 
 impl Serving {
     /// Starts the thread that keeps what the terminal shows, or ends the shell if it can't.
     pub(in crate::terminals) fn serve(self) -> Result<(), ApiError> {
-        let Self { shell, runtime, read, told, exit, answers, ending } = self;
+        let Self { shell, runtime, read, told, exit, ending } = self;
         let pid = shell.pid;
-        let served = spawn("terminal", move || runtime.block_on(shell.serve(read, told, exit, answers, ending)));
+        let served = spawn("terminal", move || runtime.block_on(shell.serve(read, told, exit, ending)));
         served.map_err(|e| {
             if let Some(pid) = pid {
                 process::signal_group(pid, process::Signal::Kill);
@@ -125,6 +126,7 @@ pub(in crate::terminals) fn start(
         stop_grace,
         outbox,
         watching,
+        to_program: typed.clone(),
         next,
         exit: None,
     };
@@ -136,7 +138,7 @@ pub(in crate::terminals) fn start(
         to_shell,
         ended: ending.ended.subscribe(),
     };
-    Ok((running, Serving { shell, runtime, read, told, exit, answers: typed, ending }))
+    Ok((running, Serving { shell, runtime, read, told, exit, ending }))
 }
 
 /// A PTY of `size`, from `system`, opened while no other thread is opening one, as [`OPENING_A_PTY`] says.
@@ -168,6 +170,8 @@ struct Shell {
     stop_grace: Duration,
     outbox: Arc<Outbox>,
     watching: Watching,
+    /// To the thread that writes what the program reads: what's typed, and the copy's answers to what it asks.
+    to_program: std::sync::mpsc::Sender<Vec<u8>>,
     /// The `at` the next update gets, which is how many it has sent.
     next: UpdateIndex,
     /// How the shell ended, once it has.
@@ -181,10 +185,10 @@ impl Shell {
         mut read: mpsc::Receiver<Vec<u8>>,
         mut told: mpsc::UnboundedReceiver<ToShell>,
         mut exit: oneshot::Receiver<TerminalExit>,
-        answers: std::sync::mpsc::Sender<Vec<u8>>,
         ending: Ending,
     ) {
         // Made here, since it can't be sent between threads. It answers what the program asks of its terminal.
+        let answers = self.to_program.clone();
         let mirror = Mirror::answering(mirror_size(self.size), move |answer| {
             let _ = answers.send(answer.to_vec());
         });
@@ -221,6 +225,7 @@ impl Shell {
                 biased;
                 told = told.recv(), if !untold => match told {
                     Some(ToShell::Resize(size)) => self.resize(mirror, size).await,
+                    Some(ToShell::Typed(typed)) => self.typed(mirror, &typed),
                     Some(ToShell::Show(reply)) => {
                         let _ = reply.send(self.shown(mirror));
                     }
@@ -295,6 +300,15 @@ impl Shell {
         mirror.write(&output);
         self.watching.changed(mirror);
         self.send(TerminalUpdate::Output { output: TerminalBytes::new(output) }).await;
+    }
+
+    /// Writes what the program reads for what was pressed, by the modes it set in what it wrote before.
+    fn typed(&self, mirror: &mut Mirror, typed: &Typed) {
+        match mirror.typed(typed) {
+            // Its writer has gone only once its program has, and the hub hears that next.
+            Ok(bytes) => drop(self.to_program.send(bytes)),
+            Err(e) => warn!("couldn't say what terminal {} reads for {typed:?}: {e}", self.terminal),
+        }
     }
 
     /// Gives the worker's copy the new size, and the PTY, which tells the program, and says so in order with the

@@ -6,9 +6,9 @@
 use std::sync::Arc;
 use std::time::Instant;
 
+use protocol::terminal::KeyPress;
 use protocol::terminal::{TerminalSize, TerminalUpdate};
 use terminal_state::drawn::{Frame, Rgb};
-use terminal_state::keys::KeyPress;
 use terminal_state::{Mirror, MirrorError, Pointer, SelectBy, Size};
 
 /// What the terminal shows, as far as the client has heard.

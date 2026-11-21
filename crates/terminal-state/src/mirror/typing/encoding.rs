@@ -5,8 +5,8 @@ use libghostty_vt::mode::Mode;
 use libghostty_vt::screen::Screen;
 use libghostty_vt::terminal::ScrollViewport;
 
-use crate::keys::{Key, KeyPress, Mods};
 use crate::{Mirror, MirrorError};
+use protocol::terminal::{Key, KeyPress, Mods, Typed};
 
 /// What a mirror keeps to encode keys, made the first time it encodes one, since the worker's never does.
 pub(in crate::mirror) struct Typing {
@@ -56,14 +56,41 @@ impl Mirror {
         Ok(out)
     }
 
-    /// Turns the wheel by `lines`, up for fewer than none. On the shell's screen it scrolls through the history. A
-    /// full-screen program's screen has none, so as terminal apps do, it's sent as the arrow keys instead, which is
-    /// what's returned, for the program to scroll itself. A program that asked for the mouse is sent nothing, until the
-    /// mouse is sent to programs, since it would take arrow keys for keys typed, as tmux does, which brings back old
-    /// commands for a Return to run.
+    /// What the program reads for what was pressed, as [`Typed`] says, for the worker, whose copy the wheel never
+    /// scrolls, since each client scrolls its own.
+    pub fn typed(&mut self, typed: &Typed) -> Result<Vec<u8>, MirrorError> {
+        match typed {
+            Typed::Key(press) => self.key(press),
+            Typed::Paste { text } => self.paste(text),
+            // At most a screen's worth, since each line is a key, and a client can ask for any number.
+            Typed::Wheel { lines } => {
+                let most = i32::from(self.terminal.rows()?);
+                let lines = isize::try_from((*lines).clamp(-most, most)).unwrap_or_default();
+                Ok(self.wheel_keys(lines)?.unwrap_or_default())
+            }
+            Typed::Text { text } => Ok(text.clone().into_bytes()),
+            Typed::Unknown => Ok(Vec::new()),
+        }
+    }
+
+    /// Turns the wheel by `lines`, up for fewer than none. On the shell's screen it scrolls through the history, and
+    /// otherwise returns what the program reads for it.
     pub fn wheel(&mut self, lines: isize) -> Result<Vec<u8>, MirrorError> {
+        let keys = self.wheel_keys(lines)?;
+        if keys.is_none() {
+            self.terminal.scroll_viewport(ScrollViewport::Delta(lines));
+        }
+        Ok(keys.unwrap_or_default())
+    }
+
+    /// What the program reads for a turn of the wheel by `lines`, or `None` on the shell's screen, where it scrolls
+    /// the history. A full-screen program's screen has none, so as terminal apps do, it's sent as the arrow keys
+    /// instead, for the program to scroll itself. A program that asked for the mouse is sent nothing, until the mouse
+    /// is sent to programs, since it would take arrow keys for keys typed, as tmux does, which brings back old commands
+    /// for a Return to run.
+    fn wheel_keys(&mut self, lines: isize) -> Result<Option<Vec<u8>>, MirrorError> {
         if self.terminal.is_mouse_tracking()? {
-            return Ok(Vec::new());
+            return Ok(Some(Vec::new()));
         }
         if self.terminal.active_screen()? == Screen::Alternate && self.terminal.mode(Mode::ALT_SCROLL)? {
             let arrow = KeyPress {
@@ -72,10 +99,9 @@ impl Mirror {
                 text: None,
                 consumed: Mods::default(),
             };
-            return Ok(self.key(&arrow)?.repeat(lines.unsigned_abs()));
+            return Ok(Some(self.key(&arrow)?.repeat(lines.unsigned_abs())));
         }
-        self.terminal.scroll_viewport(ScrollViewport::Delta(lines));
-        Ok(Vec::new())
+        Ok(None)
     }
 
     /// Goes back to the screen from wherever the history is scrolled to, as typing does.
@@ -113,6 +139,7 @@ fn ghostty_key(key: Key) -> (key::Key, char) {
         Key::Insert => key::Key::Insert,
         Key::Delete => key::Key::Delete,
         Key::F(number) => function_key(number),
+        Key::Unknown => key::Key::Unidentified,
     };
     (named, '\0')
 }

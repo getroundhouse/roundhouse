@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use protocol::client::terminals::{TerminalClose, TerminalInput, TerminalResize};
+use protocol::client::terminals::{TerminalClose, TerminalInput, TerminalResize, TerminalTyped};
 use protocol::client::{ApiError, ClientResponse, ErrorCode, HubNotice};
 use protocol::model::{RecordKey, Terminal, TerminalId, WorkspaceId};
 use protocol::terminal::{TerminalUpdate, UpdateIndex};
@@ -29,6 +29,12 @@ impl Hub {
     /// What's typed, sent on to the terminal's worker before anything typed after it.
     pub(crate) async fn terminal_input(&self, typed: TerminalInput) -> Result<Queued, ApiError> {
         self.pass_on(&typed.id, worker::TerminalInput { terminal: typed.id.clone(), input: typed.input }).await
+    }
+
+    /// What's pressed, sent on to the terminal's worker before anything pressed after it, for the worker to turn into
+    /// what the program reads.
+    pub(crate) async fn terminal_typed(&self, typed: TerminalTyped) -> Result<Queued, ApiError> {
+        self.pass_on(&typed.id, worker::TerminalTyped { terminal: typed.id.clone(), typed: typed.typed }).await
     }
 
     /// A new size, sent on to the terminal's worker in order with what's typed and the sizes after it.

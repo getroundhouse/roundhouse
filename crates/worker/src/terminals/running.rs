@@ -9,10 +9,10 @@ use process::Environment;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::model::TerminalId;
 use protocol::paths;
-use protocol::terminal::{TerminalRowsReply, TerminalSize};
+use protocol::terminal::{TerminalRowsReply, TerminalSize, Typed};
 use protocol::worker::{
     RunningTerminal, RunningTerminalsReply, TerminalInput, TerminalResize, TerminalRows, TerminalShown, TerminalStart,
-    TerminalWatch,
+    TerminalTyped, TerminalWatch,
 };
 use tokio::sync::{mpsc, oneshot, watch};
 
@@ -58,6 +58,7 @@ pub(super) struct Running {
 /// What the thread that keeps a terminal's screen is told to do, in order with what its program writes.
 pub(super) enum ToShell {
     Resize(TerminalSize),
+    Typed(Typed),
     Show(oneshot::Sender<Result<TerminalShown, ApiError>>),
     Rows(TerminalRows, oneshot::Sender<Result<TerminalRowsReply, ApiError>>),
     /// Watched by the hub on that connection from now, or by none.
@@ -137,6 +138,12 @@ impl Terminals {
         // Its writer has gone only once its program has, and the hub hears that next.
         let _ = running.typed.send(input.into_vec());
         Ok(())
+    }
+
+    /// Writes what the program reads for what was pressed, after the sizes and everything pressed before it.
+    pub(crate) fn typed(&self, typed: TerminalTyped) -> Result<(), ApiError> {
+        let TerminalTyped { terminal, typed } = typed;
+        self.tell(&terminal, ToShell::Typed(typed))
     }
 
     pub(crate) fn resize(&self, resize: TerminalResize) -> Result<(), ApiError> {

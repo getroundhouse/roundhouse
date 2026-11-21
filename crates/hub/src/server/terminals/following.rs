@@ -34,6 +34,7 @@ pub(in crate::server) enum Answering {
 pub(in crate::server) async fn in_order(hub: &Hub, request: Result<ClientRequest, serde_json::Error>) -> Answering {
     let queued = match request {
         Ok(ClientRequest::TerminalInput(typed)) => hub.terminal_input(typed).await,
+        Ok(ClientRequest::TerminalTyped(typed)) => hub.terminal_typed(typed).await,
         Ok(ClientRequest::TerminalResize(resize)) => hub.terminal_resize(resize).await,
         request => return Answering::OnATask(request),
     };

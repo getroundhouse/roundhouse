@@ -5,10 +5,10 @@ use std::fmt::Write as _;
 use std::sync::{Arc, OnceLock, Weak};
 
 use parking_lot::Mutex;
-use protocol::client::terminals::{TerminalClose, TerminalInput, TerminalResize};
+use protocol::client::terminals::{self as client, TerminalClose, TerminalInput, TerminalResize};
 use protocol::client::{ApiError, ClientRequest, ErrorCode, HubFrame, ReplyOutcome};
-use protocol::terminal::{TerminalExit, TerminalSize, TerminalUpdate, UpdateIndex};
-use protocol::worker::{WorkerRequest, WorkerResponse};
+use protocol::terminal::{TerminalExit, TerminalSize, TerminalUpdate, Typed, UpdateIndex};
+use protocol::worker::{TerminalTyped, WorkerRequest, WorkerResponse};
 use tokio::time::timeout;
 
 use super::stand_in::{Client, Connected, WAIT, exited, joined, open_on, output, screen, shown};
@@ -132,9 +132,9 @@ async fn a_worker_that_cant_say_what_a_terminal_shows_is_asked_again() {
     assert_eq!(hub.records_list().await.unwrap().terminals.len(), 1);
 }
 
-/// Typing in a burst sends a request for each key, which the connection reads in order, and has to pass on in order,
-/// along with new sizes, so the last a client gives is the one the terminal keeps, though each other request runs on a
-/// task of its own. On several threads, where those tasks run in any order.
+/// Typing in a burst sends a request for each key, as bytes or as what was pressed, which the connection reads in
+/// order, and has to pass on in order, along with new sizes, so the last a client gives is the one the terminal keeps,
+/// though each other request runs on a task of its own. On several threads, where those tasks run in any order.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn whats_typed_and_new_sizes_reach_the_worker_in_the_order_they_were_sent() {
     let dir = tempfile::tempdir().unwrap();
@@ -144,6 +144,8 @@ async fn whats_typed_and_new_sizes_reach_the_worker_in_the_order_they_were_sent(
     let link = WorkerLink::answering(move |request| {
         if let WorkerRequest::TerminalInput(input) = &request {
             reaching.lock().push_str(std::str::from_utf8(input.input.as_slice()).unwrap());
+        } else if let WorkerRequest::TerminalTyped(TerminalTyped { typed: Typed::Text { text }, .. }) = &request {
+            reaching.lock().push_str(text);
         } else if let WorkerRequest::TerminalResize(resize) = &request {
             write!(reaching.lock(), "{}x,", resize.size.cols).unwrap();
         }
@@ -158,6 +160,10 @@ async fn whats_typed_and_new_sizes_reach_the_worker_in_the_order_they_were_sent(
             write!(sent, "{}x,", key + 1).unwrap();
             let size = TerminalSize { cols: key + 1, rows: 24 };
             ClientRequest::TerminalResize(TerminalResize { id: "t".into(), size })
+        } else if key % 3 == 0 {
+            write!(sent, "{key},").unwrap();
+            let typed = Typed::Text { text: format!("{key},") };
+            ClientRequest::TerminalTyped(client::TerminalTyped { id: "t".into(), typed })
         } else {
             write!(sent, "{key},").unwrap();
             ClientRequest::TerminalInput(TerminalInput { id: "t".into(), input: format!("{key},").as_bytes().into() })

@@ -1,5 +1,5 @@
-use crate::keys::{Key, KeyPress, Mods};
 use crate::{Mirror, Size};
+use protocol::terminal::{Key, KeyPress, Mods, Typed};
 
 fn mirror_of(written: &[u8]) -> Mirror {
     let mut mirror = Mirror::new(Size { cols: 20, rows: 4 }).unwrap();
@@ -75,4 +75,20 @@ fn the_wheel_over_a_program_that_asked_for_the_mouse_sends_nothing() {
     let mut mirror = mirror_of(b"\x1b[?1049h\x1b[?1000h");
 
     assert_eq!(mirror.wheel(-1).unwrap(), b"");
+}
+
+/// The worker's copy is never scrolled, since each client scrolls its own, so where it says the cursor is stays put. A
+/// turn is held to a screen's worth, since each line is a key, and a key a newer client knows is sent as its text.
+#[test]
+fn what_the_worker_is_sent_never_scrolls_its_copy() {
+    let mut shell = mirror_of(&b"line\r\n".repeat(10));
+    let cursor = shell.shown().unwrap().cursor;
+    let wheel = shell.typed(&Typed::Wheel { lines: -3 }).unwrap();
+    let mut program = mirror_of(b"\x1b[?1049h");
+    let unknown = Typed::Key(KeyPress { key: Key::Unknown, mods: NONE, text: Some("x".into()), consumed: NONE });
+
+    assert_eq!((wheel, shell.shown().unwrap().cursor), (Vec::new(), cursor));
+    assert!(cursor.is_some());
+    assert_eq!(program.typed(&Typed::Wheel { lines: i32::MAX }).unwrap(), b"\x1b[B".repeat(4));
+    assert_eq!(program.typed(&unknown).unwrap(), b"x");
 }

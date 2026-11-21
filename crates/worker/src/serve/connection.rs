@@ -60,6 +60,7 @@ where
     // `None` until the hub has said hello, and then whether it asked the worker to keep running without it.
     let mut keep_running = None;
     let mut asked_to_stop = false;
+    let terminals = &worker.state.terminals;
     let mut reader = BufReader::new(reader);
     let mut line = Vec::new();
     while let Some(line) = next_line(&mut reader, &mut line).await {
@@ -96,14 +97,9 @@ where
                 let answer = worker.state.credentials.set(credential).await;
                 let _ = frames.send(reply(answer.map(|()| WorkerResponse::Ok))).await;
             }
-            Ok(WorkerRequest::TerminalInput(typed)) => {
-                let typed = worker.state.terminals.input(typed);
-                let _ = frames.send(reply(typed.map(|()| WorkerResponse::Ok))).await;
-            }
-            Ok(WorkerRequest::TerminalResize(resize)) => {
-                let resized = worker.state.terminals.resize(resize);
-                let _ = frames.send(reply(resized.map(|()| WorkerResponse::Ok))).await;
-            }
+            Ok(WorkerRequest::TerminalInput(typed)) => handed(&frames, reply, terminals.input(typed)).await,
+            Ok(WorkerRequest::TerminalTyped(typed)) => handed(&frames, reply, terminals.typed(typed)).await,
+            Ok(WorkerRequest::TerminalResize(resize)) => handed(&frames, reply, terminals.resize(resize)).await,
             request => {
                 // Each call runs on a task of its own, so a stop read after this could otherwise be handled before the
                 // setup it's for has begun.
@@ -120,6 +116,16 @@ where
     }
     let ended = if asked_to_stop || keep_running == Some(false) { Ended::Stop } else { Ended::Lost };
     Closing { ended, frames, writer }
+}
+
+/// Answers what was handed to a terminal as it was read, as what's typed and new sizes are, so they reach it in the
+/// order they were sent.
+async fn handed(
+    frames: &mpsc::Sender<Outgoing>,
+    reply: impl FnOnce(Result<WorkerResponse, ApiError>) -> Outgoing,
+    handed: Result<(), ApiError>,
+) {
+    let _ = frames.send(reply(handed.map(|()| WorkerResponse::Ok))).await;
 }
 
 /// Answers the hub's hello, and once the worker speaks the hub's version, sends it what's on its way and says whether

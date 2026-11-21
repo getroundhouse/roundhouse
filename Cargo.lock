@@ -9386,6 +9386,7 @@ dependencies = [
  "client-core",
  "gpui-kit",
  "look",
+ "protocol",
  "terminal-state",
 ]
 

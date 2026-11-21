@@ -3,3 +3,4 @@
 mod hub;
 mod pictures;
 mod running;
+mod typing;

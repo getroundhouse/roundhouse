@@ -1,6 +1,6 @@
+use protocol::terminal::{Key, KeyPress, Mods};
 use protocol::terminal::{TerminalBytes, TerminalExit, TerminalScreen, TerminalSize, TerminalUpdate};
 use terminal_state::drawn::{Frame, Rgb};
-use terminal_state::keys::{Key, KeyPress, Mods};
 use terminal_state::{Pointer, SelectBy, Size};
 
 use super::terminal_copy::*;
