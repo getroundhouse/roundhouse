@@ -48,11 +48,16 @@ fn a_draft_taken_from_a_record_isnt_from_elsewhere_until_another_is_made_there()
     assert!(drafts.from_elsewhere(&KeptDraft::composer(&told("a", 5, "typed elsewhere again"))));
 }
 
+/// What's typed here goes on and replaces a draft made elsewhere while it's on its way, and the composer shows the
+/// newest of it until the hub has it, as when the chat is shown again first. Once nothing is on its way, a newer record
+/// is taken, and the composer shows it.
 #[test]
 fn nothing_from_elsewhere_is_taken_while_a_draft_from_here_is_on_its_way() {
     let dir = tempfile::tempdir().unwrap();
     let (gone, _) = hub(&dir.path().join("gone.sock"), Answer::HangsUp);
     let drafts = Drafts::start(&gone);
+    assert_eq!(drafts.take_composer(&told("b", 2, "typed elsewhere")), "typed elsewhere", "nothing was typed here");
+    drafts.typed(DraftChange::Composer(chat("a"), DraftToKeep::new("typed")));
     drafts.typed(DraftChange::Composer(chat("a"), DraftToKeep::new("typed as the hub went")));
     drafts.flushed().recv_timeout(TIMEOUT).unwrap();
 
@@ -60,6 +65,8 @@ fn nothing_from_elsewhere_is_taken_while_a_draft_from_here_is_on_its_way() {
         !drafts.from_elsewhere(&KeptDraft::composer(&told("a", 100, "typed elsewhere"))),
         "what's typed here goes on and replaces it"
     );
+    let shown = drafts.take_composer(&told("a", 3, "typed before"));
+    assert_eq!(shown, "typed as the hub went", "the newest handed over, while there's no hub");
     assert!(drafts.caught_up().try_recv().is_err());
     drafts.reconnect(&keeping_hub(&dir.path().join("hub.sock"), 5));
 
@@ -70,4 +77,9 @@ fn nothing_from_elsewhere_is_taken_while_a_draft_from_here_is_on_its_way() {
         "a newer record, once nothing is on its way"
     );
     assert!(!drafts.from_elsewhere(&KeptDraft::composer(&told("a", 5, "typed as the hub went"))));
+    assert_eq!(
+        drafts.take_composer(&told("a", 100, "typed elsewhere")),
+        "typed elsewhere",
+        "and the composer shows it"
+    );
 }

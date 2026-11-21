@@ -1,11 +1,12 @@
 //! Answering a proposal in its tab: Choose on each option's card picks it for its question, and the bar at the tab's
 //! foot, like the composer, takes a note and sends the answer, once one option is chosen for each question, or asks
-//! for another round without choosing, once the note says what to change. The app sends it, as
-//! [`ProposalEvent::Send`] asks, and the hub keeps it on the proposal, so once its record says it's answered, the bar
+//! for another round without choosing, once the note says what to change. The view sends it to the hub, which keeps it
+//! on the proposal, so once its record says it's answered, the bar
 //! says what was chosen, or that another round was asked for, instead. What's chosen and written before it's sent is
 //! this view's alone. The note can be dictated into, as `dictating` says, and `bar` draws the bar. Nothing is sent
 //! while a newer revision is held back, as `held` says.
 
+use client_core::Client;
 use gpui_kit::component::input::{InputEvent, TextareaState};
 use gpui_kit::{
     AnyElement, App, AppContext as _, Context, ElementId, Entity, IntoElement as _, Subscription, WeakEntity, Window,
@@ -18,17 +19,15 @@ use super::view::ProposalView;
 /// What the app does for the view.
 #[derive(Clone, Debug, PartialEq)]
 pub enum ProposalEvent {
-    /// Send this to the hub, and say how it went with [`ProposalView::sent`].
-    Send(ProposalRequest),
     /// Say what went wrong, such as dictating into the note.
     Error(String),
     /// Show this workspace, as the menu of a pull request the page names asks.
     GoToWorkspace(WorkspaceId),
 }
 
-/// What the view asks the app to send the hub, and to say how it went with [`ProposalView::sent`].
+/// What the view sends the hub: an answer, or a request for another round.
 #[derive(Clone, Debug, PartialEq)]
-pub enum ProposalRequest {
+pub(super) enum ProposalRequest {
     Answer(ProposalAnswer),
     AnotherRound(ProposalAnotherRound),
 }
@@ -39,6 +38,24 @@ impl ProposalRequest {
             ProposalRequest::Answer(answer) => &mut answer.client_request_id,
             ProposalRequest::AnotherRound(round) => &mut round.client_request_id,
         }
+    }
+
+    /// Sends it to the hub, which tells the agent, and tells `view`, which asked for it, how that went. client-core
+    /// takes in the answered proposal the reply carries, so its copy has it by the time `view` hears.
+    fn send(self, client: &Client, view: WeakEntity<ProposalView>, cx: &mut App) {
+        let doing = match &self {
+            ProposalRequest::Answer(_) => "send your answer",
+            ProposalRequest::AnotherRound(_) => "ask for another round",
+        };
+        let sending = client.start(move |client| match self {
+            ProposalRequest::Answer(answer) => client.proposal_answer(answer).map(drop),
+            ProposalRequest::AnotherRound(round) => client.proposal_another_round(round).map(drop),
+        });
+        cx.spawn(async move |cx| {
+            let outcome = sending.recv().await.map_err(|e| client_core::refusals::couldnt(doing, &e));
+            let _ = view.update(cx, |view, cx| view.sent(outcome, cx));
+        })
+        .detach();
     }
 }
 
@@ -219,8 +236,8 @@ impl ProposalView {
         self.request(ProposalRequest::AnotherRound(round), cx);
     }
 
-    /// Asks the app to send `request`. The same sent again after it couldn't be is the same request, so if the hub
-    /// kept it after all, it keeps it once.
+    /// Sends `request`. The same sent again after it couldn't be is the same request, so if the hub kept it after all,
+    /// it keeps it once.
     fn request(&mut self, mut request: ProposalRequest, cx: &mut Context<Self>) {
         if let Some(sent) = &mut self.answering.request {
             let mut again = request.clone();
@@ -232,12 +249,12 @@ impl ProposalView {
         self.answering.request = Some(request.clone());
         self.answering.sending = Sending::Going;
         self.follow_dictation(cx);
-        cx.emit(ProposalEvent::Send(request));
+        request.send(&self.client, cx.weak_entity(), cx);
         cx.notify();
     }
 
     /// How sending the answer went: sent, or why it couldn't be, which the bar says beside Send.
-    pub fn sent(&mut self, outcome: Result<(), String>, cx: &mut Context<Self>) {
+    fn sent(&mut self, outcome: Result<(), String>, cx: &mut Context<Self>) {
         self.answering.sending = match outcome {
             Ok(()) => Sending::Idle,
             Err(why) => Sending::Failed(why),

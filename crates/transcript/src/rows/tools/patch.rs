@@ -29,7 +29,8 @@ pub(super) fn draw(patch: &Patch, answer: Option<&Answer>, toggle: &Toggle, cx: 
         [file] => file.line(),
         _ => Line::new(IconName::Files, format!("Edit {}", count(files.len(), "file", "files")))
             .part(Part::Counts(files.iter().map(|file| diff::counts(&file.sections)).sum()))
-            .part(Part::Note(names(&files).into())),
+            .part(Part::Note(names(&files).into()))
+            .copies(files.iter().map(|file| file.path).collect::<Vec<_>>().join("\n")),
     };
     let opened = || {
         let parts = files.iter().enumerate().flat_map(|(i, file)| {
@@ -90,7 +91,7 @@ impl Patched<'_> {
             Does::Adds { lines, replaced } => {
                 write_line(self.path, lines, replaced.then(|| diff::counts(&self.sections)))
             }
-            Does::Deletes => Line::new(IconName::Trash, "Delete").part(Part::Chip(
+            Does::Deletes => Line::new(IconName::Trash, "Delete").copies(self.path.to_string()).part(Part::Chip(
                 look::chip(look::ChipKind::File, look::ChipSize::Regular, self.path.to_string()).gone(true),
             )),
             Does::Changes => {

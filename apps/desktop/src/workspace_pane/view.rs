@@ -33,7 +33,7 @@ impl WorkspacePane {
         let needs_a_look = unread || client_core::marking::waiting_on_you([session]);
         let mark = client_ui::chat_signal(session);
         let expiring = prompt_cache::expiring_in_ms(session, look::now_ms(cx))
-            .map(|left_ms| prompt_cache::clock(format!("tab-cache-{}", session.id), left_ms, muted));
+            .map(|left_ms| prompt_cache::clock(format!("tab-cache-{}", session.id), left_ms, muted, cx));
         let (to_show, to_close) = (session.id.clone(), session.id.clone());
         let close_id = ElementId::Name(format!("close-chat-{}", session.id).into());
         let close = tab::close_button(close_id, "Close chat", cx, move |t, window, cx| {

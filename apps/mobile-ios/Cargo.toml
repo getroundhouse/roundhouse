@@ -42,6 +42,9 @@ process = { workspace = true, features = ["testing"] }
 protocol = { workspace = true, features = ["testing"] }
 gpui-kit = { workspace = true, features = ["test-support"] }
 hub = { workspace = true, features = ["testing"] }
+look = { workspace = true, features = ["testing"] }
+spec-screens.workspace = true
+image = { workspace = true, features = ["png"] }
 tempfile.workspace = true
 waiting.workspace = true
 worker = { workspace = true, features = ["testing"] }

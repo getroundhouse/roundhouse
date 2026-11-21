@@ -11,4 +11,4 @@ mod tooltip;
 pub(crate) use style::style;
 #[cfg(any(test, feature = "testing"))]
 pub use tooltip::shown_tooltip;
-pub use tooltip::tooltip;
+pub use tooltip::{Tooltipped, tooltip_words};

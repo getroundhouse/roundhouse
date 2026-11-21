@@ -1,3 +1,4 @@
+// Changed in Roundhouse's copy of gpui-kit, as third_party/README.md lists.
 use std::{
     cell::{Cell, RefCell},
     rc::Rc,
@@ -5,13 +6,13 @@ use std::{
 
 use gpui::{
     Anchor, AnyElement, App, Bounds, Context, DismissEvent, Element, ElementId, Entity,
-    FocusHandle, Focusable, GlobalElementId, Hitbox, HitboxBehavior, InspectorElementId,
+    FocusHandle, Focusable, GlobalElementId, Hitbox, HitboxBehavior, Hsla, InspectorElementId,
     InteractiveElement, IntoElement, LayoutId, LongPressEvent, MouseButton, MouseDownEvent,
-    ParentElement, Pixels, Point, Position, Style, StyleRefinement, Styled, Subscription,
-    TouchPhase, Window, anchored, deferred, div, px,
+    ParentElement, Pixels, Point, Position, Size, Style, StyleRefinement, Styled, Subscription,
+    TouchPhase, Window, anchored, deferred, div, point, px,
 };
 
-use crate::{input::AnyInputState, menu::PopupMenu, root::WindowState};
+use crate::{ActiveTheme as _, input::AnyInputState, menu::PopupMenu, root::WindowState};
 
 /// A extension trait for adding a context menu to an element.
 pub trait ContextMenuExt: InteractiveElement + ParentElement + Styled {
@@ -126,6 +127,10 @@ struct ContextMenuSharedState {
     selection_input: Option<AnyInputState>,
     open: bool,
     position: Point<Pixels>,
+    /// The trigger's bounds when a long press opened the menu: the window dims
+    /// around it, so it seems to lift, and the menu opens under it rather than
+    /// under the finger, as a touch screen's context menu does.
+    lifted: Option<Bounds<Pixels>>,
     /// Registered on this element's dispatch node every frame and never
     /// focused, so the menu can resolve its shortcut hints against the
     /// trigger's key contexts on the frame it opens: GPUI looks a handle up in
@@ -157,6 +162,7 @@ impl Default for ContextMenuState {
                 selection_input: None,
                 open: false,
                 position: Default::default(),
+                lifted: None,
                 trigger_focus_handle: None,
                 _subscription: None,
             })),
@@ -173,32 +179,97 @@ struct DeferredMenu {
     draws: Rc<Cell<bool>>,
     menu_view: Entity<PopupMenu>,
     position: Point<Pixels>,
+    lifted: Option<Bounds<Pixels>>,
     anchor: Anchor,
     menu: Option<AnyElement>,
 }
 
+/// The gap between a lifted trigger and the menu under it.
+const LIFTED_GAP: Pixels = px(8.);
+
 impl DeferredMenu {
-    fn build_menu(&self, window: &mut Window) -> AnyElement {
+    fn build_menu(&self, window: &mut Window, cx: &App) -> AnyElement {
+        let size = window.bounds().size;
+        let layer = div().w(size.width).h(size.height).on_scroll(|_, _, cx| {
+            cx.stop_propagation();
+        });
+        let (layer, position, anchor) = match self.lifted {
+            // Taps on the dimmed window only close the menu, as they do on a
+            // touch screen, rather than reaching what's under it too.
+            Some(lifted) => {
+                let (position, anchor) = beside(lifted, self.anchor, size.height);
+                let dimmed = dimmed_around(lifted, size, cx.theme().overlay);
+                (layer.occlude().children(dimmed), position, anchor)
+            }
+            None => (layer, self.position, self.anchor),
+        };
         deferred(
             anchored().child(
-                div()
-                    .w(window.bounds().size.width)
-                    .h(window.bounds().size.height)
-                    .on_scroll(|_, _, cx| {
-                        cx.stop_propagation();
-                    })
-                    .child(
-                        anchored()
-                            .position(self.position)
-                            .snap_to_window_with_margin(px(8.))
-                            .anchor(self.anchor)
-                            .child(self.menu_view.clone()),
-                    ),
+                layer.child(
+                    anchored()
+                        .position(position)
+                        .snap_to_window_with_margin(px(8.))
+                        .anchor(anchor)
+                        .child(self.menu_view.clone()),
+                ),
             ),
         )
         .with_priority(gpui_base::POPUP_PRIORITY)
         .into_any()
     }
+}
+
+/// Where a menu opens beside a lifted trigger, and the corner of it that's
+/// there: at the trigger's start edge, the one the menu's `anchor` is on, a
+/// little under it, or over it while it's in the window's lower half, so the
+/// menu isn't pushed up over it.
+fn beside(
+    lifted: Bounds<Pixels>,
+    anchor: Anchor,
+    window_height: Pixels,
+) -> (Point<Pixels>, Anchor) {
+    let end = matches!(
+        anchor,
+        Anchor::TopRight | Anchor::BottomRight | Anchor::RightCenter
+    );
+    let x = if end { lifted.right() } else { lifted.left() };
+    if lifted.center().y > window_height / 2. {
+        let corner = if end {
+            Anchor::BottomRight
+        } else {
+            Anchor::BottomLeft
+        };
+        (point(x, lifted.top() - LIFTED_GAP), corner)
+    } else {
+        let corner = if end {
+            Anchor::TopRight
+        } else {
+            Anchor::TopLeft
+        };
+        (point(x, lifted.bottom() + LIFTED_GAP), corner)
+    }
+}
+
+/// Four panes of `color` over a window of `size`, covering all of it but
+/// `lifted`.
+fn dimmed_around(lifted: Bounds<Pixels>, size: Size<Pixels>, color: Hsla) -> [AnyElement; 4] {
+    let pane = |left: Pixels, top: Pixels, right: Pixels, bottom: Pixels| {
+        div()
+            .absolute()
+            .left(left)
+            .top(top)
+            .w((right - left).max(px(0.)))
+            .h((bottom - top).max(px(0.)))
+            .bg(color)
+            .into_any_element()
+    };
+    let (top, bottom) = (lifted.top(), lifted.bottom());
+    [
+        pane(px(0.), px(0.), size.width, top),
+        pane(px(0.), bottom, size.width, size.height),
+        pane(px(0.), top, lifted.left(), bottom),
+        pane(lifted.right(), top, size.width, bottom),
+    ]
 }
 
 #[cfg(not(feature = "gpui-fast"))]
@@ -250,7 +321,7 @@ impl Element for DeferredMenu {
         if !self.draws.get() {
             return;
         }
-        let mut menu = self.build_menu(window);
+        let mut menu = self.build_menu(window, cx);
         menu.prepaint_as_root(bounds.origin, window.viewport_size().into(), window, cx);
         self.menu = Some(menu);
     }
@@ -298,9 +369,13 @@ impl<E: ParentElement + Styled + IntoElement + 'static> Element for ContextMenu<
             window,
             cx,
             |this, state: &mut ContextMenuState, window, cx| {
-                let (position, open) = {
+                let (position, lifted, open) = {
                     let shared_state = state.shared_state.borrow();
-                    (shared_state.position, shared_state.open)
+                    (
+                        shared_state.position,
+                        shared_state.lifted,
+                        shared_state.open,
+                    )
                 };
                 state
                     .shared_state
@@ -315,6 +390,7 @@ impl<E: ParentElement + Styled + IntoElement + 'static> Element for ContextMenu<
                         draws: draws_menu.clone(),
                         menu_view,
                         position,
+                        lifted,
                         anchor,
                         menu: None,
                     });
@@ -394,7 +470,15 @@ impl<E: ParentElement + Styled + IntoElement + 'static> Element for ContextMenu<
                     && !gpui_base::TextSelection::is_selectable_at(event.start_position, window, cx)
                 {
                     window.prevent_default();
-                    open_menu(&shared_state, &builder, event.start_position, window, cx);
+                    let lifted = Some(hitbox.bounds);
+                    open_menu(
+                        &shared_state,
+                        &builder,
+                        event.start_position,
+                        lifted,
+                        window,
+                        cx,
+                    );
                 }
             }
         });
@@ -405,7 +489,7 @@ impl<E: ParentElement + Styled + IntoElement + 'static> Element for ContextMenu<
         window.on_mouse_event(move |event: &MouseDownEvent, phase, window, cx| {
             if phase.bubble() && event.button == MouseButton::Right && hitbox.is_hovered(window) {
                 cx.stop_propagation();
-                open_menu(&shared_state, &builder, event.position, window, cx);
+                open_menu(&shared_state, &builder, event.position, None, window, cx);
             }
         });
 
@@ -417,11 +501,13 @@ impl<E: ParentElement + Styled + IntoElement + 'static> Element for ContextMenu<
 
 type MenuBuilder = dyn Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu;
 
-/// Builds the menu and shows it at `position`.
+/// Builds the menu and shows it at `position`, or under `lifted`, the
+/// trigger's bounds, when a long press opened it.
 fn open_menu(
     shared_state: &Rc<RefCell<ContextMenuSharedState>>,
     builder: &Option<Rc<MenuBuilder>>,
     position: Point<Pixels>,
+    lifted: Option<Bounds<Pixels>>,
     window: &mut Window,
     cx: &mut App,
 ) {
@@ -458,6 +544,7 @@ fn open_menu(
         shared_state.selection_input = None;
         shared_state._subscription = None;
         shared_state.position = position;
+        shared_state.lifted = lifted;
         shared_state.open = true;
     }
 
@@ -543,8 +630,8 @@ mod tests {
     use crate::menu::PopupMenuItem;
     use crate::theme::Theme;
     use gpui::{
-        Context, FocusHandle, IntoElement, KeyBinding, Render, TestAppContext, VisualTestContext,
-        actions, point, px,
+        Context, FocusHandle, IntoElement, KeyBinding, Render, StatefulInteractiveElement as _,
+        TestAppContext, VisualTestContext, actions, point, px,
     };
     use std::cell::Cell;
 
@@ -726,6 +813,145 @@ mod tests {
             1,
             "the item's on_click must fire exactly once"
         );
+    }
+
+    /// A row with a context menu, over a button that counts its clicks.
+    struct PressedRoot {
+        chosen: Rc<Cell<usize>>,
+        below: Rc<Cell<usize>>,
+    }
+
+    impl Render for PressedRoot {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            let (chosen, below) = (self.chosen.clone(), self.below.clone());
+            div()
+                .size_full()
+                .child(
+                    div()
+                        .id("row")
+                        .w(px(100.))
+                        .h(px(30.))
+                        .context_menu(move |menu, _, _| {
+                            let chosen = chosen.clone();
+                            menu.item(
+                                PopupMenuItem::new("Favorite")
+                                    .on_click(move |_, _, _| chosen.set(chosen.get() + 1)),
+                            )
+                        }),
+                )
+                .child(
+                    div()
+                        .id("below")
+                        .mt(px(170.))
+                        .w(px(100.))
+                        .h(px(30.))
+                        .on_click(move |_, _, _| below.set(below.get() + 1)),
+                )
+        }
+    }
+
+    fn touch(cx: &mut VisualTestContext, phase: TouchPhase, at: Point<Pixels>) {
+        cx.update(|window, cx| {
+            let event = gpui::TouchEvent {
+                id: gpui::TouchId(1),
+                phase,
+                position: at,
+                predicted_position: None,
+                force: None,
+            };
+            window.dispatch_event(gpui::InputEvent::to_platform_input(event), cx);
+        });
+    }
+
+    fn press_long(cx: &mut VisualTestContext, at: Point<Pixels>) {
+        touch(cx, TouchPhase::Started, at);
+        cx.executor().advance_clock(
+            gpui::GestureTuning::default().long_press_duration
+                + std::time::Duration::from_millis(1),
+        );
+        cx.run_until_parked();
+        touch(cx, TouchPhase::Ended, at);
+        cx.run_until_parked();
+        cx.update(|window, cx| {
+            window.draw(cx).clear(cx);
+        });
+    }
+
+    #[gpui::test]
+    fn a_long_press_opens_the_menu_under_what_was_pressed(cx: &mut TestAppContext) {
+        cx.update(|cx| crate::init(cx));
+        let chosen = Rc::new(Cell::new(0));
+        let (_, cx) = cx.add_window_view({
+            let chosen = chosen.clone();
+            move |_, _| PressedRoot {
+                chosen,
+                below: Rc::default(),
+            }
+        });
+        cx.update(|window, cx| {
+            window.draw(cx).clear(cx);
+        });
+
+        press_long(cx, point(px(60.), px(10.)));
+
+        // The first item sits inside the menu's content padding, under the
+        // row's start edge rather than under the finger.
+        let item = point(px(30.), px(30.) + LIFTED_GAP + px(17.));
+        cx.simulate_mouse_move(item, None, Default::default());
+        cx.simulate_click(item, Default::default());
+        cx.run_until_parked();
+        assert_eq!(chosen.get(), 1, "the item under the row is chosen");
+    }
+
+    #[test]
+    fn a_lifted_menu_opens_under_what_was_pressed_or_over_it_low_in_the_window() {
+        let window = px(800.);
+        let high = Bounds::new(point(px(10.), px(100.)), gpui::size(px(200.), px(40.)));
+        assert_eq!(
+            beside(high, Anchor::TopLeft, window),
+            (point(px(10.), px(140.) + LIFTED_GAP), Anchor::TopLeft)
+        );
+        let low = Bounds::new(point(px(10.), px(700.)), gpui::size(px(200.), px(40.)));
+        assert_eq!(
+            beside(low, Anchor::TopLeft, window),
+            (point(px(10.), px(700.) - LIFTED_GAP), Anchor::BottomLeft)
+        );
+        assert_eq!(
+            beside(low, Anchor::TopRight, window),
+            (point(px(210.), px(700.) - LIFTED_GAP), Anchor::BottomRight),
+            "from the end edge, right to left"
+        );
+    }
+
+    #[gpui::test]
+    fn a_tap_on_the_dimmed_window_closes_the_menu_and_nothing_else(cx: &mut TestAppContext) {
+        cx.update(|cx| crate::init(cx));
+        let (chosen, below) = (Rc::new(Cell::new(0)), Rc::new(Cell::new(0)));
+        let (_, cx) = cx.add_window_view({
+            let (chosen, below) = (chosen.clone(), below.clone());
+            move |_, _| PressedRoot { chosen, below }
+        });
+        cx.update(|window, cx| {
+            window.draw(cx).clear(cx);
+        });
+
+        press_long(cx, point(px(60.), px(10.)));
+        let under_the_dim = point(px(50.), px(215.));
+        cx.simulate_click(under_the_dim, Default::default());
+        cx.run_until_parked();
+        cx.update(|window, cx| {
+            window.draw(cx).clear(cx);
+        });
+        assert_eq!(below.get(), 0, "the dimmed window takes the tap");
+
+        cx.simulate_click(under_the_dim, Default::default());
+        cx.run_until_parked();
+        assert_eq!(
+            below.get(),
+            1,
+            "the menu has closed, so the next tap reaches it"
+        );
+        assert_eq!(chosen.get(), 0);
     }
 
     /// Opening a context menu and closing the window without dismissing the

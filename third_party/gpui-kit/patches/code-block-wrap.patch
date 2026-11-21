@@ -1,0 +1,244 @@
+diff --git a/crates/base/src/text/editor_host.rs b/crates/base/src/text/editor_host.rs
+index 37d7adc0..36896074 100644
+--- a/crates/base/src/text/editor_host.rs
++++ b/crates/base/src/text/editor_host.rs
+@@ -26,9 +26,9 @@
+ use std::{cell::RefCell, collections::HashMap, ops::Range, rc::Rc, sync::Arc};
+ 
+ use gpui::{
+-    AnyElement, App, Bounds, ClickEvent, ElementId, HighlightStyle, Hsla, ImageSource,
++    AnyElement, App, Bounds, ClickEvent, Div, ElementId, HighlightStyle, Hsla, ImageSource,
+     InteractiveElement as _, IntoElement, ParentElement as _, Pixels, Point, SharedString,
+-    SharedUri, TextLayout, Window, WrappedLineLayout, div, point, px,
++    SharedUri, Stateful, TextLayout, Window, WrappedLineLayout, div, point, px,
+ };
+ use unicode_segmentation::UnicodeSegmentation as _;
+ 
+@@ -105,6 +105,21 @@ impl RenderContext {
+         self
+     }
+ 
++    /// Wraps the whole of each code block as it's drawn, its actions and its
++    /// language included, given the block and the element it's drawn as,
++    /// which has an ID of its own, so the host can give the block a behaviour
++    /// of its own, such as a menu that opens where it's pressed.
++    pub fn with_code_block_wrap<F>(mut self, wrap: F) -> Self
++    where
++        F: Fn(&CodeBlock, Stateful<Div>, &mut Window, &mut App) -> AnyElement
++            + Send
++            + Sync
++            + 'static,
++    {
++        self.node.code_block_wrap = Some(Arc::new(wrap));
++        self
++    }
++
+     /// Resolves document image URIs. The host owns resource access policy.
+     pub fn with_image_source<F>(mut self, resolver: F) -> Self
+     where
+diff --git a/crates/base/src/text/node.rs b/crates/base/src/text/node.rs
+index 24797c2d..5ac2af78 100644
+--- a/crates/base/src/text/node.rs
++++ b/crates/base/src/text/node.rs
+@@ -10,8 +10,9 @@ use gpui::{
+     GlobalElementId, HighlightStyle, Hsla, Image, ImageFormat, ImageSource, InspectorElementId,
+     InteractiveElement as _, IntoElement, IsZero as _, LayoutId, ObjectFit, Overflow,
+     ParentElement, Pixels, Point, Refineable as _, Rems, ScrollHandle, SharedString, SharedUri,
+-    StatefulInteractiveElement, StyleRefinement, Styled, StyledImage as _, TextStyleRefinement,
+-    WhiteSpace, Window, div, img, prelude::FluentBuilder as _, px, relative, rems,
++    Stateful, StatefulInteractiveElement, StyleRefinement, Styled, StyledImage as _,
++    TextStyleRefinement, WhiteSpace, Window, div, img, prelude::FluentBuilder as _, px, relative,
++    rems,
+ };
+ use markdown::mdast;
+ 
+@@ -19,8 +20,9 @@ use crate::{
+     GlobalState, ScrollableMask, Scrollbar, StyledExt, h_flex,
+     scrollable_mask::horizontal_scroll_area,
+     text::{
+-        CodeBlockActionsFn, CodeBlockHighlighterFn, Link, LinkClickHandlerFn, LinkFn,
+-        MarkdownExtensions, MarkdownNode, TableActionsFn, TaskToggleEvent, TaskToggleHandlerFn,
++        CodeBlockActionsFn, CodeBlockHighlighterFn, CodeBlockWrapFn, Link, LinkClickHandlerFn,
++        LinkFn, MarkdownExtensions, MarkdownNode, TableActionsFn, TaskToggleEvent,
++        TaskToggleHandlerFn,
+         document::{NodeRenderOptions, PrevBlock, flow_position},
+         inline::{
+             Inline, InlineHighlight, InlineState, code_insets, combine_highlights, fade_highlights,
+@@ -2745,7 +2747,7 @@ impl CodeBlock {
+             // `gpui::list` doesn't scroll on the same event. Mask, scrollbar
+             // and actions are siblings of the scrolled block, so they stay
+             // pinned to the viewport instead of moving with the code.
+-            div()
++            let drawn = div()
+                 .id(id.clone())
+                 .when(actions.is_some(), |this| this.group(CODE_BLOCK_GROUP))
+                 .w_full()
+@@ -2760,17 +2762,21 @@ impl CodeBlock {
+                         .child(Scrollbar::vertical(&scroll_handle)),
+                 )
+                 .children(actions)
+-                .children(lang_label)
+-                .into_any_element()
++                .children(lang_label);
++            wrapped(&node_cx.code_block_wrap, self, drawn, window, cx)
+         } else {
+-            // Without actions nothing under the block needs element state.
+-            match actions {
+-                Some(actions) => block
+-                    .id(id)
+-                    .group(CODE_BLOCK_GROUP)
+-                    .child(actions)
+-                    .into_any_element(),
+-                None => block.children(lang_label).into_any_element(),
++            // Without actions or a wrap nothing under the block needs element
++            // state.
++            match (actions, &node_cx.code_block_wrap) {
++                (Some(actions), wrap) => wrapped(
++                    wrap,
++                    self,
++                    block.id(id).group(CODE_BLOCK_GROUP).child(actions),
++                    window,
++                    cx,
++                ),
++                (None, Some(wrap)) => wrap(self, block.id(id).children(lang_label), window, cx),
++                (None, None) => block.children(lang_label).into_any_element(),
+             }
+         };
+ 
+@@ -2785,6 +2791,21 @@ impl CodeBlock {
+     }
+ }
+ 
++/// `drawn`, the whole of `block` as it's drawn, as `wrap` wraps it, if there's
++/// a wrap.
++fn wrapped(
++    wrap: &Option<Arc<CodeBlockWrapFn>>,
++    block: &CodeBlock,
++    drawn: Stateful<Div>,
++    window: &mut Window,
++    cx: &mut App,
++) -> AnyElement {
++    match wrap {
++        Some(wrap) => wrap(block, drawn, window, cx),
++        None => drawn.into_any_element(),
++    }
++}
++
+ /// A context for rendering nodes, contains link references.
+ #[derive(Default, Clone)]
+ pub(crate) struct NodeContext {
+@@ -2794,6 +2815,7 @@ pub(crate) struct NodeContext {
+     pub(crate) link_refs: HashMap<SharedString, LinkMark>,
+     pub(crate) style: Arc<TextViewStyle>,
+     pub(crate) code_block_actions: Option<Arc<CodeBlockActionsFn>>,
++    pub(crate) code_block_wrap: Option<Arc<CodeBlockWrapFn>>,
+     pub(crate) code_block_highlighter: Option<Arc<CodeBlockHighlighterFn>>,
+     pub(crate) table_actions: Option<Arc<TableActionsFn>>,
+     pub(crate) image_source: Option<Arc<super::text_view::ImageSourceFn>>,
+diff --git a/crates/base/src/text/state.rs b/crates/base/src/text/state.rs
+index 92d1018c..420b8bb4 100644
+--- a/crates/base/src/text/state.rs
++++ b/crates/base/src/text/state.rs
+@@ -1183,6 +1183,8 @@ impl Render for TextViewState {
+             link_refs: self.parsed_content.node_cx.link_refs.clone(),
+             style: self.text_view_style.clone(),
+             code_block_actions: self.code_block_actions.clone(),
++            // Only a host drawing through `RenderContext` wraps its blocks.
++            code_block_wrap: None,
+             code_block_highlighter: self.code_block_highlighter.clone(),
+             table_actions: self.table_actions.clone(),
+             link_click_handler: self.link_click_handler.clone(),
+diff --git a/crates/base/src/text/text_view.rs b/crates/base/src/text/text_view.rs
+index 82a9332c..64a157a1 100644
+--- a/crates/base/src/text/text_view.rs
++++ b/crates/base/src/text/text_view.rs
+@@ -2,10 +2,10 @@ use std::{ops::Range, rc::Rc, sync::Arc};
+ 
+ use gpui::prelude::FluentBuilder as _;
+ use gpui::{
+-    AnyElement, AnyView, App, Bounds, ClickEvent, ContentMask, Element, ElementId, Entity, Global,
+-    GlobalElementId, Hitbox, HitboxBehavior, InspectorElementId, InteractiveElement, IntoElement,
+-    LayoutId, MouseButton, ParentElement, Pixels, Refineable as _, SharedString, StyleRefinement,
+-    Styled, Window, div, point, px,
++    AnyElement, AnyView, App, Bounds, ClickEvent, ContentMask, Div, Element, ElementId, Entity,
++    Global, GlobalElementId, Hitbox, HitboxBehavior, InspectorElementId, InteractiveElement,
++    IntoElement, LayoutId, MouseButton, ParentElement, Pixels, Refineable as _, SharedString,
++    Stateful, StyleRefinement, Styled, Window, div, point, px,
+ };
+ 
+ use crate::StyledExt;
+@@ -21,6 +21,10 @@ use crate::{GlobalState, TextSelection, text::TextViewStyle};
+ pub(crate) type CodeBlockActionsFn =
+     dyn Fn(&CodeBlock, &mut Window, &mut App) -> AnyElement + Send + Sync;
+ 
++/// Type for the function that wraps the whole of a code block as it's drawn.
++pub(crate) type CodeBlockWrapFn =
++    dyn Fn(&CodeBlock, Stateful<Div>, &mut Window, &mut App) -> AnyElement + Send + Sync;
++
+ pub(crate) type CodeBlockHighlighterFn =
+     dyn Fn(&CodeBlock) -> Vec<(Range<usize>, gpui::HighlightStyle)> + Send + Sync;
+ 
+diff --git a/crates/base/tests/text_host.rs b/crates/base/tests/text_host.rs
+index 5d4fcab9..6d791dd7 100644
+--- a/crates/base/tests/text_host.rs
++++ b/crates/base/tests/text_host.rs
+@@ -7,8 +7,8 @@ use std::sync::{
+ };
+ 
+ use gpui::{
+-    Context, InteractiveElement as _, IntoElement, ParentElement as _, Render, Styled as _,
+-    TestAppContext, Window, div,
++    Context, InteractiveElement as _, IntoElement, Overflow, ParentElement as _, Render,
++    StyleRefinement, Styled as _, TestAppContext, Window, div,
+ };
+ use gpui_base::{
+     TextViewStyle,
+@@ -119,3 +119,48 @@ fn external_host_draws_code_block_actions(cx: &mut TestAppContext) {
+     drawn.dedup();
+     assert_eq!(drawn, ["nested", "top"]);
+ }
++
++/// A host's wrap is given the whole of each code block as it's drawn, with
++/// actions or without, and scrolling or not, and the block it's for.
++#[gpui::test]
++fn external_host_wraps_each_code_block(cx: &mut TestAppContext) {
++    cx.update(gpui_base::init);
++    let mut scrolling = StyleRefinement::default();
++    scrolling.overflow.y = Some(Overflow::Scroll);
++    for (actions, style) in [
++        (false, StyleRefinement::default()),
++        (true, StyleRefinement::default()),
++        (false, scrolling.clone()),
++        (true, scrolling),
++    ] {
++        let wrapped = Arc::new(Mutex::new(Vec::new()));
++        let context = RenderContext::new(TextViewStyle::default().with_code_block(style))
++            .with_code_block_wrap({
++                let wrapped = wrapped.clone();
++                move |block, drawn, _, _| {
++                    wrapped
++                        .lock()
++                        .unwrap()
++                        .push(block.code().trim().to_string());
++                    div().child(drawn).into_any_element()
++                }
++            });
++        let context = if actions {
++            context.with_code_block_actions(|_, _, _| div().child("Copy"))
++        } else {
++            context
++        };
++        let blocks = parse_markdown("```rust\ntop\n```\n\nAfter.\n", Default::default())
++            .unwrap()
++            .into_iter()
++            .enumerate()
++            .map(|(ix, block)| (ix as u64, block))
++            .collect();
++        let (_, vcx) = cx.add_window_view(move |_, _| ExternalText { blocks, context });
++        vcx.run_until_parked();
++        vcx.update(|window, cx| window.draw(cx).clear(cx));
++        let mut wrapped = wrapped.lock().unwrap().clone();
++        wrapped.dedup();
++        assert_eq!(wrapped, ["top"], "actions {actions}");
++    }
++}

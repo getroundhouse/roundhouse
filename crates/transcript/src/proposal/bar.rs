@@ -103,7 +103,11 @@ impl ProposalView {
                 None => "Not chosen".to_string(),
             };
             let said = if several { format!("{}: {said}", question.header.trim()) } else { said };
-            div().flex_none().text_color(if chosen.is_some() { colors.text } else { colors.text_faint }).child(said)
+            div()
+                .min_w_0()
+                .truncate()
+                .text_color(if chosen.is_some() { colors.text } else { colors.text_faint })
+                .child(said)
         });
         let failed = match &self.answering.sending {
             Sending::Failed(why) => Some(why.clone()),
@@ -112,11 +116,12 @@ impl ProposalView {
         let failed = failed.map(|why| {
             div().min_w_0().overflow_hidden().text_ellipsis().whitespace_nowrap().text_color(colors.error).child(why)
         });
+        // What's chosen gives way to the buttons, shortened, where the bar's as narrow as a phone's.
+        let picks = h_flex().flex_1().min_w_0().gap(look::Space::Small).children(picks);
         h_flex()
             .w_full()
             .gap(look::Space::Small)
-            .children(picks)
-            .child(div().flex_1())
+            .child(picks)
             .children(failed)
             .child(another)
             .child(send)
@@ -167,7 +172,8 @@ impl ProposalView {
     }
 
     fn send_button(off: bool, cx: &mut Context<Self>) -> AnyElement {
-        look::button("send-proposal-answer", look::ButtonKind::Main, look::ControlSize::Regular, "Send ↵")
+        look::button("send-proposal-answer", look::ButtonKind::Main, look::ControlSize::Regular, "Send")
+            .after(look::key(look::KeyKind::Plain, "enter"))
             .off(off)
             .on_click(cx.listener(|this, _, _, cx| this.send(cx)))
             .into_any_element()

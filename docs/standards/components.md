@@ -9,7 +9,7 @@ How code makes and uses the components screens are built from. `docs/spec/compon
 - **The components are in `look`, beside the foundations they're built on,** since both the app and `transcript` draw with them, and `transcript` can't depend on the app. Each is drawn with the kit's own part where the kit has one, from the kit's copy in `third_party/gpui-kit`. Where the kit doesn't do what a component needs, the kit's copy is changed if upstream would take the change, and the component draws that itself otherwise, as `docs/standards/gpui.md` says.
 - **A component is a type of `look`'s own, which gives its caller none of the kit's or GPUI's styling.** It holds the kit's part, and offers only what the component is: what it's for, its size, what it shows, what it does and what state it's in. So every component of a kind and a size looks the same wherever it's made, the kit stays behind one module, where it can be changed or replaced without touching what uses it, and a picture of every look a component has can be drawn from the same calls the app makes. *Unconfirmed:* that a component's own options say how it's laid out among what's around it, as below.
 - **`look` knows nothing of the app's areas.** An area chooses which component it draws, and its kind, its size and its state, from what it holds itself, and the component draws that. A component that needs to say more takes a value of `look`'s own, as a button takes a `look::Work` for where a pull request stands, rather than one of an area's.
-- **A component knows the client it's drawn in, so no screen does.** It takes its sizes from the foundations, which have a value for each reach, and how it responds from the input, such as a touch area of 44 points and no tooltip on a touch screen, as "Each client" in `docs/spec/look.md` says. A component only one kind of client has, such as a handheld's bar across the top, is in `look` with the rest, under the same rules. A component reads the input with `look::Input::of`, as it's drawn, and a size with no `_at`, such as `height`, at the process's `look::Reach`. *Not built:* a handheld's own components, and a button's tap over more than it's drawn.
+- **A component knows the client it's drawn in, so no screen does.** It takes its sizes from the foundations, which have a value for each reach, and how it responds from the input, such as a touch area of 44 points and no tooltip on a touch screen, as "Each client" in `docs/spec/look.md` says. A component only one kind of client has, such as a handheld's bar across the top, is in `look` with the rest, under the same rules. A component reads the input with `look::Input::of`, as it's drawn, and a size with no `_at`, such as `height`, at the process's `look::Reach`. *Not built:* a button's tap over more than it's drawn.
 - **What the library doesn't name, the app doesn't draw.** A look an area needs that no component has is added to the component, with its row in the spec's table and its place on the component's sheet, rather than made where it's drawn. Until then, the area draws with the kit's part, and the policy check lists it and says why.
 
 ## How a component's API is laid out
@@ -62,6 +62,7 @@ A new size or option of a component goes through these steps as a kind does, and
 | Set how wide it is, or share a row | `width`, `full_width`, `grows` |
 | Line its words or icon up with what's beside it, past its own room | `stands_out` |
 | Show it only while the pointer is over a group, such as a heading | `shown_while_over` |
+| Make a copy button shown only under the pointer | `look::copy_button_shown_while_over` |
 
 A button's hand is its own: it has the hand while a press does something, and the arrow while it's off or waiting. A quiet or faint button's words take the kit's greyed-out colour while it's off.
 
@@ -116,11 +117,13 @@ A key in one of the kit's menus is the kit's, from the action it's bound to, so 
 |---|---|
 | Open one from a button | `look::Button::menu(anchor, build)`, where `build` fills a `look::Menu` |
 | Open one where something is right-clicked | `right_click_menu(build)`, from `look::RightClickMenu` |
+| Open one with Copy on a long press under touch | `copied_by_a_long_press(text, cx)` |
 | Open one from something that isn't `look`'s, such as the kit's own button | `look::menu(build)`, which gives what the kit opens |
 | Add a row, a line between groups of rows, or a label over some | `row`, `separator`, `label` |
 | Make a row that says words | `look::menu_row(words)` |
 | Put an icon before a row's words, its key or a note of a kind at its end, or say what it does while the pointer rests on it | `icon`, `key`, `note`, `tooltip` |
 | Check a row as the one chosen, or grey it out | `chosen`, `off` |
+| Mark a row that removes something, or copies | `removes`, `copies` |
 | Do something as a row is chosen | `on_choose` |
 | Find the keys rows show from where the keyboard's focus is, such as the field a menu is beside | `keys_from` |
 | Set how wide a menu is, such as as wide as what opens it | `width` |
@@ -140,6 +143,7 @@ A key in one of the kit's menus is the kit's, from the action it's bound to, so 
 | Put something at the start of its foot, such as a link | `start` |
 | Do something as it's confirmed, keeping it open if that says so, or once it's closed | `on_confirm`, `on_close` |
 | Set how wide it is | `width`, with a `look::DialogWidth` |
+| Open a handheld's sheet, or its action sheet | `look::sheet()`, `look::action_sheet(asks)` |
 | Close it once what it waited on has come, without what's done as someone closes it | `look::close_dialog` |
 | Ask before what would stop or lose something, so Enter keeps things as they are | `careful` |
 | Know whether one is open, or close every one, as when the hub they asked of has gone | `look::dialog_open`, `look::close_every_dialog` |
@@ -154,7 +158,7 @@ The app asks and tells only in these, never in the system's alert, and `tools/po
 
 | To | Call |
 |---|---|
-| Say a few words while the pointer rests on something | `.tooltip(look::tooltip(words))`, on what's pointed at |
+| Say a few words while the pointer rests on something | `says(words, cx)`, from `look::Tooltipped`, on what's pointed at |
 | Say what a button or a menu's row does, with the key that does the same | the button's `tooltip` or `tooltip_with_action`, and the row's `tooltip` |
 
 What needs more than a few words, such as a path, goes on a hover card, not a tooltip. `tools/policy` refuses the kit's tooltip outside `look`.
@@ -196,6 +200,7 @@ What's done on a card as a whole, such as keeping the keyboard's focus or measur
 | To | Call |
 |---|---|
 | Make one, of a kind and a size | `look::bar(kind, size)` |
+| Draw a handheld's bar, with a menu under its title | `look::top_bar(title)`, `menu` |
 | Put what it says in it, from its start, and what's done about it at its end | `child`, `children`, `end` |
 | Keep what it holds clear of what's over its ends, such as the window's buttons | `clear` |
 | Tint it in a pull request's colour, as the pull request's bar is | `of_work` |

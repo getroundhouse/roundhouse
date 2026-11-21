@@ -7,7 +7,7 @@ use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, InteractiveElement as _, IntoElement, ParentElement, Styled, TestSupportExt as _, div, relative,
 };
-use look::{IconSizing as _, Shaped as _, Typeset as _};
+use look::{IconSizing as _, RightClickMenu as _, Shaped as _, Typeset as _};
 
 use super::{Shared, from_blocks, row};
 use crate::attachments::{self, Carried};
@@ -51,7 +51,7 @@ pub(super) fn prompt_bubble(
     let typed = !text.trim().is_empty();
     let faint = state != Some(PromptState::Taken);
     let dropped = state == Some(PromptState::Dropped);
-    let copy = typed.then(|| copy_button(key, text, cx));
+    let copy = typed.then(|| copy_button(key, text, cx)).flatten();
     let bubble = v_flex()
         .id(key.element("bubble"))
         .gap(look::Space::Medium)
@@ -68,6 +68,7 @@ pub(super) fn prompt_bubble(
             if spoken { d.child(said_out_loud(text, cx)) } else { d.child(text) }
         })
         .test_support();
+    let bubble = if typed { bubble.copied_by_a_long_press(text.to_string(), cx) } else { bubble.into_any_element() };
     let bubble = v_flex().relative().max_w(relative(WIDEST_SHARE)).child(bubble).children(copy);
     // The row, so the button stays while the pointer moves from the bubble onto it.
     row()
@@ -96,11 +97,12 @@ fn said_out_loud(text: AnyElement, cx: &App) -> impl IntoElement {
 }
 
 /// A cutout over the bubble's corner, one small step above it, so the whole hit target clears the following row.
-/// Anchored to the bubble, so a note below a prompt the agent dropped doesn't move the button away from it.
-fn copy_button(key: &ItemKey, text: &str, cx: &App) -> impl IntoElement {
-    let copy = look::copy_button(key.element("copy-prompt"), text.to_string(), "Copy prompt", cx);
-    // Its own hover keeps the half of the hit target past the row's right edge usable too.
-    let copy = copy.invisible().group_hover(GROUP, Styled::visible).hover(Styled::visible);
+/// Anchored to the bubble, so a note below a prompt the agent dropped doesn't move the button away from it. It shows
+/// while the row or the button is under the pointer, so the half of the hit target past the row's right edge is
+/// usable too, and under touch there's none.
+fn copy_button(key: &ItemKey, text: &str, cx: &App) -> Option<impl IntoElement> {
+    let copy =
+        look::copy_button_shown_while_over(GROUP, key.element("copy-prompt"), text.to_string(), "Copy prompt", cx)?;
     let half = look::ControlSize::Small.height() / 2.;
-    div().absolute().right(-half).bottom(look::Space::XSmall).h_0().flex().items_center().child(copy)
+    Some(div().absolute().right(-half).bottom(look::Space::XSmall).h_0().flex().items_center().child(copy))
 }

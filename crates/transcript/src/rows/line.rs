@@ -13,7 +13,7 @@ use gpui_kit::{
     AnyElement, AnyView, App, Div, ElementId, InteractiveElement, IntoElement, ParentElement, Pixels, Role,
     SharedString, Stateful, StatefulInteractiveElement, Styled, TestSupportExt as _, Window, div, relative,
 };
-use look::{Hand as _, IconSizing as _, LineText, Shaped as _};
+use look::{Hand as _, IconSizing as _, LineText, RightClickMenu as _, Shaped as _, Tooltipped as _};
 use protocol::event::Denied;
 
 use super::shown::Gather;
@@ -44,6 +44,9 @@ pub(super) struct Line {
     shows_output: bool,
     /// A button at the line's far end, which always shows, so the way it offers is seen before the pointer finds it.
     action: Option<AnyElement>,
+    /// What a long press on the line copies under touch, when it isn't the title: what the call acted on, such as its
+    /// command or its file.
+    copies: Option<SharedString>,
 }
 
 /// What shows while a closed line is hovered, on a device that has hover, such as a change's diff. It stays while the
@@ -79,6 +82,7 @@ impl Line {
             preview: None,
             shows_output: false,
             action: None,
+            copies: None,
         }
     }
 
@@ -104,6 +108,13 @@ impl Line {
         self
     }
 
+    /// Has the menu a long press on the line opens under touch copy `text`, what the call acted on, such as its
+    /// command, a file's path, or what it searched for, rather than the line's title, which every other line copies.
+    pub(super) fn copies(mut self, text: impl Into<SharedString>) -> Self {
+        self.copies = Some(text.into());
+        self
+    }
+
     pub(super) fn part(mut self, part: impl Into<Option<Part>>) -> Self {
         self.parts.extend(part.into());
         self
@@ -115,21 +126,24 @@ impl Line {
         let set_open = move |cx: &mut App| {
             let _ = this.update(cx, |t, cx| t.set_open(seq, key.clone(), fold, !open, cx));
         };
+        // Under touch there's no preview, and a tap opens the line to what it would show.
         let preview = self.preview.take().filter(|_| !open);
         let frame = opening(toggle.key.element("call"), self.title.clone(), open, set_open, cx)
-            .when_some(preview, |d, preview| d.hoverable_tooltip(move |window, cx| preview(window, cx)));
+            .when_some(preview, |d, preview| d.previews(move |window, cx| preview(window, cx), cx));
         let title = find::marked(self.title.clone(), &self.title_marks, &[], None);
         let lead = lead(glyph(self.icon, cx), look::Size::Inline.width(), open, cx);
-        self.fill(frame, lead, title, &toggle.shared.line_text, cx).test_support().into_any_element()
+        let copies = self.copies.take().unwrap_or_else(|| self.title.clone());
+        self.fill(frame, lead, title, &toggle.shared.line_text, cx).test_support().copied_by_a_long_press(copies, cx)
     }
 
     /// The line with nothing under it to open, named `id`, and `label` to assistive apps, such as a task a turn the
     /// agent started by itself took in: the same as a call's, but with no way to open it, and nothing lit under the
     /// pointer.
-    pub(super) fn still(self, id: ElementId, label: String, line_text: &LineText, cx: &App) -> AnyElement {
+    pub(super) fn still(mut self, id: ElementId, label: String, line_text: &LineText, cx: &App) -> AnyElement {
         let frame = frame().id(id).role(Role::Label).aria_label(label);
         let (lead, title) = (still_icon(self.icon, cx), self.title.clone());
-        self.fill(frame, lead, title, line_text, cx).test_support().into_any_element()
+        let copies = self.copies.take().unwrap_or_else(|| self.title.clone());
+        self.fill(frame, lead, title, line_text, cx).test_support().copied_by_a_long_press(copies, cx)
     }
 
     /// `frame`, holding what every line does after `lead`: the title, which takes at most most of the line, then the

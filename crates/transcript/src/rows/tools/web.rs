@@ -20,7 +20,7 @@ use crate::item_key::ItemKey;
 use crate::rows::shown::Gather;
 
 pub(super) fn fetch(fetch: &Fetch, answer: Option<&Answer>, toggle: &Toggle, cx: &App) -> AnyElement {
-    let line = Line::new(IconName::Globe, Fetch::TITLE).part(Part::Chip(look::chip(
+    let line = Line::new(IconName::Globe, Fetch::TITLE).copies(fetch.url.to_string()).part(Part::Chip(look::chip(
         look::ChipKind::Site,
         look::ChipSize::Regular,
         site(fetch.url).to_string(),
@@ -80,6 +80,7 @@ pub(super) fn shown_search(search: &WebSearch, answer: Option<&Answer>, key: &It
 pub(super) fn search(search: &WebSearch, answer: Option<&Answer>, toggle: &Toggle, cx: &App) -> AnyElement {
     let results = results(answer);
     let line = Line::new(IconName::Globe, WebSearch::TITLE)
+        .copies(search.query.to_string())
         .part(Part::Pill(search.query.to_string().into(), toggle.marks(Text::Pill, search.query)))
         .part(results.as_ref().and_then(Results::summary).map(|summary| Part::Note(summary.into())));
     let opened = || results.map(|results| pages(&results, toggle, cx));

@@ -45,6 +45,8 @@ pub struct ProposalView {
     /// The issues and pull requests what the agent wrote links to, which a chip names by its number alone in the
     /// proposal's workspace's repository.
     references: References<()>,
+    /// What answers are sent to the hub through.
+    pub(super) client: Client,
     selection: Selection,
     /// The selection's, which a press on the page's text takes, so a copy and a select all come to it.
     focus: FocusHandle,
@@ -59,7 +61,7 @@ pub struct ProposalView {
 }
 
 impl ProposalView {
-    /// Shows `proposal`, reading the images it points to from the hub through `client`.
+    /// Shows `proposal`, reading the images it points to from the hub through `client`, and sending its answer there.
     pub fn new(proposal: Arc<Proposal>, client: Client, cx: &mut Context<Self>) -> Self {
         let this = cx.weak_entity();
         // A long text parsed on another thread is drawn once it's in.
@@ -67,7 +69,7 @@ impl ProposalView {
             let _ = this.update(cx, |_, cx| cx.notify());
         });
         let this = cx.weak_entity();
-        let linked = LinkedImages::new(client, proposal.session_id.clone(), move |_, cx| {
+        let linked = LinkedImages::new(client.clone(), proposal.session_id.clone(), move |_, cx| {
             let _ = this.update(cx, |_, cx| cx.notify());
         });
         let (changed, go_to) = (cx.weak_entity(), cx.weak_entity());
@@ -92,6 +94,7 @@ impl ProposalView {
             texts,
             linked,
             references,
+            client,
             selection,
             starts: Vec::new(),
             focus,
@@ -103,6 +106,7 @@ impl ProposalView {
 
     /// Carries on on a new connection to the hub, and asks again for what couldn't be read.
     pub fn reconnect(&mut self, client: &Client) {
+        self.client = client.clone();
         self.linked.reconnect(client);
     }
 
@@ -248,13 +252,15 @@ impl Render for ProposalView {
             self.texts.drawing(Of::Document(0), || document::parts(revision, &mut writing, &choosing, cx))
         };
         self.starts = parts.iter().map(|part| part.first).collect();
-        let outline = self.outline(&parts, cx);
+        // Beside the page on a desk, and not on a handheld, which has no room for it. *Not built:* the layout's width
+        // deciding, as "Each client" in `docs/spec/look.md` says.
+        let outline = (look::Reach::now() == look::Reach::Desk).then(|| self.outline(&parts, cx));
         let page = self.page(parts, area, cx);
         let foot = self.foot(window, cx);
         // Across the top of the page, as a banner is across a pane.
         let banner = self.banner(cx);
         let beside = v_flex().flex_1().min_w_0().h_full().children(banner).child(page).children(foot);
-        let page = div().flex().size_full().min_h_0().child(outline).child(beside);
+        let page = div().flex().size_full().min_h_0().children(outline).child(beside);
         with_step_keys(self.selection.with_keys(page), cx)
     }
 }

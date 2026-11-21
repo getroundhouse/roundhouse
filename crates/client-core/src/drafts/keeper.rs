@@ -307,6 +307,7 @@ impl Keeper {
             *count -= 1;
             if *count == 0 {
                 counts.unkept.remove(key);
+                counts.on_its_way.remove(key);
                 // Full only while a signal is waiting, which says the same.
                 let _ = self.catching_up.try_send(());
             }

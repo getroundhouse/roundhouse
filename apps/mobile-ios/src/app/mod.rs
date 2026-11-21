@@ -6,8 +6,11 @@ mod mobile_app;
 mod new_workspace;
 mod open;
 mod pairing;
+mod workspace_menu;
 mod workspaces;
 
+#[cfg(feature = "testing")]
+pub use mobile_app::open_window_connecting;
 use mobile_app::{Creating, Followed, Pairing};
 pub use mobile_app::{MobileApp, open_window};
 use open::Panel;

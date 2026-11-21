@@ -20,5 +20,5 @@ mod document;
 mod held;
 mod view;
 
-pub use answering::{ProposalEvent, ProposalRequest};
+pub use answering::ProposalEvent;
 pub use view::{ICON, ProposalView};

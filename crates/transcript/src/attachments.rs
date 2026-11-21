@@ -128,7 +128,8 @@ pub(crate) fn view(carried: &[Carried], cx: &App) -> Option<AnyElement> {
     let (images, files): (Vec<&Carried>, Vec<&Carried>) =
         carried.iter().partition(|file| file.attachment.media_type.is_bitmap());
     let images = images.into_iter().map(|file| thumbnail(file, cx));
-    let files = files.into_iter().map(|file| file_card(file.key.element("file"), &file.attachment).into_any_element());
+    let files =
+        files.into_iter().map(|file| file_card(file.key.element("file"), &file.attachment, cx).into_any_element());
     Some(
         h_flex()
             .w_full()
@@ -194,14 +195,15 @@ fn not_ready(file: &Carried, cx: &App) -> AnyElement {
         .into_any_element()
 }
 
-/// A file that isn't drawn, as its name and size, the same in the transcript and the composer.
-pub fn file_card(id: impl Into<ElementId>, attachment: &Attachment) -> Card {
+/// A file that isn't drawn, as its name and size, the same in the transcript and the composer, with its name again
+/// while the pointer rests on it, since a long one is cut short.
+pub fn file_card(id: impl Into<ElementId>, attachment: &Attachment, cx: &App) -> Card {
     let name = attachment.name.clone();
     Card::new()
         .id(id)
         .small()
         .corners(look::Corner::Control)
-        .tooltip(name.clone())
+        .when_some(look::tooltip_words(name.clone(), cx), Card::tooltip)
         .media(AttachmentMedia::new().child(Icon::new(IconName::FileText).sized(look::IconSize::Large)))
         .content(
             AttachmentContent::new()

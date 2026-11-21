@@ -11,7 +11,7 @@ Where each kind of test goes, what a test runs in, which is its hub, its clocks 
 | The agent adapter | Normalizing the CLI's captured output | `crates/agents/tests/` |
 | The whole backend | What spans processes: restarts, crashes, a real worker, with a fake agent | `apps/daemon/tests/` |
 | The window | Clicking and typing through to what's shown | `apps/desktop/tests/` |
-| How each screen looks, and the app icon | That each still matches its approved image | `apps/desktop/tests/ui/gallery/` |
+| How each screen looks, and the app icon | That each still matches its approved image | `apps/desktop/tests/ui/gallery/` and `apps/mobile-ios/tests/ui/gallery/` |
 | The repo's rules | Dependencies, licenses, file length and lint inheritance, against the real dependency graph | `tools/policy/` |
 | The guide's tool | That it publishes each page and refuses a link, heading or picture that isn't there, against made-up guides. CI's `guide` job builds the real one | `tools/guide/tests/` |
 | The kit's tool | That it makes the copy of gpui-kit and keeps its patches in step with it, against stand-ins for upstream's repository and this one | `tools/kit-sync/tests/` |

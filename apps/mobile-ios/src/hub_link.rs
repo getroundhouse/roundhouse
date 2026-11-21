@@ -1,15 +1,27 @@
-//! The connection to the hub this phone paired with, which client-core's [`Link`] makes again whenever it goes, and the
-//! records it keeps from it, with what the hub says of the pull requests of the workspaces the phone lists.
+//! The connection to the hub this phone paired with, which client-core's [`Link`] makes again whenever it goes, the
+//! records it keeps from it, with what the hub says of the pull requests of the workspaces the phone lists, and what
+//! has the hub keep what's typed and not sent.
+
+use std::sync::Arc;
 
 use client_core::link::{Connect, Link, Lost, Refused};
 use client_core::records::Snapshot;
-use client_core::{Client, GithubView, RecordsFeed, RemoteHub};
+use client_core::{Client, ClientError, Drafts, GithubView, RecordsFeed, RemoteHub};
 use gpui_kit::{App, Context, EventEmitter, Task};
 use protocol::client::github::GithubShown;
 use protocol::model::{PullRequestFound, Workspace, WorkspaceStatus};
 
 /// What the hub's list of clients calls the app.
 const CLIENT_NAME: &str = "roundhouse-ios";
+
+/// How the app reaches the hub it paired with. It's given to the app as it opens, so a test can have it connect to a
+/// hub of its own, such as the gallery's, which answers from fixed data on a socket.
+pub(crate) type ConnectTo = Arc<dyn Fn(&RemoteHub) -> Result<Client, ClientError> + Send + Sync>;
+
+/// As the app connects on a phone: over the network, to whichever of the hub's addresses answers first.
+pub(crate) fn over_the_network() -> ConnectTo {
+    Arc::new(|hub| Client::connect_remote(hub, CLIENT_NAME))
+}
 
 /// How the connection stands, as the phone says it.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -37,20 +49,24 @@ pub(crate) struct HubLink {
     /// The pull requests of the workspaces listed, which the hub sends as they change, once the link has the hub's
     /// records, and the task that draws them again.
     marks: Option<(GithubView, Task<()>)>,
+    /// What has the hub keep what's typed and not sent, from the first connection on, and the task that shows a draft
+    /// made elsewhere once one typed here has reached the hub.
+    drafts: Option<(Drafts, Task<()>)>,
     _following: Task<()>,
 }
 
-/// The hub as the phone paired with it, which the link connects to over the network.
-struct PairedHub(RemoteHub);
+/// The hub as the phone paired with it, which the link connects to as the app was given.
+struct PairedHub {
+    hub: RemoteHub,
+    connect: ConnectTo,
+}
 
 impl Connect for PairedHub {
     type With = ();
     type Failure = String;
 
     fn connect(&mut self) -> Result<(Client, ()), Refused<String>> {
-        Client::connect_remote(&self.0, CLIENT_NAME)
-            .map(|client| (client, ()))
-            .map_err(|e| Refused::by(&e, e.to_string()))
+        (self.connect)(&self.hub).map(|client| (client, ())).map_err(|e| Refused::by(&e, e.to_string()))
     }
 
     fn lost(&self, lost: &Lost) -> String {
@@ -64,11 +80,19 @@ pub(crate) fn listed(workspace: &Workspace) -> bool {
     workspace.status == WorkspaceStatus::Ready
 }
 
+/// What a screen that works on the hub needs of it, while there's a connection that's caught up.
+#[derive(Clone)]
+pub(crate) struct Ready {
+    pub(crate) client: Client,
+    pub(crate) feed: RecordsFeed,
+    pub(crate) drafts: Drafts,
+}
+
 impl EventEmitter<Reconnected> for HubLink {}
 
 impl HubLink {
-    pub(crate) fn new(hub: RemoteHub, cx: &mut Context<Self>) -> HubLink {
-        let link = start(PairedHub(hub.clone()), cx);
+    pub(crate) fn new(hub: RemoteHub, connect: ConnectTo, cx: &mut Context<Self>) -> HubLink {
+        let link = start(PairedHub { hub: hub.clone(), connect }, cx);
         let changed = link.changed().clone();
         let following = cx.spawn(async move |this, cx| {
             while changed.recv_async().await.is_ok() {
@@ -77,7 +101,15 @@ impl HubLink {
                 }
             }
         });
-        HubLink { hub, link, state: LinkState::Connecting, client: None, marks: None, _following: following }
+        HubLink {
+            hub,
+            link,
+            state: LinkState::Connecting,
+            client: None,
+            marks: None,
+            drafts: None,
+            _following: following,
+        }
     }
 
     pub(crate) fn hub(&self) -> &RemoteHub {
@@ -104,9 +136,10 @@ impl HubLink {
         self.marks.as_ref()?.0.feed().pull_request(workspace)
     }
 
-    /// What follows the hub's records, over every connection, once there's been one.
-    pub(crate) fn feed(&self) -> Option<RecordsFeed> {
-        self.link.feed()
+    /// The connection, the records and the drafts, while there's a connection that's caught up.
+    pub(crate) fn ready(&self) -> Option<Ready> {
+        let (client, feed, (drafts, _)) = (self.client()?, self.link.feed()?, self.drafts.as_ref()?);
+        Some(Ready { client, feed, drafts: drafts.clone() })
     }
 
     /// Connects again now, such as when the app comes back to the front, since a phone that slept may hold a
@@ -115,9 +148,19 @@ impl HubLink {
         self.link.connect_now();
     }
 
+    /// Has the hub keep at once what's typed and not kept yet, rather than once typing pauses, for an app iOS may end
+    /// without a word, such as one sent to the background.
+    pub(crate) fn keep_drafts_now(&self) {
+        if let Some((drafts, _)) = &self.drafts {
+            // How it went isn't waited for: the app goes on as it was either way.
+            drop(drafts.flushed());
+        }
+    }
+
     /// Draws how the link stands, hands any new connection on, and shows the hub which workspaces are listed.
     fn link_changed(&mut self, cx: &mut Context<Self>) {
         if let Some((client, ())) = self.link.take_connection() {
+            self.keep_drafts_on(&client, cx);
             cx.emit(Reconnected(client));
         }
         let state = self.link.state();
@@ -139,6 +182,17 @@ impl HubLink {
         }
         cx.notify();
     }
+
+    /// Keeps drafts on `client`'s hub from here on, carrying on with any the last connection couldn't.
+    fn keep_drafts_on(&mut self, client: &Client, cx: &mut Context<Self>) {
+        if let Some((drafts, _)) = &self.drafts {
+            drafts.reconnect(client);
+        } else {
+            let drafts = Drafts::start(client);
+            let shown = show_drafts_from_elsewhere(&drafts, cx);
+            self.drafts = Some((drafts, shown));
+        }
+    }
 }
 
 /// Follows what the hub says of the pull requests of the workspaces shown, drawing them again as they change.
@@ -153,6 +207,19 @@ fn hear(feed: &RecordsFeed, cx: &mut Context<HubLink>) -> (GithubView, Task<()>)
         }
     });
     (marks, hearing)
+}
+
+/// Shows the records again whenever no draft has anything of this client's on its way, so a draft made elsewhere,
+/// which waited behind one typed here, is shown, as `client_core::Drafts::from_elsewhere` says.
+fn show_drafts_from_elsewhere(drafts: &Drafts, cx: &mut Context<HubLink>) -> Task<()> {
+    let caught_up = drafts.caught_up().clone();
+    cx.spawn(async move |this, cx| {
+        while caught_up.recv_async().await.is_ok() {
+            if this.update(cx, |_, cx| cx.notify()).is_err() {
+                return;
+            }
+        }
+    })
 }
 
 #[cfg(not(any(test, feature = "testing")))]

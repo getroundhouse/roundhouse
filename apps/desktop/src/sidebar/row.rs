@@ -165,8 +165,8 @@ fn right_end(
         .role(Role::Image)
         .aria_label("Draft")
         .test_support();
-    let clock =
-        expiring.map(|left_ms| icon_box(prompt_cache::clock(format!("row-cache-{}", workspace.id), left_ms, muted)));
+    let clock = expiring
+        .map(|left_ms| icon_box(prompt_cache::clock(format!("row-cache-{}", workspace.id), left_ms, muted, cx)));
     let icons_drawn = h_flex().gap(look::Space::XSmall).when(drafted, |d| d.child(pencil)).children(clock);
     // With nothing else at the row's end, the room between the name and the button comes and goes with the button.
     let before = if icons || waiting.is_some() { MARK_GAP.size() } else { MARK_GAP.size() * came };

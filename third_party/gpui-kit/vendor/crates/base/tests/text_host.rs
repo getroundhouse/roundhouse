@@ -8,8 +8,8 @@ use std::sync::{
 };
 
 use gpui::{
-    Context, InteractiveElement as _, IntoElement, ParentElement as _, Render, Styled as _,
-    TestAppContext, Window, div,
+    Context, InteractiveElement as _, IntoElement, Overflow, ParentElement as _, Render,
+    StyleRefinement, Styled as _, TestAppContext, Window, div,
 };
 use gpui_base::{
     TextViewStyle,
@@ -119,4 +119,49 @@ fn external_host_draws_code_block_actions(cx: &mut TestAppContext) {
     drawn.sort();
     drawn.dedup();
     assert_eq!(drawn, ["nested", "top"]);
+}
+
+/// A host's wrap is given the whole of each code block as it's drawn, with
+/// actions or without, and scrolling or not, and the block it's for.
+#[gpui::test]
+fn external_host_wraps_each_code_block(cx: &mut TestAppContext) {
+    cx.update(gpui_base::init);
+    let mut scrolling = StyleRefinement::default();
+    scrolling.overflow.y = Some(Overflow::Scroll);
+    for (actions, style) in [
+        (false, StyleRefinement::default()),
+        (true, StyleRefinement::default()),
+        (false, scrolling.clone()),
+        (true, scrolling),
+    ] {
+        let wrapped = Arc::new(Mutex::new(Vec::new()));
+        let context = RenderContext::new(TextViewStyle::default().with_code_block(style))
+            .with_code_block_wrap({
+                let wrapped = wrapped.clone();
+                move |block, drawn, _, _| {
+                    wrapped
+                        .lock()
+                        .unwrap()
+                        .push(block.code().trim().to_string());
+                    div().child(drawn).into_any_element()
+                }
+            });
+        let context = if actions {
+            context.with_code_block_actions(|_, _, _| div().child("Copy"))
+        } else {
+            context
+        };
+        let blocks = parse_markdown("```rust\ntop\n```\n\nAfter.\n", Default::default())
+            .unwrap()
+            .into_iter()
+            .enumerate()
+            .map(|(ix, block)| (ix as u64, block))
+            .collect();
+        let (_, vcx) = cx.add_window_view(move |_, _| ExternalText { blocks, context });
+        vcx.run_until_parked();
+        vcx.update(|window, cx| window.draw(cx).clear(cx));
+        let mut wrapped = wrapped.lock().unwrap().clone();
+        wrapped.dedup();
+        assert_eq!(wrapped, ["top"], "actions {actions}");
+    }
 }

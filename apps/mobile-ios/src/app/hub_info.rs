@@ -30,7 +30,7 @@ impl MobileApp {
         let body = v_flex()
             .flex_1()
             .px(Space::Large)
-            .pb(window.insets().safe_area.bottom + Space::Large.size())
+            .pb(crate::safe_area::insets(window, cx).safe_area.bottom + Space::Large.size())
             .child(heading("Connection"))
             .child(div().typeset(Type::Body).child(chrome::connection(link.state())))
             .when_some(why, |d, why| d.child(detail(why)))

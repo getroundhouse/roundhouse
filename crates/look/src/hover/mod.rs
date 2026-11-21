@@ -2,7 +2,9 @@
 //! open.
 
 mod card;
+mod shown;
 #[cfg(test)]
 mod tests;
 
-pub use card::{HoldOpen, HoverCard, hover_card, hover_card_with_a_button};
+pub use card::{HoverCard, hover_card, hover_card_with_a_button};
+pub use shown::HoldOpen;

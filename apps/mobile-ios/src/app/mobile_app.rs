@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
@@ -7,13 +8,14 @@ use gpui_kit::{
     AnyElement, AnyWindowHandle, App, AppContext as _, Context, Entity, IntoElement, ParentElement as _, Render,
     SharedString, Styled as _, Subscription, Task, Window, WindowOptions, div,
 };
-use protocol::model::{RepoId, SessionId};
+use protocol::model::{RepoId, SessionId, WorkspaceId};
 use protocol::pairing::PairingLink;
 
 use super::Panel;
 use super::open::{OneAtATime, Open, OpenChat};
+use super::workspace_menu::{Asking, Renaming};
 use crate::chat::{ChatEvent, ChatView};
-use crate::hub_link::{HubLink, Reconnected};
+use crate::hub_link::{self, ConnectTo, HubLink, Reconnected};
 use crate::vault::Vault;
 
 /// How long the app can be away before coming back connects again. A phone suspends an app soon after it leaves the
@@ -29,8 +31,31 @@ pub fn open_window(
     options: WindowOptions,
     cx: &mut App,
 ) -> anyhow::Result<(AnyWindowHandle, Entity<MobileApp>)> {
+    open(vault, links, hub_link::over_the_network(), options, cx)
+}
+
+/// As [`open_window`], connecting to the hub it's paired with as `connect` does, such as to a test's own hub on a
+/// socket, rather than over the network.
+#[cfg(feature = "testing")]
+pub fn open_window_connecting(
+    vault: Arc<dyn Vault>,
+    links: flume::Receiver<String>,
+    connect: impl Fn(&RemoteHub) -> Result<client_core::Client, client_core::ClientError> + Send + Sync + 'static,
+    options: WindowOptions,
+    cx: &mut App,
+) -> anyhow::Result<(AnyWindowHandle, Entity<MobileApp>)> {
+    open(vault, links, Arc::new(connect), options, cx)
+}
+
+fn open(
+    vault: Arc<dyn Vault>,
+    links: flume::Receiver<String>,
+    connect: ConnectTo,
+    options: WindowOptions,
+    cx: &mut App,
+) -> anyhow::Result<(AnyWindowHandle, Entity<MobileApp>)> {
     init(cx);
-    gpui_kit::open_window(options, cx, move |window, cx| cx.new(|cx| MobileApp::new(vault, links, window, cx)))
+    gpui_kit::open_window(options, cx, move |window, cx| cx.new(|cx| MobileApp::new(vault, links, connect, window, cx)))
 }
 
 /// The app's look, for a device held in the hand and pressed by touch, as "Each client" in `docs/spec/look.md` says.
@@ -58,6 +83,14 @@ pub(super) enum Pairing {
 pub(super) struct Followed {
     pub(super) link: Entity<HubLink>,
     pub(super) creating: Option<Creating>,
+    /// What's asked before it's done to one of its workspaces, over the screen.
+    pub(super) asking: Option<Asking>,
+    /// One of its workspaces being renamed, in a sheet over the screen.
+    pub(super) renaming: Option<Renaming>,
+    /// Its workspaces whose new title is on its way, which aren't asked for another meanwhile.
+    pub(super) retitling: HashSet<WorkspaceId>,
+    /// Its workspaces asked to be archived, whose Archive is off until the hub has answered.
+    pub(super) archiving: HashSet<WorkspaceId>,
     _events: [Subscription; 2],
 }
 
@@ -69,6 +102,7 @@ pub(super) struct Creating {
 
 pub struct MobileApp {
     pub(super) vault: Arc<dyn Vault>,
+    connect: ConnectTo,
     pub(super) followed: Option<Followed>,
     pub(super) open: Open,
     pub(super) pairing: Pairing,
@@ -81,7 +115,13 @@ pub struct MobileApp {
 }
 
 impl MobileApp {
-    fn new(vault: Arc<dyn Vault>, links: flume::Receiver<String>, window: &mut Window, cx: &mut Context<Self>) -> Self {
+    fn new(
+        vault: Arc<dyn Vault>,
+        links: flume::Receiver<String>,
+        connect: ConnectTo,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Self {
         let link_input = cx.new(|cx| InputState::new(window, cx).placeholder("Pairing link"));
         let opened = cx.spawn(async move |this, cx| {
             while let Ok(url) = links.recv_async().await {
@@ -93,6 +133,7 @@ impl MobileApp {
         let activation = cx.observe_window_activation(window, Self::activation);
         let mut app = MobileApp {
             vault,
+            connect,
             followed: None,
             open: Open::default(),
             pairing: Pairing::Idle,
@@ -110,12 +151,16 @@ impl MobileApp {
 
     /// Starts following a hub, in place of any before it, with nothing of the last one open.
     pub(super) fn follow(&mut self, hub: RemoteHub, cx: &mut Context<Self>) {
-        let link = cx.new(|cx| HubLink::new(hub, cx));
+        let connect = self.connect.clone();
+        let link = cx.new(|cx| HubLink::new(hub, connect, cx));
         let events = [
             cx.observe(&link, |app, link, cx| {
-                let records = link.read(cx).snapshot();
+                let (records, hub_here) = (link.read(cx).snapshot(), link.read(cx).client().is_some());
                 if let (Some(open), Some(records)) = (&app.open.chat, records) {
-                    open.chat.update(cx, |chat, cx| chat.records_changed(&records, cx));
+                    open.chat.update(cx, |chat, cx| {
+                        chat.set_hub_here(hub_here, cx);
+                        chat.records_changed(&records, cx);
+                    });
                 }
                 cx.notify();
             }),
@@ -125,7 +170,16 @@ impl MobileApp {
                 }
             }),
         ];
-        self.followed = Some(Followed { link, creating: None, _events: events });
+        let followed = Followed {
+            link,
+            creating: None,
+            asking: None,
+            renaming: None,
+            retitling: HashSet::new(),
+            archiving: HashSet::new(),
+            _events: events,
+        };
+        self.followed = Some(followed);
         self.open = Open::default();
         cx.notify();
     }
@@ -146,8 +200,15 @@ impl MobileApp {
     }
 
     fn activation(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(open) = &self.open.chat {
+            let in_front = window.is_window_active();
+            open.chat.update(cx, |chat, cx| chat.set_app_in_front(in_front, cx));
+        }
         if !window.is_window_active() {
             self.left_at = Some(SystemTime::now());
+            if let Some(link) = self.link() {
+                link.read(cx).keep_drafts_now();
+            }
             return;
         }
         // A clock set back counts as away, since how long isn't known.
@@ -160,6 +221,17 @@ impl MobileApp {
 
     pub(super) fn link(&self) -> Option<&Entity<HubLink>> {
         self.followed.as_ref().map(|followed| &followed.link)
+    }
+
+    /// The connection to the hub, while there is one.
+    pub(super) fn client(&self, cx: &App) -> Option<client_core::Client> {
+        self.link().and_then(|link| link.read(cx).client())
+    }
+
+    /// Says what went wrong, across the screen under its bar.
+    pub(super) fn say(&mut self, error: String, cx: &mut Context<Self>) {
+        self.error = Some(error.into());
+        cx.notify();
     }
 
     /// Opens `chat`, in place of any panel.
@@ -202,6 +274,14 @@ impl MobileApp {
         self.link().is_some_and(|link| link.read(cx).client().is_some())
     }
 
+    /// Connects to the hub again now, as coming back to the app after a while away does.
+    #[cfg(feature = "testing")]
+    pub fn connect_again(&mut self, cx: &mut Context<Self>) {
+        if let Some(link) = self.link() {
+            link.update(cx, HubLink::connect_now);
+        }
+    }
+
     /// What the open chat's header names it.
     #[cfg(any(test, feature = "testing"))]
     pub fn chat_title(&self, cx: &App) -> Option<String> {
@@ -212,6 +292,30 @@ impl MobileApp {
     #[cfg(any(test, feature = "testing"))]
     pub fn transcript(&self, cx: &App) -> Option<Entity<transcript::Transcript>> {
         self.open.chat.as_ref().and_then(|open| open.chat.read(cx).transcript())
+    }
+
+    /// The chat the open chat's screen shows, once it shows one.
+    #[cfg(feature = "testing")]
+    pub fn chat_shown(&self, cx: &App) -> Option<protocol::model::SessionId> {
+        self.open.chat.as_ref().and_then(|open| open.chat.read(cx).session().cloned())
+    }
+
+    /// The phone's own record of the chat the open chat's screen shows, which can be behind the hub's.
+    #[cfg(feature = "testing")]
+    pub fn shown_record(&self, cx: &App) -> Option<protocol::model::Session> {
+        self.open.chat.as_ref().and_then(|open| open.chat.read(cx).shown_record().cloned())
+    }
+
+    /// What's typed in the open chat's composer.
+    #[cfg(feature = "testing")]
+    pub fn typed(&self, cx: &App) -> Option<String> {
+        self.open.chat.as_ref().map(|open| open.chat.read(cx).typed(cx))
+    }
+
+    /// The work of the subagent shown over the open chat, while it's in front.
+    #[cfg(feature = "testing")]
+    pub fn subagent_transcript(&self, cx: &App) -> Option<Entity<transcript::Transcript>> {
+        self.open.chat.as_ref().and_then(|open| open.chat.read(cx).subagent_transcript())
     }
 }
 
@@ -230,6 +334,7 @@ impl Render for MobileApp {
             },
             Some(_) | None => self.pairing_screen(window, cx),
         };
-        div().size_full().bg(pane).text_color(text).child(screen)
+        let over = [self.asking_sheet(window, cx), self.renaming_sheet(window, cx)];
+        div().relative().size_full().bg(pane).text_color(text).child(screen).children(over.into_iter().flatten())
     }
 }

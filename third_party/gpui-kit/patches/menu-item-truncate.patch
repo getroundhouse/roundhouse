@@ -1,0 +1,29 @@
+diff --git a/crates/component/src/menu/popup_menu.rs b/crates/component/src/menu/popup_menu.rs
+index fe783da3..b45ca64b 100644
+--- a/crates/component/src/menu/popup_menu.rs
++++ b/crates/component/src/menu/popup_menu.rs
+@@ -1594,10 +1594,15 @@ impl PopupMenu {
+                     h_flex()
+                         .flex_row_dir(cx)
+                         .w_full()
++                        .min_w_0()
+                         .gap_3()
+                         .items_center()
+                         .justify_between()
+-                        .when(!show_link_icon, |this| this.child(label.clone()))
++                        // Cut short in a menu too narrow for it, keeping the
++                        // key and the check whole.
++                        .when(!show_link_icon, |this| {
++                            this.child(div().min_w_0().truncate().child(label.clone()))
++                        })
+                         .when(show_link_icon, |this| {
+                             this.child(
+                                 h_flex()
+@@ -1619,6 +1624,7 @@ impl PopupMenu {
+                             this.child(
+                                 h_flex()
+                                     .flex_row_dir(cx)
++                                    .flex_none()
+                                     .gap_x(item_gap)
+                                     .items_center()
+                                     .children(key)

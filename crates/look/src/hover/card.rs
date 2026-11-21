@@ -1,5 +1,6 @@
 //! The app's hover card: it shows once the pointer has rested on what it's for, and goes once the pointer has left
-//! both that and the card, as the kit's does. Unlike the kit's, something opened from it can hold it open, as a menu
+//! both that and the card, as the kit's does. Under touch, where nothing rests, a tap on what it's for shows it, and a
+//! tap anywhere but the card puts it away, as `components.md` says. Unlike the kit's, something opened from it can hold it open, as a menu
 //! opened from a button in it does while the pointer is in the menu, which is drawn outside the card, and one can show
 //! while what it's for has the keyboard's focus too.
 
@@ -9,13 +10,13 @@ use std::time::Duration;
 
 use gpui_kit::base::{Popup, StyledExt as _, v_flex};
 use gpui_kit::{
-    Anchor, AnyElement, App, Bounds, Context, DismissEvent, Div, ElementId, Entity, EntityId, EventEmitter,
-    FocusHandle, Half as _, InteractiveElement as _, IntoElement, ParentElement as _, Pixels, RenderOnce, Role,
-    SharedString, StatefulInteractiveElement as _, StyleRefinement, Styled as _, Subscription, Task,
-    TestSupportExt as _, WeakEntity, Window, canvas, div,
+    Anchor, AnyElement, App, Bounds, ClickEvent, Div, ElementId, Half as _, InteractiveElement as _, IntoElement,
+    MouseDownEvent, ParentElement as _, Pixels, RenderOnce, Role, SharedString, StatefulInteractiveElement as _,
+    StyleRefinement, Styled as _, TestSupportExt as _, Window, canvas, div,
 };
 
-use crate::Space;
+use super::shown::{HoldOpen, Shown};
+use crate::{Input, Space};
 
 /// How long the pointer rests before a card shows: as long as GPUI waits before any other tooltip in the app shows,
 /// so a card doesn't feel slower than one.
@@ -40,7 +41,7 @@ pub fn hover_card_with_a_button(id: impl Into<ElementId>) -> HoverCard {
 }
 
 type Content = Box<dyn FnOnce(&HoldOpen, &mut Window, &mut App) -> AnyElement>;
-type OpenChange = Rc<dyn Fn(&bool, &mut Window, &mut App)>;
+pub(super) type OpenChange = Rc<dyn Fn(&bool, &mut Window, &mut App)>;
 
 /// A card that shows over what it's for, its trigger, while the pointer is on either, or while something opened from
 /// it holds it open, as [`hover_card`] makes one.
@@ -141,167 +142,6 @@ impl HoverCard {
     }
 }
 
-/// Holds a card open, whatever the pointer does, while something opened from it is, such as a menu opened from a
-/// button in it. It's for the time the card was open when it was handed out, so one kept after the card has closed
-/// does nothing, even once the card opens again.
-#[derive(Clone)]
-pub struct HoldOpen {
-    shown: WeakEntity<Shown>,
-    opening: usize,
-}
-
-impl HoldOpen {
-    /// Holds the card open while `view` is open: until it's dismissed, or goes without that, as a menu does when the
-    /// button it opened from is no longer drawn. Once nothing holds the card, it goes as it would have, unless the
-    /// pointer is on the card or what it's for.
-    pub fn while_open<V: EventEmitter<DismissEvent>>(&self, view: &Entity<V>, window: &Window, cx: &mut App) {
-        // Gone once the card's trigger is no longer drawn, when there's no card left to hold.
-        let Some(shown) = self.shown.upgrade() else { return };
-        let (opening, id) = (self.opening, view.entity_id());
-        shown.update(cx, |shown, cx| {
-            if !shown.open || shown.opening != opening {
-                return;
-            }
-            shown.holders.push(id);
-            cx.subscribe_in(view, window, move |shown, _, _: &DismissEvent, window, cx| shown.let_go(id, window, cx))
-                .detach();
-            cx.observe_release_in(view, window, move |shown, _, window, cx| shown.let_go(id, window, cx)).detach();
-        });
-    }
-
-    /// Holds the card open while `menu` is, as [`HoldOpen::while_open`] does, such as a menu opened from a button on
-    /// the card, which is drawn outside it.
-    pub fn while_menu_open(&self, menu: &crate::OpenMenu, window: &Window, cx: &mut App) {
-        if let Some(menu) = menu.kit() {
-            self.while_open(&menu, window, cx);
-        }
-    }
-}
-
-/// Whether a card shows, and what decides when it next does or goes, kept from one drawing to the next.
-#[derive(Default)]
-struct Shown {
-    open: bool,
-    open_delay: Duration,
-    close_delay: Duration,
-    on_open_change: Option<OpenChange>,
-    /// When it next opens or closes. A newer one replaces it, and dropping it cancels it.
-    timer: Option<Task<()>>,
-    /// Where the pointer and the keyboard's focus are, which keep it open.
-    on: On,
-    /// What takes the keyboard's focus for a card that shows on it, made the first time it's drawn so, with what says
-    /// when the focus comes and goes.
-    focus: Option<(FocusHandle, [Subscription; 2])>,
-    /// Where what it's for was last drawn, for a card that flips to fit.
-    trigger_at: Rc<Cell<Option<Bounds<Pixels>>>>,
-    /// What holds it open. It only closes once nothing does.
-    holders: Vec<EntityId>,
-    /// Counts each time it opens, so a hold handed out an earlier time does nothing.
-    opening: usize,
-}
-
-/// Which of what keeps a card open, but a hold, it's on: the pointer on what it's for, the pointer on the card, and the
-/// keyboard's focus on what it's for, put there from the keyboard.
-#[derive(Clone, Copy, Default)]
-struct On {
-    trigger: bool,
-    card: bool,
-    focus: bool,
-}
-
-impl Shown {
-    fn after(&mut self, delay: Duration, open: bool, window: &mut Window, cx: &mut Context<Self>) {
-        self.timer = Some(cx.spawn_in(window, async move |this, cx| {
-            cx.background_executor().timer(delay).await;
-            let _ = this.update_in(cx, |shown, window, cx| {
-                if open || !shown.stays() {
-                    shown.set_open(open, window, cx);
-                }
-            });
-        }));
-    }
-
-    /// Whether something keeps it open: the pointer, on the card or what it's for, the keyboard's focus, or what holds
-    /// it.
-    fn stays(&self) -> bool {
-        self.on.trigger || self.on.card || self.on.focus || !self.holders.is_empty()
-    }
-
-    /// Has it go after its delay, unless something keeps it open.
-    fn close_unless_kept(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if !self.stays() {
-            self.after(self.close_delay, false, window, cx);
-        }
-    }
-
-    fn set_open(&mut self, open: bool, window: &mut Window, cx: &mut Context<Self>) {
-        if self.open == open {
-            return;
-        }
-        self.open = open;
-        if open {
-            self.opening += 1;
-        }
-        cx.notify();
-        // From here rather than from the element, since a timer outlives the element that set it.
-        if let Some(changed) = self.on_open_change.clone() {
-            changed(&open, window, cx);
-        }
-    }
-
-    fn on_trigger(&mut self, on: bool, window: &mut Window, cx: &mut Context<Self>) {
-        self.on.trigger = on;
-        if on {
-            self.after(self.open_delay, true, window, cx);
-        } else {
-            self.close_unless_kept(window, cx);
-        }
-    }
-
-    fn on_card(&mut self, on: bool, window: &mut Window, cx: &mut Context<Self>) {
-        self.on.card = on;
-        if on {
-            self.timer = None;
-        } else {
-            self.close_unless_kept(window, cx);
-        }
-    }
-
-    /// What takes the keyboard's focus for it, made the first time it's asked for.
-    fn focus(&mut self, window: &mut Window, cx: &mut Context<Self>) -> FocusHandle {
-        if let Some((focus, _)) = &self.focus {
-            return focus.clone();
-        }
-        let focus = cx.focus_handle().tab_stop(true);
-        // Only from the keyboard, since a click is the pointer's, which shows it once it has rested.
-        let came = cx.on_focus_in(&focus, window, |shown, window, cx| {
-            shown.focused(window.last_input_was_keyboard(), window, cx);
-        });
-        let went = cx.on_focus_out(&focus, window, |shown, _, window, cx| shown.focused(false, window, cx));
-        self.focus = Some((focus.clone(), [came, went]));
-        focus
-    }
-
-    fn focused(&mut self, focused: bool, window: &mut Window, cx: &mut Context<Self>) {
-        self.on.focus = focused;
-        if focused {
-            self.timer = None;
-            self.set_open(true, window, cx);
-        } else {
-            self.close_unless_kept(window, cx);
-        }
-    }
-
-    /// `holder` no longer holds it open, being dismissed or gone, if it still did.
-    fn let_go(&mut self, holder: EntityId, window: &mut Window, cx: &mut Context<Self>) {
-        let held = self.holders.len();
-        self.holders.retain(|id| *id != holder);
-        if self.holders.len() < held {
-            self.close_unless_kept(window, cx);
-        }
-    }
-}
-
 impl RenderOnce for HoverCard {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let (open_delay, close_delay, on_open_change) = (self.open_delay, self.close_delay, self.on_open_change);
@@ -312,11 +152,18 @@ impl RenderOnce for HoverCard {
             (shown.open, shown.opening, focuses.then(|| shown.focus(window, cx)), shown.trigger_at.clone())
         });
         let anchor = if self.flips { fitting(self.anchor, trigger_at.get(), window) } else { self.anchor };
-        let on_trigger = window.listener_for(&shown, |shown, on: &bool, window, cx| shown.on_trigger(*on, window, cx));
+        let touch = Input::of(cx) == Input::Touch;
         // As big as the box `trigger_style` lays out, so what it's for can fill that, as a tab fills its bar's height.
-        let trigger = div().id("trigger").size_full().children(self.trigger).on_hover(on_trigger);
-        // Measured only for a card that flips, so every other is laid out as it was.
-        let trigger = if self.flips { trigger.relative().child(measuring(trigger_at)) } else { trigger };
+        let trigger = div().id("trigger").size_full().children(self.trigger);
+        let trigger = if touch {
+            trigger.on_click(window.listener_for(&shown, |shown, _: &ClickEvent, window, cx| shown.tapped(window, cx)))
+        } else {
+            trigger
+                .on_hover(window.listener_for(&shown, |shown, on: &bool, window, cx| shown.on_trigger(*on, window, cx)))
+        };
+        // Measured only for a card that flips, or under touch, to tell a tap on it, so every other is laid out as it
+        // was.
+        let trigger = if self.flips || touch { trigger.relative().child(measuring(trigger_at)) } else { trigger };
         let trigger = match (focus, self.on_focus) {
             (Some(focus), Some(said)) => trigger
                 .role(said.role)
@@ -331,7 +178,15 @@ impl RenderOnce for HoverCard {
         let Some(content) = self.content.filter(|_| open) else { return popup };
         let on_card = window.listener_for(&shown, |shown, on: &bool, window, cx| shown.on_card(*on, window, cx));
         let hold = HoldOpen { shown: shown.downgrade(), opening };
-        popup.content(around_content(anchor).on_hover(on_card).child(content(&hold, window, cx)))
+        let around = around_content(anchor).on_hover(on_card);
+        let around = if touch {
+            around.on_mouse_down_out(window.listener_for(&shown, |shown, event: &MouseDownEvent, window, cx| {
+                shown.pressed_off_the_card(event.position, window, cx);
+            }))
+        } else {
+            around
+        };
+        popup.content(around.child(content(&hold, window, cx)))
     }
 }
 

@@ -36,4 +36,8 @@ patches = [
     "ios-mono-font",
     "mono-font-without-a-font-list",
     "test-input-between-frames",
+    "context-menu-lift",
+    "menu-item-danger",
+    "menu-item-truncate",
+    "code-block-wrap",
 ]

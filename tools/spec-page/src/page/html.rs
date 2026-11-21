@@ -8,6 +8,21 @@ const STYLE: &str = include_str!("../page.css");
 /// From the page to the spec's files, which it links to.
 const TO_THE_SPEC: &str = "../../docs/spec/";
 
+/// Copies what's in `from` into `to`, and what's in its folders, such as each client's screens in a folder of its own.
+fn copy_all(from: &Path, to: &Path) -> Result<()> {
+    std::fs::create_dir_all(to).with_context(|| format!("making {}", to.display()))?;
+    for entry in std::fs::read_dir(from).with_context(|| format!("reading {}", from.display()))? {
+        let entry = entry?;
+        let to = to.join(entry.file_name());
+        if entry.file_type()?.is_dir() {
+            copy_all(&entry.path(), &to)?;
+        } else {
+            std::fs::copy(entry.path(), &to).with_context(|| format!("copying to {}", to.display()))?;
+        }
+    }
+    Ok(())
+}
+
 /// Writes the page into `out`, with the index it's drawn from as `index.json` and a copy of the screens in `spec`,
 /// and gives the page's path.
 pub(crate) fn write(index: &Index, spec: &Path, out: &Path) -> Result<PathBuf> {
@@ -18,13 +33,7 @@ pub(crate) fn write(index: &Index, spec: &Path, out: &Path) -> Result<PathBuf> {
         _ => Ok(()),
     }
     .with_context(|| format!("clearing {}", screens.display()))?;
-    std::fs::create_dir_all(&screens).with_context(|| format!("making {}", screens.display()))?;
-    let from = spec.join("screens");
-    for entry in std::fs::read_dir(&from).with_context(|| format!("reading {}", from.display()))? {
-        let entry = entry?;
-        let to = screens.join(entry.file_name());
-        std::fs::copy(entry.path(), &to).with_context(|| format!("copying to {}", to.display()))?;
-    }
+    copy_all(&spec.join("screens"), &screens)?;
     let write = |name: &str, contents: String| {
         let path = out.join(name);
         std::fs::write(&path, contents).with_context(|| format!("writing {}", path.display()))?;

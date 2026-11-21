@@ -158,8 +158,9 @@ fn tie_line(tie: &Tie, cx: &App) -> Option<AnyElement> {
     )
 }
 
-/// The chip's menu, the same rows on every chip, with what doesn't apply to this one off. An archived workspace is
-/// named but can't be gone to, since it's brought back from Home.
+/// The chip's menu, the same rows on every chip, with what doesn't apply to this one off, and Copy link first under
+/// touch, as the menu puts every row that copies. An archived workspace is named but can't be gone to, since it's
+/// brought back from Home.
 pub(super) fn menu<W: Waiter>(
     reference: &Reference,
     tie: &Tie,
@@ -173,16 +174,16 @@ pub(super) fn menu<W: Waiter>(
         Tie::ThisOne { .. } | Tie::None => ("Go to its workspace".to_string(), None),
     };
     let references = references.clone();
-    list.row(look::menu_row("Open on GitHub").icon(IconName::ArrowUpRight).on_choose(move |_, cx| cx.open_url(&open)))
-        .row(
-            look::menu_row("Copy link")
-                .icon(IconName::Link)
-                .on_choose(move |_, cx| cx.write_to_clipboard(ClipboardItem::new_string(copy.clone()))),
-        )
-        .separator()
-        .row(look::menu_row(go).icon(IconName::GitBranch).off(to.is_none()).on_choose(move |_, cx| {
+    let open = look::menu_row("Open on GitHub").icon(IconName::ArrowUpRight).on_choose(move |_, cx| cx.open_url(&open));
+    let copy = look::menu_row("Copy link")
+        .icon(IconName::Link)
+        .copies()
+        .on_choose(move |_, cx| cx.write_to_clipboard(ClipboardItem::new_string(copy.clone())));
+    list.row(open).row(copy).separator().row(look::menu_row(go).icon(IconName::GitBranch).off(to.is_none()).on_choose(
+        move |_, cx| {
             if let Some(to) = &to {
                 references.go_to(to.clone(), cx);
             }
-        }))
+        },
+    ))
 }

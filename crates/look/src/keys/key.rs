@@ -6,10 +6,11 @@ use gpui_kit::{
 };
 
 use super::KeyKind;
-use crate::{Corner, EDGE, Shaped as _, Space, Type, Typeset as _, colors};
+use crate::{Corner, EDGE, Input, Shaped as _, Space, Type, Typeset as _, colors};
 
 /// A key to press, as `binding` names it, such as `secondary-f` or `enter`, shown as `kind`. It's read for the system
-/// it's drawn on, so `secondary` is Cmd on a Mac and Ctrl elsewhere, and written as that system writes keys.
+/// it's drawn on, so `secondary` is Cmd on a Mac and Ctrl elsewhere, and written as that system writes keys. It shows
+/// only with a pointer, as `docs/spec/components.md` says of every key, and under touch takes no room.
 pub fn key(kind: KeyKind, binding: impl Into<SharedString>) -> Key {
     Key { kind, binding: binding.into() }
 }
@@ -50,6 +51,10 @@ impl Key {
 
 impl RenderOnce for Key {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+        if Input::of(cx) == Input::Touch {
+            // Out of the layout, so whatever it's beside leaves no gap for it either.
+            return div().hidden().into_any_element();
+        }
         let parts = Key::parts(&self.binding, cx.platform_info().os);
         match self.kind {
             KeyKind::Plain => parts.concat().into_any_element(),

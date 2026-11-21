@@ -9,6 +9,7 @@ mod menu;
 mod notes;
 mod row;
 mod style;
+mod title;
 
 #[cfg(any(test, feature = "testing"))]
 pub use menu::shown_menu;
@@ -16,3 +17,4 @@ pub use menu::{Menu, OpenMenu, RightClickMenu, menu};
 pub use notes::NoteKind;
 pub use row::{MenuRow, menu_row};
 pub(crate) use style::style;
+pub(crate) use title::under_the_title;

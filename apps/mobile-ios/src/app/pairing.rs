@@ -1,6 +1,7 @@
 //! Pairing with a hub: from a link the phone opens, such as the Camera app scanning the hub's QR code, or one pasted
 //! in.
 
+use gpui_kit::assets::IconName;
 use gpui_kit::component::v_flex;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
@@ -11,7 +12,7 @@ use look::{AppIconSize, AppIconStyle, ButtonKind, Corner, FieldKind, Shaped as _
 use protocol::pairing::PairingLink;
 
 use super::{MobileApp, Pairing};
-use crate::chrome::TAPPED;
+use crate::chrome::{self, TAPPED};
 
 /// What the hub calls this phone in its list of paired devices. iOS only tells an app the model, not the name its
 /// owner gave it.
@@ -60,29 +61,31 @@ impl MobileApp {
         cx.notify();
     }
 
+    /// Pairing, under the bar every screen has, which names it. With a hub already followed, the bar goes back to it,
+    /// but while it's asked whether to replace it, where keeping it is one of the answers.
     pub(super) fn pairing_screen(&self, window: &Window, cx: &mut Context<Self>) -> AnyElement {
-        let insets = window.insets();
-        let body = match &self.pairing {
-            Pairing::Confirm(link) => self.confirm(link, cx),
-            Pairing::Idle | Pairing::Busy { .. } | Pairing::Failed(_) => self.instructions(cx),
+        let insets = crate::safe_area::insets(window, cx);
+        let (title, body) = match &self.pairing {
+            Pairing::Confirm(link) => ("Another hub", self.confirm(link, cx)),
+            Pairing::Idle | Pairing::Busy { .. } | Pairing::Failed(_) => ("Pair with a hub", self.instructions(cx)),
         };
         let back = self.followed.as_ref().filter(|_| !matches!(self.pairing, Pairing::Confirm(_))).map(|followed| {
-            let words = format!("Back to {}", followed.link.read(cx).hub().hub_name);
-            look::button("keep-hub", ButtonKind::Borderless, TAPPED, words)
-                .full_width()
+            let hub = followed.link.read(cx).hub().hub_name.clone();
+            chrome::icon_button("keep-hub", IconName::ChevronLeft, "Back")
+                .accessibility_label(format!("Back to {hub}"))
                 .on_click(cx.listener(|app, _, _, cx| app.keep_hub(cx)))
         });
-        v_flex()
-            .size_full()
-            .pt(insets.safe_area.top)
+        let header = chrome::header(title.into(), None, back, Vec::new(), window, cx);
+        let body = v_flex()
+            .flex_1()
+            .min_h_0()
             .pb(insets.effective().bottom + Space::Large.size())
             .px(Space::XLarge)
             .gap(Space::Large)
             .justify_center()
             .child(div().flex().justify_center().child(look::app_icon(AppIconStyle::Idle, AppIconSize::Px128, cx)))
-            .child(body)
-            .children(back)
-            .into_any_element()
+            .child(body);
+        v_flex().size_full().child(header).child(body).into_any_element()
     }
 
     fn instructions(&self, cx: &mut Context<Self>) -> AnyElement {
@@ -105,7 +108,6 @@ impl MobileApp {
             .child("roundhouse phone pair");
         v_flex()
             .gap(Space::Large)
-            .child(div().typeset(Type::PageTitle).text_center().child("Pair with a hub"))
             .child(div().typeset(Type::Body).text_center().text_color(colors.text_muted).child(
                 "On the computer running your hub, run this, then scan the QR code it shows with the Camera app.",
             ))

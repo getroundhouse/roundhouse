@@ -9,6 +9,7 @@ use gpui_kit::{
     AnyElement, App, Div, ElementId, InteractiveElement as _, IntoElement, ParentElement,
     StatefulInteractiveElement as _, Styled, TestSupportExt as _, WeakEntity, div,
 };
+use look::Tooltipped as _;
 use look::{Moving, TaskRing};
 use protocol::event::AgentTask;
 use protocol::model::{Wait, WaitId, WaitUntil};
@@ -61,7 +62,7 @@ fn several(group: TaskGroup, tasks: &[&AgentTask], open: bool, shared: &Shared, 
     };
     opening(group.key().element("several"), count.clone().into(), open, set_open, cx)
         .text_color(colors.text_muted)
-        .tooltip(look::tooltip(pointed_at))
+        .says(pointed_at, cx)
         .child(lead(mark, look::Size::Inline.width(), open, cx))
         .child(div().flex_none().child(count))
         .when(!open, |line| line.child(clipped(what_for(tasks)).min_w_0().text_color(colors.text_faint)))
@@ -167,7 +168,7 @@ fn in_the_background(
                 .aria_label(text)
                 .test_support(),
         )
-        .tooltip(look::tooltip(pointed_at))
+        .says(pointed_at, cx)
         .test_support();
     tail_line(cx).child(described).when_some(button, |line, button| line.child(div().flex_none().child(button)))
 }

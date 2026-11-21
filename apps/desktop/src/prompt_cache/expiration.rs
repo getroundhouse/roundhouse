@@ -1,8 +1,8 @@
 use gpui_kit::{
-    ElementId, Hsla, InteractiveElement as _, IntoElement, ParentElement as _, StatefulInteractiveElement as _,
+    App, Div, ElementId, Hsla, InteractiveElement as _, ParentElement as _, Stateful, StatefulInteractiveElement as _,
     Styled as _, div,
 };
-use look::CacheMark;
+use look::{CacheMark, Tooltipped as _};
 use protocol::model::{CacheState, Session, Workspace, WorkspaceStatus};
 
 /// The longest the app waits to draw again what's said of a cache, however much later the next change is. A Mac's
@@ -33,14 +33,9 @@ pub(crate) fn told_of(workspace: &Workspace) -> bool {
 
 /// The clock a tab or a row shows while a cache is about to expire, with `left_ms` left, which says so while it's
 /// pointed at, and to assistive apps.
-pub(crate) fn clock(id: impl Into<ElementId>, left_ms: i64, color: Hsla) -> impl IntoElement {
+pub(crate) fn clock(id: impl Into<ElementId>, left_ms: i64, color: Hsla, cx: &App) -> Stateful<Div> {
     let said = look::expires_in(left_ms);
-    div()
-        .id(id)
-        .flex_none()
-        .aria_label(said.clone())
-        .tooltip(look::tooltip(said))
-        .child(look::cache_mark(CacheMark::Clock, color))
+    div().id(id).flex_none().aria_label(said.clone()).says(said, cx).child(look::cache_mark(CacheMark::Clock, color))
 }
 
 /// How long the soonest to expire of `sessions`' caches has left at `now_ms`, of those about to.

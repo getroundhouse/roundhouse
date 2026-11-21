@@ -125,6 +125,12 @@ impl Type {
         self.set().size.to_pixels(rem)
     }
 
+    /// How big it is at `reach`, in a window whose rem is `rem`, for a test of what has to fit somewhere.
+    #[cfg(test)]
+    pub(crate) fn size_at(self, reach: Reach, rem: Pixels) -> Pixels {
+        self.set_at(reach).size.to_pixels(rem)
+    }
+
     /// How the spec's table writes it: its name, its font, its size at a desk, at the app's rem there, its weight, and
     /// its size on a handheld.
     ///

@@ -21,7 +21,7 @@ use gpui_kit::{
 };
 use look::{IconSizing as _, InRegion as _, Region};
 use protocol::model::{Proposal, ProposalId, SessionId};
-use transcript::{PROPOSAL_ICON, ProposalEvent, ProposalRequest, ProposalView};
+use transcript::{PROPOSAL_ICON, ProposalEvent, ProposalView};
 
 use super::band::Band;
 use super::{PaneEvent, Showing, WorkspacePane, tab};
@@ -112,8 +112,7 @@ impl WorkspacePane {
                 });
             });
             view.read(cx).follow_records(self.records.clone());
-            let answers = cx.subscribe(&view, |this, view, event: &ProposalEvent, cx| match event {
-                ProposalEvent::Send(request) => this.answer_proposal(view, request.clone(), cx),
+            let answers = cx.subscribe(&view, |_, _, event: &ProposalEvent, cx| match event {
                 ProposalEvent::Error(message) => cx.emit(PaneEvent::Error(message.clone())),
                 ProposalEvent::GoToWorkspace(workspace) => cx.emit(PaneEvent::GoToWorkspace(workspace.clone())),
             });
@@ -128,28 +127,6 @@ impl WorkspacePane {
             self.bring_to_front(Showing::Proposal, cx);
         }
         cx.notify();
-    }
-
-    /// Sends the person's answer, or their request for another round, to the hub, which tells the agent, and tells
-    /// `view` how it went.
-    fn answer_proposal(&mut self, view: Entity<ProposalView>, request: ProposalRequest, cx: &mut Context<Self>) {
-        let doing = match &request {
-            ProposalRequest::Answer(_) => "send your answer",
-            ProposalRequest::AnotherRound(_) => "ask for another round",
-        };
-        let answering = self.client.start(move |client| match request {
-            ProposalRequest::Answer(answer) => client.proposal_answer(answer),
-            ProposalRequest::AnotherRound(round) => client.proposal_another_round(round),
-        });
-        // client-core takes in the answered proposal the reply carries, so the copy has it by the time this runs.
-        cx.spawn(async move |_, cx| {
-            let outcome = match answering.recv().await {
-                Ok(_) => Ok(()),
-                Err(e) => Err(client_core::refusals::couldnt(doing, &e)),
-            };
-            view.update(cx, |view, cx| view.sent(outcome, cx));
-        })
-        .detach();
     }
 
     /// Closes the proposal tab, and shows the chat it covered.

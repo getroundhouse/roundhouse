@@ -4,7 +4,7 @@ use gpui_kit::base::Tab as Pressable;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, ClickEvent, Div, ElementId, InteractiveElement as _, IntoElement, ParentElement as _, RenderOnce,
-    SharedString, StatefulInteractiveElement as _, Styled, TestSupportExt as _, Window, div, relative,
+    SharedString, Styled, TestSupportExt as _, Window, div, relative,
 };
 
 use super::TabWidth;
@@ -16,6 +16,7 @@ use crate::hand::Hand as _;
 use crate::menus::{Menu, RightClickMenu as _};
 use crate::shape::TAB_LINE;
 use crate::space::Space;
+use crate::tooltips::Tooltipped as _;
 use crate::typography::{Type, Typeset as _};
 
 /// How far in from a tab's start its mark or its name starts.
@@ -174,7 +175,7 @@ impl RenderOnce for Tab {
                     tab.text_color(colors.text_muted)
                 }
             })
-            .when_some(self.tooltip, |tab, words| tab.tooltip(crate::tooltip(words)))
+            .when_some(self.tooltip, |tab, words| tab.says(words, cx))
             .when_some(self.on_click, |tab, on_click| {
                 tab.on_click(move |event, window, cx| on_click(event, window, cx))
             })
