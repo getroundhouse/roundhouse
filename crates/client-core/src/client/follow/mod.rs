@@ -6,3 +6,6 @@ mod following;
 
 pub use following::FollowError;
 pub(super) use following::{Follow, Giver, Reach, Source, Teller};
+
+#[cfg(test)]
+mod tests;

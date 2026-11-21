@@ -2,7 +2,7 @@
 //! gives a meaning edit the shell's line as they do there.
 
 use desktop::workspace_pane::Showing;
-use gpui_kit::{Action, ClipboardItem, TestAppContext};
+use gpui_kit::{Action, AppContext as _, ClipboardItem, TestAppContext};
 use protocol::model::WorkspaceStatus;
 
 use super::selecting::with_a_made_up_terminal;
@@ -175,4 +175,23 @@ fn stop_agent_is_left_to_the_chat_showing(cx: &mut TestAppContext) {
 
     ui.wait("the chat in front", |ui| showing(ui) == Showing::Chat);
     assert!(can_stop(&mut ui));
+}
+
+/// A terminal is shown only while it's in front, so one behind the chat is let go after a while, and the chat in front
+/// of it again tells it so.
+#[gpui_kit::test]
+fn a_terminal_is_shown_only_while_its_in_front(cx: &mut TestAppContext) {
+    let (_fake, mut ui) = with_a_made_up_terminal(cx);
+    let view = ui.cx.read_entity(&ui.pane().unwrap(), |p, _| p.terminal()).unwrap();
+    let shown = |ui: &Ui<'_>| ui.cx.read_entity(&view, |view, _| view.open_terminal().shown());
+    assert!(shown(&ui));
+
+    ui.press("ctrl-tab");
+    ui.wait("the chat in front", |ui| showing(ui) == Showing::Chat);
+    let behind_the_chat = shown(&ui);
+    ui.press("ctrl-tab");
+    ui.wait("the terminal in front again", |ui| showing(ui) == Showing::Terminal);
+
+    assert!(!behind_the_chat);
+    assert!(shown(&ui));
 }

@@ -1,6 +1,7 @@
 //! A terminal someone has open, and the source it's followed from.
 
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use parking_lot::Mutex;
 use protocol::model::TerminalId;
@@ -11,6 +12,11 @@ use super::window::{Ask, Pointer, Replied, SelectBy, Window};
 use crate::client::follow::{Follow, Source};
 use crate::client::{Client, ClientError, FollowError, Result, Subscription, SubscriptionItem};
 use crate::drawn::{Frame, Rgb};
+
+/// How long a terminal goes without being shown before it's let go, as #2099 says: long enough that going between a
+/// chat and its terminal costs nothing, and short enough that a terminal left behind a chat soon stops costing the
+/// link what its program writes.
+const LET_GO_AFTER: Duration = Duration::from_secs(30);
 
 /// A terminal someone has open, followed until every clone of this has gone. One view takes its frames, since taking
 /// one empties what's held.
@@ -31,6 +37,8 @@ pub(super) struct Held {
     pub(super) given: Vec<Given>,
     /// Whether its shell has ended, after which nothing more comes.
     ended: bool,
+    /// Since when no view has shown it, while none does.
+    hidden_since: Option<Instant>,
 }
 
 /// What a view gives the window, which only the thread it's followed on reaches, and the replies that thread waits for
@@ -56,10 +64,17 @@ pub(super) enum Given {
 }
 
 impl OpenTerminal {
-    /// Follows the terminal `id` on a thread of its own, so this doesn't wait for the hub.
+    /// Follows the terminal `id` on a thread of its own, so this doesn't wait for the hub. It's taken to be shown until
+    /// [`OpenTerminal::set_shown`] says otherwise.
     pub fn start(client: &Client, id: &TerminalId) -> Self {
+        Self::letting_go_after(client, id, LET_GO_AFTER)
+    }
+
+    /// As [`OpenTerminal::start`], letting it go once it hasn't been shown for `after`.
+    pub(super) fn letting_go_after(client: &Client, id: &TerminalId, after: Duration) -> Self {
         let (waiting, replies) = flume::unbounded();
-        let source = TerminalSource { id: id.clone(), window: Window::new(), waiting, copies: Vec::new() };
+        let source =
+            TerminalSource { id: id.clone(), window: Window::new(), waiting, copies: Vec::new(), let_go_after: after };
         let follow = Follow::start(client, Held::default(), move || source);
         asking::start(id.clone(), replies, follow.giver());
         Self { id: id.clone(), follow }
@@ -84,6 +99,30 @@ impl OpenTerminal {
             self.follow.wake();
         }
         frame
+    }
+
+    /// Whether a view shows it. Once none has for 30 seconds, it's let go, so the hub sends it nothing, and the
+    /// terminal's worker sends the hub nothing if no other client watches. Shown again, it draws the rows it had until
+    /// a picture of what the terminal shows now comes. It asks for nothing when it's shown again, unless the view's
+    /// room changed meanwhile, or the connection did, as [`OpenTerminal::fit`] says.
+    pub fn set_shown(&self, shown: bool) {
+        let changed = self.follow.quietly(|held| {
+            let changed = held.hidden_since.is_none() != shown;
+            if changed {
+                held.hidden_since = (!shown).then(Instant::now);
+            }
+            changed
+        });
+        // So its thread waits for when it's let go, or follows it again.
+        if changed {
+            self.follow.wake();
+        }
+    }
+
+    /// Whether a view shows it, as [`OpenTerminal::set_shown`] last said.
+    #[cfg(any(test, feature = "testing"))]
+    pub fn shown(&self) -> bool {
+        self.follow.read(|held| held.hidden_since.is_none())
     }
 
     /// Whether its shell has ended.
@@ -116,10 +155,10 @@ impl OpenTerminal {
         self.give(Given::Wheel(lines));
     }
 
-    /// The view has room for `size`, which the terminal is asked to take if it isn't that size already, and again
-    /// on each new connection, if it's another size there. A new size another client gives it is kept until the room changes.
-    /// The view's top and what's selected stay on their rows through a size it asked for, and go to the bottom with
-    /// nothing selected through one another client gave.
+    /// The view has room for `size`, which the terminal is asked to take if it isn't that size already, and again on
+    /// each new connection, once it's shown there, if it's another size there. A new size another client gives it is
+    /// kept until the room changes. The view's top and what's selected stay on their rows through a size it asked for,
+    /// and go to the bottom with nothing selected through one another client gave.
     pub fn fit(&self, size: TerminalSize) {
         self.give(Given::Fit(size));
     }
@@ -185,6 +224,8 @@ struct TerminalSource {
     waiting: flume::Sender<Waiting>,
     /// Where to send what's selected, asked while it was still to be settled, once it is.
     copies: Vec<flume::Sender<String>>,
+    /// How long it goes without being shown before it's let go.
+    let_go_after: Duration,
 }
 
 impl Source for TerminalSource {
@@ -230,6 +271,10 @@ impl Source for TerminalSource {
     /// that's gone is.
     fn asked(&mut self, connection: Option<&Client>, held: &Mutex<Held>, _: &dyn Fn()) -> Result<bool> {
         Ok(self.settle(connection, held))
+    }
+
+    fn wanted_until(&self, held: &Mutex<Held>) -> Option<Instant> {
+        held.lock().hidden_since.map(|since| since + self.let_go_after)
     }
 
     fn reconnected(&mut self) {

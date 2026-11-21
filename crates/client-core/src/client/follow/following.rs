@@ -2,6 +2,7 @@
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Weak};
+use std::time::Instant;
 
 use parking_lot::Mutex;
 use protocol::client::ErrorCode;
@@ -26,8 +27,16 @@ pub(in crate::client) trait Source: 'static {
     fn asked(&mut self, connection: Option<&Client>, held: &Mutex<Self::Held>, tell: &dyn Fn()) -> Result<bool>;
 
     /// There's a new connection, which may be to another hub, such as a newer one after a restart. Runs just before
-    /// [`Source::resume`] does for it.
+    /// [`Source::resume`] does for it, or before it's let go on it, as [`Source::wanted_until`] says.
     fn reconnected(&mut self) {}
+
+    /// Until when it's followed, after which its subscription is let go, until this says it's wanted again, such as a
+    /// terminal nobody is shown. `None`, as by default, is for as long as there's a connection. What it holds stays,
+    /// and what readers ask is still done on the connection while it's let go. Following again resumes it, as after
+    /// falling behind. Asked after each item, what readers give it, and a new connection.
+    fn wanted_until(&self, _held: &Mutex<Self::Held>) -> Option<Instant> {
+        None
+    }
 
     /// Whether `error`, from [`Source::resume`], is one its readers do without, rather than hear of, as a hub too old
     /// to serve something whose absence the source says itself.
@@ -138,7 +147,8 @@ impl<H: Send + 'static> Follow<H> {
         });
         let (client, thread_shared) = (client.clone(), shared.clone());
         let follow = move || {
-            Follower { source: source(), client, shared: thread_shared, woken, subscription: None }.run();
+            let source = source();
+            Follower { source, client, shared: thread_shared, woken, subscription: None, let_go: false }.run();
         };
         if let Err(e) = std::thread::Builder::new().name("follow hub".to_string()).spawn(follow) {
             shared.failed(FollowError::Following(ClientError::Io(e)));
@@ -224,18 +234,22 @@ struct Follower<S: Source> {
     client: Client,
     shared: Arc<Shared<S::Held>>,
     woken: flume::Receiver<()>,
-    /// `None` while there's no connection to follow on.
+    /// `None` while there's no connection to follow on, or while it's let go.
     subscription: Option<Subscription>,
+    /// Not followed, since it isn't wanted, on a connection that hasn't gone as far as it knows.
+    let_go: bool,
 }
 
 enum Next {
     Item(std::result::Result<SubscriptionItem, flume::RecvError>),
     Woken(std::result::Result<(), flume::RecvError>),
+    /// When it was wanted until has come.
+    Due,
 }
 
 impl<S: Source> Follower<S> {
     fn run(mut self) {
-        self.resume();
+        self.resume_if_wanted();
         loop {
             match self.next() {
                 Next::Item(Ok(item)) => match self.source.apply(&self.client, &self.shared.held, item) {
@@ -253,18 +267,50 @@ impl<S: Source> Follower<S> {
                 Next::Woken(Ok(())) => self.woken(),
                 // Every handle has gone.
                 Next::Woken(Err(_)) => return,
+                Next::Due => {}
             }
+            self.let_go_or_resume();
         }
     }
 
-    /// Waits for an item, while there's a subscription, or to be woken.
+    /// Waits for an item, while there's a subscription, or to be woken, or for when it's wanted until.
     fn next(&mut self) -> Next {
         let selector = flume::Selector::new();
         let selector = match &self.subscription {
             Some(subscription) => selector.recv(&subscription.items, Next::Item),
             None => selector,
         };
-        selector.recv(&self.woken, Next::Woken).wait()
+        let selector = selector.recv(&self.woken, Next::Woken);
+        let due = self.subscription.as_ref().and(self.source.wanted_until(&self.shared.held));
+        match due {
+            Some(due) => selector.wait_deadline(due).unwrap_or(Next::Due),
+            None => selector.wait(),
+        }
+    }
+
+    /// Whether it's wanted now.
+    fn wanted(&self) -> bool {
+        self.source.wanted_until(&self.shared.held).is_none_or(|until| Instant::now() < until)
+    }
+
+    /// Lets the subscription go once it isn't wanted, and follows again once it's wanted again.
+    fn let_go_or_resume(&mut self) {
+        if self.subscription.is_some() && !self.wanted() {
+            // Dropping it tells the hub to stop sending.
+            self.subscription = None;
+            self.let_go = true;
+        } else if self.let_go && self.wanted() {
+            self.resume();
+        }
+    }
+
+    /// Follows on the connection it has, unless it isn't wanted, when it's let go on it until it is.
+    fn resume_if_wanted(&mut self) {
+        if self.wanted() {
+            self.resume();
+        } else {
+            self.let_go = true;
+        }
     }
 
     fn woken(&mut self) {
@@ -275,10 +321,11 @@ impl<S: Source> Follower<S> {
             // a connection that's going isn't. A source that fetches leaves what was asked for the next.
             self.ask(false);
             self.client = client;
+            self.subscription = None;
             self.source.reconnected();
-            self.resume();
+            self.resume_if_wanted();
         }
-        self.ask(self.subscription.is_some());
+        self.ask(self.subscription.is_some() || self.let_go);
     }
 
     /// Asks the source to do what was asked of it, on the connection if `connected`.
@@ -293,6 +340,7 @@ impl<S: Source> Follower<S> {
 
     fn resume(&mut self) {
         self.subscription = None;
+        self.let_go = false;
         match self.source.resume(&self.client, &self.shared.held) {
             Ok(subscription) => {
                 self.subscription = Some(subscription);
@@ -307,6 +355,7 @@ impl<S: Source> Follower<S> {
 
     fn lost(&mut self, error: Option<FollowError>) {
         self.subscription = None;
+        self.let_go = false;
         self.shared.connected.store(false, Ordering::SeqCst);
         match error {
             Some(error) => self.shared.failed(error),
