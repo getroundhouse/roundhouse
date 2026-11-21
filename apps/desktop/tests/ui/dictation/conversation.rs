@@ -239,8 +239,8 @@ fn the_key_does_nothing_where_the_card_cant_show(cx: &mut TestAppContext) {
     assert!(!on(&mut ui) && !ui.has(CONVERSATION_BAR), "the mode stays off");
 }
 
-/// A hub that won't turn the mode off says why, and the bar stays, since the mode is still on. ✕ asks again, both
-/// while the voice was following the chat and once it no longer is. The fake hub refuses every change.
+/// A hub that won't turn the mode off says why, and the conversation carries on, as the mode is still on, so ✕ asks
+/// again as it did the first time. The fake hub refuses every change.
 #[gpui_kit::test]
 fn the_hub_refusing_to_turn_the_mode_off_says_why_and_it_can_be_asked_again(cx: &mut TestAppContext) {
     let this_mac = ClientDevice { id: "this-mac".into(), name: "This Mac".into() };
@@ -255,6 +255,7 @@ fn the_hub_refusing_to_turn_the_mode_off_says_why_and_it_can_be_asked_again(cx: 
     std::fs::write(fake.source().paths.data_dir.join("device-id"), this_mac.id.to_string()).unwrap();
     let mut ui = Ui::open_on(cx, &fake);
     ui.wait("the bar, since the conversation is on this Mac", |ui| ui.has(CONVERSATION_BAR));
+    ui.wait("the conversation to be here", here);
 
     for asking in ["first", "again"] {
         ui.click(CONVERSATION_END);
@@ -265,6 +266,13 @@ fn the_hub_refusing_to_turn_the_mode_off_says_why_and_it_can_be_asked_again(cx: 
             Some("Couldn't turn conversation mode off: this hub can't do that until it's updated")
         );
         assert!(ui.has(CONVERSATION_BAR), "the mode is still on, asking {asking}");
+        ui.wait(&format!("the conversation to carry on, asking {asking}"), here);
         ui.click("dismiss-error");
     }
+}
+
+/// Whether the conversation of the chat showing is on this Mac, so it hears and reads.
+fn here(ui: &mut Ui) -> bool {
+    let pane = ui.pane().unwrap();
+    ui.cx.read_entity(&pane, desktop::workspace_pane::WorkspacePane::conversation_is_here)
 }

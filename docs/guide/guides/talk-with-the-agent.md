@@ -30,7 +30,7 @@ The conversation goes on while you look at another chat, another workspace or Se
 
 **Type**, or any key you type, leaves the mode with the composer back, and anything you'd typed before is still there. ✕ leaves it too. While the agent works, Stop takes ✕'s place, and stops the agent as Send's Stop does.
 
-If the hub can't turn the mode off, the app says why along the top, and the bar stays. Nothing is read out meanwhile, and ✕ or **Type** asks the hub again.
+If the hub can't turn the mode off, the app says why along the top, and the conversation carries on as before. ✕ or **Type** asks the hub again.
 
 ## On another Mac
 

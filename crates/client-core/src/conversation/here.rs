@@ -53,8 +53,8 @@ impl Conversation {
 
     /// Turns the mode off, as typing, Type and ✕ do, on `client`: how far the voice got, and how each reply ended,
     /// reach the hub first, so it needn't settle them. Until the chat's record says the mode is off, the conversation
-    /// isn't read here again. Asked again meanwhile, as when the hub refused, it asks the hub again. Answers with how
-    /// the hub took it, so a client can say why the mode is still on.
+    /// isn't read here again. Asked again meanwhile, it asks the hub again. Answers with how the hub took it: a
+    /// client says why when it refused, and has the conversation carry on with [`Self::refused`].
     pub fn end(&mut self, client: &Client) -> Reply<()> {
         self.left = true;
         if let Some(reading) = self.reading.take() {
@@ -63,6 +63,12 @@ impl Conversation {
         let id = self.session.clone();
         // Nothing is being read, so there's nothing to say first.
         client.start(move |client| client.session_conversation_end(&id).map(drop))
+    }
+
+    /// The hub refused to turn the mode off, so it's still on: the conversation carries on, read here again from the
+    /// next [`Self::follow`] while it's here, as before it was asked.
+    pub fn refused(&mut self) {
+        self.left = false;
     }
 
     /// Whether the conversation is here, so this device hears and reads.

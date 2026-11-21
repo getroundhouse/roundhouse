@@ -61,10 +61,19 @@ impl Conversations {
     }
 
     /// Turns the mode off in the chat `session`, as typing, Type and ✕ do, telling the hub how far the voice got
-    /// first. Answers with how the hub took it, or `None` with nothing to end, as with no connection.
+    /// first. Answers with how the hub took it, or `None` with nothing to end, as with no connection. When it
+    /// refused, the app says why and calls [`Self::refused`].
     pub fn end(&mut self, session: &SessionId) -> Option<Reply<()>> {
         let (client, conversation) = (self.client.as_ref()?, self.chats.get_mut(session)?);
         Some(conversation.end(client))
+    }
+
+    /// The hub refused to turn the mode off in `session`, its record, so the mode is still on: the conversation
+    /// carries on, read out with `voices` again while it's here, as before it was asked.
+    pub fn refused(&mut self, session: &Session, voices: &Voices) {
+        let (Some(client), Some(conversation)) = (&self.client, self.chats.get_mut(&session.id)) else { return };
+        conversation.refused();
+        conversation.follow(client, session, || voices.voice(), &self.tell);
     }
 
     /// Says that what a conversation here is reading changed. It holds one signal at a time.
@@ -80,7 +89,7 @@ mod tests {
     use client_core::stand_in_hub::{self, Does};
     use client_core::{Client, Introduction};
     use fetching::serving::serve;
-    use protocol::client::ClientRequest;
+    use protocol::client::{ApiError, ClientRequest, ErrorCode, ReplyOutcome};
     use protocol::fixtures::session;
     use protocol::model::{ClientDevice, Interaction, Session};
 
@@ -128,5 +137,32 @@ mod tests {
 
         conversations.follow([&there], &voices);
         assert!(conversations.get(&here.id).is_none());
+    }
+
+    /// A hub that won't turn the mode off leaves it on, so once the app hears so, the conversation carries on.
+    #[test]
+    fn a_conversation_the_hub_wont_end_carries_on() {
+        let dir = tempfile::tempdir().unwrap();
+        stand_in_hub::listen(&dir.path().join("hub.sock"), |request| {
+            if let ClientRequest::SessionConversationEnd(_) = request {
+                return Does::Answers(Box::new(ReplyOutcome::Error(ApiError::new(ErrorCode::Internal, "no"))));
+            }
+            Does::Nothing
+        });
+        let this = ClientDevice { id: "mac".into(), name: "Mac".into() };
+        let client = Client::connect(&dir.path().join("hub.sock"), Introduction::on("desktop", this)).unwrap();
+        let files = serve(Vec::new()).unwrap();
+        let voices = Voices::fetched_from(dir.path().join("phonon"), "this Mac", files.base.clone());
+        let mut conversations = Conversations::new();
+        conversations.connected(&client);
+        let here = on("here", "mac");
+        conversations.follow([&here], &voices);
+
+        let ending = conversations.end(&here.id).unwrap();
+        assert!(ending.wait().is_err(), "refused");
+        assert!(conversations.get(&here.id).is_some_and(|c| !c.is_here()), "not read meanwhile");
+
+        conversations.refused(&here, &voices);
+        assert!(conversations.get(&here.id).is_some_and(Conversation::is_here));
     }
 }
