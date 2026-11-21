@@ -2,10 +2,12 @@ use gpui_kit::{App, Global};
 use jiff::civil::Date;
 use jiff::tz::TimeZone;
 use jiff::{Timestamp, ZonedDateTime};
-use std::sync::OnceLock;
 use std::time::Instant;
 
-static START: OnceLock<Instant> = OnceLock::new();
+/// When the app started its marks' clock, by the app's own clock, which [`elapsed`] measures from.
+struct Started(Instant);
+
+impl Global for Started {}
 
 /// Set by pictures, to hold the time at one moment.
 struct Still {
@@ -19,9 +21,20 @@ pub(crate) fn moving(cx: &App) -> bool {
     !cx.reduce_motion()
 }
 
-/// Seconds since the first mark asked. Each motion takes its own phase from this.
-pub(crate) fn elapsed() -> f64 {
-    START.get_or_init(Instant::now).elapsed().as_secs_f64()
+/// Starts the clock the marks move by, once, as the app starts.
+pub(crate) fn start(cx: &mut App) {
+    if !cx.has_global::<Started>() {
+        let now = cx.background_executor().now();
+        cx.set_global(Started(now));
+    }
+}
+
+/// Seconds since the app started its marks' clock, by the app's clock, which is the system's in the app and moves only
+/// as a test or a clip moves it in one, as everything else that moves does. Each motion takes its own phase from this.
+/// In an app that hasn't started it, such as a test that doesn't apply the look, no time has passed.
+pub(crate) fn elapsed(cx: &App) -> f64 {
+    cx.try_global::<Started>()
+        .map_or(0., |Started(at)| cx.background_executor().now().saturating_duration_since(*at).as_secs_f64())
 }
 
 /// The time now, in milliseconds since the Unix epoch, for text that says when something happened or how long it's

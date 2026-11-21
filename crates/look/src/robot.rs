@@ -21,7 +21,7 @@ const STRIPS: usize = 16;
 
 /// The robot, as wide as a task's ring, so what follows it lines up with the other lines'.
 pub fn robot_at_work(cx: &App) -> impl IntoElement {
-    let t = clock::moving(cx).then(clock::elapsed);
+    let t = clock::moving(cx).then(|| clock::elapsed(cx));
     let drawn = canvas(
         |_, _, _| {},
         move |bounds, (), window, cx| {
@@ -37,7 +37,7 @@ pub fn robot_at_work(cx: &App) -> impl IntoElement {
 /// The robot at work, painted within `bounds`, as [`robot_at_work`] draws it. Returns whether it moves, so what paints
 /// it asks for the next frame.
 pub(crate) fn paint_robot(bounds: Bounds<Pixels>, window: &mut Window, cx: &App) -> bool {
-    paint_at(clock::moving(cx).then(clock::elapsed), bounds, window, cx)
+    paint_at(clock::moving(cx).then(|| clock::elapsed(cx)), bounds, window, cx)
 }
 
 /// Paints the robot, in the middle of `bounds`, with the light where it is at `t` seconds, `None` while it holds

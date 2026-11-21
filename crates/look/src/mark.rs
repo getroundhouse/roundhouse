@@ -111,7 +111,7 @@ impl Painted {
             Signal::Idle | Signal::SettingUp | Signal::Working => unlit(color),
         };
         let moves = matches!(signal, Signal::Working | Signal::Background | Signal::SettingUp) && clock::moving(cx);
-        let t = if moves { clock::elapsed() } else { STILL_S };
+        let t = if moves { clock::elapsed(cx) } else { STILL_S };
         Painted { signal, color, hub, t, moves }
     }
 

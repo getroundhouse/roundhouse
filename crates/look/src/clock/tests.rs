@@ -1,3 +1,6 @@
+use std::time::Duration;
+
+use gpui_kit::TestAppContext;
 use jiff::civil::Date;
 use jiff::tz::TimeZone;
 use jiff::{Timestamp, ZonedDateTime};
@@ -12,6 +15,19 @@ fn at(text: &str) -> ZonedDateTime {
 
 fn day(text: &str) -> Date {
     text.parse().unwrap()
+}
+
+/// So a test or a clip moves a mark as it moves everything else, and a moment of it is the same on every run.
+#[gpui_kit::test]
+fn marks_move_by_the_app_s_clock_from_when_it_started_theirs(cx: &mut TestAppContext) {
+    let before = cx.update(|cx| elapsed(cx));
+    cx.update(start);
+    let started = cx.update(|cx| elapsed(cx));
+    cx.executor().advance_clock(Duration::from_millis(1_500));
+    cx.update(start);
+
+    assert_eq!((before, started), (0., 0.), "no time has passed before the clock starts, or as it does");
+    assert!((cx.update(|cx| elapsed(cx)) - 1.5).abs() < 1e-9, "as far as the app's clock went, from the first start");
 }
 
 #[test]

@@ -17,4 +17,4 @@ pub use time::{
 };
 #[cfg(test)]
 use time::{date_and_time_of, date_of, day_and_time_from, months_between, start_of, time_of};
-pub(crate) use time::{elapsed, moving};
+pub(crate) use time::{elapsed, moving, start};
