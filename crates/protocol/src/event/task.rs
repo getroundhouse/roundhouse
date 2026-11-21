@@ -78,37 +78,15 @@ impl EventBody {
     /// What the agent has running in the background once this is recorded, if it changes that: the list it gives, or
     /// nothing once it starts or exits, since what it ran goes with the agent that started it. `None` leaves what was
     /// running as it was. The hub keeps a session's list by this, and so its record's `background_tasks`.
+    #[expect(
+        clippy::wildcard_enum_match_arm,
+        reason = "only `AgentTasks`, `AgentStarted` and `AgentExited` change what runs in the background"
+    )]
     pub fn sets_background(&self) -> Option<&[AgentTask]> {
         match self {
             EventBody::AgentTasks { tasks, .. } => Some(tasks),
             EventBody::AgentStarted { .. } | EventBody::AgentExited { .. } => Some(&[]),
-            EventBody::UserPrompt { .. }
-            | EventBody::CompactionAsked { .. }
-            | EventBody::PromptTaken { .. }
-            | EventBody::PromptDropped { .. }
-            | EventBody::ToolCallDropped { .. }
-            | EventBody::AgentInit { .. }
-            | EventBody::OwnTurn(_)
-            | EventBody::AgentState { .. }
-            | EventBody::AgentLimits { .. }
-            | EventBody::Assistant { .. }
-            | EventBody::AgentUser { .. }
-            | EventBody::TurnEnded { .. }
-            | EventBody::ApprovalRequested { .. }
-            | EventBody::ApprovalResolved { .. }
-            | EventBody::Notice { .. }
-            | EventBody::RequestFailed { .. }
-            | EventBody::AgentMode { .. }
-            | EventBody::SubagentStarted { .. }
-            | EventBody::SubagentContext { .. }
-            | EventBody::SubagentEnded { .. }
-            | EventBody::TaskChanged { .. }
-            | EventBody::AgentOther { .. }
-            | EventBody::AgentCompacting { .. }
-            | EventBody::AgentCompacted { .. }
-            | EventBody::CacheExpired { .. }
-            | EventBody::ConversationStarted { .. }
-            | EventBody::Unknown => None,
+            _ => None,
         }
     }
 }
