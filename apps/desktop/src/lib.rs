@@ -123,7 +123,9 @@ actions!(
         ChatPageDown,
         BackToComposer,
         StepBack,
-        StepOn
+        StepOn,
+        SelectStepBack,
+        SelectStepOn
     ]
 );
 

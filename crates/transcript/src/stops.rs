@@ -1,21 +1,41 @@
 //! Where `Option-Up` and `Option-Down` step a page that isn't a chat: a rendered Markdown file between its headings,
 //! and a proposal between the parts of its outline. Each step puts what it stops at at the top, as pressing a part in a
 //! proposal's outline does. A step back goes first to the top of what's at the top, if the page is scrolled into it,
-//! and then to the stop before, as a step back in a chat goes first to the prompt being read.
+//! and then to the stop before, as a step back in a chat goes first to the prompt being read. With Shift, they move the
+//! end of what's selected the same way, from what it's in, which a chat's prompts go by too.
 
 use gpui_kit::{Pixels, px};
 
 use crate::selection::Way;
 
-/// The stop a step `way` goes to, of `stops`, the items of a page it stops at, in order, with the page's top `into`
-/// this far into the item `top`.
-pub(crate) fn stop_beside(stops: impl IntoIterator<Item = usize>, top: usize, into: Pixels, way: Way) -> Option<usize> {
+/// Where in the item it's in a step goes from.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Within {
+    /// At its start, so a step back passes over it to the stop before.
+    Start,
+    /// Past its start, so a step back goes to its start first, if it's a stop.
+    Into,
+}
+
+impl Within {
+    /// Where a page's top is in the item at the top, `by` this far into it. Less than a pixel in is where a scroll to
+    /// its top leaves it, which is its start.
+    pub(crate) fn scrolled(by: Pixels) -> Self {
+        if by >= px(1.) { Self::Into } else { Self::Start }
+    }
+}
+
+/// The stop a step `way` goes to, of `stops`, the items it stops at, in order, from `within` the item `at`.
+pub(crate) fn stop_beside(
+    stops: impl IntoIterator<Item = usize>,
+    at: usize,
+    within: Within,
+    way: Way,
+) -> Option<usize> {
     let mut stops = stops.into_iter();
-    // Less than a pixel in is where a scroll to its top leaves it.
-    let into = into >= px(1.);
     match way {
-        Way::Back => stops.filter(|stop| *stop < top || (*stop == top && into)).last(),
-        Way::On => stops.find(|stop| *stop > top),
+        Way::Back => stops.filter(|stop| *stop < at || (*stop == at && within == Within::Into)).last(),
+        Way::On => stops.find(|stop| *stop > at),
     }
 }
 
@@ -23,7 +43,7 @@ pub(crate) fn stop_beside(stops: impl IntoIterator<Item = usize>, top: usize, in
 mod tests {
     use gpui_kit::px;
 
-    use super::stop_beside;
+    use super::{Within, stop_beside};
     use crate::selection::Way;
 
     #[test]
@@ -41,7 +61,7 @@ mod tests {
         ];
 
         for (name, top, into, way, want) in cases {
-            assert_eq!(stop_beside(stops, top, into, way), want, "{name}");
+            assert_eq!(stop_beside(stops, top, Within::scrolled(into), way), want, "{name}");
         }
     }
 }

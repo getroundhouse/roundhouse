@@ -16,7 +16,7 @@ mod tests;
 
 mod ticks;
 #[cfg(test)]
-use steps::{Step, step};
+use steps::{Step, selecting_stops, step};
 pub(super) use ticks::Outline;
 use ticks::{Jumps, Kind, Line};
 #[cfg(test)]

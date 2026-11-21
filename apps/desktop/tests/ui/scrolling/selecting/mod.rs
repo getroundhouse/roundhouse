@@ -17,6 +17,7 @@ pub(super) use views::{
 
 mod dragging;
 use dragging::{
-    LAST, PRINTED, bounds, click, copy, everything, head, on_the_end_of_the_chat, on_the_reply_saying, open, settled,
-    shift_click, tail,
+    LAST, PRINTED, bounds, everything, head, on_the_end_of_the_chat, on_the_reply_saying, open, settled, shift_click,
+    tail,
 };
+pub(super) use dragging::{click, copy};

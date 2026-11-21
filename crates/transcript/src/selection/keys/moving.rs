@@ -10,7 +10,8 @@ use super::super::places::in_a_word;
 use super::super::{End, Selection};
 use super::lines::Run;
 use super::sight::ToDo;
-use crate::texts::{Leaves, TextKey};
+use crate::stops::Within;
+use crate::texts::{Leaves, Of, TextAt, TextKey};
 
 /// Which way a key goes, moving the end of what's selected or stepping a view: back, which is left or up, or on, which
 /// is right or down.
@@ -29,6 +30,9 @@ pub(super) enum Step {
     Word(Way),
     /// To the line above or below.
     Line(Way),
+    /// To the start of the first text at this place, or after it in what draws it, as the keys that step a view go to
+    /// the start of a prompt, a heading or a part.
+    Start(TextAt),
 }
 
 /// What the keys that move an end keep: each thing for the end it was for, so once anything else moves that end, it's
@@ -53,6 +57,8 @@ pub(super) enum Tried {
     Past(Way),
     /// The end isn't drawn, and has to be, to know where it goes.
     NotDrawn,
+    /// What it goes to isn't drawn, and has to be, in what this says.
+    Elsewhere(Of),
     /// There's nowhere to go.
     Nowhere,
 }
@@ -67,6 +73,20 @@ impl Selection {
             .on_action(self.moving::<SelectToNextWordEnd>(Step::Word(Way::On)))
             .on_action(self.moving::<SelectUp>(Step::Line(Way::Back)))
             .on_action(self.moving::<SelectDown>(Step::Line(Way::On)))
+    }
+
+    /// Where the end of what's selected that moved last is, and whether it's at the start of its text or into it, if
+    /// anything's selected, or a press has left a place to start from, for a view to say where a step from it goes.
+    pub(crate) fn far_end(&self) -> Option<(TextAt, Within)> {
+        let far = self.inner.borrow().ends.as_ref()?.1.clone();
+        let within = if far.leaf == 0 && far.byte == 0 { Within::Start } else { Within::Into };
+        Some((self.texts.place_of(&far.text)?, within))
+    }
+
+    /// Moves the end of what's selected that moved last to the start of the first text at `at`, or after it in what
+    /// draws it, as a key that steps a view does, once that's drawn.
+    pub(crate) fn move_to_start_of(&self, at: TextAt, window: &mut Window, cx: &mut App) {
+        self.step(Step::Start(at), window, cx);
     }
 
     /// What the key bound to `A` does, which is to move the end by `step`.
@@ -109,6 +129,12 @@ impl Selection {
             Step::Character(way) => (way, character_beside(text, end.byte, way)),
             Step::Word(way) => (way, word_beside(text, end.byte, way)),
             Step::Line(way) => return self.line_beside(end, way, past),
+            Step::Start(at) => {
+                return match self.texts.first_at(at) {
+                    Some(text) => Tried::Moved(End { text, leaf: 0, byte: 0 }, None),
+                    None => Tried::Elsewhere(at.of),
+                };
+            }
         };
         if let Some(byte) = beside {
             return Tried::Moved(End { byte, ..end.clone() }, None);

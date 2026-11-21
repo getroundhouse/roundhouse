@@ -18,8 +18,8 @@ use crate::DictationHints;
 use crate::linked_images::LinkedImages;
 use crate::references::References;
 use crate::selection::{Scrolled, Selection, Way};
-use crate::stops::stop_beside;
-use crate::texts::{Of, Texts};
+use crate::stops::{Within, stop_beside};
+use crate::texts::{Of, TextAt, Texts};
 use client_core::{Client, RecordsFeed};
 
 /// What a proposal's line in the chat starts with, and its tab: a way that splits in two, for the options it offers.
@@ -48,6 +48,9 @@ pub struct ProposalView {
     /// The selection's, which a press on the page's text takes, so a copy and a select all come to it.
     focus: FocusHandle,
     scroll: ScrollHandle,
+    /// Where each part's first text is among the page's, as it was last drawn, for the keys that move the end of
+    /// what's selected to a part's start.
+    starts: Vec<usize>,
     /// The tab's in front, in a workspace that's showing, so the person may be reading it: the note can be dictated
     /// into, and a revision the agent writes doesn't take the page.
     pub(super) in_sight: bool,
@@ -88,6 +91,7 @@ impl ProposalView {
             linked,
             references,
             selection,
+            starts: Vec::new(),
             focus,
             scroll: ScrollHandle::new(),
             in_sight: false,
@@ -117,9 +121,20 @@ impl ProposalView {
     pub fn step(&mut self, way: Way, cx: &mut Context<Self>) {
         // Where the top part's top is, from the page's, which is above it once the page is scrolled into it.
         let (top, starts) = self.scroll.logical_scroll_top();
-        if let Some(part) = stop_beside(0..self.scroll.children_count(), top, -starts, way) {
+        if let Some(part) = stop_beside(0..self.scroll.children_count(), top, Within::scrolled(-starts), way) {
             self.scroll.scroll_to_top_of_item(part);
             cx.notify();
+        }
+    }
+
+    /// Moves the end of what's selected `way` to the start of a part of the outline: back to the one before it, or to
+    /// the one it's in if it isn't at its start already, or on to the one after, as `Option-Shift-Up` and
+    /// `Option-Shift-Down` do.
+    pub fn select_step(&self, way: Way, window: &mut Window, cx: &mut Context<Self>) {
+        // Every text on the page is placed by where it's drawn among them, so a part's start is its first text's.
+        let Some((end, within)) = self.selection.far_end() else { return };
+        if let Some(first) = stop_beside(self.starts.iter().copied(), end.block, within, way) {
+            self.selection.move_to_start_of(TextAt::on_page(first), window, cx);
         }
     }
 
@@ -231,6 +246,7 @@ impl Render for ProposalView {
             // The page is drawn as one block, so its texts are the first of a page that isn't a chat.
             self.texts.drawing(Of::Document(0), || document::parts(revision, &mut writing, &choosing, cx))
         };
+        self.starts = parts.iter().map(|part| part.first).collect();
         let outline = self.outline(&parts, cx);
         let page = self.page(parts, area, cx);
         let foot = self.foot(window, cx);

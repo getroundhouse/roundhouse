@@ -16,6 +16,7 @@ use transcript::Place;
 use super::selecting::{
     PARAGRAPHS, last_shown, on_the_first, painted, paragraphs, with_a_file, with_a_proposal, with_a_proposal_asking,
 };
+use super::selecting::{click, copy};
 use super::{A_FRAME, open_on_a_chat, prose, thumb, turns};
 use crate::support::Ui;
 
@@ -175,15 +176,20 @@ fn shown_from_the_top(ui: &mut Ui<'_>, either: &str, or: &str) -> Vec<String> {
     ui.cx.update_window(ui.handle, |_, window, _| shown(window)).unwrap()
 }
 
-/// `Option-Down` steps a rendered Markdown file on to the heading after the top, with that at the top, and
-/// `Option-Up` back, to the top of the heading's part the file is scrolled into first, and then to the one before.
-#[gpui_kit::test]
-fn option_up_and_down_step_a_rendered_markdown_file_between_its_headings(cx: &mut TestAppContext) {
+/// A Markdown file of four sections, each a heading and 30 paragraphs, far longer than a screen.
+fn sections() -> String {
     let sections = Vec::from_fn(4, |s| {
         let paragraphs = Vec::from_fn(30, |n| format!("Paragraph {}.{}.", s + 1, n + 1)).join("\n\n");
         format!("# Section {}\n\n{paragraphs}", s + 1)
     });
-    let (_fake, mut ui) = with_a_file(cx, &sections.join("\n\n"));
+    sections.join("\n\n")
+}
+
+/// `Option-Down` steps a rendered Markdown file on to the heading after the top, with that at the top, and
+/// `Option-Up` back, to the top of the heading's part the file is scrolled into first, and then to the one before.
+#[gpui_kit::test]
+fn option_up_and_down_step_a_rendered_markdown_file_between_its_headings(cx: &mut TestAppContext) {
+    let (_fake, mut ui) = with_a_file(cx, &sections());
     ui.click("all-file-long.md");
     ui.wait("the file, rendered", |ui| painted(ui, "Section 1").is_some());
     let first = painted(&mut ui, "Paragraph 1.1.").unwrap();
@@ -221,4 +227,41 @@ fn option_up_and_down_step_a_proposal_between_its_parts(cx: &mut TestAppContext)
 
     assert_eq!(on, (false, true), "the question, at the top, past the context");
     assert!(painted(&mut ui, "Context 1.").is_some(), "and back to the context");
+}
+
+/// With Shift, `Option-Down` moves the end of what's selected in a rendered Markdown file to the start of the heading
+/// after it, and `Option-Up` back to the start of the one before.
+#[gpui_kit::test]
+fn option_shift_up_and_down_move_the_end_to_the_start_of_a_heading(cx: &mut TestAppContext) {
+    let (_fake, mut ui) = with_a_file(cx, &sections());
+    ui.click("all-file-long.md");
+    ui.wait("the file, rendered", |ui| painted(ui, "Section 1").is_some());
+    let word = painted(&mut ui, "Paragraph 1.3.").unwrap();
+    click(&mut ui, word.origin + point(px(2.), px(4.)), 2);
+
+    ui.press("alt-shift-down");
+    let on = copy(&mut ui);
+    ui.press("alt-shift-up");
+    let back = copy(&mut ui);
+
+    assert!(on.starts_with("Paragraph 1.3.") && on.trim_end().ends_with("Paragraph 1.30."), "to Section 2: {on:?}");
+    assert!(back.starts_with("Section 1\n\nParagraph 1.1."), "and back to Section 1: {back:?}");
+}
+
+/// With Shift, `Option-Up` moves the end of what's selected in a proposal to the start of the part it's in, and then
+/// to the start of the one before.
+#[gpui_kit::test]
+fn option_shift_up_moves_the_end_to_the_start_of_a_proposal_s_part(cx: &mut TestAppContext) {
+    let (_fake, mut ui) = with_a_proposal_asking(cx, "Context 1.\n\nContext 2.", &paragraphs("Detail"));
+    ui.wait("the context", |ui| painted(ui, "Context 1.").is_some());
+    let word = painted(&mut ui, "Detail 3.").unwrap();
+    click(&mut ui, word.origin + point(px(2.), px(4.)), 2);
+
+    ui.press("alt-shift-up");
+    let to_its_part = copy(&mut ui);
+    ui.press("alt-shift-up");
+
+    assert!(to_its_part.starts_with("Where does a held train's wait live?"), "its question: {to_its_part:?}");
+    let to_the_one_before = copy(&mut ui);
+    assert!(to_the_one_before.starts_with("Context 1."), "then the context: {to_the_one_before:?}");
 }

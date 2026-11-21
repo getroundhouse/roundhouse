@@ -39,8 +39,8 @@ use crate::{
     ArchiveWorkspace, BackToComposer, ChatPageDown, ChatPageUp, CloseChat, CloseSettings, CreatePullRequest,
     FindInChat, FindNext, FindPrevious, FindSetting, FlipImage, GoBack, GoForward, Hide, HideOthers, MarkWorkspace,
     Minimize, NewChat, NewTerminal, NewWorkspace, NextChat, NextWorkspace, OpenSettings, PreviousChat,
-    PreviousWorkspace, Quit, StepBack, StepOn, StopAgent, ToggleDiff, ToggleMenus, TogglePlanMode, ToggleSidebar,
-    composing, file_diff, image_diff, settings,
+    PreviousWorkspace, Quit, SelectStepBack, SelectStepOn, StepBack, StepOn, StopAgent, ToggleDiff, ToggleMenus,
+    TogglePlanMode, ToggleSidebar, composing, file_diff, image_diff, settings,
 };
 
 /// Binds the app's shortcuts, after the kit's.
@@ -150,7 +150,7 @@ fn bind_selecting(cx: &mut App) {
 /// Up and Page Down scroll a chat from its composer and a question in its place too, and Escape goes back from the chat
 /// to the composer. `Option-Up` and `Option-Down`, `Alt` off the Mac, step a chat between its prompts, from the
 /// composer too, a rendered Markdown file between its headings, and a proposal between its parts, as what holds each
-/// takes them.
+/// takes them, and with Shift, they move the end of what's selected to the same places.
 fn bind_scrolling(cx: &mut App) {
     let focused = Some(transcript::KEY_CONTEXT);
     let around_a_chat = Some(CHAT_KEY_CONTEXT);
@@ -175,6 +175,8 @@ fn bind_scrolling(cx: &mut App) {
         key("alt-down", StepOn, focused, cx),
         key("alt-up", StepBack, around_a_chat, cx),
         key("alt-down", StepOn, around_a_chat, cx),
+        key("alt-shift-up", SelectStepBack, focused, cx),
+        key("alt-shift-down", SelectStepOn, focused, cx),
     ]);
 }
 
