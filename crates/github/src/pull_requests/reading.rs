@@ -5,12 +5,13 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use protocol::client::{ApiError, ErrorCode};
 use protocol::model::{
-    CheckState, GitHubRepository, GithubRepositoryName, ObservedPullRequest, PrState, PullRequestNumber,
-    PullRequestsSnapshot, Reference,
+    GitHubRepository, GithubRepositoryName, ObservedPullRequest, PrState, PullRequestNumber, PullRequestsSnapshot,
+    Reference,
 };
 use serde_json::Value;
 
 use super::asked::{PullRequestsAsk, Unread};
+use super::facets::{self, Checks, Reviews, Stack, Status};
 use super::parse::{self, Metadata, Policy, ReportedCheck};
 use super::query::Part;
 use super::said::{array, changed, incomplete, next, string};
@@ -286,27 +287,20 @@ impl Reading {
     /// branch's rules require.
     fn observed(&self, looked: Looked) -> Result<ObservedPullRequest, ApiError> {
         let Looked { pr, metadata, checks, confirmed, .. } = looked;
-        let (metadata, mut confirmed) = (metadata.ok_or_else(incomplete)?, confirmed.ok_or_else(incomplete)?);
-        confirmed["statusCheckRollup"] = pr["statusCheckRollup"].clone();
-        let mut observed = parse::observation(&confirmed, &metadata)?;
-        let empty = Policy::default();
+        let (metadata, confirmed) = (metadata.ok_or_else(incomplete)?, confirmed.ok_or_else(incomplete)?);
+        let revision = pr["statusCheckRollup"]["commit"]["oid"].as_str().map(Into::into);
         // A merged or closed one may go into a branch since deleted, whose rules no longer matter.
-        let policy = self
+        let rules = self
             .branches
             .iter()
             .find(|branch| metadata.state == PrState::Open && branch.name == metadata.destination)
-            .map_or(&empty, |branch| &branch.policy);
-        if !matches!(observed.pull_request.state, PrState::Merged | PrState::Closed) {
-            observed.checks = policy.checks(checks);
-        }
-        for check in &observed.checks {
-            let counts = &mut observed.pull_request.checks;
-            match check.state {
-                CheckState::Passed => counts.passed += 1,
-                CheckState::Failed => counts.failed += 1,
-                CheckState::Pending | CheckState::Unknown => counts.pending += 1,
-            }
-        }
-        Ok(observed)
+            .map(|branch| &branch.policy);
+        Ok(facets::observe(
+            Status::read(&confirmed)?,
+            Reviews::read(&confirmed)?,
+            Stack::read(&confirmed, &metadata)?,
+            Checks { revision, reported: checks },
+            rules,
+        ))
     }
 }
