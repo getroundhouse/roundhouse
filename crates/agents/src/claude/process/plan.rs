@@ -6,7 +6,6 @@
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
-use process::{Signal, signal_group};
 use protocol::capability::approvals::ApprovalMode;
 use protocol::event::{EventBody, NoticeLevel};
 use serde_json::json;
@@ -73,5 +72,5 @@ async fn stop(shared: &Shared, output: &mpsc::Sender<AgentOutput>, why: &str) {
     // Before it's stopped, so this comes before its exit.
     let notice = EventBody::Notice { level: NoticeLevel::Error, message, subagent: None };
     deliver(shared, output, AgentOutput::event(notice, None)).await;
-    signal_group(shared.pid.load(Ordering::SeqCst), Signal::Terminate);
+    shared.run.terminate();
 }

@@ -12,6 +12,7 @@ pub(super) async fn supervise(mut child: Child, stdout: ChildStdout, stderr: Chi
     let events = tokio::spawn(notifications::read(shared.clone(), rx));
     let err = tokio::spawn(stdio::read_stderr(stderr));
     let status = child.wait().await;
+    shared.run.reaped();
     shared.run.mark_gone();
     shared.rpc.close().await;
     stdio::drain(out).await;

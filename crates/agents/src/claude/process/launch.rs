@@ -1,15 +1,14 @@
 //! Starting the CLI: its arguments, its environment, and finding the binary.
 
 use std::path::{Path, PathBuf};
-use std::process::Stdio;
 
-use process::{Environment, ProcessRecord};
+use process::Environment;
 use protocol::model::AgentLogin;
 use protocol::worker::AgentSpec;
-use tokio::process::{Child, ChildStderr, ChildStdin, ChildStdout, Command};
-use tracing::warn;
+use tokio::process::{Child, Command};
 
 use super::Tap;
+use crate::starting::Launched;
 use crate::{AgentError, AgentOptions, BinaryLookup};
 
 /// Set by a parent Claude session. If the hub was started from inside one, these would make a new
@@ -78,14 +77,6 @@ pub(super) fn conversation(spec: &AgentSpec) -> Result<&protocol::model::AgentSe
     }
 }
 
-pub(super) struct Launched {
-    pub(super) child: Child,
-    pub(super) pid: u32,
-    pub(super) stdin: ChildStdin,
-    pub(super) stdout: ChildStdout,
-    pub(super) stderr: ChildStderr,
-}
-
 /// Starts the CLI for `spec`, telling `tap` what it's started with.
 pub(super) fn launch(
     bin: &Path,
@@ -112,23 +103,13 @@ pub(super) fn launch(
     if let Some(tools) = options.tools.as_ref().and_then(super::tools::args) {
         command.args(tools).env(super::tools::TAKES_TASKS, "1");
     }
-    let mut child = start(&mut command, bin, cwd, options.login.as_ref(), &options.environment)?;
-    let pid = child.id().unwrap_or_default();
-    record(options.pid_file.as_deref(), pid);
-    let (Some(stdin), Some(stdout), Some(stderr)) = (child.stdin.take(), child.stdout.take(), child.stderr.take())
-    else {
-        return Err(AgentError::NoPipes { bin: bin.display().to_string() });
-    };
-    Ok(Launched { child, pid, stdin, stdout, stderr })
+    let child = start(&mut command, bin, cwd, options.login.as_ref(), &options.environment)?;
+    Launched::new("Claude", bin, child, options.pid_file.as_deref())
 }
 
-/// The CLI at `bin`, run in `cwd` with its stdio piped. It's in a process group of its own, so a stop reaches
-/// everything it starts and a signal to the hub's terminal doesn't reach it directly, and it doesn't get what a
-/// parent Claude session set.
+/// The CLI at `bin`, run in `cwd` as [`crate::starting::piped`] says, without what a parent Claude session set.
 pub(in crate::claude) fn command(bin: &Path, cwd: &Path) -> Command {
-    let mut command = Command::new(bin);
-    command.current_dir(cwd).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).kill_on_drop(true);
-    process::own_group(command.as_std_mut());
+    let mut command = crate::starting::piped(bin, cwd);
     for name in SCRUBBED_ENV {
         command.env_remove(name);
     }
@@ -147,14 +128,4 @@ pub(in crate::claude) fn start(
 ) -> Result<Child, AgentError> {
     crate::claude::login::run_under(command, login);
     crate::starting::start(command, bin, cwd, environment)
-}
-
-/// Records a running process at `pid_file`, so the provider can stop it if this worker is killed. Failing to only
-/// loses that, so it's logged rather than stopping the process.
-fn record(pid_file: Option<&Path>, pid: u32) {
-    if let Some(path) = pid_file
-        && let Err(e) = ProcessRecord::write(path, pid)
-    {
-        warn!("could not record {pid} in {}: {e}", path.display());
-    }
 }

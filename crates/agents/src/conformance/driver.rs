@@ -197,6 +197,9 @@ impl Driver {
     pub async fn stop(&mut self) -> Result<(), Failed> {
         let Some(mut running) = self.running.take() else { return Ok(()) };
         running.agent.stop().await;
+        if running.agent.pid() != 0 {
+            return Err(Failed("the agent kept its CLI's pid once the CLI was reaped".into()));
+        }
         let deadline = tokio::time::Instant::now() + self.launcher.patience();
         loop {
             match tokio::time::timeout_at(deadline, running.output.recv()).await {

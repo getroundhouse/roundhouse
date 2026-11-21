@@ -69,8 +69,8 @@ pub(crate) async fn read_stderr(stderr: ChildStderr) -> Vec<String> {
     tail.into()
 }
 
-/// A one-off CLI call recorded at `pid_file` so the provider can stop it if the worker is killed. Unless marked
-/// finished, dropping this guard kills the whole process group.
+/// A CLI that's been started, such as for a one-off call, recorded at `pid_file`, if it's given one, so the provider
+/// can stop it if the worker is killed. Unless marked finished, dropping this guard kills the whole process group.
 pub(crate) struct GroupGuard {
     pid: u32,
     pid_file: Option<PathBuf>,

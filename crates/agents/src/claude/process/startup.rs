@@ -5,7 +5,7 @@ use protocol::worker::AgentSpec;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, AtomicU32};
+use std::sync::atomic::AtomicBool;
 use tokio::sync::mpsc;
 
 use super::compact::AskedToCompact;
@@ -15,6 +15,7 @@ use super::run_files::RunFiles;
 use super::running::{ClaudeProcess, Shared};
 use super::usage::UsageWatch;
 use super::{Tap, launch, plan, supervise};
+use crate::run::Run;
 use crate::{AgentError, AgentOptions, AgentOutput, AgentProcess};
 
 pub(super) async fn begin(
@@ -38,7 +39,8 @@ pub(super) async fn begin(
     .await?;
     let shared = Arc::new(Shared {
         stdin: tokio::sync::Mutex::new(Some(launched.stdin)),
-        pid: AtomicU32::new(launched.pid),
+        // Its record goes with the run's other files, which a start cancelled before there's a run removes too.
+        run: Run::new(launched.pid, None, output.clone()),
         confirmed: AtomicBool::new(false),
         held_output: Mutex::new(Vec::new()),
         unconfirmed_prompts: Mutex::new(Vec::new()),
@@ -48,11 +50,7 @@ pub(super) async fn begin(
         pending_controls: Mutex::new(HashMap::new()),
         context: Mutex::new(ContextWatch::default()),
         usage: Mutex::new(UsageWatch::default()),
-        stop_requested: AtomicBool::new(false),
-        stopping: tokio::sync::Notify::new(),
         entering_plan: AtomicBool::new(false),
-        gone: AtomicBool::new(false),
-        exited: tokio::sync::watch::channel(false).0,
         tap,
         covering: Covering::new(
             Starting { bin: bin.clone(), login: options.login.clone(), environment: options.environment.clone() },
@@ -60,6 +58,7 @@ pub(super) async fn begin(
             &output,
         ),
     });
+    launched.group.finished();
     let mode = crate::registry::launch(&spec)?.mode;
     plan::start_in(mode, &shared, &mut *shared.stdin.lock().await, &output).await;
     tokio::spawn(supervise(

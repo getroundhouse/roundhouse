@@ -2,12 +2,12 @@ use super::super::approvals::Waiting;
 use super::launch::resolve_binary;
 use super::startup::begin;
 use super::{compact, context, prompt, tap, usage};
+use crate::run::Run;
 use crate::{AgentError, AgentOptions, AgentOutput, AgentProcess};
 use async_trait::async_trait;
 use compact::{AskedToCompact, ToCompact};
 use context::ContextWatch;
 use parking_lot::Mutex;
-use process::{Signal, signal_group};
 use prompt::user_message;
 use protocol::attachment::AttachmentFile;
 use protocol::capability::approvals::Decision;
@@ -19,19 +19,18 @@ use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 use tap::Tap;
 use tokio::io::AsyncWriteExt;
 use tokio::process::ChildStdin;
 use tokio::sync::{mpsc, oneshot};
-use tracing::{debug, warn};
+use tracing::debug;
 use usage::UsageWatch;
 
 /// A CLI that's still starting runs the user's hooks first, which can take a while.
 const CONTROL_REPLY_TIMEOUT: Duration = Duration::from_secs(20);
 
-const STOP_GRACE: Duration = Duration::from_secs(3);
 /// How long to wait for buffered output after the process has exited. A tool that outlives the CLI
 /// can hold the pipe open forever.
 const DRAIN_GRACE: Duration = Duration::from_secs(5);
@@ -49,7 +48,10 @@ pub(super) struct Shared {
     /// Also held while a prompt is noted and written, and while a relaunch swaps this and replays.
     /// Either a prompt is on the list before the swap or it's written after, never both.
     pub(super) stdin: tokio::sync::Mutex<Option<ChildStdin>>,
-    pub(super) pid: AtomicU32,
+    /// The CLI's group, whether it's gone and whether its stop was asked for, which a relaunch carries on with the new
+    /// CLI's pid. Only the run's `Exited` goes out through it. What comes before goes out on the output the readers and
+    /// the supervisor hold, once `confirmed` lets it.
+    pub(super) run: Run,
     /// True once the CLI has opened the conversation, which its `init` says, and so does its taking or dropping a
     /// prompt, since a launch with the wrong conversation flag exits without reading one. Before that, output is held
     /// back and prompts are kept, because the launch may still need retrying.
@@ -71,17 +73,9 @@ pub(super) struct Shared {
     pub(super) context: Mutex<ContextWatch>,
     /// Where asking what's left of the account's limits has got to.
     pub(super) usage: Mutex<UsageWatch>,
-    pub(super) stop_requested: AtomicBool,
-    pub(super) stopping: tokio::sync::Notify,
     /// Set from asking a launch into plan mode until the CLI next reports its mode, starts a turn or refuses. `plan` says
     /// what each of those means.
     pub(super) entering_plan: AtomicBool,
-    /// Set as soon as the process is known to be gone, which can be well before `exited`: output is
-    /// still being drained and delivered.
-    pub(super) gone: AtomicBool,
-    /// `send_replace`, not `send`: a value sent with no receivers is otherwise lost, and a later
-    /// `stop` would wait for it forever.
-    pub(super) exited: tokio::sync::watch::Sender<bool>,
     /// Told each launch and exit of the CLI, and each line the adapter writes to it and reads from it, in order, for a
     /// conformance trial.
     pub(super) tap: Option<Tap>,
@@ -226,8 +220,8 @@ async fn send(
             // goes to that replacement, so this one mustn't say it dropped it.
             process.shared.untaken.lock().remove(&uuid);
             process.shared.compacts.lock().dropped(&uuid);
-            process.shared.gone.store(true, Ordering::SeqCst);
-            signal_group(process.pid(), Signal::Terminate);
+            process.shared.run.mark_gone();
+            process.shared.run.terminate();
             Err(e)
         }
         Ok(()) => Ok(()),
@@ -336,35 +330,17 @@ impl AgentProcess for ClaudeProcess {
     }
 
     fn pid(&self) -> u32 {
-        self.shared.pid.load(Ordering::SeqCst)
+        self.shared.run.pid()
     }
 
     fn is_gone(&self) -> bool {
-        self.shared.gone.load(Ordering::SeqCst)
+        self.shared.run.is_gone()
     }
 
+    /// Sends SIGTERM rather than closing stdin, because on EOF the CLI finishes the whole turn first. It stops its tools
+    /// itself on SIGTERM. They run in their own groups, out of reach of a signal to its own.
     async fn stop(&self) {
-        self.shared.stop_requested.store(true, Ordering::SeqCst);
-        self.shared.stopping.notify_one();
-        let mut exited = self.shared.exited.subscribe();
-        // Already reaped, so its PID may belong to something else by now.
-        if *exited.borrow() {
-            return;
-        }
-        // SIGTERM rather than closing stdin, because on EOF the CLI finishes the whole turn first.
-        // It stops its tools itself on SIGTERM. They run in their own groups, out of our reach.
-        if self.pid() != 0 {
-            signal_group(self.pid(), Signal::Terminate);
-        }
-        let wait = exited.wait_for(|done| *done);
-        if tokio::time::timeout(STOP_GRACE, wait).await.is_ok() {
-            return;
-        }
-        warn!("agent {} ignored SIGTERM, sending SIGKILL", self.pid());
-        if self.pid() != 0 {
-            signal_group(self.pid(), Signal::Kill);
-        }
-        let _ = exited.wait_for(|done| *done).await;
+        self.shared.run.stop().await;
     }
 }
 

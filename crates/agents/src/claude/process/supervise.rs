@@ -40,11 +40,11 @@ pub(super) async fn supervise(
         let err_task = stderr;
         let status = child.wait().await;
         // No stop may signal a reaped PID while a replacement is being verified.
-        shared.pid.store(0, Ordering::SeqCst);
+        shared.run.reaped();
         // Before draining, which can take seconds. A launch that hasn't opened may yet be retried,
         // and until that's decided, starting another process would be wrong.
         if shared.confirmed.load(Ordering::SeqCst) {
-            shared.gone.store(true, Ordering::SeqCst);
+            shared.run.mark_gone();
         }
         drain(out_task).await;
         let stderr_tail = drain_errors(err_task).await;
@@ -53,7 +53,7 @@ pub(super) async fn supervise(
         // disagree with the CLI's: a launch can crash right after the CLI saved the conversation,
         // or the user can delete it. Either way the CLI exits at once saying so, and the other flag
         // is right.
-        if shared.confirmed.load(Ordering::SeqCst) || shared.stop_requested.load(Ordering::SeqCst) {
+        if shared.confirmed.load(Ordering::SeqCst) || shared.run.requested() {
             break (status, stderr_tail);
         }
         let Some(resume) = recovery.correct(&stderr_tail, &output).await else { break (status, stderr_tail) };
@@ -69,7 +69,7 @@ pub(super) async fn supervise(
         // startup guard kills the replacement group, even before it has become the current process.
         let replacement = tokio::select! {
             biased;
-            () = shared.stopping.notified() => break (status, stderr_tail),
+            () = shared.run.stop_asked() => break (status, stderr_tail),
             launched = launch(&bin, &spec, resume, &options, shared.tap.as_ref(), &output, &mut recovery) => launched,
         };
         let mut launched = match replacement {
@@ -79,19 +79,20 @@ pub(super) async fn supervise(
                 break (status, vec![format!("{e:#}")]);
             }
         };
-        if shared.stop_requested.load(Ordering::SeqCst) {
-            process::signal_group(launched.pid, process::Signal::Kill);
+        if shared.run.requested() {
+            drop(launched.group);
             let _ = launched.child.wait().await;
             break (status, stderr_tail);
         }
-        shared.pid.store(launched.pid, Ordering::SeqCst);
+        shared.run.replaced(launched.pid);
+        launched.group.finished();
         child = launched.child;
         stdout = launched.stdout;
         stderr = launched.stderr;
         let mut stdin = shared.stdin.lock().await;
         *stdin = Some(launched.stdin);
-        if shared.stop_requested.load(Ordering::SeqCst) {
-            process::signal_group(launched.pid, process::Signal::Terminate);
+        if shared.run.requested() {
+            shared.run.terminate();
             continue;
         }
         replay(mode, &shared, &mut stdin, &output).await;
@@ -110,7 +111,7 @@ async fn replay(
     plan::start_in(mode, shared, stdin, output).await;
     let prompts = shared.unconfirmed_prompts.lock().clone();
     for prompt in prompts {
-        if shared.stop_requested.load(Ordering::SeqCst) {
+        if shared.run.requested() {
             break;
         }
         if let Err(e) = write_to(shared.tap.as_ref(), stdin, &prompt).await {
@@ -127,7 +128,7 @@ async fn finish(
     status: std::io::Result<ExitStatus>,
     stderr_tail: Vec<String>,
 ) {
-    shared.gone.store(true, Ordering::SeqCst);
+    shared.run.mark_gone();
     shared.covering.stop();
     *shared.stdin.lock().await = None;
     shared.pending_controls.lock().clear();
@@ -143,14 +144,13 @@ async fn finish(
         let _ = output.send(AgentOutput::event(EventBody::PromptDropped { prompt }, None)).await;
     }
     let (code, signal) = status.map_or((None, None), |s| (s.code(), signal_of(s)));
-    let requested = shared.stop_requested.load(Ordering::SeqCst);
+    let requested = shared.run.requested();
     if let Some(tap) = &shared.tap {
         tap.exited(code, signal, requested);
     }
     shared.context.lock().close();
     shared.usage.lock().close();
-    let _ = output.send(AgentOutput::Exited { code, signal, stderr_tail, requested }).await;
-    shared.exited.send_replace(true);
+    shared.run.exit(code, signal, stderr_tail, requested).await;
 }
 
 async fn drain<T>(mut task: JoinHandle<T>) -> Option<T> {
