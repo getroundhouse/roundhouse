@@ -13,6 +13,7 @@ use gpui_kit::{
     Styled, Task, TestSupportExt as _, Window, div, font, px,
 };
 
+use crate::color;
 use crate::fitting::{Fitting, Room};
 use crate::grid::{Glyphs, Grid, Metrics, Pointing};
 use crate::keys::key_press;
@@ -96,8 +97,8 @@ impl TerminalView {
         cx: &mut Context<Self>,
     ) -> Self {
         let colors = look::colors(cx);
-        let foreground = rgb_of(colors.text);
-        let (background, selection) = (rgb_of(colors.pane), colors.selection());
+        let foreground = color::to_rgb(colors.text);
+        let (background, selection) = (color::to_rgb(colors.pane), colors.selection());
         let code = look::Type::Code;
         let metrics = Metrics::of(font(code.family(cx)), code.size(window.rem_size()), window);
         open.set_colors(foreground, background);
@@ -275,27 +276,11 @@ impl Render for TerminalView {
     }
 }
 
-fn rgb_of(color: gpui_kit::Hsla) -> Rgb {
-    let rgba = color.to_rgb();
-    Rgb { r: channel(rgba.r), g: channel(rgba.g), b: channel(rgba.b) }
-}
-
-#[expect(clippy::cast_possible_truncation, clippy::cast_sign_loss, reason = "a colour's channel, from 0 to 1")]
-fn channel(value: f32) -> u8 {
-    (value.clamp(0., 1.) * 255.).round() as u8
-}
-
 #[cfg(test)]
 mod tests {
-    use client_core::drawn::Rgb;
     use gpui_kit::px;
 
-    use super::{rgb_of, turned};
-
-    #[test]
-    fn a_colour_keeps_its_channels() {
-        assert_eq!(rgb_of(gpui_kit::rgb(0x15_1312).into()), Rgb { r: 0x15, g: 0x13, b: 0x12 });
-    }
+    use super::turned;
 
     /// A trackpad turns it by parts of a line, which add up.
     #[test]
