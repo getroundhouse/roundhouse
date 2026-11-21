@@ -143,6 +143,8 @@ pub enum ClientRequest {
     TerminalAttach(terminals::TerminalAttach),
     TerminalWatch(terminals::TerminalWatch),
     TerminalRows(terminals::TerminalRows),
+    TerminalBounds(terminals::TerminalBounds),
+    TerminalText(terminals::TerminalText),
     TerminalInput(terminals::TerminalInput),
     TerminalTyped(terminals::TerminalTyped),
     TerminalResize(terminals::TerminalResize),

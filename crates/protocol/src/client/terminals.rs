@@ -5,7 +5,10 @@ use serde::{Deserialize, Serialize};
 
 use super::{ClientRequest, ClientResponse, Reply, Request};
 use crate::model::{Terminal, TerminalId, WorkspaceId};
-use crate::terminal::{Numbering, RowNumber, TerminalBytes, TerminalRowsReply, TerminalSize, Typed};
+use crate::terminal::{
+    Bounds, Numbering, RowNumber, TerminalBoundsReply, TerminalBytes, TerminalPoint, TerminalRange, TerminalRowsReply,
+    TerminalSize, TerminalTextReply, Typed,
+};
 
 /// Opens a terminal in the workspace: a shell in its worktree, of `size`, which the workspace's worker runs, starting
 /// the worker if none is. Answers with the terminal's record, which the feed also announces. Opening one with the same
@@ -97,6 +100,57 @@ impl Reply for TerminalRowsReply {
     fn read(response: ClientResponse) -> Result<Self, ClientResponse> {
         let ClientResponse::TerminalRows(rows) = response else { return Err(response) };
         Ok(rows)
+    }
+}
+
+/// The ends of the word or the line at a cell, by Ghostty's rules, as a double or a triple click selects. The hub
+/// asks the worker, which has the only copy of the terminal.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct TerminalBounds {
+    pub id: TerminalId,
+    pub numbering: Numbering,
+    pub at: TerminalPoint,
+    pub of: Bounds,
+}
+
+impl Request for TerminalBounds {
+    type Reply = TerminalBoundsReply;
+
+    fn into_request(self) -> ClientRequest {
+        ClientRequest::TerminalBounds(self)
+    }
+}
+
+impl Reply for TerminalBoundsReply {
+    fn read(response: ClientResponse) -> Result<Self, ClientResponse> {
+        let ClientResponse::TerminalBounds(bounds) = response else { return Err(response) };
+        Ok(bounds)
+    }
+}
+
+/// The text of the cells in `range`, or of the columns between its two cells in each of its rows for a `rectangle`,
+/// as Ghostty copies it, a page at a time, as [`TerminalTextReply`] says. The hub asks the worker.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct TerminalText {
+    pub id: TerminalId,
+    pub numbering: Numbering,
+    pub range: TerminalRange,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub rectangle: bool,
+}
+
+impl Request for TerminalText {
+    type Reply = TerminalTextReply;
+
+    fn into_request(self) -> ClientRequest {
+        ClientRequest::TerminalText(self)
+    }
+}
+
+impl Reply for TerminalTextReply {
+    fn read(response: ClientResponse) -> Result<Self, ClientResponse> {
+        let ClientResponse::TerminalText(text) = response else { return Err(response) };
+        Ok(text)
     }
 }
 

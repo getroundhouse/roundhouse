@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-use std::convert::Infallible;
 use std::io::{BufRead as _, BufReader, Write as _};
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::Path;
@@ -16,13 +14,11 @@ use protocol::client::{
 use protocol::event::SessionEvent;
 use protocol::find::{Found, Needle};
 use protocol::frame;
-use protocol::model::{
-    CompactionLine, GitDiff, GitStatus, GithubSignIn, Place, PromptLine, Rev, Seq, Session, SessionId, SettledAt,
-    SubagentId,
-};
+use protocol::model::{CompactionLine, GitDiff, GitStatus, GithubSignIn, Place, Rev, Seq, Session};
 
 use super::base_pages::{opened, paged};
 use super::github;
+use super::logs::{prompt_lines, read, subscribe, subscribe_places};
 use super::stand_in::{claude, fixed_pairing, status, version};
 use super::world::{LoginSupport, NOW_MS, World};
 
@@ -336,56 +332,14 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
         | R::TerminalWatch(_)
         | R::TerminalRows(_)
         | R::TerminalTyped(_)
+        | R::TerminalBounds(_)
+        | R::TerminalText(_)
         | R::Unknown => Err(ApiError::new(ErrorCode::Unsupported, "a fake hub doesn't know that request")),
         R::TerminalAttach(attach) => super::terminals::attach(world, &attach),
         R::TerminalOpen(_) | R::TerminalInput(_) | R::TerminalResize(_) | R::TerminalClose(_) => {
             Err(read_only("change a terminal"))
         }
     }
-}
-
-/// The log from `from_seq`, then the streaming tail, as a real hub sends them once it has caught up.
-fn subscribe(world: &World, id: &SessionId, from_seq: Seq, subscription_id: u64) -> Answer {
-    world.session(id)?;
-    let events = world.events_from(id, from_seq).map(|event| HubFrame::Event { subscription_id, event: event.clone() });
-    let tail = HubFrame::Tail { subscription_id, tail: world.tails.get(id).cloned().unwrap_or_default() };
-    Ok(Outcome::Reply(ClientResponse::Ok, events.chain(std::iter::once(tail)).collect()))
-}
-
-/// The same, for the agent's own events or one subagent's, with only that one's part of what's still streaming.
-fn subscribe_places(
-    world: &World,
-    id: &SessionId,
-    subagent: Option<&SubagentId>,
-    from: Place,
-    subscription_id: u64,
-) -> Answer {
-    world.session(id)?;
-    let events =
-        world.placed_from(id, subagent, from).map(|event| HubFrame::Event { subscription_id, event: event.clone() });
-    let tail = world.tails.get(id).map_or_default(|tail| tail.of(subagent));
-    let tail = HubFrame::Tail { subscription_id, tail };
-    Ok(Outcome::Reply(ClientResponse::Ok, events.chain(std::iter::once(tail)).collect()))
-}
-
-/// What a read of `events` is sent, by what each takes in a hub's log: its body as JSON, and its raw line.
-fn read<'a>(limit: ReadLimit, events: impl Iterator<Item = &'a SessionEvent>) -> Vec<SessionEvent> {
-    let sized = events.map(|event| {
-        let size = serde_json::to_string(&event.body).unwrap().len() + event.raw.as_ref().map_or(0, String::len);
-        Ok::<_, Infallible>((event.clone(), u64::try_from(size).unwrap()))
-    });
-    let Ok(sent) = limit.cut(sized);
-    sent
-}
-
-/// Each prompt in the chat as a line, oldest first, with where it was settled, which is the last event to settle it.
-fn prompt_lines(world: &World, id: &SessionId) -> Vec<PromptLine> {
-    let settled: HashMap<Seq, SettledAt> = world.events_from(id, Seq::new(1)).filter_map(SettledAt::of).collect();
-    let line = |line: PromptLine| match settled.get(&line.seq()) {
-        Some(at) => line.settled_at(*at),
-        None => line,
-    };
-    world.events_from(id, Seq::new(1)).filter_map(PromptLine::of).map(line).collect()
 }
 
 pub(super) fn read_only(what: &str) -> ApiError {

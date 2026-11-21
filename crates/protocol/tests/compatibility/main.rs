@@ -47,6 +47,7 @@ mod restarts;
 mod sessions;
 mod subagents;
 mod terminal_rows;
+mod terminal_text;
 mod terminal_typed;
 mod terminals;
 mod waits;

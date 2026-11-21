@@ -74,6 +74,8 @@ fn carried(response: &ClientResponse) -> Vec<Record> {
         | ClientResponse::RepliesHeard(_)
         // And what isn't a record.
         | ClientResponse::TerminalRows(_)
+        | ClientResponse::TerminalBounds(_)
+        | ClientResponse::TerminalText(_)
         | ClientResponse::Paired(_)
         | ClientResponse::Devices(_)
         | ClientResponse::Pairing(_)

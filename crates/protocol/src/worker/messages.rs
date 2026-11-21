@@ -5,7 +5,7 @@ use super::{
 use crate::client::Outcome;
 use crate::model;
 use crate::model::{AgentAccount, FileContents, FileOpened, WorktreeFiles};
-use crate::terminal::TerminalRowsReply;
+use crate::terminal::{TerminalBoundsReply, TerminalRowsReply, TerminalTextReply};
 use crate::versions::Versions;
 #[cfg(test)]
 use agents::Delivery;
@@ -25,8 +25,8 @@ use serde::{Deserialize, Serialize};
 #[cfg(test)]
 use terminals::RunningTerminals;
 use terminals::{
-    RunningTerminalsReply, TerminalInput, TerminalResize, TerminalRows, TerminalShow, TerminalShown, TerminalStart,
-    TerminalStop, TerminalTyped, TerminalWatch,
+    RunningTerminalsReply, TerminalBounds, TerminalInput, TerminalResize, TerminalRows, TerminalShow, TerminalShown,
+    TerminalStart, TerminalStop, TerminalText, TerminalTyped, TerminalWatch,
 };
 use tools::{ServeTools, ToolsServing};
 #[cfg(test)]
@@ -132,6 +132,8 @@ pub enum WorkerRequest {
     TerminalResize(TerminalResize),
     TerminalShow(TerminalShow),
     TerminalRows(TerminalRows),
+    TerminalBounds(TerminalBounds),
+    TerminalText(TerminalText),
     TerminalWatch(TerminalWatch),
     TerminalStop(TerminalStop),
     /// See [`RunningTerminals`](super::RunningTerminals).
@@ -175,6 +177,8 @@ pub enum WorkerResponse {
     RepoUrl(RepoUrlReply),
     TerminalShown(TerminalShown),
     TerminalRows(TerminalRowsReply),
+    TerminalBounds(TerminalBoundsReply),
+    TerminalText(TerminalTextReply),
     RunningTerminals(RunningTerminalsReply),
 }
 

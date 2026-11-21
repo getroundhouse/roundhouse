@@ -8,6 +8,7 @@ mod tests;
 mod copy;
 mod open_terminals;
 mod opening;
+mod reading;
 mod terminal_calls;
 mod watching;
 
