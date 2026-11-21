@@ -72,8 +72,8 @@ fn a_terminals_record_keeps_its_form_as_a_reply_a_notice_and_a_removal() {
     keeps_its_form(&removed, r#"{"notice":"removed","record":{"kind":"terminal","id":"t"},"rev":10}"#);
 }
 
-/// What a hub sends a client that watches: a frame of a picture, a row in it as the worker wrote it, inside a frame whose
-/// tag serde reads first, and the rows a client asks for.
+/// What a hub sends a client that watches: a frame of a picture, a row in it as the worker wrote it, inside a frame
+/// whose tag serde reads first, and the rows a client asks for.
 #[test]
 fn what_a_hub_sends_a_client_that_watches_keeps_its_form() {
     let span = Span { text: "hi".into(), style: Some(0), ..Span::default() };

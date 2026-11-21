@@ -97,10 +97,10 @@ impl Reply for TerminalShown {
 }
 
 /// Rows of the terminal's history, by their numbers in `numbering`, for a client scrolled back past the rows it holds:
-/// `count` from `from` on, or as many as come to [`MOST_ROWS`](crate::terminal::MOST_ROWS) or about a frame's worth, whichever is fewer. History is
-/// the rows above the screen, which a program can't write to, so asking again gets the same, for as long as the
-/// terminal keeps them. None while a full-screen program is up, whose screen has none, or once the terminal's rows are
-/// in another numbering.
+/// `count` from `from` on, or as many as come to [`MOST_ROWS`](crate::terminal::MOST_ROWS) or about a frame's worth,
+/// whichever is fewer. History is the rows above the screen, which a program can't write to, so asking again gets the
+/// same, for as long as the terminal keeps them. None while a full-screen program is up, whose screen has none, or
+/// once the terminal's rows are in another numbering.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct TerminalRows {
     pub terminal: TerminalId,
