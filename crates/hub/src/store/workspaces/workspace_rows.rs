@@ -357,15 +357,25 @@ impl Store {
         rows.collect::<rusqlite::Result<_>>().map_err(StoreError::from)
     }
 
-    /// A workspace left half-made by a crash has no usable worktree or sessions.
+    /// A workspace left half-made by a crash has no usable worktree or sessions. Its instance is marked to be
+    /// destroyed, however far it got, since nothing else names it once the workspace goes: one its provider made is
+    /// recorded as made before the worker makes the worktree, which can take minutes.
     pub fn take_unfinished_workspaces(&self) -> Result<Vec<Workspace>, StoreError> {
-        let conn = lock(&self.writer);
-        let mut statement =
-            conn.prepare_cached(&format!("SELECT {WORKSPACE_COLUMNS}, rev FROM workspaces WHERE status = ?"))?;
+        let mut conn = lock(&self.writer);
+        let tx = conn.transaction()?;
         let creating = text_of(&WorkspaceStatus::Creating);
-        let rows = statement.query_map([&creating], workspace_from_row)?;
-        let workspaces = rows.collect::<rusqlite::Result<Vec<_>>>()?;
-        conn.execute("DELETE FROM workspaces WHERE status = ?", [&creating])?;
+        let workspaces = {
+            let mut statement =
+                tx.prepare_cached(&format!("SELECT {WORKSPACE_COLUMNS}, rev FROM workspaces WHERE status = ?"))?;
+            let rows = statement.query_map([&creating], workspace_from_row)?;
+            rows.collect::<rusqlite::Result<Vec<_>>>()?
+        };
+        tx.execute(
+            "UPDATE instances SET stage = ?1 WHERE id IN (SELECT instance_id FROM workspaces WHERE status = ?2)",
+            params![text_of(&InstanceStage::Destroying), creating],
+        )?;
+        tx.execute("DELETE FROM workspaces WHERE status = ?", [&creating])?;
+        tx.commit()?;
         Ok(workspaces)
     }
 }
