@@ -8,7 +8,7 @@ use std::path::Path;
 use kit_sync::{Git, Pin};
 use serde_json::Value;
 
-use super::workspace::metadata;
+use super::workspace::{built_by, metadata};
 
 /// Everything `package` pulls in, excluding dev-dependencies.
 fn runtime_closure(metadata: &Value, package: &str) -> HashSet<String> {
@@ -75,6 +75,21 @@ fn clients_only_reach_the_hub_through_the_protocol() {
         let closure = runtime_closure(&metadata, package);
         for banned in ["hub", "github", "worker", "agents", "providers"] {
             assert!(!closure.contains(banned), "{package} depends on {banned}");
+        }
+    }
+}
+
+/// No client builds Ghostty. The worker keeps the only copy of each terminal, and a client shows the rows it sends.
+/// Tests still may, through `client-core`'s `testing` feature, for the fake hub to make pictures from its world's
+/// bytes. `cargo metadata` resolves features for the whole workspace at once, tests and all, so it counts that as
+/// what ships, and this asks `cargo tree`, which resolves them as a build of each client does.
+#[test]
+fn no_client_builds_ghostty() {
+    for package in ["client-core", "terminal-view", "transcript", "local-hub", "cli", "desktop", "mobile-ios"] {
+        let built = built_by(package);
+        assert!(built.contains(&"client-core".to_string()), "{package} builds client-core, as every client does");
+        for banned in ["terminal-state", "libghostty-vt"] {
+            assert!(!built.contains(&banned.to_string()), "{package} builds {banned}");
         }
     }
 }
