@@ -280,10 +280,11 @@ jobs:
       - run: cp Cargo.lock third_party/gpui-kit/vendor/Cargo.lock
       - run: >-
           cargo clippy --manifest-path third_party/gpui-kit/vendor/Cargo.toml --target-dir target/gpui-kit
-          -p gpui-base -p gpui-component --all-targets --features test-support -- -D warnings
+          -p gpui-kit -p gpui-base -p gpui-component --all-targets --features test-support -- -D warnings
+      # Not gpui-kit's tests that draw with a GPU or open a native window, which its manifest leaves out unless named.
       - run: >-
           cargo test --manifest-path third_party/gpui-kit/vendor/Cargo.toml --target-dir target/gpui-kit
-          -p gpui-base -p gpui-component --features test-support
+          -p gpui-kit -p gpui-base -p gpui-component --features test-support
       # Only the dependencies, as for the lints.
       - if: github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true'
         run: cargo clean --manifest-path third_party/gpui-kit/vendor/Cargo.toml --target-dir target/gpui-kit --workspace
