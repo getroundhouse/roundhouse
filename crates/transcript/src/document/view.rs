@@ -1,9 +1,10 @@
 use std::rc::Rc;
+use std::time::Instant;
 
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, AppContext as _, Context, ElementId, FocusHandle, Focusable, IntoElement, ListAlignment,
-    ListState, ParentElement as _, Pixels, Render, SharedString, Styled as _, Task, Window, div, list, px,
+    ListOffset, ListState, ParentElement as _, Pixels, Render, SharedString, Styled as _, Task, Window, div, list, px,
 };
 
 use super::changes::{Change, changed};
@@ -142,6 +143,14 @@ impl Scroller for Blocks {
 
     fn scrolled(&self) -> Pixels {
         -self.0.scroll_px_offset_for_scrollbar().y
+    }
+
+    fn to_start(&self) {
+        self.0.scroll_to(ListOffset::default());
+    }
+
+    fn to_end(&self, _: Instant) {
+        self.0.scroll_to_end();
     }
 
     fn show(&self, of: Of) -> bool {

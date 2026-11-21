@@ -287,6 +287,13 @@ impl State {
         self.loaded.iter().map(ExactSizeIterator::len).sum()
     }
 
+    /// The first row of the run of loaded rows the top is in, or of the last run above it, or the first row, if no run
+    /// starts at or above the top.
+    pub(in super::super) fn first_loaded(&self) -> usize {
+        let top = self.top.row;
+        self.loaded.iter().rev().find(|run| run.start <= top).map_or(0, |run| run.start)
+    }
+
     /// The loaded rows whose heights are out of date, nearest the top of what's shown first, and at most `most` of
     /// them. Measured a few to a frame, they put the guesses right without holding a frame up, so the scrollbar
     /// settles on the session's real height a moment after a page loads or the width changes.

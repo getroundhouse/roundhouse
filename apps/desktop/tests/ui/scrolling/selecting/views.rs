@@ -21,7 +21,7 @@ use crate::subagents::showing;
 use crate::support::{FakeHub, Ui};
 
 /// How many paragraphs each view holds, far more than the window shows.
-const PARAGRAPHS: usize = 120;
+pub(in crate::scrolling) const PARAGRAPHS: usize = 120;
 /// How many frames a drag is held past the bottom.
 const HELD: usize = 60;
 
@@ -144,12 +144,12 @@ fn a_key_past_the_end_of_a_proposal_stops(cx: &mut TestAppContext) {
 }
 
 /// [`PARAGRAPHS`] paragraphs of Markdown, each saying `word` and which it is.
-fn paragraphs(word: &str) -> String {
+pub(in crate::scrolling) fn paragraphs(word: &str) -> String {
     Vec::from_fn(PARAGRAPHS, |n| format!("{word} **{}**.", n + 1)).join("\n\n")
 }
 
 /// The app on a fake hub, with a workspace whose worktree holds `long.md`, saying `text`, and All files showing it.
-fn with_a_file<'a>(cx: &'a mut TestAppContext, text: &str) -> (FakeHub, Ui<'a>) {
+pub(in crate::scrolling) fn with_a_file<'a>(cx: &'a mut TestAppContext, text: &str) -> (FakeHub, Ui<'a>) {
     let mut world = World::default();
     let repo = world.repo("signals");
     let workspace = world.workspace(&repo, "ledger");
@@ -165,7 +165,7 @@ fn with_a_file<'a>(cx: &'a mut TestAppContext, text: &str) -> (FakeHub, Ui<'a>) 
 }
 
 /// The app on a fake hub, with a chat that has made a proposal whose context says `context`, open in its tab.
-fn with_a_proposal<'a>(cx: &'a mut TestAppContext, context: &str) -> (FakeHub, Ui<'a>) {
+pub(in crate::scrolling) fn with_a_proposal<'a>(cx: &'a mut TestAppContext, context: &str) -> (FakeHub, Ui<'a>) {
     let mut world = World::default();
     let repo = world.repo("signals");
     let workspace = world.workspace(&repo, "ledger");
@@ -218,7 +218,7 @@ fn with_a_proposal<'a>(cx: &'a mut TestAppContext, context: &str) -> (FakeHub, U
 }
 
 /// Where the kit painted the text that says `said`, if it shows.
-fn painted(ui: &mut Ui<'_>, said: &str) -> Option<Bounds<Pixels>> {
+pub(in crate::scrolling) fn painted(ui: &mut Ui<'_>, said: &str) -> Option<Bounds<Pixels>> {
     ui.frame();
     let found = |window: &mut gpui_kit::Window| {
         texts(window).into_iter().find(|text| text.visible() && text.text() == said).map(|text| text.bounds())
@@ -227,12 +227,12 @@ fn painted(ui: &mut Ui<'_>, said: &str) -> Option<Bounds<Pixels>> {
 }
 
 /// The last of the paragraphs that say `word` that shows, counting from the first.
-fn last_shown(ui: &mut Ui<'_>, word: &str) -> usize {
+pub(in crate::scrolling) fn last_shown(ui: &mut Ui<'_>, word: &str) -> usize {
     (1..=PARAGRAPHS).take_while(|n| painted(ui, &format!("{word} {n}.")).is_some()).last().unwrap_or(0)
 }
 
 /// Where a press on the first of the paragraphs that say `word` goes.
-fn on_the_first(ui: &mut Ui<'_>, word: &str) -> gpui_kit::Point<Pixels> {
+pub(in crate::scrolling) fn on_the_first(ui: &mut Ui<'_>, word: &str) -> gpui_kit::Point<Pixels> {
     on_the_first_of(ui, &format!("{word} 1."))
 }
 

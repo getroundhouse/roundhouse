@@ -1,5 +1,5 @@
 use super::keys::Keyed;
-use super::{geometry, places};
+use super::{Paging, geometry, places};
 use crate::reveal::Reveal;
 use crate::texts::{Leaves, TextAt, TextKey, Texts};
 use geometry::Geometry;
@@ -17,8 +17,8 @@ use std::rc::Rc;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-/// Where the keys that copy what's selected, select everything and move an end of what's selected are bound, which is
-/// the transcript once a press in it has focused it.
+/// Where the keys that copy what's selected, select everything and move an end of what's selected are bound, and those
+/// that scroll it as a page, which is the transcript once a press in it has focused it.
 pub const KEY_CONTEXT: &str = "Transcript";
 
 /// A place in a text, between two characters, in the chat's order.
@@ -63,6 +63,8 @@ pub(crate) struct Selection {
     /// What's to be brought into view in the view the texts are drawn in, which what scrolls them scrolls to, as
     /// `Scrolled` has it.
     pub(super) reveal: Reveal,
+    /// What the keys that scroll that view have asked of it, which what scrolls the texts does as `Scrolled` has it.
+    pub(super) paging: Paging,
 }
 
 #[derive(Default)]
@@ -118,7 +120,7 @@ impl Selecting {
 
 impl Selection {
     pub(crate) fn new(texts: Texts, focus: FocusHandle) -> Self {
-        Self { inner: Rc::default(), texts, focus, reveal: Reveal::default() }
+        Self { inner: Rc::default(), texts, focus, reveal: Reveal::default(), paging: Paging::default() }
     }
 
     /// What's to be brought into view in the view the texts are drawn in: the end of what's selected that a key moved,
@@ -127,16 +129,23 @@ impl Selection {
         &self.reveal
     }
 
+    /// What the keys that scroll the view the texts are drawn in have asked of it, which a view also asks of from
+    /// elsewhere, as a chat does from its composer.
+    pub(crate) fn paging(&self) -> &Paging {
+        &self.paging
+    }
+
     /// `chat`, the transcript's, with its focus, and the keys that copy what's selected, select everything, and move
-    /// the end of what's selected that moved last, as `keys` says. They're the actions a text box takes for the same
-    /// keys. GPUI gives focus to what tracks it on a press in it that nothing else takes, so a press anywhere in the
-    /// chat gives it the focus, rather than the window, which tracks it everywhere else.
+    /// the end of what's selected that moved last, as `keys` says, which are the actions a text box takes for the same
+    /// keys, and those that scroll it, as `paging` says. GPUI gives focus to what tracks it on a press in it that
+    /// nothing else takes, so a press anywhere in the chat gives it the focus, rather than the window, which tracks it
+    /// everywhere else.
     pub(crate) fn with_keys(&self, chat: Div) -> Div {
         let (copying, selecting) = (self.clone(), self.clone());
         let chat = (chat.key_context(KEY_CONTEXT).track_focus(&self.focus))
             .on_action(move |_: &Copy, _, cx| copying.copy(cx))
             .on_action(move |_: &SelectAll, window, cx| selecting.select_all(window, cx));
-        self.with_moving_keys(chat)
+        self.paging.with_keys(self.with_moving_keys(chat))
     }
 
     /// The list has started drawing a frame: forgets the texts drawn in the last, before this one's are, and tells the

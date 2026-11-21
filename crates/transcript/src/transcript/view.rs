@@ -7,7 +7,7 @@ use crate::linked_images::LinkedImages;
 use crate::list::TranscriptList;
 use crate::questions::QuestionPanel;
 use crate::references::References;
-use crate::selection::Selection;
+use crate::selection::{Asked, Selection};
 use crate::texts::{Of, Texts};
 use client_core::hints::HintCollector;
 use client_core::session_log::{RecordedApprovals, SessionLog};
@@ -211,6 +211,18 @@ impl Transcript {
     /// Copies what's selected of the chat's texts, drawn or not, or lets the action go on when nothing is.
     pub fn copy_selection(&self, cx: &mut App) {
         self.selection.copy(cx);
+    }
+
+    /// Scrolls the chat up a screen, as Page Up does in it, for the same key from the composer.
+    pub fn page_up(&self, cx: &mut Context<Self>) {
+        self.selection.paging().ask(Asked::Screens(-1.));
+        cx.notify();
+    }
+
+    /// Scrolls the chat down a screen, as Page Down does in it, for the same key from the composer.
+    pub fn page_down(&self, cx: &mut Context<Self>) {
+        self.selection.paging().ask(Asked::Screens(1.));
+        cx.notify();
     }
 
     /// Shows what changed in the session since this last looked, however much that is. It takes the log as it is now,

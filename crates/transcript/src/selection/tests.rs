@@ -6,7 +6,7 @@ use look::motion::ScrollingOn;
 use protocol::model::Seq;
 
 use super::test_layouts::in_pieces;
-use super::{Drag, End, Geometry, Scroller, Selection, Unit};
+use super::{Asked, Drag, End, Geometry, Scroller, Selection, Unit, Way};
 use crate::reveal::Wanted;
 use crate::texts::{Of, TextAt, TextKey, Texts};
 
@@ -69,13 +69,16 @@ fn a_text_that_shows_only_the_space_between_its_lines_shows_none_of_its_leaves(c
     assert_eq!(draw(into_the_second), 1, "and its leaf shows once the second line does");
 }
 
-/// What scrolls the texts, which goes where it's asked.
+/// What scrolls the texts, which goes where it's asked, and whose end is `END` down.
 #[derive(Default)]
 struct Scrolling(Cell<Pixels>);
 
+/// How far down the end of what [`Scrolling`] scrolls is.
+const END: Pixels = px(1000.);
+
 impl Scroller for Scrolling {
     fn scroll_down(&self, by: Pixels) {
-        self.0.set(self.0.get() + by);
+        self.0.set((self.0.get() + by).clamp(px(0.), END));
     }
 
     fn scrolled(&self) -> Pixels {
@@ -84,6 +87,14 @@ impl Scroller for Scrolling {
 
     fn show(&self, _: Of) -> bool {
         true
+    }
+
+    fn to_start(&self) {
+        self.0.set(px(0.));
+    }
+
+    fn to_end(&self, _: Instant) {
+        self.0.set(END);
     }
 }
 
@@ -107,4 +118,48 @@ fn a_drag_held_past_the_edge_takes_over_from_what_was_being_brought_into_view(cx
     selection.frame_started(window, &Scrolling::default(), Instant::now());
 
     assert!(!selection.reveal().wants(Wanted::Match), "it isn't brought into view once the drag's done");
+}
+
+/// The keys that scroll a page scroll what scrolls the texts as the next frame starts, once: a line by what a line
+/// is, a screen by most of what's in view, adding up the presses between two frames, and to the start and the end,
+/// which takes the place of a line asked before it.
+#[gpui_kit::test]
+fn the_keys_that_scroll_a_page_scroll_once_as_the_next_frame_starts(cx: &mut TestAppContext) {
+    let selection = Selection::new(Texts::alone(), cx.update(|cx| cx.focus_handle()));
+    let window = Bounds::new(point(px(0.), px(0.)), size(px(200.), px(200.)));
+    let scrolling = Scrolling::default();
+    let frame = |asked: &[Asked]| {
+        for asked in asked {
+            selection.paging().ask(*asked);
+        }
+        let started = selection.frame_started(window, &scrolling, Instant::now());
+        selection.texts_laid_out(window, &scrolling, started);
+        scrolling.scrolled()
+    };
+
+    let two_screens = frame(&[Asked::Screens(1.), Asked::Screens(1.)]);
+    let a_line_up = frame(&[Asked::By(px(-20.))]);
+    let after = frame(&[]);
+    let end = frame(&[Asked::To(Way::On)]);
+    let start = frame(&[Asked::By(px(20.)), Asked::To(Way::Back)]);
+
+    assert_eq!(two_screens, px(350.), "two screens, each an eighth short of the window");
+    assert_eq!(a_line_up, px(330.));
+    assert_eq!(after, px(330.), "and once");
+    assert_eq!(end, END);
+    assert_eq!(start, px(0.));
+}
+
+/// The keys that scroll a page take over from what was being brought into view, such as Find's match, which would
+/// scroll back to it.
+#[gpui_kit::test]
+fn the_keys_that_scroll_a_page_take_over_from_what_was_being_brought_into_view(cx: &mut TestAppContext) {
+    let selection = Selection::new(Texts::alone(), cx.update(|cx| cx.focus_handle()));
+    let window = Bounds::new(point(px(0.), px(0.)), size(px(200.), px(200.)));
+    selection.reveal().want(Wanted::Match, Of::Event(Seq::new(1)));
+    selection.paging().ask(Asked::Screens(-1.));
+
+    selection.frame_started(window, &Scrolling::default(), Instant::now());
+
+    assert!(!selection.reveal().wants(Wanted::Match), "it isn't brought into view after");
 }

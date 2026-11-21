@@ -15,11 +15,13 @@
 //!
 //! It's the mouse's: a press, a drag and a release, and the keyboard's, which moves the end that moved last, as `keys`
 //! says. The kit's selection also takes a touch screen's long press and handles, which a transcript on a phone will
-//! need here.
+//! need here. The keys that scroll the view the texts are drawn in, as they'd scroll a page, are here too, as `paging`
+//! says, since what scrolls the texts does what they ask in the frame that does what the selection needs.
 
 mod frames;
 mod geometry;
 mod keys;
+mod paging;
 mod pieces;
 mod places;
 mod pointer;
@@ -31,6 +33,7 @@ mod tests;
 pub(crate) use frames::{Scrolled, Scroller, drawn_last_frame};
 pub(crate) use geometry::Geometry;
 pub(crate) use keys::Way;
+pub(crate) use paging::{Asked, Paging};
 pub(crate) use pieces::Pieces;
 
 mod selecting;

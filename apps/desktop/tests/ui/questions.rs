@@ -3,7 +3,7 @@
 
 #![cfg(test)]
 
-use gpui_kit::TestAppContext;
+use gpui_kit::{AppContext as _, TestAppContext};
 use protocol::event::EventBody;
 use protocol::model::SessionStatus;
 
@@ -116,14 +116,25 @@ fn a_question_answered_or_skipped_stays_as_a_line_that_opens_to_what_was_answere
 }
 
 /// What's asked takes keys once it settles: the arrows move between questions, a number chooses, 0 goes to the typing
-/// row and Escape comes back out of it, and Enter sends. Closing Settings gives the focus to one that came meanwhile.
+/// row and Escape comes back out of it, and Enter sends. Page Up and Page Down scroll the chat behind it, from the
+/// typing row too. Closing Settings gives the focus to one that came meanwhile.
 #[gpui_kit::test]
 fn the_keys_answer_once_what_is_asked_settles_and_closing_settings_gives_it_the_focus(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let mut ui = in_a_new_workspace(cx, &stack);
-    ui.ask("ask:*Which colors?=Red/Green/Blue|How many?=One/Two");
+    // Asked after a reply that makes the chat a few screens long, for Page Up to scroll.
+    ui.ask("prose:20:1;ask:*Which colors?=Red/Green/Blue|How many?=One/Two");
     ui.let_what_is_asked_settle();
     let showing_the_first = |ui: &mut Ui| ui.has(id("question-answer-2"));
+    let scrolled = |ui: &Ui| ui.cx.read_entity(&ui.transcript().unwrap(), |t, _| t.list().scrolled());
+
+    // Page Up and Page Down scroll the chat behind it.
+    let end = scrolled(&ui);
+    ui.press("pageup");
+    let up = scrolled(&ui);
+    ui.press("pagedown");
+    assert!(up < end, "Page Up scrolled the chat up, to {up:?} from {end:?}");
+    assert_eq!(scrolled(&ui), end, "and Page Down back down");
 
     // The arrows move between questions.
     ui.press("right");
@@ -131,8 +142,10 @@ fn the_keys_answer_once_what_is_asked_settles_and_closing_settings_gives_it_the_
     ui.press("left");
     assert!(showing_the_first(&mut ui));
 
-    // 0 goes to the typing row, and its checkbox takes back what's typed there.
+    // 0 goes to the typing row, where Page Up scrolls the chat too, and its checkbox takes back what's typed there.
     ui.press("0");
+    ui.press("pageup");
+    assert!(scrolled(&ui) < end, "Page Up scrolled the chat up from the typing row");
     ui.input("Teal");
     ui.click(id("question-other-check"));
 

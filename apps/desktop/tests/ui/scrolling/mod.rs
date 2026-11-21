@@ -4,6 +4,7 @@
 #![cfg(test)]
 
 mod cost;
+mod keys;
 mod late_heights;
 mod latest;
 mod selecting;

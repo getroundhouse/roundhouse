@@ -256,7 +256,7 @@ impl WorkspacePane {
         let composer = self.composer_row(cx).into_any_element();
         let log = self.setup_log.clone();
         let transcript = self.transcript();
-        v_flex()
+        let chat = v_flex()
             .flex_1()
             .min_h_0()
             .w_full()
@@ -296,7 +296,7 @@ impl WorkspacePane {
                         .text_color(muted),
                 )
             })
-            .child(composer)
-            .into_any_element()
+            .child(composer);
+        Self::with_chat_keys(chat, cx).into_any_element()
     }
 }

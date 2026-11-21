@@ -11,6 +11,7 @@ mod kinds;
 mod made_up;
 mod tab;
 mod views;
+pub(super) use views::{PARAGRAPHS, last_shown, on_the_first, painted, paragraphs, with_a_file, with_a_proposal};
 
 mod dragging;
 use dragging::{

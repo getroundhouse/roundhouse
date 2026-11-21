@@ -21,18 +21,26 @@
 //!
 //! Archive is left out of a terminal too, since Ctrl+Shift+A is a terminal's Select All there, as
 //! `terminal_view::bind_keys` has it, so in a terminal Archive is the File menu's.
+//!
+//! Page Up and Page Down scroll a chat from its composer, and a text box in a question in its place, where a text box
+//! would move its cursor a screen with them, so they're bound there after the kit's, which they then win over.
 
 use std::rc::Rc;
 
 use gpui_kit::base::actions::{SelectDown, SelectLeft, SelectRight, SelectUp};
-use gpui_kit::component::input::{Copy, SelectAll, SelectToNextWordEnd, SelectToPreviousWordStart};
+use gpui_kit::component::input::{
+    Copy, MoveDown, MovePageDown, MovePageUp, MoveToEnd, MoveToStart, MoveUp, SelectAll, SelectToNextWordEnd,
+    SelectToPreviousWordStart,
+};
 use gpui_kit::{Action, App, KeyBinding, KeyBindingContextPredicate};
 
+use crate::workspace_pane::CHAT_KEY_CONTEXT;
 use crate::{
-    ArchiveWorkspace, CloseChat, CloseSettings, CreatePullRequest, FindInChat, FindNext, FindPrevious, FindSetting,
-    FlipImage, GoBack, GoForward, Hide, HideOthers, MarkWorkspace, Minimize, NewChat, NewTerminal, NewWorkspace,
-    NextChat, NextWorkspace, OpenSettings, PreviousChat, PreviousWorkspace, Quit, StopAgent, ToggleDiff, ToggleMenus,
-    TogglePlanMode, ToggleSidebar, composing, file_diff, image_diff, settings,
+    ArchiveWorkspace, BackToComposer, ChatPageDown, ChatPageUp, CloseChat, CloseSettings, CreatePullRequest,
+    FindInChat, FindNext, FindPrevious, FindSetting, FlipImage, GoBack, GoForward, Hide, HideOthers, MarkWorkspace,
+    Minimize, NewChat, NewTerminal, NewWorkspace, NextChat, NextWorkspace, OpenSettings, PreviousChat,
+    PreviousWorkspace, Quit, StopAgent, ToggleDiff, ToggleMenus, TogglePlanMode, ToggleSidebar, composing, file_diff,
+    image_diff, settings,
 };
 
 /// Binds the app's shortcuts, after the kit's.
@@ -113,9 +121,9 @@ pub(crate) fn set(cx: &mut App) {
         key("secondary-shift-g", FindPrevious, None, cx),
     ];
     cx.bind_keys(bindings);
-    bind_selecting(cx);
-    dictation_ui::bind_keys(cx);
-    terminal_view::bind_keys(cx);
+    for bind in [bind_selecting, bind_scrolling, dictation_ui::bind_keys, terminal_view::bind_keys] {
+        bind(cx);
+    }
 }
 
 /// The keys for what's selected in a chat, a rendered Markdown file or a proposal that has focus, which a press on its
@@ -134,6 +142,33 @@ fn bind_selecting(cx: &mut App) {
         key(&format!("{by_word}-right"), SelectToNextWordEnd, focused, cx),
         key("shift-up", SelectUp, focused, cx),
         key("shift-down", SelectDown, focused, cx),
+    ]);
+}
+
+/// The keys that scroll a chat, a rendered Markdown file or a proposal that has focus, as they'd scroll a page, with the
+/// actions a text box moves its cursor with, which scroll a view that has no cursor, as `transcript` takes them. Page
+/// Up and Page Down scroll a chat from its composer and a question in its place too, and Escape goes back from the chat
+/// to the composer.
+fn bind_scrolling(cx: &mut App) {
+    let focused = Some(transcript::KEY_CONTEXT);
+    let around_a_chat = Some(CHAT_KEY_CONTEXT);
+    // After the kit's own, in the composer and a question's row for typing an answer, so these win there, and in Find's
+    // bar, which, as a text box of one line, lets Up and Down go on to the chat too.
+    let typed_around_a_chat = format!("{CHAT_KEY_CONTEXT} > Input");
+    let typed_around_a_chat = Some(typed_around_a_chat.as_str());
+    let in_a_chat = format!("{CHAT_KEY_CONTEXT} > {}", transcript::KEY_CONTEXT);
+    cx.bind_keys([
+        key("up", MoveUp, focused, cx),
+        key("down", MoveDown, focused, cx),
+        key("pageup", MovePageUp, focused, cx),
+        key("pagedown", MovePageDown, focused, cx),
+        key("home", MoveToStart, focused, cx),
+        key("end", MoveToEnd, focused, cx),
+        key("pageup", ChatPageUp, around_a_chat, cx),
+        key("pagedown", ChatPageDown, around_a_chat, cx),
+        key("pageup", ChatPageUp, typed_around_a_chat, cx),
+        key("pagedown", ChatPageDown, typed_around_a_chat, cx),
+        key("escape", BackToComposer, Some(&in_a_chat), cx),
     ]);
 }
 

@@ -28,7 +28,10 @@ The app's keyboard shortcuts. They're written as a Mac's. On Windows and Linux, 
 | `Cmd-G`, `Cmd-Shift-G` | The next match, and the one before |
 | `F3`, `Shift-F3` | On Windows and Linux, the next match, and the one before, too |
 | `Enter`, `Shift-Enter` | In Find's bar, the next match, and the one before |
-| Escape | Close Find's bar, or an image opened from the chat |
+| Escape | Close Find's bar, or an image opened from the chat, or else go from the chat back to the composer |
+| Up and down arrows | In the chat, a rendered Markdown file or a proposal, once you've clicked in it, scroll a line |
+| `Page Up`, `Page Down` | The same, a screen at a time |
+| `Home`, `End` | The same, to the start and the end. In a chat, the start is as far up as has loaded |
 | `Shift` and an arrow | Make what's selected in the chat, a rendered Markdown file or a proposal longer or shorter, a character or a line at a time, at the end you moved last |
 | `Option-Shift` and left or right | The same, a word at a time. `Ctrl-Shift` on Windows and Linux |
 
@@ -58,6 +61,7 @@ Find and stopping the agent are for a chat, so they do nothing unless the chat s
 | `Cmd-Enter` | Queue a prompt for when the agent finishes |
 | `Cmd-.` | Stop the agent's turn |
 | `Shift-Tab` | Turn plan mode on or off |
+| `Page Up`, `Page Down` | Scroll the chat a screen, leaving what's typed as it is |
 | `Enter`, Escape | While changing a queued prompt, keep the change, or leave it as it was |
 | Space, held | On a Mac, once dictation is ready, dictate while it's held, after a moment |
 | `Option-Space`, held | The same, at once |
@@ -72,6 +76,7 @@ Find and stopping the agent are for a chat, so they do nothing unless the chat s
 | Left and right arrows | The question before, and after |
 | `Enter` | Go to the next question without an answer, and send once there's none |
 | Escape | Leave the row for typing an answer |
+| `Page Up`, `Page Down` | Scroll the chat a screen |
 
 ## The new-workspace dialog
 
