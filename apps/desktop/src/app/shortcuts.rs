@@ -10,7 +10,7 @@ use super::selection::Way;
 use super::{AppView, corner};
 use crate::menus;
 use crate::sides::{Side, Sidebar};
-use crate::workspace_pane::{Showing, WorkspacePane};
+use crate::workspace_pane::{Mark, Showing, WorkspacePane};
 use crate::{
     AddRepository, ArchiveWorkspace, CloseChat, ConversationMode, CreatePullRequest, FindInChat, FindNext,
     FindPrevious, GoBack, GoForward, MarkWorkspace, NewChat, NewTerminal, NewWorkspace, NextChat, NextWorkspace,
@@ -41,7 +41,21 @@ impl AppView {
             })
             // Home hides the selected workspace, so nothing acts on it unseen.
             .when(self.selected_pane().is_some() && !self.home_showing(), |root| with_workspace_shortcuts(root, cx))
+            .when(self.marking_showing(cx).is_some(), |root| {
+                root.on_action(cx.listener(|t, _: &MarkWorkspace, _, cx| {
+                    if let Some((mark, chats)) = t.selected().and_then(|id| t.workspace_marking(id, cx)) {
+                        t.mark_chats(mark, chats, cx);
+                    }
+                }))
+            })
             .when(self.chat_showing(cx), |root| with_chat_shortcuts(root, cx))
+    }
+
+    /// What marking the workspace showing does, as its row's menu would, or `None` while there's no reply in it to mark,
+    /// or Home hides it.
+    fn marking_showing(&self, cx: &Context<Self>) -> Option<Mark> {
+        let id = self.selected().filter(|_| self.selected_pane().is_some() && !self.home_showing())?;
+        self.workspace_marking(id, cx).map(|(mark, _)| mark)
     }
 
     /// Whether a chat shows, in front of the selected workspace's tabs, to find text in and stop the agent of.
@@ -59,6 +73,7 @@ impl AppView {
             sidebar_open: Side::Left.chosen(cx).sidebar == Sidebar::Open,
             diff_open: pane.is_some_and(|pane| pane.changes_open(cx)),
             showing: pane.map_or(Showing::Chat, WorkspacePane::showing),
+            marking: self.marking_showing(cx),
         };
         if Some(says) != self.menus_say {
             self.menus_say = Some(says);
@@ -121,11 +136,6 @@ fn with_workspace_shortcuts(root: Div, cx: &mut Context<AppView>) -> Div {
         .on_action(cx.listener(|t, _: &ArchiveWorkspace, _, cx| {
             if let Some(id) = t.selected().cloned() {
                 t.archive(id, false, cx);
-            }
-        }))
-        .on_action(cx.listener(|t, _: &MarkWorkspace, _, cx| {
-            if let Some((mark, chats)) = t.selected().and_then(|id| t.workspace_marking(id, cx)) {
-                t.mark_chats(mark, chats, cx);
             }
         }))
         .on_action(cx.listener(|t, _: &Copy, window, cx| {

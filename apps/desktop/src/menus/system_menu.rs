@@ -1,8 +1,8 @@
-use crate::workspace_pane::Showing;
+use crate::workspace_pane::{Mark, Showing};
 use crate::{
     About, AddRepository, ArchiveWorkspace, CheckForUpdates, CloseChat, FindInChat, FindNext, FindPrevious, GoBack,
-    GoForward, Hide, HideOthers, Minimize, NewChat, NewTerminal, NewWorkspace, NextChat, NextWorkspace, OpenSettings,
-    PreviousChat, PreviousWorkspace, Quit, ShowAll, ToggleDiff, ToggleSidebar, Zoom,
+    GoForward, Hide, HideOthers, MarkWorkspace, Minimize, NewChat, NewTerminal, NewWorkspace, NextChat, NextWorkspace,
+    OpenSettings, PreviousChat, PreviousWorkspace, Quit, ShowAll, ToggleDiff, ToggleSidebar, Zoom,
 };
 use gpui_kit::component::input::{Copy, Cut, Paste, Redo, SelectAll, Undo};
 use gpui_kit::{App, Menu, MenuItem, OsAction, SystemMenuType, Window};
@@ -44,6 +44,9 @@ pub(crate) struct Says {
     pub(crate) diff_open: bool,
     /// What's showing under the tabs, which ⌘W closes, rather than the chat behind it when it's a tab.
     pub(crate) showing: Showing,
+    /// What ⇧⌘U does to the workspace showing, which File's item says: Mark as Read while it has a reply nobody has
+    /// read. `None` while there's nothing to mark, when the item is greyed out.
+    pub(crate) marking: Option<Mark>,
 }
 
 /// Sets the menus, and handles the items no view does, wherever focus is. The window shows Settings itself. macOS
@@ -97,10 +100,11 @@ fn app_menu() -> Menu {
     ])
 }
 
-/// Making things, and closing a chat or archiving the workspace, as a File menu makes and closes documents. The window
-/// handles these. ⌘W closes the file tab, the subagent tab or the proposal tab while it shows, so the item says so
-/// then. Archiving is here for a terminal off the Mac, where its key is the terminal's Select All. Off the Mac,
-/// Settings… and quitting end it, as they do a Windows or Linux app's File menu.
+/// Making things, and closing a chat, marking the workspace or archiving it, as a File menu makes and closes documents.
+/// The window handles these. ⌘W closes the file tab, the subagent tab or the proposal tab while it shows, so the item
+/// says so then. Marking is here since a right-click menu shows no keys, so this is where ⇧⌘U is seen. Archiving is
+/// here for a terminal off the Mac, where its key is the terminal's Select All. Off the Mac, Settings… and quitting end
+/// it, as they do a Windows or Linux app's File menu.
 fn file_menu(system: System, says: Says) -> Menu {
     let close = match says.showing {
         Showing::Chat => "Close Chat",
@@ -116,6 +120,7 @@ fn file_menu(system: System, says: Says) -> Menu {
         MenuItem::action("Add Project…", AddRepository),
         MenuItem::separator(),
         MenuItem::action(close, CloseChat),
+        MenuItem::action(marks(says.marking), MarkWorkspace),
         MenuItem::action("Archive Workspace", ArchiveWorkspace),
     ];
     match system {
@@ -128,6 +133,14 @@ fn file_menu(system: System, says: Says) -> Menu {
         ]),
     }
     Menu::new("File").items(items)
+}
+
+/// What the item that marks the workspace showing says: what it does now, or Mark as Unread while it can't act.
+fn marks(marking: Option<Mark>) -> &'static str {
+    match marking {
+        Some(Mark::Read) => "Mark as Read",
+        Some(Mark::Unread) | None => "Mark as Unread",
+    }
 }
 
 /// What the item that quits is called: Exit on Windows, as its apps say, and Quit on Linux, as GNOME's and KDE's do.

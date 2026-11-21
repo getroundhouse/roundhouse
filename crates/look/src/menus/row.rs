@@ -87,6 +87,11 @@ impl MenuRow {
         self
     }
 
+    /// The row without its key, for a menu that shows none.
+    pub(super) fn without_key(self) -> Self {
+        MenuRow { key: None, ..self }
+    }
+
     /// The kit's row: its own, where the kit draws all of it, and one drawn here where it has a note or a tooltip.
     pub(super) fn kit(self) -> PopupMenuItem {
         let MenuRow { words, icon, key, note, chosen, off, tooltip, choose } = self;
