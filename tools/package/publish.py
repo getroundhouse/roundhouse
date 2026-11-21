@@ -37,7 +37,7 @@ Each step takes `--channel` first, for which platform's releases it publishes: `
       for a minute.
 
 STORE is s3://BUCKET, with S3_ENDPOINT, S3_REGION and the AWS CLI's usual credentials, or a directory, to try it
-without a bucket. KEY is the app's public key, in the form `apps/desktop/src/updates/source/mod.rs` says.
+without a bucket. KEY is the app's public key, in the form `crates/update-feed/src/signature.rs` says.
 `test_publish.py` runs this against a directory, and serves it for `check`. Needs Python 3.9 or newer, and OpenSSL 3,
 as `feed-signature.sh` does.
 

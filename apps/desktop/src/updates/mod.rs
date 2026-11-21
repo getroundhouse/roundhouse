@@ -20,9 +20,11 @@ pub(crate) use problem::Said;
 use problem::problem;
 pub use problem::{Kind, Problem, Refusal, Step};
 #[cfg(test)]
-use source::{SignedSource, UpdateFeedKey, WorkersToKeep};
+use source::{SignedSource, WorkersToKeep};
 #[cfg(test)]
 use std::time::Duration;
+#[cfg(test)]
+use update_feed::UpdateFeedKey;
 #[cfg(test)]
 use velopack::UpdateManager;
 

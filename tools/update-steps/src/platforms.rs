@@ -6,7 +6,7 @@ use protocol::versions::Versions;
 use update_feed::Feed;
 
 /// Where apps read the feeds, as the app has it.
-const UPDATE_URL: &str = include_str!("../../../apps/desktop/src/updates/update-feed.url");
+const UPDATE_URL: &str = include_str!("../../../crates/update-feed/update-feed.url");
 
 /// The platforms whose apps step: those whose hubs keep their workers through an update, as `KEEPS_WORKERS` in the hub
 /// has it, and as `STEPS` in `tools/package/publish.py` has them. A Windows hub's workers stop with it, so its apps

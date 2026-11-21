@@ -83,7 +83,7 @@ pub(in super::super) fn problem(step: Step, error: &velopack::Error) -> Problem 
             _,
         )
         | (None, velopack::Error::Network(_)) => Kind::Unreachable,
-        (Some(SourceError::Unsigned), _) => Kind::Refused(Refusal::Unsigned),
+        (Some(SourceError::Unsigned(_)), _) => Kind::Refused(Refusal::Unsigned),
         (Some(SourceError::Fetch(FetchError::TooLong { .. })), _) => Kind::Refused(Refusal::TooLong),
         (None, velopack::Error::ChecksumInvalid(..) | velopack::Error::SizeInvalid(..)) => {
             Kind::Refused(Refusal::NotAsListed)

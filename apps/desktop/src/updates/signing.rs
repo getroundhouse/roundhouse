@@ -3,7 +3,7 @@
 use ring::rand::SystemRandom;
 use ring::signature::{Ed25519KeyPair, KeyPair as _};
 
-use super::source::UpdateFeedKey;
+use update_feed::UpdateFeedKey;
 
 pub(crate) fn key_pair() -> Ed25519KeyPair {
     let pkcs8 = Ed25519KeyPair::generate_pkcs8(&SystemRandom::new()).unwrap();
