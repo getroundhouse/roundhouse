@@ -44,14 +44,6 @@ pub fn hub_copy_files() -> [String; 2] {
     [program_file(HUB_COPY_NAME), daemon_file()]
 }
 
-/// Whether `name` is one [`Paths::hub_copy`] gives a build's directory in [`Paths::daemons_dir`], which
-/// [`StampedBuild::dir_name`] makes.
-pub fn is_hub_copy_dir(name: &str) -> bool {
-    name.rsplit_once('-').is_some_and(|(version, number)| {
-        !version.is_empty() && number.parse::<u64>().is_ok_and(|parsed| parsed.to_string() == number)
-    })
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -92,7 +84,7 @@ mod tests {
         assert_eq!(linking.parent(), fixed.parent());
         let name = linking.file_name().unwrap().to_str().unwrap();
         assert!(name.starts_with(&linking_hub_prefix()), "{name}");
-        assert!(!is_hub_copy_dir(name), "{name}");
+        assert!(!StampedBuild::is_dir_name(name), "{name}");
     }
 
     #[test]
@@ -101,9 +93,9 @@ mod tests {
         let copy = paths.hub_copy(&StampedBuild::new("0.1.371", 1_794_519_400).unwrap());
         let dir = copy.parent().unwrap().file_name().unwrap().to_str().unwrap();
 
-        assert!(is_hub_copy_dir(dir));
+        assert!(StampedBuild::is_dir_name(dir));
         for other in ["notes", "abc123-new", "-7", "abc123-07", "abc123-+7"] {
-            assert!(!is_hub_copy_dir(other), "{other}");
+            assert!(!StampedBuild::is_dir_name(other), "{other}");
         }
     }
 }

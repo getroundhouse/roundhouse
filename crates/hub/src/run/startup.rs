@@ -121,8 +121,19 @@ fn load_providers(
     Ok(providers)
 }
 
-/// Runs until asked to stop or signalled. Returns an error if another hub is using these paths.
-pub async fn run(config: HubConfig) -> Result<(), HubError> {
+/// How a hub's run ended.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Ended {
+    /// It stopped its workers, and their agents with them.
+    Stopped,
+    /// It left its workers running for the next hub, which it was asked to restart for, and which whatever started
+    /// this one starts.
+    Restarting,
+}
+
+/// Runs until asked to stop or signalled, and says whether another hub is to start. Returns an error if another hub
+/// is using these paths.
+pub async fn run(config: HubConfig) -> Result<Ended, HubError> {
     let update_feed = config.update_feed;
     let HubConfig { network_address, build, paths, worker_exe, shell, path, start, agents, timers, github, .. } =
         config;
@@ -180,18 +191,26 @@ pub async fn run(config: HubConfig) -> Result<(), HubError> {
     listener::unbind(&paths.socket);
     // Before the lock goes, so what a renewal under way is given is written before the next hub can start.
     hub.stop_checking_github_logins(watching_github_logins).await;
-    if hub.restarting() && !signalled {
-        hub.leave_workers().await;
-    } else {
-        hub.stop_all_workers().await;
-    }
+    let ended = end_workers(&hub, signalled).await;
     hub.shut_down_providers().await;
     if let Some(awake) = awake {
         awake.abort();
     }
     drop(lock);
     info!("hub stopped");
-    Ok(())
+    Ok(ended)
+}
+
+/// Leaves `hub`'s workers running for the next hub, if it was asked to restart and no signal asked it to go, and stops
+/// them otherwise, with their agents.
+async fn end_workers(hub: &Arc<Hub>, signalled: bool) -> Ended {
+    if hub.restarting() && !signalled {
+        hub.leave_workers().await;
+        Ended::Restarting
+    } else {
+        hub.stop_all_workers().await;
+        Ended::Stopped
+    }
 }
 
 /// What `hub` watches while it serves, each a task of `serving`: its waits' deadlines, its pull requests, its reach on

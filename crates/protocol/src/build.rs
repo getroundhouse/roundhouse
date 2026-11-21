@@ -35,6 +35,14 @@ impl StampedBuild {
     pub fn dir_name(&self) -> String {
         format!("{}-{}", self.version, self.number)
     }
+
+    /// Whether `name` is one [`StampedBuild::dir_name`] makes, so a build's directory is told from anything else
+    /// beside it.
+    pub fn is_dir_name(name: &str) -> bool {
+        name.rsplit_once('-').is_some_and(|(version, number)| {
+            !version.is_empty() && number.parse::<u64>().is_ok_and(|parsed| parsed.to_string() == number)
+        })
+    }
 }
 
 /// Which build a program is, which its `main` makes with [`this_build!`] and passes down.

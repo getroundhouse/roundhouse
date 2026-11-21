@@ -6,7 +6,18 @@
 use std::path::PathBuf;
 
 use crate::StampedBuild;
-use crate::paths::Paths;
+use crate::paths::{Paths, daemon_file, program_file};
+
+/// The command line's file, which it has beside the daemon in each build the service runs.
+pub fn cli_file() -> String {
+    program_file("roundhouse")
+}
+
+/// Each program in a build's directory for the service: the daemon, which the service and its workers run from, and
+/// then the command line.
+pub fn service_programs() -> [String; 2] {
+    [daemon_file(), cli_file()]
+}
 
 impl Paths {
     /// Where a hub installed as a service keeps its builds.

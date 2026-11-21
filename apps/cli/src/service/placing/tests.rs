@@ -31,7 +31,7 @@ fn unpacked(dir: &Path, which: &str) -> std::path::PathBuf {
 fn placing_a_build_points_the_service_at_it_and_leaves_the_build_before_it_as_it_was() {
     let dir = tempfile::tempdir().unwrap();
     let paths = paths_in(dir.path());
-    let programs = [OsString::from("roundhoused"), OsString::from("roundhouse")];
+    let programs = ["roundhoused".to_owned(), "roundhouse".to_owned()];
     let first = StampedBuild::new("0.1.7", 7).unwrap();
     let second = StampedBuild::new("0.1.8", 8).unwrap();
     place_build(&paths, &first, &unpacked(dir.path(), "first"), &programs).unwrap();
@@ -62,7 +62,7 @@ fn a_placed_build_is_only_its_user_s() {
     let paths = paths_in(dir.path());
     let build = StampedBuild::new("0.1.7", 7).unwrap();
 
-    place_build(&paths, &build, &unpacked(dir.path(), "first"), &[OsString::from("roundhoused")]).unwrap();
+    place_build(&paths, &build, &unpacked(dir.path(), "first"), &["roundhoused".to_owned()]).unwrap();
 
     let mode = |path: &Path| std::fs::metadata(path).unwrap().permissions().mode() & 0o777;
     assert_eq!(mode(&paths.data_dir), 0o700);

@@ -114,6 +114,22 @@ fn a_hub_its_service_manager_started_says_so() {
     assert!(!status.on_demand, "so a client doesn't restart it");
 }
 
+/// The service starts the hub again after it fails, and not after it succeeds, so a hub that leaves its workers for
+/// the next one, as for an update, exits as a failure would, and one that's stopped doesn't.
+#[test]
+fn a_hub_that_restarts_exits_for_its_service_to_start_it_again_and_one_stopped_does_not() {
+    let mut stack = Stack::start();
+    HubAdmin::connect(&stack.socket()).unwrap().stop().unwrap();
+    let stopped = stack.hub.take().unwrap().wait().unwrap();
+    stack.start_hub_with(&["--service"]);
+
+    client_core::restart_hub(&stack.client()).unwrap();
+    let restarted = stack.hub.take().unwrap().wait().unwrap();
+
+    assert!(stopped.success(), "{stopped}");
+    assert_eq!(restarted.code(), Some(75), "EX_TEMPFAIL");
+}
+
 /// Installing a new version moves the `current` link, and a running hub stays on the one it came from.
 #[test]
 fn a_hub_started_through_a_link_stays_on_its_version_when_the_link_moves() {
