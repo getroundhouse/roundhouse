@@ -33,7 +33,7 @@ If something hasn't reached the hub yet, such as a prompt still on its way, the 
 
 ## Checking by hand
 
-Check for Updates looks right away: in the question mark's menu at the bottom of the sidebar, or as Check for Updates… in the app menu, or in Help on Windows and Linux. Otherwise the app looks when it opens, and every hour. If nothing is newer, `Up to date` shows at the bottom of the sidebar, in the build's place, for a few seconds. A newer version shows as its card, and a problem as [below](#problems).
+Check for Updates looks right away: in the question mark's menu at the bottom of the sidebar, or as Check for Updates… in the app menu, or in Help on Windows and Linux. Otherwise the app looks when it opens, and every 10 minutes. If nothing is newer, `Up to date` shows at the bottom of the sidebar, in the build's place, for a few seconds. A newer version shows as its card, and a problem as [below](#problems).
 
 ## When the card says Finishing update
 
@@ -47,7 +47,7 @@ A hub from before agents could outlive a restart still has to wait for its agent
 
 ## A hub on a machine of its own
 
-A hub [installed as a service](../get-started/install.md#a-hub-on-a-machine-of-its-own) updates only when you say, since updating it ahead of your other devices could cut one off. It looks for a newer release every hour. Once it has found one, the card says `Hub update ready`, and `Update hub` updates it. The hub downloads the release, checks it, and restarts on it, and agents at work keep going. The card says `Updating hub` meanwhile, and the app connects again by itself.
+A hub [installed as a service](../get-started/install.md#a-hub-on-a-machine-of-its-own) updates only when you say, since updating it ahead of your other devices could cut one off. It looks for a newer release as it starts, and every 10 minutes. Once it has found one, the card says `Hub update ready`, and `Update hub` updates it. The hub downloads the release, checks it, and restarts on it, and agents at work keep going. The card says `Updating hub` meanwhile, and the app connects again by itself.
 
 ![The card once a hub on another machine has found a newer release](../../spec/screens/hub-update-ready.png)
 

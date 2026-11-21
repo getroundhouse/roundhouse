@@ -62,7 +62,7 @@ tar -xzf Roundhouse-osx-hub.tar.gz -C roundhouse-hub
 sudo roundhouse-hub/roundhouse hub install --user <name>
 ```
 
-It says how to pair a device with it once it's running. It looks for a newer release every hour, and the app on a device connected to it shows a card when it has found one, whose `Update hub` [updates it](../reference/updates.md#a-hub-on-a-machine-of-its-own). Agents at work keep going. On its machine, `roundhouse hub update`, run as its user, does the same. Installing a newer download the same way updates it too. [The command line](../reference/command-line.md#the-hub) says what else `roundhouse hub` does.
+It says how to pair a device with it once it's running. It looks for a newer release every 10 minutes, and the app on a device connected to it shows a card when it has found one, whose `Update hub` [updates it](../reference/updates.md#a-hub-on-a-machine-of-its-own). Agents at work keep going. On its machine, `roundhouse hub update`, run as its user, does the same. Installing a newer download the same way updates it too. [The command line](../reference/command-line.md#the-hub) says what else `roundhouse hub` does.
 
 ## No account
 
