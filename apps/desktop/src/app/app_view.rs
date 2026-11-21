@@ -16,11 +16,11 @@ use restarts::UpdateQuestion;
 use std::collections::{HashMap, HashSet};
 
 /// How often the app looks whether an older hub has gone idle, which a test can wait out.
-#[cfg(feature = "testing")]
+#[cfg(any(test, feature = "testing"))]
 pub const LOOK_AGAIN: std::time::Duration = restarts::LOOK_AGAIN;
 
 /// How long after a sound for a chat that needs the person the next one waits, which a test can wait out.
-#[cfg(feature = "testing")]
+#[cfg(any(test, feature = "testing"))]
 pub const SOUNDS_APART: std::time::Duration = notifying::SOUNDS_APART;
 
 /// The position `by` away from `at` in a list of `len`, wrapping around. `at` has to be in the list,

@@ -189,7 +189,7 @@ fn turned(rest: &mut Pixels, delta_y: Pixels, line: Pixels) -> isize {
     whole_lines(lines)
 }
 
-#[cfg(feature = "testing")]
+#[cfg(any(test, feature = "testing"))]
 impl TerminalView {
     /// Each row it last drew, as text, with a space for each cell that draws nothing.
     pub fn rows(&self) -> Vec<String> {

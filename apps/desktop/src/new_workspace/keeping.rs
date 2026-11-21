@@ -222,7 +222,7 @@ impl NewWorkspaceDialog {
 }
 
 /// What a test reads.
-#[cfg(feature = "testing")]
+#[cfg(any(test, feature = "testing"))]
 impl NewWorkspaceDialog {
     /// The hub's record as the dialog was last told of it, for a test to see that it has heard of a change.
     pub fn kept(&self) -> &NewWorkspaceDraft {

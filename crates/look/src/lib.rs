@@ -81,7 +81,7 @@ pub use clock::{
     date, date_and_time, day_ago, day_and_time, days_apart, local_time, months_apart, next_day_at_ms, now_ms,
     time_of_day,
 };
-#[cfg(feature = "testing")]
+#[cfg(any(test, feature = "testing"))]
 pub use colors::NamedColor;
 pub use colors::{Colors, colors};
 pub use control_sizes::ControlSize;

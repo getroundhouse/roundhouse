@@ -4,7 +4,7 @@
 //! it, so only the `testing` feature builds that one.
 
 use protocol::client::{accounts, sessions};
-#[cfg(feature = "testing")]
+#[cfg(any(test, feature = "testing"))]
 use protocol::model::SessionAccount;
 use protocol::model::{Account, AccountId, AgentKind, HubSettings, LoginToken, Reserve, Session, SessionId};
 
@@ -56,7 +56,7 @@ impl Client {
     }
 
     /// See [`sessions::SessionAccount`]. A hub older than this refuses it, as `is_unsupported` says.
-    #[cfg(feature = "testing")]
+    #[cfg(any(test, feature = "testing"))]
     pub fn session_account(&self, id: &SessionId) -> Result<SessionAccount> {
         self.call(sessions::SessionAccount { id: id.clone() })
     }

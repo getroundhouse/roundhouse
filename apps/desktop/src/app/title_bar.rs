@@ -43,26 +43,26 @@ pub(super) fn buttons_in_this_frame(window: &Window, cx: &App) -> WindowButtons 
 }
 
 /// The window's, as the system has it, or as a test says in its place.
-#[cfg(feature = "testing")]
+#[cfg(any(test, feature = "testing"))]
 fn title_bar(cx: &App) -> TitleBar {
     cx.try_global::<StandIn>().map_or(TitleBar::OF_THE_SYSTEM, |StandIn(title_bar)| *title_bar)
 }
 
-#[cfg(not(feature = "testing"))]
+#[cfg(not(any(test, feature = "testing")))]
 fn title_bar(_: &App) -> TitleBar {
     TitleBar::OF_THE_SYSTEM
 }
 
 /// What a test says of the title bar, in place of the system.
-#[cfg(feature = "testing")]
+#[cfg(any(test, feature = "testing"))]
 struct StandIn(TitleBar);
 
-#[cfg(feature = "testing")]
+#[cfg(any(test, feature = "testing"))]
 impl gpui_kit::Global for StandIn {}
 
 /// Says the window's title bar is `title_bar` from the next frame on, whatever the system has, so a test can stand in
 /// for Windows, where the tests mostly don't build.
-#[cfg(feature = "testing")]
+#[cfg(any(test, feature = "testing"))]
 pub fn the_title_bar_is(title_bar: TitleBar, cx: &mut App) {
     cx.set_global(StandIn(title_bar));
 }

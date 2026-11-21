@@ -5,24 +5,24 @@ use protocol::pairing::clean_device_name;
 
 const FALLBACK: &str = "Roundhouse desktop";
 
-#[cfg(feature = "testing")]
+#[cfg(any(test, feature = "testing"))]
 struct StandIn(String);
 
-#[cfg(feature = "testing")]
+#[cfg(any(test, feature = "testing"))]
 impl gpui_kit::Global for StandIn {}
 
 /// Gives pictures and tests a fixed computer name, so no machine's own name enters a screenshot or fixture.
-#[cfg(feature = "testing")]
+#[cfg(any(test, feature = "testing"))]
 pub fn the_device_name_is(name: impl Into<String>, cx: &mut App) {
     cx.set_global(StandIn(name.into()));
 }
 
-#[cfg(feature = "testing")]
+#[cfg(any(test, feature = "testing"))]
 fn override_name(cx: &App) -> Option<String> {
     cx.try_global::<StandIn>().map(|StandIn(name)| name.clone())
 }
 
-#[cfg(not(feature = "testing"))]
+#[cfg(not(any(test, feature = "testing")))]
 fn override_name(_: &App) -> Option<String> {
     None
 }

@@ -30,7 +30,6 @@ objc2-core-ml.workspace = true
 objc2-foundation = { workspace = true, features = ["NSDictionary", "NSError", "NSProcessInfo", "NSURL", "NSValue"] }
 
 [dev-dependencies]
-dictation = { workspace = true, features = ["testing"] }
 proptest.workspace = true
 tempfile.workspace = true
 

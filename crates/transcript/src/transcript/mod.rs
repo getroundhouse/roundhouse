@@ -13,7 +13,7 @@ mod proposals;
 mod record;
 mod sending;
 mod shown;
-#[cfg(feature = "testing")]
+#[cfg(any(test, feature = "testing"))]
 mod testing;
 
 pub(crate) use record::{AtWork, IdleCache};

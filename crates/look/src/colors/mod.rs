@@ -14,7 +14,7 @@ mod palette;
 mod ramp;
 mod srgb;
 
-#[cfg(feature = "testing")]
+#[cfg(any(test, feature = "testing"))]
 pub use palette::NamedColor;
 #[cfg(test)]
 use palette::hsla;

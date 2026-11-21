@@ -21,5 +21,9 @@ sound.workspace = true
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2-core-graphics.workspace = true
 
+[dev-dependencies]
+# What the `testing` feature turns on in it, which the tests have without it.
+dictation = { workspace = true, features = ["testing"] }
+
 [lints]
 workspace = true

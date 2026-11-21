@@ -49,6 +49,6 @@ pub use client::{
     restart_hub, stop_hub, stop_hub_if_idle, stop_hub_if_still,
 };
 
-#[cfg(feature = "testing")]
+#[cfg(any(test, feature = "testing"))]
 pub use client::pair_with_timeout;
 pub use client::{RemoteHub, pair};

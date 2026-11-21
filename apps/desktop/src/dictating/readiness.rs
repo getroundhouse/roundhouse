@@ -333,7 +333,7 @@ fn record(hints: dictation::Hints, cx: &App) -> Option<(Recording, flume::Receiv
 /// them with `load`, from the folder the product loads them from, on the thread that hears what's dictated. Each
 /// recording hears only what a test gives it, as `WorkspacePane::hear` does. It follows the choice from now, as it
 /// does once the app starts.
-#[cfg(feature = "testing")]
+#[cfg(any(test, feature = "testing"))]
 pub fn use_model(
     model_dir: PathBuf,
     files: ModelFiles,
@@ -348,7 +348,7 @@ pub fn use_model(
 /// Turns dictation on with `engine` as its model, which has no files, so it's prepared as soon as the thread starts,
 /// and ready once [`is_ready`] says so. Each recording hears only what a test gives it. The model's folder is the
 /// app's, in the test's own data directory.
-#[cfg(feature = "testing")]
+#[cfg(any(test, feature = "testing"))]
 pub fn use_engine(engine: dictation::fake::FakeEngine, cx: &mut App) {
     let files = ModelFiles { repository: "none", revision: "none", files: &[] };
     let model_dir = dictating(cx).model.dir.clone();
@@ -357,14 +357,14 @@ pub fn use_engine(engine: dictation::fake::FakeEngine, cx: &mut App) {
 }
 
 /// Turns dictation on, or off, as the person can in Settings.
-#[cfg(feature = "testing")]
+#[cfg(any(test, feature = "testing"))]
 pub fn set_on(on: bool, cx: &mut App) {
     let choice = if on { Choice::On } else { Choice::Off };
     crate::settings::change(cx, |settings| settings.dictation = choice);
 }
 
 /// Whether opted-in fields can be dictated to, for a test to wait for.
-#[cfg(feature = "testing")]
+#[cfg(any(test, feature = "testing"))]
 pub fn is_ready(cx: &App) -> bool {
     ready(cx)
 }

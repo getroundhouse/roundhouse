@@ -22,10 +22,10 @@ pub use description::description;
 pub use one_off::{account, title_for};
 pub use running::{spawn, spawn_at};
 
-#[cfg(feature = "testing")]
+#[cfg(any(test, feature = "testing"))]
 pub use running::spawn_tapped;
 
-#[cfg(all(feature = "testing", unix))]
+#[cfg(all(any(test, feature = "testing"), unix))]
 pub mod conformance;
 
 #[cfg(test)]

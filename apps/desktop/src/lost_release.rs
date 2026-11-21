@@ -77,26 +77,26 @@ pub enum Button {
 }
 
 /// Where the left button is now, as the system says, or as a test says in its place.
-#[cfg(feature = "testing")]
+#[cfg(any(test, feature = "testing"))]
 fn left_button(cx: &App) -> Button {
     cx.try_global::<StandIn>().map_or_else(system::left_button, |StandIn(button)| *button)
 }
 
-#[cfg(not(feature = "testing"))]
+#[cfg(not(any(test, feature = "testing")))]
 fn left_button(_: &App) -> Button {
     system::left_button()
 }
 
 /// What a test says of the left button, in place of the system.
-#[cfg(feature = "testing")]
+#[cfg(any(test, feature = "testing"))]
 struct StandIn(Button);
 
-#[cfg(feature = "testing")]
+#[cfg(any(test, feature = "testing"))]
 impl gpui_kit::Global for StandIn {}
 
 /// Says the left button is `button` from now on, whatever the system would say. Only Windows is asked, and a test
 /// can't run there, or hold its button.
-#[cfg(feature = "testing")]
+#[cfg(any(test, feature = "testing"))]
 pub fn the_left_button_is(button: Button, cx: &mut App) {
     cx.set_global(StandIn(button));
 }

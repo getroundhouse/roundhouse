@@ -35,7 +35,7 @@ pub(crate) fn needing_a_look(app: &AppView, cx: &App) -> usize {
     app.records().workspaces().iter().filter(|w| super::lists(w) && needs_a_look(app, w, cx)).count()
 }
 
-#[cfg(feature = "testing")]
+#[cfg(any(test, feature = "testing"))]
 impl AppView {
     /// What a workspace's mark shows of its pull request, in the sidebar or in Home.
     pub fn work_shown(&self, id: &protocol::model::WorkspaceId, cx: &App) -> Option<Work> {

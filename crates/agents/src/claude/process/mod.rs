@@ -45,5 +45,5 @@ use running::{Shared, ask, control, drain_grace, write_line, write_to};
 pub use running::{spawn, spawn_at};
 
 use crate::tap::{self, Tap};
-#[cfg(feature = "testing")]
+#[cfg(any(test, feature = "testing"))]
 pub use running::spawn_tapped;

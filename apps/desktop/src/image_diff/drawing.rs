@@ -117,7 +117,7 @@ impl ImageDiff {
     }
 
     /// What the strip under the bar says of what's shown, for a test to read.
-    #[cfg(feature = "testing")]
+    #[cfg(any(test, feature = "testing"))]
     pub(super) fn told_now(&self, cx: &App) -> Option<Told> {
         self.told(&self.drawn(cx))
     }

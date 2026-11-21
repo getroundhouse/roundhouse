@@ -2,14 +2,14 @@
 //! be given shorter ones, as `hub::Timers` are for a test's hub. The worker's own tests check each timer's rules
 //! without waiting.
 
-#[cfg(feature = "testing")]
+#[cfg(any(test, feature = "testing"))]
 use protocol::paths::ENV_TEST_WORKER_TIMERS;
 use std::time::Duration;
 
 /// How long the worker has others wait by the clock, where a test of it from outside would otherwise wait as long. A
 /// worker runs with [`Timers::DEFAULT`], and only a test's takes others, as [`Timers::from_env`] says.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-#[cfg_attr(feature = "testing", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(any(test, feature = "testing"), derive(serde::Serialize, serde::Deserialize))]
 pub struct Timers {
     /// How often the agent's CLI is asked to check on a wait.
     pub wait_poll: Duration,
@@ -36,7 +36,7 @@ impl Timers {
 
     /// [`Timers::DEFAULT`], whatever `var` says, since only a build with the `testing` feature takes others, and the
     /// product is never built with it.
-    #[cfg(not(feature = "testing"))]
+    #[cfg(not(any(test, feature = "testing")))]
     pub fn from_env(_var: impl Fn(&str) -> Option<String>) -> Self {
         Self::DEFAULT
     }
@@ -46,7 +46,7 @@ impl Timers {
     /// # Panics
     ///
     /// On a value [`Timers::env`] didn't write, which only a mistake in a test gives it.
-    #[cfg(feature = "testing")]
+    #[cfg(any(test, feature = "testing"))]
     #[expect(
         clippy::expect_used,
         reason = "only a test sets it, through `Timers::env`, so one that doesn't parse is a mistake in the test"
@@ -57,7 +57,7 @@ impl Timers {
     }
 }
 
-#[cfg(feature = "testing")]
+#[cfg(any(test, feature = "testing"))]
 impl Timers {
     /// What a test's worker runs with: a wait asked after every quarter of a second, the most often the Claude CLI
     /// takes, and so the fake agent too, and a terminal's job in front looked at twenty times a second. A terminal's

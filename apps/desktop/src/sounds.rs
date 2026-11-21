@@ -79,7 +79,7 @@ impl Global for Speaker {}
 /// Plays the sound at once, stopping whatever this played before. One of the computer's that has gone since it was
 /// chosen plays Chime instead.
 pub(crate) fn play(sound: &Sound, cx: &mut App) {
-    #[cfg(feature = "testing")]
+    #[cfg(any(test, feature = "testing"))]
     cx.default_global::<Played>().0.push(sound.name().to_string());
     if cx.has_global::<Speaker>() {
         speak(sound);
@@ -96,15 +96,15 @@ fn speak(sound: &Sound) {
 fn speak(_sound: &Sound) {}
 
 /// The sounds played, by name, oldest first, for a test to read.
-#[cfg(feature = "testing")]
+#[cfg(any(test, feature = "testing"))]
 #[derive(Default)]
 struct Played(Vec<String>);
 
-#[cfg(feature = "testing")]
+#[cfg(any(test, feature = "testing"))]
 impl Global for Played {}
 
 /// The sounds played so far, by name, oldest first, whether or not there was a speaker to play them.
-#[cfg(feature = "testing")]
+#[cfg(any(test, feature = "testing"))]
 pub fn played(cx: &App) -> Vec<String> {
     cx.try_global::<Played>().map_or_default(|played| played.0.clone())
 }

@@ -11,7 +11,7 @@ mod bar;
 mod count;
 mod stepping;
 mod stretch;
-#[cfg(feature = "testing")]
+#[cfg(any(test, feature = "testing"))]
 mod testing;
 
 #[cfg(test)]

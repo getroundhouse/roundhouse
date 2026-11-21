@@ -112,7 +112,7 @@ impl TranscriptList {
     }
 
     /// Where the rows were drawn in the last frame, in the window, for a test of what shows.
-    #[cfg(feature = "testing")]
+    #[cfg(any(test, feature = "testing"))]
     pub fn viewport(&self) -> Bounds<Pixels> {
         self.state.borrow().viewport
     }
@@ -146,7 +146,7 @@ impl TranscriptList {
     }
 
     /// How far down the scrollbar its thumb is, from 0 to 1, and how tall the list takes the session to be.
-    #[cfg(feature = "testing")]
+    #[cfg(any(test, feature = "testing"))]
     pub fn thumb(&self) -> (f32, Pixels) {
         let state = self.state.borrow();
         let furthest = state.furthest();
@@ -156,31 +156,31 @@ impl TranscriptList {
 
     /// How many rows are loaded, as the list was last told, which is what it has measured or will. The session's log
     /// can be a page ahead of that, since pages arrive on another thread.
-    #[cfg(feature = "testing")]
+    #[cfg(any(test, feature = "testing"))]
     pub fn loaded_rows(&self) -> usize {
         self.state.borrow().loaded_rows()
     }
 
     /// How many times a row has been drawn since the transcript was opened, whether to show it or to measure it.
-    #[cfg(feature = "testing")]
+    #[cfg(any(test, feature = "testing"))]
     pub fn rows_drawn(&self) -> u64 {
         self.state.borrow().rows_drawn
     }
 
     /// How many loaded rows have a height that's out of date, and are still to be measured.
-    #[cfg(feature = "testing")]
+    #[cfg(any(test, feature = "testing"))]
     pub fn rows_to_measure(&self) -> usize {
         self.state.borrow().out_of_date_near_the_top(usize::MAX).len()
     }
 
     /// Each height `row` has been measured at, in turn.
-    #[cfg(feature = "testing")]
+    #[cfg(any(test, feature = "testing"))]
     pub fn heights_measured(&self, row: usize) -> Vec<Pixels> {
         self.state.borrow().measures.get(&row).cloned().unwrap_or_default()
     }
 
     /// How tall the row at `row` was when it was last measured, or `None` if it never has been.
-    #[cfg(feature = "testing")]
+    #[cfg(any(test, feature = "testing"))]
     pub fn row_height(&self, row: usize) -> Option<Pixels> {
         self.state.borrow().heights.measured(row)
     }

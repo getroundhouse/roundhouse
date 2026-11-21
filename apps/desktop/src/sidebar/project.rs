@@ -129,19 +129,19 @@ impl AppView {
     }
 
     /// Whether a project is being dragged, or is on its way to its place from where it was let go.
-    #[cfg(feature = "testing")]
+    #[cfg(any(test, feature = "testing"))]
     pub fn dragging_a_project(&self) -> bool {
         self.sidebar.dragging.is_some()
     }
 
     /// How many projects' workspaces are on their way out from under their rows, or away under them.
-    #[cfg(feature = "testing")]
+    #[cfg(any(test, feature = "testing"))]
     pub fn projects_folding(&self) -> usize {
         self.sidebar.folding.len()
     }
 
     /// The projects' order as the settings have it, which a drag saves once it's let go.
-    #[cfg(feature = "testing")]
+    #[cfg(any(test, feature = "testing"))]
     pub fn saved_project_order(cx: &gpui_kit::App) -> Vec<RepoId> {
         crate::settings::get(cx).project_order
     }

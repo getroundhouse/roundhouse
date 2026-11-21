@@ -181,25 +181,25 @@ fn say(found: Answer, cx: &mut App) {
 }
 
 /// Shows a problem as if updating had failed, which only an installed app can do for real.
-#[cfg(feature = "testing")]
+#[cfg(any(test, feature = "testing"))]
 pub fn show_problem(problem: Problem, cx: &mut App) {
     show(problem, cx);
 }
 
 /// Shows a check as under way, which only an installed app can start for real.
-#[cfg(feature = "testing")]
+#[cfg(any(test, feature = "testing"))]
 pub fn show_checking(cx: &mut App) {
     cx.set_global(Shown { checking: true, ..Shown::default() });
 }
 
 /// Shows a check as having found nothing newer, which only an installed app can do for real.
-#[cfg(feature = "testing")]
+#[cfg(any(test, feature = "testing"))]
 pub fn show_up_to_date(cx: &mut App) {
     cx.set_global(Shown { answer: Some(Answer::UpToDate), ..Shown::default() });
 }
 
 /// Shows an update as downloaded, which only an installed app can do for real.
-#[cfg(feature = "testing")]
+#[cfg(any(test, feature = "testing"))]
 pub fn show_ready(version: &str, cx: &mut App) {
     cx.set_global(Shown { ready: Some(version.to_string()), ..Shown::default() });
 }

@@ -30,8 +30,8 @@ pub use usage::{lists_every_models_week, usage_limits};
 mod server_name;
 use server_name::TOOLS_SERVER;
 
-#[cfg(all(feature = "testing", unix))]
+#[cfg(all(any(test, feature = "testing"), unix))]
 pub mod conformance;
 
-#[cfg(feature = "testing")]
+#[cfg(any(test, feature = "testing"))]
 pub use process::spawn_tapped;

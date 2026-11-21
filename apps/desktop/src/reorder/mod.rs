@@ -8,7 +8,7 @@ mod hold;
 mod list;
 mod places;
 
-#[cfg(feature = "testing")]
+#[cfg(any(test, feature = "testing"))]
 pub(crate) use hold::HOLDS_FOR;
 pub(crate) use hold::{Hold, hears_the_pointer, hold_while_open, keep_held};
 pub(crate) use list::{Drawn, list};

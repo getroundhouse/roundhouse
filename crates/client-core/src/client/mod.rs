@@ -71,6 +71,6 @@ pub use devices::PairingWait;
 
 mod remote;
 
-#[cfg(feature = "testing")]
+#[cfg(any(test, feature = "testing"))]
 pub use remote::pair_with_timeout;
 pub use remote::{RemoteHub, pair};

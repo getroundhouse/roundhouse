@@ -39,5 +39,5 @@ pub(crate) use updater::{answered, checking, installs, problem_shown};
 use updater::{apply, keep_looking, keep_up_to_date, newest, options};
 pub use updater::{check_now, run_hooks, start};
 pub(crate) use updater::{keep_workers, observe, ready, restart_to_update, said};
-#[cfg(feature = "testing")]
+#[cfg(any(test, feature = "testing"))]
 pub use updater::{show_checking, show_problem, show_ready, show_up_to_date};

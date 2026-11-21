@@ -82,14 +82,14 @@ impl WorkspacePane {
     }
 
     /// The names of what's attached in the chat showing, in order, for a test to see what a paste or drop did.
-    #[cfg(feature = "testing")]
+    #[cfg(any(test, feature = "testing"))]
     pub fn attached_names(&self) -> Vec<String> {
         self.attached.names()
     }
 
     /// Takes a file out of the chat showing, as its tile's remove button does, for a test, since the button only shows
     /// under the pointer.
-    #[cfg(feature = "testing")]
+    #[cfg(any(test, feature = "testing"))]
     pub fn click_remove(&mut self, id: &AttachmentId, cx: &mut Context<Self>) {
         self.remove_attached(id, cx);
     }

@@ -52,10 +52,10 @@ pub(in super::super) struct State {
     /// by those would move the page under a pointer that's holding still.
     pub(super) dragging: Option<Heights>,
     /// How many times a row has been drawn, for a test to see that few are.
-    #[cfg(feature = "testing")]
+    #[cfg(any(test, feature = "testing"))]
     pub(in super::super) rows_drawn: u64,
     /// Each height each row has been measured at, in turn, for a test to see a row never went blank.
-    #[cfg(feature = "testing")]
+    #[cfg(any(test, feature = "testing"))]
     pub(in super::super) measures: std::collections::HashMap<usize, Vec<Pixels>>,
 }
 
@@ -236,7 +236,7 @@ impl State {
 
     /// Notes what a row was measured at, as the list is now.
     pub(in super::super) fn measured(&mut self, row: usize, height: Pixels) {
-        #[cfg(feature = "testing")]
+        #[cfg(any(test, feature = "testing"))]
         self.measures.entry(row).or_default().push(height);
         self.heights.measure(row, height);
         self.up_to_date(row);
@@ -288,7 +288,7 @@ impl State {
     }
 
     /// How many rows are loaded, as the list was last told.
-    #[cfg(feature = "testing")]
+    #[cfg(any(test, feature = "testing"))]
     pub(in super::super) fn loaded_rows(&self) -> usize {
         self.loaded.iter().map(ExactSizeIterator::len).sum()
     }

@@ -9,6 +9,6 @@ use unix as system;
 #[cfg(windows)]
 use windows as system;
 
-#[cfg(feature = "testing")]
+#[cfg(any(test, feature = "testing"))]
 pub use name::the_device_name_is;
 pub(crate) use name::{read_in_background, read_now};

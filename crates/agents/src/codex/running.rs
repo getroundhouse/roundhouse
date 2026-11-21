@@ -95,7 +95,7 @@ pub async fn spawn_at(
     Ok(start_conversation(&bin, &spec, output, &options, launch::Purpose::Agent, None).await?)
 }
 
-#[cfg(feature = "testing")]
+#[cfg(any(test, feature = "testing"))]
 pub async fn spawn_tapped(
     bin: PathBuf,
     spec: AgentSpec,

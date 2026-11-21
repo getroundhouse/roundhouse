@@ -2,14 +2,14 @@
 //! a test's hub can be given shorter ones, or, for a test that something didn't wait for a time limit, a longer one.
 //! The hub's own tests pause tokio's clock instead, which checks each timer's rules without waiting.
 
-#[cfg(feature = "testing")]
+#[cfg(any(test, feature = "testing"))]
 use protocol::paths::ENV_TEST_HUB_TIMERS;
 use std::time::Duration;
 
 /// How long the hub waits by the clock, where a test of it from outside would otherwise wait as long. A hub runs with
 /// [`Timers::DEFAULT`], and only a test's takes others, as [`Timers::from_env`] says.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-#[cfg_attr(feature = "testing", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(any(test, feature = "testing"), derive(serde::Serialize, serde::Deserialize))]
 pub struct Timers {
     /// How long after a workspace's last read of its pull request an agent asking waits before its own.
     pub agent_spacing: Duration,
@@ -96,7 +96,7 @@ impl Timers {
 
     /// [`Timers::DEFAULT`], whatever `var` says, since only a build with the `testing` feature takes others, and the
     /// product is never built with it.
-    #[cfg(not(feature = "testing"))]
+    #[cfg(not(any(test, feature = "testing")))]
     pub fn from_env(_var: impl Fn(&str) -> Option<String>) -> Self {
         Self::DEFAULT
     }
@@ -106,7 +106,7 @@ impl Timers {
     /// # Panics
     ///
     /// On a value [`Timers::env`] didn't write, which only a mistake in a test gives it.
-    #[cfg(feature = "testing")]
+    #[cfg(any(test, feature = "testing"))]
     #[expect(
         clippy::expect_used,
         reason = "only a test sets it, through `Timers::env`, so one that doesn't parse is a mistake in the test"
@@ -117,7 +117,7 @@ impl Timers {
     }
 }
 
-#[cfg(feature = "testing")]
+#[cfg(any(test, feature = "testing"))]
 impl Timers {
     /// What a test's hub runs with, unless the test is about one of them: the timers that only make a test wait
     /// shortened, as is how long a client's ask takes what a read just before found, which a test would otherwise wait

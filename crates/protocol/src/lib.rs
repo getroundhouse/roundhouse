@@ -18,7 +18,7 @@ pub mod capability;
 pub mod client;
 pub mod event;
 pub mod find;
-#[cfg(feature = "testing")]
+#[cfg(any(test, feature = "testing"))]
 pub mod fixtures;
 pub mod frame;
 mod hub_copies;

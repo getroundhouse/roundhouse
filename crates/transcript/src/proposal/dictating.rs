@@ -88,13 +88,13 @@ impl ProposalView {
     }
 
     /// Whether the note is being dictated into.
-    #[cfg(feature = "testing")]
+    #[cfg(any(test, feature = "testing"))]
     pub fn dictating(&self, cx: &App) -> bool {
         self.answering.note.as_ref().is_some_and(|note| note.dictation.read(cx).is_dictating())
     }
 
     /// What's written in the note.
-    #[cfg(feature = "testing")]
+    #[cfg(any(test, feature = "testing"))]
     pub fn note_text(&self, cx: &App) -> String {
         self.answering.note.as_ref().map_or_default(|note| note.input.read(cx).text().to_string())
     }

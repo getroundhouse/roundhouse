@@ -12,5 +12,5 @@ mod panel;
 
 pub(crate) use panel::Asks;
 pub use panel::QuestionPanel;
-#[cfg(feature = "testing")]
+#[cfg(any(test, feature = "testing"))]
 pub(crate) use panel::SETTLE;

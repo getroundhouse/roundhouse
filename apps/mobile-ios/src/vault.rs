@@ -33,14 +33,14 @@ pub trait Vault: Send + Sync {
 }
 
 /// Keeps the hub in memory, for tests, which can have it refuse to forget, as the Keychain can.
-#[cfg(feature = "testing")]
+#[cfg(any(test, feature = "testing"))]
 #[derive(Default)]
 pub struct MemoryVault {
     hub: parking_lot::Mutex<Option<RemoteHub>>,
     refuses_to_forget: std::sync::atomic::AtomicBool,
 }
 
-#[cfg(feature = "testing")]
+#[cfg(any(test, feature = "testing"))]
 impl MemoryVault {
     /// Has [`Vault::forget`] fail from now on, or not.
     pub fn refuse_to_forget(&self, refuses: bool) {
@@ -48,7 +48,7 @@ impl MemoryVault {
     }
 }
 
-#[cfg(feature = "testing")]
+#[cfg(any(test, feature = "testing"))]
 impl Vault for MemoryVault {
     fn load(&self) -> Option<RemoteHub> {
         self.hub.lock().clone()

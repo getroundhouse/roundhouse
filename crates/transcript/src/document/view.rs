@@ -128,7 +128,7 @@ impl Document {
     }
 
     /// What a copy of all of it has, as it's drawn.
-    #[cfg(feature = "testing")]
+    #[cfg(any(test, feature = "testing"))]
     pub fn copied_whole(&self) -> String {
         self.selection.all_as_copied()
     }

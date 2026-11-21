@@ -23,12 +23,12 @@ pub use controls::{CANCEL, STOP};
 pub use dictation::Hints;
 pub use field::{Event, Field};
 pub use holding::{SPACE_DICTATES_AFTER, SPACE_LISTENS_AFTER};
-#[cfg(feature = "testing")]
+#[cfg(any(test, feature = "testing"))]
 pub use keyboard::{asked_to_see_the_keyboard, hide_the_keyboard, hold_space_down};
 pub use keys::{CancelDictation, HOLD_TO_DICTATE_KEY, HoldToDictate, bind_keys, window_activation_changed};
 pub use pending::Pending;
 pub use recording::NOTHING_HEARD;
 pub use source::{Source, install, unavailable};
-#[cfg(feature = "testing")]
+#[cfg(any(test, feature = "testing"))]
 pub use source::{hear, quiets_while_dictating};
 pub use view::LIVE_LINE;

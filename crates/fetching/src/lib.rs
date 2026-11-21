@@ -8,7 +8,7 @@
 mod checked;
 mod fetcher;
 mod lock;
-#[cfg(feature = "testing")]
+#[cfg(any(test, feature = "testing"))]
 pub mod serving;
 
 pub use checked::{CheckError, Expected, Fetched};

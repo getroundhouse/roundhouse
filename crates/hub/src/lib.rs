@@ -39,14 +39,14 @@ pub use crate::hub::UpdateFeed;
 pub use crate::run::{Ended, HubConfig, run};
 pub use crate::timers::Timers;
 pub use github::GithubConfig;
-#[cfg(feature = "testing")]
+#[cfg(any(test, feature = "testing"))]
 pub use github::{
     Answer as GithubAnswer, Gate as GithubGate, PullRequestState as GithubPullRequestState,
     PullRequests as GithubPullRequests, Script as GithubScript, StandIn as GithubStandIn,
 };
 
 /// The names the hub picks a new workspace's from, so a test can have git hold every one.
-#[cfg(feature = "testing")]
+#[cfg(any(test, feature = "testing"))]
 #[must_use]
 pub fn workspace_names() -> &'static [&'static str] {
     names::NAMES

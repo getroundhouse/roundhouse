@@ -139,7 +139,7 @@ impl ChatView {
         self.workspace.label()
     }
 
-    #[cfg(feature = "testing")]
+    #[cfg(any(test, feature = "testing"))]
     pub(crate) fn transcript(&self) -> Option<Entity<Transcript>> {
         self.shown.as_ref().map(|shown| shown.transcript.clone())
     }

@@ -57,7 +57,7 @@ impl Rows<AnyElement> for Measuring<'_> {
         let height = element.layout_as_root(room, self.window, self.cx).height;
         let mut state = self.list.state.borrow_mut();
         state.measured(row, height);
-        #[cfg(feature = "testing")]
+        #[cfg(any(test, feature = "testing"))]
         {
             state.rows_drawn += 1;
         }
