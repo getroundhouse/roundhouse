@@ -124,7 +124,7 @@ pub(super) fn dictating_mut(cx: &mut App) -> &mut Dictating {
 /// Turns dictation on or off as the person chose, once that changes, but not while the model is being deleted, which
 /// follows the choice again once it's done.
 pub(super) fn follow_the_choice(cx: &mut App) {
-    let on = dictation::HEARS && crate::settings::get(cx).dictation == DictationChoice::On;
+    let on = sound::HEARS && crate::settings::get(cx).dictation == DictationChoice::On;
     let dictating = dictating(cx);
     let off = matches!(dictating.readiness, Readiness::Off);
     if on && off && dictating.deleting.is_none() {
@@ -260,7 +260,7 @@ pub(super) fn model_size_bytes(cx: &App) -> u64 {
 
 /// Whether this Mac can run the model, so prompts can offer dictation.
 pub(crate) fn runs_here(cx: &App) -> bool {
-    dictation::HEARS && (dictating(cx).model.runs_here)()
+    sound::HEARS && (dictating(cx).model.runs_here)()
 }
 
 /// Whether opted-in fields can be dictated to.
@@ -275,7 +275,7 @@ fn hears_the_microphone(cx: &App) -> bool {
 
 /// Whether a recording quiets what's playing `how` says while it's dictated to: where this platform can, once it's
 /// chosen.
-fn quiets(how: dictation::Quieting, cx: &App) -> bool {
+fn quiets(how: sound::Quieting, cx: &App) -> bool {
     how.is_possible() && crate::settings::get(cx).quiets_while_dictating(how)
 }
 

@@ -1866,6 +1866,7 @@ dependencies = [
  "serde",
  "serde_json",
  "similar",
+ "sound",
  "tempfile",
  "terminal-view",
  "thiserror 2.0.21",
@@ -1884,20 +1885,17 @@ name = "dictation"
 version = "0.1.0"
 dependencies = [
  "block2 0.6.2",
- "cpal",
  "dictation",
  "flume",
  "models",
- "now-playing",
  "objc2 0.6.5",
- "objc2-av-foundation",
- "objc2-core-audio",
  "objc2-core-ml",
  "objc2-foundation 0.3.2",
  "parking_lot",
  "proptest",
  "realfft",
  "serde_json",
+ "sound",
  "tempfile",
  "thiserror 2.0.21",
 ]
@@ -1911,6 +1909,7 @@ dependencies = [
  "gpui-kit",
  "look",
  "objc2-core-graphics",
+ "sound",
 ]
 
 [[package]]
@@ -8541,6 +8540,22 @@ checksum = "c3d1e2c7f27f8d4cb10542a02c49005dbd6e93095799d6f3be745fae9f8fedd4"
 dependencies = [
  "libc",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "sound"
+version = "0.1.0"
+dependencies = [
+ "block2 0.6.2",
+ "cpal",
+ "flume",
+ "now-playing",
+ "objc2 0.6.5",
+ "objc2-av-foundation",
+ "objc2-core-audio",
+ "parking_lot",
+ "proptest",
+ "thiserror 2.0.21",
 ]
 
 [[package]]

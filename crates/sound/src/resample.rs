@@ -1,11 +1,12 @@
-//! Converting the microphone's audio to what the models take: one channel at [`crate::SAMPLE_RATE`].
+//! Converting the microphone's audio to what its caller takes: one channel at the rate it asks for, such as the 16 kHz
+//! dictation's model takes.
 //!
-//! The microphone is heard at its own rate rather than asked for 16 kHz, since on a Mac asking changes the device's
+//! The microphone is heard at its own rate rather than asked for another, since on a Mac asking changes the device's
 //! rate for every app using it. Each sample out is the samples in around where it falls, weighed by a windowed sinc
-//! that passes what's under 7 kHz and stops what's over 7.8 kHz, which would otherwise fold back as noise. The weights
-//! are worked out once, for 256 places between two samples in, so hearing is a few multiplications a sample.
-
-use crate::SAMPLE_RATE;
+//! that passes what's under 87.5% of the slower rate's highest frequency and stops what's over 97.5% of it, which
+//! would otherwise fold back as noise: down to 16 kHz, what's under 7 kHz is passed and what's over 7.8 kHz stopped.
+//! The weights are worked out once, for 256 places between two samples in, so hearing is a few multiplications a
+//! sample.
 
 /// How many samples out's worth of samples in, on each side of where a sample out falls, it's made from. More makes
 /// the step from passing to stopping narrower.
@@ -15,8 +16,8 @@ const HALF_WIDTH: usize = 48;
 /// at most 1/512 of a sample off, well under what the models hear.
 const PLACES: usize = 256;
 
-/// Where the filter is half way from passing to stopping, as a share of the rate out's highest frequency: 7.36 kHz,
-/// with what's under 7 kHz passed whole and what's over 7.8 kHz stopped.
+/// Where the filter is half way from passing to stopping, as a share of the slower rate's highest frequency: 7.36 kHz
+/// down to 16 kHz, with what's under 7 kHz passed whole and what's over 7.8 kHz stopped.
 const PASSED: f64 = 0.92;
 
 /// Converts audio as it comes, a buffer at a time, keeping what the next samples out still need.
@@ -35,8 +36,9 @@ pub(crate) struct Resampler {
 }
 
 impl Resampler {
-    pub(crate) fn new(rate: u32, channels: u16) -> Self {
-        let step = f64::from(rate) / f64::from(SAMPLE_RATE);
+    /// Converts audio in at `rate` in `channels`, to one channel at `to`.
+    pub(crate) fn new(rate: u32, channels: u16, to: u32) -> Self {
+        let step = f64::from(rate) / f64::from(to);
         // In cycles a sample in: half of the slower rate's, less the room to stop.
         let cutoff = 0.5 * PASSED * (1.0 / step).min(1.0);
         let half = HALF_WIDTH * whole(step.ceil()).max(1);
@@ -51,7 +53,7 @@ impl Resampler {
         Self { channels: channels.max(1), step, half, weights, kept, next: real(half) }
     }
 
-    /// Takes `interleaved` audio at the rate and channels this was made for, and gives what's ready at 16 kHz.
+    /// Takes `interleaved` audio at the rate and channels this was made for, and gives what's ready at the rate out.
     pub(crate) fn push(&mut self, interleaved: &[f32]) -> Vec<f32> {
         let share = 1.0 / f32::from(self.channels);
         let mixed = interleaved.chunks(usize::from(self.channels)).map(|frame| frame.iter().sum::<f32>() * share);
@@ -118,7 +120,9 @@ mod tests {
     use proptest::test_runner::{Config, RngSeed};
 
     use super::{HALF_WIDTH, Resampler};
-    use crate::SAMPLE_RATE;
+
+    /// The rate out the tests convert to, dictation's.
+    const SAMPLE_RATE: u32 = 16_000;
 
     /// `seconds` of a sine at `hz` and `level`, at `rate`, on each of `channels`.
     #[expect(
@@ -140,7 +144,7 @@ mod tests {
     /// `audio` through a resampler from `rate`, given in buffers of 10 ms as a microphone gives them, without the
     /// first and last tenth of a second, where it starts and stops.
     fn resampled(audio: &[f32], rate: u32, channels: u16) -> Vec<f32> {
-        let mut resampler = Resampler::new(rate, channels);
+        let mut resampler = Resampler::new(rate, channels, SAMPLE_RATE);
         let buffer = (rate / 100) as usize * usize::from(channels);
         let out: Vec<f32> = audio.chunks(buffer).flat_map(|chunk| resampler.push(chunk)).collect();
         let tenth = (SAMPLE_RATE / 10) as usize;
@@ -178,7 +182,7 @@ mod tests {
     #[test]
     fn a_second_of_audio_gives_a_second_at_sixteen_khz() {
         for rate in [44_100, 48_000] {
-            let mut resampler = Resampler::new(rate, 1);
+            let mut resampler = Resampler::new(rate, 1, SAMPLE_RATE);
 
             let out: usize = tone(440.0, 0.5, rate, 1, 3.0).chunks(441).map(|chunk| resampler.push(chunk).len()).sum();
 
@@ -215,7 +219,7 @@ mod tests {
         ) {
             let channels_in = usize::from(channels);
             let audio = &audio[..audio.len() / channels_in * channels_in];
-            let mut split = Resampler::new(rate, channels);
+            let mut split = Resampler::new(rate, channels, SAMPLE_RATE);
             let mut out = Vec::new();
             let mut rest = audio;
             // Whole frames at a time, as a microphone gives them, of each size in turn.
@@ -227,7 +231,7 @@ mod tests {
                 out.extend(split.push(buffer));
                 rest = after;
             }
-            let whole = Resampler::new(rate, channels).push(audio);
+            let whole = Resampler::new(rate, channels, SAMPLE_RATE).push(audio);
 
             let frames = audio.len() / channels_in;
             let expected = frames * SAMPLE_RATE as usize / rate as usize;

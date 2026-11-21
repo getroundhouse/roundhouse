@@ -4,10 +4,10 @@ use std::cell::{Cell, RefCell};
 use std::sync::Arc;
 
 use parking_lot::Mutex;
+use sound::{MicrophoneError, Quieting};
 
 use super::buffer::Buffer;
-use crate::audio::Quieted;
-use crate::{AudioIn, EngineError, Quieting};
+use crate::{AudioIn, EngineError};
 
 /// One recording, from the moment it's asked for. Dropping it before [`Recording::stop`] cancels it.
 pub struct Recording {
@@ -17,6 +17,25 @@ pub struct Recording {
     cancelled: Cancelled,
     /// What [`Recording::quiet`] did, each put back as it was when this lets go of it.
     quieted: RefCell<Vec<Quieted>>,
+}
+
+/// What a recording did to quiet what's playing, in one way.
+enum Quieted {
+    /// Put back as it was once this is dropped.
+    Playing(sound::Quieted),
+    /// Nothing, since the recording hears only what a test feeds it, which [`Recording::quiets`] tells the test.
+    #[cfg(any(test, feature = "testing"))]
+    Fed(Quieting),
+}
+
+impl Quieted {
+    fn how(&self) -> Quieting {
+        match self {
+            Self::Playing(quieted) => quieted.how(),
+            #[cfg(any(test, feature = "testing"))]
+            Self::Fed(how) => *how,
+        }
+    }
 }
 
 /// Whether a recording has been cancelled, which its loop reads before each thing it does, since what's already
@@ -67,7 +86,7 @@ impl Recording {
             return;
         }
         let quieted = match self.audio {
-            AudioIn::Microphone => how.quiet(),
+            AudioIn::Microphone => how.quiet().map(Quieted::Playing),
             #[cfg(any(test, feature = "testing"))]
             AudioIn::Fed => Some(Quieted::Fed(how)),
         };
@@ -150,16 +169,8 @@ pub enum Ending {
 /// Why a recording couldn't be heard.
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum DictationError {
-    /// The person hasn't allowed the app to use the microphone, which only the system's settings change.
-    #[error("the app isn't allowed to use the microphone")]
-    MicrophoneDenied,
-    /// The system hasn't asked the person yet, which [`crate::ask_for_microphone`] has it do.
-    #[error("the app hasn't asked to use the microphone")]
-    MicrophoneNotAsked,
-    #[error("there's no microphone")]
-    NoMicrophone,
-    #[error("the microphone stopped working: {0}")]
-    Microphone(String),
+    #[error(transparent)]
+    Microphone(#[from] MicrophoneError),
     #[error("speech recognition couldn't keep up with the microphone")]
     AudioBacklog,
     #[error(transparent)]

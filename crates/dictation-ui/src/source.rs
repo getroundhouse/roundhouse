@@ -1,7 +1,8 @@
 //! The app's recording source and the one field hearing it. Model setup and settings stay with the app.
 
-use dictation::{Hints, Quieting, Recording, Update};
+use dictation::{Hints, Recording, Update};
 use gpui_kit::{App, Context, Global, WeakEntity};
+use sound::Quieting;
 
 use crate::Field;
 
@@ -32,7 +33,7 @@ pub fn install(source: Source, cx: &mut App) {
         // that, as long as quitting waits for anything.
         cx.on_app_quit(|cx| {
             unavailable(cx);
-            dictation::restored()
+            sound::restored()
         })
         .detach();
     }
@@ -40,7 +41,7 @@ pub fn install(source: Source, cx: &mut App) {
 }
 
 pub(crate) fn ready(cx: &App) -> bool {
-    dictation::HEARS && cx.try_global::<Source>().is_some_and(|source| (source.ready)(cx))
+    sound::HEARS && cx.try_global::<Source>().is_some_and(|source| (source.ready)(cx))
 }
 
 pub(crate) fn uses_microphone(cx: &App) -> bool {

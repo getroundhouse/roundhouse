@@ -1,4 +1,4 @@
-//! Changes a recording makes to the system while it's dictated to, such as muting the sound output, each made and
+//! Changes made to the system while something is heard, such as muting the sound output, each made and
 //! undone on a thread of its own for its kind, since each waits on another process, which can be slow or wedged, such
 //! as `coreaudiod` while it restarts, and the app's thread mustn't wait on it. One thread makes and undoes every change
 //! of its kind, in the order they're asked for, so a change never overtakes the undoing of the one before it.

@@ -31,6 +31,7 @@ look.workspace = true
 dictation.workspace = true
 dictation-ui.workspace = true
 models = { workspace = true, features = ["download"] }
+sound.workspace = true
 fetching.workspace = true
 anyhow.workspace = true
 serde.workspace = true

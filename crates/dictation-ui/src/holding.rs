@@ -3,9 +3,10 @@
 
 use std::time::Duration;
 
-use dictation::{Permission, Recording, Update};
+use dictation::{Recording, Update};
 use gpui_kit::component::input::Rope;
 use gpui_kit::{Context, Focusable as _, KeyDownEvent, Keystroke, Task, Window};
+use sound::Permission;
 
 use crate::recording::Started;
 use crate::text::Before;
@@ -58,7 +59,7 @@ impl Field {
         let hints = self.current_hints(cx);
         let Some(down) = self.space_down.as_mut() else { return };
         down.typed = Some(self.input.read(cx).text().clone());
-        if !source::uses_microphone(cx) || dictation::microphone_permission() == Permission::Allowed {
+        if !source::uses_microphone(cx) || sound::microphone_permission() == Permission::Allowed {
             down.listening = source::record(hints, cx);
         }
     }

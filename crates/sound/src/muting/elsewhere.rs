@@ -1,7 +1,7 @@
 //! Windows and Linux, which don't mute their sound output yet, so [`MUTES_OUTPUT`] is false and the app doesn't offer
 //! to.
 
-/// Whether this platform can mute its sound output while it's dictated to. Windows and Linux can't yet.
+/// Whether this platform can mute its sound output while something is heard. Windows and Linux can't yet.
 pub(crate) const MUTES_OUTPUT: bool = false;
 
 /// Never made: nothing is muted here.
