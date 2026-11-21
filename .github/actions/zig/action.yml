@@ -1,12 +1,14 @@
 # The Zig that builds Ghostty's terminal core, which libghostty-vt-sys's build script runs, and Zig's global cache, for
 # the jobs that build Ghostty. A composite action can't run a step when the job ends, so each job saves the cache
-# itself, with the key this gives.
+# itself, with the key this gives. A job that names no cache gets Zig alone, as release.yml's do, whose target/ cache
+# holds Ghostty's build.
 name: Zig
 description: Installs Zig, and restores Zig's global cache
 inputs:
   cache-name:
-    description: What the cache is named for, as the job's target/ cache is
-    required: true
+    description: What the cache is named for, as the job's target/ cache is. Without one, no cache is restored
+    required: false
+    default: ''
 outputs:
   cache-hit:
     description: Whether the cache's key matched exactly
@@ -26,6 +28,7 @@ runs:
         use-cache: false
     # The libghostty-rs commit Cargo.lock locks, since it fixes the Ghostty commit the build script fetches.
     - id: key
+      if: inputs.cache-name != ''
       shell: bash
       run: |
         rev=$(grep -om1 'git+https://github.com/Uzaaft/libghostty-rs[^"]*' Cargo.lock | cut -s -d'#' -f2) || true
@@ -38,6 +41,7 @@ runs:
     # building Ghostty when target/ held none of it. Only main saves it, and main starts from nothing when the key
     # changes, so a cache holds what one Zig built for one Ghostty.
     - id: restore
+      if: inputs.cache-name != ''
       uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: .zig-cache
