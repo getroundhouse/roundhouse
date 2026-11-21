@@ -1,36 +1,28 @@
 //! What the agent asks in the screens' chats, about where the sidebar's PR state should come from: waiting to be
-//! answered, and once it's answered, when the transcript keeps it as a call's line, whose questions and answers are
-//! copied with the rest of the chat while it's open.
+//! answered, and once it's answered, as the hub records the answers and the agent is told them.
 
-#![cfg(test)]
-
-use std::sync::Arc;
-
-use gpui_kit::PlatformTextSystem;
+use client_core::fake_hub::events::{replied, said as said_to, text, typed_call};
 use protocol::capability::approvals::{Asks, Decision};
 use protocol::capability::asking::{Choose, Question, QuestionAnswer, QuestionOption, TypedAnswer};
 use protocol::capability::calls::Call;
 use protocol::event::EventBody;
 use protocol::fixtures::{ApprovalRequest, approval_request, decided};
-use protocol::model::{SessionStatus, ToolUseId};
+use protocol::model::ToolUseId;
 
-use super::capture;
-use super::chats::looked_around;
-use super::worlds::chat_world;
-use client_core::fake_hub::events::{replied, said as said_to, text, typed_call};
+use crate::chats::looked_around;
 
 /// The line [`answered`] leaves for its second call, with two questions.
-pub(crate) const TWO_ASKED: &str = "Asked 2 questions";
+pub const TWO_ASKED: &str = "Asked 2 questions";
 
 /// Waiting for an answer to a question with choices.
-pub(crate) fn question() -> Vec<EventBody> {
+pub fn question() -> Vec<EventBody> {
     let mut events = looked_around();
     events.extend(asking("msg-3", "toolu-3", "approval-1", vec![pr_state()]));
     events
 }
 
 /// A question that asks only for words, without any offered choices.
-pub(crate) fn written_answer() -> Vec<EventBody> {
+pub fn written_answer() -> Vec<EventBody> {
     let mut events = looked_around();
     let words = asked("How should the sidebar behave while the hub reconnects?", "Reconnecting", false, &[]);
     events.extend(asking("msg-3", "toolu-3", "approval-1", vec![words]));
@@ -38,7 +30,7 @@ pub(crate) fn written_answer() -> Vec<EventBody> {
 }
 
 /// Waiting for answers to three questions, the second of which takes several.
-pub(crate) fn questions() -> Vec<EventBody> {
+pub fn questions() -> Vec<EventBody> {
     let mut events = looked_around();
     events.extend(asking("msg-3", "toolu-3", "approval-1", vec![pr_state(), mark(), refresh()]));
     events
@@ -46,7 +38,7 @@ pub(crate) fn questions() -> Vec<EventBody> {
 
 /// The question of [`question`] answered, then two more, of which only the first was answered, as their answers were
 /// recorded, and the reply that followed.
-pub(crate) fn answered() -> Vec<EventBody> {
+pub fn answered() -> Vec<EventBody> {
     let mut events = question();
     events.extend(answer("toolu-3", "approval-1", &[pr_state()], vec![picked(&[0], None)]));
     events.push(text("msg-4", TWO_MORE));
@@ -59,17 +51,17 @@ pub(crate) fn answered() -> Vec<EventBody> {
 }
 
 /// What the agent says before it asks [`answered`]'s two more questions.
-const TWO_MORE: &str = "The hub, then. Two more things decide how the sidebar shows it.";
+pub const TWO_MORE: &str = "The hub, then. Two more things decide how the sidebar shows it.";
 /// What was answered to the first of them.
-const MARKED: &str = "Open, Merged, Only while it's open";
+pub const MARKED: &str = "Open, Merged, Only while it's open";
 /// What the agent replies once they're answered.
-const REPLY: &str = "I'll have the hub ask GitHub for each workspace's pull request and keep it on the workspace's \
+pub const REPLY: &str = "I'll have the hub ask GitHub for each workspace's pull request and keep it on the workspace's \
                      record. The mark will show it while it's open or merged, and only while the pull request is \
                      open. I've left how often the hub asks again as it is, since you didn't say.";
 
-const PR_STATE: &str = "Where should the PR state be fetched?";
-const MARK: &str = "Which states should the sidebar's mark show?";
-const REFRESH: &str = "How often should the hub ask GitHub again?";
+pub const PR_STATE: &str = "Where should the PR state be fetched?";
+pub const MARK: &str = "Which states should the sidebar's mark show?";
+pub const REFRESH: &str = "How often should the hub ask GitHub again?";
 
 fn pr_state() -> Question {
     let options = [
@@ -141,19 +133,4 @@ fn answer(call: &str, approval: &str, questions: &[Question], answers: Vec<Quest
         told.join(", ")
     );
     vec![decided(approval, Decision::Answer { answers }), said_to(call, &told)]
-}
-
-/// Each question an opened call shows, and what was answered to it, is copied with the rest, in the order shown, each
-/// a blank line apart. Their headers, and what says nobody answered, aren't the agent's words or the person's, so a
-/// copy leaves them out.
-#[test]
-fn an_opened_call_s_questions_and_answers_are_copied_with_the_rest() {
-    let text_system: Arc<dyn PlatformTextSystem> = Arc::new(gpui_apple::AppleTextSystem::new());
-    let world = || chat_world(SessionStatus::Idle, answered());
-
-    let copied = capture::copied_whole(world, &[TWO_ASKED], &text_system);
-
-    let shown = [TWO_MORE, MARK, MARKED, REFRESH, REPLY].join("\n\n");
-    assert!(copied.contains(&shown), "{copied:?}");
-    assert_eq!(copied.matches(PR_STATE).count(), 0, "and nothing of the call that isn't open: {copied:?}");
 }

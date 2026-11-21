@@ -6,13 +6,12 @@
 #![cfg(test)]
 
 use std::collections::BTreeMap;
-use std::path::PathBuf;
 
 use gpui_kit::test::TestWindowExt as _;
 use gpui_kit::{ElementId, Window};
 use serde::Serialize;
+use spec_screens::{DESKTOP, UPDATE};
 
-use super::UPDATE;
 use super::frame::to_pixels;
 
 /// The ID a sheet gives what it draws for `name` in `kind`, such as `Medium` in `look::Space`, so its place can be
@@ -66,7 +65,7 @@ impl Places {
         let mut problems: Vec<String> =
             self.missing.iter().map(|name| format!("{sheet} doesn't draw {name} with its ID")).collect();
         let written = serde_json::to_string_pretty(&self.found).unwrap() + "\n";
-        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!("../../docs/spec/screens/{sheet}.json"));
+        let path = DESKTOP.beside(&format!("{sheet}.json"));
         if std::env::var_os(UPDATE).is_some() {
             std::fs::write(&path, written).unwrap();
         } else {

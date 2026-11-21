@@ -96,6 +96,7 @@ tempfile.workspace = true
 tokio.workspace = true
 proptest.workspace = true
 similar.workspace = true
+spec-screens.workspace = true
 waiting.workspace = true
 
 [target.'cfg(target_os = "macos")'.dev-dependencies]

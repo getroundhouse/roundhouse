@@ -11,7 +11,6 @@ use protocol::event::EventBody;
 use protocol::fixtures::{ApprovalRequest, approval_request, decided, deny, typed_command, typed_request};
 use protocol::model::{AgentKind, SessionStatus};
 
-use super::chats::{self, looked_around};
 use super::frame::{CHAT, QUESTION};
 use super::screens::FOCUS;
 use super::steps::{Screen, Step};
@@ -22,6 +21,7 @@ use client_core::fake_hub::events::{
     command, denied as denied_with, first_turn, launched, replied, subagent, subagent_started, subagents_listed, text,
     typed_call, user_prompt, within,
 };
+use spec_screens::chats::{self, looked_around};
 
 /// The screens about a tool's use the agent asks about.
 pub(crate) const SCREENS: &[Screen] = &[

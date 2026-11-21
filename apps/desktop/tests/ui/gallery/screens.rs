@@ -16,8 +16,9 @@ use super::worlds::{
     setup_failed, steered, streaming, titled, unread, unread_titled, waiting_on_checks, waiting_on_stacks,
     working_background,
 };
-use super::{chats, long_chats, pictures, question_chats};
+use super::{long_chats, pictures};
 use client_core::fake_hub::World;
+use spec_screens::{chats, question_chats};
 
 /// The workspace each screen is about, in the first repository, below the ones the sidebar always has.
 pub(super) const FOCUS: &str = "aspen";

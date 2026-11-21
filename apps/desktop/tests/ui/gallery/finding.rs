@@ -8,8 +8,9 @@ use protocol::event::{EventBody, ExitReason, FailureKind, NoticeLevel, RequestFa
 use protocol::model::SessionStatus;
 
 use super::worlds::{codex_images, sidebar};
-use super::{capture, file_chats, subagent_chats, tool_chats, typed_chats};
+use super::{capture, file_chats, tool_chats, typed_chats};
 use client_core::fake_hub::World;
+use spec_screens::subagent_chats;
 
 /// What finding counts in each kind of call is what the call draws, so every match drawn is one that can be gone to,
 /// and the count is of what's there.

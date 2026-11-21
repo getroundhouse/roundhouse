@@ -15,7 +15,6 @@
 #![cfg(test)]
 
 mod approval_chats;
-mod approved;
 mod background_chats;
 mod banner_kinds;
 mod bar_kinds;
@@ -24,7 +23,6 @@ mod cache_screens;
 mod call_screens;
 mod capture;
 mod cards;
-mod chats;
 mod clips;
 mod code_lines;
 mod codex_screens;
@@ -34,6 +32,7 @@ mod component_screens;
 mod components_approved;
 mod context_screens;
 mod conversation_chats;
+mod copied_questions;
 mod dialog_widths;
 mod dictation_screens;
 mod diff_screens;
@@ -64,7 +63,6 @@ mod prompt_screens;
 mod proposal_chats;
 mod provider_screens;
 mod pull_requests;
-mod question_chats;
 mod reference_screens;
 mod screens;
 mod settings_screens;
@@ -84,7 +82,6 @@ mod worktree;
 mod worlds;
 
 mod screens_approved;
-use screens_approved::UPDATE;
 
 mod button_states;
 

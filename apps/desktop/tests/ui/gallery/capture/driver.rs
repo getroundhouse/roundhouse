@@ -19,6 +19,7 @@ use look::Region;
 use opening::open;
 use protocol::model::Seq;
 use scrollbar::ChatScroll;
+use spec_screens::Picture;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -34,12 +35,6 @@ const LONGER_THAN_A_TOOLTIP_WAITS: Duration = Duration::from_secs(1);
 /// drawn while what a check for updates says, or a problem updating, is in its place, so a screen with one can't
 /// [`Step::Open`] a line or [`Step::MoveAway`].
 const AWAY: &str = "version";
-
-pub(crate) struct Picture {
-    pub(crate) image: RgbaImage,
-    /// It stopped changing. If not, something on the screen moves, and the picture won't match from run to run.
-    pub(crate) settled: bool,
-}
 
 /// Its picture, cut to its frame, and what's wrong with the frame, each said as what's wrong with the screen.
 pub(crate) fn take(screen: &Screen, text_system: &Arc<dyn PlatformTextSystem>) -> (Picture, Vec<String>) {

@@ -8,9 +8,10 @@ use protocol::model::{
 use protocol::prompt::Prompt;
 
 use super::{chat_world, sidebar};
-use crate::gallery::{chats, pull_requests};
+use crate::gallery::pull_requests;
 use client_core::fake_hub::World;
 use protocol::prompt::PromptFrom;
+use spec_screens::chats;
 
 pub(in crate::gallery) fn streaming() -> World {
     let mut world = World::default();

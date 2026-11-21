@@ -10,8 +10,8 @@ use super::frame::{COMPOSER, DICTATION_CARD, Frame, QUESTION};
 use super::screens::FOCUS;
 use super::steps::{DictateWith, Screen, Step};
 use super::worlds::{chat_world, conversation};
-use super::{chats, question_chats};
 use protocol::model::SessionStatus;
+use spec_screens::{chats, question_chats};
 
 pub(crate) const SCREENS: &[Screen] = &[
     Screen {

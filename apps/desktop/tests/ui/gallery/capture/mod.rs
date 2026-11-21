@@ -17,5 +17,6 @@ use opening::open;
 pub(crate) use recording::{Done, Pointer, record};
 
 mod driver;
+pub(crate) use driver::take;
 use driver::{Driver, TIMEOUT, id_in, selected_pane};
-pub(crate) use driver::{Picture, take};
+pub(crate) use spec_screens::Picture;

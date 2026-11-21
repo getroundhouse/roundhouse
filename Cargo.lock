@@ -2012,6 +2012,7 @@ dependencies = [
  "serde_json",
  "similar",
  "sound",
+ "spec-screens",
  "tempfile",
  "terminal-view",
  "thiserror 2.0.21",
@@ -8966,6 +8967,16 @@ dependencies = [
  "serde",
  "serde_json",
  "tempfile",
+]
+
+[[package]]
+name = "spec-screens"
+version = "0.1.0"
+dependencies = [
+ "client-core",
+ "image",
+ "protocol",
+ "serde_json",
 ]
 
 [[package]]
