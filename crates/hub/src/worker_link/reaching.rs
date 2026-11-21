@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use protocol::client::{ApiError, ErrorCode, error_chain};
 use protocol::model::InstanceId;
-use providers::Provider;
+use providers::{Provider, WorkerBinary};
 use tracing::warn;
 
 use crate::child_process::{self, Spawned, Stderr};
@@ -23,12 +23,13 @@ pub(crate) enum Opening {
     LeftRunning,
 }
 
-/// Runs the command that reaches the instance's worker, starting the instance first if it's to be started. On failure
-/// nothing is left running that the hub started. `before_serving` is how long the provider has to say how to reach a
-/// worker [`Opening::LeftRunning`].
+/// Runs the command that reaches the instance's worker, starting the instance first if it's to be started, with
+/// `workers` for the provider to put there. On failure nothing is left running that the hub started. `before_serving`
+/// is how long the provider has to say how to reach a worker [`Opening::LeftRunning`].
 pub(super) async fn reach(
     provider: &dyn Provider,
     instance_id: &InstanceId,
+    workers: &[WorkerBinary],
     log: &std::path::Path,
     opening: Opening,
     before_serving: Duration,
@@ -36,8 +37,7 @@ pub(super) async fn reach(
 ) -> Result<Spawned, ApiError> {
     let command = match opening {
         Opening::Started => {
-            // The local provider runs the hub's own executable, so there are no other builds of the worker to give it.
-            provider.start(instance_id, &[]).await.map_err(|e| provider_failed(&e))?;
+            provider.start(instance_id, workers).await.map_err(|e| provider_failed(&e))?;
             provider.connect(instance_id).await.map_err(|e| provider_failed(&e))
         }
         Opening::LeftRunning => match tokio::time::timeout(before_serving, provider.connect(instance_id)).await {

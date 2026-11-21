@@ -2,7 +2,7 @@
 //! local provider over the provider protocol, as an adapter does, and writes the ID of each instance it makes to
 //! `--made`, and of each it's asked how to reach a worker on to `--connected`, one to a line, since the local provider
 //! has no tools of its own to show either in. An instance that's there already isn't made again, as with any provider,
-//! so asking for it again writes nothing.
+//! so asking for it again writes nothing. The workers it's given at each start go beside `--made`, as `.started`.
 
 #![expect(clippy::unwrap_used, reason = "a test program, so failing loudly is what it should do")]
 
@@ -88,6 +88,8 @@ impl Provider for Recording {
     }
 
     async fn start(&self, instance_id: &InstanceId, workers: &[WorkerBinary]) -> Result<(), ProviderError> {
+        let mut started = std::fs::OpenOptions::new().create(true).append(true).open(self.started()).unwrap();
+        started.write_all(&protocol::frame::encode(&workers).unwrap()).unwrap();
         self.local.start(instance_id, workers).await
     }
 
@@ -126,6 +128,13 @@ impl Provider for Recording {
 
     async fn make_base_image(&self, instance_id: &InstanceId) -> Result<(), ProviderError> {
         self.local.make_base_image(instance_id).await
+    }
+}
+
+impl Recording {
+    /// Where it writes the workers it's given at each start, as a line of JSON.
+    fn started(&self) -> PathBuf {
+        self.made.with_extension("started")
     }
 }
 
