@@ -3,7 +3,7 @@
 pub(crate) use carrying_on::LeftAtWork;
 #[cfg(test)]
 pub(crate) use terminals::QUEUED_UPDATES;
-pub(crate) use terminals::{Numbered, Queued};
+pub(crate) use terminals::{Numbered, Queued, Watcher};
 pub use updates::UpdateFeed;
 
 mod accounts;

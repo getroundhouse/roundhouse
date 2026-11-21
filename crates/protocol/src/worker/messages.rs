@@ -5,6 +5,7 @@ use super::{
 use crate::client::Outcome;
 use crate::model;
 use crate::model::{AgentAccount, FileContents, FileOpened, WorktreeFiles};
+use crate::terminal::TerminalRowsReply;
 use crate::versions::Versions;
 #[cfg(test)]
 use agents::Delivery;
@@ -24,8 +25,8 @@ use serde::{Deserialize, Serialize};
 #[cfg(test)]
 use terminals::RunningTerminals;
 use terminals::{
-    RunningTerminalsReply, TerminalInput, TerminalResize, TerminalRows, TerminalRowsReply, TerminalShow, TerminalShown,
-    TerminalStart, TerminalStop, TerminalWatch,
+    RunningTerminalsReply, TerminalInput, TerminalResize, TerminalRows, TerminalShow, TerminalShown, TerminalStart,
+    TerminalStop, TerminalWatch,
 };
 use tools::{ServeTools, ToolsServing};
 #[cfg(test)]

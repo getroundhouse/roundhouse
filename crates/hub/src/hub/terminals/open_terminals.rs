@@ -2,12 +2,15 @@
 
 use std::collections::HashMap;
 use std::pin::Pin;
+use std::sync::Arc;
 
 use parking_lot::Mutex;
 use protocol::client::{ApiError, ClientResponse};
 use protocol::model::{Terminal, TerminalId, WorkspaceId};
 use protocol::terminal::{TerminalUpdate, UpdateIndex};
 use tokio::sync::{Mutex as AsyncMutex, broadcast, watch};
+
+use super::watching::Watch;
 
 /// The updates held for the clients attached to a terminal. One that falls further behind gets a new screen.
 pub(crate) const QUEUED_UPDATES: usize = 256;
@@ -38,6 +41,7 @@ pub(super) struct Open {
     pub(super) link: Option<u64>,
     pub(super) stage: Stage,
     pub(super) updates: broadcast::Sender<Numbered>,
+    pub(super) watch: Arc<Watch>,
 }
 
 pub(super) enum Stage {
@@ -56,7 +60,7 @@ pub(super) type Outcome = watch::Receiver<Option<Result<Terminal, ApiError>>>;
 
 impl Open {
     pub(super) fn new(workspace_id: WorkspaceId, link: Option<u64>, stage: Stage) -> Self {
-        Self { workspace_id, link, stage, updates: broadcast::channel(QUEUED_UPDATES).0 }
+        Self { workspace_id, link, stage, updates: broadcast::channel(QUEUED_UPDATES).0, watch: Watch::new() }
     }
 
     pub(super) fn record(&self) -> Option<&Terminal> {

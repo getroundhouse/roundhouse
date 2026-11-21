@@ -11,7 +11,7 @@ use protocol::event::SessionEvent;
 use protocol::frame;
 use protocol::model::{AttachmentId, SessionId};
 use protocol::tail::{StreamDelta, Tail};
-use protocol::terminal::TerminalUpdate;
+use protocol::terminal::{TerminalPicture, TerminalUpdate};
 use std::collections::{HashMap, HashSet};
 use std::io::{BufRead, BufReader, Write};
 use std::path::Path;
@@ -75,6 +75,8 @@ pub enum SubscriptionItem {
     Terminal(TerminalUpdate),
     /// Only on one to what GitHub says of what's shown.
     Github(GithubUpdate),
+    /// Only on a terminal's that watches it.
+    TerminalPicture(Box<TerminalPicture>),
 }
 
 /// Why a subscription's channel closed.
@@ -311,6 +313,9 @@ fn read_frames(inner: &Arc<Inner>, stream: impl std::io::Read) {
             }
             HubFrame::Github { subscription_id, update } => {
                 deliver(inner, subscription_id, SubscriptionItem::Github(update));
+            }
+            HubFrame::TerminalPicture { subscription_id, picture } => {
+                deliver(inner, subscription_id, SubscriptionItem::TerminalPicture(Box::new(picture)));
             }
         }
     }

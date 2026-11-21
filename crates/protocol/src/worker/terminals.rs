@@ -5,7 +5,9 @@ use serde::{Deserialize, Serialize};
 
 use super::{Reply, Request, WorkerRequest, WorkerResponse};
 use crate::model::TerminalId;
-use crate::terminal::{Numbering, RowNumber, TerminalBytes, TerminalRow, TerminalScreen, TerminalSize, UpdateIndex};
+use crate::terminal::{
+    Numbering, RowNumber, TerminalBytes, TerminalRowsReply, TerminalScreen, TerminalSize, UpdateIndex,
+};
 
 /// Starts a shell in `cwd`, in a terminal of `size`. Starting one that runs already changes nothing, so a hub can send
 /// it again. What the shell writes comes as [`WorkerFrame::Terminal`](super::WorkerFrame::Terminal)s.
@@ -95,10 +97,10 @@ impl Reply for TerminalShown {
 }
 
 /// Rows of the terminal's history, by their numbers in `numbering`, for a client scrolled back past the rows it holds:
-/// `count` from `from` on, or as many as come to [`MOST_ROWS`] or about a frame's worth, whichever is fewer. History is
-/// the rows above the screen, which a program can't write to, so asking again gets the same, for as long as the
-/// terminal keeps them. None while a full-screen program is up, whose screen has none, or once the terminal's rows are
-/// in another numbering.
+/// `count` from `from` on, or as many as come to [`MOST_ROWS`](crate::terminal::MOST_ROWS) or about a frame's worth,
+/// whichever is fewer. History is the rows above the screen, which a program can't write to, so asking again gets the
+/// same, for as long as the terminal keeps them. None while a full-screen program is up, whose screen has none, or
+/// once the terminal's rows are in another numbering.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct TerminalRows {
     pub terminal: TerminalId,
@@ -107,30 +109,12 @@ pub struct TerminalRows {
     pub count: u32,
 }
 
-/// The most rows a worker sends for one [`TerminalRows`], so one asks for little of the terminal's thread, whose
-/// reading is a few milliseconds at the widest.
-pub const MOST_ROWS: u32 = 200;
-
 impl Request for TerminalRows {
     type Reply = TerminalRowsReply;
 
     fn into_request(self) -> WorkerRequest {
         WorkerRequest::TerminalRows(self)
     }
-}
-
-/// The rows asked for that the terminal has, and where its rows are now, in its numbering now, so a client that asked
-/// in one that has gone learns the new.
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
-pub struct TerminalRowsReply {
-    pub numbering: Numbering,
-    /// The oldest row of history the terminal keeps.
-    pub first: RowNumber,
-    /// The screen's first row, which comes after the last row of history.
-    pub top: RowNumber,
-    /// The number of the first of `rows`, which is `first` if that's after what was asked for.
-    pub from: RowNumber,
-    pub rows: Vec<TerminalRow>,
 }
 
 impl Reply for TerminalRowsReply {

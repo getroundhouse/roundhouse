@@ -5,11 +5,14 @@
 #[cfg(test)]
 mod tests;
 
+mod copy;
 mod open_terminals;
 mod opening;
 mod terminal_calls;
+mod watching;
 
 #[cfg(test)]
 pub(crate) use open_terminals::QUEUED_UPDATES;
 pub(crate) use open_terminals::{Numbered, Queued, Terminals};
 use open_terminals::{Open, Outcome, Stage};
+pub(crate) use watching::Watcher;

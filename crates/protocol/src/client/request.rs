@@ -141,6 +141,8 @@ pub enum ClientRequest {
     SessionRename(sessions::SessionRename),
     TerminalOpen(terminals::TerminalOpen),
     TerminalAttach(terminals::TerminalAttach),
+    TerminalWatch(terminals::TerminalWatch),
+    TerminalRows(terminals::TerminalRows),
     TerminalInput(terminals::TerminalInput),
     TerminalResize(terminals::TerminalResize),
     TerminalClose(terminals::TerminalClose),

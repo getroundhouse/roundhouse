@@ -2,8 +2,8 @@
 
 use std::fmt::Write as _;
 
+use protocol::terminal::MOST_ROWS;
 use protocol::terminal::{CellAttributes, CellColor, CellStyle, RowNumber, Span, TerminalRow};
-use protocol::worker::MOST_ROWS;
 
 use crate::mirror::rows::reading::{Place, row};
 use crate::{Mirror, Size};

@@ -60,7 +60,10 @@ pinned! {
     "proposals.rs" => [ProposalAnswer(_), ProposalAnotherRound(_), ProposalRevisionsRead(_)],
     "references.rs" => [ReferencesRead(_)],
     "github_shown.rs" => [GithubSubscribe(_)],
-    "terminals.rs" => [TerminalOpen(_), TerminalAttach(_), TerminalInput(_), TerminalResize(_), TerminalClose(_)],
+    "terminals.rs" => [
+        TerminalOpen(_), TerminalAttach(_), TerminalWatch(_), TerminalRows(_), TerminalInput(_), TerminalResize(_),
+        TerminalClose(_),
+    ],
 }
 
 /// A request's `method`, or a reply's `result`, as serde's `snake_case` makes it from the variant's name.
