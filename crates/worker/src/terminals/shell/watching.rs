@@ -1,6 +1,7 @@
 //! Pictures of what a terminal shows, sent to the hub while it watches, one frame on its way at a time, at most about
-//! 60 a second, and fewer of a screen that takes long to read. Under a flood the worker goes on taking in all its program writes, and the hub is sent the newest of
-//! what the terminal shows whenever there's room, rather than all that came between.
+//! 60 a second, and fewer of a screen that takes long to read. Under a flood the worker goes on taking in all its
+//! program writes, and the hub is sent the newest of what the terminal shows whenever there's room, rather than all
+//! that came between.
 
 use std::sync::Arc;
 use std::time::Duration;
