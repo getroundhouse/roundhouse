@@ -41,6 +41,7 @@ mod at;
 mod beside;
 mod budget;
 mod code_blocks;
+mod dimming;
 mod element;
 mod moves;
 mod parse;

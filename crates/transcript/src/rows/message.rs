@@ -10,8 +10,8 @@ use protocol::model::Seq;
 
 use super::around::{Around, BlockAround};
 use super::tools::{self, Toggle};
-use super::{Shared, empty, row, thinking, written};
-use crate::find::{FindLook, Part};
+use super::{Shared, empty, reply, row, thinking};
+use crate::find::FindLook;
 
 /// A message of the agent's, or what came back to it, recorded at `seq`: each of its `blocks` as `around` says.
 pub(super) fn draw(
@@ -73,7 +73,7 @@ pub(super) fn render_block(
     let (fold, open) = (drawing.fold, drawing.open);
     let toggle = Toggle { seq, key, fold, open, shared, find, in_row };
     Some(match block {
-        ContentBlock::Text { text, images } => written(&toggle, Part::Text, text, None, Some(images)),
+        ContentBlock::Text { text, images } => reply(&toggle, text, images, drawing.unheard_from),
         ContentBlock::Thinking { text } if text.is_empty() => return None,
         ContentBlock::Thinking { text } => thinking::draw(text, &toggle, cx),
         ContentBlock::Call { .. } => {

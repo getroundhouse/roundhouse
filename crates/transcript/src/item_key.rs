@@ -46,8 +46,7 @@ impl ItemKey {
         message: Option<&MessageId>,
         first_index: Option<u32>,
     ) -> Self {
-        let offset = u32::try_from(position).ok();
-        let index = first_index.zip(offset).and_then(|(first, offset)| first.checked_add(offset));
+        let index = first_index.and_then(|_| in_message(position, first_index));
         match (message, index) {
             (Some(message), Some(index)) => ItemKey::Block(message.clone(), index),
             _ => ItemKey::Event(seq, position),
@@ -70,6 +69,13 @@ impl ItemKey {
         };
         ElementId::Name(name.into())
     }
+}
+
+/// Where the block at `position` among a recorded event's blocks sits in its message: counted on from `first_index`,
+/// where the deltas that streamed it numbered the event's first block, or from the event's first block when nothing
+/// streamed, as a place in a reply read out loud counts. `None` past what a `u32` holds.
+pub(crate) fn in_message(position: usize, first_index: Option<u32>) -> Option<u32> {
+    u32::try_from(position).ok()?.checked_add(first_index.unwrap_or(0))
 }
 
 #[cfg(test)]

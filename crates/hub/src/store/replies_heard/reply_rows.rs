@@ -6,8 +6,9 @@ const REPLY_HEARD_COLUMNS: &str = "session_id, message, ending, rev, settled_by"
 
 impl Store {
     /// Keeps how the reply `message` ended, as `by` said it, unless how it ended is kept already, since the first that's
-    /// said of a reply is kept, but for what the hub settled, which what the device says takes the place of. Returns
-    /// the record if it changed.
+    /// said of a reply is kept, but for what the hub settled, which what the device says takes the place of. A device
+    /// that says none of it was read out can't undo how far it was heard, as one that took the conversation over
+    /// partway through a reply says of it, though another device was reading it. Returns the record if it changed.
     pub fn keep_reply_heard(
         &self,
         session_id: &SessionId,
@@ -20,8 +21,15 @@ impl Store {
         let kept = tx.execute(
             "INSERT INTO replies_heard (session_id, message, ending, settled_by) VALUES (?1, ?2, ?3, ?4)
                 ON CONFLICT DO UPDATE SET ending = excluded.ending, settled_by = excluded.settled_by
-                WHERE replies_heard.settled_by = 'hub' AND ?4 IS NULL",
-            params![session_id.as_str(), message.as_str(), serde_json::to_string(&ending)?, settled_by_column(by)],
+                WHERE replies_heard.settled_by = 'hub' AND ?4 IS NULL
+                    AND NOT (?5 AND json_extract(replies_heard.ending, '$.through') IS NOT NULL)",
+            params![
+                session_id.as_str(),
+                message.as_str(),
+                serde_json::to_string(&ending)?,
+                settled_by_column(by),
+                ending == Ending::NotReadOut,
+            ],
         )?;
         let heard = if kept == 0 { None } else { reply_heard_on(&tx, session_id, message)? };
         tx.commit()?;

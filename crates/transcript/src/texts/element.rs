@@ -13,6 +13,7 @@ use gpui_kit::{
 };
 
 use super::code_blocks;
+use super::dimming::Dimmed;
 use super::parsing::Apart;
 use super::{Leaf, Parsed, Style, TextAt, TextKey, Texts};
 use crate::find::Marks;
@@ -35,6 +36,8 @@ pub(super) struct ProseElement {
     pub(super) apart: Option<Apart>,
     /// What's found in each leaf, by key.
     pub(super) marks: Vec<Marks>,
+    /// Where it's drawn dimmed from, if it is.
+    pub(super) dimmed: Option<Dimmed>,
     pub(super) images: Option<Images>,
     pub(super) texts: Texts,
     pub(super) selection: Selection,
@@ -87,6 +90,12 @@ impl Element for ProseElement {
         if let Some(parsed) = &self.text {
             for (identifier, link) in &parsed.links {
                 context = context.with_link_reference(identifier.clone(), link.clone());
+            }
+            if let Some(dimmed) = self.dimmed {
+                let faint = look::colors(cx).text_faint;
+                for (leaf, range) in dimmed.ranges(&parsed.leaves) {
+                    context = context.with_foreground_ranges(leaf, vec![(range, faint)]);
+                }
             }
         }
         let style = context.style();

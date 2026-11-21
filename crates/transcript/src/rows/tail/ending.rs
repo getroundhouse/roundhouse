@@ -1,4 +1,4 @@
-use super::super::around::Around;
+use super::super::around::{Around, Heard};
 use super::super::line::{SIZE, still_icon};
 use super::super::prompt::{Prompt, prompt_bubble};
 use super::super::{Shared, empty, from_blocks, render_event, row, thinking, turn_times};
@@ -18,8 +18,10 @@ use gpui_kit::{
 };
 use look::{Moving, Signal};
 use protocol::event::SessionEvent;
-use protocol::model::QueuedPrompt;
+use protocol::model::{MessageId, QueuedPrompt, ReplyHeard};
 use protocol::tail::{BlockKind, Retrying, Tail};
+use std::collections::HashMap;
+use std::sync::Arc;
 use std::time::Duration;
 
 /// What the end of the chat draws: what the agent is still writing, the prompts it hasn't read yet, what the
@@ -33,6 +35,9 @@ pub(in super::super) struct EndOfChat<'a> {
     pub(in super::super) folds: &'a Folds,
     /// It's the subagent tab's, whose tail the hub sends with only what its subagent is writing.
     pub(in super::super) alone: bool,
+    /// How each of the agent's replies read out loud ended, as the hub records it, which dims what of one still being
+    /// written wasn't heard.
+    pub(in super::super) heard: &'a HashMap<MessageId, Arc<ReplyHeard>>,
 }
 
 /// A prompt the agent hasn't read yet, which is drawn after what it's still writing, as it will be once it's read.
@@ -62,8 +67,8 @@ pub(in super::super) fn waiting(log: &SessionLog, m: &Model) -> Vec<Waiting> {
 /// read `by` place, which keeps its work apart, since only then can the tab read it. Nothing's found at the end of the
 /// chat, since it isn't counted, so nothing's marked there either.
 pub(in super::super) fn render_tail(end: &EndOfChat, shared: &Shared, by: By, cx: &App) -> AnyElement {
-    let EndOfChat { tail, waiting, at_work, folds, alone } = *end;
-    let (written, placed) = still_writing(tail, alone, shared, folds.thinking_open(), cx);
+    let EndOfChat { tail, waiting, at_work, folds, alone, heard } = *end;
+    let (written, placed) = still_writing(tail, alone, heard, shared, folds.thinking_open(), cx);
     let mut after: Vec<AnyElement> = Vec::new();
     if at_work.working {
         let line = working_line(at_work.turn_started_at_ms, tail, shared, cx);
@@ -91,24 +96,39 @@ pub(in super::super) fn render_tail(end: &EndOfChat, shared: &Shared, by: By, cx
 }
 
 /// What the agent is still writing, or in the subagent tab, its subagent, block by block, and how many texts that is,
-/// each at the next place at the end of the chat. Each is known as it will be once it's recorded. A chat's tail from a
-/// hub too old to keep a subagent's work apart holds what its subagents are writing too, which shows in the call that
-/// started each, once it's recorded. The tab's holds only its subagent's, which is all it shows.
-fn still_writing(tail: &Tail, alone: bool, shared: &Shared, thinking_open: bool, cx: &App) -> (Vec<AnyElement>, usize) {
+/// each at the next place at the end of the chat. Each is known as it will be once it's recorded, and the agent's own
+/// text is dimmed where it wasn't heard, read out loud, as it will be, since the device can read a reply as it's
+/// written. A chat's tail from a hub too old to keep a subagent's work apart holds what its subagents are writing too,
+/// which shows in the call that started each, once it's recorded. The tab's holds only its subagent's, which is all it
+/// shows.
+fn still_writing(
+    tail: &Tail,
+    alone: bool,
+    heard: &HashMap<MessageId, Arc<ReplyHeard>>,
+    shared: &Shared,
+    thinking_open: bool,
+    cx: &App,
+) -> (Vec<AnyElement>, usize) {
     let (mut out, mut placed) = (Vec::new(), 0);
     for message in tail.messages.iter().filter(|m| alone || m.subagent.is_none()) {
+        let recorded = heard.get(&message.message_id).map(Arc::as_ref);
+        let read_out =
+            Heard::of(&message.message_id, tail.speaking.as_ref(), recorded).filter(|_| message.subagent.is_none());
         for block in &message.blocks {
             let key = ItemKey::Block(message.message_id.clone(), block.index);
-            let mut drawn = |part| {
+            let mut drawn = |part, dimmed_from| {
                 let (element, at) = (find::view_id(&(key.clone(), part)), TextAt::at_the_end(placed));
                 placed += 1;
-                let written = Written { style: Style::for_part(part), ..Written::unfound(at, element, &block.text) };
-                from_blocks(&written, None, shared)
+                let written = Written::unfound(at, element, &block.text);
+                from_blocks(&Written { style: Style::for_part(part), dimmed_from, ..written }, None, shared)
             };
             match block.kind {
-                BlockKind::Text => out.push(drawn(Part::Text)),
+                BlockKind::Text => {
+                    let unheard_from = read_out.and_then(|heard| heard.unheard_from(block.index, &block.text));
+                    out.push(drawn(Part::Text, unheard_from));
+                }
                 BlockKind::Thinking if thinking_open => {
-                    let thought_drawn = drawn(Part::Thinking);
+                    let thought_drawn = drawn(Part::Thinking, None);
                     out.push(thought("Thinking…".to_string(), cx).into_any_element());
                     out.push(thinking::text(&key, thought_drawn, cx).into_any_element());
                 }
@@ -129,7 +149,7 @@ fn waiting_prompt(prompt: &Waiting, at: TextAt, shared: &Shared, cx: &App) -> An
         Waiting::Recorded(event, around) => render_event(event, around, at, shared, &find, cx),
         Waiting::Sending(sent, carried) => {
             let key = ItemKey::Prompt(sent.client_msg_id.clone());
-            let text = Prompt { text: &sent.prompt.text, find: &find, at };
+            let text = Prompt { text: &sent.prompt.text, spoken: sent.prompt.spoken, find: &find, at };
             prompt_bubble(&key, text, carried, None, shared, cx)
         }
     }

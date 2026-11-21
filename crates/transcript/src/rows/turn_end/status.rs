@@ -1,30 +1,26 @@
+use super::super::around::{Around, Heard};
 use super::super::{empty, marked_line, muted_line, row, turn_times};
 use super::{cache, card};
 use crate::find::{FindLook, Marks, Part};
 use crate::item_key::ItemKey;
-use crate::transcript::IdleCache;
 use card::TurnCard;
-use gpui_kit::component::h_flex;
+use gpui_kit::component::{Icon, h_flex};
 use gpui_kit::{
-    Anchor, AnyElement, App, InteractiveElement as _, IntoElement, ParentElement, SharedString, Styled,
-    TestSupportExt as _, div,
+    Anchor, AnyElement, App, InteractiveElement as _, IntoElement, ParentElement, Styled, TestSupportExt as _, div,
 };
-use look::Typeset as _;
+use look::{IconSizing as _, Typeset as _};
 use protocol::event::{EventBody, SessionEvent, TurnOutcome};
 use std::time::Duration;
 
-/// How the turn `ended`, in a chat whose agent is called `agent`. A finished one says how long it took and when it ended, with a button
-/// that copies what the agent said last, its `result`, and resting the pointer on what it says shows the turn's card.
+/// How the turn `ended`, with what's `around` it: what the chat's agent is called, what the cache holds and how the
+/// reply it ended on was heard, read out loud. A finished one says how long it took and when it ended, after how that
+/// reply was heard, if that's more than heard to its end, with a button that copies what the agent said last, its
+/// `result`, and resting the pointer on what it says shows the turn's card.
 /// The newest one's also says what the cache holds, `cache`, as [`cache`] says. A failed one says what went wrong,
 /// with its matches.
-pub(in super::super) fn line(
-    ended: &SessionEvent,
-    agent: Option<SharedString>,
-    cache: Option<&IdleCache>,
-    find: &FindLook,
-    cx: &App,
-) -> AnyElement {
+pub(in super::super) fn line(ended: &SessionEvent, around: &Around, find: &FindLook, cx: &App) -> AnyElement {
     let colors = look::colors(cx);
+    let (agent, cache, heard) = (around.agent.clone(), around.cache.as_ref(), around.heard);
     let EventBody::TurnEnded { outcome, result, errors, duration_ms, started_at_ms, models, tokens, .. } = &ended.body
     else {
         return empty();
@@ -50,7 +46,8 @@ pub(in super::super) fn line(
                 cache: cache.map(|cache| cache.cache.clone()),
             };
             let mark = cache.and_then(|cache| cache::on_the_line(cache, cx));
-            finished(ended, result.as_deref(), card, mark, cx)
+            let ending = Ending { result: result.as_deref(), card, mark, heard };
+            finished(ended, ending, cx)
         }
     }
 }
@@ -65,15 +62,23 @@ fn timed(ended_at_ms: i64, started_at_ms: Option<i64>, duration_ms: Option<u64>)
     (started_at_ms, took_ms.or(duration_ms))
 }
 
-/// A finished turn's line, which says how long it took, as the working line counted it, and when it ended, then
-/// `mark`, which says the cache is about to expire or has. Resting the pointer on any of that shows the turn's card.
-fn finished(
-    ended: &SessionEvent,
-    result: Option<&str>,
+/// What a finished turn's line says, besides when it ended.
+struct Ending<'a, M> {
+    /// What the agent said last, which the line's button copies.
+    result: Option<&'a str>,
     card: TurnCard,
-    mark: Option<impl IntoElement>,
-    cx: &App,
-) -> AnyElement {
+    /// What says the cache is about to expire or has.
+    mark: Option<M>,
+    /// How the reply it ended on was heard, read out loud.
+    heard: Option<Heard>,
+}
+
+/// A finished turn's line, which says how the reply it ended on was heard, if it was read out loud and that's more
+/// than heard to its end, then how long the turn took, as the working line counted it, and when it ended, then the
+/// mark that says the cache is about to expire or has. Resting the pointer on how long it took, when it ended or the
+/// mark shows the turn's card.
+fn finished(ended: &SessionEvent, ending: Ending<'_, impl IntoElement>, cx: &App) -> AnyElement {
+    let Ending { result, card, mark, heard } = ending;
     let when = look::day_and_time(ended.ts_ms, cx);
     let said = card.took.clone().into_iter().chain(when).collect::<Vec<_>>().join(" · ");
     // It only shows something while the pointer rests on it, so it keeps the arrow. The card opens centred above it,
@@ -100,10 +105,15 @@ fn finished(
         );
         div().flex().items_center().h_0().child(copy)
     });
+    let heard = heard.map(|heard| {
+        let icon = Icon::new(heard.icon()).sized(look::IconSize::Small);
+        h_flex().gap(look::Space::XSmall).child(icon).child(format!("{} ·", heard.words()))
+    });
     let line = h_flex()
         .gap(look::Space::XSmall)
         .typeset(look::Type::Detail)
         .text_color(look::colors(cx).text_faint)
+        .children(heard)
         .child(said)
         .children(copy);
     row().child(line).into_any_element()

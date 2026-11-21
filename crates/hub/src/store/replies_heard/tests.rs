@@ -88,3 +88,21 @@ fn what_the_device_says_takes_the_place_of_what_the_hub_settled() {
     assert_eq!((put_right.ending, put_right.settled_by), (Ending::ToTheEnd, SettledBy::Device));
     assert!(put_right.rev.supersedes(settled.rev));
 }
+
+/// A device that says none of a reply was read out, as one that took the conversation over partway through it says,
+/// doesn't undo how far the hub kept it was heard, though it would put right a reply the hub settled as not read out.
+#[test]
+fn a_device_that_read_none_of_a_reply_does_not_undo_how_far_it_was_heard() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = store_with_session(dir.path());
+    let keep = |message: &str, ending, by| store.keep_reply_heard(&"s".into(), &message.into(), ending, by).unwrap();
+    let stopped = Ending::Stopped { through: ReplyPlace { block: 0, through: 7 } };
+
+    keep("m1", stopped, SettledBy::Hub).expect("kept");
+    assert_eq!(keep("m1", Ending::NotReadOut, SettledBy::Device), None);
+    keep("m2", Ending::NotReadOut, SettledBy::Hub).expect("kept");
+    assert!(keep("m2", Ending::NotReadOut, SettledBy::Device).is_some(), "said by the device");
+
+    let m1 = store.reply_heard(&"s".into(), &"m1".into()).unwrap().unwrap();
+    assert_eq!((m1.ending, m1.settled_by), (stopped, SettledBy::Hub));
+}

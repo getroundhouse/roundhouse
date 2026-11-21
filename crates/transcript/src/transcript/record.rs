@@ -100,10 +100,10 @@ impl Transcript {
         }
     }
 
-    /// Takes what the client holds now of the chat's records: its session's, its subagents' and its proposals'. Each
-    /// is taken only if it changed, so a client can call this whenever its records do. The client has the subagents'
-    /// and proposals' only while it follows the chat's. The subagent tab's transcript takes whether it's at work from
-    /// its subagent's record, not the chat's.
+    /// Takes what the client holds now of the chat's records: its session's, its subagents', its proposals' and how its
+    /// replies read out loud ended. Each is taken only if it changed, so a client can call this whenever its records
+    /// do. The client has all but the session's only while it follows the chat's. The subagent tab's transcript takes
+    /// whether it's at work from its subagent's record, not the chat's.
     pub fn records_changed(&mut self, records: &Snapshot, cx: &mut Context<Self>) {
         let id = self.session_id.clone();
         if self.model.borrow().alone.is_none()
@@ -113,6 +113,7 @@ impl Transcript {
         }
         self.set_subagents(records.subagents(&id), cx);
         self.set_proposals(records.proposals(&id), cx);
+        self.set_replies_heard(records.replies_heard(&id), cx);
     }
 
     /// Follows the session's record.

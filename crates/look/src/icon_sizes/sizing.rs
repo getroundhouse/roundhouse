@@ -12,16 +12,17 @@ named! {
     /// a line of text, such as the check in a checkbox, is small, so it has room inside it.
     IconSize {
         /// Among a detail's or code's text: a rule's across the chat, such as a compaction's, and the compaction's in
-        /// the outline; the build line's answer; a changed file's state at its row's end, and a folder's chevron, in
-        /// Changes; the check in a checkbox; and the `+` that adds a comment to a diff's line, on a button as tall as
-        /// the line. Beside a small button's words. A small chip's mark, beside its detail's text.
+        /// the outline; the speaker that says how a reply was heard, on its turn's line; the build line's answer; a
+        /// changed file's state at its row's end, and a folder's chevron, in Changes; the check in a checkbox; and the
+        /// `+` that adds a comment to a diff's line, on a button as tall as the line. Beside a small button's words. A
+        /// small chip's mark, beside its detail's text.
         Small,
-        /// Among body text: a warning before the body text it warns of, such as an account's standing; a project's
-        /// chevron after its name; the arrow before an answer to a question, and the check on an option chosen; a file
-        /// sent with a prompt waiting in the queue; a draft's pencil at a workspace's row's end; the arrow that reopens
-        /// a closed chat, in its menu; the glass in a search field; the arrow after a pull request's number; and the
-        /// update card's details. Beside a regular button's words, and a small or regular button's own, as a square,
-        /// such as Send, a tab's close or closed chats.
+        /// Among body text: a warning before the body text it warns of, such as an account's standing; the microphone
+        /// at the start of a prompt said out loud; a project's chevron after its name; the arrow before an answer to a
+        /// question, and the check on an option chosen; a file sent with a prompt waiting in the queue; a draft's
+        /// pencil at a workspace's row's end; the arrow that reopens a closed chat, in its menu; the glass in a search
+        /// field; the arrow after a pull request's number; and the update card's details. Beside a regular button's
+        /// words, and a small or regular button's own, as a square, such as Send, a tab's close or closed chats.
         Regular,
         /// Standing for what a row, a tab, a bar, a card or a call's line is, at its start, in the place a workspace or
         /// a chat has its mark: a file's or a folder's, in All files or Changes; a place's or a project's in the

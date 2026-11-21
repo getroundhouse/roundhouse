@@ -14,6 +14,7 @@ gpui_kit::assets::icon_assets!(
     [
         Activity,
         ArrowUpRight,
+        AudioLines,
         Brain,
         CircleDot,
         CircleFadingArrowUp,
@@ -38,6 +39,8 @@ gpui_kit::assets::icon_assets!(
         Split,
         Terminal,
         Trash,
+        Volume2,
+        VolumeX,
         Wrench,
     ]
 );

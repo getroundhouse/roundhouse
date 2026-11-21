@@ -2,6 +2,7 @@
 //! while it's drawn.
 
 mod failures;
+mod heard;
 mod nearby;
 mod reply;
 mod settled;
@@ -9,6 +10,7 @@ mod subagent;
 
 pub(crate) use failures::redrawn_with;
 pub(super) use failures::{Started, Tries, Try};
+pub(super) use heard::Heard;
 pub(super) use reply::{Answer, Outcome, Reply};
 pub(super) use settled::{AnswerTo, Settled};
 pub(super) use subagent::{Names, Subagent};

@@ -3,11 +3,11 @@ use super::screens::SCREENS;
 use super::{
     approval_chats, approved, background_chats, banner_kinds, bar_kinds, baselines, button_states, cache_screens,
     call_screens, capture, cards, code_lines, colours, compaction_chats, component_screens, context_screens, controls,
-    corners, dialog_widths, dictation_screens, diff_screens, empty_kinds, failure_chats, failures_in_a_row,
-    field_states, heights, home_screens, icon_sizes, key_kinds, kinds_of_text, lines, list_rows, mark_states,
-    menu_rows, own_turn_chats, proposal_chats, pull_requests, settings_screens, sidebar_screens, small_things, spaces,
-    steps, subagent_chats, switch_kinds, tab_widths, terminal_screens, toggle_states, tool_screens, tooltips,
-    turn_screens, update_screens, workspace_screens,
+    conversation_chats, corners, dialog_widths, dictation_screens, diff_screens, empty_kinds, failure_chats,
+    failures_in_a_row, field_states, heights, home_screens, icon_sizes, key_kinds, kinds_of_text, lines, list_rows,
+    mark_states, menu_rows, own_turn_chats, proposal_chats, pull_requests, settings_screens, sidebar_screens,
+    small_things, spaces, steps, subagent_chats, switch_kinds, tab_widths, terminal_screens, toggle_states,
+    tool_screens, tooltips, turn_screens, update_screens, workspace_screens,
 };
 use approved::Verdict;
 use capture::Picture;
@@ -161,6 +161,7 @@ fn screens() -> impl Iterator<Item = &'static steps::Screen> {
         .chain(background_chats::SCREENS)
         .chain(own_turn_chats::SCREENS)
         .chain(compaction_chats::SCREENS)
+        .chain(conversation_chats::SCREENS)
         .chain(failure_chats::SCREENS)
         .chain(failures_in_a_row::SCREENS)
         .chain(super::reference_screens::SCREENS)

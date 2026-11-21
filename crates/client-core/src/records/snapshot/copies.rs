@@ -259,6 +259,11 @@ impl Snapshot {
         self.replies_heard.find(session, message)
     }
 
+    /// How each of the session's replies read out loud ended, as [`Snapshot::reply_heard`] says of one, by reply.
+    pub fn replies_heard(&self, session: &SessionId) -> &[Arc<ReplyHeard>] {
+        self.replies_heard.of_session(session)
+    }
+
     /// What changed between `earlier`, such as the snapshot a view last looked at, and this one.
     pub fn changes_since<'a>(&'a self, earlier: &'a Snapshot) -> Changes<'a> {
         Changes { now: self, then: earlier }

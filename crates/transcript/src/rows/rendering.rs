@@ -1,6 +1,6 @@
 use super::{
-    alone, around, asked, cache_rule, column, compaction, failed_request, message, mode, notices, own_turn, plan_card,
-    prompt, tail, tools, turn_end, update_rule,
+    alone, around, asked, cache_rule, column, compaction, conversation_rule, failed_request, message, mode, notices,
+    own_turn, plan_card, prompt, tail, tools, turn_end, update_rule,
 };
 use crate::find::{FindLook, Marks};
 use crate::item_key::ItemKey;
@@ -149,8 +149,8 @@ fn render_shown(
                 }
             }
             let m = model.borrow();
-            let (at_work, folds, alone) = (&m.at_work, &m.folds, m.alone.is_some());
-            let end = EndOfChat { tail, waiting: &waiting, at_work, folds, alone };
+            let (at_work, folds, alone, heard) = (&m.at_work, &m.folds, m.alone.is_some(), &m.heard);
+            let end = EndOfChat { tail, waiting: &waiting, at_work, folds, alone, heard };
             shared.texts.drawing(Of::Tail, || render_tail(&end, shared, by, cx))
         }
         // Each text an event's row no longer draws is hidden, such as one in a fold that's been closed, or all of
@@ -237,18 +237,19 @@ pub(super) fn render_event(
         EventBody::AgentStarted { build: Some(build), previous_build: Some(from), .. } => {
             update_rule::line(seq, from, build, cx)
         }
+        EventBody::ConversationStarted { .. } => conversation_rule::line(seq, event.ts_ms, cx),
         EventBody::UserPrompt { .. } if let Some(answers) = &around.answers => {
             tools::proposal::answered(seq, answers, around.prompt, shared, cx)
         }
         EventBody::UserPrompt { client_msg_id, prompt, .. } => {
             let key = ItemKey::prompt(seq, client_msg_id.as_ref());
-            let text = Prompt { text: &prompt.text, find, at: prompt_at };
+            let text = Prompt { text: &prompt.text, spoken: prompt.spoken, find, at: prompt_at };
             prompt_bubble(&key, text, &around.carried, Some(around.prompt), shared, cx)
         }
         EventBody::Assistant { blocks, .. } | EventBody::AgentUser { blocks, .. } => {
             message::draw(seq, blocks, around, shared, find, cx)
         }
-        EventBody::TurnEnded { .. } => turn_end::line(event, around.agent.clone(), around.cache.as_ref(), find, cx),
+        EventBody::TurnEnded { .. } => turn_end::line(event, around, find, cx),
         // A plan's card. A tool's use is asked in the composer's place too, and its call's own line is what the
         // transcript keeps of it, with what became of it after.
         EventBody::ApprovalRequested { .. } => plan_card(seq, body, around.approval_open, shared),
@@ -281,8 +282,6 @@ pub(super) fn render_event(
         | EventBody::AgentOther { .. }
         | EventBody::AgentCompacting { .. }
         | EventBody::ApprovalResolved { .. }
-        // Drawn as the rule across the chat once the desktop app has conversation mode.
-        | EventBody::ConversationStarted { .. }
         | EventBody::Unknown => empty(),
     }
 }
