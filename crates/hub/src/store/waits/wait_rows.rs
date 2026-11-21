@@ -8,6 +8,7 @@ columns! {
     pub(super) struct WaitColumns {
         id, session_id, workspace_id, number, call, until, started_at_ms, ended_at_ms, ended, watch,
     }
+    written as WaitValues
 }
 
 impl Store {
@@ -33,19 +34,19 @@ impl Store {
                 id: wait.session_id.to_string(),
             });
         }
-        tx.prepare_cached(&format!("INSERT INTO waits ({}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", WaitColumns::LIST))?
-            .execute(params![
-                wait.id.as_str(),
-                wait.session_id.as_str(),
-                wait.workspace_id.as_str(),
-                wait.number,
-                wait.call.as_ref().map(ToolUseId::as_str),
-                text_of(&wait.until),
-                wait.started_at_ms,
-                wait.ended.map(|ended| ended.at_ms),
-                wait.ended.map(|ended| text_of(&ended.how)),
-                wait.watch.as_ref().map(serde_json::to_string).transpose()?,
-            ])?;
+        let values = WaitValues {
+            id: &wait.id.as_str(),
+            session_id: &wait.session_id.as_str(),
+            workspace_id: &wait.workspace_id.as_str(),
+            number: &wait.number,
+            call: &wait.call.as_ref().map(ToolUseId::as_str),
+            until: &text_of(&wait.until),
+            started_at_ms: &wait.started_at_ms,
+            ended_at_ms: &wait.ended.map(|ended| ended.at_ms),
+            ended: &wait.ended.map(|ended| text_of(&ended.how)),
+            watch: &wait.watch.as_ref().map(serde_json::to_string).transpose()?,
+        };
+        tx.prepare_cached(&format!("INSERT INTO waits {}", WaitValues::INSERT))?.execute(values.params())?;
         tx.commit()?;
         Ok(wait.clone())
     }

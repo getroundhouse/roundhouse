@@ -11,6 +11,7 @@ columns! {
     } then {
         rev,
     }
+    written as CommentValues with { client_request_id }
 }
 
 /// The comment in a row of [`CommentColumns`].
@@ -50,22 +51,17 @@ impl Store {
         if let Some(made) = made_by(&tx, client_request_id)? {
             return Ok(Commented { made: Made::Earlier(made), workspace: None });
         }
-        tx.execute(
-            &format!(
-                "INSERT INTO diff_comments ({}, client_request_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                CommentColumns::ROW
-            ),
-            params![
-                comment.id.as_str(),
-                comment.workspace_id.as_str(),
-                comment.path,
-                text_of(&comment.side),
-                comment.line,
-                comment.text,
-                comment.created_at_ms,
-                client_request_id.map(ClientRequestId::as_str),
-            ],
-        )?;
+        let values = CommentValues {
+            id: &comment.id.as_str(),
+            workspace_id: &comment.workspace_id.as_str(),
+            path: &comment.path,
+            side: &text_of(&comment.side),
+            line: &comment.line,
+            text: &comment.text,
+            created_at_ms: &comment.created_at_ms,
+            client_request_id: &client_request_id.map(ClientRequestId::as_str),
+        };
+        tx.execute(&format!("INSERT INTO diff_comments {}", CommentValues::INSERT), values.params())?;
         let made = inserted(&tx, comment.id.as_str())?;
         let saves = |writing: &CommentDraft| {
             writing.editing.is_none()
