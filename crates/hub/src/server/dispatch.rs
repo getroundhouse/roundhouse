@@ -29,6 +29,8 @@ pub(super) async fn handle(
         R::TerminalAttach(attach) => terminals::attach(hub, connection, attach)?,
         R::TerminalWatch(watch) => terminals::watch(hub, connection, watch)?,
         R::TerminalRows(rows) => C::TerminalRows(hub.terminal_rows(rows).await?),
+        R::TerminalBounds(asked) => C::TerminalBounds(hub.terminal_bounds(asked).await?),
+        R::TerminalText(asked) => C::TerminalText(hub.terminal_text(asked).await?),
         R::TerminalInput(_) | R::TerminalTyped(_) | R::TerminalResize(_) => {
             unreachable!("sent on as they're read, by terminals::in_order")
         }

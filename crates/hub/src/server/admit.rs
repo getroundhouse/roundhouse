@@ -325,6 +325,8 @@ fn local_only(request: &ClientRequest) -> bool {
         | R::TerminalAttach(..)
         | R::TerminalWatch(..)
         | R::TerminalRows(..)
+        | R::TerminalBounds(..)
+        | R::TerminalText(..)
         | R::TerminalInput(..)
         | R::TerminalTyped(..)
         | R::TerminalResize(..)

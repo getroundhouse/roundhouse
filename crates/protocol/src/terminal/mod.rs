@@ -12,6 +12,7 @@ mod picture;
 mod rows;
 mod sending;
 mod size;
+mod text;
 mod typed;
 mod updates;
 
@@ -20,5 +21,6 @@ pub use picture::{CursorShape, PaletteColor, RowJson, RowRun, ScreenState, Termi
 pub use rows::{CellAttributes, CellColor, CellStyle, Numbering, RowNumber, Span, TerminalRow, Underline};
 pub use sending::{MOST_PICTURE_BYTES, PictureSending, Shown};
 pub use size::TerminalSize;
+pub use text::{Bounds, MOST_TEXT_BYTES, TerminalBoundsReply, TerminalPoint, TerminalRange, TerminalTextReply};
 pub use typed::{Key, KeyPress, Mods, Typed};
 pub use updates::{TerminalBytes, TerminalExit, TerminalScreen, TerminalUpdate, UpdateIndex};

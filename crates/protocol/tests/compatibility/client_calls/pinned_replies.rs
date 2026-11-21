@@ -38,6 +38,7 @@ pinned! {
     "proposals.rs" => [Proposal(_), ProposalRevisions(_)],
     "references.rs" => [References(_)],
     "terminals.rs" => [Terminal(_), TerminalRows(_)],
+    "terminal_text.rs" => [TerminalBounds(_), TerminalText(_)],
     "model_lists.rs" => [ModelList(_)],
 }
 

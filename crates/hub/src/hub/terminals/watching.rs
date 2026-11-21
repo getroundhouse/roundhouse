@@ -6,10 +6,9 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Weak};
 
 use parking_lot::Mutex;
-use protocol::client::terminals::TerminalRows;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::model::TerminalId;
-use protocol::terminal::{TerminalPicture, TerminalRowsReply};
+use protocol::terminal::TerminalPicture;
 use protocol::worker;
 use tokio::sync::{Mutex as AsyncMutex, watch};
 use tracing::warn;
@@ -134,12 +133,5 @@ impl Hub {
             warn!(terminal = %id, "a picture lacked rows the hub didn't have, so its worker is asked to begin again");
             self.terminal_watching_soon(id);
         }
-    }
-
-    /// Rows of an open terminal's history, which its worker has.
-    pub(crate) async fn terminal_rows(&self, asked: TerminalRows) -> Result<TerminalRowsReply, ApiError> {
-        let TerminalRows { id, numbering, from, count } = asked;
-        let (_, link) = self.open_terminal(&id)?;
-        link.call(worker::TerminalRows { terminal: id, numbering, from, count }).await
     }
 }

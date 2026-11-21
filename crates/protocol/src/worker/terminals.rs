@@ -6,7 +6,8 @@ use serde::{Deserialize, Serialize};
 use super::{Reply, Request, WorkerRequest, WorkerResponse};
 use crate::model::TerminalId;
 use crate::terminal::{
-    Numbering, RowNumber, TerminalBytes, TerminalRowsReply, TerminalScreen, TerminalSize, Typed, UpdateIndex,
+    Bounds, Numbering, RowNumber, TerminalBoundsReply, TerminalBytes, TerminalPoint, TerminalRange, TerminalRowsReply,
+    TerminalScreen, TerminalSize, TerminalTextReply, Typed, UpdateIndex,
 };
 
 /// Starts a shell in `cwd`, in a terminal of `size`. Starting one that runs already changes nothing, so a hub can send
@@ -138,6 +139,57 @@ impl Reply for TerminalRowsReply {
     fn read(response: WorkerResponse) -> Result<Self, WorkerResponse> {
         let WorkerResponse::TerminalRows(rows) = response else { return Err(response) };
         Ok(rows)
+    }
+}
+
+/// The ends of the word or the line at a cell, as Ghostty finds them for a double or a triple click, in the numbering
+/// the terminal's rows are in now.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct TerminalBounds {
+    pub terminal: TerminalId,
+    pub numbering: Numbering,
+    pub at: TerminalPoint,
+    pub of: Bounds,
+}
+
+impl Request for TerminalBounds {
+    type Reply = TerminalBoundsReply;
+
+    fn into_request(self) -> WorkerRequest {
+        WorkerRequest::TerminalBounds(self)
+    }
+}
+
+impl Reply for TerminalBoundsReply {
+    fn read(response: WorkerResponse) -> Result<Self, WorkerResponse> {
+        let WorkerResponse::TerminalBounds(bounds) = response else { return Err(response) };
+        Ok(bounds)
+    }
+}
+
+/// The text of the cells in `range`, a page at a time, as
+/// [`TerminalTextReply`](crate::terminal::TerminalTextReply) says.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct TerminalText {
+    pub terminal: TerminalId,
+    pub numbering: Numbering,
+    pub range: TerminalRange,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub rectangle: bool,
+}
+
+impl Request for TerminalText {
+    type Reply = TerminalTextReply;
+
+    fn into_request(self) -> WorkerRequest {
+        WorkerRequest::TerminalText(self)
+    }
+}
+
+impl Reply for TerminalTextReply {
+    fn read(response: WorkerResponse) -> Result<Self, WorkerResponse> {
+        let WorkerResponse::TerminalText(text) = response else { return Err(response) };
+        Ok(text)
     }
 }
 

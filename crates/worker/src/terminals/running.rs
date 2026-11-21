@@ -9,14 +9,14 @@ use process::Environment;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::model::TerminalId;
 use protocol::paths;
-use protocol::terminal::{TerminalRowsReply, TerminalSize, Typed};
+use protocol::terminal::{TerminalBoundsReply, TerminalRowsReply, TerminalSize, TerminalTextReply, Typed};
 use protocol::worker::{
-    RunningTerminal, RunningTerminalsReply, TerminalInput, TerminalResize, TerminalRows, TerminalShown, TerminalStart,
-    TerminalTyped, TerminalWatch,
+    RunningTerminal, RunningTerminalsReply, TerminalBounds, TerminalInput, TerminalResize, TerminalRows, TerminalShown,
+    TerminalStart, TerminalText, TerminalTyped, TerminalWatch,
 };
 use tokio::sync::{mpsc, oneshot, watch};
 
-use super::shell;
+use super::shell::{self, Asked};
 use crate::Timers;
 use crate::serve::{HubConnection, Outbox};
 
@@ -60,7 +60,8 @@ pub(super) enum ToShell {
     Resize(TerminalSize),
     Typed(Typed),
     Show(oneshot::Sender<Result<TerminalShown, ApiError>>),
-    Rows(TerminalRows, oneshot::Sender<Result<TerminalRowsReply, ApiError>>),
+    /// What the hub asks of what it shows.
+    Asked(Asked),
     /// Watched by the hub on that connection from now, or by none.
     Watch(Option<HubConnection>),
     Stop,
@@ -168,9 +169,29 @@ impl Terminals {
     /// Rows of the terminal's history by number, as [`TerminalRows`] says.
     pub(crate) async fn rows(&self, asked: TerminalRows) -> Result<TerminalRowsReply, ApiError> {
         let terminal = asked.terminal.clone();
-        let (reply, rows) = oneshot::channel();
-        self.tell(&terminal, ToShell::Rows(asked, reply))?;
-        rows.await.map_err(|_| not_running(&terminal))?
+        self.ask(&terminal, |reply| Asked::Rows(asked, reply)).await
+    }
+
+    /// The ends of a word or a line, as [`TerminalBounds`] says.
+    pub(crate) async fn bounds(&self, asked: TerminalBounds) -> Result<TerminalBoundsReply, ApiError> {
+        let terminal = asked.terminal.clone();
+        self.ask(&terminal, |reply| Asked::Bounds(asked, reply)).await
+    }
+
+    /// The text of cells, a page at a time, as [`TerminalText`] says.
+    pub(crate) async fn text(&self, asked: TerminalText) -> Result<TerminalTextReply, ApiError> {
+        let terminal = asked.terminal.clone();
+        self.ask(&terminal, |reply| Asked::Text(asked, reply)).await
+    }
+
+    async fn ask<T>(
+        &self,
+        terminal: &TerminalId,
+        asked: impl FnOnce(oneshot::Sender<Result<T, ApiError>>) -> Asked,
+    ) -> Result<T, ApiError> {
+        let (reply, answer) = oneshot::channel();
+        self.tell(terminal, ToShell::Asked(asked(reply)))?;
+        answer.await.map_err(|_| not_running(terminal))?
     }
 
     /// Ends the terminal's shell, and the job it was running, and waits until the hub has been sent that it ended.

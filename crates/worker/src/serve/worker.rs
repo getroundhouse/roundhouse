@@ -262,6 +262,10 @@ pub(super) async fn handle(
             Ok(WorkerResponse::TerminalShown(state.terminals.show(&terminal).await?))
         }
         WorkerRequest::TerminalRows(asked) => Ok(WorkerResponse::TerminalRows(state.terminals.rows(asked).await?)),
+        WorkerRequest::TerminalBounds(asked) => {
+            Ok(WorkerResponse::TerminalBounds(state.terminals.bounds(asked).await?))
+        }
+        WorkerRequest::TerminalText(asked) => Ok(WorkerResponse::TerminalText(state.terminals.text(asked).await?)),
         WorkerRequest::TerminalWatch(watch) => {
             state.terminals.watch(watch, state.outbox.connection().await)?;
             Ok(WorkerResponse::Ok)

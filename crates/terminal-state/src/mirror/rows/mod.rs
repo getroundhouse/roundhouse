@@ -7,6 +7,7 @@ mod tests;
 mod counting;
 mod reading;
 mod showing;
+mod text;
 
 pub(super) use counting::Counting;
 pub(super) use showing::Picturing;

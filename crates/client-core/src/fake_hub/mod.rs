@@ -10,6 +10,7 @@ mod base_pages;
 pub mod events;
 mod github;
 mod listing;
+mod logs;
 mod model_lists;
 mod serve;
 mod stand_in;
