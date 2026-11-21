@@ -38,6 +38,11 @@ fn app_keeping(
     state
 }
 
+/// What the app hears from a hub on the app's own release, 0.1.5, running workers as old as `workers`.
+fn on_the_app_s_release(workers: Option<u32>) -> Heard {
+    Heard { workers, hub: "0.1.5".to_owned() }
+}
+
 /// Waits for the update a quit would install to be `version`, and checks the card says the same.
 fn ready_to_be(version: Option<&str>, cx: &mut TestAppContext) {
     crate::executor_waits::until(cx, LOOK_TIMEOUT, format!("{version:?} never got ready"), |cx| {
@@ -199,10 +204,10 @@ fn the_update_ready_is_the_newest_whose_hub_speaks_the_workers_to_keep(cx: &mut 
     let _state = app_keeping(&server.base, public(&pair), &installed, ToKeep::oldest_at(Some(3)), cx);
     ready_to_be(Some("0.1.6"), cx);
 
-    cx.update(|cx| keep(Keeping { workers: Some(4), hub: None }, cx));
+    cx.update(|cx| keep(on_the_app_s_release(Some(4)), cx));
     ready_to_be(Some("0.1.7"), cx);
 
-    cx.update(|cx| keep(Keeping { workers: Some(2), hub: None }, cx));
+    cx.update(|cx| keep(on_the_app_s_release(Some(2)), cx));
     assert_eq!(cx.read(|cx| installs(cx).map(str::to_string)), None, "before the look");
     ready_to_be(None, cx);
 }
@@ -228,7 +233,7 @@ fn workers_to_keep_that_change_during_a_look_are_looked_for_again_at_once(cx: &m
         server.asked().contains(&package_name("0.1.6"))
     });
 
-    cx.update(|cx| keep(Keeping { workers: Some(4), hub: None }, cx));
+    cx.update(|cx| keep(on_the_app_s_release(Some(4)), cx));
     release.now();
 
     ready_to_be(Some("0.1.7"), cx);

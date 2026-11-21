@@ -7,7 +7,7 @@ use client_core::link::LinkState;
 use gpui_kit::Context;
 use protocol::client::HubStatus;
 
-use super::{AppView, Connection, Unconnected, hub_source, restarts};
+use super::{AppView, Connection, ConnectionFailure, Unconnected, hub_source, restarts};
 
 impl AppView {
     /// Listens to the link, which tells of each change: how it stands, a new connection, the records, or an error.
@@ -42,9 +42,18 @@ impl AppView {
         if state.connected().is_none() {
             self.forget_the_hub(cx);
         }
+        if failed_to_start(&state) {
+            crate::updates::keep_without_the_hub(self.hub.build_version, cx);
+        }
         match shown(state) {
             Some(Connection::Ready(client)) => self.connection = Connection::Ready(client),
             Some(connection) if !same(&self.connection, &connection) => {
+                // The hub said its status, so the app has heard which release it's on. One newer than the app, which
+                // the app needs to update to talk to, would otherwise hold back every update that says the oldest
+                // release it updates from.
+                if let Connection::AcrossABreak(status) = &connection {
+                    self.keep_workers_of(status, cx);
+                }
                 self.set_connection(connection, cx);
                 cx.notify();
             }
@@ -117,6 +126,12 @@ fn shown(state: LinkState<Unconnected>) -> Option<Connection> {
     }
 }
 
+/// Whether this computer's hub failed to start, or couldn't be reached, in a way that waits for a person to try again.
+/// A paired hub's failure says nothing of this computer's hub, and a connection that went is tried again by itself.
+fn failed_to_start(state: &LinkState<Unconnected>) -> bool {
+    matches!(state, LinkState::Stopped(Unconnected::Failed(ConnectionFailure::Local(_))))
+}
+
 /// Whether `next` shows as `shown` does, so the panes needn't be told again.
 fn same(shown: &Connection, next: &Connection) -> bool {
     match (shown, next) {
@@ -132,7 +147,6 @@ fn same(shown: &Connection, next: &Connection) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::app::ConnectionFailure;
 
     /// A hub tried again by itself, and one caught up on, keep showing what they did, and a try that was asked for shows
     /// Connecting.
@@ -147,5 +161,18 @@ mod tests {
         assert!(failed(shown(LinkState::Waiting(unreachable()))), "waiting to");
         assert!(failed(shown(LinkState::Stopped(unreachable()))), "stopped");
         assert!(matches!(shown(LinkState::Connecting(None)), Some(Connection::Connecting)), "asked to try");
+    }
+
+    /// Only then does the app's update go by the app's own release alone.
+    #[test]
+    fn only_this_computer_s_hub_stopped_for_a_person_failed_to_start() {
+        let local = || Unconnected::Failed(ConnectionFailure::Local("couldn't start the hub".into()));
+        let paired = || Unconnected::Failed(ConnectionFailure::Unreachable { hosts: vec!["127.0.0.1:1".into()] });
+
+        assert!(failed_to_start(&LinkState::Stopped(local())));
+        assert!(!failed_to_start(&LinkState::Waiting(local())), "a connection that went, tried again by itself");
+        assert!(!failed_to_start(&LinkState::Connecting(Some(local()))), "trying again");
+        assert!(!failed_to_start(&LinkState::Stopped(paired())), "a paired hub");
+        assert!(!failed_to_start(&LinkState::Stopped(Unconnected::Failed(ConnectionFailure::Revoked))), "a paired hub");
     }
 }

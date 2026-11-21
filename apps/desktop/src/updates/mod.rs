@@ -33,12 +33,12 @@ mod tests;
 
 mod updater;
 
-pub(crate) use source::Keeping;
+pub(crate) use source::Heard;
 #[cfg(test)]
 pub(crate) use updater::{answered, checking, installs, problem_shown};
 #[cfg(test)]
 use updater::{apply, keep_looking, keep_up_to_date, newest, options};
 pub use updater::{check_now, run_hooks, start};
-pub(crate) use updater::{keep, observe, ready, restart_to_update, said};
+pub(crate) use updater::{keep, keep_without_the_hub, observe, ready, restart_to_update, said};
 #[cfg(any(test, feature = "testing"))]
 pub use updater::{show_checking, show_problem, show_ready, show_up_to_date};

@@ -30,8 +30,9 @@ impl AppView {
     /// app connects, since its workers are another computer's, which this app's update doesn't restart.
     pub(super) fn keep_workers_of(&mut self, status: &HubStatus, cx: &mut Context<Self>) {
         self.keeping.moving.seen(on_other_builds(&self.records));
-        let hub = Some(status.hub_version.clone());
-        crate::updates::keep(crate::updates::Keeping { workers: hub_source::workers_to_keep(status), hub }, cx);
+        let heard =
+            crate::updates::Heard { workers: hub_source::workers_to_keep(status), hub: status.hub_version.clone() };
+        crate::updates::keep(heard, cx);
         self.keeping.reading = hub_source::runs_older_workers(status).then(|| read_status_after(READ_AGAIN_AFTER, cx));
     }
 

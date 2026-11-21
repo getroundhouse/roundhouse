@@ -86,15 +86,49 @@ pub struct Release<'a> {
     pub hub: Option<&'a HubArchive>,
 }
 
-/// Where an update goes from: the release that's running, and the oldest version of the worker protocol among the
-/// workers the update has to keep, if it has to keep any.
+/// Where an update goes from: the release that's running, the release of the hub whose database the update's hub
+/// migrates next, and the oldest version of the worker protocol among the workers the update has to keep, if it has to
+/// keep any.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Running<'a> {
     pub version: &'a str,
-    /// The release of the hub whose database the update's hub migrates next, where that's another than `version`'s,
-    /// as for an app whose hub hasn't restarted on the app's release yet.
-    pub hub: Option<&'a str>,
+    pub hub: HubRelease<&'a str>,
     pub workers: Option<u32>,
+}
+
+/// Which release a hub is on, as far as an update knows. For an app, that's the hub it last heard from, which can be
+/// older than the app while that hub waits to restart on the app's release, or the app's own once its hub has failed to
+/// start. For a hub updating itself, it's its own.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum HubRelease<V> {
+    /// The app hasn't heard from its hub yet, as in the moment after it opens, so the hub's database may be older than
+    /// any floor, and an update takes only a release that updates from any.
+    NotHeard,
+    On(V),
+}
+
+impl<V: AsRef<str>> HubRelease<V> {
+    pub fn as_deref(&self) -> HubRelease<&str> {
+        match self {
+            Self::NotHeard => HubRelease::NotHeard,
+            Self::On(version) => HubRelease::On(version.as_ref()),
+        }
+    }
+
+    /// Whether an update from a hub on this release takes every release that an update from one on `was` takes, as
+    /// far as their floors go. A hub not heard from takes the fewest, and one on a newer release takes as many or more.
+    /// A version that isn't a release's, such as a build of a commit, is past no floor, as one not heard from is.
+    pub fn past_every_floor_of<W: AsRef<str>>(&self, was: &HubRelease<W>) -> bool {
+        // `None`, past no floor, comes before every release.
+        self.release_order() >= was.release_order()
+    }
+
+    fn release_order(&self) -> Option<[u64; 3]> {
+        match self.as_deref() {
+            HubRelease::NotHeard => None,
+            HubRelease::On(version) => order_of(version).ok(),
+        }
+    }
 }
 
 /// A version that isn't three numbers, which is all the release workflow publishes.
@@ -122,7 +156,8 @@ impl Feed {
     /// to: the newest that's newer than it, takes over from it, and has an archive of its hub. `None` when there's
     /// none, such as when it's the newest.
     pub fn hub_update(&self, running: &str, oldest: u32) -> Result<Option<Release<'_>>, BadVersion> {
-        let from = Running { version: running, hub: None, workers: Some(oldest) };
+        // Its database is from its own release, which it migrated as it started.
+        let from = Running { version: running, hub: HubRelease::On(running), workers: Some(oldest) };
         let running = order_of(running)?;
         let mut newest: Option<([u64; 3], Release<'_>)> = None;
         for release in self.taking_over(from).filter(|release| release.hub.is_some()) {
@@ -216,11 +251,14 @@ impl Release<'_> {
     /// speaks the workers the update has to keep, so the update ends none of them and crosses at most one break in the
     /// worker protocol, as `docs/principles/protocol.md` says. And `running`, and the hub it names, are at least the
     /// oldest release it updates from, so its hub can migrate the database, as "The database" in
-    /// `docs/principles/state.md` says. An app or a hub takes the newest release it can, so it steps through each floor.
+    /// `docs/principles/state.md` says. A hub not heard from yet is past no floor. An app or a hub takes the newest
+    /// release it can, so it steps through each floor.
     pub fn takes_over(&self, running: Running<'_>) -> bool {
-        running.workers.is_none_or(|oldest| self.speaks(oldest))
-            && self.updates_from(running.version)
-            && running.hub.is_none_or(|hub| self.updates_from(hub))
+        let hub = match running.hub {
+            HubRelease::NotHeard => self.updates_from.is_none(),
+            HubRelease::On(hub) => self.updates_from(hub),
+        };
+        running.workers.is_none_or(|oldest| self.speaks(oldest)) && self.updates_from(running.version) && hub
     }
 
     /// Whether its hub speaks workers of `version`. One from before releases said may not.

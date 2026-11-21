@@ -22,7 +22,7 @@ mod keeping;
 mod signed_feed;
 mod stepping;
 
-pub(crate) use keeping::{Keeping, Kept, ToKeep};
+pub(crate) use keeping::{Heard, Kept, ToKeep};
 #[cfg(test)]
 use signed_feed::FEED_LIMIT_BYTES;
 #[cfg(test)]

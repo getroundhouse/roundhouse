@@ -1,4 +1,4 @@
-use update_feed::{Feed, Running, UpdateFeedKey, fixture};
+use update_feed::{Feed, HubRelease, Running, UpdateFeedKey, fixture};
 
 use super::*;
 use crate::updates::signing::{key_pair, public};
@@ -193,7 +193,7 @@ fn kept_of(feed: &str, version: &str, workers: Option<u32>) -> Vec<String> {
     let kept = only_taking_over(
         releases,
         &serde_json::from_str::<Feed>(feed).unwrap(),
-        Running { version, hub: None, workers },
+        Running { version, hub: HubRelease::On(version), workers },
     );
     kept.Assets.iter().map(|package| format!("{} {}", package.Version, package.Type)).collect()
 }
@@ -238,33 +238,80 @@ fn with_no_workers_to_keep_every_release_that_says_no_floor_is_kept() {
     assert_eq!(kept_of(SPEAKING, "0.1.4", None), ["0.1.5 Full", "0.1.6 Full", "0.1.7 Delta", "0.1.7 Full"]);
 }
 
-/// The app's own release, as Velopack's manifest says it, is where its update goes from, and so is its hub's, whose
-/// database the update's hub migrates, while that's older.
-#[test]
-fn the_app_s_release_and_its_hub_s_are_where_its_update_goes_from() {
-    let read = |app: &str, hub: Option<&str>| {
-        let (feed, signature, key) = signed(UPDATING_FROM);
-        let server = serve_feed(vec![Reply::file(feed)], vec![Reply::file(signature)]);
-        let keeping = ToKeep::keeping(Keeping { workers: None, hub: hub.map(str::to_owned) });
-        let source = SignedSource::waiting(&server.base, key, keeping, Duration::ZERO);
-        let app = Manifest { version: app.parse().unwrap(), ..Manifest::default() };
-        let releases = source.get_release_feed("macos-arm64", &app, "").unwrap();
-        releases.Assets.iter().map(|package| format!("{} {}", package.Version, package.Type)).collect::<Vec<_>>()
-    };
-
-    assert_eq!(read("0.1.5", None), ["0.1.6 Full"]);
-    assert_eq!(read("0.1.6", None), ["0.1.6 Full", "0.1.7 Delta", "0.1.7 Full"]);
-    assert_eq!(read("0.1.6", Some("0.1.5")), ["0.1.6 Full"], "the hub hasn't restarted on 0.1.6 yet");
+/// What the app knows of this computer's hub, for [`read_from`].
+#[derive(Clone, Copy)]
+enum Hub<'a> {
+    NotHeard,
+    Heard(&'a str),
+    FailedToStart,
 }
 
-/// Another hub may have a database that an update that kept the last one's can't migrate, so it's more to keep.
-#[test]
-fn hearing_from_another_hub_is_more_to_keep() {
-    let to_keep = ToKeep::oldest_at(Some(3));
-    let on = |workers, hub: &str| Keeping { workers: Some(workers), hub: Some(hub.to_owned()) };
+/// What Velopack is given of [`UPDATING_FROM`], as the source reads it, by an app on `app` that knows this of its hub.
+fn read_from(app: &str, hub: Hub<'_>) -> Vec<String> {
+    let (feed, signature, key) = signed(UPDATING_FROM);
+    let server = serve_feed(vec![Reply::file(feed)], vec![Reply::file(signature)]);
+    let keeping = ToKeep::oldest_at(None);
+    match hub {
+        Hub::NotHeard => {}
+        Hub::Heard(hub) => _ = keeping.set(Heard { workers: None, hub: hub.to_owned() }),
+        Hub::FailedToStart => _ = keeping.failed_to_start(app),
+    }
+    let source = SignedSource::waiting(&server.base, key, keeping, Duration::ZERO);
+    let app = Manifest { version: app.parse().unwrap(), ..Manifest::default() };
+    let releases = source.get_release_feed("macos-arm64", &app, "").unwrap();
+    releases.Assets.iter().map(|package| format!("{} {}", package.Version, package.Type)).collect()
+}
 
-    assert_eq!(to_keep.set(on(3, "0.1.5")), Kept::Older, "heard from for the first time");
+/// The app's own release, as Velopack's manifest says it, is where its update goes from, and so is its hub's, whose
+/// database the update's hub migrates, while that's older. Until the app has heard from its hub, that database may be
+/// older than any floor, so the update takes no release that says the oldest release it updates from.
+#[test]
+fn the_app_s_release_and_its_hub_s_are_where_its_update_goes_from() {
+    assert_eq!(read_from("0.1.5", Hub::Heard("0.1.5")), ["0.1.6 Full"]);
+    assert_eq!(read_from("0.1.6", Hub::Heard("0.1.6")), ["0.1.6 Full", "0.1.7 Delta", "0.1.7 Full"]);
+    assert_eq!(read_from("0.1.6", Hub::Heard("0.1.5")), ["0.1.6 Full"], "the hub hasn't restarted on 0.1.6 yet");
+    assert_eq!(read_from("0.1.6", Hub::NotHeard), ["0.1.6 Full"], "no hub heard from yet");
+}
+
+/// So a release that fixes a broken hub still arrives, though the hub's database may be older than its floor.
+#[test]
+fn once_its_hub_has_failed_to_start_the_app_s_update_goes_by_the_app_s_release_alone() {
+    assert_eq!(read_from("0.1.6", Hub::FailedToStart), ["0.1.6 Full", "0.1.7 Delta", "0.1.7 Full"]);
+    assert_eq!(read_from("0.1.5", Hub::FailedToStart), ["0.1.6 Full"], "0.1.7 updates from 0.1.6 and nothing older");
+}
+
+/// What the update took before the app heard from its hub updates from any release, so the first hub heard from is
+/// more to keep only for its workers. A hub on an older release than before may have a database that an update that
+/// kept the last one's can't migrate, so it's more to keep.
+#[test]
+fn hearing_from_a_hub_on_an_older_release_is_more_to_keep() {
+    let on = |workers, hub: &str| Heard { workers: Some(workers), hub: hub.to_owned() };
+    let to_keep = ToKeep::oldest_at(Some(3));
+    let older_workers = ToKeep::oldest_at(Some(3));
+
+    assert_eq!(to_keep.set(on(3, "0.1.5")), Kept::Newer, "heard from for the first time");
     assert_eq!(to_keep.set(on(3, "0.1.5")), Kept::Same);
     assert_eq!(to_keep.set(on(4, "0.1.5")), Kept::Newer);
-    assert_eq!(to_keep.set(on(4, "0.1.6")), Kept::Older);
+    assert_eq!(to_keep.set(on(4, "0.1.6")), Kept::Newer, "a newer hub");
+    assert_eq!(to_keep.set(on(4, "0.1.5")), Kept::Older);
+    assert_eq!(older_workers.set(on(2, "0.1.5")), Kept::Older, "heard from for the first time, with older workers");
+}
+
+/// An update the app took while its hub had failed to start may not update from the hub's release, so hearing from a
+/// hub on an older one than the app's drops it. A hub that fails, starts and fails again changes what's ready only as
+/// far as it must.
+#[test]
+fn hearing_from_a_hub_older_than_the_app_after_it_failed_to_start_is_more_to_keep() {
+    let on = |hub: &str| Heard { workers: Some(3), hub: hub.to_owned() };
+    let failed = ToKeep::oldest_at(Some(3));
+    let started_on_the_app_s = ToKeep::oldest_at(Some(3));
+
+    assert_eq!(failed.failed_to_start("0.1.6"), Kept::Newer, "going by the app's own release");
+    assert_eq!(failed.failed_to_start("0.1.6"), Kept::Same, "failing again");
+    assert_eq!(failed.set(on("0.1.5")), Kept::Older, "a hub older than the app");
+    assert_eq!(failed.failed_to_start("0.1.6"), Kept::Newer, "failing once it was heard from");
+
+    started_on_the_app_s.failed_to_start("0.1.6");
+    assert_eq!(started_on_the_app_s.set(on("0.1.6")), Kept::Newer, "a hub on the app's release");
+    assert_eq!(started_on_the_app_s.failed_to_start("0.1.6"), Kept::Newer, "failing again");
 }
