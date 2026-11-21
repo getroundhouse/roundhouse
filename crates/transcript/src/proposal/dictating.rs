@@ -56,7 +56,7 @@ impl ProposalView {
         match event {
             dictation_ui::Event::Error(message) => cx.emit(ProposalEvent::Error(message.clone())),
             dictation_ui::Event::Ended { submit: true } => self.send(cx),
-            dictation_ui::Event::Ended { submit: false } => {}
+            dictation_ui::Event::Ended { submit: false } | dictation_ui::Event::Started => {}
         }
         cx.notify();
     }

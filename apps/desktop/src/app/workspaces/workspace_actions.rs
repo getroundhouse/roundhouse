@@ -26,7 +26,8 @@ impl AppView {
                 return;
             }
             let (Some(records), Some(drafts)) = (self.feed.clone(), self.drafts.clone()) else { return };
-            let pane = cx.new(|cx| WorkspacePane::new(client, records, drafts, shown, window, cx));
+            let conversations = self.conversations.clone();
+            let pane = cx.new(|cx| WorkspacePane::new(client, records, drafts, conversations, shown, window, cx));
             let (busy, retitling) = (self.busy.clone(), self.retitling.contains(&id));
             pane.update(cx, |pane, cx| {
                 pane.set_busy(busy, cx);

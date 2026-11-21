@@ -49,6 +49,8 @@ pub struct AppView {
     /// Whether the window was in front when the panes were last told whether they're drawn.
     pub(super) in_front: bool,
     /// Client-core's copy of the hub's records, which `records` shows.
+    /// The hub's chats' conversations on this Mac, which every pane of its draws the bar of.
+    pub(super) conversations: Entity<conversation::Conversations>,
     pub(super) feed: Option<RecordsFeed>,
     /// Keeps what's typed in each chat on the hub, for every pane, across connections.
     pub(super) drafts: Option<Drafts>,
@@ -141,6 +143,7 @@ impl AppView {
             // Until the window says it's in front, so nothing is read that may not have been seen.
             in_front: false,
             feed: None,
+            conversations: crate::conversing::conversations(cx),
             drafts: None,
             joining: None,
             restartable_hub: None,
@@ -291,6 +294,7 @@ impl AppView {
             self.show_pull_requests(&feed, cx);
             self.feed = Some(feed);
         }
+        self.conversations.update(cx, |conversations, _| conversations.connected(&client));
         // Every pane stays as it was, with whatever's typed in it, and carries on here.
         for pane in self.panes.values() {
             pane.update(cx, |p, cx| p.reconnect(&client, cx));

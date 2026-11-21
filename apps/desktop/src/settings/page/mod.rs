@@ -14,6 +14,7 @@ mod providers;
 mod redraw;
 mod rows;
 mod sidebar;
+mod speech_row;
 /// What the pages' tests against a stand-in hub share. The stand-in listens on a Unix socket.
 #[cfg(all(test, unix))]
 mod stand_in_hub;

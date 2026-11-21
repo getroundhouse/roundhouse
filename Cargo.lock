@@ -1407,7 +1407,6 @@ dependencies = [
  "protocol",
  "speaking",
  "tempfile",
- "waiting",
 ]
 
 [[package]]
@@ -1978,6 +1977,7 @@ dependencies = [
  "agents",
  "anyhow",
  "client-core",
+ "conversation",
  "desktop",
  "dictation",
  "dictation-ui",

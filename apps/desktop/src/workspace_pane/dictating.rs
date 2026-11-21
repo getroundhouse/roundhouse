@@ -17,8 +17,13 @@ pub(super) enum Then {
 impl WorkspacePane {
     pub(super) fn dictation_event(&mut self, event: &dictation_ui::Event, window: &mut Window, cx: &mut Context<Self>) {
         match event {
+            dictation_ui::Event::Started => self.talking(cx),
             dictation_ui::Event::Error(message) => cx.emit(PaneEvent::Error(message.clone())),
             dictation_ui::Event::Ended { submit } => {
+                // In conversation mode, letting go of Space sends what was said.
+                if self.send_said(window, cx) {
+                    return cx.notify();
+                }
                 let then = self.after_dictation.ended(*submit);
                 match then {
                     Some(Then::Send) => self.submit(window, cx),

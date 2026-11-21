@@ -41,17 +41,15 @@ impl Conversations {
     }
 
     /// Follows `sessions`, every chat's record the hub has sent: each in conversation mode is followed, and read out
-    /// with `voices` while its conversation is here, and a chat whose mode has ended, or that's gone, is let go. The
-    /// voice's files are fetched as a conversation comes here.
+    /// with `voices` while its conversation is here, and a chat whose mode has ended, or that's gone, is let go. Nothing
+    /// is fetched for it: the voice reads once speech is on and ready.
     pub fn follow<'a>(&mut self, sessions: impl IntoIterator<Item = &'a Session>, voices: &Voices) {
         let Some(client) = &self.client else { return };
         let mut on = std::collections::HashSet::new();
         for session in sessions.into_iter().filter(|session| session.interaction.device().is_some()) {
             let conversation =
                 self.chats.entry(session.id.clone()).or_insert_with(|| Conversation::new(session.id.clone()));
-            if conversation.follow(client, session, || voices.voice(), &self.tell) {
-                voices.get_ready();
-            }
+            conversation.follow(client, session, || voices.voice(), &self.tell);
             on.insert(session.id.clone());
         }
         self.chats.retain(|id, _| on.contains(id));
@@ -97,8 +95,8 @@ mod tests {
         Session { interaction: Interaction::Conversation { device: Box::new(device) }, ..session(id) }
     }
 
-    /// Every chat whose conversation is here is read out, whatever an app shows, and the voice is got ready as one
-    /// comes. A chat in the mode on another device is followed for its bar. Closing a chat whose conversation is here
+    /// Every chat whose conversation is here is read out, whatever an app shows, and nothing is fetched for the voice
+    /// as one comes, since speech is turned on by itself. A chat in the mode on another device is followed for its bar. Closing a chat whose conversation is here
     /// ends the mode, and a chat whose mode has ended is let go.
     #[test]
     fn each_conversation_here_is_read_out_and_ends_as_its_chat_closes() {
@@ -122,8 +120,7 @@ mod tests {
         assert!(conversations.get(&here.id).is_some_and(Conversation::is_here));
         assert!(conversations.get(&there.id).is_some_and(|c| !c.is_here()));
         assert!(conversations.get(&typing.id).is_none());
-        let fetched = || !files.requests().is_empty();
-        waiting::thread::until(Duration::from_secs(10), "the voice to be fetched", fetched);
+        assert!(files.requests().is_empty(), "nothing fetched without speech on");
 
         let closed = Session { closed_at_ms: Some(1), ..here.clone() };
         conversations.follow([&closed, &there], &voices);

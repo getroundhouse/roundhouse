@@ -22,6 +22,10 @@ impl AppView {
     /// it holds for its workspace.
     pub(super) fn refresh(&mut self, feed: &RecordsFeed, cx: &mut Context<Self>) {
         let records = feed.snapshot();
+        // Every chat's conversation, whichever workspace shows.
+        if let Some(voices) = crate::conversing::voices(cx).cloned() {
+            self.conversations.update(cx, |conversations, _| conversations.follow(records.every_session(), &voices));
+        }
         self.drop_hidden_panes(&records, cx);
         for (id, pane) in &self.panes {
             let Some(shown) = records.in_workspace(id) else { continue };

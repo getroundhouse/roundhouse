@@ -6,7 +6,7 @@
 
 use std::time::{Duration, Instant};
 
-use client_core::conversation::{FromVoice, ToVoice, Voice as _, VoiceReady, VoiceText};
+use client_core::conversation::{FromVoice, Readiness, ToVoice, Voice as _, VoiceText};
 use conversation::Voices;
 
 fn main() {
@@ -15,12 +15,12 @@ fn main() {
     let started = Instant::now();
     let at = || started.elapsed().as_secs_f64();
     let voices = Voices::new(model_dir.into(), "this device");
-    voices.get_ready();
+    voices.turn_on();
     loop {
         match voices.ready() {
-            VoiceReady::Ready => break,
-            VoiceReady::Failed(why) => panic!("couldn't get the voice ready: {why}"),
-            VoiceReady::Fetching(done) => println!("{:6.2}s fetching {done:?}", at()),
+            Readiness::Ready => break,
+            Readiness::Failed(why) => panic!("couldn't get the voice ready: {why}"),
+            other => println!("{:6.2}s {}", at(), other.says()),
         }
         let _ = voices.changed().recv_timeout(Duration::from_secs(5));
     }

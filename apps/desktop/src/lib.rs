@@ -12,6 +12,7 @@ pub mod busy;
 pub mod changes;
 pub mod checkout;
 mod composing;
+pub mod conversing;
 pub mod dictating;
 #[cfg(test)]
 mod executor_waits;
@@ -106,6 +107,7 @@ actions!(
         FlipImage,
         CreatePullRequest,
         StopAgent,
+        ConversationMode,
         GoBack,
         GoForward,
         NextWorkspace,
@@ -144,6 +146,7 @@ pub fn open_main_window(
     keys::set(cx);
     dictation_ui::install(dictating::source(), cx);
     dictating::start(&hub.paths.data_dir, cx);
+    conversing::start(&hub.paths.data_dir, cx);
     menus::set(hub.build_version, cx);
     std::thread::spawn(look::preload_highlighting);
     let (display_id, window_bounds) = window_place::open_at(opens, &hub.paths.data_dir, cx);

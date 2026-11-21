@@ -5,7 +5,7 @@ use protocol::fixtures::session;
 use protocol::model::{ClientDevice, DeviceId, Interaction, ReplyPlace, Session, SessionStatus, SpokenThrough};
 use protocol::tail::{Covering, Tail};
 
-use crate::conversation::{Bar, HereNow, Shows, Stage, VoiceReady};
+use crate::conversation::{Bar, HereNow, Needs, Readiness, Shows, Stage};
 
 fn studio() -> ClientDevice {
     ClientDevice { id: "studio".into(), name: "Mac Studio".into() }
@@ -20,7 +20,7 @@ fn on(device: ClientDevice, status: SessionStatus) -> Session {
 }
 
 fn idle() -> HereNow {
-    HereNow { hearing: false, reading: false, voice: VoiceReady::Ready }
+    HereNow { hearing: false, reading: false, needs: Needs::READY }
 }
 
 fn covered(line: &str) -> Tail {
@@ -35,7 +35,7 @@ fn shows(bar: &mut Bar, session: &Session, tail: &Tail, this: Option<&DeviceId>,
 }
 
 fn here(stage: Stage) -> Shows {
-    Shows::Here { stage, voice: VoiceReady::Ready }
+    Shows::Here { stage, needs: Needs::READY }
 }
 
 /// On the device that has it, hearing comes first, then the voice, then the agent at work with its line.
@@ -55,8 +55,16 @@ fn here_the_bar_says_what_the_conversation_is_at() {
     );
     let reading = HereNow { reading: true, ..idle() };
     assert_eq!(shows(&mut bar, &working, &line, Some(&this), &reading), here(Stage::Speaking));
-    let hearing = HereNow { hearing: true, ..reading };
+    let hearing = HereNow { hearing: true, ..reading.clone() };
     assert_eq!(shows(&mut bar, &working, &line, Some(&this), &hearing), here(Stage::Hearing));
+
+    let needs = Needs { dictation: Readiness::NotOn, speech: Readiness::Ready };
+    let not_ready = HereNow { needs: needs.clone(), ..reading };
+    assert_eq!(
+        shows(&mut bar, &working, &line, Some(&this), &not_ready),
+        Shows::Here { stage: Stage::Waiting, needs },
+        "until both are ready, it waits for them, whatever the agent does"
+    );
 }
 
 /// Another device says where the conversation is, with what it's at there when the chat says, and the device it
@@ -99,17 +107,18 @@ fn the_bar_says_where_the_conversation_stands_in_the_same_words_everywhere() {
     let some = |words: &str| Some(words.to_string());
     let elsewhere = |stage| Shows::Elsewhere { device: "Mac Studio".into(), stage };
     let line = || Stage::Working { line: Some("Hold on, one sec.".into()) };
-    let waiting = |voice| Shows::Here { stage: Stage::Waiting, voice };
+    let waiting = |dictation, speech| Shows::Here { stage: Stage::Waiting, needs: Needs { dictation, speech } };
 
     assert_eq!(says(here(Stage::Waiting)), (None, None), "each says how to talk its own way");
     assert_eq!(says(here(Stage::Hearing)), (None, None), "what's heard is the hearing's own");
     assert_eq!(says(here(Stage::Working { line: None })), (None, None));
     assert_eq!(says(here(line())), (some("Hold on, one sec."), None));
     assert_eq!(says(here(Stage::Speaking)), (some("Speaking"), None));
-    assert_eq!(says(waiting(VoiceReady::Fetching(None))), (some("Getting the voice ready"), None));
-    assert_eq!(says(waiting(VoiceReady::Fetching(Some(0.404)))), (some("Getting the voice ready, 40%"), None));
-    let failed = waiting(VoiceReady::Failed("Hugging Face answered 404.".into()));
-    assert_eq!(says(failed), (some("Couldn't get the voice ready: Hugging Face answered 404."), None));
+    let speech = |speech| says(waiting(Readiness::Ready, speech));
+    assert_eq!(speech(Readiness::Downloading(None)), (some("Getting speech ready"), None));
+    assert_eq!(speech(Readiness::Downloading(Some(0.404))), (some("Getting speech ready, 40%"), None));
+    let failed = speech(Readiness::Failed("Hugging Face answered 404.".into()));
+    assert_eq!(failed, (some("Couldn't get speech ready: Hugging Face answered 404."), None));
 
     assert_eq!(says(elsewhere(None)), (some("The conversation is on Mac Studio"), None));
     assert_eq!(says(elsewhere(Some(Stage::Working { line: None }))), (some("The conversation is on Mac Studio"), None));
@@ -118,4 +127,51 @@ fn the_bar_says_where_the_conversation_stands_in_the_same_words_everywhere() {
     let moved = Shows::MovedTo { device: "Mac Studio".into() };
     assert_eq!(says(moved), (some("The conversation moved to Mac Studio"), None));
     assert_eq!(says(Shows::Composer), (None, None));
+}
+
+/// While the conversation is here and dictation or speech isn't ready, the bar says what's missing: what failed, then
+/// what isn't on, then what's getting ready.
+#[test]
+fn the_bar_says_what_the_conversation_still_needs() {
+    let says = |dictation, speech| Needs { dictation, speech }.says();
+    let some = |words: &str| Some(words.to_string());
+    let failed = || Readiness::Failed("Hugging Face answered 404.".into());
+
+    assert_eq!(says(Readiness::Ready, Readiness::Ready), None);
+    assert_eq!(says(Readiness::NotOn, Readiness::Ready), some("Turn on dictation to talk"));
+    assert_eq!(says(Readiness::Ready, Readiness::NotOn), some("Turn on speech to hear replies"));
+    assert_eq!(says(Readiness::NotOn, Readiness::NotOn), some("Turn on dictation and speech to talk"));
+    assert_eq!(says(Readiness::Preparing, Readiness::Ready), some("Getting dictation ready"));
+    assert_eq!(says(Readiness::Downloading(Some(0.5)), Readiness::Ready), some("Getting dictation ready, 50%"));
+    let both = says(Readiness::Downloading(Some(0.5)), Readiness::Downloading(None));
+    assert_eq!(both, some("Getting dictation and speech ready"));
+    assert_eq!(
+        says(Readiness::Preparing, Readiness::NotOn),
+        some("Turn on speech to hear replies"),
+        "what isn't on first"
+    );
+    let failed_first = says(Readiness::NotOn, failed());
+    assert_eq!(failed_first, some("Couldn't get speech ready: Hugging Face answered 404."), "what failed first");
+}
+
+/// The card that sets up the mode lists how each stands, and its button names what it turns on.
+#[test]
+fn the_card_says_how_each_stands_and_what_turning_on_turns_on() {
+    let turn_on = |dictation, speech| Needs { dictation, speech }.turn_on();
+    assert_eq!(turn_on(Readiness::NotOn, Readiness::Ready).as_deref(), Some("Turn on dictation"));
+    assert_eq!(turn_on(Readiness::Preparing, Readiness::NotOn).as_deref(), Some("Turn on speech"));
+    assert_eq!(turn_on(Readiness::NotOn, Readiness::NotOn).as_deref(), Some("Turn on both"));
+    assert_eq!(turn_on(Readiness::Downloading(None), Readiness::Ready), None);
+
+    let rows = [
+        (Readiness::NotOn, "Not on"),
+        (Readiness::Downloading(None), "Downloading"),
+        (Readiness::Downloading(Some(0.404)), "Downloading, 40%"),
+        (Readiness::Preparing, "Preparing"),
+        (Readiness::Ready, "Ready"),
+        (Readiness::Failed("Hugging Face answered 404.".into()), "Couldn't get it ready: Hugging Face answered 404."),
+    ];
+    for (readiness, says) in rows {
+        assert_eq!(readiness.says(), says);
+    }
 }

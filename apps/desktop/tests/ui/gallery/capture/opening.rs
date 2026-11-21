@@ -13,6 +13,9 @@ use client_core::fake_hub;
 use crate::gallery::frame;
 use crate::support::hub_source;
 
+/// The device the app is on in every screen, by its ID, which a world puts a chat's conversation on to have it here.
+pub(crate) const THIS_MAC: &str = "this-mac";
+
 /// The real app, connected to a hub that holds `world`, if there's one, in a directory of its own, which goes with it,
 /// and in a [`frame::WIDE`] window if it's `wide`.
 pub(super) fn open(
@@ -25,6 +28,7 @@ pub(super) fn open(
     let hub = hub_source(dir.path());
     if let Some(world) = world {
         std::fs::create_dir_all(&hub.paths.data_dir).unwrap();
+        this_mac(&hub.paths.data_dir);
         let built = world();
         if !built.saved_hubs.is_empty() {
             write_saved_hubs(&hub.paths.data_dir, &built.saved_hubs);
@@ -57,6 +61,18 @@ pub(super) fn open(
     }
     app.wait("the app to connect", |view, _| !matches!(view.connection(), Connection::Connecting));
     (dir, app)
+}
+
+/// Has the app be on the device [`THIS_MAC`], with its voice's files here, so a chat whose conversation is on it
+/// reads nothing from Hugging Face. They're as big as they say they are and empty, which only their size says is there,
+/// and nothing reads from them unless something is read out, which no screen does.
+fn this_mac(data_dir: &Path) {
+    std::fs::write(data_dir.join("device-id"), THIS_MAC).unwrap();
+    let voice = conversation::FILES.dir(&data_dir.join("speaking").join("phonon"));
+    std::fs::create_dir_all(&voice).unwrap();
+    for file in conversation::FILES.files {
+        std::fs::File::create(voice.join(file.path)).unwrap().set_len(file.size_bytes).unwrap();
+    }
 }
 
 fn write_saved_hubs(data_dir: &Path, hubs: &[(&str, &str)]) {

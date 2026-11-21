@@ -4,7 +4,6 @@
 //! stands as it follows that choice, from downloading and preparing the model to ready, and Space held to dictate.
 //! Each recording is its composer's, in `workspace_pane/dictating.rs`.
 
-mod choice;
 mod deleting;
 mod downloading;
 pub(crate) mod language;
@@ -12,14 +11,13 @@ mod microphone;
 mod readiness;
 mod words;
 
-pub(crate) use choice::DictationChoice;
 pub(crate) use downloading::observe_progress;
 pub(crate) use microphone::microphone;
 pub use microphone::{HIDE, MICROPHONE, TURN_ON};
+pub(crate) use readiness::{for_conversation, observe, observe_in, ready, retry, runs_here, source, start};
 #[cfg(feature = "testing")]
-pub use readiness::{is_ready, use_engine, use_model};
-pub(crate) use readiness::{observe, ready, runs_here, source, start};
+pub use readiness::{is_ready, set_on, use_engine, use_model};
 #[cfg(test)]
 pub(crate) use words::gigabytes;
-pub(crate) use words::status_box;
 pub use words::{DELETE, RETRY, STATUS};
+pub(crate) use words::{size, status_box};

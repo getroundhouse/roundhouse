@@ -47,6 +47,8 @@ pub enum Region {
     LatestButton,
     /// What the agent asks in the composer's place: a question, or to use a tool.
     Question,
+    /// Conversation mode's bar, in the composer's place.
+    ConversationBar,
     /// What an edit changed, shown while the pointer is on its line.
     EditPreview,
     /// A finished turn's models, times and tokens, shown while the pointer is on its last line.
@@ -57,6 +59,9 @@ pub enum Region {
     UsageCard,
     /// What the composer's microphone opens until dictation is ready: the offer to turn it on, or how it stands.
     DictationCard,
+    /// What conversation mode's button opens until dictation and speech are ready: how each stands, and turning them
+    /// on.
+    ConversationCard,
     /// Home, which lists every workspace.
     Home,
     /// The card that says what an update does, above its card in the sidebar.
@@ -97,11 +102,13 @@ impl Region {
             Region::FindBar => "find-bar",
             Region::LatestButton => "latest-button",
             Region::Question => "question",
+            Region::ConversationBar => "conversation-bar",
             Region::EditPreview => "edit-preview",
             Region::TurnCard => "turn-card",
             Region::ContextCard => "context-card",
             Region::UsageCard => "usage-card",
             Region::DictationCard => "dictation-card",
+            Region::ConversationCard => "conversation-card",
             Region::Home => "home-page",
             Region::UpdateDetails => "update-details-card",
             Region::WorkspaceCard => "workspace-card",

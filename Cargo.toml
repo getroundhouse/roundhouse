@@ -118,6 +118,7 @@ models = { path = "crates/models" }
 sound = { path = "crates/sound" }
 phonon = { path = "crates/phonon" }
 speaking = { path = "crates/speaking" }
+conversation = { path = "crates/conversation" }
 now-playing = { path = "crates/now-playing" }
 update-feed = { path = "crates/update-feed" }
 windows-icon = { path = "crates/windows-icon" }

@@ -15,11 +15,11 @@ fn a_keyboard_started_recording_keeps_escape_and_typing_in_the_input(cx: &mut Te
     ui.new_workspace();
     let engine = ready(&mut ui);
     ui.input("Keep this");
-    ui.press_at_once(&["tab", "tab", "tab"]);
+    ui.press_at_once(&["tab", "tab", "tab", "tab"]);
     assert_eq!(
         ui.cx.update_window(ui.handle, |_, window, _| window.find("dictate").focused()).unwrap(),
         Some(true),
-        "Tab reaches the microphone after Attach and Model"
+        "Tab reaches the microphone after Attach, Model and Conversation mode"
     );
     press_control(&mut ui, "space");
     assert!(ui.has(dictation_ui::STOP));

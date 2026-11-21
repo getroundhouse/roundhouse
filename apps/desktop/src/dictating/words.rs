@@ -66,19 +66,38 @@ pub(crate) fn status_box(cx: &App) -> Option<StatusBox> {
             StatusBox { action: Some(retry), ..said(Lucide::TriangleAlert, Tone::Problem, Some(lead), detail) }
         }
         Readiness::NeedsNewerMacos => {
-            let detail = format!("It needs macOS {} or later.", dictation::nemotron::OLDEST_MACOS);
-            said(Lucide::TriangleAlert, Tone::Problem, Some("Dictation can't run on this Mac."), detail)
+            said(Lucide::TriangleAlert, Tone::Problem, Some("Dictation can't run on this Mac."), needs_newer_macos())
         }
     })
 }
 
 /// What failed, as the step that did, and why, in a few words.
 fn failed(failure: &Failure) -> (&'static str, String) {
+    let lead = match failure {
+        Failure::Download(_) => "Couldn't download the model:",
+        Failure::Start(_) => "Couldn't start dictation:",
+        Failure::Prepare(_) => "Couldn't prepare the model:",
+    };
+    (lead, why(failure))
+}
+
+/// Why dictation couldn't be made ready, in a few words.
+pub(super) fn why(failure: &Failure) -> String {
     match failure {
-        Failure::Download(e) => ("Couldn't download the model:", e.why("this Mac")),
-        Failure::Start(e) => ("Couldn't start dictation:", format!("{e}.")),
-        Failure::Prepare(e) => ("Couldn't prepare the model:", format!("{e}.")),
+        Failure::Download(e) => e.why("this Mac"),
+        Failure::Start(e) => format!("{e}."),
+        Failure::Prepare(e) => format!("{e}."),
     }
+}
+
+/// Why dictation can't run on this Mac.
+pub(super) fn needs_newer_macos() -> String {
+    format!("It needs macOS {} or later.", dictation::nemotron::OLDEST_MACOS)
+}
+
+/// How big the model is, as conversation mode's card says it, such as `2.4 GB`.
+pub(crate) fn size() -> String {
+    format!("{} GB", gigabytes(dictation::nemotron::MODEL.size_bytes()))
 }
 
 /// `bytes` in gigabytes, to a tenth.

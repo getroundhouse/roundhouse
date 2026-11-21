@@ -69,6 +69,7 @@ Find and stopping the agent are for a chat, so they do nothing unless the chat s
 | Space, held | On a Mac, once dictation is ready, dictate while it's held, after a moment |
 | `Option-Space`, held | The same, at once |
 | Escape, `Option-Escape` | While dictating, stop, and put the composer back as it was |
+| `Cmd-Shift-Space` | Turn [conversation mode](../guides/talk-with-the-agent.md) on, where dictation is. Then Space, held, talks, and letting go sends |
 
 ## A question from the agent
 

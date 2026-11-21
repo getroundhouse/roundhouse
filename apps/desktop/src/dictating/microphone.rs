@@ -11,7 +11,8 @@ use gpui_kit::{
 use look::Region;
 
 use crate::HoldToDictate;
-use crate::dictating::{self, DictationChoice};
+use crate::dictating;
+use crate::settings::Choice;
 use crate::settings::{change, get};
 
 /// The microphone, whichever it is, for tests to find it by, and its popover's buttons.
@@ -42,10 +43,10 @@ fn state(cx: &App) -> Option<Microphone> {
         return None;
     }
     match get(cx).dictation {
-        DictationChoice::Off => None,
-        DictationChoice::AskFirst => Some(Microphone::Offers),
-        DictationChoice::On if dictating::ready(cx) => Some(Microphone::Dictates),
-        DictationChoice::On => Some(Microphone::Stands),
+        Choice::Off => None,
+        Choice::AskFirst => Some(Microphone::Offers),
+        Choice::On if dictating::ready(cx) => Some(Microphone::Dictates),
+        Choice::On => Some(Microphone::Stands),
     }
 }
 
@@ -102,14 +103,14 @@ fn popover(window: &mut Window, cx: &mut App) -> AnyElement {
     let card = look::card(look::CardKind::Over, look::CardWidth::Regular)
         .region(Region::DictationCard)
         .heading(look::card_heading(TITLE));
-    if get(cx).dictation != DictationChoice::AskFirst {
+    if get(cx).dictation != Choice::AskFirst {
         return card.children(dictating::status_box(cx).map(|status| status.draw(cx))).into_any_element();
     }
     let turn_on = look::button(TURN_ON, look::ButtonKind::Main, look::ControlSize::Regular, "Turn on")
-        .on_click(|_, _, cx| change(cx, |settings| settings.dictation = DictationChoice::On));
+        .on_click(|_, _, cx| change(cx, |settings| settings.dictation = Choice::On));
     let hide = look::button(HIDE, look::ButtonKind::Outlined, look::ControlSize::Regular, "Hide the microphone");
     // The microphone goes, and its popover with it. The app returns focus to the visible prompt.
-    let hide = hide.on_click(|_, _, cx| change(cx, |settings| settings.dictation = DictationChoice::Off));
+    let hide = hide.on_click(|_, _, cx| change(cx, |settings| settings.dictation = Choice::Off));
     card.under_heading(div().text_color(colors.text_muted).child(OFFER))
         .child(h_flex().gap(look::Space::Small).child(turn_on).child(hide))
         .into_any_element()

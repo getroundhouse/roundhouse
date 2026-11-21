@@ -13,8 +13,8 @@ use dictation::{AudioIn, Dictation, Engine, EngineError, Recording, Update};
 use gpui_kit::{App, AsyncApp, Context, Global, Subscription, Task};
 use models::{DownloadError, ModelFiles};
 
-use super::DictationChoice;
 use super::downloading::{self, Downloaded, ModelDownload};
+use crate::settings::Choice;
 
 /// How long the model stays loaded with nothing dictated, after which the next recording loads it again, which takes
 /// under a second once Core ML has compiled it, as `docs/spec/settings.md` says.
@@ -124,7 +124,7 @@ pub(super) fn dictating_mut(cx: &mut App) -> &mut Dictating {
 /// Turns dictation on or off as the person chose, once that changes, but not while the model is being deleted, which
 /// follows the choice again once it's done.
 pub(super) fn follow_the_choice(cx: &mut App) {
-    let on = sound::HEARS && crate::settings::get(cx).dictation == DictationChoice::On;
+    let on = sound::HEARS && crate::settings::get(cx).dictation == Choice::On;
     let dictating = dictating(cx);
     let off = matches!(dictating.readiness, Readiness::Off);
     if on && off && dictating.deleting.is_none() {
@@ -135,7 +135,7 @@ pub(super) fn follow_the_choice(cx: &mut App) {
 }
 
 /// Tries again after a failure.
-pub(super) fn retry(cx: &mut App) {
+pub(crate) fn retry(cx: &mut App) {
     if matches!(dictating(cx).readiness, Readiness::Failed(_)) {
         prepare(cx);
     }
@@ -238,6 +238,15 @@ pub(crate) fn observe<V: 'static>(
     cx.observe_global::<Dictating>(changed)
 }
 
+/// Has a view hear, in `window`, whenever how dictation stands changes.
+pub(crate) fn observe_in<V: 'static>(
+    window: &mut gpui_kit::Window,
+    cx: &mut Context<V>,
+    changed: impl Fn(&mut V, &mut gpui_kit::Window, &mut Context<V>) + 'static,
+) -> Subscription {
+    cx.observe_global_in::<Dictating>(window, changed)
+}
+
 /// How dictation stands.
 pub(super) fn readiness(cx: &App) -> &Readiness {
     &dictating(cx).readiness
@@ -266,6 +275,26 @@ pub(crate) fn runs_here(cx: &App) -> bool {
 /// Whether opted-in fields can be dictated to.
 pub(crate) fn ready(cx: &App) -> bool {
     matches!(readiness(cx), Readiness::Ready(_))
+}
+
+/// How dictation stands, as conversation mode says it on every client, which needs it to hear the person.
+pub(crate) fn for_conversation(cx: &App) -> client_core::conversation::Readiness {
+    use client_core::conversation::Readiness as Says;
+    match readiness(cx) {
+        Readiness::Off => Says::NotOn,
+        Readiness::Downloading => {
+            let done = downloading::progress(cx).map(|progress| {
+                #[expect(clippy::cast_precision_loss, reason = "a bar's width needs nothing like 2^24 steps")]
+                let done = progress.done_bytes as f32 / progress.total_bytes.max(1) as f32;
+                done
+            });
+            Says::Downloading(done)
+        }
+        Readiness::Preparing(_) => Says::Preparing,
+        Readiness::Ready(_) => Says::Ready,
+        Readiness::Failed(failure) => Says::Failed(super::words::why(failure)),
+        Readiness::NeedsNewerMacos => Says::Failed(super::words::needs_newer_macos()),
+    }
 }
 
 /// Whether a recording hears the microphone, which the system has to allow first, rather than audio a test gives it.
@@ -324,7 +353,14 @@ pub fn use_engine(engine: dictation::fake::FakeEngine, cx: &mut App) {
     let files = ModelFiles { repository: "none", revision: "none", files: &[] };
     let model_dir = dictating(cx).model.dir.clone();
     use_model(model_dir, files, String::new(), move |_| Ok(engine.clone()), cx);
-    crate::settings::change(cx, |settings| settings.dictation = DictationChoice::On);
+    crate::settings::change(cx, |settings| settings.dictation = Choice::On);
+}
+
+/// Turns dictation on, or off, as the person can in Settings.
+#[cfg(feature = "testing")]
+pub fn set_on(on: bool, cx: &mut App) {
+    let choice = if on { Choice::On } else { Choice::Off };
+    crate::settings::change(cx, |settings| settings.dictation = choice);
 }
 
 /// Whether opted-in fields can be dictated to, for a test to wait for.

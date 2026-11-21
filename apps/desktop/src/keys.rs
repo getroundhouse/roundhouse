@@ -36,23 +36,27 @@ use gpui_kit::{Action, App, KeyBinding, KeyBindingContextPredicate};
 
 use crate::workspace_pane::CHAT_KEY_CONTEXT;
 use crate::{
-    ArchiveWorkspace, BackToComposer, ChatPageDown, ChatPageUp, CloseChat, CloseSettings, CreatePullRequest,
-    FindInChat, FindNext, FindPrevious, FindSetting, FlipImage, GoBack, GoForward, Hide, HideOthers, MarkWorkspace,
-    Minimize, NewChat, NewTerminal, NewWorkspace, NextChat, NextWorkspace, OpenSettings, PreviousChat,
+    ArchiveWorkspace, BackToComposer, ChatPageDown, ChatPageUp, CloseChat, CloseSettings, ConversationMode,
+    CreatePullRequest, FindInChat, FindNext, FindPrevious, FindSetting, FlipImage, GoBack, GoForward, Hide, HideOthers,
+    MarkWorkspace, Minimize, NewChat, NewTerminal, NewWorkspace, NextChat, NextWorkspace, OpenSettings, PreviousChat,
     PreviousWorkspace, Quit, SelectStepBack, SelectStepOn, StepBack, StepOn, StopAgent, ToggleDiff, ToggleMenus,
     TogglePlanMode, ToggleSidebar, composing, file_diff, image_diff, settings,
 };
 
-/// Binds the app's shortcuts, after the kit's.
-pub(crate) fn set(cx: &mut App) {
+/// A Mac's own shortcuts. Only a Mac hides an app, and elsewhere the system minimizes a window itself.
+fn set_a_macs_own(cx: &mut App) {
     if cx.platform_info().is_mac() {
-        // A Mac's own. Only a Mac hides an app, and elsewhere the system minimizes a window itself.
         cx.bind_keys([
             key("secondary-h", Hide, None, cx),
             key("alt-secondary-h", HideOthers, None, cx),
             key("secondary-m", Minimize, None, cx),
         ]);
     }
+}
+
+/// Binds the app's shortcuts, after the kit's.
+pub(crate) fn set(cx: &mut App) {
+    set_a_macs_own(cx);
     let outside_a_terminal = (!cx.platform_info().is_mac()).then(|| format!("!{}", terminal_view::KEY_CONTEXT));
     if crate::menus::System::THIS.draws_the_menus() {
         // GPUI can bind Alt pressed alone, but sends it for any press of Alt let go with no key between, even over a
@@ -96,6 +100,7 @@ pub(crate) fn set(cx: &mut App) {
         key("secondary-shift-a", ArchiveWorkspace, outside_a_terminal, cx),
         key("secondary-shift-u", MarkWorkspace, None, cx),
         key("secondary-.", StopAgent, outside_a_terminal, cx),
+        key("shift-secondary-space", ConversationMode, outside_a_terminal, cx),
         // Back and Forward, as a browser's. The workspace above and below in the sidebar are on the arrows, which the
         // app takes from a text box, where they'd add a cursor above or below.
         key("secondary-[", GoBack, outside_a_terminal, cx),
