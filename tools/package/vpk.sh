@@ -1,7 +1,7 @@
 # shellcheck shell=bash
-# What the packaging scripts share: the app's name to Velopack, running the `vpk` that dotnet-tools.json pins, and
-# reading what it made. Sourced by `package.sh`, `package-windows.sh` and `package-linux.sh`, with HERE set to this
-# directory.
+# What the packaging scripts share: the app's name to Velopack, running the `vpk` that dotnet-tools.json pins, reading
+# what it made, and making the hub's archive. Sourced by `package.sh`, `package-windows.sh` and `package-linux.sh`,
+# with HERE set to this directory.
 
 # Velopack's name for the app, which names its packages, and the directory it installs in on Windows.
 # shellcheck disable=SC2034  # The scripts that source this use it.
@@ -54,4 +54,24 @@ full_package() {
     '[.Assets[] | select(.Version == $version and .Type == "Full") | .FileName] | first // empty' "$releases/$feed")"
   [ -n "$full" ] && [ -f "$releases/$full" ] || die "$feed doesn't list a full package for $VERSION that's there"
   echo "$full"
+}
+
+# The hub's archive for CHANNEL, which a hub on a machine of its own is installed and updated from, as
+# `docs/decisions/hub-package.md` says. `publish.py` lists it in the feed by this name.
+hub_archive_name() {
+  echo "$PACK_ID-$VERSION-$1-hub.tar.gz"
+}
+
+# Packs `roundhoused` and `roundhouse` from BINS into the archive ARCHIVE, at its top and executable, with nothing
+# else, and checks it holds just them. Runs with macOS's tar and GNU's.
+hub_archive() {
+  local bins=$1 archive=$2 held bin
+  # macOS's tar adds a `._` file for each file's extended attributes unless it's told not to.
+  COPYFILE_DISABLE=1 tar -czf "$archive" -C "$bins" roundhoused roundhouse
+  held="$(tar -tzf "$archive" | sort)"
+  [ "$held" = "$(printf '%s\n' roundhouse roundhoused)" ] || die "$(basename "$archive") holds more than the hub: $held"
+  held="$(tar -tvzf "$archive")"
+  for bin in roundhoused roundhouse; do
+    grep -qE "^-rwxr-xr-x .* $bin\$" <<< "$held" || die "$(basename "$archive") doesn't hold $bin, executable"
+  done
 }

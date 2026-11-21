@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Packages this checkout as Roundhouse.app with Velopack's `vpk`: the three binaries, which `tools/build.sh` builds and
 # stamps with the version, and the library beside them that pauses what's playing while dictating, in one bundle with
-# Velopack's updater. It makes the portable zip people download, and the update package and feed the release workflow
-# publishes. Unsigned unless it's given an identity. It's macOS on Apple silicon only, like the app, and needs `jq` and
-# the .NET SDK 8, 9 or 10, which runs `vpk`.
+# Velopack's updater. It makes the portable zip people download, the update package and feed the release workflow
+# publishes, and the hub's archive, for a Mac with no app on it, from the binaries in the bundle. Unsigned unless it's
+# given an identity. It's macOS on Apple silicon only, like the app, and needs `jq` and the .NET SDK 8, 9 or 10, which
+# runs `vpk`.
 #
 #   tools/package/package.sh                  Package this commit, unsigned
 #   tools/package/package.sh --allow-dirty    The same, with uncommitted changes in the build
@@ -15,9 +16,10 @@
 #       Sign with a Developer ID, named as `codesign -s` takes it, or `-` for ad hoc, and given a notarytool profile,
 #       notarize and staple, then check Gatekeeper takes it
 #
-# Writes `releases/`, which holds the portable zip, the full package and the feed, and `Roundhouse.app`, unzipped from
-# the portable zip, to check or run. The default directory's `releases/` starts empty. Another directory's keeps what's
-# there, and a package from an earlier version gets a delta to this one.
+# Writes `releases/`, which holds the portable zip, the full package, the feed and the hub's archive,
+# `Roundhouse-VERSION-osx-hub.tar.gz`, and `Roundhouse.app`, unzipped from the portable zip, to check or run. The
+# default directory's `releases/` starts empty. Another directory's keeps what's there, and a package from an earlier
+# version gets a delta to this one.
 #
 # The version is `0.1.<commits>`, as `docs/decisions/publish-every-merge.md` says, and it's the build the app and its
 # hub say they are. A package with uncommitted changes gets its commit's version, which is never published, since the
@@ -32,8 +34,8 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 # BINARIES, ROOT, version, stamp, target_dir and build_release.
 # shellcheck source=SCRIPTDIR/../build.sh
 source "$HERE/../build.sh"
-# PACK_ID, die, dotnet_tools, dotnet_here, refuse_vpk_variables and check_newer. The bundle identifier is in
-# Info.plist.
+# PACK_ID, die, dotnet_tools, dotnet_here, refuse_vpk_variables, check_newer, hub_archive_name and hub_archive. The
+# bundle identifier is in Info.plist.
 # shellcheck source=SCRIPTDIR/vpk.sh
 source "$HERE/vpk.sh"
 # The app's icon, a drawing for each size. `docs/spec/components.md` says which style it is.
@@ -104,8 +106,24 @@ check() {
   xcrun stapler validate "$app" > /dev/null || die "the app has no notarization ticket stapled to it"
 }
 
+# Checks the hub's archive holds the bundle's own `roundhoused` and `roundhouse`, and that each, out of the bundle, is
+# still signed and, once the app is notarized, still notarized, since notarizing the app notarizes each binary in it.
+check_hub() {
+  local archive=$1 app=$2 signed=$3 notarized=$4 unpacked=$staging/hub bin
+  mkdir "$unpacked"
+  tar -xzf "$archive" -C "$unpacked"
+  for bin in roundhoused roundhouse; do
+    cmp -s "$unpacked/$bin" "$app/Contents/MacOS/$bin" || die "$bin in $(basename "$archive") isn't the bundle's"
+    [ "$signed" = yes ] || continue
+    codesign --verify --strict "$unpacked/$bin" || die "$bin out of the bundle isn't signed"
+    [ "$notarized" = yes ] || continue
+    codesign --verify --strict -R=notarized --check-notarization "$unpacked/$bin" \
+      || die "$bin out of the bundle isn't notarized"
+  done
+}
+
 package() {
-  local allow_dirty=$1 out=$2 prebuilt=$3 sign=$4 keychain=$5 notary=$6 signing=()
+  local allow_dirty=$1 out=$2 prebuilt=$3 sign=$4 keychain=$5 notary=$6 signing=() signed notarized hub
   # Such as signing with vpk's default entitlements, which are .NET's exceptions to the hardened runtime.
   refuse_vpk_variables
   dotnet_tools
@@ -130,10 +148,15 @@ package() {
     --outputDir "$out/releases" ${signing[@]+"${signing[@]}"}
   rm -rf "$out/Roundhouse.app"
   ditto -x -k "$out/releases/$PACK_ID-osx-Portable.zip" "$out"
-  check "$out/Roundhouse.app" "$([ -n "$sign" ] && echo yes || echo no)" "$([ -n "$notary" ] && echo yes || echo no)"
+  signed="$([ -n "$sign" ] && echo yes || echo no)" notarized="$([ -n "$notary" ] && echo yes || echo no)"
+  check "$out/Roundhouse.app" "$signed" "$notarized"
+  hub="$out/releases/$(hub_archive_name osx)"
+  hub_archive "$out/Roundhouse.app/Contents/MacOS" "$hub"
+  check_hub "$hub" "$out/Roundhouse.app" "$signed" "$notarized"
   echo "Packaged $VERSION, build $BUILD:"
   echo "  $out/Roundhouse.app"
   echo "  $out/releases/$PACK_ID-osx-Portable.zip"
+  echo "  $hub"
   echo "It's a release build, so opening it uses your own hub and data. To try it on throwaway ones, run it directly,"
   echo "since \`open\` doesn't pass the environment on, then stop the hub it started:"
   echo "  export ROUNDHOUSE_HOME=\"\$(mktemp -d)\" ROUNDHOUSE_WORKSPACES=\"\$(mktemp -d)\""
