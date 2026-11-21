@@ -1,5 +1,5 @@
 # docs/standards/merging.md's full checks and publish.py's tests, on Linux, for every PR and the queue. The gallery compiles only on
-# macOS, and mac.yml covers the Mac. Changes to only Markdown and the site skip them, and a change to what the guide
+# macOS, and macos.yml runs there. Changes to only Markdown and the site skip them, and a change to what the guide
 # is made of builds the guide, whatever else it changes. A change to the copy of gpui-kit also runs the kit's own checks.
 name: CI
 
