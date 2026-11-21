@@ -10,6 +10,7 @@ use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
 use client_core::Client;
+use client_core::link::Waits;
 use gpui_kit::test::TestWindowExt as _;
 use gpui_kit::{
     AnyWindowHandle, AppContext as _, Bounds, ElementId, Entity, SharedString, TestAppContext, WindowBounds,
@@ -26,6 +27,9 @@ use tempfile::TempDir;
 pub(crate) const TIMEOUT: Duration = Duration::from_secs(20);
 /// How far the app's own clock moves on each look while a test waits on a real hub.
 const STEP: Duration = Duration::from_millis(10);
+/// How long the phone waits before trying a hub again, first and longest, in place of the second and the thirty
+/// seconds every client waits.
+const RETRY_WAITS: Waits = Waits::retrying(Duration::from_millis(20), Duration::from_millis(100));
 
 /// The ID of an element named `name`, as the question panel names its own.
 pub(crate) fn id(name: &str) -> SharedString {
@@ -183,6 +187,8 @@ impl<'a> Phone<'a> {
         // A real hub answers on real threads, which the scheduler otherwise reports as nondeterminism.
         cx.executor().allow_parking();
         cx.update(gpui_kit::init);
+        // Tried again by the system's clock, which a test can't move, so it would sit through the phone's waits.
+        cx.update(|cx| mobile::the_retry_waits_are(RETRY_WAITS, cx));
         let (links, opened) = flume::unbounded();
         // An iPhone's screen, in points.
         let screen = Bounds::new(point(px(0.), px(0.)), size(px(402.), px(874.)));
@@ -203,7 +209,8 @@ impl<'a> Phone<'a> {
     }
 
     /// Runs the app until `done`, on real time, because a real hub is on the other end of the socket. The app's own
-    /// timers, such as its wait before connecting again, run on the test's clock, so that moves on with it.
+    /// timers run on the test's clock, so that moves on with it. The wait before connecting again is client-core's, on
+    /// the system's clock, which [`RETRY_WAITS`] shortens.
     pub(crate) fn wait(&mut self, what: &str, mut done: impl FnMut(&mut Self) -> bool) {
         waiting::thread::until(TIMEOUT, format!("timed out waiting for {what}"), || {
             self.frame();

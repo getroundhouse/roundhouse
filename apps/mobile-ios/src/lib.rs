@@ -13,6 +13,8 @@ mod vault;
 
 pub use app::{MobileApp, open_window};
 pub use assets::Assets;
+#[cfg(any(test, feature = "testing"))]
+pub use hub_link::the_retry_waits_are;
 #[cfg(target_os = "ios")]
 pub use vault::DeviceVault;
 #[cfg(any(test, feature = "testing"))]

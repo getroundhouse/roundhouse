@@ -52,6 +52,7 @@ pub(crate) fn connection(state: &LinkState) -> SharedString {
         LinkState::Connecting => "Connecting…".into(),
         LinkState::Ready => "Connected".into(),
         LinkState::Unreachable(_) => "Can't reach it. Trying again".into(),
+        LinkState::Refused(_) => "Can't connect".into(),
     }
 }
 
