@@ -3,7 +3,7 @@
 //! holds in every workspace until the app quits.
 //!
 //! What's beside a sidebar moves with it as it slides, so it's laid out again on every frame of the slide, and only
-//! then. How far each has slid is kept here rather than by a view, because two views lay out by the one on the left:
+//! then. A terminal there keeps its size until the slide ends, since resizing one resizes its program. How far each has slid is kept here rather than by a view, because two views lay out by the one on the left:
 //! the window, which draws it, and the workspace, whose header starts clear of the window's buttons. The window
 //! works out where both are once, as it starts to draw a frame, and every view reads that, so no two of them
 //! disagree by the moment between their asking.
@@ -23,6 +23,6 @@ mod placement;
 #[cfg(test)]
 pub(crate) use placement::Chosen;
 use placement::Sides;
-pub(crate) use placement::{Beside, Side, Sidebar, frame, place};
+pub(crate) use placement::{Beside, Side, Sidebar, frame, place, sliding};
 #[cfg(test)]
 use placement::{Change, Placed, dragged};

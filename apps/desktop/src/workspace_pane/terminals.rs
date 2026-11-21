@@ -9,18 +9,25 @@ use client_core::{Client, OpenTerminal};
 use gpui_kit::assets::IconName as Lucide;
 use gpui_kit::component::Icon;
 use gpui_kit::{
-    AnyElement, AppContext as _, Context, ElementId, Entity, Focusable as _, IntoElement as _, ParentElement as _,
+    AnyElement, App, AppContext as _, Context, ElementId, Entity, Focusable as _, IntoElement as _, ParentElement as _,
     Styled, Window, div,
 };
 use look::{IconSizing as _, InRegion as _, Region};
 use protocol::model::{Terminal, TerminalId};
 use protocol::terminal::TerminalSize;
-use terminal_view::TerminalView;
+use terminal_view::{Room, TerminalView};
 
 use super::{Next, PaneEvent, Showing, WorkspacePane, tab};
+use crate::sides;
 
-/// The size a terminal opens at, which its view changes to the size it has room for as soon as it's drawn.
+/// The size a terminal opens at, which its view changes to the size it has room for as soon as it's drawn, or as a
+/// sidebar sliding beside it then stops.
 const OPENING_SIZE: TerminalSize = TerminalSize { cols: 80, rows: 24 };
+
+/// The room a terminal has, which changes on every frame of a sidebar's slide beside it, and is settled otherwise.
+fn room(cx: &App) -> Room {
+    if sides::sliding(cx) { Room::Moving } else { Room::Settled }
+}
 
 #[derive(Default)]
 pub(super) struct Terminals {
@@ -95,7 +102,7 @@ impl WorkspacePane {
             // since another may have been asked for between.
             if !t.terminals.views.contains_key(&id) {
                 let open = OpenTerminal::start(&t.client, &id);
-                let view = cx.new(|cx| TerminalView::new(open, window, cx));
+                let view = cx.new(|cx| TerminalView::new(open, room, window, cx));
                 t.terminals.views.insert(id.clone(), view);
             }
             t.bring_terminal_to_front(id, cx);

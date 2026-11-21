@@ -12,8 +12,8 @@ use gpui_kit::{
     KeyDownEvent, MouseButton, MouseDownEvent, NoAction, OperatingSystem, ParentElement, Pixels, Render, ScrollEvent,
     Styled, Task, TestSupportExt as _, Window, div, font, px,
 };
-use protocol::terminal::TerminalSize;
 
+use crate::fitting::{Fitting, Room};
 use crate::grid::{Glyphs, Grid, Metrics, Pointing};
 use crate::keys::key_press;
 
@@ -73,8 +73,10 @@ pub struct TerminalView {
     metrics: Metrics,
     glyphs: Glyphs,
     focus: FocusHandle,
-    /// The size the view last said it had room for.
-    fit: Rc<Cell<Option<TerminalSize>>>,
+    /// The size the view last gave its terminal.
+    fitting: Rc<Cell<Fitting>>,
+    /// Whether the room the view has is still changing, read as each frame is drawn.
+    room: Box<dyn Fn(&App) -> Room>,
     /// The part of a line the wheel has turned that hasn't scrolled a line yet.
     wheel: Pixels,
     /// Draws the view again as client-core's copy changes, until the view has gone.
@@ -85,8 +87,14 @@ pub struct TerminalView {
 }
 
 impl TerminalView {
-    /// A view of `open`, in the code font, in the app's text colour on its pane's.
-    pub fn new(open: OpenTerminal, window: &mut Window, cx: &mut Context<Self>) -> Self {
+    /// A view of `open`, in the code font, in the app's text colour on its pane's, which gives the terminal the size it
+    /// has room for once `room` says the room has stopped changing.
+    pub fn new(
+        open: OpenTerminal,
+        room: impl Fn(&App) -> Room + 'static,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Self {
         let colors = look::colors(cx);
         let foreground = rgb_of(colors.text);
         let (background, selection) = (rgb_of(colors.pane), colors.selection());
@@ -116,7 +124,8 @@ impl TerminalView {
             metrics,
             glyphs: Glyphs::default(),
             focus,
-            fit: Rc::new(Cell::new(None)),
+            fitting: Rc::new(Cell::new(Fitting::default())),
+            room: Box::new(room),
             wheel: px(0.),
             _changes: drawing_again,
             dragging,
@@ -202,6 +211,11 @@ impl TerminalView {
         self.frame.as_ref().is_some_and(|frame| frame.rows.iter().any(|row| row.selected.is_some()))
     }
 
+    /// The size it last gave its terminal.
+    pub fn given_size(&self) -> Option<protocol::terminal::TerminalSize> {
+        self.fitting.get().given()
+    }
+
     /// How big each cell is, so a test can point at one. The grid's top left is the view's.
     pub fn cell_size(&self) -> gpui_kit::Size<Pixels> {
         gpui_kit::size(self.metrics.cell_width, self.metrics.line_height)
@@ -224,7 +238,7 @@ impl Render for TerminalView {
         if let Some(frame) = self.open.take_frame() {
             self.frame = Some(frame);
         }
-        let (open, fit) = (self.open.clone(), self.fit.clone());
+        let (open, fitting, room) = (self.open.clone(), self.fitting.clone(), (self.room)(cx));
         let grid = Grid {
             frame: self.frame.clone(),
             background: self.background,
@@ -234,8 +248,10 @@ impl Render for TerminalView {
             focused: self.focus.is_focused(window) && window.is_window_active(),
             selection: self.selection,
             pointing: Pointing { open: self.open.clone(), dragging: self.dragging.clone() },
-            fits: Box::new(move |size| {
-                if fit.replace(Some(size)) != Some(size) {
+            fits: Box::new(move |fits| {
+                let mut given = fitting.get();
+                if let Some(size) = given.give(fits, room) {
+                    fitting.set(given);
                     open.fit(size);
                 }
             }),

@@ -1,9 +1,10 @@
 //! A workspace's terminals in the app: one opened from the `+` after the tabs takes the keys, and its tab goes once
 //! it's closed or its shell ends, with the chat back in front, with a real shell, and what's selected in one is what's
-//! copied, on a fake hub's terminal.
+//! copied, and the size it's given as a sidebar slides beside it, on a fake hub's terminal.
 
 #![cfg(test)]
 
+mod fitting;
 mod keys;
 mod selecting;
 mod using;
