@@ -4,8 +4,8 @@
 
 use std::collections::HashMap;
 
-use client_core::Client;
 use client_core::conversation::Conversation;
+use client_core::{Client, Reply};
 use protocol::model::{Session, SessionId};
 
 use crate::Voices;
@@ -61,11 +61,10 @@ impl Conversations {
     }
 
     /// Turns the mode off in the chat `session`, as typing, Type and ✕ do, telling the hub how far the voice got
-    /// first.
-    pub fn end(&mut self, session: &SessionId) {
-        if let (Some(client), Some(conversation)) = (&self.client, self.chats.get_mut(session)) {
-            conversation.end(client);
-        }
+    /// first. Answers with how the hub took it, or `None` with nothing to end, as with no connection.
+    pub fn end(&mut self, session: &SessionId) -> Option<Reply<()>> {
+        let (client, conversation) = (self.client.as_ref()?, self.chats.get_mut(session)?);
+        Some(conversation.end(client))
     }
 
     /// Says that what a conversation here is reading changed. It holds one signal at a time.

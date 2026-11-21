@@ -30,6 +30,8 @@ The conversation goes on while you look at another chat, another workspace or Se
 
 **Type**, or any key you type, leaves the mode with the composer back, and anything you'd typed before is still there. ✕ leaves it too. While the agent works, Stop takes ✕'s place, and stops the agent as Send's Stop does.
 
+If the hub can't turn the mode off, the app says why along the top, and the bar stays. Nothing is read out meanwhile, and ✕ or **Type** asks the hub again.
+
 ## On another Mac
 
 The chat is everyone's, and the conversation is one Mac's. Another Mac showing the chat says where the conversation is, such as "The conversation is on Mac Studio", and still shows what the agent is doing and when it's speaking, quietly. **Take over** moves the conversation there, and the Mac it left says where it went, with **Take back**.

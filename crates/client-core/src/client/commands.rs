@@ -76,6 +76,13 @@ impl Drop for Ending {
 pub struct Reply<T>(flume::Receiver<Result<T>>);
 
 impl<T> Reply<T> {
+    /// A reply that whatever holds the sender gives, as one to a call sent once something else has been. One whose
+    /// sender goes without giving it counts as the connection lost.
+    pub(crate) fn channel() -> (flume::Sender<Result<T>>, Self) {
+        let (reply, replied) = flume::bounded(1);
+        (reply, Self(replied))
+    }
+
     /// Waits for the reply without holding a thread. A call that ended without one, which only a panic does, counts as
     /// the connection lost.
     pub async fn recv(self) -> Result<T> {
@@ -93,7 +100,7 @@ impl Client {
     /// Starts a call that changes something, on a thread of its own, and returns at once, so the caller never waits
     /// on the hub. The call runs to the end whatever the caller does next, and [`Commands::finished`] waits for it.
     pub fn start<T: Send + 'static>(&self, call: impl FnOnce(&Client) -> Result<T> + Send + 'static) -> Reply<T> {
-        let (reply, replied) = flume::bounded(1);
+        let (reply, replied) = Reply::channel();
         let failed = reply.clone();
         // Counted before this returns, so a `finished` asked for after it always waits for it.
         self.inner.running.begin();
@@ -105,7 +112,7 @@ impl Client {
         if let Err(e) = spawned {
             let _ = failed.send(Err(ClientError::Io(e)));
         }
-        Reply(replied)
+        replied
     }
 
     /// A place in the chat's line of prompts, taken now, on the caller's thread, so it's in the order the prompts were

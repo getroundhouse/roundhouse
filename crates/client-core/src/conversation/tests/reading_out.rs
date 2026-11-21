@@ -144,7 +144,7 @@ fn only_what_comes_after_the_tail_is_read_and_the_hub_is_told_in_order() {
 }
 
 /// Leaving stops the voice, tells the hub how the reply being read ended, where the voice says it stopped, and only
-/// then turns the mode off, though the reading out has gone.
+/// then turns the mode off, though the reading out has gone, answering with how the hub took that.
 #[test]
 fn leaving_tells_the_hub_how_the_reply_ended_before_the_mode_ends() {
     let dir = tempfile::tempdir().unwrap();
@@ -159,12 +159,13 @@ fn leaving_tells_the_hub_how_the_reply_ended_before_the_mode_ends() {
     changed.recv_timeout(TIMEOUT).unwrap();
     assert!(reading.reading_a_reply());
 
-    reading.leave();
+    let ending = reading.leave();
     assert_eq!(voice_was_given.recv_timeout(TIMEOUT), Ok(ToVoice::Stop));
     say.send(FromVoice::Stopped { cut: Some((text, 2)), never_started: Vec::new() }).unwrap();
     let stopped = Ending::Stopped { through: ReplyPlace { block: 0, through: 2 } };
     assert_eq!(told.recv_timeout(TIMEOUT), Ok(Told::Heard("m2".into(), stopped)));
     assert_eq!(told.recv_timeout(TIMEOUT), Ok(Told::End));
+    assert!(ending.wait().is_err_and(|e| e.is_unsupported()), "this hub refuses it");
 }
 
 /// How a reply ended, told on a connection that goes as it's told, is told again on the next, so a device that read

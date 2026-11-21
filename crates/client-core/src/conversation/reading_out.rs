@@ -14,7 +14,7 @@ use protocol::tail::Tail;
 
 use super::reading::Reading;
 use super::telling::{Do, FromVoice, ToHub, ToVoice};
-use crate::client::{Client, LiveItem, LiveLog};
+use crate::client::{Client, LiveItem, LiveLog, Reply, Result};
 
 /// The voice an app reads with, such as Phonon through the speakers, as the `conversation` crate gives it.
 pub trait Voice: Send + 'static {
@@ -44,8 +44,9 @@ enum Command {
     Talk,
     /// The person stopped talking, having sent what they said, or not.
     LetGo { sent: bool },
-    /// Turn the mode off: stop the voice, say how each reply ended, then end the mode.
-    Leave,
+    /// Turn the mode off: stop the voice, say how each reply ended, then end the mode, and answer with how the hub
+    /// took that.
+    Leave(flume::Sender<Result<()>>),
 }
 
 /// How long leaving waits for the voice to say it stopped, so how far it got lands before the mode ends. One that
@@ -123,9 +124,12 @@ impl ReadingOut {
     }
 
     /// Turns the mode off: stops the voice, tells the hub how each reply ended, then ends the mode, in that order, on
-    /// threads that finish by themselves.
-    pub fn leave(self) {
-        let _ = self.commands.send(Command::Leave);
+    /// threads that finish by themselves. Answers with how the hub took ending the mode.
+    pub fn leave(self) -> Reply<()> {
+        let (answer, reply) = Reply::channel();
+        // Reading out that's gone drops the answer, which says the mode didn't end.
+        let _ = self.commands.send(Command::Leave(answer));
+        reply
     }
 
     /// Whether the voice has something it hasn't finished, as [`Reading::reading`] says.
@@ -158,8 +162,8 @@ struct Follower<V> {
 /// What to tell the hub, in turn.
 enum Tell {
     Hub(ToHub),
-    /// Turn the mode off.
-    End,
+    /// Turn the mode off, and answer with how the hub took it.
+    End(flume::Sender<Result<()>>),
 }
 
 enum Woken<S> {
@@ -177,7 +181,8 @@ impl<V: Voice> Follower<V> {
         let said = self.voice.said();
         // Once leaving, until the voice has said it stopped, or it's waited long enough.
         let mut leaving: Option<Instant> = None;
-        let mut end = false;
+        // Once leaving, what to answer with how the hub took the end.
+        let mut ending = None;
         loop {
             let selector = flume::Selector::new()
                 .recv(self.log.changed(), |changed| changed.map_or(Woken::Gone, |()| Woken::Changed))
@@ -194,10 +199,12 @@ impl<V: Voice> Follower<V> {
                     _ => Vec::new(),
                 },
                 Woken::Command(command) => {
-                    end |= matches!(command, Command::Leave);
+                    if let Command::Leave(answer) = &command {
+                        ending = Some(answer.clone());
+                    }
                     let Some(reading) = self.reading.as_mut() else {
                         // Before the tail has come, nothing is being read, and leaving only ends the mode.
-                        if end {
+                        if ending.is_some() {
                             break;
                         }
                         continue;
@@ -209,7 +216,7 @@ impl<V: Voice> Follower<V> {
                             reading.let_go(sent);
                             Vec::new()
                         }
-                        Command::Leave => {
+                        Command::Leave(_) => {
                             leaving = Some(Instant::now() + LEAVING_WAITS);
                             reading.stop()
                         }
@@ -223,8 +230,8 @@ impl<V: Voice> Follower<V> {
             }
         }
         self.voice.act(ToVoice::Stop);
-        if end {
-            let _ = self.to_hub.send(Tell::End);
+        if let Some(answer) = ending {
+            let _ = self.to_hub.send(Tell::End(answer));
         }
         self.set_reading(NOTHING);
     }
@@ -308,20 +315,24 @@ fn tell_the_hub(
     connection: &flume::Receiver<()>,
 ) {
     while let Ok(what) = outbox.recv() {
-        loop {
+        let told = loop {
             let client = client.lock().clone();
             let told = match &what {
                 Tell::Hub(ToHub::Speaking(through)) => client.session_speaking(id, through.clone()).map(drop),
                 Tell::Hub(ToHub::Heard { message, ending }) => {
                     client.session_reply_heard(id, message.clone(), *ending).map(drop)
                 }
-                Tell::End => client.session_conversation_end(id).map(drop),
+                Tell::End(_) => client.session_conversation_end(id).map(drop),
             };
             let lost = told.is_err() && client.is_disconnected() && !matches!(what, Tell::Hub(ToHub::Speaking(_)));
             // Once the reading out has gone, no new connection will be said.
             if !lost || connection.recv().is_err() {
-                break;
+                break told;
             }
+        };
+        if let Tell::End(answer) = what {
+            // Whoever asked may no longer listen.
+            let _ = answer.send(told);
         }
     }
 }

@@ -2,21 +2,22 @@
 //! then opens the card that sets them up, holding Space talks and letting go sends what was said, out loud, and typing
 //! turns it off with what was typed in the composer.
 
+use client_core::fake_hub::World;
 use desktop::workspace_pane::{
-    CONVERSATION_BAR, CONVERSATION_CARD, CONVERSATION_MODE, CONVERSATION_NOT_NOW, CONVERSATION_TURN_ON,
-    SPACE_DICTATES_AFTER,
+    CONVERSATION_BAR, CONVERSATION_CARD, CONVERSATION_END, CONVERSATION_MODE, CONVERSATION_NOT_NOW,
+    CONVERSATION_TURN_ON, SPACE_DICTATES_AFTER,
 };
 use dictation::fake::FakeEngine;
 use gpui_kit::{AppContext as _, TestAppContext};
 use protocol::event::EventBody;
-use protocol::model::Interaction;
+use protocol::model::{ClientDevice, Interaction, SessionStatus};
 
 use super::holding_space::hold_for;
 use super::support::{
     SCRIPT, dictating, ended, let_go, on_the_keyboard, press_space, ready, say, type_keys, use_model,
 };
 use crate::support::made_up_model::{made_up, put};
-use crate::support::{Stack, Ui};
+use crate::support::{FakeHub, Stack, Ui};
 
 /// Has dictation ready, speech on with a voice that reads nothing, and the mode turned on in the chat showing.
 fn in_conversation_mode<'a>(cx: &'a mut TestAppContext, stack: &Stack) -> (Ui<'a>, dictation::fake::FakeEngine) {
@@ -58,8 +59,10 @@ fn the_button_turns_conversation_mode_on_and_typing_turns_it_off_with_what_was_t
     assert!(on(&mut ui), "the hub's record says so");
 
     type_keys(&mut ui, "a", "a");
+    type_keys(&mut ui, "b", "b");
     ui.wait("the composer to come back", |ui| !ui.has(CONVERSATION_BAR) && !on(ui));
-    assert_eq!(ui.composer_text(), "a", "with what was typed in it");
+    assert_eq!(ui.composer_text(), "ab", "with what was typed in it");
+    assert_eq!(ui.view().error, None, "a key that asks again before the hub has turned it off isn't refused");
 }
 
 /// What was said, said out loud.
@@ -234,4 +237,34 @@ fn the_key_does_nothing_where_the_card_cant_show(cx: &mut TestAppContext) {
     ui.wait("dictation and speech to be ready", |ui| ui.cx.update(|cx| desktop::conversing::is_ready(cx)));
     ui.frame();
     assert!(!on(&mut ui) && !ui.has(CONVERSATION_BAR), "the mode stays off");
+}
+
+/// A hub that won't turn the mode off says why, and the bar stays, since the mode is still on. ✕ asks again, both
+/// while the voice was following the chat and once it no longer is. The fake hub refuses every change.
+#[gpui_kit::test]
+fn the_hub_refusing_to_turn_the_mode_off_says_why_and_it_can_be_asked_again(cx: &mut TestAppContext) {
+    let this_mac = ClientDevice { id: "this-mac".into(), name: "This Mac".into() };
+    let mut world = World::default();
+    let repo = world.repo("signals");
+    let workspace = world.workspace(&repo, "ledger");
+    let started = EventBody::ConversationStarted { device: this_mac.clone() };
+    let chat = world.chat(&workspace, SessionStatus::Idle, vec![started]);
+    let session = world.sessions.iter_mut().find(|session| session.id == chat).unwrap();
+    session.interaction = Interaction::Conversation { device: Box::new(this_mac.clone()) };
+    let fake = FakeHub::holding(world);
+    std::fs::write(fake.source().paths.data_dir.join("device-id"), this_mac.id.to_string()).unwrap();
+    let mut ui = Ui::open_on(cx, &fake);
+    ui.wait("the bar, since the conversation is on this Mac", |ui| ui.has(CONVERSATION_BAR));
+
+    for asking in ["first", "again"] {
+        ui.click(CONVERSATION_END);
+        ui.wait(&format!("the refusal, asking {asking}"), |ui| ui.view().error.is_some());
+        assert_eq!(
+            ui.view().error.as_deref(),
+            // As a hub too old to have conversation mode refuses, which is how the fake one refuses a change.
+            Some("Couldn't turn conversation mode off: this hub can't do that until it's updated")
+        );
+        assert!(ui.has(CONVERSATION_BAR), "the mode is still on, asking {asking}");
+        ui.click("dismiss-error");
+    }
 }

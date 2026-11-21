@@ -6,7 +6,7 @@ use protocol::tail::Tail;
 
 use super::bar::{Bar, HereNow, Shows};
 use super::reading_out::{ReadingOut, Voice};
-use crate::client::Client;
+use crate::client::{Client, Reply};
 
 /// One chat's conversation on this device, while the chat is in conversation mode.
 pub struct Conversation {
@@ -41,7 +41,8 @@ impl Conversation {
         let here = session.interaction.device().is_some_and(|device| Some(&device.id) == self.this.as_ref());
         self.left &= here;
         if here && !session.is_open() && !self.left {
-            self.end(client);
+            // The chat is closed here, so nothing shows the hub refusing.
+            drop(self.end(client));
             return;
         }
         let reads = here && !self.left;
@@ -52,18 +53,16 @@ impl Conversation {
 
     /// Turns the mode off, as typing, Type and ✕ do, on `client`: how far the voice got, and how each reply ended,
     /// reach the hub first, so it needn't settle them. Until the chat's record says the mode is off, the conversation
-    /// isn't read here again. Asked again meanwhile, as when the hub never heard, it asks the hub again.
-    pub fn end(&mut self, client: &Client) {
+    /// isn't read here again. Asked again meanwhile, as when the hub refused, it asks the hub again. Answers with how
+    /// the hub took it, so a client can say why the mode is still on.
+    pub fn end(&mut self, client: &Client) -> Reply<()> {
         self.left = true;
         if let Some(reading) = self.reading.take() {
-            reading.leave();
-            return;
+            return reading.leave();
         }
-        let (client, id) = (client.clone(), self.session.clone());
-        // Nothing is being read, so there's nothing to say first. A thread that can't start leaves the mode on.
-        let _ = std::thread::Builder::new()
-            .name("ending-conversation-mode".into())
-            .spawn(move || client.session_conversation_end(&id));
+        let id = self.session.clone();
+        // Nothing is being read, so there's nothing to say first.
+        client.start(move |client| client.session_conversation_end(&id).map(drop))
     }
 
     /// Whether the conversation is here, so this device hears and reads.
