@@ -29,7 +29,7 @@ impl Reader<'_> {
                 if completed && self.scope.parent.is_none() {
                     let prompt = self.shared.state.lock().untaken.pop_front();
                     if let Some(prompt) = prompt {
-                        self.shared.event(EventBody::PromptTaken { prompt }, Some(raw)).await;
+                        self.shared.run.event(EventBody::PromptTaken { prompt }, Some(raw)).await;
                     }
                 }
             }
@@ -78,19 +78,23 @@ impl Reader<'_> {
                 let took_ms = completed_at_ms.zip(started_at_ms).map(|(ended, began)| ended.saturating_sub(began));
                 self.compacted(completed, took_ms, raw).await;
             }
-            Item::ContextCompaction { .. } | Item::Unknown => {
-                let kind = value["type"].as_str().unwrap_or("item").into();
-                self.shared.event(EventBody::AgentOther { kind, subagent: self.scope.parent.clone() }, Some(raw)).await;
-            }
+            Item::ContextCompaction { .. } | Item::Unknown => self.other(value, raw).await,
         }
         Ok(())
+    }
+
+    /// An item of a kind not translated yet, kept as it is for a later build to translate.
+    async fn other(&self, value: &Value, raw: String) {
+        let kind = value["type"].as_str().unwrap_or("item").into();
+        let subagent = self.scope.parent.clone();
+        self.shared.run.event(EventBody::AgentOther { kind, subagent }, Some(raw)).await;
     }
 
     /// Codex compacting the agent's context, or having compacted it, in `took_ms`. The turn Codex compacts in when
     /// asked holds the compaction, which names the request.
     async fn compacted(&self, completed: bool, took_ms: Option<u64>, raw: String) {
         let asked = completed.then(|| self.answered_compaction()).flatten();
-        self.shared.event(compaction(completed, took_ms, asked), Some(raw)).await;
+        self.shared.run.event(compaction(completed, took_ms, asked), Some(raw)).await;
     }
 
     /// The request the compaction answers, if it's the one asked for, whose turn has started.
@@ -157,6 +161,7 @@ impl Reader<'_> {
                 ContentBlock::Text { text, images: Vec::new() }
             };
             self.shared
+                .run
                 .event(
                     EventBody::Assistant {
                         message_id: Some(id.into()),
@@ -170,6 +175,7 @@ impl Reader<'_> {
                 .await;
         } else {
             self.shared
+                .run
                 .emit(AgentOutput::Delta(StreamDelta {
                     run: None,
                     message_id: id.into(),
@@ -236,6 +242,7 @@ impl Reader<'_> {
     async fn started(&self, id: ToolUseId, call: Call, raw: String) {
         self.shared.state.lock().work(self.scope.parent.as_ref()).calls.insert(id.clone(), call.clone());
         self.shared
+            .run
             .event(
                 EventBody::Assistant {
                     message_id: Some(id.to_string().into()),
@@ -279,7 +286,7 @@ impl Reader<'_> {
                 images: Vec::new(),
             }],
         };
-        self.shared.emit(AgentOutput::Event { body, raw: Some(raw), attachments: images }).await;
+        self.shared.run.emit(AgentOutput::Event { body, raw: Some(raw), attachments: images }).await;
     }
 }
 

@@ -1,5 +1,4 @@
 use std::path::Path;
-use std::process::Stdio;
 
 use protocol::capability::approvals::ApprovalMode;
 use protocol::capability::conversation::Start;
@@ -7,8 +6,6 @@ use protocol::event::{EventBody, NoticeLevel};
 use protocol::model::AgentSessionId;
 use protocol::worker::AgentSpec;
 use serde_json::{Value, json};
-use tokio::process::{Child, ChildStderr, ChildStdin, ChildStdout, Command};
-use tracing::warn;
 
 use super::files::{ConversationFiles, effective_home};
 use super::running::{Shared, effort_str, ensure_sign_in_offers_model, mode_id};
@@ -37,48 +34,6 @@ impl Purpose {
     pub(super) fn skips_permissions(self, mode: ApprovalMode) -> bool {
         matches!(self, Purpose::Agent) && mode == super::claims::full_access()
     }
-}
-
-pub(super) struct Launched {
-    pub(super) child: Child,
-    pub(super) pid: u32,
-    pub(super) stdin: ChildStdin,
-    pub(super) stdout: ChildStdout,
-    pub(super) stderr: ChildStderr,
-}
-
-pub(super) fn launch(
-    bin: &Path,
-    args: &[&str],
-    cwd: &Path,
-    env: &[(String, String)],
-    options: &AgentOptions,
-) -> Result<Launched, AgentError> {
-    if options.login.is_some() {
-        return Err(AgentError::Refused("Antigravity uses the login on its worker's machine".into()));
-    }
-    let mut command = Command::new(bin);
-    command
-        .args(args)
-        .current_dir(cwd)
-        .envs(env.iter().map(|(key, value)| (key, value)))
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .kill_on_drop(true);
-    process::own_group(command.as_std_mut());
-    let mut child = crate::starting::start(&mut command, bin, cwd, &options.environment)?;
-    let pid = child.id().unwrap_or_default();
-    if let Some(path) = &options.pid_file
-        && let Err(error) = process::ProcessRecord::write(path, pid)
-    {
-        warn!("could not record Antigravity {pid} in {}: {error}", path.display());
-    }
-    let (Some(stdin), Some(stdout), Some(stderr)) = (child.stdin.take(), child.stdout.take(), child.stderr.take())
-    else {
-        return Err(AgentError::NoPipes { bin: bin.display().to_string() });
-    };
-    Ok(Launched { child, pid, stdin, stdout, stderr })
 }
 
 pub(super) async fn initialize(shared: &Shared) -> Result<Option<String>, AgentError> {
@@ -123,6 +78,7 @@ pub(super) async fn conversation(
         (state.model.as_str().to_owned(), state.mode)
     };
     shared
+        .run
         .event(
             EventBody::AgentInit {
                 capabilities: None,
@@ -211,6 +167,7 @@ async fn open_session(
                 && conversation_gone(error, conversation, home).await
             {
                 shared
+                    .run
                     .event(
                         EventBody::Notice {
                             level: NoticeLevel::Warning,

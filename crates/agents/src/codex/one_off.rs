@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use protocol::attachment::{AttachmentFile, NewAttachment};
+use protocol::attachment::NewAttachment;
 use protocol::capability::conversation::Start;
 use protocol::capability::settings::Settings;
 use protocol::model::{AgentAccount, AgentKind, ModelName, RunId, Title};
@@ -13,7 +13,7 @@ use tokio::sync::mpsc;
 use super::launch::Purpose;
 use super::running;
 use crate::title::{NAMING, read_title};
-use crate::{AgentError, AgentOptions, AgentProcess, NoTitle};
+use crate::{AgentError, AgentOptions, AgentProcess};
 
 /// What a one-off call runs, which starts no chat, so it's none a chat is offered: a small model, at a low effort.
 pub(super) const ONE_OFF_MODEL: ModelName = ModelName::named("gpt-6-luna");
@@ -52,17 +52,7 @@ pub async fn title_for(
     options: &AgentOptions,
     scratch_dir: &Path,
 ) -> Result<Title, AgentError> {
-    let scratch_dir = scratch_dir.to_owned();
-    let room = tokio::task::spawn_blocking(move || tempfile::tempdir_in(scratch_dir))
-        .await
-        .map_err(|_| AgentError::Exited)?
-        .map_err(NoTitle::NoRoom)?;
-    let mut files = Vec::new();
-    for (i, file) in prompt.files.iter().enumerate() {
-        let path = room.path().join(format!("image-{i}"));
-        tokio::fs::write(&path, file.data.as_slice()).await?;
-        files.push(AttachmentFile { attachment: file.attachment.clone(), path: path.to_string_lossy().into_owned() });
-    }
+    let (room, files) = crate::title::room(prompt, scratch_dir).await?;
     let spec = AgentSpec {
         session_id: "title".into(),
         run: RunId::new(1),

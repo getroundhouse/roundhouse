@@ -79,7 +79,7 @@ impl NativeModel {
 pub async fn models_for(options: &AgentOptions, cwd: &Path) -> Result<ModelCatalog, AgentError> {
     let process = super::one_off::open(options, cwd).await?;
     let result = read(&process.shared.rpc).await;
-    process.shared.stop().await;
+    process.shared.run.stop().await;
     result
 }
 

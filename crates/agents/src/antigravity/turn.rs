@@ -37,16 +37,17 @@ pub(super) async fn prompt_finished(shared: &Arc<Shared>, rpc_id: u64, reply: Rp
                 }
                 let event =
                     if cancelled { EventBody::PromptDropped { prompt } } else { EventBody::PromptTaken { prompt } };
-                shared.event(event, None).await;
+                shared.run.event(event, None).await;
             }
         }
         (Err(error), true) => {
             if !entry.taken
                 && let Some(prompt) = entry.seq()
             {
-                shared.event(EventBody::PromptDropped { prompt }, None).await;
+                shared.run.event(EventBody::PromptDropped { prompt }, None).await;
             }
             shared
+                .run
                 .event(
                     EventBody::Notice { level: NoticeLevel::Error, message: error.to_string(), subagent: None },
                     Some(raw),
@@ -128,7 +129,7 @@ async fn finish_last_err(shared: &Arc<Shared>, entry: &InFlightPrompt, error: &c
     if !entry.taken {
         shared.state.lock().reply = None;
         if let Some(prompt) = entry.seq() {
-            shared.event(EventBody::PromptDropped { prompt }, None).await;
+            shared.run.event(EventBody::PromptDropped { prompt }, None).await;
         }
     }
     shared.state.lock().cancelling = false;
@@ -136,6 +137,7 @@ async fn finish_last_err(shared: &Arc<Shared>, entry: &InFlightPrompt, error: &c
         let why = shared.state.lock().take_ended_own_turn();
         let Some(why) = why else {
             shared
+                .run
                 .event(
                     EventBody::Notice { level: NoticeLevel::Error, message: error.to_string(), subagent: None },
                     Some(raw),
@@ -147,8 +149,8 @@ async fn finish_last_err(shared: &Arc<Shared>, entry: &InFlightPrompt, error: &c
             schedule_pending_mode_swap(shared);
             return;
         };
-        shared.event(EventBody::AgentState { state: AgentRunState::Running }, None).await;
-        shared.event(EventBody::OwnTurn(why), None).await;
+        shared.run.event(EventBody::AgentState { state: AgentRunState::Running }, None).await;
+        shared.run.event(EventBody::OwnTurn(why), None).await;
     }
     settle_turn(shared).await;
     record_end(shared, TurnOutcome::Error, Some(error.to_string()), None, Some(raw)).await;
@@ -169,7 +171,7 @@ async fn finish_last_ok(shared: &Arc<Shared>, entry: &InFlightPrompt, result: &V
         && let Some(prompt) = entry.seq()
     {
         let event = if cancelled { EventBody::PromptDropped { prompt } } else { EventBody::PromptTaken { prompt } };
-        shared.event(event, None).await;
+        shared.run.event(event, None).await;
     }
     if entry.is_drain() && !entry.started_own_turn() {
         settle_turn(shared).await;
@@ -272,6 +274,7 @@ pub(super) async fn record_compacted_end(
     };
     let models = if outcome == TurnOutcome::Cancelled && reply.is_none() { Vec::new() } else { vec![model] };
     shared
+        .run
         .event(
             EventBody::TurnEnded {
                 outcome,
@@ -311,10 +314,10 @@ pub(super) async fn settle_replaced_child(shared: &Shared) {
     notifications::flush_streams(shared).await;
     let (dropped, stopped) = shared.state.lock().take_replaced_child_tasks();
     for tool_use_id in dropped {
-        shared.event(EventBody::ToolCallDropped { tool_use_id }, None).await;
+        shared.run.event(EventBody::ToolCallDropped { tool_use_id }, None).await;
     }
     if let Some(stopped) = stopped {
-        shared.event(EventBody::AgentTasks { tasks: Vec::new(), stopped }, None).await;
+        shared.run.event(EventBody::AgentTasks { tasks: Vec::new(), stopped }, None).await;
     }
 }
 
@@ -328,7 +331,7 @@ pub(super) async fn settle_all(shared: &Shared) {
         state.prompts.drain(..).filter(|entry| !entry.taken).filter_map(|entry| entry.seq()).collect()
     };
     for prompt in prompts {
-        shared.event(EventBody::PromptDropped { prompt }, None).await;
+        shared.run.event(EventBody::PromptDropped { prompt }, None).await;
     }
     settle_turn(shared).await;
 }
@@ -353,13 +356,13 @@ pub(super) async fn settle_turn(shared: &Shared) {
         (requests, calls, surviving_tasks)
     };
     for approval_id in requests {
-        shared.event(EventBody::ApprovalResolved { approval_id, decision: None, by_setting: false }, None).await;
+        shared.run.event(EventBody::ApprovalResolved { approval_id, decision: None, by_setting: false }, None).await;
     }
     for tool_use_id in calls {
-        shared.event(EventBody::ToolCallDropped { tool_use_id }, None).await;
+        shared.run.event(EventBody::ToolCallDropped { tool_use_id }, None).await;
     }
     if let Some(tasks) = surviving_tasks {
-        shared.event(EventBody::AgentTasks { tasks, stopped: Vec::new() }, None).await;
+        shared.run.event(EventBody::AgentTasks { tasks, stopped: Vec::new() }, None).await;
     }
 }
 
@@ -374,5 +377,5 @@ pub(super) async fn report_state(shared: &Shared) {
             AgentRunState::Idle
         }
     };
-    shared.event(EventBody::AgentState { state }, None).await;
+    shared.run.event(EventBody::AgentState { state }, None).await;
 }

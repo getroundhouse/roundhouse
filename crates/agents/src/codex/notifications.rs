@@ -20,6 +20,7 @@ pub(super) async fn read(shared: Arc<Shared>, mut input: mpsc::Receiver<(Value, 
         let line = raw.clone();
         if let Err(error) = notification(&shared, &value, raw).await {
             shared
+                .run
                 .event(
                     EventBody::Notice {
                         level: NoticeLevel::Error,
@@ -47,6 +48,7 @@ async fn notification(shared: &Shared, value: &Value, raw: String) -> Result<(),
         // Preserve unsupported foreign-thread data without letting it consume a prompt, settle the root turn,
         // or appear as the root assistant. No call association means it cannot be normalized safely.
         shared
+            .run
             .event(
                 EventBody::AgentOther {
                     kind: format!("unassociated Codex thread: {method}"),
@@ -116,9 +118,9 @@ async fn dispatch(
                     asked.asked
                 })
             };
-            shared.event(EventBody::AgentState { state: AgentRunState::Running }, Some(raw)).await;
+            shared.run.event(EventBody::AgentState { state: AgentRunState::Running }, Some(raw)).await;
             if let Some(prompt) = compacting {
-                shared.event(EventBody::PromptTaken { prompt }, None).await;
+                shared.run.event(EventBody::PromptTaken { prompt }, None).await;
             }
         }
         "turn/completed" => {
@@ -147,6 +149,7 @@ async fn dispatch(
         "item/commandExecution/terminalInteraction" if params["stdin"] == "" => {}
         _ => {
             shared
+                .run
                 .event(EventBody::AgentOther { kind: method.into(), subagent: scope.parent.clone() }, Some(raw))
                 .await;
         }
@@ -163,6 +166,7 @@ async fn delta(shared: &Shared, method: &str, params: &Value, scope: &subagents:
         DeltaChange::Text { index: 0, text: text.into() }
     };
     shared
+        .run
         .emit(AgentOutput::Delta(StreamDelta {
             run: None,
             message_id: id.into(),
@@ -233,6 +237,6 @@ pub(super) async fn record_end(shared: &Shared, outcome: TurnOutcome, error: Opt
         only_compacted,
         request_failed: false,
     };
-    shared.event(end, raw).await;
+    shared.run.event(end, raw).await;
     control::report_state(shared).await;
 }

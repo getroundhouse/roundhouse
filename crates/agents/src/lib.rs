@@ -18,6 +18,7 @@ mod model_offers;
 mod options;
 mod output;
 mod registry;
+mod run;
 mod spoken;
 mod starting;
 mod stdio;

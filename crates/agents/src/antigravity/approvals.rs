@@ -142,6 +142,7 @@ async fn ask(
 ) {
     shared.state.lock().waiting.insert(id.clone(), Waiting { native });
     shared
+        .run
         .event(
             EventBody::ApprovalRequested {
                 approval_id: id,
@@ -152,7 +153,7 @@ async fn ask(
             raw,
         )
         .await;
-    shared.event(EventBody::AgentState { state: AgentRunState::RequiresAction }, None).await;
+    shared.run.event(EventBody::AgentState { state: AgentRunState::RequiresAction }, None).await;
 }
 
 pub(super) async fn cancel_native_waiters(shared: &Shared) {
@@ -192,10 +193,11 @@ pub(super) async fn decide(shared: &Arc<Shared>, id: &ApprovalId, decision: &Dec
             return Err(error);
         }
         shared
+            .run
             .event(EventBody::Notice { level: NoticeLevel::Error, message: error.to_string(), subagent: None }, None)
             .await;
         if !refused {
-            shared.stop().await;
+            shared.run.stop().await;
         }
         turn::report_state(shared).await;
         return Err(error);
@@ -276,7 +278,7 @@ async fn switch_plan_mode(shared: &Arc<Shared>, mode: ApprovalMode, prompt_text:
         changed
     };
     if changed {
-        shared.event(EventBody::AgentMode { mode }, None).await;
+        shared.run.event(EventBody::AgentMode { mode }, None).await;
     }
     control::send_prompt_rpc(shared, None, vec![json!({ "type": "text", "text": prompt_text })]).await
 }
@@ -287,6 +289,7 @@ fn unsupported_decision() -> AgentError {
 
 async fn unsupported(shared: &Shared, id: &Value, method: &str) -> Result<(), AgentError> {
     shared
+        .run
         .event(
             EventBody::Notice {
                 level: NoticeLevel::Warning,

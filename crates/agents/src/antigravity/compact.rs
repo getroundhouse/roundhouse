@@ -50,9 +50,9 @@ pub(super) async fn request(shared: &Arc<Shared>, asked: Seq) -> Result<(), Agen
         Ok((session_id, rpc_id))
     })
     .await?;
-    shared.event(EventBody::PromptTaken { prompt: asked }, None).await;
-    shared.event(EventBody::AgentState { state: AgentRunState::Running }, None).await;
-    shared.event(EventBody::AgentCompacting { written_chars: None }, None).await;
+    shared.run.event(EventBody::PromptTaken { prompt: asked }, None).await;
+    shared.run.event(EventBody::AgentState { state: AgentRunState::Running }, None).await;
+    shared.run.event(EventBody::AgentCompacting { written_chars: None }, None).await;
     write_prompt_request(shared, &rpc, rpc_id, &session_id, vec![json!({ "type": "text", "text": "/compact" })]).await;
     Ok(())
 }
@@ -87,7 +87,7 @@ pub(super) async fn finish_ok(shared: &Arc<Shared>, asked: Seq, started_at: Inst
             summary: None,
         }
     };
-    shared.event(EventBody::AgentCompacted { asked: Some(asked), keeping: None, outcome }, None).await;
+    shared.run.event(EventBody::AgentCompacted { asked: Some(asked), keeping: None, outcome }, None).await;
     turn::settle_turn(shared).await;
     let turn_outcome = parsed.stop_reason.outcome();
     let only_compacted = turn_outcome == TurnOutcome::Success;
@@ -102,7 +102,7 @@ pub(super) async fn finish_err(shared: &Arc<Shared>, asked: Seq, error: &AgentEr
         state.reply = None;
     }
     let outcome = CompactionOutcome::Failed { error: Some(error.to_string()) };
-    shared.event(EventBody::AgentCompacted { asked: Some(asked), keeping: None, outcome }, None).await;
+    shared.run.event(EventBody::AgentCompacted { asked: Some(asked), keeping: None, outcome }, None).await;
     turn::settle_turn(shared).await;
     turn::record_compacted_end(shared, TurnOutcome::Error, Some(error.to_string()), None, false, Some(raw)).await;
 }

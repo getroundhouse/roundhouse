@@ -1,5 +1,4 @@
 use std::sync::Arc;
-use std::sync::atomic::Ordering;
 use std::time::Duration;
 
 use async_trait::async_trait;
@@ -28,10 +27,10 @@ impl AgentProcess for AntigravityProcess {
         super::claims::claims()
     }
     fn pid(&self) -> u32 {
-        self.shared.pid.load(Ordering::SeqCst)
+        self.shared.run.pid()
     }
     fn is_gone(&self) -> bool {
-        self.shared.gone.load(Ordering::SeqCst)
+        self.shared.run.is_gone()
     }
 
     async fn control(&self, control: &Control) -> Result<(), AgentError> {
@@ -72,7 +71,7 @@ impl AgentProcess for AntigravityProcess {
     }
 
     async fn stop(&self) {
-        self.shared.stop().await;
+        self.shared.run.stop().await;
     }
 }
 
@@ -174,9 +173,10 @@ pub(super) async fn write_prompt_request(
         // Some of it may have reached `agy`, so it's stopped rather than left in a state nobody knows, and its exit
         // drops the prompt, as it does any prompt `agy` hadn't taken.
         shared
+            .run
             .event(EventBody::Notice { level: NoticeLevel::Error, message: error.to_string(), subagent: None }, None)
             .await;
-        shared.stop().await;
+        shared.run.stop().await;
     }
 }
 
@@ -199,7 +199,7 @@ pub(super) async fn between_endings<T>(
             ended
         };
         if tokio::time::timeout(END_WAIT, done.wait_for(|count| *count > ended)).await.is_err() {
-            shared.stop().await;
+            shared.run.stop().await;
             return Err(AgentError::NoAnswer);
         }
     }
@@ -257,7 +257,7 @@ async fn change(shared: &Arc<Shared>, requested: &settings::Settings) -> Result<
             changed
         };
         if changed {
-            shared.event(EventBody::AgentMode { mode: perm }, None).await;
+            shared.run.event(EventBody::AgentMode { mode: perm }, None).await;
         }
     }
     Ok(())
@@ -279,7 +279,7 @@ async fn swap_idle_settings(
     };
     ensure_mode_process(shared).await?;
     if changed {
-        shared.event(EventBody::AgentMode { mode: perm }, None).await;
+        shared.run.event(EventBody::AgentMode { mode: perm }, None).await;
     }
     Ok(())
 }
@@ -377,11 +377,11 @@ async fn cancel(shared: &Arc<Shared>) -> Result<(), AgentError> {
     if let Some(session_id) = session_id
         && let Err(error) = shared.rpc().notify("session/cancel", json!({ "sessionId": session_id })).await
     {
-        shared.stop().await;
+        shared.run.stop().await;
         return Err(error);
     }
     if tokio::time::timeout(END_WAIT, done.wait_for(|count| *count > before)).await.is_err() {
-        shared.stop().await;
+        shared.run.stop().await;
         return Err(AgentError::NoAnswer);
     }
     Ok(())

@@ -17,13 +17,13 @@ pub(super) async fn tokens(shared: &Shared, params: &Value, scope: &Scope, raw: 
     let Some(used_tokens) = usage["last"]["totalTokens"].as_u64() else { return };
     if let Some(subagent) = &scope.parent {
         let body = EventBody::SubagentContext { subagent: subagent.clone(), tokens: used_tokens };
-        shared.event(body, Some(raw)).await;
+        shared.run.event(body, Some(raw)).await;
         return;
     }
     let Some(max_tokens) = usage["modelContextWindow"].as_u64() else { return };
     // Codex's window is its configuration's, which can be smaller than its model's, and it doesn't say which.
     let context = ContextUsage { used_tokens, max_tokens, model_tokens: None, max_set_by: None, parts: Vec::new() };
-    shared.emit(AgentOutput::Report(Report::Context { context })).await;
+    shared.run.emit(AgentOutput::Report(Report::Context { context })).await;
 }
 
 /// `account/rateLimits/updated`: the account's limits, each window it names. An update can leave out what hasn't
@@ -36,7 +36,7 @@ pub(super) async fn limits(shared: &Shared, params: &Value, scope: &Scope, raw: 
     } else {
         EventBody::AgentLimits { limits }
     };
-    shared.event(body, Some(raw)).await;
+    shared.run.event(body, Some(raw)).await;
 }
 
 /// The windows of the account's limit on every model, `codex`, shortest first. Another ID is a model's own limit, which

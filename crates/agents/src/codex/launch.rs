@@ -1,12 +1,7 @@
-use std::path::Path;
-use std::process::Stdio;
-
 use protocol::capability::conversation::Start;
 use protocol::event::EventBody;
 use protocol::worker::AgentSpec;
 use serde_json::{Value, json};
-use tokio::process::{Child, ChildStderr, ChildStdin, ChildStdout, Command};
-use tracing::warn;
 
 use super::running::Shared;
 use super::state::ThreadId;
@@ -27,47 +22,6 @@ pub(super) const ARGS: [&str; 10] = [
     "-c",
     "suppress_unstable_features_warning=true",
 ];
-
-pub(super) struct Launched {
-    pub(super) child: Child,
-    pub(super) pid: u32,
-    pub(super) stdin: ChildStdin,
-    pub(super) stdout: ChildStdout,
-    pub(super) stderr: ChildStderr,
-}
-
-pub(super) fn launch(
-    bin: &Path,
-    cwd: &Path,
-    env: &[(String, String)],
-    options: &AgentOptions,
-) -> Result<Launched, AgentError> {
-    if options.login.is_some() {
-        return Err(AgentError::Refused("Codex uses the login on its worker's machine".into()));
-    }
-    let mut command = Command::new(bin);
-    command
-        .args(ARGS)
-        .current_dir(cwd)
-        .envs(env.iter().map(|(key, value)| (key, value)))
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .kill_on_drop(true);
-    process::own_group(command.as_std_mut());
-    let mut child = crate::starting::start(&mut command, bin, cwd, &options.environment)?;
-    let pid = child.id().unwrap_or_default();
-    if let Some(path) = &options.pid_file
-        && let Err(error) = process::ProcessRecord::write(path, pid)
-    {
-        warn!("could not record Codex {pid} in {}: {error}", path.display());
-    }
-    let (Some(stdin), Some(stdout), Some(stderr)) = (child.stdin.take(), child.stdout.take(), child.stderr.take())
-    else {
-        return Err(AgentError::NoPipes { bin: bin.display().to_string() });
-    };
-    Ok(Launched { child, pid, stdin, stdout, stderr })
-}
 
 pub(super) async fn initialize(shared: &Shared) -> Result<(), AgentError> {
     shared
@@ -120,7 +74,7 @@ pub(super) async fn conversation(
                 Err(AgentError::Refused(message))
                     if message.contains("no rollout found") || message.contains("thread not found") =>
                 {
-                    shared.event(EventBody::Notice { level: protocol::event::NoticeLevel::Warning,
+                    shared.run.event(EventBody::Notice { level: protocol::event::NoticeLevel::Warning,
                         message: "Codex could not find this conversation. Starting a new one without its previous context.".into(), subagent: None }, None).await;
                     shared.rpc.ask("thread/start", configuration(spec, &settings, options, told)).await?
                 }
@@ -135,6 +89,7 @@ pub(super) async fn conversation(
         response["thread"]["id"].as_str().ok_or_else(|| AgentError::Refused("Codex returned no thread ID".into()))?;
     shared.state.lock().thread = Some(ThreadId(id.into()));
     shared
+        .run
         .event(
             EventBody::AgentInit {
                 // The worker says what the run claims as it starts it.
