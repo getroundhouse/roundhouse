@@ -28,8 +28,9 @@ fn whole(cells: f32) -> u16 {
 }
 
 /// A sidebar sliding beside a terminal leaves it at the size it has, with its grid cut off or its room left empty,
-/// and the terminal takes the size it has room for once the slide ends, so its program is resized once rather than
-/// for each column the slide passes. The sidebar on the left is hidden, which widens the room, then shown again.
+/// and the terminal takes the size it has room for once the slide ends, so its program is resized once rather than on
+/// every frame. Each sidebar is hidden, which widens the room, then shown again, which narrows it: the one on the
+/// left, which slides wherever a workspace shows, and the changes, which slide only where they're drawn.
 #[gpui_kit::test]
 fn a_terminal_takes_the_size_it_has_room_for_once_a_sidebar_beside_it_stops_sliding(cx: &mut TestAppContext) {
     let (_hub, mut ui) = with_a_made_up_terminal(cx);
@@ -37,22 +38,28 @@ fn a_terminal_takes_the_size_it_has_room_for_once_a_sidebar_beside_it_stops_slid
     assert_eq!(given(&ui), Some(before), "it has the size it has room for");
     ui.allow_motion();
 
-    ui.click("toggle-sidebar");
+    for (toggle, sidebar) in [("toggle-sidebar", "the workspaces"), ("toggle-diff", "the changes")] {
+        let hidden = slide(&mut ui, toggle, &format!("hiding {sidebar}"));
+        assert!(hidden.cols > before.cols, "hiding {sidebar} widened the room: {hidden:?}");
+        let shown = slide(&mut ui, toggle, &format!("showing {sidebar}"));
+        assert_eq!(shown, before, "showing {sidebar} gave back the size it had");
+    }
+}
+
+/// Clicks `toggle`, which slides a sidebar, and checks that halfway through the slide the terminal still has the size
+/// it had, though its room has changed by many columns, and that once it ends the terminal has the size its room has,
+/// which this returns.
+fn slide(ui: &mut Ui<'_>, toggle: &'static str, case: &str) -> TerminalSize {
+    let before = given(ui).unwrap();
+
+    ui.click(toggle);
     ui.play(PANEL.mul_f32(0.5));
 
-    let partway = room(&mut ui);
-    assert!(partway.cols > before.cols + 10, "the room has widened by many columns: {partway:?}");
-    assert_eq!(given(&ui), Some(before), "hiding, it keeps its size partway");
+    let partway = room(ui);
+    assert!(partway.cols.abs_diff(before.cols) > 10, "{case}: the room has changed by many columns: {partway:?}");
+    assert_eq!(given(ui), Some(before), "{case}: it keeps its size partway");
     ui.play(PANEL.mul_f32(0.6));
-    let hidden = room(&mut ui);
-    assert!(hidden.cols > partway.cols);
-    assert_eq!(given(&ui), Some(hidden), "hidden, it has the size it has room for");
-
-    ui.click("toggle-sidebar");
-    ui.play(PANEL.mul_f32(0.5));
-
-    assert!(room(&mut ui).cols < hidden.cols, "the room has narrowed");
-    assert_eq!(given(&ui), Some(hidden), "showing, it keeps its size partway");
-    ui.play(PANEL.mul_f32(0.6));
-    assert_eq!(given(&ui), Some(before), "shown again, it has the size it had");
+    let after = room(ui);
+    assert_eq!(given(ui), Some(after), "{case}: once the slide ends, it has the size it has room for");
+    after
 }
