@@ -95,8 +95,21 @@ enum Role {
 /// Everything a worker starts runs the code in a workspace, which can be another build of Roundhouse, and these
 /// would point it at this hub. That includes git hooks, so it has to cover every command rather than a few.
 fn forget_hub_variables() {
-    for name in protocol::paths::HUB_ONLY_ENV {
-        // SAFETY: this runs on the main thread before any other exists, so nothing can be reading the environment.
+    forget(&protocol::paths::HUB_ONLY_ENV);
+}
+
+/// A hub can be started from inside a Claude session, such as by an agent, and every program the daemon starts inherits
+/// what it was started with: a worker, an agent, a terminal's shell, a setup or run script, and git. A Claude CLI among
+/// them, however far down, would take itself for part of that session.
+fn forget_a_parent_claude_session() {
+    forget(agents::claude::PARENT_SESSION_ENV);
+}
+
+/// Removes `names` from this process's environment. Only `main` calls it, before it starts a thread.
+fn forget(names: &[&str]) {
+    for name in names {
+        // SAFETY: `main` calls this on the main thread before any other exists, so nothing can be reading the
+        // environment.
         unsafe { std::env::remove_var(name) };
     }
 }
@@ -116,6 +129,8 @@ fn hub_start(on_demand: bool, service: bool) -> HubStart {
 }
 
 fn main() -> anyhow::Result<ExitCode> {
+    // First, whatever this runs as, so nothing it starts has them.
+    forget_a_parent_claude_session();
     signals::unblock();
     // Before anything is started. A worker's input and output are its hub's pipes, and the hub learns that the worker
     // has exited when its output ends.

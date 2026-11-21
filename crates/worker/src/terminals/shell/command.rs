@@ -44,11 +44,6 @@ pub(super) fn shell(cwd: &str, env: Vec<(String, String)>, given: &Environment) 
     for (name, value) in env {
         command.env(name, value);
     }
-    // As an agent doesn't get them, since a hub started from inside a Claude session has them, and the CLI run here
-    // would take itself for part of that session.
-    for name in agents::claude::SCRUBBED_ENV {
-        command.env_remove(name);
-    }
     let others: Vec<String> = command.iter_full_env_as_str().map(|(name, _)| name.to_string()).collect();
     for name in others.into_iter().filter(|name| another_terminals(name)) {
         command.env_remove(name);

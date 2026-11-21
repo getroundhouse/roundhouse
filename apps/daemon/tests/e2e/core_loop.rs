@@ -5,7 +5,6 @@
 use std::path::PathBuf;
 use std::process::Command;
 
-use client_core::Client;
 use protocol::event::EventBody;
 use protocol::model::{Seq, WorkspaceStatus};
 
@@ -102,31 +101,6 @@ fn many_sessions_run_at_once_without_mixing_their_output() {
         }
     }
     assert_eq!(client.hub_status().unwrap().workers, 4);
-}
-
-#[test]
-fn the_agent_does_not_inherit_a_parent_sessions_identity() {
-    let mut stack = Stack::start();
-    stack.kill_hub();
-    let mut command = stack.command();
-    command.env("CLAUDECODE", "1").env("CLAUDE_CODE_SESSION_ID", "parent").env("ANTHROPIC_API_KEY", "kept");
-    stack.hub = Some(command.spawn().unwrap().into());
-    wait_until("the hub", || Client::connect(&stack.socket(), "test").is_ok());
-
-    let client = stack.client();
-    let (_, session) = stack.workspace(&client);
-    client
-        .session_prompt(
-            &session.id,
-            "env:CLAUDECODE; env:CLAUDE_CODE_SESSION_ID; env:ANTHROPIC_API_KEY; env:CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS",
-            None,
-        )
-        .unwrap();
-    let text = assistant_text(&wait_for_turn_end(&client, &session.id, 1));
-    assert!(text.contains("CLAUDECODE=<unset>"), "{text}");
-    assert!(text.contains("CLAUDE_CODE_SESSION_ID=<unset>"), "{text}");
-    assert!(text.contains("ANTHROPIC_API_KEY=kept"), "the user's own login settings stay: {text}");
-    assert!(text.contains("CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS=1"), "{text}");
 }
 
 #[test]

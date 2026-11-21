@@ -35,8 +35,8 @@ async fn a_terminal_is_given_the_git_credential_its_hub_set() {
 }
 
 /// What's typed comes back worked out, in the worktree, with the terminal the worker says it is and the environment the
-/// hub gave it, but for a parent Claude session's and terminal apps', and starting the terminal again starts nothing
-/// more. The worker lists it with the time the hub opened it at.
+/// hub gave it, but for terminal apps', and starting the terminal again starts nothing more. The worker lists it with
+/// the time the hub opened it at.
 #[tokio::test]
 async fn a_terminal_runs_a_shell_in_the_worktree_that_does_what_is_typed() {
     let dir = tempfile::tempdir().unwrap();
@@ -44,14 +44,10 @@ async fn a_terminal_runs_a_shell_in_the_worktree_that_does_what_is_typed() {
 
     hub.open("t", dir.path()).await;
     hub.open("t", dir.path()).await;
-    hub.type_in(
-        "t",
-        r#"echo "$((6*7)) $TERM $PORT ${CLAUDECODE-none} ${TMUX-none} ${GHOSTTY_RESOURCES_DIR-none} $(pwd -P)""#,
-    )
-    .await;
+    hub.type_in("t", r#"echo "$((6*7)) $TERM $PORT ${TMUX-none} ${GHOSTTY_RESOURCES_DIR-none} $(pwd -P)""#).await;
 
     let worktree = dir.path().canonicalize().unwrap();
-    hub.until_shown(&format!("42 xterm-256color 55000 none none none {}", worktree.display())).await;
+    hub.until_shown(&format!("42 xterm-256color 55000 none none {}", worktree.display())).await;
     assert_eq!(hub.listed().await, [("t".into(), OPENED_AT_MS)]);
     hub.finish().await;
 }

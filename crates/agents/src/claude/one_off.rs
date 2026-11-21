@@ -10,7 +10,7 @@ use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
 use process::Environment;
 use protocol::model::AgentLogin;
 
-use super::process::{command, start};
+use super::process::start;
 use crate::stdio::GroupGuard;
 use crate::{AgentError, CallFailed};
 
@@ -37,7 +37,7 @@ pub(super) struct OneOff<'a> {
 /// Runs the call and answers with what it printed and how it exited, which is for the caller to judge. Dropping the
 /// future stops the call and everything it started.
 pub(super) async fn run(call: OneOff<'_>) -> Result<Output, AgentError> {
-    let mut command = command(call.bin, call.cwd);
+    let mut command = crate::starting::piped(call.bin, call.cwd);
     command.args(&call.args);
     let mut child = start(&mut command, call.bin, call.cwd, call.login, call.environment)?;
     let running = GroupGuard::new(child.id().unwrap_or_default(), call.pid_file.clone());

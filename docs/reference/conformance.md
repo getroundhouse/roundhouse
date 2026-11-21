@@ -43,7 +43,7 @@ A scripted trial's CLI is kept from this machine:
 - The example plays scripted trials in a process of its own, whose environment holds only what the CLI and its tools need to run, such as `PATH`, and it refuses any other.
 - Its home and `CLAUDE_CONFIG_DIR` are a scratch directory, and so is its project, a git repository outside every checkout, so it finds no repository's instructions. It signs in with a key that's no one's, and `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` turns off what it fetches and reports as it starts.
 
-A trial against the real model isn't sandboxed. It uses this machine's login, settings and environment, but for what the adapter takes out, and removes the conversation and the plans it leaves in `~/.claude`. With `ROUNDHOUSE_CONFORMANCE_TOKEN` set to a token `claude setup-token` made, it signs in with that, and keeps to a home and config directory of its own, though it still has the rest of this machine's environment.
+A trial against the real model isn't sandboxed. It uses this machine's login, settings and environment, but for a parent Claude session's variables, which the example takes out of its own as it starts, and removes the conversation and the plans it leaves in `~/.claude`. With `ROUNDHOUSE_CONFORMANCE_TOKEN` set to a token `claude setup-token` made, it signs in with that, and keeps to a home and config directory of its own, though it still has the rest of this machine's environment.
 
 ## Codex's binding
 

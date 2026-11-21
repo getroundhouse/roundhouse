@@ -97,15 +97,14 @@ impl Hub {
     }
 
     /// Asks the worker to start terminal `terminal` running `sh` in `dir`, with `dir` for its home, so it reads no
-    /// one's profile, and with variables a parent Claude session and terminal apps set, as a hub started from inside
-    /// them has, and a `GH_TOKEN`, as a worker started where one is set has.
+    /// one's profile, and with variables terminal apps set, as a hub started from inside one has, and a `GH_TOKEN`, as a
+    /// worker started where one is set has.
     pub(super) async fn start_terminal(&mut self, terminal: &str, dir: &Path, size: TerminalSize) -> WorkerOutcome {
         let home = dir.to_string_lossy().into_owned();
         let env = [
             ("SHELL", "/bin/sh"),
             ("HOME", home.as_str()),
             ("PORT", "55000"),
-            ("CLAUDECODE", "1"),
             ("TMUX", "/tmp/tmux-501/default,1,0"),
             ("GHOSTTY_RESOURCES_DIR", "/Applications/Ghostty.app/Contents/Resources/ghostty"),
             ("GH_TOKEN", "the-machines-own"),

@@ -23,7 +23,7 @@ pub use context::{ModelWindows, context_usage};
 pub use description::description;
 pub use effort::applied_effort;
 pub use normalize::{Normalized, Normalizer, Parsed};
-pub use process::{SCRUBBED_ENV, build_args, spawn, spawn_at};
+pub use process::{PARENT_SESSION_ENV, build_args, spawn, spawn_at};
 pub use title::title_for;
 pub use usage::{lists_every_models_week, usage_limits};
 
