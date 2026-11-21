@@ -1,21 +1,30 @@
 use super::super::made::{Made, inserted, made_by};
 use super::super::workspaces::workspace_on;
-use super::super::{Store, StoreError, current_rev, from_text, lock, rev_of, text_of};
+use super::super::{ByColumn, Columns, Store, StoreError, columns, current_rev, lock, rev_of, text_at, text_of};
 use protocol::model::{ClientRequestId, CommentDraft, CommentId, DiffComment, Rev, Workspace, WorkspaceId};
 use rusqlite::{Connection, OptionalExtension as _, Row, params};
 
-pub(in super::super) const COMMENT_COLUMNS: &str = "id, workspace_id, path, side, line, text, created_at_ms";
+columns! {
+    /// What a comment's row holds, as it's written, then its revision.
+    pub(in super::super) struct CommentColumns {
+        id, workspace_id, path, side, line, text, created_at_ms,
+    } then {
+        rev,
+    }
+}
 
+/// The comment in a row of [`CommentColumns`].
 pub(in super::super) fn comment_from_row(row: &Row) -> rusqlite::Result<DiffComment> {
+    let c = CommentColumns::at(0);
     Ok(DiffComment {
-        id: row.get::<_, String>(0)?.into(),
-        workspace_id: row.get::<_, String>(1)?.into(),
-        path: row.get(2)?,
-        side: from_text(row.get(3)?)?,
-        line: row.get(4)?,
-        text: row.get(5)?,
-        created_at_ms: row.get(6)?,
-        rev: rev_of(row, 7)?,
+        id: row.at::<String>(c.id)?.into(),
+        workspace_id: row.at::<String>(c.workspace_id)?.into(),
+        path: row.at(c.path)?,
+        side: text_at(row, c.side)?,
+        line: row.at(c.line)?,
+        text: row.at(c.text)?,
+        created_at_ms: row.at(c.created_at_ms)?,
+        rev: rev_of(row, c.rev)?,
     })
 }
 
@@ -43,7 +52,8 @@ impl Store {
         }
         tx.execute(
             &format!(
-                "INSERT INTO diff_comments ({COMMENT_COLUMNS}, client_request_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+                "INSERT INTO diff_comments ({}, client_request_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                CommentColumns::ROW
             ),
             params![
                 comment.id.as_str(),
@@ -70,7 +80,8 @@ impl Store {
     pub fn list_comments(&self, workspace_id: &WorkspaceId) -> Result<Vec<DiffComment>, StoreError> {
         let conn = lock(&self.reader);
         let mut statement = conn.prepare_cached(&format!(
-            "SELECT {COMMENT_COLUMNS}, rev FROM diff_comments WHERE workspace_id = ? ORDER BY created_at_ms, id"
+            "SELECT {} FROM diff_comments WHERE workspace_id = ? ORDER BY created_at_ms, id",
+            CommentColumns::LIST
         ))?;
         let rows = statement.query_map([workspace_id.as_str()], comment_from_row)?;
         rows.collect::<rusqlite::Result<_>>().map_err(StoreError::from)
@@ -84,7 +95,7 @@ impl Store {
         let tx = conn.transaction()?;
         let update = "UPDATE diff_comments SET text = ?1 WHERE id = ?2 AND text IS NOT ?1";
         tx.execute(update, params![text, id.as_str()])?;
-        let query = format!("SELECT {COMMENT_COLUMNS}, rev FROM diff_comments WHERE id = ?");
+        let query = format!("SELECT {} FROM diff_comments WHERE id = ?", CommentColumns::LIST);
         let edited = tx.query_row(&query, [id.as_str()], comment_from_row).optional()?;
         let Some(edited) = edited else { return Err(StoreError::NotFound { kind: "comment", id: id.to_string() }) };
         let saves = |writing: &CommentDraft| writing.editing.as_ref() == Some(id) && writing.text == text;

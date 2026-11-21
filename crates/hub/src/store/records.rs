@@ -4,7 +4,7 @@ use protocol::model::Records;
 use rusqlite::{Row, Transaction};
 
 use super::accounts::accounts;
-use super::comments::{COMMENT_COLUMNS, comment_from_row};
+use super::comments::{CommentColumns, comment_from_row};
 use super::github_accounts::github_accounts;
 use super::github_apps::github_apps;
 use super::github_reach::github_reach;
@@ -12,9 +12,9 @@ use super::github_sign_ins::github_sign_ins;
 use super::hub_settings::hub_settings;
 use super::new_workspace_draft::new_workspace_draft;
 use super::repos::{REPO_COLUMNS, repo_from_row};
-use super::sessions::{SESSION_COLUMNS, session_from_row};
-use super::workspaces::{WORKSPACE_COLUMNS, workspace_from_row};
-use super::{Store, StoreError, current_rev, lock};
+use super::sessions::{SessionColumns, session_from_row};
+use super::workspaces::{WorkspaceColumns, workspace_from_row};
+use super::{Columns, Store, StoreError, current_rev, lock};
 
 impl Store {
     /// Read in one transaction, so it's everything as of one revision. Repositories, workspaces, sessions and comments
@@ -26,20 +26,20 @@ impl Store {
         let mut conn = lock(&self.reader);
         let tx = conn.transaction()?;
         let sessions =
-            rows(&tx, &format!("SELECT {SESSION_COLUMNS}, rev FROM sessions ORDER BY created_at_ms, id"), |row| {
+            rows(&tx, &format!("SELECT {} FROM sessions ORDER BY created_at_ms, id", SessionColumns::LIST), |row| {
                 session_from_row(row).map(|stored| stored.session)
             })?;
         let records = Records {
             repos: rows(&tx, &format!("SELECT {REPO_COLUMNS}, rev FROM repos ORDER BY name, id"), repo_from_row)?,
             workspaces: rows(
                 &tx,
-                &format!("SELECT {WORKSPACE_COLUMNS}, rev FROM workspaces ORDER BY created_at_ms, id"),
+                &format!("SELECT {} FROM workspaces ORDER BY created_at_ms, id", WorkspaceColumns::LIST),
                 workspace_from_row,
             )?,
             sessions,
             comments: rows(
                 &tx,
-                &format!("SELECT {COMMENT_COLUMNS}, rev FROM diff_comments ORDER BY created_at_ms, id"),
+                &format!("SELECT {} FROM diff_comments ORDER BY created_at_ms, id", CommentColumns::LIST),
                 comment_from_row,
             )?,
             hub_settings: Some(hub_settings(&tx)?),

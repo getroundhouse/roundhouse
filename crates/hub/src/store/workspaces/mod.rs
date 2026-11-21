@@ -8,4 +8,4 @@ mod workspace_rows;
 
 pub use placement::WorkspacePlacement;
 pub use workspace_rows::{BranchesSet, Ended, Move};
-pub(super) use workspace_rows::{WORKSPACE_COLUMNS, workspace_from_row, workspace_on};
+pub(super) use workspace_rows::{WorkspaceColumns, workspace_from_row, workspace_on};

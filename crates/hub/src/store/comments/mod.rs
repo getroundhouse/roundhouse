@@ -5,4 +5,4 @@ mod tests;
 
 mod comment_rows;
 pub use comment_rows::Commented;
-pub(super) use comment_rows::{COMMENT_COLUMNS, comment_from_row};
+pub(super) use comment_rows::{CommentColumns, comment_from_row};
