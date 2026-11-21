@@ -2,9 +2,7 @@
 //! it's open.
 
 pub(crate) use chat_keys::CHAT_KEY_CONTEXT;
-pub use conversing::{
-    CONVERSATION_BAR, CONVERSATION_END, CONVERSATION_MODE, CONVERSATION_STOP, CONVERSATION_TYPE, TAKE_OVER,
-};
+pub use conversing::{CONVERSATION_BAR, CONVERSATION_MODE, CONVERSATION_STOP, CONVERSATION_TYPE, TAKE_OVER};
 pub use dictation_ui::{LIVE_LINE, NOTHING_HEARD, SPACE_DICTATES_AFTER, SPACE_LISTENS_AFTER};
 pub use file_tab::Opened;
 pub(crate) use keeping::drafted;
