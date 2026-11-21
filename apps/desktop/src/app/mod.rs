@@ -28,6 +28,7 @@ pub(crate) mod share_hub;
 mod shortcuts;
 mod this_device;
 mod title_bar;
+mod updating_hub;
 mod view;
 mod window_buttons;
 mod workspaces;

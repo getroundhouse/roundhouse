@@ -3,9 +3,10 @@
 use client_core::Client;
 use gpui_kit::App;
 use protocol::event::AgentTask;
-use protocol::model::SessionStatus;
+use protocol::model::{HubUpdate, SessionStatus, UpdateAttempt};
 
 use super::AppView;
+use super::updating_hub::HubUpdateAsk;
 
 impl AppView {
     pub fn build_line(&self, cx: &App) -> BuildLine {
@@ -17,7 +18,9 @@ impl AppView {
         let terminals = self.records.workspaces().iter().map(|workspace| self.records.terminals(&workspace.id).len());
         let holding = Holding::of(restarting, chats, terminals.sum());
         let may_restart = self.restartable_hub.is_some();
-        BuildLine::new(self.hub.build_version, hub, may_restart, holding, crate::updates::ready(cx))
+        let ready = crate::updates::ready(cx);
+        let (found, asked) = (self.records.hub_update(), self.hub_update_asked.as_ref());
+        BuildLine::new(self.hub.build_version, hub, may_restart, holding, ready, found, asked)
     }
 }
 
@@ -42,6 +45,10 @@ pub enum Updating {
     /// `terminals` open that restarting it would end. The app restarts the hub once that work is done, or sooner if
     /// asked.
     Finishing { hub: String, agents: Agents, terminals: usize },
+    /// The hub, `hub`, is installed as a service and has found `next`, a newer release, which it updates to when asked,
+    /// or is updating to, as `updating` says. `problem` says why the last update to it didn't go ahead, if it didn't:
+    /// why the hub refused the app's request, or why the update it took failed.
+    Hub { hub: String, next: String, updating: bool, problem: Option<String> },
 }
 
 /// The agents on a turn, which is what keeps an older hub from being replaced. Apart, because an update that waits
@@ -95,9 +102,19 @@ impl Holding {
 
 impl BuildLine {
     /// `hub` is `None` while there's no connection. `may_restart` says whether the app may restart the hub it's
-    /// connected to, `holding` what's on it that holds that up, and `ready` is the version of an update that's
-    /// downloaded. A downloaded update comes first, since it's what installs.
-    pub(super) fn new(app: &str, hub: Option<&str>, may_restart: bool, holding: Holding, ready: Option<&str>) -> Self {
+    /// connected to, `holding` what's on it that holds that up, `ready` is the version of an update that's downloaded,
+    /// `found` what the hub found in the update feed, as one installed as a service reads it, and `asked` the app's own
+    /// request to update it. A downloaded update comes first, since it's what installs, and the app's own update
+    /// finishing next, since it's under way.
+    pub(super) fn new(
+        app: &str,
+        hub: Option<&str>,
+        may_restart: bool,
+        holding: Holding,
+        ready: Option<&str>,
+        found: Option<&HubUpdate>,
+        asked: Option<&HubUpdateAsk>,
+    ) -> Self {
         let another = hub.filter(|hub| *hub != app).map(str::to_string);
         let other_hub = another.clone().filter(|_| !may_restart);
         let update = match (ready, another) {
@@ -106,16 +123,42 @@ impl BuildLine {
                 let Holding { agents, terminals } = holding;
                 Some(Updating::Finishing { hub, agents, terminals })
             }
-            (None, _) => None,
+            (None, _) => hub.zip(found).and_then(|(hub, found)| hub_update(hub, found, asked)),
         };
         Self { app: app.to_string(), other_hub, update }
     }
+}
+
+/// Where the update of `hub` has got to, as what it found in the feed says, and the app's own request to update it,
+/// while it found one. It's updating from when the app asks, until the hub says the update it took failed, or refuses.
+fn hub_update(hub: &str, found: &HubUpdate, asked: Option<&HubUpdateAsk>) -> Option<Updating> {
+    let under_way = match &found.attempt {
+        Some(UpdateAttempt::UnderWay { to }) => Some(to),
+        Some(UpdateAttempt::Failed { .. } | UpdateAttempt::Unknown) | None => None,
+    };
+    let next = under_way.or(found.version.as_ref())?.clone();
+    let failed = match &found.attempt {
+        Some(UpdateAttempt::Failed { to, why }) if *to == next => Some(why),
+        Some(_) | None => None,
+    };
+    let (asking, refused) = match asked {
+        // A failure the hub recorded before the app asked is of the update before.
+        Some(HubUpdateAsk::Asked { next: asked, rev }) if *asked == next => {
+            (failed.is_none() || !found.rev.supersedes(*rev), None)
+        }
+        Some(HubUpdateAsk::Refused { next: asked, why }) if *asked == next => (false, Some(why.clone())),
+        Some(_) | None => (false, None),
+    };
+    let updating = under_way.is_some() || asking;
+    let problem = if updating { None } else { refused.or_else(|| failed.cloned()) };
+    Some(Updating::Hub { hub: hub.to_string(), next, updating, problem })
 }
 
 #[cfg(test)]
 mod tests {
     use SessionStatus::{Background, Idle, Interrupted, Running, Unknown, WaitingApproval};
     use protocol::event::TaskKind;
+    use protocol::model::Rev;
 
     use super::*;
 
@@ -153,8 +196,67 @@ mod tests {
     #[test]
     fn the_line_names_the_hub_only_when_its_another_the_app_leaves_alone_and_says_where_an_update_has_got_to() {
         for (name, hub, may_restart, holding, downloaded, want) in lines() {
-            assert_eq!(BuildLine::new("abc", hub, may_restart, holding, downloaded), want, "{name}");
+            assert_eq!(BuildLine::new("abc", hub, may_restart, holding, downloaded, None, None), want, "{name}");
         }
+    }
+
+    /// A hub installed as a service that has found a newer release, `version`, as the app is connected to it, with an
+    /// update in `attempt`, at `rev`.
+    fn found(version: Option<&str>, attempt: Option<UpdateAttempt>, rev: u64) -> HubUpdate {
+        HubUpdate { version: version.map(str::to_string), looked_at_ms: 1, problem: None, attempt, rev: Rev::new(rev) }
+    }
+
+    fn hub(next: &str, updating: bool, problem: Option<&str>) -> Updating {
+        let (hub, next, problem) = ("def".to_string(), next.to_string(), problem.map(str::to_string));
+        Updating::Hub { hub, next, updating, problem }
+    }
+
+    /// The line on an app connected to a hub `def` that found `found`, having asked as `asked`.
+    fn line_with(downloaded: Option<&str>, found: &HubUpdate, asked: Option<&HubUpdateAsk>) -> BuildLine {
+        BuildLine::new("abc", Some("def"), false, NOTHING, downloaded, Some(found), asked)
+    }
+
+    /// The hub's update shows once nothing of the app's own is under way, and says when it's updating.
+    #[test]
+    fn a_hub_s_update_shows_after_the_app_s_own_and_says_when_it_s_updating() {
+        let under_way = Some(UpdateAttempt::UnderWay { to: "ghi".to_string() });
+
+        assert_eq!(
+            line_with(None, &found(Some("ghi"), None, 1), None),
+            line(Some("def"), Some(hub("ghi", false, None)))
+        );
+        assert_eq!(
+            line_with(None, &found(Some("ghi"), under_way, 1), None),
+            line(Some("def"), Some(hub("ghi", true, None)))
+        );
+        let ready = Some(Updating::Ready { next: "jkl".to_string() });
+        assert_eq!(line_with(Some("jkl"), &found(Some("ghi"), None, 1), None), line(Some("def"), ready));
+        assert_eq!(line_with(None, &found(None, None, 1), None), line(Some("def"), None), "nothing newer");
+        let unconnected = BuildLine::new("abc", None, false, NOTHING, None, Some(&found(Some("ghi"), None, 1)), None);
+        assert_eq!(unconnected, line(None, None));
+    }
+
+    /// The app's request says it's updating, so it isn't sent twice, until the hub refuses it or says the update it
+    /// took failed. A failure from before the app asked is of the update before.
+    #[test]
+    fn a_hub_s_update_the_app_asked_for_is_updating_until_it_s_refused_or_fails() {
+        let asked = HubUpdateAsk::Asked { next: "ghi".to_string(), rev: Rev::new(2) };
+        let refused = HubUpdateAsk::Refused { next: "ghi".to_string(), why: "busy".to_string() };
+        let failed = || Some(UpdateAttempt::Failed { to: "ghi".to_string(), why: "offline".to_string() });
+
+        let asking = line_with(None, &found(Some("ghi"), None, 2), Some(&asked));
+        let failed_before = line_with(None, &found(Some("ghi"), failed(), 2), Some(&asked));
+        let failed_since = line_with(None, &found(Some("ghi"), failed(), 3), Some(&asked));
+        let never_asked = line_with(None, &found(Some("ghi"), failed(), 3), None);
+        let was_refused = line_with(None, &found(Some("ghi"), None, 2), Some(&refused));
+        let another_release = line_with(None, &found(Some("jkl"), None, 3), Some(&refused));
+
+        assert_eq!(asking, line(Some("def"), Some(hub("ghi", true, None))));
+        assert_eq!(failed_before, line(Some("def"), Some(hub("ghi", true, None))));
+        assert_eq!(failed_since, line(Some("def"), Some(hub("ghi", false, Some("offline")))));
+        assert_eq!(never_asked, line(Some("def"), Some(hub("ghi", false, Some("offline")))));
+        assert_eq!(was_refused, line(Some("def"), Some(hub("ghi", false, Some("busy")))));
+        assert_eq!(another_release, line(Some("def"), Some(hub("jkl", false, None))));
     }
 
     fn task(kind: TaskKind) -> AgentTask {

@@ -105,6 +105,9 @@ pub struct World {
     pub github_reach: Vec<protocol::model::GithubReach>,
     /// Each open terminal, and what it shows, as the bytes that draw it in a fresh terminal of its size.
     pub terminals: Vec<(Terminal, TerminalScreen)>,
+    /// What the hub found in the update feed, as a hub installed as a service does. `None` as from one that doesn't
+    /// read it.
+    pub hub_update: Option<protocol::model::HubUpdate>,
     records: i64,
 }
 

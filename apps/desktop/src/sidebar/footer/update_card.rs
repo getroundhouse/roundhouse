@@ -28,6 +28,7 @@ pub(super) fn update_card(
             ready_card(next, question.filter(|q| matches!(q, UpdateQuestion::Restart { .. })), cx)
         }
         Updating::Finishing { agents, terminals, .. } => (finishing_card(*agents, *terminals, cx), None),
+        Updating::Hub { next, updating, problem, .. } => hub_card(next, *updating, problem.as_deref(), cx),
     };
     let details = Details::of(line)?;
     Some(UpdateCard { about, details, action }.into_any_element())
@@ -109,6 +110,28 @@ fn ready_card(
             .into_any_element()
     };
     (about, Some(action))
+}
+
+/// The hub, installed as a service, has found a newer release, which updating it to is the card's main action, and
+/// the card says so while it's updating. Why the last update to it didn't go ahead, if it didn't, takes the version's
+/// place.
+fn hub_card(
+    next: &str,
+    updating: bool,
+    problem: Option<&str>,
+    cx: &mut Context<AppView>,
+) -> (Stateful<Div>, Option<AnyElement>) {
+    let version = format!("Roundhouse hub {next}");
+    if updating {
+        return (card_text("Updating hub", version, cx), None);
+    }
+    let about = card_text("Hub update ready", problem.map_or(version, str::to_owned), cx);
+    let update = cx.listener(|t, _, _, cx| t.update_hub(cx));
+    let button = look::button("update-hub", look::ButtonKind::Main, look::ControlSize::Regular, "Update hub")
+        .full_width()
+        .on_click(update)
+        .into_any_element();
+    (about, Some(button))
 }
 
 /// The app has updated, and the older hub is still busy, so it finishes by itself once it isn't, or now if asked.

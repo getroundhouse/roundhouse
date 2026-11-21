@@ -38,6 +38,22 @@ impl Details {
                 ),
             ),
             Updating::Finishing { hub, agents, terminals } => (hub, app, finishing(app, hub, *agents, *terminals)),
+            Updating::Hub { hub, next, updating: false, .. } => (
+                hub,
+                next,
+                format!(
+                    "The hub you're connected to is {hub}, installed as a service on its machine. Updating it \
+                     downloads {next} there and restarts the hub on it, and agents keep running."
+                ),
+            ),
+            Updating::Hub { hub, next, updating: true, .. } => (
+                hub,
+                next,
+                format!(
+                    "The hub is downloading {next}, and restarts on it once it's in place. Agents keep running, and \
+                     the app connects again by itself."
+                ),
+            ),
         };
         Some(Self { from: from.clone(), to: to.clone(), what_happens })
     }

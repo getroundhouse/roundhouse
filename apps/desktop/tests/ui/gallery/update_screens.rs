@@ -11,7 +11,7 @@ use protocol::model::{Seq, SessionStatus};
 use super::frame::{CHAT, Frame, Part, SIDEBAR, SIDEBAR_MENU, WORKSPACE_CARD};
 use super::screens::FOCUS;
 use super::steps::{Screen, Step, Target};
-use super::worlds::{chat_world, conversation, diff, finishing_update, own_hub};
+use super::worlds::{chat_world, conversation, diff, finishing_update, hub_update_found, own_hub};
 use client_core::fake_hub::events::{replied, taken, text, user_prompt};
 use client_core::fake_hub::{BUILD, World};
 
@@ -72,6 +72,13 @@ pub(crate) const UPDATE_SCREENS: &[Screen] = &[
         steps: &[Step::Select(FOCUS), Step::AskToFinish],
     },
     Screen { name: "own-hub", spec: "updates.md", world: Some(own_hub), frame: SIDEBAR, steps: &[Step::Select(FOCUS)] },
+    Screen {
+        name: "hub-update-ready",
+        spec: "updates.md",
+        world: Some(hub_update_found),
+        frame: SIDEBAR,
+        steps: &[Step::Select(FOCUS)],
+    },
     Screen {
         name: "own-hub-card",
         spec: "updates.md",

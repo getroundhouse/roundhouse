@@ -93,6 +93,8 @@ pub struct AppView {
     pub(super) following: Option<Task<()>>,
     /// What the update's card, or the dialog before restarting the hub now, asks before going ahead, while it asks.
     pub update_question: Option<UpdateQuestion>,
+    /// The app's own request to update the hub it's connected to, if it made one.
+    pub(super) hub_update_asked: Option<super::updating_hub::HubUpdateAsk>,
     pub quitting: Quitting,
     /// Reading what's running on the older hub, to ask about finishing the update or to go ahead with it, so pressing
     /// again doesn't read it twice.
@@ -163,6 +165,7 @@ impl AppView {
             connecting: None,
             following: None,
             update_question: None,
+            hub_update_asked: None,
             quitting: Quitting::No,
             asking: None,
             finishing: None,
@@ -276,6 +279,8 @@ impl AppView {
     /// Ready once client-core has caught up on this connection, so the sidebar never shows empty.
     pub(super) fn connected(&mut self, client: Client, status: Option<&HubStatus>, cx: &mut Context<Self>) {
         self.connection_attempt = 0;
+        // Of the hub before, if this is another, or of this one before it restarted on the release it was asked for.
+        self.hub_update_asked = None;
         self.keep_drafts_on(&client, cx);
         if let Some(feed) = &self.feed {
             feed.reconnect(&client);

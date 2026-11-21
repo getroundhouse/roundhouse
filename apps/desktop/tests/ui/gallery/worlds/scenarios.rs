@@ -21,6 +21,19 @@ pub(in super::super) fn own_hub() -> World {
     older_hub(false)
 }
 
+/// The conversation, on an older hub installed as a service, which has found the app's release in the update feed.
+pub(in super::super) fn hub_update_found() -> World {
+    let mut world = older_hub(false);
+    world.hub_update = Some(protocol::model::HubUpdate {
+        version: Some(client_core::fake_hub::BUILD.to_owned()),
+        looked_at_ms: NOW_MS - HOUR_MS / 2,
+        problem: None,
+        attempt: None,
+        rev: Rev::default(),
+    });
+    world
+}
+
 fn older_hub(on_demand: bool) -> World {
     let mut world = conversation();
     world.hub = Some(HubBuild { version: "0.9.0", number: 1, on_demand });
