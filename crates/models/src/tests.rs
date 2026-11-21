@@ -114,3 +114,10 @@ fn the_folder_is_kept_out_of_backups() {
 
     assert!(excluded());
 }
+
+/// A disk too full to save a file says so, naming the device.
+#[test]
+fn a_full_disk_says_so() {
+    let full = std::io::Error::from(std::io::ErrorKind::StorageFull);
+    assert_eq!(super::download::not_saved(&full, "this Mac"), "there isn't room for it on this Mac.");
+}

@@ -146,6 +146,36 @@ fn speaking_needs_none_of_our_other_crates_but_phonon_and_sound_no_async_runtime
     );
 }
 
+/// Conversation mode's voice is every client's, with threads rather than a runtime and no UI, so the phone can read
+/// out with it as the desktop app does. It joins `client-core`'s reading out to `speaking`'s voice, so `client-core`
+/// itself stays free of audio.
+#[test]
+fn conversation_needs_none_of_our_other_crates_but_client_core_and_speaking_no_async_runtime_and_no_ui() {
+    needs_none_of_ours_no_async_runtime_and_no_ui(
+        "conversation",
+        &[
+            "client-core",
+            "protocol",
+            "terminal-state",
+            "speaking",
+            "phonon",
+            "sound",
+            "models",
+            "fetching",
+            "now-playing",
+        ],
+    );
+}
+
+/// `client-core` reads replies out without a voice of its own, so the CLI never builds one.
+#[test]
+fn client_core_has_no_voice() {
+    let closure = runtime_closure(&metadata(), "client-core");
+    for banned in ["speaking", "phonon", "sound", "dictation"] {
+        assert!(!closure.contains(banned), "client-core depends on {banned}");
+    }
+}
+
 /// Phonon knows nothing of what it says or where the audio goes, with no runtime and no UI, so any client on any device
 /// can speak with it. It keeps its model's files with `models`, which downloads them with `fetching`.
 #[test]
