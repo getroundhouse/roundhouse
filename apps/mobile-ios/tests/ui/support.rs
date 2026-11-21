@@ -238,10 +238,12 @@ impl<'a> Phone<'a> {
         self.type_text(text);
     }
 
-    /// Taps the workspace in the list, once it's there, and waits for its chat.
+    /// Taps the workspace in the list, once it's there and the phone is connected, and waits for its chat. The list
+    /// draws the records client-core holds, which can be there before the connection is ready, or after it went, and a
+    /// tap opens nothing without a connection.
     pub(crate) fn open_chat(&mut self, workspace: &Workspace) {
         let row = ElementId::Name(format!("workspace-{}", workspace.id).into());
-        self.wait("the workspace", |phone| phone.has(row.clone()));
+        self.wait("the workspace", |phone| phone.has(row.clone()) && phone.is_connected());
         self.tap(row);
         self.wait("its chat", |phone| phone.has("composer") && phone.transcript_shown());
     }
