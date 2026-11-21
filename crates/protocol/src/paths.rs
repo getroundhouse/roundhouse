@@ -3,7 +3,8 @@
 use std::path::{Path, PathBuf};
 
 use crate::client::{ApiError, ErrorCode};
-pub use crate::hub_copies::{hub_copy_files, is_hub_copy_dir, linking_hub_prefix};
+pub use crate::hub_copies::{hub_copy_files, linking_hub_prefix};
+pub use crate::service_builds::{cli_file, service_programs};
 
 /// A debug build keeps its data apart from a release build's, so one run from a checkout can't reach the
 /// installed app's hub, or migrate its database.

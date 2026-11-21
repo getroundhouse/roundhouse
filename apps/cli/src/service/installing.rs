@@ -33,7 +33,7 @@ pub(crate) fn install(user: &str) -> anyhow::Result<()> {
     println!("installed build {} as a service, running as {user}, which started its hub", build.version());
     println!("pid {}  version {}", status.pid, status.hub_version);
     println!("its log is {}", paths.log.display());
-    let cli = paths.service_current().join(this.file_name().context("naming this program")?);
+    let cli = paths.service_current().join(paths::cli_file());
     println!("pair a device with it: sudo -u {user} -H '{}' phone pair", cli.display());
     Ok(())
 }

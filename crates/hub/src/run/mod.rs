@@ -7,6 +7,6 @@ use std::sync::Arc;
 mod tests;
 
 mod startup;
-pub use startup::{HubConfig, run};
+pub use startup::{Ended, HubConfig, run};
 #[cfg(test)]
 use startup::{HubLock, recover};

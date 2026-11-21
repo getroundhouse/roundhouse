@@ -4,10 +4,12 @@
 mod hub_role;
 mod preflight;
 mod runtime;
+mod service_builds;
 mod signals;
 mod worker_role;
 
 use std::path::PathBuf;
+use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
 use protocol::client::HubStart;
@@ -111,7 +113,7 @@ fn hub_start(on_demand: bool, service: bool) -> HubStart {
     }
 }
 
-fn main() -> anyhow::Result<()> {
+fn main() -> anyhow::Result<ExitCode> {
     signals::unblock();
     // Before anything is started. A worker's input and output are its hub's pipes, and the hub learns that the worker
     // has exited when its output ends.
@@ -139,8 +141,9 @@ fn main() -> anyhow::Result<()> {
     if matches!(args.role, Role::Worker { attach: false, .. } | Role::Preflight { .. }) {
         forget_hub_variables();
     }
-    match args.role {
-        Role::Hub { on_demand, service } => hub_role::run(hub_start(on_demand, service)),
+    // Only a hub says something by how it exits.
+    let ran = match args.role {
+        Role::Hub { on_demand, service } => return hub_role::run(hub_start(on_demand, service)),
         Role::GitCredential { dir, action } => Ok(worker::answer_credential_request(
             &dir,
             &action,
@@ -178,5 +181,6 @@ fn main() -> anyhow::Result<()> {
                 },
             )
         }
-    }
+    };
+    ran.map(|()| ExitCode::SUCCESS)
 }

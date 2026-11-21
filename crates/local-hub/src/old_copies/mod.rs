@@ -15,6 +15,6 @@ mod tests;
 
 mod cleanup;
 
-#[cfg(test)]
-use cleanup::ABANDONED_AFTER;
 pub(super) use cleanup::remove_unused;
+#[cfg(test)]
+use process::ABANDONED_AFTER;

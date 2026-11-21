@@ -1,6 +1,7 @@
 //! The daemon as a hub: what it's told from the environment and this build, and running it until it stops.
 
 use std::path::PathBuf;
+use std::process::ExitCode;
 
 use anyhow::Context;
 use protocol::client::HubStart;
@@ -8,9 +9,18 @@ use protocol::client::HubStart;
 use super::BUILD;
 use crate::runtime::run_to_end;
 
-/// Runs a hub until it's asked to stop, saying what started it.
-pub(crate) fn run(start: HubStart) -> anyhow::Result<()> {
+/// What a hub exits with once it has left its workers for the next hub, as for an update: `EX_TEMPFAIL`, a failure the
+/// service a hub can be installed as starts it again after, as it doesn't after a success. A client that starts a hub
+/// starts the next one itself, and reads nothing from how the last one exited.
+const RESTARTING: u8 = 75;
+
+/// Runs a hub until it's asked to stop, saying what started it, and says by how it exits whether it stopped or left
+/// its workers for the next hub.
+pub(crate) fn run(start: HubStart) -> anyhow::Result<ExitCode> {
     let paths = protocol::paths::resolve(|name| std::env::var(name).ok()).map_err(anyhow::Error::msg)?;
+    if let (HubStart::AsService, Some(build)) = (start, BUILD.stamped()) {
+        crate::service_builds::remove_unused(&paths, &build);
+    }
     // Follows symlinks, so moving an install's `current` link can't change what later workers run.
     let running =
         std::env::current_exe().and_then(std::fs::canonicalize).context("finding this binary to run workers")?;
@@ -40,8 +50,10 @@ pub(crate) fn run(start: HubStart) -> anyhow::Result<()> {
         github,
         update_feed,
     };
-    run_to_end(hub::run(config))??;
-    Ok(())
+    Ok(match run_to_end(hub::run(config))?? {
+        hub::Ended::Stopped => ExitCode::SUCCESS,
+        hub::Ended::Restarting => ExitCode::from(RESTARTING),
+    })
 }
 
 /// What this hub's workers run from: `build`'s copy, if it runs from [`Paths::fixed_hub`], as a Windows hub a client
