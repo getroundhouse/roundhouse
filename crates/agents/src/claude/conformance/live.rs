@@ -7,7 +7,6 @@ use std::time::{Duration, Instant};
 
 use async_trait::async_trait;
 use protocol::model::{AgentLogin, AgentSessionId, LoginToken, RunId};
-use serde_json::Value;
 use tokio::sync::mpsc;
 
 use super::messages::ScriptedModel;
@@ -15,7 +14,7 @@ use super::{MODEL, fixture, project_folder, scripts, spec};
 use crate::conformance::capture::{Entry, Tap};
 use crate::conformance::driver::{Driver, Launcher};
 use crate::conformance::scenario::{Against, Failed, Scenario};
-use crate::conformance::trial::{Played, Report, Trial};
+use crate::conformance::trial::{Live, Played, Report, Trial};
 use crate::conformance::{executable, quoted};
 use crate::{AgentOptions, AgentOutput, AgentProcess, BinaryLookup};
 
@@ -47,16 +46,6 @@ pub struct Options {
     /// A token `claude setup-token` made, for trials on the real model to sign in with and keep to a config of their
     /// own. Without one, they run under this machine's login and config.
     pub token: Option<LoginToken>,
-}
-
-/// How a trial on the real CLI went.
-pub struct Live {
-    pub report: Report,
-    /// The fixture its capture makes, on the scripted model. One on the real model says what the account is and has
-    /// used, so it's never kept.
-    pub fixture: Option<String>,
-    /// What the scripted model was asked, in order.
-    pub requests: Vec<Value>,
 }
 
 /// Plays `scenario` against `against` on the real CLI, through the adapter. A trial on the scripted model has to be

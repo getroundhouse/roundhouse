@@ -21,6 +21,16 @@ pub(crate) enum Dialect {
     JsonRpc2,
 }
 
+impl Dialect {
+    /// `message` with the `"jsonrpc": "2.0"` member, in the dialect that has one.
+    pub(crate) fn framed(self, mut message: Value) -> Value {
+        if self == Dialect::JsonRpc2 {
+            message["jsonrpc"] = json!("2.0");
+        }
+        message
+    }
+}
+
 /// Whether `error` turned the request down, so nothing came of it: the CLI refused it or didn't know it, or the
 /// adapter refused it before asking. Not a request that may not have reached the CLI, one whose answer didn't come, or
 /// one the CLI took and failed on.
@@ -61,7 +71,7 @@ impl Rpc {
 
     /// Writes a client request frame with a pre-allocated `id` without registering a oneshot waiter.
     pub(crate) async fn write_request(&self, id: u64, method: &str, params: Value) -> Result<(), AgentError> {
-        self.write(&self.framed(json!({ "id": id, "method": method, "params": params }))).await
+        self.write(&self.dialect.framed(json!({ "id": id, "method": method, "params": params }))).await
     }
 
     /// Sends a request without awaiting its reply, returning its allocated ID and reply receiver for turn-spanning
@@ -94,24 +104,16 @@ impl Rpc {
     }
 
     pub(crate) async fn notify(&self, method: &str, params: Value) -> Result<(), AgentError> {
-        self.write(&self.framed(json!({ "method": method, "params": params }))).await
+        self.write(&self.dialect.framed(json!({ "method": method, "params": params }))).await
     }
 
     pub(crate) async fn reply(&self, id: Value, result: Value) -> Result<(), AgentError> {
-        self.write(&self.framed(json!({ "id": id, "result": result }))).await
+        self.write(&self.dialect.framed(json!({ "id": id, "result": result }))).await
     }
 
     /// Answers the peer's request `id` as one this side has no method for, JSON-RPC's -32601, saying `why`.
     pub(crate) async fn refuse(&self, id: Value, why: &str) -> Result<(), AgentError> {
-        self.write(&self.framed(json!({ "id": id, "error": { "code": -32601, "message": why } }))).await
-    }
-
-    /// `message` with the `"jsonrpc": "2.0"` member, in the dialect that has one.
-    fn framed(&self, mut message: Value) -> Value {
-        if self.dialect == Dialect::JsonRpc2 {
-            message["jsonrpc"] = json!("2.0");
-        }
-        message
+        self.write(&self.dialect.framed(json!({ "id": id, "error": { "code": -32601, "message": why } }))).await
     }
 
     pub(crate) async fn write(&self, value: &Value) -> Result<(), AgentError> {

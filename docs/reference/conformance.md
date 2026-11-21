@@ -47,6 +47,8 @@ A trial against the real model isn't sandboxed. It uses this machine's login, se
 
 ## Codex's binding
 
+Codex and Antigravity play a trial the same way, live or replayed, with `conformance::json_rpc`. Each binding gives only what's its own as a `JsonRpcAgent`: its scripted model, how its CLI is prepared, what its fixtures call the scratch directory, and what a trial on the real model leaves to remove.
+
 `codex::conformance` uses the same scenarios and replay driver, with an HTTP Responses stand-in and native app-server JSON-RPC captures. Select it with `cargo run -p agents --example conformance -- --agent codex`; `--save` records synthetic fixtures and `--paid` also uses the worker machine's Codex sign-in, on `gpt-6-luna` at Low effort. Real captures are never saved, and a real trial deletes its own native thread when it finishes.
 
 Scripted trials use a scratch project and separate `HOME` and `CODEX_HOME`. On macOS, `sandbox-exec` denies outbound traffic except the scripted model's loopback port, and denies the user's home except the installed CLI's directory. Fixtures cover native text, tools, reasoning summaries, resume, cancellation and plan approval; `cargo test -p agents --test conformance codex` replays them without the CLI and checks that a plain final reply in plan mode cannot bypass approval.

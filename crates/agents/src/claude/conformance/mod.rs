@@ -9,7 +9,8 @@ mod replay;
 mod scripts;
 mod stream_json;
 
-pub use live::{KEPT_ENV, Live, Options, find_cli, live};
+pub use crate::conformance::trial::Live;
+pub use live::{KEPT_ENV, Options, find_cli, live};
 pub use replay::replay;
 
 mod launch_spec;
