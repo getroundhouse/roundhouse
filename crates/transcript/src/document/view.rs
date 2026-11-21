@@ -10,6 +10,7 @@ use gpui_kit::{
 use super::changes::{Change, changed};
 use crate::rows::in_column;
 use crate::selection::{Scrolled, Scroller, Selection, Way};
+use crate::step_keys::{Steps, with_step_keys};
 use crate::stops::{Within, stop_beside};
 use crate::texts::{Of, TextAt, Texts, TopBlock, Written, top_blocks};
 
@@ -101,26 +102,6 @@ impl Document {
         cx.notify();
     }
 
-    /// Steps it `way` to the heading before the top or after it, with that at the top, as `Option-Up` and
-    /// `Option-Down` do.
-    pub fn step(&mut self, way: Way, cx: &mut Context<Self>) {
-        let top = self.list.logical_scroll_top();
-        if let Some(heading) = stop_beside(self.headings(), top.item_ix, Within::scrolled(top.offset_in_item), way) {
-            self.list.scroll_to(ListOffset { item_ix: heading, offset_in_item: px(0.) });
-            cx.notify();
-        }
-    }
-
-    /// Moves the end of what's selected `way` to the start of a heading: back to the one before it, or to the one it's
-    /// in if it isn't at its start already, or on to the one after, as `Option-Shift-Up` and `Option-Shift-Down` do.
-    pub fn select_step(&self, way: Way, window: &mut Window, cx: &mut Context<Self>) {
-        let Some((end, within)) = self.selection.far_end() else { return };
-        let Of::Document(block) = end.of else { return };
-        if let Some(heading) = stop_beside(self.headings(), block, within, way) {
-            self.selection.move_to_start_of(at(heading), window, cx);
-        }
-    }
-
     /// The blocks that are headings, in order, which the keys that step it go between.
     fn headings(&self) -> Vec<usize> {
         let blocks = self.shown.as_ref().map(|shown| shown.blocks.iter());
@@ -152,11 +133,31 @@ impl Document {
     }
 }
 
+impl Steps for Document {
+    /// Steps it `way` to the heading before the top or after it, with that at the top.
+    fn step(&mut self, way: Way, cx: &mut Context<Self>) {
+        let top = self.list.logical_scroll_top();
+        if let Some(heading) = stop_beside(self.headings(), top.item_ix, Within::scrolled(top.offset_in_item), way) {
+            self.list.scroll_to(ListOffset { item_ix: heading, offset_in_item: px(0.) });
+            cx.notify();
+        }
+    }
+
+    /// Moves the end of what's selected `way` to the start of a heading.
+    fn select_step(&mut self, way: Way, window: &mut Window, cx: &mut Context<Self>) {
+        let Some((end, within)) = self.selection.far_end() else { return };
+        let Of::Document(block) = end.of else { return };
+        if let Some(heading) = stop_beside(self.headings(), block, within, way) {
+            self.selection.move_to_start_of(at(heading), window, cx);
+        }
+    }
+}
+
 impl Render for Document {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let blocks = list(self.list.clone(), cx.processor(|this, ix, _, cx| this.block(ix, cx))).size_full();
         let selecting = Scrolled::new("document-frames", Blocks(self.list.clone()), &self.selection, blocks);
-        self.selection.with_keys(div().size_full().child(selecting))
+        with_step_keys(self.selection.with_keys(div().size_full().child(selecting)), cx)
     }
 }
 

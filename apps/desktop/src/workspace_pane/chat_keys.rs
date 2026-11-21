@@ -1,15 +1,15 @@
 //! What the keys do to the chat showing from what's around it: Page Up and Page Down scroll it from the composer, or a
 //! question in its place, which have little use for them, so the chat can be read back while a prompt is written,
-//! `Option-Up` and `Option-Down` step it between its prompts, from there and from the chat, with Shift moving the end of
-//! what's selected to a prompt's start in the chat, and Escape goes back to the composer from the chat, once Find's
-//! bar, if it's open over the chat, has closed. In the chat itself, the keys scroll it as `transcript` takes them.
+//! `Option-Up` and `Option-Down` step it between its prompts from there, and Escape goes back to the composer from the
+//! chat, once Find's bar, if it's open over the chat, has closed. In the chat itself, the keys scroll and step it as
+//! `transcript` takes them.
 
 use gpui_kit::{Context, Div, InteractiveElement as _, Window};
 
-use transcript::{Transcript, Way};
+use transcript::{StepBack, StepOn, Steps as _, Transcript, Way};
 
 use super::WorkspacePane;
-use crate::{BackToComposer, ChatPageDown, ChatPageUp, SelectStepBack, SelectStepOn, StepBack, StepOn};
+use crate::{BackToComposer, ChatPageDown, ChatPageUp};
 
 /// Where the keys that reach the chat from around it are bound: the chat, its composer and a question in its place.
 pub(crate) const CHAT_KEY_CONTEXT: &str = "Chat";
@@ -37,16 +37,6 @@ impl WorkspacePane {
             .on_action(cx.listener(|pane, _: &StepOn, _, cx| {
                 if let Some(transcript) = pane.transcript() {
                     transcript.update(cx, |transcript, cx| transcript.step(Way::On, cx));
-                }
-            }))
-            .on_action(cx.listener(|pane, _: &SelectStepBack, window, cx| {
-                if let Some(transcript) = pane.transcript() {
-                    transcript.update(cx, |transcript, cx| transcript.select_step(Way::Back, window, cx));
-                }
-            }))
-            .on_action(cx.listener(|pane, _: &SelectStepOn, window, cx| {
-                if let Some(transcript) = pane.transcript() {
-                    transcript.update(cx, |transcript, cx| transcript.select_step(Way::On, window, cx));
                 }
             }))
             .on_action(cx.listener(|pane, _: &BackToComposer, window, cx| pane.back_to_composer(window, cx)))

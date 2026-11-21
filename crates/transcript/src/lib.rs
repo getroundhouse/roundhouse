@@ -30,6 +30,7 @@ mod rows;
 mod scroll_area;
 mod selection;
 mod signal;
+mod step_keys;
 mod stops;
 mod task_lines;
 mod texts;
@@ -46,6 +47,7 @@ pub use rows::{
 };
 pub use selection::{KEY_CONTEXT, Way};
 pub use signal::{chat_signal, recorded_work, waiting_on_you, work, workspace_signal};
+pub use step_keys::{SelectStepBack, SelectStepOn, StepBack, StepOn, Steps};
 pub use transcript::{Transcript, TranscriptEvent};
 
 /// What the app adds to the words a field dictated into here favours, such as the workspace's, after the field's own.

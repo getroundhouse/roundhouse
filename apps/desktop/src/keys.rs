@@ -34,13 +34,15 @@ use gpui_kit::component::input::{
 };
 use gpui_kit::{Action, App, KeyBinding, KeyBindingContextPredicate};
 
+use transcript::{SelectStepBack, SelectStepOn, StepBack, StepOn};
+
 use crate::workspace_pane::CHAT_KEY_CONTEXT;
 use crate::{
     ArchiveWorkspace, BackToComposer, ChatPageDown, ChatPageUp, CloseChat, CloseSettings, ConversationMode,
     CreatePullRequest, FindInChat, FindNext, FindPrevious, FindSetting, FlipImage, GoBack, GoForward, Hide, HideOthers,
     MarkWorkspace, Minimize, NewChat, NewTerminal, NewWorkspace, NextChat, NextWorkspace, OpenSettings, PreviousChat,
-    PreviousWorkspace, Quit, SelectStepBack, SelectStepOn, StepBack, StepOn, StopAgent, ToggleDiff, ToggleMenus,
-    TogglePlanMode, ToggleSidebar, composing, file_diff, image_diff, settings,
+    PreviousWorkspace, Quit, StopAgent, ToggleDiff, ToggleMenus, TogglePlanMode, ToggleSidebar, composing, file_diff,
+    image_diff, settings,
 };
 
 /// A Mac's own shortcuts. Only a Mac hides an app, and elsewhere the system minimizes a window itself.
