@@ -83,12 +83,6 @@ impl Hub {
         if let Some(open) = self.terminals.open.lock().get_mut(id).filter(|open| open.opening_by(noted).is_some()) {
             open.link = Some(link.id);
         }
-        // It's replaced by one of the hub's own build once nothing is at work in the workspace.
-        if !link.shows_rows() {
-            let refused =
-                "the workspace's worker is from before terminals showed as rows, until nothing is at work in it";
-            return Ok((link, Err(ApiError::new(ErrorCode::Unavailable, refused))));
-        }
         let start = worker::TerminalStart { terminal: id.clone(), size, cwd, env, opened_at_ms };
         let started = link.call(start).await.map_err(|e| {
             if e.code != ErrorCode::Unsupported {

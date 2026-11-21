@@ -205,11 +205,6 @@ impl Request for RunningTerminals {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct RunningTerminalsReply {
     pub terminals: Vec<RunningTerminal>,
-    /// Whether the worker does all a client's window onto a terminal needs of it by row number: pictures, rows of
-    /// history, what's pressed, the ends of a word, text and fits. One from before says nothing, so reads as false,
-    /// and a hub ends the terminals of such a worker once clients show only rows.
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-    pub rows: bool,
 }
 
 impl Reply for RunningTerminalsReply {

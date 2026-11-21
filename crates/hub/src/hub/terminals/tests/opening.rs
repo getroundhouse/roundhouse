@@ -280,7 +280,7 @@ async fn a_hub_carries_on_with_the_terminals_a_worker_it_finds_runs() {
     let dir = tempfile::tempdir().unwrap();
     let hub = hub_with_worktree(dir.path());
     let running = RunningTerminal { terminal: "t".into(), opened_at_ms: 5 };
-    let reply = worker::RunningTerminalsReply { terminals: vec![running], rows: true };
+    let reply = worker::RunningTerminalsReply { terminals: vec![running] };
     let link = WorkerLink::answering(move |_| Some(Ok(WorkerResponse::RunningTerminals(reply.clone()))));
     serving(&hub, &link);
 
@@ -303,10 +303,7 @@ async fn a_shell_that_ends_as_a_hub_carries_on_with_it_takes_its_record_with_it(
         let (hub, link) = reached(&ends);
         hub.terminal_update(&link, "t".into(), &exited());
         let running = RunningTerminal { terminal: "t".into(), opened_at_ms: 5 };
-        Some(Ok(WorkerResponse::RunningTerminals(worker::RunningTerminalsReply {
-            terminals: vec![running],
-            rows: true,
-        })))
+        Some(Ok(WorkerResponse::RunningTerminals(worker::RunningTerminalsReply { terminals: vec![running] })))
     });
     reaching.set((Arc::downgrade(&hub), Arc::downgrade(&link))).unwrap();
     serving(&hub, &link);
@@ -330,35 +327,4 @@ async fn a_hub_with_a_terminal_open_isnt_idle() {
 
     assert_eq!(hub.status().open_terminals, 1);
     assert_eq!(hub.shutdown_if_idle().map_err(|e| e.code), Err(ErrorCode::Conflict));
-}
-
-/// No client can show a terminal on a worker from before rows, so as a hub carries on with one, it ends them, with
-/// whatever runs in them, and refuses a new one there until the worker is replaced, once nothing is at work.
-#[tokio::test]
-async fn a_worker_from_before_rows_has_its_terminals_ended_and_opens_none() {
-    let dir = tempfile::tempdir().unwrap();
-    let hub = hub_with_worktree(dir.path());
-    let asked = Arc::new(Mutex::new(Vec::new()));
-    let keeping = asked.clone();
-    let link = WorkerLink::answering(move |request| {
-        let running = RunningTerminal { terminal: "t".into(), opened_at_ms: 5 };
-        let answer = if request == WorkerRequest::RunningTerminals {
-            WorkerResponse::RunningTerminals(worker::RunningTerminalsReply { terminals: vec![running], rows: false })
-        } else {
-            WorkerResponse::Ok
-        };
-        keeping.lock().push(request);
-        Some(Ok(answer))
-    });
-    serving(&hub, &link);
-
-    let carried_on = hub.carry_on_terminals(&"w".into(), &link).await;
-    let refused = hub.terminal_open(open("u")).await;
-
-    assert_eq!(carried_on, 0);
-    assert_eq!(listed(&hub).await.terminals, Vec::new());
-    assert_eq!(refused.map_err(|e| e.code), Err(ErrorCode::Unavailable));
-    let asked = asked.lock();
-    assert!(asked.contains(&WorkerRequest::TerminalStop(worker::TerminalStop { terminal: "t".into() })));
-    assert!(!asked.iter().any(|request| matches!(request, WorkerRequest::TerminalStart(_))), "{asked:?}");
 }

@@ -8,7 +8,7 @@ use protocol::model::{RecordKey, Terminal, TerminalId, WorkspaceId};
 use protocol::terminal::TerminalUpdate;
 use protocol::worker::{self, Request, RunningTerminal};
 use tokio::sync::MutexGuard as AsyncMutexGuard;
-use tracing::{info, warn};
+use tracing::warn;
 
 use crate::hub::Hub;
 use crate::store::Store;
@@ -95,28 +95,15 @@ impl Hub {
     }
 
     /// Takes on the terminals that a worker an earlier hub left is running, announcing a record for each, and says how
-    /// many it took on. One it can't give a record ends, so no shell runs that no client can see, and so does every
-    /// one of a worker from before rows, which a client can't show.
+    /// many it took on. One it can't give a record ends, so no shell runs that no client can see.
     pub(crate) async fn carry_on_terminals(&self, workspace_id: &WorkspaceId, link: &WorkerLink) -> usize {
         // Across the call, so the end of a shell the worker lists, which can reach the hub before the list does, or
         // just after it, waits to remove the record this makes.
         let _changing = self.terminals.changing.lock().await;
         let running = match link.call(worker::RunningTerminals).await {
-            Ok(reply) if reply.rows => reply.terminals,
-            Ok(reply) => {
-                link.without_rows();
-                for RunningTerminal { terminal, .. } in reply.terminals {
-                    info!(%workspace_id, %terminal, "ending a terminal of a worker from before rows, which no client can show");
-                    // Its end waits for `changing` on a task of its own, so this can wait for the stop holding it.
-                    let _ = link.call(worker::TerminalStop { terminal }).await;
-                }
-                return 0;
-            }
+            Ok(reply) => reply.terminals,
             // A worker from before terminals runs none.
-            Err(e) if e.code == ErrorCode::Unsupported => {
-                link.without_rows();
-                return 0;
-            }
+            Err(e) if e.code == ErrorCode::Unsupported => return 0,
             Err(e) => {
                 warn!(%workspace_id, "asking the worker an earlier hub left for its terminals: {}", e.message);
                 return 0;
