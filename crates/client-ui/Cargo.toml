@@ -1,0 +1,20 @@
+[package]
+name = "client-ui"
+description = "What every app draws of a hub's workspaces and chats, other than a chat's transcript: their marks, and the picker of a chat's model."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+license.workspace = true
+
+[dependencies]
+protocol.workspace = true
+client-core.workspace = true
+gpui-kit.workspace = true
+look.workspace = true
+
+[dev-dependencies]
+# The records the tests build, such as a workspace and its chats.
+protocol = { workspace = true, features = ["testing"] }
+
+[lints]
+workspace = true

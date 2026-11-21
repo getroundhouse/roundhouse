@@ -1,5 +1,5 @@
 //! The model and its effort, as one button that opens one menu with both, for a chat's composer and for a new
-//! workspace's first prompt. What it offers is what the chat's agent is offered, as the hub describes it.
+//! workspace's first prompt, in every app. What it offers is what the chat's agent is offered, as the hub describes it.
 
 use std::rc::Rc;
 
@@ -10,14 +10,14 @@ use protocol::model::{AgentDescription, ModelName};
 
 /// What was picked in the model picker's menu.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) enum Picked {
+pub enum Picked {
     Model(ModelName),
     Effort(Effort),
 }
 
 /// What the picker calls a model: what its agent's description calls it, or for any other, such as a full ID, the name
 /// itself.
-pub(crate) fn model_label<'a>(model: &'a ModelName, agent: Option<&'a AgentDescription>) -> &'a str {
+pub fn model_label<'a>(model: &'a ModelName, agent: Option<&'a AgentDescription>) -> &'a str {
     agent.and_then(|agent| agent.label(model)).unwrap_or(model.as_str())
 }
 
@@ -54,7 +54,7 @@ impl Offered {
 /// One button for the model and its effort, which opens one menu with both, showing what's chosen now and offering what
 /// `agent` is. Pointing at another model says `switching`, when there's something to say of it, such as what the chat's
 /// cache costs to write again.
-pub(crate) fn model_picker(
+pub fn model_picker(
     id: &'static str,
     agent: Option<&AgentDescription>,
     model: &ModelName,

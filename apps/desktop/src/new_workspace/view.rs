@@ -2,6 +2,7 @@
 //! typed, then the `+` menu, the model and effort, and Create, as the composer's bar has them, over plan mode's
 //! texture while it's on.
 
+use client_ui::model_picker;
 use gpui_kit::component::input::Textarea;
 use gpui_kit::component::{h_flex, v_flex};
 use gpui_kit::{
@@ -14,7 +15,6 @@ use look::Shaped as _;
 use super::NewWorkspaceDialog;
 use crate::attached;
 use crate::composing::{self, Plan};
-use crate::model_picker::model_picker;
 
 impl Render for NewWorkspaceDialog {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {

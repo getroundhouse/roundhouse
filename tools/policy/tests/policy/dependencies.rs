@@ -85,7 +85,9 @@ fn clients_only_reach_the_hub_through_the_protocol() {
 /// what ships, and this asks `cargo tree`, which resolves them as a build of each client does.
 #[test]
 fn no_client_builds_ghostty() {
-    for package in ["client-core", "terminal-view", "transcript", "local-hub", "cli", "desktop", "mobile-ios"] {
+    for package in
+        ["client-core", "terminal-view", "transcript", "client-ui", "local-hub", "cli", "desktop", "mobile-ios"]
+    {
         let built = built_by(package);
         assert!(built.contains(&"client-core".to_string()), "{package} builds client-core, as every client does");
         for banned in ["terminal-state", "libghostty-vt"] {

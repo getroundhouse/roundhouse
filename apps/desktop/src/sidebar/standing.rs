@@ -19,15 +19,15 @@ pub(crate) struct Standing {
 pub(crate) fn standing(app: &AppView, workspace: &Workspace, cx: &App) -> Standing {
     let chats = app.records().sessions(&workspace.id);
     let needs_a_look = needs_a_look(app, workspace, cx);
-    let signal = transcript::workspace_signal(workspace, chats);
-    let work = transcript::recorded_work(app.pull_request_of(workspace).as_ref()).unwrap_or(Work::NoPr);
+    let signal = client_ui::workspace_signal(workspace, chats);
+    let work = client_ui::recorded_work(app.pull_request_of(workspace).as_ref()).unwrap_or(Work::NoPr);
     Standing { signal, work, needs_a_look }
 }
 
 /// Whether a workspace needs a look: it has a reply nobody has read, or a chat waiting on an answer or an approval.
 pub(super) fn needs_a_look(app: &AppView, workspace: &Workspace, cx: &App) -> bool {
     let unread = workspace.status != WorkspaceStatus::Archived && !app.unread_chats(&workspace.id, cx).is_empty();
-    unread || transcript::waiting_on_you(app.records().sessions(&workspace.id))
+    unread || client_ui::waiting_on_you(app.records().sessions(&workspace.id))
 }
 
 /// How many listed workspaces on `app` need a look.

@@ -16,6 +16,7 @@ members = [
     "apps/desktop",
     "apps/mobile-ios",
     "crates/transcript",
+    "crates/client-ui",
     "crates/look",
     "crates/terminal-state",
     "crates/dictation",
@@ -111,6 +112,7 @@ hub = { path = "crates/hub" }
 client-core = { path = "crates/client-core" }
 local-hub = { path = "crates/local-hub" }
 transcript = { path = "crates/transcript" }
+client-ui = { path = "crates/client-ui" }
 look = { path = "crates/look" }
 dictation = { path = "crates/dictation" }
 dictation-ui = { path = "crates/dictation-ui" }

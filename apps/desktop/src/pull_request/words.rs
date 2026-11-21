@@ -1,5 +1,5 @@
 //! What the bar says for each standing, and the one thing it offers to do about it. Its colour is
-//! [`transcript::work`]'s, which a workspace's mark shows in every app.
+//! [`client_ui::work`]'s, which a workspace's mark shows in every app.
 
 use protocol::model::Standing;
 

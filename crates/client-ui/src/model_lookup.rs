@@ -7,8 +7,9 @@ use gpui_kit::{AnyElement, Context, IntoElement as _};
 use protocol::client::admin::{ModelTarget, ModelsFor};
 use protocol::model::{AgentDescription, ModelList, ModelListKey, ModelLookup};
 
+/// The hub's list of models that a dialog or a chat's picker follows, and what it last asked for one.
 #[derive(Default)]
-pub(crate) struct Lookup {
+pub struct FollowedModels {
     /// What was asked last, so the same isn't asked again while the hub holds its list.
     asked: Option<ModelsFor>,
     /// The list the hub said applies, as its reply had it, or what it said instead.
@@ -19,9 +20,9 @@ pub(crate) struct Lookup {
     generation: u64,
 }
 
-impl Lookup {
+impl FollowedModels {
     /// Forgets what was asked, as on a new connection, whose hub may hold other lists.
-    pub(crate) fn reset(&mut self) {
+    pub fn reset(&mut self) {
         self.generation += 1;
         (self.asked, self.answer, self.seen) = (None, None, false);
     }
@@ -30,7 +31,7 @@ impl Lookup {
     /// followed, when the hub has let go of that one, or `again`, as Retry does. `held` is what the records hold of the
     /// list followed. Nothing is asked for an agent that doesn't discover its models.
     #[expect(clippy::too_many_arguments, reason = "what's asked, where it's held, and where the answer goes")]
-    pub(crate) fn follow<T: 'static>(
+    pub fn follow<T: 'static>(
         &mut self,
         client: &Client,
         agent: Option<&AgentDescription>,
@@ -70,7 +71,7 @@ impl Lookup {
     }
 
     /// Which list is followed, once the hub has said.
-    pub(crate) fn key(&self) -> Option<&ModelListKey> {
+    pub fn key(&self) -> Option<&ModelListKey> {
         Some(&self.answer.as_ref()?.as_ref().ok()?.key)
     }
 
@@ -82,7 +83,7 @@ impl Lookup {
 
     /// What `base` offers where the list followed applies: `base` itself for an agent that doesn't discover its models,
     /// and for one that does, `base` with the list's models, once the agent has given some.
-    pub(crate) fn description(&self, base: &AgentDescription, held: Option<&ModelList>) -> Option<AgentDescription> {
+    pub fn description(&self, base: &AgentDescription, held: Option<&ModelList>) -> Option<AgentDescription> {
         if !base.discovers_models() {
             return Some(base.clone());
         }
@@ -91,7 +92,7 @@ impl Lookup {
     }
 
     /// Whether the agent hasn't said yet what it offers, and hasn't failed to, so there's nothing to pick from.
-    pub(crate) fn waiting(&self, held: Option<&ModelList>) -> bool {
+    pub fn waiting(&self, held: Option<&ModelList>) -> bool {
         self.asked.is_some() && self.failed(held).is_none() && self.list(held).is_none_or(|list| list.catalog.is_none())
     }
 
@@ -109,7 +110,7 @@ impl Lookup {
     }
 
     /// "Loading models…" while the agent is asked, and what went wrong, with Retry, once it fails. `retry` asks again.
-    pub(crate) fn status<T: 'static>(
+    pub fn status<T: 'static>(
         &self,
         held: Option<&ModelList>,
         cx: &mut Context<T>,
@@ -156,7 +157,7 @@ mod tests {
             again: false,
         };
         let answer = Some(Ok(list(2, ModelLookup::Asking, None)));
-        let lookup = Lookup { asked: Some(asked), answer, ..Lookup::default() };
+        let lookup = FollowedModels { asked: Some(asked), answer, ..FollowedModels::default() };
         let older = list(1, ModelLookup::Answered, Some(ModelCatalog::default()));
         let newer = list(3, ModelLookup::Failed { message: "logged out".into() }, None);
 
