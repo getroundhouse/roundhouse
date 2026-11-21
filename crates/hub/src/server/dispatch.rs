@@ -114,6 +114,10 @@ pub(super) async fn handle(
         R::WorkspacePullRequest(workspaces::WorkspacePullRequest { id }) => {
             C::PullRequest(workspaces::PullRequestReply { pull_request: hub.workspace_pull_request(id).await? })
         }
+        R::GithubSubscribe(subscribe) => {
+            super::github::follow(hub, connection, subscribe)?;
+            C::Ok
+        }
         R::ReferencesRead(references::ReferencesRead { workspace, references }) => {
             C::References(references::References { references: hub.references_read(&workspace, references).await? })
         }

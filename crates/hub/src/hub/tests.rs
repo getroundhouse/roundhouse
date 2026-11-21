@@ -25,7 +25,7 @@ use crate::store::Store;
 use crate::store::tests::{open_in, store_with_session};
 use crate::timers::Timers;
 use crate::worker_link::WorkerLink;
-use github::{Github, GithubConfig, PullRequests, Script, StandIn};
+use github::{Github, GithubConfig, PullRequests, References, Script, StandIn};
 
 /// Claude as a hub's tests describe it, which a chat nobody has chosen for runs on Sonnet at High, so a test can tell
 /// what the description gave a chat from what anything else would have, and whose token lasts [`A_TOKEN_LASTS_MS`].
@@ -289,8 +289,22 @@ pub(crate) async fn hub_on_github(dir: &Path) -> (Arc<Hub>, PullRequests, StandI
 
 /// The same, with `timers`.
 pub(crate) async fn hub_on_github_timed(dir: &Path, timers: Timers) -> (Arc<Hub>, PullRequests, StandIn) {
+    hub_on_github_answering(dir, timers, None).await
+}
+
+/// The same, where GitHub answers for `references` too, as its issues and pull requests by their numbers.
+pub(crate) async fn hub_on_github_with(dir: &Path, references: &References) -> (Arc<Hub>, PullRequests, StandIn) {
+    hub_on_github_answering(dir, Timers::FOR_TESTS, Some(references.clone())).await
+}
+
+async fn hub_on_github_answering(
+    dir: &Path,
+    timers: Timers,
+    references: Option<References>,
+) -> (Arc<Hub>, PullRequests, StandIn) {
     let pull_requests = PullRequests::default();
-    let github = StandIn::with(Script { pull_requests: Some(pull_requests.clone()), ..Script::default() }).await;
+    let github =
+        StandIn::with(Script { pull_requests: Some(pull_requests.clone()), references, ..Script::default() }).await;
     let hub = hub_reading_github_timed(dir, github.api(), timers);
     hub.store.set_workspace_branches(&"w".into(), &pushed("head-7", "head-7", (0, 0))).unwrap();
     (hub, pull_requests, github)

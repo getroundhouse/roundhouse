@@ -1,7 +1,7 @@
 use super::agents::ModelLists;
 use super::terminals::Terminals;
 use super::updates::Updates;
-use super::{awake, feed, pull_requests, sessions, setup};
+use super::{awake, feed, github_reads, pull_requests, sessions, setup};
 use crate::attachment_files::AttachmentFiles;
 use crate::error::internal;
 use crate::gh::Gh;
@@ -93,6 +93,8 @@ pub(crate) struct Hub {
     pub(super) pull_requests: pull_requests::Reading,
     /// What the hub last read from GitHub, for every part of it that reads GitHub, and every client.
     pub(super) github_cache: Arc<GithubCache>,
+    /// What clients show of GitHub, as their subscriptions say.
+    pub(super) github_shown: github_reads::Shown,
     /// The reads of workspaces' own pull requests nobody asked for that are running now, by whose token each reads
     /// as.
     pub(super) own_reads: Jobs<pull_requests::ReadsAs>,
@@ -214,6 +216,7 @@ impl Hub {
             updates: Updates::new(dirs.service_builds),
             pull_requests: pull_requests::Reading::new(),
             github_cache: Arc::new(GithubCache::open(&dirs.github_cache)),
+            github_shown: github_reads::Shown::default(),
             own_reads: Jobs::new(),
             sign_ins: Jobs::new(),
             github_checks_stopped: watch::Sender::new(false),

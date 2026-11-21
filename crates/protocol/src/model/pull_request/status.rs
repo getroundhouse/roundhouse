@@ -11,9 +11,7 @@ pub struct PullRequestFound {
 
 /// Reads a field that's there as `Some`, even when it's `null`, so `null` says "looked, and there's none", apart from
 /// a missing field, which says "hasn't looked". The field is left out rather than written as `null` when it's `None`.
-pub(in super::super) fn deserialize_found<'de, D: Deserializer<'de>>(
-    from: D,
-) -> Result<Option<PullRequestFound>, D::Error> {
+pub(crate) fn deserialize_found<'de, D: Deserializer<'de>>(from: D) -> Result<Option<PullRequestFound>, D::Error> {
     PullRequestFound::deserialize(from).map(Some)
 }
 

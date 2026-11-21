@@ -1,5 +1,6 @@
 //! The client side of the hub: connections, requests and subscriptions.
 
+mod github;
 mod pump;
 mod subscribing;
 mod terminals;

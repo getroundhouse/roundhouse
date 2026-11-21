@@ -174,7 +174,7 @@ pub(crate) fn follow(
                     }
                     true
                 }
-                SubscriptionItem::Notice(_) | SubscriptionItem::Terminal(_) => false,
+                SubscriptionItem::Notice(_) | SubscriptionItem::Terminal(_) | SubscriptionItem::Github(_) => false,
             };
             if until_idle && check && finished(following)? {
                 return Ok(());

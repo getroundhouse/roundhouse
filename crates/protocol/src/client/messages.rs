@@ -288,6 +288,11 @@ pub enum HubFrame {
         subscription_id: u64,
         notice: HubNotice,
     },
+    /// What the hub knows now of one of what a [`super::github::GithubSubscribe`] shows.
+    Github {
+        subscription_id: u64,
+        update: super::github::GithubUpdate,
+    },
     /// What happens next in the terminal a `TerminalAttach` follows, in order, starting with what it shows.
     Terminal {
         subscription_id: u64,

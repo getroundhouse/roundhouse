@@ -68,6 +68,7 @@ pub use proposal::{
     ProposalQuestion, ProposalRevision, Proposed, Recommendation, Response, ResponseSummary, RevisionNumber,
     RevisionStanding, RevisionSummary, Round, Withdrawal, chosen_in_words,
 };
+pub(crate) use pull_request::deserialize_found;
 pub use pull_request::{
     Checks, LeftQueue, Local, MergeState, PrState, PullRequest, PullRequestFound, QueueState, Review, Standing,
 };

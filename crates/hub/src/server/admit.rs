@@ -265,6 +265,7 @@ fn local_only(request: &ClientRequest) -> bool {
         | R::SessionSubscribePlaces(..)
         | R::SessionUnsubscribe(..)
         | R::FeedSubscribe(..)
+        | R::GithubSubscribe(..)
         | R::SessionPrompt(..)
         | R::AttachmentAdd(..)
         | R::AttachmentRead(..)

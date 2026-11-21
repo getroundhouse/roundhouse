@@ -56,6 +56,9 @@ pub(super) struct Connection {
     pub(super) id: u64,
     pub(super) frames: mpsc::Sender<Outgoing>,
     pub(super) subscriptions: Mutex<HashMap<u64, AbortHandle>>,
+    /// Of `subscriptions`, those to what GitHub says of what the client shows, which it can say it shows something
+    /// else, taken under `subscriptions`' lock.
+    pub(super) github: Mutex<HashMap<u64, super::github::Followed>>,
     /// True once nothing more will be read, so a request that only waits, with nothing to carry on with, can stop.
     pub(super) closed: Arc<watch::Sender<bool>>,
 }
@@ -101,7 +104,8 @@ pub(super) async fn serve_connection(
     let closed = Arc::new(watch::Sender::new(false));
     let id = NEXT_CONNECTION.fetch_add(1, Ordering::Relaxed);
     let subscriptions = Mutex::new(HashMap::new());
-    let connection = Arc::new(Connection { id, frames, subscriptions, closed: closed.clone() });
+    let github = Mutex::new(HashMap::new());
+    let connection = Arc::new(Connection { id, frames, subscriptions, github, closed: closed.clone() });
     let revoked = gate.revoked();
     let mut revoking = revoked.clone();
 

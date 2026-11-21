@@ -1,4 +1,4 @@
-use protocol::model::{BranchName, GithubRepositoryName, IssueNumber};
+use protocol::model::{BranchName, GithubRepositoryName, IssueNumber, ReferenceAsk};
 
 /// An issue or a pull request on GitHub, which GitHub numbers together in each repository, by its repository, as
 /// GitHub writes it in lower case, since GitHub's names ignore case, and its number.
@@ -11,6 +11,11 @@ pub(crate) struct Item {
 impl Item {
     pub(crate) fn new(repository: &GithubRepositoryName, number: IssueNumber) -> Self {
         Self { repository: repository.as_str().to_ascii_lowercase(), number }
+    }
+
+    /// Whether it's what `ask` names.
+    pub(crate) fn is(&self, ask: &ReferenceAsk) -> bool {
+        self.number == ask.number && self.repository.eq_ignore_ascii_case(ask.repository.as_str())
     }
 }
 

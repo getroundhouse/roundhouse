@@ -113,7 +113,7 @@ impl Source for SessionSource {
                 log.apply_delta(&delta);
                 true
             }
-            SubscriptionItem::Notice(_) | SubscriptionItem::Terminal(_) => false,
+            SubscriptionItem::Notice(_) | SubscriptionItem::Terminal(_) | SubscriptionItem::Github(_) => false,
         })
     }
 

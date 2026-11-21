@@ -2,6 +2,7 @@ use super::feed::Folding;
 use super::transport::{Closer, Transport};
 use super::{commands, lines, queueing};
 use parking_lot::Mutex;
+use protocol::client::github::GithubUpdate;
 use protocol::client::{
     ApiError, ClientFrame, ClientRequest, ClientResponse, ErrorCode, HubFrame, HubNotice, Reply as _, ReplyOutcome,
     Request, subscriptions,
@@ -72,6 +73,8 @@ pub enum SubscriptionItem {
     Notice(Box<HubNotice>),
     /// Only on a terminal's.
     Terminal(TerminalUpdate),
+    /// Only on one to what GitHub says of what's shown.
+    Github(GithubUpdate),
 }
 
 /// Why a subscription's channel closed.
@@ -305,6 +308,9 @@ fn read_frames(inner: &Arc<Inner>, stream: impl std::io::Read) {
             }
             HubFrame::Terminal { subscription_id, update } => {
                 deliver(inner, subscription_id, SubscriptionItem::Terminal(update));
+            }
+            HubFrame::Github { subscription_id, update } => {
+                deliver(inner, subscription_id, SubscriptionItem::Github(update));
             }
         }
     }

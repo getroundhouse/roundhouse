@@ -111,7 +111,8 @@ impl Source for RecordsSource {
             SubscriptionItem::Event(_)
             | SubscriptionItem::Tail(_)
             | SubscriptionItem::Delta(_)
-            | SubscriptionItem::Terminal(_) => false,
+            | SubscriptionItem::Terminal(_)
+            | SubscriptionItem::Github(_) => false,
         })
     }
 

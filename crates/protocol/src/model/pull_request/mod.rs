@@ -5,7 +5,7 @@
 mod tests;
 
 mod status;
-pub(super) use status::deserialize_found;
+pub(crate) use status::deserialize_found;
 pub use status::{
     Checks, LeftQueue, Local, MergeState, PrState, PullRequest, PullRequestFound, QueueState, Review, Standing,
 };
