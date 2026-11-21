@@ -4,24 +4,12 @@ use protocol::capability::approvals::ApprovalMode;
 use protocol::event::{AgentTask, TaskKind};
 use protocol::model::AgentAccount;
 
-use super::*;
+use super::super::*;
+use super::older::older_database;
 use crate::store::backup::files_in;
 use crate::store::older::store_from_before;
 use crate::store::tests::store_with_session;
 use crate::store::{InstanceStage, RecordedInstance, SessionLogin, Store, WorkspacePlacement};
-
-/// A database as a build with only the first `version` migrations left it, holding a repo. Keep what
-/// this returns open, and what it wrote stays in the WAL, as it does when a hub is killed. One with every migration
-/// starts as a copy of the database they ran on once, as a store's does, so none runs here.
-fn older_database(path: &Path, backups: &Path, version: usize) -> Connection {
-    if version == MIGRATIONS.len() {
-        crate::store::migrated::copy_to(path);
-    }
-    let mut conn = open_connection(path).unwrap();
-    migrate_to(&mut conn, backups, version).unwrap();
-    conn.execute("INSERT INTO repos (id, name, path, created_at_ms) VALUES ('r', 'repo', '/repo', 0)", []).unwrap();
-    conn
-}
 
 #[test]
 fn an_older_database_is_copied_with_what_its_wal_holds_before_it_migrates() {
@@ -88,7 +76,7 @@ fn retrying_an_update_that_stops_part_way_keeps_the_copy_from_before_it() {
     let _current = older_database(&path, &backups, MIGRATIONS.len());
     let update = [MIGRATIONS, &[Migration::Sql("CREATE TABLE fifth (a)"), Migration::Sql("NOT SQL")]].concat();
 
-    let attempts = Vec::from_fn(4, |_| migrate_through(&mut open_connection(&path).unwrap(), &backups, &update));
+    let attempts = Vec::from_fn(4, |_| migrate_through(&mut open_connection(&path).unwrap(), &backups, &update, None));
 
     assert!(attempts.iter().all(|attempt| matches!(attempt, Err(StoreError::Database(_)))), "got {attempts:?}");
     let mut versions: Vec<usize> = files_in(&backups)
@@ -97,21 +85,6 @@ fn retrying_an_update_that_stops_part_way_keeps_the_copy_from_before_it() {
         .collect();
     versions.sort_unstable();
     assert_eq!(versions, [MIGRATIONS.len(), MIGRATIONS.len() + 1]);
-}
-
-#[test]
-fn a_database_from_a_newer_build_is_refused_and_left_as_it_is() {
-    let dir = tempfile::tempdir().unwrap();
-    let path = dir.path().join("hub.db");
-    let backups = dir.path().join("backups");
-    let newer = older_database(&path, &backups, MIGRATIONS.len());
-    newer.pragma_update(None, "user_version", i64::try_from(MIGRATIONS.len() + 1).unwrap()).unwrap();
-
-    let result = migrate(&mut open_connection(&path).unwrap(), &backups);
-
-    assert!(matches!(result, Err(StoreError::TooNew { .. })), "got {result:?}");
-    assert_eq!(schema_version(&newer).unwrap(), MIGRATIONS.len() + 1);
-    assert_eq!(files_in(&backups), Vec::<String>::new());
 }
 
 /// What's running in the background is on the session's record, so writing it moves the session's revision, as
@@ -303,11 +276,11 @@ fn a_migration_in_rust_runs_in_its_place_and_one_that_fails_changes_nothing() {
     let name = |conn: &Connection| conn.query_row("SELECT name FROM repos", [], |row| row.get::<_, String>(0)).unwrap();
 
     let failed = [MIGRATIONS, &[Migration::Rust(failing)]].concat();
-    let result = migrate_through(&mut open_connection(&path).unwrap(), &backups, &failed);
+    let result = migrate_through(&mut open_connection(&path).unwrap(), &backups, &failed, None);
     let after_failing =
         (schema_version(&open_connection(&path).unwrap()).unwrap(), name(&open_connection(&path).unwrap()));
     let update = [MIGRATIONS, &[Migration::Rust(renaming), Migration::Sql("CREATE TABLE after (a)")]].concat();
-    migrate_through(&mut open_connection(&path).unwrap(), &backups, &update).unwrap();
+    migrate_through(&mut open_connection(&path).unwrap(), &backups, &update, None).unwrap();
 
     assert!(matches!(result, Err(StoreError::NotFound { .. })), "got {result:?}");
     assert_eq!(after_failing, (MIGRATIONS.len(), "repo".to_string()), "nothing it changed is kept");

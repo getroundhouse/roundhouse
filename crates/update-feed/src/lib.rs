@@ -2,14 +2,18 @@
 //! which `tools/package/publish.py` writes: which versions of the worker protocol its hub speaks. The app reads it to
 //! take the newest update whose hub speaks every worker at work, so its update crosses one break at a time, as
 //! `docs/principles/protocol.md` says, and `tools/update-steps` to hold back a change that would leave it none, as "A
-//! break in the worker protocol" in `docs/standards/merging.md` says. It does no IO, so the app, a hub and the tools share it without the rest of any.
+//! break in the worker protocol" in `docs/standards/merging.md` says. It also holds this build's floor, the oldest
+//! release it updates from, which the hub's store reads to refuse a database older than that. It does no IO, so the
+//! app, a hub and the tools share it without the rest of any.
 
 mod feed;
 #[cfg(any(test, feature = "testing"))]
 pub mod fixture;
+mod floor;
 mod signature;
 #[cfg(test)]
 mod tests;
 
 pub use feed::{BadChecksum, BadVersion, Feed, HubArchive, Release, is_release};
+pub use floor::{FLOOR, Floor};
 pub use signature::{HUB_CHANNEL, KEY, URL, Unsigned, UpdateFeedKey};
