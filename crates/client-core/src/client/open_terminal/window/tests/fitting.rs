@@ -125,21 +125,34 @@ fn a_view_with_room_for_more_than_a_terminal_has_asks_for_the_most() {
     assert_eq!(tall, [TerminalSize { cols: 20, rows: TerminalSize::MOST.rows }]);
 }
 
-/// So a view that watches again, as on a new connection, takes the terminal back to its own size, but keeps one
-/// another device gave it while the view's room stays as it was.
+/// The sizes a window asked for as it took `frames`.
+fn fits_asked(window: &mut Window, frames: Vec<TerminalPicture>) -> Vec<(u16, u16)> {
+    let asks: Vec<Ask> = frames.into_iter().flat_map(|frame| window.take(frame).unwrap()).collect();
+    asks.iter()
+        .filter_map(|ask| if let Ask::Fit { size, .. } = ask { Some((size.cols, size.rows)) } else { None })
+        .collect()
+}
+
+/// A view that watches again on the same connection, after falling behind, keeps a size another device gave the
+/// terminal meanwhile, as it would had it kept up, so two devices don't take the size from each other each time either
+/// falls behind. On a new connection, it takes the terminal back to its own size.
 #[test]
-fn a_fresh_picture_at_another_size_than_the_views_room_asks_for_the_room() {
+fn only_a_fresh_picture_on_a_new_connection_asks_for_the_views_room() {
     let mut worker = worker(SIZE, lines().as_bytes());
     let mut window = watched(&mut worker, &mut PictureSending::default());
     assert!(window.fit(SIZE).is_empty());
 
     worker.resize(TerminalSize { cols: 30, rows: 6 }).unwrap();
-    let again = pictured(&mut worker, &mut PictureSending::default());
-    let asks: Vec<Ask> = again.into_iter().flat_map(|frame| window.take(frame).unwrap()).collect();
+    let after_falling_behind = pictured(&mut worker, &mut PictureSending::default());
+    let asked_after_falling_behind = fits_asked(&mut window, after_falling_behind);
+    let rows_shown = window.frame().unwrap().rows.len();
+    window.disconnected();
+    let on_a_new_connection = pictured(&mut worker, &mut PictureSending::default());
+    let asked_on_a_new_connection = fits_asked(&mut window, on_a_new_connection);
 
-    let fits: Vec<_> =
-        asks.iter().filter_map(|ask| if let Ask::Fit { size, .. } = ask { Some(*size) } else { None }).collect();
-    assert_eq!(fits.iter().map(|size| (size.cols, size.rows)).collect::<Vec<_>>(), [(SIZE.cols, SIZE.rows)]);
+    assert_eq!(asked_after_falling_behind, []);
+    assert_eq!(rows_shown, 6, "it shows the terminal at the size it came at");
+    assert_eq!(asked_on_a_new_connection, [(SIZE.cols, SIZE.rows)]);
 }
 
 #[test]
