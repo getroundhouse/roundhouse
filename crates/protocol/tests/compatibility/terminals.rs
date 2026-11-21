@@ -5,9 +5,13 @@ use protocol::client::terminals::{TerminalAttach, TerminalClose, TerminalInput, 
 use protocol::client::{ClientFrame, ClientRequest, ClientResponse, HubFrame, HubNotice, HubStatus, ReplyOutcome};
 use protocol::frame;
 use protocol::model::{RecordKey, Records, Rev, Terminal};
-use protocol::terminal::{TerminalBytes, TerminalExit, TerminalScreen, TerminalSize, TerminalUpdate, UpdateIndex};
+use protocol::terminal::{
+    Numbering, RowNumber, Span, TerminalBytes, TerminalExit, TerminalRow, TerminalScreen, TerminalSize, TerminalUpdate,
+    UpdateIndex,
+};
 use protocol::worker::{
-    self, RunningTerminal, RunningTerminalsReply, TerminalShown, WorkerFrame, WorkerRequest, WorkerResponse,
+    self, RunningTerminal, RunningTerminalsReply, TerminalRowsReply, TerminalShown, WorkerFrame, WorkerRequest,
+    WorkerResponse,
 };
 
 use crate::keeps_its_form;
@@ -116,6 +120,16 @@ fn every_request_a_hub_makes_of_a_workers_terminal_keeps_its_form() {
     );
     let show = worker::TerminalShow { terminal: "t".into() };
     asked(WorkerRequest::TerminalShow(show), r#"{"method":"terminal_show","terminal":"t"}"#);
+    let rows = worker::TerminalRows {
+        terminal: "t".into(),
+        numbering: Numbering::new(2),
+        from: RowNumber::new(40),
+        count: 100,
+    };
+    asked(
+        WorkerRequest::TerminalRows(rows),
+        r#"{"method":"terminal_rows","terminal":"t","numbering":2,"from":40,"count":100}"#,
+    );
     let stop = worker::TerminalStop { terminal: "t".into() };
     asked(WorkerRequest::TerminalStop(stop), r#"{"method":"terminal_stop","terminal":"t"}"#);
     asked(WorkerRequest::RunningTerminals, r#"{"method":"running_terminals"}"#);
@@ -127,6 +141,18 @@ fn every_reply_and_update_a_worker_sends_of_its_terminals_keeps_its_form() {
     answered(
         WorkerResponse::TerminalShown(TerminalShown { screen, next: UpdateIndex::new(12) }),
         r#"{"result":"terminal_shown","screen":{"size":{"cols":80,"rows":24},"bytes":"G1syShtbSGhp"},"next":12}"#,
+    );
+    let row = TerminalRow { spans: vec![Span { text: "hi".into(), ..Span::default() }], ..TerminalRow::default() };
+    let rows = TerminalRowsReply {
+        numbering: Numbering::new(2),
+        first: RowNumber::new(30),
+        top: RowNumber::new(900),
+        from: RowNumber::new(40),
+        rows: vec![row, TerminalRow::default()],
+    };
+    answered(
+        WorkerResponse::TerminalRows(rows),
+        r#"{"result":"terminal_rows","numbering":2,"first":30,"top":900,"from":40,"rows":[{"s":[{"t":"hi"}]},{}]}"#,
     );
     let running = RunningTerminal { terminal: "t".into(), opened_at_ms: 5 };
     answered(

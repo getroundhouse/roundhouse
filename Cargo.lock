@@ -9374,6 +9374,8 @@ version = "0.1.0"
 dependencies = [
  "libghostty-vt",
  "proptest",
+ "protocol",
+ "serde_json",
  "thiserror 2.0.21",
 ]
 

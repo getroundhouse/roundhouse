@@ -12,6 +12,7 @@ mod tests;
 mod compressing;
 mod drawing;
 mod place;
+mod rows;
 mod screen;
 mod selecting;
 mod typing;

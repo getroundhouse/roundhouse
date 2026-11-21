@@ -7,8 +7,10 @@
 #[cfg(test)]
 mod tests;
 
+mod rows;
 mod size;
 mod updates;
 
+pub use rows::{CellAttributes, CellColor, CellStyle, Numbering, RowNumber, Span, TerminalRow, Underline};
 pub use size::TerminalSize;
 pub use updates::{TerminalBytes, TerminalExit, TerminalScreen, TerminalUpdate, UpdateIndex};

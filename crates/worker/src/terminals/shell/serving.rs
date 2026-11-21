@@ -242,6 +242,10 @@ impl Shell {
                     Some(ToShell::Show(reply)) => {
                         let _ = reply.send(self.shown(mirror));
                     }
+                    Some(ToShell::Rows(asked, reply)) => {
+                        let rows = mirror.history_rows(asked.numbering, asked.from, asked.count);
+                        let _ = reply.send(rows.map_err(|e| failed("reading the terminal's rows", &e)));
+                    }
                     Some(ToShell::Stop) => self.hang_up(&mut kill_at),
                     // Nothing can tell it anything once the worker has let go of it.
                     None => {
