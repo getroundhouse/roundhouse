@@ -211,8 +211,9 @@ impl WorkspacePane {
             Stage::Waiting => Self::waiting(needs, says, type_),
         };
         let surface = bar(icon, says, actions, cx);
-        // Holding Space, or Option-Space, talks only once dictation and speech are ready, and does nothing before.
-        let surface = if needs.ready() { dictation_ui::Field::keys(surface, &self.dictation) } else { surface };
+        // Holding Space, or Option-Space, talks only once dictation and speech are ready, and does nothing before. Space
+        // types nothing here, so it's held for less before it talks than where it types.
+        let surface = if needs.ready() { dictation_ui::Field::keys_to_talk(surface, &self.dictation) } else { surface };
         let surface = surface
             .track_focus(&self.composer.focus_handle(cx))
             .capture_key_down(cx.listener(Self::key_in_the_bar))

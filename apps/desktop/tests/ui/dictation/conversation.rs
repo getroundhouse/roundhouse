@@ -5,7 +5,7 @@
 use client_core::fake_hub::World;
 use desktop::workspace_pane::{
     CONVERSATION_BAR, CONVERSATION_CARD, CONVERSATION_MODE, CONVERSATION_NOT_NOW, CONVERSATION_STOP,
-    CONVERSATION_TURN_ON, CONVERSATION_TYPE, LIVE_LINE, SPACE_DICTATES_AFTER,
+    CONVERSATION_TURN_ON, CONVERSATION_TYPE, LIVE_LINE, SPACE_TALKS_AFTER,
 };
 use dictation::fake::FakeEngine;
 use gpui_kit::{AppContext as _, TestAppContext};
@@ -65,6 +65,28 @@ fn the_button_turns_conversation_mode_on_and_typing_turns_it_off_with_what_was_t
     assert_eq!(ui.view().error, None, "a key that asks again before the hub has turned it off isn't refused");
 }
 
+/// Space types nothing in the bar, so holding it talks sooner than where it types, though a brush of it still doesn't.
+#[gpui_kit::test]
+fn space_held_briefly_talks_and_a_brush_of_it_does_not(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let (mut ui, _engine) = in_conversation_mode(cx, &stack);
+
+    on_the_keyboard(&mut ui, true);
+    press_space(&mut ui);
+    hold_for(&mut ui, SPACE_TALKS_AFTER / 2);
+    on_the_keyboard(&mut ui, false);
+    let_go(&mut ui);
+    hold_for(&mut ui, SPACE_TALKS_AFTER);
+    assert!(!dictating(&mut ui), "a brush of the key");
+
+    on_the_keyboard(&mut ui, true);
+    press_space(&mut ui);
+    hold_for(&mut ui, SPACE_TALKS_AFTER);
+    assert!(dictating(&mut ui), "held as long as it takes to listen");
+    on_the_keyboard(&mut ui, false);
+    let_go(&mut ui);
+}
+
 /// What was said, said out loud.
 fn spoken(ui: &Ui) -> Option<String> {
     ui.events().iter().find_map(|e| match &e.body {
@@ -80,7 +102,7 @@ fn letting_go_of_space_sends_what_was_said_out_loud(cx: &mut TestAppContext) {
 
     on_the_keyboard(&mut ui, true);
     press_space(&mut ui);
-    hold_for(&mut ui, SPACE_DICTATES_AFTER);
+    hold_for(&mut ui, SPACE_TALKS_AFTER);
     say(&mut ui, &engine, "fix the flaky test");
     on_the_keyboard(&mut ui, false);
     let_go(&mut ui);
@@ -99,7 +121,7 @@ fn something_long_said_stays_in_the_bar(cx: &mut TestAppContext) {
 
     on_the_keyboard(&mut ui, true);
     press_space(&mut ui);
-    hold_for(&mut ui, SPACE_DICTATES_AFTER);
+    hold_for(&mut ui, SPACE_TALKS_AFTER);
     // Sentences and pauses end what's heard so far, and the rest is still being heard.
     let said = format!("{}fix the flaky test", "fix the flaky test in the hub. / ".repeat(4));
     say(&mut ui, &engine, &said);
@@ -123,7 +145,7 @@ fn what_was_typed_before_is_not_said(cx: &mut TestAppContext) {
 
     on_the_keyboard(&mut ui, true);
     press_space(&mut ui);
-    hold_for(&mut ui, SPACE_DICTATES_AFTER);
+    hold_for(&mut ui, SPACE_TALKS_AFTER);
     say(&mut ui, &engine, "fix the flaky test");
     on_the_keyboard(&mut ui, false);
     let_go(&mut ui);
@@ -207,7 +229,7 @@ fn holding_space_does_nothing_until_dictation_is_ready(cx: &mut TestAppContext) 
 
     on_the_keyboard(&mut ui, true);
     press_space(&mut ui);
-    hold_for(&mut ui, SPACE_DICTATES_AFTER);
+    hold_for(&mut ui, SPACE_TALKS_AFTER);
     assert!(!dictating(&mut ui), "nothing is heard");
     say(&mut ui, &engine, "fix the flaky test");
     on_the_keyboard(&mut ui, false);
@@ -230,7 +252,7 @@ fn holding_space_sends_nothing_until_speech_is_ready_too(cx: &mut TestAppContext
 
     on_the_keyboard(&mut ui, true);
     press_space(&mut ui);
-    hold_for(&mut ui, SPACE_DICTATES_AFTER);
+    hold_for(&mut ui, SPACE_TALKS_AFTER);
     assert!(!dictating(&mut ui), "nothing is heard");
     say(&mut ui, &engine, "fix the flaky test");
     on_the_keyboard(&mut ui, false);
