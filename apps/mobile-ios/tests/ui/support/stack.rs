@@ -1,7 +1,7 @@
 //! The hub the tests talk to: one of its own for each test, with a repository, and the fake agent in the place of the
 //! real one.
 
-use std::net::TcpListener;
+use std::cell::OnceCell;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Stdio};
 use std::sync::OnceLock;
@@ -29,7 +29,9 @@ fn binaries() -> &'static PathBuf {
 pub(crate) struct Stack {
     dir: TempDir,
     paths: Paths,
-    port: u16,
+    /// The port the hub chose as it first listened for devices, for a pairing link. A free port asked for and let go of
+    /// before the hub took it could be given to another test's hub too, which could then take it while this one restarts.
+    port: OnceCell<u16>,
     hub: Option<Child>,
 }
 
@@ -45,9 +47,7 @@ impl Stack {
             other => std::env::var(other).ok(),
         })
         .unwrap();
-        // Free when asked. Another test could take it before the hub does, which would fail that test loudly.
-        let port = TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
-        let mut stack = Stack { dir, paths, port, hub: None };
+        let mut stack = Stack { dir, paths, port: OnceCell::new(), hub: None };
         stack.start_hub();
         stack
     }
@@ -67,12 +67,14 @@ impl Stack {
         self.client().workspace_create(&self.add_repo().id, None, None, None).unwrap()
     }
 
+    /// Starts the hub on the port it chose before, if it has, and otherwise lets it choose one as it first listens.
     pub(crate) fn start_hub(&mut self) {
+        let port = self.port.get().copied().unwrap_or(0);
         let hub = environment(self.dir.path())
             .set(ENV_HOME, &self.paths.data_dir)
             .set(ENV_WORKSPACES, &self.paths.workspaces_root)
             // Only on loopback, so no firewall asks.
-            .set(ENV_LISTEN, format!("127.0.0.1:{}", self.port))
+            .set(ENV_LISTEN, format!("127.0.0.1:{port}"))
             .command(binaries().join("roundhoused"))
             .arg("hub")
             .stdin(Stdio::null())
@@ -103,10 +105,14 @@ impl Stack {
         Client::connect(&self.paths.socket, "test").unwrap()
     }
 
-    /// What the hub's QR code holds now, which points only at loopback, where the hub listens.
+    /// What the hub's QR code holds now, which points only at loopback, where the hub listens, on the port it chose the
+    /// first time.
     pub(crate) fn pairing_link(&self) -> String {
         let link = self.client().pairing_start().unwrap().link;
-        assert_eq!(link.hosts, [format!("127.0.0.1:{}", self.port)]);
+        let [host] = link.hosts.as_slice() else { panic!("the link offers {:?}", link.hosts) };
+        let port = host.strip_prefix("127.0.0.1:").and_then(|port| port.parse().ok());
+        let port = port.unwrap_or_else(|| panic!("the link offers {host}, which isn't on loopback"));
+        assert_eq!(*self.port.get_or_init(|| port), port, "the hub listens on another port than it chose");
         link.to_string()
     }
 }
