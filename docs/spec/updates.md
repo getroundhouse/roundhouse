@@ -12,7 +12,7 @@ What someone using the desktop app sees when it or its hub updates, or when ther
 - **A hub from before agents could outlive it waits for them, and you can restart it yourself rather than wait.** Restarting one of those stops its agents, so the app restarts it only once nothing is running, as it did before. While the hub is older than the app and wasn't started by hand, the app offers to restart it, and says how many agents, setup scripts and terminals that would stop, since a terminal's shell runs beside the agents and stops with them. *Unconfirmed:* terminals. Each stopped agent picks up its conversation at its next prompt. *Unconfirmed:* `Restart now`, at the bottom of the sidebar, does it, as "The build line" below shows.
 - **A workspace stays on screen while the app connects to a hub again,** whether the app is restarting the hub or the hub went away. What's typed meanwhile is kept, since that's often the moment someone starts their next prompt. Send and Enter wait until the hub is back, and what's typed stays in the composer, because a hub that's being stopped would take the prompt and then cut its agent off. The app only says "Connecting…" when there's nothing to show yet. *Unconfirmed:* that Enter waits, rather than sending once the hub is back.
 - **An older hub keeps working.** The app hides or disables what it doesn't support, and only a real protocol break stops it.
-- **A hub someone runs themselves is left alone,** even on the same Mac. The app says when it's older, and only its admins stop it.
+- **A hub someone runs themselves is left alone,** even on the same Mac. The app says when it's older, and only its admins stop it. A hub installed as a service is another kind, which a client updates when someone says, as "A hub installed as a service" below says.
 - **A problem updating says so in the version's place at the bottom of the sidebar,** with all of what it says and the detail on a card above it on hover, since a long one is cut short before the buttons, until a later check works. A feed or package that isn't the one the release workflow signed says "Update refused" at once. Not reaching the update server only shows once it has lasted a day, since being offline for a while is ordinary, unless you check for updates yourself. An app that can't replace itself where it is says so when it opens, and one that macOS runs from where it was downloaded asks to be moved to Applications. *Unconfirmed.*
 
   **An app that macOS runs from where it was downloaded, asking to be moved to Applications. Its words are cut short before the buttons, and all of them show on hover.** *Unconfirmed.*
@@ -103,6 +103,14 @@ The bottom of the sidebar shows which build is running, faint, since a bug repor
   **The card of a workspace still on the version before the app's.** *Unconfirmed.*
 
   ![The card of a workspace still on the version before the app's](screens/workspace-card-moving.png)
+
+## A hub installed as a service
+
+A hub installed as a service, on a machine such as a server with no desktop app on it, updates only when someone using one of its clients says. A hub that ran ahead of its clients would cut off one that hasn't updated, as a hub left behind is cut off by them, so whoever is using them chooses when. *Not built:* all of this section.
+
+- **The app shows the hub's update as it shows its own,** on a card over the build line, once the hub it's connected to has found a newer version: "Hub update ready", with the version, and `Update hub` as the card's main action. That version is the newest release the hub's workers can move to, so the hub's update crosses one protocol break at a time, as the app's does. *Unconfirmed:* the card's words.
+- **Updating the hub stops no agents,** as the app restarting its own hub stops none. Each agent carries on where it was, on the version it started with, and each workspace moves to the new version once nothing in it is at work, as above. The workspace stays on screen while the app connects again, and every other client of the hub connects again by itself. *Not built:* on a provider other than the local one, whose workers stop their agents when they lose their hub, so updating stops them, and on Windows, where a hub's agents still stop with it.
+- **Any paired device can update the hub,** since such a hub is used from other machines, though a paired device can't stop or restart it otherwise, as `hubs.md` says.
 
 ## When there's no hub
 
