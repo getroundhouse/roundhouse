@@ -129,7 +129,7 @@ jobs:
         run: |
           mkdir "$RUNNER_TEMP/hub"
           version="$(tools/package/package.sh --print-version)"
-          tar -xzf "$RUNNER_TEMP/package/releases/Roundhouse-$version-osx-hub.tar.gz" -C "$RUNNER_TEMP/hub"
+          tar -xzf "$RUNNER_TEMP/package/releases/Roundhouse-$version-macos-arm64-hub.tar.gz" -C "$RUNNER_TEMP/hub"
           tools/package/smoke.sh "$RUNNER_TEMP/hub" "$BUILD" "$RUNNER_TEMP/smoke-hub"
       - name: Show the hubs' logs
         if: always()
@@ -282,10 +282,15 @@ jobs:
         run: |
           feed="$(tools/package/publish.py merge --version "$VERSION" --keep "$KEEP" \
             --worker-versions "$RUNNER_TEMP/binaries/worker-versions.json" --work "$PACKAGE")"
+          # The older channel's feed too, `osx`, for an app or a hub still looking there. See TAKES_OVER in publish.py.
+          older="$(tools/package/publish.py bridge --version "$VERSION" --work "$PACKAGE")"
           trap 'rm -f "$RUNNER_TEMP/feed.pem"' EXIT
           (umask 077 && printf '%s\n' "$FEED_SIGNING_KEY" > "$RUNNER_TEMP/feed.pem")
           # Against the app's key too, since apps refuse any other.
           tools/package/feed-signature.sh sign "$feed" "$RUNNER_TEMP/feed.pem" "$FEED_PUBLIC_KEY"
+          if [ -n "$older" ]; then
+            tools/package/feed-signature.sh sign "$older" "$RUNNER_TEMP/feed.pem" "$FEED_PUBLIC_KEY"
+          fi
       - name: Publish
         if: steps.feed.outputs.state == 'new'
         env:

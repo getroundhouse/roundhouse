@@ -12,5 +12,9 @@ protocol.workspace = true
 serde_json.workspace = true
 update-feed.workspace = true
 
+[dev-dependencies]
+# A server standing in for where feeds are published.
+fetching = { workspace = true, features = ["testing"] }
+
 [lints]
 workspace = true
