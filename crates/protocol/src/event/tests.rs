@@ -1,7 +1,7 @@
 use proptest::prelude::*;
 use proptest::test_runner::{Config, RngSeed};
 
-use super::{AgentRunState, AgentTask, EndedTask, EventBody, ExitReason, TaskKind, TaskOutcome};
+use super::{AgentRunState, AgentTask, ApprovalChange, EndedTask, EventBody, ExitReason, TaskKind, TaskOutcome};
 use crate::capability::turns::OwnTurn;
 use crate::model::{EndedWait, WaitEnd, WaitEnded, WaitUntil, Watching};
 
@@ -22,6 +22,24 @@ fn what_runs_in_the_background_is_the_newest_list_until_the_agent_starts_or_exit
     assert_eq!(exited.sets_background(), Some([].as_slice()));
     assert_eq!(idle.sets_background(), None);
     assert_eq!(crate::fixtures::turn_ended(super::TurnOutcome::Success).sets_background(), None);
+}
+
+/// A request opens its approval, with what it asks, and a resolution closes it, decided or cancelled. Nothing else
+/// opens or closes one, the turn's end and the agent's exit included.
+#[test]
+fn only_a_request_opens_an_approval_and_only_its_resolution_closes_it() {
+    let request = crate::fixtures::approval_request("a", crate::fixtures::to_run("ls"));
+    let asked = EventBody::from(request.clone());
+    let cancelled = EventBody::ApprovalResolved { approval_id: "a".into(), decision: None, by_setting: false };
+    let exited =
+        EventBody::AgentExited { reason: ExitReason::Unexpected, code: None, signal: None, stderr_tail: vec![] };
+    let id = "a".into();
+
+    assert_eq!(asked.approval_change(), Some(ApprovalChange::Opens { approval_id: &id, request: &request.request }));
+    assert_eq!(cancelled.approval_change(), Some(ApprovalChange::Closes(&id)));
+    assert_eq!(cancelled.approval_change().map(|change| change.approval_id().clone()), Some(id));
+    assert_eq!(exited.approval_change(), None);
+    assert_eq!(crate::fixtures::turn_ended(super::TurnOutcome::Success).approval_change(), None);
 }
 
 fn wait() -> impl Strategy<Value = EndedWait> {

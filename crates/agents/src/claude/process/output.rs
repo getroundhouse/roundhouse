@@ -5,7 +5,7 @@ use std::sync::atomic::Ordering;
 
 use crate::claude::login_check::Output;
 use protocol::capability::Report;
-use protocol::event::EventBody;
+use protocol::event::{ApprovalChange, EventBody};
 use protocol::model::CacheRequest;
 use serde_json::json;
 use tokio::sync::mpsc;
@@ -203,46 +203,19 @@ fn note(shared: &Shared, body: &mut EventBody, line: &str) {
 }
 
 /// Keeps each open approval's input, which is what allowing it sends back, from the CLI's `line`, and what it asks,
-/// which answering it goes by.
+/// which answering it goes by, for as long as it's open, as [`EventBody::approval_change`] says.
 fn track_approval(shared: &Shared, body: &EventBody, line: &str) {
-    match body {
-        EventBody::ApprovalRequested { approval_id, request, .. } => {
+    match body.approval_change() {
+        Some(ApprovalChange::Opens { approval_id, request }) => {
             let asked = serde_json::from_str::<serde_json::Value>(line).unwrap_or_default();
             let asked = &asked["request"];
             let waiting = Waiting { input: asked["input"].clone(), asks: request.asks.clone() };
             shared.waiting.lock().insert(approval_id.clone(), waiting);
         }
-        EventBody::ApprovalResolved { approval_id, .. } => {
+        Some(ApprovalChange::Closes(approval_id)) => {
             shared.waiting.lock().remove(approval_id);
         }
-        EventBody::UserPrompt { .. }
-        | EventBody::CompactionAsked { .. }
-        | EventBody::PromptTaken { .. }
-        | EventBody::PromptDropped { .. }
-        | EventBody::ToolCallDropped { .. }
-        | EventBody::AgentStarted { .. }
-        | EventBody::AgentInit { .. }
-        | EventBody::AgentState { .. }
-        | EventBody::AgentTasks { .. }
-        | EventBody::OwnTurn(_)
-        | EventBody::AgentLimits { .. }
-        | EventBody::Assistant { .. }
-        | EventBody::AgentUser { .. }
-        | EventBody::TurnEnded { .. }
-        | EventBody::AgentExited { .. }
-        | EventBody::Notice { .. }
-        | EventBody::RequestFailed { .. }
-        | EventBody::AgentMode { .. }
-        | EventBody::SubagentStarted { .. }
-        | EventBody::SubagentContext { .. }
-        | EventBody::SubagentEnded { .. }
-        | EventBody::TaskChanged { .. }
-        | EventBody::AgentOther { .. }
-        | EventBody::AgentCompacting { .. }
-        | EventBody::AgentCompacted { .. }
-        | EventBody::CacheExpired { .. }
-        | EventBody::ConversationStarted { .. }
-        | EventBody::Unknown => {}
+        None => {}
     }
 }
 

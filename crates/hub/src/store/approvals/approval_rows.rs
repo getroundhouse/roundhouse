@@ -1,6 +1,6 @@
 use super::super::{Store, StoreError, lock};
 use protocol::capability::approvals::Request;
-use protocol::event::EventBody;
+use protocol::event::{ApprovalChange, EventBody};
 use protocol::model::{ApprovalId, OpenApproval, Seq, SessionId};
 use rusqlite::{Connection, OptionalExtension, params};
 
@@ -14,13 +14,14 @@ pub(in super::super) fn note_approvals(
     seq: Seq,
     body: &EventBody,
 ) -> Result<Option<Vec<OpenApproval>>, StoreError> {
-    let (EventBody::ApprovalRequested { approval_id, .. } | EventBody::ApprovalResolved { approval_id, .. }) = body
-    else {
-        return Ok(None);
-    };
+    let Some(change) = body.approval_change() else { return Ok(None) };
+    let approval_id = change.approval_id();
     let mut open = open_on(conn, id)?;
     let was_open = open.iter().any(|approval| approval.approval_id == *approval_id);
-    let requested = matches!(body, EventBody::ApprovalRequested { .. });
+    let requested = match change {
+        ApprovalChange::Opens { .. } => true,
+        ApprovalChange::Closes(_) => false,
+    };
     if requested == was_open {
         return Ok(None);
     }
