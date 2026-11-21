@@ -39,8 +39,8 @@ use crate::{
     ArchiveWorkspace, BackToComposer, ChatPageDown, ChatPageUp, CloseChat, CloseSettings, CreatePullRequest,
     FindInChat, FindNext, FindPrevious, FindSetting, FlipImage, GoBack, GoForward, Hide, HideOthers, MarkWorkspace,
     Minimize, NewChat, NewTerminal, NewWorkspace, NextChat, NextWorkspace, OpenSettings, PreviousChat,
-    PreviousWorkspace, Quit, StopAgent, ToggleDiff, ToggleMenus, TogglePlanMode, ToggleSidebar, composing, file_diff,
-    image_diff, settings,
+    PreviousWorkspace, Quit, StepBack, StepOn, StopAgent, ToggleDiff, ToggleMenus, TogglePlanMode, ToggleSidebar,
+    composing, file_diff, image_diff, settings,
 };
 
 /// Binds the app's shortcuts, after the kit's.
@@ -148,7 +148,9 @@ fn bind_selecting(cx: &mut App) {
 /// The keys that scroll a chat, a rendered Markdown file or a proposal that has focus, as they'd scroll a page, with the
 /// actions a text box moves its cursor with, which scroll a view that has no cursor, as `transcript` takes them. Page
 /// Up and Page Down scroll a chat from its composer and a question in its place too, and Escape goes back from the chat
-/// to the composer.
+/// to the composer. `Option-Up` and `Option-Down`, `Alt` off the Mac, step a chat between its prompts, from the
+/// composer too, a rendered Markdown file between its headings, and a proposal between its parts, as what holds each
+/// takes them.
 fn bind_scrolling(cx: &mut App) {
     let focused = Some(transcript::KEY_CONTEXT);
     let around_a_chat = Some(CHAT_KEY_CONTEXT);
@@ -169,6 +171,10 @@ fn bind_scrolling(cx: &mut App) {
         key("pageup", ChatPageUp, typed_around_a_chat, cx),
         key("pagedown", ChatPageDown, typed_around_a_chat, cx),
         key("escape", BackToComposer, Some(&in_a_chat), cx),
+        key("alt-up", StepBack, focused, cx),
+        key("alt-down", StepOn, focused, cx),
+        key("alt-up", StepBack, around_a_chat, cx),
+        key("alt-down", StepOn, around_a_chat, cx),
     ]);
 }
 

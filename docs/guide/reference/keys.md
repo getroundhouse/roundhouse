@@ -32,6 +32,7 @@ The app's keyboard shortcuts. They're written as a Mac's. On Windows and Linux, 
 | Up and down arrows | In the chat, a rendered Markdown file or a proposal, once you've clicked in it, scroll a line |
 | `Page Up`, `Page Down` | The same, a screen at a time |
 | `Home`, `End` | The same, to the start and the end. In a chat, the start is as far up as has loaded |
+| `Option-Up`, `Option-Down` | Step the chat back to the prompt before, and on to the one after, a rendered Markdown file to the heading before and after, and a proposal to the part before and after. `Alt-Up` and `Alt-Down` on Windows and Linux |
 | `Shift` and an arrow | Make what's selected in the chat, a rendered Markdown file or a proposal longer or shorter, a character or a line at a time, at the end you moved last |
 | `Option-Shift` and left or right | The same, a word at a time. `Ctrl-Shift` on Windows and Linux |
 
@@ -62,6 +63,7 @@ Find and stopping the agent are for a chat, so they do nothing unless the chat s
 | `Cmd-.` | Stop the agent's turn |
 | `Shift-Tab` | Turn plan mode on or off |
 | `Page Up`, `Page Down` | Scroll the chat a screen, leaving what's typed as it is |
+| `Option-Up`, `Option-Down` | Step the chat back to the prompt before, and on to the one after, leaving what's typed as it is |
 | `Enter`, Escape | While changing a queued prompt, keep the change, or leave it as it was |
 | Space, held | On a Mac, once dictation is ready, dictate while it's held, after a moment |
 | `Option-Space`, held | The same, at once |
@@ -77,6 +79,7 @@ Find and stopping the agent are for a chat, so they do nothing unless the chat s
 | `Enter` | Go to the next question without an answer, and send once there's none |
 | Escape | Leave the row for typing an answer |
 | `Page Up`, `Page Down` | Scroll the chat a screen |
+| `Option-Up`, `Option-Down` | Step the chat back to the prompt before, and on to the one after |
 
 ## The new-workspace dialog
 

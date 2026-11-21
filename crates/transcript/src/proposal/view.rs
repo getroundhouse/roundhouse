@@ -17,7 +17,8 @@ use super::document::{self, Part, Writing};
 use crate::DictationHints;
 use crate::linked_images::LinkedImages;
 use crate::references::References;
-use crate::selection::{Scrolled, Selection};
+use crate::selection::{Scrolled, Selection, Way};
+use crate::stops::stop_beside;
 use crate::texts::{Of, Texts};
 use client_core::{Client, RecordsFeed};
 
@@ -108,6 +109,18 @@ impl ProposalView {
     /// The record whose newest revision the page shows, which isn't the hub's newest while that's held back.
     pub fn proposal(&self) -> &Arc<Proposal> {
         &self.proposal
+    }
+
+    /// Steps the page `way` to the part of its outline before the top or after it, with that at the top, as
+    /// `Option-Up` and `Option-Down` do, and as pressing that part in the outline does. Each part is a child of what
+    /// scrolls.
+    pub fn step(&mut self, way: Way, cx: &mut Context<Self>) {
+        // Where the top part's top is, from the page's, which is above it once the page is scrolled into it.
+        let (top, starts) = self.scroll.logical_scroll_top();
+        if let Some(part) = stop_beside(0..self.scroll.children_count(), top, -starts, way) {
+            self.scroll.scroll_to_top_of_item(part);
+            cx.notify();
+        }
     }
 
     /// Scrolls the page back to its top, where another revision starts with what changed.

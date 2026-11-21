@@ -15,4 +15,5 @@ mod tests;
 mod keeping;
 use keeping::Keeping;
 pub use keeping::Place;
+pub(crate) use keeping::Reading;
 pub(super) use keeping::State;

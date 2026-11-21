@@ -104,6 +104,27 @@ fn a_row_sent_to_the_bottom_is_kept_there_frame_after_frame() {
     assert_eq!(lay_from(&state), Start::AtBottom { row: 40 }, "and after, as the rows above it load");
 }
 
+/// The list is read from a row kept at the bottom first, even in a session too short to scroll, which is at its end
+/// too, then from its end, and once someone has scrolled away from that, from the last row in sight.
+#[test]
+fn it_is_read_from_a_row_kept_at_the_bottom_then_its_end_then_the_last_row_in_sight() {
+    let mut short = session(4, 50.);
+    short.go_to_row_at_bottom(2);
+    let mut scrolled = scrolled_to(100, 50., 10, 0.);
+    scrolled.last_in_sight = 15;
+    let cases = [
+        ("a row kept at the bottom", kept_at_the_bottom(), Reading::Kept(40)),
+        ("a row kept at the bottom of a session too short to scroll", short, Reading::Kept(2)),
+        ("its end", session(100, 50.), Reading::End),
+        ("the end of a session too short to scroll", session(4, 50.), Reading::End),
+        ("scrolled away from its end", scrolled, Reading::Scrolled(15)),
+    ];
+
+    for (name, state, want) in cases {
+        assert_eq!(state.reading(), want, "{name}");
+    }
+}
+
 /// Something that moves the list, and what it is.
 type Move = (&'static str, fn(&mut State));
 

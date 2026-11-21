@@ -6,6 +6,8 @@ use protocol::model::{Proposal, ProposalId, Response, Rev, RevisionNumber, Round
 use protocol::prompt::{Prompt, PromptFrom};
 
 use super::*;
+use crate::list::Reading;
+use crate::selection::Way;
 
 /// Prompts drawn in these rows.
 fn at_rows(rows: &[usize]) -> Vec<Line> {
@@ -32,30 +34,30 @@ fn compaction_at(row: usize) -> Line {
     Line { kind: Kind::Compaction(line), row }
 }
 
-/// The outline's lines, the row at the bottom of the chat's window, whether the chat is at its end, and which line is
-/// being read.
-fn readings() -> Vec<(&'static str, Vec<Line>, usize, bool, usize)> {
+/// The outline's lines, where the chat is read from, and which line is being read.
+fn readings() -> Vec<(&'static str, Vec<Line>, Reading, usize)> {
     let three = at_rows(&[0, 10, 20]);
     let compacted = vec![prompt_at(0, 1), compaction_at(10), prompt_at(20, 2), compaction_at(30)];
     vec![
-        ("the first, from its row", three.clone(), 0, false, 0),
-        ("the first, above the second", three.clone(), 9, false, 0),
-        ("a prompt at the bottom", three.clone(), 10, false, 1),
-        ("the last, below it", three.clone(), 25, false, 2),
-        ("above the first prompt, the first", at_rows(&[3, 10]), 1, false, 0),
-        ("at the end, the last, whatever the bottom row", three, 12, true, 2),
+        ("the first, from its row", three.clone(), Reading::Scrolled(0), 0),
+        ("the first, above the second", three.clone(), Reading::Scrolled(9), 0),
+        ("a prompt at the bottom", three.clone(), Reading::Scrolled(10), 1),
+        ("the last, below it", three.clone(), Reading::Scrolled(25), 2),
+        ("above the first prompt, the first", at_rows(&[3, 10]), Reading::Scrolled(1), 0),
+        ("a prompt kept at the bottom", three.clone(), Reading::Kept(10), 1),
+        ("at the end, the last", three, Reading::End, 2),
         // A compaction is never the one being read.
-        ("the prompt before a compaction", compacted.clone(), 15, false, 0),
-        ("the prompt before the last compaction", compacted.clone(), 35, false, 2),
-        ("at the end, the last prompt", compacted, 35, true, 2),
-        ("before any prompt, the first", vec![compaction_at(0), prompt_at(5, 1)], 0, false, 1),
+        ("the prompt before a compaction", compacted.clone(), Reading::Scrolled(15), 0),
+        ("the prompt before the last compaction", compacted.clone(), Reading::Scrolled(35), 2),
+        ("at the end, the last prompt", compacted, Reading::End, 2),
+        ("before any prompt, the first", vec![compaction_at(0), prompt_at(5, 1)], Reading::Scrolled(0), 1),
     ]
 }
 
 #[test]
 fn the_prompt_being_read_is_the_last_at_or_above_the_bottom() {
-    for (name, lines, bottom, at_end, want) in readings() {
-        assert_eq!(being_read(&lines, bottom, at_end), want, "{name}");
+    for (name, lines, reading, want) in readings() {
+        assert_eq!(being_read(&lines, reading), want, "{name}");
     }
 }
 
@@ -124,4 +126,29 @@ fn a_responses_mark_follows_its_proposals_record() {
     let after = said(&outline.read(&log, &known));
 
     assert_eq!((before.as_str(), after.as_str()), ("Answered Search", "Replied Search"));
+}
+
+/// Where a step goes, with the outline's lines in rows 0, 10, 20 and 30, the third a compaction, which a step stops at
+/// as it does at a prompt.
+#[test]
+fn a_step_goes_from_the_line_at_the_bottom_or_the_end_to_the_line_beside_it() {
+    let lines = vec![prompt_at(0, 1), prompt_at(10, 2), compaction_at(20), prompt_at(30, 3)];
+    let steps = [
+        ("back from the end, to the last", Reading::End, Way::Back, Some(Step::To(30))),
+        ("on from the end, nowhere", Reading::End, Way::On, None),
+        ("back from a line kept at the bottom, to the one before", Reading::Kept(30), Way::Back, Some(Step::To(20))),
+        ("back from a compaction too", Reading::Kept(20), Way::Back, Some(Step::To(10))),
+        ("on from a line kept at the bottom, to the one after", Reading::Kept(10), Way::On, Some(Step::To(20))),
+        ("on from the last, to the end", Reading::Kept(30), Way::On, Some(Step::End)),
+        ("back from the first, nowhere", Reading::Kept(0), Way::Back, None),
+        ("back from below a line, to it first", Reading::Scrolled(15), Way::Back, Some(Step::To(10))),
+        ("back from a line partly at the bottom, to it", Reading::Scrolled(10), Way::Back, Some(Step::To(10))),
+        ("on from below a line, to the one after", Reading::Scrolled(15), Way::On, Some(Step::To(20))),
+        ("on from below the last, to the end", Reading::Scrolled(35), Way::On, Some(Step::End)),
+        ("back from a row kept at the bottom that isn't a line's", Reading::Kept(25), Way::Back, Some(Step::To(20))),
+    ];
+
+    for (name, reading, way, want) in steps {
+        assert_eq!(step(&lines, reading, way), want, "{name}");
+    }
 }

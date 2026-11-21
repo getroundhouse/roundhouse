@@ -12,9 +12,10 @@ use super::lines::Run;
 use super::sight::ToDo;
 use crate::texts::{Leaves, TextKey};
 
-/// Which way a key moves the end: back, which is left or up, or on, which is right or down.
+/// Which way a key goes, moving the end of what's selected or stepping a view: back, which is left or up, or on, which
+/// is right or down.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum Way {
+pub enum Way {
     Back,
     On,
 }

@@ -26,6 +26,8 @@ pub(crate) struct TopBlock {
     pub(crate) flow: Option<FlowPosition>,
     /// Its leaves, in order.
     pub(crate) leaves: Arc<[super::Leaf]>,
+    /// Whether it's a heading, which the keys that step a document go between.
+    pub(crate) heading: bool,
 }
 
 /// `source`'s blocks at its top, but for those that draw nothing, such as a link's definition. One the kit's parser
@@ -47,7 +49,8 @@ pub(crate) fn top_blocks_and_items(source: &str) -> Vec<TopBlock> {
 /// `source`'s blocks at its top, with each list cut into its items if `items`.
 fn cut(source: &str, items: bool) -> Vec<TopBlock> {
     let whole = || {
-        vec![TopBlock { source: source.to_string(), shown: source.len(), flow: None, leaves: super::leaves(source) }]
+        let leaves = super::leaves(source);
+        vec![TopBlock { source: source.to_string(), shown: source.len(), flow: None, leaves, heading: false }]
     };
     let Some(blocks) = read(source, 0, Whose::TheKits) else { return whole() };
     // A code block from its line's start, since a fence indented by a few spaces takes as many off each of its lines.
@@ -72,7 +75,14 @@ fn cut(source: &str, items: bool) -> Vec<TopBlock> {
         let own = &source[span];
         // Not after a code block, which refers to nothing, and one left open would take them in as code.
         let referred = if matches!(block, BlockNode::CodeBlock(_)) { "" } else { &referred_to(own, &definitions) };
-        TopBlock { source: format!("{own}{referred}"), shown: own.len(), flow: Some(flow), leaves: leaves.into() }
+        let heading = matches!(block, BlockNode::Heading { .. });
+        TopBlock {
+            source: format!("{own}{referred}"),
+            shown: own.len(),
+            flow: Some(flow),
+            leaves: leaves.into(),
+            heading,
+        }
     };
     (blocks.iter().zip(spans).enumerate())
         .filter(|(_, (block, _))| draws(block))

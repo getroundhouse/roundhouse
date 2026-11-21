@@ -170,10 +170,16 @@ impl State {
         }
     }
 
-    /// The row at the window's bottom: the one it's keeping there, from as soon as something sends it there, even near
-    /// the start of the session, where it shows higher up, and otherwise the last row in the window in the last frame.
-    pub(in super::super) fn bottom_row(&self) -> usize {
-        self.kept_at_bottom().unwrap_or(self.last_in_sight)
+    /// Where it's read from, for the outline's prompt being read and a step between prompts: the row it's keeping at
+    /// the window's bottom, from as soon as something sends it there, even near the start of the session, where it
+    /// shows higher up, and even in a session too short to scroll, which is at its end too. Otherwise, its end while
+    /// nobody has scrolled away from it, and the last row in the window in the last frame once someone has.
+    pub(in super::super) fn reading(&self) -> Reading {
+        match self.kept_at_bottom() {
+            Some(row) => Reading::Kept(row),
+            None if !self.is_scrolled_up() => Reading::End,
+            None => Reading::Scrolled(self.last_in_sight),
+        }
     }
 
     /// The row it's keeping at the window's bottom, from as soon as something sends it there.
@@ -326,6 +332,17 @@ impl State {
 }
 
 /// What the list keeps to between frames.
+/// Where a transcript is read from, as [`State::reading`] says.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Reading {
+    /// With this row kept at the bottom, as a step or a click in the outline's list puts a line there.
+    Kept(usize),
+    /// At its end, keeping to the latest row.
+    End,
+    /// Scrolled to where this row is at the bottom.
+    Scrolled(usize),
+}
+
 #[derive(Debug, Default)]
 pub(super) enum Keeping {
     /// The latest row, which it does until someone scrolls away from it, and again once they're back.

@@ -7,6 +7,8 @@ mod jumps;
 
 mod navigating;
 
+mod steps;
+
 mod worlds;
 
 use navigating::{open_the_list, prompt_rows, row_id, scrolled_to, scrolled_to_exactly, selected, wait_out_the_list};

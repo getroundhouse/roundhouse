@@ -14,7 +14,7 @@ mod sight;
 mod tests;
 
 pub(in crate::selection) use moving::Keyed;
-pub(crate) use moving::Way;
+pub use moving::Way;
 #[cfg(test)]
 use moving::word_beside;
 use moving::{Step, Tried, character_beside};
