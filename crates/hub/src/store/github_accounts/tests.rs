@@ -1,9 +1,6 @@
 use github::GithubProfile;
-use protocol::model::GithubSettings;
 
 use super::*;
-use crate::store::older::store_from_before;
-use crate::store::schema::{BEFORE_GITHUB_ACCOUNTS, BEFORE_GITHUB_PROFILES};
 use crate::store::tests::open_in;
 
 fn ada() -> GithubUser {
@@ -15,20 +12,6 @@ fn connecting<'a>(id: &'a GithubAccountId, user: &'a GithubUser, file: &'a Login
     let how = GithubLoginKind::Token;
     let (connected_at_ms, ends_at_ms, installation, profile) = (100, None, None, None);
     GithubConnecting { account: id, user, how, file, connected_at_ms, ends_at_ms, installation, profile }
-}
-
-#[test]
-fn a_hub_from_before_github_accounts_holds_none_and_has_no_default() {
-    let dir = tempfile::tempdir().unwrap();
-
-    let store = store_from_before(dir.path(), BEFORE_GITHUB_ACCOUNTS, "");
-
-    let settings = store.hub_settings().unwrap();
-    assert_eq!(
-        settings.github,
-        Some(GithubSettings { account: None, sent: None, left_to_machine: Vec::new(), set_up: Vec::new() })
-    );
-    assert_eq!(store.list_records().unwrap().github_accounts, []);
 }
 
 /// The same again moves neither, as `same_again` has it of every record.
@@ -93,24 +76,6 @@ fn renewing_a_sign_in_and_its_needing_signing_in_again_each_move_its_records_rev
 
 fn profile(name: &str, email: &str) -> GithubProfile {
     GithubProfile { name: Some(name.to_string()), email: Some(email.to_string()) }
-}
-
-/// Its token's, but not one disconnected, nor an app's installation, whose bot has no profile.
-#[test]
-fn a_hub_from_before_profiles_has_asked_for_none_so_each_held_token_and_sign_in_is_due() {
-    let dir = tempfile::tempdir().unwrap();
-    let held = "INSERT INTO github_accounts
-                    (id, user_id, username, login_kind, login_file, login_connected_at_ms, login_ends_at_ms)
-                    VALUES ('g', 7, 'ada', 'token', '6f1c2a9e-0000-4000-8000-000000000000', 1, NULL),
-                           ('gone', 8, 'grace', NULL, NULL, NULL, NULL),
-                           ('bot', 41, 'ada-roundhouse[bot]', 'app', '6f1c2a9e-0000-4000-8000-000000000001', 1, NULL);";
-
-    let store = store_from_before(dir.path(), BEFORE_GITHUB_PROFILES, held);
-
-    assert_eq!(store.github_profile(&"g".into()).unwrap(), None);
-    let due: Vec<GithubAccountId> =
-        store.github_profiles_due(i64::MAX).unwrap().into_iter().map(|(account, _)| account.id).collect();
-    assert_eq!(due, ["g".into()] as [GithubAccountId; 1]);
 }
 
 /// As a check's answer would come once the account was connected again.

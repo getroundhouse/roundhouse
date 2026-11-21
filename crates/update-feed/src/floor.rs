@@ -13,7 +13,7 @@ pub struct Floor {
 
 /// This build's floor, or `None` while it updates from any release. It moves only at a break in the worker protocol,
 /// as "The database" in `docs/principles/state.md` says.
-pub const FLOOR: Option<Floor> = None;
+pub const FLOOR: Option<Floor> = Some(Floor { release: "0.1.870", migrations: 72 });
 
 /// What a build says of itself in the update feed, beside its packages: its two floors. `roundhoused worker-versions`
 /// prints it, as `{"oldest":3,"newest":4}` and, once the build has a floor, `"updatesFrom":"0.1.300"` too, and

@@ -1,8 +1,8 @@
 use protocol::model::Workspace;
 
 use super::*;
+use crate::store::WorkspacePlacement;
 use crate::store::tests::{idle_session, store_with_session, workspace_w};
-use crate::store::{WorkspacePlacement, older, schema};
 
 fn title(text: &str) -> Title {
     Title::typed(text).unwrap()
@@ -214,26 +214,4 @@ fn where_a_chat_title_came_from_moves_its_revision() {
     lock(&store.writer).execute("UPDATE sessions SET title_source = 'by_hand' WHERE id = 's'", []).unwrap();
 
     assert!(store.get_session(&"s".into()).unwrap().session.rev > before);
-}
-
-/// A workspace from before titles takes its oldest chat's, so whatever is said in it next doesn't become its title.
-#[test]
-fn a_workspace_from_before_titles_takes_its_oldest_chats() {
-    let dir = tempfile::tempdir().unwrap();
-    let rows = r"
-        INSERT INTO workspaces (id, repo_id, name, branch, status, provider, instance_id, created_at_ms)
-            VALUES ('w2', 'r', 'birch', 'birch', 'ready', 'local', 'w2', 0);
-        INSERT INTO sessions (id, workspace_id, agent, agent_session_id, status, last_seq, created_at_ms,
-                              updated_at_ms, title)
-            VALUES ('later', 'w', 'claude', 'a', 'idle', 0, 2, 2, 'Write the docs'),
-                   ('first', 'w', 'claude', 'b', 'idle', 0, 1, 1, 'Fix the login'),
-                   ('unprompted', 'w', 'claude', 'c', 'idle', 0, 0, 0, NULL),
-                   ('other', 'w2', 'claude', 'd', 'idle', 0, 0, 0, NULL);
-    ";
-
-    let store = older::store_from_before(dir.path(), schema::BEFORE_TITLES, rows);
-
-    let workspace = store.get_workspace(&"w".into()).unwrap();
-    assert_eq!((workspace.title.as_deref(), workspace.title_source), (Some("Fix the login"), TitleSource::FirstLine));
-    assert_eq!(store.get_workspace(&"w2".into()).unwrap().title, None, "no chat has a title, so it has none yet");
 }

@@ -1,10 +1,7 @@
 use parking_lot::Mutex;
-use protocol::model::Rev;
 
 use super::*;
 use crate::store::OneValue;
-use crate::store::older::store_from_before;
-use crate::store::schema::BEFORE_LOGINS;
 use crate::store::tests::open_in;
 
 /// A login of `agent`'s kind for `id`, connected at 100.
@@ -60,20 +57,6 @@ fn a_row_naming_a_file_the_hub_doesnt_make_or_with_no_connect_time_holds_no_logi
     assert!(store.held_logins(AgentKind::Claude).unwrap().is_empty());
     assert_eq!(store.login_files().unwrap().len(), 2);
     assert!(store.login_files().unwrap().iter().all(|(_, file)| file.is_none()));
-}
-
-#[test]
-fn an_account_from_before_logins_were_held_has_none_and_its_id_is_its_adapters() {
-    let dir = tempfile::tempdir().unwrap();
-    let rows = "INSERT INTO accounts (id, email) VALUES ('claude-0123456789abcdef', 'ada@example.com');";
-
-    let store = store_from_before(dir.path(), BEFORE_LOGINS, rows);
-
-    let account = store.account(&"claude-0123456789abcdef".into()).unwrap().unwrap();
-    assert_eq!((account.name, account.login_agent, account.held_login), (None, None, None));
-    assert!(account.rev > Rev::default());
-    let row = store.login_row(&account.id).unwrap();
-    assert_eq!(row, LoginRow { id_from: IdFrom::Adapter, file: None });
 }
 
 #[test]

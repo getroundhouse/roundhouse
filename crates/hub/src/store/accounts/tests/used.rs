@@ -83,28 +83,3 @@ fn a_launch_filed_after_another_chat_used_its_account_leaves_that_later_use() {
     assert_eq!(used_at(&store, "claude-ada@example.com"), Some(i64::MAX));
     assert_eq!(launched.account.map(|account| account.used_at_ms), Some(Some(i64::MAX)), "who it is changed");
 }
-
-#[test]
-fn an_account_from_before_was_last_used_when_the_person_last_sent_something_in_a_chat_that_names_it() {
-    let dir = tempfile::tempdir().unwrap();
-    let rows = "
-        INSERT INTO accounts (id) VALUES ('ada'), ('grace'), ('unused');
-        INSERT INTO sessions (id, workspace_id, agent, model, effort, permission_mode, agent_session_id, status,
-            last_seq, created_at_ms, updated_at_ms, user_active_at_ms, account_id)
-            VALUES ('s', 'w', 'claude', 'opus', 'high', 'bypassPermissions', 's', 'idle', 0, 100, 9000, 1800, 'ada'),
-                ('t', 'w', 'claude', 'opus', 'high', 'bypassPermissions', 't', 'idle', 0, 100, 9000, 2400, 'ada'),
-                ('u', 'w', 'claude', 'opus', 'high', 'bypassPermissions', 'u', 'idle', 0, 100, 9000, 600, 'grace'),
-                ('v', 'w', 'claude', 'opus', 'high', 'bypassPermissions', 'v', 'idle', 0, 100, 9000, NULL, 'unused');
-    ";
-
-    let store = crate::store::older::store_from_before(dir.path(), crate::store::schema::BEFORE_ACCOUNTS_USED, rows);
-
-    assert_eq!(
-        ["ada", "grace", "unused"].map(|id| used_at(&store, id)),
-        [Some(2400), Some(600), None],
-        "the newest of each account's chats"
-    );
-    // `unused` was made last, so only a migration that changed the others gives them a newer revision.
-    let rev = |id: &str| store.account(&id.into()).unwrap().unwrap().rev;
-    assert!(rev("ada") > rev("unused") && rev("grace") > rev("unused"), "one that gets none is as it was");
-}

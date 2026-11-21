@@ -6,7 +6,7 @@ use super::Store;
 #[cfg(test)]
 use protocol::event::{ContentBlock, EventBody, SessionEvent};
 #[cfg(test)]
-use protocol::model::{Rev, Subagent, SubagentId, SubagentStatus};
+use protocol::model::{Subagent, SubagentId};
 
 #[cfg(test)]
 mod tests;

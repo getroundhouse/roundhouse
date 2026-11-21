@@ -5,8 +5,6 @@ use std::path::Path;
 
 use super::{Store, schema};
 
-pub(crate) use schema::BEFORE_GITHUB_PROFILES;
-
 /// The store in `dir`, opened on a database that a build with only the first `version` migrations left, holding the
 /// repository `r`, its workspace `w`, and `rows`, which are written with that build's columns.
 pub(crate) fn store_from_before(dir: &Path, version: usize, rows: &str) -> Store {

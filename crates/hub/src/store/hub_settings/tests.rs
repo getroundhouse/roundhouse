@@ -43,17 +43,6 @@ fn a_change_that_names_no_setting_says_nothing_new() {
 }
 
 #[test]
-fn a_hub_from_before_it_kept_settings_keeps_its_machine_awake() {
-    let dir = tempfile::tempdir().unwrap();
-
-    let store = older::store_from_before(dir.path(), schema::BEFORE_HUB_SETTINGS, "");
-
-    let settings = store.hub_settings().unwrap();
-    assert!(settings.keep_awake);
-    assert!(settings.rev > protocol::model::Rev::default(), "it has a revision, as every record does");
-}
-
-#[test]
 fn a_hub_asks_the_person_about_a_tool_until_someone_chooses_otherwise_and_then_remembers() {
     let dir = tempfile::tempdir().unwrap();
     let store = store_with_session(dir.path());
@@ -68,38 +57,6 @@ fn a_hub_asks_the_person_about_a_tool_until_someone_chooses_otherwise_and_then_r
     drop(store);
     let (path, backups) = (dir.path().join("hub.db"), dir.path().join("backups"));
     assert_eq!(crate::store::Store::open(&path, &backups).unwrap().hub_settings().unwrap(), on);
-}
-
-#[test]
-fn a_hub_from_before_it_could_allow_a_tool_itself_asks_and_keeps_what_it_had() {
-    let dir = tempfile::tempdir().unwrap();
-    let before = "UPDATE hub_settings SET keep_awake = 0;";
-
-    let store = older::store_from_before(dir.path(), schema::BEFORE_ALLOWING_ASKED, before);
-
-    let settings = store.hub_settings().unwrap();
-    assert_eq!(settings.allow_asked_in_full_access, Some(false));
-    assert!(!settings.keep_awake);
-}
-
-/// A hub from before it recorded what workers are sent has none on its settings until it's recorded, which it is as
-/// the hub starts.
-#[test]
-fn what_workers_are_sent_is_on_the_settings_once_recorded_and_moves_their_revision_as_it_changes() {
-    use protocol::model::SentCredential;
-    let dir = tempfile::tempdir().unwrap();
-    let store = older::store_from_before(dir.path(), schema::BEFORE_GITHUB_SENT, "");
-    let before = store.hub_settings().unwrap();
-    let account = SentCredential::Account { account: "g".into() };
-
-    let recorded = store.record_github_sent(&SentCredential::MachineOwn).unwrap().unwrap();
-    let changed = store.record_github_sent(&account).unwrap().unwrap();
-
-    assert_eq!(before.github.unwrap().sent, None);
-    assert_eq!(recorded.github.as_ref().unwrap().sent, Some(SentCredential::MachineOwn));
-    assert!(recorded.rev > before.rev);
-    assert_eq!((changed.github.as_ref().unwrap().sent.as_ref(), changed.rev > recorded.rev), (Some(&account), true));
-    assert_eq!(store.list_records().unwrap().hub_settings, Some(changed));
 }
 
 /// A hub from before it recorded the providers whose machines Roundhouse leaves GitHub to has none on its settings, so
@@ -155,30 +112,4 @@ fn a_hub_is_given_an_id_once_and_keeps_it() {
     drop(store);
     assert_eq!(open(first.path()).hub_id().unwrap(), id);
     assert_ne!(open(second.path()).hub_id().unwrap(), id, "another hub is another");
-}
-
-#[test]
-fn migrating_chooses_the_newest_usable_login_once_and_keeps_an_expired_choice_visible() {
-    use protocol::model::AgentKind;
-    let dir = tempfile::tempdir().unwrap();
-    let rows = r"
-        INSERT INTO accounts (id, login_agent, login_file, login_connected_at_ms, login_ends_at_ms) VALUES
-            ('old', 'claude', '00000000-0000-4000-8000-000000000001', 100, NULL),
-            ('new', 'claude', '00000000-0000-4000-8000-000000000002', 200, NULL),
-            ('expired', 'claude', '00000000-0000-4000-8000-000000000003', 300, 500),
-            ('only-expired', 'codex', '00000000-0000-4000-8000-000000000004', 100, 500);
-    ";
-    let store = older::store_from_before(dir.path(), schema::BEFORE_ACCOUNT_DEFAULTS, rows);
-    let defaults = store.hub_settings().unwrap().account_defaults.unwrap();
-    assert_eq!(
-        defaults.iter().find(|d| d.agent == AgentKind::Claude).map(|d| d.account.as_str()),
-        Some("new"),
-        "{defaults:?}"
-    );
-    assert_eq!(defaults.iter().find(|d| d.agent == AgentKind::Codex).unwrap().account.as_str(), "only-expired");
-    store.set_account_default(AgentKind::Claude, &"old".into()).unwrap();
-    drop(store);
-    let store = crate::store::tests::open_in(dir.path());
-    let defaults = store.hub_settings().unwrap().account_defaults.unwrap();
-    assert_eq!(defaults.iter().find(|d| d.agent == AgentKind::Claude).unwrap().account.as_str(), "old");
 }

@@ -1,8 +1,6 @@
-use protocol::model::{GithubAccountId, GithubLoginKind, HeldGithubLogin};
+use protocol::model::{GithubAccountId, GithubLoginKind};
 
 use super::*;
-use crate::store::older::store_from_before;
-use crate::store::schema::BEFORE_GITHUB_SIGN_INS;
 use crate::store::tests::open_in;
 use crate::store::{GithubApproving, Store};
 use github::GithubProfile;
@@ -31,24 +29,6 @@ fn started(store: &Store, id: &str) -> GithubSignInId {
     let id = GithubSignInId::from(id);
     assert!(store.start_github_sign_in(&id, &waiting()).unwrap().made);
     id
-}
-
-#[test]
-fn a_hub_from_before_sign_ins_has_none_and_the_logins_it_held_need_no_signing_in_again() {
-    let dir = tempfile::tempdir().unwrap();
-    let held = "INSERT INTO github_accounts
-                    (id, user_id, username, login_kind, login_file, login_connected_at_ms, login_ends_at_ms)
-                    VALUES ('g', 7, 'ada', 'token', '6f1c2a9e-0000-4000-8000-000000000000', 1, NULL);";
-
-    let store = store_from_before(dir.path(), BEFORE_GITHUB_SIGN_INS, held);
-
-    let listed = store.list_records().unwrap();
-    assert_eq!(listed.github_sign_ins, []);
-    let held = listed.github_accounts[0].held_login.unwrap();
-    assert_eq!(
-        held,
-        HeldGithubLogin { how: GithubLoginKind::Token, connected_at_ms: 1, ends_at_ms: None, needs_sign_in: false }
-    );
 }
 
 #[test]

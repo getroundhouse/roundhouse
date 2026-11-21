@@ -1,38 +1,16 @@
-//! The database's migrations, from the first, which `first.rs` has. `before.rs` has how many there were before some of
-//! them, for tests.
+//! The database's migrations since its floor, whose schema `at_floor.sql` has. `before.rs` has how many there were
+//! before some of them, for tests.
 
 mod account_defaults;
 mod accounts;
-mod activity;
-mod agent_runs;
-mod cache;
-mod comments;
 mod conversations;
-mod devices;
 mod drafts;
 mod event_kinds;
-mod event_runs;
-mod first;
 mod github_accounts;
-mod github_sign_ins;
-mod hub_settings;
-mod limits;
-mod logins;
 mod proposals;
-mod providers;
-mod replies;
-mod repos;
 mod session_accounts;
-mod subagents;
 mod todos;
-mod tools;
-mod typed_calls;
-mod typed_modes;
-mod typed_requests;
-mod waiting;
-mod waits;
-mod workers;
 mod workspaces;
 
 mod sequence;
-pub(super) use sequence::MIGRATIONS;
+pub(super) use sequence::{AT_FLOOR, MIGRATIONS};

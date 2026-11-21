@@ -3,7 +3,7 @@
 //! Its bytes aren't here, but in a file of their own, which `attachment_files` keeps.
 
 #[cfg(test)]
-use super::{lock, now_ms, text_of};
+use super::{lock, now_ms};
 #[cfg(test)]
 use protocol::attachment::Attachment;
 #[cfg(test)]
