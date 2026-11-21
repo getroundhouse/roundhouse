@@ -1,10 +1,20 @@
 //! Why a hub connection failed, distinguishing local failures from remote network, key and authorization failures.
 
 use client_core::ClientError;
+use protocol::client::HubStatus;
+
+/// Why the app isn't connected to a hub, as client-core's link holds it between tries.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Unconnected {
+    Failed(ConnectionFailure),
+    /// This machine's hub is running, and there's a real protocol break between it and this app.
+    AcrossABreak(HubStatus),
+}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ConnectionFailure {
-    /// Local hub couldn't be reached or started, or following failed.
+    /// This machine's hub couldn't be reached or started, which waits for Try again, or following its records failed,
+    /// which is tried again by itself.
     Local(String),
     /// Remote hub couldn't be reached over the network; retried automatically.
     Unreachable { hosts: Vec<String> },
@@ -14,7 +24,7 @@ pub enum ConnectionFailure {
     KeyChanged { host: String },
     /// Remote hub speaks an incompatible protocol version.
     RemoteProtocolBreak(String),
-    /// Any other failure talking to a remote hub.
+    /// Any other failure talking to a remote hub, which is tried again by itself.
     RemoteOther(String),
 }
 

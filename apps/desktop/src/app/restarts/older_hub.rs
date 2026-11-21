@@ -1,4 +1,4 @@
-use super::super::{AppView, Connection, hub_source};
+use super::super::{AppView, Connection, ConnectionFailure, Unconnected, hub_source};
 use super::{asking, said};
 use gpui_kit::{App, AppContext as _, Context, Task};
 use protocol::client::HubStatus;
@@ -123,17 +123,10 @@ impl AppView {
         // Whatever was being asked about this hub is settled, including when stopping it fails.
         self.drop_restart_question(cx);
         self.show_connecting(cx);
-        let socket = self.hub.paths.socket.clone();
-        self.connecting = Some(cx.spawn(async move |this, cx| {
-            let stopped = cx.background_spawn(async move { stop(&socket) }).await;
-            let _ = this.update(cx, |t, cx| match stopped {
-                Ok(()) => t.connect(cx),
-                Err(e) => {
-                    t.set_connection(Connection::Failed(super::super::ConnectionFailure::Local(e.to_string())), cx);
-                    cx.notify();
-                }
-            });
-        }));
+        // On the link's thread, so it tries nothing until the hub has stopped.
+        self.link.connect_after(move |hub| {
+            stop(&hub.paths.socket).map_err(|e| Unconnected::Failed(ConnectionFailure::Local(e.to_string())))
+        });
     }
 
     /// Finishes an update now by restarting the older hub, as `Restart now` asks, after asking in a dialog that says

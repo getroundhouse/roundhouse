@@ -34,10 +34,10 @@ impl AppView {
         }
         // The connection there is, even one still catching up, which a dialog made now would otherwise hear of only on
         // the next, so it couldn't read back its files until then.
-        let client = self.client().or_else(|| self.joining.clone());
+        let client = self.link.state().connected().cloned();
         let (offer, keeping) = (self.offer(), Keeping::new(self.drafts.clone(), client));
         let dialog = cx.new(|cx| NewWorkspaceDialog::new(repo, offer, keeping, window, cx));
-        if let Some(kept) = self.feed.as_ref().and_then(|feed| feed.snapshot().new_workspace_draft().cloned()) {
+        if let Some(kept) = self.feed().and_then(|feed| feed.snapshot().new_workspace_draft().cloned()) {
             dialog.update(cx, |dialog, cx| dialog.take_kept(kept, window, cx));
         }
         cx.subscribe_in(&dialog, window, |t, dialog, event: &DialogEvent, window, cx| match event {
@@ -77,7 +77,7 @@ impl AppView {
     /// it show a change made elsewhere that it held back. Once the window can be updated, since this can come while
     /// it's being drawn.
     pub(in crate::app) fn show_kept_in_dialog(&self, cx: &mut Context<Self>) {
-        let (Some(dialog), Some(feed), handle) = (self.new_workspace.clone(), self.feed.clone(), self.window) else {
+        let (Some(dialog), Some(feed), handle) = (self.new_workspace.clone(), self.feed(), self.window) else {
             return;
         };
         let offer = self.offer();

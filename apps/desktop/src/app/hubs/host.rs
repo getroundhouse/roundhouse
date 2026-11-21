@@ -64,7 +64,7 @@ impl Hubs {
                     view.hub.remote.as_ref().map(|hub| &hub.device_id) != remote.as_ref().map(|hub| &hub.device_id);
                 view.hub.remote.clone_from(&remote);
                 if renewed {
-                    view.connect(cx);
+                    view.connect_anew(cx);
                 }
             });
         }

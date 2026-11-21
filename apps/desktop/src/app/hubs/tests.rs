@@ -16,8 +16,9 @@ pub(in crate::app) fn remote(device: &str) -> RemoteHub {
     }
 }
 
-/// The real host and views in a test window. Connections are cancelled before the scheduler starts them; these
-/// tests exercise window ownership, while the loopback network tests exercise the hub and draft keeper.
+/// The real host and views in a test window. Each view stops listening to its link before the scheduler runs, so what
+/// the link does on its own thread changes nothing here: these tests exercise window ownership, while the loopback
+/// network tests exercise the hub and draft keeper.
 pub(in crate::app) fn host(cx: &mut TestAppContext) -> (tempfile::TempDir, AnyWindowHandle, Entity<Hubs>) {
     let dir = tempfile::tempdir().unwrap();
     let paths = protocol::paths::resolve(|name| match name {
@@ -42,7 +43,7 @@ pub(in crate::app) fn host(cx: &mut TestAppContext) -> (tempfile::TempDir, AnyWi
             cx.new(|cx| Hubs::new(source, None, window, cx))
         })
         .unwrap();
-        host.read(cx).active().update(cx, |view, _| view.connecting = None);
+        host.read(cx).active().update(cx, |view, _| view.following = None);
         (window, host)
     });
     (dir, window, host)
@@ -59,7 +60,7 @@ pub(in crate::app) fn pick(
             .update(cx, |_, window, cx| {
                 select(remote, window, cx);
                 let view = host.read(cx).active();
-                view.update(cx, |view, _| view.connecting = None);
+                view.update(cx, |view, _| view.following = None);
                 view
             })
             .unwrap()
@@ -142,22 +143,4 @@ fn background_hub_changes_notify_the_selected_hubs_view(cx: &mut TestAppContext)
     cx.run_until_parked();
 
     assert_eq!(notified.load(std::sync::atomic::Ordering::SeqCst), 1);
-}
-
-#[gpui_kit::test]
-fn unreachable_retries_keep_unreachable_state_without_flashing_connecting(cx: &mut TestAppContext) {
-    let (_dir, window, host) = host(cx);
-    let remote_view = pick(Some(remote("other")), window, &host, cx);
-    remote_view.update(cx, |view, cx| {
-        let failure = crate::app::ConnectionFailure::Unreachable { hosts: vec!["127.0.0.1:1".into()] };
-        view.set_connection(crate::app::Connection::Failed(failure), cx);
-        view.attempt_connect(cx);
-    });
-
-    cx.read(|cx| {
-        assert!(matches!(
-            remote_view.read(cx).connection(),
-            crate::app::Connection::Failed(crate::app::ConnectionFailure::Unreachable { .. })
-        ));
-    });
 }

@@ -17,7 +17,7 @@ Choose **Create new link** if the link expired before a device connected. Each l
 
 ## When it cannot connect
 
-The selected hub shows **Offline**, **Access revoked**, **Key changed** or **Update required** in the switcher, and explains why in place of the workspace when none is open. Transient network failures retry automatically without closing an already open workspace pane. Check that the other machine is awake, its hub is running, and the network allows the port: 7867 in installed builds, or 7868 in development builds. `ROUNDHOUSE_LISTEN` on the hub's machine chooses another port or a specific address. There is no relay that connects machines across otherwise unreachable networks.
+The selected hub shows **Offline**, **Access revoked**, **Key changed** or **Update required** in the switcher, and explains why in place of the workspace when none is open. The app tries again by itself, at once and then after longer and longer waits, up to 30 seconds, without closing a workspace that's open. Only **Access revoked**, **Key changed** and **Update required** wait for you. Check that the other machine is awake, its hub is running, and the network allows the port: 7867 in installed builds, or 7868 in development builds. `ROUNDHOUSE_LISTEN` on the hub's machine chooses another port or a specific address. There is no relay that connects machines across otherwise unreachable networks.
 
 If the hub reports a different key, check that you are connecting to the intended machine before choosing **Pair again…**. An expired, used or revoked credential also offers **Pair again…** to paste a fresh pairing link. A protocol mismatch requires updating the app or hub; a remote desktop cannot restart the other machine's hub.
 
