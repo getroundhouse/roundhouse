@@ -46,6 +46,12 @@ fn the_workers_copy_says_where_the_cursor_is_and_what_the_terminal_is() {
     assert_eq!(answers(|worker| worker.write(b"\x1b[c")), b"\x1b[?62;22c");
 }
 
+/// Since a picture has no images, as `Mirror::new` says. A program asks by sending an image, with `a=q`.
+#[test]
+fn a_program_that_asks_whether_it_can_show_images_is_told_nothing() {
+    assert_eq!(answers(|worker| worker.write(b"\x1b_Gi=31,s=1,v=1,a=q,t=d,f=24;AAAA\x1b\\")), b"");
+}
+
 #[test]
 fn a_new_size_is_the_one_a_program_is_told_of() {
     let answered = answers(|worker| {

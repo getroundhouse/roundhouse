@@ -49,6 +49,9 @@ impl Mirror {
     pub fn new(size: TerminalSize) -> Result<Self, MirrorError> {
         let mut terminal = Terminal::new(size.cols, size.rows)?;
         terminal.set_scrollback_max_lines(Some(HISTORY_LINES))?.set_scrollback_max_bytes(Some(HISTORY_BYTES))?;
+        // A picture is rows of cells, with no images, so the kitty graphics protocol is off. A program that asks
+        // whether it can show images is then told nothing, and shows text instead, and none it sends are kept.
+        terminal.set_kitty_image_storage_limit(0)?;
         let compressing = Compressing::default();
         Ok(Self { terminal, typing: None, compressing, rows: None, picturing: None })
     }
