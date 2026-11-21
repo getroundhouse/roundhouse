@@ -21,8 +21,9 @@ impl TokenHash {
 }
 
 columns! {
-    /// What a device's row holds, but for its token's hash, as it's written and read.
+    /// What a device's row holds, as it's written and read, and its token's hash, which is only written.
     struct DeviceColumns { id, name, paired_at_ms, last_seen_ms }
+    written as DeviceValues with { token_sha256 }
 }
 
 fn device_from_row(row: &Row<'_>) -> rusqlite::Result<Device> {
@@ -38,10 +39,14 @@ fn device_from_row(row: &Row<'_>) -> rusqlite::Result<Device> {
 
 impl Store {
     pub(crate) fn add_device(&self, device: &Device, token: &TokenHash) -> Result<(), StoreError> {
-        lock(&self.writer).execute(
-            &format!("INSERT INTO devices ({}, token_sha256) VALUES (?, ?, ?, ?, ?)", DeviceColumns::LIST),
-            params![device.id.as_str(), device.name, device.paired_at_ms, device.last_seen_ms, &token.0[..]],
-        )?;
+        let values = DeviceValues {
+            id: &device.id.as_str(),
+            name: &device.name,
+            paired_at_ms: &device.paired_at_ms,
+            last_seen_ms: &device.last_seen_ms,
+            token_sha256: &token.0,
+        };
+        lock(&self.writer).execute(&format!("INSERT INTO devices {}", DeviceValues::INSERT), values.params())?;
         Ok(())
     }
 

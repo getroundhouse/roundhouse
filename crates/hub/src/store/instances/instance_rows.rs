@@ -27,6 +27,7 @@ pub struct RecordedInstance {
 columns! {
     /// What an instance's row holds, as it's written and read.
     struct InstanceColumns { id, provider, stage, created_at_ms }
+    written as InstanceValues
 }
 
 fn instance_from_row(row: &Row<'_>) -> rusqlite::Result<RecordedInstance> {
@@ -48,10 +49,13 @@ pub(in super::super) fn record_instance(
     stage: InstanceStage,
     created_at_ms: i64,
 ) -> rusqlite::Result<()> {
-    conn.execute(
-        &format!("INSERT INTO instances ({}) VALUES (?, ?, ?, ?)", InstanceColumns::LIST),
-        params![id.as_str(), provider.as_str(), text_of(&stage), created_at_ms],
-    )?;
+    let values = InstanceValues {
+        id: &id.as_str(),
+        provider: &provider.as_str(),
+        stage: &text_of(&stage),
+        created_at_ms: &created_at_ms,
+    };
+    conn.execute(&format!("INSERT INTO instances {}", InstanceValues::INSERT), values.params())?;
     Ok(())
 }
 

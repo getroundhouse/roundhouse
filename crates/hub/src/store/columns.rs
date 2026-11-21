@@ -1,7 +1,8 @@
 //! What a query reads, declared once for each kind of row, so the list a statement selects and the name each reader
 //! takes a value by come from the same declaration. Removing or renaming a column there fails to compile where it's
 //! read, and an error from reading one names it. Every name is a place in the row, fixed as the crate compiles, so
-//! nothing looks a column up by its name as the hub runs.
+//! nothing looks a column up by its name as the hub runs. A statement that writes the row gives each value by its
+//! column's name too, so the order of the declaration's columns changes nothing that's stored.
 
 use rusqlite::Row;
 use rusqlite::types::{FromSql, Type, ValueRef};
@@ -31,8 +32,8 @@ impl Column {
 pub(super) trait Columns {
     /// Every column, as a statement selects them, in their order.
     const LIST: &'static str;
-    /// The row's own columns, before those a read adds after them, such as a session's waits, for a statement that
-    /// writes the row, or that reads the row and then adds its own.
+    /// The row's own columns, before those a read adds after them, such as an event's raw line, for a statement that
+    /// reads the row and then adds its own.
     const ROW: &'static str;
     /// How many columns [`Columns::LIST`] has, which is where a list read after it starts.
     const COUNT: usize;
@@ -111,6 +112,11 @@ impl Error for Unreadable {
 /// or computes, such as `id = "p.id"`. A second group, after `then`, is what a read adds after the row's own columns,
 /// such as a subquery or `rev`. `at(first)` gives the columns where the list starts at `first` in a query's, for a list
 /// read after another, as an account's login is.
+///
+/// `written as` names a second struct, for a statement that writes the row's own columns, which are the first group,
+/// and those after `with`, which the row has and this declaration doesn't read, such as a session's
+/// `client_request_id`. It has a field for each, so a write gives every value by its column's name, and binds them in
+/// the declaration's order.
 macro_rules! columns {
     (
         $(#[$meta:meta])*
@@ -120,6 +126,7 @@ macro_rules! columns {
         $(then {
             $($added:ident $(= $added_sql:literal)?),+ $(,)?
         })?
+        $(written as $values:ident $(with { $($with:ident),+ $(,)? })?)?
     ) => {
         $(#[$meta])*
         #[derive(Clone, Copy, Debug)]
@@ -154,6 +161,35 @@ macro_rules! columns {
                 }
             }
         }
+
+        $crate::store::columns::columns!(@values $vis $name [$($column),+] [$($values)?] [$($($($with),+)?)?]);
+    };
+    (@values $vis:vis $name:ident [$($column:ident),+] [] []) => {};
+    (@values $vis:vis $name:ident [$($column:ident),+] [$values:ident] [$($with:ident),*]) => {
+        #[doc = concat!("The value a write gives each column of [`", stringify!($name), "`]'s row.")]
+        $vis struct $values<'a> {
+            $($vis $column: &'a dyn rusqlite::ToSql,)+
+            $($vis $with: &'a dyn rusqlite::ToSql,)*
+        }
+
+        impl<'a> $values<'a> {
+            /// What a statement that inserts the row says after the table's name: the columns, then a `?` for each.
+            $vis const INSERT: &'static str = concat!(
+                "(",
+                $crate::store::columns::columns!(@join $(stringify!($column)),+ $(, stringify!($with))*),
+                ") VALUES (",
+                $crate::store::columns::columns!(
+                    @join $($crate::store::columns::columns!(@place $column)),+
+                    $(, $crate::store::columns::columns!(@place $with))*
+                ),
+                ")",
+            );
+
+            /// Each value, in its column's place.
+            $vis fn params(self) -> impl rusqlite::Params {
+                rusqlite::params_from_iter([$(self.$column,)+ $(self.$with,)*])
+            }
+        }
     };
     (@join $first:expr $(, $rest:expr)*) => {
         concat!($first $(, ", ", $rest)*)
@@ -163,6 +199,9 @@ macro_rules! columns {
     };
     (@sql $column:ident = $sql:literal) => {
         $sql
+    };
+    (@place $column:ident) => {
+        "?"
     };
 }
 pub(super) use columns;
@@ -185,28 +224,33 @@ mod tests {
     columns! {
         struct Sample {
             id,
-            doubled = "number * 2",
+            number,
             status,
         } then {
+            doubled = "number * 2",
             label = "upper(status)",
         }
+        written as SampleValues with { note }
     }
 
+    /// Its rows as [`SampleValues`] writes them, into a table whose columns are in another order.
     fn sample() -> Connection {
         let conn = Connection::open_in_memory().unwrap();
-        conn.execute_batch(
-            "CREATE TABLE samples (id TEXT, number INTEGER, status TEXT);
-             INSERT INTO samples VALUES ('a', 21, 'idle'), ('b', 1, 'no such status');",
-        )
-        .unwrap();
+        conn.execute_batch("CREATE TABLE samples (status TEXT, note TEXT, id TEXT, number INTEGER)").unwrap();
+        let insert = format!("INSERT INTO samples {}", SampleValues::INSERT);
+        for (id, number, status) in [("a", 21, "idle"), ("b", 1, "no such status")] {
+            let values = SampleValues { id: &id, number: &number, status: &status, note: &format!("{id}'s") };
+            conn.execute(&insert, values.params()).unwrap();
+        }
         conn
     }
 
     #[test]
     fn a_declaration_gives_its_list_and_a_place_for_each_name() {
-        assert_eq!(Sample::LIST, "id, number * 2, status, upper(status)");
-        assert_eq!(Sample::ROW, "id, number * 2, status");
-        assert_eq!(Sample::COUNT, 4);
+        assert_eq!(Sample::LIST, "id, number, status, number * 2, upper(status)");
+        assert_eq!(Sample::ROW, "id, number, status");
+        assert_eq!(Sample::COUNT, 5);
+        assert_eq!(SampleValues::INSERT, "(id, number, status, note) VALUES (?, ?, ?, ?)");
 
         let conn = sample();
         let c = Sample::at(0);
@@ -214,13 +258,22 @@ mod tests {
             .query_row(&format!("SELECT {} FROM samples WHERE id = 'a'", Sample::LIST), [], |row| {
                 Ok((
                     row.at::<String>(c.id)?,
+                    row.at::<i64>(c.number)?,
                     row.at::<i64>(c.doubled)?,
                     text_at::<Status>(row, c.status)?,
                     row.at::<String>(c.label)?,
                 ))
             })
             .unwrap();
-        assert_eq!(read, ("a".to_owned(), 42, Status::Idle, "IDLE".to_owned()));
+        assert_eq!(read, ("a".to_owned(), 21, 42, Status::Idle, "IDLE".to_owned()));
+
+        // Each value a write gave by name is in its column, in the table's own order.
+        let stored: (String, String, String, i64) = conn
+            .query_row("SELECT * FROM samples WHERE id = 'a'", [], |row| {
+                Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
+            })
+            .unwrap();
+        assert_eq!(stored, ("idle".to_owned(), "a's".to_owned(), "a".to_owned(), 21));
 
         // The same list after one of a query's own, as a list read after another is.
         let c = Sample::at(1);

@@ -70,6 +70,7 @@ columns! {
     } then {
         rev,
     }
+    written as WorkspaceValues with { client_request_id, repo_source, worker_environment }
 }
 
 /// The workspace's record as `conn` reads it, such as the writer inside a change, so its revision is that change's.
@@ -136,40 +137,35 @@ impl Store {
             return Ok(Some(Made::Earlier(made)));
         }
         let tx = conn.transaction()?;
-        let added = tx.execute(
-            &format!(
-                "INSERT INTO workspaces ({}, client_request_id, repo_source, worker_environment)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                     ON CONFLICT (repo_id, name) DO NOTHING",
-                WorkspaceColumns::ROW
-            ),
-            params![
-                workspace.id.as_str(),
-                workspace.repo_id.as_str(),
-                workspace.name,
-                workspace.branch.as_str(),
-                workspace.base_ref,
-                workspace.path,
-                text_of(&workspace.status),
-                workspace.provider.as_str(),
-                workspace.instance_id.as_str(),
-                workspace.created_at_ms,
-                workspace.archived_at_ms,
-                serde_json::to_string(&workspace.setup)?,
-                i64::from(workspace.port_base),
-                workspace.title.as_deref(),
-                text_of(&workspace.title_source),
-                linked_text(workspace.pull_request_link.as_ref())?,
-                workspace.user_active_at_ms,
-                workspace.comment_draft.as_ref().map(serde_json::to_string).transpose()?,
-                workspace.branches.as_ref().map(serde_json::to_string).transpose()?,
-                workspace.pull_request_branch.as_ref().map(BranchName::as_str),
-                workspace.worker_build,
-                client_request_id.map(ClientRequestId::as_str),
-                serde_json::to_string(&placement.source)?,
-                serde_json::to_string(&placement.environment)?,
-            ],
-        )?;
+        let values = WorkspaceValues {
+            id: &workspace.id.as_str(),
+            repo_id: &workspace.repo_id.as_str(),
+            name: &workspace.name,
+            branch: &workspace.branch.as_str(),
+            base_ref: &workspace.base_ref,
+            path: &workspace.path,
+            status: &text_of(&workspace.status),
+            provider: &workspace.provider.as_str(),
+            instance_id: &workspace.instance_id.as_str(),
+            created_at_ms: &workspace.created_at_ms,
+            archived_at_ms: &workspace.archived_at_ms,
+            setup: &serde_json::to_string(&workspace.setup)?,
+            port_base: &i64::from(workspace.port_base),
+            title: &workspace.title.as_deref(),
+            title_source: &text_of(&workspace.title_source),
+            pull_request_link: &linked_text(workspace.pull_request_link.as_ref())?,
+            user_active_at_ms: &workspace.user_active_at_ms,
+            comment_draft: &workspace.comment_draft.as_ref().map(serde_json::to_string).transpose()?,
+            branches: &workspace.branches.as_ref().map(serde_json::to_string).transpose()?,
+            pull_request_branch: &workspace.pull_request_branch.as_ref().map(BranchName::as_str),
+            worker_build: &workspace.worker_build,
+            client_request_id: &client_request_id.map(ClientRequestId::as_str),
+            repo_source: &serde_json::to_string(&placement.source)?,
+            worker_environment: &serde_json::to_string(&placement.environment)?,
+        };
+        let insert =
+            format!("INSERT INTO workspaces {} ON CONFLICT (repo_id, name) DO NOTHING", WorkspaceValues::INSERT);
+        let added = tx.execute(&insert, values.params())?;
         if added == 0 {
             return Ok(None);
         }

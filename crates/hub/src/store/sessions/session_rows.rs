@@ -41,6 +41,7 @@ columns! {
                 ORDER BY started_at_ms, id))",
         rev,
     }
+    written as SessionValues with { client_request_id }
 }
 
 /// A draft for its column: NULL when nothing is typed.
@@ -125,52 +126,46 @@ impl Store {
             return Ok(Made::Earlier(made));
         }
         let session = &stored.session;
-        tx.execute(
-            &format!(
-                "INSERT INTO sessions ({}, client_request_id)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                SessionColumns::ROW
-            ),
-            params![
-                session.id.as_str(),
-                session.workspace_id.as_str(),
-                text_of(&session.agent),
-                session.model.as_str(),
-                serde_json::to_string(&session.mode)?,
-                text_of(&session.status),
-                seq_column(session.last_seq),
-                session.created_at_ms,
-                session.updated_at_ms,
-                stored.agent_session_id.as_ref().map(protocol::model::AgentSessionId::as_str),
-                stored.agent_opened,
-                session.title.as_deref(),
-                session.closed_at_ms,
-                seq_column(session.reply_seq),
-                seq_column(session.read_seq),
-                serde_json::to_string(&session.background_tasks)?,
-                text_of(&session.title_source),
-                serde_json::to_string(&session.queued)?,
-                session.queue_held,
-                session.turn_started_at_ms,
-                text_of(&session.effort),
-                session.context.as_ref().map(serde_json::to_string).transpose()?,
-                session.account.as_ref().map(AccountId::as_str),
-                session.user_active_at_ms,
-                session.prompt_cache.as_ref().map(serde_json::to_string).transpose()?,
-                draft_column(&session.draft)?,
-                session.decision_draft.as_ref().map(serde_json::to_string).transpose()?,
-                serde_json::to_string(session.untaken.as_deref().unwrap_or_default())?,
-                serde_json::to_string(session.open_approvals.as_deref().unwrap_or_default())?,
-                session.reply_outcome.as_ref().map(text_of),
-                session.agent_capabilities.as_ref().map(serde_json::to_string).transpose()?,
-                session.account_source.as_ref().map(text_of),
-                session.todos.as_ref().map(serde_json::to_string).transpose()?,
-                session.placed_automatically,
-                session.needs_an_account,
-                session.interaction.device().map(serde_json::to_string).transpose()?,
-                client_request_id.map(ClientRequestId::as_str),
-            ],
-        )?;
+        let values = SessionValues {
+            id: &session.id.as_str(),
+            workspace_id: &session.workspace_id.as_str(),
+            agent: &text_of(&session.agent),
+            model: &session.model.as_str(),
+            mode: &serde_json::to_string(&session.mode)?,
+            status: &text_of(&session.status),
+            last_seq: &seq_column(session.last_seq),
+            created_at_ms: &session.created_at_ms,
+            updated_at_ms: &session.updated_at_ms,
+            agent_session_id: &stored.agent_session_id.as_ref().map(protocol::model::AgentSessionId::as_str),
+            agent_opened: &stored.agent_opened,
+            title: &session.title.as_deref(),
+            closed_at_ms: &session.closed_at_ms,
+            reply_seq: &seq_column(session.reply_seq),
+            read_seq: &seq_column(session.read_seq),
+            background_tasks: &serde_json::to_string(&session.background_tasks)?,
+            title_source: &text_of(&session.title_source),
+            queued: &serde_json::to_string(&session.queued)?,
+            queue_held: &session.queue_held,
+            turn_started_at_ms: &session.turn_started_at_ms,
+            effort: &text_of(&session.effort),
+            context: &session.context.as_ref().map(serde_json::to_string).transpose()?,
+            account_id: &session.account.as_ref().map(AccountId::as_str),
+            user_active_at_ms: &session.user_active_at_ms,
+            prompt_cache: &session.prompt_cache.as_ref().map(serde_json::to_string).transpose()?,
+            draft: &draft_column(&session.draft)?,
+            decision_draft: &session.decision_draft.as_ref().map(serde_json::to_string).transpose()?,
+            untaken: &serde_json::to_string(session.untaken.as_deref().unwrap_or_default())?,
+            open_approvals: &serde_json::to_string(session.open_approvals.as_deref().unwrap_or_default())?,
+            reply_outcome: &session.reply_outcome.as_ref().map(text_of),
+            agent_capabilities: &session.agent_capabilities.as_ref().map(serde_json::to_string).transpose()?,
+            account_source: &session.account_source.as_ref().map(text_of),
+            todos: &session.todos.as_ref().map(serde_json::to_string).transpose()?,
+            placed_automatically: &session.placed_automatically,
+            needs_an_account: &session.needs_an_account,
+            conversation: &session.interaction.device().map(serde_json::to_string).transpose()?,
+            client_request_id: &client_request_id.map(ClientRequestId::as_str),
+        };
+        tx.execute(&format!("INSERT INTO sessions {}", SessionValues::INSERT), values.params())?;
         // Making a chat is doing something in its workspace.
         tx.execute(
             "UPDATE workspaces SET user_active_at_ms = ? WHERE id = ?",
