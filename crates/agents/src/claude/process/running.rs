@@ -85,6 +85,8 @@ pub(super) struct Shared {
     /// Told each launch and exit of the CLI, and each line the adapter writes to it and reads from it, in order, for a
     /// conformance trial.
     pub(super) tap: Option<Tap>,
+    /// What's said for the agent while it can't answer what was said out loud.
+    pub(super) covering: super::covering::Covering,
 }
 
 pub(in super::super) struct ClaudeProcess {
@@ -276,7 +278,14 @@ impl ClaudeProcess {
                 Err(e) => std::panic::resume_unwind(e.into_panic()),
             }
         };
-        send(self, seq, message, None).await
+        send(self, seq, message, None).await?;
+        super::covering::Covering::sent(&self.shared, seq, &prompt.text, prompt.spoken);
+        Ok(())
+    }
+
+    /// The person talks with the agent as `mode` says from now on.
+    pub(in super::super) async fn interaction(&self, mode: protocol::model::InteractionMode) {
+        super::covering::Covering::mode(&self.shared, mode).await;
     }
 
     /// Asks it to compact, by typing `/compact`, with what to keep after it. `asked` is where that's recorded, which the

@@ -14,6 +14,7 @@ mod asking;
 mod capture;
 mod compact;
 mod context;
+mod covering;
 mod instructions;
 mod launch;
 mod output;

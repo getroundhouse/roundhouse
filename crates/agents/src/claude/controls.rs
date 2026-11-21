@@ -15,6 +15,10 @@ pub(super) async fn apply(process: &ClaudeProcess, control: &Control) -> Result<
         Control::Compact { asked, keeping } => process.ask_to_compact(*asked, keeping.as_deref()).await,
         Control::Change(settings) => process.change(settings).await,
         Control::Decide { approval, decision } => process.decide(approval, decision).await,
+        Control::Interaction { mode } => {
+            process.interaction(*mode).await;
+            Ok(())
+        }
         Control::Note { .. }
         | Control::Aside { .. }
         | Control::Overrule { .. }
@@ -33,8 +37,7 @@ pub(super) async fn apply(process: &ClaudeProcess, control: &Control) -> Result<
         | Control::Review { .. }
         | Control::ReadRules
         | Control::ListModels
-        | Control::ListOutside
-        | Control::Interaction { .. } => Err(unsupported()),
+        | Control::ListOutside => Err(unsupported()),
     }
 }
 
