@@ -31,6 +31,11 @@ THROWAWAY_KEY = FIXTURE / "throwaway-key.pem"
 SPEAKS = {"oldest": 3, "newest": 4}
 
 
+def floors(speaks: dict[str, int] = SPEAKS, updates_from: str | None = None) -> dict:
+    """A build's floors, as its full package says them in the feed."""
+    return {publish.WORKER_VERSIONS: speaks, **({publish.UPDATES_FROM: updates_from} if updates_from else {})}
+
+
 def feed_signature(*args: str) -> str:
     """Runs feed-signature.sh, and returns what it printed."""
     return subprocess.run([str(HERE / "feed-signature.sh"), *args], capture_output=True, text=True,
@@ -96,6 +101,13 @@ class Signature(unittest.TestCase):
         assets = json.loads((FIXTURE / publish.FEED).read_bytes())["Assets"]
         full = next(asset for asset in assets if asset["Type"] == "Full")
         self.assertEqual(full[publish.WORKER_VERSIONS], SPEAKS)
+
+    def test_the_fixture_the_app_reads_names_the_oldest_release_it_updates_from_as_this_writes_it(self) -> None:
+        """`crates/update-feed` reads the same file, so the two can't come to call the field different things, which
+        would have every app step past every floor."""
+        full = next(asset for asset in json.loads((FIXTURE / publish.FEED).read_bytes())["Assets"]
+                    if asset["Type"] == "Full")
+        self.assertEqual(full[publish.UPDATES_FROM], "0.1.0")
 
     def test_the_fixture_the_app_and_a_hub_read_lists_the_hub_s_archive_as_this_writes_it(self) -> None:
         """`crates/update-feed` reads the same file, so a hub can't come to look for its archive under another name."""
@@ -176,13 +188,15 @@ class Publishing(unittest.TestCase):
                        capture_output=True)
 
     def release(self, version: str, keep: int = 10, store: DirStore | None = None,
-                speaks: dict[str, int] = SPEAKS) -> Path:
-        """One run of the release job, of a build whose hub speaks the worker versions `speaks`."""
+                speaks: dict[str, int] = SPEAKS, updates_from: str | None = None) -> Path:
+        """One run of the release job, of a build whose hub speaks the worker versions `speaks`, and that updates from
+        `updates_from` and nothing older, if it's given."""
         store = store or self.store
         work = self.work()
         if publish.prepare(store, self.key, version, work) == "new":
             self.pack(work, version)
-            self.assertEqual(publish.merge(version, keep, speaks, work), work / "feed" / publish.FEED)
+            self.assertEqual(publish.merge(version, keep, floors(speaks, updates_from), work),
+                             work / "feed" / publish.FEED)
             self.sign(work)
             older = publish.bridge(version, work)
             if older is not None:
@@ -235,7 +249,7 @@ class Publishing(unittest.TestCase):
         self.assertEqual(newest.read_bytes(), (self.bucket / newest.name).read_bytes())
         self.assertEqual((work / "releases" / publish.FEED).read_bytes(), self.store.get(publish.FEED))
         self.pack(work, "0.1.2")
-        publish.merge("0.1.2", 10, SPEAKS, work)
+        publish.merge("0.1.2", 10, floors(), work)
         self.sign(work)
         publish.upload(self.store, self.key, "0.1.2", work)
         self.assertEqual(self.published(), [("0.1.1", "Full"), ("0.1.2", "Delta"), ("0.1.2", "Full")])
@@ -290,10 +304,10 @@ class Publishing(unittest.TestCase):
         archive = work / "releases" / hub_name("0.1.1")
         archive.unlink()
         with self.assertRaisesRegex(Refused, f"packaging made no {hub_name('0.1.1')}"):
-            publish.merge("0.1.1", 10, SPEAKS, work)
+            publish.merge("0.1.1", 10, floors(), work)
 
         archive.write_bytes(b"hub")
-        publish.merge("0.1.1", 10, SPEAKS, work)
+        publish.merge("0.1.1", 10, floors(), work)
         self.sign(work)
         archive.write_bytes(b"changed")
         with self.assertRaisesRegex(Refused, "doesn't match the signed feed"):
@@ -328,24 +342,79 @@ class Publishing(unittest.TestCase):
 
         if self.APPS_STEP:
             with self.assertRaises(Refused):
-                publish.merge("0.1.2", 10, {"oldest": 5, "newest": 6}, work)
+                publish.merge("0.1.2", 10, floors({"oldest": 5, "newest": 6}), work)
             self.assertEqual(self.published(), [("0.1.1", "Full")])
         else:
-            publish.merge("0.1.2", 10, {"oldest": 5, "newest": 6}, work)
+            publish.merge("0.1.2", 10, floors({"oldest": 5, "newest": 6}), work)
 
-    def test_what_a_build_says_it_speaks_is_used_only_as_a_range(self) -> None:
+    def test_what_a_build_says_of_its_floors_is_used_only_as_a_range_and_a_release(self) -> None:
         path = self.dir / "worker-versions.json"
         path.write_text('{"oldest":3,"newest":4}\n')
-        self.assertEqual(publish.worker_versions(path), SPEAKS)
+        self.assertEqual(publish.floors(path), floors())
+        path.write_text('{"oldest":3,"newest":4,"updatesFrom":"0.1.300"}\n')
+        self.assertEqual(publish.floors(path), floors(updates_from="0.1.300"))
 
         for said in ('{"oldest":4,"newest":3}', '{"newest":4}', '{"oldest":"3","newest":4}',
                      '{"oldest":true,"newest":4}', '{"oldest":0,"newest":4}', '{"oldest":3,"newest":4,"more":5}',
-                     "[3,4]", ""):
+                     '{"oldest":3,"newest":4,"updatesFrom":"0.1"}', '{"oldest":3,"newest":4,"updatesFrom":300}',
+                     '{"oldest":3,"newest":4,"updatesFrom":null}', "[3,4]", ""):
             path.write_text(said)
             with self.assertRaises(Refused, msg=said):
-                publish.worker_versions(path)
+                publish.floors(path)
         with self.assertRaises(Refused):
-            publish.worker_versions(self.dir / "missing.json")
+            publish.floors(self.dir / "missing.json")
+
+    def test_a_release_s_full_package_says_the_oldest_release_it_updates_from_if_it_says_one(self) -> None:
+        # Where apps step, a floor can be no newer than 0.1.1, the last whose hub doesn't speak workers of 5.
+        self.release("0.1.1", speaks={"oldest": 3, "newest": 4})
+        self.release("0.1.2", speaks={"oldest": 4, "newest": 5})
+        self.release("0.1.3", speaks={"oldest": 5, "newest": 6}, updates_from="0.1.1")
+
+        said = {(entry["Version"], entry["Type"]): entry.get(publish.UPDATES_FROM)
+                for entry in json.loads(self.store.get(publish.FEED))["Assets"] if entry["Type"] == "Full"}
+        self.assertEqual(said, {("0.1.1", "Full"): None, ("0.1.2", "Full"): None, ("0.1.3", "Full"): "0.1.1"})
+
+    def test_the_newest_release_of_each_floor_stays_as_its_full_package(self) -> None:
+        for version, oldest, updates_from in (("0.1.1", 3, None), ("0.1.2", 3, None), ("0.1.3", 4, None),
+                                              ("0.1.4", 4, None), ("0.1.5", 5, None), ("0.1.6", 5, "0.1.2")):
+            self.release(version, keep=1, speaks={"oldest": oldest, "newest": oldest + 1}, updates_from=updates_from)
+
+        # 0.1.2's hub is the newest that speaks workers of protocol 3, and 0.1.4's the newest that speaks 4. 0.1.5 is
+        # the newest of 5 that updates from any release, which an app on one before 0.1.2 steps to, and 0.1.6 the
+        # newest that updates from 0.1.2.
+        self.assertEqual(self.published(), [("0.1.2", "Full"), ("0.1.4", "Full"), ("0.1.5", "Full"),
+                                            ("0.1.6", "Delta"), ("0.1.6", "Full")])
+        self.assert_packages_match()
+
+    def test_a_release_whose_floor_the_feed_doesnt_keep_to_step_to_is_refused(self) -> None:
+        for version in ("0.1.1", "0.1.2"):
+            self.release(version, keep=1)
+        for floor in ("0.1.1", "0.1.3"):
+            work = self.work()
+            publish.prepare(self.store, self.key, "0.1.3", work)
+            self.pack(work, "0.1.3")
+
+            with self.assertRaises(Refused, msg=floor):
+                publish.merge("0.1.3", 10, floors({"oldest": 4, "newest": 5}, floor), work)
+        self.assertEqual(self.published(), [("0.1.2", "Delta"), ("0.1.2", "Full")])
+
+    def test_where_apps_step_a_floor_newer_than_the_last_release_before_the_oldest_workers_is_refused(self) -> None:
+        self.release("0.1.1", speaks={"oldest": 3, "newest": 4})
+        self.release("0.1.2", speaks={"oldest": 4, "newest": 5})
+        work = self.work()
+        publish.prepare(self.store, self.key, "0.1.3", work)
+        self.pack(work, "0.1.3")
+
+        # Only an app whose hub runs workers of 5 takes 0.1.3, and 0.1.1's hub runs none, so it updates from 0.1.1.
+        if self.APPS_STEP:
+            with self.assertRaises(Refused):
+                publish.merge("0.1.3", 10, floors({"oldest": 5, "newest": 6}, "0.1.2"), work)
+        else:
+            publish.merge("0.1.3", 10, floors({"oldest": 5, "newest": 6}, "0.1.2"), work)
+        work = self.work()
+        publish.prepare(self.store, self.key, "0.1.3", work)
+        self.pack(work, "0.1.3")
+        publish.merge("0.1.3", 10, floors({"oldest": 5, "newest": 6}, "0.1.1"), work)
 
     def test_a_feed_changed_in_the_bucket_is_never_signed(self) -> None:
         self.release("0.1.1")
@@ -448,14 +517,14 @@ class Publishing(unittest.TestCase):
         (work / "releases" / package_name("0.1.1", "Full")).write_bytes(b"changed after vpk")
 
         with self.assertRaisesRegex(Refused, "doesn't match what vpk's feed says"):
-            publish.merge("0.1.1", 10, SPEAKS, work)
+            publish.merge("0.1.1", 10, floors(), work)
 
     def test_only_the_feed_as_merged_and_signed_is_uploaded(self) -> None:
         self.release("0.1.1")
         work = self.work()
         publish.prepare(self.store, self.key, "0.1.2", work)
         self.pack(work, "0.1.2")
-        publish.merge("0.1.2", 10, SPEAKS, work)
+        publish.merge("0.1.2", 10, floors(), work)
         feed = work / "feed" / publish.FEED
         merged = feed.read_bytes()
 
@@ -517,7 +586,7 @@ class Publishing(unittest.TestCase):
         work = self.work()
         publish.prepare(self.store, self.key, version, work)
         self.pack(work, version)
-        publish.merge(version, 10, SPEAKS, work)
+        publish.merge(version, 10, floors(), work)
         self.sign(work)
         return work
 
