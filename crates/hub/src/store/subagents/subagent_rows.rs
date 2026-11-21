@@ -1,11 +1,18 @@
-use super::super::{Store, StoreError, current_rev, from_text, json_at, lock, rev_of, text_of};
+use super::super::{
+    ByColumn, Column, Columns, Store, StoreError, columns, current_rev, json_at, lock, rev_of, text_at, text_of,
+};
 use protocol::event::SessionEvent;
 use protocol::model::{ModelName, Rev, SessionId, Subagent, SubagentId, SubagentStatus, TouchedSubagents};
 use rusqlite::types::ValueRef;
 use rusqlite::{Connection, OptionalExtension, Row, ToSql, params};
 
-const SUBAGENT_COLUMNS: &str = "session_id, call, kind, description, prompt, in_background, status, started_at_ms, \
-     ended_at_ms, calls, report, rev, model, context_tokens, id, lately";
+columns! {
+    /// The columns every read of a subagent's row takes, as [`subagent_from_row`] reads them.
+    struct SubagentColumns {
+        session_id, call, kind, description, prompt, in_background, status, started_at_ms, ended_at_ms, calls, report,
+        rev, model, context_tokens, id, lately,
+    }
+}
 
 impl Store {
     /// The session's subagents, oldest first, read in one transaction with the revision they're as of.
@@ -14,7 +21,8 @@ impl Store {
         let tx = conn.transaction()?;
         let subagents = tx
             .prepare_cached(&format!(
-                "SELECT {SUBAGENT_COLUMNS} FROM subagents WHERE session_id = ? ORDER BY started_at_ms, rowid"
+                "SELECT {} FROM subagents WHERE session_id = ? ORDER BY started_at_ms, rowid",
+                SubagentColumns::LIST
             ))?
             .query_map([session_id.as_str()], subagent_from_row)?
             .collect::<rusqlite::Result<Vec<_>>>()?;
@@ -25,7 +33,7 @@ impl Store {
 
     pub fn get_subagent(&self, session_id: &SessionId, subagent: &SubagentId) -> Result<Option<Subagent>, StoreError> {
         let conn = lock(&self.reader);
-        let sql = format!("SELECT {SUBAGENT_COLUMNS} FROM subagents WHERE session_id = ? AND id = ?");
+        let sql = format!("SELECT {} FROM subagents WHERE session_id = ? AND id = ?", SubagentColumns::LIST);
         Ok(conn.query_row(&sql, params![session_id.as_str(), subagent.as_str()], subagent_from_row).optional()?)
     }
 
@@ -75,9 +83,12 @@ fn touched_records(
     touched: &TouchedSubagents,
 ) -> Result<Vec<Subagent>, StoreError> {
     let read = |which: &str, values: &[&dyn ToSql]| -> rusqlite::Result<Vec<Subagent>> {
-        tx.prepare_cached(&format!("SELECT {SUBAGENT_COLUMNS} FROM subagents WHERE session_id = ?1 AND {which}"))?
-            .query_map(values, subagent_from_row)?
-            .collect()
+        tx.prepare_cached(&format!(
+            "SELECT {} FROM subagents WHERE session_id = ?1 AND {which}",
+            SubagentColumns::LIST
+        ))?
+        .query_map(values, subagent_from_row)?
+        .collect()
     };
     let session = session.as_str();
     Ok(match touched {
@@ -163,25 +174,26 @@ fn lately_column(subagent: &Subagent) -> Result<Option<String>, StoreError> {
 }
 
 fn subagent_from_row(row: &Row<'_>) -> rusqlite::Result<Subagent> {
+    let c = SubagentColumns::at(0);
     Ok(Subagent {
-        session_id: row.get::<_, String>(0)?.into(),
-        id: Some(row.get::<_, String>(14)?.into()),
-        call: row.get::<_, String>(1)?.into(),
-        kind: text_at(row, 2)?,
-        description: text_at(row, 3)?,
-        prompt: text_at(row, 4)?,
-        in_background: row.get(5)?,
+        session_id: row.at::<String>(c.session_id)?.into(),
+        id: Some(row.at::<String>(c.id)?.into()),
+        call: row.at::<String>(c.call)?.into(),
+        kind: repaired_text_at(row, c.kind)?,
+        description: repaired_text_at(row, c.description)?,
+        prompt: repaired_text_at(row, c.prompt)?,
+        in_background: row.at(c.in_background)?,
         // Written only by this hub, from a name that named a model. One that doesn't is none it knows of.
-        model: row.get::<_, Option<String>>(12)?.and_then(|model| ModelName::try_from(model).ok()),
-        status: from_text(row.get(6)?)?,
-        started_at_ms: row.get(7)?,
-        ended_at_ms: row.get(8)?,
-        context_tokens: row.get::<_, Option<i64>>(13)?.map(i64::cast_unsigned),
-        calls: row.get(9)?,
-        report: text_at(row, 10)?,
-        rev: rev_of(row, 11)?,
+        model: row.at::<Option<String>>(c.model)?.and_then(|model| ModelName::try_from(model).ok()),
+        status: text_at(row, c.status)?,
+        started_at_ms: row.at(c.started_at_ms)?,
+        ended_at_ms: row.at(c.ended_at_ms)?,
+        context_tokens: row.at::<Option<i64>>(c.context_tokens)?.map(i64::cast_unsigned),
+        calls: row.at(c.calls)?,
+        report: repaired_text_at(row, c.report)?,
+        rev: rev_of(row, c.rev)?,
         // Written only by this hub, as JSON. What it can't read is nothing it knows of.
-        lately: json_at(row, 15)?,
+        lately: json_at(row, c.lately)?,
     })
 }
 
@@ -189,8 +201,8 @@ fn subagent_from_row(row: &Row<'_>) -> rusqlite::Result<Subagent> {
 /// from the CLI's own lines, where half of a surrogate pair, which JavaScript writes, comes out of SQLite as three
 /// bytes that aren't UTF-8. The adapter repairs a line before reading it, making each half U+FFFD, and so does this,
 /// so a record can't fail its session's list.
-fn text_at(row: &Row<'_>, column: usize) -> rusqlite::Result<Option<String>> {
-    let ValueRef::Text(mut bytes) = row.get_ref(column)? else { return row.get(column) };
+fn repaired_text_at(row: &Row<'_>, column: Column) -> rusqlite::Result<Option<String>> {
+    let ValueRef::Text(mut bytes) = row.borrowed_at(column)? else { return row.at(column) };
     let mut text = String::with_capacity(bytes.len());
     loop {
         match std::str::from_utf8(bytes) {

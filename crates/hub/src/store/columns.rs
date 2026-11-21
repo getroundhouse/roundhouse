@@ -38,9 +38,7 @@ pub(super) trait Columns {
     const COUNT: usize;
 }
 
-/// Where a reader finds the value it reads: a declared [`Column`], or a bare number. A number is for a query that
-/// reads one value, whose read sits beside it with no order to keep, and for `subagents`' rows, until #2241 declares
-/// them.
+/// Where a reader finds the value it reads: a declared [`Column`], or [`OneValue`].
 pub(super) trait At: Copy {
     fn index(self) -> usize;
     /// The error for what this column holds that its reader can't read.
@@ -57,13 +55,18 @@ impl At for Column {
     }
 }
 
-impl At for usize {
+/// The one value a query reads, such as `SELECT rev FROM accounts WHERE id = ?`, whose read sits beside it with no
+/// order to keep, so it has no declaration. A reader takes no bare number, so a query of several values declares them.
+#[derive(Clone, Copy, Debug)]
+pub(super) struct OneValue;
+
+impl At for OneValue {
     fn index(self) -> usize {
-        self
+        0
     }
 
     fn unreadable(self, kind: Type, error: Box<dyn Error + Send + Sync>) -> rusqlite::Error {
-        rusqlite::Error::FromSqlConversionFailure(self, kind, error)
+        rusqlite::Error::FromSqlConversionFailure(0, kind, error)
     }
 }
 
