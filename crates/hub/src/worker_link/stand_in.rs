@@ -52,7 +52,7 @@ impl WorkerLink {
         self
     }
 
-    /// The same, for a worker that chose protocol 4, the version before this one.
+    /// The same, for a worker that chose protocol 5, the version before this one.
     pub(crate) fn answering_previous(
         answer: impl Fn(WorkerRequest) -> Option<Result<WorkerResponse, ApiError>> + Send + 'static,
     ) -> Arc<WorkerLink> {

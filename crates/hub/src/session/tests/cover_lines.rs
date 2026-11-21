@@ -37,7 +37,7 @@ fn claiming_cover_lines(dir: &std::path::Path) -> (Arc<Hub>, Arc<LiveSession>, u
 
 /// The run `by` reports `report`, and the line the tail has once the session has dealt with it.
 async fn reported(live: &LiveSession, by: RunId, report: Report) -> Option<(Option<RunId>, CoverLine)> {
-    live.send_item(Item::Report { run: by, report, seq: None, held_to_claims: true }).await;
+    live.send_item(Item::Report { run: by, report, seq: None }).await;
     said(live).await
 }
 

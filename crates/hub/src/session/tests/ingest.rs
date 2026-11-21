@@ -58,10 +58,9 @@ fn the_hub_allows_only_a_tools_use_asked_about_with_full_access_and_only_when_se
     }
 }
 
-/// A report is dropped unless its run claims what it needs, but for one a worker of protocol 4 sent as a frame of its
-/// own, from before a run had to claim what a report needs.
+/// A report is dropped unless its run claims what it needs.
 #[tokio::test]
-async fn a_report_its_run_doesnt_claim_is_dropped_but_from_a_worker_of_protocol_4() {
+async fn a_report_its_run_doesnt_claim_is_dropped() {
     use crate::hub::tests::{carried_on, flushed, hub_in, stand_in_worker};
     use protocol::capability::{Capabilities, Claimed, Report};
     use protocol::model::RunCapabilities;
@@ -72,20 +71,19 @@ async fn a_report_its_run_doesnt_claim_is_dropped_but_from_a_worker_of_protocol_
     let run = RunId::new(2);
     let live = carried_on(&hub, &link, run);
     let held = |claims: Capabilities| live.state.lock().capabilities = Some(RunCapabilities::new(run, claims));
-    let reported = async |used_tokens, held_to_claims| {
+    let reported = async |used_tokens| {
         let report = Report::Context { context: context(used_tokens) };
-        live.send_item(Item::Report { run, report, seq: None, held_to_claims }).await;
+        live.send_item(Item::Report { run, report, seq: None }).await;
         flushed(&live).await;
         live.state.lock().context.as_ref().map(|context| context.used_tokens)
     };
 
     held(Capabilities::default());
-    assert_eq!(reported(1, true).await, None, "a run that doesn't claim it");
-    assert_eq!(reported(2, false).await, Some(2), "from a worker of protocol 4");
+    assert_eq!(reported(1).await, None, "a run that doesn't claim it");
     let mut usage = Capabilities::default();
     usage.context.usage = Some(Claimed {});
     held(usage);
-    assert_eq!(reported(3, true).await, Some(3), "a run that claims it");
+    assert_eq!(reported(3).await, Some(3), "a run that claims it");
 }
 
 /// The newest to-do list the run reports is kept on the session's record, which a hub that starts again reads, and the
@@ -110,7 +108,7 @@ async fn the_agents_to_do_list_is_kept_on_the_sessions_record_and_only_a_change_
         TodoList { items: vec![todo], note: Some("One step".into()) }
     };
     let recorded = async |said: TodoList| {
-        live.send_item(Item::Report { run, report: Report::Todos(said), seq: None, held_to_claims: true }).await;
+        live.send_item(Item::Report { run, report: Report::Todos(said), seq: None }).await;
         flushed(&live).await;
         let id = live.id.clone();
         hub.blocking(move |store| store.get_session(&id)).await.unwrap().session

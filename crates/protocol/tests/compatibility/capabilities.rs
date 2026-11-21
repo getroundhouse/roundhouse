@@ -78,9 +78,9 @@ fn current_calls_keep_typed_input_once_and_old_calls_dont_fail_their_event() {
     assert_eq!(unknown, ContentBlock::Unknown);
 }
 
-/// Each control a run of this build claims, as a hub sends it to a worker of protocol 4, spelled out, since a worker of
-/// this build has to read what any later hub sends it, and these types are what a hub sends it until the protocol
-/// breaks.
+/// Each control a run of this build claims, as a hub sends it to a worker of this protocol, spelled out, since a
+/// worker of this build has to read what any later hub sends it, and these types are what a hub sends it until the
+/// protocol breaks.
 #[test]
 fn every_control_a_run_of_this_build_claims_keeps_its_form() {
     use protocol::capability::approvals::{AfterDenial, Decision, Remember};

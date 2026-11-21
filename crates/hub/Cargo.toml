@@ -23,7 +23,6 @@ fetching.workspace = true
 # Reads the archive of the release an update goes to.
 flate2.workspace = true
 github.workspace = true
-memchr.workspace = true
 parking_lot.workspace = true
 private-files.workspace = true
 process.workspace = true

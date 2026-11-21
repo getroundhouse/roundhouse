@@ -24,7 +24,7 @@ pub(crate) async fn run_ingest(session: Arc<LiveSession>, mut items: mpsc::Recei
             Item::Delta { run, delta } => session.apply_delta(run, delta),
             Item::Tail { run, tail } => session.take_tail(run, tail),
             Item::Retrying { run, retrying } => session.retrying(run, retrying),
-            Item::Report { run, report, held_to_claims, .. } => session.take_report(run, report, held_to_claims).await,
+            Item::Report { run, report, .. } => session.take_report(run, report).await,
             Item::AgentLost { link, reason } => session.agent_lost(link, reason).await,
             Item::PickupDue { wait } => session.no_pickup(wait).await,
             Item::Flush(done) => {

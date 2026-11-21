@@ -105,7 +105,7 @@ fn a_branch_keeps_its_form_in_what_a_hub_and_its_worker_send() {
     });
     keeps_its_form(
         WorkerCall { id: 1, request: prepare },
-        r#"{"id":1,"request":{"method":"prepare_workspace","repo_name":"r","repo_path":"/r","source":{"kind":"checkout","path":"/r"},"workspace_name":"aspen","branch":"aspen","base_ref":"origin/main"}}"#,
+        r#"{"id":1,"request":{"method":"prepare_workspace","repo_name":"r","source":{"kind":"checkout","path":"/r"},"workspace_name":"aspen","branch":"aspen","base_ref":"origin/main"}}"#,
     );
     let restore = WorkerRequest::RestoreWorkspace(RestoreWorkspace {
         source: RepoSource::Checkout { path: "/r".into() },
@@ -115,7 +115,7 @@ fn a_branch_keeps_its_form_in_what_a_hub_and_its_worker_send() {
     });
     keeps_its_form(
         WorkerCall { id: 2, request: restore },
-        r#"{"id":2,"request":{"method":"restore_workspace","repo_path":"/r","source":{"kind":"checkout","path":"/r"},"path":"/w","branch":"birch"}}"#,
+        r#"{"id":2,"request":{"method":"restore_workspace","source":{"kind":"checkout","path":"/r"},"path":"/w","branch":"birch"}}"#,
     );
 
     keeps_its_form(

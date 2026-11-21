@@ -1,5 +1,5 @@
-//! What a worker makes a repository's worktrees from, which every request about a workspace's worktrees names, and the
-//! form a request writes it in, so a worker from before it reads what it can of it.
+//! What a worker makes a repository's worktrees from, which every request about a workspace's worktrees names, as its
+//! `source`.
 
 use serde::{Deserialize, Serialize};
 
@@ -24,43 +24,5 @@ impl RepoSource {
             Self::Checkout { path } => Some(path),
             Self::Clone { .. } => None,
         }
-    }
-}
-
-/// How a request writes its [`RepoSource`]: as `source`, and for a checkout, beside the `repo_path` that a worker from
-/// before `source` reads, so such a worker goes on making worktrees from it. A clone is written without `repo_path`,
-/// so such a worker can't read the request and refuses it, rather than make a worktree of `""`. Read from `source`, or,
-/// from a hub from before `source`, as after a rollback, from `repo_path` alone. `repo_path` goes with the next break of
-/// the worker protocol, as `docs/principles/protocol.md` says.
-pub(super) mod beside_repo_path {
-    use serde::de::Error as _;
-    use serde::{Deserialize, Deserializer, Serialize, Serializer};
-
-    use super::RepoSource;
-
-    #[derive(Serialize)]
-    struct Written<'a> {
-        #[serde(skip_serializing_if = "Option::is_none")]
-        repo_path: Option<&'a str>,
-        source: &'a RepoSource,
-    }
-
-    #[derive(Deserialize)]
-    struct Read {
-        #[serde(default)]
-        repo_path: Option<String>,
-        #[serde(default)]
-        source: Option<RepoSource>,
-    }
-
-    pub(in super::super) fn serialize<S: Serializer>(source: &RepoSource, serializer: S) -> Result<S::Ok, S::Error> {
-        Written { repo_path: source.checkout(), source }.serialize(serializer)
-    }
-
-    pub(in super::super) fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<RepoSource, D::Error> {
-        let Read { repo_path, source } = Read::deserialize(deserializer)?;
-        source
-            .or_else(|| repo_path.map(|path| RepoSource::Checkout { path }))
-            .ok_or_else(|| D::Error::missing_field("source"))
     }
 }

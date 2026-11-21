@@ -72,7 +72,7 @@ fn every_request_about_the_workspace_keeps_its_form() {
     let names = worker::NamesGitHas { repo_name: "r".into(), source: checkout() };
     asked(
         WorkerRequest::NamesGitHas(names),
-        r#"{"method":"names_git_has","repo_name":"r","repo_path":"/r","source":{"kind":"checkout","path":"/r"}}"#,
+        r#"{"method":"names_git_has","repo_name":"r","source":{"kind":"checkout","path":"/r"}}"#,
     );
     let prepare = WorkerRequest::PrepareWorkspace(worker::PrepareWorkspace {
         repo_name: "r".into(),
@@ -83,34 +83,37 @@ fn every_request_about_the_workspace_keeps_its_form() {
     });
     asked(
         prepare,
-        r#"{"method":"prepare_workspace","repo_name":"r","repo_path":"/r","source":{"kind":"checkout","path":"/r"},"workspace_name":"aspen","branch":"aspen","base_ref":null}"#,
+        r#"{"method":"prepare_workspace","repo_name":"r","source":{"kind":"checkout","path":"/r"},"workspace_name":"aspen","branch":"aspen","base_ref":null}"#,
     );
     let restore =
         worker::RestoreWorkspace { source: checkout(), path: "/w".into(), branch: "birch".into(), archived: None };
     asked(
         WorkerRequest::RestoreWorkspace(restore),
-        r#"{"method":"restore_workspace","repo_path":"/r","source":{"kind":"checkout","path":"/r"},"path":"/w","branch":"birch"}"#,
+        r#"{"method":"restore_workspace","source":{"kind":"checkout","path":"/r"},"path":"/w","branch":"birch"}"#,
     );
     let remove = worker::RemoveWorkspace { source: checkout(), path: "/w".into(), force: true, own: None };
     let another = worker::RemoveWorkspace { path: "/c".into(), own: Some("/w".into()), ..remove.clone() };
     asked(
         WorkerRequest::RemoveWorkspace(remove),
-        r#"{"method":"remove_workspace","repo_path":"/r","source":{"kind":"checkout","path":"/r"},"path":"/w","force":true}"#,
+        r#"{"method":"remove_workspace","source":{"kind":"checkout","path":"/r"},"path":"/w","force":true}"#,
     );
     asked(
         WorkerRequest::RemoveWorkspace(another),
-        r#"{"method":"remove_workspace","repo_path":"/r","source":{"kind":"checkout","path":"/r"},"path":"/c","force":true,"own":"/w"}"#,
+        r#"{"method":"remove_workspace","source":{"kind":"checkout","path":"/r"},"path":"/c","force":true,"own":"/w"}"#,
     );
     let env = vec![("PORT".to_string(), "55000".to_string())];
     asked(
         WorkerRequest::SetupWorkspace(worker::SetupWorkspace { source: checkout(), path: "/w".into(), env }),
-        r#"{"method":"setup_workspace","repo_path":"/r","source":{"kind":"checkout","path":"/r"},"path":"/w","env":[["PORT","55000"]]}"#,
+        r#"{"method":"setup_workspace","source":{"kind":"checkout","path":"/r"},"path":"/w","env":[["PORT","55000"]]}"#,
     );
     asked(WorkerRequest::CancelSetup, r#"{"method":"cancel_setup"}"#);
     asked(WorkerRequest::SetupLog(worker::SetupLog { path: "/w".into() }), r#"{"method":"setup_log","path":"/w"}"#);
+    // Read without the path too, since only a worker of protocol 5 needs it, so a hub of the next break sends none.
+    let pathless = serde_json::from_str::<WorkerRequest>(r#"{"method":"setup_log"}"#).unwrap();
+    assert_eq!(pathless, WorkerRequest::SetupLog(worker::SetupLog { path: String::new() }));
     asked(
         WorkerRequest::ArchiveScript(worker::ArchiveScript { source: checkout(), path: "/w".into(), env: vec![] }),
-        r#"{"method":"archive_script","repo_path":"/r","source":{"kind":"checkout","path":"/r"},"path":"/w","env":[]}"#,
+        r#"{"method":"archive_script","source":{"kind":"checkout","path":"/r"},"path":"/w","env":[]}"#,
     );
 }
 
@@ -120,11 +123,11 @@ fn ephemeral_archive_and_restore_requests_keep_their_form() {
     let capture_forced = worker::CaptureArchive { source: checkout(), force: true };
     asked(
         WorkerRequest::CaptureArchive(capture),
-        r#"{"method":"capture_archive","repo_path":"/r","source":{"kind":"checkout","path":"/r"}}"#,
+        r#"{"method":"capture_archive","source":{"kind":"checkout","path":"/r"}}"#,
     );
     asked(
         WorkerRequest::CaptureArchive(capture_forced),
-        r#"{"method":"capture_archive","repo_path":"/r","source":{"kind":"checkout","path":"/r"},"force":true}"#,
+        r#"{"method":"capture_archive","source":{"kind":"checkout","path":"/r"},"force":true}"#,
     );
     let archived = worker::ArchivedGit {
         branches: vec![worker::ArchivedBranch { name: "birch".into(), commit: "abc123".into() }],
@@ -139,7 +142,7 @@ fn ephemeral_archive_and_restore_requests_keep_their_form() {
     };
     asked(
         WorkerRequest::RestoreWorkspace(restore),
-        r#"{"method":"restore_workspace","repo_path":"/r","source":{"kind":"checkout","path":"/r"},"path":"/w","branch":"birch","archived":{"branches":[{"name":"birch","commit":"abc123"}],"bundle":"AAAA"}}"#,
+        r#"{"method":"restore_workspace","source":{"kind":"checkout","path":"/r"},"path":"/w","branch":"birch","archived":{"branches":[{"name":"birch","commit":"abc123"}],"bundle":"AAAA"}}"#,
     );
 }
 

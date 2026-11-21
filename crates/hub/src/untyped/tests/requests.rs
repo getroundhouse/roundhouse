@@ -6,10 +6,8 @@ use protocol::capability::asking::{Choose, QuestionAnswer, TypedAnswer};
 use protocol::capability::calls::call::{Command, Runs};
 use protocol::capability::calls::{Call, CallKind};
 use protocol::fixtures::{allow_once, approve_plan, deny, question};
-use protocol::worker::WorkerFrame;
 use serde_json::{Value, json};
 
-use super::super::Typing;
 use super::super::{type_request, type_resolution};
 
 fn bash(command: &str, description: Option<&str>) -> Call {
@@ -201,25 +199,4 @@ fn answers_are_read_by_position_or_by_each_questions_text_and_matched_to_its_opt
     );
     let none_answered = answered(vec![QuestionAnswer::default(); 3]);
     assert_eq!(decided(resolved("denied"), Some(&asks), None), none_answered, "skipped, as a skip says it now");
-}
-
-/// A worker of a build from before requests were typed sends one untyped, and an agent's adapter closed one only by
-/// cancelling it.
-#[test]
-fn a_workers_frame_reads_with_its_request_and_what_closed_it_typed() {
-    let frame = |body: Value| json!({"frame":"agent_event","session_id":"s","run":1,"body":body}).to_string();
-    let read = |body: Value| {
-        let WorkerFrame::AgentEvent { body, .. } =
-            Typing::default().frame(frame(body).as_bytes(), protocol::model::AgentKind::Claude).unwrap()
-        else {
-            panic!()
-        };
-        serde_json::to_value(body).unwrap()
-    };
-
-    let asked = read(claudes("Bash", json!({"command":"ls"}), None));
-    let closed = read(resolved("cancelled"));
-
-    assert_eq!(asked["request"]["asks"], json!({"asks":"call","call":bash("ls", None)}));
-    assert_eq!(closed, json!({"type":"approval_resolved","approval_id":"a"}), "decided by nobody");
 }

@@ -42,7 +42,7 @@ use worktree::{
 
 /// The worker protocol's version, apart from the client protocol's, so a break in one doesn't break the other. It
 /// changes only for a real break, as `docs/principles/protocol.md` says.
-pub const WORKER_PROTOCOL_VERSION: u32 = 5;
+pub const WORKER_PROTOCOL_VERSION: u32 = 6;
 
 /// The versions of this protocol a hub of this build speaks: its own, and the one before it, for a worker of an older
 /// build, as `docs/principles/protocol.md` says. The update feed says it of each release, so an app can take one whose

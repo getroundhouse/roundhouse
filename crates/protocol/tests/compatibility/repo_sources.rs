@@ -1,6 +1,6 @@
-//! What a hub tells a worker to make a workspace's worktrees from, in each request that names it: a checkout, as every
-//! worker reads it, or an address to clone, which a worker from before refuses. The checkout's form, beside the rest
-//! of each request, is spelled out with the rest in `worker_calls.rs`.
+//! What a hub tells a worker to make a workspace's worktrees from, in each request that names it, as its `source`: a
+//! checkout or an address to clone, which a worker of protocol 5 reads too. The checkout's form, beside the rest of
+//! each request, is spelled out with the rest in `worker_calls.rs`.
 
 use protocol::frame;
 use protocol::model::BranchName;
@@ -70,64 +70,52 @@ fn after_source(method: &str) -> &'static str {
     }
 }
 
-/// A clone is written as its address alone, without the `repo_path` that a worker from before reads, and read back as
-/// it was written.
+/// Each source is written as `source` alone, and read back as it was written.
 #[test]
-fn every_request_names_a_clone_by_its_address_alone() {
-    let clone = RepoSource::Clone { url: URL.into() };
+fn every_request_names_its_source_alone() {
+    let sources = [
+        (RepoSource::Checkout { path: "/r".into() }, r#"{"kind":"checkout","path":"/r"}"#.to_string()),
+        (RepoSource::Clone { url: URL.into() }, format!(r#"{{"kind":"clone","url":"{URL}"}}"#)),
+    ];
 
-    for (request, method, before) in every_request(&clone) {
-        let form = format!(
-            r#"{{"method":"{method}",{before}"source":{{"kind":"clone","url":"{URL}"}}{}}}"#,
-            after_source(method)
-        );
-        asked(request, &form);
+    for (source, written) in sources {
+        for (request, method, before) in every_request(&source) {
+            asked(request, &format!(r#"{{"method":"{method}",{before}"source":{written}{}}}"#, after_source(method)));
+        }
     }
 }
 
-/// A hub from before sources, as after a rollback, names a checkout as `repo_path` alone, which reads as one.
-#[test]
-fn a_checkout_named_as_a_hub_from_before_sources_names_it_reads_as_one() {
-    let checkout = RepoSource::Checkout { path: "/r".into() };
-
-    for (request, method, before) in every_request(&checkout) {
-        let form =
-            format!(r#"{{"id":7,"request":{{"method":"{method}",{before}"repo_path":"/r"{}}}}}"#, after_source(method));
-        let call = frame::read_call::<WorkerRequest>(form.as_bytes()).unwrap();
-        assert_eq!(call.request.unwrap(), request, "{form}");
-    }
-}
-
-/// What a worker from before sources reads of a request, which is every field it has, and a `repo_path` it needs.
+/// What a worker of protocol 5 reads of a request's source: `source`, or `repo_path` where that's missing, as a hub
+/// from before sources sent it.
 #[derive(Deserialize)]
-struct BeforeSources {
-    repo_path: String,
+struct Protocol5 {
+    #[serde(default)]
+    repo_path: Option<String>,
+    #[serde(default)]
+    source: Option<RepoSource>,
 }
 
-/// A worker from before sources reads a checkout's `repo_path` as it always has, and can't read a request to clone at
-/// all, so it refuses it, rather than make a worktree of a checkout that isn't there.
+/// A worker of protocol 5 reads each request's source from `source`, so it needs no `repo_path` beside it.
 #[test]
-fn a_worker_from_before_sources_reads_a_checkout_and_refuses_a_clone() {
-    let written = |source: &RepoSource| {
-        every_request(source).into_iter().map(|(request, ..)| serde_json::to_string(&request).unwrap()).collect()
-    };
-    let checkouts: Vec<String> = written(&RepoSource::Checkout { path: "/r".into() });
-    let clones: Vec<String> = written(&RepoSource::Clone { url: URL.into() });
+fn a_worker_of_protocol_5_reads_each_requests_source() {
+    for source in [RepoSource::Checkout { path: "/r".into() }, RepoSource::Clone { url: URL.into() }] {
+        for (request, ..) in every_request(&source) {
+            let form = serde_json::to_string(&request).unwrap();
 
-    for form in checkouts {
-        assert_eq!(serde_json::from_str::<BeforeSources>(&form).unwrap().repo_path, "/r", "{form}");
-    }
-    for form in clones {
-        assert!(serde_json::from_str::<BeforeSources>(&form).is_err(), "{form}");
+            let Protocol5 { repo_path, source: read } = serde_json::from_str(&form).unwrap();
+
+            assert_eq!((repo_path, read.as_ref()), (None, Some(&source)), "{form}");
+        }
     }
 }
 
-/// A source of a kind this build doesn't know makes the request unreadable, so the worker refuses it, even with a
-/// `repo_path` beside it, rather than make the worktree from that checkout. So does a request that names no source.
+/// A source of a kind this build doesn't know makes the request unreadable, so the worker refuses it, rather than make
+/// the worktree some other way. So does a request that names no source, as a hub from before sources named only its
+/// checkout's `repo_path`.
 #[test]
 fn a_source_of_a_kind_this_build_doesnt_know_or_none_at_all_isnt_read() {
-    let newer = br#"{"id":7,"request":{"method":"prepare_workspace","repo_name":"r","repo_path":"/r","source":{"kind":"mirror","url":"x"},"workspace_name":"b","branch":"b","base_ref":null}}"#;
-    let none = br#"{"id":8,"request":{"method":"restore_workspace","path":"/w","branch":"b"}}"#;
+    let newer = br#"{"id":7,"request":{"method":"prepare_workspace","repo_name":"r","source":{"kind":"mirror","url":"x"},"workspace_name":"b","branch":"b","base_ref":null}}"#;
+    let none = br#"{"id":8,"request":{"method":"restore_workspace","repo_path":"/r","path":"/w","branch":"b"}}"#;
 
     for (line, id) in [(&newer[..], 7), (&none[..], 8)] {
         let call = frame::read_call::<WorkerRequest>(line).unwrap();

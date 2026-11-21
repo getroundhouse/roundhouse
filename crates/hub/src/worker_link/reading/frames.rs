@@ -2,10 +2,9 @@ use super::super::WorkerLink;
 use crate::frames::FrameReader;
 use crate::hub::Hub;
 use crate::session::Item;
-use crate::untyped::Typing;
 use protocol::client::{ApiError, ErrorCode, Outcome, error_chain};
 use protocol::frame;
-use protocol::model::{AgentKind, InstanceId, RunId, SessionId, WorkspaceId};
+use protocol::model::{InstanceId, RunId, SessionId, WorkspaceId};
 use protocol::worker::{AskAnswer, AskId, WorkerAsk, WorkerFrame};
 use providers::Provider;
 use std::collections::HashMap;
@@ -50,8 +49,6 @@ pub(in super::super) async fn read_frames(
     reader: Box<dyn tokio::io::AsyncRead + Send + Unpin>,
 ) {
     let mut incoming = FrameReader::new(reader);
-    // What a worker of protocol 4 sends of its agents' calls, which may be untyped.
-    let mut untyped = Typing::default();
     loop {
         let bytes = match incoming.next().await {
             Ok(Some(bytes)) => bytes,
@@ -61,8 +58,7 @@ pub(in super::super) async fn read_frames(
                 break;
             }
         };
-        let kind_of = async |session| hub.live_session(&session).await.map_or(AgentKind::Unknown, |s| s.agent());
-        let parsed = match link.read_frame(bytes, &mut untyped, kind_of).await {
+        let parsed = match frame::decode::<WorkerFrame>(bytes) {
             Ok(parsed) => parsed,
             Err(e) => {
                 // A reply from a newer worker, as after a rollback, ends its call rather than leaving it to wait until
@@ -130,10 +126,7 @@ pub(in super::super) async fn route(hub: &Arc<Hub>, link: &WorkerLink, frame: Wo
         }
         WorkerFrame::AgentDelta { session_id, run, delta } => (session_id, Item::Delta { run, delta }, None),
         WorkerFrame::AgentReport { session_id, run, report, seq } => {
-            // A worker of protocol 4 sent each of its reports as a frame of its own, from before a run had to claim
-            // what a report needs, as Claude's didn't claim the cache.
-            let held_to_claims = !link.speaks_previous();
-            (session_id, Item::Report { run, report, seq, held_to_claims }, seq)
+            (session_id, Item::Report { run, report, seq }, seq)
         }
         WorkerFrame::AgentTail { session_id, run, tail } => (session_id, Item::Tail { run, tail }, None),
         WorkerFrame::AgentRetrying { session_id, run, retrying } => {
