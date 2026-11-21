@@ -66,6 +66,12 @@ impl<F> Prompt<F> {
     pub fn with_files<G>(self, files: Vec<G>) -> Prompt<G> {
         Prompt { text: self.text, files, spoken: self.spoken }
     }
+
+    /// A copy of its words, said or typed as these were, carrying `files`, such as the IDs its files were added
+    /// under, leaving this as it is.
+    pub fn carrying_too<G>(&self, files: Vec<G>) -> Prompt<G> {
+        Prompt { text: self.text.clone(), files, spoken: self.spoken }
+    }
 }
 
 /// Saying nothing and carrying nothing, whatever its files would be.

@@ -13,6 +13,7 @@ mod github_account;
 mod github_app;
 mod introduction;
 mod lines;
+mod live_log;
 mod open_file;
 mod open_session;
 mod open_terminal;
@@ -35,6 +36,7 @@ pub use github::{GithubFeed, GithubView};
 pub use github_account::new_github_sign_in_id;
 pub use introduction::Introduction;
 pub(crate) use lines::Place;
+pub use live_log::{LiveItem, LiveLog};
 pub use open_file::{OpenFile, Opening};
 pub use open_session::{OpenSession, Search, Searched, Stretch, View};
 pub use open_terminal::{OpenTerminal, Pointer, SelectBy};
@@ -55,6 +57,7 @@ use std::path::Path;
 mod tests;
 
 mod connection;
+mod frames;
 #[cfg(test)]
 use connection::SUBSCRIPTION_CAPACITY;
 pub use connection::hub_is_missing;

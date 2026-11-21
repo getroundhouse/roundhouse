@@ -174,3 +174,18 @@ fn a_write_that_fails_ends_the_connection() {
     assert!(matches!(typed, Err(ClientError::Disconnected)), "{typed:?}");
     assert!(client.is_disconnected());
 }
+
+/// A connection knows the device its hello named, which a chat's conversation is on when its record names it, and a
+/// client on no device has none.
+#[test]
+fn a_connection_knows_the_device_its_hello_named() {
+    let dir = tempfile::tempdir().unwrap();
+    let (on, off) = (dir.path().join("on.sock"), dir.path().join("off.sock"));
+    stand_in_hub::listen(&on, |_| Does::Nothing);
+    stand_in_hub::listen(&off, |_| Does::Nothing);
+    let device = protocol::model::ClientDevice { id: "mac".into(), name: "Mac Studio".into() };
+
+    let client = Client::connect(&on, Introduction::on("desktop", device)).unwrap();
+    assert_eq!(client.device().map(protocol::model::DeviceId::as_str), Some("mac"));
+    assert_eq!(Client::connect(&off, "cli").unwrap().device(), None);
+}

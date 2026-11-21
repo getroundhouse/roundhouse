@@ -43,6 +43,10 @@ impl Client {
 
     pub(super) fn hello_until(&self, introduction: Introduction, deadline: Option<Instant>) -> Result<()> {
         let Introduction { client, device } = introduction;
+        // Over the network, the hub takes it to be the device it paired as, which is set already.
+        if let Some(device) = &device {
+            let _ = self.inner.device.set(device.id.clone());
+        }
         let HelloReply { protocol_version, hub_version } = self.call_until(
             Hello {
                 protocol_version: CLIENT_PROTOCOL_VERSION,
