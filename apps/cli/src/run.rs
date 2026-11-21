@@ -8,7 +8,7 @@ use local_hub::Daemon;
 use protocol::capability::approvals::Decision;
 use protocol::client::HubStart;
 use protocol::event::SessionEvent;
-use protocol::model::{ApprovalId, Repo, RepoOrigin, Session};
+use protocol::model::{ApprovalId, HubUpdate, Repo, RepoOrigin, Session};
 use protocol::paths::Paths;
 use protocol::prompt::Prompt;
 use protocol::versions::Versions;
@@ -151,6 +151,19 @@ enum Admin {
 }
 
 /// Through [`HubAdmin`], so these work on a hub of any version.
+/// What a hub installed as a service last found in the update feed, as `hub status` says it.
+fn updates_line(update: Option<&HubUpdate>) -> String {
+    let Some(update) = update else { return "it hasn't read the update feed yet".to_owned() };
+    let found = match &update.version {
+        Some(version) => format!("it would update to {version}"),
+        None => "no newer release it can update to".to_owned(),
+    };
+    match &update.problem {
+        Some(problem) => format!("{found}, though its last read of the update feed failed: {problem}"),
+        None => found,
+    }
+}
+
 fn admin_command(paths: &Paths, command: Admin) -> anyhow::Result<()> {
     let hub = match HubAdmin::connect(&paths.socket) {
         Ok(hub) => hub,
@@ -191,6 +204,10 @@ fn admin_command(paths: &Paths, command: Admin) -> anyhow::Result<()> {
                     "this client speaks protocol {}, so it can only stop that hub",
                     protocol::client::CLIENT_PROTOCOL_VERSION
                 );
+            } else if status.start() == HubStart::AsService {
+                // The hub is running, so this connects to it rather than starting one.
+                let records = connect(paths)?.records_list()?;
+                println!("{}", updates_line(records.hub_update.as_ref()));
             }
         }
         Admin::Stop => {
@@ -222,7 +239,9 @@ pub(crate) fn short(id: &str) -> &str {
 
 #[cfg(test)]
 mod tests {
-    use super::stopped;
+    use protocol::model::{HubUpdate, Rev};
+
+    use super::{stopped, updates_line};
 
     #[test]
     fn stopping_the_hub_says_how_many_agents_it_stopped() {
@@ -233,5 +252,23 @@ mod tests {
             stopped(1)
         );
         assert!(stopped(3).starts_with("hub stopped, with the 3 agents at work on it"), "{}", stopped(3));
+    }
+
+    #[test]
+    fn a_service_s_status_says_what_it_found_in_the_update_feed() {
+        let found = |version: Option<&str>, problem: Option<&str>| HubUpdate {
+            version: version.map(str::to_owned),
+            looked_at_ms: 1,
+            problem: problem.map(str::to_owned),
+            rev: Rev::default(),
+        };
+
+        assert_eq!(updates_line(None), "it hasn't read the update feed yet");
+        assert_eq!(updates_line(Some(&found(Some("0.1.9"), None))), "it would update to 0.1.9");
+        assert_eq!(updates_line(Some(&found(None, None))), "no newer release it can update to");
+        assert_eq!(
+            updates_line(Some(&found(Some("0.1.9"), Some("offline")))),
+            "it would update to 0.1.9, though its last read of the update feed failed: offline"
+        );
     }
 }

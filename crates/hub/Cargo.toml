@@ -19,6 +19,7 @@ tokio-rustls.workspace = true
 webpki.workspace = true
 async-trait.workspace = true
 fastrand.workspace = true
+fetching.workspace = true
 github.workspace = true
 memchr.workspace = true
 parking_lot.workspace = true
@@ -32,10 +33,12 @@ serde.workspace = true
 serde_json.workspace = true
 tokio.workspace = true
 tracing.workspace = true
+update-feed.workspace = true
 uuid.workspace = true
 
 [dev-dependencies]
 client-core = { workspace = true, features = ["testing"] }
+fetching = { workspace = true, features = ["testing"] }
 hub = { workspace = true, features = ["testing"] }
 # For the times GitHub gives, as a stand-in for it says them.
 jiff.workspace = true

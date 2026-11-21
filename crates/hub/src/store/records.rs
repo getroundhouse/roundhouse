@@ -51,9 +51,10 @@ impl Store {
             found_github_logins: Vec::new(),
             github_apps: github_apps(&tx)?,
             github_reach: github_reach(&tx)?,
-            // Kept in memory rather than here, as `Terminal` and `ModelList` say, so the hub adds them.
+            // Kept in memory rather than here, as `Terminal`, `ModelList` and `HubUpdate` say, so the hub adds them.
             terminals: Vec::new(),
             model_lists: Vec::new(),
+            hub_update: None,
             rev: current_rev(&tx)?,
         };
         tx.commit()?;

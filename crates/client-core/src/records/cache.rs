@@ -114,6 +114,7 @@ impl HubRecords {
             | Record::Session(_)
             | Record::Comment(_)
             | Record::HubSettings(_)
+            | Record::HubUpdate(_)
             | Record::Account(_)
             | Record::NewWorkspaceDraft(_)
             | Record::GithubAccount(_)

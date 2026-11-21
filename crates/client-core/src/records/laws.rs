@@ -6,8 +6,8 @@ use proptest::sample::Index;
 use proptest::test_runner::{Config, RngSeed};
 
 use protocol::model::{
-    Account, FoundGithubLogin, GhLogin, GhLoginWorks, GithubReach, GithubRepositoryName, HubSettings, LimitWindow,
-    NewWorkspaceDraft, Reach, Record, Session, SessionId, Title, UsageLimit,
+    Account, FoundGithubLogin, GhLogin, GhLoginWorks, GithubReach, GithubRepositoryName, HubSettings, HubUpdate,
+    LimitWindow, NewWorkspaceDraft, Reach, Record, Session, SessionId, Title, UsageLimit,
 };
 
 use super::*;
@@ -181,8 +181,17 @@ struct Kind {
     shown: fn(&HubRecords, &RecordKey) -> Option<Record>,
 }
 
-fn kinds() -> [Kind; 5] {
+fn kinds() -> [Kind; 6] {
     [
+        Kind {
+            name: "what a hub found in the update feed",
+            copy: |version, rev| {
+                let found = Some(format!("0.1.{version}"));
+                Record::HubUpdate(HubUpdate { version: found, looked_at_ms: 1, problem: None, rev: Rev::new(rev) })
+            },
+            other: None,
+            shown: |held, _| held.snapshot().hub_update().cloned().map(Record::HubUpdate),
+        },
         Kind {
             name: "a hub's settings",
             copy: |version, rev| Record::HubSettings(settings(version == 2, rev)),
@@ -242,6 +251,7 @@ fn listed(records: impl IntoIterator<Item = Record>, rev: u64) -> Records {
             Record::Session(session) => list.sessions.push(session),
             Record::Comment(comment) => list.comments.push(comment),
             Record::HubSettings(settings) => list.hub_settings = Some(settings),
+            Record::HubUpdate(update) => list.hub_update = Some(update),
             Record::Account(account) => list.accounts.push(account),
             Record::NewWorkspaceDraft(draft) => list.new_workspace_draft = Some(draft),
             Record::GithubAccount(account) => list.github_accounts.push(account),

@@ -1,5 +1,6 @@
 use super::agents::ModelLists;
 use super::terminals::Terminals;
+use super::updates::Updates;
 use super::{awake, feed, pull_requests, sessions, setup};
 use crate::attachment_files::AttachmentFiles;
 use crate::error::internal;
@@ -86,6 +87,8 @@ pub(crate) struct Hub {
     pub(super) terminals: Terminals,
     /// What the agents that discover their own models offer, where the hub has been asked.
     pub(super) model_lists: ModelLists,
+    /// What the hub last found in the update feed, which it reads only as a service.
+    pub(super) updates: Updates,
     pub(super) pull_requests: pull_requests::Reading,
     /// What the hub found on GitHub of the issues and pull requests chats name, for every client.
     pub(super) references: super::references::Kept,
@@ -199,6 +202,7 @@ impl Hub {
             setup_gates: Mutex::new(HashMap::new()),
             terminals: Terminals::default(),
             model_lists: ModelLists::default(),
+            updates: Updates::default(),
             pull_requests: pull_requests::Reading::new(),
             references: super::references::Kept::default(),
             own_reads: Jobs::new(),
@@ -279,8 +283,9 @@ impl Hub {
     /// Every record, as of one revision, for a client starting to follow the feed.
     pub(crate) async fn records_list(&self) -> Result<Records, ApiError> {
         let listing = self.model_lists.listed_with(self.blocking(Store::list_records));
-        let ((listed, model_lists), terminals) = self.terminals.listed_with(listing).await;
-        Ok(Records { terminals, model_lists, ..listed? })
+        let listing = self.terminals.listed_with(listing);
+        let (((listed, model_lists), terminals), hub_update) = self.updates.listed_with(listing).await;
+        Ok(Records { terminals, model_lists, hub_update, ..listed? })
     }
 
     pub(crate) async fn workspace(&self, id: &WorkspaceId) -> Result<Workspace, ApiError> {
@@ -343,7 +348,7 @@ impl Hub {
     /// How many workers it has, and the oldest version of the worker protocol among those still open, counting its own,
     /// as [`HubStatus::oldest_running_worker_protocol`] says, from one look at them. A worker joins them once its hello
     /// has chosen its version, and a closed one is still among them until whatever ends it has given back its instance.
-    fn workers_running(&self) -> (u32, u32) {
+    pub(super) fn workers_running(&self) -> (u32, u32) {
         let workers = self.workers.lock();
         let oldest = workers
             .values()

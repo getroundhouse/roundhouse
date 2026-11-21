@@ -40,6 +40,8 @@ pub struct Timers {
     /// token has ended, and which sign-ins to renew and installations to make a token for, as
     /// `Hub::watch_github_logins` says.
     pub check_github_logins_every: Duration,
+    /// How often a hub installed as a service reads the update feed, after the read as it starts.
+    pub look_for_updates_every: Duration,
 }
 
 impl Timers {
@@ -75,6 +77,8 @@ impl Timers {
         // minute of waking. Until then, a push fails at GitHub, which says the token is bad, rather than with the
         // block, which says what to do. *Unconfirmed:* a minute.
         check_github_logins_every: Duration::from_secs(60),
+        // As often as the app looks for its own.
+        look_for_updates_every: Duration::from_hours(1),
     };
 
     /// [`Timers::DEFAULT`], whatever `var` says, since only a build with the `testing` feature takes others, and the
@@ -138,7 +142,7 @@ mod tests {
         #![proptest_config(Config { rng_seed: RngSeed::Fixed(1), failure_persistence: None, ..Config::default() })]
 
         #[test]
-        fn a_hub_takes_the_timers_a_test_gives_it(times in prop::array::uniform10(duration())) {
+        fn a_hub_takes_the_timers_a_test_gives_it(times in prop::array::uniform11(duration())) {
             let [
                 agent_spacing,
                 picks_up_within,
@@ -150,6 +154,7 @@ mod tests {
                 read_pace,
                 sign_in_pace,
                 check_github_logins_every,
+                look_for_updates_every,
             ] = times;
             let given = Timers {
                 agent_spacing,
@@ -162,6 +167,7 @@ mod tests {
                 read_pace,
                 sign_in_pace,
                 check_github_logins_every,
+                look_for_updates_every,
             };
             let (name, value) = given.env();
 

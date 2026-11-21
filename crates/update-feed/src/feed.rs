@@ -113,6 +113,11 @@ impl Release<'_> {
     }
 }
 
+/// Whether `version` is a release's, three numbers, as the release workflow publishes, rather than a build of a commit.
+pub fn is_release(version: &str) -> bool {
+    order_of(version).is_ok()
+}
+
 /// Its numbers, in the order versions go in.
 fn order_of(version: &str) -> Result<[u64; 3], BadVersion> {
     let bad = || BadVersion(version.to_string());

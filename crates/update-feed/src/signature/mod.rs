@@ -11,4 +11,4 @@ mod published;
 mod tests;
 
 pub use key::{Unsigned, UpdateFeedKey};
-pub use published::{KEY, URL};
+pub use published::{HUB_CHANNEL, KEY, URL};

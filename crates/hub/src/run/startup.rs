@@ -1,5 +1,5 @@
 use crate::error::HubError;
-use crate::hub::{Hub, HubDirs, LeftAtWork};
+use crate::hub::{Hub, HubDirs, LeftAtWork, UpdateFeed};
 use crate::listener;
 use crate::listener::Listener;
 use crate::provider_set::ProviderSet;
@@ -36,6 +36,9 @@ pub struct HubConfig {
     /// the hub doesn't run.
     pub agents: Vec<AgentDescription>,
     pub timers: Timers,
+    /// Where a hub installed as a service reads the update feed, for the release it would update to. `None` for any
+    /// other hub, which updates as whoever runs it says.
+    pub update_feed: Option<UpdateFeed>,
     /// Where the hub calls GitHub, and as which app it signs people in, as [`GithubConfig::from_env`] gives it. Given
     /// rather than known here, so a hub can be pointed at a stand-in, as the hub's own tests point theirs.
     pub github: GithubConfig,
@@ -120,7 +123,9 @@ fn load_providers(
 
 /// Runs until asked to stop or signalled. Returns an error if another hub is using these paths.
 pub async fn run(config: HubConfig) -> Result<(), HubError> {
-    let HubConfig { network_address, build, paths, worker_exe, shell, path, start, agents, timers, github } = config;
+    let update_feed = config.update_feed;
+    let HubConfig { network_address, build, paths, worker_exe, shell, path, start, agents, timers, github, .. } =
+        config;
     private_files::create_dir_all(&paths.data_dir)
         .map_err(|e| HubError::io(format!("creating {}", paths.data_dir.display()), e))?;
     let lock_file = take_lock(&paths)?;
@@ -164,10 +169,7 @@ pub async fn run(config: HubConfig) -> Result<(), HubError> {
         let hub = hub.clone();
         tokio::spawn(crate::server::accept_loop(hub, listener))
     };
-    serving.spawn(hub.clone().watch_wait_deadlines());
-    serving.spawn(hub.clone().watch_pull_requests());
-    // What it would record is checked again as the next hub starts.
-    serving.spawn(hub.clone().watch_github_reach());
+    watch_while_serving(&hub, &mut serving, update_feed, build);
     let watching_github_logins = tokio::spawn(hub.clone().watch_github_logins());
     let mut terminate = Terminate::listen().map_err(|e| HubError::io("listening for a signal to stop", e))?;
     let signalled = asked_to_go(&hub, &mut terminate).await;
@@ -190,6 +192,23 @@ pub async fn run(config: HubConfig) -> Result<(), HubError> {
     drop(lock);
     info!("hub stopped");
     Ok(())
+}
+
+/// What `hub` watches while it serves, each a task of `serving`: its waits' deadlines, its pull requests, its reach on
+/// GitHub, and `update_feed`, if it has one and this build is a release, since a build of a commit has no version to
+/// compare with the feed's.
+fn watch_while_serving(hub: &Arc<Hub>, serving: &mut JoinSet<()>, update_feed: Option<UpdateFeed>, build: Build) {
+    serving.spawn(Arc::clone(hub).watch_wait_deadlines());
+    serving.spawn(Arc::clone(hub).watch_pull_requests());
+    // What it would record is checked again as the next hub starts.
+    serving.spawn(Arc::clone(hub).watch_github_reach());
+    match update_feed {
+        Some(feed) if update_feed::is_release(build.version()) => {
+            serving.spawn(Arc::clone(hub).look_for_updates(feed, build.version()));
+        }
+        Some(_) => info!(build = build.version(), "not reading the update feed, since this build isn't a release"),
+        None => {}
+    }
 }
 
 /// Waits until the hub is asked to go, and says whether a signal asked. Whoever sends one, such as systemd, can't say
