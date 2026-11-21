@@ -50,9 +50,9 @@ pub struct World {
     pub pull_requests: HashMap<WorkspaceId, PullRequest>,
     /// The issues and pull requests on GitHub that chats link to, as the hub would have looked them up.
     pub references: Vec<protocol::model::Reference>,
-    /// Each ask for references the hub has answered, in order, which a test shares before the hub is given the
-    /// world, to tell what a client asked for and when.
-    pub references_asked: std::sync::Arc<parking_lot::Mutex<Vec<Vec<protocol::model::ReferenceAsk>>>>,
+    /// What clients have said they show of GitHub, each time, in order, which a test shares before the hub is given the
+    /// world, to tell what a client showed and when.
+    pub github_shown: std::sync::Arc<parking_lot::Mutex<Vec<protocol::client::github::GithubShown>>>,
     /// The bytes of the images the hub keeps, by attachment: the files prompts carry, and the images tools send back
     /// and the agent's text points to.
     pub attachments: HashMap<AttachmentId, Vec<u8>>,

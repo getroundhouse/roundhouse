@@ -4,7 +4,7 @@
 
 use look::{Signal, Work};
 use protocol::event::TaskKind;
-use protocol::model::{Session, SessionStatus, SetupStatus, Standing, Workspace};
+use protocol::model::{PullRequestFound, Session, SessionStatus, SetupStatus, Standing, Workspace};
 
 /// A workspace's mark, of its record and its chats: being set up, until it is, and then the open chat with the most
 /// going on speaks for it. A reply nobody has read isn't on the mark,
@@ -44,10 +44,10 @@ pub fn chat_signal(session: &Session) -> Signal {
     }
 }
 
-/// Where a workspace's work stands, as its record says, for its mark. `None` from a hub too old to record its pull
-/// request.
-pub fn recorded_work(workspace: &Workspace) -> Option<Work> {
-    workspace.pull_request.as_ref().map(|found| work(Standing::of(found.pull_request.as_ref())))
+/// Where a workspace's work stands, as what the hub `found` of its pull request says, for its mark. `None` until the
+/// hub has looked.
+pub fn recorded_work(found: Option<&PullRequestFound>) -> Option<Work> {
+    found.map(|found| work(Standing::of(found.pull_request.as_ref())))
 }
 
 /// The colour a pull request that stands so is shown in, on a workspace's mark and the desktop's pull request bar.

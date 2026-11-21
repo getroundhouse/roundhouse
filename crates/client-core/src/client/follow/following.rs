@@ -31,6 +31,12 @@ pub(in crate::client) trait Source: 'static {
     /// [`Source::resume`] does for it.
     fn reconnected(&mut self) {}
 
+    /// Whether `error`, from [`Source::resume`], is one its readers do without, rather than hear of, as a hub too old
+    /// to serve something whose absence the source says itself.
+    fn does_without(&self, _error: &ClientError) -> bool {
+        false
+    }
+
     /// When there's next something to do with what's held that nobody asks for, such as compressing a terminal's
     /// history once it has been quiet a while. None while there's nothing. Runs each time the thread is about to wait.
     fn due_at(&mut self) -> Option<Instant> {
@@ -290,6 +296,7 @@ impl<S: Source> Follower<S> {
             }
             // Deleted, which the records say too, so whoever reads it lets go of it rather than hearing it failed.
             Err(ClientError::Api(e)) if e.code == ErrorCode::NotFound => self.lost(None),
+            Err(e) if self.source.does_without(&e) => self.lost(None),
             Err(e) => self.lost(Some(FollowError::Following(e))),
         }
     }

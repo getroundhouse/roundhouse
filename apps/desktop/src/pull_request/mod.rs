@@ -9,4 +9,4 @@ mod words;
 pub use words::{Action, Ask};
 
 mod status_bar;
-pub use status_bar::{Lookup, READ_AGAIN, bar, controls};
+pub use status_bar::{Lookup, bar, controls};

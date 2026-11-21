@@ -1,8 +1,11 @@
 //! What a fake hub says to what it's asked of GitHub that isn't a change it refuses: who `gh` on its machine is,
-//! connecting that login, looking for an app's installations, and writing an app's manifest.
+//! connecting that login, looking for an app's installations, writing an app's manifest, and what GitHub says of what
+//! a client shows.
 
+use protocol::client::github::{GithubSubscribe, GithubUpdate};
 use protocol::client::github_apps::{GithubAppManifest, GithubAppManifestWrite};
-use protocol::client::{ApiError, ClientResponse, ErrorCode};
+use protocol::client::{ApiError, ClientResponse, ErrorCode, HubFrame};
+use protocol::model::{PullRequestFound, ReferenceAsk, ReferenceRead};
 
 use super::serve::{Answer, Outcome, read_only};
 use super::world::World;
@@ -38,4 +41,28 @@ pub(super) fn look_for_installations(world: &World) -> Answer {
 pub(super) fn manifest(GithubAppManifestWrite { name, redirect_url }: GithubAppManifestWrite) -> ClientResponse {
     let manifest = serde_json::json!({"name": name, "redirect_url": redirect_url, "public": false});
     ClientResponse::GithubAppManifest(GithubAppManifest { manifest })
+}
+
+/// What GitHub says of `ask`, as the world has it, which is missing where the world has none.
+pub(super) fn reference(world: &World, ask: &ReferenceAsk) -> ReferenceRead {
+    let found = world
+        .references
+        .iter()
+        .find(|reference| reference.number == ask.number && reference.repository == ask.repository);
+    found.map_or(ReferenceRead::Missing, |reference| ReferenceRead::Found { reference: Box::new(reference.clone()) })
+}
+
+/// What a hub sends at once of what `subscribe` shows, since nothing here changes after: each chip as the world has
+/// it, and each workspace's pull request as its record has it, or else as a read would find it, from the world's.
+pub(super) fn shown(world: &World, subscribe: GithubSubscribe) -> Vec<HubFrame> {
+    let GithubSubscribe { subscription_id, shown } = subscribe;
+    world.github_shown.lock().push(shown.clone());
+    let references = (shown.references.iter())
+        .map(|ask| GithubUpdate::Reference { reference: ask.clone(), read: reference(world, ask) });
+    let pull_requests = shown.workspaces.iter().filter_map(|id| {
+        let recorded = world.workspaces.iter().find(|workspace| workspace.id == *id)?.pull_request.clone();
+        let found = recorded.unwrap_or_else(|| PullRequestFound { pull_request: world.pull_requests.get(id).cloned() });
+        Some(GithubUpdate::PullRequest { workspace: id.clone(), found: Some(found) })
+    });
+    references.chain(pull_requests).map(|update| HubFrame::Github { subscription_id, update }).collect()
 }

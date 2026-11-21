@@ -1,10 +1,9 @@
-//! The workspace's pull request: reading it from the hub, and doing what its bar offers.
+//! The workspace's pull request: taking it as the hub sends it, and doing what its bar offers.
 
-use gpui_kit::{AppContext as _, Context};
-use protocol::model::PrState;
+use gpui_kit::Context;
 
 use super::{PaneEvent, WorkspacePane};
-use crate::pull_request::{Action, Ask};
+use crate::pull_request::{Action, Ask, Lookup};
 
 impl WorkspacePane {
     pub fn create_pull_request(&mut self, cx: &mut Context<Self>) {
@@ -37,31 +36,16 @@ impl WorkspacePane {
         from.trim_prefix("origin/")
     }
 
-    /// Asks the hub to read it now. The hub records what it finds on the workspace's record, which brings it here in
-    /// order with everything else the hub says, so the answer is only taken from the reply while the record has none,
-    /// such as from a hub too old to keep it there.
-    pub(super) fn refresh_pull_request(&mut self, cx: &mut Context<Self>) {
-        self.pull_request_asks += 1;
-        let (client, id, asked) = (self.client.clone(), self.workspace().id.clone(), self.pull_request_asks);
-        cx.spawn(async move |this, cx| {
-            let found = cx.background_spawn(async move { client.workspace_pull_request(&id) }).await;
-            let _ = this.update(cx, |t, cx| {
-                let unrecorded = t.workspace().pull_request.is_none();
-                if unrecorded && t.pull_request.answer(asked == t.pull_request_asks, found) {
-                    cx.notify();
-                }
-            });
-        })
-        .detach();
-    }
-
-    /// Reads the pull request again, unless it's merged or closed. An open one's checks, reviews and place in the
-    /// merge queue change, and a workspace with none gets one when it's opened, by the agent or on GitHub.
-    pub(crate) fn look_again_at_pull_request(&mut self, cx: &mut Context<Self>) {
-        let done =
-            self.pull_request.pull_request().is_some_and(|pr| matches!(pr.state, PrState::Merged | PrState::Closed));
-        if !done {
-            self.refresh_pull_request(cx);
+    /// Takes the pull request as the hub sent it, or as the workspace's record has it from a hub too old to send it,
+    /// once the hub has looked.
+    pub(crate) fn take_pull_request(&mut self, cx: &mut Context<Self>) {
+        let found = self.records.github().pull_request(self.workspace());
+        if found.is_some() {
+            let lookup = Lookup::of(found);
+            if lookup != self.pull_request {
+                self.pull_request = lookup;
+                cx.notify();
+            }
         }
     }
 }

@@ -8,6 +8,7 @@ mod commands;
 mod feed;
 mod files;
 mod follow;
+mod github;
 mod github_account;
 mod github_app;
 mod introduction;
@@ -29,6 +30,7 @@ pub use api::{new_attachment_id, new_device_id, new_message_id, new_request_id, 
 pub use commands::{Commands, Reply};
 pub use feed::RecordsFeed;
 pub use follow::FollowError;
+pub use github::{GithubFeed, GithubView};
 pub use github_account::new_github_sign_in_id;
 pub use introduction::Introduction;
 pub(crate) use lines::Place;

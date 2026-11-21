@@ -20,10 +20,7 @@ pub(crate) fn standing(app: &AppView, workspace: &Workspace, cx: &App) -> Standi
     let chats = app.records().sessions(&workspace.id);
     let needs_a_look = needs_a_look(app, workspace, cx);
     let signal = transcript::workspace_signal(workspace, chats);
-    // The hub keeps it on the record, open or not. A hub too old to do that leaves it to the pane, if it's open.
-    let work = transcript::recorded_work(workspace)
-        .or_else(|| app.panes.get(&workspace.id).map(|pane| pane.read(cx).work()))
-        .unwrap_or(Work::NoPr);
+    let work = transcript::recorded_work(app.pull_request_of(workspace).as_ref()).unwrap_or(Work::NoPr);
     Standing { signal, work, needs_a_look }
 }
 

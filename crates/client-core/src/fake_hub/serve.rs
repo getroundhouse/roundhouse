@@ -17,8 +17,8 @@ use protocol::event::SessionEvent;
 use protocol::find::{Found, Needle};
 use protocol::frame;
 use protocol::model::{
-    CompactionLine, GitDiff, GitStatus, GithubSignIn, Place, PromptLine, ReferenceAsk, ReferenceRead, Rev, Seq,
-    Session, SessionId, SettledAt, SubagentId,
+    CompactionLine, GitDiff, GitStatus, GithubSignIn, Place, PromptLine, Rev, Seq, Session, SessionId, SettledAt,
+    SubagentId,
 };
 
 use super::base_pages::{opened, paged};
@@ -103,20 +103,10 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
             reply(C::PullRequest(workspaces::PullRequestReply { pull_request: world.pull_requests.get(&id).cloned() }))
         }
         R::ReferencesRead(references::ReferencesRead { references, .. }) => {
-            world.references_asked.lock().push(references.clone());
-            let found = |ask: &ReferenceAsk| {
-                (world.references.iter())
-                    .find(|reference| reference.number == ask.number && reference.repository == ask.repository)
-            };
-            let references = references
-                .iter()
-                .map(|ask| match found(ask) {
-                    Some(reference) => ReferenceRead::Found { reference: Box::new(reference.clone()) },
-                    None => ReferenceRead::Missing,
-                })
-                .collect();
+            let references = references.iter().map(|ask| github::reference(world, ask)).collect();
             reply(C::References(references::References { references }))
         }
+        R::GithubSubscribe(subscribe) => Ok(Outcome::Reply(C::Ok, github::shown(world, subscribe))),
         R::CommentList(comments::CommentList { workspace_id }) => {
             reply(C::Comments(comments::Comments { comments: world.comments_listed(&workspace_id) }))
         }
@@ -234,7 +224,7 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
             };
             reply(C::ProposalRevisions(proposals::ProposalRevisions { revisions, newest: current.number }))
         }
-        R::FeedSubscribe(_) | R::GithubSubscribe(_) | R::SessionUnsubscribe(_) => reply(C::Ok),
+        R::FeedSubscribe(_) | R::SessionUnsubscribe(_) => reply(C::Ok),
         R::AttachmentRead(attachments::AttachmentRead { id, .. }) => {
             let data = world.attachments.get(&id).ok_or_else(|| ApiError::new(ErrorCode::NotFound, "no such file"))?;
             reply(C::AttachmentData(attachments::AttachmentData { data: AttachmentBytes::new(data.clone()) }))

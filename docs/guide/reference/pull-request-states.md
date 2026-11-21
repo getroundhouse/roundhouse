@@ -60,7 +60,7 @@ With the sidebar of changes hidden, the workspace's header shows the pull reques
 
 ## When it's read
 
-Roundhouse reads the pull request from GitHub itself, as the default GitHub account in [Settings](settings.md#git), or with none, as the machine's own `gh` login:
+Roundhouse's hub reads the pull request from GitHub, as the default GitHub account in [Settings](settings.md#git), or with none, as the machine's own `gh` login, and sends what it found to every app showing it:
 
 - Each time its workspace is shown, and every 30 seconds while it shows.
 - When a turn ends.

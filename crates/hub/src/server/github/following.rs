@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use protocol::client::github::{GithubShown, GithubSubscribe};
+use protocol::client::github::{GithubShown, GithubSubscribe, MOST_REFERENCES_SHOWN};
 use protocol::client::{ApiError, ErrorCode};
 use tokio::sync::watch;
 
@@ -10,10 +10,6 @@ use super::pumping::pump;
 use crate::hub::Hub;
 use crate::hub::github_reads::{ShowingEnds, ShownBy};
 use crate::server::Connection;
-
-/// The most issues and pull requests one subscription can show as chips, which is more than a window shows, so a
-/// client that shows more is wrong.
-const MOST_SHOWN: usize = 200;
 
 /// A subscription to what GitHub says of what a client shows, which a client can tell it shows something else.
 pub(in crate::server) struct Followed {
@@ -29,8 +25,9 @@ pub(in crate::server) fn follow(
     subscribe: GithubSubscribe,
 ) -> Result<(), ApiError> {
     let GithubSubscribe { subscription_id, shown } = subscribe;
-    if shown.references.len() > MOST_SHOWN {
-        let message = format!("{} issues and pull requests shown at once, over {MOST_SHOWN}", shown.references.len());
+    if shown.references.len() > MOST_REFERENCES_SHOWN {
+        let message =
+            format!("{} issues and pull requests shown at once, over {MOST_REFERENCES_SHOWN}", shown.references.len());
         return Err(ApiError::new(ErrorCode::InvalidRequest, message));
     }
     let by = ShownBy { connection: connection.id, subscription: subscription_id };

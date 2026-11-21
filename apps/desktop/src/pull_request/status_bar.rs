@@ -8,13 +8,8 @@ use gpui_kit::{
     AnyElement, App, Div, InteractiveElement as _, IntoElement, ParentElement as _, Styled as _, Window, div,
 };
 use look::{IconSizing as _, Typeset as _, Work};
-use protocol::model::{BranchName, PullRequest, Standing, Workspace};
-use std::time::Duration;
+use protocol::model::{BranchName, PullRequest, PullRequestFound, Standing};
 use words::Action;
-
-/// How often the pull request showing is read again. Soon enough to see a check finish or the queue merge it within
-/// a minute, and far from GitHub's limits, at two calls to it each time. The hub reads every workspace's less often.
-pub const READ_AGAIN: Duration = Duration::from_secs(30);
 
 /// What the app knows of a workspace's pull request.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -25,10 +20,9 @@ pub enum Lookup {
 }
 
 impl Lookup {
-    /// What the hub last found, as the workspace's record has it. `None` until the hub has looked, and from a hub too
-    /// old to keep it there.
-    pub fn recorded(workspace: &Workspace) -> Option<Self> {
-        workspace.pull_request.clone().map(|found| Lookup::Found(found.pull_request))
+    /// What the hub `found`, which is `None` until it has looked.
+    pub fn of(found: Option<PullRequestFound>) -> Self {
+        found.map_or(Lookup::Looking, |found| Lookup::Found(found.pull_request))
     }
 
     pub fn pull_request(&self) -> Option<&PullRequest> {
@@ -48,19 +42,6 @@ impl Lookup {
 
     pub fn work(&self) -> Work {
         self.standing().map_or(Work::NoPr, transcript::work)
-    }
-
-    /// Takes the hub's answer, unless a newer ask has been made, whose answer can arrive first, so this one says
-    /// what's no longer true. A failure keeps what was known, since it only means it can't be told now, such as while
-    /// the workspace sets up. Says whether anything changed.
-    pub(crate) fn answer<E>(&mut self, newest: bool, found: Result<Option<PullRequest>, E>) -> bool {
-        match found {
-            Ok(found) if newest => {
-                *self = Lookup::Found(found);
-                true
-            }
-            Ok(_) | Err(_) => false,
-        }
     }
 }
 

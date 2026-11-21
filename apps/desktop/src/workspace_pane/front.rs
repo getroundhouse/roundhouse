@@ -45,6 +45,21 @@ impl WorkspacePane {
         cx.notify();
     }
 
+    /// Tells each transcript whether it's shown, so what the app shows of GitHub is what's on screen: the active chat's
+    /// while it's in front, or the subagent tab's while that is, and only while this pane is drawn.
+    pub(super) fn transcripts_shown(&self, cx: &mut Context<Self>) {
+        let (drawn, showing) = (self.drawn(), self.showing());
+        for (id, chat) in &self.chats {
+            if let Some((transcript, _)) = &chat.transcript {
+                let shown = drawn && showing == Showing::Chat && self.active.as_ref() == Some(id);
+                transcript.update(cx, |t, cx| t.set_shown(shown, cx));
+            }
+        }
+        if let Some(transcript) = self.subagents.transcript() {
+            transcript.update(cx, |t, cx| t.set_shown(drawn && showing == Showing::Subagent, cx));
+        }
+    }
+
     /// Copies what's selected in what's in front, wherever focus is, once a text box with nothing selected lets the
     /// action go on. What the kit has selected, such as a command asked about in the composer's place, goes on to the
     /// window's root, which copies it.

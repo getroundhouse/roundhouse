@@ -47,6 +47,7 @@ impl AppView {
         }
         self.close_home();
         self.show_selected(cx);
+        self.say_which_pull_requests_show();
         cx.notify();
     }
 
