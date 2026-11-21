@@ -3,7 +3,7 @@
 //! Each request that changes something is safe to send again after a lost reply: it either has the same effect however
 //! often it's applied, or carries an ID the client chose, which the hub records once. Each says which. Two act again
 //! once what they acted on has passed, as each says: [`agent::SessionCancel`] and [`workspaces::WorkspaceRerunSetup`].
-//! [`terminals::TerminalInput`] is never safe to send again, since typing twice isn't typing once.
+//! [`terminals::TerminalTyped`] is never safe to send again, since typing twice isn't typing once.
 
 use serde::{Deserialize, Serialize};
 
@@ -140,14 +140,11 @@ pub enum ClientRequest {
     NewWorkspaceCreate(new_workspace::NewWorkspaceCreate),
     SessionRename(sessions::SessionRename),
     TerminalOpen(terminals::TerminalOpen),
-    TerminalAttach(terminals::TerminalAttach),
     TerminalWatch(terminals::TerminalWatch),
     TerminalRows(terminals::TerminalRows),
     TerminalBounds(terminals::TerminalBounds),
     TerminalText(terminals::TerminalText),
-    TerminalInput(terminals::TerminalInput),
     TerminalTyped(terminals::TerminalTyped),
-    TerminalResize(terminals::TerminalResize),
     TerminalFit(terminals::TerminalFit),
     TerminalClose(terminals::TerminalClose),
     /// Any request this build doesn't know, from a client newer than it. A hub answers with

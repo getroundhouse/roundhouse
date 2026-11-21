@@ -1,4 +1,4 @@
-//! What the hub keeps of each terminal open, or being opened, in memory, and what its worker sends of it.
+//! What the hub keeps of each terminal open, or being opened, in memory.
 
 use std::collections::HashMap;
 use std::pin::Pin;
@@ -7,20 +7,9 @@ use std::sync::Arc;
 use parking_lot::Mutex;
 use protocol::client::{ApiError, ClientResponse};
 use protocol::model::{Terminal, TerminalId, WorkspaceId};
-use protocol::terminal::{TerminalUpdate, UpdateIndex};
-use tokio::sync::{Mutex as AsyncMutex, broadcast, watch};
+use tokio::sync::{Mutex as AsyncMutex, watch};
 
 use super::watching::Watch;
-
-/// The updates held for the clients attached to a terminal. One that falls further behind gets a new screen.
-pub(crate) const QUEUED_UPDATES: usize = 256;
-
-/// An update of a terminal, and where it is among the terminal's, so a client is sent only those after its screen.
-#[derive(Clone, Debug)]
-pub(crate) struct Numbered {
-    pub(crate) at: UpdateIndex,
-    pub(crate) update: TerminalUpdate,
-}
 
 /// The reply to a request the worker has been sent already, to wait for.
 pub(crate) type Queued = Pin<Box<dyn Future<Output = Result<ClientResponse, ApiError>> + Send>>;
@@ -40,7 +29,6 @@ pub(super) struct Open {
     /// The ID of the link to the worker that runs its shell, once the open knows which that is.
     pub(super) link: Option<u64>,
     pub(super) stage: Stage,
-    pub(super) updates: broadcast::Sender<Numbered>,
     pub(super) watch: Arc<Watch>,
 }
 
@@ -60,7 +48,7 @@ pub(super) type Outcome = watch::Receiver<Option<Result<Terminal, ApiError>>>;
 
 impl Open {
     pub(super) fn new(workspace_id: WorkspaceId, link: Option<u64>, stage: Stage) -> Self {
-        Self { workspace_id, link, stage, updates: broadcast::channel(QUEUED_UPDATES).0, watch: Watch::new() }
+        Self { workspace_id, link, stage, watch: Watch::new() }
     }
 
     pub(super) fn record(&self) -> Option<&Terminal> {

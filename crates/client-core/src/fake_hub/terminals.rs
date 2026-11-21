@@ -2,20 +2,14 @@
 //! can't change. It's made from the bytes the world gives, the same way on every call, so a picture's numbering and
 //! the rows asked for in it agree.
 
-use protocol::client::terminals::{TerminalAttach, TerminalBounds, TerminalRows, TerminalText, TerminalWatch};
+use protocol::client::terminals::{TerminalBounds, TerminalRows, TerminalText, TerminalWatch};
 use protocol::client::{ApiError, ClientResponse, ErrorCode, HubFrame};
 use protocol::model::TerminalId;
-use protocol::terminal::{PictureSending, TerminalScreen, TerminalUpdate};
+use protocol::terminal::{PictureSending, TerminalScreen};
 use terminal_state::{Mirror, MirrorError};
 
 use super::serve::{Answer, Outcome};
 use super::world::World;
-
-/// What the world's terminal shows, as the frame that follows the reply.
-pub(super) fn attach(world: &World, attach: &TerminalAttach) -> Answer {
-    let update = TerminalUpdate::Screen(screen(world, &attach.id)?.clone());
-    Ok(Outcome::Reply(ClientResponse::Ok, vec![HubFrame::Terminal { subscription_id: attach.subscription_id, update }]))
-}
 
 /// A whole picture of what the world's terminal shows, in as many frames as it takes, after the reply.
 pub(super) fn watch(world: &World, watch: &TerminalWatch) -> Answer {

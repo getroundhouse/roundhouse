@@ -9,7 +9,7 @@ use client_core::{Client, OpenTerminal};
 use process::ProcessRecord;
 use protocol::model::{TerminalId, WorkspaceId};
 use protocol::paths::AGENTS_DIR;
-use protocol::terminal::TerminalSize;
+use protocol::terminal::{TerminalSize, Typed};
 
 use crate::carrying_on::restart;
 use crate::support::{self, Stack, is_alive, parent_of, signal, wait_until};
@@ -43,16 +43,16 @@ fn shown_when(open: &OpenTerminal, what: &str, done: impl Fn(&str) -> bool) -> S
     shown
 }
 
-/// Types `typed` into `open` straight to the hub, as the bytes the shell reads, rather than through the client's copy,
-/// which sends nothing for a key before its first screen.
-fn type_in(client: &Client, open: &OpenTerminal, typed: &[u8]) {
-    client.terminal_input(open.id(), typed).unwrap();
+/// Types `typed` into `open` straight to the hub, as text the shell reads as it is, rather than through the open
+/// terminal, which sends nothing for a key before its first picture.
+fn type_in(client: &Client, open: &OpenTerminal, typed: &str) {
+    client.terminal_typed(open.id(), Typed::Text { text: typed.to_owned() }).unwrap();
 }
 
 /// The process ID of the shell in `open`, which it prints as asked. What's typed is shown too, which the quotes keep
 /// from looking like what it prints.
 fn shell_pid(client: &Client, open: &OpenTerminal) -> u32 {
-    type_in(client, open, b"echo pi''d:$$:\r");
+    type_in(client, open, "echo pi''d:$$:\r");
     printed_pid(open, "pid:")
 }
 
@@ -102,7 +102,7 @@ fn a_terminal_runs_a_shell_in_its_worktree_until_it_is_closed() {
     let worktree = support::workspace(&client, &workspace.id).path.unwrap();
 
     let open = open_terminal(&client, &workspace.id);
-    type_in(&client, &open, b"pwd -P; echo is-$((6*7))\r");
+    type_in(&client, &open, "pwd -P; echo is-$((6*7))\r");
     let shown = shown_until(&open, "is-42");
     let pid = shell_pid(&client, &open);
 
@@ -122,7 +122,7 @@ fn a_terminal_outlasts_its_client_and_its_hub() {
     let client = stack.client();
     let (workspace, _) = stack.workspace(&client);
     let open = open_terminal(&client, &workspace.id);
-    type_in(&client, &open, b"echo before-$((6*7))\r");
+    type_in(&client, &open, "echo before-$((6*7))\r");
     shown_until(&open, "before-42");
     let pid = shell_pid(&client, &open);
     // A restart waits for the workspace's setup to finish, and opening a terminal doesn't, so this does first.
@@ -138,7 +138,7 @@ fn a_terminal_outlasts_its_client_and_its_hub() {
     let open = OpenTerminal::start(&client, &"t".into());
     // What it shows, which is what it showed.
     shown_until(&open, "before-42");
-    type_in(&client, &open, b"echo after-$((7*8))\r");
+    type_in(&client, &open, "echo after-$((7*8))\r");
     shown_until(&open, "after-56");
 }
 
@@ -152,7 +152,7 @@ fn the_job_a_killed_workers_terminal_ran_in_front_is_stopped() {
     let open = open_terminal(&client, &workspace.id);
     let shell = shell_pid(&client, &open);
     // `sleep` keeps the hangup ignored, and ends by itself, should the test fail before it's stopped.
-    type_in(&client, &open, b"sh -c 'trap \"\" HUP; echo jo''b:$$:; exec sleep 300'\r");
+    type_in(&client, &open, "sh -c 'trap \"\" HUP; echo jo''b:$$:; exec sleep 300'\r");
     let job = printed_pid(&open, "job:");
     wait_until("the job to be recorded", || recorded_in_front(&stack) == Some(job));
 

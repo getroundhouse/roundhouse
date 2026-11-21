@@ -1,119 +1,26 @@
-//! A hub with a terminal open on a stand-in for the worker that runs it, and stand-ins for a client attached to it.
+//! A stand-in for a client connected to a hub, and a paused clock to let what the hub does meanwhile all be done.
 
-use std::path::Path;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 
-use protocol::client::{ApiError, CLIENT_PROTOCOL_VERSION, ClientFrame, ClientRequest, Hello, HubFrame};
+use protocol::client::{CLIENT_PROTOCOL_VERSION, ClientFrame, ClientRequest, Hello, HubFrame};
 use protocol::frame;
-use protocol::terminal::{TerminalBytes, TerminalExit, TerminalScreen, TerminalSize, TerminalUpdate, UpdateIndex};
-use protocol::worker::{TerminalShown, WorkerRequest, WorkerResponse};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, DuplexStream, Lines, ReadHalf, WriteHalf};
-use tokio::sync::mpsc;
-use tokio::task::JoinHandle;
 use tokio::time::timeout;
 
-use super::super::following::Attached;
 use crate::hub::Hub;
-use crate::hub::tests::{hub_with_worktree, serving, terminal_in_w};
-use crate::server::Outgoing;
-use crate::worker_link::WorkerLink;
 
-pub(super) const SIZE: TerminalSize = TerminalSize { cols: 80, rows: 24 };
 /// Long enough for anything here on a busy machine.
 pub(super) const WAIT: Duration = Duration::from_secs(10);
 
-pub(super) fn screen() -> TerminalScreen {
-    TerminalScreen { size: SIZE, bytes: b"screen".as_slice().into() }
-}
-
-/// What the worker says the terminal shows, taking in the updates before `next`.
-pub(super) fn shown(next: u64) -> WorkerResponse {
-    WorkerResponse::TerminalShown(TerminalShown { screen: screen(), next: UpdateIndex::new(next) })
-}
-
-pub(super) fn output(text: &str) -> TerminalUpdate {
-    TerminalUpdate::Output { output: TerminalBytes::from(text.as_bytes()) }
-}
-
-pub(super) fn exited() -> TerminalUpdate {
-    TerminalUpdate::Exited(TerminalExit { code: Some(0) })
-}
-
-/// The output among `updates`, joined, and the other updates, in order, since how output is split into frames depends
-/// on how fast the client takes them.
-pub(super) fn joined(updates: Vec<TerminalUpdate>) -> (String, Vec<TerminalUpdate>) {
-    let (mut output, mut others) = (String::new(), Vec::new());
-    for update in updates {
-        match update {
-            TerminalUpdate::Output { output: bytes } => output.push_str(std::str::from_utf8(bytes.as_slice()).unwrap()),
-            other @ (TerminalUpdate::Screen(_)
-            | TerminalUpdate::Resized { .. }
-            | TerminalUpdate::Exited(_)
-            | TerminalUpdate::Unknown) => others.push(other),
-        }
-    }
-    (output, others)
-}
-
-/// A hub with `t` open in `w`, on a stand-in worker that answers the `n`th time it's asked what the terminal shows with
-/// what `show(n)` says, and every other call with `Ok`.
-pub(super) async fn open_on(
-    dir: &Path,
-    show: impl Fn(usize) -> Result<WorkerResponse, ApiError> + Send + 'static,
-) -> (Arc<Hub>, Arc<WorkerLink>) {
-    let hub = hub_with_worktree(dir);
-    let shows = AtomicUsize::new(0);
-    let link = WorkerLink::answering(move |request| {
-        Some(if matches!(request, WorkerRequest::TerminalShow(_)) {
-            show(shows.fetch_add(1, Ordering::SeqCst))
-        } else {
-            Ok(WorkerResponse::Ok)
-        })
-    });
-    serving(&hub, &link);
-    hub.terminal_open(terminal_in_w("t")).await.unwrap();
-    (hub, link)
-}
-
-/// A client attached to `t`, and what it's sent, which it takes only when it reads it.
-pub(super) struct Client {
-    following: JoinHandle<()>,
-    sent: mpsc::Receiver<Outgoing>,
-}
-
-impl Client {
-    pub(super) fn attach(hub: &Arc<Hub>) -> Self {
-        let (link, updates) = hub.terminal_follow(&"t".into()).unwrap();
-        let (frames, sent) = mpsc::channel(1024);
-        let attached = Attached { subscription_id: 3, frames };
-        Self { following: tokio::spawn(attached.follow(hub.clone(), link, "t".into(), updates)), sent }
-    }
-
-    pub(super) async fn next(&mut self) -> TerminalUpdate {
-        let queued = timeout(WAIT, self.sent.recv()).await.expect("an update").expect("the following to go on");
-        let HubFrame::Terminal { subscription_id: 3, update } = queued.frame else { panic!("sent {:?}", queued.frame) };
-        update
-    }
-
-    /// How many frames are queued for it that it hasn't read.
-    pub(super) fn queued(&self) -> usize {
-        self.sent.len()
-    }
-
-    /// Everything it's sent from here until the following ends.
-    pub(super) async fn rest(mut self) -> Vec<TerminalUpdate> {
-        let mut rest = Vec::new();
-        while let Some(queued) = timeout(WAIT, self.sent.recv()).await.expect("the following to end") {
-            let HubFrame::Terminal { subscription_id: 3, update } = queued.frame else {
-                panic!("sent {:?}", queued.frame)
-            };
-            rest.push(update);
-        }
-        timeout(WAIT, self.following).await.unwrap().unwrap();
-        rest
-    }
+/// Until everything else is waiting. Only a moment on tokio's paused clock, where a sleep lasts until everything else
+/// is waiting, so the hub's own timers, of seconds, don't pass.
+#[expect(
+    clippy::disallowed_methods,
+    reason = "on tokio's paused clock, which moves on once everything else is waiting"
+)]
+pub(super) async fn settled() {
+    tokio::time::sleep(Duration::from_millis(1)).await;
 }
 
 /// A client's end of a connection to the hub, over a buffer of `buffer` bytes each way, which has said hello.
