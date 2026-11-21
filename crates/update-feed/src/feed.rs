@@ -17,6 +17,23 @@ struct Package {
     /// On a full package, which versions of the worker protocol its release's hub speaks.
     #[serde(rename = "WorkerVersions")]
     worker_versions: Option<Versions>,
+    /// On a full package, the archive of its release's hub, on a channel that publishes one.
+    #[serde(rename = "Hub")]
+    hub: Option<HubArchive>,
+}
+
+/// The archive a hub installed as a service is installed and updated from, as the feed describes it, under its
+/// signature. `tools/package/publish.py` writes it, with a SHA-1 too, which nothing here reads.
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
+pub struct HubArchive {
+    /// Its name beside the feed.
+    #[serde(rename = "FileName")]
+    pub file_name: String,
+    #[serde(rename = "Size")]
+    pub size: u64,
+    /// Its SHA-256, in hexadecimal.
+    #[serde(rename = "SHA256")]
+    pub sha256: String,
 }
 
 #[derive(Debug, Deserialize, PartialEq, Eq)]
@@ -32,6 +49,8 @@ pub struct Release<'a> {
     pub version: &'a str,
     /// Which versions of the worker protocol its hub speaks. `None` from a release from before releases said.
     pub worker_versions: Option<Versions>,
+    /// The archive of its hub. `None` on a channel that publishes none, and from a release from before releases did.
+    pub hub: Option<&'a HubArchive>,
 }
 
 /// A version that isn't three numbers, which is all the release workflow publishes.
@@ -42,10 +61,32 @@ pub struct BadVersion(String);
 impl Feed {
     /// Each release in it, by its full package.
     pub fn releases(&self) -> impl Iterator<Item = Release<'_>> {
-        self.packages
-            .iter()
-            .filter(|package| package.kind == Kind::Full)
-            .map(|package| Release { version: &package.version, worker_versions: package.worker_versions })
+        self.packages.iter().filter(|package| package.kind == Kind::Full).map(|package| Release {
+            version: &package.version,
+            worker_versions: package.worker_versions,
+            hub: package.hub.as_ref(),
+        })
+    }
+
+    /// Each release whose hub speaks workers of `oldest`, the oldest at work, so updating to it ends none of them, and
+    /// an update crosses at most one break in the worker protocol, as `docs/principles/protocol.md` says.
+    pub fn speaking(&self, oldest: u32) -> impl Iterator<Item = Release<'_>> {
+        self.releases().filter(move |release| release.speaks(oldest))
+    }
+
+    /// The release a hub installed as a service, on version `running` with workers of `oldest` at work, would update
+    /// to: the newest that's newer than it, speaks those workers, and has an archive of its hub. `None` when there's
+    /// none, such as when it's the newest.
+    pub fn hub_update(&self, running: &str, oldest: u32) -> Result<Option<Release<'_>>, BadVersion> {
+        let running = order_of(running)?;
+        let mut newest: Option<([u64; 3], Release<'_>)> = None;
+        for release in self.speaking(oldest).filter(|release| release.hub.is_some()) {
+            let order = order_of(release.version)?;
+            if order > running && newest.is_none_or(|(at, _)| order > at) {
+                newest = Some((order, release));
+            }
+        }
+        Ok(newest.map(|(_, release)| release))
     }
 
     /// The newest release, which is the one an app with that release's workers at work steps from, if a hub that

@@ -97,6 +97,16 @@ class Signature(unittest.TestCase):
         full = next(asset for asset in assets if asset["Type"] == "Full")
         self.assertEqual(full[publish.WORKER_VERSIONS], SPEAKS)
 
+    def test_the_fixture_the_app_and_a_hub_read_lists_the_hub_s_archive_as_this_writes_it(self) -> None:
+        """`crates/update-feed` reads the same file, so a hub can't come to look for its archive under another name."""
+        full = next(asset for asset in json.loads((FIXTURE / publish.FEED).read_bytes())["Assets"]
+                    if asset["Type"] == "Full")
+        with tempfile.TemporaryDirectory() as work:
+            archive = Path(work) / f"Roundhouse-{full['Version']}-osx-hub.tar.gz"
+            archive.write_bytes(b"hub")
+            self.assertEqual(set(full[publish.HUB]), set(publish.described(archive)))
+        self.assertEqual(full[publish.HUB]["FileName"], archive.name)
+
     def test_openssl_signs_the_fixture_as_the_app_expects(self) -> None:
         key = (FIXTURE / "throwaway-key.pub").read_text().strip()
         self.assertEqual(feed_signature("public", str(THROWAWAY_KEY)), key)

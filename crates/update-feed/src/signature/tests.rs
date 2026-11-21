@@ -20,16 +20,9 @@ fn public(pair: &Ed25519KeyPair) -> UpdateFeedKey {
 
 const FEED: &[u8] = br#"{"Assets":[{"Version":"0.1.50","Type":"Full","Size":18889777}]}"#;
 
-/// OpenSSL signed this feed with a throwaway key, as `tools/package/feed-signature.sh` signs the real one, and
-/// `tools/package/test_publish.py` checks the same files, so the two sides can't disagree on the signature's form.
 #[test]
 fn a_feed_openssl_signed_checks_out() {
-    let key = UpdateFeedKey::from_base64(include_str!("../../fixture/throwaway-key.pub").trim_ascii());
-
-    let checked = key.verify(
-        include_bytes!("../../fixture/releases.osx.json"),
-        include_bytes!("../../fixture/releases.osx.json.sig"),
-    );
+    let checked = crate::fixture::KEY.verify(crate::fixture::FEED, crate::fixture::SIGNATURE);
 
     assert!(checked.is_ok(), "{checked:?}");
 }
