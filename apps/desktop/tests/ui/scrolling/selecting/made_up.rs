@@ -3,8 +3,8 @@
 
 use client_core::fake_hub::World;
 use client_core::fake_hub::events::{
-    self, advised, finished_turn, launched, printed, subagent_ended, subagent_started, subagents_listed, taken, text,
-    typed_call, user_prompt,
+    self, advised, finished_turn, launched, printed, start_turn, subagent_ended, subagent_started, subagents_listed,
+    text, typed_call, user_prompt,
 };
 use gpui_kit::{Bounds, Pixels, TestAppContext};
 use protocol::capability::calls::Call;
@@ -76,8 +76,7 @@ pub(super) fn open_on_a_chat(cx: &mut TestAppContext, turns: Vec<Turn>) -> (Fake
 fn events(turns: Vec<Turn>) -> Vec<EventBody> {
     let mut events = Vec::new();
     for (asked, said) in turns {
-        let prompt = Seq::new(u64::try_from(events.len() + 1).unwrap());
-        events.extend([user_prompt(&asked), taken(prompt)]);
+        start_turn(&mut events, user_prompt(&asked));
         for said in said {
             let message = format!("msg-{}", events.len());
             match said {

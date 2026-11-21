@@ -7,7 +7,7 @@
 
 #![cfg(test)]
 
-use client_core::fake_hub::events::{finished_turn, launched, subagent, taken, user_prompt};
+use client_core::fake_hub::events::{finished_turn, first_turn, launched, subagent, user_prompt};
 use client_core::session_log::SessionLog;
 use desktop::workspace_pane::Showing;
 use gpui_kit::test::TestWindowExt as _;
@@ -15,7 +15,7 @@ use gpui_kit::{AppContext as _, ElementId, SharedString, TestAppContext};
 use protocol::capability::calls::Call;
 use protocol::capability::calls::call::Runs;
 use protocol::event::{ContentBlock, EventBody};
-use protocol::model::{Record, Rev, Seq, SessionId, SessionStatus, SettledAt, Subagent, SubagentId};
+use protocol::model::{Record, Rev, SessionId, SessionStatus, SettledAt, Subagent, SubagentId};
 
 use crate::menus::items;
 use crate::support::{Gate, Stack, Ui, one_chat, open_on_the_chat};
@@ -328,13 +328,14 @@ fn a_working_subagent_s_line_opens_its_tab_and_its_call_opened_meanwhile_makes_r
 #[gpui_kit::test]
 fn a_subagent_tab_opened_before_its_record_comes_is_named_as_the_record_names_it_once_it_does(cx: &mut TestAppContext) {
     let call = "toolu-agent";
-    let events = vec![
+    let events = first_turn(
         user_prompt("Look around"),
-        taken(Seq::new(1)),
-        subagent("msg-1", call, "Explore", AGENT_LINE, "Look around.", Runs::Background),
-        launched(call),
-        finished_turn(4, 0.01),
-    ];
+        [
+            subagent("msg-1", call, "Explore", AGENT_LINE, "Look around.", Runs::Background),
+            launched(call),
+            finished_turn(4, 0.01),
+        ],
+    );
     let (world, chat) = one_chat(SessionStatus::Idle, events);
     let (_fake, mut ui) = open_on_the_chat(cx, world, &chat);
     let pane = ui.pane().unwrap();

@@ -5,7 +5,7 @@
 
 use protocol::capability::calls::call::Runs;
 use protocol::event::{AgentTask, EventBody, TaskKind};
-use protocol::model::{Seq, SessionStatus};
+use protocol::model::SessionStatus;
 
 use super::frame::{CHAT, Frame, Part};
 use super::screens::FOCUS;
@@ -13,7 +13,7 @@ use super::steps::{Screen, Step};
 use super::worlds::chat_world;
 use client_core::fake_hub::World;
 use client_core::fake_hub::events::{
-    in_background, launched, monitor, printed, replied, said, subagent, subagent_started, taken, task, text,
+    first_turn, in_background, launched, monitor, printed, replied, said, subagent, subagent_started, task, text,
     user_prompt,
 };
 
@@ -100,11 +100,13 @@ fn starting(kind: TaskKind, at: usize, call: &str) -> (Vec<EventBody>, AgentTask
 /// The start of a turn that left `count` tasks of each kind going in the background, in the order given, each
 /// started by a call of its own, and then the list of them all.
 fn started(kinds: &[(TaskKind, usize)]) -> Vec<EventBody> {
-    let mut events = vec![
+    let mut events = first_turn(
         user_prompt("Move every crate over to typed aspects, a pull request for each, and get them merged."),
-        taken(Seq::new(1)),
-        text("msg-1", "I'll give each crate to an agent of its own, and watch their pull requests through the queue."),
-    ];
+        [text(
+            "msg-1",
+            "I'll give each crate to an agent of its own, and watch their pull requests through the queue.",
+        )],
+    );
     let mut tasks = Vec::new();
     for (kind, count) in kinds {
         for at in 0..*count {

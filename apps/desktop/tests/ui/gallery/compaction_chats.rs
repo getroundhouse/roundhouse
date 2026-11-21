@@ -14,7 +14,9 @@ use super::screens::FOCUS;
 use super::steps::{Screen, Step, Target};
 use super::worlds::chat_world;
 use client_core::fake_hub::World;
-use client_core::fake_hub::events::{command, edit, printed, replied, taken, text, thought, updated, user_prompt};
+use client_core::fake_hub::events::{
+    command, edit, printed, replied, start_turn, text, thought, turn_ending_with, updated, user_prompt,
+};
 
 /// The screens about compacting.
 pub(crate) const SCREENS: &[Screen] = &[
@@ -91,12 +93,9 @@ pub(crate) const SCREENS: &[Screen] = &[
 fn long_with_compactions() -> Vec<EventBody> {
     let mut events = Vec::new();
     for (turn, (asked, said)) in (1..).zip(super::long_chats::TURNS) {
-        let prompt = next(&events);
-        events.extend([user_prompt(asked), taken(prompt)]);
-        if turn == 10 {
-            events.push(compacted(CompactedBy::Agent, 467_499, 15_694, 89_120));
-        }
-        events.extend([text(&format!("msg-{turn}"), said), replied(said, 12, 0.04)]);
+        let compacting = (turn == 10).then(|| compacted(CompactedBy::Agent, 467_499, 15_694, 89_120));
+        let did = compacting.into_iter().chain([text(&format!("msg-{turn}"), said)]);
+        turn_ending_with(&mut events, user_prompt(asked), did, replied(said, 12, 0.04));
         if turn == 16 {
             compact_asked(&mut events, None);
         }
@@ -154,27 +153,26 @@ fn asked_last() -> Vec<EventBody> {
 fn asked_as(keeping: Option<&str>) -> Vec<EventBody> {
     let mut events = finished();
     compact_asked(&mut events, keeping);
-    let prompt = next(&events);
     let reply = "The field is on `Workspace`, and the sidebar draws a badge from it. Nothing else had to change, \
                  since the feed already sends the whole record.";
-    events.extend([
+    turn_ending_with(
+        &mut events,
         user_prompt("Go with the first. Add the field, and have the sidebar draw a badge from it."),
-        taken(prompt),
-        text("msg-5", "I'll add the field first."),
-        edit("msg-5", "toolu-5", MODEL, "    pub branch: String,\n", WITH_PULL_REQUEST),
-        updated("toolu-5", MODEL),
-        text("msg-6", reply),
+        [
+            text("msg-5", "I'll add the field first."),
+            edit("msg-5", "toolu-5", MODEL, "    pub branch: String,\n", WITH_PULL_REQUEST),
+            updated("toolu-5", MODEL),
+            text("msg-6", reply),
+        ],
         replied(reply, 41, 0.12),
-    ]);
+    );
     events
 }
 
 /// A compaction asked for keeping `keeping`, after `events`, as the hub and the adapter record it.
 fn compact_asked(events: &mut Vec<EventBody>, keeping: Option<&str>) {
-    let asked = next(events);
+    let asked = start_turn(events, EventBody::CompactionAsked { keeping: keeping.map(str::to_string) });
     events.extend([
-        EventBody::CompactionAsked { keeping: keeping.map(str::to_string) },
-        taken(asked),
         asked_for(compacted(CompactedBy::Asked, 226_869, 9_009, 51_558), asked, keeping),
         only_compacted(51_797),
     ]);
@@ -210,13 +208,13 @@ fn compacting_world() -> World {
 /// The conversation, then a compaction asked for that the agent couldn't do, as the CLI says when there's too little.
 fn failed() -> Vec<EventBody> {
     let mut events = finished();
-    let asked = next(&events);
+    let asked = start_turn(&mut events, EventBody::CompactionAsked { keeping: None });
     let couldnt = EventBody::AgentCompacted {
         asked: Some(asked),
         keeping: None,
         outcome: CompactionOutcome::Failed { error: Some("Not enough messages to compact.".to_string()) },
     };
-    events.extend([EventBody::CompactionAsked { keeping: None }, taken(asked), couldnt, only_compacted(212)]);
+    events.extend([couldnt, only_compacted(212)]);
     events
 }
 
@@ -272,9 +270,4 @@ fn asked_for(mut compacted: EventBody, asked: Seq, keeping: Option<&str>) -> Eve
         *kept = keeping.map(str::to_string);
     }
     compacted
-}
-
-/// The seq the next event pushed onto `events` gets.
-fn next(events: &[EventBody]) -> Seq {
-    Seq::new(u64::try_from(events.len()).unwrap() + 1)
 }

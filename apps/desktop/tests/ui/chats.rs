@@ -5,10 +5,12 @@
 use std::time::Duration;
 
 use client_core::fake_hub::World;
-use client_core::fake_hub::events::{in_background, monitor, printed, replied, said, taken, task, text, user_prompt};
+use client_core::fake_hub::events::{
+    first_turn, in_background, monitor, printed, replied, said, task, text, user_prompt,
+};
 use gpui_kit::{AppContext as _, SharedString, TestAppContext};
 use protocol::event::{EventBody, TaskKind};
-use protocol::model::{Seq, SessionId, SessionStatus, Title};
+use protocol::model::{SessionId, SessionStatus, Title};
 
 use crate::support::{FakeHub, Gate, Stack, Ui};
 use crate::tools::in_a_new_workspace;
@@ -264,17 +266,18 @@ fn left_a_command_and_a_monitor_going() -> World {
     let tasks =
         vec![task(TaskKind::Command, "toolu-1", "Run the tests"), task(TaskKind::Monitor, "toolu-2", "Watch the run")];
     let reply = "Both are going.";
-    let events = vec![
+    let events = first_turn(
         user_prompt("Run the tests, and watch the run"),
-        taken(Seq::new(1)),
-        in_background("msg-1", "toolu-1", "cargo test", "Run the tests"),
-        printed("toolu-1", "Command running in background."),
-        monitor("msg-1", "toolu-2", "tail -f test.log", "Watch the run", Some(600_000)),
-        said("toolu-2", "Monitor started."),
-        EventBody::AgentTasks { tasks, stopped: Vec::new() },
-        text("msg-2", reply),
-        replied(reply, 5, 0.01),
-    ];
+        [
+            in_background("msg-1", "toolu-1", "cargo test", "Run the tests"),
+            printed("toolu-1", "Command running in background."),
+            monitor("msg-1", "toolu-2", "tail -f test.log", "Watch the run", Some(600_000)),
+            said("toolu-2", "Monitor started."),
+            EventBody::AgentTasks { tasks, stopped: Vec::new() },
+            text("msg-2", reply),
+            replied(reply, 5, 0.01),
+        ],
+    );
     world.chat(&workspace, SessionStatus::Background, events);
     world
 }

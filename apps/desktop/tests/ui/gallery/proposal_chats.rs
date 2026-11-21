@@ -15,7 +15,9 @@ use super::screens::FOCUS;
 use super::steps::{DictateWith, Screen, Step};
 use super::worlds::chat_world;
 use client_core::fake_hub::World;
-use client_core::fake_hub::events::{mcp, mcp_said, replied, taken, text, user_prompt};
+use client_core::fake_hub::events::{
+    first_turn, mcp, mcp_said, replied, start_turn, text, turn_ending_with, user_prompt,
+};
 
 /// The call that proposed, which the proposal's record names.
 const CALL: &str = "toolu-p1";
@@ -153,17 +155,9 @@ fn asked_events() -> Vec<EventBody> {
         "I'd like another round of your proposal \"Holding a train\" ({ID}), without choosing yet. My note says what \
          to change, which get_proposal reads. Then revise it with revise_proposal."
     );
-    events.extend([
-        EventBody::UserPrompt {
-            client_msg_id: Some("round-1".into()),
-            prompt: protocol::prompt::Prompt::new(told),
-            from: protocol::prompt::PromptFrom::ProposalResponse {
-                proposal: ID.into(),
-                revision: RevisionNumber::FIRST,
-            },
-        },
-        taken(protocol::model::Seq::new(9)),
-    ]);
+    let from = protocol::prompt::PromptFrom::ProposalResponse { proposal: ID.into(), revision: RevisionNumber::FIRST };
+    let prompt = protocol::prompt::Prompt::new(told);
+    start_turn(&mut events, EventBody::UserPrompt { client_msg_id: Some("round-1".into()), prompt, from });
     events
 }
 
@@ -247,22 +241,15 @@ fn answered_world() -> World {
     let told = format!(
         "I chose A, The signal, in your proposal \"Holding a train\" ({ID}). I wrote a note with it, which get_proposal reads."
     );
-    events.extend([
-        EventBody::UserPrompt {
-            client_msg_id: Some(TOLD.into()),
-            prompt: protocol::prompt::Prompt::new(told),
-            from: protocol::prompt::PromptFrom::ProposalResponse {
-                proposal: ID.into(),
-                revision: RevisionNumber::FIRST,
-            },
-        },
-        taken(protocol::model::Seq::new(9)),
-        text(
-            "m5",
-            "Going with the signal. I'll keep the countdown on `Signal`, and say in the PR that it's one field.",
-        ),
+    let from = protocol::prompt::PromptFrom::ProposalResponse { proposal: ID.into(), revision: RevisionNumber::FIRST };
+    let prompt = protocol::prompt::Prompt::new(told);
+    let going = "Going with the signal. I'll keep the countdown on `Signal`, and say in the PR that it's one field.";
+    turn_ending_with(
+        &mut events,
+        EventBody::UserPrompt { client_msg_id: Some(TOLD.into()), prompt, from },
+        [text("m5", going)],
         replied("Going with the signal.", 41, 0.22),
-    ]);
+    );
     let answered =
         Choice { chosen: vec![OptionPlace(0)], note: "Hold it while the platform clears too.".into(), at_ms: 0 };
     with_proposal(events, [first(Some(Response::Chose(answered)))])
@@ -275,14 +262,16 @@ const WITHDREW: &str = "toolu-p9";
 fn withdrawn_world() -> World {
     let mut events = events();
     let why = "Dispatch decides where holds live now, in the timetable service.";
-    events.extend([
+    turn_ending_with(
+        &mut events,
         user_prompt("Dispatch just moved holds into the timetable service, so drop that one."),
-        taken(protocol::model::Seq::new(9)),
-        mcp("m5", WITHDREW, "roundhouse", "withdraw_proposal", json!({ "proposal": ID, "why": why })),
-        mcp_said(WITHDREW, &format!("Withdrew \"Holding a train\" ({ID})."), false),
-        text("m6", "Withdrawn. I'll leave holding to the timetable service."),
+        [
+            mcp("m5", WITHDREW, "roundhouse", "withdraw_proposal", json!({ "proposal": ID, "why": why })),
+            mcp_said(WITHDREW, &format!("Withdrew \"Holding a train\" ({ID})."), false),
+            text("m6", "Withdrawn. I'll leave holding to the timetable service."),
+        ],
         replied("Withdrawn. I'll leave holding to the timetable service.", 12, 0.05),
-    ]);
+    );
     let mut world = with_proposal(events, [first(None)]);
     for proposals in world.proposals.values_mut() {
         for proposal in proposals {
@@ -316,16 +305,17 @@ fn with_proposal(events: Vec<EventBody>, revisions: impl Into<Vec<ProposalRevisi
 }
 
 fn events() -> Vec<EventBody> {
-    vec![
+    first_turn(
         user_prompt("Trains should be able to wait at a signal for longer than a minute. Work out how first."),
-        taken(protocol::model::Seq::new(1)),
-        text("m1", "I read how the controller holds a train at a signal, and how long it waits now."),
-        text("m2", "Three ways would work, and they differ in where the wait is kept. I've written them up."),
-        mcp("m3", CALL, "roundhouse", "propose", json!({ "title": "Holding a train" })),
-        mcp_said(CALL, &format!("Proposed \"Holding a train\" as {ID}."), false),
-        text("m4", "I'd go with A. Ask me anything about them here first, if you like."),
-        replied("I'd go with A. Ask me anything about them here first, if you like.", 74, 0.41),
-    ]
+        [
+            text("m1", "I read how the controller holds a train at a signal, and how long it waits now."),
+            text("m2", "Three ways would work, and they differ in where the wait is kept. I've written them up."),
+            mcp("m3", CALL, "roundhouse", "propose", json!({ "title": "Holding a train" })),
+            mcp_said(CALL, &format!("Proposed \"Holding a train\" as {ID}."), false),
+            text("m4", "I'd go with A. Ask me anything about them here first, if you like."),
+            replied("I'd go with A. Ask me anything about them here first, if you like.", 74, 0.41),
+        ],
+    )
 }
 
 fn proposed() -> Proposed {

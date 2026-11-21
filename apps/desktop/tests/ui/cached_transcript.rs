@@ -4,10 +4,10 @@
 
 #![cfg(test)]
 
-use client_core::fake_hub::events::{taken, text, user_prompt};
+use client_core::fake_hub::events::{first_turn, text, user_prompt};
 use gpui_kit::{AppContext as _, Context, Entity, TestAppContext};
 use protocol::capability::Capabilities;
-use protocol::model::{RunCapabilities, RunId, Seq, SessionStatus};
+use protocol::model::{RunCapabilities, RunId, SessionStatus};
 use transcript::Transcript;
 
 use crate::support::{Ui, one_chat, open_on_the_chat};
@@ -30,7 +30,7 @@ fn draws_rows(
 
 #[gpui_kit::test]
 fn what_changes_how_its_rows_are_drawn_draws_the_transcript_again(cx: &mut TestAppContext) {
-    let events = vec![user_prompt("Keep the ledger."), taken(Seq::new(1)), text("msg-0", "The ledger is kept.")];
+    let events = first_turn(user_prompt("Keep the ledger."), [text("msg-0", "The ledger is kept.")]);
     let (world, chat) = one_chat(SessionStatus::Idle, events);
     let mut session = world.session(&chat).unwrap().clone();
     let (_fake, mut ui) = open_on_the_chat(cx, world, &chat);

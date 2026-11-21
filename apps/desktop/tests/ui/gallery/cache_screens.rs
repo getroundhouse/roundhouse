@@ -14,7 +14,7 @@ use super::screens::FOCUS;
 use super::steps::{Screen, Step, Target};
 use super::worlds::{chat_world, conversation, titled};
 use client_core::fake_hub::World;
-use client_core::fake_hub::events::{replied, taken, text, user_prompt};
+use client_core::fake_hub::events::{replied, text, turn_ending_with, user_prompt};
 
 /// The screens about the cache.
 pub(crate) const SCREENS: &[Screen] = &[
@@ -87,15 +87,15 @@ const IDLE_MS: i64 = 80 * 60_000;
 /// the cache again, and the reply.
 fn came_back() -> World {
     let mut events = finished();
-    let prompt = Seq::new(u64::try_from(events.len()).unwrap() + 1);
     let reply = "Yes. The badge reads the state from the workspace's record, so it's right as soon as the feed says.";
-    events.extend([
+    let expired =
+        EventBody::CacheExpired { idle_ms: IDLE_MS.unsigned_abs(), read_tokens: 14_755, written_tokens: 298_745 };
+    let prompt = turn_ending_with(
+        &mut events,
         user_prompt("Does the badge update when the PR merges?"),
-        taken(prompt),
-        EventBody::CacheExpired { idle_ms: IDLE_MS.unsigned_abs(), read_tokens: 14_755, written_tokens: 298_745 },
-        text("msg-4", reply),
+        [expired, text("msg-4", reply)],
         replied(reply, 9, 0.62),
-    ]);
+    );
     let mut world = chat_world(SessionStatus::Idle, events);
     world.idle_before(&shown_chat(&world), prompt, IDLE_MS);
     world

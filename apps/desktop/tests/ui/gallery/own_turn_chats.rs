@@ -6,7 +6,7 @@
 use protocol::capability::calls::call::Runs;
 use protocol::capability::turns::OwnTurn;
 use protocol::event::{AgentTask, EndedTask, EventBody, TaskKind, TaskOutcome};
-use protocol::model::{EndedWait, Seq, SessionStatus, WaitEnd, WaitEnded};
+use protocol::model::{EndedWait, SessionStatus, WaitEnd, WaitEnded};
 use serde_json::json;
 
 use super::frame::CHAT;
@@ -14,7 +14,7 @@ use super::screens::FOCUS;
 use super::steps::{Screen, Step};
 use super::worlds::chat_world;
 use client_core::fake_hub::events::{
-    launched, mcp, mcp_said, replied, subagent, subagent_ended, subagent_started, taken, task, text, user_prompt,
+    first_turn, launched, mcp, mcp_said, replied, subagent, subagent_ended, subagent_started, task, text, user_prompt,
 };
 
 /// The screens about turns the agent started by itself.
@@ -47,41 +47,42 @@ fn picked_up() -> Vec<EventBody> {
     let queued = "#7's required checks passed, so I've added it to the merge queue.";
     let mut wait = protocol::fixtures::pull_request_wait("toolu-2");
     wait.ended = Some(WaitEnded { at_ms: 2, how: WaitEnd::ChecksPassed });
-    vec![
+    first_turn(
         user_prompt("Have an agent review the depot's design while #7's checks run, and queue #7 once they pass."),
-        taken(Seq::new(1)),
-        text("msg-1", "I'll have an agent review the depot, and wait on #7's checks meanwhile."),
-        subagent("msg-1", "toolu-1", "general-purpose", REVIEW, REVIEW_PROMPT, Runs::Background),
-        subagent_started("toolu-1", "general-purpose", REVIEW, REVIEW_PROMPT),
-        launched("toolu-1"),
-        mcp(
-            "msg-2",
-            "toolu-2",
-            "roundhouse",
-            "wait_for_pull_requests",
-            json!({ "pull_requests": [7], "until": "required_checks" }),
-        ),
-        mcp_said("toolu-2", "The task w1 was moved to the background.", false),
-        EventBody::AgentTasks {
-            tasks: vec![task(TaskKind::Subagent, "toolu-1", REVIEW), wait_task.clone()],
-            stopped: Vec::new(),
-        },
-        text("msg-3", reply),
-        replied(reply, 21, 0.09),
-        subagent_ended("toolu-1", found, 31_400),
-        EventBody::AgentTasks { tasks: vec![wait_task.clone()], stopped: Vec::new() },
-        own_turn(EndedTask {
-            task: task(TaskKind::Subagent, "toolu-1", REVIEW),
-            outcome: TaskOutcome::Finished,
-            wait: None,
-        }),
-        text("msg-4", fixing),
-        replied(fixing, 6, 0.03),
-        EventBody::AgentTasks { tasks: Vec::new(), stopped: Vec::new() },
-        own_turn(EndedTask { task: wait_task, outcome: TaskOutcome::Finished, wait: Some(EndedWait::from(&wait)) }),
-        text("msg-5", queued),
-        replied(queued, 8, 0.04),
-    ]
+        [
+            text("msg-1", "I'll have an agent review the depot, and wait on #7's checks meanwhile."),
+            subagent("msg-1", "toolu-1", "general-purpose", REVIEW, REVIEW_PROMPT, Runs::Background),
+            subagent_started("toolu-1", "general-purpose", REVIEW, REVIEW_PROMPT),
+            launched("toolu-1"),
+            mcp(
+                "msg-2",
+                "toolu-2",
+                "roundhouse",
+                "wait_for_pull_requests",
+                json!({ "pull_requests": [7], "until": "required_checks" }),
+            ),
+            mcp_said("toolu-2", "The task w1 was moved to the background.", false),
+            EventBody::AgentTasks {
+                tasks: vec![task(TaskKind::Subagent, "toolu-1", REVIEW), wait_task.clone()],
+                stopped: Vec::new(),
+            },
+            text("msg-3", reply),
+            replied(reply, 21, 0.09),
+            subagent_ended("toolu-1", found, 31_400),
+            EventBody::AgentTasks { tasks: vec![wait_task.clone()], stopped: Vec::new() },
+            own_turn(EndedTask {
+                task: task(TaskKind::Subagent, "toolu-1", REVIEW),
+                outcome: TaskOutcome::Finished,
+                wait: None,
+            }),
+            text("msg-4", fixing),
+            replied(fixing, 6, 0.03),
+            EventBody::AgentTasks { tasks: Vec::new(), stopped: Vec::new() },
+            own_turn(EndedTask { task: wait_task, outcome: TaskOutcome::Finished, wait: Some(EndedWait::from(&wait)) }),
+            text("msg-5", queued),
+            replied(queued, 8, 0.04),
+        ],
+    )
 }
 
 /// A turn the agent started by itself to take in how `task` ended, as the hub records it.

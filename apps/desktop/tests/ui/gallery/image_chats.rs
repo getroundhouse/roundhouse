@@ -6,12 +6,12 @@
 
 use protocol::attachment::{Attachment, MediaType};
 use protocol::event::LinkedImage;
-use protocol::model::{AttachmentId, Seq, SessionStatus};
+use protocol::model::{AttachmentId, SessionStatus};
 
 use super::pictures;
 use super::worlds::chat_world;
 use client_core::fake_hub::World;
-use client_core::fake_hub::events::{replied, taken, text_pointing, user_prompt};
+use client_core::fake_hub::events::{first_turn, replied, text_pointing, user_prompt};
 
 /// Where the reply in [`pointed`] says its screenshot is.
 const AFTER: &str = "docs/screens/board-after.png";
@@ -87,8 +87,7 @@ fn pointing(prompt: &str, reply: &str, kept: Vec<(&str, Vec<u8>)>) -> World {
     let images: Vec<LinkedImage> =
         kept.iter().map(|kept| LinkedImage { address: kept.0.to_string(), attachment: attachment(kept) }).collect();
     let ids: Vec<AttachmentId> = images.iter().map(|image| image.attachment.id.clone()).collect();
-    let events =
-        vec![user_prompt(prompt), taken(Seq::new(1)), text_pointing("msg-1", reply, images), replied(reply, 9, 0.05)];
+    let events = first_turn(user_prompt(prompt), [text_pointing("msg-1", reply, images), replied(reply, 9, 0.05)]);
     let mut world = chat_world(SessionStatus::Idle, events);
     world.attachments.extend(ids.into_iter().zip(kept.into_iter().map(|(_, png)| png)));
     world

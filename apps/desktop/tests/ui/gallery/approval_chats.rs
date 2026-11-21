@@ -9,7 +9,7 @@ use protocol::capability::calls::Call;
 use protocol::capability::calls::call::{Command, Edit, Replace, Replaces, Runs};
 use protocol::event::EventBody;
 use protocol::fixtures::{ApprovalRequest, approval_request, decided, deny, typed_command, typed_request};
-use protocol::model::{AgentKind, Seq, SessionStatus};
+use protocol::model::{AgentKind, SessionStatus};
 
 use super::chats::{self, looked_around};
 use super::frame::{CHAT, QUESTION};
@@ -19,7 +19,7 @@ use super::typed_chats;
 use super::worlds::{chat_world, in_plan_mode};
 use client_core::fake_hub::World;
 use client_core::fake_hub::events::{
-    command, denied as denied_with, launched, replied, subagent, subagent_started, subagents_listed, taken, text,
+    command, denied as denied_with, first_turn, launched, replied, subagent, subagent_started, subagents_listed, text,
     typed_call, user_prompt, within,
 };
 
@@ -88,13 +88,14 @@ fn codex_patching() -> World {
 /// that uses it, with nothing said of what it's for.
 fn patched() -> Vec<EventBody> {
     let call = Call::Patch(typed_chats::patch());
-    vec![
+    first_turn(
         user_prompt("Add a `may_pass` to the signal, and a depot that uses it."),
-        taken(Seq::new(1)),
-        text("msg-1", "I'll add it, and the depot."),
-        typed_call("msg-2", "patch-1", call.clone()),
-        typed_request("approval-1", "patch-1", call),
-    ]
+        [
+            text("msg-1", "I'll add it, and the depot."),
+            typed_call("msg-2", "patch-1", call.clone()),
+            typed_request("approval-1", "patch-1", call),
+        ],
+    )
 }
 
 /// Waiting to be allowed an edit to the project's settings for Claude, which says nothing of what it's for or why it's

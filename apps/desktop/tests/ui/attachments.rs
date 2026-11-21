@@ -6,7 +6,7 @@ use std::io::Cursor;
 
 use client_core::FileToSend;
 use client_core::fake_hub::World;
-use client_core::fake_hub::events::{finished_turn, taken, text};
+use client_core::fake_hub::events::{finished_turn, first_turn, text};
 use gpui_kit::component::TITLE_BAR_HEIGHT;
 use gpui_kit::{
     AppContext as _, Bounds, ClipboardEntry, ClipboardItem, ElementId, ExternalPaths, Image, ImageFormat, SharedString,
@@ -14,7 +14,7 @@ use gpui_kit::{
 };
 use protocol::attachment::{Attachment, MediaType};
 use protocol::event::EventBody;
-use protocol::model::{AttachmentId, Seq, SessionStatus};
+use protocol::model::{AttachmentId, SessionStatus};
 use protocol::prompt::Prompt;
 use transcript::TranscriptEvent;
 
@@ -201,11 +201,7 @@ fn a_prompts_image_opens_over_the_window_as_big_as_fits_and_a_click_or_escape_cl
         prompt: Prompt::carrying("Look.".to_string(), vec![carried.clone()]),
         from: PromptFrom::Person,
     };
-    world.chat(
-        &workspace,
-        SessionStatus::Idle,
-        vec![prompt, taken(Seq::new(1)), text("seen", "Seen."), finished_turn(3, 0.01)],
-    );
+    world.chat(&workspace, SessionStatus::Idle, first_turn(prompt, [text("seen", "Seen."), finished_turn(3, 0.01)]));
     let fake = FakeHub::holding(world);
     let mut ui = Ui::open_on(cx, &fake);
     let thumbnail = ElementId::Name(format!("picture/attachment/{}", carried.id).into());

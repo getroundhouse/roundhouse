@@ -4,10 +4,10 @@
 
 use std::time::Duration;
 
-use client_core::fake_hub::events::{replied, taken, text, user_prompt};
+use client_core::fake_hub::events::{replied, text, turn_ending_with, user_prompt};
 use gpui_kit::{AppContext as _, Modifiers, MouseMoveEvent, TestAppContext, point, px};
 use protocol::event::EventBody;
-use protocol::model::{Seq, SessionId, SessionStatus};
+use protocol::model::{SessionId, SessionStatus};
 
 use crate::support::{Gate, Stack, Ui, one_chat, open_on_the_chat, wait_until};
 use crate::tools::in_a_new_workspace;
@@ -193,8 +193,7 @@ fn says(body: &EventBody, text: &str) -> bool {
 fn turns(said: &[(&str, &str)]) -> Vec<EventBody> {
     let mut events = Vec::new();
     for (i, (prompt, reply)) in said.iter().enumerate() {
-        let asked = Seq::new(u64::try_from(events.len() + 1).unwrap());
-        events.extend([user_prompt(prompt), taken(asked), text(&format!("msg-{i}"), reply), replied(reply, 2, 0.01)]);
+        turn_ending_with(&mut events, user_prompt(prompt), [text(&format!("msg-{i}"), reply)], replied(reply, 2, 0.01));
     }
     events
 }

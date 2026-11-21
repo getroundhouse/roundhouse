@@ -4,13 +4,11 @@
 
 #![cfg(test)]
 
-use client_core::fake_hub::events::{finished_turn, taken, text, thought, user_prompt};
+use client_core::fake_hub::events::{finished_turn, first_turn, text, thought, user_prompt};
 use client_core::fake_hub::{NOW_MS, World};
 use gpui_kit::TestAppContext;
 use protocol::fixtures::{account, claude_default, github_account};
-use protocol::model::{
-    Account, AgentKind, GithubAccount, GithubSettings, HeldLogin, SentCredential, Seq, SessionStatus,
-};
+use protocol::model::{Account, AgentKind, GithubAccount, GithubSettings, HeldLogin, SentCredential, SessionStatus};
 
 use super::agents::to_agents;
 use crate::support::{FakeHub, Ui};
@@ -22,13 +20,10 @@ pub(super) fn thought_then_answered() -> World {
     let mut world = World::default();
     let repo = world.repo("signals");
     let workspace = world.workspace(&repo, "ledger");
-    let events = vec![
+    let events = first_turn(
         user_prompt("Ponder it"),
-        taken(Seq::new(1)),
-        thought("msg-1", "Weighing the levers"),
-        text("msg-2", "first answer"),
-        finished_turn(4, 0.01),
-    ];
+        [thought("msg-1", "Weighing the levers"), text("msg-2", "first answer"), finished_turn(4, 0.01)],
+    );
     world.chat(&workspace, SessionStatus::Idle, events);
     world
 }

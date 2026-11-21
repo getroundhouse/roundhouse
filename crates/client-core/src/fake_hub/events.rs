@@ -20,6 +20,52 @@ pub fn user_prompt(text: &str) -> EventBody {
     EventBody::UserPrompt { client_msg_id: None, prompt: Prompt::new(text), from: PromptFrom::Person }
 }
 
+/// A chat's events from its first turn: `prompt`, such as [`user_prompt`] makes, the agent taking it, and `then`, which
+/// is what the agent did and, once the turn has ended, its end. A later turn is added as [`turn`] adds one.
+pub fn first_turn(prompt: EventBody, then: impl IntoIterator<Item = EventBody>) -> Vec<EventBody> {
+    let mut events = Vec::new();
+    start_turn(&mut events, prompt);
+    events.extend(then);
+    events
+}
+
+/// A turn added to a chat's `events`, as the hub records one: `prompt`, such as [`user_prompt`] makes, the agent taking
+/// it, what the agent `did`, and the turn's end, as [`finished_turn`] makes one that took three seconds and a cent.
+/// Returns where the prompt is.
+pub fn turn(events: &mut Vec<EventBody>, prompt: EventBody, did: impl IntoIterator<Item = EventBody>) -> Seq {
+    turn_ending_with(events, prompt, did, finished_turn(3, 0.01))
+}
+
+/// A turn added to a chat's `events`, as [`turn`] adds one, that ends with `end`, such as [`replied`] makes.
+pub fn turn_ending_with(
+    events: &mut Vec<EventBody>,
+    prompt: EventBody,
+    did: impl IntoIterator<Item = EventBody>,
+    end: EventBody,
+) -> Seq {
+    let asked = start_turn(events, prompt);
+    events.extend(did);
+    events.push(end);
+    asked
+}
+
+/// The start of a turn added to a chat's `events`: `asked`, which is a prompt, such as [`user_prompt`] makes, or an ask
+/// to compact, and the agent taking it. Returns where `asked` is.
+pub fn start_turn(events: &mut Vec<EventBody>, asked: EventBody) -> Seq {
+    assert!(
+        matches!(asked, EventBody::UserPrompt { .. } | EventBody::CompactionAsked { .. }),
+        "a turn starts with a prompt or an ask to compact, not {asked:?}",
+    );
+    let at = next_seq(events);
+    events.extend([asked, taken(at)]);
+    at
+}
+
+/// The `seq` of the next event added to a chat's `events`, since a chat's first is at 1.
+pub fn next_seq(events: &[EventBody]) -> Seq {
+    Seq::new(u64::try_from(events.len()).unwrap() + 1)
+}
+
 /// The agent taking the prompt recorded at `prompt`, which is the first event of every chat here.
 pub fn taken(prompt: Seq) -> EventBody {
     EventBody::PromptTaken { prompt }

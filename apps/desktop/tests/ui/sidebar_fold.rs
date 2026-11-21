@@ -6,9 +6,9 @@
 #![cfg(test)]
 
 use client_core::fake_hub::World;
-use client_core::fake_hub::events::{finished_turn, taken, text, user_prompt};
+use client_core::fake_hub::events::{finished_turn, first_turn, text, user_prompt};
 use gpui_kit::{Pixels, SharedString, TestAppContext, px};
-use protocol::model::{RepoId, Seq, SessionStatus, WorkspaceId};
+use protocol::model::{RepoId, SessionStatus, WorkspaceId};
 
 use crate::support::{
     FakeHub, MORE_THAN_FIT, Stack, Ui, home_row, open_on_the_world, order, project_row, sidebar_row as row, top,
@@ -91,8 +91,7 @@ fn a_new_workspace_shows_in_a_project_whose_row_was_pressed_with_nothing_to_coll
 #[gpui_kit::test]
 fn a_collapsed_project_says_how_many_of_its_workspaces_need_a_look(cx: &mut TestAppContext) {
     let (mut world, [first, second], [.., last]) = two_projects_world();
-    let reply =
-        vec![user_prompt("Look at the ledger."), taken(Seq::new(1)), text("msg-1", "Done."), finished_turn(4, 0.01)];
+    let reply = first_turn(user_prompt("Look at the ledger."), [text("msg-1", "Done."), finished_turn(4, 0.01)]);
     let chat = world.chat(&last, SessionStatus::Idle, reply);
     world.unread(&chat);
     let (_fake, mut ui) = open_on(cx, world);
