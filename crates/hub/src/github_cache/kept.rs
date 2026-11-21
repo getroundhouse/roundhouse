@@ -8,8 +8,12 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::watch;
 use tracing::warn;
 
+use github::Rules;
+use protocol::model::{BranchName, GithubRepositoryName};
+
 use super::file::{CacheFile, Row};
-use super::keys::{Facet, Item};
+use super::keys::{BranchOf, Facet, Item, Subject};
+use super::rules::KeptRules;
 use crate::store::now_ms;
 
 /// How long the cache keeps what nothing has asked for since, in memory and in its file, so it doesn't keep everything
@@ -24,6 +28,7 @@ pub(crate) struct GithubCache {
     /// showing the same chat, that the read is over, however it ended, so the ask waits for its answer rather than
     /// asking GitHub again, and waits for nothing else.
     reading: Mutex<HashMap<(Item, Facet), watch::Receiver<()>>>,
+    rules: KeptRules,
     file: CacheFile,
 }
 
@@ -66,7 +71,7 @@ impl Said {
         let said = serde_json::to_string(self)
             .inspect_err(|error| warn!("writing what GitHub said for the cache's file: {error}"))
             .ok()?;
-        Some(Row { item: item.clone(), facet: Facet::Summary, said, read_at_ms })
+        Some(Row { subject: Subject::Item(item.clone()), facet: Facet::Summary, said, read_at_ms })
     }
 }
 
@@ -103,14 +108,15 @@ impl GithubCache {
             warn!("reading what was last read from GitHub from {}: {error}", path.display());
             Vec::new()
         });
-        let mut items = HashMap::new();
-        for Row { item, facet, said, read_at_ms } in rows {
-            let Facet::Summary = facet;
+        let (mut items, rules) = (HashMap::new(), KeptRules::default());
+        for row in rows {
+            rules.load(&row);
+            let Row { subject: Subject::Item(item), facet: Facet::Summary, said, read_at_ms } = row else { continue };
             let Ok(said) = serde_json::from_str::<Said>(&said) else { continue };
             let summary = LastRead { said: Some(said), failed: None, read_at_ms };
             items.insert(item, Kept { summary, asked_at_ms: read_at_ms });
         }
-        Self { items: Mutex::new(items), reading: Mutex::new(HashMap::new()), file }
+        Self { items: Mutex::new(items), reading: Mutex::new(HashMap::new()), rules, file }
     }
 
     /// Which of `items` have a `facet` older than `fresh_for`, each once: those this ask is to read itself, which no
@@ -167,19 +173,40 @@ impl GithubCache {
                 items.insert(item, Kept { summary, asked_at_ms: read_at_ms });
             }
         }
-        let written = self.file.forget(&forgotten).and_then(|()| rows.iter().try_for_each(|row| self.file.write(row)));
+        self.write(&forgotten, &rows);
+    }
+
+    /// Forgets `forgotten` in the file, and writes `rows` to it.
+    fn write(&self, forgotten: &[Subject], rows: &[Row]) {
+        let written = self.file.forget(forgotten).and_then(|()| rows.iter().try_for_each(|row| self.file.write(row)));
         if let Err(error) = written {
             warn!("keeping what was read from GitHub in the cache's file: {error}");
         }
     }
 
+    /// The rules of the branches of `repository` the cache has read within `fresh_for`, for a read of pull requests
+    /// into them not to read again.
+    pub(crate) fn rules_of(&self, repository: &GithubRepositoryName, fresh_for: Duration) -> Vec<(BranchName, Rules)> {
+        self.rules.known(repository, fresh_for, now_ms())
+    }
+
+    /// Keeps the rules of each branch a read of pull requests read just now, as `(repository, branch, rules)`, and
+    /// forgets what nothing has asked for in [`KEPT_FOR`]. Blocks on the file.
+    pub(crate) fn keep_rules(&self, read: Vec<(GithubRepositoryName, BranchName, Rules)>) {
+        let now_ms = now_ms();
+        let forgotten = self.forget_unasked(now_ms);
+        let read = read.into_iter().map(|(repository, branch, rules)| (BranchOf::new(&repository, branch), rules));
+        let rows = self.rules.keep(read.collect(), now_ms);
+        self.write(&forgotten, &rows);
+    }
+
     /// Forgets, in memory, what nothing has asked for in [`KEPT_FOR`] by `now_ms`, and returns it.
-    fn forget_unasked(&self, now_ms: i64) -> Vec<Item> {
-        let mut forgotten = Vec::new();
+    fn forget_unasked(&self, now_ms: i64) -> Vec<Subject> {
+        let mut forgotten = self.rules.forget_unasked(now_ms);
         self.items.lock().retain(|item, kept| {
             let keep = now_ms - kept.asked_at_ms < millis(KEPT_FOR);
             if !keep {
-                forgotten.push(item.clone());
+                forgotten.push(Subject::Item(item.clone()));
             }
             keep
         });
@@ -208,10 +235,11 @@ impl GithubCache {
             kept.summary.read_at_ms -= millis(by);
             kept.asked_at_ms -= millis(by);
         }
+        self.rules.age(by);
     }
 }
 
 /// `duration` in milliseconds, or the most there are.
-fn millis(duration: Duration) -> i64 {
+pub(super) fn millis(duration: Duration) -> i64 {
     i64::try_from(duration.as_millis()).unwrap_or(i64::MAX)
 }

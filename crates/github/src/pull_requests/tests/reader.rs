@@ -111,6 +111,7 @@ pub(super) fn ask(name: &'static str, numbers: &[u64]) -> PullRequestsAsk {
             numbers.iter().map(|n| PullRequestNumber::try_from(*n).unwrap()).collect::<Vec<_>>(),
         )
         .unwrap(),
+        known_rules: Vec::new(),
     }
 }
 
@@ -150,6 +151,24 @@ async fn a_read_takes_in_what_is_under_it_reads_every_page_and_confirms_nothing_
     }
     assert!(queries[1].contains("c7: pullRequest") && queries[3].contains("b0: ref("), "{queries:?}");
     assert!(queries[3].contains("compare(headRef:") && queries.len() == 4, "{queries:?}");
+}
+
+/// A read returns the rules of the branch it read them of, `main`, and an ask that knows them, as the hub does once
+/// it has read them, isn't asked them again, and still finds which checks they require.
+#[tokio::test]
+async fn rules_an_ask_knows_arent_read_again() {
+    let (first, _) = read(rounds(unmoved()), vec![ask("project", &[7])]).await;
+    let branches: Vec<_> = first.rules.iter().map(|read| read.branch.as_str()).collect();
+    assert_eq!(branches, ["main"]);
+    let known_rules = first.rules.into_iter().map(|read| (read.branch, read.rules)).collect();
+
+    let (again, queries) = read(rounds(unmoved()), vec![PullRequestsAsk { known_rules, ..ask("project", &[7]) }]).await;
+
+    assert!(again.rules.is_empty(), "{:?}", again.rules);
+    assert!(queries.iter().all(|query| !query.contains("b0: ref(")), "{queries:?}");
+    let snapshot = again.answers.into_iter().next().unwrap().unwrap();
+    let upper = snapshot.get(number(7)).unwrap();
+    assert!(upper.checks.iter().any(|check| check.required && check.state == CheckState::Pending), "{upper:?}");
 }
 
 /// Its branch pushed between the first look and the last, so the read starts again, and once that has moved too, and

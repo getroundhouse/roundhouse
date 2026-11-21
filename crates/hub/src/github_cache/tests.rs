@@ -1,7 +1,10 @@
 use std::path::Path;
 use std::time::Duration;
 
-use protocol::model::{GithubRepositoryName, IssueNumber, IssueState, Reference, ReferenceKind, ReferenceRead};
+use github::Rules;
+use protocol::model::{
+    BranchName, GithubRepositoryName, IssueNumber, IssueState, Reference, ReferenceKind, ReferenceRead,
+};
 
 use super::file::VERSION;
 use super::kept::KEPT_FOR;
@@ -23,6 +26,10 @@ fn issue(n: u64) -> Reference {
     }
 }
 
+fn project() -> GithubRepositoryName {
+    GithubRepositoryName::named("example/project")
+}
+
 fn item(n: u64) -> Item {
     Item::new(&GithubRepositoryName::named("Example/Project"), IssueNumber::try_from(n).unwrap())
 }
@@ -37,14 +44,15 @@ fn version_of(path: &Path) -> i64 {
     conn.pragma_query_value(None, "user_version", |row| row.get(0)).unwrap()
 }
 
-/// A hub that starts again has what was read before it stopped, what GitHub found and what it said wasn't there, but
-/// not why a read failed, which says nothing of what's on GitHub.
+/// A hub that starts again has what was read before it stopped, what GitHub found and what it said wasn't there, and
+/// branches' rules, but not why a read failed, which says nothing of what's on GitHub.
 #[test]
 fn what_was_read_is_kept_across_a_restart() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("github-cache.db");
     let cache = GithubCache::open(&path);
     cache.keep(vec![(item(1), Ok(Some(issue(1)))), (item(2), Ok(None)), (item(3), Err("GitHub is down".into()))]);
+    cache.keep_rules(vec![(project(), BranchName::from("main"), Rules::default())]);
     drop(cache);
 
     let again = GithubCache::open(&path);
@@ -52,6 +60,8 @@ fn what_was_read_is_kept_across_a_restart() {
     assert_eq!(again.summary(&item(1)), Some(found(1)));
     assert_eq!(again.summary(&item(2)), Some(ReferenceRead::Missing));
     assert_eq!(again.summary(&item(3)), None);
+    let rules = again.rules_of(&GithubRepositoryName::named("EXAMPLE/project"), Duration::from_secs(60));
+    assert_eq!(rules, [(BranchName::from("main"), Rules::default())]);
 }
 
 /// A file a build with another form left, older or newer, is emptied rather than read or migrated, and a damaged one

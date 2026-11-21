@@ -75,7 +75,7 @@ async fn a_read_finds_what_github_has_in_one_query_and_says_what_it_hasnt() {
     assert_eq!(answers, [Some(issue.clone()), Some(pull_request), None, None, Some(issue)]);
     assert_eq!((references.queries(), read.rate_limit.unwrap().remaining, read.refused), (1, 4900, false));
     let selection = PullRequestSelection::try_from(vec![PullRequestNumber::try_from(7).unwrap()]).unwrap();
-    let ask = PullRequestsAsk { repository: named("example/project"), selection };
+    let ask = PullRequestsAsk { repository: named("example/project"), selection, known_rules: Vec::new() };
     let pull_requests = calls.read_pull_requests(&token, vec![ask], Leaving::ForOthers).await;
     assert!(pull_requests.answers[0].is_ok(), "{:?}", pull_requests.answers);
     assert_eq!(references.queries(), 1, "a read of pull requests is answered as one");

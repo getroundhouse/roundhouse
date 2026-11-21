@@ -6,6 +6,7 @@
 mod file;
 mod kept;
 mod keys;
+mod rules;
 #[cfg(test)]
 mod tests;
 

@@ -1,6 +1,9 @@
+use super::facets::Rules;
 use super::said::RateLimit;
 use protocol::client::ApiError;
-use protocol::model::{GithubRepositoryName, PullRequestNumber, PullRequestSelection, PullRequestsSnapshot, Reference};
+use protocol::model::{
+    BranchName, GithubRepositoryName, PullRequestNumber, PullRequestSelection, PullRequestsSnapshot, Reference,
+};
 
 /// What one ask of a read is for: the pull requests `selection` names in `repository`, and those open under them in
 /// their stacks on GitHub.
@@ -8,6 +11,18 @@ use protocol::model::{GithubRepositoryName, PullRequestNumber, PullRequestSelect
 pub struct PullRequestsAsk {
     pub repository: GithubRepositoryName,
     pub selection: PullRequestSelection,
+    /// The rules of branches of `repository` the asker knows well enough, which aren't read again.
+    pub known_rules: Vec<(BranchName, Rules)>,
+}
+
+/// What a read found of a branch's rules for the checks a pull request into it needs, which it read since no ask knew
+/// them.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RulesRead {
+    /// The repository it was asked of, as it was asked.
+    pub repository: GithubRepositoryName,
+    pub branch: BranchName,
+    pub rules: Rules,
 }
 
 /// What a read found for each of its asks, in the order they were asked.
@@ -17,6 +32,8 @@ pub struct PullRequestsRead {
     /// The summary of each pull request the read looked at, as a chip shows it, or why it couldn't be read, whether
     /// the rest of its ask could be or not.
     pub summaries: Vec<SummaryRead>,
+    /// The rules of each branch the read read, which a later ask can give as known.
+    pub rules: Vec<RulesRead>,
     /// What GitHub last said is left of its limit for the token, if it said.
     pub rate_limit: Option<RateLimit>,
     /// Whether GitHub refused the token, so whoever holds it can find out whether it's still the one to read with.

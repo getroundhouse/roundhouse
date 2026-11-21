@@ -66,8 +66,10 @@ impl Metadata {
     }
 }
 
-#[derive(Default)]
-pub(super) struct Policy {
+/// A branch's rules for the checks a pull request into it needs: those its protection and its rulesets require, by
+/// name and the app that has to report them, if one does, and those GitHub shows of a protection it hides the rest of.
+#[derive(Clone, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct Policy {
     required: BTreeSet<(String, Option<i64>)>,
     visible_contexts: BTreeSet<String>,
 }
