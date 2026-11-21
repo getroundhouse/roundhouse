@@ -167,6 +167,11 @@ impl AgentDescription {
         self.modes().into_iter().find(|mode| mode.plan)
     }
 
+    /// The approval mode for plan mode on, if `planning`, or off: the one a chat plans in, or the one it starts in.
+    pub fn mode_for(&self, planning: bool) -> Option<ApprovalMode> {
+        if planning { self.plan_mode() } else { self.default_mode() }
+    }
+
     /// Whether a chat can be given what `settings` set: only a mode its claims offer and an effort its model is
     /// offered, never one this build has no name for, since neither could be passed on to the agent, and nothing else
     /// its claims don't take, as [`Settings::allowed`] says. Any model is taken, since the agent's CLI takes full IDs as

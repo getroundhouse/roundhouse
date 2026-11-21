@@ -1,4 +1,4 @@
-use client_ui::waiting_on_you;
+use client_core::marking::waiting_on_you;
 use protocol::model::{Seq, Session, SessionId, Title, WorkspaceId};
 use std::collections::{HashMap, HashSet};
 

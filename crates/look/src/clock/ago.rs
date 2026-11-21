@@ -1,4 +1,4 @@
-//! How long ago something happened, as the app says it, to the minute. `look::day_ago` says it by the day.
+//! How long ago something happened, as the apps say it, to the minute. [`super::day_ago`] says it by the day.
 
 const MINUTE_MS: i64 = 60_000;
 const MINUTES_IN_AN_HOUR: i64 = 60;
@@ -6,7 +6,7 @@ const MINUTES_IN_A_DAY: i64 = 24 * MINUTES_IN_AN_HOUR;
 
 /// How long before `now_ms` `then_ms` was, in its largest whole unit, such as "9m ago" or "4h ago". Under a minute
 /// is "just now", and so is a time after now, which a hub whose clock runs ahead of this one's can give.
-pub(crate) fn ago(then_ms: i64, now_ms: i64) -> String {
+pub fn ago(then_ms: i64, now_ms: i64) -> String {
     let minutes = now_ms.saturating_sub(then_ms) / MINUTE_MS;
     match minutes {
         ..1 => "just now".to_string(),
@@ -19,7 +19,7 @@ pub(crate) fn ago(then_ms: i64, now_ms: i64) -> String {
 /// How long after `now_ms` what [`ago`] says of `then_ms` changes: as the next minute goes in the first hour, the next
 /// hour in the first day, and the next day after that. A time after now is looked at again as each minute before it
 /// goes.
-pub(crate) fn changes_in_ms(then_ms: i64, now_ms: i64) -> i64 {
+pub fn changes_in_ms(then_ms: i64, now_ms: i64) -> i64 {
     let ago_ms = now_ms.saturating_sub(then_ms);
     let unit = match ago_ms / MINUTE_MS {
         ..MINUTES_IN_AN_HOUR => MINUTE_MS,

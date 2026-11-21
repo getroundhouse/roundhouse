@@ -3,9 +3,10 @@
 //! when it's for somewhere else, when the hub has let go of it, or on Retry.
 
 use client_core::Client;
+use client_core::records::Snapshot;
 use gpui_kit::{AnyElement, Context, IntoElement as _};
 use protocol::client::admin::{ModelTarget, ModelsFor};
-use protocol::model::{AgentDescription, ModelList, ModelListKey, ModelLookup};
+use protocol::model::{AgentDescription, ModelList, ModelListKey, ModelLookup, Session};
 
 /// The hub's list of models that a dialog or a chat's picker follows, and what it last asked for one.
 #[derive(Default)]
@@ -68,6 +69,38 @@ impl FollowedModels {
             });
         })
         .detach();
+    }
+
+    /// Follows the list of models of the chat `session`, as [`FollowedModels::follow`] says, from what `records`
+    /// hold. For whenever which chat shows changes, or what the hub holds does, such as the chat's login, or the hub
+    /// letting go of the list.
+    pub fn follow_chat<T: 'static>(
+        &mut self,
+        client: &Client,
+        records: &Snapshot,
+        session: &Session,
+        again: bool,
+        cx: &mut Context<T>,
+        lookup: fn(&mut T) -> &mut Self,
+    ) {
+        let (agent, target) = (records.agents().of(session.agent), ModelTarget::Session(session.id.clone()));
+        // A chat moved to another account launches under its login, which has a list of its own.
+        if self.key().is_some_and(|key| session.account.is_some() && key.account != session.account) {
+            self.reset();
+        }
+        let list = self.held(records);
+        self.follow(client, agent, target, list, again, cx, lookup);
+    }
+
+    /// What the chat `session`'s agent is offered where it runs, for its model picker, as
+    /// [`FollowedModels::description`] says.
+    pub fn chat_agent(&self, records: &Snapshot, session: &Session) -> Option<AgentDescription> {
+        self.description(records.agents().of(session.agent)?, self.held(records))
+    }
+
+    /// What `records` hold of the list followed.
+    pub fn held<'a>(&self, records: &'a Snapshot) -> Option<&'a ModelList> {
+        self.key().and_then(|key| records.model_list(key))
     }
 
     /// Which list is followed, once the hub has said.

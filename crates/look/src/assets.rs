@@ -1,6 +1,6 @@
 //! What a window loads the icons of what every client shares from: the kit's own, the icons of kinds of file, and the
-//! few more that look's components and the transcript draw and the kit doesn't bundle by default. An app puts its own
-//! in front. `tools/policy` checks that every icon the code names is embedded where the window can load it.
+//! few more that look's components, the transcript and `client-ui` draw and the kit doesn't bundle by default. An app
+//! puts its own in front, and `tools/policy` checks that every icon named is embedded where its window loads it.
 
 use std::borrow::Cow;
 
@@ -13,6 +13,7 @@ gpui_kit::assets::icon_assets!(
     Icons,
     [
         Activity,
+        Archive,
         ArrowUpRight,
         AudioLines,
         Brain,
@@ -32,9 +33,13 @@ gpui_kit::assets::icon_assets!(
         ImagePlus,
         Lightbulb,
         Link,
+        Mail,
+        MailOpen,
         MessageCircleQuestionMark,
         MessageSquare,
         NotebookPen,
+        Pencil,
+        PencilSparkles,
         Plug,
         Split,
         Terminal,

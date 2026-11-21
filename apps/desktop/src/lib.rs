@@ -1,7 +1,6 @@
 //! The desktop app. It only talks to a hub, through `client-core`, the same way the CLI does.
 
 mod accessibility_focus;
-mod ago;
 pub mod all_files;
 pub mod app;
 pub mod appimage;
@@ -39,7 +38,6 @@ pub mod pull_request;
 mod rename;
 mod reorder;
 pub mod review;
-mod right_click;
 mod saving;
 mod says_more;
 mod settings;

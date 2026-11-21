@@ -230,7 +230,7 @@ fn row(app: &AppView, workspace: &Workspace, line_text: &LineText, cx: &mut Cont
 
 /// The button that archives the workspace or brings it back, or what the row says in its place while it does.
 fn row_button(app: &AppView, workspace: &Workspace, small: &Placed, cx: &mut Context<AppView>) -> AnyElement {
-    if let Some(waiting) = crate::busy::doing(workspace.status) {
+    if let Some(waiting) = client_core::moving::doing(workspace.status) {
         return doing(format!("home-doing-{}", workspace.id), waiting, small, cx).into_any_element();
     }
     let archived = workspace.status == WorkspaceStatus::Archived;

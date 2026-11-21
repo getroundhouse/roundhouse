@@ -8,7 +8,6 @@ pub use file_tab::Opened;
 pub(crate) use keeping::drafted;
 pub use microphone::{HIDE, MICROPHONE, TURN_ON};
 pub use pushing::{INSTALL_APP, OPEN_GIT};
-pub use reading::Mark;
 pub(crate) use reading::OnScreen;
 pub use setting_up::{
     CONVERSATION_CARD, CONVERSATION_NOT_NOW, CONVERSATION_RETRY, CONVERSATION_TURN_ON, DICTATION_PROGRESS,

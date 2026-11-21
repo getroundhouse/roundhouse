@@ -9,7 +9,6 @@ use gpui_kit::{AssetSource, Result, SharedString};
 gpui_kit::assets::icon_assets!(
     Extra,
     [
-        Archive,
         ArchiveRestore,
         ArrowUpDown,
         CircleDashed,
@@ -22,12 +21,8 @@ gpui_kit::assets::icon_assets!(
         KeyRound,
         Laptop,
         ListTree,
-        Mail,
-        MailOpen,
         MessageSquarePlus,
         Paperclip,
-        Pencil,
-        PencilSparkles,
         QrCode,
         RotateCcwClock,
         ScrollText,

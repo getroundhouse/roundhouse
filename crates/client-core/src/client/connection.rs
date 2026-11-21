@@ -63,6 +63,13 @@ impl ClientError {
     pub fn needs_a_person(&self) -> bool {
         self.is_unauthorized() || self.is_version_mismatch() || matches!(self, ClientError::FingerprintMismatch { .. })
     }
+
+    /// Why the hub didn't do it, when the only reason is that it would lose something, such as work that isn't pushed,
+    /// so the person can be asked, and it's done if they say to, by asking again with force.
+    pub fn would_lose(&self) -> Option<&str> {
+        let ClientError::Api(e) = self else { return None };
+        (e.code == ErrorCode::NeedsForce).then_some(e.message.as_str())
+    }
 }
 
 pub type Result<T> = std::result::Result<T, ClientError>;

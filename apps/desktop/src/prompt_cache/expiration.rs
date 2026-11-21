@@ -1,5 +1,3 @@
-use crate::ago;
-use crate::ago::ago;
 use gpui_kit::{
     ElementId, Hsla, InteractiveElement as _, IntoElement, ParentElement as _, StatefulInteractiveElement as _,
     Styled as _, div,
@@ -58,7 +56,7 @@ pub(crate) fn expired_line(session: &Session, now_ms: i64) -> Option<String> {
     let tokens = session.context.as_ref()?.used_tokens;
     Some(format!(
         "Cache expired {} · this prompt writes {} tokens again",
-        ago(cache.expires_at_ms()?, now_ms),
+        look::ago(cache.expires_at_ms()?, now_ms),
         look::tokens(tokens)
     ))
 }
@@ -87,13 +85,13 @@ pub(crate) fn next_change_in_ms<'a>(sessions: impl IntoIterator<Item = &'a Sessi
 }
 
 /// How long until the line above `session`'s composer changes, from `now_ms`: once its cache expires, and from then
-/// on, as what [`ago`] says of when it did changes.
+/// on, as what [`look::ago`] says of when it did changes.
 pub(crate) fn composer_line_changes_in_ms(session: &Session, now_ms: i64) -> Option<i64> {
     let cache = session.cache_worth_telling()?;
     let expires_at_ms = cache.expires_at_ms()?;
     let wait_ms = match cache.state(now_ms)? {
         CacheState::Warm { left_ms } | CacheState::Expiring { left_ms } => left_ms,
-        CacheState::Expired { .. } => ago::changes_in_ms(expires_at_ms, now_ms),
+        CacheState::Expired { .. } => look::changes_in_ms(expires_at_ms, now_ms),
     };
     Some(capped(wait_ms))
 }

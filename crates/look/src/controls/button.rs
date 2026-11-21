@@ -18,6 +18,7 @@ use super::{ButtonKind, Sizing as _};
 use crate::ControlSize;
 use crate::colors::colors;
 use crate::hand::Hand;
+use crate::shape::{Corner, Shaped as _};
 use crate::traits::Input;
 use crate::work::Work;
 
@@ -35,6 +36,13 @@ pub fn icon_button(id: impl Into<ElementId>, kind: ButtonKind, size: ControlSize
 /// middle. It's named by [`Button::accessibility_label`], since it has no words.
 pub fn glyph_button(id: impl Into<ElementId>, kind: ButtonKind, size: ControlSize, glyph: impl IntoElement) -> Button {
     Button::new(kind.drawn(KitButton::new(id)).sized_square(size).child(glyph), kind, Shape::Square(size))
+}
+
+/// Stop, in the main action's place while an agent works: a main square of `size`, with a filled square in it, as
+/// wide as five twelfths of it, which is 10 points on a desk's small button.
+pub fn stop_button(id: impl Into<ElementId>, size: ControlSize, cx: &App) -> Button {
+    let square = gpui_kit::div().size(size.height() * (5. / 12.)).corners(Corner::Glyph).bg(colors(cx).on_main);
+    glyph_button(id, ButtonKind::Main, size, square).accessibility_label("Stop")
 }
 
 /// A side of a button, which it can stand out past.

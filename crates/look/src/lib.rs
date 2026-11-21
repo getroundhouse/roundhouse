@@ -78,14 +78,14 @@ pub use chips::{Chip, ChipKind, ChipSize, GithubState, IssueState, PullRequestSt
 #[cfg(any(test, feature = "testing"))]
 pub use clock::hold_still;
 pub use clock::{
-    date, date_and_time, day_ago, day_and_time, days_apart, local_time, months_apart, next_day_at_ms, now_ms,
-    time_of_day,
+    ago, changes_in_ms, date, date_and_time, day_ago, day_and_time, days_apart, local_time, months_apart,
+    next_day_at_ms, now_ms, time_of_day,
 };
 #[cfg(any(test, feature = "testing"))]
 pub use colors::NamedColor;
 pub use colors::{Colors, colors};
 pub use control_sizes::ControlSize;
-pub use controls::{Button, ButtonKind, MenuButton, Side, Sizing, button, glyph_button, icon_button};
+pub use controls::{Button, ButtonKind, MenuButton, Side, Sizing, button, glyph_button, icon_button, stop_button};
 pub use copy::copy_button;
 pub use counts::{Count, CountKind, LinesChanged, count, lines_changed};
 #[cfg(any(test, feature = "testing"))]

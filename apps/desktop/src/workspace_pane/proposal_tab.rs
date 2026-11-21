@@ -24,7 +24,6 @@ use protocol::model::{Proposal, ProposalId, SessionId};
 use transcript::{PROPOSAL_ICON, ProposalEvent, ProposalRequest, ProposalView};
 
 use super::band::Band;
-use super::view::chat_title;
 use super::{PaneEvent, Showing, WorkspacePane, tab};
 
 /// The proposal tab, while it's open, and which proposals the pane has seen.
@@ -219,7 +218,7 @@ impl WorkspacePane {
     pub(super) fn proposal_view(&self, cx: &mut Context<Self>) -> AnyElement {
         let Some(tab) = &self.proposals.tab else { return div().into_any_element() };
         let proposal = tab.view.read(cx).proposal().clone();
-        let from = self.shown.session(&tab.session).map(|chat| (chat.id.clone(), chat_title(chat).to_string()));
+        let from = self.shown.session(&tab.session).map(|chat| (chat.id.clone(), chat.label().to_string()));
         v_flex()
             .region(Region::Proposal)
             .flex_1()

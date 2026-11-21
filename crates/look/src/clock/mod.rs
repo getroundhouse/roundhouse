@@ -5,9 +5,11 @@
 #[cfg(test)]
 mod tests;
 
+mod ago;
 mod days;
 mod time;
 
+pub use ago::{ago, changes_in_ms};
 pub use days::day_ago;
 
 #[cfg(any(test, feature = "testing"))]

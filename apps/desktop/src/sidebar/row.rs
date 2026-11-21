@@ -17,7 +17,7 @@ use protocol::model::{Workspace, WorkspaceId};
 
 use super::{MARK_GAP, MARK_INDENT, ROW_SIZE, Standing, standing};
 use crate::app::AppView;
-use crate::{prompt_cache, right_click};
+use crate::prompt_cache;
 
 /// As wide as the button that archives a row, a small button's square.
 const BUTTON: look::ControlSize = look::ControlSize::Small;
@@ -41,7 +41,7 @@ pub(super) fn workspace_row(
     let label = workspace.label().to_string();
     let pointing = app.pointing_at.as_ref() == Some(&workspace.id);
     let retitling = app.retitling.contains(&workspace.id).then_some("Renaming…");
-    let waiting = crate::busy::doing(workspace.status).or(retitling);
+    let waiting = client_core::moving::doing(workspace.status).or(retitling);
     // Not on the workspace showing, whose composer is in view, but while Home shows in its place. A workspace not shown
     // since the app opened has only what the hub keeps.
     let drafted = !selected
@@ -225,45 +225,42 @@ fn archive_button(app: &AppView, workspace: &Workspace, cx: &mut Context<AppView
     div().flex_none().child(button)
 }
 
-/// What a right-click on a workspace's row offers: what a tab's does, a new title from what's been asked in it, then
-/// archiving it. Marking its chats needs one with a reply. A new title needs one to replace, which the first prompt gives, none already on its way, and a
-/// workspace that isn't on its way out. The sidebar lists no archived workspace, so every row can be archived.
+/// What a right-click on a workspace's row offers, as every app's workspace menu does, with archiving held off while
+/// this app waits on the hub to make, archive or restore one. The sidebar lists no archived workspace, so every row can
+/// be archived.
 fn row_menu(
     app: &AppView,
     workspace: &Workspace,
     cx: &mut Context<AppView>,
 ) -> impl Fn(look::Menu, &mut Window, &mut App) -> look::Menu + 'static {
-    let marking = app.workspace_marking(&workspace.id, cx);
-    let (this, id) = (cx.weak_entity(), workspace.id.clone());
-    let to_mark = this.clone();
-    let marking = marking.map(|(marking, chats)| {
-        let mark = move |cx: &mut App| {
+    let this = cx.weak_entity();
+    let (to_mark, to_rename, to_retitle, to_archive) = (this.clone(), this.clone(), this.clone(), this.clone());
+    let marking = app.workspace_marking(&workspace.id, cx).map(|(marking, chats)| {
+        let mark: client_ui::Choose = Rc::new(move |_, cx| {
             let _ = to_mark.update(cx, |t, cx| t.mark_chats(marking, chats.clone(), cx));
-        };
+        });
         (marking, mark)
     });
-    let to_archive = this.clone();
-    let shared = right_click::menu(marking, move |window, cx| {
-        let _ = this.update(cx, |t, cx| t.start_renaming(id.clone(), window, cx));
-    });
-    let (busy, id) = (!app.busy.is_free(), workspace.id.clone());
-    let (to_retitle, retitled, holds) = (to_archive.clone(), workspace.id.clone(), to_archive.clone());
-    let going = crate::busy::doing(workspace.status).is_some();
-    let cant_retitle = going || workspace.title.is_none() || app.retitling.contains(&workspace.id);
-    let retitle = Rc::new(move |cx: &mut App| {
-        let _ = to_retitle.update(cx, |t, cx| t.regenerate_title(retitled.clone(), cx));
-    });
-    let archive = Rc::new(move |cx: &mut App| {
-        let _ = to_archive.update(cx, |t, cx| t.archive(id.clone(), false, cx));
-    });
-    move |menu, window, cx| {
+    let (renamed, retitled, archived) = (workspace.id.clone(), workspace.id.clone(), workspace.id.clone());
+    let menu = client_ui::WorkspaceMenu {
+        marking,
+        rename: Rc::new(move |window, cx| {
+            let _ = to_rename.update(cx, |t, cx| t.start_renaming(renamed.clone(), window, cx));
+        }),
+        retitle: Rc::new(move |_, cx| {
+            let _ = to_retitle.update(cx, |t, cx| t.regenerate_title(retitled.clone(), cx));
+        }),
+        archive: Rc::new(move |_, cx| {
+            let _ = to_archive.update(cx, |t, cx| t.archive(archived.clone(), false, cx));
+        }),
+        retitling: app.retitling.contains(&workspace.id),
+        archiving: !app.busy.is_free(),
+    }
+    .of(workspace);
+    move |opening, window, cx| {
         // Built as it opens, so this is when the order starts to hold still for it.
-        let opened = menu.open();
-        let _ = holds.update(cx, |t, cx| crate::reorder::hold_while_open(t, &opened, |t| &mut t.sidebar.hold, cx));
-        let (retitle, archive) = (retitle.clone(), archive.clone());
-        let regenerate = look::menu_row("Regenerate title").icon(Lucide::PencilSparkles);
-        let menu = shared(menu, window, cx).row(regenerate.off(cant_retitle).on_choose(move |_, cx| retitle(cx)));
-        let row = look::menu_row("Archive").icon(Lucide::Archive);
-        menu.separator().row(row.off(busy || going).on_choose(move |_, cx| archive(cx)))
+        let opened = opening.open();
+        let _ = this.update(cx, |t, cx| crate::reorder::hold_while_open(t, &opened, |t| &mut t.sidebar.hold, cx));
+        menu(opening, window, cx)
     }
 }

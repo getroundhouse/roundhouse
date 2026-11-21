@@ -19,7 +19,6 @@ use protocol::model::{SessionId, Subagent, SubagentId};
 use transcript::{Transcript, TranscriptEvent, shown_kind, subagent_standing};
 
 use super::band::Band;
-use super::view::chat_title;
 use super::{PaneEvent, Showing, WorkspacePane, tab};
 
 /// The subagent tab, while it's open.
@@ -208,7 +207,7 @@ impl WorkspacePane {
             .w_full()
             .children(self.subagents.title(self.shown.all()).map(|title| {
                 let chat = self.shown.session(&tab.session);
-                let from = chat.map(|chat| (chat.id.clone(), chat_title(chat).to_string()));
+                let from = chat.map(|chat| (chat.id.clone(), chat.label().to_string()));
                 band(from, title, self.subagents.shown(self.shown.all()), cx)
             }))
             .child(div().flex_1().min_h_0().w_full().child(Transcript::drawn(&tab.transcript, cx)))

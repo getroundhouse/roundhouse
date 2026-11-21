@@ -331,6 +331,11 @@ impl Session {
         self.reply_seq != Seq::default()
     }
 
+    /// What to call it on screen: its title, or `Untitled` until it has one, in every client.
+    pub fn label(&self) -> &str {
+        self.title.as_deref().unwrap_or("Untitled")
+    }
+
     /// Whether the chat is open, in its workspace's tabs, rather than closed, which stopped its agent. Nothing can be
     /// sent to a closed one until it's reopened.
     pub fn is_open(&self) -> bool {

@@ -2,6 +2,7 @@
 //! menus' items share, and what those menus say about the sidebars and the selected workspace. macOS greys out an item
 //! when nothing where focus is takes its action, so each shortcut is taken only where it can act.
 
+use client_core::marking::Mark;
 use gpui_kit::component::input::Copy;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{Context, Div, InteractiveElement};
@@ -10,7 +11,7 @@ use super::selection::Way;
 use super::{AppView, corner};
 use crate::menus;
 use crate::sides::{Side, Sidebar};
-use crate::workspace_pane::{Mark, Showing, WorkspacePane};
+use crate::workspace_pane::{Showing, WorkspacePane};
 use crate::{
     AddRepository, ArchiveWorkspace, CloseChat, ConversationMode, CreatePullRequest, FindInChat, FindNext,
     FindPrevious, GoBack, GoForward, MarkWorkspace, NewChat, NewTerminal, NewWorkspace, NextChat, NextWorkspace,

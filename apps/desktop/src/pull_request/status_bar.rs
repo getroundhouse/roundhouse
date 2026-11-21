@@ -48,7 +48,7 @@ impl Lookup {
 /// The bar at the top of the sidebar: the pull request's number, which opens it, what stands in its way, and the
 /// one thing to do about it, all in its colour. `busy` greys out Archive, as every button that archives is while the
 /// app is making, archiving or restoring a workspace, and it says what the workspace it's for is `doing` in its place,
-/// such as `Archiving…`, as [`crate::busy::doing`] reads it from its record.
+/// such as `Archiving…`, as [`client_core::moving::doing`] reads it from its record.
 pub fn bar(
     lookup: &Lookup,
     busy: &Busy,

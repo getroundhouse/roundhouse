@@ -10,6 +10,6 @@ mod tests;
 mod button;
 mod kinds;
 mod sizing;
-pub use button::{Button, MenuButton, Side, button, glyph_button, icon_button};
+pub use button::{Button, MenuButton, Side, button, glyph_button, icon_button, stop_button};
 pub use kinds::ButtonKind;
 pub use sizing::Sizing;

@@ -1,6 +1,9 @@
 //! How a workspace looks: its header, tabs and chat, and the sidebar of changes beside them. The composer is in
 //! `composer.rs`.
 
+use std::rc::Rc;
+
+use client_core::marking::Mark;
 use gpui_kit::assets::IconName as Lucide;
 use gpui_kit::base::Tabs;
 use gpui_kit::component::{IconName, h_flex, v_flex};
@@ -14,26 +17,20 @@ use protocol::model::{Session, SessionStatus};
 
 use super::setup::setup_log_view;
 use super::workspace_card;
-use super::{Mark, Opened, PaneEvent, Showing, WorkspacePane, reserving, tab};
+use super::{Opened, PaneEvent, Showing, WorkspacePane, reserving, tab};
 use crate::sides::{self, AtTheTop, Side, Sidebar};
-use crate::{NewChat, NewTerminal, ToggleDiff, prompt_cache, right_click};
+use crate::{NewChat, NewTerminal, ToggleDiff, prompt_cache};
 
-/// What a chat is called until it has a title.
-const UNTITLED: &str = "Untitled";
 /// What the `+` after the tabs is called, for whoever can't see it, and in its tooltip.
 const NEW_TAB_LABEL: &str = "New chat or terminal";
-
-pub(super) fn chat_title(session: &Session) -> &str {
-    session.title.as_deref().unwrap_or(UNTITLED)
-}
 
 impl WorkspacePane {
     fn chat_tab(&self, session: &Session, cx: &mut Context<Self>) -> AnyElement {
         let muted = look::colors(cx).text_muted;
-        let title = chat_title(session).to_string();
+        let title = session.label().to_string();
         let selected = self.active.as_ref() == Some(&session.id) && self.showing() == Showing::Chat;
         let unread = self.shows_unread(session);
-        let needs_a_look = unread || client_ui::waiting_on_you([session]);
+        let needs_a_look = unread || client_core::marking::waiting_on_you([session]);
         let mark = client_ui::chat_signal(session);
         let expiring = prompt_cache::expiring_in_ms(session, look::now_ms(cx))
             .map(|left_ms| prompt_cache::clock(format!("tab-cache-{}", session.id), left_ms, muted));
@@ -69,14 +66,17 @@ impl WorkspacePane {
         let (this, session) = (cx.weak_entity(), session.clone());
         let (to_mark, id) = (this.clone(), session.id.clone());
         let marking = marking.map(|marking| {
-            let mark = move |cx: &mut App| {
+            let mark: client_ui::Choose = Rc::new(move |_, cx| {
                 let _ = to_mark.update(cx, |t, cx| t.mark(&session, marking, cx));
-            };
+            });
             (marking, mark)
         });
-        right_click::menu(marking, move |window, cx| {
-            let _ = this.update(cx, |t, cx| t.start_renaming_chat(id.clone(), &title, window, cx));
-        })
+        client_ui::marking_and_renaming(
+            marking,
+            Rc::new(move |window, cx| {
+                let _ = this.update(cx, |t, cx| t.start_renaming_chat(id.clone(), &title, window, cx));
+            }),
+        )
     }
 
     /// The file tab, the subagent tab and the proposal tab if they're open, at the far left as tabs that are replaced
@@ -131,7 +131,7 @@ impl WorkspacePane {
             Sidebar::Open => None,
             Sidebar::Hidden => {
                 let on_action = cx.listener(|t, action, _, cx| t.act(*action, cx));
-                let doing = crate::busy::doing(self.workspace().status);
+                let doing = client_core::moving::doing(self.workspace().status);
                 crate::pull_request::controls(&self.pull_request, &self.busy, doing, on_action)
             }
         };

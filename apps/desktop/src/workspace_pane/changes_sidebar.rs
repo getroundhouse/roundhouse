@@ -181,7 +181,7 @@ impl WorkspacePane {
         let diff = self.diff.as_ref()?;
         let shown = Side::Right.shown(cx)?;
         let act = cx.listener(|t, action, _, cx| t.act(*action, cx));
-        let doing = crate::busy::doing(self.workspace().status);
+        let doing = client_core::moving::doing(self.workspace().status);
         let bar = crate::pull_request::bar(&self.pull_request, &self.busy, doing, act, cx);
         let changed = diff.review.read(cx).files.as_ref().map(Vec::len);
         let chosen = diff.sidebar_tab.tab();

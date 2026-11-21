@@ -7,11 +7,9 @@ use crate::rename;
 use crate::rename::Renaming;
 use crate::settings::PageId;
 use crate::workspace_pane::{PaneEvent, WorkspacePane};
-use client_core::ClientError;
 use client_core::records::Snapshot;
 use gpui_kit::{App, AppContext as _, Context, PathPromptOptions, Window};
 use in_view::InView;
-use protocol::client::ErrorCode;
 use protocol::model::{Repo, RepoId, WorkspaceId, WorkspaceStatus};
 use protocol::prompt::Prompt;
 
@@ -294,10 +292,10 @@ impl AppView {
                 match result {
                     // As it's being archived, in the same frame as the buttons that archive come back.
                     Ok(_) => t.read_records(cx),
-                    Err(ClientError::Api(e)) if e.code == ErrorCode::NeedsForce && !force => {
-                        t.confirm_forced_archive(id.clone(), &e.message, cx);
-                    }
-                    Err(e) => t.show_error(client_core::refusals::couldnt("archive", &e), cx),
+                    Err(e) => match e.would_lose().filter(|_| !force) {
+                        Some(reason) => t.confirm_forced_archive(id.clone(), reason, cx),
+                        None => t.show_error(client_core::refusals::couldnt("archive", &e), cx),
+                    },
                 }
                 cx.notify();
             });
