@@ -2,6 +2,7 @@ use super::super::Hub;
 use crate::error::provider_failed;
 use crate::session::{CarriedOver, Item, LiveSession, Progress, Starting};
 use crate::store::{Store, StoreError, cancelled_approval};
+use crate::worker_link::WorkerLinkId;
 use parking_lot::Mutex;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::event::{EventBody, ExitReason};
@@ -179,7 +180,7 @@ impl Hub {
     pub(super) async fn carry_on_session(
         self: &Arc<Self>,
         id: &SessionId,
-        link: u64,
+        link: WorkerLinkId,
         run: RunId,
         untaken: Vec<Seq>,
         claims: Option<RunCapabilities>,

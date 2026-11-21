@@ -21,7 +21,7 @@ use protocol::worker::{AskAnswer, HelloReply, WorkerFrame, WorkerResponse};
 #[cfg(test)]
 use providers::Provider;
 #[cfg(test)]
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::AtomicBool;
 #[cfg(test)]
 use std::sync::{Arc, OnceLock};
 #[cfg(test)]
@@ -47,6 +47,6 @@ pub(crate) use stand_in::Answer;
 mod tests;
 
 mod connection;
-#[cfg(test)]
-use connection::NEXT_LINK_ID;
+mod link_id;
 pub(crate) use connection::{STOP_GRACE, WorkerLink};
+pub(crate) use link_id::WorkerLinkId;

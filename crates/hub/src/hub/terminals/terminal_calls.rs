@@ -12,7 +12,7 @@ use tracing::warn;
 
 use crate::hub::Hub;
 use crate::store::Store;
-use crate::worker_link::WorkerLink;
+use crate::worker_link::{WorkerLink, WorkerLinkId};
 
 use super::reading::within_a_read;
 use super::{Open, Queued, Stage};
@@ -71,7 +71,7 @@ impl Hub {
 
     /// Removes the record of a terminal whose shell has ended, run by the worker on link `link`, and announces that.
     /// One still being opened is marked, for the open to refuse.
-    pub(crate) async fn terminal_ended(&self, id: &TerminalId, link: u64) {
+    pub(crate) async fn terminal_ended(&self, id: &TerminalId, link: WorkerLinkId) {
         let changing = self.terminals.changing.lock().await;
         {
             let mut open = self.terminals.open.lock();
@@ -89,7 +89,7 @@ impl Hub {
 
     /// Removes the records of every terminal whose shell ran on link `link`, since it has gone, and with it the
     /// shells.
-    pub(crate) async fn terminals_lost(&self, link: u64) {
+    pub(crate) async fn terminals_lost(&self, link: WorkerLinkId) {
         let changing = self.terminals.changing.lock().await;
         self.forget_terminals(&changing, |_, open| open.on(link)).await;
     }

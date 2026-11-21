@@ -10,6 +10,7 @@ use protocol::model::{Terminal, TerminalId, WorkspaceId};
 use tokio::sync::{Mutex as AsyncMutex, watch};
 
 use super::watching::Watch;
+use crate::worker_link::WorkerLinkId;
 
 /// The reply to a request the worker has been sent already, to wait for.
 pub(crate) type Queued = Pin<Box<dyn Future<Output = Result<ClientResponse, ApiError>> + Send>>;
@@ -27,7 +28,7 @@ pub(crate) struct Terminals {
 pub(super) struct Open {
     pub(super) workspace_id: WorkspaceId,
     /// The ID of the link to the worker that runs its shell, once the open knows which that is.
-    pub(super) link: Option<u64>,
+    pub(super) link: Option<WorkerLinkId>,
     pub(super) stage: Stage,
     pub(super) watch: Arc<Watch>,
 }
@@ -47,7 +48,7 @@ pub(super) enum Stage {
 pub(super) type Outcome = watch::Receiver<Option<Result<Terminal, ApiError>>>;
 
 impl Open {
-    pub(super) fn new(workspace_id: WorkspaceId, link: Option<u64>, stage: Stage) -> Self {
+    pub(super) fn new(workspace_id: WorkspaceId, link: Option<WorkerLinkId>, stage: Stage) -> Self {
         Self { workspace_id, link, stage, watch: Watch::new() }
     }
 
@@ -56,7 +57,7 @@ impl Open {
         Some(record)
     }
 
-    pub(super) fn on(&self, link: u64) -> bool {
+    pub(super) fn on(&self, link: WorkerLinkId) -> bool {
         self.link == Some(link)
     }
 

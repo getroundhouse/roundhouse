@@ -68,7 +68,7 @@ impl WorkerLink {
     ) -> Arc<WorkerLink> {
         let (ours, theirs) = tokio::io::duplex(64 * 1024);
         let link = Arc::new(WorkerLink {
-            id: NEXT_LINK_ID.fetch_add(1, Ordering::Relaxed),
+            id: WorkerLinkId::next(),
             calls: Calls::new(Box::new(ours)),
             closed: watch::channel(false).0,
             kept: AtomicBool::new(false),
