@@ -12,7 +12,7 @@ pub(super) const HISTORY_LINES: usize = 10_000;
 /// The most the lines kept above the screen take, which [`HISTORY_LINES`] fill at the widths people use, so it stops
 /// only a wide or colourful terminal short of them. Without it, Ghostty's own limit of about one page, 400 KiB, would
 /// keep about a thousand lines at 80 columns and two hundred at 200. The worker's copy holds the only history. At
-/// `TerminalSize::MOST`, with a colour in every cell, its history would otherwise take 171 MiB.
+/// `TerminalSize::MOST`, 600 columns, it would otherwise take about 50 MiB, and this keeps about 6,000 lines.
 pub(super) const HISTORY_BYTES: usize = 32 * 1024 * 1024;
 /// What the terminal says it is when a program asks, which is what most terminals say: a VT220, with colour.
 const ATTRIBUTES: DeviceAttributes = DeviceAttributes {

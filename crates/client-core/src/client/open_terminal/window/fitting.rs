@@ -88,8 +88,11 @@ impl Window {
         }
     }
 
-    /// The view has room for `room`, which the terminal is asked to take if it isn't that size, or about to be.
+    /// The view has room for `room`, which the terminal is asked to take if it isn't that size, or about to be, or the
+    /// most a worker gives a terminal, if that's less, which the view shows with the rest of its room empty.
     pub(in crate::client::open_terminal) fn fit(&mut self, room: TerminalSize) -> Vec<Ask> {
+        let TerminalSize { cols, rows } = TerminalSize::MOST;
+        let room = TerminalSize { cols: room.cols.min(cols), rows: room.rows.min(rows) };
         let changed = self.room != Some(room);
         self.room = Some(room);
         self.fit_to_room(!changed)

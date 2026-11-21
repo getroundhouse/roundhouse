@@ -108,6 +108,23 @@ fn the_same_size_again_asks_for_nothing() {
     assert!(window.fit(SIZE).is_empty());
 }
 
+/// A worker refuses more, which would leave the terminal at the size it had. The view shows it with the rest of its
+/// room empty.
+#[test]
+fn a_view_with_room_for_more_than_a_terminal_has_asks_for_the_most() {
+    let mut worker = worker(SIZE, lines().as_bytes());
+    let mut window = watched(&mut worker, &mut PictureSending::default());
+
+    let sizes = |asks: Vec<Ask>| -> Vec<TerminalSize> {
+        asks.iter().filter_map(|ask| if let Ask::Fit { size, .. } = ask { Some(*size) } else { None }).collect()
+    };
+    let wide = sizes(window.fit(TerminalSize { cols: 700, rows: 4 }));
+    let tall = sizes(window.fit(TerminalSize { cols: 20, rows: 250 }));
+
+    assert_eq!(wide, [TerminalSize { cols: TerminalSize::MOST.cols, rows: 4 }]);
+    assert_eq!(tall, [TerminalSize { cols: 20, rows: TerminalSize::MOST.rows }]);
+}
+
 /// So a view that watches again, as on a new connection, takes the terminal back to its own size, but keeps one
 /// another device gave it while the view's room stays as it was.
 #[test]

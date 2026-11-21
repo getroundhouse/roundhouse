@@ -12,9 +12,10 @@ fn a_terminal_keeps_its_lines_of_history_unless_they_take_too_much() {
     for line in 0..12_000 {
         narrow.write(format!("\x1b[32mline {line}\x1b[0m of a build's output, as long as most are\r\n").as_bytes());
     }
-    let wide = TerminalSize { cols: 2000, rows: 50 };
+    let wide = TerminalSize::MOST;
     let mut colourful = Mirror::new(wide).unwrap();
-    for line in 0..3_000_usize {
+    // About 41 MiB of them.
+    for line in 0..8_000_usize {
         let cells = (0..usize::from(wide.cols)).map(|col| format!("\x1b[38;5;{}mx", (line + col) % 256));
         colourful.write(format!("{}\r\n", cells.collect::<String>()).as_bytes());
     }
@@ -22,8 +23,10 @@ fn a_terminal_keeps_its_lines_of_history_unless_they_take_too_much() {
     let rows = |mirror: &Mirror| mirror.terminal.scrollback_rows().unwrap();
     let bytes = |mirror: &Mirror| usize::try_from(mirror.terminal.memory_usage().unwrap().primary_resident_bytes);
     assert!(rows(&narrow) > HISTORY_LINES * 9 / 10, "{} rows", rows(&narrow));
-    assert!(bytes(&colourful).unwrap() < HISTORY_BYTES * 11 / 10, "{:?} bytes", bytes(&colourful));
+    let colourful_bytes = bytes(&colourful).unwrap();
+    assert!((HISTORY_BYTES * 9 / 10..HISTORY_BYTES * 11 / 10).contains(&colourful_bytes), "{colourful_bytes} bytes");
 }
+
 /// What the worker's copy answers, as a terminal does, since a program such as a shell waits for its answers.
 fn answers(write: impl FnOnce(&mut Mirror)) -> Vec<u8> {
     let answered = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));

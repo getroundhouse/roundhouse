@@ -11,10 +11,10 @@ pub struct TerminalSize {
 }
 
 impl TerminalSize {
-    /// The most a worker gives a terminal. Far more than a screen shows at any size of type someone can read, and few
-    /// enough cells that the copies of a terminal that keep every one, the worker's and each client's, fit in memory
-    /// easily, as a size a bug made up might not.
-    pub const MOST: Self = Self { cols: 2000, rows: 1000 };
+    /// The most a worker gives a terminal, which a client asks for when its view has room for more. Few enough cells,
+    /// 120,000, that a whole picture of one stays small on a slow link, where 2,000 by 1,000, the most before, was 2
+    /// million.
+    pub const MOST: Self = Self { cols: 600, rows: 200 };
 
     /// Whether a worker gives a terminal this size.
     pub fn is_allowed(self) -> bool {
