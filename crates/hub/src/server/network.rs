@@ -16,6 +16,7 @@ use tracing::{debug, warn};
 
 use super::admit::{AUTHENTICATE_WITHIN, Gate};
 use super::connection::serve_connection;
+use super::unsent::set_most_unsent;
 use crate::hub::Hub;
 
 /// A phone can go without closing its connection, such as when it leaves the network or its battery runs out.
@@ -24,6 +25,14 @@ use crate::hub::Hub;
 /// probes closes it within about 25 s.
 const KEEPALIVE: TcpKeepalive =
     TcpKeepalive::new().with_time(Duration::from_secs(10)).with_interval(Duration::from_secs(5)).with_retries(3);
+
+/// The most of what's written to a device's connection that the kernel holds unsent. The hub keeps one frame of a
+/// watched terminal queued for a client at a time, and lets the next go once that one is written, which means taken by
+/// the kernel, not sent. Left to size its send buffer by itself, the kernel takes frame after frame while a slow link
+/// sends them, and a reply written after them waits for them all: at 1 Mbit/s, under a flood, 1.4 s, against 0.45 s
+/// with this, as #2129 measured. 16 KiB is about a tenth of a second at 1 Mbit/s, and enough that the kernel has
+/// something to send while the hub writes the next frame.
+const MOST_UNSENT: u32 = 16 * 1024;
 
 /// Boxed, because pairing starts this, and a request to pair is served by it. Its type would otherwise be part of
 /// its own definition.
@@ -83,12 +92,15 @@ async fn serve_device(
 
 fn ready(stream: &TcpStream) -> io::Result<()> {
     stream.set_nodelay(true)?;
+    set_most_unsent(stream, MOST_UNSENT)?;
     SockRef::from(stream).set_tcp_keepalive(&KEEPALIVE)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(unix)]
+    use crate::server::unsent::most_unsent;
 
     /// What the OS holds for the socket. A phone that's really gone can't be shown without dropping packets, which
     /// takes root, and then a test would wait the 25 s.
@@ -109,5 +121,18 @@ mod tests {
         #[cfg(unix)]
         assert_eq!(socket.tcp_keepalive_interval().unwrap(), Duration::from_secs(5));
         assert_eq!(socket.tcp_keepalive_retries().unwrap(), 3);
+    }
+
+    /// So a reply to a device on a slow link waits for little more than the frame being written, as `MOST_UNSENT` says.
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn a_devices_connection_holds_little_unsent() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let _device = TcpStream::connect(listener.local_addr().unwrap()).await.unwrap();
+        let (accepted, _) = listener.accept().await.unwrap();
+
+        ready(&accepted).unwrap();
+
+        assert_eq!(most_unsent(&accepted).unwrap(), MOST_UNSENT);
     }
 }
