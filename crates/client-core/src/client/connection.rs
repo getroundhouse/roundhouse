@@ -56,6 +56,13 @@ impl ClientError {
     pub fn is_unauthorized(&self) -> bool {
         matches!(self, ClientError::Api(e) if e.code == ErrorCode::Unauthorized)
     }
+
+    /// Trying again can't fix it, so a person has to: the hub refused this device's token, answered with another key
+    /// than the one it was paired with, or is across a protocol break from this client. Anything else, such as a hub
+    /// that can't be reached or a connection that went, may be gone by the next try.
+    pub fn needs_a_person(&self) -> bool {
+        self.is_unauthorized() || self.is_version_mismatch() || matches!(self, ClientError::FingerprintMismatch { .. })
+    }
 }
 
 pub type Result<T> = std::result::Result<T, ClientError>;
@@ -291,7 +298,7 @@ impl Client {
         }
     }
 
-    pub(super) fn disconnect(&self) {
+    pub(crate) fn disconnect(&self) {
         self.closer.close();
         end_connection(&self.inner);
     }

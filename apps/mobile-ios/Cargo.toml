@@ -15,7 +15,7 @@ name = "mobile"
 path = "src/lib.rs"
 
 [features]
-testing = ["dep:parking_lot", "transcript/testing"]
+testing = ["dep:parking_lot", "client-core/testing", "transcript/testing"]
 
 [dependencies]
 anyhow.workspace = true

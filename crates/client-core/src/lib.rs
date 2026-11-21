@@ -3,6 +3,9 @@
 //! threads and async tasks can read. This keeps GPUI's executor out of it and leaves a path open
 //! for a native mobile client.
 //!
+//! A [`link::Link`] connects to a hub, connects again whenever the connection goes, and keeps a [`RecordsFeed`] on
+//! each connection, by one rule for every client, so an app only draws how it stands.
+//!
 //! [`records`] holds what a client has of a hub's records, and [`session_log`] what it has of a
 //! session's history. [`RecordsFeed`] and [`OpenSession`] keep them current, each on a thread of its
 //! own, so a view only reads them, and [`OpenTerminal`] keeps a copy of what a terminal shows the
@@ -18,6 +21,7 @@ pub mod conversation;
 pub mod drawn;
 pub mod file_text;
 pub mod hints;
+pub mod link;
 pub mod records;
 pub mod refusals;
 pub mod session_log;
