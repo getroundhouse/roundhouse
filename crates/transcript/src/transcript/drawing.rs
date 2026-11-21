@@ -7,6 +7,7 @@ use look::LineText;
 
 use super::{Transcript, find};
 use crate::list::Rows;
+use crate::step_keys::with_step_keys;
 use crate::texts::Of;
 
 impl Transcript {
@@ -59,7 +60,7 @@ impl Render for Transcript {
         let rows = self.list.render(id, rows, in_view, room_under, window, cx);
         let bar = self.find_bar(cx);
         let chat = self.with_outline(rows.into_any_element(), line_text, window, cx).children(bar);
-        self.selection.with_keys(chat)
+        with_step_keys(self.selection.with_keys(chat), cx)
     }
 }
 

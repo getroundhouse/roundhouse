@@ -18,6 +18,7 @@ use crate::DictationHints;
 use crate::linked_images::LinkedImages;
 use crate::references::References;
 use crate::selection::{Scrolled, Selection, Way};
+use crate::step_keys::{Steps, with_step_keys};
 use crate::stops::{Within, stop_beside};
 use crate::texts::{Of, TextAt, Texts};
 use client_core::{Client, RecordsFeed};
@@ -115,29 +116,6 @@ impl ProposalView {
         &self.proposal
     }
 
-    /// Steps the page `way` to the part of its outline before the top or after it, with that at the top, as
-    /// `Option-Up` and `Option-Down` do, and as pressing that part in the outline does. Each part is a child of what
-    /// scrolls.
-    pub fn step(&mut self, way: Way, cx: &mut Context<Self>) {
-        // Where the top part's top is, from the page's, which is above it once the page is scrolled into it.
-        let (top, starts) = self.scroll.logical_scroll_top();
-        if let Some(part) = stop_beside(0..self.scroll.children_count(), top, Within::scrolled(-starts), way) {
-            self.scroll.scroll_to_top_of_item(part);
-            cx.notify();
-        }
-    }
-
-    /// Moves the end of what's selected `way` to the start of a part of the outline: back to the one before it, or to
-    /// the one it's in if it isn't at its start already, or on to the one after, as `Option-Shift-Up` and
-    /// `Option-Shift-Down` do.
-    pub fn select_step(&self, way: Way, window: &mut Window, cx: &mut Context<Self>) {
-        // Every text on the page is placed by where it's drawn among them, so a part's start is its first text's.
-        let Some((end, within)) = self.selection.far_end() else { return };
-        if let Some(first) = stop_beside(self.starts.iter().copied(), end.block, within, way) {
-            self.selection.move_to_start_of(TextAt::on_page(first), window, cx);
-        }
-    }
-
     /// Scrolls the page back to its top, where another revision starts with what changed.
     pub(super) fn scroll_to_top(&self) {
         self.scroll.set_offset(point(px(0.), px(0.)));
@@ -219,6 +197,28 @@ impl ProposalView {
     }
 }
 
+impl Steps for ProposalView {
+    /// Steps the page `way` to the part of its outline before the top or after it, with that at the top, as pressing
+    /// that part in the outline does. Each part is a child of what scrolls.
+    fn step(&mut self, way: Way, cx: &mut Context<Self>) {
+        // Where the top part's top is, from the page's, which is above it once the page is scrolled into it.
+        let (top, starts) = self.scroll.logical_scroll_top();
+        if let Some(part) = stop_beside(0..self.scroll.children_count(), top, Within::scrolled(-starts), way) {
+            self.scroll.scroll_to_top_of_item(part);
+            cx.notify();
+        }
+    }
+
+    /// Moves the end of what's selected `way` to the start of a part of the outline.
+    fn select_step(&mut self, way: Way, window: &mut Window, cx: &mut Context<Self>) {
+        // Every text on the page is placed by where it's drawn among them, so a part's start is its first text's.
+        let Some((end, within)) = self.selection.far_end() else { return };
+        if let Some(first) = stop_beside(self.starts.iter().copied(), end.block, within, way) {
+            self.selection.move_to_start_of(TextAt::on_page(first), window, cx);
+        }
+    }
+}
+
 impl gpui_kit::EventEmitter<ProposalEvent> for ProposalView {}
 
 impl Focusable for ProposalView {
@@ -254,6 +254,7 @@ impl Render for ProposalView {
         // Across the top of the page, as a banner is across a pane.
         let banner = self.banner(cx);
         let beside = v_flex().flex_1().min_w_0().h_full().children(banner).child(page).children(foot);
-        self.selection.with_keys(div().flex().size_full().min_h_0().child(outline).child(beside))
+        let page = div().flex().size_full().min_h_0().child(outline).child(beside);
+        with_step_keys(self.selection.with_keys(page), cx)
     }
 }

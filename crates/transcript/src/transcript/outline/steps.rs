@@ -15,6 +15,7 @@ use super::super::drawing::row_of;
 use super::Line;
 use crate::list::Reading;
 use crate::selection::Way;
+use crate::step_keys::Steps;
 use crate::stops::stop_beside;
 use crate::texts::{Of, TextAt};
 use client_core::session_log::Row;
@@ -55,10 +56,10 @@ pub(super) fn step(lines: &[Line], reading: Reading, way: Way) -> Option<Step> {
     }
 }
 
-impl Transcript {
+impl Steps for Transcript {
     /// Steps the chat `way` to the line the outline lists before the one being read or after it, or on from the last
-    /// to its end, as `Option-Up` and `Option-Down` do.
-    pub fn step(&mut self, way: Way, cx: &mut Context<Self>) {
+    /// to its end.
+    fn step(&mut self, way: Way, cx: &mut Context<Self>) {
         let lines = self.outline.read(&self.log, &self.model.borrow().proposals_by_id);
         match step(&lines, self.list.reading(), way) {
             Some(Step::To(row)) => self.list.go_to_row_at_bottom(row),
@@ -68,10 +69,9 @@ impl Transcript {
         cx.notify();
     }
 
-    /// Moves the end of what's selected `way` to the start of a prompt: back to the one before it, or to the one whose
-    /// turn it's in if it isn't at its start already, or on to the one after, as `Option-Shift-Up` and
-    /// `Option-Shift-Down` do.
-    pub fn select_step(&mut self, way: Way, window: &mut Window, cx: &mut Context<Self>) {
+    /// Moves the end of what's selected `way` to the start of a prompt, the one whose turn it's in being the one it's
+    /// in.
+    fn select_step(&mut self, way: Way, window: &mut Window, cx: &mut Context<Self>) {
         let Some((end, within)) = self.selection.far_end() else { return };
         let Some(row) = row_of(&self.log, self.list.row_count(), end.of) else { return };
         let lines = self.outline.read(&self.log, &self.model.borrow().proposals_by_id);
