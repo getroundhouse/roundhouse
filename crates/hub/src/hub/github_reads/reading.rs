@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use github::Leaving;
+use github::{Leaving, SummaryRead};
 use protocol::model::{GithubRepositoryName, IssueNumber, Reference};
 
 use super::super::Hub;
@@ -22,10 +22,7 @@ impl Hub {
                 }
             }
             let read = self.summaries_from_github(&reading).await;
-            let cache = self.github_cache.clone();
-            if let Err(error) = tokio::task::spawn_blocking(move || cache.keep(read)).await {
-                tracing::warn!("keeping what was read from GitHub: {error}");
-            }
+            self.keep_summaries(read).await;
             // Only now, so an ask that waited on these finds what was kept.
             drop(mine);
         }
@@ -35,6 +32,30 @@ impl Hub {
                 // It's over once what tells of it is dropped, which is all `changed` waits for.
                 let _ = read.changed().await;
             }
+        }
+    }
+
+    /// Keeps the summaries a read of pull requests found as it read the rest of them, as a read of the summaries alone
+    /// would, so a chip of one says what the bar's read, or a wait's, found.
+    pub(in crate::hub) async fn keep_read_summaries(&self, summaries: Vec<SummaryRead>) {
+        let read = summaries
+            .into_iter()
+            .filter_map(|SummaryRead { repository, number, summary }| {
+                let number = IssueNumber::try_from(number.get()).ok()?;
+                Some((Item::new(&repository, number), summary.map(Some).map_err(|error| error.message)))
+            })
+            .collect();
+        self.keep_summaries(read).await;
+    }
+
+    /// Keeps what GitHub said of each summary, as [`crate::github_cache::GithubCache::keep`] says.
+    async fn keep_summaries(&self, read: Vec<(Item, Result<Option<Reference>, String>)>) {
+        if read.is_empty() {
+            return;
+        }
+        let cache = self.github_cache.clone();
+        if let Err(error) = tokio::task::spawn_blocking(move || cache.keep(read)).await {
+            tracing::warn!("keeping what was read from GitHub: {error}");
         }
     }
 

@@ -5,7 +5,8 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use protocol::client::{ApiError, ErrorCode};
 use protocol::model::{
-    CheckState, GitHubRepository, ObservedPullRequest, PrState, PullRequestNumber, PullRequestsSnapshot,
+    CheckState, GitHubRepository, GithubRepositoryName, ObservedPullRequest, PrState, PullRequestNumber,
+    PullRequestsSnapshot, Reference,
 };
 use serde_json::Value;
 
@@ -13,6 +14,7 @@ use super::asked::{PullRequestsAsk, Unread};
 use super::parse::{self, Metadata, Policy, ReportedCheck};
 use super::query::Part;
 use super::said::{array, changed, incomplete, next, string};
+use crate::references::pull_request_reference;
 
 pub(super) struct Reading {
     pub(super) ask: PullRequestsAsk,
@@ -26,6 +28,8 @@ pub(super) struct Reading {
     branches: Vec<Branch>,
     /// Those above each, which a failure to read it fails too.
     dependents: BTreeMap<PullRequestNumber, BTreeSet<PullRequestNumber>>,
+    /// The summary of each looked at, or why it couldn't be read, which fails nothing else.
+    summaries: Vec<(PullRequestNumber, Result<Reference, ApiError>)>,
     failed: Option<Unread>,
 }
 
@@ -59,6 +63,7 @@ impl Reading {
             looked: BTreeMap::new(),
             branches: Vec::new(),
             dependents: BTreeMap::new(),
+            summaries: Vec::new(),
             failed: None,
         }
     }
@@ -156,6 +161,11 @@ impl Reading {
             looked.entries.extend(array(connection, "nodes")?.iter().cloned());
             looked.stack_after = next(connection)?;
         }
+        let summary = self.repository.as_ref().ok_or_else(incomplete).and_then(|repository| {
+            let name = GithubRepositoryName::try_from(repository.name_with_owner.clone()).map_err(|_| incomplete())?;
+            pull_request_reference(name, pr)
+        });
+        self.summaries.push((number, summary));
         // Only an open one's checks can still matter.
         let rollup = &pr["statusCheckRollup"];
         if !rollup.is_null() && pr["state"] == "OPEN" {
@@ -245,6 +255,11 @@ impl Reading {
         }
         looked.confirmed = Some(pr.clone());
         Ok(())
+    }
+
+    /// The summary of each pull request it looked at, or why it couldn't be read, apart from whether the rest could.
+    pub(super) fn take_summaries(&mut self) -> Vec<(PullRequestNumber, Result<Reference, ApiError>)> {
+        std::mem::take(&mut self.summaries)
     }
 
     /// What it found, once [`Reading::parts`] has nothing left to ask, or why it couldn't be read.

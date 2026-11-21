@@ -36,6 +36,7 @@ impl Hub {
             .read_pull_requests(&token, vec![PullRequestsAsk { repository, selection }], Asked::Agent.leaving())
             .await;
         self.github_said(&reads_as, read.rate_limit);
+        self.keep_read_summaries(read.summaries).await;
         let answer = read.answers.into_iter().next().ok_or_else(|| ApiError::new(ErrorCode::Worker, "no answer"))?;
         let snapshot = answer.map_err(|unread| unread.error)?;
         Ok((snapshot, held))

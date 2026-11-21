@@ -6,7 +6,8 @@ use super::reader::{answer, answer_with, ask, pull_request, read, repository, ru
 use super::*;
 use crate::Answer;
 
-/// #3 of example/project, alone in its stack as far as a read of it goes, and example/gone, which isn't there.
+/// #3 of example/project, alone in its stack as far as a read of it goes, with its summary, and example/gone, which
+/// isn't there.
 #[tokio::test]
 async fn asks_read_together_share_their_queries_and_one_that_fails_fails_no_other() {
     let gone = json!({"type":"NOT_FOUND","path":["r1"],"message":"Could not resolve to a Repository."});
@@ -21,6 +22,12 @@ async fn asks_read_together_share_their_queries_and_one_that_fails_fails_no_othe
     assert_eq!(project.pull_requests.iter().map(|row| row.pull_request.number).collect::<Vec<_>>(), [3]);
     let gone = gone.unwrap_err();
     assert_eq!((gone.error.code, gone.affected), (ErrorCode::Unavailable, Vec::new()));
+    let summaries: Vec<_> = read
+        .summaries
+        .iter()
+        .map(|read| (read.number.get(), read.summary.as_ref().map(|summary| summary.comments)))
+        .collect();
+    assert_eq!(summaries, [(3, Ok(2))], "#3's summary, and none of the repository that isn't there");
     assert_eq!(queries.len(), 2);
     assert!(queries[0].contains("r0: repository(") && queries[0].contains("r1: repository("), "{}", queries[0]);
     assert!(!queries[1].contains("r1: repository("), "{}", queries[1]);

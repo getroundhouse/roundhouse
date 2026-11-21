@@ -68,11 +68,24 @@ pub(super) fn number_alias(number: IssueNumber) -> String {
 
 /// `number` as an issue or a pull request, whichever it is, as GitHub numbers both together.
 fn asked(number: IssueNumber) -> String {
-    let labels = format!("labels(first:{LABELS}) {{ nodes {{ name color }} }}");
     format!(
-        "{}: issueOrPullRequest(number:{number}) {{ __typename ... on Issue {{ {SHARED} {labels} stateReason }} \
-         ... on PullRequest {{ {SHARED} {labels} isDraft additions deletions reviewDecision \
-         commits(last:1) {{ nodes {{ commit {{ statusCheckRollup {{ state }} }} }} }} }} }}",
-        number_alias(number)
+        "{}: issueOrPullRequest(number:{number}) {{ __typename ... on Issue {{ {SHARED} {} stateReason }} \
+         ... on PullRequest {{ {} }} }}",
+        number_alias(number),
+        labels(),
+        pull_request_summary(),
     )
+}
+
+/// What's read of a pull request's summary, as a chip and its card show it, which every read of a pull request takes.
+pub(crate) fn pull_request_summary() -> String {
+    format!(
+        "{SHARED} {} isDraft additions deletions reviewDecision \
+         commits(last:1) {{ nodes {{ commit {{ statusCheckRollup {{ state }} }} }} }}",
+        labels()
+    )
+}
+
+fn labels() -> String {
+    format!("labels(first:{LABELS}) {{ nodes {{ name color }} }}")
 }

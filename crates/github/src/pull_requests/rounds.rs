@@ -6,7 +6,7 @@ use protocol::client::{ApiError, ErrorCode};
 use protocol::model::GithubToken;
 use serde_json::Value;
 
-use super::asked::{PullRequestsAsk, PullRequestsRead, Unread};
+use super::asked::{PullRequestsAsk, PullRequestsRead, SummaryRead, Unread};
 use super::graphql::NoAnswer;
 use super::query::{self, Asked, Part};
 use super::reading::Reading;
@@ -73,15 +73,26 @@ impl Github {
     ) -> PullRequestsRead {
         let mut spent = Spent::new(leaving);
         let mut answers: Vec<Option<Result<_, Unread>>> = asks.iter().map(|_| None).collect();
+        let mut summaries = Vec::new();
         let mut reading: Vec<(usize, Reading)> = asks.iter().cloned().map(Reading::new).enumerate().collect();
         for attempt in 1..=ATTEMPTS {
             self.read_rounds(token, &mut reading, &mut spent).await;
-            for (index, read) in std::mem::take(&mut reading) {
+            for (index, mut read) in std::mem::take(&mut reading) {
+                let read_summaries = read.take_summaries();
                 match read.finish() {
+                    // What it found of them moved as it was read, so the next attempt reads them again.
                     Err(unread) if unread.error.code == ErrorCode::Conflict && attempt < ATTEMPTS => {
                         reading.push((index, Reading::new(asks[index].clone())));
                     }
-                    answer => answers[index] = Some(answer),
+                    answer => {
+                        let repository = &asks[index].repository;
+                        summaries.extend(read_summaries.into_iter().map(|(number, summary)| SummaryRead {
+                            repository: repository.clone(),
+                            number,
+                            summary,
+                        }));
+                        answers[index] = Some(answer);
+                    }
                 }
             }
             if reading.is_empty() {
@@ -90,7 +101,7 @@ impl Github {
         }
         let unanswered = || Err(Unread { error: incomplete(), affected: Vec::new() });
         let answers = answers.into_iter().map(|answer| answer.unwrap_or_else(unanswered)).collect();
-        PullRequestsRead { answers, rate_limit: spent.rate_limit, refused: spent.refused }
+        PullRequestsRead { answers, summaries, rate_limit: spent.rate_limit, refused: spent.refused }
     }
 
     /// Asks for what each of `reading` needs, round after round, until none needs more.

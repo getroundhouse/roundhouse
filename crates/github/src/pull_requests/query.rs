@@ -15,7 +15,8 @@ pub(super) const FIELDS: &str = "number url title state isDraft baseRefName base
 /// What one part of a query asks of a repository, under the alias [`Part::alias`] gives it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) enum Part {
-    /// A pull request's fields, its place in its stack and the first page of it, and the first page of its checks.
+    /// A pull request's fields, its summary, its place in its stack and the first page of it, and the first page of its
+    /// checks.
     Look(PullRequestNumber),
     /// A page past the first of a pull request's stack.
     Stack(PullRequestNumber, String),
@@ -56,8 +57,12 @@ impl Part {
         let alias = self.alias();
         match self {
             Part::Look(number) => {
-                let rollup = rollup(*number, None);
-                format!("{alias}: pullRequest(number:{}) {{ {FIELDS} {} {rollup} }}", number.get(), stack(None))
+                let (rollup, summary) = (rollup(*number, None), crate::references::pull_request_summary());
+                format!(
+                    "{alias}: pullRequest(number:{}) {{ {FIELDS} {summary} {} {rollup} }}",
+                    number.get(),
+                    stack(None)
+                )
             }
             Part::Stack(number, after) => {
                 format!("{alias}: pullRequest(number:{}) {{ headRefOid {} }}", number.get(), stack(Some(after)))

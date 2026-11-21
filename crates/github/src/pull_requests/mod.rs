@@ -3,7 +3,7 @@
 //! token, in as few queries as GitHub allows.
 
 mod asked;
-pub use asked::{PullRequestsAsk, PullRequestsRead, Unread};
+pub use asked::{PullRequestsAsk, PullRequestsRead, SummaryRead, Unread};
 mod graphql;
 mod heads;
 pub use heads::{BRANCHES_A_QUERY, Headed, HeadsAsk, HeadsRead};

@@ -17,9 +17,21 @@ pub(super) fn reference(repository: &Value, node: &Value) -> Result<Reference, A
         Some("PullRequest") => ReferenceKind::PullRequest(pull_request(node)?),
         _ => return Err(incomplete()),
     };
+    let repository = GithubRepositoryName::try_from(string(repository, "nameWithOwner")?).map_err(|_| incomplete())?;
+    reference_of(repository, kind, node)
+}
+
+/// The summary of the pull request `node` is, in `repository`, as GitHub answered for its
+/// [`pull_request_summary`](super::query::pull_request_summary).
+pub(crate) fn pull_request_reference(repository: GithubRepositoryName, node: &Value) -> Result<Reference, ApiError> {
+    reference_of(repository, ReferenceKind::PullRequest(pull_request(node)?), node)
+}
+
+/// The issue or pull request `node` is, in `repository`, which is `kind`.
+fn reference_of(repository: GithubRepositoryName, kind: ReferenceKind, node: &Value) -> Result<Reference, ApiError> {
     let labels = array(&node["labels"], "nodes")?.iter().map(label).collect::<Result<_, _>>()?;
     Ok(Reference {
-        repository: GithubRepositoryName::try_from(string(repository, "nameWithOwner")?).map_err(|_| incomplete())?,
+        repository,
         number: node["number"].as_u64().and_then(|n| IssueNumber::try_from(n).ok()).ok_or_else(incomplete)?,
         kind,
         url: string(node, "url")?,

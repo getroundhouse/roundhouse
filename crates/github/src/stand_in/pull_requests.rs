@@ -60,6 +60,7 @@ impl PullRequestState {
             Self::Failed => {
                 let check = &mut pr["statusCheckRollup"]["contexts"]["nodes"][0];
                 (check["status"], check["conclusion"]) = (json!("COMPLETED"), json!("FAILURE"));
+                pr["commits"]["nodes"][0]["commit"]["statusCheckRollup"]["state"] = json!("FAILURE");
                 pr["mergeStateStatus"] = json!("BLOCKED");
             }
             Self::Draft => (pr["isDraft"], pr["mergeStateStatus"]) = (json!(true), json!("DRAFT")),
@@ -270,5 +271,8 @@ fn pull_request(number: u64, passed: bool, head: &str) -> Value {
         "state":"OPEN","isDraft":false,"headRefOid":head,"baseRefOid":"base","baseRefName":"main","headRefName":"branch",
         "mergeStateStatus":"CLEAN","mergeable":"MERGEABLE","reviewDecision":null,"potentialMergeCommit":null,
         "mergeQueueEntry":null,"reviews":{"nodes":[]},"timelineItems":{"nodes":[]},"stackEntry":null,"stack":null,
+        "createdAt":"2026-01-01T00:00:00Z","author":{"login":"ada"},"comments":{"totalCount":0},"bodyText":"",
+        "labels":{"nodes":[]},"additions":1,"deletions":0,
+        "commits":{"nodes":[{"commit":{"statusCheckRollup":{"state":if passed {"SUCCESS"} else {"PENDING"}}}}]},
         "statusCheckRollup":{"commit":{"oid":head},"contexts":{"nodes":[check],"pageInfo":{"hasNextPage":false,"endCursor":null}}}})
 }
