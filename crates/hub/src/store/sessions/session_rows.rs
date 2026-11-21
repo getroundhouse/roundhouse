@@ -2,7 +2,7 @@ use super::super::accounts::name_account;
 use super::super::drafts::forget_drafts;
 use super::super::made::{Made, inserted, made_by};
 use super::super::{
-    ByColumn, Columns, Store, StoreError, StoredSession, columns, current_rev, json_at, lock, maybe_text_at,
+    ByColumn, Columns, OneValue, Store, StoreError, StoredSession, columns, current_rev, json_at, lock, maybe_text_at,
     required_json_at, rev_of, seq_column, seq_of, text_at, text_of,
 };
 use protocol::capability::approvals::ApprovalMode;
@@ -319,7 +319,7 @@ impl Store {
             return Err(StoreError::NotFound { kind: "session", id: id.to_string() });
         };
         let logged: bool =
-            tx.query_row("SELECT EXISTS (SELECT 1 FROM events WHERE session_id = ?)", [id.as_str()], |row| row.get(0))?;
+            tx.query_row("SELECT EXISTS (SELECT 1 FROM events WHERE session_id = ?)", [id.as_str()], OneValue::read)?;
         if logged || !stored.session.queued.is_empty() {
             return Ok(None);
         }

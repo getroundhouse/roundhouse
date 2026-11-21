@@ -1,4 +1,4 @@
-use super::super::{Store, StoreError, lock};
+use super::super::{OneValue, Store, StoreError, lock};
 use protocol::model::{SessionId, Workspace, WorkspaceId};
 use rusqlite::{OptionalExtension, params};
 
@@ -32,7 +32,7 @@ impl Store {
     /// The build the session's agent last started on, as its newest `AgentStarted` says. `None` before its first, and
     /// when that didn't say, as from a hub from before it recorded builds.
     pub fn last_agent_build(&self, id: &SessionId) -> Result<Option<String>, StoreError> {
-        let build = lock(&self.reader).query_row(NEWEST_START, [id.as_str()], |row| row.get(0)).optional()?;
+        let build = lock(&self.reader).query_row(NEWEST_START, [id.as_str()], OneValue::read).optional()?;
         Ok(build.flatten())
     }
 }

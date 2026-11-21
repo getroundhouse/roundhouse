@@ -4,7 +4,7 @@ use protocol::model::DeviceId;
 use protocol::pairing::{Device, DeviceToken};
 use rusqlite::{OptionalExtension, Row, params};
 
-use super::{ByColumn, Columns, Store, StoreError, columns, lock};
+use super::{ByColumn, Columns, OneValue, Store, StoreError, columns, lock};
 
 /// A token's SHA-256, which is all the hub keeps of it. A token is 32 random bytes, so a hash with no salt is as
 /// hard to reverse as guessing the token.
@@ -72,7 +72,7 @@ impl Store {
     }
 
     pub(crate) fn has_devices(&self) -> Result<bool, StoreError> {
-        Ok(lock(&self.reader).query_row("SELECT EXISTS (SELECT 1 FROM devices)", [], |row| row.get(0))?)
+        Ok(lock(&self.reader).query_row("SELECT EXISTS (SELECT 1 FROM devices)", [], OneValue::read)?)
     }
 
     /// Whether there was one to remove.

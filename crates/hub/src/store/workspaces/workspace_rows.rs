@@ -269,7 +269,7 @@ impl Store {
         for moving in [Move::Archive, Move::Restore] {
             let mut statement =
                 conn.prepare_cached("SELECT id FROM workspaces WHERE status = ? ORDER BY created_at_ms")?;
-            let ids = statement.query_map([text_of(&moving.during())], |row| row.get::<_, String>(0))?;
+            let ids = statement.query_map([text_of(&moving.during())], OneValue::read::<String>)?;
             for id in ids {
                 left.push((WorkspaceId::from(id?), moving));
             }
@@ -327,7 +327,7 @@ impl Store {
     /// The start of ten ports nothing else has. Never reused, so a restored workspace keeps its own.
     pub fn next_port_base(&self) -> Result<u16, StoreError> {
         let highest: u16 =
-            lock(&self.reader).query_row("SELECT COALESCE(MAX(port_base), 0) FROM workspaces", [], |row| row.get(0))?;
+            lock(&self.reader).query_row("SELECT COALESCE(MAX(port_base), 0) FROM workspaces", [], OneValue::read)?;
         let next = if highest == 0 { FIRST_PORT_BASE } else { highest + PORTS_PER_WORKSPACE };
         // Past the top of the range, start again rather than fail. A clash is possible, but only
         // after thousands of workspaces, and it only matters if both are running a server.
@@ -367,7 +367,7 @@ impl Store {
     pub fn names_in_repo(&self, repo_id: &RepoId) -> Result<Vec<String>, StoreError> {
         let conn = lock(&self.reader);
         let mut statement = conn.prepare_cached("SELECT name FROM workspaces WHERE repo_id = ?")?;
-        let rows = statement.query_map([repo_id.as_str()], |row| row.get(0))?;
+        let rows = statement.query_map([repo_id.as_str()], OneValue::read)?;
         rows.collect::<rusqlite::Result<_>>().map_err(StoreError::from)
     }
 

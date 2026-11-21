@@ -1,6 +1,6 @@
 use super::super::made::Made;
 use super::super::queue::{Queued, queue_on};
-use super::super::{Columns, Store, StoreError, current_rev, lock};
+use super::super::{Columns, OneValue, Store, StoreError, current_rev, lock};
 use super::proposal_reads::{
     PROPOSAL_WITH_NEWEST, RevisionColumns, proposal_columns, proposal_from_row, proposal_on, revision_from_row,
     with_summaries,
@@ -95,7 +95,7 @@ impl Store {
             .query_row(
                 "SELECT id FROM proposals WHERE session_id = ? AND ask_key = ?",
                 params![session_id.as_str(), key.as_str()],
-                |row| row.get::<_, String>(0),
+                OneValue::read::<String>,
             )
             .optional()?;
         made.map(|id| proposal_on(&conn, &id.into())).transpose()
@@ -110,7 +110,7 @@ impl Store {
             .query_row(
                 "SELECT id FROM proposals WHERE session_id = ? AND ask_key = ?",
                 params![proposal.session_id.as_str(), key.as_str()],
-                |row| row.get::<_, String>(0),
+                OneValue::read::<String>,
             )
             .optional()?;
         if let Some(earlier) = earlier {
@@ -179,7 +179,7 @@ impl Store {
             .query_row(
                 "SELECT response_request FROM proposal_revisions WHERE proposal_id = ? AND number = ?",
                 params![id.as_str(), answer.revision.0],
-                |row| row.get(0),
+                OneValue::read,
             )
             .optional()?
             .ok_or_else(|| StoreError::NotFound {
@@ -229,7 +229,7 @@ impl Store {
             .query_row(
                 "SELECT number FROM proposal_revisions WHERE proposal_id = ? AND ask_key = ?",
                 params![id.as_str(), key.as_str()],
-                |row| row.get(0),
+                OneValue::read,
             )
             .optional()?;
         if asked.is_some() {

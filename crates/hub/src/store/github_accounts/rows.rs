@@ -1,5 +1,7 @@
 use super::super::hub_settings::hub_settings;
-use super::super::{ByColumn, Columns, Store, StoreError, columns, current_rev, lock, rev_of, text_from, text_of};
+use super::super::{
+    ByColumn, Columns, OneValue, Store, StoreError, columns, current_rev, lock, rev_of, text_from, text_of,
+};
 use super::profiles::keep_profile;
 use crate::login_files::LoginFile;
 use github::GithubProfile;
@@ -110,7 +112,7 @@ impl Store {
     /// Whether the hub has any GitHub account's record.
     pub(crate) fn has_github_accounts(&self) -> Result<bool, StoreError> {
         let conn = lock(&self.reader);
-        Ok(conn.query_row("SELECT EXISTS (SELECT 1 FROM github_accounts)", [], |row| row.get::<_, bool>(0))?)
+        Ok(conn.query_row("SELECT EXISTS (SELECT 1 FROM github_accounts)", [], OneValue::read)?)
     }
 
     pub(crate) fn github_account(&self, id: &GithubAccountId) -> Result<Option<GithubAccount>, StoreError> {
@@ -268,7 +270,7 @@ pub(in super::super) fn connect_login(
 ) -> rusqlite::Result<GithubConnected> {
     let GithubConnecting { account: id, user, how, file, connected_at_ms, ends_at_ms, installation, profile } =
         *connecting;
-    let first = !tx.query_row("SELECT EXISTS (SELECT 1 FROM github_accounts)", [], |row| row.get::<_, bool>(0))?;
+    let first = !tx.query_row("SELECT EXISTS (SELECT 1 FROM github_accounts)", [], OneValue::read::<bool>)?;
     let replaced = row_of(tx, id)?.and_then(|(_, file)| file);
     tx.execute(
         "INSERT INTO github_accounts
@@ -316,7 +318,7 @@ pub(in super::super) fn signed_in_as(
         "SELECT id FROM github_accounts WHERE user_id = ? AND login_kind = ? AND login_file IS NOT NULL
              ORDER BY rowid LIMIT 1",
         params![user.id.get(), text_of(&GithubLoginKind::SignIn)],
-        |row| row.get::<_, String>(0),
+        OneValue::read::<String>,
     );
     Ok(found.optional()?.map(GithubAccountId::from))
 }

@@ -3,7 +3,7 @@
 use protocol::model::Rev;
 
 use super::super::tests::store_with_session;
-use super::super::{Store, lock};
+use super::super::{OneValue, Store, lock};
 use super::{github, hub, proposals, sessions, workspaces};
 
 /// A write the hub can be asked for again with nothing new in it.
@@ -128,7 +128,7 @@ fn with_revisions(store: &Store) -> Vec<String> {
     let select = "SELECT m.name FROM sqlite_master AS m JOIN pragma_table_info(m.name) AS c
                   WHERE m.type = 'table' AND c.name = 'rev'";
     let mut statement = conn.prepare(select).unwrap();
-    statement.query_map([], |row| row.get(0)).unwrap().map(Result::unwrap).collect()
+    statement.query_map([], OneValue::read).unwrap().map(Result::unwrap).collect()
 }
 
 fn nothing(_: &Store) {}

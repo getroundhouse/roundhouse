@@ -1,5 +1,5 @@
 use super::super::accounts::account_or_missing;
-use super::super::{ByColumn, Columns, Store, StoreError, columns, lock, maybe_text_at, text_of};
+use super::super::{ByColumn, Columns, OneValue, Store, StoreError, columns, lock, maybe_text_at, text_of};
 use crate::login_files::LoginFile;
 use protocol::model::{Account, AccountId, AgentKind, HeldLogin, HubSettings};
 use rusqlite::{OptionalExtension as _, Row, params};
@@ -127,7 +127,7 @@ impl Store {
         let Connecting { account: id, agent, name, file, connected_at_ms, ends_at_ms } = *connecting;
         self.lasting(|tx| {
             let replaced: Option<String> = tx
-                .query_row("SELECT login_file FROM accounts WHERE id = ?", [id.as_str()], |row| row.get(0))
+                .query_row("SELECT login_file FROM accounts WHERE id = ?", [id.as_str()], OneValue::read)
                 .optional()?
                 .flatten();
             tx.execute(

@@ -15,7 +15,7 @@ mod backup;
 mod builds;
 mod children;
 mod claims;
-mod columns;
+pub(crate) mod columns;
 mod comments;
 mod drafts;
 mod error;

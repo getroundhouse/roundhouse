@@ -1,7 +1,7 @@
 use protocol::model::{GithubAccount, GithubAccountId, GithubAppId, GithubInstallation, GithubLoginKind, GithubUserId};
 use rusqlite::{OptionalExtension as _, params};
 
-use super::super::{Columns, GithubConnected, GithubConnecting, Store, StoreError, lock, text_of};
+use super::super::{Columns, GithubConnected, GithubConnecting, OneValue, Store, StoreError, lock, text_of};
 use super::rows::{GithubAccountColumns, account_at, connect_login};
 use crate::login_files::LoginFile;
 
@@ -45,7 +45,7 @@ impl Store {
             let found = tx.query_row(
                 "SELECT id FROM github_accounts WHERE app_id = ? AND installed_on_id = ? ORDER BY rowid LIMIT 1",
                 params![installation.app.get(), installation.on.id.get()],
-                |row| row.get::<_, String>(0),
+                OneValue::read::<String>,
             );
             let account = found.optional()?.map_or_else(|| connecting.account.clone(), GithubAccountId::from);
             connect_login(tx, &GithubConnecting { account: &account, installation: Some(installation), ..*connecting })

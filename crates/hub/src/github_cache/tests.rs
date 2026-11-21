@@ -10,6 +10,7 @@ use protocol::model::{
 use super::file::VERSION;
 use super::kept::KEPT_FOR;
 use super::{GithubCache, Item};
+use crate::store::columns::OneValue;
 use crate::store::now_ms;
 
 /// Issue `n` of `example/project`.
@@ -65,7 +66,7 @@ fn found(n: u64) -> ReferenceRead {
 /// The version the file at `path` says it's of.
 fn version_of(path: &Path) -> i64 {
     let conn = rusqlite::Connection::open(path).unwrap();
-    conn.pragma_query_value(None, "user_version", |row| row.get(0)).unwrap()
+    conn.pragma_query_value(None, "user_version", OneValue::read).unwrap()
 }
 
 /// A hub that starts again has what was read before it stopped, what GitHub found and what it said wasn't there, and

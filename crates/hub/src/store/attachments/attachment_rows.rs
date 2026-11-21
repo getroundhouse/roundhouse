@@ -1,5 +1,5 @@
 use super::super::new_workspace_draft::read_draft_file;
-use super::super::{ByColumn, Columns, Store, StoreError, columns, lock, now_ms, text_at, text_of};
+use super::super::{ByColumn, Columns, OneValue, Store, StoreError, columns, lock, now_ms, text_at, text_of};
 use crate::attachment_files::FileFor;
 use protocol::attachment::{Attachment, MAX_PER_PROMPT};
 use protocol::model::{AttachmentId, SessionId, WorkspaceId};
@@ -24,9 +24,8 @@ impl Store {
     ) -> Result<Attachment, StoreError> {
         let conn = lock(&self.writer);
         // Under the writer's lock, so a session deleted meanwhile is found missing rather than failing the insert.
-        let session: Option<i64> = conn
-            .query_row("SELECT 1 FROM sessions WHERE id = ?", [session_id.as_str()], |row| row.get(0))
-            .optional()?;
+        let session: Option<i64> =
+            conn.query_row("SELECT 1 FROM sessions WHERE id = ?", [session_id.as_str()], OneValue::read).optional()?;
         if session.is_none() {
             return Err(StoreError::NotFound { kind: "session", id: session_id.to_string() });
         }
@@ -61,7 +60,7 @@ impl Store {
             .query_row(
                 "SELECT placed_at FROM attachments WHERE session_id = ? AND id = ?",
                 params![session_id.as_str(), id.as_str()],
-                |row| row.get(0),
+                OneValue::read,
             )
             .optional()?;
         placed.ok_or_else(|| not_found(id))

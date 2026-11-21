@@ -1,5 +1,5 @@
 use super::super::attachments::{FileColumns, file_from_row, named_on};
-use super::super::{ByColumn, Columns, Store, StoreError, columns, lock, now_ms, rev_of, text_of};
+use super::super::{ByColumn, Columns, OneValue, Store, StoreError, columns, lock, now_ms, rev_of, text_of};
 use crate::attachment_files::FileFor;
 use protocol::attachment::Attachment;
 use protocol::model::{AttachmentId, NewWorkspaceDraft, NewWorkspaceDraftToKeep, Rev};
@@ -102,16 +102,16 @@ impl Store {
         let mut statement = conn.prepare(&format!(
             "DELETE FROM new_workspace_draft_files WHERE created_at_ms < ?1 AND {UNNAMED} RETURNING id"
         ))?;
-        let ids = statement.query_map([before_ms], |row| row.get::<_, String>(0).map(AttachmentId::from))?;
-        Ok(ids.collect::<rusqlite::Result<_>>()?)
+        let ids = statement.query_map([before_ms], OneValue::read::<String>)?;
+        Ok(ids.map(|id| id.map(AttachmentId::from)).collect::<rusqlite::Result<_>>()?)
     }
 
     /// Every file the hub has for the draft, named or not.
     pub fn new_workspace_draft_file_ids(&self) -> Result<HashSet<AttachmentId>, StoreError> {
         let conn = lock(&self.reader);
         let mut statement = conn.prepare("SELECT id FROM new_workspace_draft_files")?;
-        let ids = statement.query_map([], |row| row.get::<_, String>(0).map(AttachmentId::from))?;
-        Ok(ids.collect::<rusqlite::Result<_>>()?)
+        let ids = statement.query_map([], OneValue::read::<String>)?;
+        Ok(ids.map(|id| id.map(AttachmentId::from)).collect::<rusqlite::Result<_>>()?)
     }
 }
 

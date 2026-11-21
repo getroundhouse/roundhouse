@@ -1,6 +1,6 @@
 use super::super::accounts::name_account;
 use super::super::sessions::{forget_cache_unless_under, on_the_hubs, session_login_of};
-use super::super::{SessionLogin, Store, StoreError, lock};
+use super::super::{OneValue, SessionLogin, Store, StoreError, lock};
 use protocol::model::{Account, AccountId, RunId, SessionId};
 use rusqlite::{Connection, OptionalExtension as _, params};
 
@@ -139,7 +139,7 @@ fn given(conn: &Connection, session: &SessionId, run: RunId) -> rusqlite::Result
     conn.query_row(
         "SELECT account_id FROM runs_under_logins WHERE session_id = ? AND run = ?",
         params![session.as_str(), run.get().cast_signed()],
-        |row| row.get::<_, String>(0),
+        OneValue::read::<String>,
     )
     .optional()
     .map(|account| account.map(AccountId::from))

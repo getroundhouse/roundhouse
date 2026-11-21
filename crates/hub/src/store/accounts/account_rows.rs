@@ -21,7 +21,8 @@ pub struct Launched {
 pub(in super::super) fn accounts(conn: &Connection) -> rusqlite::Result<Vec<Account>> {
     let ids: Vec<AccountId> = conn
         .prepare_cached("SELECT id FROM accounts ORDER BY rowid")?
-        .query_map([], |row| Ok(AccountId::from(row.get::<_, String>(0)?)))?
+        .query_map([], OneValue::read::<String>)?
+        .map(|id| id.map(AccountId::from))
         .collect::<rusqlite::Result<_>>()?;
     ids.iter().filter_map(|id| account(conn, id).transpose()).collect()
 }
@@ -262,11 +263,9 @@ pub(in super::super) fn name_account(
 
 /// The account `session`'s record names as the one its agent runs under.
 fn named(conn: &Connection, session: &SessionId) -> rusqlite::Result<Option<AccountId>> {
-    conn.query_row("SELECT account_id FROM sessions WHERE id = ?", [session.as_str()], |row| {
-        row.get::<_, Option<String>>(0)
-    })
-    .optional()
-    .map(|account| account.flatten().map(AccountId::from))
+    conn.query_row("SELECT account_id FROM sessions WHERE id = ?", [session.as_str()], OneValue::read::<Option<String>>)
+        .optional()
+        .map(|account| account.flatten().map(AccountId::from))
 }
 
 /// Brings when the account `session`'s record names was last used up to when the person last sent the session's agent
@@ -284,7 +283,7 @@ pub(in super::super) fn used_by_session(conn: &Connection, session: &SessionId) 
         return Ok(None);
     }
     let id: String =
-        conn.query_row("SELECT account_id FROM sessions WHERE id = ?", [session.as_str()], |row| row.get(0))?;
+        conn.query_row("SELECT account_id FROM sessions WHERE id = ?", [session.as_str()], OneValue::read)?;
     account(conn, &id.into())
 }
 

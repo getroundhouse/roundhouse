@@ -1,5 +1,6 @@
 use super::super::{
-    ByColumn, Column, Columns, Store, StoreError, columns, current_rev, json_at, lock, rev_of, text_at, text_of,
+    ByColumn, Column, Columns, OneValue, Store, StoreError, columns, current_rev, json_at, lock, rev_of, text_at,
+    text_of,
 };
 use protocol::event::SessionEvent;
 use protocol::model::{ModelName, Rev, SessionId, Subagent, SubagentId, SubagentStatus, TouchedSubagents};
@@ -52,7 +53,7 @@ impl Store {
     ) -> Result<Option<SubagentId>, StoreError> {
         let conn = lock(&self.reader);
         let sql = "SELECT id FROM subagents WHERE session_id = ?1 AND (id = ?2 OR call = ?2) ORDER BY id = ?2 DESC";
-        let found = conn.query_row(sql, params![session_id.as_str(), named.as_str()], |row| row.get::<_, String>(0));
+        let found = conn.query_row(sql, params![session_id.as_str(), named.as_str()], OneValue::read::<String>);
         Ok(found.optional()?.map(SubagentId::from))
     }
 }

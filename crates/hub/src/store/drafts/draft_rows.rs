@@ -2,7 +2,7 @@ use super::super::attachments::named_on;
 use super::super::reading::session_on;
 use super::super::sessions::draft_column;
 use super::super::workspaces::workspace_on;
-use super::super::{Reading, Store, StoreError, lock};
+use super::super::{OneValue, Reading, Store, StoreError, lock};
 use crate::attachment_files::FileFor;
 use protocol::model::{
     AttachmentId, CommentDraft, DecisionDraft, Draft, DraftToKeep, SessionId, Workspace, WorkspaceId,
@@ -88,7 +88,7 @@ pub(in super::super) fn forget_drafts(conn: &Connection, id: &SessionId) -> Resu
              WHERE sessions.id = ?",
     )?;
     let files: Vec<AttachmentId> = named
-        .query_map([id.as_str()], |row| row.get::<_, String>(0))?
+        .query_map([id.as_str()], OneValue::read::<String>)?
         .map(|file| file.map(Into::into))
         .collect::<Result<_, _>>()?;
     conn.execute("UPDATE sessions SET draft = NULL, decision_draft = NULL WHERE id = ?", [id.as_str()])?;

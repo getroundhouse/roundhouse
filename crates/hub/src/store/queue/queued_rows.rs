@@ -142,8 +142,8 @@ impl Store {
     pub fn sessions_with_queues(&self) -> Result<Vec<SessionId>, StoreError> {
         let conn = lock(&self.reader);
         let mut statement = conn.prepare("SELECT id FROM sessions WHERE queued <> '[]'")?;
-        let ids = statement.query_map([], |row| Ok(SessionId::from(row.get::<_, String>(0)?)))?;
-        Ok(ids.collect::<rusqlite::Result<_>>()?)
+        let ids = statement.query_map([], OneValue::read::<String>)?;
+        Ok(ids.map(|id| id.map(SessionId::from)).collect::<rusqlite::Result<_>>()?)
     }
 }
 

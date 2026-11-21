@@ -323,10 +323,11 @@ fn event_in(session_id: &SessionId, row: &rusqlite::Row<'_>) -> Result<(SessionE
 
 /// How the person is talking with the agent of `session_id`, as its record says.
 fn interaction_of(tx: &Connection, session_id: &SessionId) -> Result<InteractionMode, StoreError> {
-    let on: bool =
-        tx.query_row("SELECT conversation IS NOT NULL FROM sessions WHERE id = ?", [session_id.as_str()], |row| {
-            row.get(0)
-        })?;
+    let on: bool = tx.query_row(
+        "SELECT conversation IS NOT NULL FROM sessions WHERE id = ?",
+        [session_id.as_str()],
+        OneValue::read,
+    )?;
     Ok(if on { InteractionMode::Conversation } else { InteractionMode::Typing })
 }
 

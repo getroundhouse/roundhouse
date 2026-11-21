@@ -1,5 +1,5 @@
 use super::super::made::Made;
-use super::super::{ByColumn, Columns, Store, StoreError, columns, json_at, lock, now_ms, rev_of};
+use super::super::{ByColumn, Columns, OneValue, Store, StoreError, columns, json_at, lock, now_ms, rev_of};
 use protocol::model::{AskKey, Branches, ChildStatus, ChildWorktree, ChildWorktreeId, MadeBy, SessionId, WorkspaceId};
 use rusqlite::{Connection, OptionalExtension, Row, params};
 
@@ -173,7 +173,7 @@ impl Store {
         );
         let text = serde_json::to_string(branches)?;
         let changed: Option<String> =
-            conn.query_row(&update, params![text, workspace_id.as_str(), path], |row| row.get(0)).optional()?;
+            conn.query_row(&update, params![text, workspace_id.as_str(), path], OneValue::read).optional()?;
         changed.map(|id| child_on(&conn, &id.into())).transpose()
     }
 }

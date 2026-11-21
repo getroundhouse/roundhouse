@@ -1,6 +1,8 @@
 use super::super::made::{Made, inserted, made_by};
 use super::super::workspaces::workspace_on;
-use super::super::{ByColumn, Columns, Store, StoreError, columns, current_rev, lock, rev_of, text_at, text_of};
+use super::super::{
+    ByColumn, Columns, OneValue, Store, StoreError, columns, current_rev, lock, rev_of, text_at, text_of,
+};
 use protocol::model::{ClientRequestId, CommentDraft, CommentId, DiffComment, Rev, Workspace, WorkspaceId};
 use rusqlite::{Connection, OptionalExtension as _, Row, params};
 
@@ -106,9 +108,7 @@ impl Store {
         let mut conn = lock(&self.writer);
         let tx = conn.transaction()?;
         let on: Option<WorkspaceId> = tx
-            .query_row("SELECT workspace_id FROM diff_comments WHERE id = ?", [id.as_str()], |row| {
-                row.get::<_, String>(0)
-            })
+            .query_row("SELECT workspace_id FROM diff_comments WHERE id = ?", [id.as_str()], OneValue::read::<String>)
             .optional()?
             .map(Into::into);
         let Some(on) = on else { return Ok(Commented { made: None, workspace: None }) };
