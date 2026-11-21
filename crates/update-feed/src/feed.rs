@@ -17,6 +17,9 @@ struct Package {
     /// On a full package, which versions of the worker protocol its release's hub speaks.
     #[serde(rename = "WorkerVersions")]
     worker_versions: Option<Versions>,
+    /// On a full package, the oldest release its release updates from, if it says one.
+    #[serde(rename = "UpdatesFrom")]
+    updates_from: Option<String>,
     /// On a full package, the archive of its release's hub, on a channel that publishes one.
     #[serde(rename = "Hub")]
     hub: Option<HubArchive>,
@@ -72,8 +75,22 @@ pub struct Release<'a> {
     pub version: &'a str,
     /// Which versions of the worker protocol its hub speaks. `None` from a release from before releases said.
     pub worker_versions: Option<Versions>,
+    /// The oldest release it updates from, since its hub can't migrate the database of one before it. `None` when it
+    /// updates from any.
+    pub updates_from: Option<&'a str>,
     /// The archive of its hub. `None` on a channel that publishes none, and from a release from before releases did.
     pub hub: Option<&'a HubArchive>,
+}
+
+/// Where an update goes from: the release that's running, and the oldest version of the worker protocol among the
+/// workers the update has to keep, if it has to keep any.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Running<'a> {
+    pub version: &'a str,
+    /// The release of the hub whose database the update's hub migrates next, where that's another than `version`'s,
+    /// as for an app whose hub hasn't restarted on the app's release yet.
+    pub hub: Option<&'a str>,
+    pub workers: Option<u32>,
 }
 
 /// A version that isn't three numbers, which is all the release workflow publishes.
@@ -87,23 +104,24 @@ impl Feed {
         self.packages.iter().filter(|package| package.kind == Kind::Full).map(|package| Release {
             version: &package.version,
             worker_versions: package.worker_versions,
+            updates_from: package.updates_from.as_deref(),
             hub: package.hub.as_ref(),
         })
     }
 
-    /// Each release whose hub speaks workers of `oldest`, the oldest at work, so updating to it ends none of them, and
-    /// an update crosses at most one break in the worker protocol, as `docs/principles/protocol.md` says.
-    pub fn speaking(&self, oldest: u32) -> impl Iterator<Item = Release<'_>> {
-        self.releases().filter(move |release| release.speaks(oldest))
+    /// Each release an update from `running` can take, as [`Release::takes_over`] says.
+    pub fn taking_over<'a>(&'a self, running: Running<'_>) -> impl Iterator<Item = Release<'a>> {
+        self.releases().filter(move |release| release.takes_over(running))
     }
 
     /// The release a hub installed as a service, on version `running` with workers of `oldest` at work, would update
-    /// to: the newest that's newer than it, speaks those workers, and has an archive of its hub. `None` when there's
+    /// to: the newest that's newer than it, takes over from it, and has an archive of its hub. `None` when there's
     /// none, such as when it's the newest.
     pub fn hub_update(&self, running: &str, oldest: u32) -> Result<Option<Release<'_>>, BadVersion> {
+        let from = Running { version: running, hub: None, workers: Some(oldest) };
         let running = order_of(running)?;
         let mut newest: Option<([u64; 3], Release<'_>)> = None;
-        for release in self.speaking(oldest).filter(|release| release.hub.is_some()) {
+        for release in self.taking_over(from).filter(|release| release.hub.is_some()) {
             let order = order_of(release.version)?;
             if order > running && newest.is_none_or(|(at, _)| order > at) {
                 newest = Some((order, release));
@@ -130,9 +148,28 @@ impl Feed {
 }
 
 impl Release<'_> {
+    /// Whether an update from `running` can take it, which is whether it's past both of this release's floors. Its hub
+    /// speaks the workers the update has to keep, so the update ends none of them and crosses at most one break in the
+    /// worker protocol, as `docs/principles/protocol.md` says. And `running`, and the hub it names, are at least the
+    /// oldest release it updates from, so its hub can migrate the database, as "The database" in
+    /// `docs/principles/state.md` says. An app or a hub takes the newest release it can, so it steps through each floor.
+    pub fn takes_over(&self, running: Running<'_>) -> bool {
+        running.workers.is_none_or(|oldest| self.speaks(oldest))
+            && self.updates_from(running.version)
+            && running.hub.is_none_or(|hub| self.updates_from(hub))
+    }
+
     /// Whether its hub speaks workers of `version`. One from before releases said may not.
     pub fn speaks(&self, version: u32) -> bool {
         self.worker_versions.is_some_and(|versions| versions.speaks(version))
+    }
+
+    /// Whether it updates from release `version`, by version rather than as text. A version that isn't a release's,
+    /// such as a build of a commit, isn't known to be past any floor, so only a release that says none updates from it.
+    fn updates_from(&self, version: &str) -> bool {
+        self.updates_from.is_none_or(
+            |oldest| matches!((order_of(oldest), order_of(version)), (Ok(oldest), Ok(version)) if oldest <= version),
+        )
     }
 }
 

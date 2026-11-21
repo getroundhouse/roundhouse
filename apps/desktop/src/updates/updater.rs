@@ -4,7 +4,7 @@ use answer::Answer;
 use flume::RecvTimeoutError;
 use gpui_kit::{App, BorrowAppContext as _, Context, Global, Subscription};
 use problem::{Kind, OutOfReach, Problem, Said, Shown, Step};
-use source::{Kept, SignedSource, WorkersToKeep};
+use source::{Keeping, Kept, SignedSource, ToKeep};
 use std::path::Path;
 use std::time::{Duration, SystemTime};
 use velopack::{UpdateCheck, UpdateInfo, UpdateManager, UpdateOptions, VelopackApp};
@@ -16,13 +16,13 @@ const CHECK_EVERY: Duration = Duration::from_mins(10);
 /// What a look found, and how long the update server had been out of reach then.
 type Look = (Result<Option<UpdateInfo>, Problem>, Duration);
 
-/// Velopack, the update it has downloaded, if any, a way to have it look now, and which workers the update has to keep.
+/// Velopack, the update it has downloaded, if any, a way to have it look now, and what the update has to keep.
 struct Updater {
     pub(super) manager: UpdateManager,
     pub(super) ready: Option<UpdateInfo>,
     /// Wakes the thread that looks, so it looks now rather than when its wait ends.
     pub(super) look_now: flume::Sender<()>,
-    pub(super) workers: WorkersToKeep,
+    pub(super) keeping: ToKeep,
 }
 
 impl Global for Updater {}
@@ -51,8 +51,8 @@ pub(super) fn options() -> UpdateOptions {
 /// been out of reach, and where Velopack keeps downloads on Linux.
 pub fn start(data_dir: &Path, cx: &mut App) {
     let paths = location::paths(data_dir);
-    let workers = WorkersToKeep::until_heard();
-    let source = SignedSource::new(update_feed::URL, update_feed::KEY, workers.clone());
+    let keeping = ToKeep::until_heard();
+    let source = SignedSource::new(update_feed::URL, update_feed::KEY, keeping.clone());
     let manager = match UpdateManager::new(source, Some(options()), paths.clone()) {
         Ok(manager) => manager,
         Err(velopack::Error::NotInstalled(_)) => return,
@@ -67,7 +67,7 @@ pub fn start(data_dir: &Path, cx: &mut App) {
         async {}
     })
     .detach();
-    keep_up_to_date(manager, workers, OutOfReach::in_dir(data_dir), cx);
+    keep_up_to_date(manager, keeping, OutOfReach::in_dir(data_dir), cx);
 }
 
 /// Looks for an update now, rather than when the next look is due, and says what it found in the sidebar, never in an
@@ -87,14 +87,14 @@ pub fn check_now(cx: &mut App) {
     });
 }
 
-/// Says which workers the update has to keep, as the app learns it from its hub, as [`WorkersToKeep`] says. A change
-/// looks again at once, rather than when the next look is due, so what's ready is the newest update that keeps them,
-/// whether that's newer than before or older. The look shows nothing until it's done, since nobody asked for it. Older
-/// workers to keep drop the update that's ready first, which may not keep them, so a quit before the look is done, or
-/// after it fails, installs nothing rather than ending them.
-pub(crate) fn keep_workers(oldest: Option<u32>, cx: &mut App) {
+/// Says what the update has to keep, the hub's workers and its database, as the app learns it from its hub, as
+/// [`ToKeep`] says. A change looks again at once, rather than when the next look is due, so what's ready is the newest
+/// update that keeps them, whether that's newer than before or older. The look shows nothing until it's done, since
+/// nobody asked for it. Older workers to keep, or another hub, drop the update that's ready first, which may not keep
+/// them, so a quit before the look is done, or after it fails, installs nothing rather than ending them.
+pub(crate) fn keep(keeping: Keeping, cx: &mut App) {
     let Some(updater) = cx.try_global::<Updater>() else { return };
-    let kept = updater.workers.set(oldest);
+    let kept = updater.keeping.set(keeping);
     if kept == Kept::Same {
         return;
     }
@@ -106,17 +106,17 @@ pub(crate) fn keep_workers(oldest: Option<u32>, cx: &mut App) {
     }
 }
 
-/// Looks on launch, every 10 minutes, whenever someone checks, and whenever which workers to keep changes, and keeps what
+/// Looks on launch, every 10 minutes, whenever someone checks, and whenever what to keep changes, and keeps what
 /// each look finds.
-pub(super) fn keep_up_to_date(manager: UpdateManager, workers: WorkersToKeep, out_of_reach: OutOfReach, cx: &mut App) {
+pub(super) fn keep_up_to_date(manager: UpdateManager, keeping: ToKeep, out_of_reach: OutOfReach, cx: &mut App) {
     // Asking again before a look starts adds nothing, so one is enough.
     let (look_now, asked) = flume::bounded(1);
     cx.set_global(Shown::default());
-    cx.set_global(Updater { manager: manager.clone(), ready: None, look_now, workers: workers.clone() });
+    cx.set_global(Updater { manager: manager.clone(), ready: None, look_now, keeping: keeping.clone() });
     // A thread of its own, since a look blocks, a download can take minutes, and GPUI's background threads are the
     // ones the app's calls to its hub go through.
     let (looks, looked) = flume::unbounded();
-    std::thread::spawn(move || keep_looking(&manager, &workers, &asked, &looks, &out_of_reach));
+    std::thread::spawn(move || keep_looking(&manager, &keeping, &asked, &looks, &out_of_reach));
     cx.spawn(async move |cx| {
         while let Ok(look) = looked.recv_async().await {
             cx.update(|cx| record(look, cx));
@@ -205,16 +205,16 @@ pub fn show_ready(version: &str, cx: &mut App) {
 }
 
 /// Looks, then waits 10 minutes or until someone asks, for as long as the app takes what it finds. A look during which
-/// which workers to keep changed is followed by another at once, since what it found may not keep them.
+/// what to keep changed is followed by another at once, since what it found may not keep it.
 pub(super) fn keep_looking(
     manager: &UpdateManager,
-    workers: &WorkersToKeep,
+    to_keep: &ToKeep,
     asked: &flume::Receiver<()>,
     looks: &flume::Sender<Look>,
     out_of_reach: &OutOfReach,
 ) {
     loop {
-        let keeping = workers.oldest();
+        let keeping = to_keep.now();
         let found = newest(manager);
         let reached = !matches!(&found, Err(problem) if problem.kind == Kind::Unreachable);
         // Whoever has asked by now hears what this look found, since it reaches the app after they asked, so it
@@ -223,7 +223,7 @@ pub(super) fn keep_looking(
         if looks.send((found, out_of_reach.note(reached, SystemTime::now()))).is_err() {
             return;
         }
-        if workers.oldest() != keeping {
+        if to_keep.now() != keeping {
             continue;
         }
         if matches!(asked.recv_timeout(CHECK_EVERY), Err(RecvTimeoutError::Disconnected)) {
