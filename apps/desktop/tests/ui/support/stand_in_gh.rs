@@ -26,11 +26,3 @@ impl Stack {
         StandInGh { _hub: hub }
     }
 }
-
-impl super::Ui<'_> {
-    /// Lets the time pass after which the app reads the pull request showing again, and lets it read it.
-    pub(crate) fn wait_out_a_pull_request_look(&mut self) {
-        self.cx.executor().advance_clock(desktop::pull_request::READ_AGAIN);
-        self.frame();
-    }
-}

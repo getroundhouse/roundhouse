@@ -12,7 +12,7 @@ One hub's workspaces and chats, on a phone, for keeping work moving away from th
 
 ## Workspaces
 
-- **The first screen lists the hub's workspaces, grouped by repository,** newest first, each with the status mark the desktop's sidebar shows, in its pull request's colour as the hub records it, what the sidebar calls it, which is its title or its name until it has one, and its branch where that isn't the same again. Only workspaces that are ready are listed, since one still being made or archived has nothing to open. *Unconfirmed.*
+- **The first screen lists the hub's workspaces, grouped by repository,** newest first, each with the status mark the desktop's sidebar shows, in its pull request's colour as the hub sends it, what the sidebar calls it, which is its title or its name until it has one, and its branch where that isn't the same again. Only workspaces that are ready are listed, since one still being made or archived has nothing to open. *Unconfirmed.*
 - **Tapping a workspace opens its chat:** the one last worked in, as the desktop opens it on, or with none open, the one the hub finds or starts, on the agent the hub would start a chat on. *Unconfirmed.*
 - **`+` starts a workspace in a repository the hub already has,** with the hub's choice of name and branch, as the desktop app does, and opens its chat. Adding a repository needs the hub's computer. *Unconfirmed.*
 

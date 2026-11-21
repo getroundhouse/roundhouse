@@ -19,8 +19,10 @@ fn state(ui: &Ui<'_>) -> Option<PrState> {
     lookup(ui).pull_request().map(|pr| pr.state)
 }
 
+/// The hub reads the pull request showing as often as the app shows it, so the app asks nothing itself, and shows
+/// what each read finds, whatever made it, as the hub sends it.
 #[gpui_kit::test]
-fn the_pull_request_showing_is_read_again_until_its_merged(cx: &mut TestAppContext) {
+fn the_pull_request_showing_is_what_the_hub_last_read(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let github = stack.start_hub_reading_stand_in_github();
     let mut ui = Ui::open_with_a_repository(cx, &stack);
@@ -28,22 +30,13 @@ fn the_pull_request_showing_is_read_again_until_its_merged(cx: &mut TestAppConte
     let (branch, _) = ui.push(&id);
     ui.wait("it to have no pull request", |ui| lookup(ui) == Lookup::Found(None));
 
-    // One opened on GitHub shows once it's time to read it again, and not before.
     github.pull_requests.set_from(7, Open, &branch);
-    ui.frame();
-    assert_eq!(lookup(&ui), Lookup::Found(None), "not read again before its time");
-    ui.wait_out_a_pull_request_look();
+    stack.client().workspace_pull_request(&id).unwrap();
     ui.wait("the open pull request", |ui| state(ui) == Some(PrState::Open));
 
     github.pull_requests.set_from(7, Merged, &branch);
-    ui.wait_out_a_pull_request_look();
+    stack.client().workspace_pull_request(&id).unwrap();
     ui.wait("it to merge", |ui| state(ui) == Some(PrState::Merged));
-
-    // Merged is done, so it isn't read again.
-    github.pull_requests.set_from(7, Open, &branch);
-    ui.wait_out_a_pull_request_look();
-    ui.wait_out_a_pull_request_look();
-    assert_eq!(state(&ui), Some(PrState::Merged));
 }
 
 #[gpui_kit::test]

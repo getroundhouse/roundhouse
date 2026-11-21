@@ -70,6 +70,7 @@ impl WorkspacePane {
         self.dictation_follows_its_composer(cx);
         self.read_showing(cx);
         self.follow_models(false, cx);
+        self.transcripts_shown(cx);
     }
 
     /// Marks the chat showing read, when it's being read with a reply that has just come, or that the screen hasn't

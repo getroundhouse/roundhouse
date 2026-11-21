@@ -9,11 +9,14 @@ use gpui_kit::{
     StatefulInteractiveElement as _, Styled as _, Window, div,
 };
 use look::{IconSize, IconSizing as _, RowSize, Space, Type, Typeset as _, Work};
-use protocol::model::{Repo, Session, Workspace, WorkspaceId, WorkspaceStatus};
+use std::collections::HashMap;
+
+use protocol::model::{Repo, Session, Workspace, WorkspaceId};
 
 use super::{Followed, MobileApp, Panel};
 use crate::chat::ChatView;
 use crate::chrome;
+use crate::hub_link::{HubLink, listed};
 
 /// A workspace's row: its name and its branch under it, which takes a large row.
 const ROW: RowSize = RowSize::Large;
@@ -40,7 +43,10 @@ impl MobileApp {
             Some(records) if !records.workspaces().iter().any(listed) => {
                 chrome::empty("No workspaces", "Tap + to start one.")
             }
-            Some(records) => Self::list(&records, ready, window.insets().safe_area.bottom, cx),
+            Some(records) => {
+                let works = Works::read(&records, link);
+                Self::list(&records, &works, ready, window.insets().safe_area.bottom, cx)
+            }
         };
         // Such as the vault failing to keep the hub just paired with.
         let error = self.error.clone().map(chrome::error);
@@ -48,7 +54,7 @@ impl MobileApp {
     }
 
     /// The repositories by name, as client-core keeps them, and newest first in each.
-    fn list(records: &Snapshot, ready: bool, bottom: Pixels, cx: &mut Context<Self>) -> AnyElement {
+    fn list(records: &Snapshot, works: &Works, ready: bool, bottom: Pixels, cx: &mut Context<Self>) -> AnyElement {
         let muted = look::colors(cx).text_muted;
         let mut sections = v_flex().w_full().px(look::ROWS_INSET).pb(bottom);
         for repo in records.repos() {
@@ -60,16 +66,15 @@ impl MobileApp {
             workspaces.sort_by_key(|w| std::cmp::Reverse(w.created_at_ms));
             sections = sections.child(heading(repo, muted));
             for workspace in workspaces {
-                sections = sections.child(Self::row(workspace, records, ready, cx));
+                sections = sections.child(Self::row(workspace, records, works.of(workspace), ready, cx));
             }
         }
         div().id("workspaces").flex_1().min_h_0().w_full().overflow_y_scroll().child(sections).into_any_element()
     }
 
-    fn row(workspace: &Workspace, records: &Snapshot, ready: bool, cx: &mut Context<Self>) -> AnyElement {
+    fn row(workspace: &Workspace, records: &Snapshot, work: Work, ready: bool, cx: &mut Context<Self>) -> AnyElement {
         let muted = look::colors(cx).text_muted;
         let signal = transcript::workspace_signal(workspace, records.sessions(&workspace.id));
-        let work = transcript::recorded_work(workspace).unwrap_or(Work::NoPr);
         let id = workspace.id.clone();
         let names = v_flex()
             .flex_1()
@@ -101,10 +106,25 @@ impl MobileApp {
     }
 }
 
-/// Whether the list shows it: ready ones only, since one still being made, being archived or archived has nothing to
-/// open here. The desktop's sidebar also lists one being archived, and notes one being made.
-fn listed(workspace: &Workspace) -> bool {
-    workspace.status == WorkspaceStatus::Ready
+/// Where each listed workspace's pull request stands, as the hub sent it, for its mark.
+struct Works(HashMap<WorkspaceId, Work>);
+
+impl Works {
+    fn read(records: &Snapshot, link: &HubLink) -> Self {
+        let listed = records.workspaces().iter().filter(|workspace| listed(workspace));
+        Self(
+            listed
+                .filter_map(|workspace| {
+                    let work = transcript::recorded_work(link.pull_request_of(workspace).as_ref())?;
+                    Some((workspace.id.clone(), work))
+                })
+                .collect(),
+        )
+    }
+
+    fn of(&self, workspace: &Workspace) -> Work {
+        self.0.get(&workspace.id).copied().unwrap_or(Work::NoPr)
+    }
 }
 
 /// A repository's name over its workspaces.

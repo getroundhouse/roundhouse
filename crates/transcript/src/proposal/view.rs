@@ -62,12 +62,11 @@ impl ProposalView {
             let _ = this.update(cx, |_, cx| cx.notify());
         });
         let this = cx.weak_entity();
-        let linked = LinkedImages::new(client.clone(), proposal.session_id.clone(), move |_, cx| {
+        let linked = LinkedImages::new(client, proposal.session_id.clone(), move |_, cx| {
             let _ = this.update(cx, |_, cx| cx.notify());
         });
         let (changed, go_to) = (cx.weak_entity(), cx.weak_entity());
         let references = References::new(
-            client,
             proposal.workspace_id.clone(),
             move |_, cx| {
                 let _ = changed.update(cx, |_, cx| cx.notify());
@@ -75,6 +74,8 @@ impl ProposalView {
             move |workspace, cx| {
                 let _ = go_to.update(cx, |_, cx| cx.emit(ProposalEvent::GoToWorkspace(workspace)));
             },
+            // Each chip it draws is in what it shows.
+            |(), _| true,
         );
         let focus = cx.focus_handle();
         let selection = Selection::new(texts.clone(), focus.clone());
@@ -97,7 +98,6 @@ impl ProposalView {
     /// Carries on on a new connection to the hub, and asks again for what couldn't be read.
     pub fn reconnect(&mut self, client: &Client) {
         self.linked.reconnect(client);
-        self.references.reconnect(client);
     }
 
     /// Reads which workspace a pull request the page names is in from `records` from now on.
@@ -201,6 +201,7 @@ impl Focusable for ProposalView {
 
 impl Render for ProposalView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        self.references.drawing(cx);
         let area = ElementId::Name("proposal-page".into());
         let parts = {
             let images = (&self.linked, self.proposal.current.images.as_slice());

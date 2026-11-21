@@ -11,6 +11,7 @@ mod outline;
 mod proposals;
 mod record;
 mod sending;
+mod shown;
 #[cfg(feature = "testing")]
 mod testing;
 

@@ -174,13 +174,7 @@ impl WorkspacePane {
                 this.open_subagent_tab(chat.clone(), subagent.clone(), title.clone(), cx);
             }
             TranscriptEvent::OpenProposal { proposal } => this.open_proposal_tab(chat.clone(), proposal, true, cx),
-            TranscriptEvent::TurnEnded => {
-                // The hub reads the pull request again itself, and records it, except a hub too old to.
-                if this.workspace().pull_request.is_none() {
-                    this.refresh_pull_request(cx);
-                }
-                this.turn_ended(cx);
-            }
+            TranscriptEvent::TurnEnded => this.turn_ended(cx),
             TranscriptEvent::Asking { left } => {
                 // The question takes the composer's place.
                 this.dictation_follows_its_composer(cx);

@@ -28,6 +28,7 @@ impl AppView {
             pane.update(cx, |p, cx| p.set_records(shown, cx));
         }
         self.records = records;
+        self.say_which_pull_requests_show();
         self.keep_workers_as_they_move(cx);
         let still_there = self.selected().and_then(|id| self.records.workspace(id)).is_some_and(crate::sidebar::lists);
         if !still_there {

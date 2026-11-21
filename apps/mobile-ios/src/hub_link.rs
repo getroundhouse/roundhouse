@@ -1,11 +1,13 @@
 //! The connection to the hub this phone paired with, made again whenever it goes, and the records client-core keeps
-//! from it.
+//! from it, with what the hub says of the pull requests of the workspaces the phone lists.
 
 use std::time::Duration;
 
 use client_core::records::Snapshot;
-use client_core::{Client, ClientError, RecordsFeed, RemoteHub};
+use client_core::{Client, ClientError, GithubView, RecordsFeed, RemoteHub};
 use gpui_kit::{AppContext as _, Context, EventEmitter, Task};
+use protocol::client::github::GithubShown;
+use protocol::model::{PullRequestFound, Workspace, WorkspaceStatus};
 
 /// What the hub's list of clients calls the app.
 const CLIENT_NAME: &str = "roundhouse-ios";
@@ -48,6 +50,16 @@ pub(crate) struct HubLink {
 struct Records {
     feed: RecordsFeed,
     _following: Task<()>,
+    /// The pull requests of the workspaces listed, which the hub sends as they change, and the task that draws them
+    /// again.
+    marks: GithubView,
+    _hearing: Task<()>,
+}
+
+/// Whether the phone lists `workspace`: ready ones only, since one still being made, being archived or archived has
+/// nothing to open here. The desktop's sidebar also lists one being archived, and notes one being made.
+pub(crate) fn listed(workspace: &Workspace) -> bool {
+    workspace.status == WorkspaceStatus::Ready
 }
 
 impl EventEmitter<Reconnected> for HubLink {}
@@ -85,6 +97,12 @@ impl HubLink {
         self.records.as_ref().map(|records| records.feed.snapshot())
     }
 
+    /// `workspace`'s pull request, as the hub sent it, or, from a hub too old to send it, as its record has it. `None`
+    /// until the hub has looked.
+    pub(crate) fn pull_request_of(&self, workspace: &Workspace) -> Option<PullRequestFound> {
+        self.records.as_ref()?.marks.feed().pull_request(workspace)
+    }
+
     /// What follows the hub's records, over every connection, once there's been one.
     pub(crate) fn feed(&self) -> Option<RecordsFeed> {
         self.records.as_ref().map(|records| records.feed.clone())
@@ -111,7 +129,17 @@ impl HubLink {
                     records.feed.reconnect(&client);
                 } else {
                     let feed = RecordsFeed::start(&client);
-                    self.records = Some(Records { feed: feed.clone(), _following: Self::follow(feed, cx) });
+                    let marks = feed.github().view();
+                    let changed = marks.changed().clone();
+                    let hearing = cx.spawn(async move |this, cx| {
+                        while changed.recv_async().await.is_ok() {
+                            if this.update(cx, |_, cx| cx.notify()).is_err() {
+                                return;
+                            }
+                        }
+                    });
+                    let following = Self::follow(feed.clone(), cx);
+                    self.records = Some(Records { feed, _following: following, marks, _hearing: hearing });
                 }
                 self.client = Some(client.clone());
                 self.catching_up = Some(cx.spawn(async move |this, cx| {
@@ -151,6 +179,10 @@ impl HubLink {
     }
 
     fn feed_changed(&mut self, feed: &RecordsFeed, cx: &mut Context<Self>) {
+        if let Some(records) = &self.records {
+            let listed = feed.snapshot().workspaces().iter().filter(|w| listed(w)).map(|w| w.id.clone()).collect();
+            records.marks.show(GithubShown { workspaces: listed, ..GithubShown::default() });
+        }
         let error = feed.take_errors().first().map(ToString::to_string);
         // A try under way decides what comes next.
         if self.connecting.is_none() {

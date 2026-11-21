@@ -105,7 +105,7 @@ impl Transcript {
         let list = TranscriptList::new(selection.clone(), cx);
         list.set_rows(rows, loaded);
         let linked = LinkedImages::of_transcript(client.clone(), session.id.clone(), cx.weak_entity());
-        let references = References::of_transcript(client.clone(), session.workspace_id.clone(), cx.weak_entity());
+        let references = References::of_transcript(session.workspace_id.clone(), cx.weak_entity());
         let ticking = tick(&at_work, cx);
         let approvals = RecordedApprovals::of(session);
         let model = Rc::new(RefCell::new(Model {
@@ -185,10 +185,10 @@ impl Transcript {
         // changed once it has caught up on the new connection, or lost it, and the transcript is drawn again then.
         self.model.borrow_mut().pictures.retain(|_, picture| !matches!(picture, Picture::Unreadable));
         self.linked.reconnect(client);
-        self.references.reconnect(client);
     }
 
-    /// Reads which workspace a pull request the chat names is in from `records`, client-core's copy of the hub's.
+    /// Reads which workspace a pull request the chat names is in, and what the hub says of those it draws, from
+    /// `records`, client-core's copy of the hub's.
     pub fn follow_records(&mut self, records: client_core::RecordsFeed) {
         self.references.follow_records(records);
     }

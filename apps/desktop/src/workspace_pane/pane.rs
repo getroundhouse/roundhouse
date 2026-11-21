@@ -142,7 +142,6 @@ pub struct WorkspacePane {
     pub(super) proposals: proposal_tab::Proposals,
     pub pull_request: Lookup,
     /// How many times the pull request has been asked for, so only the newest answer is shown.
-    pub(super) pull_request_asks: u64,
     pub setup_log: Option<String>,
     /// Keeps the open log current while setup runs.
     pub(super) setup_log_refresh: Option<Task<()>>,
@@ -159,11 +158,6 @@ pub struct WorkspacePane {
 impl EventEmitter<PaneEvent> for WorkspacePane {}
 
 impl WorkspacePane {
-    /// Where the workspace's work stands, as its mark and the pull request's bar show it.
-    pub(crate) fn work(&self) -> look::Work {
-        self.pull_request.work()
-    }
-
     /// The pane for the workspace `shown` is part of, as `records` had it.
     pub fn new(
         client: Client,
@@ -184,7 +178,7 @@ impl WorkspacePane {
         });
         // The microphone is as dictation stands.
         let on_dictation = crate::dictating::observe(cx, |_, cx| cx.notify());
-        let pull_request = Lookup::recorded(shown.workspace()).unwrap_or(Lookup::Looking);
+        let pull_request = Lookup::of(records.github().pull_request(shown.workspace()));
         let mut this = Self {
             client,
             records,
@@ -212,7 +206,6 @@ impl WorkspacePane {
             terminals: terminals::Terminals::default(),
             proposals: proposal_tab::Proposals::default(),
             pull_request,
-            pull_request_asks: 0,
             setup_log: None,
             setup_log_refresh: None,
             cache_clock: None,
@@ -289,11 +282,11 @@ impl WorkspacePane {
         }
     }
 
-    /// For each time the pane is shown. Reads the pull request again, since it changes on GitHub while nobody's
-    /// looking, and what the sidebar of changes and the file tab show of the worktree.
+    /// For each time the pane is shown. Reads again what the sidebar of changes and the file tab show of the worktree,
+    /// and takes its pull request as the hub has sent it. The hub reads that as the app shows it.
     pub fn shown(&mut self, cx: &mut Context<Self>) {
         self.behind = false;
-        self.refresh_pull_request(cx);
+        self.take_pull_request(cx);
         self.load_changes(cx);
     }
 
@@ -307,9 +300,7 @@ impl WorkspacePane {
             transcript.update(cx, |t, cx| t.records_changed(&now, cx));
         }
         if changes.workspace(&id) {
-            if let Some(recorded) = Lookup::recorded(self.workspace()) {
-                self.pull_request = recorded;
-            }
+            self.take_pull_request(cx);
             // Picks up the last lines of the log once setup has finished, while there's a worktree to read it from.
             if self.setup_log.is_some() && self.workspace().status == WorkspaceStatus::Ready {
                 self.load_setup_log(cx);

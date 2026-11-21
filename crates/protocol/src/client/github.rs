@@ -25,6 +25,10 @@ impl Request for GithubSubscribe {
     }
 }
 
+/// The most issues and pull requests one subscription can show as chips, which is more than a window shows, so a hub
+/// refuses a subscription that shows more.
+pub const MOST_REFERENCES_SHOWN: usize = 200;
+
 /// What a client shows of GitHub, all of it, each time it says.
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq, Eq)]
 pub struct GithubShown {

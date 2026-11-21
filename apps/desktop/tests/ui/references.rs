@@ -1,12 +1,11 @@
-//! Issues and pull requests a reply links to, drawn as chips from what the hub found of each: asked for as they're
-//! drawn, and again while they're in view, and not once they're out of it.
+//! Issues and pull requests a reply links to, drawn as chips from what the hub found of each: shown, as the app tells
+//! the hub, while they're in view, and not once they're out of it.
 
 #![cfg(test)]
 
 use client_core::fake_hub::events::{replied, taken, text, user_prompt};
 use gpui_kit::{AppContext as _, TestAppContext};
 use protocol::model::{GithubRepositoryName, IssueNumber, IssueState, Reference, ReferenceKind, SessionStatus};
-use transcript::REFERENCES_ASKED_AGAIN_AFTER;
 
 use crate::support::{one_chat, open_on_the_chat};
 
@@ -29,7 +28,7 @@ fn issue() -> Reference {
 /// The chat's first reply links to #1, and replies enough to be screens long come after it, so it's out of view at the
 /// chat's end.
 #[gpui_kit::test]
-fn a_reference_is_asked_for_again_while_it_is_in_view_and_not_once_it_is_out_of_it(cx: &mut TestAppContext) {
+fn a_reference_is_shown_while_it_is_in_view_and_not_once_it_is_out_of_it(cx: &mut TestAppContext) {
     let mut events = vec![user_prompt("Where's the signal's state kept?"), taken(protocol::model::Seq::new(1))];
     events.push(text(
         "msg-1",
@@ -41,29 +40,47 @@ fn a_reference_is_asked_for_again_while_it_is_in_view_and_not_once_it_is_out_of_
     events.push(replied("Done.", 9, 0.04));
     let (mut world, chat) = one_chat(SessionStatus::Idle, events);
     world.references = vec![issue()];
-    let asked = world.references_asked.clone();
+    let shown = world.github_shown.clone();
     let (_fake, mut ui) = open_on_the_chat(cx, world, &chat);
     let transcript = ui.transcript().unwrap();
+    let shows_it =
+        move || shown.lock().last().is_some_and(|shown| shown.references.iter().any(|ask| ask.number.get() == 1));
 
     ui.cx.update_entity(&transcript, |t, cx| {
         t.list().go_to_row(0);
         cx.notify();
     });
-    ui.wait("#1 to be asked for, in view", |_| asked.lock().len() == 1);
-    ui.cx.executor().advance_clock(REFERENCES_ASKED_AGAIN_AFTER);
-    ui.wait("#1 to be asked for again, still in view", |_| asked.lock().len() == 2);
+    ui.wait("#1 to be shown, in view", |_| shows_it());
+    ui.wait("its chip", |ui| ui.has("reference/example/signals#1"));
 
     let last = ui.cx.read_entity(&transcript, |t, _| t.row_count() - 1);
     ui.cx.update_entity(&transcript, |t, cx| {
         t.list().go_to_row(last);
         cx.notify();
     });
-    ui.frame();
-    for _ in 0..3 {
-        ui.cx.executor().advance_clock(REFERENCES_ASKED_AGAIN_AFTER);
-        ui.frame();
-    }
-    assert_eq!(asked.lock().len(), 2, "out of view, it's asked for no more");
+    ui.wait("#1 to be shown no more, out of view", |_| !shows_it());
+}
+
+/// A chat behind another's tab shows none of its chips, so what the hub reads for the app is what's on screen, and its
+/// chips are shown again once its tab is in front again.
+#[gpui_kit::test]
+fn a_chat_behind_another_shows_none_of_its_chips(cx: &mut TestAppContext) {
+    let reply = "It's on the client for now, which [#1](https://github.com/example/signals/issues/1) is to change.";
+    let (mut world, chat) = one_chat(SessionStatus::Idle, vec![user_prompt("Where's it kept?"), text("msg-1", reply)]);
+    let workspace = world.sessions[0].workspace_id.clone();
+    let other = world.chat(&workspace, SessionStatus::Idle, vec![user_prompt("Anything else?")]);
+    world.references = vec![issue()];
+    let shown = world.github_shown.clone();
+    let (_fake, mut ui) = open_on_the_chat(cx, world, &chat);
+    let shows_it =
+        move || shown.lock().last().is_some_and(|shown| shown.references.iter().any(|ask| ask.number.get() == 1));
+    ui.wait("#1 to be shown", |_| shows_it());
+
+    ui.activate_chat(&other);
+    ui.wait("#1 to be shown no more, behind the other chat", |_| !shows_it());
+
+    ui.activate_chat(&chat);
+    ui.wait("#1 to be shown again, in front again", |_| shows_it());
 }
 
 /// A chip is the words of the link it was written as, so a click on it opens that link, to where it goes, such as a

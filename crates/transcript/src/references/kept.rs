@@ -1,22 +1,18 @@
-//! What a chat knows of the issues and pull requests its texts name, as the hub found them, asked for as they're drawn,
-//! a frame's at once, and again a minute after, for those still drawn.
+//! What a chat knows of the issues and pull requests its texts name, as the hub sends them: those drawn in sight in its
+//! last frame are what it shows, while it's shown, which the hub reads and sends again as they change, and those it drew
+//! are drawn again.
 
-use std::collections::HashMap;
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::{Duration, Instant};
+use std::sync::{Arc, Weak};
 
-use client_core::{Client, ClientError, RecordsFeed};
-use gpui_kit::{App, AppContext as _, WeakEntity};
+use client_core::{GithubView, RecordsFeed};
+use gpui_kit::{App, Task, WeakEntity};
 use parking_lot::Mutex;
+use protocol::client::github::GithubShown;
 use protocol::model::{Reference, ReferenceAsk, ReferenceRead, Seq, WorkspaceId};
 
+use super::book::Book;
 use crate::linked_images::Waiter;
 use crate::transcript::{Transcript, TranscriptEvent};
-
-/// How long what was found of one is drawn before it's asked for again, while it's drawn, which the hub answers from
-/// what it keeps until that's as old. *Unconfirmed.*
-pub(crate) const ASK_AGAIN_AFTER: Duration = Duration::from_secs(60);
 
 /// The references one chat's texts name, by what each asks, and the workspaces of the hub it's on, to say which a pull
 /// request is in. `W` is what draws one, such as a transcript's row, which is told when what's known of it changes.
@@ -32,92 +28,27 @@ impl<W> Clone for References<W> {
 struct Shared<W> {
     /// The chat's workspace, whose repository a chip names a reference in by its number alone.
     workspace: WorkspaceId,
-    /// Replaced when its owner reconnects.
-    client: Mutex<Client>,
     known: Mutex<Book<W>>,
-    /// Those to ask for once this frame is drawn.
-    to_ask: Mutex<Vec<ReferenceAsk>>,
-    /// Client-core's copy of the hub's records, whose workspaces say which a pull request is in, once it's given one.
+    /// Client-core's copy of the hub's records, whose workspaces say which a pull request is in, and whose part of
+    /// what the hub says of GitHub has what's drawn, once it's given one.
     records: Mutex<Option<RecordsFeed>>,
-    /// Tells what drew one that what's known of it changed, or that it's time to ask for it again.
+    /// What this shows of GitHub, once it's drawn with the records followed, and what listens for it changing.
+    github: Mutex<Option<Following>>,
+    /// Tells what drew one that what's known of it changed.
     changed: Changed<W>,
+    /// Whether what drew one is in sight, as a row out of sight is when it's drawn only to be measured.
+    in_sight: InSight<W>,
     /// Shows a workspace, as its menu's Go to asks.
     go_to: GoTo,
-    /// Whether the hub said it's too old to look them up, until it reconnects.
-    unsupported: AtomicBool,
 }
 
 type Changed<W> = Box<dyn Fn(Vec<W>, &mut App) + Send + Sync>;
+type InSight<W> = Box<dyn Fn(&W, &App) -> bool + Send + Sync>;
 type GoTo = Box<dyn Fn(WorkspaceId, &mut App) + Send + Sync>;
 
-/// What's known of each reference, by what it asks, which [`References`] asks the hub for as [`Book::drawn`] says.
-struct Book<W>(HashMap<ReferenceAsk, Known<W>>);
-
-struct Known<W> {
-    /// What the hub said, or `None` until it has.
-    read: Option<ReferenceRead>,
-    /// When it was last asked for, or `None` if it never was.
-    asked_at: Option<Instant>,
-    asking: bool,
-    /// What's drawn it since it was last asked for, to tell when what's known of it changes.
-    drawn_by: Vec<W>,
-}
-
-impl<W: Waiter> Book<W> {
-    /// What's known of `ask`, which `drawer` draws at `now`, and whether it's due to be asked for, which it's then
-    /// taken to be: the first time, and once what was found is [`ASK_AGAIN_AFTER`] old, unless it's being asked for.
-    fn drawn(&mut self, ask: &ReferenceAsk, drawer: W, now: Instant) -> (Option<ReferenceRead>, bool) {
-        let known = self.0.entry(ask.clone()).or_insert_with(|| Known {
-            read: None,
-            asked_at: None,
-            asking: false,
-            drawn_by: Vec::new(),
-        });
-        if !known.drawn_by.contains(&drawer) {
-            known.drawn_by.push(drawer);
-        }
-        let due = !known.asking
-            && known.asked_at.is_none_or(|asked_at| now.saturating_duration_since(asked_at) >= ASK_AGAIN_AFTER);
-        if due {
-            known.asking = true;
-            known.asked_at = Some(now);
-        }
-        (known.read.clone(), due)
-    }
-
-    /// Keeps what the hub said of each of `asks`, if it answered, and returns what's drawn them since they were last
-    /// asked for, each once.
-    fn took(&mut self, asks: &[ReferenceAsk], read: Option<Vec<ReferenceRead>>) -> Vec<W> {
-        let answers = read.map_or_else(|| vec![None; asks.len()], |read| read.into_iter().map(Some).collect());
-        for (ask, answer) in asks.iter().zip(answers) {
-            let Some(known) = self.0.get_mut(ask) else { continue };
-            known.asking = false;
-            // The hub keeps what it found while GitHub can't be read, so this keeps it only while the hub can't say:
-            // while it can't be reached, and once it's started again, and lost what it kept, until GitHub answers.
-            match answer {
-                Some(ReferenceRead::Unread { .. } | ReferenceRead::Unknown) | None if known.read.is_some() => {}
-                Some(answer) => known.read = Some(answer),
-                None => {}
-            }
-        }
-        let mut drawers = Vec::new();
-        for ask in asks {
-            let Some(known) = self.0.get_mut(ask) else { continue };
-            for drawer in std::mem::take(&mut known.drawn_by) {
-                if !drawers.contains(&drawer) {
-                    drawers.push(drawer);
-                }
-            }
-        }
-        drawers
-    }
-
-    /// Takes each to be due to be asked for when it's next drawn, as on a new connection.
-    fn forget_asking(&mut self) {
-        for known in self.0.values_mut() {
-            known.asked_at = None;
-        }
-    }
+struct Following {
+    view: GithubView,
+    _listening: Task<()>,
 }
 
 /// Which workspace a pull request is in, as the hub's records say.
@@ -134,10 +65,9 @@ pub(crate) enum Tie {
 impl References<Seq> {
     /// The references the texts of the transcript `transcript`, of a chat in `workspace`, name, each of whose rows is
     /// measured again when what's known of one it draws changes, and which asks the app to show a workspace.
-    pub(crate) fn of_transcript(client: Client, workspace: WorkspaceId, transcript: WeakEntity<Transcript>) -> Self {
-        let (changed, go_to) = (transcript.clone(), transcript);
+    pub(crate) fn of_transcript(workspace: WorkspaceId, transcript: WeakEntity<Transcript>) -> Self {
+        let (changed, go_to, in_sight) = (transcript.clone(), transcript.clone(), transcript);
         Self::new(
-            client,
             workspace,
             move |drawers, cx| {
                 let _ = changed.update(cx, |transcript, cx| {
@@ -150,91 +80,108 @@ impl References<Seq> {
             move |workspace, cx| {
                 let _ = go_to.update(cx, |_, cx| cx.emit(TranscriptEvent::GoToWorkspace { workspace }));
             },
+            move |seq, cx| in_sight.upgrade().is_some_and(|transcript| transcript.read(cx).in_sight(*seq)),
         )
     }
 }
 
 impl<W: Waiter> References<W> {
     /// The references the texts of a chat in `workspace` name, where `changed` tells what drew one that what's known
-    /// of it changed, which is measured again, and has what's in view drawn again, which is all it does when it's told
-    /// of nothing, and `go_to` shows a workspace.
+    /// of it changed, which is measured again, `go_to` shows a workspace, and `in_sight` says whether what drew one is
+    /// in sight.
     pub(crate) fn new(
-        client: Client,
         workspace: WorkspaceId,
         changed: impl Fn(Vec<W>, &mut App) + Send + Sync + 'static,
         go_to: impl Fn(WorkspaceId, &mut App) + Send + Sync + 'static,
+        in_sight: impl Fn(&W, &App) -> bool + Send + Sync + 'static,
     ) -> Self {
         Self(Arc::new(Shared {
             workspace,
-            client: Mutex::new(client),
-            known: Mutex::new(Book(HashMap::new())),
-            to_ask: Mutex::new(Vec::new()),
+            known: Mutex::new(Book::new()),
             records: Mutex::new(None),
+            github: Mutex::new(None),
             changed: Box::new(changed),
             go_to: Box::new(go_to),
-            unsupported: AtomicBool::new(false),
+            in_sight: Box::new(in_sight),
         }))
     }
 
-    /// Carries on on a new connection, asking again for each as it's next drawn.
-    pub(crate) fn reconnect(&self, client: &Client) {
-        *self.0.client.lock() = client.clone();
-        self.0.unsupported.store(false, Ordering::Relaxed);
-        self.0.known.lock().forget_asking();
-    }
-
-    /// Reads which workspace a pull request is in, and which repository the chat's is on, from `records` from now on.
+    /// Reads which workspace a pull request is in, which repository the chat's is on, and what the hub says of what's
+    /// drawn, from `records` from now on.
     pub(crate) fn follow_records(&self, records: RecordsFeed) {
         *self.0.records.lock() = Some(records);
     }
 
-    /// What the hub said of `ask`, which `drawer` draws, or `None` until it has. Asks for it, once this frame is drawn,
-    /// the first time, and again once what was found is [`ASK_AGAIN_AFTER`] old.
+    /// What the hub said of `ask`, which `drawer` draws, or `None` until it has. What's drawn in a frame is what's
+    /// shown once it's drawn, which the hub reads, and sends again as it changes.
     pub(crate) fn read(&self, ask: &ReferenceAsk, drawer: W, cx: &mut App) -> Option<ReferenceRead> {
-        // By the executor's clock, which a test moves on.
-        let now = cx.background_executor().now();
-        let (read, due) = self.0.known.lock().drawn(ask, drawer, now);
-        if due && !self.0.unsupported.load(Ordering::Relaxed) {
-            let first = {
-                let mut to_ask = self.0.to_ask.lock();
-                to_ask.push(ask.clone());
-                to_ask.len() == 1
-            };
-            if first {
-                let references = self.clone();
-                cx.defer(move |cx| references.ask(cx));
-            }
+        let said = self.0.github.lock().as_ref().and_then(|following| following.view.feed().reference(ask));
+        let (read, first) = self.0.known.lock().drawn(ask, drawer, said);
+        if first {
+            self.settle_after(cx);
         }
         read
     }
 
-    /// Asks the hub for what's waiting to be asked for, all at once, and tells what drew each that what's known of it
-    /// changed, and a minute later has what's in view drawn again, so those still in view are asked for again.
-    fn ask(&self, cx: &mut App) {
-        let asks = std::mem::take(&mut *self.0.to_ask.lock());
-        if asks.is_empty() {
+    /// Says a frame is being drawn, so what's shown once it's drawn is what it draws, even when that's none.
+    pub(crate) fn drawing(&self, cx: &mut App) {
+        let first = !std::mem::replace(&mut self.0.known.lock().settling, true);
+        if first {
+            self.settle_after(cx);
+        }
+    }
+
+    /// Says whether what draws them is shown, as a chat's transcript is while its tab is, so it shows none while it's
+    /// not, and what it draws next once it is again. Returns whether it's shown again after it wasn't.
+    pub(crate) fn set_shown(&self, shown: bool) -> bool {
+        let (again, hides) = {
+            let mut known = self.0.known.lock();
+            let again = shown && known.hidden;
+            known.hidden = !shown;
+            let hides = !shown && !known.shown.is_empty();
+            if hides {
+                known.shown.clear();
+            }
+            (again, hides)
+        };
+        // Apart from the book's lock, as hearing from the hub takes them the other way round.
+        if hides && let Some(following) = &*self.0.github.lock() {
+            following.view.show(GithubShown::default());
+        }
+        again
+    }
+
+    /// Once this frame is drawn, takes what it drew in sight to be what's shown, and tells the hub if that changed.
+    fn settle_after(&self, cx: &mut App) {
+        let references = self.clone();
+        cx.defer(move |cx| {
+            let in_sight = |by: &W| (references.0.in_sight)(by, cx);
+            let Some(shown) = references.0.known.lock().settled(in_sight) else { return };
+            references.follow_github(cx);
+            if let Some(following) = &*references.0.github.lock() {
+                following.view.show(GithubShown { references: shown, ..GithubShown::default() });
+            }
+        });
+    }
+
+    /// Starts listening for what the hub says of what's shown changing, once the records are followed.
+    fn follow_github(&self, cx: &mut App) {
+        let mut github = self.0.github.lock();
+        if github.is_some() {
             return;
         }
-        let (client, workspace) = (self.0.client.lock().clone(), self.0.workspace.clone());
-        let asked = asks.clone();
-        let reading = cx.background_spawn(async move { client.references_read(&workspace, asked) });
-        let references = self.clone();
-        cx.spawn(async move |cx| {
-            let read = reading.await;
-            // A hub too old to look them up is never asked again, and each is left as it's written.
-            let unsupported = read.as_ref().is_err_and(ClientError::is_unsupported);
-            references.0.unsupported.store(unsupported, Ordering::Relaxed);
-            let drawers = references.0.known.lock().took(&asks, read.ok());
-            cx.update(|cx| (references.0.changed)(drawers, cx));
-            if unsupported {
-                return;
+        let Some(records) = self.0.records.lock().clone() else { return };
+        let view = records.github().view();
+        let changed = view.changed().clone();
+        let shared = Arc::downgrade(&self.0);
+        let listening = cx.spawn(async move |cx| {
+            while changed.recv_async().await.is_ok() {
+                if !cx.update(|cx| heard(&shared, cx)) {
+                    return;
+                }
             }
-            cx.background_executor().timer(ASK_AGAIN_AFTER).await;
-            // Only drawn again, not measured, since measuring lays out a row out of view too, which would ask for
-            // what it names, where only what's in view is to be asked for again.
-            cx.update(|cx| (references.0.changed)(Vec::new(), cx));
-        })
-        .detach();
+        });
+        *github = Some(Following { view, _listening: listening });
     }
 
     /// How a chip names `reference`: `#1021` in the repository the chat's workspace is on, as the hub's records say,
@@ -287,63 +234,17 @@ impl<W: Waiter> References<W> {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use protocol::model::{GithubRepositoryName, IssueNumber, IssueState, ReferenceKind};
-
-    use super::*;
-
-    fn ask(number: u64) -> ReferenceAsk {
-        ReferenceAsk { repository: GithubRepositoryName::named("o/r"), number: IssueNumber::try_from(number).unwrap() }
+/// Tells what drew each reference whose hub's word changed. Returns false once the references have gone.
+fn heard<W: Waiter>(shared: &Weak<Shared<W>>, cx: &mut App) -> bool {
+    let Some(shared) = shared.upgrade() else { return false };
+    let drawers = {
+        let github = shared.github.lock();
+        let Some(following) = &*github else { return true };
+        let feed = following.view.feed();
+        shared.known.lock().heard(|ask| feed.reference(ask))
+    };
+    if !drawers.is_empty() {
+        (shared.changed)(drawers, cx);
     }
-
-    fn found(title: &str) -> ReferenceRead {
-        let repository = GithubRepositoryName::new("o", "r").unwrap();
-        ReferenceRead::Found {
-            reference: Box::new(Reference {
-                repository,
-                number: IssueNumber::try_from(12).unwrap(),
-                kind: ReferenceKind::Issue { state: IssueState::Open },
-                url: "https://github.com/o/r/issues/12".into(),
-                title: title.into(),
-                author: None,
-                opened_at_ms: 0,
-                comments: 0,
-                labels: Vec::new(),
-                body: String::new(),
-            }),
-        }
-    }
-
-    #[test]
-    fn one_is_asked_for_once_until_what_was_found_is_old() {
-        let (mut book, now) = (Book::<u32>(HashMap::new()), Instant::now());
-        assert_eq!(book.drawn(&ask(12), 1, now), (None, true), "the first time it's drawn");
-        assert!(!book.drawn(&ask(12), 2, now).1, "nor while it's being asked for");
-        assert_eq!(book.took(&[ask(12)], Some(vec![found("A")])), [1, 2], "and each that drew it is told");
-        assert_eq!(book.drawn(&ask(12), 3, now + ASK_AGAIN_AFTER / 2), (Some(found("A")), false));
-        assert!(book.drawn(&ask(12), 1, now + ASK_AGAIN_AFTER).1, "until it's a minute old");
-        book.took(&[ask(12)], Some(vec![found("B")]));
-        book.forget_asking();
-        assert_eq!(book.drawn(&ask(12), 1, now + ASK_AGAIN_AFTER), (Some(found("B")), true), "or on a new connection");
-    }
-
-    #[test]
-    fn what_was_found_is_kept_while_the_hub_can_say_no_more() {
-        let mut book = Book::<u32>(HashMap::new());
-        let now = Instant::now();
-        let mut answer = |read: Option<Vec<ReferenceRead>>| {
-            book.drawn(&ask(12), 1, now);
-            book.took(&[ask(12)], read);
-            book.drawn(&ask(12), 1, now).0
-        };
-        assert_eq!(
-            answer(Some(vec![ReferenceRead::Unread { message: "offline".into() }])),
-            Some(ReferenceRead::Unread { message: "offline".into() })
-        );
-        assert_eq!(answer(Some(vec![found("A")])), Some(found("A")));
-        assert_eq!(answer(None), Some(found("A")), "nor when it can't be reached");
-        assert_eq!(answer(Some(vec![ReferenceRead::Unread { message: "offline".into() }])), Some(found("A")));
-        assert_eq!(answer(Some(vec![ReferenceRead::Missing])), Some(ReferenceRead::Missing), "but gone, it's gone");
-    }
+    true
 }

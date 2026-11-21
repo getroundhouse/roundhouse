@@ -36,6 +36,7 @@ impl Render for Transcript {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         // Its rows leave room for the marks that move again as they're drawn.
         self.moving.draw_again();
+        self.references.drawing(cx);
         let wanted = self.session.clone();
         let recorded = self.log.row_count();
         let line_text = LineText::new(window, cx);

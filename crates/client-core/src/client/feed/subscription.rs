@@ -1,16 +1,19 @@
 use super::super::follow::{Follow, FollowError, Source};
-use super::super::{Client, ClientError, Result, Subscription, SubscriptionItem};
+use super::super::{Client, ClientError, GithubFeed, Result, Subscription, SubscriptionItem};
 use crate::Agents;
 use crate::records::{BySession, HubRecords, OfSession, Snapshot};
 use parking_lot::Mutex;
 use protocol::client::HubNotice;
 use protocol::model::{Records, SessionId};
+use std::sync::Arc;
 
 /// One hub's records, kept current until every clone of this has gone. It carries on from a new connection
 /// given to [`RecordsFeed::reconnect`].
 #[derive(Clone)]
 pub struct RecordsFeed {
     pub(super) follow: Follow<HubRecords>,
+    /// What the hub says of GitHub, once something asks, and the newest connection, to start it on.
+    github: Arc<Mutex<(Client, Option<GithubFeed>)>>,
 }
 
 impl RecordsFeed {
@@ -20,7 +23,8 @@ impl RecordsFeed {
     /// Every record a reply on `client` carries is taken in too, as it comes, so whoever made the call needn't hand it
     /// on, and what's shown needn't wait for the feed to say the same.
     pub fn start(client: &Client) -> RecordsFeed {
-        let feed = RecordsFeed { follow: Follow::start(client, HubRecords::default(), || RecordsSource) };
+        let follow = Follow::start(client, HubRecords::default(), || RecordsSource);
+        let feed = RecordsFeed { follow, github: Arc::new(Mutex::new((client.clone(), None))) };
         client.inner.folding.reach(&feed.follow);
         feed
     }
@@ -63,6 +67,19 @@ impl RecordsFeed {
     pub fn reconnect(&self, client: &Client) {
         client.inner.folding.reach(&self.follow);
         self.follow.reconnect(client);
+        let mut github = self.github.lock();
+        github.0 = client.clone();
+        if let Some(feed) = &github.1 {
+            feed.reconnect(client);
+        }
+    }
+
+    /// What the same hub says of GitHub, of what views show, which is followed from the first time it's asked for,
+    /// and carries on on each new connection this does.
+    pub fn github(&self) -> GithubFeed {
+        let mut github = self.github.lock();
+        let (client, feed) = &mut *github;
+        feed.get_or_insert_with(|| GithubFeed::start(client)).clone()
     }
 
     /// True once it has caught up on a connection, and false from when that connection goes, or following
