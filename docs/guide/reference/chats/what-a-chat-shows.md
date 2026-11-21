@@ -168,6 +168,6 @@ A link to an issue or a pull request on GitHub in a reply shows as a chip, whate
 - **Copying and Find use the link's words as they're written,** such as `#1021`, not the title.
 - **One that can't be found stays the link it's written as,** such as a typo, or one in a repository the workspace's GitHub account can't read.
 
-The hub looks each up on GitHub with the account the workspace's pull request is read as, for every client at once, and looks again about once a minute while one is on screen, so a pull request that merges says so.
+The hub looks each up on GitHub with the account the workspace's pull request is read as, for every client at once, and looks again about once a minute while one is on screen, so a pull request that merges says so. A chip of a pull request a workspace's bar shows says what the bar does.
 
 ![A pull request's card](../../../spec/screens/reference-card-pull-request.png)

@@ -72,6 +72,7 @@ impl Hub {
             jobs::step(format!("waiting for GitHub to answer for {} pull requests", asks.len()));
             let read = self.github.read_pull_requests(token, asks, asked.leaving()).await;
             rate_limit = read.rate_limit.or(rate_limit);
+            self.keep_read_summaries(read.summaries).await;
             read.answers
         };
         let uncommitted = if asked == Asked::InTurn { HashMap::new() } else { self.uncommitted(&readings).await };

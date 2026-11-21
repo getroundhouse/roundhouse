@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use github::{References, Script, StandIn};
 use protocol::model::{
-    GithubRepositoryName, IssueNumber, IssueState, Reference, ReferenceAsk, ReferenceKind, ReferenceRead,
+    ChecksRollup, GithubRepositoryName, IssueNumber, IssueState, Reference, ReferenceAsk, ReferenceKind, ReferenceRead,
 };
 
 use super::references::FRESH_FOR;
@@ -172,4 +172,22 @@ async fn an_ask_waits_only_for_the_reads_of_what_it_asks_for() {
     assert_eq!(second.await.unwrap(), [found(&issue("example/project", 1))]);
     assert_eq!(other.await.unwrap(), [found(&issue("example/project", 2))]);
     assert_eq!(references.queries(), 2, "one for #1, and one for #2 while #1 was held");
+}
+
+/// A chip of the workspace's own pull request says what the bar's read of it found, without GitHub being asked again,
+/// so the two agree.
+#[tokio::test]
+async fn a_chip_of_a_pull_request_read_for_the_bar_is_what_that_read_found() {
+    let dir = tempfile::tempdir().unwrap();
+    let (hub, pull_requests, github) = crate::hub::tests::hub_on_github(dir.path()).await;
+    pull_requests.set(7, github::PullRequestState::Failed);
+    hub.workspace_pull_request("w".into()).await.unwrap();
+    let asked = github.asked().len();
+
+    let read = hub.references_read(&"w".into(), vec![own(7)]).await.unwrap();
+
+    let [ReferenceRead::Found { reference }] = &read[..] else { panic!("{read:?}") };
+    let ReferenceKind::PullRequest(pull_request) = reference.kind else { panic!("{reference:?}") };
+    assert_eq!((reference.title.as_str(), pull_request.checks), ("Change 7", Some(ChecksRollup::Failed)));
+    assert_eq!(github.asked().len(), asked, "GitHub wasn't asked again");
 }

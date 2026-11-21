@@ -57,6 +57,8 @@ pub(super) fn pull_request(number: u64) -> Value {
         "headRefOid":head,"baseRefOid":base,"baseRefName":if number==7 {"lower"} else {"main"},"headRefName":"branch",
         "mergeStateStatus":"CLEAN","mergeable":"MERGEABLE","reviewDecision":null,"potentialMergeCommit":null,"mergeQueueEntry":null,
         "reviews":{"nodes":[]},"timelineItems":{"nodes":[]},"stackEntry":{"position":if number==7 {2} else {1}},
+        "createdAt":"2026-01-01T00:00:00Z","author":{"login":"ada"},"comments":{"totalCount":2},"bodyText":"Why",
+        "labels":{"nodes":[]},"additions":3,"deletions":1,"commits":{"nodes":[{"commit":{"statusCheckRollup":{"state":"PENDING"}}}]},
         "stack":{"baseRefName":"main","entries":connection(&entries(),None,3)},
         "baseRef":{"compare":{"behindBy":0,"baseTarget":{"oid":base},"headTarget":{"oid":head}}},
         "statusCheckRollup":{"commit":{"oid":head},"contexts":connection(&[reported("checks",&head,number==7)],None,1)}})
