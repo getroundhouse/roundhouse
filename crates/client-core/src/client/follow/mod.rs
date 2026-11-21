@@ -7,4 +7,4 @@ mod following;
 mod tests;
 
 pub use following::FollowError;
-pub(super) use following::{Follow, Reach, Source, Teller};
+pub(super) use following::{Follow, Giver, Reach, Source, Teller};

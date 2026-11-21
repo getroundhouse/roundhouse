@@ -223,13 +223,13 @@ fn follow_the_pointer(
             } else {
                 // The button came up where the window didn't hear it, such as over another app.
                 moved.dragging.set(false);
-                moved.open.release(at(event.position));
+                moved.open.release();
             }
         }
     });
     window.on_mouse_event(move |event: &MouseUpEvent, phase, _, _| {
         if phase == DispatchPhase::Bubble && event.button == MouseButton::Left && up.dragging.replace(false) {
-            up.open.release(at(event.position));
+            up.open.release();
         }
     });
 }
