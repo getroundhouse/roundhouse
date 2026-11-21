@@ -16,6 +16,7 @@ use tracing::{debug, warn};
 
 use super::admit::{AUTHENTICATE_WITHIN, Gate};
 use super::connection::serve_connection;
+use super::unsent::hold_little_unsent;
 use crate::hub::Hub;
 
 /// A phone can go without closing its connection, such as when it leaves the network or its battery runs out.
@@ -83,12 +84,15 @@ async fn serve_device(
 
 fn ready(stream: &TcpStream) -> io::Result<()> {
     stream.set_nodelay(true)?;
+    hold_little_unsent(stream)?;
     SockRef::from(stream).set_tcp_keepalive(&KEEPALIVE)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(unix)]
+    use crate::server::unsent::{MOST_UNSENT, unsent_held};
 
     /// What the OS holds for the socket. A phone that's really gone can't be shown without dropping packets, which
     /// takes root, and then a test would wait the 25 s.
@@ -109,5 +113,18 @@ mod tests {
         #[cfg(unix)]
         assert_eq!(socket.tcp_keepalive_interval().unwrap(), Duration::from_secs(5));
         assert_eq!(socket.tcp_keepalive_retries().unwrap(), 3);
+    }
+
+    /// So a reply to a device on a slow link waits for little more than the frame being written, as `unsent` says.
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn a_devices_connection_holds_little_unsent() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let _device = TcpStream::connect(listener.local_addr().unwrap()).await.unwrap();
+        let (accepted, _) = listener.accept().await.unwrap();
+
+        ready(&accepted).unwrap();
+
+        assert_eq!(unsent_held(&accepted).unwrap(), MOST_UNSENT);
     }
 }
