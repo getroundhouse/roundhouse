@@ -10,6 +10,13 @@
 //!
 //! An entry can also say `"set_up_github": false`, so Roundhouse leaves GitHub on that provider's machines to the
 //! machine, as it always does on the local provider's, as `ProviderSet::leaves_github_to_machine` says.
+//!
+//! The file can also name the builds of the worker for machines other than the hub's, which the hub gives an adapter
+//! to put on an instance as it starts, as `ProviderSet::workers` says:
+//!
+//! ```json
+//! {"workers": [{"target": "aarch64-unknown-linux-gnu", "path": "/path/to/linux/roundhoused"}]}
+//! ```
 
 #[cfg(test)]
 use protocol::Build;
@@ -26,4 +33,5 @@ use std::sync::Arc;
 mod tests;
 
 mod configuration;
+mod worker_builds;
 pub(crate) use configuration::ProviderSet;

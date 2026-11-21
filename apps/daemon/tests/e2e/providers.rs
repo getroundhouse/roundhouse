@@ -107,3 +107,27 @@ fn an_ephemeral_provider_keeps_unpushed_commits_across_archive_and_restore() {
     assert_eq!(git(&restored_wt, &["rev-parse", "HEAD"]), expected_head);
     assert_eq!(std::fs::read_to_string(restored_wt.join("unpushed.txt")).unwrap(), "kept in hub bundle\n");
 }
+
+/// So an adapter puts the hub's own build of the worker on a machine other than the hub's, as the provider protocol's
+/// `Start` asks, from the builds the providers file names.
+#[test]
+fn a_hub_gives_an_adapter_the_worker_builds_its_providers_file_names() {
+    let mut stack = Stack::start();
+    let client = stack.client();
+    let repo = client.repo_add(stack.repo().to_str().unwrap()).unwrap();
+    let worker = stack.path("linux-roundhoused");
+    std::fs::write(&worker, "a linux worker").unwrap();
+
+    stack.make_through_an_adapter_given(
+        &serde_json::json!([{"target": "aarch64-unknown-linux-gnu", "path": worker.to_str().unwrap()}]),
+    );
+    let client = stack.client();
+    client.workspace_create(&repo.id, Some("given".into()), None, None).unwrap();
+
+    let given = protocol::provider::WorkerBinary {
+        target: "aarch64-unknown-linux-gnu".into(),
+        path: worker.to_string_lossy().into_owned(),
+        sha256: "d9b8a662b18f6103eb2f4eae615868208ea5b44b00ab571fc8ad6582480597e2".into(),
+    };
+    assert_eq!(stack.workers_started(), [vec![given]]);
+}

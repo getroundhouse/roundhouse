@@ -38,22 +38,28 @@ impl Stack {
     /// [`Stack::instances_made`] and [`Stack::workers_reached`] say what the adapter was asked. Starts the hub again, since it reads its
     /// providers as it starts.
     pub(crate) fn make_through_an_adapter(&mut self) {
-        self.write_adapter("home/clones", &[]);
+        self.write_adapter("home/clones", &[], &serde_json::json!([]));
+    }
+
+    /// As [`Stack::make_through_an_adapter`], with the providers file naming `workers`, the builds of the worker for
+    /// other machines, which [`Stack::workers_started`] says the adapter was given.
+    pub(crate) fn make_through_an_adapter_given(&mut self, workers: &serde_json::Value) {
+        self.write_adapter("home/clones", &[], workers);
     }
 
     /// Makes workspaces from now on through an adapter declaring [`WorkerFilesystem::Separate`], keeping its clones
     /// in a directory apart from the hub's own `home/clones` so tests prove it never reads the hub's disk.
     pub(crate) fn make_through_separate_adapter(&mut self) {
-        self.write_adapter("adapter-clones", &["--separate"]);
+        self.write_adapter("adapter-clones", &["--separate"], &serde_json::json!([]));
     }
 
     /// Makes workspaces from now on through an adapter declaring [`WorkerFilesystem::Separate`] and
     /// [`ClonePersistence::Ephemeral`], which wipes `adapter-clones` whenever an instance is destroyed.
     pub(crate) fn make_through_ephemeral_adapter(&mut self) {
-        self.write_adapter("adapter-clones", &["--separate", "--ephemeral"]);
+        self.write_adapter("adapter-clones", &["--separate", "--ephemeral"], &serde_json::json!([]));
     }
 
-    fn write_adapter(&mut self, clones: &str, extra: &[&str]) {
+    fn write_adapter(&mut self, clones: &str, extra: &[&str], workers: &serde_json::Value) {
         self.kill_hub();
         let path = |name: &str| self.path(name).to_str().unwrap().to_string();
         let mut args = vec![
@@ -72,7 +78,7 @@ impl Stack {
         ];
         args.extend(extra.iter().map(|flag| (*flag).to_string()));
         let adapter = serde_json::json!({"name": "recording", "program": recording_adapter(), "args": args});
-        let file = serde_json::json!({"default": "recording", "providers": [adapter]});
+        let file = serde_json::json!({"default": "recording", "providers": [adapter], "workers": workers});
         std::fs::write(self.path("home/providers.json"), file.to_string()).unwrap();
         self.start_hub();
     }
@@ -86,6 +92,12 @@ impl Stack {
     /// [`Stack::instances_made`].
     pub(crate) fn workers_reached(&self) -> Vec<String> {
         self.lines_of("workers-reached")
+    }
+
+    /// The workers the adapter was given at each start, in turn, once [`Stack::make_through_an_adapter_given`] has been
+    /// called.
+    pub(crate) fn workers_started(&self) -> Vec<Vec<protocol::provider::WorkerBinary>> {
+        self.lines_of("instances-made.started").iter().map(|line| serde_json::from_str(line).unwrap()).collect()
     }
 
     fn lines_of(&self, name: &str) -> Vec<String> {

@@ -3,7 +3,7 @@ use crate::provider_link::{ADAPTER_GRACE, AdapterCommand, AdapterProvider};
 use protocol::Build;
 use protocol::client::{ApiError, ErrorCode, error_chain};
 use protocol::model::{HubId, ProviderName};
-use providers::Provider;
+use providers::{Provider, WorkerBinary};
 use serde::Deserialize;
 use std::collections::{BTreeSet, HashMap};
 use std::io;
@@ -13,6 +13,8 @@ use std::time::Duration;
 use tokio::task::JoinSet;
 use tracing::{error, info, warn};
 
+use super::worker_builds::{WorkerEntry, with_checksums};
+
 pub(crate) struct ProviderSet {
     pub(super) by_name: HashMap<ProviderName, Arc<dyn Provider>>,
     /// The same as their entries in `by_name`, for what only an adapter does.
@@ -21,6 +23,8 @@ pub(crate) struct ProviderSet {
     pub(super) default: Result<ProviderName, String>,
     /// The providers whose machines Roundhouse leaves GitHub to, as [`ProviderSet::leaves_github_to_machine`] says.
     pub(super) left_to_machine: BTreeSet<ProviderName>,
+    /// The builds of the worker for other machines than the hub's, as [`ProviderSet::workers`] says.
+    pub(super) workers: Vec<WorkerBinary>,
 }
 
 #[derive(Deserialize)]
@@ -30,6 +34,8 @@ struct ProvidersFile {
     pub(super) default: Option<ProviderName>,
     #[serde(default)]
     pub(super) providers: Vec<Entry>,
+    #[serde(default)]
+    pub(super) workers: Vec<WorkerEntry>,
 }
 
 #[derive(Deserialize)]
@@ -58,7 +64,15 @@ impl ProviderSet {
             adapters: Vec::new(),
             default: Ok(default),
             left_to_machine: BTreeSet::new(),
+            workers: Vec::new(),
         }
+    }
+
+    /// The builds of the worker for other machines than the hub's, which the hub gives an adapter as it starts an
+    /// instance, so the worker there is the hub's build. The local provider runs the hub's own executable, so it takes
+    /// none of them.
+    pub(crate) fn workers(&self) -> &[WorkerBinary] {
+        &self.workers
     }
 
     /// Whether Roundhouse leaves GitHub on `name`'s machines to the machine, so its workers are given none of the
@@ -122,6 +136,7 @@ impl ProviderSet {
                 return set;
             }
         };
+        set.workers = with_checksums(parsed.workers);
         for entry in parsed.providers {
             if set.by_name.contains_key(&entry.name) {
                 warn!(provider = %entry.name, "leaving out a second provider of the same name");

@@ -261,6 +261,11 @@ impl Hub {
         self.providers.leaves_github_to_machine(name)
     }
 
+    /// The builds of the worker for other machines than the hub's, as [`ProviderSet::workers`] says.
+    pub(crate) fn worker_builds(&self) -> &[providers::WorkerBinary] {
+        self.providers.workers()
+    }
+
     /// Ends every job where it is, sign-ins' and lookups of models included, and starts none after, as the hub stops,
     /// before its workers are stopped or left. A sign-in left waiting is recorded as ended as the next hub starts, and
     /// lists of models aren't kept.
