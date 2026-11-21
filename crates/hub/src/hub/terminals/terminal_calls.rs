@@ -1,13 +1,13 @@
-//! What the hub does with a terminal as a client asks: types into it, resizes it, follows it and closes it.
+//! What the hub does with a terminal as a client asks: types into it, resizes it and closes it.
 
 use std::sync::Arc;
 
-use protocol::client::terminals::{TerminalClose, TerminalFit, TerminalInput, TerminalResize, TerminalTyped};
+use protocol::client::terminals::{TerminalClose, TerminalFit, TerminalTyped};
 use protocol::client::{ApiError, ClientResponse, ErrorCode, HubNotice};
 use protocol::model::{RecordKey, Terminal, TerminalId, WorkspaceId};
-use protocol::terminal::{TerminalUpdate, UpdateIndex};
-use protocol::worker::{self, Request, RunningTerminal, TerminalShown};
-use tokio::sync::{MutexGuard as AsyncMutexGuard, broadcast};
+use protocol::terminal::TerminalUpdate;
+use protocol::worker::{self, Request, RunningTerminal};
+use tokio::sync::MutexGuard as AsyncMutexGuard;
 use tracing::{info, warn};
 
 use crate::hub::Hub;
@@ -15,7 +15,7 @@ use crate::store::Store;
 use crate::worker_link::WorkerLink;
 
 use super::reading::within_a_read;
-use super::{Numbered, Open, Queued, Stage};
+use super::{Open, Queued, Stage};
 
 impl Hub {
     /// Ends the terminal's shell, and the job it runs, and removes its record. Answers with the record as it last was.
@@ -27,20 +27,10 @@ impl Hub {
         Ok(record)
     }
 
-    /// What's typed, sent on to the terminal's worker before anything typed after it.
-    pub(crate) async fn terminal_input(&self, typed: TerminalInput) -> Result<Queued, ApiError> {
-        self.pass_on(&typed.id, worker::TerminalInput { terminal: typed.id.clone(), input: typed.input }).await
-    }
-
     /// What's pressed, sent on to the terminal's worker before anything pressed after it, for the worker to turn into
     /// what the program reads.
     pub(crate) async fn terminal_typed(&self, typed: TerminalTyped) -> Result<Queued, ApiError> {
         self.pass_on(&typed.id, worker::TerminalTyped { terminal: typed.id.clone(), typed: typed.typed }).await
-    }
-
-    /// A new size, sent on to the terminal's worker in order with what's typed and the sizes after it.
-    pub(crate) async fn terminal_resize(&self, resize: TerminalResize) -> Result<Queued, ApiError> {
-        self.pass_on(&resize.id, worker::TerminalResize { terminal: resize.id.clone(), size: resize.size }).await
     }
 
     /// A new size, sent on to the terminal's worker in order with what's pressed, answered with where the cells the
@@ -64,52 +54,19 @@ impl Hub {
         Ok(Box::pin(async move { replied.await.map(|()| ClientResponse::Ok) }))
     }
 
-    /// The ID of the link to the worker of an open terminal, and the updates it sends of it from now on, for a client
-    /// that attaches.
-    pub(crate) fn terminal_follow(&self, id: &TerminalId) -> Result<(u64, broadcast::Receiver<Numbered>), ApiError> {
-        let (_, link) = self.open_terminal(id)?;
-        let open = self.terminals.open.lock();
-        let updates = open.get(id).ok_or_else(|| not_open(id))?.updates.subscribe();
-        Ok((link.id, updates))
-    }
-
-    /// What an open terminal shows, as the worker on link `link` says, for a client that attaches. `NotFound` once the
-    /// terminal has gone, as it has when the worker has let go of it, which it does only once the shell has ended, so
-    /// that closes it.
-    pub(crate) async fn terminal_screen(&self, id: &TerminalId, link: u64) -> Result<TerminalShown, ApiError> {
-        let (_, on) = self.open_terminal(id).ok().filter(|(_, on)| on.id == link).ok_or_else(|| not_open(id))?;
-        let shown = on.call(worker::TerminalShow { terminal: id.clone() }).await;
-        if shown.as_ref().is_err_and(|e| e.code == ErrorCode::NotFound) {
-            // Its end may not have been said yet.
-            self.terminal_ended(id, link).await;
-        }
-        shown
-    }
-
-    /// What a worker sent of one of its terminals, passed on to every client attached. A shell's end closes its
-    /// terminal.
-    pub(crate) fn terminal_update(
-        self: &Arc<Self>,
-        link: &WorkerLink,
-        id: TerminalId,
-        at: UpdateIndex,
-        update: TerminalUpdate,
-    ) {
-        let ended = matches!(update, TerminalUpdate::Exited(_));
+    /// What a worker sent of one of its terminals. A shell's end closes its terminal, and is passed on to every client
+    /// watching. A worker from before rows still sends what its program writes, which reads as `Unknown`, and is
+    /// dropped.
+    pub(crate) fn terminal_update(self: &Arc<Self>, link: &WorkerLink, id: TerminalId, update: &TerminalUpdate) {
+        let &TerminalUpdate::Exited(exit) = update else { return };
         if let Some(open) = self.terminals.open.lock().get(&id).filter(|open| open.on(link.id)) {
-            if let TerminalUpdate::Exited(exit) = &update {
-                open.watch.copy.lock().exited(*exit);
-            }
-            // None may be attached.
-            let _ = open.updates.send(Numbered { at, update });
+            open.watch.copy.lock().exited(exit);
         }
-        if ended {
-            // On a task of its own, since this is called as the worker's frames are read, and taking the record away
-            // waits for `changing`, which carrying on with the worker's terminals holds while it waits for the
-            // worker's reply, which comes after this frame.
-            let (hub, link) = (self.clone(), link.id);
-            tokio::spawn(async move { hub.terminal_ended(&id, link).await });
-        }
+        // On a task of its own, since this is called as the worker's frames are read, and taking the record away waits
+        // for `changing`, which carrying on with the worker's terminals holds while it waits for the worker's reply,
+        // which comes after this frame.
+        let (hub, link) = (self.clone(), link.id);
+        tokio::spawn(async move { hub.terminal_ended(&id, link).await });
     }
 
     /// Removes the record of a terminal whose shell has ended, run by the worker on link `link`, and announces that.

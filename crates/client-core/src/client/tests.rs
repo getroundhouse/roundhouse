@@ -3,6 +3,8 @@
 
 use std::time::Duration;
 
+use protocol::terminal::Typed;
+
 use super::*;
 use crate::stand_in_hub::{self, Does};
 
@@ -169,7 +171,7 @@ fn a_write_that_fails_ends_the_connection() {
     let transport = transport::Transport { reader, writer: Box::new(Gone), closer: transport::Closer::tcp(stream) };
     let client = Client::from_transport(transport).unwrap();
 
-    let typed = client.terminal_input(&"t".into(), b"x");
+    let typed = client.terminal_typed(&"t".into(), Typed::Text { text: "x".into() });
 
     assert!(matches!(typed, Err(ClientError::Disconnected)), "{typed:?}");
     assert!(client.is_disconnected());

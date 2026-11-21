@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use super::{ClientRequest, ClientResponse, Reply, Request};
 use crate::model::{Terminal, TerminalId, WorkspaceId};
 use crate::terminal::{
-    Bounds, Numbering, RowNumber, TerminalBoundsReply, TerminalBytes, TerminalFitReply, TerminalPoint, TerminalRange,
+    Bounds, Numbering, RowNumber, TerminalBoundsReply, TerminalFitReply, TerminalPoint, TerminalRange,
     TerminalRowsReply, TerminalSize, TerminalTextReply, Typed,
 };
 
@@ -33,25 +33,6 @@ impl Reply for Terminal {
     fn read(response: ClientResponse) -> Result<Self, ClientResponse> {
         let ClientResponse::Terminal(terminal) = response else { return Err(response) };
         Ok(terminal)
-    }
-}
-
-/// Follows the terminal: what it shows, as a [`TerminalUpdate::Screen`], and then each update after it, in order, as
-/// `HubFrame::Terminal`s for `subscription_id`, which the client picks, as for a session's, since updates can arrive
-/// before the reply. `SessionUnsubscribe` stops it, as it does every kind of subscription. Answers with nothing.
-///
-/// [`TerminalUpdate::Screen`]: crate::terminal::TerminalUpdate::Screen
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
-pub struct TerminalAttach {
-    pub id: TerminalId,
-    pub subscription_id: u64,
-}
-
-impl Request for TerminalAttach {
-    type Reply = ();
-
-    fn into_request(self) -> ClientRequest {
-        ClientRequest::TerminalAttach(self)
     }
 }
 
@@ -154,28 +135,10 @@ impl Reply for TerminalTextReply {
     }
 }
 
-/// What's typed into the terminal, as the bytes a terminal sends for it, such as `\x03` for Control-C. Unlike other
-/// requests, it isn't safe to send again: a client sends what's typed once, and drops what's typed while it can't reach
-/// the hub, as a terminal over SSH does. A hub takes what one connection types in the order it was sent, unlike other
-/// requests, so a client needn't wait for each reply. Answers with nothing.
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
-pub struct TerminalInput {
-    pub id: TerminalId,
-    pub input: TerminalBytes,
-}
-
-impl Request for TerminalInput {
-    type Reply = ();
-
-    fn into_request(self) -> ClientRequest {
-        ClientRequest::TerminalInput(self)
-    }
-}
-
 /// What's pressed in the terminal, which its worker turns into what the program reads, by the modes the program has
-/// set. Like [`TerminalInput`], it isn't safe to send again, and a hub takes what one connection types in the order it
-/// was sent, so a client needn't wait for each reply. A hub or worker from before refuses it as `Unsupported`.
-/// Answers with nothing.
+/// set. Unlike other requests, it isn't safe to send again: a client sends what's pressed once, and drops what's
+/// pressed while it can't reach the hub, as a terminal over SSH does. A hub takes what one connection types in the
+/// order it was sent, unlike other requests, so a client needn't wait for each reply. Answers with nothing.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct TerminalTyped {
     pub id: TerminalId,
@@ -216,24 +179,6 @@ impl Reply for TerminalFitReply {
     fn read(response: ClientResponse) -> Result<Self, ClientResponse> {
         let ClientResponse::TerminalFit(fit) = response else { return Err(response) };
         Ok(fit)
-    }
-}
-
-/// Gives the terminal a new size, which every client attached to it is told of, in order with what the program writes,
-/// so they all show what it draws for that size. A hub takes the sizes one connection gives in the order they were
-/// sent, as it takes what's typed, but not in order with what's typed, so keys typed just after a new size can reach
-/// the program before it. Sent again, it sets the same again. Answers with nothing.
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
-pub struct TerminalResize {
-    pub id: TerminalId,
-    pub size: TerminalSize,
-}
-
-impl Request for TerminalResize {
-    type Reply = ();
-
-    fn into_request(self) -> ClientRequest {
-        ClientRequest::TerminalResize(self)
     }
 }
 

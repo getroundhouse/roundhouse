@@ -235,8 +235,7 @@ pub enum HubFrame {
         subscription_id: u64,
         update: super::github::GithubUpdate,
     },
-    /// What happens next in the terminal a `TerminalAttach` follows, in order, starting with what it shows. For one a
-    /// `TerminalWatch` follows, only that its shell ended.
+    /// That the shell of the terminal a `TerminalWatch` follows ended, after which nothing more comes.
     Terminal {
         subscription_id: u64,
         update: TerminalUpdate,

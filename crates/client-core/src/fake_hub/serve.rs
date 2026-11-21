@@ -331,17 +331,13 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
         | R::DeviceList
         | R::DeviceRevoke(_)
         | R::Unknown => Err(ApiError::new(ErrorCode::Unsupported, "a fake hub doesn't know that request")),
-        R::TerminalAttach(attach) => super::terminals::attach(world, &attach),
         R::TerminalWatch(watch) => super::terminals::watch(world, &watch),
         R::TerminalRows(rows) => super::terminals::rows(world, &rows),
         R::TerminalBounds(bounds) => super::terminals::bounds(world, &bounds),
         R::TerminalText(text) => super::terminals::text(world, &text),
-        R::TerminalOpen(_)
-        | R::TerminalInput(_)
-        | R::TerminalTyped(_)
-        | R::TerminalResize(_)
-        | R::TerminalFit(_)
-        | R::TerminalClose(_) => Err(read_only("change a terminal")),
+        R::TerminalOpen(_) | R::TerminalTyped(_) | R::TerminalFit(_) | R::TerminalClose(_) => {
+            Err(read_only("change a terminal"))
+        }
     }
 }
 

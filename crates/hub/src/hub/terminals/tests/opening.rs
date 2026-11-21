@@ -7,7 +7,7 @@ use parking_lot::Mutex;
 use protocol::client::terminals::{TerminalClose, TerminalOpen};
 use protocol::client::{ApiError, ErrorCode, HubNotice};
 use protocol::model::{RecordKey, Records};
-use protocol::terminal::{TerminalBytes, TerminalExit, TerminalUpdate, UpdateIndex};
+use protocol::terminal::{TerminalExit, TerminalUpdate};
 use protocol::worker::{self, RunningTerminal, TerminalStart, WorkerRequest, WorkerResponse};
 use tokio::sync::broadcast;
 use tokio::time::timeout;
@@ -39,10 +39,6 @@ fn reached(reaching: &Reaching) -> (Arc<Hub>, Arc<WorkerLink>) {
 
 fn exited() -> TerminalUpdate {
     TerminalUpdate::Exited(TerminalExit { code: Some(0) })
-}
-
-fn output(text: &str) -> TerminalUpdate {
-    TerminalUpdate::Output { output: TerminalBytes::from(text.as_bytes()) }
 }
 
 async fn next(feed: &mut broadcast::Receiver<HubNotice>) -> HubNotice {
@@ -178,7 +174,7 @@ async fn a_terminal_whose_shell_ends_is_removed() {
     let opened = hub.terminal_open(open("t")).await.unwrap();
     let mut feed = hub.subscribe_feed();
 
-    hub.terminal_update(&link, "t".into(), UpdateIndex::new(12), exited());
+    hub.terminal_update(&link, "t".into(), &exited());
 
     let HubNotice::Removed { record, rev } = next(&mut feed).await else { panic!("the terminal wasn't removed") };
     assert_eq!(record, RecordKey::Terminal { id: "t".into() });
@@ -193,15 +189,17 @@ async fn what_another_worker_says_doesnt_reach_a_terminal() {
     let dir = tempfile::tempdir().unwrap();
     let (hub, link, _) = with_worker(dir.path());
     hub.terminal_open(open("t")).await.unwrap();
-    let (_, mut updates) = hub.terminal_follow(&"t".into()).unwrap();
+    let mut feed = hub.subscribe_feed();
     let other = WorkerLink::unconnected();
 
-    hub.terminal_update(&other, "t".into(), UpdateIndex::new(0), output("theirs"));
+    hub.terminal_update(&other, "t".into(), &exited());
     hub.terminal_ended(&"t".into(), other.id).await;
-    hub.terminal_update(&link, "t".into(), UpdateIndex::new(0), output("ours"));
+    hub.terminal_update(&link, "t".into(), &exited());
 
-    assert_eq!(updates.recv().await.unwrap().update, output("ours"));
-    assert_eq!(listed(&hub).await.terminals.len(), 1);
+    // Only once its own worker says its shell ended.
+    let HubNotice::Removed { record, .. } = next(&mut feed).await else { panic!("the terminal wasn't removed") };
+    assert_eq!(record, RecordKey::Terminal { id: "t".into() });
+    assert!(timeout(Duration::from_millis(50), feed.recv()).await.is_err(), "removed twice");
 }
 
 /// Whichever reaches the hub first, the open or its shell's end, no record is left of it.
@@ -214,7 +212,7 @@ async fn a_shell_that_ends_as_its_terminal_opens_leaves_no_record() {
     let link = WorkerLink::answering(move |request| {
         if matches!(request, WorkerRequest::TerminalStart(_)) {
             let (hub, link) = reached(&ends);
-            hub.terminal_update(&link, "t".into(), UpdateIndex::new(0), exited());
+            hub.terminal_update(&link, "t".into(), &exited());
         }
         Some(Ok(WorkerResponse::Ok))
     });
@@ -288,7 +286,7 @@ async fn a_shell_that_ends_as_a_hub_carries_on_with_it_takes_its_record_with_it(
     let ends = reaching.clone();
     let link = WorkerLink::answering(move |_| {
         let (hub, link) = reached(&ends);
-        hub.terminal_update(&link, "t".into(), UpdateIndex::new(0), exited());
+        hub.terminal_update(&link, "t".into(), &exited());
         let running = RunningTerminal { terminal: "t".into(), opened_at_ms: 5 };
         Some(Ok(WorkerResponse::RunningTerminals(worker::RunningTerminalsReply {
             terminals: vec![running],

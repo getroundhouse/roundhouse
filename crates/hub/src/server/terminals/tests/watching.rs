@@ -1,5 +1,5 @@
 //! Clients watching a terminal, each sent what it lacks of the hub's copy, which pictures from a stand-in for the
-//! terminal's worker make. On a paused clock, as `slow` says.
+//! terminal's worker make. On a paused clock, as `stand_in::settled` says.
 
 use std::sync::Arc;
 
@@ -8,7 +8,7 @@ use protocol::client::terminals::{TerminalRows, TerminalWatch};
 use protocol::client::{ApiError, ClientRequest, ErrorCode, HubFrame};
 use protocol::terminal::{
     Numbering, PictureSending, RowJson, RowNumber, ScreenState, Shown, Span, TerminalExit, TerminalPicture,
-    TerminalRow, TerminalRowsReply, TerminalSize, TerminalUpdate, UpdateIndex,
+    TerminalRow, TerminalRowsReply, TerminalSize, TerminalUpdate,
 };
 use protocol::worker::{WorkerRequest, WorkerResponse};
 use tokio::sync::mpsc;
@@ -16,8 +16,7 @@ use tokio::task::JoinHandle;
 use tokio::time::timeout;
 
 use super::super::watching::Watching;
-use super::slow::settled;
-use super::stand_in::{Connected, WAIT};
+use super::stand_in::{Connected, WAIT, settled};
 use crate::hub::Hub;
 use crate::hub::tests::{hub_with_worktree, serving, terminal_in_w};
 use crate::server::Outgoing;
@@ -280,7 +279,7 @@ async fn a_client_watching_hears_its_shell_end() {
     viewer.picture().await;
 
     let exited = TerminalUpdate::Exited(TerminalExit { code: Some(3) });
-    worker.hub.terminal_update(&worker.link, "t".into(), UpdateIndex::new(0), exited.clone());
+    worker.hub.terminal_update(&worker.link, "t".into(), &exited);
 
     let HubFrame::Terminal { subscription_id: 5, update } = viewer.next().await else { panic!("not its end") };
     assert_eq!(update, exited);
@@ -299,7 +298,7 @@ async fn a_client_watching_is_sent_what_the_shell_last_showed_before_its_end() {
     settled().await;
     worker.shows(shown(&["last"]));
     let exited = TerminalUpdate::Exited(TerminalExit { code: Some(0) });
-    worker.hub.terminal_update(&worker.link, "t".into(), UpdateIndex::new(0), exited.clone());
+    worker.hub.terminal_update(&worker.link, "t".into(), &exited);
     settled().await;
     viewer.picture().await;
     let last = viewer.picture().await;

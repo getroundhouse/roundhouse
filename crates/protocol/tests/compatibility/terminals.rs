@@ -1,9 +1,7 @@
 //! Every message about a terminal, spelled out, since a client, its hub and the hub's workers can each be a different
 //! build, and a worker outlives the hub that started it.
 
-use protocol::client::terminals::{
-    TerminalAttach, TerminalClose, TerminalInput, TerminalOpen, TerminalResize, TerminalRows, TerminalWatch,
-};
+use protocol::client::terminals::{TerminalClose, TerminalOpen, TerminalRows, TerminalWatch};
 use protocol::client::{ClientFrame, ClientRequest, ClientResponse, HubFrame, HubNotice, HubStatus, ReplyOutcome};
 use protocol::frame;
 use protocol::model::{RecordKey, Records, Rev, Terminal};
@@ -35,8 +33,6 @@ fn every_request_a_client_makes_of_a_terminal_keeps_its_form() {
         ClientRequest::TerminalOpen(open),
         r#"{"method":"terminal_open","workspace_id":"w","id":"t","size":{"cols":80,"rows":24}}"#,
     );
-    let attach = TerminalAttach { id: "t".into(), subscription_id: 3 };
-    client_asked(ClientRequest::TerminalAttach(attach), r#"{"method":"terminal_attach","id":"t","subscription_id":3}"#);
     let watch = TerminalWatch { id: "t".into(), subscription_id: 4 };
     client_asked(ClientRequest::TerminalWatch(watch), r#"{"method":"terminal_watch","id":"t","subscription_id":4}"#);
     let rows = TerminalRows { id: "t".into(), numbering: Numbering::new(2), from: RowNumber::new(40), count: 100 };
@@ -44,17 +40,25 @@ fn every_request_a_client_makes_of_a_terminal_keeps_its_form() {
         ClientRequest::TerminalRows(rows),
         r#"{"method":"terminal_rows","id":"t","numbering":2,"from":40,"count":100}"#,
     );
-    let input = TerminalInput { id: "t".into(), input: b"ls\r".as_slice().into() };
-    client_asked(ClientRequest::TerminalInput(input), r#"{"method":"terminal_input","id":"t","input":"bHMN"}"#);
-    let resize = TerminalResize { id: "t".into(), size: TerminalSize { cols: 120, rows: 40 } };
-    client_asked(
-        ClientRequest::TerminalResize(resize),
-        r#"{"method":"terminal_resize","id":"t","size":{"cols":120,"rows":40}}"#,
-    );
     client_asked(
         ClientRequest::TerminalClose(TerminalClose { id: "t".into() }),
         r#"{"method":"terminal_close","id":"t"}"#,
     );
+}
+
+/// The requests of the way before rows, from an app that sent a terminal's bytes, are ones a hub no longer knows, so
+/// it refuses each as `Unsupported` and carries on.
+#[test]
+fn a_request_from_before_rows_is_one_a_hub_doesnt_know() {
+    let before = [
+        r#"{"method":"terminal_attach","id":"t","subscription_id":3}"#,
+        r#"{"method":"terminal_input","id":"t","input":"bHMN"}"#,
+        r#"{"method":"terminal_resize","id":"t","size":{"cols":120,"rows":40}}"#,
+    ];
+    for request in before {
+        let read = frame::decode::<ClientRequest>(request.as_bytes());
+        assert!(matches!(read, Ok(ClientRequest::Unknown)), "{request} read as {read:?}");
+    }
 }
 
 #[test]

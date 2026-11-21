@@ -89,8 +89,8 @@ pub(in super::super) async fn read_frames(
         }
         let Some(parsed) = hub.branches_frame(&workspace_id, &link, parsed).await else { continue };
         // Taken at once too, since a terminal isn't an agent's.
-        if let WorkerFrame::Terminal { terminal, at, update } = parsed {
-            hub.terminal_update(&link, terminal, at, update);
+        if let WorkerFrame::Terminal { terminal, update, .. } = parsed {
+            hub.terminal_update(&link, terminal, &update);
             continue;
         }
         if let WorkerFrame::TerminalPicture { terminal, picture } = parsed {
