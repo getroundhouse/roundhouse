@@ -31,6 +31,7 @@ use heights::Heights;
 #[cfg(doc)]
 use layout::Anchor;
 pub use state::Place;
+pub(crate) use state::Reading;
 
 mod transcript_list;
 

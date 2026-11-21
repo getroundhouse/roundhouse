@@ -1,16 +1,21 @@
 //! Scrolling with the keys, as a page scrolls: Up and Down a line, Page Up and Page Down a screen, and Home and End to
 //! the start and the end, in a chat that has focus, a rendered Markdown file and a proposal, Page Up and Page Down from
-//! the composer too, which keeps what's typed, and Escape from the chat back to the composer. How far a line and a
-//! screen go is tested in `crates/transcript/src/selection`, and here each key in a chat, and one example in each of the
-//! others. Only what the hub holds matters, so each is made up for a fake hub.
+//! the composer too, which keeps what's typed, and Escape from the chat back to the composer. `Option-Up` and
+//! `Option-Down` step a Markdown file between its headings and a proposal between its parts here, and a chat between its
+//! prompts in `outline::steps`. How far a line and a screen go is tested in `crates/transcript/src/selection`, and here
+//! each key in a chat, and one example in each of the others. Only what the hub holds matters, so each is made up for a
+//! fake hub.
 
 use client_core::fake_hub::events::text;
-use gpui_kit::{AppContext as _, Focusable as _, Pixels, TestAppContext, px};
+use gpui_kit::base::test_support::texts;
+use gpui_kit::{AppContext as _, Focusable as _, Pixels, TestAppContext, point, px};
 use look::Region;
 use protocol::event::EventBody;
 use transcript::Place;
 
-use super::selecting::{PARAGRAPHS, last_shown, on_the_first, painted, paragraphs, with_a_file, with_a_proposal};
+use super::selecting::{
+    PARAGRAPHS, last_shown, on_the_first, painted, paragraphs, with_a_file, with_a_proposal, with_a_proposal_asking,
+};
 use super::{A_FRAME, open_on_a_chat, prose, thumb, turns};
 use crate::support::Ui;
 
@@ -153,4 +158,67 @@ fn the_keys_scroll_a_proposal(cx: &mut TestAppContext) {
 
     assert!(a_screen_on, "Page Down shows the paragraph after the last that showed");
     assert!(painted(&mut ui, &format!("Context {PARAGRAPHS}.")).is_some(), "and End the last");
+}
+
+/// The document's texts that show, from the top, of those that say `either` or `or` at their start.
+fn shown_from_the_top(ui: &mut Ui<'_>, either: &str, or: &str) -> Vec<String> {
+    ui.frame();
+    let shown = |window: &mut gpui_kit::Window| {
+        let mut shown: Vec<_> = texts(window)
+            .into_iter()
+            .filter(|text| text.visible() && (text.text().starts_with(either) || text.text().starts_with(or)))
+            .map(|text| (text.bounds().top(), text.text().to_owned()))
+            .collect();
+        shown.sort_by(|a, b| f32::from(a.0).total_cmp(&f32::from(b.0)));
+        shown.into_iter().map(|(_, text)| text).collect()
+    };
+    ui.cx.update_window(ui.handle, |_, window, _| shown(window)).unwrap()
+}
+
+/// `Option-Down` steps a rendered Markdown file on to the heading after the top, with that at the top, and
+/// `Option-Up` back, to the top of the heading's part the file is scrolled into first, and then to the one before.
+#[gpui_kit::test]
+fn option_up_and_down_step_a_rendered_markdown_file_between_its_headings(cx: &mut TestAppContext) {
+    let sections = Vec::from_fn(4, |s| {
+        let paragraphs = Vec::from_fn(30, |n| format!("Paragraph {}.{}.", s + 1, n + 1)).join("\n\n");
+        format!("# Section {}\n\n{paragraphs}", s + 1)
+    });
+    let (_fake, mut ui) = with_a_file(cx, &sections.join("\n\n"));
+    ui.click("all-file-long.md");
+    ui.wait("the file, rendered", |ui| painted(ui, "Section 1").is_some());
+    let first = painted(&mut ui, "Paragraph 1.1.").unwrap();
+    ui.click_at(first.origin + point(px(2.), px(4.)));
+    let at_the_top = |ui: &mut Ui<'_>| shown_from_the_top(ui, "Section", "Paragraph").into_iter().next();
+
+    ui.press("alt-down");
+    let on = at_the_top(&mut ui);
+    ui.press("alt-down");
+    let on_again = at_the_top(&mut ui);
+    ui.press("down");
+    ui.press("alt-up");
+    let back_to_its_top = at_the_top(&mut ui);
+    ui.press("alt-up");
+
+    assert_eq!(on.as_deref(), Some("Section 2"), "the next heading, at the top");
+    assert_eq!(on_again.as_deref(), Some("Section 3"));
+    assert_eq!(back_to_its_top.as_deref(), Some("Section 3"), "back to the top of the heading scrolled into");
+    assert_eq!(at_the_top(&mut ui).as_deref(), Some("Section 2"), "and then to the one before");
+}
+
+/// `Option-Down` steps a proposal on from its context to its question, and `Option-Up` back.
+#[gpui_kit::test]
+fn option_up_and_down_step_a_proposal_between_its_parts(cx: &mut TestAppContext) {
+    // The question's details, which are Markdown, unlike what it asks, are far longer than a screen.
+    let context = "Context 1.\n\nContext 2.";
+    let (_fake, mut ui) = with_a_proposal_asking(cx, context, &paragraphs("Detail"));
+    ui.wait("the context", |ui| painted(ui, "Context 1.").is_some());
+    let first = on_the_first(&mut ui, "Context");
+    ui.click_at(first);
+
+    ui.press("alt-down");
+    let on = (painted(&mut ui, "Context 1.").is_some(), painted(&mut ui, "Detail 1.").is_some());
+    ui.press("alt-up");
+
+    assert_eq!(on, (false, true), "the question, at the top, past the context");
+    assert!(painted(&mut ui, "Context 1.").is_some(), "and back to the context");
 }

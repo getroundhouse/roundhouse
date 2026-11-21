@@ -1,6 +1,6 @@
 use super::super::Transcript;
 use super::{hover, list};
-use crate::list::TranscriptList;
+use crate::list::{Reading, TranscriptList};
 use client_core::session_log::SessionLog;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
@@ -179,7 +179,7 @@ impl Transcript {
         if !lines.iter().any(Line::is_prompt) {
             return around.child(chat);
         }
-        let at = being_read(&lines, self.list.bottom_row(), !self.list.is_scrolled_up());
+        let at = being_read(&lines, self.list.reading());
         let hover = window.use_keyed_state("outline", cx, |_, _| Hover::default());
         let showing = hover.update(cx, |hover, _| hover.frame());
         if showing == Showing::Opened {
@@ -286,12 +286,15 @@ fn tick(line: &Line, prompts: usize, look: Tick, cx: &App) -> AnyElement {
         .into_any_element()
 }
 
-/// Which prompt is being read, as an index into `lines`: the last one at or above the bottom row, whose part of the
-/// chat is at the bottom, or before any has reached it, the first. At the end of the chat, it's the last prompt, as its
-/// row makes it once the end is laid out, and also before then, when the list is first drawn. A compaction is never
-/// the one being read, so the white tick is always a prompt's.
-pub(super) fn being_read(lines: &[Line], bottom: usize, at_end: bool) -> usize {
-    let reached = if at_end { lines.len() } else { lines.partition_point(|line| line.row <= bottom) };
+/// Which prompt is being read, as an index into `lines`, from where the chat is read from: the last one at or above
+/// the bottom row, whose part of the chat is at the bottom, or before any has reached it, the first. At the end of the
+/// chat, it's the last prompt, as its row makes it once the end is laid out, and also before then, when the list is
+/// first drawn. A compaction is never the one being read, so the white tick is always a prompt's.
+pub(super) fn being_read(lines: &[Line], reading: Reading) -> usize {
+    let reached = match reading {
+        Reading::Kept(bottom) | Reading::Scrolled(bottom) => lines.partition_point(|line| line.row <= bottom),
+        Reading::End => lines.len(),
+    };
     lines[..reached].iter().rposition(Line::is_prompt).or_else(|| lines.iter().position(Line::is_prompt)).unwrap_or(0)
 }
 

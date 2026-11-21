@@ -121,7 +121,9 @@ actions!(
         FindPrevious,
         ChatPageUp,
         ChatPageDown,
-        BackToComposer
+        BackToComposer,
+        StepBack,
+        StepOn
     ]
 );
 

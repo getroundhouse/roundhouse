@@ -160,8 +160,8 @@ impl Element for ListElement {
             self.state.borrow_mut().end_drag();
         }
         // What the rest of the transcript was drawn from in this frame: its button back to the latest row, which
-        // shows while the list is scrolled up, and the row its outline marks a prompt by, which it goes by only then.
-        let read = |state: &State| state.is_scrolled_up().then(|| state.bottom_row());
+        // shows while the list is scrolled up, and where its outline marks the prompt being read from.
+        let read = |state: &State| (state.is_scrolled_up(), state.reading());
         let before = read(&self.state.borrow());
         let layout = self.lay_out(bounds, window, cx);
         self.measure_out_of_sight(bounds.size.width, window, cx);

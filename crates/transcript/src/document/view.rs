@@ -9,7 +9,8 @@ use gpui_kit::{
 
 use super::changes::{Change, changed};
 use crate::rows::in_column;
-use crate::selection::{Scrolled, Scroller, Selection};
+use crate::selection::{Scrolled, Scroller, Selection, Way};
+use crate::stops::stop_beside;
 use crate::texts::{Of, TextAt, Texts, TopBlock, Written, top_blocks};
 
 /// How far past the window the list draws blocks, so one scrolled into sight is drawn already.
@@ -98,6 +99,18 @@ impl Document {
         }
         self.shown = Some(Shown { name, blocks });
         cx.notify();
+    }
+
+    /// Steps it `way` to the heading before the top or after it, with that at the top, as `Option-Up` and
+    /// `Option-Down` do.
+    pub fn step(&mut self, way: Way, cx: &mut Context<Self>) {
+        let Some(shown) = &self.shown else { return };
+        let headings = shown.blocks.iter().enumerate().filter(|(_, (block, _))| block.heading).map(|(ix, _)| ix);
+        let top = self.list.logical_scroll_top();
+        if let Some(heading) = stop_beside(headings, top.item_ix, top.offset_in_item, way) {
+            self.list.scroll_to(ListOffset { item_ix: heading, offset_in_item: px(0.) });
+            cx.notify();
+        }
     }
 
     /// What a copy of all of it has, as it's drawn.

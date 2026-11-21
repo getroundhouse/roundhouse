@@ -32,7 +32,7 @@ mod tests;
 
 pub(crate) use frames::{Scrolled, Scroller, drawn_last_frame};
 pub(crate) use geometry::Geometry;
-pub(crate) use keys::Way;
+pub use keys::Way;
 pub(crate) use paging::{Asked, Paging};
 pub(crate) use pieces::Pieces;
 

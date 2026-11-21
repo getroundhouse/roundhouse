@@ -1,4 +1,4 @@
-use super::{element, state};
+use super::{Reading, element, state};
 use crate::around_column;
 use crate::scroll_area::hears_the_wheel;
 use crate::selection::{Scrolled, Scroller, Selection};
@@ -99,11 +99,11 @@ impl TranscriptList {
         self.state.borrow_mut().go_to_row_at_bottom(row);
     }
 
-    /// The row at the bottom of the list: the one [`TranscriptList::go_to_row_at_bottom`] sent there, until something
-    /// else moves the list, even near the start of the session, where it shows higher up, and otherwise the last row
-    /// with more than a pixel of it in the list, as the last frame laid them out.
-    pub(crate) fn bottom_row(&self) -> usize {
-        self.state.borrow().bottom_row()
+    /// Where the list is read from: the row [`TranscriptList::go_to_row_at_bottom`] sent to its bottom, until
+    /// something else moves it, or else its end, or the last row with more than a pixel of it in the list, as the last
+    /// frame laid them out, once someone has scrolled away from the end.
+    pub(crate) fn reading(&self) -> Reading {
+        self.state.borrow().reading()
     }
 
     /// Whether any of the row at `row` showed in the last frame.

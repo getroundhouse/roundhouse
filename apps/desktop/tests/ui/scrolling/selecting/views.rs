@@ -166,6 +166,15 @@ pub(in crate::scrolling) fn with_a_file<'a>(cx: &'a mut TestAppContext, text: &s
 
 /// The app on a fake hub, with a chat that has made a proposal whose context says `context`, open in its tab.
 pub(in crate::scrolling) fn with_a_proposal<'a>(cx: &'a mut TestAppContext, context: &str) -> (FakeHub, Ui<'a>) {
+    with_a_proposal_asking(cx, context, "")
+}
+
+/// The same, with its question's details saying `details`.
+pub(in crate::scrolling) fn with_a_proposal_asking<'a>(
+    cx: &'a mut TestAppContext,
+    context: &str,
+    details: &str,
+) -> (FakeHub, Ui<'a>) {
     let mut world = World::default();
     let repo = world.repo("signals");
     let workspace = world.workspace(&repo, "ledger");
@@ -180,7 +189,7 @@ pub(in crate::scrolling) fn with_a_proposal<'a>(cx: &'a mut TestAppContext, cont
     let question = ProposalQuestion {
         header: "Holding".into(),
         text: "Where does a held train's wait live?".into(),
-        details: String::new(),
+        details: details.to_owned(),
         options: vec![option("The signal"), option("The train")],
         recommended: None,
     };

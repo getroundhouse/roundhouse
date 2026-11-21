@@ -3,6 +3,7 @@ use super::{lines, reading};
 use crate::file_header::file_header;
 use crate::file_image::{FileImage, Placed, fitted};
 use crate::shared_choice::{Chosen, chosen, switch};
+use crate::{StepBack, StepOn};
 use client_core::Client;
 use gpui_kit::component::{h_flex, v_flex};
 use gpui_kit::{
@@ -14,7 +15,7 @@ use lines::Lines;
 use look::Typeset as _;
 use protocol::model::WorkspaceId;
 use reading::Unshown;
-use transcript::Document;
+use transcript::{Document, Way};
 
 /// The height of a line of a file, and of a line of a diff, so the two read alike.
 pub(crate) const LINE_HEIGHT: Pixels = look::CodeLines::File.height();
@@ -221,7 +222,14 @@ impl Render for FileView {
                     .into_any_element()
             }
         };
-        v_flex().track_focus(&self.focus).size_full().children(self.header(cx)).child(body)
+        // A rendered Markdown file steps between its headings.
+        v_flex()
+            .track_focus(&self.focus)
+            .size_full()
+            .on_action(cx.listener(|t, _: &StepBack, _, cx| t.document.update(cx, |d, cx| d.step(Way::Back, cx))))
+            .on_action(cx.listener(|t, _: &StepOn, _, cx| t.document.update(cx, |d, cx| d.step(Way::On, cx))))
+            .children(self.header(cx))
+            .child(body)
     }
 }
 

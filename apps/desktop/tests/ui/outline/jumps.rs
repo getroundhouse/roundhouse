@@ -187,7 +187,7 @@ fn jump_to_line(ui: &mut Ui<'_>, target: ElementId) {
 /// every row from the top of the chat down to it to have been laid out, over as many frames as that takes, since a row
 /// jumped to can load before the rows above it, which can be in a page that comes after its own, and a row that hasn't
 /// come isn't measured.
-fn assert_at_the_bottom(ui: &mut Ui<'_>, row: usize, what: &str) {
+pub(super) fn assert_at_the_bottom(ui: &mut Ui<'_>, row: usize, what: &str) {
     ui.wait("the rows down to it to be laid out", |ui| laid_out_down_to(ui, row));
     let (end, tall) = (place_of(ui, row).1, ui.bounds("transcript").size.height);
     assert!((end - tall).abs() < px(1.), "{what} ends {end:?} down a chat {tall:?} tall");
