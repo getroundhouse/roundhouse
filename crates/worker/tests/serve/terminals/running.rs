@@ -175,8 +175,7 @@ async fn a_terminal_that_cant_start_is_refused_and_the_next_still_starts() {
     hub.finish().await;
 }
 
-/// A shell that exits ends its terminal with its code, and the worker lists it no longer, saying still that it does all
-/// a client's window needs by row number, as every worker from this build on does.
+/// A shell that exits ends its terminal with its code, and the worker lists it no longer.
 #[tokio::test]
 async fn a_shell_that_exits_ends_its_terminal_with_its_code() {
     let dir = tempfile::tempdir().unwrap();
@@ -187,7 +186,7 @@ async fn a_shell_that_exits_ends_its_terminal_with_its_code() {
 
     hub.until_update(&TerminalUpdate::Exited(TerminalExit { code: Some(3) })).await;
     let running = hub.call(WorkerRequest::RunningTerminals).await;
-    let none = RunningTerminalsReply { terminals: vec![], rows: true };
+    let none = RunningTerminalsReply { terminals: vec![] };
     assert_eq!(running, WorkerOutcome::Response(WorkerResponse::RunningTerminals(none)));
     hub.finish().await;
 }

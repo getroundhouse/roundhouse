@@ -193,12 +193,7 @@ fn every_reply_and_update_a_worker_sends_of_its_terminals_keeps_its_form() {
     );
     let running = RunningTerminal { terminal: "t".into(), opened_at_ms: 5 };
     answered(
-        WorkerResponse::RunningTerminals(RunningTerminalsReply { terminals: vec![running.clone()], rows: true }),
-        r#"{"result":"running_terminals","terminals":[{"terminal":"t","opened_at_ms":5}],"rows":true}"#,
-    );
-    // From a worker before rows, which says nothing of them.
-    answered(
-        WorkerResponse::RunningTerminals(RunningTerminalsReply { terminals: vec![running], rows: false }),
+        WorkerResponse::RunningTerminals(RunningTerminalsReply { terminals: vec![running] }),
         r#"{"result":"running_terminals","terminals":[{"terminal":"t","opened_at_ms":5}]}"#,
     );
 

@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use parking_lot::Mutex;
 use protocol::client::terminals::{TerminalRows, TerminalWatch};
-use protocol::client::{ApiError, ClientRequest, ErrorCode, HubFrame};
+use protocol::client::{ApiError, ClientRequest, HubFrame};
 use protocol::terminal::{
     Numbering, PictureSending, RowJson, RowNumber, ScreenState, Shown, Span, TerminalExit, TerminalPicture,
     TerminalRow, TerminalRowsReply, TerminalSize, TerminalUpdate,
@@ -360,21 +360,4 @@ async fn rows_of_history_are_asked_of_the_worker() {
     let rows = worker.hub.terminal_rows(asked).await.unwrap();
 
     assert_eq!((rows.numbering, rows.from, rows.rows.len()), (Numbering::new(4), RowNumber::new(150), 1));
-}
-
-/// A worker from before pictures is asked once, and then never again, so each client that watches doesn't wait on it.
-#[tokio::test(start_paused = true)]
-async fn a_worker_from_before_pictures_is_asked_to_be_watched_only_once() {
-    let dir = tempfile::tempdir().unwrap();
-    let unsupported = || Err(ApiError::new(ErrorCode::Unsupported, "a worker from before pictures"));
-    let worker = Worker::answering_watch(dir.path(), unsupported).await;
-
-    let first = Viewer::watch(&worker.hub);
-    settled().await;
-    first.stop().await;
-    let second = Viewer::watch(&worker.hub);
-    settled().await;
-    second.stop().await;
-
-    assert_eq!(worker.told(), [true]);
 }

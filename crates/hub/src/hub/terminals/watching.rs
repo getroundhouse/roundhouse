@@ -88,9 +88,6 @@ impl Hub {
         if *told == Some(watching) && !resync {
             return Ok(());
         }
-        if !link.shows_rows() {
-            return Ok(());
-        }
         if watching {
             watch.copy.lock().asked();
         }
@@ -98,8 +95,6 @@ impl Hub {
         *told = None;
         match link.call(worker::TerminalWatch { terminal: id.clone(), watching }).await {
             Ok(()) => *told = Some(watching),
-            // From before pictures, so it sends none, and the client watching is shown nothing.
-            Err(e) if e.code == ErrorCode::Unsupported => link.without_rows(),
             Err(e) if e.code == ErrorCode::NotFound => {}
             Err(e) => return Err(e),
         }
