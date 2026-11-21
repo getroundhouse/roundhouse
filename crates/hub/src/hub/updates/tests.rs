@@ -229,7 +229,7 @@ async fn an_update_restarts_only_once_no_request_is_under_way() {
 }
 
 /// The release the client showed is the one it gets, only one update runs at a time, and a request sent again after
-/// its reply was lost changes nothing. The hourly read of the feed leaves the update as it is.
+/// its reply was lost changes nothing. The read of the feed every 10 minutes leaves the update as it is.
 #[tokio::test]
 async fn a_hub_updates_once_at_a_time_to_what_it_found_whatever_it_reads_meanwhile() {
     let dir = tempfile::tempdir().unwrap();

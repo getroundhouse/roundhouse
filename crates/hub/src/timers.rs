@@ -91,7 +91,7 @@ impl Timers {
         // block, which says what to do. *Unconfirmed:* a minute.
         check_github_logins_every: Duration::from_secs(60),
         // As often as the app looks for its own.
-        look_for_updates_every: Duration::from_hours(1),
+        look_for_updates_every: Duration::from_mins(10),
     };
 
     /// [`Timers::DEFAULT`], whatever `var` says, since only a build with the `testing` feature takes others, and the

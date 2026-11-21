@@ -1,4 +1,4 @@
-//! Reading the feed as the hub starts and every hour after, and keeping what it found, with how an update a client
+//! Reading the feed as the hub starts and every 10 minutes after, and keeping what it found, with how an update a client
 //! asked for is going, as a record every client follows.
 
 use std::future::Future;
@@ -102,12 +102,12 @@ impl Updates {
 }
 
 impl Hub {
-    /// Reads the feed it was given as the hub starts, and every hour after while it serves, for the release it would
+    /// Reads the feed it was given as the hub starts, and every 10 minutes after while it serves, for the release it would
     /// update to. Each read tells every client, so a client knows when the hub last read it.
     pub(crate) async fn look_for_updates(self: Arc<Self>) {
         let Some(source) = self.updates.source().cloned() else { return };
         let mut every = tokio::time::interval(self.timers.look_for_updates_every);
-        // Tokio's timers don't count the time a machine sleeps, so a hub that slept reads it an hour after it woke.
+        // Tokio's timers don't count the time a machine sleeps, so a hub that slept reads it 10 minutes after it woke.
         every.set_missed_tick_behavior(MissedTickBehavior::Delay);
         loop {
             every.tick().await;

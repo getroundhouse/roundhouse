@@ -9,9 +9,9 @@ use std::path::Path;
 use std::time::{Duration, SystemTime};
 use velopack::{UpdateCheck, UpdateInfo, UpdateManager, UpdateOptions, VelopackApp};
 
-/// How long to wait before looking again. An update only installs when someone restarts the app for it or quits it, so
-/// looking more often would mostly download versions that nobody runs.
-const CHECK_EVERY: Duration = Duration::from_hours(1);
+/// How long to wait before looking again, so a release shows within minutes of being published. An update only
+/// installs when someone restarts the app for it or quits it, so some of what's downloaded is never run.
+const CHECK_EVERY: Duration = Duration::from_mins(10);
 
 /// What a look found, and how long the update server had been out of reach then.
 type Look = (Result<Option<UpdateInfo>, Problem>, Duration);
@@ -20,7 +20,7 @@ type Look = (Result<Option<UpdateInfo>, Problem>, Duration);
 struct Updater {
     pub(super) manager: UpdateManager,
     pub(super) ready: Option<UpdateInfo>,
-    /// Wakes the thread that looks, so it looks now rather than at the end of its hour.
+    /// Wakes the thread that looks, so it looks now rather than when its wait ends.
     pub(super) look_now: flume::Sender<()>,
     pub(super) workers: WorkersToKeep,
 }
@@ -70,7 +70,7 @@ pub fn start(data_dir: &Path, cx: &mut App) {
     keep_up_to_date(manager, workers, OutOfReach::in_dir(data_dir), cx);
 }
 
-/// Looks for an update now, rather than at the end of the hour, and says what it found in the sidebar, never in an
+/// Looks for an update now, rather than when the next look is due, and says what it found in the sidebar, never in an
 /// alert. A build that doesn't update says so at once, and one that can't update where it is already says why.
 pub fn check_now(cx: &mut App) {
     let Some(updater) = cx.try_global::<Updater>() else {
@@ -88,7 +88,7 @@ pub fn check_now(cx: &mut App) {
 }
 
 /// Says which workers the update has to keep, as the app learns it from its hub, as [`WorkersToKeep`] says. A change
-/// looks again at once, rather than at the end of the hour, so what's ready is the newest update that keeps them,
+/// looks again at once, rather than when the next look is due, so what's ready is the newest update that keeps them,
 /// whether that's newer than before or older. The look shows nothing until it's done, since nobody asked for it. Older
 /// workers to keep drop the update that's ready first, which may not keep them, so a quit before the look is done, or
 /// after it fails, installs nothing rather than ending them.
@@ -106,7 +106,7 @@ pub(crate) fn keep_workers(oldest: Option<u32>, cx: &mut App) {
     }
 }
 
-/// Looks on launch, every hour, whenever someone checks, and whenever which workers to keep changes, and keeps what
+/// Looks on launch, every 10 minutes, whenever someone checks, and whenever which workers to keep changes, and keeps what
 /// each look finds.
 pub(super) fn keep_up_to_date(manager: UpdateManager, workers: WorkersToKeep, out_of_reach: OutOfReach, cx: &mut App) {
     // Asking again before a look starts adds nothing, so one is enough.
@@ -204,7 +204,7 @@ pub fn show_ready(version: &str, cx: &mut App) {
     cx.set_global(Shown { ready: Some(version.to_string()), ..Shown::default() });
 }
 
-/// Looks, then waits an hour or until someone asks, for as long as the app takes what it finds. A look during which
+/// Looks, then waits 10 minutes or until someone asks, for as long as the app takes what it finds. A look during which
 /// which workers to keep changed is followed by another at once, since what it found may not keep them.
 pub(super) fn keep_looking(
     manager: &UpdateManager,
