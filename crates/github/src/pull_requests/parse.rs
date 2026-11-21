@@ -3,10 +3,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use protocol::client::ApiError;
-use protocol::model::{
-    BranchName, CheckState, Checks, CommitId, LeftQueue, Local, Mergeability, ObservedCheck, ObservedPullRequest,
-    PrState, PullRequest, PullRequestNumber, Review,
-};
+use protocol::model::{CheckState, CommitId, ObservedCheck, PrState, PullRequestNumber, Review};
 use serde_json::Value;
 
 use super::said::{array, changed, incomplete, string};
@@ -156,6 +153,7 @@ impl Policy {
     }
 }
 
+#[derive(Debug)]
 pub(super) struct ReportedCheck {
     check: ObservedCheck,
     app: Option<i64>,
@@ -221,72 +219,6 @@ fn conclusion(conclusion: Option<&str>) -> CheckState {
         }
         _ => CheckState::Unknown,
     }
-}
-
-pub(super) fn observation(pr: &Value, metadata: &Metadata) -> Result<ObservedPullRequest, ApiError> {
-    let parse = |key: &str| pr.get(key).cloned().ok_or_else(incomplete);
-    let mut pull_request = PullRequest {
-        number: pr["number"].as_u64().ok_or_else(incomplete)?,
-        url: string(pr, "url")?,
-        title: string(pr, "title")?,
-        state: serde_json::from_value(parse("state")?).map_err(|_| incomplete())?,
-        is_draft: pr["isDraft"].as_bool().ok_or_else(incomplete)?,
-        base: Some(BranchName::from(string(pr, "baseRefName")?)),
-        merge_state: serde_json::from_value(parse("mergeStateStatus")?).map_err(|_| incomplete())?,
-        review: review(pr)?,
-        checks: Checks::default(),
-        queue: None,
-        left_queue: None,
-        changes_requested_at_ms: None,
-        local: Local::default(),
-    };
-    if !pr.get("mergeQueueEntry").ok_or_else(incomplete)?.is_null() {
-        pull_request.queue =
-            Some(serde_json::from_value(pr["mergeQueueEntry"]["state"].clone()).map_err(|_| incomplete())?);
-    }
-    if let Some(event) = array(&pr["timelineItems"], "nodes")?.last()
-        && event["reason"] != "merged"
-    {
-        pull_request.left_queue =
-            Some(LeftQueue { at_ms: time(&event["createdAt"])?, reason: string(event, "reason")? });
-    }
-    if let Some(review) = array(&pr["reviews"], "nodes")?.last() {
-        pull_request.changes_requested_at_ms = Some(time(&review["submittedAt"])?);
-    }
-    let mergeability = match pr["mergeable"].as_str() {
-        Some("MERGEABLE") => Mergeability::Mergeable,
-        Some("CONFLICTING") => Mergeability::Conflicting,
-        _ => Mergeability::Unknown,
-    };
-    Ok(ObservedPullRequest {
-        pull_request,
-        head: metadata.head.clone(),
-        base: metadata.base.clone(),
-        destination: metadata.destination.as_str().into(),
-        dependencies: metadata.dependencies.clone(),
-        mergeability,
-        linear: linear(pr, metadata)?,
-        checks: Vec::new(),
-        checks_revision: pr["statusCheckRollup"]["commit"]["oid"].as_str().map(Into::into),
-        requirements_known: true,
-        checks_known: !pr["statusCheckRollup"].is_null(),
-    })
-}
-
-fn linear(pr: &Value, metadata: &Metadata) -> Result<Option<bool>, ApiError> {
-    if metadata.dependencies.is_empty() {
-        return Ok(Some(true));
-    }
-    let compare = &pr["baseRef"]["compare"];
-    if compare.is_null() {
-        return Ok(None);
-    }
-    if string(&compare["baseTarget"], "oid")? != metadata.base.as_str()
-        || string(&compare["headTarget"], "oid")? != metadata.head.as_str()
-    {
-        return Err(changed());
-    }
-    Ok(Some(compare["behindBy"].as_u64().ok_or_else(incomplete)? == 0))
 }
 
 /// Where `pr`'s review stands, by its `reviewDecision`, which GitHub leaves empty where the repository asks for none.
