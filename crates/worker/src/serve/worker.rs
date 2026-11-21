@@ -260,6 +260,7 @@ pub(super) async fn handle(
         WorkerRequest::TerminalShow(TerminalShow { terminal }) => {
             Ok(WorkerResponse::TerminalShown(state.terminals.show(&terminal).await?))
         }
+        WorkerRequest::TerminalRows(asked) => Ok(WorkerResponse::TerminalRows(state.terminals.rows(asked).await?)),
         WorkerRequest::TerminalStop(TerminalStop { terminal }) => {
             state.terminals.stop(&terminal).await;
             Ok(WorkerResponse::Ok)

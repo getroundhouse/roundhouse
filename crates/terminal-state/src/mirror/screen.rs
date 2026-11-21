@@ -54,6 +54,8 @@ pub struct Mirror {
     pub(super) typing: Option<super::typing::Typing>,
     pub(super) selecting: Option<super::selecting::Selecting>,
     pub(super) compressing: Compressing,
+    /// The count of its rows, once they've been asked for by number.
+    pub(super) rows: Option<super::rows::Counting>,
 }
 
 impl Mirror {
@@ -63,7 +65,8 @@ impl Mirror {
         terminal.set_scrollback_max_lines(Some(HISTORY_LINES))?.set_scrollback_max_bytes(Some(HISTORY_BYTES))?;
         // From the start, since only bytes written after it's on can be carried over by a snapshot.
         terminal.set_continuation_max_bytes(LONGEST_UNFINISHED_BYTES)?;
-        Ok(Self { terminal, drawing: None, typing: None, selecting: None, compressing: Compressing::default() })
+        let compressing = Compressing::default();
+        Ok(Self { terminal, drawing: None, typing: None, selecting: None, compressing, rows: None })
     }
 
     /// A copy that answers what the program asks of its terminal, such as where the cursor is, or what the terminal
@@ -79,12 +82,22 @@ impl Mirror {
     /// What the program wrote, however its output was split up, such as partway through a sequence.
     pub fn write(&mut self, output: &[u8]) {
         self.terminal.vt_write(output);
+        if let Some(counting) = &mut self.rows
+            && counting.written(&mut self.terminal).is_err()
+        {
+            // Ghostty fails only when it can't allocate. The next ask starts a new numbering, rather than trust this.
+            self.rows = None;
+        }
     }
 
     /// Gives the terminal a new size, which rewraps the shell's screen and its history, as the program's terminal has.
     pub fn resize(&mut self, size: Size) -> Result<(), MirrorError> {
         // Nothing here knows how big a cell is, so a program that asks the size in pixels is told nothing.
-        Ok(self.terminal.resize(size.cols, size.rows, 0, 0)?)
+        self.terminal.resize(size.cols, size.rows, 0, 0)?;
+        if let Some(counting) = &mut self.rows {
+            counting.resized(&mut self.terminal)?;
+        }
+        Ok(())
     }
 
     pub fn size(&self) -> Result<Size, MirrorError> {

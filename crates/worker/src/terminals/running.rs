@@ -11,7 +11,8 @@ use protocol::model::TerminalId;
 use protocol::paths;
 use protocol::terminal::TerminalSize;
 use protocol::worker::{
-    RunningTerminal, RunningTerminalsReply, TerminalInput, TerminalResize, TerminalShown, TerminalStart,
+    RunningTerminal, RunningTerminalsReply, TerminalInput, TerminalResize, TerminalRows, TerminalRowsReply,
+    TerminalShown, TerminalStart,
 };
 use tokio::sync::{mpsc, oneshot, watch};
 
@@ -58,6 +59,7 @@ pub(super) struct Running {
 pub(super) enum ToShell {
     Resize(TerminalSize),
     Show(oneshot::Sender<Result<TerminalShown, ApiError>>),
+    Rows(TerminalRows, oneshot::Sender<Result<TerminalRowsReply, ApiError>>),
     Stop,
 }
 
@@ -146,6 +148,14 @@ impl Terminals {
         let (reply, shown) = oneshot::channel();
         self.tell(terminal, ToShell::Show(reply))?;
         shown.await.map_err(|_| not_running(terminal))?
+    }
+
+    /// Rows of the terminal's history by number, as [`TerminalRows`] says.
+    pub(crate) async fn rows(&self, asked: TerminalRows) -> Result<TerminalRowsReply, ApiError> {
+        let terminal = asked.terminal.clone();
+        let (reply, rows) = oneshot::channel();
+        self.tell(&terminal, ToShell::Rows(asked, reply))?;
+        rows.await.map_err(|_| not_running(&terminal))?
     }
 
     /// Ends the terminal's shell, and the job it was running, and waits until the hub has been sent that it ended.

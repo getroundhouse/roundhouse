@@ -6,10 +6,10 @@ use std::time::Duration;
 use super::hub::{Hub, OPENED_AT_MS, SIZE, WAIT, contains, input, process_records_dir, refused};
 use protocol::client::ErrorCode;
 use protocol::model::GithubToken;
-use protocol::terminal::{TerminalExit, TerminalSize, TerminalUpdate};
+use protocol::terminal::{Numbering, RowNumber, TerminalExit, TerminalSize, TerminalUpdate};
 use protocol::worker::{
-    GitCredential, GitCredentialSet, GithubCredential, RunningTerminalsReply, TerminalResize, TerminalShow,
-    TerminalShown, TerminalStop, WorkerOutcome, WorkerRequest, WorkerResponse,
+    GitCredential, GitCredentialSet, GithubCredential, RunningTerminalsReply, TerminalResize, TerminalRows,
+    TerminalRowsReply, TerminalShow, TerminalShown, TerminalStop, WorkerOutcome, WorkerRequest, WorkerResponse,
 };
 
 /// As every process a worker starts is, so `git` and `gh` typed in a terminal use the default GitHub account, as its
@@ -65,6 +65,43 @@ async fn what_a_terminal_shows_takes_in_everything_its_program_wrote_before() {
     assert_eq!(screen.size, SIZE);
     assert!(contains(screen.bytes.as_slice(), "42"), "{:?}", String::from_utf8_lossy(screen.bytes.as_slice()));
     assert!(next >= seen, "the screen takes in {next:?} updates, and {seen:?} had been sent");
+    hub.finish().await;
+}
+
+/// A hub asks for rows of a terminal's history by number, in the numbering the worker says they're in, and is sent
+/// what its program wrote, oldest first. An ask in another numbering is sent none, and told which it is.
+#[tokio::test]
+async fn rows_of_history_are_sent_by_number() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut hub = Hub::start(dir.path()).await;
+    hub.open("t", dir.path()).await;
+    hub.type_in("t", "stty -echo; seq -f 'line %g' 1 60; printf 'do''ne'; sleep 60").await;
+    hub.until_output("done").await;
+    let rows = |numbering| {
+        let ask = TerminalRows { terminal: "t".into(), numbering, from: RowNumber::new(0), count: 200 };
+        WorkerRequest::TerminalRows(ask)
+    };
+
+    let WorkerOutcome::Response(WorkerResponse::TerminalRows(told)) = hub.call(rows(Numbering::new(u64::MAX))).await
+    else {
+        panic!("the worker didn't answer an ask for rows");
+    };
+    let WorkerOutcome::Response(WorkerResponse::TerminalRows(sent)) = hub.call(rows(told.numbering)).await else {
+        panic!("the worker didn't answer an ask for rows");
+    };
+
+    assert!(told.rows.is_empty(), "{told:?}");
+    let TerminalRowsReply { numbering, first, top, from, rows } = sent;
+    assert_eq!((numbering, from), (told.numbering, first));
+    assert_eq!(u64::try_from(rows.len()).unwrap(), top.get() - first.get());
+    let lines: Vec<String> = rows
+        .iter()
+        .map(|row| row.spans.iter().map(|span| span.text.as_str()).collect())
+        .filter(|text: &String| text.starts_with("line "))
+        .collect();
+    let written: Vec<String> = (1..=lines.len()).map(|n| format!("line {n}")).collect();
+    assert_eq!(lines, written);
+    assert!(lines.len() > 30, "{lines:?}");
     hub.finish().await;
 }
 
