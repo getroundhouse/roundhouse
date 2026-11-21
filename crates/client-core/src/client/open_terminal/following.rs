@@ -117,7 +117,7 @@ impl OpenTerminal {
     }
 
     /// The view has room for `size`, which the terminal is asked to take if it isn't that size already, and again
-    /// whenever it's watched again at another size. A new size another client gives it is kept until the room changes.
+    /// on each new connection, if it's another size there. A new size another client gives it is kept until the room changes.
     /// The view's top and what's selected stay on their rows through a size it asked for, and go to the bottom with
     /// nothing selected through one another client gave.
     pub fn fit(&self, size: TerminalSize) {

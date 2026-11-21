@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 
 use super::following::*;
 use super::window::{Pointer, SelectBy};
-use crate::client::Client;
+use crate::client::{Client, SUBSCRIPTION_CAPACITY};
 use crate::drawn::{Frame, Rgb};
 use crate::stand_in_hub::{Does, listen};
 use protocol::client::terminals::{TerminalFit, TerminalTyped};
@@ -34,7 +34,12 @@ fn typed(typed: char) -> ClientRequest {
 
 /// The pictures a worker sends of a terminal that's written each of `writes` in turn, one after each.
 fn pictures(writes: &[&[u8]]) -> Vec<TerminalPicture> {
-    let mut worker = Mirror::new(SIZE).unwrap();
+    pictures_at(SIZE, writes)
+}
+
+/// As [`pictures`], of a terminal of `size`.
+fn pictures_at(size: TerminalSize, writes: &[&[u8]]) -> Vec<TerminalPicture> {
+    let mut worker = Mirror::new(size).unwrap();
     let mut sending = PictureSending::default();
     let mut pictures = Vec::new();
     for written in writes {
@@ -94,7 +99,12 @@ fn start_hub(
 
 /// A terminal that wrote each of `writes`, with a picture after each, and hasn't ended.
 fn showing(writes: &[&[u8]]) -> Watched {
-    Watched { pictures: pictures(writes), exited: false }
+    showing_at(SIZE, writes)
+}
+
+/// As [`showing`], of a terminal of `size`.
+fn showing_at(size: TerminalSize, writes: &[&[u8]]) -> Watched {
+    Watched { pictures: pictures_at(size, writes), exited: false }
 }
 
 fn text(frame: &Frame) -> Vec<String> {
@@ -263,4 +273,67 @@ fn rows_scrolled_back_to_are_fetched_and_what_is_selected_is_copied() {
 
     assert_eq!(copied.as_deref(), Ok("line 18\nline 19"));
     assert_eq!(double_clicked.as_deref(), Ok("line"));
+}
+
+/// What `asked` is sent up to what's typed as `typed`, which comes after whatever was sent before it on the connection.
+fn asked_until(asked: &flume::Receiver<ClientRequest>, typed_last: char) -> Vec<ClientRequest> {
+    let mut before = Vec::new();
+    loop {
+        let request = asked.recv_timeout(WAIT).expect("what was typed never came");
+        if request == typed(typed_last) {
+            return before;
+        }
+        before.push(request);
+    }
+}
+
+/// The sizes asked for among `requests`.
+fn fits(requests: &[ClientRequest]) -> Vec<(u16, u16)> {
+    let fit = |request: &ClientRequest| {
+        if let ClientRequest::TerminalFit(TerminalFit { size, .. }) = request {
+            Some((size.cols, size.rows))
+        } else {
+            None
+        }
+    };
+    requests.iter().filter_map(fit).collect()
+}
+
+/// A view that falls so far behind that the app's own buffer of what the hub sends fills watches again on the same
+/// connection, and keeps the size another device gave the terminal meanwhile, so the two don't take it from each
+/// other. On a new connection it asks for its own size again.
+#[test]
+fn only_a_new_connection_asks_for_the_views_size_again() {
+    let dir = tempfile::tempdir().unwrap();
+    let (first, second) = (dir.path().join("first.sock"), dir.path().join("second.sock"));
+    let other = TerminalSize { cols: 60, rows: 12 };
+    // More pictures than the buffer holds, then, on watching again, a picture at the size another device gave it.
+    let flood: Vec<&[u8]> = std::iter::repeat_n(&b"."[..], SUBSCRIPTION_CAPACITY + SUBSCRIPTION_CAPACITY / 4).collect();
+    let flooded = pictures(&flood);
+    let first_asked = start_hub(&first, false, move |watches| {
+        let pictures = if watches == 1 { flooded.clone() } else { pictures_at(other, &[b"resized elsewhere"]) };
+        Some(Watched { pictures, exited: false })
+    });
+    let second_asked = start_hub(&second, false, move |_| Some(showing_at(other, &[b"after"])));
+    let client = Client::connect(&first, "test").unwrap();
+
+    let open = OpenTerminal::start(&client, &"t".into());
+    // The view is held, as a view that doesn't keep up is, until the buffer has filled.
+    open.follow.quietly(|held| {
+        held.given.push(Given::Fit(SIZE));
+        waiting::thread::until(WAIT, "the buffer never filled", || !client.inner.lagged.lock().is_empty());
+    });
+    frame_when(&open, "the picture on watching again", |frame| text(frame)[0] == "resized elsewhere");
+    open.key(key('x'));
+
+    let on_the_first = asked_until(&first_asked, 'x');
+    let watches = on_the_first.iter().filter(|request| matches!(request, ClientRequest::TerminalWatch(_))).count();
+    assert_eq!(watches, 2, "{on_the_first:?}");
+    assert_eq!(fits(&on_the_first), [], "it took the size back after falling behind");
+
+    open.reconnect(&Client::connect(&second, "test").unwrap());
+    frame_when(&open, "the picture on the new connection", |frame| text(frame)[0] == "after");
+    open.key(key('y'));
+
+    assert_eq!(fits(&asked_until(&second_asked, 'y')), [(SIZE.cols, SIZE.rows)]);
 }

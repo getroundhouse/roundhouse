@@ -58,6 +58,10 @@ pub(in crate::client::open_terminal) struct Window {
     /// The size the view has room for, once it's laid out.
     pub(super) room: Option<TerminalSize>,
     pub(super) fitting: Option<Fitting>,
+    /// Until the first picture on a connection, which takes the terminal back to the view's own size. One that comes
+    /// as it watches again on the same connection, after falling behind, keeps a size another device gave it, as a new
+    /// size from elsewhere is kept, so two devices don't take it from each other each time either falls behind.
+    pub(super) connecting: bool,
     /// The rows the last frame drew, so a row that hasn't changed is the same `Arc`.
     pub(super) drawn: Vec<Arc<Row>>,
     pub(super) changed: bool,
@@ -75,6 +79,7 @@ impl Window {
             fetching: false,
             room: None,
             fitting: None,
+            connecting: true,
             drawn: Vec::new(),
             changed: true,
         }
@@ -96,19 +101,21 @@ impl Window {
             self.colors = colors;
             self.rows.repaint(&self.colors);
         }
+        let connected = fresh && std::mem::take(&mut self.connecting);
         let mut asks = Vec::new();
         match taken {
             Taken::Gathered | Taken::Same => {}
-            // A view that watches again, as on a new connection, takes the terminal back to its own size.
             Taken::Fresh => {
                 self.fetching = false;
-                asks.extend(self.fit_to_room(false));
+                if connected {
+                    asks.extend(self.fit_to_room(false));
+                }
                 asks.extend(self.fetch_above());
             }
             Taken::Anew => {
                 self.fetching = false;
                 self.anew(numbering, size);
-                if fresh {
+                if connected {
                     asks.extend(self.fit_to_room(false));
                 }
                 asks.extend(self.fetch_above());
@@ -122,6 +129,7 @@ impl Window {
     /// Lets go of what it holds of the history, as when the connection goes, since rows on the screen then could
     /// change before they leave it. The screen is drawn until the next picture.
     pub(in crate::client::open_terminal) fn disconnected(&mut self) {
+        self.connecting = true;
         self.rows.forget();
         self.fetching = false;
         self.fitting = None;
