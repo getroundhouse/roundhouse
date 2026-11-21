@@ -94,6 +94,16 @@ impl Counting {
         self.written(terminal)
     }
 
+    /// Lets go of every count, after Ghostty failed partway through taking in a write or a resize, so no number can be
+    /// trusted. The screen showing has a new numbering, with no rows to ask for, until the next write counts again.
+    /// The next numbering is still this one's, so no number names a row it named before.
+    pub(in crate::mirror) fn lost(&mut self) {
+        self.shell = None;
+        self.program = None;
+        let start = RowNumber::new(0);
+        self.now = Numbered { numbering: self.start(), first: start, top: start, shell: false };
+    }
+
     /// The screen showing's numbering, and where its rows are, as of the last write.
     pub(in crate::mirror) fn now(&self) -> Numbered {
         self.now

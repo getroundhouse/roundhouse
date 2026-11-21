@@ -85,19 +85,21 @@ impl Mirror {
         if let Some(counting) = &mut self.rows
             && counting.written(&mut self.terminal).is_err()
         {
-            // Ghostty fails only when it can't allocate. The next ask starts a new numbering, rather than trust this.
-            self.rows = None;
+            // Ghostty fails only when it can't allocate.
+            counting.lost();
         }
     }
 
     /// Gives the terminal a new size, which rewraps the shell's screen and its history, as the program's terminal has.
     pub fn resize(&mut self, size: Size) -> Result<(), MirrorError> {
         // Nothing here knows how big a cell is, so a program that asks the size in pixels is told nothing.
-        self.terminal.resize(size.cols, size.rows, 0, 0)?;
-        if let Some(counting) = &mut self.rows {
-            counting.resized(&mut self.terminal)?;
+        let resized = self.terminal.resize(size.cols, size.rows, 0, 0).map_err(MirrorError::from);
+        let Some(counting) = &mut self.rows else { return resized };
+        let counted = resized.and_then(|()| counting.resized(&mut self.terminal));
+        if counted.is_err() {
+            counting.lost();
         }
-        Ok(())
+        counted
     }
 
     pub fn size(&self) -> Result<Size, MirrorError> {

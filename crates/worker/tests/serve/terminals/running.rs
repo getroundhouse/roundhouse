@@ -75,7 +75,7 @@ async fn rows_of_history_are_sent_by_number() {
     let dir = tempfile::tempdir().unwrap();
     let mut hub = Hub::start(dir.path()).await;
     hub.open("t", dir.path()).await;
-    hub.type_in("t", "stty -echo; seq -f 'line %g' 1 60; printf 'do''ne'; sleep 60").await;
+    hub.type_in("t", "stty -echo; seq -f 'li''ne %g' 1 60; printf 'do''ne'; sleep 60").await;
     hub.until_output("done").await;
     let rows = |numbering| {
         let ask = TerminalRows { terminal: "t".into(), numbering, from: RowNumber::new(0), count: 200 };
@@ -94,10 +94,12 @@ async fn rows_of_history_are_sent_by_number() {
     let TerminalRowsReply { numbering, first, top, from, rows } = sent;
     assert_eq!((numbering, from), (told.numbering, first));
     assert_eq!(u64::try_from(rows.len()).unwrap(), top.get() - first.get());
+    // From the last `line `, since what the shell echoed of the command can share the first line's row. The command
+    // splits the word, so its echo isn't taken for a line.
     let lines: Vec<String> = rows
         .iter()
-        .map(|row| row.spans.iter().map(|span| span.text.as_str()).collect())
-        .filter(|text: &String| text.starts_with("line "))
+        .map(|row| row.spans.iter().map(|span| span.text.as_str()).collect::<String>())
+        .filter_map(|text| text.rfind("line ").map(|at| text[at..].to_owned()))
         .collect();
     let written: Vec<String> = (1..=lines.len()).map(|n| format!("line {n}")).collect();
     assert_eq!(lines, written);
