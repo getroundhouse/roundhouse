@@ -38,7 +38,7 @@ That server doesn't say how long a file may be kept, so a browser can go on usin
 - **A page is three columns: every page, this page, and this page's headings.** The headings go under 1180 pixels, and under 860 every page is behind one row above the page, which opens without a script.
 - **They're set to be read,** in a column no wider than 760 pixels, with a page's first paragraph larger and muted, as what it's for. Words are a step quieter than headings, and a link among them is underlined in copper, as here.
 - **The page showing is the one row that's filled,** as the row showing is in the app's Settings, and the pages that are parts of a page sit a step in from it, under a line.
-- **A block of code is on the surface the app's code blocks have, `#1e1b19`,** and a note that warns is amber, the app's colour for what needs you. Copper is the brand's, so a plain note has it.
+- **A block of code is on the surface the app's code blocks have, `#201b18`,** and a note that warns is amber, the app's colour for what needs you. Copper is the brand's, so a plain note has it.
 - **A picture is one of the app's own screens,** inside a thin edge, at its own size or smaller to fit, and it opens whole when clicked.
 - **The only script is `fan.js`, for the mark beside the name.**
 
@@ -46,4 +46,5 @@ That server doesn't say how long a file may be kept, so a browser can go on usin
 
 - **GitHub Pages serves it from `main`.** `.github/workflows/site.yml` publishes `site/` whenever it changes, put together by `tools/site/assemble.py`, which leaves this file out, with the guide built into its `docs/` by `tools/guide`. It publishes again when the guide, the screens its pages show, or the tool change.
 - **Its address is `https://getroundhouse.dev`,** the custom domain in the repo's Pages settings. The page and the scripts don't name it: the deploy reads it from the `SITE_URL` secret, to add the link-preview tags that need it, so the site can move without a change here. `tools/site/assemble.py OUT https://example.com` shows the page as it's published, without the guide, which `tools/guide` builds into `OUT/docs`.
+- **The favicon and the touch icon are the app icon's own drawings,** `icon_32x32@2x.png` and `icon_256x256.png` from `apps/desktop/icons/working.iconset/` copied as `assets/favicon.png` and `assets/apple-touch-icon.png`, so the site and the guide show the icon the app has. Copy them again when the icon changes. *Unconfirmed.*
 - **The link preview's picture, `assets/card.png`, is the hero held still,** without the nav and the button, at 1200 by 630. Take it again when the hero changes.

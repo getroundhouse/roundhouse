@@ -1,19 +1,19 @@
 /* The app's own palette, from the table of colours in docs/spec/look.md. */
 :root {
-  --pane: #151312;
-  --sidebar: #1a1715;
-  --raised: #24201e;
-  --inset: #1e1b19;
-  --edge: #2a2624;
-  --fg: #ebe7e3;
-  --muted: #a39d97;
-  --faint: #6f6964;
+  --pane: #140f0c;
+  --sidebar: #17120f;
+  --raised: #26211e;
+  --inset: #201b18;
+  --edge: #2d2724;
+  --fg: #eee6e1;
+  --muted: #b8b1ac;
+  --faint: #7c7671;
   --copper: #d08a5c;
   --red: #ee6f64;
   --open: #3fb950;
   --merged: #a371f7;
   --primary: #f2eee9;
-  --primary-fg: #1d1a18;
+  --primary-fg: #1a1512;
 
   --sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
   --mono: ui-monospace, Menlo, SFMono-Regular, Consolas, monospace;
@@ -257,8 +257,8 @@ canvas.fan {
 }
 
 .button.outline:hover {
-  background: #211e1c;
-  border-color: #353130;
+  background: #201b18;
+  border-color: #332d2a;
 }
 
 .button.small {

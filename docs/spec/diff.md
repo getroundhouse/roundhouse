@@ -44,7 +44,7 @@ A workspace's changes against its base, listed in a sidebar on the right, each f
 
   ![The button that copies the path](screens/file-path-copy.png)
 
-- **A file's changes show with git's three lines either side, and the lines between fold into a row that says how many there are,** rather than git's `@@` lines. The row is on the code blocks' surface, `#1e1b19`, so it stands out from the lines either side without looking raised. Arrows in the row's line numbers show 20 more at a time, up from the change below or down from the change above, or all of them at once when there are no more than 20 between two changes, so the code around a change can be read without leaving the diff. Each arrow says what it shows when it's hovered. *Unconfirmed.*
+- **A file's changes show with git's three lines either side, and the lines between fold into a row that says how many there are,** rather than git's `@@` lines. The row is on the code blocks' surface, `#201b18`, so it stands out from the lines either side without looking raised. Arrows in the row's line numbers show 20 more at a time, up from the change below or down from the change above, or all of them at once when there are no more than 20 between two changes, so the code around a change can be read without leaving the diff. Each arrow says what it shows when it's hovered. *Unconfirmed.*
 
   **A file's diff in the file tab, with a comment on a changed line, and the lines far from the change folded.** *Unconfirmed.*
 

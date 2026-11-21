@@ -85,7 +85,7 @@
 
 .guide-nav a:hover {
   color: var(--fg);
-  background: #1d1a18;
+  background: #1a1512;
 }
 
 /* The page showing is the one row that's filled, as the row showing is in the app's Settings. */
@@ -329,8 +329,8 @@
 }
 
 .guide-pager a:hover {
-  background: #1d1a18;
-  border-color: #353130;
+  background: #1a1512;
+  border-color: #332d2a;
 }
 
 .guide-pager a.after {
