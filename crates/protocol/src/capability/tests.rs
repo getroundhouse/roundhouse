@@ -383,4 +383,6 @@ fn a_reports_keeper_is_where_its_state_is_kept() {
     assert_eq!(Report::Models { models: vec![] }.keeper(), Keeper::Session);
     assert_eq!(aside.keeper(), Keeper::Log);
     assert_eq!(Report::ThinkingProgress { tokens: 1 }.keeper(), Keeper::Shown);
+    let covered = Report::Covered { wait: output::CoverWait(1) };
+    assert_eq!((covered.needs(), covered.keeper()), (Some(output::Capability::CoverLines.into()), Keeper::Shown));
 }

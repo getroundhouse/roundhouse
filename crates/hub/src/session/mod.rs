@@ -16,6 +16,7 @@ mod chat_settings;
 mod commands;
 mod controls;
 mod conversation;
+mod cover_lines;
 mod decisions;
 mod ingest;
 mod limits;

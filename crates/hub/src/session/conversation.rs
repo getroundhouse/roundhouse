@@ -62,10 +62,13 @@ pub(super) fn left_conversation(had: Option<&DeviceId>, now: &Interaction) -> bo
 }
 
 /// Puts `now` on the live session, and says whether the conversation left the device that had it, as
-/// [`left_conversation`] says.
+/// [`left_conversation`] says. A line said for the agent goes with the mode, and stays when the conversation moves.
 pub(super) fn set_interaction(state: &mut LiveState, now: Interaction) -> bool {
     let left = left_conversation(state.interaction.device().map(|had| &had.id), &now);
     state.interaction = now;
+    if state.interaction.is_typing() {
+        super::cover_lines::nobody_listening(state);
+    }
     left
 }
 
