@@ -18,7 +18,7 @@ pub(super) struct Shown {
 impl AppView {
     /// What Settings shows of the hub, and the hub it asks for a change.
     pub(super) fn settings_of_hub(&self) -> OfHub {
-        let asking = self.client().zip(self.feed.clone()).map(|(client, feed)| Asking { client, feed });
+        let asking = self.client().zip(self.feed()).map(|(client, feed)| Asking { client, feed });
         OfHub { records: self.records.clone(), asking }
     }
 

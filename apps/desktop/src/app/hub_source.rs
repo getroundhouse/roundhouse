@@ -3,12 +3,15 @@
 use std::path::PathBuf;
 
 use anyhow::Context as _;
-use client_core::{Client, ClientError, IdleStop, Introduction, Restart};
+use client_core::link::{Connect, Lost, Refused};
+use client_core::{Client, ClientError, HubAdmin, IdleStop, Introduction, Restart};
 use gpui_kit::Result;
 use local_hub::Daemon;
 use protocol::Build;
 use protocol::client::HubStatus;
 use protocol::paths::Paths;
+
+use super::{ConnectionFailure, Unconnected};
 
 /// Where to find the hub, and how to start one if none is running.
 #[derive(Clone, Debug)]
@@ -83,7 +86,7 @@ impl HubSource {
     /// word on whether it's idle, and one that's busy after all is kept. One restarting that's still finishing, as with
     /// a setup script running, is used until it goes, and then the app connects again. The panes stay, with what's
     /// typed in them. Also returns the hub's status as it connected.
-    pub(super) fn connect(&self) -> Result<(Client, Option<HubStatus>), ClientError> {
+    fn connect_or_replace(&self) -> Result<(Client, Option<HubStatus>), ClientError> {
         if let Some(remote) = &self.remote {
             return Client::connect_remote(remote, "desktop").map(|client| (client, None));
         }
@@ -113,6 +116,31 @@ impl HubSource {
             None => Introduction::from("desktop"),
         };
         local_hub::connect_or_start(&self.paths, &self.daemon, introduction)
+    }
+}
+
+/// The link connects with this. A failure of this machine's hub waits for a person, since only one can start a hub
+/// that failed to start, and one across a protocol break says which hub is running, so the app can offer to restart it.
+impl Connect for HubSource {
+    type With = Option<HubStatus>;
+    type Failure = Unconnected;
+
+    fn connect(&mut self) -> Result<(Client, Option<HubStatus>), Refused<Unconnected>> {
+        let local = self.remote.is_none();
+        self.connect_or_replace().map_err(|e| {
+            if !local {
+                return Refused::by(&e, Unconnected::Failed(ConnectionFailure::of(false, &e)));
+            }
+            let across = e.is_version_mismatch().then(|| HubAdmin::connect(&self.paths.socket)?.status());
+            match across {
+                Some(Ok(status)) => Refused::for_a_person(Unconnected::AcrossABreak(status)),
+                Some(Err(_)) | None => Refused::for_a_person(Unconnected::Failed(ConnectionFailure::of(true, &e))),
+            }
+        })
+    }
+
+    fn lost(&self, lost: &Lost) -> Unconnected {
+        Unconnected::Failed(ConnectionFailure::of_follow(self.remote.is_none(), lost.to_string()))
     }
 }
 

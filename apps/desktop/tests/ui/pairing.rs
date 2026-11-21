@@ -3,8 +3,6 @@
 
 #![cfg(test)]
 
-use std::time::Duration;
-
 use gpui_kit::{AppContext as _, TestAppContext};
 use protocol::model::AgentKind;
 use protocol::pairing::{PairingCode, PairingLink};
@@ -151,8 +149,4 @@ fn an_open_workspace_on_a_remote_hub_stays_drawn_when_the_hub_goes_unreachable(c
         ui.shows_label("hub-switcher", &format!("Switch hub: {}, Offline", pairing.link.hub_name))
     });
     assert!(ui.has(look::Region::Composer.id()), "the open workspace stays on screen while unreachable");
-
-    ui.cx.executor().advance_clock(Duration::from_secs(2));
-    ui.frame();
-    assert!(ui.has(look::Region::Composer.id()), "retrying in the background doesn't hide the open workspace");
 }

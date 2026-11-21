@@ -5,9 +5,10 @@ use crate::busy::Busy;
 use crate::checkout::Checkout;
 use crate::new_workspace::NewWorkspaceDialog;
 use crate::workspace_pane::WorkspacePane;
+use client_core::link::Link;
 use client_core::records::Snapshot;
-use client_core::{Client, Drafts, HubAdmin, RecordsFeed};
-use gpui_kit::{AnyWindowHandle, AppContext, Context, Entity, FocusHandle, ScrollHandle, Task, Window};
+use client_core::{Client, Drafts, RecordsFeed};
+use gpui_kit::{AnyWindowHandle, Context, Entity, FocusHandle, ScrollHandle, Task, Window};
 use hub_source::HubSource;
 use protocol::client::HubStatus;
 use protocol::model::{SessionId, Workspace, WorkspaceId};
@@ -41,21 +42,20 @@ pub struct AppView {
     pub(crate) hub: HubSource,
     pub(super) visible: bool,
     pub(super) presentation: super::presentation::Pending,
-    pub(super) connection_attempt: u32,
     /// The checkout this build is from, which the sidebar names, with why it's open.
     pub(crate) checkout: Option<Checkout>,
-    /// Set by [`Self::set_connection`], so the panes are told, and by `feed_changed` once a new one is ready.
-    connection: Connection,
+    /// The connection to the hub, made again whenever it goes, and the hub's records, kept on every connection.
+    pub(super) link: Link<HubSource>,
+    /// What's shown of how the link stands. Set by [`Self::set_connection`], so the panes are told, and by
+    /// `link_changed` once a new connection is ready.
+    pub(super) connection: Connection,
     /// Whether the window was in front when the panes were last told whether they're drawn.
     pub(super) in_front: bool,
     /// Client-core's copy of the hub's records, which `records` shows.
     /// The hub's chats' conversations on this Mac, which every pane of its draws the bar of.
     pub(super) conversations: Entity<conversation::Conversations>,
-    pub(super) feed: Option<RecordsFeed>,
     /// Keeps what's typed in each chat on the hub, for every pane, across connections.
     pub(super) drafts: Option<Drafts>,
-    /// A new connection, until client-core has caught up on it.
-    pub(super) joining: Option<Client>,
     pub(super) restartable_hub: Option<restarts::OlderHub>,
     /// What's shown of the hub's records, as of client-core's last change to them.
     pub(super) records: Snapshot,
@@ -90,8 +90,7 @@ pub struct AppView {
     /// Where keys go while Settings shows.
     pub(super) settings_focus: FocusHandle,
     pub(super) window: AnyWindowHandle,
-    /// Held so these tasks stop when the view goes away.
-    pub(super) connecting: Option<Task<()>>,
+    /// Listening to the link, held so it stops when the view goes away.
     pub(super) following: Option<Task<()>>,
     /// What the update's card, or the dialog before restarting the hub now, asks before going ahead, while it asks.
     pub update_question: Option<UpdateQuestion>,
@@ -133,19 +132,18 @@ impl AppView {
         crate::settings::observe(cx, |_, cx| cx.notify()).detach();
         Self::observe_activation(window, cx);
         quitting::ask_first(window, cx);
+        let link = Link::start(hub.clone());
         let mut this = Self {
             hub,
+            link,
             visible: true,
             presentation: Vec::new(),
-            connection_attempt: 0,
             checkout,
             connection: Connection::Connecting,
             // Until the window says it's in front, so nothing is read that may not have been seen.
             in_front: false,
-            feed: None,
             conversations: crate::conversing::conversations(cx),
             drafts: None,
-            joining: None,
             restartable_hub: None,
             records: Snapshot::default(),
             selection: Selection::default(),
@@ -166,7 +164,6 @@ impl AppView {
             settings: None,
             settings_focus: cx.focus_handle(),
             window: window.window_handle(),
-            connecting: None,
             following: None,
             update_question: None,
             hub_update_asked: None,
@@ -182,7 +179,7 @@ impl AppView {
             telling: notifying::Telling::default(),
             chat_to_show: None,
         };
-        this.connect(cx);
+        this.follow_link(cx);
         this
     }
 
@@ -223,130 +220,12 @@ impl AppView {
 
     /// Client-core's copy of the hub's records, once it's following a hub.
     pub fn feed(&self) -> Option<RecordsFeed> {
-        self.feed.clone()
+        self.link.feed()
     }
 
     pub fn show_error(&mut self, message: impl Into<String>, cx: &mut Context<Self>) {
         self.error = Some(message.into());
         cx.notify();
-    }
-
-    /// Connects. Everything already shown carries on on the new connection, and the first time, client-core
-    /// starts following the hub's records. Comes back here if the connection goes, which starts a new hub.
-    pub fn connect(&mut self, cx: &mut Context<Self>) {
-        self.connection_attempt = 0;
-        self.show_connecting(cx);
-        self.attempt_connect(cx);
-    }
-
-    pub(super) fn attempt_connect(&mut self, cx: &mut Context<Self>) {
-        // What it was connected to says nothing about what it connects to next.
-        (self.restartable_hub, self.finishing, self.looking, self.joining) = (None, None, None, None);
-        self.drop_restart_question(cx);
-        let hub = self.hub.clone();
-        let socket = hub.paths.socket.clone();
-        let local = hub.remote.is_none();
-        let delay = std::time::Duration::from_secs(1_u64 << self.connection_attempt.min(5));
-        self.connection_attempt = self.connection_attempt.saturating_add(1);
-        self.connecting = Some(cx.spawn(async move |this, cx| {
-            let connected = cx.background_spawn(async move { hub.connect() }).await;
-            let (client, status) = match connected {
-                Ok(connected) => connected,
-                Err(e) => {
-                    let failure = ConnectionFailure::of(local, &e);
-                    let retry = matches!(failure, ConnectionFailure::Unreachable { .. });
-                    let status = if local && e.is_version_mismatch() {
-                        cx.background_spawn(async move { HubAdmin::connect(&socket)?.status() }).await.ok()
-                    } else {
-                        None
-                    };
-                    let _ = this.update(cx, |t, cx| {
-                        let unchanged =
-                            status.is_none() && matches!(&t.connection, Connection::Failed(prev) if prev == &failure);
-                        if !unchanged {
-                            let connection = status.map_or(Connection::Failed(failure), Connection::AcrossABreak);
-                            t.set_connection(connection, cx);
-                            cx.notify();
-                        }
-                    });
-                    if retry {
-                        cx.background_executor().timer(delay).await;
-                        let _ = this.update(cx, AppView::attempt_connect);
-                    }
-                    return;
-                }
-            };
-            let _ = this.update(cx, |t, cx| t.connected(client, status.as_ref(), cx));
-        }));
-    }
-
-    /// Ready once client-core has caught up on this connection, so the sidebar never shows empty.
-    pub(super) fn connected(&mut self, client: Client, status: Option<&HubStatus>, cx: &mut Context<Self>) {
-        self.connection_attempt = 0;
-        // Of the hub before, if this is another, or of this one before it restarted on the release it was asked for.
-        self.hub_update_asked = None;
-        self.keep_drafts_on(&client, cx);
-        if let Some(feed) = &self.feed {
-            feed.reconnect(&client);
-        } else {
-            let feed = RecordsFeed::start(&client);
-            self.follow(feed.clone(), cx);
-            self.show_pull_requests(&feed, cx);
-            self.feed = Some(feed);
-        }
-        self.conversations.update(cx, |conversations, _| conversations.connected(&client));
-        // Every pane stays as it was, with whatever's typed in it, and carries on here.
-        for pane in self.panes.values() {
-            pane.update(cx, |p, cx| p.reconnect(&client, cx));
-        }
-        self.reconnect_dialog(&client, cx);
-        self.joining = Some(client);
-        let Some(status) = status else { return };
-        self.keep_workers_of(status, cx);
-        let build = self.hub.build_number;
-        let restarting = hub_source::restarts_at_once(status, build);
-        let older = restarts::OlderHub { pid: status.pid, restarting };
-        self.restartable_hub = hub_source::may_restart(status, build).then_some(older);
-        self.finishing = self.restartable_hub.map(|_| Self::keep_finishing(cx));
-    }
-
-    /// Shows what client-core holds whenever it changes, and connects again when its connection goes.
-    pub(super) fn follow(&mut self, feed: RecordsFeed, cx: &mut Context<Self>) {
-        self.following = Some(cx.spawn(async move |this, cx| {
-            let changed = feed.changed().clone();
-            while changed.recv_async().await.is_ok() {
-                if this.update(cx, |t, cx| t.feed_changed(&feed, cx)).is_err() {
-                    return;
-                }
-            }
-        }));
-    }
-
-    pub(super) fn feed_changed(&mut self, feed: &RecordsFeed, cx: &mut Context<Self>) {
-        let errors = feed.take_errors();
-        if !feed.connected() {
-            // Following failed on a connection that's there, which needs a person. A connection that went
-            // is made again, even one still being joined, such as an older hub's that went as it restarted.
-            if let Some(error) = errors.first() {
-                self.joining = None;
-                self.drop_restart_question(cx);
-                let failure = ConnectionFailure::of_follow(self.hub.remote.is_none(), error.to_string());
-                self.set_connection(Connection::Failed(failure), cx);
-                cx.notify();
-            } else if matches!(self.connection, Connection::Ready(_))
-                || self.joining.as_ref().is_some_and(Client::is_disconnected)
-            {
-                self.connect(cx);
-            }
-            return;
-        }
-        if let Some(client) = self.joining.take() {
-            self.connection = Connection::Ready(client);
-        }
-        if let Some(error) = errors.first() {
-            self.show_error(error.to_string(), cx);
-        }
-        self.refresh(feed, cx);
     }
 
     /// What's shown of client-core's copy of the hub's records, as of its last change.

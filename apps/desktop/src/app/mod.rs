@@ -1,5 +1,5 @@
 //! The window: the sidebar on the left and the selected workspace beside it. Shows the hub's records,
-//! which client-core keeps current, and is the only place that connects and reconnects.
+//! which client-core keeps current, and how client-core's link to the hub stands, giving the link its way to connect.
 
 mod build_line;
 mod corner;
@@ -11,6 +11,7 @@ mod home;
 mod hub_source;
 pub(crate) mod hubs;
 mod keeping_workers;
+mod linking;
 mod menu_button;
 mod notifying;
 pub(crate) mod pairing;
@@ -36,7 +37,7 @@ mod workspaces;
 pub use build_line::{Agents, BuildLine, Updating};
 #[cfg(any(test, feature = "testing"))]
 pub use device_name::the_device_name_is;
-pub use failure::ConnectionFailure;
+pub use failure::{ConnectionFailure, Unconnected};
 pub use hub_source::HubSource;
 pub use quitting::Quitting;
 pub(crate) use quitting::quit;

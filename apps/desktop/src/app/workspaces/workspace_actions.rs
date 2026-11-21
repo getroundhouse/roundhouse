@@ -25,7 +25,7 @@ impl AppView {
             if !crate::sidebar::lists(shown.workspace()) {
                 return;
             }
-            let (Some(records), Some(drafts)) = (self.feed.clone(), self.drafts.clone()) else { return };
+            let (Some(records), Some(drafts)) = (self.feed(), self.drafts.clone()) else { return };
             let conversations = self.conversations.clone();
             let pane = cx.new(|cx| WorkspacePane::new(client, records, drafts, conversations, shown, window, cx));
             let (busy, retitling) = (self.busy.clone(), self.retitling.contains(&id));

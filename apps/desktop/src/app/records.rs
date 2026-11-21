@@ -14,7 +14,7 @@ impl AppView {
     /// Brings what's shown up to date with client-core's copy now, rather than once the feed says it changed, for what's
     /// done next with a record a reply carried, which client-core took in before the reply came.
     pub(super) fn read_records(&mut self, cx: &mut Context<Self>) {
-        let Some(feed) = self.feed.clone() else { return };
+        let Some(feed) = self.feed() else { return };
         self.refresh(&feed, cx);
     }
 
