@@ -15,10 +15,10 @@ fn key(key: Key) -> Typed {
 }
 
 /// A program that reads `count` bytes as they're typed and writes each in hex, once it has set what `modes` set, and
-/// said so.
+/// said so, and says once the terminal is back as the shell reads lines, for what's typed next.
 fn reading(modes: &str, count: usize) -> String {
     // The quotes keep the shell's echo of the line from reading as its having said so.
-    format!("stty raw -echo; printf '{modes}rea''dy'; head -c {count} | od -An -tx1 | tr -s ' '; stty sane")
+    format!("stty raw -echo; printf '{modes}rea''dy'; head -c {count} | od -An -tx1 | tr -s ' '; stty sane; echo do''ne")
 }
 
 /// The up arrow is read as the program asked in what it wrote just before, which only the worker's copy of the
@@ -50,6 +50,7 @@ async fn the_wheel_is_read_as_arrows_only_on_a_programs_screen_that_asked() {
     press(&mut hub, Typed::Wheel { lines: -3 }).await;
     press(&mut hub, Typed::Text { text: "é".into() }).await;
     hub.until_output("c3 a9").await;
+    hub.until_output("done").await;
 
     hub.type_in("t", &reading(r"\033[?1049h\033[?1007h", 7)).await;
     hub.until_output("ready").await;
