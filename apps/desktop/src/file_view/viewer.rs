@@ -3,7 +3,7 @@ use super::{lines, reading};
 use crate::file_header::file_header;
 use crate::file_image::{FileImage, Placed, fitted};
 use crate::shared_choice::{Chosen, chosen, switch};
-use crate::{StepBack, StepOn};
+use crate::{SelectStepBack, SelectStepOn, StepBack, StepOn};
 use client_core::Client;
 use gpui_kit::component::{h_flex, v_flex};
 use gpui_kit::{
@@ -222,12 +222,18 @@ impl Render for FileView {
                     .into_any_element()
             }
         };
-        // A rendered Markdown file steps between its headings.
+        // A rendered Markdown file steps between its headings, and moves the end of what's selected to one with Shift.
         v_flex()
             .track_focus(&self.focus)
             .size_full()
             .on_action(cx.listener(|t, _: &StepBack, _, cx| t.document.update(cx, |d, cx| d.step(Way::Back, cx))))
             .on_action(cx.listener(|t, _: &StepOn, _, cx| t.document.update(cx, |d, cx| d.step(Way::On, cx))))
+            .on_action(cx.listener(|t, _: &SelectStepBack, window, cx| {
+                t.document.update(cx, |d, cx| d.select_step(Way::Back, window, cx));
+            }))
+            .on_action(cx.listener(|t, _: &SelectStepOn, window, cx| {
+                t.document.update(cx, |d, cx| d.select_step(Way::On, window, cx));
+            }))
             .children(self.header(cx))
             .child(body)
     }

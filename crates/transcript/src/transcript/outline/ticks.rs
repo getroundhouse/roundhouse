@@ -81,6 +81,14 @@ impl Line {
     pub(super) fn is_prompt(&self) -> bool {
         matches!(self.kind, Kind::Prompt { .. })
     }
+
+    /// The prompt it's the line of, if it's a prompt's.
+    pub(super) fn prompt(&self) -> Option<&PromptLine> {
+        match &self.kind {
+            Kind::Prompt { line, .. } => Some(line),
+            Kind::Answer { .. } | Kind::Compaction(_) => None,
+        }
+    }
 }
 
 /// The prompts and compactions as the outline last read them, in the order they're drawn in the chat, and the list's

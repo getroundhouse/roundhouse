@@ -26,7 +26,7 @@ use transcript::{PROPOSAL_ICON, ProposalEvent, ProposalRequest, ProposalView, Wa
 use super::band::Band;
 use super::view::chat_title;
 use super::{PaneEvent, Showing, WorkspacePane, tab};
-use crate::{StepBack, StepOn};
+use crate::{SelectStepBack, SelectStepOn, StepBack, StepOn};
 
 /// The proposal tab, while it's open, and which proposals the pane has seen.
 #[derive(Default)]
@@ -222,15 +222,21 @@ impl WorkspacePane {
         let proposal = tab.view.read(cx).proposal().clone();
         let from = self.shown.session(&tab.session).map(|chat| (chat.id.clone(), chat_title(chat).to_string()));
         let view = tab.view.clone();
-        let (back, on) = (view.clone(), view);
+        let (back, on, select_back, select_on) = (view.clone(), view.clone(), view.clone(), view);
         v_flex()
             .region(Region::Proposal)
             .flex_1()
             .min_h_0()
             .w_full()
-            // The page steps between the parts of its outline.
+            // The page steps between the parts of its outline, and moves the end of what's selected to one with Shift.
             .on_action(move |_: &StepBack, _, cx| back.update(cx, |proposal, cx| proposal.step(Way::Back, cx)))
             .on_action(move |_: &StepOn, _, cx| on.update(cx, |proposal, cx| proposal.step(Way::On, cx)))
+            .on_action(move |_: &SelectStepBack, window, cx| {
+                select_back.update(cx, |proposal, cx| proposal.select_step(Way::Back, window, cx));
+            })
+            .on_action(move |_: &SelectStepOn, window, cx| {
+                select_on.update(cx, |proposal, cx| proposal.select_step(Way::On, window, cx));
+            })
             .child(
                 Band {
                     id: "proposal",

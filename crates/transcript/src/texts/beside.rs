@@ -1,4 +1,5 @@
-//! Which text is beside another in the chat's order, for a key that moves the end of what's selected into the next.
+//! Which text is beside another in the chat's order, for a key that moves the end of what's selected into the next, and
+//! which is first in what one place draws, for a key that moves it to the start of a prompt, a heading or a part.
 
 use std::ops::Bound;
 
@@ -18,5 +19,18 @@ impl Texts {
             Way::On => store.places.within((Bound::Excluded(at), Bound::Unbounded)).find_map(found),
             Way::Back => store.places.within(..at).rev().find_map(found),
         }
+    }
+
+    /// The first text at `at` or after it that what `at` is in draws, that isn't hidden and shows something, if one
+    /// has been drawn there.
+    pub(crate) fn first_at(&self, at: TextAt) -> Option<TextKey> {
+        let store = self.0.borrow();
+        let shows = |id: &TextKey| {
+            let leaves =
+                store.texts.get(id).filter(|_| !store.hidden.contains(id)).and_then(super::cache::Text::leaves);
+            leaves.is_some_and(|leaves| leaves.last_leaf().is_some())
+        };
+        let from = store.places.within((Bound::Included(at), Bound::Unbounded));
+        from.take_while(|(place, _)| place.of == at.of).find(|(_, id)| shows(id)).map(|(_, id)| id.clone())
     }
 }

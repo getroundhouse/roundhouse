@@ -23,6 +23,8 @@ pub(super) struct Part {
     /// Whether the outline sets it in, under its question, which it does only when there's more than one question.
     pub(super) under: bool,
     pub(super) element: AnyElement,
+    /// Where its first text is among the page's, for a key that moves the end of what's selected to its start.
+    pub(super) first: usize,
 }
 
 /// What draws the page's texts, each in its place, in the order they're drawn, and selected with the rest.
@@ -83,16 +85,18 @@ pub(super) fn parts(
     let mut parts = Vec::new();
     if !revision.changed.trim().is_empty() {
         let before = RevisionNumber(revision.number.0.saturating_sub(1));
+        let first = writing.drawn;
         let changed = writing.markdown("changed", &revision.changed);
         let heading = div().typeset(look::Type::Heading).child(format!("What changed since revision {before}"));
         let element = section(heading).child(changed).into_any_element();
-        parts.push(Part { label: "What changed".into(), under: false, element });
+        parts.push(Part { label: "What changed".into(), under: false, element, first });
     }
     let proposed = &revision.proposed;
     if !proposed.context.trim().is_empty() {
+        let first = writing.drawn;
         let context = writing.markdown("context", &proposed.context);
         let element = section(heading("Context")).child(context).into_any_element();
-        parts.push(Part { label: "Context".into(), under: false, element });
+        parts.push(Part { label: "Context".into(), under: false, element, first });
     }
     let several = proposed.questions.len() > 1;
     for (at, question) in proposed.questions.iter().enumerate() {
@@ -102,8 +106,9 @@ pub(super) fn parts(
             let recommended = question.recommended.as_ref().is_some_and(|r| r.option == place);
             let label = format!("{letter} · {}", option.label.trim()).into();
             let choose = choosing.button(at, place, letter);
+            let first = writing.drawn;
             let element = option_card(at, (place, letter), option, recommended, choose, writing, cx);
-            parts.push(Part { label, under: several, element });
+            parts.push(Part { label, under: several, element, first });
         }
         if let Some(part) = recommendation(at, question, writing) {
             parts.push(Part { under: several, ..part });
@@ -114,6 +119,7 @@ pub(super) fn parts(
 
 /// What a question asks: its header, its text, and what compares its options, such as a table.
 fn asked(at: usize, question: &ProposalQuestion, writing: &mut Writing<'_>, cx: &App) -> Part {
+    let first = writing.drawn;
     let colors = look::colors(cx);
     let header =
         div().typeset(look::Type::Detail).text_color(colors.text_muted).child(question.header.trim().to_string());
@@ -121,7 +127,8 @@ fn asked(at: usize, question: &ProposalQuestion, writing: &mut Writing<'_>, cx: 
     let details =
         (!question.details.trim().is_empty()).then(|| writing.markdown(&format!("details-{at}"), &question.details));
     let element = section(v_flex().gap(look::Space::XSmall).child(header).child(text)).children(details);
-    Part { label: question.header.trim().to_string().into(), under: false, element: element.into_any_element() }
+    let label = question.header.trim().to_string().into();
+    Part { label, under: false, element: element.into_any_element(), first }
 }
 
 /// An option, as a card: its letter, its label, whether it's recommended, Choose at its end, its description and its
@@ -167,10 +174,11 @@ fn recommendation(at: usize, question: &ProposalQuestion, writing: &mut Writing<
     let recommended = question.recommended.as_ref()?;
     let (letter, option) = question.named(recommended.option)?;
     let named = format!("{letter} · {}", option.label.trim());
+    let first = writing.drawn;
     let named = div().typeset(look::Type::Body).child(writing.plain(&format!("recommended-{at}"), &named));
     let why = (!recommended.why.trim().is_empty()).then(|| writing.markdown(&format!("why-{at}"), &recommended.why));
     let element = section(heading("Recommendation")).child(named).children(why).into_any_element();
-    Some(Part { label: "Recommendation".into(), under: false, element })
+    Some(Part { label: "Recommendation".into(), under: false, element, first })
 }
 
 /// A part with its heading, and the space below it that sets it apart from the next.

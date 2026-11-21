@@ -253,7 +253,7 @@ pub(super) fn bounds(ui: &mut Ui<'_>, id: ElementId) -> Bounds<Pixels> {
 }
 
 /// Presses the button at `at`, and lets it go, as the `clicks`th click in a row.
-pub(super) fn click(ui: &mut Ui<'_>, at: gpui_kit::Point<Pixels>, clicks: usize) {
+pub(in crate::scrolling) fn click(ui: &mut Ui<'_>, at: gpui_kit::Point<Pixels>, clicks: usize) {
     let button = MouseButton::Left;
     press(ui, MouseDownEvent { button, position: at, click_count: clicks, ..Default::default() });
     press(ui, MouseUpEvent { button, position: at, click_count: clicks, ..Default::default() });
@@ -309,7 +309,7 @@ pub(super) fn on_the_reply_saying(ui: &Ui<'_>, window: Bounds<Pixels>, text: &st
 
 /// What's selected, as a copy has it, with the keys the kit copies with where the tests run. The clipboard's emptied
 /// first, so a copy of nothing doesn't read as the last.
-pub(super) fn copy(ui: &mut Ui<'_>) -> String {
+pub(in crate::scrolling) fn copy(ui: &mut Ui<'_>) -> String {
     ui.cx.write_to_clipboard(ClipboardItem::new_string(String::new()));
     ui.press("secondary-c");
     ui.cx.read_from_clipboard().and_then(|item| item.text()).unwrap_or_default()

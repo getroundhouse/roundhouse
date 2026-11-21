@@ -20,7 +20,12 @@ fn seq_in(row: usize) -> Seq {
 }
 
 fn prompt_at(row: usize, number: usize) -> Line {
-    Line { kind: Kind::Prompt { line: PromptLine::new(seq_in(row), "", 0), number }, row }
+    prompt_saying(row, number, "", 0)
+}
+
+/// A prompt drawn in `row` that says `text` and carries `files` files.
+fn prompt_saying(row: usize, number: usize, text: &str, files: u32) -> Line {
+    Line { kind: Kind::Prompt { line: PromptLine::new(seq_in(row), text, files), number }, row }
 }
 
 fn compaction_at(row: usize) -> Line {
@@ -150,5 +155,31 @@ fn a_step_goes_from_the_line_at_the_bottom_or_the_end_to_the_line_beside_it() {
 
     for (name, reading, way, want) in steps {
         assert_eq!(step(&lines, reading, way), want, "{name}");
+    }
+}
+
+/// Which prompts a step with Shift stops at: those in the run of rows loaded around where it goes from, and of those,
+/// the ones with words, with the outline's lines in rows 0, 10, 15, 20 and 30, the third a compaction and the fourth
+/// a prompt that only carries a file, rows 12 to 17 not loaded, and the list's tail in row 40.
+#[test]
+fn a_step_with_shift_stops_at_the_prompts_with_words_loaded_around_it() {
+    let lines = vec![
+        prompt_saying(0, 1, "Keep the ledger", 0),
+        prompt_saying(10, 2, "And the rest", 0),
+        compaction_at(15),
+        prompt_saying(20, 3, "", 1),
+        prompt_saying(30, 4, "Hold the train", 1),
+    ];
+    let (loaded, tail) = ([0..12, 18..40], 40);
+    let cases = [
+        ("from the first run, its prompts", &loaded[..], 5, vec![0, 10]),
+        ("from the last, its prompt with words, not past the rows that aren't loaded", &loaded, 35, vec![30]),
+        ("from a row that isn't loaded, none", &loaded, 14, vec![]),
+        ("from the tail, the run that reaches it", &loaded, tail, vec![30]),
+        ("from the tail with rows before it not loaded, none", &[0..12, 18..35], tail, vec![]),
+    ];
+
+    for (name, loaded, row, want) in cases {
+        assert_eq!(selecting_stops(&lines, loaded, tail, row), want, "{name}");
     }
 }

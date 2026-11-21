@@ -10,7 +10,7 @@ use gpui_kit::{
 use super::changes::{Change, changed};
 use crate::rows::in_column;
 use crate::selection::{Scrolled, Scroller, Selection, Way};
-use crate::stops::stop_beside;
+use crate::stops::{Within, stop_beside};
 use crate::texts::{Of, TextAt, Texts, TopBlock, Written, top_blocks};
 
 /// How far past the window the list draws blocks, so one scrolled into sight is drawn already.
@@ -104,13 +104,27 @@ impl Document {
     /// Steps it `way` to the heading before the top or after it, with that at the top, as `Option-Up` and
     /// `Option-Down` do.
     pub fn step(&mut self, way: Way, cx: &mut Context<Self>) {
-        let Some(shown) = &self.shown else { return };
-        let headings = shown.blocks.iter().enumerate().filter(|(_, (block, _))| block.heading).map(|(ix, _)| ix);
         let top = self.list.logical_scroll_top();
-        if let Some(heading) = stop_beside(headings, top.item_ix, top.offset_in_item, way) {
+        if let Some(heading) = stop_beside(self.headings(), top.item_ix, Within::scrolled(top.offset_in_item), way) {
             self.list.scroll_to(ListOffset { item_ix: heading, offset_in_item: px(0.) });
             cx.notify();
         }
+    }
+
+    /// Moves the end of what's selected `way` to the start of a heading: back to the one before it, or to the one it's
+    /// in if it isn't at its start already, or on to the one after, as `Option-Shift-Up` and `Option-Shift-Down` do.
+    pub fn select_step(&self, way: Way, window: &mut Window, cx: &mut Context<Self>) {
+        let Some((end, within)) = self.selection.far_end() else { return };
+        let Of::Document(block) = end.of else { return };
+        if let Some(heading) = stop_beside(self.headings(), block, within, way) {
+            self.selection.move_to_start_of(at(heading), window, cx);
+        }
+    }
+
+    /// The blocks that are headings, in order, which the keys that step it go between.
+    fn headings(&self) -> Vec<usize> {
+        let blocks = self.shown.as_ref().map(|shown| shown.blocks.iter());
+        blocks.into_iter().flatten().enumerate().filter(|(_, (block, _))| block.heading).map(|(ix, _)| ix).collect()
     }
 
     /// What a copy of all of it has, as it's drawn.

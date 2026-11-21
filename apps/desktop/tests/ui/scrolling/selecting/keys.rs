@@ -10,7 +10,7 @@ use gpui_kit::{AppContext as _, ElementId, TestAppContext, point, px};
 use super::super::{A_FRAME, turns};
 use super::kinds::settled_at_its_last_row;
 use super::made_up::{command, open_on_a_chat, open_on_chats_of, reply};
-use super::{COMMAND_LINE, bounds, click, on_the_reply_saying};
+use super::{COMMAND_LINE, bounds, click, head, on_the_reply_saying};
 use crate::support::Ui;
 
 /// What's selected now, as a copy would have it, which is nothing with nothing selected.
@@ -223,4 +223,29 @@ fn with_find_open_a_run_of_shift_up_keeps_the_end_below_its_bar(cx: &mut TestApp
     let first = selected.lines().next().unwrap_or_default();
     assert!(first.ends_with(" 9 is short."), "on past the window's top: {first:?}");
     assert!(up.iter().all(|it| *it == Some(true)), "below the bar after each: {up:?}");
+}
+
+/// With Shift, `Option-Up` moves the end to the start of the prompt whose turn it's in, and then to the one before,
+/// a long reply above, and `Option-Down` on to the start of the one after, so a turn is selected from its prompt.
+#[gpui_kit::test]
+fn option_shift_up_and_down_move_the_end_to_the_start_of_a_prompt(cx: &mut TestAppContext) {
+    let long = "Trains wait at a stop signal until it clears and the box says the line ahead is free. ".repeat(30);
+    let short = vec![reply("Reply short.")];
+    let turns =
+        vec![("Keep the ledger.".to_owned(), vec![reply(long.trim_end())]), ("And the rest.".to_owned(), short)];
+    let (_fake, mut ui, window) = open_on_a_chat(cx, turns);
+    go(&mut ui, true);
+    let at = on_the_reply_saying(&ui, window, "Reply short.");
+    click(&mut ui, at, 2);
+
+    keys(&mut ui, "alt-shift-up", 1);
+    let to_its_prompt = selected(&ui).unwrap_or_default();
+    keys(&mut ui, "alt-shift-up", 1);
+    let to_the_one_before = selected(&ui).unwrap_or_default();
+    keys(&mut ui, "alt-shift-down", 1);
+
+    assert!(to_its_prompt.starts_with("And the rest."), "from its prompt: {:?}", head(&to_its_prompt));
+    assert!(to_the_one_before.starts_with("Keep the ledger."), "then the one before: {:?}", head(&to_the_one_before));
+    let back = selected(&ui).unwrap_or_default();
+    assert!(back.starts_with("And the rest."), "and on to the one after: {:?}", head(&back));
 }

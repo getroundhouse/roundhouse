@@ -37,8 +37,8 @@ pub(super) struct ToDo {
     /// How far what scrolls the texts is to scroll down as the next frame starts, or up for less than nothing, while
     /// the move waits for what it goes to to show.
     scroll: Option<Pixels>,
-    /// Whether the view's `Reveal` has been asked to bring the end into view, since it isn't drawn, which the move
-    /// waits for.
+    /// Whether the view's `Reveal` has been asked to bring the end into view, since it isn't drawn, or to go to where
+    /// the move goes, which the move waits for.
     drawing: bool,
 }
 
@@ -75,8 +75,9 @@ impl Selection {
                 });
                 self.inner.borrow_mut().keyed.to_do = Some(to_do);
             }
-            // Until the `Reveal` has the end drawn, or gives up, as for a text in a row that shows without it.
-            Tried::NotDrawn if to_do.drawing => {
+            // Until the `Reveal` has the end drawn, or what it goes to, or gives up, as for a text in a row that shows
+            // without it.
+            Tried::NotDrawn | Tried::Elsewhere(_) if to_do.drawing => {
                 if self.reveal.wants(Wanted::End) {
                     self.inner.borrow_mut().keyed.to_do = Some(to_do);
                 }
@@ -85,6 +86,14 @@ impl Selection {
                 if self.bring_into_view(to_do.end.clone()) {
                     self.inner.borrow_mut().keyed.to_do = Some(ToDo { drawing: true, ..to_do });
                 }
+            }
+            // To where what it goes to is, which draws it, as the `Reveal` goes to an end's row. The end it moves from
+            // isn't what's brought into view any more, so a frame that draws it doesn't take the `Reveal` back to it.
+            Tried::Elsewhere(of) => {
+                self.reveal.want(Wanted::End, of);
+                let mut selecting = self.inner.borrow_mut();
+                selecting.keyed.revealing = None;
+                selecting.keyed.to_do = Some(ToDo { drawing: true, ..to_do });
             }
             Tried::Nowhere => {}
         }
@@ -153,8 +162,8 @@ impl Selection {
     /// tab's, which comes back to them where it was.
     pub(in crate::selection) fn let_go_of_the_keys(&self) {
         let mut selecting = self.inner.borrow_mut();
-        selecting.keyed.to_do = None;
-        if selecting.keyed.revealing.take().is_some() {
+        let to_do = selecting.keyed.to_do.take();
+        if selecting.keyed.revealing.take().is_some() || to_do.is_some_and(|to_do| to_do.drawing) {
             self.reveal.done_with(Wanted::End);
         }
     }
@@ -169,8 +178,10 @@ impl Selection {
             keyed.revealing = None;
             self.reveal.done_with(Wanted::End);
         }
-        if keyed.to_do.as_ref().is_some_and(|to_do| far.as_ref() != Some(&to_do.end)) {
-            keyed.to_do = None;
+        if let Some(to_do) = keyed.to_do.take_if(|to_do| far.as_ref() != Some(&to_do.end))
+            && to_do.drawing
+        {
+            self.reveal.done_with(Wanted::End);
         }
     }
 }

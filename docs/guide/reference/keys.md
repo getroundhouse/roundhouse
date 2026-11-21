@@ -35,6 +35,7 @@ The app's keyboard shortcuts. They're written as a Mac's. On Windows and Linux, 
 | `Option-Up`, `Option-Down` | Step the chat back to the prompt before, and on to the one after, a rendered Markdown file to the heading before and after, and a proposal to the part before and after. `Alt-Up` and `Alt-Down` on Windows and Linux |
 | `Shift` and an arrow | Make what's selected in the chat, a rendered Markdown file or a proposal longer or shorter, a character or a line at a time, at the end you moved last |
 | `Option-Shift` and left or right | The same, a word at a time. `Ctrl-Shift` on Windows and Linux |
+| `Option-Shift-Up`, `Option-Shift-Down` | The same, to the start of the prompt, the heading or the part before, and the one after. `Alt-Shift` on Windows and Linux |
 
 ## A terminal
 

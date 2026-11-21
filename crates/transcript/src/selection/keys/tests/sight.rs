@@ -1,170 +1,14 @@
-use std::cell::{Cell, RefCell};
-use std::time::Instant;
+//! Tests of what `sight` does: a move that waits for what it goes to to be drawn, while what scrolls the texts
+//! scrolls a line its way or goes to where it is, and an end out of view brought into view.
 
 use gpui_kit::{Bounds, Pixels, TestAppContext, VisualTestContext, point, px, size};
 use protocol::model::Seq;
 
-use super::super::test_layouts::{in_pieces, laid_out};
-use super::super::{End, Geometry, Pieces, Scroller, Selection};
-use super::{Step, Way, character_beside, word_beside};
+use super::super::super::test_layouts::{in_pieces, laid_out};
+use super::super::super::{Geometry, Pieces, Selection};
+use super::super::{Step, Way};
+use super::support::{Asked, Scrolling, a_window, frame, place, selecting, step};
 use crate::texts::{Of, TextAt, TextKey, Texts};
-
-#[test]
-fn a_character_is_what_a_person_sees_as_one() {
-    // An e and its accent, which are two characters to Rust, and a flag, which is two of four bytes each.
-    let text = "ae\u{301}b🇬🇧";
-
-    assert_eq!(character_beside(text, 1, Way::On), Some(4), "past the e and its accent together");
-    assert_eq!(character_beside(text, 4, Way::Back), Some(1), "and back");
-    assert_eq!(character_beside(text, 5, Way::On), Some(text.len()), "past the flag whole");
-    assert_eq!(character_beside(text, text.len(), Way::On), None, "and nothing past the end");
-    assert_eq!(character_beside(text, 0, Way::Back), None, "or before the start");
-}
-
-#[test]
-fn a_word_at_a_time_goes_to_the_end_of_the_word_after_or_the_start_of_the_one_before() {
-    let text = "the quick_fox, jumps";
-
-    assert_eq!(word_beside(text, 0, Way::On), Some(3), "to the end of the word it's at the start of");
-    assert_eq!(word_beside(text, 3, Way::On), Some(13), "past the space to the end of the next");
-    assert_eq!(word_beside(text, 6, Way::On), Some(13), "and from inside one, to its end");
-    assert_eq!(word_beside(text, 13, Way::On), Some(text.len()), "past what isn't in a word");
-    assert_eq!(word_beside(text, text.len(), Way::On), None, "and nothing at the end");
-    assert_eq!(word_beside(text, text.len(), Way::Back), Some(15), "back to the start of the last");
-    assert_eq!(word_beside(text, 15, Way::Back), Some(4), "and past what isn't in a word to the one before");
-    assert_eq!(word_beside("ends.", 5, Way::Back), Some(0), "a word before what isn't in one");
-    assert_eq!(word_beside("  ", 0, Way::On), Some(2), "and the edge, with no word that way");
-}
-
-/// A selection over the texts `texts` holds, with a window to press keys in.
-fn selecting<'a>(cx: &'a mut TestAppContext, texts: &Texts) -> (Selection, &'a mut VisualTestContext) {
-    let selection = Selection::new(texts.clone(), cx.update(|cx| cx.focus_handle()));
-    (selection, cx.add_empty_window())
-}
-
-/// What the stand-in for what scrolls the texts was asked to do.
-#[derive(Clone, Copy, Debug, PartialEq)]
-enum Asked {
-    /// Scroll down by this, or up for less than nothing.
-    Down(Pixels),
-    /// Go to where this is drawn.
-    Show(Of),
-}
-
-/// What scrolls the texts, which notes what it's asked to do, and does it, until it's `at_the_end`, where a scroll
-/// moves nothing. While its rows all `show`, there's nowhere to go to.
-#[derive(Default)]
-struct Scrolling {
-    asked: RefCell<Vec<Asked>>,
-    scrolled: Cell<Pixels>,
-    at_the_end: Cell<bool>,
-    shows: bool,
-}
-
-impl Scroller for Scrolling {
-    fn scroll_down(&self, by: Pixels) {
-        self.asked.borrow_mut().push(Asked::Down(by));
-        if !self.at_the_end.get() {
-            self.scrolled.set(self.scrolled.get() + by);
-        }
-    }
-
-    fn scrolled(&self) -> Pixels {
-        self.scrolled.get()
-    }
-
-    fn show(&self, of: Of) -> bool {
-        self.asked.borrow_mut().push(Asked::Show(of));
-        if self.shows {
-            return false;
-        }
-        self.scrolled.set(self.scrolled.get() + px(1.));
-        true
-    }
-
-    /// The keys that move an end never go to the start, nor the end.
-    fn to_start(&self) {
-        unreachable!("only the keys that scroll a page go to the start");
-    }
-
-    fn to_end(&self, _: Instant) {
-        unreachable!("only the keys that scroll a page go to the end");
-    }
-}
-
-/// A frame of `scrolling` showing what's in `bounds`, as the element that holds it has it: it scrolls as the frame
-/// starts, `draw` draws the texts, and the keys go on from those. Says whether it asks for the next frame.
-fn frame(selection: &Selection, scrolling: &Scrolling, bounds: Bounds<Pixels>, draw: impl FnOnce()) -> bool {
-    let started = selection.frame_started(bounds, scrolling, Instant::now());
-    draw();
-    selection.texts_laid_out(bounds, scrolling, started)
-}
-
-/// What a window 200 square shows.
-fn a_window() -> Bounds<Pixels> {
-    Bounds::new(point(px(0.), px(0.)), size(px(200.), px(200.)))
-}
-
-/// Moves the end that moved last of what `selection` has selected by `step`, as its key does.
-fn step(selection: &Selection, window: &mut VisualTestContext, step: Step) {
-    window.update(|window, cx| selection.step(step, window, cx));
-}
-
-fn place(text: &TextKey, leaf: u64, byte: usize) -> End {
-    End { text: text.clone(), leaf, byte }
-}
-
-/// The end moved last is the one a key moves, and the other stays: here from a selection made backwards, which a key
-/// makes longer at its start.
-#[gpui_kit::test]
-fn a_key_moves_the_end_that_moved_last(cx: &mut TestAppContext) {
-    let texts = Texts::alone();
-    let (selection, window) = selecting(cx, &texts);
-    let reply = TextKey::named("reply");
-    texts.drawn_as(&reply, TextAt::only(Seq::new(1), 0), "Signals clear ahead");
-    selection.inner.borrow_mut().set(Some((place(&reply, 0, 13), place(&reply, 0, 8))));
-
-    step(&selection, window, Step::Word(Way::Back));
-    let made_longer = selection.text();
-    step(&selection, window, Step::Character(Way::On));
-
-    assert_eq!(made_longer, "Signals clear");
-    assert_eq!(selection.text(), "ignals clear", "and a character back from there");
-}
-
-/// Past the end of a paragraph, or any other leaf, a character is the start of the next, and a word the end of its
-/// first word, whether the text's drawn or not.
-#[gpui_kit::test]
-fn past_the_end_of_a_leaf_is_the_start_of_the_next(cx: &mut TestAppContext) {
-    let texts = Texts::alone();
-    let (selection, window) = selecting(cx, &texts);
-    let reply = TextKey::named("reply");
-    texts.drawn_as(&reply, TextAt::only(Seq::new(1), 0), "Signals clear\n\nTrains wait");
-    selection.inner.borrow_mut().set(Some((place(&reply, 0, 8), place(&reply, 0, 13))));
-    let far = || selection.inner.borrow().ends.clone().map(|(_, far)| far);
-
-    step(&selection, window, Step::Character(Way::On));
-    let next = far();
-    step(&selection, window, Step::Word(Way::On));
-
-    assert_eq!(next, Some(place(&reply, 1, 0)));
-    assert_eq!(far(), Some(place(&reply, 1, 6)), "and the end of its first word");
-}
-
-/// Everything ends past the end of the last text, which a key takes as the end of what it shows.
-#[gpui_kit::test]
-fn a_key_after_selecting_everything_moves_from_the_end_of_what_the_last_text_shows(cx: &mut TestAppContext) {
-    let texts = Texts::alone();
-    let (selection, window) = selecting(cx, &texts);
-    texts.drawn_at(TextAt::only(Seq::new(1), 0), "Signals clear");
-    texts.drawn_at(TextAt::only(Seq::new(2), 0), "Trains wait");
-    let everything = selection.whole();
-    selection.inner.borrow_mut().set(everything);
-
-    step(&selection, window, Step::Character(Way::Back));
-
-    assert_eq!(selection.text(), "Signals clear\n\nTrains wai");
-}
 
 /// Into another text, a key goes to the nearest one shown, past a hidden one and one with nothing parsed yet, once
 /// it's drawn. Until then, as with a drag past the window's edge, what scrolls the texts scrolls a line that way, a
@@ -379,4 +223,64 @@ fn a_move_that_waits_is_let_go_of_once_something_else_moves_the_end(cx: &mut Tes
 
     assert!(scrolling.asked.borrow().is_empty() && !asks, "nothing scrolls for it, or asks for a frame");
     assert_eq!(selection.inner.borrow().ends, Some(clicked), "and the click's place stays");
+}
+
+/// A step to the start of a place, as a key that steps a view makes, moves the end to the start of the first text
+/// there at once if that's drawn, and otherwise has what scrolls the texts go there, and moves once it's drawn.
+#[gpui_kit::test]
+fn a_step_to_a_place_moves_the_end_to_its_first_text_once_that_is_drawn(cx: &mut TestAppContext) {
+    let texts = Texts::alone();
+    let (selection, window) = selecting(cx, &texts);
+    let (reply, prompt) = (TextKey::named("reply"), TextKey::named("prompt"));
+    let (replied, asked) = (Of::Event(Seq::new(1)), Of::Event(Seq::new(9)));
+    texts.drawn_as(&reply, TextAt::only(Seq::new(1), 0), "Signals clear");
+    selection.inner.borrow_mut().set(Some((place(&reply, 0, 13), place(&reply, 0, 7))));
+    let far = || selection.inner.borrow().ends.clone().map(|(_, far)| far);
+    let scrolling = Scrolling::default();
+
+    window.update(|window, cx| selection.move_to_start_of(TextAt::first_of(replied), window, cx));
+    let drawn = far();
+    window.update(|window, cx| selection.move_to_start_of(TextAt::first_of(asked), window, cx));
+    let waiting = far();
+    frame(&selection, &scrolling, a_window(), || texts.drawn_as(&prompt, TextAt::only(Seq::new(9), 0), "Hold it"));
+
+    assert_eq!(drawn, Some(place(&reply, 0, 0)), "to the start of what's drawn there, at once");
+    assert_eq!(waiting, drawn, "and to what isn't drawn, not yet");
+    assert!(scrolling.asked.borrow().contains(&Asked::Show(asked)), "but once what scrolls the texts goes there");
+    assert_eq!(far(), Some(place(&prompt, 0, 0)), "and draws it");
+}
+
+/// While a step waits for what scrolls the texts to go to a place, the end it moves from isn't brought into view, so
+/// a frame that draws that end out of view, before the place's text is drawn, doesn't scroll back to it.
+#[gpui_kit::test]
+fn a_step_to_a_place_does_not_bring_back_the_end_it_moves_from(cx: &mut TestAppContext) {
+    let texts = Texts::alone();
+    let (selection, window) = selecting(cx, &texts);
+    let (reply, prompt) = (TextKey::named("reply"), TextKey::named("prompt"));
+    let at = |seq| TextAt::only(Seq::new(seq), 0);
+    texts.drawn_as(&reply, at(1), "Signals clear");
+    let layouts = laid_out(window, &["Signals clear"], 6.);
+    let draw = || {
+        selection.new_frame();
+        let pieces = Pieces::whole(layouts[0].clone());
+        let bounds = Geometry::Plain(pieces.clone()).bounds();
+        selection.drawn(reply.clone(), at(1), bounds, None, [(0, Geometry::Plain(pieces))]);
+    };
+    selection.inner.borrow_mut().set(Some((place(&reply, 0, 13), place(&reply, 0, 13))));
+    let scrolling = Scrolling::default();
+    let below = Bounds::new(point(px(0.), px(400.)), size(px(200.), px(200.)));
+
+    // A key moves the end first, which brings it into view.
+    draw();
+    step(&selection, window, Step::Character(Way::Back));
+    frame(&selection, &scrolling, a_window(), draw);
+    window.update(|window, cx| selection.move_to_start_of(TextAt::first_of(Of::Event(Seq::new(9))), window, cx));
+    frame(&selection, &scrolling, below, draw);
+    frame(&selection, &scrolling, below, || {
+        draw();
+        texts.drawn_as(&prompt, at(9), "Hold it");
+    });
+
+    assert_eq!(*scrolling.asked.borrow(), [Asked::Show(Of::Event(Seq::new(9)))], "it goes only to the place");
+    assert_eq!(selection.inner.borrow().ends.clone().map(|(_, far)| far), Some(place(&prompt, 0, 0)), "and moves");
 }
