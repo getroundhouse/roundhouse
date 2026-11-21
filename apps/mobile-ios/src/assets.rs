@@ -5,8 +5,9 @@ use std::borrow::Cow;
 
 use gpui_kit::{AssetSource, Result, SharedString};
 
-// Only these are embedded, rather than the whole catalog, which would add every icon to the app. The hub's button.
-gpui_kit::assets::icon_assets!(Own, [Server]);
+// Only these are embedded, rather than the whole catalog, which would add every icon to the app: the hub's button, and
+// New chat in a chat's.
+gpui_kit::assets::icon_assets!(Own, [Server, MessageSquarePlus]);
 
 /// What the window loads its icons from.
 #[derive(Clone, Copy, Debug, Default)]
@@ -37,7 +38,9 @@ mod tests {
     /// look's, as the transcript draws, and the kit's.
     #[test]
     fn has_the_icons_of_the_app_what_every_client_shares_and_the_kit() {
-        for icon in [IconName::Server, IconName::Wrench, IconName::TriangleAlert, IconName::ChevronLeft] {
+        for icon in
+            [IconName::Server, IconName::Archive, IconName::Wrench, IconName::TriangleAlert, IconName::ChevronLeft]
+        {
             let path = icon.path();
             assert!(Assets.load(&path).unwrap().is_some(), "{path}");
         }

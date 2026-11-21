@@ -47,6 +47,8 @@ fn the_page_is_written_with_its_index_and_the_spec_s_screens_as_they_are_now() {
     let out = tempfile::tempdir().unwrap();
     std::fs::create_dir(spec.path().join("screens")).unwrap();
     std::fs::write(spec.path().join("screens/menu.png"), "the menu").unwrap();
+    std::fs::create_dir(spec.path().join("screens/phone")).unwrap();
+    std::fs::write(spec.path().join("screens/phone/chat.png"), "a phone's chat").unwrap();
     std::fs::create_dir(out.path().join("screens")).unwrap();
     std::fs::write(out.path().join("screens/dropped.png"), "a screen the spec dropped").unwrap();
 
@@ -55,6 +57,7 @@ fn the_page_is_written_with_its_index_and_the_spec_s_screens_as_they_are_now() {
     assert!(std::fs::read_to_string(page).unwrap().contains("<h1>The spec</h1>"));
     assert!(std::fs::read_to_string(out.path().join("index.json")).unwrap().contains("\"menus.md\""));
     assert_eq!(std::fs::read_to_string(out.path().join("screens/menu.png")).unwrap(), "the menu");
+    assert_eq!(std::fs::read_to_string(out.path().join("screens/phone/chat.png")).unwrap(), "a phone's chat");
     assert!(!out.path().join("screens/dropped.png").exists());
 }
 

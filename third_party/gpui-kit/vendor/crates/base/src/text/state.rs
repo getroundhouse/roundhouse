@@ -1,3 +1,4 @@
+// Changed in Roundhouse's copy of gpui-kit, as third_party/README.md lists.
 use futures::Stream as _;
 #[cfg(not(target_family = "wasm"))]
 use std::time::Instant;
@@ -1183,6 +1184,8 @@ impl Render for TextViewState {
             link_refs: self.parsed_content.node_cx.link_refs.clone(),
             style: self.text_view_style.clone(),
             code_block_actions: self.code_block_actions.clone(),
+            // Only a host drawing through `RenderContext` wraps its blocks.
+            code_block_wrap: None,
             code_block_highlighter: self.code_block_highlighter.clone(),
             table_actions: self.table_actions.clone(),
             link_click_handler: self.link_click_handler.clone(),

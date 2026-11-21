@@ -11,8 +11,9 @@ use gpui::{
     GlobalElementId, HighlightStyle, Hsla, Image, ImageFormat, ImageSource, InspectorElementId,
     InteractiveElement as _, IntoElement, IsZero as _, LayoutId, ObjectFit, Overflow,
     ParentElement, Pixels, Point, Refineable as _, Rems, ScrollHandle, SharedString, SharedUri,
-    StatefulInteractiveElement, StyleRefinement, Styled, StyledImage as _, TextStyleRefinement,
-    WhiteSpace, Window, div, img, prelude::FluentBuilder as _, px, relative, rems,
+    Stateful, StatefulInteractiveElement, StyleRefinement, Styled, StyledImage as _,
+    TextStyleRefinement, WhiteSpace, Window, div, img, prelude::FluentBuilder as _, px, relative,
+    rems,
 };
 use markdown::mdast;
 
@@ -20,8 +21,9 @@ use crate::{
     GlobalState, ScrollableMask, Scrollbar, StyledExt, h_flex,
     scrollable_mask::horizontal_scroll_area,
     text::{
-        CodeBlockActionsFn, CodeBlockHighlighterFn, Link, LinkClickHandlerFn, LinkFn,
-        MarkdownExtensions, MarkdownNode, TableActionsFn, TaskToggleEvent, TaskToggleHandlerFn,
+        CodeBlockActionsFn, CodeBlockHighlighterFn, CodeBlockWrapFn, Link, LinkClickHandlerFn,
+        LinkFn, MarkdownExtensions, MarkdownNode, TableActionsFn, TaskToggleEvent,
+        TaskToggleHandlerFn,
         document::{NodeRenderOptions, PrevBlock, flow_position},
         inline::{
             Inline, InlineHighlight, InlineState, code_insets, combine_highlights, fade_highlights,
@@ -2746,7 +2748,7 @@ impl CodeBlock {
             // `gpui::list` doesn't scroll on the same event. Mask, scrollbar
             // and actions are siblings of the scrolled block, so they stay
             // pinned to the viewport instead of moving with the code.
-            div()
+            let drawn = div()
                 .id(id.clone())
                 .when(actions.is_some(), |this| this.group(CODE_BLOCK_GROUP))
                 .w_full()
@@ -2761,17 +2763,21 @@ impl CodeBlock {
                         .child(Scrollbar::vertical(&scroll_handle)),
                 )
                 .children(actions)
-                .children(lang_label)
-                .into_any_element()
+                .children(lang_label);
+            wrapped(&node_cx.code_block_wrap, self, drawn, window, cx)
         } else {
-            // Without actions nothing under the block needs element state.
-            match actions {
-                Some(actions) => block
-                    .id(id)
-                    .group(CODE_BLOCK_GROUP)
-                    .child(actions)
-                    .into_any_element(),
-                None => block.children(lang_label).into_any_element(),
+            // Without actions or a wrap nothing under the block needs element
+            // state.
+            match (actions, &node_cx.code_block_wrap) {
+                (Some(actions), wrap) => wrapped(
+                    wrap,
+                    self,
+                    block.id(id).group(CODE_BLOCK_GROUP).child(actions),
+                    window,
+                    cx,
+                ),
+                (None, Some(wrap)) => wrap(self, block.id(id).children(lang_label), window, cx),
+                (None, None) => block.children(lang_label).into_any_element(),
             }
         };
 
@@ -2786,6 +2792,21 @@ impl CodeBlock {
     }
 }
 
+/// `drawn`, the whole of `block` as it's drawn, as `wrap` wraps it, if there's
+/// a wrap.
+fn wrapped(
+    wrap: &Option<Arc<CodeBlockWrapFn>>,
+    block: &CodeBlock,
+    drawn: Stateful<Div>,
+    window: &mut Window,
+    cx: &mut App,
+) -> AnyElement {
+    match wrap {
+        Some(wrap) => wrap(block, drawn, window, cx),
+        None => drawn.into_any_element(),
+    }
+}
+
 /// A context for rendering nodes, contains link references.
 #[derive(Default, Clone)]
 pub(crate) struct NodeContext {
@@ -2795,6 +2816,7 @@ pub(crate) struct NodeContext {
     pub(crate) link_refs: HashMap<SharedString, LinkMark>,
     pub(crate) style: Arc<TextViewStyle>,
     pub(crate) code_block_actions: Option<Arc<CodeBlockActionsFn>>,
+    pub(crate) code_block_wrap: Option<Arc<CodeBlockWrapFn>>,
     pub(crate) code_block_highlighter: Option<Arc<CodeBlockHighlighterFn>>,
     pub(crate) table_actions: Option<Arc<TableActionsFn>>,
     pub(crate) image_source: Option<Arc<super::text_view::ImageSourceFn>>,

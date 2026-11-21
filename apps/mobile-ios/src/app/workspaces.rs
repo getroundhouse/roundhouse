@@ -2,16 +2,15 @@
 
 use client_core::records::Snapshot;
 use gpui_kit::assets::IconName;
-use gpui_kit::component::{Icon, v_flex};
+use gpui_kit::component::v_flex;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, AppContext as _, Context, ElementId, InteractiveElement as _, IntoElement, ParentElement as _, Pixels,
     StatefulInteractiveElement as _, Styled as _, Window, div,
 };
-use look::{IconSize, IconSizing as _, RowSize, Space, Type, Typeset as _, Work};
-use std::collections::HashMap;
-
+use look::{RowSize, Space, Type, Typeset as _, Work};
 use protocol::model::{Repo, Session, Workspace, WorkspaceId};
+use std::collections::HashMap;
 
 use super::{Followed, MobileApp, Panel};
 use crate::chat::ChatView;
@@ -45,7 +44,7 @@ impl MobileApp {
             }
             Some(records) => {
                 let works = Works::read(&records, link);
-                Self::list(&records, &works, ready, window.insets().safe_area.bottom, cx)
+                self.list(&records, &works, ready, crate::safe_area::insets(window, cx).safe_area.bottom, cx)
             }
         };
         // Such as the vault failing to keep the hub just paired with.
@@ -54,7 +53,14 @@ impl MobileApp {
     }
 
     /// The repositories by name, as client-core keeps them, and newest first in each.
-    fn list(records: &Snapshot, works: &Works, ready: bool, bottom: Pixels, cx: &mut Context<Self>) -> AnyElement {
+    fn list(
+        &self,
+        records: &Snapshot,
+        works: &Works,
+        ready: bool,
+        bottom: Pixels,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
         let muted = look::colors(cx).text_muted;
         let mut sections = v_flex().w_full().px(look::ROWS_INSET).pb(bottom);
         for repo in records.repos() {
@@ -66,20 +72,36 @@ impl MobileApp {
             workspaces.sort_by_key(|w| std::cmp::Reverse(w.created_at_ms));
             sections = sections.child(heading(repo, muted));
             for workspace in workspaces {
-                sections = sections.child(Self::row(workspace, records, works.of(workspace), ready, cx));
+                sections = sections.child(self.row(workspace, records, works.of(workspace), ready, cx));
             }
         }
         div().id("workspaces").flex_1().min_h_0().w_full().overflow_y_scroll().child(sections).into_any_element()
     }
 
-    fn row(workspace: &Workspace, records: &Snapshot, work: Work, ready: bool, cx: &mut Context<Self>) -> AnyElement {
-        let muted = look::colors(cx).text_muted;
-        let signal = client_ui::workspace_signal(workspace, records.sessions(&workspace.id));
+    /// A workspace's row, which opens its chat, and whose menu, on a long press, offers what its row's menu does on the
+    /// desktop. Its name is muted until it needs a look, as in the desktop's sidebar, so the ones that do stand out.
+    fn row(
+        &self,
+        workspace: &Workspace,
+        records: &Snapshot,
+        work: Work,
+        ready: bool,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let colors = look::colors(cx);
+        let (muted, chats) = (colors.text_muted, records.sessions(&workspace.id));
+        let signal = client_ui::workspace_signal(workspace, chats);
+        let needs_a_look = client_core::marking::needs_a_look(workspace, chats, Session::unread);
         let id = workspace.id.clone();
+        let name = div()
+            .typeset(Type::Body)
+            .truncate()
+            .text_color(if needs_a_look { colors.text } else { muted })
+            .when(needs_a_look, look::Typeset::emphasis);
         let names = v_flex()
             .flex_1()
             .min_w_0()
-            .child(div().typeset(Type::Body).truncate().child(workspace.label().to_string()))
+            .child(name.child(workspace.label().to_string()))
             .when_some(chrome::branch_under_name(workspace), |d, branch| {
                 d.child(div().typeset(Type::Detail).text_color(muted).truncate().child(branch))
             });
@@ -87,8 +109,11 @@ impl MobileApp {
             .off(!ready)
             .child(look::mark(signal, work, look::Size::Row, cx))
             .child(names)
-            .child(Icon::new(IconName::ChevronRight).sized(IconSize::Regular).text_color(muted))
+            .opens()
             .on_click(cx.listener(move |app, _, window, cx| app.open_workspace(&id, window, cx)))
+            .when(ready, |row| {
+                row.right_click_menu(self.workspace_menu(workspace, records.sessions(&workspace.id), cx))
+            })
             .into_any_element()
     }
 
@@ -96,12 +121,11 @@ impl MobileApp {
     /// connection, since the chat reads its history from the hub.
     pub(super) fn open_workspace(&mut self, id: &WorkspaceId, window: &mut Window, cx: &mut Context<Self>) {
         let Some(link) = self.link() else { return };
-        let link = link.read(cx);
-        let (Some(client), Some(feed)) = (link.client(), link.feed()) else { return };
-        let records = feed.snapshot();
+        let Some(hub) = link.read(cx).ready() else { return };
+        let records = hub.feed.snapshot();
         let Some(workspace) = records.workspace(id).cloned() else { return };
         let session = Session::last_worked_in(records.sessions(id).iter().filter(|s| s.is_open())).cloned();
-        let chat = cx.new(|cx| ChatView::new(workspace, session, feed, client, window, cx));
+        let chat = cx.new(|cx| ChatView::new(workspace, session, hub, window, cx));
         self.open_chat(chat, window, cx);
     }
 }

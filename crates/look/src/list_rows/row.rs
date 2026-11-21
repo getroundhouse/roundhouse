@@ -15,8 +15,12 @@ use crate::menus::{Menu, RightClickMenu as _};
 use crate::shape::{Corner, Shaped as _};
 use crate::space::Space;
 use crate::theme::{CHOSEN, PRESSED, UNDER_POINTER};
+use crate::tooltips::Tooltipped as _;
 use crate::typography::{Type, Typeset as _};
-use gpui_kit::component::h_flex;
+use gpui_kit::assets::IconName;
+use gpui_kit::component::{Icon, h_flex};
+
+use crate::icon_sizes::{IconSize, IconSizing as _};
 
 /// How far in from its list's edge a row sits, on every side of the list, so its rounded corners don't meet the edge.
 pub const ROWS_INSET: Space = Space::XSmall;
@@ -30,6 +34,7 @@ pub fn list_row(id: impl Into<ElementId>, size: RowSize) -> ListRow {
         off: false,
         wraps: false,
         indent: px(0.),
+        end: End::Nothing,
         role: None,
         tooltip: None,
         on_click: None,
@@ -48,6 +53,14 @@ type OnPress = Box<dyn Fn(&MouseDownEvent, &mut Window, &mut App)>;
 type OnLetGo = Box<dyn Fn(&MouseUpEvent, &mut Window, &mut App)>;
 type BuildMenu = Rc<dyn Fn(Menu, &mut Window, &mut App) -> Menu>;
 
+/// What a row draws at its end, after what it holds.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum End {
+    Nothing,
+    /// A chevron, which says a press shows what the row names in the list's place.
+    Chevron,
+}
+
 /// One of what a list holds, which [`list_row`] makes. What's put in it is laid out in a line, from its start.
 #[derive(IntoElement)]
 #[must_use]
@@ -58,6 +71,7 @@ pub struct ListRow {
     off: bool,
     wraps: bool,
     indent: Pixels,
+    end: End,
     role: Option<(Role, SharedString)>,
     tooltip: Option<SharedString>,
     on_click: Option<OnClick>,
@@ -93,6 +107,13 @@ impl ListRow {
     /// Set in by `indent` after its start, such as a file in a folder.
     pub fn indent(mut self, indent: Pixels) -> Self {
         self.indent = indent;
+        self
+    }
+
+    /// A chevron at its end, which says a press shows what it names in the list's place, as on a handheld, where a
+    /// row is the way to another screen. What it holds before that takes the room that's left.
+    pub fn opens(mut self) -> Self {
+        self.end = End::Chevron;
         self
     }
 
@@ -205,7 +226,7 @@ impl RenderOnce for ListRow {
                 let row = row.role(role).aria_label(label);
                 if role == Role::ListBoxOption { row.aria_selected(self.chosen) } else { row }
             })
-            .when_some(self.tooltip, |row, words| row.tooltip(crate::tooltip(words)))
+            .when_some(self.tooltip, |row, words| row.says(words, cx))
             .when_some(self.on_click.filter(|_| on), |row, on_click| {
                 row.on_click(move |event, window, cx| on_click(event, window, cx))
             })
@@ -214,6 +235,10 @@ impl RenderOnce for ListRow {
             .when_some(self.on_let_go, |row, on_let_go| row.on_mouse_up(MouseButton::Left, on_let_go))
             .when_some(self.on_let_go_outside, |row, on_let_go| row.on_mouse_up_out(MouseButton::Left, on_let_go))
             .children(self.children)
+            .when(self.end == End::Chevron, |row| {
+                let chevron = Icon::new(IconName::ChevronRight).sized(IconSize::Regular).text_color(colors.text_faint);
+                row.child(div().flex_none().ml_auto().child(chevron))
+            })
             .a11y_disabled(self.off);
         // On what holds the row, since the menu is a child of what it's on, set apart from the rest, and the row's
         // gap would count it as one of what's in the row.

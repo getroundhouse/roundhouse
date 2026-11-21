@@ -11,6 +11,7 @@ What's built, and what's designed and not built. The order things are built in, 
 | **Linux** | A first preview, as an AppImage for amd64 and ARM64 |
 | **Agents** | Claude, Codex and Antigravity, through their CLIs; Codex and Antigravity are exercised on macOS |
 | **The hub** | Runs on your machine; another paired desktop can connect over a LAN or VPN |
+| **iPhone** | Built from source with Xcode, and not on the App Store; it pairs with a hub on the same network or a VPN, lists its workspaces and works in their chats |
 
 [Install](get-started/install.md) says what each preview needs, and how it differs from the Mac.
 
@@ -21,7 +22,6 @@ These are part of the design, and the app is built to take them. None is built.
 - **More agents,** beyond Claude, Codex and Antigravity.
 - **Codex and Antigravity logins managed by the hub,** rather than their worker machine’s native sign-ins.
 - **A hub on your own server, or in the cloud,** with workspaces in VMs or sandboxes rather than on your machine.
-- **An iPhone app,** as another way in to the same hub.
 
 ## Smaller things that aren't built
 

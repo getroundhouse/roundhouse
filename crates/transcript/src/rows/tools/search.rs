@@ -27,6 +27,7 @@ const LISTED_FILES: usize = 200;
 pub(super) fn draw(search: &Search, answer: Option<&Answer>, toggle: &Toggle, cx: &App) -> AnyElement {
     let found = found(answer);
     let line = Line::new(IconName::Search, search.title())
+        .copies(search.pattern.to_string())
         .part(Part::Pill(search.pattern.to_string().into(), toggle.marks(Text::Pill, search.pattern)))
         .part(
             search.path.map(|path| Part::Chip(look::chip(looked_in(path), look::ChipSize::Regular, path.to_string()))),

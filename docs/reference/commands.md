@@ -12,6 +12,7 @@ cargo run -p desktop --example look -- <workspace> diff --note "What it shows"  
 cargo test -p desktop --test ui gallery   # Every screen, from made-up data, against its image in docs/spec/screens, and every size of both styles of the app icon. No hub, no window
 ROUNDHOUSE_UPDATE_SCREENS=1 cargo test -p desktop --test ui gallery   # Accepts how they look now. A confirmed screen needs the owner
 cargo test -p desktop --test ui gallery::clips:: -- --ignored   # Records every clip, a short video of the app from made-up data, a frame at a time, into .context/clips/, as the gallery's clips/mod.rs says. Add the end of a clip's test's name to record only it. On a Mac, and never in CI
+cargo test -p mobile-ios --test ui gallery   # Every screen of the iPhone app, and the handheld's components, against its image in docs/spec/screens/phone. Accepted the same way
 cargo run -p guide -- OUT         # Builds docs/guide as the site's /docs/ pages in OUT, which mustn't exist, and refuses a link or a picture that isn't there. Run it after changing a page, as tools/guide/README.md says, since CI does
 cargo run -p spec-page            # The spec as a page in .context/spec/, each area's screens beside its rules, and which are confirmed, and the design system's page, its foundations to look one up and then its components. Open the paths it prints
 tools/install.sh                  # Installs this commit as the app to use every day, outside target/. Run it by hand

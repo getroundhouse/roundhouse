@@ -3,10 +3,10 @@ use std::{ops::Range, rc::Rc, sync::Arc};
 
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    AnyElement, AnyView, App, Bounds, ClickEvent, ContentMask, Element, ElementId, Entity, Global,
-    GlobalElementId, Hitbox, HitboxBehavior, InspectorElementId, InteractiveElement, IntoElement,
-    LayoutId, MouseButton, ParentElement, Pixels, Refineable as _, SharedString, StyleRefinement,
-    Styled, Window, div, point, px,
+    AnyElement, AnyView, App, Bounds, ClickEvent, ContentMask, Div, Element, ElementId, Entity,
+    Global, GlobalElementId, Hitbox, HitboxBehavior, InspectorElementId, InteractiveElement,
+    IntoElement, LayoutId, MouseButton, ParentElement, Pixels, Refineable as _, SharedString,
+    Stateful, StyleRefinement, Styled, Window, div, point, px,
 };
 
 use crate::StyledExt;
@@ -21,6 +21,10 @@ use crate::{GlobalState, TextSelection, text::TextViewStyle};
 /// Type for code block actions generator function.
 pub(crate) type CodeBlockActionsFn =
     dyn Fn(&CodeBlock, &mut Window, &mut App) -> AnyElement + Send + Sync;
+
+/// Type for the function that wraps the whole of a code block as it's drawn.
+pub(crate) type CodeBlockWrapFn =
+    dyn Fn(&CodeBlock, Stateful<Div>, &mut Window, &mut App) -> AnyElement + Send + Sync;
 
 pub(crate) type CodeBlockHighlighterFn =
     dyn Fn(&CodeBlock) -> Vec<(Range<usize>, gpui::HighlightStyle)> + Send + Sync;

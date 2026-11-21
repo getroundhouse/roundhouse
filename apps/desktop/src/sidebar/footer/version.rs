@@ -6,10 +6,10 @@ use gpui_kit::component::{Icon, IconName, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     Anchor, AnyElement, App, Context, Hsla, InteractiveElement, IntoElement, ParentElement, SharedString,
-    StatefulInteractiveElement, StyleRefinement, Styled, TestSupportExt as _, div,
+    StyleRefinement, Styled, TestSupportExt as _, div,
 };
-use look::Lined as _;
 use look::{IconSizing as _, Region, TaskRing, Typeset as _};
+use look::{Lined as _, Tooltipped as _};
 use std::path::Path;
 
 /// How tall the build line is, whatever it says, so a check for updates never moves the sidebar above it: a small
@@ -32,6 +32,7 @@ fn in_the_versions_place(
     words: impl Into<SharedString>,
     pointed: Pointed,
     color: Hsla,
+    cx: &App,
 ) -> AnyElement {
     let words = words.into();
     let line = h_flex()
@@ -42,7 +43,7 @@ fn in_the_versions_place(
         .child(h_flex().flex_none().w(look::Size::Inline.width()).justify_center().child(icon))
         .child(div().min_w_0().truncate().child(words.clone()));
     match pointed {
-        Pointed::Words => line.tooltip(look::tooltip(words)).test_support().into_any_element(),
+        Pointed::Words => line.says(words, cx).test_support().into_any_element(),
         Pointed::Card { heading, says } => over_the_line(line.test_support(), Some(heading), says),
     }
 }
@@ -66,7 +67,7 @@ fn about_updating(said: Said<'_>, cx: &App) -> AnyElement {
         Said::Checking => {
             let words = "Checking for updates…";
             let ring = look::task_ring(TaskRing::Running, cx);
-            in_the_versions_place("checking-for-updates", ring, words, Pointed::Words, colors.text_faint)
+            in_the_versions_place("checking-for-updates", ring, words, Pointed::Words, colors.text_faint, cx)
         }
         Said::Answer(answer) => {
             let icon = match answer {
@@ -80,13 +81,14 @@ fn about_updating(said: Said<'_>, cx: &App) -> AnyElement {
                 words,
                 Pointed::Words,
                 colors.text_muted,
+                cx,
             )
         }
         Said::Problem(problem) => {
             let color = if matches!(problem.kind, Kind::Refused(_)) { colors.error } else { colors.text_muted };
             let (words, icon) = (problem.summary(), Icon::new(IconName::TriangleAlert).sized(look::IconSize::Small));
             let pointed = Pointed::Card { heading: words.clone(), says: vec![problem.detail.clone()] };
-            in_the_versions_place("update-problem", icon, words, pointed, color)
+            in_the_versions_place("update-problem", icon, words, pointed, color, cx)
         }
     }
 }

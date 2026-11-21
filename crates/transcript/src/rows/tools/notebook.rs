@@ -17,7 +17,8 @@ use crate::item_key::ItemKey;
 use crate::rows::shown::Gather;
 
 pub(super) fn draw(edit: &NotebookEdit, answer: Option<&Answer>, toggle: &Toggle, cx: &App) -> AnyElement {
-    let line = Line::new(IconName::NotebookPen, typed::notebook_title(edit)).part(chip(&edit.path));
+    let line =
+        Line::new(IconName::NotebookPen, typed::notebook_title(edit)).part(chip(&edit.path)).copies(edit.path.clone());
     let sections = Rc::new(source(edit));
     let opened = || (!sections.is_empty()).then(|| shown_file(toggle, &edit.path, &marks::marked(&sections), cx));
     line::drawn(line, answer, opened, toggle, cx)

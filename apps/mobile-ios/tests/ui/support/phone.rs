@@ -1,28 +1,21 @@
-//! What the tests share: a real hub with the fake agent, and the app in a phone-sized window, driven the way someone
-//! would. The app pairs and connects as it does on a phone, over TLS, to a hub listening on loopback.
+//! The app in a phone-sized window, driven the way someone would: tapping, pressing long, typing, and reading what it
+//! shows.
 
-#![cfg(test)]
-
-use std::net::TcpListener;
-use std::path::{Path, PathBuf};
-use std::process::{Child, Stdio};
-use std::sync::{Arc, OnceLock};
+use std::sync::Arc;
 use std::time::Duration;
 
-use client_core::Client;
 use client_core::link::Waits;
-use gpui_kit::test::TestWindowExt as _;
+use gpui_kit::test::{TestQueryExt as _, TestWindowExt as _};
 use gpui_kit::{
-    AnyWindowHandle, AppContext as _, Bounds, ElementId, Entity, SharedString, TestAppContext, WindowBounds,
-    WindowOptions, point, px, size,
+    AnyWindowHandle, AppContext as _, Bounds, ElementId, Entity, GestureTuning, InputEvent as _, Pixels, Point,
+    SharedString, TestAppContext, TouchEvent, TouchId, TouchPhase, WindowBounds, WindowOptions, point, px, size,
 };
 use mobile::{MemoryVault, MobileApp, Vault as _};
-use process::testing::WholeEnvironment;
 use protocol::event::{ContentBlock, EventBody, SessionEvent};
-use protocol::model::{Repo, Seq, Workspace};
+use protocol::model::{Seq, Workspace};
 use protocol::pairing::PairingLink;
-use protocol::paths::{ENV_HOME, ENV_LISTEN, ENV_WORKSPACES, Paths};
-use tempfile::TempDir;
+
+use super::Stack;
 
 pub(crate) const TIMEOUT: Duration = Duration::from_secs(20);
 /// How far the app's own clock moves on each look while a test waits on a real hub.
@@ -34,128 +27,6 @@ const RETRY_WAITS: Waits = Waits::retrying(Duration::from_millis(20), Duration::
 /// The ID of an element named `name`, as the question panel names its own.
 pub(crate) fn id(name: &str) -> SharedString {
     SharedString::from(name.to_string())
-}
-
-/// The hub and the fake agent live in other packages, so `cargo test -p mobile-ios` wouldn't otherwise build them.
-fn binaries() -> &'static PathBuf {
-    static DIR: OnceLock<PathBuf> = OnceLock::new();
-    DIR.get_or_init(|| {
-        let tmp = Path::new(env!("CARGO_TARGET_TMPDIR"));
-        process::testing::the_hub_and_examples(tmp, "phone-binaries", &["fake_claude"])
-    })
-}
-
-/// A hub of its own, with a repository, which stops with the test. It keeps one port through restarts, as a hub people
-/// use does, so a paired phone finds it again.
-pub(crate) struct Stack {
-    dir: TempDir,
-    paths: Paths,
-    port: u16,
-    hub: Option<Child>,
-}
-
-impl Stack {
-    pub(crate) fn new() -> Stack {
-        // Under /tmp because of the socket path limit.
-        let dir = tempfile::Builder::new().prefix("phui-").tempdir_in("/tmp").unwrap();
-        let root = dir.path().to_path_buf();
-        process::testing::repository_with_a_commit(&root.join("repo"));
-        let paths = protocol::paths::resolve(|name| match name {
-            ENV_HOME => Some(root.join("home").to_string_lossy().into_owned()),
-            ENV_WORKSPACES => Some(root.join("workspaces").to_string_lossy().into_owned()),
-            other => std::env::var(other).ok(),
-        })
-        .unwrap();
-        // Free when asked. Another test could take it before the hub does, which would fail that test loudly.
-        let port = TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
-        let mut stack = Stack { dir, paths, port, hub: None };
-        stack.start_hub();
-        stack
-    }
-
-    /// The stack's repository, added to the hub.
-    pub(crate) fn add_repo(&self) -> Repo {
-        self.client().repo_add(self.dir.path().join("repo").to_str().unwrap()).unwrap()
-    }
-
-    /// A file in the stack's directory that the fake agent's `hang-until:` waits for, until it's made.
-    pub(crate) fn gate(&self, name: &str) -> PathBuf {
-        self.dir.path().join(name)
-    }
-
-    /// A workspace in the stack's repository, made by another client, as from the desktop app.
-    pub(crate) fn workspace(&self) -> Workspace {
-        self.client().workspace_create(&self.add_repo().id, None, None, None).unwrap()
-    }
-
-    pub(crate) fn start_hub(&mut self) {
-        let hub = environment(self.dir.path())
-            .set(ENV_HOME, &self.paths.data_dir)
-            .set(ENV_WORKSPACES, &self.paths.workspaces_root)
-            // Only on loopback, so no firewall asks.
-            .set(ENV_LISTEN, format!("127.0.0.1:{}", self.port))
-            .command(binaries().join("roundhoused"))
-            .arg("hub")
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .spawn()
-            .unwrap();
-        self.hub = Some(hub);
-        let socket = &self.paths.socket;
-        waiting::thread::until(TIMEOUT, "timed out waiting for the hub to start", || {
-            Client::connect(socket, "test").is_ok()
-        });
-    }
-
-    /// Stops the hub as the app does, and waits for it to exit.
-    pub(crate) fn stop_hub(&mut self) {
-        let Some(mut hub) = self.hub.take() else { return };
-        let stopped = client_core::stop_hub(&self.paths.socket);
-        // Not again in a test that failed, since a panic as it unwinds would end the run without saying why.
-        assert!(stopped.is_ok() || std::thread::panicking(), "the hub didn't stop: {stopped:?}");
-        waiting::thread::up_to(Duration::from_secs(5), || !matches!(hub.try_wait(), Ok(None)));
-        let _ = hub.kill();
-        let _ = hub.wait();
-    }
-
-    /// A client on the hub's own machine, for setting things up and checking them from outside the app.
-    pub(crate) fn client(&self) -> Client {
-        Client::connect(&self.paths.socket, "test").unwrap()
-    }
-
-    /// What the hub's QR code holds now, which points only at loopback, where the hub listens.
-    pub(crate) fn pairing_link(&self) -> String {
-        let link = self.client().pairing_start().unwrap().link;
-        assert_eq!(link.hosts, [format!("127.0.0.1:{}", self.port)]);
-        link.to_string()
-    }
-}
-
-impl Drop for Stack {
-    fn drop(&mut self) {
-        self.stop_hub();
-    }
-}
-
-/// The whole environment the hub runs in, as the desktop's tests start theirs: what [`WholeEnvironment::for_a_test`]
-/// gives, with a home of its own under `root`, so a real ~/.conductor/settings.toml or `gh` login can't change what
-/// these tests do, a `gh` that's logged in to nothing, the fake agent, and the timers that only make a test wait
-/// shortened.
-fn environment(root: &Path) -> WholeEnvironment {
-    let (timers, short) = hub::Timers::FOR_TESTS.env();
-    let (worker_timers, worker_short) = worker::Timers::FOR_TESTS.env();
-    let mut environment = WholeEnvironment::for_a_test(&root.join("user-home"));
-    environment
-        .put_first_on_path(process::testing::logged_out_gh())
-        .set("ROUNDHOUSE_CLAUDE_BIN", binaries().join("examples/fake_claude"))
-        .set("FAKE_CLAUDE_STATE", root.join("agent-state"))
-        // So a test waits out only the time limits it's about. The hub passes the workers' on to them.
-        .set(timers, short)
-        .set(worker_timers, worker_short)
-        // So an agent started again doesn't sit through the CLI's 2 s before it asks after a task.
-        .set("FAKE_CLAUDE_POLL_DEFAULT_MS", worker::Timers::FOR_TESTS.wait_poll.as_millis().to_string());
-    environment
 }
 
 pub(crate) struct Phone<'a> {
@@ -194,6 +65,8 @@ impl<'a> Phone<'a> {
         let screen = Bounds::new(point(px(0.), px(0.)), size(px(402.), px(874.)));
         let options = WindowOptions { window_bounds: Some(WindowBounds::Windowed(screen)), ..Default::default() };
         let (handle, app) = cx.update(|cx| mobile::open_window(vault.clone(), opened, options, cx)).unwrap();
+        // In front, as an app the person just opened is.
+        cx.update_window(handle, |_, window, _| window.activate_window()).unwrap();
         Phone { cx, handle, app, vault, links, seen_approval: Seq::default() }
     }
 
@@ -230,6 +103,55 @@ impl<'a> Phone<'a> {
         let id = id.into();
         self.frame();
         self.cx.update_window(self.handle, |_, window, cx| window.click(id, cx)).unwrap();
+        self.frame();
+    }
+
+    /// Makes another app the one in front, or the phone locked.
+    pub(crate) fn send_to_back(&mut self) {
+        gpui_kit::VisualTestContext::from_window(self.handle, self.cx).deactivate_window();
+        self.frame();
+    }
+
+    /// Brings the app to the front again.
+    pub(crate) fn bring_to_front(&mut self) {
+        self.cx.update_window(self.handle, |_, window, _| window.activate_window()).unwrap();
+        self.frame();
+    }
+
+    /// Holds a finger on `id` until it's a long press, then lets go, as opens its menu.
+    pub(crate) fn press_long(&mut self, id: impl Into<ElementId>) {
+        let id = id.into();
+        self.frame();
+        let at = self.cx.update_window(self.handle, |_, window, _| window.find(id).bounds().center()).unwrap();
+        self.touch(TouchPhase::Started, at);
+        self.cx.executor().advance_clock(GestureTuning::default().long_press_duration + Duration::from_millis(1));
+        self.frame();
+        self.touch(TouchPhase::Ended, at);
+        self.frame();
+    }
+
+    fn touch(&mut self, phase: TouchPhase, at: Point<Pixels>) {
+        let touch = TouchEvent { id: TouchId(1), phase, position: at, predicted_position: None, force: None };
+        self.cx
+            .update_window(self.handle, |_, window, cx| window.dispatch_event(touch.to_platform_input(), cx))
+            .unwrap();
+    }
+
+    /// Taps the row labelled `label` in the menu that's open, rather than anything else with that label.
+    pub(crate) fn choose(&mut self, label: &str) {
+        self.frame();
+        let menu = ElementId::Name("popup-menu".into());
+        let (place, row) = self
+            .cx
+            .update_window(self.handle, |_, window, _| {
+                let found = window.find_all_by_label(label).into_iter().find(|found| found.path().contains(&menu));
+                let path =
+                    found.unwrap_or_else(|| panic!("the open menu has nothing labelled {label}")).path().to_vec();
+                // By its place in the menu too, since two rows can say the same, such as two untitled chats.
+                (path[path.len() - 2].clone(), path[path.len() - 1].clone())
+            })
+            .unwrap();
+        self.cx.update_window(self.handle, |_, window, cx| window.within(menu).within(place).click(row, cx)).unwrap();
         self.frame();
     }
 
@@ -283,6 +205,84 @@ impl<'a> Phone<'a> {
         self.cx.read_entity(&self.app, MobileApp::transcript).is_some()
     }
 
+    /// The chat the open chat's screen shows.
+    pub(crate) fn chat_shown(&self) -> Option<protocol::model::SessionId> {
+        self.cx.read_entity(&self.app, MobileApp::chat_shown)
+    }
+
+    /// The phone's own record of the chat shown, which can be behind the hub's.
+    pub(crate) fn shown_record(&self) -> Option<protocol::model::Session> {
+        self.cx.read_entity(&self.app, MobileApp::shown_record)
+    }
+
+    /// What's typed in the open chat's composer.
+    pub(crate) fn typed(&self) -> String {
+        self.cx.read_entity(&self.app, MobileApp::typed).unwrap_or_default()
+    }
+
+    /// Whether a subagent's work is shown over the chat.
+    pub(crate) fn subagent_shown(&self) -> bool {
+        self.cx.read_entity(&self.app, MobileApp::subagent_transcript).is_some()
+    }
+
+    /// The first element the last frame drew whose ID starts with `part`, for one a test can't know the whole ID of,
+    /// such as the Open on a subagent's line, which ends with its call's.
+    pub(crate) fn found_starting(&mut self, part: &str) -> Option<ElementId> {
+        self.frame();
+        self.cx
+            .update_window(self.handle, |_, window, _| {
+                let mut ids = window.elements().into_iter().filter_map(|element| element.path().last().cloned());
+                ids.find(|id| matches!(id, ElementId::Name(name) if name.starts_with(part)))
+            })
+            .unwrap()
+    }
+
+    /// Whether the first thing labelled `label`, such as a call's line, is open, if it's something that opens.
+    pub(crate) fn expanded(&mut self, label: &str) -> Option<bool> {
+        self.frame();
+        self.cx
+            .update_window(self.handle, |_, window, _| {
+                window.find_all_by_label(label).first().and_then(gpui_kit::test::ElementSnapshot::expanded)
+            })
+            .unwrap()
+    }
+
+    /// Taps the first thing labelled `label`, such as a call's line, which is labelled by what the call did.
+    pub(crate) fn tap_labelled(&mut self, label: &str) {
+        self.frame();
+        let found = self
+            .cx
+            .update_window(self.handle, |_, window, _| {
+                window.find_all_by_label(label).first().and_then(|found| found.path().last().cloned())
+            })
+            .unwrap();
+        self.tap(found.unwrap_or_else(|| panic!("nothing is labelled {label}")));
+    }
+
+    /// The text on the clipboard.
+    pub(crate) fn copied(&self) -> Option<String> {
+        self.cx.read_from_clipboard().and_then(|copied| copied.text())
+    }
+
+    /// The first element the last frame drew whose ID is `name` and a number, such as a code block, which the kit
+    /// numbers by where it starts in its text.
+    pub(crate) fn found_numbered(&mut self, name: &str) -> Option<ElementId> {
+        self.frame();
+        self.cx
+            .update_window(self.handle, |_, window, _| {
+                let mut ids = window.elements().into_iter().filter_map(|element| element.path().last().cloned());
+                ids.find(|id| matches!(id, ElementId::NamedInteger(named, _) if named == name))
+            })
+            .unwrap()
+    }
+
+    /// Waits for an element whose ID starts with `part`, then taps it.
+    pub(crate) fn tap_starting(&mut self, part: &str) {
+        self.wait(&format!("something whose ID starts {part}"), |phone| phone.found_starting(part).is_some());
+        let found = self.found_starting(part).unwrap();
+        self.tap(found);
+    }
+
     fn events(&self) -> Vec<SessionEvent> {
         let Some(transcript) = self.cx.read_entity(&self.app, MobileApp::transcript) else { return Vec::new() };
         self.cx.read_entity(&transcript, |t, _| (0..t.row_count()).filter_map(|row| t.event_at(row)).collect())
@@ -300,6 +300,16 @@ impl<'a> Phone<'a> {
             }
         }
         text
+    }
+
+    /// What each prompt the chat's log holds says, in order, which a prompt sent while the agent works is once it's
+    /// steered it rather than queued.
+    pub(crate) fn prompts(&self) -> Vec<String> {
+        let prompt = |event: SessionEvent| match event.body {
+            EventBody::UserPrompt { prompt, .. } => Some(prompt.text),
+            _ => None,
+        };
+        self.events().into_iter().filter_map(prompt).collect()
     }
 
     /// What the agent was told its calls came to, such as the answer to its question.

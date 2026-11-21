@@ -147,7 +147,7 @@ impl Attachments {
                     .axis(Axis::Vertical)
                     .media(AttachmentMedia::new().src(preview.clone()))
                     .on_remove(remove),
-                None => transcript::file_card(element, attachment).on_remove(remove),
+                None => transcript::file_card(element, attachment, cx).on_remove(remove),
             }
         });
         Some(AttachmentGroup::new(group).children(tiles))

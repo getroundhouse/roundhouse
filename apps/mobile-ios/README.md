@@ -6,11 +6,14 @@
 
 ```sh
 cargo test -p mobile-ios                                    # The app in a phone-sized window, against a real hub with the fake agent
+cargo test -p mobile-ios --test ui gallery                  # Every screen, from made-up data, against its image in docs/spec/screens/phone
 cargo test -p desktop --test ui the_phone_icon              # The app icon, against the asset catalog's
 IPHONEOS_DEPLOYMENT_TARGET=17.0 cargo clippy -p mobile-ios --target aarch64-apple-ios -- -D warnings   # What only builds for the phone
 ```
 
 The UI tests tap what someone would tap. The app pairs and connects as it does on a phone, over TLS, to a hub that listens only on loopback, so no firewall asks. What only runs on a phone, such as the Keychain and the Camera app opening a link, is checked by hand.
+
+The gallery draws each screen on a fake hub that answers from fixed data, in a window the size of a phone's screen, kept clear of a phone's status bar and home indicator, and checks it against its image, as the desktop's gallery does. `docs/spec/mobile.md` shows each beside its rule, and `.context/gallery/phone/` has how each looks now. The app is told how to connect and what its safe area is there, since the fake hub is on a socket rather than the network, and a window that's never on screen has no status bar.
 
 ## Running it on a phone
 

@@ -1,7 +1,7 @@
 //! A shell command: what the agent said it's for, with the command beside it. Opened, the command and then its
 //! output, in one block. The command is faded, since the call's title has said what it does and what it printed is
 //! what's read, and whole, since opening the call is what shows it. It's text to select, and a button at its top right
-//! copies all of it, to run elsewhere.
+//! copies all of it, to run elsewhere, or a long press on it under touch.
 
 use client_core::calls::Command;
 use gpui_kit::assets::IconName;
@@ -9,7 +9,7 @@ use gpui_kit::{
     AnyElement, App, Div, ElementId, InteractiveElement, IntoElement, ParentElement, Role, SharedString,
     StatefulInteractiveElement as _, Styled, TestSupportExt as _, div, px,
 };
-use look::Typeset as _;
+use look::{RightClickMenu as _, Typeset as _};
 
 use super::highlight::spans;
 use super::line::{Line, Part};
@@ -33,7 +33,8 @@ pub(super) fn draw(command: &Command, answer: Option<&Answer>, toggle: &Toggle, 
         let summary = command.summary();
         Part::Pill(summary.to_string().into(), toggle.marks(Text::Summary, summary))
     });
-    let line = Line::new(ICON, command.title()).part(summary).shows_output(true);
+    let line =
+        Line::new(ICON, command.title()).part(summary).shows_output(true).copies(command.command.trim().to_string());
     let line = if command.described().is_some() { line.found(toggle) } else { line };
     let opened = || Some(opened(command, answer, toggle, cx).into_any_element());
     line::drawn(line, answer, opened, toggle, cx)
@@ -121,7 +122,8 @@ fn command_part(command: &Command, toggle: &Toggle, cx: &App) -> AnyElement {
         .child(div().flex_none().text_color(colors.text_faint).child("$\u{a0}"))
         .child(div().flex_1().min_w_0().child(text))
         // Room for the button, which is pinned over it, so the text never runs under the button. As wide as the
-        // copy button, a small button's square.
+        // copy button, a small button's square, and kept under touch too, where there's no button, so the command
+        // wraps in the same place whatever the input.
         .child(div().flex_none().ml(look::Space::Small).w(look::ControlSize::Small.height()))
         .test_support()
         .into_any_element();
@@ -129,22 +131,23 @@ fn command_part(command: &Command, toggle: &Toggle, cx: &App) -> AnyElement {
     let selectable = block::selectable(toggle, Text::Command, &id, part, full.clone(), Pieces::whole(layout));
     // Half as tall as what it printed can be, so a long command leaves room for that.
     let scrolling = block::scrolling(&toggle.shared.selection, &id, selectable).max_height(px(block::MAX_HEIGHT / 2.));
-    div()
+    let area = div()
         .id(ElementId::from((id.clone(), "area")))
         .relative()
         .group(GROUP)
         .typeset_code(cx)
         .child(scrolling)
-        .child(copy_button(&id, full, cx))
-        .test_support()
-        .into_any_element()
+        .children(copy_button(&id, full.clone(), cx))
+        .test_support();
+    area.copied_by_a_long_press(full, cx)
 }
 
-/// The button that copies the command, shown while the command is hovered. It's pinned at the command's top right,
-/// over what scrolls, so it stays beside the first line's place however far a long command is scrolled.
-fn copy_button(id: &ElementId, full: SharedString, cx: &App) -> impl IntoElement {
-    let copy = look::copy_button(ElementId::from((id.clone(), "copy")), full, "Copy command", cx);
-    div()
+/// The button that copies the command, shown while the command is hovered, and under touch none. It's pinned at the
+/// command's top right, over what scrolls, so it stays beside the first line's place however far a long command is
+/// scrolled.
+fn copy_button(id: &ElementId, full: SharedString, cx: &App) -> Option<impl IntoElement> {
+    let copy = look::copy_button_shown_while_over(GROUP, (id.clone(), "copy"), full, "Copy command", cx)?;
+    let pinned = div()
         .absolute()
         .top_0()
         .right_0()
@@ -152,9 +155,8 @@ fn copy_button(id: &ElementId, full: SharedString, cx: &App) -> impl IntoElement
         .pr(look::Space::Medium)
         .flex()
         .items_center()
-        .invisible()
-        .group_hover(GROUP, Styled::visible)
         // A line's height, so the button is centred on the command's first line.
         .child(div().w_0().child("\u{a0}"))
-        .child(div().h_0().flex().items_center().child(copy))
+        .child(div().h_0().flex().items_center().child(copy));
+    Some(pinned)
 }

@@ -1,7 +1,12 @@
 use gpui_kit::component::menu::{ContextMenu, ContextMenuExt, PopupMenu};
-use gpui_kit::{App, Context, DismissEvent, FocusHandle, Pixels, SharedString, WeakEntity, Window};
+use gpui_kit::{
+    AnyElement, App, ClipboardItem, Context, DismissEvent, FocusHandle, IntoElement, ParentElement, Pixels,
+    SharedString, Styled, WeakEntity, Window,
+};
 
-use super::MenuRow;
+use super::row::Does;
+use super::{MenuRow, menu_row};
+use crate::Input;
 
 /// What fills a menu, built each time it opens: its rows, the lines between groups of them, and the labels over some.
 #[must_use]
@@ -9,13 +14,23 @@ pub struct Menu {
     kit: PopupMenu,
     open: WeakEntity<PopupMenu>,
     keys: Keys,
+    input: Input,
+    entries: Vec<Entry>,
 }
 
-/// Whether a menu's rows show their keys: every menu's do but a right-click menu's, which is a shortcut of its own.
+/// Whether a menu's rows show their keys: every menu's do but a right-click menu's, which is a shortcut of its own, and
+/// only with a pointer, as every key shows.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Keys {
     Shown,
     Hidden,
+}
+
+/// What a menu holds, in the order it's given, until the menu is built.
+pub(super) enum Entry {
+    Row(Box<MenuRow>),
+    Separator,
+    Label(SharedString),
 }
 
 impl Menu {
@@ -26,20 +41,20 @@ impl Menu {
 
     /// A row, which [`crate::menu_row`] makes.
     pub fn row(mut self, row: MenuRow) -> Self {
-        let row = if self.keys == Keys::Hidden { row.without_key() } else { row };
-        self.kit = self.kit.item(row.kit());
+        let row = if self.keys == Keys::Hidden || self.input == Input::Touch { row.without_key() } else { row };
+        self.entries.push(Entry::Row(Box::new(row)));
         self
     }
 
     /// A line between one group of rows and the next.
     pub fn separator(mut self) -> Self {
-        self.kit = self.kit.separator();
+        self.entries.push(Entry::Separator);
         self
     }
 
     /// A label over the rows that follow, such as Effort over the model picker's efforts.
     pub fn label(mut self, words: impl Into<SharedString>) -> Self {
-        self.kit = self.kit.label(words);
+        self.entries.push(Entry::Label(words.into()));
         self
     }
 
@@ -78,7 +93,34 @@ fn built(
 ) -> impl Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static {
     move |kit, window, cx| {
         let open = cx.entity().downgrade();
-        build(Menu { kit, open, keys }, window, cx).kit
+        let input = Input::of(cx);
+        build(Menu { kit, open, keys, input, entries: Vec::new() }, window, cx).kit()
+    }
+}
+
+impl Menu {
+    /// The kit's menu, with what it holds. Under touch, the rows that copy come first, since a long press opens Copy
+    /// first on anything, as a message's does in Messages, as `docs/spec/components.md` says.
+    fn kit(self) -> PopupMenu {
+        let Menu { kit, input, entries, .. } = self;
+        in_order(entries, input).into_iter().fold(kit, |kit, entry| match entry {
+            Entry::Row(row) => kit.item(row.kit()),
+            Entry::Separator => kit.separator(),
+            Entry::Label(words) => kit.label(words),
+        })
+    }
+}
+
+/// `entries` in the order a menu shows them under `input`: as they were given, but under touch the rows that copy
+/// come first, in the order they were given.
+pub(super) fn in_order(entries: Vec<Entry>, input: Input) -> Vec<Entry> {
+    match input {
+        Input::Pointer => entries,
+        Input::Touch => {
+            let copies = |entry: &Entry| matches!(entry, Entry::Row(row) if row.does == Does::Copies);
+            let (first, rest): (Vec<_>, Vec<_>) = entries.into_iter().partition(copies);
+            first.into_iter().chain(rest).collect()
+        }
     }
 }
 
@@ -113,7 +155,7 @@ impl OpenMenu {
     }
 }
 
-/// Opens a menu where something is right-clicked.
+/// Opens a menu where something is right-clicked, or pressed long under touch.
 pub trait RightClickMenu: ContextMenuExt + Sized {
     /// Opens the menu `build` fills where this is right-clicked. Its rows show no keys, as `components.md` says, since
     /// the menu is a shortcut of its own, so a row given one shows it only in a menu that drops from a button.
@@ -121,6 +163,29 @@ pub trait RightClickMenu: ContextMenuExt + Sized {
     fn right_click_menu(self, build: impl Fn(Menu, &mut Window, &mut App) -> Menu + 'static) -> ContextMenu<Self> {
         self.context_menu(built(build, Keys::Hidden))
     }
+
+    /// Opens a menu with Copy, copying `text`, where this is pressed long under touch, for what a copy button shown
+    /// under the pointer copies with one, since nothing rests on it under touch, as `docs/spec/components.md` says.
+    /// With a pointer it's as it was, since its button copies it. A menu takes its trigger's element ID, so this has
+    /// one of its own.
+    fn copied_by_a_long_press(self, text: impl Into<SharedString>, cx: &App) -> AnyElement
+    where
+        Self: ParentElement + Styled + IntoElement + 'static,
+    {
+        if Input::of(cx) == Input::Pointer {
+            return self.into_any_element();
+        }
+        let text = text.into();
+        self.right_click_menu(move |menu, _, _| menu.row(copy_row(text.clone()))).into_any_element()
+    }
+}
+
+/// The row that copies `text`.
+fn copy_row(text: SharedString) -> MenuRow {
+    menu_row("Copy")
+        .icon(gpui_kit::assets::IconName::Copy)
+        .copies()
+        .on_choose(move |_, cx| cx.write_to_clipboard(ClipboardItem::new_string(text.to_string())))
 }
 
 impl<T: ContextMenuExt + Sized> RightClickMenu for T {}

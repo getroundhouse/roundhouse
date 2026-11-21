@@ -46,6 +46,7 @@ pub(super) fn draw(
 ) -> AnyElement {
     let mut line =
         Line::new(ICON, call.title())
+            .copies(call.prompt.unwrap_or_else(|| call.title()).to_string())
             .part(agent::shown_kind(call.kind).map(|kind| {
                 Part::Chip(look::chip(look::ChipKind::Subagent, look::ChipSize::Regular, kind.to_string()))
             }))

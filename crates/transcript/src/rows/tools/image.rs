@@ -22,7 +22,7 @@ const TITLE: &str = "Make an image";
 pub(super) fn draw(made: &GenerateImage, answer: Option<&Answer>, toggle: &Toggle, cx: &App) -> AnyElement {
     let asked = asked(made, answer);
     let summary = asked.map(|asked| Part::Summary(first_line(asked).to_string().into()));
-    let line = Line::new(IconName::ImagePlus, TITLE).part(summary);
+    let line = Line::new(IconName::ImagePlus, TITLE).part(summary).copies(asked.unwrap_or(TITLE).to_string());
     let images = answer.map_or_default(Answer::images);
     let opened = || {
         if asked.is_none() && images.is_empty() {

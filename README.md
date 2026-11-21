@@ -23,7 +23,7 @@
 
 Give each task a workspace: a git worktree, a branch and chats of its own, with an agent at work in it. Roundhouse shows which agents are working, which have finished and which are waiting on you, and takes each one's work from the first prompt to a merged pull request. The workspace is the unit of delegation, and the branch and pull request are the unit of integration.
 
-**It's early.** It runs on a Mac with Apple silicon, with first previews for Windows and Linux, and it runs Claude, Codex and Antigravity through their installed CLIs. The desktop can [connect to a paired hub on another machine](docs/guide/guides/connect-another-hub.md). More agents, cloud providers and an iPhone app are designed for and not built. [Where it stands](#where-it-stands) has the rest.
+**It's early.** It runs on a Mac with Apple silicon, with first previews for Windows and Linux, and it runs Claude, Codex and Antigravity through their installed CLIs. The desktop can [connect to a paired hub on another machine](docs/guide/guides/connect-another-hub.md). More agents and cloud providers are designed for and not built. An iPhone app, built from source, pairs with a hub and works in its workspaces' chats. [Where it stands](#where-it-stands) has the rest.
 
 Roundhouse is a working name, after the round building where a railway services its locomotives, each in its own stall around one turntable. Rail is the theme for naming, and the mark beside every workspace is a roundhouse seen from above.
 
@@ -124,7 +124,7 @@ roundhouse --help
 | **Mac** | Built, for Apple silicon. |
 | **Agents** | Claude, Codex and Antigravity, through their CLIs. Codex discovers the models and efforts available to its CLI before the first prompt. Antigravity starts on Gemini 4 Neon at High effort. Both integrations are exercised on macOS. |
 | **Hub** | Runs on your machine and can be controlled from another paired desktop. Cloud providers, with workspaces in VMs or sandboxes, are designed for and not built. |
-| **iPhone** | Not built. `mobile-poc/` is a proof of concept. |
+| **iPhone** | Built from source with Xcode, and not on the App Store: it pairs with a hub, lists its workspaces and works in their chats, as `docs/spec/mobile.md` says. `apps/mobile-ios/README.md` says how to build it. `mobile-poc/` is the proof of concept that came before it. |
 | **Windows** | A first preview. An installer is published from every merge, for [amd64](https://f001.backblazeb2.com/file/getroundhouse-releases/Roundhouse-win-amd64-Setup.exe) and [ARM64](https://f001.backblazeb2.com/file/getroundhouse-releases/Roundhouse-win-arm64-Setup.exe). It's unsigned, so Windows warns about it, and the only checks that run on Windows are a lint and a hub starting and stopping. |
 | **Linux** | A first preview. An AppImage is published from every merge, for [amd64](https://f001.backblazeb2.com/file/getroundhouse-releases/Roundhouse-linux-amd64.AppImage) and [ARM64](https://f001.backblazeb2.com/file/getroundhouse-releases/Roundhouse-linux-arm64.AppImage). Make it executable and open it, and it updates itself. It needs glibc 2.35 or newer, as on Ubuntu 22.04 and later, Vulkan and FUSE. The only checks that run on Linux are the tests and a hub starting and stopping. |
 
@@ -133,7 +133,7 @@ What's left is on GitHub: [issues](https://github.com/getroundhouse/roundhouse/i
 ## How it fits together
 
 ```
- Desktop app      CLI      iPhone app (not built)
+ Desktop app      CLI      iPhone app
       └────────────┼────────────┘
                    │
                   Hub       Owns workspaces, chats and their logs, in SQLite

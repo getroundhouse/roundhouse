@@ -1,6 +1,6 @@
 //! What a code block in a text has at its top right: its language, where the kit would draw it, and before it, while
 //! the block is hovered, a button that copies its code. The kit draws a block's actions in place of its language, so
-//! the actions draw the language too.
+//! the actions draw the language too. Under touch nothing hovers it, so a long press on the block copies it instead.
 
 use gpui_kit::base::text::editor_host::{CODE_BLOCK_GROUP, CodeBlock, RenderContext};
 use gpui_kit::component::h_flex;
@@ -8,7 +8,7 @@ use gpui_kit::{
     AnyElement, App, InteractiveElement as _, IntoElement as _, ParentElement as _, Pixels, Styled,
     TestSupportExt as _, Window, div, px,
 };
-use look::Typeset as _;
+use look::{RightClickMenu as _, Typeset as _};
 
 /// The room above a block's code, which the kit gives a block whose language it draws, and every block has, so the
 /// language and the button sit above the code rather than over it.
@@ -23,7 +23,10 @@ pub(super) fn with_actions(context: RenderContext) -> RenderContext {
     let style = context.style();
     let code_block = style.code_block().clone().pt(ROOM).line_height(look::CodeLines::Chat.height());
     let roomy = style.clone().with_code_block(code_block);
-    context.with_style(roomy).with_code_block_actions(actions)
+    context
+        .with_style(roomy)
+        .with_code_block_actions(actions)
+        .with_code_block_wrap(|block, drawn, _, cx| drawn.test_support().copied_by_a_long_press(block.code(), cx))
 }
 
 /// What a code block that isn't one of a text's blocks is drawn with, such as a diagram's that couldn't be drawn, as
@@ -32,12 +35,12 @@ pub(crate) fn code_context(cx: &App) -> RenderContext {
     with_actions(RenderContext::from_app(cx))
 }
 
-/// The button that copies `block`'s code, shown while the block is hovered, then its language, if it has one.
+/// The button that copies `block`'s code, shown while the block is hovered, then its language, if it has one. Under
+/// touch, only its language.
 fn actions(block: &CodeBlock, _: &mut Window, cx: &mut App) -> AnyElement {
-    let copy = look::copy_button("copy", block.code(), "Copy code", cx);
+    let copy = look::copy_button_shown_while_over(CODE_BLOCK_GROUP, "copy", block.code(), "Copy code", cx);
     // Centred on the line without making it taller, so the line sits where the kit's language would.
-    let copy = div().flex().items_center().h_0().mr(look::Space::XSmall).child(copy);
-    let copy = copy.invisible().group_hover(CODE_BLOCK_GROUP, Styled::visible);
+    let copy = copy.map(|copy| div().flex().items_center().h_0().mr(look::Space::XSmall).child(copy));
     h_flex()
         .id("code-block-actions")
         // As far in from the block's edge as the kit draws the language.
@@ -48,7 +51,7 @@ fn actions(block: &CodeBlock, _: &mut Window, cx: &mut App) -> AnyElement {
         .text_color(look::colors(cx).text_muted)
         // A line's height, so a block with no language has the line too.
         .child(div().w_0().child("\u{a0}"))
-        .child(copy)
+        .children(copy)
         .children(block.lang().filter(|lang| !lang.is_empty()))
         .test_support()
         .into_any_element()

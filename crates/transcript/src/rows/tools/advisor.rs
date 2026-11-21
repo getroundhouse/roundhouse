@@ -22,6 +22,8 @@ const ENCRYPTED: &str = "The advisor's reply is encrypted, so only the agent can
 const NO_REPLY: &str = "The advisor hasn't replied.";
 /// What it opens to when the log says the agent went on without a reply.
 const DROPPED: &str = "The advisor didn't reply, and the agent went on without it.";
+/// What its line says.
+const TITLE: &str = "Ask the advisor";
 /// What a call the agent went on without says on its line, so closed, it reads apart from the call the agent then
 /// makes again.
 const DROPPED_NOTE: &str = "No reply";
@@ -34,7 +36,8 @@ pub(super) fn draw(reply: &Reply, toggle: &Toggle, cx: &App) -> AnyElement {
     // Its start, while it's closed, as a thought's is, so it isn't shown twice.
     let start = advice.filter(|_| !toggle.open).map(Part::start_of);
     let dropped = matches!(reply, Reply::Dropped).then(|| Part::Note(DROPPED_NOTE.into()));
-    let line = Line::new(IconName::Lightbulb, "Ask the advisor").part(start).part(dropped);
+    let line =
+        Line::new(IconName::Lightbulb, TITLE).copies(advice.unwrap_or(TITLE).to_string()).part(start).part(dropped);
     let opened = || said(reply, advice, toggle, cx).map(|said| block::frame(cx).child(said).into_any_element());
     line::drawn(line, answer, opened, toggle, cx)
 }

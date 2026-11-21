@@ -2,6 +2,25 @@
 
 The pieces screens are built from, on the foundations in `look.md`: what each is, what it comes in, and how each of its states looks and what it means. Each area's file says where it uses them.
 
+## Which clients each is for
+
+- **A component is shared by every client unless one of `look.md`'s three traits decides it,** as the owner decided: reach for what only a device held in the hand has, width for what's there only when there's room or there isn't, and input for what only a pointer can do. So a tablet with a trackpad, or a desktop window made narrow, gets what fits it rather than what its device usually has.
+
+| Component | Decided by | What changes |
+|---|---|---|
+| Buttons, toggles, switches, fields, bars, cards in the page, small things in a line, the status mark, lines, banners, empty states, the app icon | Shared | Their sizes, by reach |
+| A list's row | Shared | Under touch it's washed when pressed, not under the pointer. Its chevron is a compact layout's |
+| A menu | Shared | Beside what opened it, at every width. Under touch a right-click menu opens on a long press |
+| A copy button shown under the pointer | Input | Under touch, Copy is first in what a long press opens |
+| A tooltip, the pointing hand, a key | Input: a pointer | Nothing under touch |
+| A hover card | Input | Under touch it opens on a tap, in a sheet in a compact layout |
+| A handheld's bar across the top | Reach: handheld | Every screen on a phone or a tablet has one, at any width |
+| A sheet | Width: compact | A regular or wide layout opens a dialog, or a card over the rest |
+| A dialog | Width: regular and wide | A compact layout opens a sheet, or the whole screen for a task of several steps |
+| Tabs | Width: regular and wide | In a compact layout the screen's title opens a menu of what the tabs hold |
+
+*Not built:* a list's row washed when it's pressed under touch, rather than under the pointer, as `look.md` says.
+
 ## Buttons
 
 - **Each area has at most one main action,** with a light fill and dark text, such as Create PR, Send or Add project. With one obvious next step per area, nothing competes with it.
@@ -50,6 +69,8 @@ The pieces screens are built from, on the foundations in `look.md`: what each is
 ## Keys
 
 - **A key to press is shown where it's pressed, as the system it's on writes keys,** so the same key reads the same everywhere: Cmd on a Mac and Ctrl elsewhere, Return as `⏎`, and Escape as `Esc` everywhere, as the owner decided, since the Mac's symbol for it reads as undo. A key on its own, beside what it does, is on a small raised key, such as `⌘ F` at the end of Settings' search. A key after a button's words is written as text, in the button's colour, such as Return after Create and after a comment's Comment and Save. `look::KeyKind` holds the kinds. A tooltip's key is `Plain`, in muted text. The keys in the kit's menus are the kit's own, written as text. *Unconfirmed.*
+
+- **Only a client with a pointer shows keys,** as the owner decided, since an iPad's keyboard almost always comes with a trackpad, so no fourth trait is needed for one component.
 
 **Every kind of key, by its name.** Each is a kind in `look::KeyKind`. *Unconfirmed.*
 
@@ -101,6 +122,18 @@ The pieces screens are built from, on the foundations in `look.md`: what each is
 
 ![Every kind of bar](screens/bar-kinds.png)
 
+### A handheld's bar across the top
+
+- **A handheld's screen has a bar across its top that names it, in its middle, with what goes back at its start and what's done there at its end,** as a phone's own apps do, since a screen fills the device and nothing else says where it is or how to leave. It's a regular bar, 44 points tall, on the pane's surface with a line under it, and its surface runs up under the status bar, with what it holds below that. Every screen on a phone or a tablet has one, at any width, and a desk never does, as the owner decided, since a desk's window names what's showing at any width. `look::top_bar` draws one.
+- **Its buttons are borderless icons, each a square as tall as the bar, 4 points in from the screen's edges,** so an icon sits about where a phone's own apps draw theirs, and a tap anywhere in the square counts. *Unconfirmed.*
+- **The title is body text, emphasised, and a line under it says more in a detail's text, muted, such as a workspace's branch or how the hub's connection stands.** Both fit in the bar, with their lines 1.2 times their text's size apart, closer than text is set elsewhere. *Unconfirmed.*
+- **The title stays in the bar's middle whatever is at its ends, and gives way only once it would run into them:** it moves off the middle towards the end with fewer buttons, and is cut short with an ellipsis once it has no more room. *Unconfirmed.*
+- **A title that opens a choice of what the screen shows has a small chevron after it, and is pressed as a button is,** such as a workspace's title, which opens its chats. Its menu opens under it, from its middle, as a phone's own title menus do, and it stays pressed while the menu is open. *Unconfirmed.*
+
+**Every way a top bar is used.** *Unconfirmed.*
+
+![Every way a handheld's top bar is used](screens/phone/top-bars.png)
+
 ## Tabs
 
 - **A tab names one of what its bar can show, and the one showing is underlined,** with a 2px line in the paled copper over the bar's bottom edge, rather than filled, so its bar stays a row of names, as `chats.md` says of the chat tabs. Its name is muted whether or not it's showing, and stronger, in the text's colour, only when what it names needs a look, such as a reply not yet read. `look::tab` makes one, the workspace's tabs and the sidebar's All files and Changes alike.
@@ -141,6 +174,7 @@ The pieces screens are built from, on the foundations in `look.md`: what each is
 - **A list's row is washed in the text's colour under the pointer, while it's pressed and while it's chosen, as a borderless button is,** `text` at 6%, 12% and 9%, and rounded with a control's corners, 4px in from its list's edges, as the owner chose from pictures of three ways, so every list lights the same way, as a menu's rows and a button do. Each list had its own grey, and some ran edge to edge, so a row under the pointer was filled seven ways. `look::ListRow` draws one, in All files, Changes, Settings' pages, Home, the outline's list, a question's options, a web search's results and the sidebar's Home, Create, Search and workspaces. A row that's off for now, such as Create with no project, isn't washed. The sidebar sets its rows 8px in from its edges, where other lists set them 4px, so they line up under the hub switcher. *Unconfirmed:* all of it, which the owner wants to see across the app before confirming.
 - **A row's room, at its ends and between what's in it, is by its size:** 8px in a small or a regular row, and 12px in a large one, a table's, so its parts read apart across a pane. A row in a tree is set in by its depth after its start. *Unconfirmed.*
 - **A row that holds more than a line wraps,** such as a prompt of two lines in the outline, or a question's option with what it means under it: it's as tall as what it holds, at least its size's height, with its room above and below as well as at its ends, and what it holds sits at its top. *Unconfirmed.*
+- **A row that opens what it names has a faint chevron at its end,** as a phone's own lists do, where a row is the way to another screen: a page of Settings, or a file in a folder. What's in the row takes the room before it. Only a compact layout's rows have one, since in a wider one what a row opens shows beside the list. `opens` on a `look::ListRow` draws it. *Unconfirmed:* only a compact layout's.
 - **Home's rows have no line between them,** since each is washed under the pointer, apart from the next. *Unconfirmed.*
 
 **Every size of a list's row, as All files', Settings' pages and Home's are, with the first chosen and the third under the pointer.** *Unconfirmed.*
@@ -157,9 +191,17 @@ The pieces screens are built from, on the foundations in `look.md`: what each is
 - **A note at a row's end says something about what the row names, in a detail's text, and its kind says its colour:** faint for a detail, such as a hub's address or how long ago a chat was closed, the text's colour and stronger for how many need a look, and the error's for what went wrong. A row's words are cut short where they're long, so its note stays. `look::NoteKind` holds the kinds. *Unconfirmed.*
 - **A long menu to choose from scrolls once it's taller than half the window, or 450px, and opens on the row that's chosen,** as dictation's 26 languages do, so it never runs off the window, and what's chosen shows as it opens. *Unconfirmed.*
 - **Every menu is filled with `look`'s rows,** so none draws a row of its own, such as the hub switcher's and closed chats' once did. *Unconfirmed.*
+- **A menu is a menu on every client and at every width, beside what opened it,** as the owner decided, as Apple asks, rather than a sheet on a phone, which is for a task. One that drops from a button sits under it, or over it near the screen's bottom. On a handheld its rows are 44 points tall, a large control's height there.
+- **Under touch, a right-click menu opens on a long press, as a context menu:** what was pressed lifts over the dimmed screen, with its menu beside it, as an iPhone's own do, as the owner decided. The screen dims around what was pressed, the menu opens under it, at its start, or over it in the screen's lower half, so it isn't pushed up over what was pressed, and a tap anywhere else only closes the menu. On selectable text a long press selects instead. *Not built:* selecting a reply's text by touch, as `look.md` says.
 - **A right-click menu shows no keys,** as the owner decided, as Apple asks, since the menu is a shortcut of its own. Each key is shown in the menu bar's menus, the menu button's on Windows and Linux, and tooltips.
+- **On a handheld, a row that removes something comes last, in red, and asks first, in a sheet of choices along the screen's bottom,** as an iPhone's own menus do, and as the owner decided for Archive on a phone, which can't bring a workspace back. The desktop's menus don't ask, and archiving there refuses only when it would lose work.
+
+  **A handheld's menus: a row that removes something, last, in red, and rows to choose one of, under a label.** *Unconfirmed.*
+
+  ![A handheld's menus](screens/phone/menus.png)
+
 - **What a right-click menu offers can mostly be done another way too, so someone who never right-clicks misses little,** as the owner decided, since nothing on screen says a menu is there. It's a leaning, not a law: a small convenience on something in view, such as marking a workspace read, can be in its menu alone.
-- **Everything the app draws as a thing it knows has a right-click menu, every chip and every row,** as the owner decided, so once someone has found one, they'll try the rest, as a sidebar's row is expected to have one. *Not built:* a chip's menu, and most rows' but a workspace's in the sidebar, such as a file's in the file tree or in Changes, and a project's on Home.
+- **Everything the app draws as a thing it knows has a right-click menu, every chip and every row,** as the owner decided, so once someone has found one, they'll try the rest, as a sidebar's row is expected to have one. *Not built:* the menu of every chip but an issue's and a pull request's, and most rows' but a workspace's in the sidebar, such as a file's in the file tree or in Changes, and a project's on Home.
 
 **Every kind of note at a menu's row's end, by its name.** Each is a kind in `look::NoteKind`. *Unconfirmed.*
 
@@ -202,11 +244,31 @@ The pieces screens are built from, on the foundations in `look.md`: what each is
 
 ![Every width of dialog](screens/dialog-widths.png)
 
+## Sheets
+
+- **In a compact layout, a sheet comes up from the bottom of the screen, over what it dims, for a task or for what a card over the rest says in a wider one,** where a thumb reaches it: what a dialog holds, such as a comment on a line, or what a hover card says, such as a chat's usage. Only a compact layout has one, as the owner decided, as Apple's own rule for an iPhone is, and a menu stays a menu, as Menus says. It's raised, as wide as the screen, with a card's corners at its top and the one thin edge over it, and it's as tall as what it holds, up to the screen, past which what it holds scrolls. `look::sheet` draws one.
+- **A short bar at its top says it can be put away, and a tap on what it dims puts it away,** as a phone's own sheets do. The bar is 36 by 5 points, in the colour of a control's edge. What's under a sheet can't be pressed until it's gone. *Unconfirmed.*
+- **Its title is body text, emphasised, in its middle, with a line under it,** and a sheet whose rows say enough has none. *Unconfirmed.*
+- **Its surface runs down under the home indicator, with what it holds above that.** *Unconfirmed.*
+- **What's chosen from in a sheet is a list's rows, of a regular size,** such as the ways to connect a GitHub account, with a line between groups. *Unconfirmed.*
+
+**A sheet over a list: connecting a GitHub account, with its title and a row for each way, which opens it.** *Unconfirmed.*
+
+![A handheld's sheet](screens/phone/sheet.png)
+
+- **An action sheet asks before what removes something, on a handheld,** as an iPhone's own do, such as Archive chosen from a menu: what's asked, in a detail's text, emphasised, in its middle, over the choices, the one that removes first and in the error's colour, each a large row with its words in the middle, then Cancel apart under them, emphasised. A tap on what it dims cancels too. It's raised, along the screen's bottom, clear of the home indicator. `look::action_sheet` draws one. *Unconfirmed.*
+
+  **Archiving, asked first, over the list it was chosen from.** *Unconfirmed.*
+
+  ![A handheld's action sheet](screens/phone/action-sheet.png)
+
 ## Tooltips
 
 - **A tooltip says a few words about what the pointer rests on,** as the owner decided, such as what a button does, and the key that does the same, if there's one, at its end. What needs more than a line or two, such as a path, what went wrong or how something works, goes on a hover card, which follows rules of its own, so a tooltip stays something read at a glance.
 - **A tooltip is raised, with a control's corners, the one thin edge and the one shadow, in a detail's text,** 8px in from its edge at each end and 4px at the top and bottom, and wraps past 320px, so a sentence that slips in stays readable. Its key is written as text, in muted text, 12px after its words, as the owner decided.
 - **Every tooltip is `look`'s,** as the owner decided, so none is drawn in the kit's own look.
+- **Only a pointer shows tooltips.** Under touch nothing takes their place, as Apple asks, and what one says is its control's label for VoiceOver, as the owner decided.
+- **Under touch, a hover card opens on a tap on what it's about,** such as a turn's time, in a sheet in a compact layout, as the owner decided. A tap anywhere but the card puts it away, and so does another on what it's about. *Not built:* the sheet, since nothing yet tells a compact layout, so the card opens over what it's about, as at a desk.
 - **A hover card that says what a tooltip has no room for is a card over the rest, of the small width,** as the owner decided, with what it's about in body text and stronger, then what it says in muted detail text, or a path in code's type, wrapped, with the button that copies it: what went wrong updating, what the version says of another hub, and where a checkout's build was made and keeps its data.
 
 **Every tooltip: words, words with their key, Escape, and words that run past its widest and wrap.**
@@ -265,7 +327,7 @@ The pieces screens are built from, on the foundations in `look.md`: what each is
 
 ### Chips
 
-- **A chip is a thing the app knows, such as a file or a subagent, in one frame whatever its kind,** as the owner decided, so a line with different chips reads as one system: filled with the one edge for something to use, a control's corners, with its kind's mark, then its name in body text, then what's said of it, in code's type on the name's baseline, so the two sizes of text read as one line. It's 24px tall, as a small control is, with 6px at its start and between its parts, as the owner decided, from pictures of six, so its words have room above and below them and its parts don't crowd. The 6px is a chip's own, rather than a space, since the smallest space crowded the mark and the name and the next was looser than it needs. A pill is as tall, so the two sit in one line. Among a paragraph's words, such as an issue a reply names, a chip is small, 20px, with a detail's text and a small mark, as the owner chose, so it's shorter than their line and doesn't touch a chip on the line above or below. A small chip has no lines or what changed, since code's type doesn't come as small as its words. Its kind says its mark and what it shows of what it names, such as a path's last part. `look::ChipKind` holds the kinds. *Unconfirmed:* 8px at its end. *Not built:* a click that opens it, its card on hover and its menu, the chips for a workspace, a branch and a commit, and a file's folder where two files in view share a name.
+- **A chip is a thing the app knows, such as a file or a subagent, in one frame whatever its kind,** as the owner decided, so a line with different chips reads as one system: filled with the one edge for something to use, a control's corners, with its kind's mark, then its name in body text, then what's said of it, in code's type on the name's baseline, so the two sizes of text read as one line. It's 24px tall, as a small control is, with 6px at its start and between its parts, as the owner decided, from pictures of six, so its words have room above and below them and its parts don't crowd. The 6px is a chip's own, rather than a space, since the smallest space crowded the mark and the name and the next was looser than it needs. A pill is as tall, so the two sit in one line. Among a paragraph's words, such as an issue a reply names, a chip is small, 20px, with a detail's text and a small mark, as the owner chose, so it's shorter than their line and doesn't touch a chip on the line above or below. A small chip has no lines or what changed, since code's type doesn't come as small as its words. Its kind says its mark and what it shows of what it names, such as a path's last part. `look::ChipKind` holds the kinds. *Unconfirmed:* 8px at its end. *Not built:* a click that opens it, and its card on hover and its menu, but for an issue's and a pull request's, the chips for a workspace, a branch and a commit, and a file's folder where two files in view share a name.
 - **An issue's or a pull request's chip has its state's mark, in its state's colour, as GitHub draws them, then its number, and its title after it, muted, where it's given one,** as the owner chose, so a list of several reads as what each is. The title is cut short with an ellipsis past 240px. Until its state is known, its mark is an open one's, muted, so it doesn't say it's open before anyone knows. *Unconfirmed:* 240px.
 - **A file's chip always has the icon for its kind, and says what more there is to say of it,** as the owner decided: the lines a call named, after its name, such as `model.rs :12–40`, and the lines a change added and removed, such as `model.rs +12 −3`. A deleted file's name is struck through.
 

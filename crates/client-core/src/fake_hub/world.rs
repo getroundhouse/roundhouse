@@ -304,6 +304,13 @@ impl World {
         self.sessions.iter_mut().find(|s| &s.id == id).unwrap().created_at_ms -= idle_ms;
     }
 
+    /// Makes the end of a chat's log its newest reply, which has been read.
+    pub fn read_reply(&mut self, id: &SessionId) {
+        let session = self.sessions.iter_mut().find(|s| &s.id == id).unwrap();
+        assert!(session.last_seq > Seq::default(), "a chat with nothing in it has no reply");
+        (session.reply_seq, session.read_seq) = (session.last_seq, session.last_seq);
+    }
+
     /// Makes the end of a chat's log a reply nobody has read.
     pub fn unread(&mut self, id: &SessionId) {
         let session = self.sessions.iter_mut().find(|s| &s.id == id).unwrap();

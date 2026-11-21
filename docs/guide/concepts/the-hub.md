@@ -29,4 +29,4 @@ Each workspace has a worker, a process of its own that does the work there: git,
 
 ## Where it runs
 
-Today the hub runs on your machine, and so do its workers. It's designed to run on a server or in the cloud too, with a phone as another client, and that isn't built. The [roadmap](../roadmap.md) says where each stands.
+Today the hub runs on your machine, and so do its workers. It's designed to run on a server or in the cloud too, and that isn't built. An iPhone app, built from source, is another client of it, over the same network or a VPN. The [roadmap](../roadmap.md) says where each stands.

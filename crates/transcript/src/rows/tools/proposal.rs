@@ -52,6 +52,7 @@ pub(super) fn draw(call: &ProposalCall, toggle: &Toggle, cx: &App) -> AnyElement
     };
     let label = format!("{verb} {title}: {said}");
     let line = Line::new(PROPOSAL_ICON, verb)
+        .copies(title.clone())
         .part(Part::Chip(look::chip(look::ChipKind::Proposal, look::ChipSize::Regular, title)))
         .part(Part::Note(said.into()))
         .action(open(&proposal.id, button, toggle.shared));

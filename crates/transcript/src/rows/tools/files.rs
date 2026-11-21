@@ -40,7 +40,7 @@ pub(super) fn read(file: &ReadFile, answer: Option<&Answer>, toggle: &Toggle, cx
         Some((first, last)) => file_chip.lines(first, last),
         None => file_chip,
     };
-    let line = Line::new(IconName::FileText, title).part(Part::Chip(file_chip));
+    let line = Line::new(IconName::FileText, title).part(Part::Chip(file_chip)).copies(file.path.to_string());
     let output = |text| block::output(toggle, Text::Output, text, look::colors(cx).text_muted, cx);
     let opened = || {
         if read.lines.is_empty() && read.images.is_empty() {
@@ -124,7 +124,9 @@ pub(super) fn written(file: &WriteFile, answer: Option<&Answer>) -> Vec<Section>
 /// with what it `replaced`. Otherwise all of it is new.
 pub(super) fn write_line(path: &str, lines: usize, replaced: Option<Counts>) -> Line {
     let icon = if replaced.is_some() { IconName::FilePen } else { IconName::FilePlus };
-    Line::new(icon, format!("Write {}", count(lines, "line", "lines"))).part(changed(path, replaced))
+    Line::new(icon, format!("Write {}", count(lines, "line", "lines")))
+        .part(changed(path, replaced))
+        .copies(path.to_string())
 }
 
 pub(super) fn edit(file: &EditFile, answer: Option<&Answer>, toggle: &Toggle, cx: &App) -> AnyElement {
@@ -138,7 +140,7 @@ pub(super) fn edit(file: &EditFile, answer: Option<&Answer>, toggle: &Toggle, cx
 /// moved, and how many lines `sections` added and removed. Hovering it shows the diff. A change with no lines, as a
 /// file only moved has, has neither.
 pub(super) fn edit_line(title: &'static str, path: &str, named: &str, sections: &Rc<Vec<Section>>) -> Line {
-    let line = Line::new(IconName::FilePen, title);
+    let line = Line::new(IconName::FilePen, title).copies(named.to_string());
     if sections.iter().all(Vec::is_empty) {
         return line.part(chip(named));
     }

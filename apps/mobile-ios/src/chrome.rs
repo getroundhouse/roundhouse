@@ -1,13 +1,10 @@
-//! What the screens share: the bar across the top, under the status bar, with a button back at its start and the
-//! screen's own at its end, what's said when there's nothing to show or something went wrong, and how the connection
-//! stands. Each is drawn from the design system's parts, at a handheld's sizes. *Not built:* a handheld's own bar,
-//! with its title in the middle, as iOS has it, so this one is the desktop's, with its title at its start.
+//! What the screens share: the bar across the top, with a button back at its start and the screen's own at its end,
+//! what's said when there's nothing to show or something went wrong, and how the connection stands. Each is drawn
+//! from the design system's parts, at a handheld's sizes.
 
 use gpui_kit::assets::IconName;
-use gpui_kit::component::v_flex;
-use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{AnyElement, App, ElementId, IntoElement, ParentElement as _, SharedString, Styled as _, Window, div};
-use look::{BarKind, BarSize, ButtonKind, ControlSize, Type, Typeset as _};
+use look::{ButtonKind, ControlSize};
 use protocol::model::Workspace;
 
 use crate::hub_link::LinkState;
@@ -15,8 +12,8 @@ use crate::hub_link::LinkState;
 /// What's tapped in the bar: large, which is as tall as iOS asks of anything tapped on a handheld.
 pub(crate) const TAPPED: ControlSize = ControlSize::Large;
 
-/// The bar across the top, below the status bar: maybe a button back, the screen's title with a line under it, and
-/// the screen's own buttons at its end.
+/// The bar across the top, clear of the status bar: maybe a button back, the screen's title with a line under it,
+/// and the screen's own buttons at its end.
 pub(crate) fn header(
     title: SharedString,
     under: Option<SharedString>,
@@ -24,16 +21,11 @@ pub(crate) fn header(
     end: Vec<look::Button>,
     window: &Window,
     cx: &App,
-) -> AnyElement {
-    let muted = look::colors(cx).text_muted;
-    // As wide as it is, so the bar's room before its end goes to none of it, and narrower, cut short, when it must be.
-    let title = v_flex()
-        .min_w_0()
-        .child(div().typeset(Type::Body).emphasis().truncate().child(title))
-        .when_some(under, |d, under| d.child(div().typeset(Type::Detail).text_color(muted).truncate().child(under)));
-    let bar = look::bar(BarKind::Words, BarSize::Regular).children(back).child(title);
-    let bar = end.into_iter().fold(bar, look::Bar::end);
-    div().w_full().flex_none().pt(window.insets().safe_area.top).child(bar).into_any_element()
+) -> look::TopBar {
+    let bar = look::top_bar(title).clear(crate::safe_area::insets(window, cx).safe_area.top);
+    let bar = under.into_iter().fold(bar, look::TopBar::under);
+    let bar = back.into_iter().fold(bar, look::TopBar::start);
+    end.into_iter().fold(bar, look::TopBar::end)
 }
 
 /// The button back to the list of workspaces.

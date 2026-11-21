@@ -307,3 +307,29 @@ fn a_card_shows_on_focus_only_when_asked_to(cx: &mut TestAppContext) {
 
     assert!(!showing(cx), "what it's for isn't one of Tab's stops");
 }
+
+#[gpui_kit::test]
+fn under_touch_a_tap_shows_a_card_and_a_tap_anywhere_but_the_card_puts_it_away(cx: &mut TestAppContext) {
+    cx.update(|cx| crate::Input::Touch.choose(cx));
+    let (cx, _, changes) = harness(cx);
+
+    move_to(cx, 210., 210., OPENS * 4);
+    assert!(!showing(cx), "resting doesn't show it under touch");
+    cx.simulate_click(point(px(210.), px(210.)), Modifiers::default());
+    settle(cx, Duration::ZERO);
+    assert!(showing(cx), "a tap on what it's for does");
+    let card = cx.debug_bounds("card").unwrap().center();
+    cx.simulate_click(card, Modifiers::default());
+    settle(cx, CLOSES * 2);
+    assert!(showing(cx), "a tap on the card leaves it");
+    cx.simulate_click(point(px(5.), px(5.)), Modifiers::default());
+    settle(cx, Duration::ZERO);
+    assert!(!showing(cx), "a tap elsewhere puts it away");
+    cx.simulate_click(point(px(210.), px(210.)), Modifiers::default());
+    settle(cx, Duration::ZERO);
+    cx.simulate_click(point(px(210.), px(210.)), Modifiers::default());
+    settle(cx, Duration::ZERO);
+
+    assert!(!showing(cx), "a second tap on what it's for puts it away");
+    assert_eq!(*changes.borrow(), [true, false, true, false]);
+}

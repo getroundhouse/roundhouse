@@ -99,6 +99,8 @@ pub enum PopupMenuItem {
         label: SharedString,
         disabled: bool,
         checked: bool,
+        /// Drawn in the theme's danger colour, for one that removes something.
+        danger: bool,
         is_link: bool,
         action: Option<Box<dyn Action>>,
         // For link item
@@ -109,6 +111,8 @@ pub enum PopupMenuItem {
         icon: Option<Icon>,
         disabled: bool,
         checked: bool,
+        /// Drawn in the theme's danger colour, for one that removes something.
+        danger: bool,
         action: Option<Box<dyn Action>>,
         render: Box<dyn Fn(&mut Window, &mut App) -> AnyElement + 'static>,
         handler: Option<Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>>,
@@ -132,6 +136,7 @@ impl PopupMenuItem {
             label: label.into(),
             disabled: false,
             checked: false,
+            danger: false,
             action: None,
             is_link: false,
             handler: None,
@@ -149,6 +154,7 @@ impl PopupMenuItem {
             icon: None,
             disabled: false,
             checked: false,
+            danger: false,
             action: None,
             render: Box::new(move |window, cx| builder(window, cx).into_any_element()),
             handler: None,
@@ -248,6 +254,23 @@ impl PopupMenuItem {
         self
     }
 
+    /// Draws the item, its icon too, in the theme's danger colour, for one that
+    /// removes something.
+    ///
+    /// Only works for [`PopupMenuItem::Item`] and [`PopupMenuItem::ElementItem`].
+    pub fn danger(mut self, danger: bool) -> Self {
+        match &mut self {
+            PopupMenuItem::Item { danger: d, .. } => {
+                *d = danger;
+            }
+            PopupMenuItem::ElementItem { danger: d, .. } => {
+                *d = danger;
+            }
+            _ => {}
+        }
+        self
+    }
+
     /// Add a click handler for the menu item.
     ///
     /// Only works for [`PopupMenuItem::Item`] and [`PopupMenuItem::ElementItem`].
@@ -276,6 +299,7 @@ impl PopupMenuItem {
             label: label.into(),
             disabled: false,
             checked: false,
+            danger: false,
             action: None,
             is_link: true,
             handler: Some(Rc::new(move |_, _, cx| cx.open_url(&href))),
@@ -314,6 +338,15 @@ impl PopupMenuItem {
                 icon.is_some() || (check_side.is_left() && *checked)
             }
             PopupMenuItem::Submenu { icon, .. } => icon.is_some(),
+            _ => false,
+        }
+    }
+
+    #[inline]
+    fn is_danger(&self) -> bool {
+        match self {
+            PopupMenuItem::Item { danger, .. } => *danger,
+            PopupMenuItem::ElementItem { danger, .. } => *danger,
             _ => false,
         }
     }
@@ -1314,6 +1347,7 @@ impl PopupMenu {
         checked: bool,
         icon: Option<Icon>,
         style: &PopupMenuStyle,
+        danger: Option<Hsla>,
         _: &mut Window,
         _: &mut Context<Self>,
     ) -> Option<impl IntoElement> {
@@ -1322,7 +1356,9 @@ impl PopupMenu {
         }
 
         let icon = if let Some(icon) = icon {
-            icon.when_some(style.icon_color, |icon, color| icon.text_color(color))
+            icon.when_some(danger.or(style.icon_color), |icon, color| {
+                icon.text_color(color)
+            })
         } else if checked {
             Icon::new(IconName::Check)
         } else {
@@ -1388,6 +1424,7 @@ impl PopupMenu {
             None
         };
 
+        let danger = item.is_danger().then(|| cx.theme().danger);
         let selected = self.selected_index == Some(ix);
         const EDGE_PADDING: Pixels = px(4.);
         const INNER_PADDING: Rems = rems(0.5);
@@ -1421,6 +1458,7 @@ impl PopupMenu {
             .gap_x(item_gap)
             .rounded(radius)
             .items_center()
+            .when_some(danger, |this, color| this.text_color(color))
             .hover_background(style.hover)
             .selected(selected)
             .on_hover(cx.listener(move |this, hovered, window, cx| {
@@ -1484,6 +1522,7 @@ impl PopupMenu {
                             false,
                             None,
                             style,
+                            danger,
                             window,
                             cx,
                         ))
@@ -1516,6 +1555,7 @@ impl PopupMenu {
                             is_left_check,
                             icon.clone(),
                             style,
+                            danger,
                             window,
                             cx,
                         ))
@@ -1547,6 +1587,7 @@ impl PopupMenu {
                     is_left_check,
                     icon.clone(),
                     style,
+                    danger,
                     window,
                     cx,
                 ))
@@ -1554,10 +1595,15 @@ impl PopupMenu {
                     h_flex()
                         .flex_row_dir(cx)
                         .w_full()
+                        .min_w_0()
                         .gap_3()
                         .items_center()
                         .justify_between()
-                        .when(!show_link_icon, |this| this.child(label.clone()))
+                        // Cut short in a menu too narrow for it, keeping the
+                        // key and the check whole.
+                        .when(!show_link_icon, |this| {
+                            this.child(div().min_w_0().truncate().child(label.clone()))
+                        })
                         .when(show_link_icon, |this| {
                             this.child(
                                 h_flex()
@@ -1579,6 +1625,7 @@ impl PopupMenu {
                             this.child(
                                 h_flex()
                                     .flex_row_dir(cx)
+                                    .flex_none()
                                     .gap_x(item_gap)
                                     .items_center()
                                     .children(key)
@@ -1613,6 +1660,7 @@ impl PopupMenu {
                             false,
                             icon.clone(),
                             style,
+                            danger,
                             window,
                             cx,
                         ))
@@ -1867,5 +1915,17 @@ mod tests {
         );
         assert_eq!(PopupMenuItem::separator().a11y_label(), None);
         assert_eq!(PopupMenuItem::element(|_, _| div()).a11y_label(), None);
+    }
+
+    #[test]
+    fn only_an_item_marked_danger_is_one() {
+        assert!(PopupMenuItem::new("Delete").danger(true).is_danger());
+        assert!(
+            PopupMenuItem::element(|_, _| div())
+                .danger(true)
+                .is_danger()
+        );
+        assert!(!PopupMenuItem::new("Copy").is_danger());
+        assert!(!PopupMenuItem::separator().danger(true).is_danger());
     }
 }

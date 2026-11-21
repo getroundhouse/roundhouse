@@ -13,7 +13,7 @@ use protocol::model::{NewWorkspaceDraftToKeep, Repo, RepoId};
 
 use super::{Creating, Followed, MobileApp};
 use crate::chat::ChatView;
-use crate::chrome;
+use crate::{chrome, safe_area};
 
 impl MobileApp {
     pub(super) fn new_workspace_screen(
@@ -28,8 +28,9 @@ impl MobileApp {
         let body = if repos.is_empty() {
             chrome::empty("No repositories", "Add one on the hub's computer, with roundhouse repo add.")
         } else {
+            let bottom = safe_area::insets(window, cx).safe_area.bottom;
             let rows = repos.iter().map(|repo| Self::repo_row(repo, creating, cx));
-            let list = v_flex().px(look::ROWS_INSET).pb(window.insets().safe_area.bottom).children(rows);
+            let list = v_flex().px(look::ROWS_INSET).pb(bottom).children(rows);
             div().id("repos").flex_1().min_h_0().overflow_y_scroll().child(list).into_any_element()
         };
         let error = self.error.clone().map(chrome::error);
@@ -99,9 +100,8 @@ impl MobileApp {
             }
         };
         // The connection it was made on may have been replaced since.
-        let (client, feed) = (link.read(cx).client(), link.read(cx).feed());
-        if let (Some(super::Panel::NewWorkspace), Some(client), Some(feed)) = (self.open.panel, client, feed) {
-            let chat = cx.new(|cx| ChatView::new(workspace, Some(session), feed, client, window, cx));
+        if let (Some(super::Panel::NewWorkspace), Some(hub)) = (self.open.panel, link.read(cx).ready()) {
+            let chat = cx.new(|cx| ChatView::new(workspace, Some(session), hub, window, cx));
             self.open_chat(chat, window, cx);
         }
     }

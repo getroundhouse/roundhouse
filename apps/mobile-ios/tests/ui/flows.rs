@@ -1,17 +1,14 @@
-//! Pairing, the workspace list, a chat, starting a workspace, and forgetting the hub. A screen is known by what only it
-//! has: `pair` for pairing, `confirm-pair` for the question before replacing the hub, `hub` for the workspaces, `forget`
-//! for the hub's own screen, and `composer` for a chat.
+//! Pairing, the workspace list and a workspace's menu, starting a workspace, and forgetting the hub. A screen is known
+//! by what only it has: `pair` for pairing, `confirm-pair` for the question before replacing the hub, `hub` for the
+//! workspaces, `forget` for the hub's own screen, and `composer` for a chat. `chat.rs` has what's done in a chat.
 
 #![cfg(test)]
 
-use std::path::PathBuf;
-
 use gpui_kit::{ElementId, TestAppContext};
 use mobile::Vault as _;
-use protocol::capability::settings::Settings;
-use protocol::model::AgentKind;
+use protocol::model::WorkspaceStatus;
 
-use crate::support::{Phone, Stack, id};
+use crate::support::{Phone, Stack};
 
 #[gpui_kit::test]
 fn opens_on_pairing_and_pairs_from_a_link_the_phone_opens(cx: &mut TestAppContext) {
@@ -64,115 +61,6 @@ fn pairs_from_a_pasted_link(cx: &mut TestAppContext) {
     assert!(phone.vault.load().is_some());
 }
 
-/// A workspace opens on the chat it has, which another client made, rather than on one of the phone's own.
-#[gpui_kit::test]
-fn opens_a_listed_workspace_on_the_chat_it_has_and_talks_in_it(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let workspace = stack.workspace();
-    let chat = stack.client().session_create(&workspace.id, AgentKind::Claude, Settings::default(), None).unwrap();
-    let mut phone = Phone::paired(cx, &stack);
-
-    phone.open_chat(&workspace);
-    phone.send("say:hello from the phone");
-
-    phone.wait("the agent's answer", |phone| phone.assistant_text().contains("hello from the phone"));
-    let sessions = stack.client().session_list(&workspace.id).unwrap();
-    assert_eq!(sessions.iter().map(|s| &s.id).collect::<Vec<_>>(), [&chat.id], "the phone made no chat of its own");
-    phone.tap("back");
-    assert!(phone.has("hub"));
-}
-
-/// The chat's header names the workspace as its record does, which another client can change while it's open.
-#[gpui_kit::test]
-fn the_chats_header_names_the_workspace_as_its_record_does(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let workspace = stack.workspace();
-    let mut phone = Phone::paired(cx, &stack);
-    phone.open_chat(&workspace);
-    assert_eq!(phone.chat_title().as_deref(), Some(workspace.label()));
-
-    stack.client().workspace_rename(&workspace.id, "Renamed on the desktop").unwrap();
-
-    phone.wait("the new title", |phone| phone.chat_title().as_deref() == Some("Renamed on the desktop"));
-}
-
-/// Whether the agent is working is the session's record's, which the chat takes as it changes, and the working line
-/// it ends with says so.
-#[gpui_kit::test]
-fn the_chat_says_the_agent_is_working_until_its_turn_ends(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let workspace = stack.workspace();
-    let mut phone = Phone::paired(cx, &stack);
-    phone.open_chat(&workspace);
-    assert!(!phone.has("working-line"));
-
-    let done = stack.gate("done");
-    phone.send(&format!("hang-until:{}; say:done", done.display()));
-    phone.wait("the working line", |phone| phone.has("working-line"));
-
-    std::fs::write(&done, "").unwrap();
-    phone.wait("the turn to end", |phone| phone.assistant_text().contains("done") && !phone.has("working-line"));
-}
-
-/// The phone can't put a chat in plan mode, which asks before a call that writes, so the desktop did.
-#[gpui_kit::test]
-fn allows_a_tool_use_in_the_composers_place(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let workspace = stack.workspace();
-    let planning = Settings { mode: Some(protocol::fixtures::plan_mode()), ..Settings::default() };
-    stack.client().session_create(&workspace.id, AgentKind::Claude, planning, None).unwrap();
-    let worktree = PathBuf::from(workspace.path.clone().unwrap());
-    let mut phone = Phone::paired(cx, &stack);
-    phone.open_chat(&workspace);
-
-    phone.send("say:starting; tool:echo changed >> a.txt; say:finished");
-    phone.next_open_approval();
-    phone.wait("the request to be asked", |phone| phone.has(id("question-answer-0")));
-    assert!(!phone.has("composer"), "asked in the composer's place");
-    assert_eq!(std::fs::read_to_string(worktree.join("a.txt")).unwrap(), "one\n", "not until it's allowed");
-    phone.tap(id("question-answer-0"));
-    phone.tap(id("question-send"));
-
-    phone.wait("the turn to finish", |phone| phone.assistant_text().contains("finished"));
-    assert_eq!(std::fs::read_to_string(worktree.join("a.txt")).unwrap(), "one\nchanged\n");
-    assert!(phone.has("composer"), "the composer is back");
-}
-
-#[gpui_kit::test]
-fn answers_a_question_by_typing(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let workspace = stack.workspace();
-    let mut phone = Phone::paired(cx, &stack);
-    phone.open_chat(&workspace);
-    phone.send("ask:Which day?=Monday/Tuesday");
-    phone.next_open_approval();
-    phone.wait("the question", |phone| phone.has(id("question-other")));
-
-    phone.tap(id("question-other"));
-    phone.type_text("Friday, if that works");
-    phone.tap(id("question-send"));
-
-    phone.wait("the typed answer", |phone| phone.told_to_agent().contains(r#""Which day?"=Friday, if that works"#));
-}
-
-/// The list's connection, and a chat open on it, both carry on over the new one.
-#[gpui_kit::test]
-fn a_chat_carries_on_after_the_hub_restarts(cx: &mut TestAppContext) {
-    let mut stack = Stack::new();
-    let workspace = stack.workspace();
-    let mut phone = Phone::paired(cx, &stack);
-    phone.open_chat(&workspace);
-
-    stack.stop_hub();
-    phone.wait("the connection to go", |phone| !phone.is_connected());
-    stack.start_hub();
-    phone.wait("the connection to come back", |phone| phone.is_connected());
-    phone.send("say:after the restart");
-
-    phone.wait("the agent's answer", |phone| phone.assistant_text().contains("after the restart"));
-    assert!(phone.has("composer"), "still in the chat");
-}
-
 #[gpui_kit::test]
 fn starts_a_workspace_and_opens_its_chat(cx: &mut TestAppContext) {
     let stack = Stack::new();
@@ -210,4 +98,74 @@ fn forgetting_the_hub_goes_back_to_pairing_once_its_forgotten(cx: &mut TestAppCo
     phone.tap("forget");
     assert!(phone.has("pair"));
     assert!(phone.vault.load().is_none());
+}
+
+/// A long press on a workspace's row opens its menu, and Archive asks first, in an action sheet, since the phone can't
+/// bring a workspace back.
+#[gpui_kit::test]
+fn archives_a_workspace_from_its_menu_once_asked(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let workspace = stack.workspace();
+    let mut phone = Phone::paired(cx, &stack);
+    let row = ElementId::Name(format!("workspace-{}", workspace.id).into());
+    phone.wait("the workspace", |phone| phone.has(row.clone()) && phone.is_connected());
+
+    phone.press_long(row.clone());
+    phone.choose("Archive");
+    assert!(phone.has("action-sheet"), "it asks first");
+    phone.tap("action-sheet-cancel");
+    assert!(!phone.has("action-sheet") && phone.has(row.clone()), "cancelling leaves it");
+
+    phone.press_long(row.clone());
+    phone.choose("Archive");
+    phone.tap("archive");
+
+    phone.wait("the workspace to go from the list", |phone| !phone.has(row.clone()));
+    let archived = stack.client().workspace_list(true).unwrap().into_iter().find(|w| w.id == workspace.id).unwrap();
+    assert!(matches!(archived.status, WorkspaceStatus::Archiving | WorkspaceStatus::Archived));
+}
+
+/// A workspace with work archiving would lose isn't archived by the first Archive: the phone asks again, saying what
+/// would be lost, and archives only once that's answered.
+#[gpui_kit::test]
+fn archiving_a_workspace_with_uncommitted_work_asks_again_before_losing_it(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let workspace = stack.workspace();
+    let mut phone = Phone::paired(cx, &stack);
+    let row = ElementId::Name(format!("workspace-{}", workspace.id).into());
+    phone.wait("the workspace", |phone| phone.has(row.clone()) && phone.is_connected());
+    let status = || stack.client().workspace_list(true).unwrap().into_iter().find(|w| w.id == workspace.id).unwrap();
+    let worktree = status().path.expect("a ready workspace has its worktree");
+    std::fs::write(std::path::Path::new(&worktree).join("unsaved.txt"), "work in progress").unwrap();
+
+    phone.press_long(row.clone());
+    phone.choose("Archive");
+    phone.tap("archive");
+    phone.wait("it to ask again", |phone| phone.has("archive-anyway"));
+    assert_eq!(status().status, WorkspaceStatus::Ready, "the first Archive doesn't force");
+
+    phone.tap("archive-anyway");
+    phone.wait("the workspace to go from the list", |phone| !phone.has(row.clone()));
+    assert!(matches!(status().status, WorkspaceStatus::Archiving | WorkspaceStatus::Archived));
+}
+
+/// Renaming from a workspace's menu takes what's typed in a sheet.
+#[gpui_kit::test]
+fn renames_a_workspace_from_its_menu(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let workspace = stack.workspace();
+    let mut phone = Phone::paired(cx, &stack);
+    let row = ElementId::Name(format!("workspace-{}", workspace.id).into());
+    phone.wait("the workspace", |phone| phone.has(row.clone()) && phone.is_connected());
+
+    phone.press_long(row.clone());
+    phone.choose("Rename…");
+    assert!(phone.has("renaming"));
+    phone.type_text("Named on the phone");
+    phone.tap("rename-confirm");
+
+    phone.wait("the new name", |_| {
+        stack.client().workspace_list(false).unwrap().iter().any(|w| w.label() == "Named on the phone")
+    });
+    assert!(!phone.has("renaming"));
 }

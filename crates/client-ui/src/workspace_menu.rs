@@ -44,7 +44,7 @@ impl WorkspaceMenu {
             let (retitle, archive) = (retitle.clone(), archive.clone());
             let regenerate = look::menu_row("Regenerate title").icon(IconName::PencilSparkles).off(cant_retitle);
             let menu = shared(menu, window, cx).row(regenerate.on_choose(move |window, cx| retitle(window, cx)));
-            let row = look::menu_row("Archive").icon(IconName::Archive).off(cant_archive);
+            let row = look::menu_row("Archive").icon(IconName::Archive).removes().off(cant_archive);
             menu.separator().row(row.on_choose(move |window, cx| archive(window, cx)))
         }
     }

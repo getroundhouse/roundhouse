@@ -11,6 +11,8 @@ use gpui_kit::{
 use super::NoteKind;
 use crate::colors::colors;
 use crate::space::Space;
+use crate::tooltips::Tooltipped as _;
+use crate::traits::Reach;
 use crate::typography::{Type, Typeset};
 
 /// What choosing a row does.
@@ -25,9 +27,20 @@ pub fn menu_row(words: impl Into<SharedString>) -> MenuRow {
         note: None,
         chosen: false,
         off: false,
+        does: Does::Else,
         tooltip: None,
         choose: None,
     }
+}
+
+/// What a row does, where that changes how it's drawn or where it goes in its menu.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum Does {
+    /// Removes something, as [`MenuRow::removes`] says.
+    Removes,
+    /// Copies something, as [`MenuRow::copies`] says.
+    Copies,
+    Else,
 }
 
 /// A row of a menu, which [`menu_row`] makes and [`crate::Menu::row`] adds.
@@ -39,6 +52,7 @@ pub struct MenuRow {
     note: Option<(SharedString, NoteKind)>,
     chosen: bool,
     off: bool,
+    pub(super) does: Does,
     tooltip: Option<SharedString>,
     choose: Option<Choose>,
 }
@@ -68,6 +82,21 @@ impl MenuRow {
         self
     }
 
+    /// Removes something, such as Archive. On a handheld it's in the error's colour, as an iPhone's own menus draw one,
+    /// and comes last, and choosing it asks first, in an action sheet, as `components.md` says, which whoever fills the
+    /// menu sees to. A desk's menus draw it as any other row.
+    pub fn removes(mut self) -> Self {
+        self.does = Does::Removes;
+        self
+    }
+
+    /// Copies something, such as Copy link. Under touch it comes first in its menu, since a long press opens Copy first
+    /// on anything, as `components.md` says, and with a pointer it stays where it's put.
+    pub fn copies(mut self) -> Self {
+        self.does = Does::Copies;
+        self
+    }
+
     /// Greyed out while `off`, so it can't be chosen.
     pub fn off(mut self, off: bool) -> Self {
         self.off = off;
@@ -94,7 +123,7 @@ impl MenuRow {
 
     /// The kit's row: its own, where the kit draws all of it, and one drawn here where it has a note or a tooltip.
     pub(super) fn kit(self) -> PopupMenuItem {
-        let MenuRow { words, icon, key, note, chosen, off, tooltip, choose } = self;
+        let MenuRow { words, icon, key, note, chosen, off, does, tooltip, choose } = self;
         let item = if note.is_some() || tooltip.is_some() {
             PopupMenuItem::element(move |_, cx| drawn(&words, note.as_ref(), tooltip.as_ref(), cx))
         } else {
@@ -103,6 +132,7 @@ impl MenuRow {
         item.when_some(icon, PopupMenuItem::icon)
             .when_some(key, PopupMenuItem::action)
             .checked(chosen)
+            .danger(does == Does::Removes && Reach::now() == Reach::Handheld)
             .disabled(off)
             .when_some(choose, |item, choose| item.on_click(move |_, window, cx| choose(window, cx)))
     }
@@ -129,7 +159,7 @@ fn drawn(
         .aria_label(label)
         .when_some(tooltip.cloned(), |row, tooltip| {
             let described = tooltip.clone();
-            row.aria_description(described).tooltip(crate::tooltip(tooltip))
+            row.aria_description(described).says(tooltip, cx)
         })
         .child(div().flex_1().min_w_0().truncate().child(words.clone()))
         .when_some(note.cloned(), |row, (note, kind)| {

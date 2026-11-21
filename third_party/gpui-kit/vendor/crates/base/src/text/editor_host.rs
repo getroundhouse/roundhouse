@@ -27,9 +27,9 @@
 use std::{cell::RefCell, collections::HashMap, ops::Range, rc::Rc, sync::Arc};
 
 use gpui::{
-    AnyElement, App, Bounds, ClickEvent, ElementId, HighlightStyle, Hsla, ImageSource,
+    AnyElement, App, Bounds, ClickEvent, Div, ElementId, HighlightStyle, Hsla, ImageSource,
     InteractiveElement as _, IntoElement, ParentElement as _, Pixels, Point, SharedString,
-    SharedUri, TextLayout, Window, WrappedLineLayout, div, point, px,
+    SharedUri, Stateful, TextLayout, Window, WrappedLineLayout, div, point, px,
 };
 use unicode_segmentation::UnicodeSegmentation as _;
 
@@ -103,6 +103,21 @@ impl RenderContext {
         self.node.code_block_actions = Some(Arc::new(move |code_block, window, cx| {
             actions(code_block, window, cx).into_any_element()
         }));
+        self
+    }
+
+    /// Wraps the whole of each code block as it's drawn, its actions and its
+    /// language included, given the block and the element it's drawn as,
+    /// which has an ID of its own, so the host can give the block a behaviour
+    /// of its own, such as a menu that opens where it's pressed.
+    pub fn with_code_block_wrap<F>(mut self, wrap: F) -> Self
+    where
+        F: Fn(&CodeBlock, Stateful<Div>, &mut Window, &mut App) -> AnyElement
+            + Send
+            + Sync
+            + 'static,
+    {
+        self.node.code_block_wrap = Some(Arc::new(wrap));
         self
     }
 

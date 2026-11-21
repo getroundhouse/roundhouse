@@ -111,6 +111,10 @@ pub(super) struct Counted {
     /// How many of each draft's changes and files haven't reached the hub, counted as each is handed over and as the
     /// hub takes it, or it's replaced by a newer change. A draft with none has nothing that only this client has.
     pub(super) unkept: HashMap<DraftKey, usize>,
+    /// The text of the newest change to each composer's draft that this client handed over, while any of the draft's
+    /// changes and files haven't reached the hub, so a client shows what it handed over rather than the older record.
+    /// It goes once the count does.
+    pub(super) on_its_way: HashMap<DraftKey, String>,
     /// The newest copy of each draft that this client and the hub agree on: the one the hub gave back as it
     /// kept one of this client's changes there, or one this client took from the record.
     pub(super) agreed: HashMap<DraftKey, Agreed>,
@@ -238,6 +242,21 @@ impl Drafts {
         agree(&mut self.counts.lock(), kept.key, kept.copy);
     }
 
+    /// Takes what `session`'s composer says to show it: the text this client last handed over for it, while that
+    /// hasn't reached the hub, since `session`'s record is from before it, and otherwise what the record says, which
+    /// this client then shows, as [`Drafts::took`] says. So a chat shown again before the hub has what was typed in it,
+    /// such as within the pause before it's kept, or while the connection's gone, shows that rather than what was there
+    /// before.
+    pub fn take_composer(&self, session: &Session) -> String {
+        let kept = KeptDraft::composer(session);
+        let mut counts = self.counts.lock();
+        if let Some(text) = counts.on_its_way.get(&kept.key) {
+            return text.clone();
+        }
+        agree(&mut counts, kept.key, kept.copy);
+        session.draft.text.clone()
+    }
+
     /// Says that a draft now has nothing on its way to the hub, so a change made elsewhere that
     /// [`Drafts::from_elsewhere`] held back meanwhile can be shown. It holds one signal at a time, so signals nobody
     /// has looked at yet gather into one, and each goes to one receiver, so one reader listens.
@@ -246,14 +265,26 @@ impl Drafts {
     }
 
     pub(super) fn change(&self, change: DraftChange, now: bool) {
-        self.handed(&change.key());
+        let key = change.key();
+        {
+            let mut counts = self.counts.lock();
+            count_handed(&mut counts, &key);
+            if let DraftChange::Composer(_, draft) = &change {
+                counts.on_its_way.insert(key, draft.text.clone());
+            }
+        }
         let _ = self.requests.send(Request::Changed { change, now });
     }
 
-    /// Counted before it's sent, so the thread can't take it, and count it down, first.
     pub(super) fn handed(&self, key: &DraftKey) {
-        *self.counts.lock().unkept.entry(key.clone()).or_default() += 1;
+        count_handed(&mut self.counts.lock(), key);
     }
+}
+
+/// Counts one more of `key`'s changes or files on its way, before it's sent, so the thread can't take it, and count it
+/// down, first.
+fn count_handed(counts: &mut Counted, key: &DraftKey) {
+    *counts.unkept.entry(key.clone()).or_default() += 1;
 }
 
 /// Takes `copy` as the one the client and the hub agree on for `key`, unless the one it has is newer.

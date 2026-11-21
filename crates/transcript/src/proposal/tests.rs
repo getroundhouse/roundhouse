@@ -1,45 +1,112 @@
-use std::cell::RefCell;
-use std::rc::Rc;
 use std::sync::Arc;
+use std::time::Duration;
 
 use client_core::stand_in_hub::Does;
 use gpui_kit::{AppContext as _, Entity, TestAppContext};
+use parking_lot::Mutex;
 use protocol::client::proposals::ProposalAnswer;
+use protocol::client::{ApiError, ClientRequest, ClientResponse, ErrorCode, ReplyOutcome};
 use protocol::model::{
     Choice, OptionLetter, OptionPlace, Proposal, ProposalOption, ProposalRevision, Response, RevisionNumber,
 };
 
-use super::answering::Choosing;
+use super::ProposalView;
+use super::answering::{Choosing, ProposalRequest, Sending};
 use super::held::carried;
-use super::{ProposalEvent, ProposalRequest, ProposalView};
 
-/// The view, and everything it asks the app to send, as it asks. Its hub answers nothing, since the view only reads
-/// images from it, and the proposal points to none.
-fn view(cx: &mut TestAppContext) -> (Entity<ProposalView>, Rc<RefCell<Vec<ProposalRequest>>>) {
-    let dir = tempfile::tempdir().unwrap();
-    let client = client_core::stand_in_hub::connect(&dir.path().join("hub.sock"), |_| Does::Nothing);
+/// What the hub heard the view send, as it heard it, and the folder its socket is in, which goes once the test lets go
+/// of this.
+#[derive(Clone)]
+struct Heard {
+    requests: Arc<Mutex<Vec<ProposalRequest>>>,
+    _dir: Arc<tempfile::TempDir>,
+}
+
+impl Heard {
+    fn len(&self) -> usize {
+        self.requests.lock().len()
+    }
+}
+
+/// How the hub stood in for answers what the view sends.
+#[derive(Clone, Copy)]
+enum Hub {
+    /// That it couldn't keep it, as a hub that went away mid-request would.
+    Refuses,
+    /// Nothing, so what was sent stays on its way.
+    Waits,
+    /// That it kept it.
+    Keeps,
+}
+
+/// The view, on a hub that answers what it sends as `hub` says, and everything that hub hears the view send.
+fn view_on(hub: Hub, cx: &mut TestAppContext) -> (Entity<ProposalView>, Heard) {
+    let (client, heard) = stand_in(hub, cx);
     let proposal = Arc::new(protocol::fixtures::proposal("p"));
     let view = cx.update(|cx| cx.new(|cx| ProposalView::new(proposal, client, cx)));
-    let asked = Rc::new(RefCell::new(Vec::new()));
-    let heard = asked.clone();
-    cx.update(|cx| {
-        cx.subscribe(&view, move |_, event: &ProposalEvent, _| {
-            if let ProposalEvent::Send(request) = event {
-                heard.borrow_mut().push(request.clone());
+    (view, heard)
+}
+
+/// A connection to a hub that answers what the view sends as `hub` says, and everything that hub hears.
+fn stand_in(hub: Hub, cx: &mut TestAppContext) -> (client_core::Client, Heard) {
+    // The hub answers on a thread of its own.
+    cx.executor().allow_parking();
+    let dir = tempfile::tempdir().unwrap();
+    let requests = Arc::new(Mutex::new(Vec::new()));
+    let hearing = requests.clone();
+    let client = client_core::stand_in_hub::connect(&dir.path().join("hub.sock"), move |request| {
+        let sent = if let ClientRequest::ProposalAnswer(answer) = request {
+            ProposalRequest::Answer(answer)
+        } else if let ClientRequest::ProposalAnotherRound(round) = request {
+            ProposalRequest::AnotherRound(round)
+        } else {
+            return Does::Nothing;
+        };
+        hearing.lock().push(sent);
+        match hub {
+            Hub::Refuses => {
+                let refused = ApiError::new(ErrorCode::Internal, "the hub went away");
+                Does::Answers(Box::new(ReplyOutcome::Error(refused)))
             }
-        })
-        .detach();
+            Hub::Waits => Does::Nothing,
+            Hub::Keeps => {
+                let kept = ClientResponse::Proposal(protocol::fixtures::proposal("p"));
+                Does::Answers(Box::new(ReplyOutcome::Response(kept)))
+            }
+        }
     });
-    (view, asked)
+    (client, Heard { requests, _dir: Arc::new(dir) })
+}
+
+/// Whether the view has sent anything, which it says the moment it does.
+fn sent_anything(view: &Entity<ProposalView>, cx: &mut TestAppContext) -> bool {
+    view.read_with(cx, |view, _| !matches!(view.answering.sending, Sending::Idle))
+}
+
+/// The view on a hub that refuses what it sends.
+fn view(cx: &mut TestAppContext) -> (Entity<ProposalView>, Heard) {
+    view_on(Hub::Refuses, cx)
+}
+
+/// Waits until the hub has heard `count` requests, and the view knows how the last went, if the hub answered.
+fn until_heard(count: usize, view: &Entity<ProposalView>, heard: &Heard, cx: &mut TestAppContext) {
+    waiting::thread::until(Duration::from_secs(10), format!("the hub to hear {count}"), || {
+        cx.run_until_parked();
+        heard.len() >= count
+    });
+    waiting::thread::until(Duration::from_secs(10), "the view to hear how it went", || {
+        cx.run_until_parked();
+        view.read_with(cx, |view, _| !matches!(view.answering.sending, Sending::Going))
+    });
 }
 
 /// The answers among what the view asked to send.
-fn answers(asked: &RefCell<Vec<ProposalRequest>>) -> Vec<ProposalAnswer> {
+fn answers(asked: &Heard) -> Vec<ProposalAnswer> {
     let answer = |request: &ProposalRequest| match request {
         ProposalRequest::Answer(answer) => Some(answer.clone()),
         ProposalRequest::AnotherRound(_) => None,
     };
-    asked.borrow().iter().filter_map(answer).collect()
+    asked.requests.lock().iter().filter_map(answer).collect()
 }
 
 fn responded(response: Response) -> Arc<Proposal> {
@@ -59,9 +126,10 @@ fn an_answer_sent_again_after_a_failure_is_the_same_request(cx: &mut TestAppCont
     view.update(cx, |view, cx| {
         view.choose(0, Some(OptionPlace(1)), cx);
         view.send(cx);
-        view.sent(Err("the hub went away".into()), cx);
-        view.send(cx);
     });
+    until_heard(1, &view, &asked, cx);
+    view.update(cx, ProposalView::send);
+    until_heard(2, &view, &asked, cx);
 
     let asked = answers(&asked);
     assert_eq!(asked.len(), 2);
@@ -77,10 +145,13 @@ fn an_answer_changed_after_a_failure_is_a_new_request(cx: &mut TestAppContext) {
     view.update(cx, |view, cx| {
         view.choose(0, Some(OptionPlace(1)), cx);
         view.send(cx);
-        view.sent(Err("the hub went away".into()), cx);
+    });
+    until_heard(1, &view, &asked, cx);
+    view.update(cx, |view, cx| {
         view.choose(0, Some(OptionPlace(0)), cx);
         view.send(cx);
     });
+    until_heard(2, &view, &asked, cx);
 
     let asked = answers(&asked);
     assert_eq!(asked[1].chosen, [OptionPlace(0)]);
@@ -100,7 +171,8 @@ fn nothing_is_sent_once_its_responded_to(cx: &mut TestAppContext) {
             view.send(cx);
         });
 
-        assert!(asked.borrow().is_empty());
+        assert!(!sent_anything(&view, cx));
+        assert_eq!(asked.len(), 0);
     }
 }
 
@@ -126,7 +198,7 @@ fn another_round_is_drawn_as_a_reply_with_a_note() {
 
 #[gpui_kit::test]
 fn an_answer_is_unsent_while_anything_is_chosen_and_not_once_its_answered(cx: &mut TestAppContext) {
-    let (view, _) = view(cx);
+    let (view, _hub) = view(cx);
 
     let unsent = |view: &Entity<ProposalView>, cx: &mut TestAppContext| view.read_with(cx, ProposalView::has_unsent);
     assert!(!unsent(&view, cx));
@@ -139,7 +211,7 @@ fn an_answer_is_unsent_while_anything_is_chosen_and_not_once_its_answered(cx: &m
 /// Send pressed again while the answer is on its way sends nothing more, so the hub isn't asked twice at once.
 #[gpui_kit::test]
 fn an_answer_on_its_way_isnt_sent_again(cx: &mut TestAppContext) {
-    let (view, asked) = view(cx);
+    let (view, asked) = view_on(Hub::Waits, cx);
 
     view.update(cx, |view, cx| {
         view.choose(0, Some(OptionPlace(1)), cx);
@@ -147,7 +219,28 @@ fn an_answer_on_its_way_isnt_sent_again(cx: &mut TestAppContext) {
         view.send(cx);
     });
 
-    assert_eq!(asked.borrow().len(), 1);
+    waiting::thread::until(Duration::from_secs(10), "the hub to hear the answer", || asked.len() > 0);
+    // The client sends requests side by side, so a second would reach the hub while the first waits.
+    waiting::thread::for_what_mustnt_happen(Duration::from_millis(200));
+    assert_eq!(asked.len(), 1);
+}
+
+/// After a reconnect, the answer goes on the connection the view was given last, since the one before may be gone, as
+/// a phone's is once it has slept.
+#[gpui_kit::test]
+fn an_answer_goes_on_the_connection_given_last(cx: &mut TestAppContext) {
+    let (view, first) = view(cx);
+    let (client, last) = stand_in(Hub::Refuses, cx);
+
+    view.update(cx, |view, cx| {
+        view.reconnect(&client);
+        view.choose(0, Some(OptionPlace(1)), cx);
+        view.send(cx);
+    });
+    until_heard(1, &view, &last, cx);
+
+    assert_eq!(answers(&last).len(), 1);
+    assert_eq!(first.len(), 0, "nothing goes to the hub it was given first");
 }
 
 /// The fixture's proposal once the agent has revised it, with these options for its question, each under the letter
@@ -175,7 +268,7 @@ fn revised_as_it_was() -> Arc<Proposal> {
 #[gpui_kit::test]
 fn a_revision_is_held_back_while_the_tab_is_in_sight_or_holds_something_unsent(cx: &mut TestAppContext) {
     for in_sight in [true, false] {
-        let (view, asked) = view(cx);
+        let (view, _hub) = view(cx);
 
         view.update(cx, |view, cx| {
             view.set_in_sight(in_sight, cx);
@@ -189,7 +282,7 @@ fn a_revision_is_held_back_while_the_tab_is_in_sight_or_holds_something_unsent(c
 
         let (shown, held) = view.read_with(cx, |view, _| (view.proposal().current.number, view.held_back()));
         assert_eq!((shown, held), (RevisionNumber::FIRST, Some(RevisionNumber(2))), "in sight: {in_sight}");
-        assert!(asked.borrow().is_empty(), "nothing is sent to a revision the agent replaced");
+        assert!(!sent_anything(&view, cx), "nothing is sent to a revision the agent replaced");
         assert!(view.read_with(cx, ProposalView::has_unsent), "what's chosen is kept");
     }
 }
@@ -227,6 +320,7 @@ fn showing_the_newest_keeps_what_was_chosen_under_its_letter(cx: &mut TestAppCon
         view.show_newest(cx);
         view.send(cx);
     });
+    until_heard(1, &view, &asked, cx);
 
     let asked = answers(&asked);
     assert_eq!(asked.len(), 1);
@@ -260,7 +354,7 @@ fn what_was_chosen_goes_on_only_to_the_same_question_and_letter() {
 /// chosen, rather than with what was already sent.
 #[gpui_kit::test]
 fn an_answer_kept_before_the_agent_revised_isnt_carried_on(cx: &mut TestAppContext) {
-    let (view, asked) = view(cx);
+    let (view, asked) = view_on(Hub::Keeps, cx);
 
     view.update(cx, |view, cx| {
         view.set_in_sight(true, cx);
@@ -270,10 +364,10 @@ fn an_answer_kept_before_the_agent_revised_isnt_carried_on(cx: &mut TestAppConte
         view.show_newest(cx);
     });
     let while_sending = view.read_with(cx, |view, _| view.proposal().current.number);
-    view.update(cx, |view, cx| view.sent(Ok(()), cx));
+    until_heard(1, &view, &asked, cx);
 
     assert_eq!(while_sending, RevisionNumber::FIRST, "the page stays until the hub says whether it kept the answer");
-    assert_eq!(asked.borrow().len(), 1);
+    assert_eq!(asked.len(), 1);
     assert_eq!(view.read_with(cx, |view, _| view.proposal().current.number), RevisionNumber(2));
     assert!(!view.read_with(cx, ProposalView::has_unsent));
 }
@@ -282,7 +376,7 @@ fn an_answer_kept_before_the_agent_revised_isnt_carried_on(cx: &mut TestAppConte
 /// choose, as the bar does.
 #[gpui_kit::test]
 fn a_response_other_than_a_choice_leaves_nothing_to_choose(cx: &mut TestAppContext) {
-    let (view, _) = view(cx);
+    let (view, _hub) = view(cx);
     let round = protocol::model::Round { note: "Could the board own it?".into(), at_ms: 0 };
     let (asked, newer) = (responded(Response::AnotherRound(round)), responded(Response::Unknown));
     let waiting = protocol::fixtures::proposal("p");
