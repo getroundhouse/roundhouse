@@ -117,6 +117,9 @@ pub struct Paths {
     pub database: PathBuf,
     /// Copies of the database from before each migration, so an older build has one it can open.
     pub backups_dir: PathBuf,
+    /// What the hub last read from GitHub, a cache apart from the database, which the hub empties rather than
+    /// migrates.
+    pub github_cache: PathBuf,
     /// The files prompts carry, one directory per session, kept out of the database so it stays small to copy.
     pub attachments_dir: PathBuf,
     /// The git bundles of archived workspaces whose provider doesn't keep repository clones across archiving, one file
@@ -179,6 +182,7 @@ pub fn resolve(env: impl Fn(&str) -> Option<String>) -> Result<Paths, String> {
         lock: data_dir.join("hub.lock"),
         database: data_dir.join("hub.db"),
         backups_dir: data_dir.join("backups"),
+        github_cache: data_dir.join("github-cache.db"),
         attachments_dir: data_dir.join("attachments"),
         bundles_dir: data_dir.join("bundles"),
         log: data_dir.join("hub.log"),

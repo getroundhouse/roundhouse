@@ -5,6 +5,7 @@ use super::{awake, feed, pull_requests, sessions, setup};
 use crate::attachment_files::AttachmentFiles;
 use crate::error::internal;
 use crate::gh::Gh;
+use crate::github_cache::GithubCache;
 use crate::github_logins::GithubLogins;
 use crate::jobs::Jobs;
 use crate::logins::Logins;
@@ -90,8 +91,8 @@ pub(crate) struct Hub {
     /// What the hub last found in the update feed, which it reads only as a service.
     pub(super) updates: Updates,
     pub(super) pull_requests: pull_requests::Reading,
-    /// What the hub found on GitHub of the issues and pull requests chats name, for every client.
-    pub(super) references: super::references::Kept,
+    /// What the hub last read from GitHub, for every part of it that reads GitHub, and every client.
+    pub(super) github_cache: Arc<GithubCache>,
     /// The reads of workspaces' own pull requests nobody asked for that are running now, by whose token each reads
     /// as.
     pub(super) own_reads: Jobs<pull_requests::ReadsAs>,
@@ -125,6 +126,8 @@ pub(crate) struct HubDirs {
     pub(crate) attachments: PathBuf,
     pub(crate) bundles: PathBuf,
     pub(crate) worker_logs: PathBuf,
+    /// The file the hub keeps what it last read from GitHub in.
+    pub(crate) github_cache: PathBuf,
     /// The data directory itself, in which the files of each kind of login have a directory of their own, as
     /// `LoginSecret::DIR` says.
     pub(crate) data: PathBuf,
@@ -138,6 +141,7 @@ impl HubDirs {
             attachments: paths.attachments_dir.clone(),
             bundles: paths.bundles_dir.clone(),
             worker_logs: paths.worker_logs_dir.clone(),
+            github_cache: paths.github_cache.clone(),
             data: paths.data_dir.clone(),
             network_address: std::net::SocketAddr::from(([127, 0, 0, 1], 0)),
         }
@@ -150,6 +154,7 @@ impl HubDirs {
             attachments: dir.join("attachments"),
             bundles: dir.join("bundles"),
             worker_logs: dir.join("worker-logs"),
+            github_cache: dir.join("github-cache.db"),
             data: dir.to_path_buf(),
             network_address: std::net::SocketAddr::from(([127, 0, 0, 1], 0)),
         }
@@ -204,7 +209,7 @@ impl Hub {
             model_lists: ModelLists::default(),
             updates: Updates::default(),
             pull_requests: pull_requests::Reading::new(),
-            references: super::references::Kept::default(),
+            github_cache: Arc::new(GithubCache::open(&dirs.github_cache)),
             own_reads: Jobs::new(),
             sign_ins: Jobs::new(),
             github_checks_stopped: watch::Sender::new(false),
