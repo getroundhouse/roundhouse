@@ -5,7 +5,7 @@ use protocol::model::{
     GithubRepositoryName, IssueNumber, IssueState, Reference, ReferenceAsk, ReferenceKind, ReferenceRead,
 };
 
-use super::kept::FRESH_FOR;
+use super::references::FRESH_FOR;
 use crate::hub::tests::hub_reading_github;
 
 fn number(number: u64) -> IssueNumber {
@@ -95,12 +95,12 @@ async fn what_was_found_is_read_again_once_its_stale_and_kept_when_github_fails(
 
     let closed = Reference { kind: ReferenceKind::Issue { state: IssueState::Done }, ..issue("example/project", 1) };
     references.set(closed.clone());
-    hub.references.age(FRESH_FOR + Duration::from_secs(1));
+    hub.github_cache.age(FRESH_FOR + Duration::from_secs(1));
     let read = hub.references_read(&"w".into(), vec![own(1)]).await.unwrap();
     assert_eq!(read, [found(&closed)]);
 
     references.fail(true);
-    hub.references.age(FRESH_FOR + Duration::from_secs(1));
+    hub.github_cache.age(FRESH_FOR + Duration::from_secs(1));
     let failed = hub.references_read(&"w".into(), vec![own(1), own(2)]).await.unwrap();
     assert_eq!(failed[0], found(&closed), "what was known before");
     assert!(matches!(failed[1], ReferenceRead::Unread { .. }), "{:?}", failed[1]);
@@ -125,7 +125,7 @@ async fn a_read_that_failed_is_tried_again_only_once_it_would_be_read_again() {
     assert_eq!(references.queries(), 1);
 
     references.fail(false);
-    hub.references.age(FRESH_FOR + Duration::from_secs(1));
+    hub.github_cache.age(FRESH_FOR + Duration::from_secs(1));
     let read = hub.references_read(&"w".into(), vec![own(1)]).await.unwrap();
     assert_eq!(read, [found(&issue("example/project", 1))]);
     assert_eq!(references.queries(), 2);

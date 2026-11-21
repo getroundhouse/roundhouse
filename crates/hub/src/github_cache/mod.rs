@@ -1,0 +1,13 @@
+//! What the hub last read from GitHub, kept for every part of the hub that reads it, so the same issue or pull request
+//! is read once however many ask, by what it describes and in facets that each have the time they were read, as
+//! `docs/principles/outside-systems.md` says. It's in memory, and in a file of its own, so a hub that starts again has
+//! it, which it empties rather than migrates: everything in it can be read from GitHub again.
+
+mod file;
+mod kept;
+mod keys;
+#[cfg(test)]
+mod tests;
+
+pub(crate) use kept::GithubCache;
+pub(crate) use keys::{Facet, Item};

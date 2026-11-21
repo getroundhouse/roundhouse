@@ -1,6 +1,7 @@
 //! SQLite storage. Synchronous, and only called through `spawn_blocking`.
 //!
-//! All SQL lives in this module, so it's the one thing a Postgres-backed hub would replace.
+//! All the database's SQL lives in this module, so it's the one thing a Postgres-backed hub would replace. The cache
+//! of what the hub reads from GitHub is a file of its own, apart from the database, in `crate::github_cache`.
 
 #[cfg(test)]
 use protocol::model::{Seq, Session};
