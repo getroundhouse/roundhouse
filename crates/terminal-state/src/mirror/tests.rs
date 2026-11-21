@@ -3,6 +3,7 @@ use proptest::collection::vec;
 use proptest::prelude::*;
 use proptest::sample::Index;
 use proptest::test_runner::{Config, RngSeed};
+use protocol::terminal::TerminalSize;
 
 use super::*;
 
@@ -40,10 +41,10 @@ fn shows(mirror: &Mirror) -> Shows {
     }
 }
 
-const SIZE: Size = Size { cols: 80, rows: 24 };
+const SIZE: TerminalSize = TerminalSize { cols: 80, rows: 24 };
 
 /// A client's terminal, made from what the worker's snapshot says.
-fn attached(worker: &Mirror, size: Size) -> Mirror {
+fn attached(worker: &Mirror, size: TerminalSize) -> Mirror {
     let mut client = Mirror::new(size).unwrap();
     client.write(&worker.snapshot().unwrap());
     client
@@ -63,11 +64,11 @@ fn shell_with_history() -> Mirror {
 /// terminal, with a colour in every cell. Ghostty drops history a page at a time, so each is reached only roughly.
 #[test]
 fn a_terminal_keeps_its_lines_of_history_unless_they_take_too_much() {
-    let mut narrow = Mirror::new(Size { cols: 200, rows: 50 }).unwrap();
+    let mut narrow = Mirror::new(TerminalSize { cols: 200, rows: 50 }).unwrap();
     for line in 0..12_000 {
         narrow.write(format!("\x1b[32mline {line}\x1b[0m of a build's output, as long as most are\r\n").as_bytes());
     }
-    let wide = Size { cols: 2000, rows: 50 };
+    let wide = TerminalSize { cols: 2000, rows: 50 };
     let mut colourful = Mirror::new(wide).unwrap();
     for line in 0..3_000_usize {
         let cells = (0..usize::from(wide.cols)).map(|col| format!("\x1b[38;5;{}mx", (line + col) % 256));
@@ -140,7 +141,7 @@ fn the_workers_copy_says_where_the_cursor_is_and_what_the_terminal_is() {
 #[test]
 fn a_new_size_is_the_one_a_program_is_told_of() {
     let answered = answers(|worker| {
-        worker.resize(Size { cols: 40, rows: 10 }).unwrap();
+        worker.resize(TerminalSize { cols: 40, rows: 10 }).unwrap();
         worker.write(b"\x1b[99;99H\x1b[6n");
     });
 
@@ -195,7 +196,7 @@ proptest! {
     /// screen and, once the program quits, on the shell's under it.
     #[test]
     fn attaching_at_any_point_ends_with_what_the_worker_has(pieces in vec(piece(), 0..80), at in any::<Index>()) {
-        let size = Size { cols: 20, rows: 6 };
+        let size = TerminalSize { cols: 20, rows: 6 };
         let output = pieces.concat();
         let (before, after) = output.split_at(at.index(output.len() + 1));
         let mut worker = Mirror::new(size).unwrap();

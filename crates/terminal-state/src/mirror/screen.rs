@@ -6,9 +6,9 @@ use libghostty_vt::effect::{
 use libghostty_vt::fmt::{Extras, Format, Formatter};
 use libghostty_vt::screen::Screen;
 use libghostty_vt::snapshot::Decoder;
+use protocol::terminal::TerminalSize;
 
 use super::compressing::Compressing;
-use crate::drawn::Rgb;
 
 /// Abandons any sequence a copy was partway through, then goes back to the shell's screen, as vim does as it quits.
 pub(super) const TO_SHELL_SCREEN: &[u8] = b"\x18\x1b[?1049l";
@@ -16,9 +16,9 @@ pub(super) const TO_SHELL_SCREEN: &[u8] = b"\x18\x1b[?1049l";
 pub(super) const HISTORY_LINES: usize = 10_000;
 /// The most the lines kept above the screen take, which [`HISTORY_LINES`] fill at the widths people use, so it stops
 /// only a wide or colourful terminal short of them. Without it, Ghostty's own limit of about one page, 400 KiB, would
-/// keep about a thousand lines at 80 columns and two hundred at 200. Each copy of a terminal holds its history, the
-/// worker's and every client's, and a screen sent to a client carries it. At `TerminalSize::MOST`, with a colour in
-/// every cell, its history would otherwise take 171 MiB, and a screen of it would pass a frame's limit.
+/// keep about a thousand lines at 80 columns and two hundred at 200. The worker's copy holds its history, and a
+/// screen sent to a client that attaches carries it. At `TerminalSize::MOST`, with a colour in every cell, its history
+/// would otherwise take 171 MiB, and a screen of it would pass a frame's limit.
 pub(super) const HISTORY_BYTES: usize = 32 * 1024 * 1024;
 /// The longest unfinished sequence a snapshot carries over, which covers everything but a large image or clipboard
 /// write cut off partway.
@@ -29,13 +29,6 @@ const ATTRIBUTES: DeviceAttributes = DeviceAttributes {
     secondary: SecondaryDeviceAttributes { device_type: DeviceType::VT220, firmware_version: 0, rom_cartridge: 0 },
     tertiary: TertiaryDeviceAttributes { unit_id: 0 },
 };
-
-/// How many columns and rows a terminal has.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Size {
-    pub cols: u16,
-    pub rows: u16,
-}
 
 #[derive(Debug, thiserror::Error)]
 pub enum MirrorError {
@@ -53,9 +46,7 @@ pub enum MirrorError {
 #[derive(Debug)]
 pub struct Mirror {
     pub(super) terminal: Terminal<'static, 'static>,
-    pub(super) drawing: Option<super::drawing::Drawing>,
     pub(super) typing: Option<super::typing::Typing>,
-    pub(super) selecting: Option<super::selecting::Selecting>,
     pub(super) compressing: Compressing,
     /// The count of its rows, once they've been asked for by number.
     pub(super) rows: Option<super::rows::Counting>,
@@ -64,21 +55,21 @@ pub struct Mirror {
 }
 
 impl Mirror {
-    /// A copy that answers nothing the program asks, as a client's is, since the worker's answers.
-    pub fn new(size: Size) -> Result<Self, MirrorError> {
+    /// A copy that answers nothing the program asks, as a test's is, such as the fake hub's.
+    pub fn new(size: TerminalSize) -> Result<Self, MirrorError> {
         let mut terminal = Terminal::new(size.cols, size.rows)?;
         terminal.set_scrollback_max_lines(Some(HISTORY_LINES))?.set_scrollback_max_bytes(Some(HISTORY_BYTES))?;
         // From the start, since only bytes written after it's on can be carried over by a snapshot.
         terminal.set_continuation_max_bytes(LONGEST_UNFINISHED_BYTES)?;
         let compressing = Compressing::default();
-        Ok(Self { terminal, drawing: None, typing: None, selecting: None, compressing, rows: None, picturing: None })
+        Ok(Self { terminal, typing: None, compressing, rows: None, picturing: None })
     }
 
     /// A copy that answers what the program asks of its terminal, such as where the cursor is, or what the terminal
     /// is, by giving `answer` what the program reads back. It's called as a write or a new size takes in a question.
     /// Only the worker's copy answers, so each question is answered once, whether several clients are attached or
     /// none, and a shell that asks as it starts doesn't wait for a client.
-    pub fn answering(size: Size, mut answer: impl FnMut(&[u8]) + 'static) -> Result<Self, MirrorError> {
+    pub fn answering(size: TerminalSize, mut answer: impl FnMut(&[u8]) + 'static) -> Result<Self, MirrorError> {
         let mut mirror = Self::new(size)?;
         mirror.terminal.on_pty_write(move |_, bytes| answer(bytes))?.on_device_attributes(|_| Some(ATTRIBUTES))?;
         Ok(mirror)
@@ -97,7 +88,7 @@ impl Mirror {
 
     /// Gives the terminal a new size, which rewraps the shell's screen and its history, as the program's terminal has,
     /// and starts its rows' numbering again. The size it has already changes nothing.
-    pub fn resize(&mut self, size: Size) -> Result<(), MirrorError> {
+    pub fn resize(&mut self, size: TerminalSize) -> Result<(), MirrorError> {
         if self.size()? == size {
             return Ok(());
         }
@@ -111,17 +102,8 @@ impl Mirror {
         counted
     }
 
-    pub fn size(&self) -> Result<Size, MirrorError> {
-        Ok(Size { cols: self.terminal.cols()?, rows: self.terminal.rows()? })
-    }
-
-    /// The colours a cell that sets none is drawn in, which a client takes from its own look.
-    pub fn set_colors(&mut self, foreground: Rgb, background: Rgb) -> Result<(), MirrorError> {
-        let ghostty = |color: Rgb| libghostty_vt::color::Rgb { r: color.r, g: color.g, b: color.b };
-        self.terminal
-            .set_default_fg_color(Some(ghostty(foreground)))?
-            .set_default_bg_color(Some(ghostty(background)))?;
-        Ok(())
+    pub(in crate::mirror) fn size(&self) -> Result<TerminalSize, MirrorError> {
+        Ok(TerminalSize { cols: self.terminal.cols()?, rows: self.terminal.rows()? })
     }
 
     /// Bytes that make a fresh terminal of the same size show what this one does, so that what the program writes

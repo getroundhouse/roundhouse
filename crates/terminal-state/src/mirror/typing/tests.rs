@@ -1,8 +1,9 @@
-use crate::{Mirror, Size};
-use protocol::terminal::{Key, KeyPress, Mods, Typed};
+use protocol::terminal::{Key, KeyPress, Mods, TerminalSize, Typed};
+
+use crate::Mirror;
 
 fn mirror_of(written: &[u8]) -> Mirror {
-    let mut mirror = Mirror::new(Size { cols: 20, rows: 4 }).unwrap();
+    let mut mirror = Mirror::new(TerminalSize { cols: 20, rows: 4 }).unwrap();
     mirror.write(written);
     mirror
 }
@@ -65,8 +66,8 @@ fn a_paste_loses_its_escapes_and_has_its_marks_if_the_program_asked() {
 fn the_wheel_over_a_full_screen_program_sends_arrow_keys() {
     let mut mirror = mirror_of(b"\x1b[?1049h");
 
-    assert_eq!(mirror.wheel(-2).unwrap(), b"\x1b[A\x1b[A");
-    assert_eq!(mirror.wheel(1).unwrap(), b"\x1b[B");
+    assert_eq!(mirror.typed(&Typed::Wheel { lines: -2 }).unwrap(), b"\x1b[A\x1b[A");
+    assert_eq!(mirror.typed(&Typed::Wheel { lines: 1 }).unwrap(), b"\x1b[B");
 }
 
 /// Until the mouse is sent to programs, since one that asked for it, such as tmux, takes arrow keys for keys typed.
@@ -74,7 +75,7 @@ fn the_wheel_over_a_full_screen_program_sends_arrow_keys() {
 fn the_wheel_over_a_program_that_asked_for_the_mouse_sends_nothing() {
     let mut mirror = mirror_of(b"\x1b[?1049h\x1b[?1000h");
 
-    assert_eq!(mirror.wheel(-1).unwrap(), b"");
+    assert_eq!(mirror.typed(&Typed::Wheel { lines: -1 }).unwrap(), b"");
 }
 
 /// The worker's copy is never scrolled, since each client scrolls its own, so where it says the cursor is stays put. A

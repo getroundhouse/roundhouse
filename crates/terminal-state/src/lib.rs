@@ -1,13 +1,11 @@
-//! What a terminal shows, kept from what the program in it writes, and the bytes that draw it again in another
-//! terminal, which a client that attaches to a terminal gets before what the program writes next, as
-//! `protocol::terminal::TerminalUpdate` says. The worker keeps each of its terminals' with it, and a client keeps its
-//! own copy the same way, which it draws from a [`drawn::Frame`], turns keys into what the program reads with, and
-//! selects in with the pointer.
+//! What a terminal shows, kept by the worker from what the program in it writes: the rows a client is sent of it by
+//! number, as `protocol::terminal::TerminalPicture` says, a word's ends and the text a client selects, and what the
+//! program reads for what a client pressed. A client holds no copy of its own, and shows the rows it's sent.
 //!
-//! It does no IO and has no UI. The worker and `client-core` both build it, and each gets the bytes its own way.
+//! It does no IO and has no UI. Only the worker builds it, and tests, such as the fake hub's, which makes a terminal's
+//! pictures from its bytes as a worker would.
 #![warn(clippy::wildcard_enum_match_arm)]
 
-pub mod drawn;
 mod mirror;
 
-pub use mirror::{Mirror, MirrorError, Pointer, QUIET_BEFORE_COMPRESSING, SelectBy, Size, Tracked};
+pub use mirror::{Mirror, MirrorError, QUIET_BEFORE_COMPRESSING, Tracked};

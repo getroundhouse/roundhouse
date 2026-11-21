@@ -1,14 +1,14 @@
-//! A plain copy of what a terminal shows, for a view to draw. It holds nothing of Ghostty's, so it can leave the thread
-//! the terminal lives on, and a row that hasn't changed is the same `Arc` as in the copy before, so a view can tell.
+//! What a terminal shows, for a view to draw, as an open terminal paints it from the rows its worker sends. A row that
+//! hasn't changed is the same `Arc` as in the frame before, so a view can tell.
 
 use std::sync::Arc;
 
-use crate::Size;
+use protocol::terminal::TerminalSize;
 
-/// What a terminal shows, as it was when it was copied.
+/// What a terminal shows, as it was when it was painted.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Frame {
-    pub size: Size,
+    pub size: TerminalSize,
     /// Each row in sight, top first, which is the screen's unless the view has scrolled back through its history.
     pub rows: Vec<Arc<Row>>,
     /// Where the cursor is, unless it's hidden or scrolled out of sight.

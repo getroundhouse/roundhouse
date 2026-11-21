@@ -1,8 +1,8 @@
 //! Selecting with the pointer in a window, by the cell under it.
 
 use protocol::terminal::{Numbering, RowNumber, TerminalPoint, TerminalRange};
-use terminal_state::{Pointer, SelectBy};
 
+use super::selecting::{Pointer, SelectBy};
 use super::viewing::{Ask, Window};
 
 impl Window {

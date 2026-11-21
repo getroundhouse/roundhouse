@@ -5,9 +5,8 @@ use std::collections::HashMap;
 use libghostty_vt::terminal::CompressionMode;
 use proptest::prelude::*;
 use proptest::test_runner::{Config, RngSeed};
-use protocol::terminal::{Numbering, RowNumber, TerminalRow};
+use protocol::terminal::{Numbering, RowNumber, TerminalRow, TerminalSize};
 
-use crate::Size;
 use crate::mirror::HISTORY_LINES;
 use crate::mirror::rows::reading::{Place, row};
 
@@ -46,7 +45,7 @@ fn a_numbering_starts_again_when_its_count_is_lost() {
     next(&mut pair, "more lines in one write than the history holds", &lines(50, 3 * HISTORY_LINES));
     next(&mut pair, "clearing the history", b"\x1b[3J");
     next(&mut pair, "a reset", b"\x1bc");
-    let resized = pair.resize(Size { cols: 30, rows: 5 }).numbering;
+    let resized = pair.resize(TerminalSize { cols: 30, rows: 5 }).numbering;
     assert!(resized > numbering, "a resize kept the numbering");
 }
 
@@ -94,7 +93,7 @@ fn a_programs_screen_has_a_numbering_of_its_own() {
     pair.write(&lines(0, 30));
     let after = pair.write(b"\x1b[?1049l");
     pair.write(b"\x1b[?1049h");
-    pair.resize(Size { cols: 30, rows: 5 });
+    pair.resize(TerminalSize { cols: 30, rows: 5 });
     let resized = pair.write(b"\x1b[?1049l");
 
     assert!(!program.shell && program.numbering != shell.numbering);
@@ -172,7 +171,7 @@ proptest! {
         let mut n = 0;
         for op in &ops {
             if let Op::Resize { cols } = op {
-                pair.resize(Size { cols: *cols, rows: SIZE.rows });
+                pair.resize(TerminalSize { cols: *cols, rows: SIZE.rows });
             }
             for write in bytes(op, &mut n) {
                 pair.write(&write);

@@ -2,15 +2,13 @@
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Weak};
-use std::time::Instant;
 
 use parking_lot::Mutex;
 use protocol::client::ErrorCode;
 
 use crate::client::{Client, ClientError, Ended, Result, Subscription, SubscriptionItem};
 
-/// What's followed, and how. It's made on the thread that follows it, so it needn't be sent between threads, as one
-/// that keeps Ghostty's terminal can't be.
+/// What's followed, and how. It's made on the thread that follows it, so it needn't be sent between threads.
 pub(in crate::client) trait Source: 'static {
     type Held: Send + 'static;
 
@@ -36,15 +34,6 @@ pub(in crate::client) trait Source: 'static {
     fn does_without(&self, _error: &ClientError) -> bool {
         false
     }
-
-    /// When there's next something to do with what's held that nobody asks for, such as compressing a terminal's
-    /// history once it has been quiet a while. None while there's nothing. Runs each time the thread is about to wait.
-    fn due_at(&mut self) -> Option<Instant> {
-        None
-    }
-
-    /// Does what [`Source::due_at`] said was due, which changes nothing readers see.
-    fn due(&mut self) {}
 }
 
 /// What went wrong while following, for a person to hear about. A connection going isn't one of these:
@@ -242,8 +231,6 @@ struct Follower<S: Source> {
 enum Next {
     Item(std::result::Result<SubscriptionItem, flume::RecvError>),
     Woken(std::result::Result<(), flume::RecvError>),
-    /// What the source said was due is, with nothing else come first.
-    Due,
 }
 
 impl<S: Source> Follower<S> {
@@ -266,24 +253,18 @@ impl<S: Source> Follower<S> {
                 Next::Woken(Ok(())) => self.woken(),
                 // Every handle has gone.
                 Next::Woken(Err(_)) => return,
-                Next::Due => self.source.due(),
             }
         }
     }
 
-    /// Waits for an item, while there's a subscription, or to be woken, or until what the source says is due.
+    /// Waits for an item, while there's a subscription, or to be woken.
     fn next(&mut self) -> Next {
-        let due_at = self.source.due_at();
         let selector = flume::Selector::new();
         let selector = match &self.subscription {
             Some(subscription) => selector.recv(&subscription.items, Next::Item),
             None => selector,
         };
-        let selector = selector.recv(&self.woken, Next::Woken);
-        match due_at {
-            Some(at) => selector.wait_deadline(at).unwrap_or(Next::Due),
-            None => selector.wait(),
-        }
+        selector.recv(&self.woken, Next::Woken).wait()
     }
 
     fn woken(&mut self) {

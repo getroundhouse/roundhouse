@@ -4,14 +4,13 @@ use std::sync::Arc;
 
 use parking_lot::Mutex;
 use protocol::model::TerminalId;
-use protocol::terminal::{KeyPress, TerminalUpdate, Typed};
-use terminal_state::drawn::{Frame, Rgb};
-use terminal_state::{Pointer, SelectBy, Size};
+use protocol::terminal::{KeyPress, TerminalSize, TerminalUpdate, Typed};
 
 use super::asking::{self, Waiting};
-use super::window::{Ask, Replied, Window};
+use super::window::{Ask, Pointer, Replied, SelectBy, Window};
 use crate::client::follow::{Follow, Source};
 use crate::client::{Client, ClientError, FollowError, Result, Subscription, SubscriptionItem};
+use crate::drawn::{Frame, Rgb};
 
 /// A terminal someone has open, followed until every clone of this has gone. One view takes its frames, since taking
 /// one empties what's held.
@@ -43,7 +42,7 @@ pub(super) enum Given {
     /// Turns the wheel by this many lines, up for fewer than none.
     Wheel(isize),
     /// The view has room for this size.
-    Fit(Size),
+    Fit(TerminalSize),
     Colors(Rgb, Rgb),
     /// The pointer's button went down, to select by what the click of a run it was selects by.
     Press(Pointer, SelectBy),
@@ -121,7 +120,7 @@ impl OpenTerminal {
     /// whenever it's watched again at another size. A new size another client gives it is kept until the room changes.
     /// The view's top and what's selected stay on their rows through a size it asked for, and go to the bottom with
     /// nothing selected through one another client gave.
-    pub fn fit(&self, size: Size) {
+    pub fn fit(&self, size: TerminalSize) {
         self.give(Given::Fit(size));
     }
 

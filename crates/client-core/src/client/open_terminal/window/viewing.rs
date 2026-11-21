@@ -7,13 +7,12 @@ use protocol::terminal::{
     Bounds, MOST_ROWS, Numbering, RowNumber, TerminalBoundsReply, TerminalFitReply, TerminalPicture, TerminalPoint,
     TerminalRowsReply, TerminalSize, Typed, Wheel,
 };
-use terminal_state::Size;
-use terminal_state::drawn::{Frame, Rgb, Row, Selected};
 
 use super::fitting::Fitting;
-use super::painting::{Colors, GHOSTTYS_COLORS, wide_at};
+use super::painting::{Colors, GHOSTTYS_COLORS};
 use super::rows::{Incomplete, Rows, Taken};
 use super::selecting::{Selecting, Step};
+use crate::drawn::{Frame, Rgb, Row, Selected};
 
 /// How many screens of history a view holds on each side of it while it's scrolled back, and how many screens it
 /// holds above the screen at the bottom, which are the rows that last scrolled off, so they come free.
@@ -267,7 +266,7 @@ impl Window {
         }
         let top = self.top()?;
         let screen = self.rows.screen.as_ref()?;
-        let size = Size { cols: screen.size.cols, rows: screen.size.rows };
+        let size = screen.size;
         let blank = Arc::new(Row::default());
         let rows: Vec<Arc<Row>> = (0..u64::from(size.rows))
             .map(|at| top.plus(at))
@@ -276,8 +275,8 @@ impl Window {
                 match self.selecting.cells(number, size.cols) {
                     Some((col, end)) => {
                         // Off a wide character's second cell at the start, and onto it at the end, as Ghostty draws it.
-                        let col = col - u16::from(col > 0 && wide_at(&painted, col - 1));
-                        let end = end + u16::from(wide_at(&painted, end));
+                        let col = col - u16::from(col > 0 && painted.wide_at(col - 1));
+                        let end = end + u16::from(painted.wide_at(end));
                         let selected = Selected { col, cells: end.saturating_sub(col) + 1 };
                         Arc::new(Row { selected: Some(selected), ..(*painted).clone() })
                     }

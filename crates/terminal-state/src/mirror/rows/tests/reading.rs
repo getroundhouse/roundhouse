@@ -2,11 +2,10 @@
 
 use std::fmt::Write as _;
 
-use protocol::terminal::MOST_ROWS;
-use protocol::terminal::{CellAttributes, CellColor, CellStyle, RowNumber, Span, TerminalRow};
+use protocol::terminal::{CellAttributes, CellColor, CellStyle, MOST_ROWS, RowNumber, Span, TerminalRow, TerminalSize};
 
+use crate::Mirror;
 use crate::mirror::rows::reading::{Place, row};
-use crate::{Mirror, Size};
 
 use super::pair::{SIZE, lines};
 
@@ -120,7 +119,7 @@ fn a_programs_screen_has_no_history_to_ask_for() {
 fn an_ask_takes_at_most_its_most_rows_or_about_a_frames_worth() {
     let mut plain = Mirror::new(SIZE).unwrap();
     plain.write(&lines(0, 1_000));
-    let mut colourful = Mirror::new(Size { cols: 200, rows: 5 }).unwrap();
+    let mut colourful = Mirror::new(TerminalSize { cols: 200, rows: 5 }).unwrap();
     for line in 0..300 {
         let mut cells = String::new();
         for col in 0..200 {

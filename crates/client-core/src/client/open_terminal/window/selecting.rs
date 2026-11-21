@@ -3,7 +3,23 @@
 //! line's ends, which the worker finds, for a double or a triple click and a drag after one.
 
 use protocol::terminal::{Bounds, RowNumber, TerminalPoint, TerminalRange};
-use terminal_state::SelectBy;
+
+/// Where the pointer is, in cells from the top left of what shows, with how far into its cell it is: half a column in
+/// is 0.5. It's outside them while a drag goes past an edge.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Pointer {
+    pub col: f32,
+    pub row: f32,
+}
+
+/// What a press selects, and a drag after it goes on selecting by: a first click's starts from its cell, a second's
+/// selects the word there, and a third's the line, as the platform counts a run of clicks.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SelectBy {
+    Cells,
+    Words,
+    Lines,
+}
 
 /// How far across its cell a drag has to cover a cell at either end of it before it's taken in, in thousandths, as in
 /// Ghostty.

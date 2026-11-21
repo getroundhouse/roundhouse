@@ -73,7 +73,7 @@ crates/
   client-core/     A client's connection, and its copy of each hub's state
   local-hub/       Starting a hub on this machine, for the desktop app and the CLI
   transcript/      A chat's history and live output, in GPUI
-  terminal-state/  What a terminal shows, on Ghostty's terminal core
+  terminal-state/  The worker's copy of each terminal, on Ghostty's terminal core
   terminal-view/   A terminal, in GPUI
   look/            The design system: colours, type, sizes, components and icons
   dictation/       Speech to text on the device

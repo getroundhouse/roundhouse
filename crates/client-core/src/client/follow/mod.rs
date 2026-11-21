@@ -3,8 +3,6 @@
 //! again from where it got to.
 
 mod following;
-#[cfg(all(test, unix))]
-mod tests;
 
 pub use following::FollowError;
 pub(super) use following::{Follow, Giver, Reach, Source, Teller};

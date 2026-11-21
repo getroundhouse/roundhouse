@@ -1,27 +1,32 @@
-//! That a window draws what the client's copy of Ghostty drew, cell for cell, colour for colour, from pictures.
+//! That a window draws what Ghostty drew, cell for cell, colour for colour, from pictures.
 
-use protocol::terminal::PictureSending;
-use terminal_state::{Mirror, Size};
+use std::sync::Arc;
 
-use super::feeding::{BACKGROUND, FOREGROUND, pictured, watched, worker};
+use protocol::terminal::{PictureSending, TerminalSize};
 
-const SIZE: Size = Size { cols: 24, rows: 6 };
+use super::described::described;
+use super::feeding::{pictured, watched, worker};
 
-/// What a client's own copy of Ghostty draws of `output`, against what a window draws from a worker's pictures of it.
+const SIZE: TerminalSize = TerminalSize { cols: 24, rows: 6 };
+
+/// What Ghostty drew of each output here, in the view's colours from `feeding`, at [`SIZE`], as [`described`] writes
+/// it, each under its output.
+const DRAWN: &str = include_str!("painted.txt");
+
+/// What Ghostty drew under `heading` in [`DRAWN`], up to the blank line after it, a line at a time, however a checkout
+/// ends its lines.
+fn drawn(heading: &str) -> String {
+    let mut lines = DRAWN.lines().skip_while(|line| *line != heading);
+    assert!(lines.next().is_some(), "nothing recorded for {heading}");
+    lines.take_while(|line| !line.is_empty()).fold(String::new(), |drawn, line| drawn + line + "\n")
+}
+
+/// What a window draws of `output` from a worker's pictures of it, against what Ghostty drew.
 fn both(output: &str) {
-    let mut ghostty = Mirror::new(SIZE).unwrap();
-    ghostty.set_colors(FOREGROUND, BACKGROUND).unwrap();
-    ghostty.write(output.as_bytes());
-    let drawn = ghostty.frame().unwrap();
-
     let mut worker = worker(SIZE, output.as_bytes());
     let mut window = watched(&mut worker, &mut PictureSending::default());
-    let from_pictures = window.frame().unwrap();
 
-    for (at, (ghosttys, windows)) in drawn.rows.iter().zip(&from_pictures.rows).enumerate() {
-        assert_eq!(windows, ghosttys, "row {at} of {output:?}");
-    }
-    assert_eq!(*from_pictures, drawn, "{output:?}");
+    assert_eq!(described(&window.frame().unwrap()), drawn(&format!("{output:?}")), "{output:?}");
 }
 
 #[test]
@@ -65,15 +70,29 @@ fn colours_the_program_changed_are_drawn_as_ghostty_drew_them() {
 #[test]
 fn before_the_view_gives_its_colours_ghosttys_are_used() {
     let output = "plain \x1b[7minverse";
-    let mut ghostty = Mirror::new(SIZE).unwrap();
-    ghostty.write(output.as_bytes());
-    let drawn = ghostty.frame().unwrap();
-
     let mut worker = worker(SIZE, output.as_bytes());
     let mut window = super::super::Window::new();
     for frame in pictured(&mut worker, &mut PictureSending::default()) {
         window.take(frame).unwrap();
     }
 
-    assert_eq!(*window.frame().unwrap(), drawn);
+    assert_eq!(described(&window.frame().unwrap()), drawn(&format!("own colours {output:?}")));
+}
+
+/// A row that hasn't changed is the same `Arc` in the next frame, so a view can tell it needn't lay it out again.
+#[test]
+fn a_row_that_hasnt_changed_is_the_one_drawn_before() {
+    let mut worker = worker(SIZE, b"one\r\ntwo\r\n");
+    let mut sending = PictureSending::default();
+    let mut window = watched(&mut worker, &mut sending);
+    let before = window.frame().unwrap();
+
+    worker.write(b"three");
+    for frame in pictured(&mut worker, &mut sending) {
+        assert!(window.take(frame).unwrap().is_empty());
+    }
+    let after = window.frame().unwrap();
+
+    assert!(Arc::ptr_eq(&before.rows[0], &after.rows[0]), "\"one\" is as it was");
+    assert!(!Arc::ptr_eq(&before.rows[2], &after.rows[2]), "\"three\" is new");
 }

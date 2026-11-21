@@ -12,7 +12,7 @@ use protocol::client::{ApiError, ErrorCode};
 use protocol::model::TerminalId;
 use protocol::terminal::{TerminalBytes, TerminalExit, TerminalScreen, TerminalSize, TerminalUpdate, UpdateIndex};
 use protocol::worker::{TerminalShown, TerminalStart, WorkerFrame};
-use terminal_state::{Mirror, Size};
+use terminal_state::Mirror;
 use tokio::sync::{OwnedSemaphorePermit, Semaphore, mpsc, oneshot};
 use tokio::time::Instant;
 use tracing::warn;
@@ -187,7 +187,7 @@ impl Shell {
     ) {
         // Made here, since it can't be sent between threads. It answers what the program asks of its terminal.
         let answers = self.to_program.clone();
-        let mirror = Mirror::answering(mirror_size(self.size), move |answer| {
+        let mirror = Mirror::answering(self.size, move |answer| {
             let _ = answers.send(answer.to_vec());
         });
         match mirror {
@@ -358,8 +358,4 @@ async fn room_at(due: Option<Instant>, room: Arc<Semaphore>) -> Option<OwnedSema
 
 pub(super) fn pty_size(size: TerminalSize) -> PtySize {
     PtySize { rows: size.rows, cols: size.cols, pixel_width: 0, pixel_height: 0 }
-}
-
-pub(super) fn mirror_size(size: TerminalSize) -> Size {
-    Size { cols: size.cols, rows: size.rows }
 }

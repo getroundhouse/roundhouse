@@ -1,0 +1,77 @@
+"$ ls\r\nCargo.toml  src\r\n$ "
+24x6 on #101214 in #e0e0d0, cursor at 2,2 Block
+0: 0"$"#e0e0d0 2"l"#e0e0d0 3"s"#e0e0d0
+1: 0"C"#e0e0d0 1"a"#e0e0d0 2"r"#e0e0d0 3"g"#e0e0d0 4"o"#e0e0d0 5"."#e0e0d0 6"t"#e0e0d0 7"o"#e0e0d0 8"m"#e0e0d0 9"l"#e0e0d0 12"s"#e0e0d0 13"r"#e0e0d0 14"c"#e0e0d0
+2: 0"$"#e0e0d0
+
+"one\r\ntwo\r\n\u{1b}[?25l"
+24x6 on #101214 in #e0e0d0
+0: 0"o"#e0e0d0 1"n"#e0e0d0 2"e"#e0e0d0
+1: 0"t"#e0e0d0 1"w"#e0e0d0 2"o"#e0e0d0
+
+"\u{1b}[5 qbar"
+24x6 on #101214 in #e0e0d0, cursor at 3,0 Bar
+0: 0"b"#e0e0d0 1"a"#e0e0d0 2"r"#e0e0d0
+
+"\u{1b}[3 qunder\u{1b}[2;3H"
+24x6 on #101214 in #e0e0d0, cursor at 2,1 Underline
+0: 0"u"#e0e0d0 1"n"#e0e0d0 2"d"#e0e0d0 3"e"#e0e0d0 4"r"#e0e0d0
+
+"\u{1b}[31mred\u{1b}[0m \u{1b}[1;94mbright\u{1b}[0m \u{1b}[38;5;208morange\u{1b}[0m"
+24x6 on #101214 in #e0e0d0, cursor at 17,0 Block
+0: 0"r"#cc6666 1"e"#cc6666 2"d"#cc6666 4"b"#7aa6da:bold 5"r"#7aa6da:bold 6"i"#7aa6da:bold 7"g"#7aa6da:bold 8"h"#7aa6da:bold 9"t"#7aa6da:bold 11"o"#ff8700 12"r"#ff8700 13"a"#ff8700 14"n"#ff8700 15"g"#ff8700 16"e"#ff8700
+
+"\u{1b}[38;2;10;200;30mrgb\u{1b}[48;2;1;2;3m on\u{1b}[0m \u{1b}[48;5;236m grey \u{1b}[0m"
+24x6 on #101214 in #e0e0d0, cursor at 13,0 Block
+0: [3+3 #010203] [7+6 #303030] 0"r"#0ac81e 1"g"#0ac81e 2"b"#0ac81e 4"o"#0ac81e 5"n"#0ac81e 8"g"#e0e0d0 9"r"#e0e0d0 10"e"#e0e0d0 11"y"#e0e0d0
+
+"\u{1b}[42m\u{1b}[Kcleared in green\u{1b}[0m\r\n\u{1b}[44m  \u{1b}[0m"
+24x6 on #101214 in #e0e0d0, cursor at 2,1 Block
+0: [0+24 #b5bd68] 0"c"#e0e0d0 1"l"#e0e0d0 2"e"#e0e0d0 3"a"#e0e0d0 4"r"#e0e0d0 5"e"#e0e0d0 6"d"#e0e0d0 8"i"#e0e0d0 9"n"#e0e0d0 11"g"#e0e0d0 12"r"#e0e0d0 13"e"#e0e0d0 14"e"#e0e0d0 15"n"#e0e0d0
+1: [0+2 #81a2be]
+
+"\u{1b}[1mbold\u{1b}[0m \u{1b}[3mitalic\u{1b}[0m \u{1b}[2mfaint\u{1b}[0m \u{1b}[4mline\u{1b}[0m \u{1b}[9mthrough\u{1b}[0m"
+24x6 on #101214 in #e0e0d0, cursor at 6,1 Block
+0: 0"b"#e0e0d0:bold 1"o"#e0e0d0:bold 2"l"#e0e0d0:bold 3"d"#e0e0d0:bold 5"i"#e0e0d0:italic 6"t"#e0e0d0:italic 7"a"#e0e0d0:italic 8"l"#e0e0d0:italic 9"i"#e0e0d0:italic 10"c"#e0e0d0:italic 12"f"#e0e0d0:faint 13"a"#e0e0d0:faint 14"i"#e0e0d0:faint 15"n"#e0e0d0:faint 16"t"#e0e0d0:faint 18"l"#e0e0d0:underline 19"i"#e0e0d0:underline 20"n"#e0e0d0:underline 21"e"#e0e0d0:underline 23"t"#e0e0d0:through
+1: 0"h"#e0e0d0:through 1"r"#e0e0d0:through 2"o"#e0e0d0:through 3"u"#e0e0d0:through 4"g"#e0e0d0:through 5"h"#e0e0d0:through
+
+"\u{1b}[7minverse\u{1b}[0m \u{1b}[31;7mred inverse\u{1b}[0m \u{1b}[8mhidden\u{1b}[0m"
+24x6 on #101214 in #e0e0d0, cursor at 2,1 Block
+0: [0+7 #e0e0d0] [8+11 #cc6666] 0"i"#101214 1"n"#101214 2"v"#101214 3"e"#101214 4"r"#101214 5"s"#101214 6"e"#101214 8"r"#101214 9"e"#101214 10"d"#101214 12"i"#101214 13"n"#101214 14"v"#101214 15"e"#101214 16"r"#101214 17"s"#101214 18"e"#101214
+
+"\u{1b}[4m   \u{1b}[0m blank but underlined"
+24x6 on #101214 in #e0e0d0, cursor at 23,0 Block
+0: 0" "#e0e0d0:underline 1" "#e0e0d0:underline 2" "#e0e0d0:underline 4"b"#e0e0d0 5"l"#e0e0d0 6"a"#e0e0d0 7"n"#e0e0d0 8"k"#e0e0d0 10"b"#e0e0d0 11"u"#e0e0d0 12"t"#e0e0d0 14"u"#e0e0d0 15"n"#e0e0d0 16"d"#e0e0d0 17"e"#e0e0d0 18"r"#e0e0d0 19"l"#e0e0d0 20"i"#e0e0d0 21"n"#e0e0d0 22"e"#e0e0d0 23"d"#e0e0d0
+
+"日本語 text"
+24x6 on #101214 in #e0e0d0, cursor at 11,0 Block
+0: 0"日"#e0e0d0:wide 2"本"#e0e0d0:wide 4"語"#e0e0d0:wide 7"t"#e0e0d0 8"e"#e0e0d0 9"x"#e0e0d0 10"t"#e0e0d0
+
+"e\u{301} and 👍🏽 too"
+24x6 on #101214 in #e0e0d0, cursor at 14,0 Block
+0: 0"e\u{301}"#e0e0d0 2"a"#e0e0d0 3"n"#e0e0d0 4"d"#e0e0d0 6"👍"#e0e0d0:wide 8"🏽"#e0e0d0:wide 11"t"#e0e0d0 12"o"#e0e0d0 13"o"#e0e0d0
+
+"\u{1b}[41m漢\u{1b}[0m字\u{1b}[1;2H"
+24x6 on #101214 in #e0e0d0, cursor at 0,0 Block wide
+0: [0+2 #cc6666] 0"漢"#e0e0d0:wide 2"字"#e0e0d0:wide
+
+"\u{1b}]4;1;rgb:12/34/56\u{7}\u{1b}[31mmine\u{1b}[0m"
+24x6 on #101214 in #e0e0d0, cursor at 4,0 Block
+0: 0"m"#123456 1"i"#123456 2"n"#123456 3"e"#123456
+
+"\u{1b}]10;rgb:aa/bb/cc\u{7}\u{1b}]11;rgb:01/02/03\u{7}plain"
+24x6 on #010203 in #aabbcc, cursor at 5,0 Block
+0: 0"p"#aabbcc 1"l"#aabbcc 2"a"#aabbcc 3"i"#aabbcc 4"n"#aabbcc
+
+"\u{1b}]12;rgb:ff/00/ff\u{7}cursor"
+24x6 on #101214 in #e0e0d0, cursor at 6,0 Block #ff00ff
+0: 0"c"#e0e0d0 1"u"#e0e0d0 2"r"#e0e0d0 3"s"#e0e0d0 4"o"#e0e0d0 5"r"#e0e0d0
+
+"\u{1b}[?5hreversed\u{1b}[31m red"
+24x6 on #e0e0d0 in #101214, cursor at 12,0 Block
+0: 0"r"#101214 1"e"#101214 2"v"#101214 3"e"#101214 4"r"#101214 5"s"#101214 6"e"#101214 7"d"#101214 9"r"#cc6666 10"e"#cc6666 11"d"#cc6666
+
+own colours "plain \u{1b}[7minverse"
+24x6 on #000000 in #ffffff, cursor at 13,0 Block
+0: [6+7 #ffffff] 0"p"#ffffff 1"l"#ffffff 2"a"#ffffff 3"i"#ffffff 4"n"#ffffff 6"i"#000000 7"n"#000000 8"v"#000000 9"e"#000000 10"r"#000000 11"s"#000000 12"e"#000000
+

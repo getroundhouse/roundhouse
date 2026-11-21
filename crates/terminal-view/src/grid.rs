@@ -1,21 +1,21 @@
 //! Paints a terminal's frame as a grid of cells, inside one layer, with each cell's character painted as a glyph at its
 //! column, as `docs/reference/performance.md` says makes a terminal fast to draw. It also says where on it the pointer is pressed
 //! and dragged, in cells, which selects.
-
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::Arc;
 
 use client_core::OpenTerminal;
+use client_core::drawn::{Cursor, CursorShape, Frame, Glyph, GlyphText, Rgb};
+use client_core::{Pointer, SelectBy};
 use gpui_kit::{
     App, BorderStyle, Bounds, CursorStyle, DispatchPhase, Element, ElementId, Font, FontId, FontStyle, FontWeight,
     GlobalElementId, GlyphId, Hitbox, HitboxBehavior, Hsla, InspectorElementId, IntoElement, LayoutId, MouseButton,
     MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, SharedString, Style, TextRun, Window, fill, outline, point,
     px, relative, rgb, size,
 };
-use terminal_state::drawn::{Cursor, CursorShape, Frame, Glyph, GlyphText, Rgb};
-use terminal_state::{Pointer, SelectBy, Size};
+use protocol::terminal::TerminalSize;
 
 /// How big a cell is, in the terminal's font.
 #[derive(Clone, Debug)]
@@ -47,10 +47,10 @@ impl Metrics {
     }
 
     /// How many cells fit in `bounds`, at least one each way.
-    pub(crate) fn fit(&self, bounds: gpui_kit::Size<Pixels>) -> Size {
+    pub(crate) fn fit(&self, bounds: gpui_kit::Size<Pixels>) -> TerminalSize {
         let cols = (bounds.width / self.cell_width).floor().max(1.);
         let rows = (bounds.height / self.line_height).floor().max(1.);
-        Size { cols: whole_cells(cols), rows: whole_cells(rows) }
+        TerminalSize { cols: whole_cells(cols), rows: whole_cells(rows) }
     }
 }
 
@@ -94,7 +94,7 @@ pub(crate) struct Grid {
     /// What selected cells are painted in, under their text.
     pub(crate) selection: Hsla,
     /// Told how many cells fit, once the grid is laid out.
-    pub(crate) fits: Box<dyn Fn(Size)>,
+    pub(crate) fits: Box<dyn Fn(TerminalSize)>,
     /// Where presses and drags on the grid go.
     pub(crate) pointing: Pointing,
 }
@@ -345,8 +345,9 @@ fn color(rgb_color: Rgb) -> Hsla {
 
 #[cfg(test)]
 mod tests {
+    use client_core::SelectBy;
     use gpui_kit::{font, px, size};
-    use terminal_state::{SelectBy, Size};
+    use protocol::terminal::TerminalSize;
 
     use super::{Metrics, select_by};
 
@@ -362,8 +363,8 @@ mod tests {
             baseline: px(12.),
         };
 
-        assert_eq!(metrics.fit(size(px(752.), px(330.))), Size { cols: 100, rows: 20 });
-        assert_eq!(metrics.fit(size(px(0.), px(0.))), Size { cols: 1, rows: 1 });
+        assert_eq!(metrics.fit(size(px(752.), px(330.))), TerminalSize { cols: 100, rows: 20 });
+        assert_eq!(metrics.fit(size(px(0.), px(0.))), TerminalSize { cols: 1, rows: 1 });
     }
 
     /// A double click selects a word, and a triple click the line, as the platform counts them, which is 0 for a press

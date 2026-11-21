@@ -1,12 +1,13 @@
 //! A row as the view draws it, from a row of a picture: each cell's colours from the palette and the view's own, and
-//! the glyphs and backgrounds it paints, as the client's copy of Ghostty drew them.
+//! the glyphs and backgrounds it paints, as Ghostty draws them.
 
 use std::sync::Arc;
 
 use protocol::terminal::{
     CellAttributes, CellColor, CellStyle, DEFAULT_PALETTE, ScreenState, Span, TerminalCursor, TerminalRow,
 };
-use terminal_state::drawn::{Background, Cursor, CursorShape, Glyph, GlyphText, Look, Rgb, Row};
+
+use crate::drawn::{Background, Cursor, CursorShape, Glyph, GlyphText, Look, Rgb, Row};
 
 /// The colours a row is drawn in: the palette, with what the program changed of it, and the colours of a cell that sets
 /// none, the program's where it set them, and the view's otherwise.
@@ -53,7 +54,7 @@ impl Colors {
             | protocol::terminal::CursorShape::BlockHollow
             | protocol::terminal::CursorShape::Unknown => CursorShape::Block,
         };
-        Cursor { col: cursor.col, row, shape, color: self.cursor, wide: wide_at(drawn, cursor.col) }
+        Cursor { col: cursor.col, row, shape, color: self.cursor, wide: drawn.wide_at(cursor.col) }
     }
 
     /// What `row` draws, with nothing selected.
@@ -144,11 +145,6 @@ fn chars(painted: &mut Row, span: &Span, cell: &Cell, mut col: u16, width: u16) 
         col += width;
     }
     col
-}
-
-/// Whether a wide character starts at column `col`.
-pub(super) fn wide_at(row: &Row, col: u16) -> bool {
-    row.glyphs.binary_search_by_key(&col, |glyph| glyph.col).is_ok_and(|at| row.glyphs[at].wide)
 }
 
 fn rgb(palette: &[Rgb; 256], color: CellColor) -> Option<Rgb> {
