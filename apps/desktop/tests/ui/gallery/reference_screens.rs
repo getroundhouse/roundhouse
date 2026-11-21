@@ -6,8 +6,9 @@
 use client_core::fake_hub::{NOW_MS, World};
 use look::Region;
 use protocol::model::{
-    ChecksRollup, GithubRepositoryName, IssueNumber, IssueState, PullRequestFound, PullRequestState, Reference,
-    ReferenceKind, ReferenceLabel, ReferencedPullRequest, RepoOrigin, RepoUrl, Review, SessionStatus,
+    ChecksRollup, GithubRepositoryName, IssueNumber, IssueState, PullRequestFound, PullRequestLink, PullRequestLinked,
+    PullRequestState, Reference, ReferenceKind, ReferenceLabel, ReferencedPullRequest, RepoOrigin, RepoUrl, Review,
+    SessionStatus,
 };
 
 use super::chats;
@@ -117,9 +118,15 @@ fn named() -> World {
     on_github(&mut world);
     world.references = references();
     let birch = world.workspaces.iter().find(|workspace| workspace.name == "birch").unwrap().id.clone();
+    let url = "https://github.com/example/roundhouse/pull/1162".to_string();
     let mut pull_request = pull_requests::open();
-    pull_request.url = "https://github.com/example/roundhouse/pull/1162".to_string();
-    world.workspace_mut(&birch).pull_request = Some(PullRequestFound { pull_request: Some(pull_request) });
+    pull_request.url.clone_from(&url);
+    // Which pull request it's on is what ties a chip to it, as the hub keeps it.
+    let (repository, number) = (repository("roundhouse"), IssueNumber::try_from(1162).unwrap());
+    let link = PullRequestLink { repository, number, url, uncommitted: 0 };
+    let birch = world.workspace_mut(&birch);
+    birch.pull_request = Some(PullRequestFound { pull_request: Some(pull_request) });
+    birch.pull_request_link = Some(PullRequestLinked { link: Some(link) });
     world
 }
 
