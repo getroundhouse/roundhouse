@@ -7,6 +7,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use super::following::*;
+use super::given::Given;
 use super::window::{Pointer, SelectBy};
 use crate::client::{Client, SUBSCRIPTION_CAPACITY};
 use crate::drawn::{Frame, Rgb};
@@ -177,7 +178,7 @@ fn a_terminal_carries_on_on_a_new_connection() {
 
     let next = Client::connect(&second, "test").unwrap();
     open.follow.quietly(|held| {
-        held.given.push(Given::Key(key('w')));
+        held.given.give(Given::Key(key('w')));
         open.reconnect(&next);
     });
     frame_when(&open, "the second screen", |frame| text(frame)[0] == "after");
@@ -217,7 +218,7 @@ fn without_a_connection_the_held_history_scrolls_and_what_is_typed_is_dropped() 
     // Typed as the next connection comes, so the thread hears of both at once.
     let next = Client::connect(&second, "test").unwrap();
     open.follow.quietly(|held| {
-        held.given.push(Given::Key(key('d')));
+        held.given.give(Given::Key(key('d')));
         open.reconnect(&next);
     });
     frame_when(&open, "the second screen", |frame| text(frame)[0] == "after");
@@ -333,7 +334,7 @@ fn only_a_new_connection_asks_for_the_views_size_again() {
     heard_watched.recv_timeout(WAIT).unwrap();
     // The view is held, as a view that doesn't keep up is, until the buffer has filled.
     open.follow.quietly(|held| {
-        held.given.push(Given::Fit(SIZE));
+        held.given.give(Given::Fit(SIZE));
         go.send(()).unwrap();
         waiting::thread::until(WAIT, "the buffer never filled", || !client.inner.lagged.lock().is_empty());
     });

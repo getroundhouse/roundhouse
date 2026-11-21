@@ -6,7 +6,8 @@ use protocol::client::terminals::{TerminalBounds, TerminalFit, TerminalRows};
 use protocol::model::TerminalId;
 use protocol::terminal::{Numbering, TerminalPoint, TerminalRange, TerminalSize};
 
-use super::following::{Given, Held};
+use super::following::Held;
+use super::given::Given;
 use super::window::{Ask, Replied, Step};
 use crate::client::follow::Giver;
 use crate::client::sent_call::SentCall;
@@ -72,7 +73,7 @@ pub(super) fn start(id: TerminalId, waiting: flume::Receiver<Waiting>, giver: Gi
                     continue;
                 }
             };
-            if !giver.give(|held| held.given.push(Given::Replied(replied.unwrap_or(Replied::Failed)))) {
+            if !giver.give(|held| held.given.give(Given::Replied(replied.unwrap_or(Replied::Failed)))) {
                 return;
             }
         }
