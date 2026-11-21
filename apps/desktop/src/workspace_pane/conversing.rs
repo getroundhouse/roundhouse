@@ -12,7 +12,7 @@ use gpui_kit::assets::IconName as Lucide;
 use gpui_kit::component::{Icon, IconName, h_flex};
 use gpui_kit::{
     AnyElement, App, Context, Focusable as _, InteractiveElement, IntoElement, KeyDownEvent, ParentElement, Role,
-    SharedString, StatefulInteractiveElement as _, Styled as _, Window, div,
+    SharedString, StatefulInteractiveElement as _, Styled, Window, div, relative,
 };
 use look::{InRegion as _, Region, Shaped as _, Typeset as _};
 use protocol::model::SessionId;
@@ -231,7 +231,13 @@ impl WorkspacePane {
         let now = self.composer.read(cx).text().to_string();
         let before = self.typed_before_talking.as_ref().map_or("", |(_, before)| before.as_str());
         let heard = said_since(before, &now).trim().to_string();
-        let words = h_flex().gap(look::Space::Small).child(heard).children(field.live_line(cx));
+        // One line, which once it's longer than the bar loses its start, so the words being said now stay in view.
+        let words = h_flex()
+            .w_full()
+            .min_w_0()
+            .gap(look::Space::Small)
+            .child(from_the_end(div().flex_initial()).child(heard))
+            .children(field.live_line(cx).map(|live| from_the_end(live.flex_none().max_w(relative(1.)))));
         let let_go = div().text_color(look::colors(cx).text_faint).child("Let go to send").into_any_element();
         let esc = look::button(CONVERSATION_STOP, look::ButtonKind::Borderless, look::ControlSize::Small, "Esc")
             .accessibility_label("Drop what was said")
@@ -335,6 +341,11 @@ fn said_since<'a>(before: &str, now: &'a str) -> &'a str {
 /// What the bar says, in a line.
 fn says(words: String, cx: &Context<WorkspacePane>) -> AnyElement {
     div().text_color(look::colors(cx).text).truncate().child(words).into_any_element()
+}
+
+/// `words` on one line, which loses its start once it's longer than it has room for.
+fn from_the_end<E: Styled>(words: E) -> E {
+    words.min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis_start()
 }
 
 /// The bar: an icon, what it says, and its actions at its right end.

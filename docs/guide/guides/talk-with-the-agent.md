@@ -18,6 +18,8 @@ The first time, a card opens instead, listing dictation and speech and how each 
 | Escape | While you hold Space, drops what you said and sends nothing. While the agent speaks, stops the voice |
 | Any other key | Leaves the mode and brings the composer back, with what you typed in it |
 
+While you hold Space, the bar shows what it hears. Once that's more than fits, it shows the newest words, and the chat has all of it once it's sent.
+
 While the agent is busy or still thinking, a small model says what it's doing, in a sentence in the agent's voice, such as "Hold on, I'm writing the brief for the parser agent." It never answers for the agent.
 
 The agent's replies are read out whole, with Markdown's marks taken out, so code and a table's cells are read as they're written. The chat shows how far each reply was heard, dimming what wasn't, and the line at the end of a turn says why its last reply was cut off: **Talked over** when you talked over it, or **Stopped** when Stop or typing stopped it.

@@ -4,8 +4,8 @@
 
 use client_core::fake_hub::World;
 use desktop::workspace_pane::{
-    CONVERSATION_BAR, CONVERSATION_CARD, CONVERSATION_END, CONVERSATION_MODE, CONVERSATION_NOT_NOW,
-    CONVERSATION_TURN_ON, SPACE_DICTATES_AFTER,
+    CONVERSATION_BAR, CONVERSATION_CARD, CONVERSATION_END, CONVERSATION_MODE, CONVERSATION_NOT_NOW, CONVERSATION_STOP,
+    CONVERSATION_TURN_ON, LIVE_LINE, SPACE_DICTATES_AFTER,
 };
 use dictation::fake::FakeEngine;
 use gpui_kit::{AppContext as _, TestAppContext};
@@ -14,7 +14,7 @@ use protocol::model::{ClientDevice, Interaction, SessionStatus};
 
 use super::holding_space::hold_for;
 use super::support::{
-    SCRIPT, dictating, ended, let_go, on_the_keyboard, press_space, ready, say, type_keys, use_model,
+    SCRIPT, dictating, ended, let_go, live, on_the_keyboard, press_space, ready, say, type_keys, use_model,
 };
 use crate::support::made_up_model::{made_up, put};
 use crate::support::{FakeHub, Stack, Ui};
@@ -89,6 +89,30 @@ fn letting_go_of_space_sends_what_was_said_out_loud(cx: &mut TestAppContext) {
     ui.wait("what was said to be sent out loud", |ui| spoken(ui).is_some());
     assert!(ui.has(CONVERSATION_BAR), "the mode stays on");
     assert_eq!(ui.composer_text(), "", "nothing is left typed");
+}
+
+/// Something said that's longer than the bar stays on its one line, clear of what's at its right end.
+#[gpui_kit::test]
+fn something_long_said_stays_in_the_bar(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let (mut ui, engine) = in_conversation_mode(cx, &stack);
+
+    on_the_keyboard(&mut ui, true);
+    press_space(&mut ui);
+    hold_for(&mut ui, SPACE_DICTATES_AFTER);
+    // Sentences and pauses end what's heard so far, and the rest is still being heard.
+    let said = format!("{}fix the flaky test", "fix the flaky test in the hub. / ".repeat(4));
+    say(&mut ui, &engine, &said);
+    ui.wait("all of what was said to show", |ui| {
+        ui.composer_text().matches("hub.").count() == 4 && live(ui).is_some_and(|live| live.starts_with("fix the"))
+    });
+
+    // The words still being heard come last, so they're what anything too long pushes out.
+    let (bar, esc, still) = (ui.bounds(CONVERSATION_BAR), ui.bounds(CONVERSATION_STOP), ui.bounds(LIVE_LINE));
+    assert!(still.left() >= bar.left() && still.right() <= esc.left(), "{still:?} in {bar:?}, before {esc:?}");
+    assert!(still.size.height < bar.size.height, "one line: {still:?} in {bar:?}");
+    on_the_keyboard(&mut ui, false);
+    let_go(&mut ui);
 }
 
 /// What was typed before the mode was turned on isn't sent with what's said, and is still there afterwards.
