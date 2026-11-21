@@ -110,6 +110,7 @@ pub(super) async fn spawn_real_agy(
         tools_token: None,
         login: None,
         repository: None,
+        interaction: protocol::model::InteractionMode::Typing,
     };
     let (tx, rx) = mpsc::channel(512);
     let agent = super::super::spawn_at(find_agy(), spec, tx, AgentOptions::default()).await.unwrap();

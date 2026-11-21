@@ -56,6 +56,7 @@ impl Binding for Antigravity {
             tools_token: None,
             login: None,
             repository: None,
+            interaction: protocol::model::InteractionMode::Typing,
         };
         crate::antigravity::spawn_at(launch.bin, spec, output, AgentOptions::default())
             .await

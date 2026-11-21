@@ -114,8 +114,12 @@ impl LiveSession {
             let _in_order = self.recording.lock().await;
             let id = self.id.clone();
             hub.blocking(move |store| store.end_conversation(&id)).await?;
+            let was_on = !self.state.lock().interaction.is_typing();
             if set_interaction(&mut self.state.lock(), Interaction::Typing) {
                 self.settle_hearing(&hub).await;
+            }
+            if was_on {
+                self.wake_the_mode();
             }
         }
         self.announce(&hub).await

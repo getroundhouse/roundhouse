@@ -4,12 +4,14 @@ use std::sync::Arc;
 
 use protocol::capability::Capabilities;
 use protocol::capability::conversation::Start;
+use protocol::capability::settings::Settings;
 use protocol::client::{ApiError, ErrorCode, HubNotice};
 use protocol::event::{EventBody, ExitReason};
-use protocol::model::{GithubRepositoryName, RunCapabilities, RunId};
+use protocol::model::{GithubRepositoryName, InteractionMode, RunCapabilities, RunId};
 use protocol::worker::{AgentSpec, AgentStarted, AgentStop};
 use tracing::{error, warn};
 
+use super::super::chat_settings::ChatSettings;
 use super::super::{AgentRun, Command, LiveSession, Origin};
 use crate::hub::Hub;
 use crate::logins::{Handed, Launching, NO_ACCOUNT_TO_SPARE};
@@ -122,23 +124,15 @@ impl LiveSession {
     /// taken for a replaced agent's and dropped.
     async fn start_agent(&self, hub: &Hub, link: &WorkerLink, launch: Launch) -> Result<(), ApiError> {
         let Launch { cwd, env, login, repository } = launch;
-        let (resume, start, mut kept) = {
+        let (resume, start, kept, interaction) = {
             let state = self.state.lock();
             let start = match (&state.agent_session_id, state.agent_opened) {
                 (Some(id), true) => Start::Resume { conversation: id.clone() },
                 (id, _) => Start::New { conversation: id.clone() },
             };
-            (state.agent_opened, start, state.settings.clone())
+            (state.agent_opened, start, state.settings.clone(), state.interaction.mode())
         };
-        // A mode its kind doesn't offer, which the agent went into by itself, can't be asked for, so the agent starts
-        // in the one a chat starts in, rather than not at all.
-        let kind = hub.agent(self.agent)?;
-        if !kind.modes().contains(&kept.mode)
-            && let Some(starts_in) = kind.default_mode()
-        {
-            kept.mode = starts_in;
-        }
-        let settings = kept.settings();
+        let settings = self.launched_with(hub, kept)?;
         let asked = hub.blocking(Store::next_run).await?;
         self.record_login(hub, asked, login.as_ref()).await?;
         let tools_token = hub.tools_for(&self.workspace_id, &self.id, link).await;
@@ -146,8 +140,19 @@ impl LiveSession {
         let build = link.said_build().map(str::to_string);
         let previous_build = self.previous_build(hub, build.as_deref()).await;
         let (session_id, agent, login) = (self.id.clone(), self.agent, login.map(|handed| handed.login));
-        let spec =
-            AgentSpec { session_id, run: asked, agent, cwd, start, settings, env, tools_token, login, repository };
+        let spec = AgentSpec {
+            session_id,
+            run: asked,
+            agent,
+            cwd,
+            start,
+            settings,
+            env,
+            tools_token,
+            login,
+            repository,
+            interaction,
+        };
         let starting = AgentRun { link: link.id, run: asked };
         self.state.lock().agent = Some(starting);
         let launched = self.launch(link, spec).await;
@@ -158,19 +163,7 @@ impl LiveSession {
             }
         })?;
         let claims = RunCapabilities { run, claims: capabilities };
-        let current = {
-            let mut state = self.state.lock();
-            // An agent that was already running keeps the run it started with. A new one can exit before
-            // this reply arrives, and then its exit has already been recorded, so it isn't made current
-            // again.
-            let current = already_running || state.agent == Some(starting);
-            if current {
-                state.agent = Some(AgentRun { link: link.id, run });
-                // With it, so nothing is asked of it that its claims don't allow.
-                state.capabilities = Some(claims.clone());
-            }
-            current
-        };
+        let current = self.take_started(starting, run, already_running, &claims, interaction);
         self.forget_other_run_logins(hub, run).await;
         if already_running {
             // Its start, which recorded them, may be from before the record let go of them, as when its worker's
@@ -183,7 +176,46 @@ impl LiveSession {
             let started = EventBody::AgentStarted { pid, resumed: resume, build, previous_build, capabilities };
             self.record_or_log(Origin::Run { run, current, numbered: None }, started).await;
         }
+        // The mode may have changed while it launched.
+        if current {
+            self.wake_the_mode();
+        }
         Ok(())
+    }
+
+    /// What the agent launches with: the chat's settings, `kept`, but in the mode a chat starts in if its kind doesn't
+    /// offer the chat's, which the agent went into by itself, since that can't be asked for, rather than not at all.
+    fn launched_with(&self, hub: &Hub, mut kept: ChatSettings) -> Result<Settings, ApiError> {
+        let kind = hub.agent(self.agent)?;
+        if !kind.modes().contains(&kept.mode)
+            && let Some(starts_in) = kind.default_mode()
+        {
+            kept.mode = starts_in;
+        }
+        Ok(kept.settings())
+    }
+
+    /// Makes the run its worker started, `run`, current, with its claims and the mode it was told as it started, and says
+    /// whether it is. An agent that was already running keeps the run it started with, and was told the mode as it was
+    /// then. A new one can exit before its worker's reply arrives, and then its exit has already been recorded, so it
+    /// isn't made current again.
+    fn take_started(
+        &self,
+        starting: AgentRun,
+        run: RunId,
+        already_running: bool,
+        claims: &RunCapabilities,
+        interaction: InteractionMode,
+    ) -> bool {
+        let mut state = self.state.lock();
+        let current = already_running || state.agent == Some(starting);
+        if current {
+            state.agent = Some(AgentRun { link: starting.link, run });
+            // With it, so nothing is asked of it that its claims don't allow.
+            state.capabilities = Some(claims.clone());
+            state.mode_told = (!already_running).then_some((run, interaction));
+        }
+        current
     }
 
     /// Records whose login the run `asked` is given, if the hub gives it one. Before the launch is sent, so no agent

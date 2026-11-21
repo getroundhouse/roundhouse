@@ -21,6 +21,7 @@ mod decisions;
 mod ingest;
 mod limits;
 mod messages;
+mod mode_told;
 mod origin;
 mod pickup;
 mod progress;

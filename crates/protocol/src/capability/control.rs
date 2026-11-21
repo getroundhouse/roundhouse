@@ -108,6 +108,12 @@ pub enum Control {
     /// gave it.
     ListModels,
     ListOutside,
+    /// The person talks with the agent as `mode` says from now on, as the chat's conversation mode was turned on or
+    /// off, which an adapter that says lines for the agent needs to know. Sent only when the mode changes, and not when
+    /// the conversation moves to another device.
+    Interaction {
+        mode: crate::model::InteractionMode,
+    },
 }
 
 impl Control {
@@ -141,6 +147,7 @@ impl Control {
             Control::ReadRules => one(approvals::Capability::Rules.into()),
             Control::ListModels => one(settings::Capability::DiscoveredModels.into()),
             Control::ListOutside => one(conversation::Capability::Import.into()),
+            Control::Interaction { .. } => one(super::output::Capability::CoverLines.into()),
         }
     }
 

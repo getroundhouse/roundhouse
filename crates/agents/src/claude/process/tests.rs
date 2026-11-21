@@ -68,6 +68,7 @@ fn spec(model: Option<&'static str>, mode: ApprovalMode) -> AgentSpec {
         tools_token: None,
         login: None,
         repository: None,
+        interaction: protocol::model::InteractionMode::Typing,
     }
 }
 

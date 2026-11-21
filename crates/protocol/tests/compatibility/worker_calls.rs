@@ -206,6 +206,7 @@ fn every_request_about_an_agent_keeps_its_form() {
         tools_token: Some(ToolsToken::new("t")),
         login: None,
         repository: None,
+        interaction: protocol::model::InteractionMode::Typing,
     };
     asked(
         WorkerRequest::AgentStart(spec.clone()),

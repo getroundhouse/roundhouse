@@ -9,6 +9,7 @@ mod chats;
 mod conversations;
 mod cover_lines;
 mod launching;
+mod mode_told;
 mod reading;
 mod reading_out;
 mod settings;

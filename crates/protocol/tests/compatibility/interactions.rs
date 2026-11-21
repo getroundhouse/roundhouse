@@ -51,3 +51,29 @@ fn an_events_mode_keeps_its_form_and_typing_is_left_out() {
     let newer: SessionEvent = serde_json::from_str(&event(r#","interaction":"meeting""#)).unwrap();
     assert_eq!(newer.interaction, InteractionMode::Unknown);
 }
+
+/// A launch says the mode only when the person is talking with the agent out loud, and a change says the mode the
+/// person talks in from then on, which a worker from before refuses as a control it doesn't know.
+#[test]
+fn the_mode_a_run_is_told_keeps_its_form_and_typing_is_left_out_of_a_launch() {
+    use protocol::capability::Control;
+    use protocol::worker::{AgentControl, AgentSpec, WorkerRequest};
+
+    let launch = r#"{"session_id":"s","run":4,"agent":"claude","cwd":"/w","start":"new","settings":{"model":null,"mode":null,"effort":null,"speed":null,"thinking":null,"persona":null,"style":null,"verbosity":null,"advisor":null,"budget":null},"env":[]"#;
+    let typed: AgentSpec = serde_json::from_str(&format!("{launch}}}")).unwrap();
+    assert_eq!(typed.interaction, InteractionMode::Typing, "a launch from before");
+    let in_the_mode = AgentSpec { interaction: InteractionMode::Conversation, ..typed.clone() };
+    let said = format!(r#"{{"method":"agent_start",{},"interaction":"conversation"}}"#, &launch[1..]);
+    super::worker_calls::asked(WorkerRequest::AgentStart(in_the_mode), &said);
+    super::worker_calls::asked(
+        WorkerRequest::AgentStart(typed),
+        &format!(r#"{{"method":"agent_start",{}}}"#, &launch[1..]),
+    );
+
+    let change =
+        AgentControl { session_id: "s".into(), control: Control::Interaction { mode: InteractionMode::Typing } };
+    super::worker_calls::asked(
+        WorkerRequest::AgentControl(change),
+        r#"{"method":"agent_control","session_id":"s","control":"interaction","mode":"typing"}"#,
+    );
+}

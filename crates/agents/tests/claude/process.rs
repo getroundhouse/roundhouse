@@ -35,6 +35,7 @@ pub(crate) fn spec(dir: &Path) -> AgentSpec {
         tools_token: None,
         login: None,
         repository: None,
+        interaction: protocol::model::InteractionMode::Typing,
     }
 }
 

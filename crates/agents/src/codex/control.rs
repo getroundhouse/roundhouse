@@ -57,7 +57,10 @@ impl AgentProcess for CodexProcess {
             | Control::Review { .. }
             | Control::ReadRules
             | Control::ListModels
-            | Control::ListOutside => Err(AgentError::UnknownRequest("Codex does not support that control".into())),
+            | Control::ListOutside
+            | Control::Interaction { .. } => {
+                Err(AgentError::UnknownRequest("Codex does not support that control".into()))
+            }
         }
     }
 

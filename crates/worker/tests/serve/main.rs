@@ -291,6 +291,7 @@ fn agent_start(session_id: &str, cwd: &Path, tools_token: Option<ToolsToken>) ->
         tools_token,
         login: None,
         repository: None,
+        interaction: protocol::model::InteractionMode::Typing,
     }
 }
 
