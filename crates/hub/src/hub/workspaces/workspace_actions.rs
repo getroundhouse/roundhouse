@@ -74,8 +74,7 @@ impl Hub {
         workspace: &Workspace,
         provider: &dyn Provider,
     ) -> Result<(), ApiError> {
-        let display_name = format!("roundhouse-{}", workspace.name);
-        provider.create(&workspace.instance_id, None, None, &display_name).await.map_err(|e| provider_failed(&e))?;
+        provider.create(&workspace.instance_id, None, None).await.map_err(|e| provider_failed(&e))?;
         let instance_id = workspace.instance_id.clone();
         self.blocking(move |store| store.instance_made(&instance_id)).await
     }
@@ -140,11 +139,10 @@ impl Hub {
         Err(taken.unwrap_or_else(|| internal("no names were tried")))
     }
 
-    /// Makes the worktree for a workspace recorded as being made, and records it ready. A name git already has a
-    /// directory, a branch or a folder of branches by is refused before anything is fetched or made, so the workspace
-    /// tries the next of `names` in place, keeping its ID, and its place in every client's list. Its instance is made
-    /// again under each new name, since the provider's own tools call it by the name it was made with, and recorded as
-    /// it is.
+    /// Makes the instance and the worktree for a workspace recorded as being made, and records it ready. A name git
+    /// already has a directory, a branch or a folder of branches by is refused before anything is fetched, so the
+    /// workspace tries the next of `names` in place, keeping its ID, and its place in every client's list, and its
+    /// instance and worker, since an instance is known by its ID alone.
     pub(super) async fn prepare_new_workspace(
         self: &Arc<Self>,
         repo: &Repo,
@@ -154,9 +152,9 @@ impl Hub {
         base_ref: Option<String>,
         provider: &dyn Provider,
     ) -> Result<Workspace, ApiError> {
-        let (reply, link) = loop {
-            self.make_workspace_instance(&workspace, provider).await?;
-            let link = self.ensure_worker(&workspace.id).await?;
+        self.make_workspace_instance(&workspace, provider).await?;
+        let link = self.ensure_worker(&workspace.id).await?;
+        let reply = loop {
             let prepare = PrepareWorkspace {
                 repo_name: repo.name.clone(),
                 source: source.clone(),
@@ -171,12 +169,8 @@ impl Hub {
             match asked {
                 Err(e) if e.code == ErrorCode::NameTaken => {
                     workspace = self.rename_unready(workspace, names, e).await?;
-                    self.unmake_instance(&workspace, provider).await?;
-                    // Recorded before its provider is asked for it again, as it was with the workspace.
-                    let (instance_id, provider_name) = (workspace.instance_id.clone(), workspace.provider.clone());
-                    self.blocking(move |store| store.instance_creating(&instance_id, &provider_name)).await?;
                 }
-                asked => break (asked?, link),
+                asked => break asked?,
             }
         };
         let WorkspaceReady { path, branch, base_ref, warnings, branches } = reply;
@@ -196,19 +190,16 @@ impl Hub {
         self.start_setup(ready).await
     }
 
-    /// Ends the workspace's worker, if it has one, and destroys its instance, whose record goes once it's gone.
-    pub(super) async fn unmake_instance(&self, workspace: &Workspace, provider: &dyn Provider) -> Result<(), ApiError> {
-        let link = self.workers.lock().get(&workspace.id).cloned();
-        if let Some(link) = link {
-            self.close_worker(workspace, &link, provider).await;
-        }
-        self.destroy_instance(provider, &workspace.instance_id).await
-    }
-
+    /// Ends the workspace's worker, if it has one, and destroys its instance, whose record goes once it's gone, and
+    /// then the workspace's record.
     pub(super) async fn discard_workspace(&self, workspace: &Workspace, provider: &dyn Provider) {
         let id = &workspace.id;
         self.first_chats.lock().remove(id);
-        if let Err(e) = self.unmake_instance(workspace, provider).await {
+        let link = self.workers.lock().get(id).cloned();
+        if let Some(link) = link {
+            self.close_worker(workspace, &link, provider).await;
+        }
+        if let Err(e) = self.destroy_instance(provider, &workspace.instance_id).await {
             warn!(%id, "cleaning up a failed workspace: {e}");
         }
         let owned = id.clone();

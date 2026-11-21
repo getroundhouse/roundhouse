@@ -35,7 +35,7 @@ fn example(name: &str) -> PathBuf {
 
 impl Stack {
     /// Makes workspaces from now on through the local provider behind an adapter, as through another provider's, so
-    /// [`Stack::instances_made`] says what each instance was called. Starts the hub again, since it reads its
+    /// [`Stack::instances_made`] and [`Stack::workers_reached`] say what the adapter was asked. Starts the hub again, since it reads its
     /// providers as it starts.
     pub(crate) fn make_through_an_adapter(&mut self) {
         self.write_adapter("home/clones", &[]);
@@ -67,6 +67,8 @@ impl Stack {
             path(clones),
             "--made".into(),
             path("instances-made"),
+            "--connected".into(),
+            path("workers-reached"),
         ];
         args.extend(extra.iter().map(|flag| (*flag).to_string()));
         let adapter = serde_json::json!({"name": "recording", "program": recording_adapter(), "args": args});
@@ -75,9 +77,19 @@ impl Stack {
         self.start_hub();
     }
 
-    /// The name each instance was made with, in turn, once [`Stack::make_through_an_adapter`] has been called.
+    /// The ID of each instance the adapter made, in turn, once [`Stack::make_through_an_adapter`] has been called.
     pub(crate) fn instances_made(&self) -> Vec<String> {
-        let made = std::fs::read_to_string(self.path("instances-made")).unwrap_or_default();
-        made.lines().map(str::to_string).collect()
+        self.lines_of("instances-made")
+    }
+
+    /// The ID of each instance the adapter was asked how to reach a worker on, in turn, as for
+    /// [`Stack::instances_made`].
+    pub(crate) fn workers_reached(&self) -> Vec<String> {
+        self.lines_of("workers-reached")
+    }
+
+    fn lines_of(&self, name: &str) -> Vec<String> {
+        let written = std::fs::read_to_string(self.path(name)).unwrap_or_default();
+        written.lines().map(str::to_string).collect()
     }
 }

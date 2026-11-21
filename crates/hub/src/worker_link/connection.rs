@@ -116,9 +116,9 @@ impl WorkerLink {
         // end too. One left running is ended before the next worker starts, as the hub ends whatever it finds there.
         if opening == Opening::Started
             && failure.code != ErrorCode::Conflict
-            && let Err(e) = provider.kill(&instance_id).await
+            && let Err(e) = provider.kill_worker(&instance_id).await
         {
-            warn!(%instance_id, "stopping a worker that failed to start: {}", error_chain(&e));
+            warn!(%instance_id, "ending a worker that failed to start: {}", error_chain(&e));
         }
         Err(failure)
     }

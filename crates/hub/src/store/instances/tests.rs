@@ -47,7 +47,7 @@ fn a_workspaces_instance_is_recorded_with_it_before_its_made_and_until_its_destr
     assert_eq!(stages(&store), [("w".into(), InstanceStage::Ready)]);
 }
 
-/// As for a workspace being made whose instance is made again under another name.
+/// As for an ephemeral workspace being restored, whose instance is made again.
 #[test]
 fn an_instance_destroyed_is_recorded_again_before_its_made_again() {
     let dir = tempfile::tempdir().unwrap();

@@ -8,7 +8,6 @@ use protocol::event::{EventBody, ExitReason};
 use protocol::model::{
     InstanceId, ProviderName, RunCapabilities, RunId, Seq, SessionId, Workspace, WorkspaceId, WorkspaceStatus,
 };
-use protocol::provider::InstanceState;
 use protocol::worker::RunningAgent;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -51,7 +50,7 @@ impl Hub {
             .filter(|workspace| matches!(workspace.status, WorkspaceStatus::Archiving | WorkspaceStatus::Restoring))
             .map(|workspace| workspace.id.clone())
             .collect();
-        for workspace_id in self.with_instances_running(&workspaces).await {
+        for workspace_id in self.with_workers_running(&workspaces).await {
             let at_work = sessions.remove(&workspace_id).unwrap_or_default();
             let being_moved = being_moved.contains(&workspace_id);
             carrying.spawn(self.clone().carry_on_in(workspace_id, at_work, being_moved, untaken.clone()));
@@ -71,8 +70,8 @@ impl Hub {
         }
     }
 
-    /// Those of `workspaces` whose instance their provider says is running, which a worker may be on.
-    pub(super) async fn with_instances_running(&self, workspaces: &[Workspace]) -> Vec<WorkspaceId> {
+    /// Those of `workspaces` whose instance their provider says a worker serves, which may be one an earlier hub left.
+    pub(super) async fn with_workers_running(&self, workspaces: &[Workspace]) -> Vec<WorkspaceId> {
         let mut by_provider: HashMap<&ProviderName, Vec<&Workspace>> = HashMap::new();
         for workspace in workspaces {
             by_provider.entry(&workspace.provider).or_default().push(workspace);
@@ -89,7 +88,7 @@ impl Hub {
             let instances: HashSet<InstanceId> = match listed {
                 Ok(instances) => instances
                     .into_iter()
-                    .filter(|instance| instance.state == InstanceState::Running)
+                    .filter(|instance| instance.worker_running)
                     .map(|instance| instance.instance_id)
                     .collect(),
                 Err(e) => {

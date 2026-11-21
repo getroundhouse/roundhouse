@@ -2,7 +2,7 @@ use std::path::Path;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use protocol::client::{ApiError, ErrorCode};
-use protocol::provider::PROVIDER_PROTOCOL_VERSION;
+use protocol::provider::{ANSWERED_WITHIN, PROVIDER_PROTOCOL_VERSION};
 use providers::Feature;
 use providers::local::{LocalConfig, LocalProvider};
 use serde_json::Value;
@@ -102,13 +102,13 @@ async fn it_answers_what_the_adapters_provider_answers() {
     );
     assert!(provider.capabilities().has(Feature::FilesystemSurvivesStop), "as the adapter's hello said");
 
-    provider.create(&id, None, None, "roundhouse-i").await.unwrap();
+    provider.create(&id, None, None).await.unwrap();
     provider.start(&id, &[]).await.unwrap();
     let command = provider.connect(&id).await.unwrap();
     assert_eq!(command, local(dir.path()).connect(&id).await.unwrap(), "the hub runs what the provider says");
     let listed = provider.list().await.unwrap();
     assert_eq!(listed.iter().map(|i| i.instance_id.as_str()).collect::<Vec<_>>(), ["i"]);
-    provider.stop(&id).await.unwrap();
+    provider.end_worker(&id).await.unwrap();
     provider.destroy(&id).await.unwrap();
 
     let Err(ProviderError::Adapter(e)) = provider.connect(&id).await else { panic!("it's gone") };
@@ -159,7 +159,9 @@ async fn it_gives_up_on_an_adapter_that_exits_again() {
     let open = opening(opens.clone(), |_, stdio| scripted(stdio, vec![Some(hello()), None], Arc::default()));
     let provider = started(open).await;
 
-    let Err(ProviderError::Io { source, .. }) = provider.stop(&"i".into()).await else { panic!("it can't answer") };
+    let Err(ProviderError::Io { source, .. }) = provider.end_worker(&"i".into()).await else {
+        panic!("it can't answer")
+    };
     assert_eq!(source.kind(), io::ErrorKind::BrokenPipe);
     assert_eq!(opens.load(Ordering::SeqCst), 2, "the first, and one it was asked again of");
 }
@@ -189,7 +191,7 @@ async fn a_hello_that_the_adapter_refuses_fails_whatever_needed_it_as_io() {
     let open = opening(Arc::default(), move |_, stdio| scripted(stdio, vec![Some(refused.clone())], Arc::default()));
     let provider = AdapterProvider::new("taken".into(), "h".into(), Build::UNSTAMPED, HELLO_WITHIN, open);
 
-    let stopped = provider.stop(&"i".into()).await;
+    let stopped = provider.end_worker(&"i".into()).await;
 
     let Err(ProviderError::Io { source, .. }) = &stopped else { panic!("{stopped:?}") };
     assert_eq!(source.to_string(), "serving hub g");
@@ -223,7 +225,7 @@ async fn a_reply_of_another_kind_than_its_request_names_fails_it() {
     let greeted = AdapterProvider::new("elsewhere".into(), "h".into(), Build::UNSTAMPED, HELLO_WITHIN, greeted);
 
     let listed = provider.list().await;
-    let stopped = provider.stop(&"i".into()).await;
+    let stopped = provider.end_worker(&"i".into()).await;
     let said = greeted.say_hello().await;
 
     assert!(matches!(&listed, Err(ProviderError::Io { .. })), "{listed:?}");
@@ -237,11 +239,11 @@ async fn a_request_an_adapter_never_answers_is_given_up_on() {
     let provider = started(open).await;
     let asked = tokio::time::Instant::now();
 
-    let started = tokio::time::timeout(REQUEST_TIMEOUT * 2, provider.start(&"i".into(), &[])).await;
+    let started = tokio::time::timeout(ANSWERED_WITHIN * 2, provider.start(&"i".into(), &[])).await;
     let Err(ProviderError::Io { source, .. }) = started.expect("no time limit") else { panic!("answered") };
 
     assert_eq!(source.kind(), io::ErrorKind::TimedOut);
-    assert_eq!(asked.elapsed(), REQUEST_TIMEOUT);
+    assert_eq!(asked.elapsed(), ANSWERED_WITHIN);
 }
 
 /// A script that says hello as an adapter would, writes its PID to `pid`, and then runs `then`.
@@ -291,7 +293,7 @@ async fn an_adapter_that_exits_leaving_its_stdout_open_isnt_waited_for() {
     let then = format!("read -r request; sleep 100 & echo $$ >> {}; exit", helpers.display());
     let provider = started(script(dir.path(), &then)).await;
 
-    let stopped = tokio::time::timeout(Duration::from_secs(10), provider.stop(&"i".into())).await;
+    let stopped = tokio::time::timeout(Duration::from_secs(10), provider.end_worker(&"i".into())).await;
 
     let Ok(Err(ProviderError::Io { source, .. })) = stopped else { panic!("{stopped:?}") };
     assert_eq!(source.kind(), io::ErrorKind::BrokenPipe);
@@ -319,7 +321,7 @@ async fn shutting_down_gives_up_on_a_hello_in_flight_and_starts_no_more_adapters
     assert_eq!(asked.elapsed(), Duration::ZERO, "it waited for the hello");
     let Err(ProviderError::Io { source, .. }) = hello.await.unwrap() else { panic!("it said hello") };
     assert_eq!(source.kind(), io::ErrorKind::Interrupted);
-    assert!(provider.stop(&"i".into()).await.is_err());
+    assert!(provider.end_worker(&"i".into()).await.is_err());
     assert_eq!(opens.load(Ordering::SeqCst), 1, "nothing started it again");
 }
 
@@ -345,5 +347,5 @@ async fn a_reply_this_hub_cant_read_fails_its_request_rather_than_leaving_it_wai
 
     let Err(ProviderError::Adapter(e)) = started else { panic!("{started:?}") };
     assert_eq!(e.code, ErrorCode::Worker, "{e:?}");
-    assert!(asked.elapsed() < REQUEST_TIMEOUT, "it waited for the time limit");
+    assert!(asked.elapsed() < ANSWERED_WITHIN, "it waited for the time limit");
 }

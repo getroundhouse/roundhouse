@@ -52,8 +52,8 @@ pub(in super::super) fn record_instance(
 }
 
 impl Store {
-    /// Before its provider is asked to make it again, once it's been destroyed, as for a workspace being made that
-    /// has taken another name. One still recorded fails, as with [`record_instance`].
+    /// Before its provider is asked to make it again, once it's been destroyed, as for an ephemeral workspace being
+    /// restored. One still recorded fails, as with [`record_instance`].
     pub fn instance_creating(&self, id: &InstanceId, provider: &ProviderName) -> Result<(), StoreError> {
         record_instance(&lock(&self.writer), id, provider, InstanceStage::Creating, now_ms())?;
         Ok(())

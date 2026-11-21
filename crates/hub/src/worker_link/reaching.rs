@@ -2,9 +2,10 @@
 
 use std::time::Duration;
 
-use protocol::client::{ApiError, ErrorCode};
+use protocol::client::{ApiError, ErrorCode, error_chain};
 use protocol::model::InstanceId;
 use providers::Provider;
+use tracing::warn;
 
 use crate::child_process::{self, Spawned, Stderr};
 use crate::error::provider_failed;
@@ -49,8 +50,11 @@ pub(super) async fn reach(
         child_process::spawn(&command.program, &command.args, &command.env, Stderr::Log(log))
             .map_err(|e| ApiError::new(ErrorCode::Worker, e.to_string()))
     });
-    if spawned.is_err() && opening == Opening::Started {
-        let _ = provider.kill(instance_id).await;
+    if spawned.is_err()
+        && opening == Opening::Started
+        && let Err(e) = provider.kill_worker(instance_id).await
+    {
+        warn!(%instance_id, "ending a worker whose stream couldn't be opened: {}", error_chain(&e));
     }
     spawned
 }

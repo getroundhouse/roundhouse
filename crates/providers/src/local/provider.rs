@@ -11,15 +11,15 @@ use tracing::warn;
 
 use super::MachinePath;
 
-/// How long what a killed worker left running, such as an agent, or a worker still running when its instance is
-/// stopped, gets to stop by itself, with all it started. An agent stops its own tools if given this.
+/// How long what a killed worker left running, such as an agent, or a worker still running when the hub asks for it
+/// to be ended, gets to stop by itself, with all it started. An agent stops its own tools if given this.
 const ORPHAN_GRACE: Duration = Duration::from_secs(3);
 /// How the hub reaches a worker. Through its socket, so the worker can outlive its hub, but on Windows, where there's
 /// no Unix socket to serve it on, on the pipes of the hub, which it stops with.
 const TRANSPORT: &str = if cfg!(unix) { "--attach" } else { "--stdio" };
 /// How long a process sent SIGKILL gets to be gone.
 const KILLED_GRACE: Duration = Duration::from_secs(2);
-/// How long starting or stopping an instance takes at most. Either stops each process left there within its
+/// How long starting an instance, or ending its worker, takes at most. Either stops each process left there within its
 /// [`ORPHAN_GRACE`] and then [`KILLED_GRACE`], and the first start reads the login shell's `PATH` within
 /// [`LOGIN_SHELL_TIMEOUT`](super::machine_path::LOGIN_SHELL_TIMEOUT). So this is that, with three processes left there.
 const STARTS_OR_STOPS_WITHIN: Duration = Duration::from_secs(
@@ -59,7 +59,7 @@ impl LocalProvider {
     pub(super) async fn end(&self, instance_id: &InstanceId, grace: Duration) {
         let dir = self.instance_dir(instance_id);
         if let Some(worker) = running_worker(&dir).await {
-            warn!(pid = worker.pid, %instance_id, "ending a worker still running in an instance that's stopping");
+            warn!(pid = worker.pid, %instance_id, "ending a worker still running in its instance");
             stop_groups(&[worker], grace).await;
         }
         stop_orphans(&dir, ORPHAN_GRACE).await;
@@ -176,7 +176,6 @@ impl Provider for LocalProvider {
         instance_id: &InstanceId,
         from: Option<&InstanceId>,
         _size: Option<Size>,
-        _display_name: &str,
     ) -> Result<(), ProviderError> {
         if from.is_some() {
             return Err(ProviderError::Unsupported("make an instance from a base image"));
@@ -185,29 +184,29 @@ impl Provider for LocalProvider {
     }
 
     /// Its workers run the hub's own executable, so there's none to put in place. A running instance is left as it
-    /// is, and one is running while a worker is. Ending that is the hub's to ask for, with `stop`.
+    /// is, and one is running while a worker is. Ending that is the hub's to ask for, with `end_worker`.
     async fn start(&self, instance_id: &InstanceId, _workers: &[WorkerBinary]) -> Result<(), ProviderError> {
         let dir = self.instance_dir(instance_id);
         create_dir(&dir)?;
         if running_worker(&dir).await.is_none() {
-            // For when the hub was killed along with its worker, so `stop` never ran.
+            // For when the hub was killed along with its worker, so `end_worker` never ran.
             stop_orphans(&dir, ORPHAN_GRACE).await;
         }
         Ok(())
     }
 
-    async fn stop(&self, instance_id: &InstanceId) -> Result<(), ProviderError> {
+    async fn end_worker(&self, instance_id: &InstanceId) -> Result<(), ProviderError> {
         self.end(instance_id, ORPHAN_GRACE).await;
         Ok(())
     }
 
-    async fn kill(&self, instance_id: &InstanceId) -> Result<(), ProviderError> {
+    async fn kill_worker(&self, instance_id: &InstanceId) -> Result<(), ProviderError> {
         self.end(instance_id, Duration::ZERO).await;
         Ok(())
     }
 
     async fn destroy(&self, instance_id: &InstanceId) -> Result<(), ProviderError> {
-        self.stop(instance_id).await?;
+        self.end_worker(instance_id).await?;
         let dir = self.instance_dir(instance_id);
         match std::fs::remove_dir_all(&dir) {
             Err(e) if e.kind() != std::io::ErrorKind::NotFound => {
@@ -229,12 +228,10 @@ impl Provider for LocalProvider {
             if !entry.path().is_dir() {
                 continue;
             }
-            let state = match running_worker(&entry.path()).await {
-                Some(_) => InstanceState::Running,
-                None => InstanceState::Stopped,
-            };
+            let worker_running = running_worker(&entry.path()).await.is_some();
             let instance_id = entry.file_name().to_string_lossy().into_owned().into();
-            instances.push(Instance { instance_id, state, base_image: false });
+            // A directory is never asleep.
+            instances.push(Instance { instance_id, state: InstanceState::Running, base_image: false, worker_running });
         }
         Ok(instances)
     }

@@ -7,7 +7,7 @@ use async_trait::async_trait;
 use protocol::Build;
 use protocol::client::ApiError;
 use protocol::model::{Workspace, WorkspaceId, WorkspaceStatus};
-use providers::{Capabilities, Instance, ProviderError, Size, WorkerBinary, WorkerCommand};
+use providers::{Capabilities, Instance, InstanceState, ProviderError, Size, WorkerBinary, WorkerCommand};
 use tokio::sync::Notify;
 use tokio::task::JoinHandle;
 
@@ -22,9 +22,12 @@ use crate::worker_link::WorkerLink;
 use github::Github;
 
 /// Makes and destroys nothing, and says it has unless it's told to refuse. One that holds its first start says so on
-/// `started`, and waits for `go_on` before refusing it.
+/// `started`, and waits for `go_on` before refusing it. It lists what `listed` says, and keeps which instances it was
+/// asked how to reach a worker on, which it refuses.
 #[derive(Default)]
 struct Fake {
+    listed: Vec<Instance>,
+    connected: parking_lot::Mutex<Vec<InstanceId>>,
     refuses_to_create: bool,
     refuses_to_destroy: AtomicBool,
     holds_start: AtomicBool,
@@ -55,13 +58,7 @@ impl Provider for Fake {
         Ok(providers::WorkerEnvironment::HUB_MACHINE)
     }
 
-    async fn create(
-        &self,
-        _: &InstanceId,
-        _: Option<&InstanceId>,
-        _: Option<Size>,
-        _: &str,
-    ) -> Result<(), ProviderError> {
+    async fn create(&self, _: &InstanceId, _: Option<&InstanceId>, _: Option<Size>) -> Result<(), ProviderError> {
         if self.refuses_to_create { Err(refused("creating")) } else { Ok(()) }
     }
 
@@ -74,11 +71,11 @@ impl Provider for Fake {
         Err(refused("starting"))
     }
 
-    async fn stop(&self, _: &InstanceId) -> Result<(), ProviderError> {
+    async fn end_worker(&self, _: &InstanceId) -> Result<(), ProviderError> {
         Ok(())
     }
 
-    async fn kill(&self, _: &InstanceId) -> Result<(), ProviderError> {
+    async fn kill_worker(&self, _: &InstanceId) -> Result<(), ProviderError> {
         Ok(())
     }
 
@@ -91,10 +88,11 @@ impl Provider for Fake {
     }
 
     async fn list(&self) -> Result<Vec<Instance>, ProviderError> {
-        Ok(Vec::new())
+        Ok(self.listed.clone())
     }
 
-    async fn connect(&self, _: &InstanceId) -> Result<WorkerCommand, ProviderError> {
+    async fn connect(&self, instance_id: &InstanceId) -> Result<WorkerCommand, ProviderError> {
+        self.connected.lock().push(instance_id.clone());
         Err(ProviderError::Unsupported("run a worker"))
     }
 
@@ -257,4 +255,32 @@ async fn a_start_that_fails_leaves_the_next_to_clear_the_instance() {
 
     assert!(started.is_err(), "its provider refused to start it");
     assert!(!*hub.worker_gate(&id).lock().await, "what it started may be on the instance");
+}
+
+/// A starting hub carries on only where its provider says a worker serves the instance, and leaves one that's awake
+/// with nothing on it, which every instance of a provider that keeps them awake is once its worker has ended.
+#[tokio::test]
+async fn a_starting_hub_carries_on_only_where_a_worker_serves_the_instance() {
+    let dir = tempfile::tempdir().unwrap();
+    let listed = |id: &str, worker_running| Instance {
+        instance_id: id.into(),
+        state: InstanceState::Running,
+        base_image: false,
+        worker_running,
+    };
+    let fake = Fake { listed: vec![listed("birch-vm", true), listed("cedar-vm", false)], ..Fake::default() };
+    let (hub, fake) = hub_with(dir.path(), fake);
+    let mut birch: Workspace = hub.workspace(&"w".into()).await.unwrap();
+    for (id, instance_id) in [("birch", "birch-vm"), ("cedar", "cedar-vm")] {
+        (birch.id, birch.name, birch.instance_id, birch.provider) =
+            (id.into(), id.into(), instance_id.into(), "fake".into());
+        birch.created_at_ms += 1;
+        let workspace = birch.clone();
+        let placement = crate::store::WorkspacePlacement::local_checkout("/repo");
+        hub.blocking(move |store| store.insert_workspace(&workspace, &placement, None)).await.unwrap();
+    }
+
+    hub.carry_on(crate::hub::LeftAtWork::read(&hub.store).unwrap()).await;
+
+    assert_eq!(*fake.connected.lock(), [InstanceId::from("birch-vm")]);
 }

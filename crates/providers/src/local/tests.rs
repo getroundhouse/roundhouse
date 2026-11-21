@@ -186,14 +186,14 @@ async fn every_request_is_safe_to_repeat() {
     let id: InstanceId = "i".into();
 
     for _ in 0..2 {
-        provider.create(&id, None, None, "roundhouse-i").await.unwrap();
+        provider.create(&id, None, None).await.unwrap();
         provider.start(&id, &[]).await.unwrap();
     }
     let first = provider.connect(&id).await.unwrap();
     let second = provider.connect(&id).await.unwrap();
     for _ in 0..2 {
-        provider.stop(&id).await.unwrap();
-        provider.kill(&id).await.unwrap();
+        provider.end_worker(&id).await.unwrap();
+        provider.kill_worker(&id).await.unwrap();
         provider.destroy(&id).await.unwrap();
     }
 
@@ -207,7 +207,7 @@ async fn connect_answers_with_the_hubs_own_worker_for_the_instance() {
     let dir = tempfile::tempdir().unwrap();
     let provider = provider(dir.path());
     let id: InstanceId = "i".into();
-    provider.create(&id, None, None, "roundhouse-i").await.unwrap();
+    provider.create(&id, None, None).await.unwrap();
 
     let command = provider.connect(&id).await.unwrap();
 
@@ -222,12 +222,13 @@ async fn connect_answers_with_the_hubs_own_worker_for_the_instance() {
     assert!(path.is_some_and(|path| path.split(':').any(|entry| entry == "/opt/tools")), "{path:?}");
 }
 
+/// A directory is never asleep, so every instance is running, and a worker is on the one it's recorded in.
 #[tokio::test]
 async fn list_says_which_instances_have_a_worker_running() {
     let dir = tempfile::tempdir().unwrap();
     let provider = provider(dir.path());
     for id in ["a", "b"] {
-        provider.create(&id.into(), None, None, id).await.unwrap();
+        provider.create(&id.into(), None, None).await.unwrap();
     }
     let mut worker = orphan(dir.path());
     record_worker(&dir.path().join("instances/a"), &worker);
@@ -235,23 +236,23 @@ async fn list_says_which_instances_have_a_worker_running() {
     let mut instances = provider.list().await.unwrap();
 
     instances.sort_by(|x, y| x.instance_id.cmp(&y.instance_id));
-    let states: Vec<_> = instances.iter().map(|i| (i.instance_id.as_str(), i.state)).collect();
-    assert_eq!(states, [("a", InstanceState::Running), ("b", InstanceState::Stopped)]);
+    let states: Vec<_> = instances.iter().map(|i| (i.instance_id.as_str(), i.state, i.worker_running)).collect();
+    assert_eq!(states, [("a", InstanceState::Running, true), ("b", InstanceState::Running, false)]);
     worker.kill().unwrap();
     worker.wait().unwrap();
 }
 
 #[tokio::test]
-async fn stopping_ends_a_worker_still_running_in_the_instance() {
+async fn ending_the_worker_ends_one_still_running_in_the_instance() {
     let dir = tempfile::tempdir().unwrap();
     let provider = provider(dir.path());
     let id: InstanceId = "a".into();
-    provider.create(&id, None, None, "a").await.unwrap();
+    provider.create(&id, None, None).await.unwrap();
     let mut worker = orphan(dir.path());
     record_worker(&dir.path().join("instances/a"), &worker);
     let reaper = std::thread::spawn(move || worker.wait().unwrap());
 
-    provider.stop(&id).await.unwrap();
+    provider.end_worker(&id).await.unwrap();
 
     assert!(reaper.join().unwrap().signal().is_some(), "it should have been signalled");
 }
@@ -261,7 +262,7 @@ async fn starting_leaves_a_running_instance_alone() {
     let dir = tempfile::tempdir().unwrap();
     let provider = provider(dir.path());
     let id: InstanceId = "a".into();
-    provider.create(&id, None, None, "a").await.unwrap();
+    provider.create(&id, None, None).await.unwrap();
     let instance = dir.path().join("instances/a");
     let mut worker = orphan(dir.path());
     record_worker(&instance, &worker);
@@ -284,7 +285,7 @@ async fn starting_clears_what_a_killed_worker_left() {
     let dir = tempfile::tempdir().unwrap();
     let provider = provider(dir.path());
     let id: InstanceId = "a".into();
-    provider.create(&id, None, None, "a").await.unwrap();
+    provider.create(&id, None, None).await.unwrap();
     let instance = dir.path().join("instances/a");
     let mut agent = orphan(dir.path());
     let agent_record = record_agent(&instance, "s.pid", agent.id(), &process::start_time(agent.id()).unwrap());
@@ -299,13 +300,13 @@ async fn starting_clears_what_a_killed_worker_left() {
 }
 
 #[tokio::test]
-async fn killing_skips_sigterm_and_returns_once_the_worker_has_gone() {
+async fn killing_the_worker_skips_sigterm_and_returns_once_it_has_gone() {
     use std::os::unix::process::CommandExt;
 
     let dir = tempfile::tempdir().unwrap();
     let provider = provider(dir.path());
     let id: InstanceId = "a".into();
-    provider.create(&id, None, None, "a").await.unwrap();
+    provider.create(&id, None, None).await.unwrap();
     let termed = dir.path().join("termed");
     // Says so if it gets SIGTERM, and ignores it.
     let script = format!("trap ': > {}' TERM; while :; do sleep 0.05; done", termed.display());
@@ -314,9 +315,9 @@ async fn killing_skips_sigterm_and_returns_once_the_worker_has_gone() {
     let (reaped_tx, reaped) = std::sync::mpsc::channel();
     std::thread::spawn(move || reaped_tx.send(worker.wait().unwrap()).unwrap());
 
-    provider.kill(&id).await.unwrap();
+    provider.kill_worker(&id).await.unwrap();
 
-    let status = reaped.try_recv().expect("kill returned before the worker had gone");
+    let status = reaped.try_recv().expect("kill_worker returned before the worker had gone");
     assert_eq!(status.signal(), Some(9));
     assert!(!termed.exists(), "a kill shouldn't ask first");
 }
@@ -328,7 +329,7 @@ async fn base_images_are_refused() {
     let id: InstanceId = "a".into();
 
     let made = provider.make_base_image(&id).await;
-    let copied = provider.create(&id, Some(&"base".into()), None, "a").await;
+    let copied = provider.create(&id, Some(&"base".into()), None).await;
 
     assert!(matches!(made, Err(ProviderError::Unsupported(_))), "{made:?}");
     assert!(matches!(copied, Err(ProviderError::Unsupported(_))), "{copied:?}");

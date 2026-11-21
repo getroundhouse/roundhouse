@@ -283,20 +283,20 @@ impl Hub {
         let mut cleared = gate.lock().await;
         link.kill();
         let replaced = self.workers.lock().get(&workspace.id).is_some_and(|current| current.is_open());
-        if !replaced && let Err(e) = provider.kill(instance_id).await {
-            warn!(%instance_id, "stopping a stuck worker failed: {}", error_chain(&e));
+        if !replaced && let Err(e) = provider.kill_worker(instance_id).await {
+            warn!(%instance_id, "ending a stuck worker failed: {}", error_chain(&e));
             *cleared = false;
         }
     }
 }
 
-/// Stops whatever runs on the instance, so a worker can start there and claim it. Whether that worked, since until it
+/// Ends whatever worker runs on the instance, so another can start there and claim it. Whether that worked, since until it
 /// has, a new worker may find the instance taken.
 async fn clear_instance(provider: &dyn Provider, instance_id: &InstanceId) -> bool {
-    match provider.stop(instance_id).await {
+    match provider.end_worker(instance_id).await {
         Ok(()) => true,
         Err(e) => {
-            warn!(%instance_id, "stopping an instance failed: {}", error_chain(&e));
+            warn!(%instance_id, "ending the worker on an instance failed: {}", error_chain(&e));
             false
         }
     }
