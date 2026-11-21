@@ -52,9 +52,9 @@ impl ChatView {
         self.put_back = Some(text);
     }
 
-    /// Shows a draft of the chat made elsewhere since, in place of what's typed here. What's on its way to the hub
-    /// from here goes on and replaces it, as `client_core::Drafts::from_elsewhere` says, so what's typed here is never undone as
-    /// it's typed.
+    /// Shows a draft of the chat made elsewhere since, in place of what's typed here. None is shown while what's typed
+    /// here is on its way to the hub, so it's never undone as it's typed, and the hub keeps whichever of the two was
+    /// typed last, as `client_core::Drafts::from_elsewhere` says.
     pub(super) fn take_draft_from_elsewhere(&mut self, cx: &mut Context<Self>) {
         let Some(session) = self.shown.as_ref().map(|shown| shown.session.clone()) else { return };
         if self.kept.drafts.from_elsewhere(&KeptDraft::composer(&session)) {

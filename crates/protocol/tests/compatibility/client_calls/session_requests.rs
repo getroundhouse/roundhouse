@@ -255,9 +255,11 @@ fn every_request_about_files_and_drafts_keeps_its_form() {
         ClientRequest::AttachmentRemove(attachments::AttachmentRemove { session_id: "s".into(), id: "a1".into() }),
         r#"{"method":"attachment_remove","session_id":"s","id":"a1"}"#,
     );
+    let typed = |typed_at_ms| drafts::SessionDraft { id: "s".into(), draft: DraftToKeep::new("half"), typed_at_ms };
+    asked(ClientRequest::SessionDraft(typed(None)), r#"{"method":"session_draft","id":"s","draft":{"text":"half"}}"#);
     asked(
-        ClientRequest::SessionDraft(drafts::SessionDraft { id: "s".into(), draft: DraftToKeep::new("half") }),
-        r#"{"method":"session_draft","id":"s","draft":{"text":"half"}}"#,
+        ClientRequest::SessionDraft(typed(Some(1_795_300_000_000))),
+        r#"{"method":"session_draft","id":"s","draft":{"text":"half"},"typed_at_ms":1795300000000}"#,
     );
     let answers = SoFar::Answers { answers: vec![AnswerSoFar { picked: vec![1], ..Default::default() }] };
     let draft = |so_far| drafts::SessionDecisionDraft {

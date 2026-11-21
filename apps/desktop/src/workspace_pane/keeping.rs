@@ -116,10 +116,10 @@ impl WorkspacePane {
         }
     }
 
-    /// Shows in each open chat a draft made elsewhere since, such as in another client, in place of this app's. What's
-    /// on its way to the hub from here goes on and replaces it, as [`client_core::Drafts::from_elsewhere`] says, so
-    /// what's typed here is never undone as it's typed. Whatever comes in its place is the hub's already, so none of it
-    /// is kept again.
+    /// Shows in each open chat a draft made elsewhere since, such as in another client, in place of this app's. None is
+    /// shown while something from here is on its way to the hub, so what's typed here is never undone as it's typed,
+    /// and the hub keeps whichever of the two was typed last, as [`client_core::Drafts::from_elsewhere`] says. Whatever
+    /// comes in its place is the hub's already, so none of it is kept again.
     pub(crate) fn take_drafts_from_elsewhere(&mut self, cx: &mut Context<Self>) {
         let elsewhere = self.open_sessions().filter(|s| self.keeper.from_elsewhere(&KeptDraft::composer(s)));
         for session in elsewhere.cloned().collect::<Vec<Session>>() {

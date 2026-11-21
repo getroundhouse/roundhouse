@@ -13,9 +13,11 @@ use protocol::model::{
 use super::{Client, Result};
 
 impl Client {
-    /// See [`drafts::SessionDraft`]. A hub older than this refuses it, as `is_unsupported` says.
-    pub fn session_draft(&self, id: &SessionId, draft: &DraftToKeep) -> Result<Session> {
-        self.call(drafts::SessionDraft { id: id.clone(), draft: draft.clone() })
+    /// See [`drafts::SessionDraft`]: `typed_at_ms` is when the change was typed, and one without it counts as typed as
+    /// it arrives. A hub older than this refuses it, as `is_unsupported` says, and one that has a change typed after it
+    /// refuses it as `is_conflict` says.
+    pub fn session_draft(&self, id: &SessionId, draft: &DraftToKeep, typed_at_ms: Option<i64>) -> Result<Session> {
+        self.call(drafts::SessionDraft { id: id.clone(), draft: draft.clone(), typed_at_ms })
     }
 
     /// See [`drafts::SessionDecisionDraft`]. A hub older than this refuses it, as `is_unsupported` says.

@@ -40,7 +40,7 @@ pub(super) fn unread(store: &Store) -> Said {
 }
 
 pub(super) fn draft(store: &Store) -> Said {
-    Said::Changed(store.set_draft(&"s".into(), &DraftToKeep::new("same")).unwrap().changed)
+    Said::Changed(store.set_draft(&"s".into(), &DraftToKeep::new("same"), None).unwrap().changed)
 }
 
 pub(super) fn drafted(store: &Store) {
@@ -48,7 +48,7 @@ pub(super) fn drafted(store: &Store) {
 }
 
 pub(super) fn no_draft(store: &Store) -> Said {
-    Said::Changed(store.set_draft(&"s".into(), &DraftToKeep::default()).unwrap().changed)
+    Said::Changed(store.set_draft(&"s".into(), &DraftToKeep::default(), None).unwrap().changed)
 }
 
 pub(super) fn queue(store: &Store) -> Said {

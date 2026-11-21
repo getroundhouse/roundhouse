@@ -142,7 +142,7 @@ fn data_survives_reopening_and_migrations_do_not_rerun() {
     let store = store_with_session(dir.path());
     let s = SessionId::from("s");
     store.append(&s, None, &notice("kept"), None, None, None).unwrap();
-    store.set_draft(&s, &DraftToKeep::new("half a thought")).unwrap();
+    store.set_draft(&s, &DraftToKeep::new("half a thought"), None).unwrap();
     let options = Settings { model: Some(ModelName::named("haiku")), ..Settings::default() };
     store.set_session_settings(&s, &options).unwrap();
     let before = store.list_records().unwrap();

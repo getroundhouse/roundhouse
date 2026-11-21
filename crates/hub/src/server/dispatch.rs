@@ -296,7 +296,9 @@ pub(super) async fn handle(
         R::SessionCallOffWait(waits::SessionCallOffWait { id, wait }) => {
             C::Session(hub.session_call_off_wait(id, wait).await?)
         }
-        R::SessionDraft(drafts::SessionDraft { id, draft }) => C::Session(hub.session_draft(id, draft).await?),
+        R::SessionDraft(drafts::SessionDraft { id, draft, typed_at_ms }) => {
+            C::Session(hub.session_draft(id, draft, typed_at_ms).await?)
+        }
         R::SessionDecisionDraft(drafts::SessionDecisionDraft { id, draft }) => {
             C::Session(hub.session_decision_draft(id, draft).await?)
         }

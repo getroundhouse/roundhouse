@@ -291,8 +291,14 @@ impl Hub {
         self.change_session(move |store| store.mark_unread(&id)).await
     }
 
-    pub(crate) async fn session_draft(&self, id: SessionId, draft: DraftToKeep) -> Result<Session, ApiError> {
-        self.change_session(move |store| store.set_draft(&id, &draft)).await
+    /// Keeps `draft` in the session's composer, unless what's there was typed after it, as `SessionDraft` says.
+    pub(crate) async fn session_draft(
+        &self,
+        id: SessionId,
+        draft: DraftToKeep,
+        typed_at_ms: Option<i64>,
+    ) -> Result<Session, ApiError> {
+        self.change_session(move |store| store.set_draft(&id, &draft, typed_at_ms)).await
     }
 
     pub(crate) async fn session_decision_draft(

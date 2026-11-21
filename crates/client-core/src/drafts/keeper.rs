@@ -59,6 +59,8 @@ struct Keeper {
 struct Pending {
     change: DraftChange,
     due: Instant,
+    /// When it was handed over, which is when it was typed, as `SessionDraft` asks of a composer's change.
+    typed_at_ms: i64,
 }
 
 impl Keeper {
@@ -97,12 +99,12 @@ impl Keeper {
     fn take(&mut self, request: Request) {
         let now = Instant::now();
         match request {
-            Request::Changed { change, now: at_once } => {
+            Request::Changed { change, now: at_once, typed_at_ms } => {
                 let key = change.key();
                 // A change while one waits keeps its time, so typing that goes on is still kept every so often.
                 let waiting = self.pending.get(&key).map_or(now + PAUSE, |p| p.due);
                 let due = if at_once || !self.answered { now } else { waiting };
-                if self.pending.insert(key.clone(), Pending { change, due }).is_some() {
+                if self.pending.insert(key.clone(), Pending { change, due, typed_at_ms }).is_some() {
                     // The one it replaces never needs to reach the hub.
                     self.reached(&key, None);
                 }
@@ -163,7 +165,7 @@ impl Keeper {
                 continue;
             }
             let Some(pending) = self.pending.remove(&key) else { continue };
-            let answer = self.send(&pending.change);
+            let answer = self.send(&pending);
             let gone = matches!(
                 answer,
                 Err(ClientError::Io(_)
@@ -183,19 +185,23 @@ impl Keeper {
                 self.pending.insert(key, pending);
             } else {
                 // Kept, or the hub answered and won't keep this one however often it's asked, such as for a chat
-                // that's closed or gone.
+                // that's closed or gone, or a composer whose draft was changed elsewhere after this was typed, when
+                // the hub's draft is shown in its place.
                 self.answered = true;
+                if matches!(key, DraftKey::Composer(_)) && answer.as_ref().is_err_and(ClientError::is_conflict) {
+                    self.counts.lock().overruled.insert(key.clone());
+                }
                 self.reached(&key, answer.ok());
             }
         }
     }
 
-    /// Has the hub keep `change`, and says what the record it kept it on says is there now.
-    fn send(&self, change: &DraftChange) -> Result<Agreed, ClientError> {
-        match change {
+    /// Has the hub keep `pending`'s change, and says what the record it kept it on says is there now.
+    fn send(&self, pending: &Pending) -> Result<Agreed, ClientError> {
+        match &pending.change {
             DraftChange::Composer(id, draft) => self
                 .client
-                .session_draft(id, draft)
+                .session_draft(id, draft, Some(pending.typed_at_ms))
                 .map(|session| Agreed { rev: session.rev, said: Said::Composer(session.draft) }),
             DraftChange::Decision(id, draft) => self
                 .client
@@ -301,6 +307,7 @@ impl Keeper {
     fn reached(&self, key: &DraftKey, kept: Option<Agreed>) {
         let mut counts = self.counts.lock();
         if let Some(kept) = kept {
+            counts.overruled.remove(key);
             agree(&mut counts, key.clone(), kept);
         }
         if let Some(count) = counts.unkept.get_mut(key) {

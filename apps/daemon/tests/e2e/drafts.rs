@@ -3,7 +3,7 @@
 
 #![cfg(test)]
 
-use client_core::{DraftChange, Drafts, FileToSend, FilesFor, RecordsFeed};
+use client_core::{DraftChange, DraftKey, Drafts, FileToSend, FilesFor, KeptDraft, RecordsFeed};
 use protocol::attachment::MediaType;
 use protocol::model::{
     AnswerSoFar, CommentDraft, DecisionDraft, DiffSide, Draft, DraftToKeep, NewWorkspaceDraftToKeep, SessionId,
@@ -55,9 +55,55 @@ fn a_drafts_files_are_kept_across_a_restart_until_its_let_go_of_them() {
     assert_eq!(client.attachment_read(id, file).unwrap(), log.data);
     client.attachment_remove(id, file).unwrap();
     assert!(client.attachment_read(id, file).is_ok(), "the hub keeps a file the draft names");
-    client.session_draft(id, &DraftToKeep::new("look")).unwrap();
+    client.session_draft(id, &DraftToKeep::new("look"), None).unwrap();
     client.attachment_remove(id, file).unwrap();
     assert!(client.attachment_read(id, file).is_err());
+}
+
+/// A change typed while the hub couldn't be reached, as on a phone away from it, gives way to one typed after it in
+/// another client, and the client that held it shows that one in its place. The hub starting again comes between the
+/// two, so they can't be typed in the same millisecond.
+#[test]
+fn a_change_held_while_the_hub_was_gone_gives_way_to_one_typed_after_it_elsewhere() {
+    let mut stack = Stack::start();
+    let client = stack.client();
+    let (_, session) = stack.workspace(&client);
+    let phone = Drafts::start(&client);
+    stack.kill_hub();
+    phone.typed(DraftChange::Composer(session.id.clone(), DraftToKeep::new("typed on the train")));
+    phone.flushed().recv().unwrap();
+    assert!(phone.unkept(&DraftKey::Composer(session.id.clone())), "held for the next connection");
+    stack.start_hub();
+    let desk = stack.client();
+    desk.session_draft(&session.id, &DraftToKeep::new("typed at the desk"), None).unwrap();
+
+    phone.reconnect(&stack.client());
+
+    phone.caught_up().recv().unwrap();
+    let kept = desk.session_get(&session.id).unwrap();
+    assert_eq!(kept.draft.text, "typed at the desk");
+    assert!(phone.from_elsewhere(&KeptDraft::composer(&kept)), "so the phone shows it in place of its own");
+}
+
+/// The other way round: a change typed while the hub couldn't be reached, after one typed in another client, replaces
+/// that one once it reaches the hub.
+#[test]
+fn a_change_held_while_the_hub_was_gone_replaces_one_typed_before_it_elsewhere() {
+    let mut stack = Stack::start();
+    let client = stack.client();
+    let (_, session) = stack.workspace(&client);
+    let phone = Drafts::start(&client);
+    stack.client().session_draft(&session.id, &DraftToKeep::new("typed at the desk"), None).unwrap();
+    stack.kill_hub();
+    phone.typed(DraftChange::Composer(session.id.clone(), DraftToKeep::new("typed on the train")));
+    phone.flushed().recv().unwrap();
+    stack.start_hub();
+
+    phone.reconnect(&stack.client());
+
+    phone.flushed().recv().unwrap();
+    assert!(!phone.unkept(&DraftKey::Composer(session.id.clone())));
+    assert_eq!(stack.client().session_get(&session.id).unwrap().draft.text, "typed on the train");
 }
 
 /// The comment being written on the workspace's diff, as client-core's copy has it.
@@ -84,7 +130,7 @@ fn a_draft_a_decision_and_a_comment_being_written_are_kept_across_a_restart_and_
     let caught_up = || feed.snapshot().workspace(&workspace.id).is_some_and(|w| w.setup == setup);
     wait_until("client-core to hear setup has finished", caught_up);
 
-    let drafted = client.session_draft(&session.id, &DraftToKeep::new("half a thought")).unwrap();
+    let drafted = client.session_draft(&session.id, &DraftToKeep::new("half a thought"), None).unwrap();
     let commented = client.workspace_comment_draft(&workspace.id, Some(&comment)).unwrap();
     let answered = client.session_decision_draft(&session.id, Some(&answer)).unwrap();
 
@@ -105,7 +151,7 @@ fn a_draft_a_decision_and_a_comment_being_written_are_kept_across_a_restart_and_
     let workspaces = client.workspace_list(false).unwrap();
     let kept = workspaces.into_iter().find(|w| w.id == workspace.id).unwrap();
     assert_eq!(kept.comment_draft, Some(comment));
-    assert_eq!(client.session_draft(&session.id, &DraftToKeep::default()).unwrap().draft, Draft::default());
+    assert_eq!(client.session_draft(&session.id, &DraftToKeep::default(), None).unwrap().draft, Draft::default());
     assert_eq!(client.workspace_comment_draft(&workspace.id, None).unwrap().comment_draft, None);
     assert_eq!(client.session_decision_draft(&session.id, None).unwrap().decision_draft, None);
 }
