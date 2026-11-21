@@ -17,9 +17,10 @@ pub const KEY: UpdateFeedKey = UpdateFeedKey::from_base64(match option_env!("ROU
 });
 
 /// Which platform's feed this build's hub reads, as `tools/package/publish.py` names it. `None` where no hub is
-/// published, as on Windows, whose hub isn't installed as a service.
+/// published, as on Windows, whose hub isn't installed as a service. A hub built while the Mac's was `osx` reads that
+/// one, which each release signs too, as `TAKES_OVER` in `publish.py` says.
 pub const HUB_CHANNEL: Option<&str> = if cfg!(all(target_os = "macos", target_arch = "aarch64")) {
-    Some("osx")
+    Some("macos-arm64")
 } else if cfg!(all(target_os = "linux", target_arch = "x86_64")) {
     Some("linux-amd64")
 } else if cfg!(all(target_os = "linux", target_arch = "aarch64")) {

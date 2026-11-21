@@ -17,9 +17,12 @@
 #       notarize and staple, then check Gatekeeper takes it
 #
 # Writes `releases/`, which holds the portable zip, the full package, the feed and the hub's archive,
-# `Roundhouse-VERSION-osx-hub.tar.gz`, and `Roundhouse.app`, unzipped from the portable zip, to check or run. The
-# default directory's `releases/` starts empty. Another directory's keeps what's there, and a package from an earlier
-# version gets a delta to this one.
+# `Roundhouse-VERSION-macos-arm64-hub.tar.gz`, and `Roundhouse.app`, unzipped from the portable zip, to check or run.
+# The default directory's `releases/` starts empty. Another directory's keeps what's there, and a package from an
+# earlier version gets a delta to this one.
+#
+# An app looks for updates in the channel it was packaged for, `macos-arm64`, named for its processor as the others'
+# are. One packaged before that was `osx`, Velopack's default, and `publish.py` keeps that feed leading to this one.
 #
 # The version is `0.1.<commits>`, as `docs/decisions/publish-every-merge.md` says, and it's the build the app and its
 # hub say they are. A package with uncommitted changes gets its commit's version, which is never published, since the
@@ -40,6 +43,8 @@ source "$HERE/../build.sh"
 source "$HERE/vpk.sh"
 # The app's icon, a drawing for each size. `docs/spec/components.md` says which style it is.
 ICONSET="$ROOT/apps/desktop/icons/working.iconset"
+# The channel, which names the feed and what people download, as `publish.py` knows them.
+CHANNEL=macos-arm64
 
 # Puts the binaries and NOW_PLAYING in `bins/`, and the bundle's Info.plist and icon beside it, in a directory of
 # their own. They come from `prebuilt` if it's set, and `check` makes sure the binaries are this build.
@@ -130,7 +135,7 @@ package() {
   VERSION="$(version)"
   stamp "$allow_dirty" package
   mkdir -p "$out/releases"
-  check_newer "$out/releases" releases.osx.json
+  check_newer "$out/releases" "releases.$CHANNEL.json"
   # Not local, because the trap outlives this function if anything fails.
   staging="$(mktemp -d)"
   trap 'rm -rf "$staging"' EXIT
@@ -143,19 +148,19 @@ package() {
   # The portable zip and no installer. vpk's installer puts the app in /Applications as root, so every update would
   # then ask for an admin password. The entitlements go in even unsigned, so nothing else can choose them.
   dotnet_here vpk --skip-updates pack --packId "$PACK_ID" --packVersion "$VERSION" --packTitle Roundhouse \
-    --runtime osx-arm64 --packDir "$staging/bins" --mainExe roundhouse-desktop --plist "$staging/Info.plist" \
-    --icon "$staging/AppIcon.icns" --signEntitlements "$HERE/Roundhouse.entitlements" --noInst \
-    --outputDir "$out/releases" ${signing[@]+"${signing[@]}"}
+    --runtime osx-arm64 --channel "$CHANNEL" --packDir "$staging/bins" --mainExe roundhouse-desktop \
+    --plist "$staging/Info.plist" --icon "$staging/AppIcon.icns" --signEntitlements "$HERE/Roundhouse.entitlements" \
+    --noInst --outputDir "$out/releases" ${signing[@]+"${signing[@]}"}
   rm -rf "$out/Roundhouse.app"
-  ditto -x -k "$out/releases/$PACK_ID-osx-Portable.zip" "$out"
+  ditto -x -k "$out/releases/$PACK_ID-$CHANNEL-Portable.zip" "$out"
   signed="$([ -n "$sign" ] && echo yes || echo no)" notarized="$([ -n "$notary" ] && echo yes || echo no)"
   check "$out/Roundhouse.app" "$signed" "$notarized"
-  hub="$out/releases/$(hub_archive_name osx)"
+  hub="$out/releases/$(hub_archive_name "$CHANNEL")"
   hub_archive "$out/Roundhouse.app/Contents/MacOS" "$hub"
   check_hub "$hub" "$out/Roundhouse.app" "$signed" "$notarized"
   echo "Packaged $VERSION, build $BUILD:"
   echo "  $out/Roundhouse.app"
-  echo "  $out/releases/$PACK_ID-osx-Portable.zip"
+  echo "  $out/releases/$PACK_ID-$CHANNEL-Portable.zip"
   echo "  $hub"
   echo "It's a release build, so opening it uses your own hub and data. To try it on throwaway ones, run it directly,"
   echo "since \`open\` doesn't pass the environment on, then stop the hub it started:"

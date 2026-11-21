@@ -5,7 +5,7 @@ use crate::updates::signing::{key_pair, public};
 use fetching::serving::{Reply, Server, serve};
 
 /// The shape `vpk` writes, with one release.
-const FEED: &str = r#"{"Assets":[{"PackageId":"Roundhouse","Version":"0.1.50","Type":"Full","FileName":"Roundhouse-0.1.50-osx-full.nupkg","SHA1":"AD4CF1813CB4589407AEEB7DA69063A25FF84566","SHA256":"0F568A995C5F5474207B3A3225F7B4059D2A268C35ED32310F1083E59CA286B7","Size":18889777}]}"#;
+const FEED: &str = r#"{"Assets":[{"PackageId":"Roundhouse","Version":"0.1.50","Type":"Full","FileName":"Roundhouse-0.1.50-macos-arm64-full.nupkg","SHA1":"AD4CF1813CB4589407AEEB7DA69063A25FF84566","SHA256":"0F568A995C5F5474207B3A3225F7B4059D2A268C35ED32310F1083E59CA286B7","Size":18889777}]}"#;
 
 /// A feed, its signature, and the key that checks it, as the release workflow makes them.
 fn signed(feed: &str) -> (Vec<u8>, Vec<u8>, UpdateFeedKey) {
@@ -15,13 +15,17 @@ fn signed(feed: &str) -> (Vec<u8>, Vec<u8>, UpdateFeedKey) {
 
 /// Serves a feed and its signature, each as a list of replies in turn.
 fn serve_feed(feed: Vec<Reply>, signature: Vec<Reply>) -> Server {
-    serve(vec![("releases.osx.json".to_string(), feed), ("releases.osx.json.sig".to_string(), signature)]).unwrap()
+    serve(vec![
+        ("releases.macos-arm64.json".to_string(), feed),
+        ("releases.macos-arm64.json.sig".to_string(), signature),
+    ])
+    .unwrap()
 }
 
 /// Reads the feed through Velopack's interface, without waiting to read it again.
 fn read_feed(server: &Server, key: UpdateFeedKey) -> Result<VelopackAssetFeed, velopack::Error> {
     let source = SignedSource::waiting(&server.base, key, WorkersToKeep::oldest_at(None), Duration::ZERO);
-    source.get_release_feed("osx", &Manifest::default(), "")
+    source.get_release_feed("macos-arm64", &Manifest::default(), "")
 }
 
 /// The source's own error, which Velopack passes on inside its `Io` variant.
@@ -33,7 +37,7 @@ fn source_error<T: std::fmt::Debug>(result: Result<T, velopack::Error>) -> Sourc
 }
 
 fn asked_for_the_feed(server: &Server) -> usize {
-    server.asked().iter().filter(|path| *path == "releases.osx.json").count()
+    server.asked().iter().filter(|path| *path == "releases.macos-arm64.json").count()
 }
 
 /// Velopack reads the feed as the release workflow publishes it, whatever it says beyond what Velopack knows, such as
@@ -70,7 +74,7 @@ fn the_source_reads_a_feed_signed_with_the_key() {
     let server = serve_feed(vec![Reply::file(feed)], vec![Reply::file(signature)]);
 
     assert_eq!(read_feed(&server, key).unwrap().Assets.len(), 1);
-    assert_eq!(server.asked(), ["releases.osx.json", "releases.osx.json.sig"]);
+    assert_eq!(server.asked(), ["releases.macos-arm64.json", "releases.macos-arm64.json.sig"]);
 }
 
 #[test]
@@ -125,7 +129,7 @@ fn a_feed_longer_than_the_limit_once_decompressed_is_refused() {
 fn a_redirect_is_not_followed() {
     let (feed, signature, key) = signed(FEED);
     let elsewhere = serve_feed(vec![Reply::file(feed)], vec![Reply::file(signature)]);
-    let server = serve_feed(vec![Reply::redirect(&format!("{}/releases.osx.json", elsewhere.base))], vec![]);
+    let server = serve_feed(vec![Reply::redirect(&format!("{}/releases.macos-arm64.json", elsewhere.base))], vec![]);
 
     assert!(matches!(
         source_error(read_feed(&server, key)),
@@ -136,7 +140,7 @@ fn a_redirect_is_not_followed() {
 
 /// A package the feed says is `size` bytes, served as `reply`, downloaded to a file of its own.
 fn download(size: u64, reply: Reply) -> (Result<(), velopack::Error>, tempfile::TempDir) {
-    let name = "Roundhouse-0.1.50-osx-full.nupkg";
+    let name = "Roundhouse-0.1.50-macos-arm64-full.nupkg";
     let server = serve(vec![(name.to_string(), vec![reply])]).unwrap();
     let asset = VelopackAsset { FileName: name.to_string(), Size: size, ..VelopackAsset::default() };
     let dir = tempfile::tempdir().unwrap();

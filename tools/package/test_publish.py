@@ -102,7 +102,7 @@ class Signature(unittest.TestCase):
         full = next(asset for asset in json.loads((FIXTURE / publish.FEED).read_bytes())["Assets"]
                     if asset["Type"] == "Full")
         with tempfile.TemporaryDirectory() as work:
-            archive = Path(work) / f"Roundhouse-{full['Version']}-osx-hub.tar.gz"
+            archive = Path(work) / f"Roundhouse-{full['Version']}-macos-arm64-hub.tar.gz"
             archive.write_bytes(b"hub")
             self.assertEqual(set(full[publish.HUB]), set(publish.described(archive)))
         self.assertEqual(full[publish.HUB]["FileName"], archive.name)
@@ -221,8 +221,8 @@ class Publishing(unittest.TestCase):
         self.assertEqual(self.published(), [("0.1.1", "Full")])
         self.assertEqual(self.store.get(publish.FEED), (work / "feed" / publish.FEED).read_bytes())
         self.assert_packages_match()
-        self.assertEqual(list(publish.DOWNLOADS), ["Roundhouse-osx-Portable.zip"])
-        for download in ("Roundhouse-osx-Portable.zip", "Roundhouse-osx-hub.tar.gz"):
+        self.assertEqual(list(publish.DOWNLOADS), ["Roundhouse-macos-arm64-Portable.zip"])
+        for download in ("Roundhouse-macos-arm64-Portable.zip", "Roundhouse-macos-arm64-hub.tar.gz"):
             self.assertTrue((self.bucket / download).exists(), download)
 
     def test_the_next_release_starts_from_the_newest_full_package_and_adds_to_the_feed(self) -> None:
@@ -477,6 +477,120 @@ class Publishing(unittest.TestCase):
         feeds = sorted(path.name for path in self.bucket.glob("releases.*.json"))
         self.assertEqual(feeds, sorted([publish.FEED, *([publish.OLDER_FEED] if publish.OLDER_FEED else [])]))
 
+    def takes_over(self) -> str:
+        """The older channel's feed, where an app packaged before this channel was named still looks, or skips a test
+        about one on a channel that took over from none."""
+        if publish.OLDER_FEED is None:
+            self.skipTest(f"{publish.CHANNEL} took over from no other channel")
+        return publish.OLDER_FEED
+
+    def full(self, version: str) -> list[dict]:
+        assets = json.loads(self.store.get(publish.FEED))["Assets"]
+        return [entry for entry in assets if entry["Version"] == version and entry["Type"] == "Full"]
+
+    def offered_on_the_older_channel(self) -> list[dict]:
+        older, signature = self.store.get(self.takes_over()), self.store.get(self.takes_over() + ".sig")
+        self.assertIsNotNone(older)
+        self.assertTrue(publish.signed(older, signature, self.key))
+        return json.loads(older)["Assets"]
+
+    def published_on_the_older_channel(self, releases: list[tuple[str, dict[str, int]]]) -> list[dict]:
+        """What the older channel published before this one was named: a full package of each release, whose hub
+        speaks the worker versions given, and a delta to each after the first, in the bucket under a signed feed."""
+        channel = self.takes_over().removeprefix("releases.").removesuffix(".json")
+        assets = []
+        for number, (version, speaks) in enumerate(releases):
+            for kind in ("Full", "Delta")[:1 if number == 0 else 2]:
+                content = f"{kind} {version} of {channel}".encode()
+                entry = {**asset(version, kind, content),
+                         "FileName": f"Roundhouse-{version}-{channel}-{kind.lower()}.nupkg"}
+                if kind == "Full":
+                    entry[publish.WORKER_VERSIONS] = speaks
+                (self.bucket / entry["FileName"]).write_bytes(content)
+                assets.append(entry)
+        (self.bucket / self.takes_over()).write_text(json.dumps({"Assets": assets}))
+        self.sign_file(self.bucket / self.takes_over())
+        return assets
+
+    def merged(self, version: str) -> Path:
+        """A run of the release job that stops before it uploads, with the older channel's feed not signed yet."""
+        work = self.work()
+        publish.prepare(self.store, self.key, version, work)
+        self.pack(work, version)
+        publish.merge(version, 10, SPEAKS, work)
+        self.sign(work)
+        return work
+
+    def test_an_app_on_the_older_channel_is_offered_the_newest_full_package_and_those_it_steps_to(self) -> None:
+        self.takes_over()
+        self.release("0.1.1", speaks={"oldest": 3, "newest": 4})
+        self.release("0.1.2", speaks={"oldest": 4, "newest": 5})
+        self.release("0.1.3", speaks={"oldest": 4, "newest": 5})
+
+        # Not the deltas, which start from the release before, where such an app isn't. Where apps step, also 0.1.1,
+        # the newest whose hub speaks workers of protocol 3, for an app with those at work. Each package is this
+        # channel's, so an app that takes it looks here from then on.
+        offered = [*(self.full("0.1.1") if self.APPS_STEP else []), *self.full("0.1.3")]
+        self.assertEqual(self.offered_on_the_older_channel(), offered)
+        self.assertEqual(self.full("0.1.3")[0]["FileName"], package_name("0.1.3", "Full"))
+        for entry in offered:
+            for file in publish.files_of(entry):
+                self.assertTrue(publish.file_matches(self.bucket / file["FileName"], file), file["FileName"])
+
+    def test_a_first_release_takes_over_the_older_channel_s_feed_so_its_apps_step_as_before(self) -> None:
+        older = self.published_on_the_older_channel([
+            ("0.1.1", {"oldest": 3, "newest": 4}), ("0.1.2", {"oldest": 4, "newest": 5})])
+
+        work = self.release("0.1.3", keep=1, speaks={"oldest": 4, "newest": 5})
+
+        # No delta from the older channel's 0.1.2, which no app would take. 0.1.1 stays, the last before the break,
+        # as the older channel's package.
+        self.assertEqual(self.published(), [("0.1.1", "Full"), ("0.1.3", "Full")])
+        self.assertEqual(self.full("0.1.1"), older[:1])
+        self.assertEqual(self.offered_on_the_older_channel(),
+                         [*(older[:1] if self.APPS_STEP else []), *self.full("0.1.3")])
+        self.assert_packages_match()
+        for gone in older[1:]:
+            self.assertFalse((self.bucket / gone["FileName"]).exists(), gone["FileName"])
+        url = self.serve()
+        publish.check(url, self.key, "0.1.3", work, wait=0)
+        if self.APPS_STEP:
+            (self.bucket / older[0]["FileName"]).unlink()
+            with self.assertRaisesRegex(Refused, f"{older[0]['FileName']} is missing"):
+                publish.check(url, self.key, "0.1.3", work, wait=0)
+
+    def test_an_older_channel_s_feed_that_isnt_signed_or_offers_more_is_refused_before_anything_goes_up(self) -> None:
+        older_feed = self.takes_over()
+        self.release("0.1.1")
+        work = self.merged("0.1.2")
+        older = publish.bridge("0.1.2", work)
+        assert older is not None
+
+        with self.assertRaisesRegex(Refused, f"{older_feed} isn't signed"):
+            publish.upload(self.store, self.key, "0.1.2", work)
+
+        merged = json.loads((work / "feed" / publish.FEED).read_bytes())["Assets"]
+        older.write_text(json.dumps({"Assets": [entry for entry in merged if entry["Version"] == "0.1.2"]}))
+        self.sign_file(older)
+        with self.assertRaisesRegex(Refused, "should offer only 0.1.2's full package"):
+            publish.upload(self.store, self.key, "0.1.2", work)
+
+        self.assertEqual(self.published(), [("0.1.1", "Full")])
+        self.assertEqual(self.offered_on_the_older_channel(), self.full("0.1.1"))
+        self.assertFalse((self.bucket / package_name("0.1.2", "Full")).exists())
+
+    def test_the_check_reads_the_older_channel_s_feed_as_apps_do(self) -> None:
+        older_feed = self.takes_over()
+        first = self.release("0.1.1")
+        work = self.release("0.1.2")
+        url = self.serve()
+        publish.check(url, self.key, "0.1.2", work, wait=0)
+
+        for name in (older_feed, older_feed + ".sig"):
+            shutil.copyfile(first / "bridge" / name, self.bucket / name)
+        with self.assertRaisesRegex(Refused, f"doesn't serve the {older_feed} this run published"):
+            publish.check(url, self.key, "0.1.2", work, attempts=2, wait=0)
+
     def test_a_run_starts_from_an_empty_directory(self) -> None:
         work = self.release("0.1.1")
         with self.assertRaisesRegex(Refused, "start from an empty directory"):
@@ -540,7 +654,7 @@ class BesideAnother:
         # Publishing's, which comes after this in each platform's bases.
         super().setUp()
         publish.use_channel(self.CHANNEL)
-        self.addCleanup(publish.use_channel, "osx")
+        self.addCleanup(publish.use_channel, "macos-arm64")
 
     def test_the_first_release_publishes_a_signed_feed_with_its_package(self) -> None:
         self.release("0.1.1")
@@ -574,70 +688,9 @@ class Windows(BesideAnother, Publishing):
     CHANNEL = "win-amd64"
     # A Windows hub's workers stop with it, so its apps take the newest.
     APPS_STEP = False
-    BESIDE = "osx"
+    BESIDE = "macos-arm64"
     PACKAGE = "Roundhouse-0.1.1-win-amd64-full.nupkg"
     DOWNLOADS = ("Roundhouse-win-amd64-Setup.exe", "Roundhouse-win-amd64-Portable.zip")
-    # What amd64 Windows was called before, where an app packaged then still looks.
-    OLDER = "releases.win.json"
-
-    def full(self, version: str) -> list[dict]:
-        assets = json.loads(self.store.get(publish.FEED))["Assets"]
-        return [entry for entry in assets if entry["Version"] == version and entry["Type"] == "Full"]
-
-    def offered_on_the_older_channel(self) -> list[dict]:
-        older, signature = self.store.get(self.OLDER), self.store.get(self.OLDER + ".sig")
-        self.assertIsNotNone(older)
-        self.assertTrue(publish.signed(older, signature, self.key))
-        return json.loads(older)["Assets"]
-
-    def merged(self, version: str) -> Path:
-        """A run of the release job that stops before it uploads, with the older channel's feed not signed yet."""
-        work = self.work()
-        publish.prepare(self.store, self.key, version, work)
-        self.pack(work, version)
-        publish.merge(version, 10, SPEAKS, work)
-        self.sign(work)
-        return work
-
-    def test_an_app_on_the_older_channel_is_offered_only_the_newest_full_package(self) -> None:
-        self.release("0.1.1")
-        self.release("0.1.2")
-
-        # Not the delta, which starts from 0.1.1, where such an app isn't. The package is this channel's, so an app
-        # that takes it looks here from then on.
-        self.assertEqual(self.offered_on_the_older_channel(), self.full("0.1.2"))
-        self.assertEqual(self.full("0.1.2")[0]["FileName"], "Roundhouse-0.1.2-win-amd64-full.nupkg")
-        self.assertTrue(publish.file_matches(self.bucket / self.full("0.1.2")[0]["FileName"], self.full("0.1.2")[0]))
-
-    def test_an_older_channel_s_feed_that_isnt_signed_or_offers_more_is_refused_before_anything_goes_up(self) -> None:
-        self.release("0.1.1")
-        work = self.merged("0.1.2")
-        older = publish.bridge("0.1.2", work)
-        assert older is not None
-
-        with self.assertRaisesRegex(Refused, "releases.win.json isn't signed"):
-            publish.upload(self.store, self.key, "0.1.2", work)
-
-        merged = json.loads((work / "feed" / publish.FEED).read_bytes())["Assets"]
-        older.write_text(json.dumps({"Assets": [entry for entry in merged if entry["Version"] == "0.1.2"]}))
-        self.sign_file(older)
-        with self.assertRaisesRegex(Refused, "should offer only 0.1.2's full package"):
-            publish.upload(self.store, self.key, "0.1.2", work)
-
-        self.assertEqual(self.published(), [("0.1.1", "Full")])
-        self.assertEqual(self.offered_on_the_older_channel(), self.full("0.1.1"))
-        self.assertFalse((self.bucket / package_name("0.1.2", "Full")).exists())
-
-    def test_the_check_reads_the_older_channel_s_feed_as_apps_do(self) -> None:
-        first = self.release("0.1.1")
-        work = self.release("0.1.2")
-        url = self.serve()
-        publish.check(url, self.key, "0.1.2", work, wait=0)
-
-        for name in (self.OLDER, self.OLDER + ".sig"):
-            shutil.copyfile(first / "bridge" / name, self.bucket / name)
-        with self.assertRaisesRegex(Refused, "doesn't serve the releases.win.json this run published"):
-            publish.check(url, self.key, "0.1.2", work, attempts=2, wait=0)
 
 
 class WindowsOnArm(BesideAnother, Publishing):

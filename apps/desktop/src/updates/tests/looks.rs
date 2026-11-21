@@ -5,7 +5,7 @@ pub(super) const LOOK_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// What `vpk` puts in an app it packages, as this test's app at 0.1.5.
 const MANIFEST: &str = r#"<?xml version="1.0" encoding="utf-8"?>
-<package><metadata><id>Roundhouse</id><version>0.1.5</version><channel>osx</channel><mainExe>roundhouse-desktop</mainExe></metadata></package>"#;
+<package><metadata><id>Roundhouse</id><version>0.1.5</version><channel>macos-arm64</channel><mainExe>roundhouse-desktop</mainExe></metadata></package>"#;
 
 /// An app Velopack installed at 0.1.5, in a directory of its own, and where it keeps downloaded packages.
 pub(super) fn installed() -> (tempfile::TempDir, VelopackLocatorConfig) {
@@ -34,7 +34,7 @@ fn hex(bytes: &[u8]) -> String {
 }
 
 pub(super) fn package_name(version: &str) -> String {
-    format!("Roundhouse-{version}-osx-full.nupkg")
+    format!("Roundhouse-{version}-macos-arm64-full.nupkg")
 }
 
 /// Publishes a full package for each release, in a feed `signer` signs, and serves each package as its reply.
@@ -67,8 +67,8 @@ pub(super) fn publish_speaking(releases: &[(&str, &[u8], Reply, Option<Versions>
     let feed = serde_json::to_vec(&serde_json::json!({ "Assets": assets })).unwrap();
     let signature = signer.sign(&feed).as_ref().to_vec();
     let mut paths = vec![
-        ("releases.osx.json".to_string(), vec![Reply::file(feed)]),
-        ("releases.osx.json.sig".to_string(), vec![Reply::file(signature)]),
+        ("releases.macos-arm64.json".to_string(), vec![Reply::file(feed)]),
+        ("releases.macos-arm64.json.sig".to_string(), vec![Reply::file(signature)]),
     ];
     paths.extend(releases.iter().map(|(version, _, reply, _)| (package_name(version), vec![reply.clone()])));
     serve(paths).unwrap()
@@ -167,7 +167,7 @@ fn a_server_that_isnt_there_is_out_of_reach() {
 
 /// How many times the server was asked for the update feed, which is once a look.
 pub(super) fn feeds_read(server: &Server) -> usize {
-    server.asked().iter().filter(|path| *path == "releases.osx.json").count()
+    server.asked().iter().filter(|path| *path == "releases.macos-arm64.json").count()
 }
 
 #[test]

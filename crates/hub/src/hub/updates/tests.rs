@@ -21,8 +21,7 @@ use crate::versions::WORKERS;
 /// A full package, with the archive of its hub if `archive`, whose hub speaks the workers this build's hub starts.
 fn release(version: &str, archive: bool) -> String {
     let speaks = format!(r#"{{"oldest":{},"newest":{}}}"#, WORKERS.newest, WORKERS.newest);
-    let hub =
-        format!(r#","Hub":{{"FileName":"Roundhouse-{version}-osx-hub.tar.gz","Size":9,"SHA1":"A","SHA256":"B"}}"#);
+    let hub = format!(r#","Hub":{{"FileName":"{}","Size":9,"SHA1":"A","SHA256":"B"}}"#, archive_name(version));
     let hub = if archive { hub.as_str() } else { "" };
     format!(r#"{{"Version":"{version}","Type":"Full","WorkerVersions":{speaks}{hub}}}"#)
 }
@@ -33,7 +32,9 @@ fn served(releases: &[String], signed_by: Option<UpdateFeedKey>) -> UpdateFeed {
     served_beside(releases, signed_by, Vec::new())
 }
 
-/// The same, with each of `files` served beside it, as a release's archive is.
+/// The same, with each of `files` served beside it, as a release's archive is. The feed is the Mac's older channel's,
+/// `osx`, where a hub built before the Mac's was renamed `macos-arm64` reads, and the archives it lists are the newer
+/// channel's, as `bridge` in `tools/package/publish.py` lists them, so every test here is one of such a hub updating.
 fn served_beside(releases: &[String], signed_by: Option<UpdateFeedKey>, files: Vec<(String, Reply)>) -> UpdateFeed {
     let pkcs8 = Ed25519KeyPair::generate_pkcs8(&SystemRandom::new()).unwrap();
     let pair = Ed25519KeyPair::from_pkcs8(pkcs8.as_ref()).unwrap();
@@ -119,7 +120,7 @@ async fn a_hub_that_hasnt_read_the_feed_lists_no_update() {
 
 /// The name the feed gives `version`'s archive.
 fn archive_name(version: &str) -> String {
-    format!("Roundhouse-{version}-osx-hub.tar.gz")
+    format!("Roundhouse-{version}-macos-arm64-hub.tar.gz")
 }
 
 /// A full package of `version`, as [`release`] makes one, whose archive is `archive`.
