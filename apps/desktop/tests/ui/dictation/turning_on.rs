@@ -11,8 +11,8 @@ use dictation::fake::FakeEngine;
 use fetching::serving::{Reply, serve};
 use gpui_kit::TestAppContext;
 
+use super::support::open_voice_settings;
 use super::support::{SCRIPT, choose, says, status, use_model};
-use crate::settings::open_settings;
 use crate::support::made_up_model::{made_up, put};
 use crate::support::{Stack, Ui};
 
@@ -34,7 +34,7 @@ fn turning_it_on_downloads_and_prepares_the_model_and_the_microphone_dictates_on
         Ok(FakeEngine::new(SCRIPT))
     });
 
-    open_settings(&mut ui);
+    open_voice_settings(&mut ui);
     assert_eq!(status(&mut ui), None, "nothing to say while it asks first, with no model here");
     choose(&mut ui, "On");
     says(&mut ui, "Preparing the model.");
@@ -45,7 +45,7 @@ fn turning_it_on_downloads_and_prepares_the_model_and_the_microphone_dictates_on
 
     go.send(()).unwrap();
     ui.wait("the microphone to dictate", |ui| ui.shows_label(MICROPHONE, "Dictate"));
-    open_settings(&mut ui);
+    open_voice_settings(&mut ui);
     says(&mut ui, "Ready. The model is on this Mac, 0.0 GB.");
     choose(&mut ui, "Off");
     says(&mut ui, "The model is still on this Mac");
@@ -64,7 +64,7 @@ fn a_download_cut_short_says_so_and_retry_goes_on_from_what_came(cx: &mut TestAp
     let models = tempfile::tempdir().unwrap();
     use_model(&mut ui, models.path(), files, &server.base, |_| Ok(FakeEngine::new(SCRIPT)));
 
-    open_settings(&mut ui);
+    open_voice_settings(&mut ui);
     choose(&mut ui, "On");
     says(&mut ui, "Couldn't download the model: the connection was lost.");
     ui.click(RETRY);
@@ -89,7 +89,7 @@ fn a_model_that_wont_load_says_why_and_retry_tries_again(cx: &mut TestAppContext
         }
     });
 
-    open_settings(&mut ui);
+    open_voice_settings(&mut ui);
     choose(&mut ui, "On");
     says(&mut ui, "Couldn't prepare the model: its files are damaged.");
     ui.click(RETRY);
@@ -108,7 +108,7 @@ fn turning_it_off_stops_the_download_and_keeps_what_came(cx: &mut TestAppContext
     let part = files.dir(models.path()).join("coreml/vocab.json.part");
     let came = || std::fs::metadata(&part).map_or(0, |found| found.len());
 
-    open_settings(&mut ui);
+    open_voice_settings(&mut ui);
     choose(&mut ui, "On");
     says(&mut ui, "Downloading the model.");
     ui.wait("what was sent to be written", |_| came() == 100_000);

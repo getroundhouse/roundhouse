@@ -148,6 +148,7 @@ pub(crate) const SCREENS: &[Screen] = &[
             Step::Select(FOCUS),
             Step::StallDictationDownload,
             Step::OpenSettings,
+            Step::Click("settings-page-voice"),
             Step::Click("settings-dictation"),
             Step::ClickItem("On"),
             Step::WaitFor(STATUS),

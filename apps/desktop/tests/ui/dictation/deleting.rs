@@ -7,8 +7,8 @@ use fetching::FolderLock;
 use fetching::serving::{Reply, serve};
 use gpui_kit::TestAppContext;
 
+use super::support::open_voice_settings;
 use super::support::{SCRIPT, choose, says, status, use_model};
-use crate::settings::open_settings;
 use crate::support::made_up_model::{made_up, put};
 use crate::support::{Stack, Ui};
 
@@ -21,7 +21,7 @@ fn deleting_the_model_while_its_on_turns_dictation_off_and_takes_its_files(cx: &
     put(models.path(), &files, &files.files[0], &bodies[0]);
     use_model(&mut ui, models.path(), files, "http://127.0.0.1:9", |_| Ok(FakeEngine::new(SCRIPT)));
 
-    open_settings(&mut ui);
+    open_voice_settings(&mut ui);
     choose(&mut ui, "On");
     says(&mut ui, "Ready.");
     ui.click(DELETE);
@@ -40,7 +40,7 @@ fn turning_it_on_while_the_model_is_deleted_downloads_it_again_once_its_gone(cx:
     let models = tempfile::tempdir().unwrap();
     put(models.path(), &files, &files.files[0], &bodies[0]);
     use_model(&mut ui, models.path(), files, &server.base, |_| Ok(FakeEngine::new(SCRIPT)));
-    open_settings(&mut ui);
+    open_voice_settings(&mut ui);
     choose(&mut ui, "On");
     says(&mut ui, "Ready.");
 

@@ -8,7 +8,7 @@ use std::sync::Arc;
 use client_core::conversation::{FromVoice, Readiness, ToVoice, Voice, VoiceText};
 use models::{Fetched, ModelFiles, Progress};
 use parking_lot::Mutex;
-use phonon::{MODEL, Phonon};
+use phonon::{MODEL, Phonon, Speed};
 use speaking::{Speaking, SpeakingError, TextId, Update};
 
 /// The voice's files, as [`Voices`] keeps them in its folder, such as for a test to put stand-ins for them there.
@@ -33,6 +33,8 @@ struct Shared {
     ready: Mutex<Readiness>,
     /// Whether the files are being fetched now.
     fetching: Mutex<bool>,
+    /// How fast every voice speaks, from the next thing it says on.
+    speed: Mutex<Speed>,
     /// A test's voice, which has no files and reads nothing.
     silent: bool,
     /// Holds one signal at a time, so changes nobody has looked at gather into one.
@@ -61,7 +63,8 @@ impl Voices {
     fn made(model_dir: PathBuf, here: &'static str, from: String, silent: bool) -> Self {
         let (tell, changed) = flume::bounded(1);
         let (on, ready, fetching) = (Mutex::new(false), Mutex::new(Readiness::NotOn), Mutex::new(false));
-        Self { shared: Arc::new(Shared { model_dir, from, here, on, ready, fetching, silent, tell, changed }) }
+        let speed = Mutex::new(Speed::default());
+        Self { shared: Arc::new(Shared { model_dir, from, here, on, ready, fetching, speed, silent, tell, changed }) }
     }
 
     /// Turns speech on, as the person did, and fetches Phonon's files unless they're here or being fetched, as trying
@@ -98,6 +101,17 @@ impl Voices {
         if std::mem::replace(&mut *self.shared.on.lock(), false) {
             let _ = self.shared.tell.try_send(());
         }
+    }
+
+    /// Has every voice speak at `speed`, as the person chose, from the next text each is given on: the next reply, or
+    /// the rest of one still being written.
+    pub fn set_speed(&self, speed: Speed) {
+        *self.shared.speed.lock() = speed;
+    }
+
+    /// How fast every voice speaks.
+    pub fn speed(&self) -> Speed {
+        *self.shared.speed.lock()
     }
 
     /// Fetches the files, saying how far as it goes.
@@ -140,7 +154,7 @@ impl Voices {
     pub fn voice(&self) -> Spoken {
         let dir = MODEL.dir(&self.shared.model_dir);
         let speaking = (!self.shared.silent).then(|| Speaking::start(move || Phonon::load(&dir)).ok()).flatten();
-        Spoken { speaking, voices: self.clone(), never: flume::bounded(0) }
+        Spoken { speaking, voices: self.clone(), speed: Speed::default(), never: flume::bounded(0) }
     }
 }
 
@@ -149,6 +163,8 @@ pub struct Spoken {
     /// `None` when its thread couldn't start, so it reads nothing.
     speaking: Option<Speaking>,
     voices: Voices,
+    /// The speed its thread was last told, which starts at the default, as the thread does.
+    speed: Speed,
     /// What says nothing, while it's kept, in place of what a voice that couldn't start would say.
     never: (flume::Sender<Update>, flume::Receiver<Update>),
 }
@@ -159,7 +175,14 @@ impl Voice for Spoken {
     fn act(&mut self, what: ToVoice) {
         let Some(speaking) = &self.speaking else { return };
         match what {
-            ToVoice::Say { text, at, more } => speaking.say(TextId(text.0), at, &more),
+            ToVoice::Say { text, at, more } => {
+                // Told before what's said, so the thread makes it at the speed chosen now.
+                let speed = self.voices.speed();
+                if std::mem::replace(&mut self.speed, speed) != speed {
+                    speaking.set_speed(speed);
+                }
+                speaking.say(TextId(text.0), at, &more);
+            }
             ToVoice::End(text) => speaking.end(TextId(text.0)),
             ToVoice::Stop => speaking.stop(),
         }
@@ -188,7 +211,8 @@ impl Voice for Spoken {
                 None
             }
             // A phrase passed over, or speakers that stopped working, which open again for the next.
-            Update::Failed(SpeakingError::Phrase(_) | SpeakingError::Speakers(_)) => None,
+            // Or a speed the voice couldn't change to, so it speaks as it did.
+            Update::Failed(SpeakingError::Phrase(_) | SpeakingError::Speakers(_) | SpeakingError::Speed(_)) => None,
         }
     }
 

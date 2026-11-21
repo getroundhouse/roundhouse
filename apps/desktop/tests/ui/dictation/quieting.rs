@@ -5,8 +5,8 @@
 use gpui_kit::{ScrollDelta, TestAppContext, point, px};
 use sound::Quieting;
 
+use super::support::open_voice_settings;
 use super::support::{dictating, hold_option_space, let_go, press_space, ready};
-use crate::settings::open_settings;
 use crate::support::{Stack, Ui};
 use desktop::workspace_pane::{SPACE_DICTATES_AFTER, SPACE_LISTENS_AFTER};
 
@@ -20,9 +20,9 @@ fn quieted(ui: &mut Ui) -> Vec<Quieting> {
     Quieting::ALL.into_iter().filter(|how| quiets(ui, *how)).collect()
 }
 
-/// Chooses the switch for `how` in Settings, at the bottom of General, and goes back to the composer.
+/// Chooses the switch for `how` in Settings, at the bottom of Voice, and goes back to the composer.
 fn choose(ui: &mut Ui, how: Quieting) {
-    open_settings(ui);
+    open_voice_settings(ui);
     ui.scroll("settings-body", ScrollDelta::Pixels(point(px(0.), px(-10_000.))));
     ui.click_label(match how {
         Quieting::MuteOutput => "Mute sound while dictating",

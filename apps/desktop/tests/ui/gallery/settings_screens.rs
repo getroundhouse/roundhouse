@@ -18,7 +18,10 @@ const FIND: &str = "secondary-f";
 /// Shows Agents, once Settings is open.
 const AGENTS: Step = Step::Click("settings-page-agents");
 
-/// Opens Dictation's choices, once Settings is open, for [`ON`] or [`OFF`] to choose from.
+/// Shows Voice, where dictation and speech are, once Settings is open.
+const VOICE: Step = Step::Click("settings-page-voice");
+
+/// Opens Dictation's choices, once Voice shows, for [`ON`] or [`OFF`] to choose from.
 const DICTATION: Step = Step::Click("settings-dictation");
 const ON: Step = Step::ClickItem("On");
 const OFF: Step = Step::ClickItem("Off");
@@ -179,6 +182,13 @@ pub(crate) const SCREENS: &[Screen] = &[
         steps: &[Step::Select(FOCUS), Step::OpenSettings, AGENTS, Step::WaitFor("accounts-older-hub")],
     },
     Screen {
+        name: "settings-voice",
+        spec: "settings.md",
+        world: Some(conversation),
+        frame: Frame::Layout,
+        steps: &[Step::Select(FOCUS), Step::OpenSettings, VOICE, Step::WaitFor("settings-speech-speed")],
+    },
+    Screen {
         name: "settings-dictation-downloading",
         spec: "settings.md",
         world: Some(conversation),
@@ -187,6 +197,7 @@ pub(crate) const SCREENS: &[Screen] = &[
             Step::Select(FOCUS),
             Step::StallDictationDownload,
             Step::OpenSettings,
+            VOICE,
             DICTATION,
             ON,
             Step::WaitFor(STATUS),
@@ -201,6 +212,7 @@ pub(crate) const SCREENS: &[Screen] = &[
             Step::Select(FOCUS),
             Step::DictationModelHere,
             Step::OpenSettings,
+            VOICE,
             DICTATION,
             OFF,
             Step::WaitFor(DELETE),
@@ -215,6 +227,7 @@ pub(crate) const SCREENS: &[Screen] = &[
             Step::Select(FOCUS),
             Step::DictationModelHere,
             Step::OpenSettings,
+            VOICE,
             DICTATION,
             ON,
             Step::WaitFor(DELETE),
@@ -229,6 +242,7 @@ pub(crate) const SCREENS: &[Screen] = &[
             Step::Select(FOCUS),
             Step::FailDictationDownload,
             Step::OpenSettings,
+            VOICE,
             DICTATION,
             ON,
             Step::WaitFor(RETRY),

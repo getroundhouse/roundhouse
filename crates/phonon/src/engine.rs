@@ -1,13 +1,19 @@
 //! The engine, loaded, and the speech it makes of a text.
 
+use std::collections::HashMap;
 use std::path::Path;
 
 use ptts::checkpoint::{Checkpoint, ResolveOptions};
 use ptts::preprocess::Lang;
 use ptts::synth::{DeviceKind, Quant, SpeechOptions, SpeechStream, Synth};
 
+use crate::Speed;
+
 /// The voice it speaks in: the model's own, from its files.
 const VOICE: &str = "default";
+
+/// The model's condition that says how much time it gives each sound, which [`Speed`] sets.
+const DURATION: &str = "duration_delta";
 
 /// Phonon 31m, on the CPU, in its own voice. It can be used from any thread, and speaks one text at a time.
 pub struct Phonon {
@@ -27,10 +33,23 @@ impl Phonon {
         let mut synth = checkpoint.builder(Lang::En).device(DeviceKind::Cpu).build()?;
         checkpoint.register_voices(&mut synth);
         let phonon = Self { synth };
-        for audio in phonon.speak("Hi.")? {
+        phonon.make_ready()?;
+        Ok(phonon)
+    }
+
+    /// Speaks at `speed` from the next text on. The voice is made ready again, as loading does, since changing its
+    /// pace undoes that, so the next phrase is as quick to start as any.
+    pub fn set_speed(&mut self, speed: Speed) -> Result<(), PhononError> {
+        self.synth.set_conditions(HashMap::from([(DURATION.to_string(), speed.duration_delta().to_string())]))?;
+        self.make_ready()
+    }
+
+    /// Speaks a word, and drops it, which readies the voice for what's said next.
+    fn make_ready(&self) -> Result<(), PhononError> {
+        for audio in self.speak("Hi.")? {
             audio?;
         }
-        Ok(phonon)
+        Ok(())
     }
 
     /// The rate of the audio it makes, in samples a second.

@@ -1,6 +1,6 @@
 //! What the thread speaks with and plays through, as traits, so its tests can stand in for the model and the device.
 
-use phonon::{Phonon, PhononError};
+use phonon::{Phonon, PhononError, Speed};
 use sound::{Played, Speakers};
 
 /// A phrase's audio, a piece at a time as it's made, in one channel at its voice's rate.
@@ -13,6 +13,9 @@ pub(crate) trait Voice {
 
     /// Starts saying `text`. Dropping what it gives stops the rest being made.
     fn speak(&self, text: &str) -> Result<Speech, PhononError>;
+
+    /// Speaks at `speed` from the next text on.
+    fn set_speed(&mut self, speed: Speed) -> Result<(), PhononError>;
 }
 
 impl Voice for Phonon {
@@ -22,6 +25,10 @@ impl Voice for Phonon {
 
     fn speak(&self, text: &str) -> Result<Speech, PhononError> {
         Ok(Box::new(Self::speak(self, text)?))
+    }
+
+    fn set_speed(&mut self, speed: Speed) -> Result<(), PhononError> {
+        Self::set_speed(self, speed)
     }
 }
 

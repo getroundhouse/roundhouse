@@ -10,4 +10,6 @@ mod conversations;
 mod voices;
 
 pub use conversations::Conversations;
+/// How fast the voice speaks, which an app keeps as the person chose and hands to [`Voices::set_speed`].
+pub use phonon::Speed;
 pub use voices::{FILES, Spoken, Voices};

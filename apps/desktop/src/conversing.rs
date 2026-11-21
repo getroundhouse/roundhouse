@@ -52,10 +52,12 @@ fn use_voices(voices: Voices, cx: &mut App) {
     follow_the_choice(cx);
 }
 
-/// Turns speech on or off as the person chose, once that changes.
+/// Turns speech on or off, and has it read at the speed, as the person chose, once either changes.
 fn follow_the_choice(cx: &mut App) {
-    let on = crate::settings::get(cx).speech == Choice::On;
+    let settings = crate::settings::get(cx);
+    let on = settings.speech == Choice::On;
     cx.update_global::<Speech, _>(|speech, _| {
+        speech.voices.set_speed(settings.speech_speed);
         if speech.on != on {
             speech.on = on;
             if on { speech.voices.turn_on() } else { speech.voices.turn_off() }

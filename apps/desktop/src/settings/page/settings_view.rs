@@ -1,4 +1,4 @@
-use super::{agents, general, git, notifications, providers, rows, sidebar};
+use super::{agents, general, git, notifications, providers, rows, sidebar, voice};
 use crate::FindSetting;
 use crate::app::TOP_STRIP;
 use crate::status_box::StatusBox;
@@ -181,6 +181,7 @@ fn matches(search: &str, said: &[&str]) -> bool {
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(crate) enum PageId {
     General,
+    Voice,
     Notifications,
     Agents,
     Git,
@@ -192,6 +193,7 @@ impl PageId {
     pub(super) fn row_id(self) -> &'static str {
         match self {
             PageId::General => "settings-page-general",
+            PageId::Voice => "settings-page-voice",
             PageId::Notifications => "settings-page-notifications",
             PageId::Agents => "settings-page-agents",
             PageId::Git => "settings-page-git",
@@ -248,8 +250,9 @@ pub(super) struct Section {
 
 /// Every page, under its heading.
 pub(super) fn sections(hub: &OfHub) -> Vec<Section> {
-    let pages =
-        vec![general::page(hub), notifications::page(), agents::page(hub), git::page(hub), providers::page(hub)];
+    let mut pages = vec![general::page(hub)];
+    pages.extend(voice::page());
+    pages.extend([notifications::page(), agents::page(hub), git::page(hub), providers::page(hub)]);
     vec![Section { heading: "Personal", pages }]
 }
 
