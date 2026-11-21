@@ -1,11 +1,8 @@
 //! How dictation stands, in words, as the box Settings draws under the setting, and the composer's microphone opens
 //! while dictation isn't ready, as `docs/spec/settings.md` says.
 
-use std::io;
-
 use gpui_kit::App;
 use gpui_kit::assets::IconName as Lucide;
-use models::{CheckError, DownloadError, FetchError};
 
 use super::readiness::{self, Failure, Readiness};
 use super::{deleting, downloading};
@@ -78,35 +75,10 @@ pub(crate) fn status_box(cx: &App) -> Option<StatusBox> {
 /// What failed, as the step that did, and why, in a few words.
 fn failed(failure: &Failure) -> (&'static str, String) {
     match failure {
-        Failure::Download(e) => ("Couldn't download the model:", why_it_didnt_come(e)),
+        Failure::Download(e) => ("Couldn't download the model:", e.why("this Mac")),
         Failure::Start(e) => ("Couldn't start dictation:", format!("{e}.")),
         Failure::Prepare(e) => ("Couldn't prepare the model:", format!("{e}.")),
     }
-}
-
-fn why_it_didnt_come(download: &DownloadError) -> String {
-    let fetch = match download {
-        DownloadError::Folder(folder) => return not_saved(&folder.source),
-        DownloadError::Check(CheckError::NotTheFile { .. }) => return "what came wasn't the file it should be.".into(),
-        DownloadError::Check(CheckError::Fetch(fetch)) => fetch,
-    };
-    if fetch.timed_out() {
-        return "the connection stalled.".to_string();
-    }
-    match fetch {
-        FetchError::Request { .. } => "Hugging Face couldn't be reached.".to_string(),
-        FetchError::Status { status, .. } => format!("Hugging Face answered {status}."),
-        FetchError::Read { .. } | FetchError::CutShort { .. } => "the connection was lost.".to_string(),
-        FetchError::TooLong { .. } => "what came wasn't the file it should be.".to_string(),
-        FetchError::Save { source, .. } => not_saved(source),
-    }
-}
-
-fn not_saved(source: &io::Error) -> String {
-    if source.kind() == io::ErrorKind::StorageFull {
-        return "there isn't room for it on this Mac.".to_string();
-    }
-    format!("it couldn't be saved: {source}.")
 }
 
 /// `bytes` in gigabytes, to a tenth.
@@ -117,19 +89,12 @@ pub(crate) fn gigabytes(bytes: u64) -> String {
 
 #[cfg(test)]
 mod tests {
-    use std::io;
-
-    use super::{gigabytes, not_saved};
+    use super::gigabytes;
 
     #[test]
     fn gigabytes_are_to_a_tenth() {
         assert_eq!(gigabytes(dictation::nemotron::MODEL.size_bytes()), "2.4");
         assert_eq!(gigabytes(0), "0.0");
         assert_eq!(gigabytes(1_249_999_999), "1.2");
-    }
-
-    #[test]
-    fn a_full_disk_says_so() {
-        assert_eq!(not_saved(&io::Error::from(io::ErrorKind::StorageFull)), "there isn't room for it on this Mac.");
     }
 }

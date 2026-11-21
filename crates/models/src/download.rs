@@ -3,7 +3,7 @@ use std::ops::ControlFlow;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use fetching::{CheckError, Expected, Fetched, Fetcher, FolderLock};
+use fetching::{CheckError, Expected, FetchError, Fetched, Fetcher, FolderLock};
 
 use super::ModelFiles;
 
@@ -25,6 +25,38 @@ pub enum DownloadError {
     Folder(#[from] FolderError),
     #[error(transparent)]
     Check(#[from] CheckError),
+}
+
+impl DownloadError {
+    /// Why the model didn't come, in a few words for a person, finishing a sentence such as "Couldn't download the
+    /// model:", with `here` naming the device, such as "this Mac".
+    pub fn why(&self, here: &str) -> String {
+        let fetch = match self {
+            DownloadError::Folder(folder) => return not_saved(&folder.source, here),
+            DownloadError::Check(CheckError::NotTheFile { .. }) => {
+                return "what came wasn't the file it should be.".into();
+            }
+            DownloadError::Check(CheckError::Fetch(fetch)) => fetch,
+        };
+        if fetch.timed_out() {
+            return "the connection stalled.".to_string();
+        }
+        match fetch {
+            FetchError::Request { .. } => "Hugging Face couldn't be reached.".to_string(),
+            FetchError::Status { status, .. } => format!("Hugging Face answered {status}."),
+            FetchError::Read { .. } | FetchError::CutShort { .. } => "the connection was lost.".to_string(),
+            FetchError::TooLong { .. } => "what came wasn't the file it should be.".to_string(),
+            FetchError::Save { source, .. } => not_saved(source, here),
+        }
+    }
+}
+
+/// Why a file couldn't be saved on the device `here`.
+pub(crate) fn not_saved(source: &io::Error, here: &str) -> String {
+    if source.kind() == io::ErrorKind::StorageFull {
+        return format!("there isn't room for it on {here}.");
+    }
+    format!("it couldn't be saved: {source}.")
 }
 
 /// A folder of the model's that couldn't be used, which is how deleting it fails.

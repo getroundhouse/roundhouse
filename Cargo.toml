@@ -26,6 +26,7 @@ members = [
     "crates/sound",
     "crates/phonon",
     "crates/speaking",
+    "crates/conversation",
     "crates/update-feed",
     "crates/windows-icon",
     "crates/waiting",
@@ -64,6 +65,7 @@ default-members = [
     "crates/sound",
     "crates/phonon",
     "crates/speaking",
+    "crates/conversation",
     "crates/update-feed",
     "crates/windows-icon",
     "crates/waiting",
@@ -115,6 +117,7 @@ fetching = { path = "crates/fetching" }
 models = { path = "crates/models" }
 sound = { path = "crates/sound" }
 phonon = { path = "crates/phonon" }
+speaking = { path = "crates/speaking" }
 now-playing = { path = "crates/now-playing" }
 update-feed = { path = "crates/update-feed" }
 windows-icon = { path = "crates/windows-icon" }
