@@ -272,8 +272,11 @@ async fn a_terminal_being_stopped_keeps_its_job_recorded_until_the_job_has_ended
     let mut hub = Hub::start_with(dir.path(), timers).await;
     hub.open("t", dir.path()).await;
     let hupped = dir.path().join("hupped");
-    // It notes the hangup and runs on, until it's killed.
-    let job = format!(r#"sh -c 'trap ": > {}" HUP; echo "job $$"; while :; do sleep 60; done'"#, hupped.display());
+    // It notes the hangup and runs on, until it's killed. It waits on its `sleep` with `wait`, which a hangup interrupts,
+    // since `sh` holds a trap until the command it runs in front ends. A hangup that comes before `sleep` has started
+    // doesn't end that `sleep`, which would hold the note for a minute.
+    let job =
+        format!(r#"sh -c 'trap ": > {}" HUP; echo "job $$"; while :; do sleep 60 & wait $!; done'"#, hupped.display());
     hub.type_in("t", &job).await;
     let job = hub.until_pid("job ").await;
     until_recorded(dir.path(), "terminal-t.front.pid", Some(job)).await;
