@@ -20,6 +20,7 @@ mod speech_row;
 mod stand_in_hub;
 #[cfg(test)]
 mod tests;
+mod voice;
 
 mod settings_view;
 pub(crate) use settings_view::{Asking, FIND_KEY, KEY_CONTEXT, OfHub, PageId, page};

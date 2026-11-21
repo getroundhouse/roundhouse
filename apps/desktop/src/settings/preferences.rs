@@ -67,6 +67,9 @@ pub(crate) struct Settings {
     /// until the person chooses, as dictation does, since turning it on downloads the voice.
     #[serde(default)]
     pub(crate) speech: Choice,
+    /// How fast replies are read out. Normal unless chosen.
+    #[serde(default, with = "crate::settings::speech_speed")]
+    pub(crate) speech_speed: conversation::Speed,
     /// Settings this build doesn't know, which a newer one wrote, kept so that saving here doesn't lose them.
     #[serde(flatten)]
     pub(super) others: Map<String, Value>,
@@ -89,6 +92,7 @@ impl Default for Settings {
             mute_while_dictating: false,
             pause_while_dictating: false,
             speech: Choice::default(),
+            speech_speed: conversation::Speed::default(),
             others: Map::new(),
         }
     }

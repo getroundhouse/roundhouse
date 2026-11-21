@@ -111,3 +111,31 @@ fn the_page_chosen_shows_or_the_first_with_none_chosen_or_none_with_nothing_left
         assert_eq!(shown(&sections, chosen).map(|page| page.id), want, "{name}");
     }
 }
+
+/// What each real page lists, by name.
+fn names_on(page: PageId) -> Vec<&'static str> {
+    let sections = real();
+    let page = sections.iter().flat_map(|section| &section.pages).find(|shown| shown.id == page);
+    match page.map(|page| &page.body) {
+        Some(Body::Settings(settings)) => settings.iter().map(|setting| setting.name).collect(),
+        Some(Body::Own { .. }) | None => Vec::new(),
+    }
+}
+
+/// Dictation and speech are on Voice, right after General, where a device can hear, and General has none of them. A
+/// device that can't hear has no Voice page.
+#[test]
+fn dictation_and_speech_are_on_voice_after_general() {
+    let pages: Vec<PageId> = real().iter().flat_map(|section| &section.pages).map(|page| page.id).collect();
+    if !sound::HEARS {
+        assert!(!pages.contains(&PageId::Voice), "{pages:?}");
+        return;
+    }
+    assert_eq!(pages[..2], [PageId::General, PageId::Voice]);
+    let voice = names_on(PageId::Voice);
+    assert_eq!(voice.first(), Some(&"Dictation"));
+    assert_eq!(voice[voice.len() - 2..], ["Speech", "Speech speed"]);
+    assert!(voice.contains(&"Dictation language"), "{voice:?}");
+    let general = names_on(PageId::General);
+    assert!(general.iter().all(|name| !name.contains("Dictation") && !name.contains("Speech")), "{general:?}");
+}

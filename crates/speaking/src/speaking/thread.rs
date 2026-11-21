@@ -4,7 +4,7 @@ use std::io;
 use std::ops::ControlFlow;
 use std::time::Duration;
 
-use phonon::{Phonon, PhononError};
+use phonon::{Phonon, PhononError, Speed};
 use sound::{Played, Speakers, SpeakersError};
 
 use super::parts::{Output, Voice};
@@ -25,6 +25,7 @@ enum Command {
     Say(TextId, usize, String),
     End(TextId),
     Stop,
+    Speed(Speed),
 }
 
 impl Speaking {
@@ -50,6 +51,7 @@ impl Speaking {
                 close_after,
                 reader: Reader::default(),
                 voice: None,
+                speed: Speed::default(),
                 said,
             };
             thread.run(&taken);
@@ -74,6 +76,11 @@ impl Speaking {
         let _ = self.commands.send(Command::Stop);
     }
 
+    /// Speaks at `speed` from the next phrase it makes on, including any of what it was given before.
+    pub fn set_speed(&self, speed: Speed) {
+        let _ = self.commands.send(Command::Speed(speed));
+    }
+
     /// What it says as it reads, which any thread or async task can wait on. Each update goes to one receiver, so a
     /// clone of it takes updates from the other.
     pub fn updates(&self) -> flume::Receiver<Update> {
@@ -88,6 +95,8 @@ struct Thread<V, O> {
     close_after: Duration,
     reader: Reader,
     voice: Option<V>,
+    /// How fast the voice speaks, which one loaded later is set to as well.
+    speed: Speed,
     said: flume::Sender<Update>,
 }
 
@@ -153,8 +162,22 @@ impl<V: Voice, O: Output> Thread<V, O> {
             Command::Say(text, at, more) => self.reader.say(text, at, &more),
             Command::End(text) => self.reader.end(text),
             Command::Stop => return ControlFlow::Break(()),
+            Command::Speed(speed) => self.set_speed(speed),
         }
         ControlFlow::Continue(())
+    }
+
+    /// Has the voice speak at `speed`, now if it's loaded, and once it is otherwise. One that can't keeps the speed it
+    /// had, and reads on.
+    fn set_speed(&mut self, speed: Speed) {
+        if std::mem::replace(&mut self.speed, speed) == speed {
+            return;
+        }
+        if let Some(voice) = &mut self.voice
+            && let Err(e) = voice.set_speed(speed)
+        {
+            self.tell([Update::Failed(SpeakingError::Speed(e))]);
+        }
     }
 
     /// Makes `phrase` and plays it, then its mark, opening the output first if it's closed.
@@ -188,9 +211,14 @@ impl<V: Voice, O: Output> Thread<V, O> {
     }
 
     fn voice(&mut self) -> Result<&V, SpeakingError> {
-        let voice = match self.voice.take() {
-            Some(voice) => voice,
-            None => (self.load)().map_err(SpeakingError::Load)?,
+        let voice = if let Some(voice) = self.voice.take() {
+            voice
+        } else {
+            let mut voice = (self.load)().map_err(SpeakingError::Load)?;
+            if self.speed != Speed::default() {
+                voice.set_speed(self.speed).map_err(SpeakingError::Load)?;
+            }
+            voice
         };
         Ok(self.voice.insert(voice))
     }

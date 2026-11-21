@@ -38,14 +38,7 @@ pub(super) fn page(hub: &OfHub) -> Page {
         ),
         status_box: None,
     };
-    let mut settings = vec![always_expand_thinking, keep_awake, allow_asked];
-    if sound::HEARS {
-        settings.push(super::dictation_row::setting());
-        settings.push(super::dictation_row::language());
-        let possible = sound::Quieting::ALL.into_iter().filter(|how| how.is_possible());
-        settings.extend(possible.map(super::dictation_row::quieting));
-        settings.push(super::speech_row::setting());
-    }
+    let settings = vec![always_expand_thinking, keep_awake, allow_asked];
     Page { id: PageId::General, name: "General", icon: Lucide::Settings2, body: Body::Settings(settings) }
 }
 

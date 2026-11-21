@@ -2,7 +2,7 @@
 
 Talk with a chat's agent out loud, and hear it answer, while it goes on working. It's the chat's own agent, so the one doing the work is the one that heard you. What you say is heard on your Mac, and its replies are spoken there, so no sound leaves it. Only the words reach the agent.
 
-Conversation mode hears you with [dictation](dictate-a-prompt.md), and reads the agent's replies out with speech. Each downloads once, dictation's model 2.4 GB and speech's voice about 65 MB, and each is a setting of its own in [Settings](../reference/settings.md#general).
+Conversation mode hears you with [dictation](dictate-a-prompt.md), and reads the agent's replies out with speech. Each downloads once, dictation's model 2.4 GB and speech's voice about 65 MB, and each is a setting of its own in [Settings](../reference/settings.md#voice). **Speech speed**, beside Speech, reads replies faster.
 
 ## Turn it on
 

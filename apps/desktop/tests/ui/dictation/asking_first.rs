@@ -9,7 +9,7 @@ use fetching::serving::{Reply, serve};
 use gpui_kit::TestAppContext;
 
 use super::support::{SCRIPT, says, type_keys, use_model};
-use crate::settings::open_settings;
+use crate::settings::open_voice_settings;
 use crate::support::made_up_model::made_up;
 use crate::support::{Stack, Ui};
 
@@ -37,7 +37,7 @@ fn the_microphone_offers_dictation_and_turning_it_on_there_downloads_the_model(c
     ui.wait("the microphone to dictate", |ui| !ui.has(STATUS) && ui.shows_label(MICROPHONE, "Dictate"));
     type_keys(&mut ui, "a", "a");
     assert_eq!(ui.composer_text(), "a", "the card went, and the composer has the keys");
-    open_settings(&mut ui);
+    open_voice_settings(&mut ui);
     assert!(ui.shows_label("settings-dictation", "Dictation: On"));
 }
 
@@ -57,7 +57,7 @@ fn hiding_the_microphone_turns_dictation_off(cx: &mut TestAppContext) {
     assert!(!ui.has(HIDE), "the popover went with it");
     type_keys(&mut ui, "a", "a");
     assert_eq!(ui.composer_text(), "a", "the composer has the keys");
-    open_settings(&mut ui);
+    open_voice_settings(&mut ui);
     assert!(ui.shows_label("settings-dictation", "Dictation: Off"));
 }
 

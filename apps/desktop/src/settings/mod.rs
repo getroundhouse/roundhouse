@@ -12,6 +12,7 @@ use std::collections::BTreeSet;
 
 mod choice;
 mod page;
+pub(crate) mod speech_speed;
 #[cfg(test)]
 mod tests;
 

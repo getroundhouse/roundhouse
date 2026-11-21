@@ -7,6 +7,8 @@
 
 mod engine;
 mod files;
+mod speed;
 
 pub use engine::{Phonon, PhononError, Speech};
 pub use files::MODEL;
+pub use speed::Speed;

@@ -7,7 +7,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 
 use parking_lot::Mutex;
-use phonon::PhononError;
+use phonon::{PhononError, Speed};
 use sound::{Played, SpeakersError};
 
 use crate::speaking::parts::{Output, Speech, Voice};
@@ -22,8 +22,12 @@ const KEEP: Duration = Duration::from_secs(600);
 const REPLY: TextId = TextId(1);
 const NEXT: TextId = TextId(2);
 
-/// A voice that makes a sample of silence for each byte of what it says, in two pieces.
-struct FakeVoice;
+/// A voice that makes a sample of silence for each byte of what it says, in two pieces, and tells the test what it
+/// said at which speed.
+struct FakeVoice {
+    speed: Speed,
+    spoken: flume::Sender<(String, Speed)>,
+}
 
 impl Voice for FakeVoice {
     fn sample_rate(&self) -> u32 {
@@ -31,8 +35,14 @@ impl Voice for FakeVoice {
     }
 
     fn speak(&self, text: &str) -> Result<Speech, PhononError> {
+        let _ = self.spoken.send((text.to_string(), self.speed));
         let half = vec![0.0; text.len() / 2];
         Ok(Box::new([Ok(half.clone()), Ok(half)].into_iter()))
+    }
+
+    fn set_speed(&mut self, speed: Speed) -> Result<(), PhononError> {
+        self.speed = speed;
+        Ok(())
     }
 }
 
@@ -98,6 +108,8 @@ struct Harness {
     seen: flume::Receiver<Seen>,
     loads: Arc<AtomicUsize>,
     opens: Arc<AtomicUsize>,
+    /// What the voice said, and at which speed.
+    spoken: flume::Receiver<(String, Speed)>,
 }
 
 impl Harness {
@@ -106,9 +118,10 @@ impl Harness {
         let (seeing, seen) = flume::unbounded();
         let (loads, opens) = (Arc::new(AtomicUsize::new(0)), Arc::new(AtomicUsize::new(0)));
         let loaded = loads.clone();
+        let (saying, spoken) = flume::unbounded();
         let load = move || {
             loaded.fetch_add(1, Ordering::SeqCst);
-            Ok(FakeVoice)
+            Ok(FakeVoice { speed: Speed::default(), spoken: saying.clone() })
         };
         let (opened, opening) = (opens.clone(), device.clone());
         let open = move |_rate| {
@@ -119,7 +132,7 @@ impl Harness {
         };
         let speaking = Speaking::start_with(load, open, close_after).unwrap();
         let updates = speaking.updates();
-        Self { speaking, updates, device, seen, loads, opens }
+        Self { speaking, updates, device, seen, loads, opens, spoken }
     }
 
     /// Reads all of `text` as `id`.
@@ -274,4 +287,20 @@ fn a_text_with_nothing_to_say_needs_no_voice_or_output() {
         ["Finished { text: TextId(1) }", "Heard { text: TextId(2), through: 5 }", "Finished { text: TextId(2) }"]
     );
     assert_eq!((harness.loads.load(Ordering::SeqCst), harness.opens.load(Ordering::SeqCst)), (0, 0));
+}
+
+/// A speed chosen before the voice is loaded is the one it speaks at once loaded, and one chosen later is the one it
+/// speaks the next phrase at.
+#[test]
+fn the_voice_speaks_at_the_speed_last_chosen() {
+    let harness = Harness::start(KEEP);
+    harness.speaking.set_speed(Speed::Faster);
+    harness.read(REPLY, "One.");
+    harness.marks(1);
+    assert_eq!(harness.spoken.recv_timeout(TIMEOUT), Ok(("One.".to_string(), Speed::Faster)));
+
+    harness.speaking.set_speed(Speed::Fastest);
+    harness.read(NEXT, "Two.");
+    harness.marks(1);
+    assert_eq!(harness.spoken.recv_timeout(TIMEOUT), Ok(("Two.".to_string(), Speed::Fastest)));
 }

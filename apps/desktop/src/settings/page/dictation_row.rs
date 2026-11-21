@@ -1,4 +1,4 @@
-//! The Dictation row of General: Ask first, On or Off, and under it a box that says how dictation stands, the language
+//! The Dictation row of Voice: Ask first, On or Off, and under it a box that says how dictation stands, the language
 //! what's dictated is heard in, and the switches that mute the sound and pause what's playing while dictating, as
 //! `docs/spec/settings.md` says. Only where `sound::HEARS`, and each switch only where its
 //! `Quieting::is_possible`.

@@ -95,6 +95,7 @@ fn saving_keeps_what_a_newer_build_wrote() {
             "mute_while_dictating": false,
             "pause_while_dictating": false,
             "speech": "ask_first",
+            "speech_speed": "normal",
             "from_later": [1, 2],
         })
     );
