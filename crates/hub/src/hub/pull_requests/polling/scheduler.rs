@@ -22,11 +22,17 @@ use github::BRANCHES_A_QUERY;
 const QUERIES_AT_MOST: u32 = 13;
 
 impl Hub {
-    /// Starts reading the pull requests nobody asks for, as jobs, every one that's due as one token together, as
-    /// GitHub's limit for each token can spare. It waits on no read, so one that hangs holds up only what's read as
-    /// its token, and that only until its limit. Runs until the hub stops.
-    #[expect(clippy::disallowed_methods, reason = "the pace the pull requests nobody asks for are read at")]
+    /// Reads what nobody asks for: workspaces' pull requests, and what clients show as chips, each as it's due. Runs
+    /// until the hub stops.
     pub(crate) async fn watch_pull_requests(self: Arc<Self>) {
+        tokio::join!(self.clone().watch_own_pull_requests(), self.watch_shown_references());
+    }
+
+    /// Starts reading workspaces' pull requests nobody asks for, as jobs, every one that's due as one token together,
+    /// as GitHub's limit for each token can spare. It waits on no read, so one that hangs holds up only what's read as
+    /// its token, and that only until its limit.
+    #[expect(clippy::disallowed_methods, reason = "the pace the pull requests nobody asks for are read at")]
+    async fn watch_own_pull_requests(self: Arc<Self>) {
         let pace = self.timers.read_pace;
         loop {
             tokio::time::sleep(pace).await;
@@ -47,7 +53,8 @@ impl Hub {
         }
         let Ok(mut workspaces) = self.workspace_list(false).await else { return Vec::new() };
         workspaces.retain(|workspace| seen || waited.contains(&workspace.id));
-        let due = schedule::due(&workspaces, &self.pull_requests.schedules.lock(), &waited, Instant::now());
+        let shown = self.github_shown.closely();
+        let due = schedule::due(&workspaces, &self.pull_requests.schedules.lock(), &waited, &shown, Instant::now());
         due.into_iter().cloned().collect()
     }
 

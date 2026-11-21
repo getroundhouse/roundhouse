@@ -5,8 +5,11 @@ use protocol::model::{
     ChecksRollup, GithubRepositoryName, IssueNumber, IssueState, Reference, ReferenceAsk, ReferenceKind, ReferenceRead,
 };
 
+use super::ShownBy;
 use super::references::FRESH_FOR;
+use crate::hub::Hub;
 use crate::hub::tests::hub_reading_github;
+use protocol::client::github::GithubShown;
 
 fn number(number: u64) -> IssueNumber {
     IssueNumber::try_from(number).unwrap()
@@ -209,4 +212,34 @@ async fn a_branchs_rules_are_read_again_only_once_theyre_stale() {
     hub.github_cache.age(super::reading::RULES_FRESH_FOR);
     hub.workspace_pull_request("w".into()).await.unwrap();
     assert_eq!(rules_read(), 2);
+}
+
+/// What a client shows as a chip is read again once it's as old as a client's ask takes, without the client asking,
+/// for as long as it's shown.
+#[tokio::test]
+async fn what_a_client_shows_is_read_again_once_its_stale() {
+    let dir = tempfile::tempdir().unwrap();
+    let references = References::default();
+    references.set(issue("example/project", 12));
+    let github = on_github(&references).await;
+    let hub = hub_reading_github(dir.path(), github.api());
+    let shown = GithubShown { references: vec![own(12)], ..GithubShown::default() };
+    let showing = hub.show_github(ShownBy { connection: 1, subscription: 1 }, shown);
+    let watching = tokio::spawn(hub.clone().watch_shown_references());
+    let titled = |hub: &Hub| match hub.reference_kept(&own(12)) {
+        Some(ReferenceRead::Found { reference }) => Some(reference.title),
+        _ => None,
+    };
+    waiting::task::until(Duration::from_secs(30), "the chip to be read", || titled(&hub).is_some()).await;
+
+    references.set(Reference { title: "Renamed".into(), ..issue("example/project", 12) });
+    hub.github_cache.age(FRESH_FOR);
+    waiting::task::until(Duration::from_secs(30), "the chip to be read again", || {
+        titled(&hub).as_deref() == Some("Renamed")
+    })
+    .await;
+
+    watching.abort();
+    drop(showing);
+    assert_eq!(hub.github_shown.references(), [], "no longer shown, so not read");
 }

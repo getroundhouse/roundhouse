@@ -1,7 +1,7 @@
 //! What clients show of GitHub, as each of their subscriptions says: what the hub sends them as it changes, and what
 //! it reads more often than what nobody shows.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use parking_lot::Mutex;
@@ -23,6 +23,25 @@ pub(crate) struct ShownBy {
 /// What every subscription shows, by which it is.
 #[derive(Default)]
 pub(crate) struct Shown(Mutex<HashMap<ShownBy, GithubShown>>);
+
+impl Shown {
+    /// The workspaces whose pull requests some client shows in full.
+    pub(crate) fn closely(&self) -> HashSet<WorkspaceId> {
+        self.0.lock().values().flat_map(|shown| shown.closely.iter().cloned()).collect()
+    }
+
+    /// The issues and pull requests some client shows as chips, each once.
+    pub(super) fn references(&self) -> Vec<(GithubRepositoryName, IssueNumber)> {
+        let mut all: Vec<(GithubRepositoryName, IssueNumber)> = Vec::new();
+        for ask in self.0.lock().values().flat_map(|shown| shown.references.iter()) {
+            let item = Item::new(&ask.repository, ask.number);
+            if !all.iter().any(|(repository, number)| Item::new(repository, *number) == item) {
+                all.push((ask.repository.clone(), ask.number));
+            }
+        }
+        all
+    }
+}
 
 /// Ends what a subscription shows as it's dropped: when the subscription ends, or its connection does.
 pub(crate) struct ShowingEnds {
@@ -52,6 +71,21 @@ impl Hub {
     #[cfg(test)]
     pub(crate) fn shows_github(&self) -> bool {
         !self.github_shown.0.lock().is_empty()
+    }
+
+    /// Reads again what clients show as chips once what the cache has of it is [`FRESH_FOR`] old, so one on screen says
+    /// it's merged within a minute or two of it merging, each time as soon as it's due. A pull request a read for its
+    /// workspace keeps the summary of is due no sooner. Runs until the hub stops.
+    #[expect(clippy::disallowed_methods, reason = "the pace what clients show is looked at")]
+    pub(crate) async fn watch_shown_references(self: Arc<Self>) {
+        let pace = self.timers.read_pace;
+        loop {
+            tokio::time::sleep(pace).await;
+            let shown = self.github_shown.references();
+            if !shown.is_empty() {
+                self.read_summaries(&shown, FRESH_FOR).await;
+            }
+        }
     }
 
     /// Takes `shown` to be what `by` shows from now on, in place of what it showed, and returns what ends it.

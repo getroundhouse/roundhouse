@@ -8,6 +8,10 @@ use tokio::time::Instant;
 /// within a couple of minutes.
 pub(super) const SOONEST: Duration = Duration::from_mins(2);
 
+/// How often one a client shows in full, as the pull request's bar does, is read while it's open, however long it has
+/// come back the same, so what's on screen is no staler than this. *Unconfirmed.*
+pub(super) const SHOWN: Duration = Duration::from_secs(30);
+
 /// The longest, for one that has come back the same time after time, such as a branch with no pull request that
 /// nobody is working on. A turn there, or showing it, reads it at once anyway.
 pub(super) const LATEST: Duration = Duration::from_mins(30);
@@ -77,11 +81,13 @@ fn moving(pr: &PullRequest) -> bool {
 /// unless it was found on another branch than the one checked out, so it isn't the workspace's now, as when the read
 /// that should have followed the worktree checking out another failed. One an agent waits on, in `waited`, is due at
 /// the soonest, however long it has come back the same, even when it was last read as done, since a read that came
-/// before the wait started didn't end it.
+/// before the wait started didn't end it. One a client shows in full, in `shown`, is due every [`SHOWN`] while it's
+/// not done.
 pub(in super::super) fn due<'a>(
     workspaces: &'a [Workspace],
     schedules: &HashMap<WorkspaceId, Schedule>,
     waited: &HashSet<WorkspaceId>,
+    shown: &HashSet<WorkspaceId>,
     now: Instant,
 ) -> Vec<&'a Workspace> {
     let state = |w: &Workspace| w.known_pull_request().map(|pr| pr.state);
@@ -91,7 +97,8 @@ pub(in super::super) fn due<'a>(
             && !waited.contains(&w.id)
     };
     let due_at = |w: &Workspace, schedule: &Schedule| {
-        if waited.contains(&w.id) { schedule.due_at_soonest() } else { schedule.due_at() }
+        let due_at = if waited.contains(&w.id) { schedule.due_at_soonest() } else { schedule.due_at() };
+        if shown.contains(&w.id) { due_at.min(schedule.read_at + SHOWN) } else { due_at }
     };
     let mut due: Vec<_> = workspaces
         .iter()
