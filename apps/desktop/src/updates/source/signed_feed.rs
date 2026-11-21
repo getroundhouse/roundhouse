@@ -1,10 +1,10 @@
-use super::{WorkersToKeep, only_speaking};
+use super::{ToKeep, only_taking_over};
 use fetching::Fetcher;
 use std::io;
 use std::path::Path;
 use std::sync::mpsc::Sender;
 use std::time::Duration;
-use update_feed::{Feed, Unsigned, UpdateFeedKey};
+use update_feed::{Feed, Running, Unsigned, UpdateFeedKey};
 use velopack::bundle::Manifest;
 use velopack::sources::UpdateSource;
 use velopack::{VelopackAsset, VelopackAssetFeed};
@@ -45,36 +45,38 @@ pub(crate) fn verified(feed: &[u8], signature: &[u8], key: &UpdateFeedKey) -> Re
 
 /// Where Velopack gets updates: the feed only once its signature checks out, and the packages it names from beside
 /// it. Neither follows a redirect, so the feed and the packages come from where the app was built to look. The feed
-/// it gives Velopack leaves out each release whose hub can't talk to the workers `workers` says to keep.
+/// it gives Velopack leaves out each release an update from this app's can't take: one whose hub can't talk to the
+/// workers `keeping` says to keep, or that doesn't update from this app's release and its hub's.
 pub(crate) struct SignedSource {
     pub(super) base: String,
     pub(super) key: UpdateFeedKey,
-    pub(super) workers: WorkersToKeep,
+    pub(super) keeping: ToKeep,
     pub(super) feeds: Fetcher,
     pub(super) packages: Fetcher,
     pub(super) retry_after: Duration,
 }
 
 impl SignedSource {
-    pub(crate) fn new(base: &str, key: UpdateFeedKey, workers: WorkersToKeep) -> Self {
-        Self::waiting(base, key, workers, RETRY_AFTER)
+    pub(crate) fn new(base: &str, key: UpdateFeedKey, keeping: ToKeep) -> Self {
+        Self::waiting(base, key, keeping, RETRY_AFTER)
     }
 
     /// A source that waits `retry_after` before reading again a feed whose signature didn't match.
-    pub(crate) fn waiting(base: &str, key: UpdateFeedKey, workers: WorkersToKeep, retry_after: Duration) -> Self {
+    pub(crate) fn waiting(base: &str, key: UpdateFeedKey, keeping: ToKeep, retry_after: Duration) -> Self {
         let base = base.trim_end_matches('/').to_string();
         let (feeds, packages) = (Fetcher::new(FEED_TIMEOUT), Fetcher::new(PACKAGE_TIMEOUT));
-        Self { base, key, workers, feeds, packages, retry_after }
+        Self { base, key, keeping, feeds, packages, retry_after }
     }
 
-    pub(super) fn signed_feed(&self, name: &str) -> Result<VelopackAssetFeed, SourceError> {
+    /// The releases the feed `name` lists that an update from the app's release, `version`, can take, keeping what
+    /// `keeping` says.
+    pub(super) fn signed_feed(&self, name: &str, version: &str) -> Result<VelopackAssetFeed, SourceError> {
         let feed = self.fetch(name, FEED_LIMIT_BYTES)?;
         let signature = self.fetch(&format!("{name}.sig"), SIGNATURE_BYTES)?;
         let releases = verified(&feed, &signature, &self.key)?;
-        Ok(match self.workers.oldest() {
-            Some(oldest) => only_speaking(releases, &serde_json::from_slice::<Feed>(&feed)?, oldest),
-            None => releases,
-        })
+        let keeping = self.keeping.now();
+        let running = Running { version, hub: keeping.hub.as_deref(), workers: keeping.workers };
+        Ok(only_taking_over(releases, &serde_json::from_slice::<Feed>(&feed)?, running))
     }
 
     pub(super) fn fetch(&self, name: &str, limit: u64) -> Result<Vec<u8>, SourceError> {
@@ -91,12 +93,12 @@ impl UpdateSource for SignedSource {
         clippy::disallowed_methods,
         reason = "the pause before a feed whose signature didn't match is read again, as one being published can be"
     )]
-    fn get_release_feed(&self, channel: &str, _: &Manifest, _: &str) -> Result<VelopackAssetFeed, velopack::Error> {
-        let name = format!("releases.{channel}.json");
-        match self.signed_feed(&name) {
+    fn get_release_feed(&self, channel: &str, app: &Manifest, _: &str) -> Result<VelopackAssetFeed, velopack::Error> {
+        let (name, version) = (format!("releases.{channel}.json"), app.version.to_string());
+        match self.signed_feed(&name, &version) {
             Err(SourceError::Unsigned(_)) => {
                 std::thread::sleep(self.retry_after);
-                Ok(self.signed_feed(&name)?)
+                Ok(self.signed_feed(&name, &version)?)
             }
             read => Ok(read?),
         }

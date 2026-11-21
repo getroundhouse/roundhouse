@@ -17,7 +17,7 @@ fn app_looking_at(
     installed: &VelopackLocatorConfig,
     cx: &mut TestAppContext,
 ) -> tempfile::TempDir {
-    app_keeping(base, key, installed, WorkersToKeep::oldest_at(None), cx)
+    app_keeping(base, key, installed, ToKeep::oldest_at(None), cx)
 }
 
 /// The same, keeping `workers` until the app says otherwise.
@@ -25,7 +25,7 @@ fn app_keeping(
     base: &str,
     key: UpdateFeedKey,
     installed: &VelopackLocatorConfig,
-    workers: WorkersToKeep,
+    workers: ToKeep,
     cx: &mut TestAppContext,
 ) -> tempfile::TempDir {
     // The look runs on a real thread, against a real server.
@@ -196,13 +196,13 @@ fn the_update_ready_is_the_newest_whose_hub_speaks_the_workers_to_keep(cx: &mut 
         ],
         &pair,
     );
-    let _state = app_keeping(&server.base, public(&pair), &installed, WorkersToKeep::oldest_at(Some(3)), cx);
+    let _state = app_keeping(&server.base, public(&pair), &installed, ToKeep::oldest_at(Some(3)), cx);
     ready_to_be(Some("0.1.6"), cx);
 
-    cx.update(|cx| keep_workers(Some(4), cx));
+    cx.update(|cx| keep(Keeping { workers: Some(4), hub: None }, cx));
     ready_to_be(Some("0.1.7"), cx);
 
-    cx.update(|cx| keep_workers(Some(2), cx));
+    cx.update(|cx| keep(Keeping { workers: Some(2), hub: None }, cx));
     assert_eq!(cx.read(|cx| installs(cx).map(str::to_string)), None, "before the look");
     ready_to_be(None, cx);
 }
@@ -223,12 +223,12 @@ fn workers_to_keep_that_change_during_a_look_are_looked_for_again_at_once(cx: &m
         ],
         &pair,
     );
-    let _state = app_keeping(&server.base, public(&pair), &installed, WorkersToKeep::oldest_at(Some(3)), cx);
+    let _state = app_keeping(&server.base, public(&pair), &installed, ToKeep::oldest_at(Some(3)), cx);
     waiting::thread::until(LOOK_TIMEOUT, "the first look never downloaded 0.1.6", || {
         server.asked().contains(&package_name("0.1.6"))
     });
 
-    cx.update(|cx| keep_workers(Some(4), cx));
+    cx.update(|cx| keep(Keeping { workers: Some(4), hub: None }, cx));
     release.now();
 
     ready_to_be(Some("0.1.7"), cx);

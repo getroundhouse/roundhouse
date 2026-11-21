@@ -1,4 +1,4 @@
-use update_feed::{Feed, UpdateFeedKey, fixture};
+use update_feed::{Feed, Running, UpdateFeedKey, fixture};
 
 use super::*;
 use crate::updates::signing::{key_pair, public};
@@ -24,7 +24,7 @@ fn serve_feed(feed: Vec<Reply>, signature: Vec<Reply>) -> Server {
 
 /// Reads the feed through Velopack's interface, without waiting to read it again.
 fn read_feed(server: &Server, key: UpdateFeedKey) -> Result<VelopackAssetFeed, velopack::Error> {
-    let source = SignedSource::waiting(&server.base, key, WorkersToKeep::oldest_at(None), Duration::ZERO);
+    let source = SignedSource::waiting(&server.base, key, ToKeep::oldest_at(None), Duration::ZERO);
     source.get_release_feed("macos-arm64", &Manifest::default(), "")
 }
 
@@ -144,7 +144,7 @@ fn download(size: u64, reply: Reply) -> (Result<(), velopack::Error>, tempfile::
     let server = serve(vec![(name.to_string(), vec![reply])]).unwrap();
     let asset = VelopackAsset { FileName: name.to_string(), Size: size, ..VelopackAsset::default() };
     let dir = tempfile::tempdir().unwrap();
-    let source = SignedSource::new(&server.base, public(&key_pair()), WorkersToKeep::oldest_at(None));
+    let source = SignedSource::new(&server.base, public(&key_pair()), ToKeep::oldest_at(None));
     (source.download_release_entry(&asset, &dir.path().join("package.partial"), None), dir)
 }
 
@@ -187,12 +187,20 @@ const SPEAKING: &str = r#"{"Assets":[
     {"PackageId":"Roundhouse","Version":"0.1.7","Type":"Full","FileName":"d","SHA1":"","Size":1,"WorkerVersions":{"oldest":4,"newest":5}}
 ]}"#;
 
+/// What Velopack is given of `feed` by an app on `version` that keeps workers as old as `workers`.
+fn kept_of(feed: &str, version: &str, workers: Option<u32>) -> Vec<String> {
+    let releases: VelopackAssetFeed = serde_json::from_str(feed).unwrap();
+    let kept = only_taking_over(
+        releases,
+        &serde_json::from_str::<Feed>(feed).unwrap(),
+        Running { version, hub: None, workers },
+    );
+    kept.Assets.iter().map(|package| format!("{} {}", package.Version, package.Type)).collect()
+}
+
 /// What Velopack is given of [`SPEAKING`] while workers as old as `oldest` are kept.
 fn kept_for(oldest: u32) -> Vec<String> {
-    let releases: VelopackAssetFeed = serde_json::from_str(SPEAKING).unwrap();
-    let feed: Feed = serde_json::from_str(SPEAKING).unwrap();
-    let kept = only_speaking(releases, &feed, oldest);
-    kept.Assets.iter().map(|package| format!("{} {}", package.Version, package.Type)).collect()
+    kept_of(SPEAKING, "0.1.4", Some(oldest))
 }
 
 #[test]
@@ -201,4 +209,62 @@ fn the_feed_keeps_only_releases_whose_hub_speaks_the_workers_to_keep() {
     assert_eq!(kept_for(4), ["0.1.6 Full", "0.1.7 Delta", "0.1.7 Full"]);
     assert_eq!(kept_for(5), ["0.1.7 Delta", "0.1.7 Full"]);
     assert!(kept_for(2).is_empty(), "none speaks workers that old");
+}
+
+/// Releases that say the oldest release each updates from, after one that says none.
+const UPDATING_FROM: &str = r#"{"Assets":[
+    {"PackageId":"Roundhouse","Version":"0.1.6","Type":"Full","FileName":"a","SHA1":"","Size":1,"WorkerVersions":{"oldest":3,"newest":4}},
+    {"PackageId":"Roundhouse","Version":"0.1.7","Type":"Delta","FileName":"b","SHA1":"","Size":1},
+    {"PackageId":"Roundhouse","Version":"0.1.7","Type":"Full","FileName":"c","SHA1":"","Size":1,"WorkerVersions":{"oldest":3,"newest":4},"UpdatesFrom":"0.1.6"}
+]}"#;
+
+/// So an app that's further behind takes the release before first, which its hub can migrate the database of, whether
+/// or not it has workers to keep, as on a hub whose workers stop with it.
+#[test]
+fn the_feed_keeps_only_releases_that_update_from_the_app_s_release() {
+    for workers in [Some(3), None] {
+        assert_eq!(kept_of(UPDATING_FROM, "0.1.5", workers), ["0.1.6 Full"], "{workers:?}");
+        assert_eq!(
+            kept_of(UPDATING_FROM, "0.1.6", workers),
+            ["0.1.6 Full", "0.1.7 Delta", "0.1.7 Full"],
+            "{workers:?}"
+        );
+    }
+}
+
+/// With no workers to keep, a release from before releases said what they speak is kept, as Velopack read it before.
+#[test]
+fn with_no_workers_to_keep_every_release_that_says_no_floor_is_kept() {
+    assert_eq!(kept_of(SPEAKING, "0.1.4", None), ["0.1.5 Full", "0.1.6 Full", "0.1.7 Delta", "0.1.7 Full"]);
+}
+
+/// The app's own release, as Velopack's manifest says it, is where its update goes from, and so is its hub's, whose
+/// database the update's hub migrates, while that's older.
+#[test]
+fn the_app_s_release_and_its_hub_s_are_where_its_update_goes_from() {
+    let read = |app: &str, hub: Option<&str>| {
+        let (feed, signature, key) = signed(UPDATING_FROM);
+        let server = serve_feed(vec![Reply::file(feed)], vec![Reply::file(signature)]);
+        let keeping = ToKeep::keeping(Keeping { workers: None, hub: hub.map(str::to_owned) });
+        let source = SignedSource::waiting(&server.base, key, keeping, Duration::ZERO);
+        let app = Manifest { version: app.parse().unwrap(), ..Manifest::default() };
+        let releases = source.get_release_feed("macos-arm64", &app, "").unwrap();
+        releases.Assets.iter().map(|package| format!("{} {}", package.Version, package.Type)).collect::<Vec<_>>()
+    };
+
+    assert_eq!(read("0.1.5", None), ["0.1.6 Full"]);
+    assert_eq!(read("0.1.6", None), ["0.1.6 Full", "0.1.7 Delta", "0.1.7 Full"]);
+    assert_eq!(read("0.1.6", Some("0.1.5")), ["0.1.6 Full"], "the hub hasn't restarted on 0.1.6 yet");
+}
+
+/// Another hub may have a database that an update that kept the last one's can't migrate, so it's more to keep.
+#[test]
+fn hearing_from_another_hub_is_more_to_keep() {
+    let to_keep = ToKeep::oldest_at(Some(3));
+    let on = |workers, hub: &str| Keeping { workers: Some(workers), hub: Some(hub.to_owned()) };
+
+    assert_eq!(to_keep.set(on(3, "0.1.5")), Kept::Older, "heard from for the first time");
+    assert_eq!(to_keep.set(on(3, "0.1.5")), Kept::Same);
+    assert_eq!(to_keep.set(on(4, "0.1.5")), Kept::Newer);
+    assert_eq!(to_keep.set(on(4, "0.1.6")), Kept::Older);
 }

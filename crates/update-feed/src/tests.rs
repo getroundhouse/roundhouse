@@ -18,6 +18,21 @@ fn with_hub(version: &str, oldest: u32, newest: u32) -> String {
     format!(r#"{{"Version":"{version}","Type":"Full","WorkerVersions":{{"oldest":{oldest},"newest":{newest}}},{hub}}}"#)
 }
 
+/// A full package that says the oldest release it updates from.
+fn updating_from(version: &str, oldest: u32, newest: u32, from: &str) -> String {
+    full(version, oldest, newest).replace(r#","Type""#, &format!(r#","UpdatesFrom":"{from}","Type""#))
+}
+
+/// [`with_hub`], saying the oldest release it updates from.
+fn with_hub_from(version: &str, oldest: u32, newest: u32, from: &str) -> String {
+    with_hub(version, oldest, newest).replace(r#","Type""#, &format!(r#","UpdatesFrom":"{from}","Type""#))
+}
+
+/// The versions of the releases in `feed` an update from `running` can take.
+fn taken(feed: &Feed, version: &str, workers: Option<u32>) -> Vec<String> {
+    feed.taking_over(Running { version, hub: None, workers }).map(|release| release.version.to_owned()).collect()
+}
+
 fn assets(packages: &[String]) -> Feed {
     feed(&format!(r#"{{"Assets":[{}]}}"#, packages.join(",")))
 }
@@ -36,8 +51,12 @@ fn the_fixture_the_publisher_s_tests_check_says_what_its_hub_speaks_and_where_it
         size: 512,
         sha256: "89ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF01234567".into(),
     };
-    let only =
-        Release { version: "0.1.1", worker_versions: Some(Versions { oldest: 3, newest: 4 }), hub: Some(&archive) };
+    let only = Release {
+        version: "0.1.1",
+        worker_versions: Some(Versions { oldest: 3, newest: 4 }),
+        updates_from: None,
+        hub: Some(&archive),
+    };
     assert_eq!(releases, [only]);
 }
 
@@ -113,6 +132,49 @@ fn a_hub_updates_only_to_a_release_that_speaks_its_oldest_worker() {
     assert_eq!(feed.hub_update("0.1.8", 3).unwrap().map(|release| release.version), Some("0.1.9"));
     assert_eq!(feed.hub_update("0.1.9", 4).unwrap().map(|release| release.version), Some("0.1.10"));
     assert_eq!(feed.hub_update("0.1.10", 4).unwrap(), None, "0.1.11 can't talk to workers of 4");
+}
+
+/// Its hub can't migrate the database of a release before it, by version rather than as text.
+#[test]
+fn a_release_is_taken_only_from_the_oldest_release_it_updates_from_or_a_newer_one() {
+    let feed = assets(&[full("0.1.9", 3, 4), updating_from("0.1.11", 3, 4, "0.1.10")]);
+
+    assert_eq!(taken(&feed, "0.1.9", None), ["0.1.9"]);
+    assert_eq!(taken(&feed, "0.1.10", None), ["0.1.9", "0.1.11"]);
+    assert_eq!(taken(&feed, "0.1.100", None), ["0.1.9", "0.1.11"]);
+    assert_eq!(taken(&feed, "0.1.10-dirty-20261120234543", None), ["0.1.9"], "not known to be past it");
+}
+
+/// An update keeps its workers and its database at once, so it takes only what's past both floors.
+#[test]
+fn a_release_is_taken_only_past_both_its_floors() {
+    let feed = assets(&[updating_from("0.1.11", 3, 4, "0.1.10"), updating_from("0.1.12", 4, 5, "0.1.9")]);
+
+    assert_eq!(taken(&feed, "0.1.10", Some(3)), ["0.1.11"]);
+    assert_eq!(taken(&feed, "0.1.10", Some(4)), ["0.1.11", "0.1.12"]);
+    assert_eq!(taken(&feed, "0.1.9", Some(4)), ["0.1.12"]);
+    assert!(taken(&feed, "0.1.9", Some(3)).is_empty());
+}
+
+/// The hub's database is from its own release, which can be older than the app's while the hub waits to restart.
+#[test]
+fn a_release_is_taken_only_from_the_oldest_release_it_updates_from_for_the_hub_too() {
+    let feed = assets(&[full("0.1.9", 3, 4), updating_from("0.1.11", 3, 4, "0.1.10")]);
+    let taken = |hub| -> Vec<_> {
+        feed.taking_over(Running { version: "0.1.10", hub, workers: None }).map(|release| release.version).collect()
+    };
+
+    assert_eq!(taken(Some("0.1.9")), ["0.1.9"]);
+    assert_eq!(taken(Some("0.1.10")), ["0.1.9", "0.1.11"]);
+}
+
+/// So a hub that's far behind steps through the release its update can't skip, as an app does.
+#[test]
+fn a_hub_updates_only_to_a_release_that_updates_from_it() {
+    let feed = assets(&[with_hub("0.1.9", 3, 4), with_hub_from("0.1.10", 3, 4, "0.1.9")]);
+
+    assert_eq!(feed.hub_update("0.1.8", 3).unwrap().map(|release| release.version), Some("0.1.9"));
+    assert_eq!(feed.hub_update("0.1.9", 3).unwrap().map(|release| release.version), Some("0.1.10"));
 }
 
 #[test]

@@ -76,14 +76,14 @@ pub(super) fn publish_speaking(releases: &[(&str, &[u8], Reply, Option<Versions>
 
 /// The app's updater, set up as `start` sets it up, reading from `base`, keeping no worker.
 fn manager(base: &str, key: UpdateFeedKey, installed: &VelopackLocatorConfig) -> UpdateManager {
-    manager_keeping(base, key, installed, &WorkersToKeep::oldest_at(None))
+    manager_keeping(base, key, installed, &ToKeep::oldest_at(None))
 }
 
 pub(super) fn manager_keeping(
     base: &str,
     key: UpdateFeedKey,
     installed: &VelopackLocatorConfig,
-    workers: &WorkersToKeep,
+    workers: &ToKeep,
 ) -> UpdateManager {
     let source = SignedSource::waiting(base, key, workers.clone(), Duration::ZERO);
     UpdateManager::new(source, Some(options()), Some(installed.clone())).unwrap()
@@ -179,7 +179,7 @@ fn asking_looks_again_without_waiting_for_the_hour() {
     let state = tempfile::tempdir().unwrap();
     let (look_now, asked) = flume::bounded(1);
     let (looks, looked) = flume::unbounded();
-    let workers = WorkersToKeep::oldest_at(None);
+    let workers = ToKeep::oldest_at(None);
     std::thread::spawn(move || keep_looking(&manager, &workers, &asked, &looks, &OutOfReach::in_dir(state.path())));
     let (on_launch, _) = looked.recv_timeout(LOOK_TIMEOUT).unwrap();
     assert!(on_launch.unwrap().is_none());
