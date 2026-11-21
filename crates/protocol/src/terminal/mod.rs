@@ -9,6 +9,7 @@ mod tests;
 
 mod fit;
 mod history;
+mod palette;
 mod picture;
 mod rows;
 mod sending;
@@ -19,6 +20,7 @@ mod updates;
 
 pub use fit::{MOST_KEPT_POINTS, TerminalFitReply};
 pub use history::{MOST_ROWS, TerminalRowsReply};
+pub use palette::DEFAULT_PALETTE;
 pub use picture::{CursorShape, PaletteColor, RowJson, RowRun, ScreenState, TerminalCursor, TerminalPicture, Wheel};
 pub use rows::{CellAttributes, CellColor, CellStyle, Numbering, RowNumber, Span, TerminalRow, Underline};
 pub use sending::{MOST_PICTURE_BYTES, PictureSending, Shown};
