@@ -85,7 +85,7 @@ fn opened(found: &Found, toggle: &Toggle, cx: &App) -> Option<AnyElement> {
         }
         Found::Count { .. } | Found::Nothing => return None,
     };
-    Some(block::frame(cx).typeset(look::Type::Code).child(shown).into_any_element())
+    Some(block::frame(cx).typeset_code(cx).child(shown).into_any_element())
 }
 
 /// A file's matching lines, with their numbers.

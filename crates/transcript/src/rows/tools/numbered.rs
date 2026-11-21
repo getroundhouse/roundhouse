@@ -60,7 +60,7 @@ pub(super) fn lines(toggle: &Toggle, part: Part, language: &str, sections: &[Sec
     let part = div()
         .id(id.clone())
         .py(AROUND_LINES)
-        .typeset(look::Type::Code)
+        .typeset_code(cx)
         .children(drawn)
         .when_some(more, |d, more| d.child(block::label(more, cx).pb(look::Space::Small)))
         .test_support();

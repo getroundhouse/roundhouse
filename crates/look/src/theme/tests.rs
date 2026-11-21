@@ -54,3 +54,10 @@ fn the_kits_theme_draws_with_the_apps_colours(cx: &mut TestAppContext) {
         assert_eq!(theme.radius_lg, Corner::Card.radius());
     });
 }
+
+/// The kit picks code's font for the platform from those installed, so the theme leaves it to the kit. One named here
+/// would be missing on some platforms, where code would be set in a font that isn't monospaced.
+#[test]
+fn the_theme_leaves_codes_font_to_the_kit() {
+    assert_eq!(config(&Colors::dark()).mono_font_family, None);
+}

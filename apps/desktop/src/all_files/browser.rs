@@ -292,7 +292,7 @@ impl AllFiles {
                                 .overflow_hidden()
                                 .whitespace_nowrap()
                                 .text_ellipsis()
-                                .typeset(look::Type::Code)
+                                .typeset_code(cx)
                                 .child(name),
                         )
                         .on_click(cx.listener(move |_, _, _, cx| cx.emit(AllFilesEvent::Open(path.clone()))));

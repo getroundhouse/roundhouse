@@ -100,7 +100,7 @@ impl MobileApp {
             .py(Space::Small)
             .corners(Corner::Control)
             .bg(colors.inset)
-            .typeset(Type::Code)
+            .typeset_code(cx)
             .text_center()
             .child("roundhouse phone pair");
         v_flex()

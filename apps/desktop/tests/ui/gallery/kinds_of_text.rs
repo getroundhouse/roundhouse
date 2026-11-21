@@ -40,8 +40,15 @@ fn rows(cx: &App) -> Vec<AnyElement> {
     let row = |&kind: &Type| {
         let [name, font, size, weight, _] = kind.written();
         let place = places::id(KIND, &name);
-        let sample = div().w(px(COLUMNS.sample)).typeset(kind).child(sample(kind)).id(place).test_support();
-        COLUMNS.row(name, sample, format!("{font} · {size} · {weight}"), cx)
+        let column = div().w(px(COLUMNS.sample));
+        let set = match kind {
+            Type::Code => column.typeset_code(cx),
+            kind @ (Type::PageTitle | Type::Heading | Type::Body | Type::Detail | Type::Key | Type::KeyHeld) => {
+                column.typeset(kind)
+            }
+        };
+        let shown = set.child(sample(kind)).id(place).test_support();
+        COLUMNS.row(name, shown, format!("{font} · {size} · {weight}"), cx)
     };
     Type::ALL.iter().map(row).collect()
 }

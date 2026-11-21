@@ -41,7 +41,7 @@ fn sample(lines: CodeLines, cx: &Context<Sheet>) -> AnyElement {
         .px(look::Space::Medium)
         .py(look::Space::Small)
         .bg(colors.inset)
-        .typeset(Type::Code)
+        .typeset_code(cx)
         .line_height(lines.height())
         .children(CODE.map(|line| div().child(line)))
         .test_support();

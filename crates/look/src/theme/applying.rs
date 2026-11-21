@@ -1,7 +1,7 @@
 use crate::colors::Colors;
 use crate::shape::Corner;
 use crate::traits::Reach;
-use crate::typography::{MONO, mono_size, rem};
+use crate::typography::{mono_size, rem};
 use gpui_kit::component::{Theme, ThemeConfig, ThemeMode};
 use gpui_kit::{App, Hsla, Pixels, Rgba};
 use serde_json::{Map, Value, json};
@@ -29,20 +29,12 @@ pub fn apply(cx: &mut App) {
     if !cx.has_global::<Theme>() {
         Theme::change(ThemeMode::Dark, None, cx);
     }
-    Theme::global_mut(cx).dark_theme = config.clone();
+    Theme::global_mut(cx).dark_theme = config;
     Theme::change(ThemeMode::Dark, None, cx);
     let menus = crate::menus::style(crate::colors::colors(cx));
     cx.set_global(menus);
     let tooltips = crate::tooltips::style(crate::colors::colors(cx));
     cx.set_global(tooltips);
-    // The kit can't tell a code font chosen to be the same as its own default from no choice, and swaps either for
-    // one it finds installed. It finds that once for the whole process, from whichever app asks first, and in a test
-    // that can be one that lists no fonts, which would leave every later picture with code in the system font. The
-    // theme's is on every Mac, so it goes back as chosen.
-    if let Some(mono) = config.mono_font_family.clone() {
-        Theme::global_mut(cx).mono_font_family = mono;
-        Theme::sync_base(cx);
-    }
 }
 
 /// The theme, in the form the kit reads a theme's file in, since that's the only way to give it some of its colours,
@@ -55,7 +47,6 @@ pub(super) fn config(colors: &Colors) -> ThemeConfig {
         "name": "Roundhouse Dark",
         "mode": "dark",
         "font.size": f32::from(rem(Reach::now())),
-        "mono_font.family": MONO,
         "mono_font.size": f32::from(mono_size(Reach::now())),
         "radius": whole(Corner::Control.radius()),
         "radius.lg": whole(Corner::Card.radius()),

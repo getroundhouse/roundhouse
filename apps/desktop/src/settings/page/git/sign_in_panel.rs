@@ -70,7 +70,7 @@ fn waiting(code: &GithubUserCode, address: &str, until: Option<&str>, cx: &App) 
         .child(
             div()
                 .id("git-code")
-                .typeset(look::Type::Code)
+                .typeset_code(cx)
                 .emphasis()
                 .text_color(colors.text)
                 .child(code.to_string())

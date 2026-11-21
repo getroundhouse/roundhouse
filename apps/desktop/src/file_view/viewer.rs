@@ -217,7 +217,7 @@ impl Render for FileView {
                     .flex_1()
                     .w_full()
                     .py(look::Space::XSmall)
-                    .typeset(look::Type::Code)
+                    .typeset_code(cx)
                     .into_any_element()
             }
         };

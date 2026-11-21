@@ -93,7 +93,7 @@ pub(crate) fn folder_row(
                 .overflow_hidden()
                 .whitespace_nowrap()
                 .text_ellipsis()
-                .typeset(look::Type::Code)
+                .typeset_code(cx)
                 .text_color(muted)
                 .child(names.join(" / ")),
         )

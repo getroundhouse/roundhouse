@@ -112,7 +112,7 @@ impl ToolUse {
                 .py(look::Space::Small)
                 .corners(look::Corner::Control)
                 .bg(colors.inset)
-                .typeset(look::Type::Code)
+                .typeset_code(cx)
         };
         let given = self.given.as_ref().map(|given| match given {
             Shown::Text(text) => block("question-given")

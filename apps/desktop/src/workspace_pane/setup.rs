@@ -23,7 +23,7 @@ pub(super) fn setup_log_view(text: String, cx: &App) -> impl IntoElement {
         .px(look::Space::Medium)
         .py(look::Space::Small)
         .line_over(cx)
-        .typeset(look::Type::Code)
+        .typeset_code(cx)
         .text_color(colors.text_muted)
         .child(SharedString::from(if text.is_empty() { "Nothing yet.".to_string() } else { text }))
 }

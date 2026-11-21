@@ -8,5 +8,5 @@ mod tests;
 mod code_lines;
 mod styles;
 pub use code_lines::CodeLines;
-pub(crate) use styles::{MONO, mono_size, rem};
 pub use styles::{STRONG, Type, Typeset};
+pub(crate) use styles::{mono_size, rem};

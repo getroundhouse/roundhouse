@@ -1,0 +1,26 @@
+diff --git a/crates/base/src/theme_tokens.rs b/crates/base/src/theme_tokens.rs
+index 1ad07854..536139ba 100644
+--- a/crates/base/src/theme_tokens.rs
++++ b/crates/base/src/theme_tokens.rs
+@@ -227,7 +227,7 @@ fn text_style(size: f32, line_height: f32) -> TextStyleToken {
+ }
+ 
+ fn default_mono_font_family() -> SharedString {
+-    if cfg!(target_os = "macos") {
++    if cfg!(any(target_os = "macos", target_os = "ios")) {
+         "Menlo".into()
+     } else if cfg!(target_os = "windows") {
+         "Consolas".into()
+diff --git a/crates/component/src/theme/mono_font.rs b/crates/component/src/theme/mono_font.rs
+index a5fe932c..37cdcc8d 100644
+--- a/crates/component/src/theme/mono_font.rs
++++ b/crates/component/src/theme/mono_font.rs
+@@ -17,7 +17,7 @@ use gpui_base::TypographyTokens;
+ use std::sync::OnceLock;
+ 
+ /// Monospace families tried, in order, when the platform default is missing.
+-const MONO_FONT_ALTERNATES: &[&str] = if cfg!(target_os = "macos") {
++const MONO_FONT_ALTERNATES: &[&str] = if cfg!(any(target_os = "macos", target_os = "ios")) {
+     &["Monaco", "Courier New"]
+ } else if cfg!(target_os = "windows") {
+     &["Cascadia Mono", "Courier New"]

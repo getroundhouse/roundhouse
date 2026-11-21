@@ -1,3 +1,4 @@
+// Changed in Roundhouse's copy of gpui-kit, as third_party/README.md lists.
 //! Semantic design tokens shared by application-owned components.
 //!
 //! These tokens describe visual roles and scales. They intentionally do not
@@ -227,7 +228,7 @@ fn text_style(size: f32, line_height: f32) -> TextStyleToken {
 }
 
 fn default_mono_font_family() -> SharedString {
-    if cfg!(target_os = "macos") {
+    if cfg!(any(target_os = "macos", target_os = "ios")) {
         "Menlo".into()
     } else if cfg!(target_os = "windows") {
         "Consolas".into()
