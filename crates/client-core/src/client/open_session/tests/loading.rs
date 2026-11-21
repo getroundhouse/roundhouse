@@ -1,12 +1,9 @@
-use parking_lot::Mutex;
-use protocol::client::{ApiError, ClientFrame, ClientRequest, ClientResponse, ErrorCode, HubFrame, ReplyOutcome, log};
-use protocol::frame;
+use protocol::client::{ApiError, ClientRequest, ClientResponse, ErrorCode, ReplyOutcome, log};
 use protocol::model::{Place, Seq, Session};
-use std::io::{BufRead, BufReader, Write};
-use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::Path;
-use std::sync::Arc;
 use std::time::Duration;
+
+use crate::stand_in_hub::{Does, StandIn};
 
 /// Far enough along that the subscription starts after the first page, so a prompt there comes only from the list.
 pub(in super::super) const LAST_SEQ: Seq = Seq::new(1800);
@@ -14,46 +11,18 @@ pub(in super::super) const LAST_SEQ: Seq = Seq::new(1800);
 /// How far the agent's own events go by place, or a subagent's: a third of the way, as if they were every third event.
 pub(in super::super) const LAST_PLACE: Place = Place::new(600);
 
-/// A hub that answers each request but its hello as `answer` says, if it says to, on each connection it's given. Each
-/// is answered on a thread of its own, so an answer can wait without holding up the rest. It reports every request
-/// it's sent, as it comes.
+/// The stand-in hub on `socket`, for each client that connects, answering each request but its hello as `answer` says,
+/// if it says to. It reports every request it's sent, as it comes.
 pub(in crate::client) fn start_hub_answering(
     socket: &Path,
-    answer: impl Fn(&ClientRequest) -> Option<ReplyOutcome> + Send + Sync + 'static,
+    mut answer: impl FnMut(&ClientRequest) -> Option<ReplyOutcome> + Send + 'static,
 ) -> flume::Receiver<ClientRequest> {
-    let listener = UnixListener::bind(socket).unwrap();
-    let answer: Arc<Answer> = Arc::new(answer);
-    let (asked, heard) = flume::unbounded();
-    std::thread::spawn(move || {
-        for stream in listener.incoming() {
-            let (stream, answer, asked) = (stream.unwrap(), answer.clone(), asked.clone());
-            std::thread::spawn(move || serve(stream, &answer, &asked));
-        }
-    });
-    heard
+    StandIn::of_build("scripted").to_every_connection().listen(socket, move |request| answers(answer(&request)))
 }
 
-type Answer = dyn Fn(&ClientRequest) -> Option<ReplyOutcome> + Send + Sync;
-
-fn serve(stream: UnixStream, answer: &Arc<Answer>, asked: &flume::Sender<ClientRequest>) {
-    let writer = Arc::new(Mutex::new(stream.try_clone().unwrap()));
-    for line in BufReader::new(stream).lines() {
-        let Ok(line) = line else { return };
-        let ClientFrame { id, request } = frame::decode(line.as_bytes()).unwrap();
-        let _ = asked.send(request.clone());
-        let (writer, answer) = (writer.clone(), answer.clone());
-        std::thread::spawn(move || {
-            let outcome = if matches!(request, ClientRequest::Hello(_)) {
-                Some(ReplyOutcome::Response(crate::stand_in_hub::hello_reply("scripted")))
-            } else {
-                answer(&request)
-            };
-            if let Some(outcome) = outcome {
-                // Gone once the test is.
-                let _ = writer.lock().write_all(&frame::encode(&HubFrame::Reply { id, outcome }).unwrap());
-            }
-        });
-    }
+/// Answers with `outcome`, or doesn't answer for `None`.
+pub(in crate::client) fn answers(outcome: Option<ReplyOutcome>) -> Does {
+    outcome.map_or(Does::Nothing, |outcome| Does::Answers(Box::new(outcome)))
 }
 
 /// What the hub answers that a test doesn't say: a read with no events, of a session that goes to [`LAST_SEQ`] by

@@ -1,36 +1,21 @@
 // Against a stand-in hub on a Unix socket.
 #![cfg(unix)]
 
-use std::io::{BufRead as _, BufReader, Write as _};
 use std::path::Path;
 
 use protocol::attachment::{Attachment, MediaType};
-use protocol::client::{
-    ApiError, ClientRequest, ClientResponse, ErrorCode, HubFrame, ReplyOutcome, agent, attachments, queue,
-};
-use protocol::frame;
+use protocol::client::{ApiError, ClientRequest, ClientResponse, ErrorCode, ReplyOutcome, agent, attachments, queue};
 use protocol::model::QueuedPrompt;
 use protocol::prompt::Prompt;
 
 use super::*;
 use crate::stand_in_hub::{self, Does};
 
-/// Answers a hello, then hangs up, so every call after it fails.
-fn connected_to_a_hub_that_goes_away(socket: &Path) -> Client {
-    let listener = std::os::unix::net::UnixListener::bind(socket).unwrap();
-    std::thread::spawn(move || {
-        let (mut stream, _) = listener.accept().unwrap();
-        BufReader::new(stream.try_clone().unwrap()).lines().next();
-        let outcome = ReplyOutcome::Response(crate::stand_in_hub::hello_reply("a"));
-        stream.write_all(&frame::encode(&HubFrame::Reply { id: 1, outcome }).unwrap()).unwrap();
-    });
-    Client::connect(socket, "test").unwrap()
-}
-
 #[test]
 fn a_prompt_the_hub_never_takes_comes_back_with_its_files() {
     let dir = tempfile::tempdir().unwrap();
-    let client = connected_to_a_hub_that_goes_away(&dir.path().join("hub.sock"));
+    // A hub that goes without answering what it's asked.
+    let client = stand_in_hub::connect(&dir.path().join("hub.sock"), |_| Does::HangsUp);
     let log = FileToSend::checked("build.log", MediaType::Text, b"error at line 42".to_vec()).unwrap();
     let written = Written::new(Prompt::carrying("why?", vec![log.clone()]));
 

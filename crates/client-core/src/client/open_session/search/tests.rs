@@ -9,10 +9,11 @@ use protocol::model::{Place, Seq, SubagentId};
 
 use super::super::OpenSession;
 use super::super::tests::{
-    LAST_PLACE, answered_simply, refused, requests_until_unsubscribed, session, start_hub_answering, until,
+    LAST_PLACE, answered_simply, answers, refused, requests_until_unsubscribed, session, start_hub_answering, until,
 };
 use super::*;
 use crate::session_log::{By, SessionLog};
+use crate::stand_in_hub::{self, Does};
 
 /// The position of the event at `place`, in a log by place, as a search reads.
 fn at(place: u64) -> Position {
@@ -135,12 +136,11 @@ fn a_chat_has_one_search_at_the_hub_at_a_time_and_one_typed_over_isn_t_asked() {
     let dir = tempfile::tempdir().unwrap();
     let socket = dir.path().join("hub.sock");
     let (answer, answered) = flume::unbounded::<()>();
-    let requests = start_hub_answering(&socket, move |request| {
+    let requests = stand_in_hub::listen(&socket, move |request| {
         if matches!(request, ClientRequest::SessionFind(_)) {
-            answered.recv().unwrap();
-            Some(found(&[]))
+            Does::After(answered.clone(), Box::new(answers(Some(found(&[])))))
         } else {
-            answered_simply(request)
+            answers(answered_simply(&request))
         }
     });
     let client = connect(&socket);
@@ -246,16 +246,15 @@ fn a_log_that_holds_every_event_needs_no_hub_once_it_knows_how_far_they_go() {
     let dir = tempfile::tempdir().unwrap();
     let socket = dir.path().join("hub.sock");
     let (answer, answered) = flume::unbounded::<()>();
-    let requests = start_hub_answering(&socket, move |request| {
+    let requests = stand_in_hub::listen(&socket, move |request| {
         if matches!(request, ClientRequest::SessionReadPlaces(_)) {
-            answered.recv().unwrap();
             let placed =
                 ClientResponse::PlacedEvents(log::PlacedEvents { events: Vec::new(), last_place: Place::new(1) });
-            Some(ReplyOutcome::Response(placed))
+            Does::After(answered.clone(), Box::new(answers(Some(ReplyOutcome::Response(placed)))))
         } else if matches!(request, ClientRequest::SessionFind(_)) {
-            Some(found(&[]))
+            answers(Some(found(&[])))
         } else {
-            answered_simply(request)
+            answers(answered_simply(&request))
         }
     });
     let client = connect(&socket);
