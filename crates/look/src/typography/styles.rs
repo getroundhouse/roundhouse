@@ -11,8 +11,6 @@ pub(crate) const REM: Pixels = px(16.);
 /// How big a rem is on a handheld, where every kind of text has a size of its own in pixels: as big as makes the kit's
 /// own text, which is 0.875 rem as body text is at a desk, as big as body text is there.
 const HANDHELD_REM: Pixels = px(17. / 0.875);
-/// The code font. Every Mac and iPhone has it, and Linux and Windows don't, so code there falls back to the system font.
-pub(crate) const MONO: &str = "Menlo";
 
 /// How big a rem is at `reach`.
 pub(crate) fn rem(reach: Reach) -> Pixels {
@@ -52,6 +50,9 @@ pub(super) enum Font {
     /// regular face, whatever weight it asked for. So it's never named on what's set, and is left to the window.
     System,
     /// The code font, which goes on what's code, and never on what holds other text, since that would take it too.
+    /// It's the family the kit's theme names, which the kit picks for the platform from those installed. A family
+    /// named here would be one some platforms don't have, where GPUI falls back to a proportional font, in which a
+    /// terminal's grid spaces every letter as wide as an `m`.
     Code,
 }
 
@@ -111,11 +112,11 @@ impl Type {
     }
 
     /// Its font, for code that names one itself, such as [`LineText`](crate::LineText), which measures text to put
-    /// it on a baseline: the system font as the kit's theme names it, or the code font.
+    /// it on a baseline: the system font or the code font, as the kit's theme names it.
     pub fn family(self, cx: &App) -> SharedString {
         match self.set().font {
             Font::System => cx.theme().font_family.clone(),
-            Font::Code => SharedString::new_static(MONO),
+            Font::Code => cx.theme().mono_font_family.clone(),
         }
     }
 
@@ -134,7 +135,7 @@ impl Type {
     pub fn written(self) -> [String; 5] {
         let font = match self.set().font {
             Font::System => "System",
-            Font::Code => MONO,
+            Font::Code => "Code",
         };
         let weight = match self.set().weight {
             None => "As around it",
@@ -146,26 +147,36 @@ impl Type {
     }
 }
 
+/// Sets `element`'s text as big as `set` has it, with any lines and weight of its own.
+fn sized<S: Styled>(element: S, set: Set) -> S {
+    let element = element.text_size(set.size);
+    let element = match set.line {
+        Some(line) => element.line_height(line),
+        None => element,
+    };
+    match set.weight {
+        Some(weight) => element.font_weight(weight),
+        None => element,
+    }
+}
+
 /// Sets text as one of the kinds the app has.
 pub trait Typeset: Styled + Sized {
-    /// Sets this element's text as `kind`: its size, any lines and weight of its own, and the code font for code.
-    /// Text in the system font takes the window's.
+    /// Sets this element's text as `kind`, in the system font: its size, and any lines and weight of its own. The
+    /// system font is the window's, so it isn't named. Code is set with [`typeset_code`](Self::typeset_code), since its
+    /// font is the one the kit's theme names, which takes the app to read, and a `kind` of code here is set in the
+    /// system font, which a debug build refuses.
     #[must_use]
     fn typeset(self, kind: Type) -> Self {
-        let set = kind.set();
-        let element = self.text_size(set.size);
-        let element = match set.font {
-            Font::System => element,
-            Font::Code => element.font_family(SharedString::new_static(MONO)),
-        };
-        let element = match set.line {
-            Some(line) => element.line_height(line),
-            None => element,
-        };
-        match set.weight {
-            Some(weight) => element.font_weight(weight),
-            None => element,
-        }
+        debug_assert!(kind.set().font == Font::System, "{kind:?} is set with `typeset_code`, in the theme's font");
+        sized(self, kind.set())
+    }
+
+    /// Sets this element's text as code: its size, any lines and weight of its own, and the code font, as the kit's
+    /// theme names it.
+    #[must_use]
+    fn typeset_code(self, cx: &App) -> Self {
+        sized(self, Type::Code.set()).font_family(Type::Code.family(cx))
     }
 
     /// Makes this element's text stand out from what's around it, as a name that needs a look or a card's title does.

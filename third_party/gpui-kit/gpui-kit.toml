@@ -33,4 +33,6 @@ patches = [
     "core-text-22",
     "dialog-focus-ring-room",
     "attachment-card-radius",
+    "ios-mono-font",
+    "mono-font-without-a-font-list",
 ]

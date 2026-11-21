@@ -153,7 +153,7 @@ fn tie_line(tie: &Tie, cx: &App) -> Option<AnyElement> {
             .child(words)
             .when_some(name, |line, name| line.child(div().text_color(colors.text).child(name)))
             .when(!after.is_empty(), |line| line.child(after))
-            .child(div().typeset(Type::Code).text_color(colors.text_faint).child(branch.clone()))
+            .child(div().typeset_code(cx).text_color(colors.text_faint).child(branch.clone()))
             .into_any_element(),
     )
 }

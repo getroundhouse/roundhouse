@@ -56,7 +56,7 @@ fn row(size: RowSize, at: usize, (first, second): (&'static str, &'static str), 
     let id = format!("{}-{at}", format!("{size:?}").to_lowercase());
     let row = look::list_row(ElementId::Name(id.into()), size).chosen(at == 0);
     match size {
-        RowSize::Small => row.child(look::file_icon(first, cx)).child(div().typeset(Type::Code).child(first)),
+        RowSize::Small => row.child(look::file_icon(first, cx)).child(div().typeset_code(cx).child(first)),
         RowSize::Regular => row.child(Icon::new(page_icon(first)).sized(look::IconSize::Large)).child(first),
         RowSize::Large => row
             .child(look::chat_mark(look::Signal::Idle, look::Size::Inline, cx))

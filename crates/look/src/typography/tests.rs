@@ -1,7 +1,8 @@
-use gpui_kit::{AbsoluteLength, SharedString, Styled as _, div};
+use gpui_kit::component::ActiveTheme as _;
+use gpui_kit::{AbsoluteLength, App, Div, Styled as _, TestAppContext, div};
 
 use super::styles::EMPHASIS;
-use super::{CodeLines, MONO, Type, Typeset as _};
+use super::{CodeLines, Type, Typeset as _};
 use crate::spec_table;
 use crate::traits::Reach;
 
@@ -13,16 +14,30 @@ fn the_specs_table_has_every_kind_of_text_in_order_as_the_app_sets_it() {
     assert_eq!(table, set, "docs/spec/look.md's table of the kinds of text, against crates/look/src/typography/mod.rs");
 }
 
-#[test]
-fn each_kind_sets_its_size_its_weight_and_its_lines() {
-    for &kind in Type::ALL {
-        let mut set = div().typeset(kind);
-        let text = &set.style().text;
-
-        assert_eq!(text.font_size, Some(kind.set().size), "{kind:?}");
-        assert_eq!(text.font_weight, kind.set().weight, "{kind:?}");
-        assert_eq!(text.line_height, kind.set().line, "{kind:?}");
+/// `kind`, set as what's set in it is.
+fn set_as(kind: Type, cx: &App) -> Div {
+    match kind {
+        Type::Code => div().typeset_code(cx),
+        kind @ (Type::PageTitle | Type::Heading | Type::Body | Type::Detail | Type::Key | Type::KeyHeld) => {
+            div().typeset(kind)
+        }
     }
+}
+
+#[gpui_kit::test]
+fn each_kind_sets_its_size_its_weight_and_its_lines(cx: &mut TestAppContext) {
+    cx.update(gpui_kit::init);
+
+    cx.update(|cx| {
+        for &kind in Type::ALL {
+            let mut set = set_as(kind, cx);
+            let text = &set.style().text;
+
+            assert_eq!(text.font_size, Some(kind.set().size), "{kind:?}");
+            assert_eq!(text.font_weight, kind.set().weight, "{kind:?}");
+            assert_eq!(text.line_height, kind.set().line, "{kind:?}");
+        }
+    });
 }
 
 /// What's held with a key is smaller than the key, and sits on its line.
@@ -46,27 +61,45 @@ fn every_kind_is_in_rems_at_a_desk() {
     }
 }
 
-#[test]
-fn emphasis_is_medium_over_any_kind() {
-    for &kind in Type::ALL {
-        let mut set = div().typeset(kind).emphasis();
+#[gpui_kit::test]
+fn emphasis_is_medium_over_any_kind(cx: &mut TestAppContext) {
+    cx.update(gpui_kit::init);
 
-        assert_eq!(set.style().text.font_weight, Some(EMPHASIS), "{kind:?}");
-    }
+    cx.update(|cx| {
+        for &kind in Type::ALL {
+            let mut set = set_as(kind, cx).emphasis();
+
+            assert_eq!(set.style().text.font_weight, Some(EMPHASIS), "{kind:?}");
+        }
+    });
 }
 
 /// On a Linux desktop without the font GPUI gives `.SystemUIFont`, text that named it would fall back to a family in
 /// its regular face whatever weight it asked for, where the window's family, which the kit's theme names, keeps its
-/// medium face.
-#[test]
-fn only_code_names_a_font_so_the_system_font_is_the_windows() {
-    for &kind in Type::ALL {
-        let mut set = div().typeset(kind);
-        let named = set.style().text.font_family.clone();
+/// medium face. Code names the family the kit's theme names, which the kit picks from those installed, since one named
+/// here wouldn't be on every platform.
+#[gpui_kit::test]
+fn only_code_names_a_font_the_one_the_kits_theme_names(cx: &mut TestAppContext) {
+    cx.update(gpui_kit::init);
+    cx.update(crate::apply);
 
-        let code = (kind == Type::Code).then(|| SharedString::new_static(MONO));
-        assert_eq!(named, code, "{kind:?}");
-    }
+    cx.update(|cx| {
+        for &kind in Type::ALL {
+            let mut set = set_as(kind, cx);
+            let named = set.style().text.font_family.clone();
+
+            let code = (kind == Type::Code).then(|| cx.theme().mono_font_family.clone());
+            assert_eq!(named, code, "{kind:?}");
+        }
+    });
+}
+
+/// Code set as the system font's kinds are would be in the window's font, as nothing would show until it was drawn.
+#[cfg(debug_assertions)]
+#[test]
+#[should_panic(expected = "typeset_code")]
+fn code_is_only_set_with_typeset_code() {
+    let _ = div().typeset(Type::Code);
 }
 
 #[test]

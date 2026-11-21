@@ -227,7 +227,7 @@ impl Render for DiffPreview {
             .py(look::Space::XSmall)
             // The wheel scrolls the diff and not the transcript under it, which would carry the line away from it.
             .occlude()
-            .typeset(look::Type::Code)
+            .typeset_code(cx)
             // It has nothing to hand the wheel on to, so GPUI scrolls it, holding a gesture to the way it started until
             // it turns far enough. That's GPUI's own, which the kit's `lock_scroll_axis` calls, since the kit gives that
             // only to an element that isn't also marked for tests, as a region is.

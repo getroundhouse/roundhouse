@@ -244,7 +244,7 @@ fn ready_row(link: &str, qr: Option<&QrMatrix>, cx: &App) -> AnyElement {
                 .flex_1()
                 .min_w_0()
                 .truncate()
-                .typeset(Type::Code)
+                .typeset_code(cx)
                 .text_color(colors.text)
                 .child(link.to_string())
                 .test_support(),

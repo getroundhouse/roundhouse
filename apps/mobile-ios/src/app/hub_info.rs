@@ -35,7 +35,7 @@ impl MobileApp {
             .child(div().typeset(Type::Body).child(chrome::connection(link.state())))
             .when_some(why, |d, why| d.child(detail(why)))
             .child(heading("Looks for it at"))
-            .child(div().typeset(Type::Code).child(hub.hosts.join("\n")))
+            .child(div().typeset_code(cx).child(hub.hosts.join("\n")))
             .child(detail(
                 "The phone needs the hub's network, or a VPN to it such as Tailscale, and the hub's computer awake."
                     .into(),

@@ -114,7 +114,7 @@ fn command(made_with: &str, cx: &App) -> Div {
         .border(look::EDGE)
         .border_color(colors.edge)
         .bg(colors.inset)
-        .typeset(look::Type::Code)
+        .typeset_code(cx)
         .child(div().text_color(colors.text_faint).child("$"))
         .child(div().flex_1().min_w_0().truncate().child(made_with.to_string()))
         .child(look::copy_button("accounts-copy-command", made_with.to_string(), "Copy command", cx))

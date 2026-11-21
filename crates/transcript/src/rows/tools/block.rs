@@ -60,7 +60,7 @@ pub(in crate::rows) fn label(text: impl Into<SharedString>, cx: &App) -> Div {
 /// A faint name for the part of a block below it that's the agent's own, such as a file's path, which can be found: in
 /// the code font, since it's what you'd copy or type.
 pub(super) fn found_label(toggle: &Toggle, part: Part, text: &str, cx: &App) -> Div {
-    faint(cx).typeset(look::Type::Code).child(marked(text.to_string().into(), &toggle.marks(part, text), &[], None))
+    faint(cx).typeset_code(cx).child(marked(text.to_string().into(), &toggle.marks(part, text), &[], None))
 }
 
 fn faint(cx: &App) -> Div {
@@ -83,11 +83,11 @@ pub(in crate::rows) fn output(toggle: &Toggle, part: Part, text: &str, color: Hs
     if text.len() > LOG_BLOCK_ABOVE {
         let font = look::Type::Code.family(cx);
         let log = LogBlock { log: LogText::new(&shown), color, font, marks, area: Some(area) };
-        return scrolling(drags, &id, printed(&id, log.into_any_element(), color)).into_any_element();
+        return scrolling(drags, &id, printed(&id, log.into_any_element(), color, cx)).into_any_element();
     }
     let said: SharedString = shown.into_owned().into();
     let (drawn, layout) = find::marked_with_layout(said.clone(), &marks, &[], Some(area));
-    let selectable = selectable(toggle, part, &id, printed(&id, drawn, color), said, Pieces::whole(layout));
+    let selectable = selectable(toggle, part, &id, printed(&id, drawn, color, cx), said, Pieces::whole(layout));
     scrolling(drags, &id, selectable).into_any_element()
 }
 
@@ -111,7 +111,7 @@ pub(super) fn lines(toggle: &Toggle, part: Part, text: &str, cx: &App) -> AnyEle
     });
     let lines = v_flex().id(ElementId::from((id.clone(), "lines"))).gap(LINE_GAP).children(lines);
     let selectable =
-        selectable(toggle, part, &id, printed(&id, lines.test_support().into_any_element(), color), said, pieces);
+        selectable(toggle, part, &id, printed(&id, lines.test_support().into_any_element(), color, cx), said, pieces);
     scrolling(&toggle.shared.selection, &id, selectable).into_any_element()
 }
 
@@ -131,12 +131,12 @@ pub(super) fn selectable(
 }
 
 /// Text that came back, `body`, in `color` and the code font, in the space a block gives it.
-fn printed(id: &ElementId, body: AnyElement, color: Hsla) -> AnyElement {
+fn printed(id: &ElementId, body: AnyElement, color: Hsla, cx: &App) -> AnyElement {
     div()
         .id(id.clone())
         .px(look::Space::Medium)
         .py(look::Space::Small)
-        .typeset(look::Type::Code)
+        .typeset_code(cx)
         .line_height(look::CodeLines::Chat.height())
         .text_color(color)
         .child(body)
@@ -200,7 +200,7 @@ pub(super) fn code(toggle: &Toggle, part: Part, language: &str, prompt: &str, te
         .id(id.clone())
         .px(look::Space::Medium)
         .py(look::Space::Small)
-        .typeset(look::Type::Code)
+        .typeset_code(cx)
         .text_color(colors.text)
         .child(marked(shown, &marks.moved(at), &styles, Some(scroll_id(&id))))
         .test_support();

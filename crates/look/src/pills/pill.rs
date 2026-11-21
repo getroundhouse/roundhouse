@@ -4,7 +4,7 @@ use super::PillKind;
 use crate::colors::colors;
 use crate::shape::{Corner, Shaped as _};
 use crate::space::Space;
-use crate::typography::{Type, Typeset as _};
+use crate::typography::Typeset as _;
 
 /// How tall a pill is, which sits in a line of body text with a little room above and below its words, as tall as a
 /// small control.
@@ -35,7 +35,7 @@ impl RenderOnce for Pill {
             .px(Space::Small)
             .corners(Corner::Control)
             .bg(fill)
-            .typeset(Type::Code)
+            .typeset_code(cx)
             .text_color(words)
             .child(div().min_w_0().truncate().child(self.value))
     }

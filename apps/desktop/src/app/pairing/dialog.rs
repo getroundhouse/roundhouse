@@ -244,7 +244,7 @@ fn preview_card(link: &PairingLink, device_name: Option<&str>, cx: &App) -> AnyE
             div()
                 .pl(detail_indent)
                 .truncate()
-                .typeset(Type::Code)
+                .typeset_code(cx)
                 .text_color(colors.text_muted)
                 .child(link.hosts.join(" · ")),
         )

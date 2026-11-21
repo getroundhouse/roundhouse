@@ -1,3 +1,4 @@
+// Changed in Roundhouse's copy of gpui-kit, as third_party/README.md lists.
 //! Keeps the theme's default monospace family on a font the machine has.
 //!
 //! GPUI panics on the first line it lays out in a family it cannot find, and
@@ -11,13 +12,20 @@
 //! file chose explicitly is used as-is: it is usually embedded through
 //! `add_fonts`, and Windows lists families under their localized names, so an
 //! English name for a CJK font would look missing when it is not.
+//!
+//! A text system that lists no fonts, as GPUI's test platform's does, or the
+//! web's before the application adds any, cannot say what is installed, so the
+//! probe keeps the default there and remembers nothing. The answer is shared by
+//! the whole process, and one learned from such a text system would otherwise
+//! swap the default for the system font in every later app, a test's with a
+//! real text system included.
 
 use gpui::{App, SharedString};
 use gpui_base::TypographyTokens;
 use std::sync::OnceLock;
 
 /// Monospace families tried, in order, when the platform default is missing.
-const MONO_FONT_ALTERNATES: &[&str] = if cfg!(target_os = "macos") {
+const MONO_FONT_ALTERNATES: &[&str] = if cfg!(any(target_os = "macos", target_os = "ios")) {
     &["Monaco", "Courier New"]
 } else if cfg!(target_os = "windows") {
     &["Cascadia Mono", "Courier New"]
@@ -35,22 +43,27 @@ pub(super) fn default_mono_font_family() -> SharedString {
 }
 
 /// Replaces the platform-default monospace family on the global theme with one
-/// that is installed. A family chosen explicitly is left alone.
+/// that is installed. A family chosen explicitly is left alone, and so is the
+/// default while no font is listed.
 pub(super) fn resolve_default_mono_font(cx: &mut App) {
     if cx.global::<super::Theme>().mono_font_family != default_mono_font_family() {
         return;
     }
-    let family = installed_default_mono_font_family(cx);
+    let installed = installed_font_names(cx);
+    if installed.is_empty() {
+        return;
+    }
+    let family = installed_default_mono_font_family(installed);
     cx.global_mut::<super::Theme>().mono_font_family = family;
 }
 
 /// The installed stand-in for the platform default, resolved once per process.
-fn installed_default_mono_font_family(cx: &App) -> SharedString {
+fn installed_default_mono_font_family(installed: &[String]) -> SharedString {
     static RESOLVED: OnceLock<SharedString> = OnceLock::new();
     RESOLVED
         .get_or_init(|| {
             let default = default_mono_font_family();
-            let family = first_installed(&default, MONO_FONT_ALTERNATES, installed_font_names(cx));
+            let family = first_installed(&default, MONO_FONT_ALTERNATES, installed);
             if family != default {
                 tracing::warn!(
                     "Monospace font {default:?} is not installed, using {family:?} instead."
@@ -61,14 +74,23 @@ fn installed_default_mono_font_family(cx: &App) -> SharedString {
         .clone()
 }
 
-/// The families installed on the machine, listed once per process.
+/// The families installed on the machine, listed once per process, or none
+/// while the text system lists none.
 ///
 /// Enumerating fonts costs around a hundred milliseconds on macOS, and the
 /// answer only depends on the system fonts, which do not change while the
-/// process runs.
+/// process runs. An empty list is not kept, since it says only that this text
+/// system cannot list them.
 pub(super) fn installed_font_names(cx: &App) -> &'static [String] {
     static NAMES: OnceLock<Vec<String>> = OnceLock::new();
-    NAMES.get_or_init(|| cx.text_system().all_font_names())
+    if let Some(names) = NAMES.get() {
+        return names;
+    }
+    let names = cx.text_system().all_font_names();
+    if names.is_empty() {
+        return &[];
+    }
+    NAMES.get_or_init(|| names)
 }
 
 /// `default` when it is installed, else the first installed alternate, else
@@ -106,6 +128,18 @@ mod tests {
             first_installed("Menlo", &["Monaco", "Courier New"], &installed),
             SharedString::from("Monaco")
         );
+    }
+
+    /// GPUI's test platform lists no fonts, so the probe has nothing to go on.
+    #[gpui::test]
+    fn keeps_the_default_while_no_font_is_listed(cx: &mut gpui::TestAppContext) {
+        cx.update(|cx| {
+            super::super::init(cx);
+            assert_eq!(
+                cx.global::<super::super::Theme>().mono_font_family,
+                default_mono_font_family()
+            );
+        });
     }
 
     #[test]

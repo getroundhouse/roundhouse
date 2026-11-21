@@ -5,7 +5,7 @@ use gpui_kit::{App, IntoElement, ParentElement as _, RenderOnce, Styled as _, Wi
 use crate::baseline::Placed;
 use crate::colors::colors;
 use crate::space::Space;
-use crate::typography::{Type, Typeset as _};
+use crate::typography::Typeset as _;
 
 /// The lines added to a file and removed from it, `+12 −3`, leaving out whichever is none.
 pub fn lines_changed(added: usize, removed: usize) -> LinesChanged {
@@ -44,7 +44,7 @@ impl RenderOnce for LinesChanged {
         let drawn = h_flex()
             .flex_none()
             .gap(Space::XSmall)
-            .typeset(Type::Code)
+            .typeset_code(cx)
             .when_some(added, |d, added| d.child(div().text_color(colors.added).child(added)))
             .when_some(removed, |d, removed| d.child(div().text_color(colors.removed).child(removed)));
         match self.placed {

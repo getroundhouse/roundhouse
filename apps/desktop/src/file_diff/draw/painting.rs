@@ -56,7 +56,7 @@ pub(in super::super) fn row(ix: usize, row: &Row, drawing: &Drawing, cx: &App) -
         Row::Pair { old, new, same } => h_flex()
             .w_full()
             .h(LINE_HEIGHT)
-            .typeset(look::Type::Code)
+            .typeset_code(cx)
             .child(half(ix, true, *old, *new, *same, drawing, cx))
             .child(half(ix, false, *new, *new, *same, drawing, cx).line_left(cx))
             .into_any_element(),
@@ -92,7 +92,7 @@ fn line(ix: usize, kind: LineKind, old: Option<u32>, new: Option<u32>, drawing: 
         .group(LINE)
         .w_full()
         .h(LINE_HEIGHT)
-        .typeset(look::Type::Code)
+        .typeset_code(cx)
         .when_some(background(kind, at, drawing, cx), Styled::bg)
         .child(number(old, drawing.numbers, cx))
         .child(number(new, drawing.numbers, cx))
