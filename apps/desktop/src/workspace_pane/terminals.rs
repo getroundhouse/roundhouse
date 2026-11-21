@@ -1,6 +1,7 @@
 //! The workspace's terminals: a tab for each open one, after the chats', and the view each shows, made the first time
-//! it shows and kept while it's open, so it stays current and keeps its place. Closing a tab ends the shell, and a
-//! shell that ends, however it does, takes its tab with it, since the hub drops the terminal's record.
+//! it shows and kept while it's open, so it keeps its place. Each is told whether it's shown, so one that isn't for a
+//! while is sent nothing until it is again. Closing a tab ends the shell, and a shell that ends, however it does, takes
+//! its tab with it, since the hub drops the terminal's record.
 
 use std::collections::HashMap;
 
@@ -99,6 +100,15 @@ impl WorkspacePane {
             }
             t.bring_terminal_to_front(id, cx);
         });
+    }
+
+    /// Tells each terminal whether it's shown: the one in front, while it's in front of the chat and this pane is drawn.
+    /// One that isn't shown for a while is let go, as `OpenTerminal::set_shown` says.
+    pub(super) fn terminals_shown(&self, cx: &mut Context<Self>) {
+        let shown = self.terminal_in_front().filter(|_| self.drawn() && self.showing() == Showing::Terminal);
+        for (id, view) in &self.terminals.views {
+            view.read(cx).open_terminal().set_shown(shown == Some(id));
+        }
     }
 
     fn bring_terminal_to_front(&mut self, id: TerminalId, cx: &mut Context<Self>) {

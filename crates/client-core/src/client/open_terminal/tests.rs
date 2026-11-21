@@ -275,15 +275,21 @@ fn rows_scrolled_back_to_are_fetched_and_what_is_selected_is_copied() {
     assert_eq!(double_clicked.as_deref(), Ok("line"));
 }
 
-/// What `asked` is sent up to what's typed as `typed`, which comes after whatever was sent before it on the connection.
-fn asked_until(asked: &flume::Receiver<ClientRequest>, typed_last: char) -> Vec<ClientRequest> {
-    let mut before = Vec::new();
+/// What `asked` is sent up to and with the first request `last` is true of, such as what's typed, which comes after
+/// whatever was sent before it on the connection.
+fn asked_until(
+    asked: &flume::Receiver<ClientRequest>,
+    what: &str,
+    last: impl Fn(&ClientRequest) -> bool,
+) -> Vec<ClientRequest> {
+    let mut requests = Vec::new();
     loop {
-        let request = asked.recv_timeout(WAIT).expect("what was typed never came");
-        if request == typed(typed_last) {
-            return before;
+        let request = asked.recv_timeout(WAIT).unwrap_or_else(|_| panic!("{what} never came"));
+        let done = last(&request);
+        requests.push(request);
+        if done {
+            return requests;
         }
-        before.push(request);
     }
 }
 
@@ -310,30 +316,83 @@ fn only_a_new_connection_asks_for_the_views_size_again() {
     // More pictures than the buffer holds, then, on watching again, a picture at the size another device gave it.
     let flood: Vec<&[u8]> = std::iter::repeat_n(&b"."[..], SUBSCRIPTION_CAPACITY + SUBSCRIPTION_CAPACITY / 4).collect();
     let flooded = pictures(&flood);
+    // The first watch is answered only once the test holds the view, so the flood comes while it's held.
+    let ((tell_watched, heard_watched), (go, held_now)) = (flume::bounded(1), flume::bounded(1));
     let first_asked = start_hub(&first, false, move |watches| {
-        let pictures = if watches == 1 { flooded.clone() } else { pictures_at(other, &[b"resized elsewhere"]) };
-        Some(Watched { pictures, exited: false })
+        if watches > 1 {
+            return Some(showing_at(other, &[b"resized elsewhere"]));
+        }
+        tell_watched.send(()).unwrap();
+        held_now.recv().unwrap();
+        Some(Watched { pictures: flooded.clone(), exited: false })
     });
     let second_asked = start_hub(&second, false, move |_| Some(showing_at(other, &[b"after"])));
     let client = Client::connect(&first, "test").unwrap();
 
     let open = OpenTerminal::start(&client, &"t".into());
+    heard_watched.recv_timeout(WAIT).unwrap();
     // The view is held, as a view that doesn't keep up is, until the buffer has filled.
     open.follow.quietly(|held| {
         held.given.push(Given::Fit(SIZE));
+        go.send(()).unwrap();
         waiting::thread::until(WAIT, "the buffer never filled", || !client.inner.lagged.lock().is_empty());
     });
     frame_when(&open, "the picture on watching again", |frame| text(frame)[0] == "resized elsewhere");
     open.key(key('x'));
 
-    let on_the_first = asked_until(&first_asked, 'x');
-    let watches = on_the_first.iter().filter(|request| matches!(request, ClientRequest::TerminalWatch(_))).count();
-    assert_eq!(watches, 2, "{on_the_first:?}");
+    let on_the_first = asked_until(&first_asked, "what was typed", |request| *request == typed('x'));
+    assert_eq!(watches_and_stops(&on_the_first).0, 2, "{on_the_first:?}");
     assert_eq!(fits(&on_the_first), [], "it took the size back after falling behind");
 
     open.reconnect(&Client::connect(&second, "test").unwrap());
     frame_when(&open, "the picture on the new connection", |frame| text(frame)[0] == "after");
     open.key(key('y'));
 
-    assert_eq!(fits(&asked_until(&second_asked, 'y')), [(SIZE.cols, SIZE.rows)]);
+    assert_eq!(
+        fits(&asked_until(&second_asked, "what was typed", |request| *request == typed('y'))),
+        [(SIZE.cols, SIZE.rows)]
+    );
+}
+
+/// How many of `requests` are watches, and how many stop a subscription.
+fn watches_and_stops(requests: &[ClientRequest]) -> (usize, usize) {
+    let watches = requests.iter().filter(|request| matches!(request, ClientRequest::TerminalWatch(_))).count();
+    let stops = requests.iter().filter(|request| matches!(request, ClientRequest::SessionUnsubscribe(_))).count();
+    (watches, stops)
+}
+
+/// A terminal no view shows for as long as it waits is let go, so the hub sends it nothing, and once it's shown again
+/// it watches again, and shows what the terminal shows now. One shown again sooner is never let go. Either way, room the
+/// view had meanwhile is asked for then, and nothing else is.
+#[test]
+fn a_terminal_not_shown_for_as_long_as_it_waits_is_let_go_until_it_shows_again() {
+    let room = TerminalSize { cols: 100, rows: 30 };
+    for (wait, let_go) in [(Duration::ZERO, true), (Duration::from_secs(3600), false)] {
+        let dir = tempfile::tempdir().unwrap();
+        let socket = dir.path().join("hub.sock");
+        let asked =
+            start_hub(&socket, false, |watches| Some(showing(&[if watches == 1 { b"before" } else { b"after" }])));
+        let open = OpenTerminal::letting_go_after(&Client::connect(&socket, "test").unwrap(), &"t".into(), wait);
+        open.fit(SIZE);
+        frame_when(&open, "the first picture", |frame| text(frame)[0] == "before");
+
+        open.set_shown(false);
+        let mut requests = Vec::new();
+        if let_go {
+            let stops = |request: &ClientRequest| matches!(request, ClientRequest::SessionUnsubscribe(_));
+            requests.extend(asked_until(&asked, "letting it go", stops));
+        }
+        open.fit(room);
+        open.set_shown(true);
+        if let_go {
+            frame_when(&open, "what the terminal shows now", |frame| text(frame)[0] == "after");
+        }
+        open.key(key('x'));
+        requests.extend(asked_until(&asked, "what was typed", |request| *request == typed('x')));
+
+        let expected = if let_go { (2, 1) } else { (1, 0) };
+        assert_eq!(watches_and_stops(&requests), expected, "waiting {wait:?}: {requests:?}");
+        assert_eq!(fits(&requests), [(room.cols, room.rows)], "waiting {wait:?}");
+        assert!(open.shown());
+    }
 }
