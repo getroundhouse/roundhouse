@@ -10,6 +10,12 @@ pub enum StoreError {
     NotFound { kind: &'static str, id: String },
     #[error("the database was written by a newer version ({found} migrations, this build has {known})")]
     TooNew { found: usize, known: usize },
+    /// Nothing was migrated, so `release` can still migrate it.
+    #[error(
+        "the database is older than {release}, the oldest release this build updates from ({found} migrations, where \
+         {release} has {migrations}). Install {release} and run it once, then update"
+    )]
+    TooOld { found: usize, release: &'static str, migrations: usize },
     /// Nothing was migrated, so the database is as the last build left it.
     #[error("couldn't back up the database into {} before migrating it", dir.display())]
     Backup { dir: PathBuf, source: BackupError },
@@ -43,6 +49,7 @@ impl From<StoreError> for ApiError {
         match failure {
             StoreError::NotFound { .. } => ApiError::new(ErrorCode::NotFound, message),
             StoreError::TooNew { .. }
+            | StoreError::TooOld { .. }
             | StoreError::Backup { .. }
             | StoreError::Database(_)
             | StoreError::Encoding(_) => {

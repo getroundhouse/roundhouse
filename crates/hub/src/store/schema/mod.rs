@@ -4,8 +4,6 @@
 use super::StoreError;
 #[cfg(test)]
 use rusqlite::Connection;
-#[cfg(test)]
-use std::path::Path;
 
 #[cfg(test)]
 mod before;

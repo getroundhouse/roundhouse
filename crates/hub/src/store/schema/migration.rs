@@ -5,6 +5,7 @@ use migrations::MIGRATIONS;
 use rusqlite::Connection;
 use std::path::Path;
 use tracing::info;
+use update_feed::{FLOOR, Floor};
 
 /// One step from one schema to the next: SQL, or Rust for one that SQL can't say well, such as rewriting what's
 /// stored from one form to another. Each runs in a transaction of its own, which commits only once it's done, so one
@@ -34,25 +35,32 @@ pub(crate) fn open_connection(path: &Path) -> rusqlite::Result<Connection> {
 /// Brings the database up to this build's schema. One that an older build wrote is copied into
 /// `backups_dir` first, since a build from before a migration can't open what it leaves.
 pub(crate) fn migrate(conn: &mut Connection, backups_dir: &Path) -> Result<(), StoreError> {
-    migrate_through(conn, backups_dir, MIGRATIONS)
+    migrate_through(conn, backups_dir, MIGRATIONS, FLOOR)
 }
 
 /// Applies migrations until `target` have run, so a test can make an older database.
 #[cfg(test)]
 pub(crate) fn migrate_to(conn: &mut Connection, backups_dir: &Path, target: usize) -> Result<(), StoreError> {
-    migrate_through(conn, backups_dir, &MIGRATIONS[..target])
+    migrate_through(conn, backups_dir, &MIGRATIONS[..target], FLOOR)
 }
 
-/// [`migrate`], with the list of migrations given, so a test can stop short of this build's or add one
-/// that fails.
+/// [`migrate`], with the list of migrations and the floor given, so a test can stop short of this build's, add one
+/// that fails, or set a floor.
 pub(super) fn migrate_through(
     conn: &mut Connection,
     backups_dir: &Path,
     migrations: &[Migration],
+    floor: Option<Floor>,
 ) -> Result<(), StoreError> {
     let version = schema_version(conn)?;
     if version > migrations.len() {
         return Err(StoreError::TooNew { found: version, known: migrations.len() });
+    }
+    // A new database holds nothing, so it migrates from the start.
+    if let Some(Floor { release, migrations: at_floor }) = floor
+        && (1..at_floor).contains(&version)
+    {
+        return Err(StoreError::TooOld { found: version, release, migrations: at_floor });
     }
     // Only a database that holds something and is about to change gets a copy. If the copy fails, such as
     // on a full disk, the hub doesn't start rather than migrate without one: any update can bring a
