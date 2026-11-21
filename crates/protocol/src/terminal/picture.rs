@@ -138,7 +138,7 @@ pub struct ScreenState {
     pub wheel: Wheel,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub title: String,
-    /// The colours of the palette the program changed, which a client draws in place of its theme's.
+    /// The colours of the palette the program changed, which a client draws in place of `DEFAULT_PALETTE`'s.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub palette: Vec<PaletteColor>,
     /// The colours of a cell that sets none, and of the cursor, where the program set them.

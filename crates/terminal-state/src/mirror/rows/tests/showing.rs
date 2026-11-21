@@ -2,7 +2,9 @@
 
 use std::fmt::Write as _;
 
-use protocol::terminal::{CellColor, CursorShape, PaletteColor, RowJson, RowNumber, ScreenState, Wheel};
+use protocol::terminal::{
+    CellColor, CursorShape, DEFAULT_PALETTE, PaletteColor, RowJson, RowNumber, ScreenState, Wheel,
+};
 
 use crate::Mirror;
 use crate::mirror::rows::reading::{Place, row};
@@ -116,4 +118,14 @@ fn a_row_on_the_screen_reads_the_same_from_either_end() {
     }
     let styled = (0..SIZE.rows).any(|y| !row(&mirror.terminal, Place::Screen(y)).unwrap().styles.is_empty());
     assert!(styled, "no row had the colours written");
+}
+
+/// So a client, which has no Ghostty, draws a colour of the palette the program didn't change as the worker's does.
+#[test]
+fn the_palette_a_picture_leaves_out_is_ghosttys_own() {
+    let mirror = Mirror::new(SIZE).unwrap();
+    let ghosttys = mirror.terminal.default_color_palette().unwrap();
+    let ghosttys: Vec<[u8; 3]> = ghosttys.0.iter().map(|color| [color.r, color.g, color.b]).collect();
+
+    assert_eq!(ghosttys, DEFAULT_PALETTE);
 }

@@ -1,9 +1,15 @@
 //! What a client asks of its hub about a workspace's terminals, as `protocol::client::terminals` says.
 
 use protocol::client::Request as _;
-use protocol::client::terminals::{TerminalAttach, TerminalClose, TerminalInput, TerminalOpen, TerminalResize};
+use protocol::client::terminals::{
+    TerminalAttach, TerminalBounds, TerminalClose, TerminalFit, TerminalInput, TerminalOpen, TerminalResize,
+    TerminalRows, TerminalText, TerminalTyped, TerminalWatch,
+};
 use protocol::model::{Terminal, TerminalId, WorkspaceId};
-use protocol::terminal::{TerminalBytes, TerminalSize};
+use protocol::terminal::{
+    Bounds, Numbering, RowNumber, TerminalBoundsReply, TerminalBytes, TerminalFitReply, TerminalPoint, TerminalRange,
+    TerminalRowsReply, TerminalSize, TerminalTextReply, Typed,
+};
 
 use super::{Client, Result, Subscription};
 
@@ -31,6 +37,65 @@ impl Client {
     /// gives take effect in the order they were sent, though not in order with what's typed.
     pub fn terminal_resize(&self, id: &TerminalId, size: TerminalSize) -> Result<()> {
         self.inner.send_only(TerminalResize { id: id.clone(), size }.into_request())
+    }
+
+    /// Watches the terminal: a picture of what it shows, then what it lacks of the newest picture whenever the last
+    /// has been written, as `SubscriptionItem::TerminalPicture`s, and its shell's end as a `SubscriptionItem::Terminal`.
+    pub fn terminal_watch(&self, id: &TerminalId) -> Result<Subscription> {
+        self.subscribe(|subscription_id| TerminalWatch { id: id.clone(), subscription_id })
+    }
+
+    /// Rows of the terminal's history from `from`, by their numbers in `numbering`, for a view scrolled back past the
+    /// rows it holds. In another numbering, the reply has none, and says the one its rows are in now.
+    pub fn terminal_rows(
+        &self,
+        id: &TerminalId,
+        numbering: Numbering,
+        from: RowNumber,
+        count: u32,
+    ) -> Result<TerminalRowsReply> {
+        self.call(TerminalRows { id: id.clone(), numbering, from, count })
+    }
+
+    /// What's pressed, which the terminal's worker turns into what the program reads, by the modes it set, sent as
+    /// [`Client::terminal_input`] sends what's typed: without waiting for the reply, in order, and once.
+    pub fn terminal_typed(&self, id: &TerminalId, typed: Typed) -> Result<()> {
+        self.inner.send_only(TerminalTyped { id: id.clone(), typed }.into_request())
+    }
+
+    /// Gives the terminal a new size, in order with what's pressed, keeping the cells in `keep`, which are in
+    /// `numbering`. The reply says where each went in the numbering the new size starts.
+    pub fn terminal_fit(
+        &self,
+        id: &TerminalId,
+        size: TerminalSize,
+        numbering: Numbering,
+        keep: Vec<TerminalPoint>,
+    ) -> Result<TerminalFitReply> {
+        self.call(TerminalFit { id: id.clone(), size, numbering, keep })
+    }
+
+    /// The ends of the word or the line at `at`, as a double or a triple click selects them.
+    pub fn terminal_bounds(
+        &self,
+        id: &TerminalId,
+        numbering: Numbering,
+        at: TerminalPoint,
+        of: Bounds,
+    ) -> Result<TerminalBoundsReply> {
+        self.call(TerminalBounds { id: id.clone(), numbering, at, of })
+    }
+
+    /// A page of the text of the cells in `range`, or of the columns between its two cells in each of its rows for a
+    /// `rectangle`, as the terminal copies it. The reply says where the rest starts.
+    pub fn terminal_text(
+        &self,
+        id: &TerminalId,
+        numbering: Numbering,
+        range: TerminalRange,
+        rectangle: bool,
+    ) -> Result<TerminalTextReply> {
+        self.call(TerminalText { id: id.clone(), numbering, range, rectangle })
     }
 
     /// Ends the terminal's shell and closes the terminal, answering with its record as it last was.
