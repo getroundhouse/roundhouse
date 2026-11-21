@@ -74,8 +74,7 @@ impl WorkspacePane {
             };
             (marking, mark)
         });
-        // No key: the one for marking acts on the workspace showing, as its row's menu does.
-        right_click::menu(marking, None, move |window, cx| {
+        right_click::menu(marking, move |window, cx| {
             let _ = this.update(cx, |t, cx| t.start_renaming_chat(id.clone(), &title, window, cx));
         })
     }

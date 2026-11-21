@@ -9,6 +9,7 @@ mod drawn;
 mod file_and_view;
 
 mod bindings;
+mod expected;
 
 #[cfg(not(target_os = "macos"))]
 use bindings::with_a_repository;

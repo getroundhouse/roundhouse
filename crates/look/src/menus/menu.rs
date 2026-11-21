@@ -8,6 +8,14 @@ use super::MenuRow;
 pub struct Menu {
     kit: PopupMenu,
     open: WeakEntity<PopupMenu>,
+    keys: Keys,
+}
+
+/// Whether a menu's rows show their keys: every menu's do but a right-click menu's, which is a shortcut of its own.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Keys {
+    Shown,
+    Hidden,
 }
 
 impl Menu {
@@ -18,6 +26,7 @@ impl Menu {
 
     /// A row, which [`crate::menu_row`] makes.
     pub fn row(mut self, row: MenuRow) -> Self {
+        let row = if self.keys == Keys::Hidden { row.without_key() } else { row };
         self.kit = self.kit.item(row.kit());
         self
     }
@@ -60,9 +69,16 @@ impl Menu {
 pub fn menu(
     build: impl Fn(Menu, &mut Window, &mut App) -> Menu + 'static,
 ) -> impl Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static {
+    built(build, Keys::Shown)
+}
+
+fn built(
+    build: impl Fn(Menu, &mut Window, &mut App) -> Menu + 'static,
+    keys: Keys,
+) -> impl Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static {
     move |kit, window, cx| {
         let open = cx.entity().downgrade();
-        build(Menu { kit, open }, window, cx).kit
+        build(Menu { kit, open, keys }, window, cx).kit
     }
 }
 
@@ -99,10 +115,11 @@ impl OpenMenu {
 
 /// Opens a menu where something is right-clicked.
 pub trait RightClickMenu: ContextMenuExt + Sized {
-    /// Opens the menu `build` fills where this is right-clicked.
+    /// Opens the menu `build` fills where this is right-clicked. Its rows show no keys, as `components.md` says, since
+    /// the menu is a shortcut of its own, so a row given one shows it only in a menu that drops from a button.
     #[track_caller]
     fn right_click_menu(self, build: impl Fn(Menu, &mut Window, &mut App) -> Menu + 'static) -> ContextMenu<Self> {
-        self.context_menu(menu(build))
+        self.context_menu(built(build, Keys::Hidden))
     }
 }
 

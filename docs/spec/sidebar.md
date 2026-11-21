@@ -125,7 +125,7 @@
 
   ![A tab's menu](screens/chat-menu.png)
 
-- **`Cmd-Shift-U` marks the workspace showing read, or unread again,** as its row's menu would, and is the key Mail uses for a message. That row's menu shows it beside the item. Other rows' menus show no key, since it wouldn't act on them, and neither do tabs' menus, since it marks the workspace rather than the chat. *Unconfirmed.*
+- **`Cmd-Shift-U` marks the workspace showing read, or unread again,** as its row's menu would, and is the key Mail uses for a message. File's Mark as Unread shows it, as `menus.md` says, and no row's or tab's menu does, since a right-click menu shows no keys, as `components.md` says. *Unconfirmed.*
 
 ## A chat's cache
 
@@ -151,11 +151,7 @@
 
 - **Each item in a row's or a tab's menu has an icon:** an envelope to mark it unread, an open one to mark it read, a pencil to rename it, a pencil with sparks for a new title, and a box to archive it. *Unconfirmed.*
 - **Renaming has no key,** since a Mac has no usual one, and Return, which Finder renames with, sends what's typed in the composer. *Unconfirmed.*
-- **`Cmd-Shift-A` archives the workspace showing,** and only its row's menu shows the key beside Archive, since it wouldn't act on another row. *Unconfirmed.*
-
-  **The menu of another workspace, which shows no keys, since they'd act on the one showing.** *Unconfirmed.*
-
-  ![The menu of another workspace](screens/other-workspace-menu.png)
+- **`Cmd-Shift-A` archives the workspace showing,** as File's Archive Workspace, which shows the key, does. *Unconfirmed.*
 
 - **While the app is making, archiving or restoring a workspace, it starts none of those,** so a button or key pressed twice does it once, and its buttons that archive are greyed out. A workspace being archived or restored from elsewhere, such as the command line, can't be archived or restored again meanwhile, and the others can. *Unconfirmed.*
 - **The workspace being archived says Archiving… at its row's right end, in place of its button,** from the press until it has gone, wherever the pointer is and whether its button, its menu, `Cmd-Shift-A` or the File menu started it, so it's clear the press took. Its pull request's Archive, if it offers one, says it too. Every window says it, wherever it was asked for, such as from the command line, since the workspace's record says it's being archived. *Unconfirmed.*

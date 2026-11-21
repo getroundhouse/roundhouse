@@ -33,7 +33,7 @@ A project you've collapsed in the sidebar does it for the workspaces it has put 
 
 A reply is read once its chat is showing in the window in front. One that comes while you're in another app waits until you're back.
 
-To deal with one later, right-click its row and mark it unread, or press `Cmd-Shift-U` on the workspace showing. That's the key Mail uses.
+To deal with one later, right-click its row and mark it unread, or choose File > Mark as Unread, or press `Cmd-Shift-U`, for the workspace showing. That's the key Mail uses.
 
 ## Let it tell you
 

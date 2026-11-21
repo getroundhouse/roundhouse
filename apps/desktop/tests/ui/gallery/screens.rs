@@ -257,14 +257,6 @@ pub(crate) const SCREENS: &[Screen] = &[
         steps: &[Step::Select(FOCUS), Step::RightClick("workspace-ws-4")],
     },
     Screen {
-        name: "other-workspace-menu",
-        spec: "sidebar.md",
-        world: Some(unread_titled),
-        // The first workspace, which isn't showing, and has a reply nobody has read.
-        frame: SIDEBAR_MENU,
-        steps: &[Step::Select(FOCUS), Step::RightClick("workspace-ws-1")],
-    },
-    Screen {
         name: "chat-menu",
         spec: "sidebar.md",
         world: Some(unread),

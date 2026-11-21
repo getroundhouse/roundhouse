@@ -9,7 +9,7 @@ use gpui_kit::base::motion::transition;
 use gpui_kit::component::{Icon, h_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    Action, AnyElement, App, Context, ElementId, InteractiveElement as _, IntoElement, ParentElement, Role,
+    AnyElement, App, Context, ElementId, InteractiveElement as _, IntoElement, ParentElement, Role,
     StatefulInteractiveElement as _, Styled, TestSupportExt as _, Window, div, px,
 };
 use look::{IconSizing as _, LineText, Placed};
@@ -17,7 +17,6 @@ use protocol::model::{Workspace, WorkspaceId};
 
 use super::{MARK_GAP, MARK_INDENT, ROW_SIZE, Standing, standing};
 use crate::app::AppView;
-use crate::{ArchiveWorkspace, MarkWorkspace};
 use crate::{prompt_cache, right_click};
 
 /// As wide as the button that archives a row, a small button's square.
@@ -227,8 +226,7 @@ fn archive_button(app: &AppView, workspace: &Workspace, cx: &mut Context<AppView
 }
 
 /// What a right-click on a workspace's row offers: what a tab's does, a new title from what's been asked in it, then
-/// archiving it. The keys act on the workspace showing, so only its row's menu shows them. Marking its chats needs one
-/// with a reply. A new title needs one to replace, which the first prompt gives, none already on its way, and a
+/// archiving it. Marking its chats needs one with a reply. A new title needs one to replace, which the first prompt gives, none already on its way, and a
 /// workspace that isn't on its way out. The sidebar lists no archived workspace, so every row can be archived.
 fn row_menu(
     app: &AppView,
@@ -245,10 +243,7 @@ fn row_menu(
         (marking, mark)
     });
     let to_archive = this.clone();
-    // Not while Home hides it, when its keys do nothing.
-    let showing = !app.home_showing() && app.selected() == Some(&workspace.id);
-    let marking_key = showing.then(|| Box::new(MarkWorkspace) as Box<dyn Action>);
-    let shared = right_click::menu(marking, marking_key, move |window, cx| {
+    let shared = right_click::menu(marking, move |window, cx| {
         let _ = this.update(cx, |t, cx| t.start_renaming(id.clone(), window, cx));
     });
     let (busy, id) = (!app.busy.is_free(), workspace.id.clone());
@@ -269,7 +264,6 @@ fn row_menu(
         let regenerate = look::menu_row("Regenerate title").icon(Lucide::PencilSparkles);
         let menu = shared(menu, window, cx).row(regenerate.off(cant_retitle).on_choose(move |_, cx| retitle(cx)));
         let row = look::menu_row("Archive").icon(Lucide::Archive);
-        let row = row.when(showing, |row| row.key(Box::new(ArchiveWorkspace)));
         menu.separator().row(row.off(busy || going).on_choose(move |_, cx| archive(cx)))
     }
 }
