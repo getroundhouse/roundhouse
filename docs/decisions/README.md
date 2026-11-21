@@ -40,6 +40,7 @@ A decision record holds one large, one-off choice among real alternatives, such 
 | [interaction-mode.md](interaction-mode.md) | How the person talks with a chat's agent is its interaction mode, which every event is recorded under |
 | [spoken-prompt-carries-instruction.md](spoken-prompt-carries-instruction.md) | A spoken prompt reaches the agent with how to talk, which its adapter adds. Not built |
 | [pause-media-through-perl.md](pause-media-through-perl.md) | The app pauses what's playing with a library of its own, which `/usr/bin/perl` loads |
+| [worker-holds-the-only-terminal.md](worker-holds-the-only-terminal.md) | The worker holds the only copy of a terminal, and clients show the rows it sends |
 
 ## Chosen, with no reason recorded
 
@@ -47,7 +48,6 @@ Each of these is a choice that was written down without an alternative or a reas
 
 - SQLite stores a local hub's data. A hosted hub would use Postgres, and so would a self-hosted one if it grows.
 - The code is one Cargo workspace in one repo.
-- Ghostty's terminal core keeps what a terminal shows, in the worker and in each client.
 - A client reaches a paired hub directly over TLS 1.3, and checks the hub's public key against the fingerprint in the pairing link. No relay and no NAT traversal is built, so the two machines must be able to reach each other, for example over a LAN or a tailnet.
 - NVIDIA's nemotron model, on Core ML, turns speech into text for dictation.
 - Catppuccin's icons are the desktop app's file icons.
