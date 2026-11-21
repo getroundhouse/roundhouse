@@ -9,5 +9,6 @@ mod chats;
 mod conversations;
 mod launching;
 mod reading;
+mod reading_out;
 mod settings;
 mod subagents;

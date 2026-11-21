@@ -125,6 +125,7 @@ pub enum ClientRequest {
     SessionConversationStart(conversation::SessionConversationStart),
     SessionConversationEnd(conversation::SessionConversationEnd),
     SessionReplyHeard(conversation::SessionReplyHeard),
+    SessionSpeaking(conversation::SessionSpeaking),
     SessionCallOffWait(waits::SessionCallOffWait),
     SessionDraft(drafts::SessionDraft),
     SessionDecisionDraft(drafts::SessionDecisionDraft),

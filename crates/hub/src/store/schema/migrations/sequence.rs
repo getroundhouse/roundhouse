@@ -390,4 +390,6 @@ pub(in super::super) const MIGRATIONS: &[Migration] = &[
     Sql(super::conversations::INTERACTION),
     // How each reply said out loud ended, in `conversations`.
     Sql(super::conversations::REPLIES_HEARD),
+    // Who said how each reply ended, in `conversations`.
+    Sql(super::conversations::SETTLED_BY),
 ];

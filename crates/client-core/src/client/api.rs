@@ -12,8 +12,8 @@ use protocol::find::Found;
 use protocol::model::{
     AgentKind, ApprovalId, AttachmentId, ClientMessageId, ClientRequestId, CommentId, DeviceId, DiffComment, DiffSide,
     Ending, GitDiff, GitStatus, HubSettings, HubSettingsChange, MessageId, Proposal, PullRequest, Records,
-    ReferenceAsk, ReferenceRead, ReplyHeard, Repo, RepoId, Rev, Seq, Session, SessionId, Subagent, SubagentId,
-    TerminalId, WaitId, Workspace, WorkspaceId,
+    ReferenceAsk, ReferenceRead, ReplyHeard, Repo, RepoId, Rev, Seq, Session, SessionId, SpokenThrough, Subagent,
+    SubagentId, TerminalId, WaitId, Workspace, WorkspaceId,
 };
 
 use super::{Client, Result, Subscription, hub_is_missing, subscription_channel};
@@ -290,6 +290,11 @@ impl Client {
     /// See [`conversation::SessionReplyHeard`]. A hub older than this refuses it, as `is_unsupported` says.
     pub fn session_reply_heard(&self, id: &SessionId, message: MessageId, ending: Ending) -> Result<()> {
         self.call(conversation::SessionReplyHeard { id: id.clone(), message, ending })
+    }
+
+    /// See [`conversation::SessionSpeaking`]. A hub older than this refuses it, as `is_unsupported` says.
+    pub fn session_speaking(&self, id: &SessionId, through: SpokenThrough) -> Result<()> {
+        self.call(conversation::SessionSpeaking { id: id.clone(), through })
     }
 
     /// See [`sessions::SessionMarkRead`]. A hub older than this refuses it, as `is_unsupported` says.

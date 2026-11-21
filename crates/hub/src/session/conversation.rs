@@ -1,9 +1,9 @@
 //! Conversation mode: which device has a chat's conversation, the one that hears and speaks, and what the person
 //! sending a prompt does to it.
 
-use protocol::client::{ApiError, ErrorCode, HubNotice};
+use protocol::client::{ApiError, ErrorCode};
 use protocol::event::EventBody;
-use protocol::model::{ClientDevice, Ending, Interaction, MessageId, Session};
+use protocol::model::{ClientDevice, DeviceId, Interaction, Session};
 use protocol::prompt::Prompt;
 
 use super::{LiveSession, LiveState, Origin};
@@ -54,6 +54,21 @@ pub(super) fn has_the_conversation(interaction: &Interaction, device: Option<&Cl
     Err(ApiError::new(ErrorCode::Conflict, why))
 }
 
+/// Whether the conversation has left the device `had`, the one that had it, now that the person talks with the agent
+/// as `now` says: the mode ended, or another device took it over. What `had` was reading out is settled then, since it
+/// won't say.
+pub(super) fn left_conversation(had: Option<&DeviceId>, now: &Interaction) -> bool {
+    had.is_some_and(|had| now.device().is_none_or(|has| has.id != *had))
+}
+
+/// Puts `now` on the live session, and says whether the conversation left the device that had it, as
+/// [`left_conversation`] says.
+pub(super) fn set_interaction(state: &mut LiveState, now: Interaction) -> bool {
+    let left = left_conversation(state.interaction.device().map(|had| &had.id), &now);
+    state.interaction = now;
+    left
+}
+
 impl LiveSession {
     /// Turns conversation mode on, with the conversation on `device`, which records the rule across the chat, or moves
     /// the conversation to `device` if the mode is on already. It's decided in order with everything the chat records,
@@ -79,7 +94,10 @@ impl LiveSession {
                 Some(false) => {
                     let (id, moving) = (self.id.clone(), device.clone());
                     hub.blocking(move |store| store.move_conversation(&id, &moving)).await?;
-                    self.state.lock().interaction = Interaction::Conversation { device: Box::new(device) };
+                    let moved = Interaction::Conversation { device: Box::new(device) };
+                    if set_interaction(&mut self.state.lock(), moved) {
+                        self.settle_hearing(&hub).await;
+                    }
                 }
             }
         }
@@ -93,25 +111,10 @@ impl LiveSession {
             let _in_order = self.recording.lock().await;
             let id = self.id.clone();
             hub.blocking(move |store| store.end_conversation(&id)).await?;
-            self.state.lock().interaction = Interaction::Typing;
+            if set_interaction(&mut self.state.lock(), Interaction::Typing) {
+                self.settle_hearing(&hub).await;
+            }
         }
         self.announce(&hub).await
-    }
-
-    /// Keeps how the reply `message` ended for the person hearing it, as `device` read it out, which has to have the
-    /// conversation, and tells everyone following the feed, unless how it ended is kept already.
-    pub(crate) async fn keep_reply_heard(
-        &self,
-        device: Option<&ClientDevice>,
-        message: MessageId,
-        ending: Ending,
-    ) -> Result<(), ApiError> {
-        let hub = self.hub()?;
-        has_the_conversation(&self.state.lock().interaction, device)?;
-        let id = self.id.clone();
-        if let Some(heard) = hub.blocking(move |store| store.keep_reply_heard(&id, &message, ending)).await? {
-            hub.notify(HubNotice::ReplyHeard(heard));
-        }
-        Ok(())
     }
 }

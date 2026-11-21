@@ -4,6 +4,7 @@ use super::subscribing::{follow_feed, follow_log, unsubscribe};
 use super::terminals;
 use crate::attachment_files::FileFor;
 use crate::hub::Hub;
+use crate::session::ReadingOn;
 use crate::store::AddedBy;
 use protocol::client::{
     ApiError, ClientRequest, ClientResponse, ErrorCode, accounts, admin, agent, attachments, comments, conversation,
@@ -264,6 +265,11 @@ pub(super) async fn handle(
         }
         R::SessionReplyHeard(conversation::SessionReplyHeard { id, message, ending }) => {
             hub.session_reply_heard(id, device.as_ref(), message, ending).await?;
+            C::Ok
+        }
+        R::SessionSpeaking(conversation::SessionSpeaking { id, through }) => {
+            let on = ReadingOn { connection: connection.id, closed: connection.closed.subscribe() };
+            hub.session_speaking(id, device.as_ref(), on, through).await?;
             C::Ok
         }
         R::SessionRepliesHeard(records::SessionRepliesHeard { id }) => {

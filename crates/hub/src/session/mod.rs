@@ -24,6 +24,7 @@ mod origin;
 mod pickup;
 mod progress;
 mod queue;
+mod reading_out;
 mod record;
 mod reports;
 mod starting;
@@ -35,6 +36,7 @@ mod waits;
 pub(crate) use chat_settings::ChatSettings;
 pub(crate) use messages::{Command, Item};
 pub(crate) use progress::Progress;
+pub(crate) use reading_out::ReadingOn;
 pub(crate) use starting::Starting;
 
 mod live;

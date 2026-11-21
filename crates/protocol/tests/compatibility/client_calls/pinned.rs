@@ -55,7 +55,7 @@ pinned! {
     "client_calls/github_apps.rs" => [
         GithubAppManifestWrite(_), GithubAppMake(_), GithubAppInstallationsConnect(_), GithubAppRemove(_),
     ],
-    "replies_heard.rs" => [SessionReplyHeard(_), SessionRepliesHeard(_)],
+    "replies_heard.rs" => [SessionReplyHeard(_), SessionRepliesHeard(_), SessionSpeaking(_)],
     "proposals.rs" => [ProposalAnswer(_), ProposalAnotherRound(_), ProposalRevisionsRead(_)],
     "references.rs" => [ReferencesRead(_)],
     "terminals.rs" => [TerminalOpen(_), TerminalAttach(_), TerminalInput(_), TerminalResize(_), TerminalClose(_)],

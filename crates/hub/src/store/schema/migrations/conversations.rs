@@ -39,3 +39,9 @@ pub(super) const REPLIES_HEARD: &str = r"
         UPDATE counters SET value = value + 1 WHERE name = 'rev';
     END;
 ";
+
+/// Who said how each reply ended: NULL for the device that read it out, and `hub` for what the hub settled, which what
+/// the device says takes the place of.
+pub(super) const SETTLED_BY: &str = r"
+    ALTER TABLE replies_heard ADD COLUMN settled_by TEXT;
+";

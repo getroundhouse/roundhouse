@@ -299,6 +299,7 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
         | R::SessionConversationStart(_)
         | R::SessionConversationEnd(_)
         | R::SessionReplyHeard(_)
+        | R::SessionSpeaking(_)
         | R::SessionRepliesHeard(_)
         | R::SessionRename(_)
         | R::AccountConnect(_)

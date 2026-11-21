@@ -10,11 +10,37 @@ use super::{MessageId, Rev, SessionId};
 /// event's blocks. `through` counts bytes of the block's text as the agent wrote it, Markdown and all, rather than of
 /// what the voice says, and falls between two characters. It comes from another build, so a reader clamps it to the
 /// text it has, and to a character's start, rather than cutting the text there as given. Every block before it in the
-/// reply was said, and every one after it wasn't.
-#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+/// reply was said, and every one after it wasn't. Places in one reply are in order by block, then by `through`.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ReplyPlace {
     pub block: u32,
     pub through: u32,
+}
+
+/// How far a reply being read out has got: `through` the place in the agent's reply `message`.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct SpokenThrough {
+    pub message: MessageId,
+    pub through: ReplyPlace,
+}
+
+/// Who said how a reply ended: the device that read it out, which knows, or the hub, which settles what's left when the
+/// device goes or the mode ends, from where the device last said it had got.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum SettledBy {
+    #[default]
+    Device,
+    Hub,
+    /// One this build doesn't know, from a newer hub.
+    #[serde(other)]
+    Unknown,
+}
+
+impl SettledBy {
+    pub fn is_device(&self) -> bool {
+        matches!(self, SettledBy::Device)
+    }
 }
 
 /// How a reply that was to be read out ended for the person hearing it.
@@ -53,5 +79,8 @@ pub struct ReplyHeard {
     pub session_id: SessionId,
     pub message: MessageId,
     pub ending: Ending,
+    /// Who said it. What the hub settled gives way to what the device says, which knows. Left out for the device.
+    #[serde(default, skip_serializing_if = "SettledBy::is_device")]
+    pub settled_by: SettledBy,
     pub rev: Rev,
 }
