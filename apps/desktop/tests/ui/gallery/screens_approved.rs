@@ -1,25 +1,20 @@
 #![cfg(test)]
 use super::screens::SCREENS;
 use super::{
-    approval_chats, approved, background_chats, banner_kinds, bar_kinds, baselines, button_states, cache_screens,
-    call_screens, capture, cards, code_lines, colours, compaction_chats, component_screens, context_screens, controls,
+    approval_chats, background_chats, banner_kinds, bar_kinds, baselines, button_states, cache_screens, call_screens,
+    capture, cards, code_lines, colours, compaction_chats, component_screens, context_screens, controls,
     conversation_chats, corners, dialog_widths, dictation_screens, diff_screens, empty_kinds, failure_chats,
     failures_in_a_row, field_states, heights, home_screens, icon_sizes, key_kinds, kinds_of_text, lines, list_rows,
     mark_states, menu_rows, own_turn_chats, proposal_chats, pull_requests, settings_screens, sidebar_screens,
     small_things, spaces, steps, subagent_chats, switch_kinds, tab_widths, terminal_screens, toggle_states,
     tool_screens, tooltips, turn_screens, update_screens, workspace_screens,
 };
-use approved::Verdict;
-use capture::Picture;
 use diff_screens::DIFF_SCREENS;
 use gpui_kit::PlatformTextSystem;
-use std::path::PathBuf;
+use spec_screens::{DESKTOP, report};
 use std::sync::Arc;
 use tool_screens::TOOL_SCREENS;
 use update_screens::UPDATE_SCREENS;
-
-/// Set to accept how every screen looks now, as its approved image.
-pub(super) const UPDATE: &str = "ROUNDHOUSE_UPDATE_SCREENS";
 
 #[test]
 fn every_state_of_a_pull_request_looks_as_approved() {
@@ -29,7 +24,7 @@ fn every_state_of_a_pull_request_looks_as_approved() {
 
     let picture = pull_requests::draw(&text_system);
 
-    problems.extend(look_at(pull_requests::NAME, pull_requests::SPEC, &picture));
+    problems.extend(DESKTOP.look_at(pull_requests::NAME, pull_requests::SPEC, &picture));
     report(&problems);
 }
 
@@ -39,7 +34,7 @@ fn every_state_of_the_mark_looks_as_approved() {
 
     let picture = mark_states::draw(&text_system);
 
-    report(&look_at(mark_states::NAME, mark_states::SPEC, &picture));
+    report(&DESKTOP.look_at(mark_states::NAME, mark_states::SPEC, &picture));
 }
 
 #[test]
@@ -48,7 +43,7 @@ fn every_colour_looks_as_approved() {
 
     let (picture, places) = colours::draw(&text_system);
 
-    let mut problems = look_at(colours::NAME, colours::SPEC, &picture);
+    let mut problems = DESKTOP.look_at(colours::NAME, colours::SPEC, &picture);
     problems.extend(places.look_at(colours::NAME));
     report(&problems);
 }
@@ -59,7 +54,7 @@ fn every_kind_of_text_looks_as_approved() {
 
     let (picture, places) = kinds_of_text::draw(&text_system);
 
-    let mut problems = look_at(kinds_of_text::NAME, kinds_of_text::SPEC, &picture);
+    let mut problems = DESKTOP.look_at(kinds_of_text::NAME, kinds_of_text::SPEC, &picture);
     problems.extend(places.look_at(kinds_of_text::NAME));
     report(&problems);
 }
@@ -89,10 +84,10 @@ fn every_screen_looks_as_approved() {
     for screen in screens() {
         let (picture, framing) = capture::take(screen, &text_system);
         if framing.is_empty() {
-            problems.extend(look_at(screen.name, screen.spec, &picture));
+            problems.extend(DESKTOP.look_at(screen.name, screen.spec, &picture));
         } else {
             // Cut to a frame that's wrong, so it's neither compared nor accepted, only kept to look at.
-            keep_to_look_at(screen.name, &picture);
+            DESKTOP.keep_to_look_at(screen.name, &picture);
             problems.extend(framing.into_iter().map(|problem| format!("{}: {problem}", screen.name)));
         }
     }
@@ -130,7 +125,7 @@ fn every_screen_looks_as_approved() {
             spaces::NAME,
         ])
         .collect();
-    problems.extend(approved::without_a_screen(&names).into_iter().map(|name| format!("{name}.png has no screen")));
+    problems.extend(DESKTOP.without_a_screen(&names).into_iter().map(|name| format!("{name}.png has no screen")));
     report(&problems);
 }
 
@@ -182,52 +177,13 @@ fn screens() -> impl Iterator<Item = &'static steps::Screen> {
         .chain(super::prompt_screens::SCREENS)
 }
 
-/// What's wrong with a picture: its spec doesn't show it, it keeps changing, or it isn't as approved. With
-/// [`UPDATE`] set, it's accepted instead of compared. Either way it goes in `.context/gallery/` to look at.
-pub(super) fn look_at(name: &str, spec: &str, picture: &Picture) -> Vec<String> {
-    let mut problems = Vec::new();
-    if !approved::shown_in(name, spec) {
-        problems.push(format!("docs/spec/{spec} doesn't show {name}"));
-    }
-    keep_to_look_at(name, picture);
-    // A picture that never stops changing can't look the same from one run to the next, so it can't be compared.
-    if !picture.settled {
-        problems.push(format!("{name} keeps changing"));
-    } else if std::env::var_os(UPDATE).is_some() {
-        approved::accept(name, &picture.image);
-    } else {
-        match approved::compare(name, &picture.image) {
-            Verdict::Matches => {}
-            Verdict::Differs => problems.push(format!("{name} no longer matches its image")),
-            Verdict::Missing => problems.push(format!("{name} has no image")),
-        }
-    }
-    problems
-}
-
-/// Puts the picture in `.context/gallery/`, to look at.
-fn keep_to_look_at(name: &str, picture: &Picture) {
-    let out = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../.context/gallery");
-    std::fs::create_dir_all(&out).unwrap();
-    picture.image.save(out.join(format!("{name}.png"))).unwrap();
-}
-
-pub(super) fn report(problems: &[String]) {
-    assert!(
-        problems.is_empty(),
-        "{}\n\nWhat each screen looks like now is in .context/gallery/. If a change is meant, {UPDATE}=1 accepts it, \
-         and changing a confirmed screen needs the owner's approval, as docs/spec/README.md says.",
-        problems.join("\n")
-    );
-}
-
 #[test]
 fn every_corner_looks_as_approved() {
     let text_system: Arc<dyn PlatformTextSystem> = Arc::new(gpui_apple::AppleTextSystem::new());
 
     let (picture, places) = corners::draw(&text_system);
 
-    let mut problems = look_at(corners::NAME, corners::SPEC, &picture);
+    let mut problems = DESKTOP.look_at(corners::NAME, corners::SPEC, &picture);
     problems.extend(places.look_at(corners::NAME));
     report(&problems);
 }
@@ -238,7 +194,7 @@ fn every_control_size_looks_as_approved() {
 
     let (picture, places) = controls::draw(&text_system);
 
-    let mut problems = look_at(controls::NAME, controls::SPEC, &picture);
+    let mut problems = DESKTOP.look_at(controls::NAME, controls::SPEC, &picture);
     problems.extend(places.look_at(controls::NAME));
     report(&problems);
 }
@@ -249,7 +205,7 @@ fn every_bar_and_row_height_looks_as_approved() {
 
     let (picture, places) = heights::draw(&text_system);
 
-    let mut problems = look_at(heights::NAME, heights::SPEC, &picture);
+    let mut problems = DESKTOP.look_at(heights::NAME, heights::SPEC, &picture);
     problems.extend(places.look_at(heights::NAME));
     report(&problems);
 }
@@ -260,7 +216,7 @@ fn every_spacing_of_codes_lines_looks_as_approved() {
 
     let (picture, places) = code_lines::draw(&text_system);
 
-    let mut problems = look_at(code_lines::NAME, code_lines::SPEC, &picture);
+    let mut problems = DESKTOP.look_at(code_lines::NAME, code_lines::SPEC, &picture);
     problems.extend(places.look_at(code_lines::NAME));
     report(&problems);
 }
@@ -271,7 +227,7 @@ fn every_icon_size_looks_as_approved() {
 
     let (picture, places) = icon_sizes::draw(&text_system);
 
-    let mut problems = look_at(icon_sizes::NAME, icon_sizes::SPEC, &picture);
+    let mut problems = DESKTOP.look_at(icon_sizes::NAME, icon_sizes::SPEC, &picture);
     problems.extend(places.look_at(icon_sizes::NAME));
     report(&problems);
 }
@@ -282,7 +238,7 @@ fn every_step_of_space_looks_as_approved() {
 
     let (picture, places) = spaces::draw(&text_system);
 
-    let mut problems = look_at(spaces::NAME, spaces::SPEC, &picture);
+    let mut problems = DESKTOP.look_at(spaces::NAME, spaces::SPEC, &picture);
     problems.extend(places.look_at(spaces::NAME));
     report(&problems);
 }

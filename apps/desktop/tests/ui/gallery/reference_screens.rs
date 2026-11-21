@@ -11,13 +11,13 @@ use protocol::model::{
     SessionStatus,
 };
 
-use super::chats;
 use super::frame::{Frame, PROPOSAL, Part};
 use super::proposal_chats;
 use super::pull_requests;
 use super::screens::FOCUS;
 use super::steps::{Screen, Step, Target};
 use super::worlds::chat_world;
+use spec_screens::chats;
 
 const ASK: &str = "Where are we with the sidebar's pull request badges?";
 

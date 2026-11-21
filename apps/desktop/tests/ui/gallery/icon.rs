@@ -15,9 +15,9 @@ use gpui_kit::{
 };
 use image::{Rgba, RgbaImage};
 use look::{AppIconSize, AppIconStyle};
+use spec_screens::{UPDATE, Verdict, accept_file, compare_file};
 
-use super::approved::{self, Verdict};
-use super::{UPDATE, headless};
+use super::headless;
 
 /// The iconset's files, and the drawing each holds. macOS names them by points and scale, so some share a drawing.
 const FILES: [(&str, AppIconSize); 10] = [
@@ -58,10 +58,10 @@ fn every_size_of_the_icon_looks_as_approved() {
                 let path = iconset(style).join(file);
                 let which = format!("{}.iconset/{file}", name(style));
                 if update {
-                    approved::accept_file(&path, &drawn);
+                    accept_file(&path, &drawn);
                     continue;
                 }
-                match approved::compare_file(&path, &drawn) {
+                match compare_file(&path, &drawn) {
                     Verdict::Matches => {}
                     Verdict::Differs => problems.push(format!("{which} no longer matches the {pixels}px icon")),
                     Verdict::Missing => problems.push(format!("{which} is missing")),
@@ -99,7 +99,7 @@ fn the_phone_icon_looks_as_approved() {
     let kept = image::open(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
     assert!(!kept.color().has_alpha(), "{} has an alpha channel", path.display());
     assert!(
-        matches!(approved::compare_file(&path, &drawn), Verdict::Matches),
+        matches!(compare_file(&path, &drawn), Verdict::Matches),
         "{} no longer matches the phone's icon. What it looks like now is in .context/gallery/. If a change is meant, \
          {UPDATE}=1 accepts it.",
         path.display()

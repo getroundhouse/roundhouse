@@ -83,6 +83,7 @@ crates/
   update-feed/     What a release adds to the update feed
   windows-icon/    An icon as the resource a Windows program carries, for the desktop app's build
   waiting/         How tests wait
+  spec-screens/    The spec's screens, for the galleries that draw them: approving a picture, and what the screens' chats say
 apps/
   daemon/          `roundhoused`, which runs as a hub or a worker
   cli/             `roundhouse`, the command-line client

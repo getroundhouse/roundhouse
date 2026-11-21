@@ -12,10 +12,11 @@ use protocol::model::{SessionStatus, ToolUseId};
 use super::frame::{CHAT, CONTEXT};
 use super::screens::FOCUS;
 use super::steps::{Screen, Step, Target};
+use super::tool_chats;
 use super::worlds::{chat_world, context, in_plan_mode};
-use super::{chats, tool_chats};
 use client_core::fake_hub::World;
 use client_core::fake_hub::events::{first_turn, printed, replied, text, typed_call, user_prompt};
+use spec_screens::chats;
 
 pub(crate) const SCREENS: &[Screen] = &[
     Screen {

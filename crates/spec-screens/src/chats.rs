@@ -1,8 +1,6 @@
 //! What the screens' chats say. It's all made up, mostly about a change this repo might make, so it reads like real
 //! work.
 
-#![cfg(test)]
-
 use protocol::attachment::Attachment;
 use protocol::capability::approvals::Asks;
 use protocol::capability::calls::Call;
@@ -33,10 +31,10 @@ const REPLY: &str = "The sidebar only knows what's in `Workspace`, so the PR sta
      pub pull_request: Option<PullRequest>,\n}\n```";
 
 /// The line [`finished`] ends with, its tenth event.
-pub(crate) const FINISHED_TURN_END: &str = "turn-end/event/10/0";
+pub const FINISHED_TURN_END: &str = "turn-end/event/10/0";
 
 /// A turn that's over: a prompt, two tools and a reply with a list and some code.
-pub(crate) fn finished() -> Vec<EventBody> {
+pub fn finished() -> Vec<EventBody> {
     let mut events = looked_around();
     events.push(text("msg-3", REPLY));
     events.push(replied(REPLY, 106, 0.21));
@@ -44,7 +42,7 @@ pub(crate) fn finished() -> Vec<EventBody> {
 }
 
 /// A turn that's over with the test run it started still going in the background, which the agent comes back to.
-pub(crate) fn background() -> Vec<EventBody> {
+pub fn background() -> Vec<EventBody> {
     let reply = "The full test suite is running in the background, since it takes a few minutes. I'll pick up again \
                  when it finishes, or sooner if something fails.";
     let mut events = started_in_background();
@@ -53,7 +51,7 @@ pub(crate) fn background() -> Vec<EventBody> {
 }
 
 /// Partway through a turn, with the test run it started, and a monitor watching it, going in the background.
-pub(crate) fn started_in_background() -> Vec<EventBody> {
+pub fn started_in_background() -> Vec<EventBody> {
     let mut events = looked_around();
     events.push(in_background("msg-3", "toolu-3", "cargo test --workspace", "Run the full test suite"));
     let suite = AgentTask {
@@ -81,7 +79,7 @@ pub(crate) fn started_in_background() -> Vec<EventBody> {
 
 /// A turn that's over with the agent waiting in the background on its pull request's checks, through the worker's tool,
 /// to queue it once they pass.
-pub(crate) fn waiting() -> Vec<EventBody> {
+pub fn waiting() -> Vec<EventBody> {
     let reply = "I've opened #182. I'm waiting on its checks in the background, and I'll add it to the merge queue once \
                  they pass.";
     let wait = AgentTask {
@@ -110,7 +108,7 @@ pub(crate) fn waiting() -> Vec<EventBody> {
 }
 
 /// A short turn that's over: a prompt and a reply, and nothing else.
-pub(crate) fn answered(prompt: &str, reply: &str) -> Vec<EventBody> {
+pub fn answered(prompt: &str, reply: &str) -> Vec<EventBody> {
     first_turn(user_prompt(prompt), [text("msg-1", reply), replied(reply, 9, 0.04)])
 }
 
@@ -120,7 +118,7 @@ const ATTACHED_REPLY: &str = "The badge comes after the name in the row, but the
      an ellipsis, with the badge kept at its own width, fixes it.";
 
 /// A prompt carrying a screenshot and a log, and the reply to it.
-pub(crate) fn attached(attachments: Vec<Attachment>) -> Vec<EventBody> {
+pub fn attached(attachments: Vec<Attachment>) -> Vec<EventBody> {
     first_turn(
         EventBody::UserPrompt {
             client_msg_id: None,
@@ -136,19 +134,19 @@ pub(crate) fn attached(attachments: Vec<Attachment>) -> Vec<EventBody> {
     )
 }
 
-pub(crate) const LAYOUT_LOG: &str = "\
+pub const LAYOUT_LOG: &str = "\
 row aspen: width 212, name 148 (min 148), badge 58
 row aspen: overflow 6 px, badge moved left over the name
 ";
 
 /// Partway through a turn, with a reply still being written. The rest of it is [`streaming_tail`].
-pub(crate) fn streaming() -> Vec<EventBody> {
+pub fn streaming() -> Vec<EventBody> {
     let mut events = looked_around();
     events.push(EventBody::AgentState { state: AgentRunState::Running });
     events
 }
 
-pub(crate) fn streaming_tail() -> Tail {
+pub fn streaming_tail() -> Tail {
     writing(
         "msg-3",
         BlockKind::Text,
@@ -158,7 +156,7 @@ pub(crate) fn streaming_tail() -> Tail {
 }
 
 /// The next call [`started_in_background`] is writing, which doesn't show until it's recorded.
-pub(crate) fn calling_tail() -> Tail {
+pub fn calling_tail() -> Tail {
     let mut tail = writing("msg-5", BlockKind::ToolUse, r#"{"command": "cargo test -p desk"#);
     tail.messages[0].blocks[0].tool_name = Some("Bash".to_string());
     tail
@@ -178,7 +176,7 @@ fn writing(message: &str, kind: BlockKind, text: &str) -> Tail {
 }
 
 /// Waiting for someone to allow a command, as an agent that's planning asks before it runs one.
-pub(crate) fn approval() -> Vec<EventBody> {
+pub fn approval() -> Vec<EventBody> {
     let mut events = looked_around();
     for event in &mut events {
         if let EventBody::AgentInit { mode, .. } = event {
@@ -203,7 +201,7 @@ pub(crate) fn approval() -> Vec<EventBody> {
 }
 
 /// Running the UI tests, with a prompt sent meanwhile that the agent takes once they finish.
-pub(crate) fn steered() -> Vec<EventBody> {
+pub fn steered() -> Vec<EventBody> {
     let mut events = looked_around();
     events
         .push(text("msg-3", "I'll run the desktop app's UI tests before changing anything, to see where they stand."));
@@ -217,7 +215,7 @@ pub(crate) fn steered() -> Vec<EventBody> {
 }
 
 /// Stopped partway, after looking around.
-pub(crate) fn stopped() -> Vec<EventBody> {
+pub fn stopped() -> Vec<EventBody> {
     let mut events = looked_around();
     events.push(EventBody::TurnEnded {
         outcome: TurnOutcome::Cancelled,
@@ -243,7 +241,7 @@ changing it, since `slow` might need a speed.";
 
 /// Thinking between calls, about the signalling crate the tool calls' chats work on: a long thought opened, and a
 /// short one closed.
-pub(crate) fn thinking() -> Vec<EventBody> {
+pub fn thinking() -> Vec<EventBody> {
     let reply = "The train treats caution as stop: `approach` brakes for any signal that isn't clear. It should brake \
                  only at stop, and slow to half speed at caution.";
     let mut events = thought_then_read();
@@ -257,20 +255,20 @@ pub(crate) fn thinking() -> Vec<EventBody> {
 
 /// Partway through [`thinking`], with its second thought still being written. The rest of it is
 /// [`thinking_tail`].
-pub(crate) fn thinking_so_far() -> Vec<EventBody> {
+pub fn thinking_so_far() -> Vec<EventBody> {
     let mut events = thought_then_read();
     events.push(EventBody::AgentState { state: AgentRunState::Running });
     events
 }
 
 /// Partway through a thought, with a prompt sent as it began, which the agent reads once it's done.
-pub(crate) fn steered_thinking() -> Vec<EventBody> {
+pub fn steered_thinking() -> Vec<EventBody> {
     let mut events = thinking_so_far();
     events.push(user_prompt("The depot test sets the caution speed to 10, if that helps."));
     events
 }
 
-pub(crate) fn thinking_tail() -> Tail {
+pub fn thinking_tail() -> Tail {
     writing("msg-3", BlockKind::Thinking, "So slow takes a target speed, and caution can pass half the line")
 }
 
@@ -291,7 +289,7 @@ fn thought_then_read() -> Vec<EventBody> {
 }
 
 /// The start every chat here shares: the prompt, a search and a file read.
-pub(crate) fn looked_around() -> Vec<EventBody> {
+pub fn looked_around() -> Vec<EventBody> {
     let mut events = first_turn(
         user_prompt(ASK),
         [
@@ -323,7 +321,7 @@ pub(crate) fn looked_around() -> Vec<EventBody> {
     events
 }
 
-pub(crate) const SETUP_LOG: &str = "\
+pub const SETUP_LOG: &str = "\
 $ cp ../.env.example .env
 $ pnpm install --frozen-lockfile
 Lockfile is up to date, resolution step is skipped

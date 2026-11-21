@@ -1,7 +1,7 @@
 #![cfg(test)]
 
 use super::super::screens::FOCUS;
-use super::super::{chats, file_chats, patch, pictures, pull_requests, typed_chats, worktree};
+use super::super::{file_chats, patch, pictures, pull_requests, typed_chats, worktree};
 use super::accounts;
 use client_core::fake_hub::{HOUR_MS, HubBuild, NOW_MS, World};
 use protocol::attachment::{Attachment, MediaType};
@@ -10,6 +10,7 @@ use protocol::model::{
     FileContents, GitDiff, LimitWindow, MaxSetBy, MergeState, ModelLabel, PullRequest, Rev, SessionStatus, SetupStatus,
     Title, UsageLimit, WorkspaceId, WorkspaceStatus,
 };
+use spec_screens::chats;
 
 /// The conversation, on an older hub that a client started, with chats still running on it.
 pub(in super::super) fn finishing_update() -> World {

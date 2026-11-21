@@ -12,7 +12,8 @@ use super::screens::FOCUS;
 use super::steps::{Screen, Step, Target};
 use super::typed_chats;
 use super::worlds::{chat_world, made_image, read_image, steered_thinking, thinking_streaming};
-use super::{chats, file_chats, question_chats, tool_chats};
+use super::{file_chats, tool_chats};
+use spec_screens::{chats, question_chats};
 
 pub(crate) const TOOL_SCREENS: &[Screen] = &[
     Screen {

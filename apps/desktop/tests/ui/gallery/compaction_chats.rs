@@ -8,7 +8,6 @@ use protocol::event::{CompactedBy, CompactionOutcome, EventBody, TurnOutcome};
 use protocol::model::{Seq, SessionStatus};
 use protocol::tail::{Compacting, Tail};
 
-use super::chats::{finished, looked_around};
 use super::frame::{CHAT, OUTLINE};
 use super::screens::FOCUS;
 use super::steps::{Screen, Step, Target};
@@ -17,6 +16,7 @@ use client_core::fake_hub::World;
 use client_core::fake_hub::events::{
     command, edit, printed, replied, start_turn, text, thought, turn_ending_with, updated, user_prompt,
 };
+use spec_screens::chats::{finished, looked_around};
 
 /// The screens about compacting.
 pub(crate) const SCREENS: &[Screen] = &[
