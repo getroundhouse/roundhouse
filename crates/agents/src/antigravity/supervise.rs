@@ -30,6 +30,7 @@ pub(super) async fn supervise(pipes: ChildPipes, shared: Arc<Shared>) {
     let err = tokio::spawn(stdio::read_stderr(stderr));
     let wakeup = tokio::spawn(super::wakeup::watch(shared.clone(), child_gone.clone()));
     let status = child.wait().await;
+    shared.run.reaped();
     child_gone.store(true, Ordering::SeqCst);
     let replaced = replacing.load(Ordering::SeqCst);
     if !replaced {

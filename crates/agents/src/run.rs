@@ -1,5 +1,5 @@
-//! A run of Codex or Antigravity, from its launch to its exit: the process group it's in, whether it's gone and whether
-//! its stop was asked for, and where what it says goes, which closes once it has said it exited.
+//! A run of an agent's CLI, from its launch to its exit: the process group it's in, whether it's gone and whether its
+//! stop was asked for, and where what it says goes, which closes once it has said it exited.
 
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
@@ -7,6 +7,7 @@ use std::time::Duration;
 
 use protocol::event::EventBody;
 use tokio::sync::{mpsc, watch};
+use tracing::warn;
 
 use crate::AgentOutput;
 
@@ -14,11 +15,14 @@ use crate::AgentOutput;
 const STOP_GRACE: Duration = Duration::from_secs(3);
 
 pub(crate) struct Run {
-    /// The process group's, which is its CLI's. Antigravity replaces its CLI during a run, and with it this.
+    /// The process group's, which is its CLI's. It changes when Antigravity's adapter replaces its CLI, and when
+    /// Claude's starts its CLI again to correct a launch. It's 0 from the CLI's reaping until another replaces it, since
+    /// the reaped one's pid may be another process's by then.
     pid: AtomicU32,
     /// Set as soon as the CLI is known to be gone, which is before what it said has all been read.
     gone: AtomicBool,
-    requested: AtomicBool,
+    /// Set once the run is asked to stop, which a launch that's still being started waits on too.
+    requested: watch::Sender<bool>,
     /// Set once the run has said it exited.
     exited: watch::Sender<bool>,
     pid_file: Option<PathBuf>,
@@ -31,7 +35,7 @@ impl Run {
         Run {
             pid: AtomicU32::new(pid),
             gone: AtomicBool::new(false),
-            requested: AtomicBool::new(false),
+            requested: watch::channel(false).0,
             exited: watch::channel(false).0,
             pid_file,
             output: tokio::sync::Mutex::new(Some(output)),
@@ -47,6 +51,11 @@ impl Run {
         self.pid.store(pid, Ordering::SeqCst);
     }
 
+    /// The CLI has exited and been reaped, so nothing signals its pid from now on.
+    pub(crate) fn reaped(&self) {
+        self.pid.store(0, Ordering::SeqCst);
+    }
+
     pub(crate) fn is_gone(&self) -> bool {
         self.gone.load(Ordering::SeqCst)
     }
@@ -57,7 +66,12 @@ impl Run {
 
     /// Whether the run was asked to stop, so its exit was too.
     pub(crate) fn requested(&self) -> bool {
-        self.requested.load(Ordering::SeqCst)
+        *self.requested.borrow()
+    }
+
+    /// Returns once the run has been asked to stop, at once if it has been already.
+    pub(crate) async fn stop_asked(&self) {
+        let _ = self.requested.subscribe().wait_for(|requested| *requested).await;
     }
 
     pub(crate) async fn emit(&self, output: AgentOutput) {
@@ -78,8 +92,14 @@ impl Run {
     /// Asks the CLI to exit, and kills its group if it hasn't in [`STOP_GRACE`]. Returns once the run has said it
     /// exited.
     pub(crate) async fn stop(&self) {
-        self.requested.store(true, Ordering::SeqCst);
+        self.requested.send_replace(true);
         stop_group(|| self.pid(), self.exited.subscribe()).await;
+    }
+
+    /// Asks the CLI to exit without waiting, for a CLI the adapter can't go on with, so its exit says it wasn't asked
+    /// for.
+    pub(crate) fn terminate(&self) {
+        process::signal_group(self.pid(), process::Signal::Terminate);
     }
 
     /// Kills the group unless the CLI is gone already, as dropping the run's handle does, without waiting. The
@@ -87,7 +107,7 @@ impl Run {
     /// the group even before the CLI has answered.
     pub(crate) fn kill_unless_gone(&self) {
         if !self.is_gone() {
-            self.requested.store(true, Ordering::SeqCst);
+            self.requested.send_replace(true);
             process::signal_group(self.pid(), process::Signal::Kill);
         }
     }
@@ -104,15 +124,20 @@ impl Run {
 }
 
 /// Asks the group of the CLI `pid` says to exit, and kills it if `exited` hasn't said so in [`STOP_GRACE`], then waits
-/// for it. `pid` is read again before the kill, since the CLI may have been replaced meanwhile. Once `exited` has said
-/// so, the CLI has been reaped and its pid may be another process's, so it's left alone.
+/// for it. `pid` is read again before the kill, since the CLI may have been replaced or reaped meanwhile. Once `exited`
+/// has said so, the CLI has been reaped and its pid may be another process's, so it's left alone.
 pub(crate) async fn stop_group(pid: impl Fn() -> u32, mut exited: watch::Receiver<bool>) {
     if *exited.borrow() {
         return;
     }
     process::signal_group(pid(), process::Signal::Terminate);
     if tokio::time::timeout(STOP_GRACE, exited.wait_for(|done| *done)).await.is_err() {
-        process::signal_group(pid(), process::Signal::Kill);
+        let pid = pid();
+        // A pid of 0 is a CLI that has been reaped, whose output is still being read, so it ignored nothing.
+        if pid != 0 {
+            warn!("CLI {pid} hadn't exited {STOP_GRACE:?} after SIGTERM, so its group is killed");
+            process::signal_group(pid, process::Signal::Kill);
+        }
         let _ = exited.wait_for(|done| *done).await;
     }
 }
@@ -143,5 +168,37 @@ mod tests {
         );
         assert!(said.recv().await.is_none(), "the run said more after it exited");
         assert!(!record.exists());
+    }
+
+    /// On Unix, where a CLI can ignore SIGTERM. On Windows every signal ends the CLI at once.
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn a_cli_that_ignores_sigterm_is_killed_once_the_grace_is_up() {
+        let dir = tempfile::tempdir().unwrap();
+        let ready = dir.path().join("ready");
+        let sh = std::path::Path::new("/bin/sh");
+        let mut command = crate::starting::piped(sh, dir.path());
+        command.args(["-c", "trap '' TERM; : > ready; exec sleep 100"]);
+        let environment = process::testing::WholeEnvironment::for_a_test(dir.path()).given();
+        let mut child = crate::starting::start(&mut command, sh, dir.path(), &environment).unwrap();
+        let (output, mut said) = mpsc::channel(8);
+        let run = std::sync::Arc::new(Run::new(child.id().unwrap(), None, output));
+        tokio::spawn({
+            let run = run.clone();
+            async move {
+                let status = child.wait().await.unwrap();
+                run.reaped();
+                run.mark_gone();
+                run.exit(status.code(), crate::stdio::signal_of(status), Vec::new(), run.requested()).await;
+            }
+        });
+        waiting::task::until(Duration::from_secs(5), "the CLI ignores SIGTERM", || ready.exists()).await;
+        // So the grace passes at once. Nothing else waits on the clock, which would jump past it too.
+        tokio::time::pause();
+
+        run.stop().await;
+
+        let exited = said.recv().await;
+        assert!(matches!(exited, Some(AgentOutput::Exited { signal: Some(9), requested: true, .. })), "{exited:?}");
     }
 }

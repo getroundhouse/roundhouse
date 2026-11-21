@@ -10,6 +10,8 @@ pub trait AgentProcess: Send + Sync {
     /// can say nothing when it carries files, which are in the worktree already, and its `seq`, and a compaction's
     /// `asked`, are where it's recorded, which the process names when it reports taking or dropping it.
     async fn control(&self, control: &protocol::capability::Control) -> Result<(), AgentError>;
+    /// The CLI's, which leads its process group, or 0 once it has been reaped, since its pid may be another process's
+    /// by then.
     fn pid(&self) -> u32;
     /// The process has exited, or can't be reached. A new prompt needs a new process, even though
     /// its last output may still be on the way.
