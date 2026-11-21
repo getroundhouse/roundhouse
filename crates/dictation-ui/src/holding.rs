@@ -79,7 +79,7 @@ impl Field {
         }
     }
 
-    #[cfg(feature = "testing")]
+    #[cfg(any(test, feature = "testing"))]
     pub(crate) fn space_listening(&self) -> Option<&Recording> {
         self.space_down.as_ref()?.listening.as_ref().map(|(recording, _)| recording)
     }

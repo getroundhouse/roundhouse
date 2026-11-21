@@ -49,12 +49,15 @@ unicode-segmentation.workspace = true
 usvg.workspace = true
 
 [dev-dependencies]
+# What the `testing` feature turns on in these, which the tests have without it.
+client-core = { workspace = true, features = ["testing"] }
+dictation-ui = { workspace = true, features = ["testing"] }
+look = { workspace = true, features = ["testing"] }
 proptest.workspace = true
 protocol = { workspace = true, features = ["testing"] }
 # For the files tests make, such as a picture a drawing names, and the socket of a hub stood in for, which a view that
 # reads from a hub is given.
 tempfile.workspace = true
-transcript = { workspace = true, features = ["testing"] }
 # For the tests that need an app, such as those of where a text is drawn and what's selected of it.
 gpui-kit = { workspace = true, features = ["test-support"] }
 

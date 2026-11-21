@@ -65,7 +65,7 @@ impl Subagent {
     /// since a client from before subagents had IDs of their own names each by its call. A read, a subscription or a
     /// search names a subagent so, and the hub finds it as this says, with SQL of its own, which its store's tests hold
     /// to this. A fake hub finds one by it. Only they use it, so it's behind `testing`.
-    #[cfg(feature = "testing")]
+    #[cfg(any(test, feature = "testing"))]
     pub fn named<'a>(subagents: &'a [Subagent], named: &SubagentId) -> Option<&'a Subagent> {
         let by_call = || subagents.iter().find(|subagent| SubagentId::of_call(&subagent.call) == *named);
         subagents.iter().find(|subagent| subagent.id() == *named).or_else(by_call)

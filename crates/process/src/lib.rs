@@ -15,7 +15,7 @@ mod record;
 mod running_from;
 mod running_in;
 mod stdio;
-#[cfg(feature = "testing")]
+#[cfg(any(test, feature = "testing"))]
 pub mod testing;
 #[cfg(unix)]
 mod unix;

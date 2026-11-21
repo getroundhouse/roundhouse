@@ -61,7 +61,7 @@ mod capabilities;
 pub mod context;
 mod control;
 pub mod conversation;
-#[cfg(feature = "testing")]
+#[cfg(any(test, feature = "testing"))]
 pub mod laws;
 mod needs;
 pub mod output;

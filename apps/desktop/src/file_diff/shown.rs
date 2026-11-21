@@ -228,7 +228,7 @@ impl FileDiff {
     }
 
     /// Whether the file as it was has been opened.
-    #[cfg(feature = "testing")]
+    #[cfg(any(test, feature = "testing"))]
     pub fn has_read_the_base(&self) -> bool {
         let old = self.shown.as_ref().and_then(|shown| shown.old.as_ref());
         old.is_some_and(|(old, _)| old.read(|opening| matches!(opening, Opening::Text(_))))

@@ -2024,7 +2024,6 @@ name = "dictation"
 version = "0.1.0"
 dependencies = [
  "block2 0.6.2",
- "dictation",
  "flume",
  "models",
  "objc2 0.6.5",
@@ -2956,7 +2955,6 @@ version = "0.1.0"
 dependencies = [
  "base64 0.23.1",
  "fetching",
- "github",
  "http",
  "jiff",
  "octocrab",
@@ -7293,7 +7291,6 @@ name = "process"
 version = "0.1.0"
 dependencies = [
  "libc",
- "process",
  "serde_json",
  "tempfile",
  "waiting",
@@ -9877,7 +9874,6 @@ dependencies = [
  "serde_json",
  "similar",
  "tempfile",
- "transcript",
  "unicode-segmentation",
  "usvg 0.46.0",
 ]
@@ -10066,7 +10062,6 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 2.0.21",
- "update-feed",
 ]
 
 [[package]]

@@ -137,13 +137,13 @@ impl Field {
 
     /// Whether what's being dictated quiets what's playing the way `how` says, or a recording listening towards held
     /// Space does.
-    #[cfg(feature = "testing")]
+    #[cfg(any(test, feature = "testing"))]
     pub(crate) fn quiets(&self, how: sound::Quieting) -> bool {
         self.recording().is_some_and(|recording| recording.quiets(how))
     }
 
     /// Gives the field synthetic audio, including to a recording listening towards held Space.
-    #[cfg(feature = "testing")]
+    #[cfg(any(test, feature = "testing"))]
     pub(crate) fn hear(&self, audio: &[f32]) {
         if let Some(recording) = self.recording() {
             for buffer in audio.chunks(160) {
@@ -153,7 +153,7 @@ impl Field {
     }
 
     /// What's being dictated, or listening towards held Space.
-    #[cfg(feature = "testing")]
+    #[cfg(any(test, feature = "testing"))]
     fn recording(&self) -> Option<&dictation::Recording> {
         self.underway.as_ref().map(|u| &u.recording).or_else(|| self.space_listening())
     }

@@ -68,19 +68,19 @@ pub use window_place::Opens;
 
 /// How long a list's order holds still after the pointer last moved over it, the sidebar's or Home's, which a test can
 /// wait out.
-#[cfg(feature = "testing")]
+#[cfg(any(test, feature = "testing"))]
 pub const ORDER_HOLDS_FOR: std::time::Duration = reorder::HOLDS_FOR;
 
 /// How long after the window last moved its place is saved, which a test can wait out.
-#[cfg(feature = "testing")]
+#[cfg(any(test, feature = "testing"))]
 pub const WINDOW_SETTLES_AFTER: std::time::Duration = window_place::SETTLES_AFTER;
 
 /// The sounds the app has played, by name, for a test to read.
-#[cfg(feature = "testing")]
+#[cfg(any(test, feature = "testing"))]
 pub use sounds::played as sounds_played;
 
 /// What a browser and GitHub do with the page the app serves while an app of your own is made, for a test to do.
-#[cfg(feature = "testing")]
+#[cfg(any(test, feature = "testing"))]
 pub use manifest_flow::browsing as github_app_browsing;
 
 actions!(

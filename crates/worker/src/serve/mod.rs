@@ -16,7 +16,7 @@ pub(crate) use outbox::{HubConnection, Outbox, Outgoing};
 
 mod worker;
 
-#[cfg(feature = "testing")]
+#[cfg(any(test, feature = "testing"))]
 pub use hello::TEST_BUILD;
 use hello::hello;
 pub use worker::{Config, serve};

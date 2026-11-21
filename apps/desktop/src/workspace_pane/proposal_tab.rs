@@ -83,7 +83,7 @@ impl WorkspacePane {
 
     /// Whether the pane has taken in the record of `proposal`, of the chat `session`, for a test to wait for, since
     /// the pane takes records in after the feed has them, and decides then whether the tab shows it by itself.
-    #[cfg(feature = "testing")]
+    #[cfg(any(test, feature = "testing"))]
     pub fn has_proposal(&self, session: &SessionId, proposal: &ProposalId) -> bool {
         self.shown.all().proposal(session, proposal).is_some()
     }
@@ -253,7 +253,7 @@ impl WorkspacePane {
     }
 
     /// What the proposal tab shows, for a test to read its note.
-    #[cfg(feature = "testing")]
+    #[cfg(any(test, feature = "testing"))]
     pub fn proposal_tab_view(&self) -> Option<Entity<ProposalView>> {
         self.proposals.view().cloned()
     }

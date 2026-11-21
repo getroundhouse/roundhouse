@@ -174,14 +174,14 @@ impl ImageDiff {
     }
 
     /// Which side it shows while it's flipped between them.
-    #[cfg(feature = "testing")]
+    #[cfg(any(test, feature = "testing"))]
     pub fn shown(&self) -> Shown {
         self.shown
     }
 
     /// What the strip under its bar says of what it shows, part by part: each side, by its name and then what it is,
     /// and how much changed, in Difference. Empty when there's no strip.
-    #[cfg(feature = "testing")]
+    #[cfg(any(test, feature = "testing"))]
     pub fn said_in_strip(&self, cx: &App) -> Vec<String> {
         let Some(told) = self.told_now(cx) else { return Vec::new() };
         let sides = told.sides.into_iter().map(|(name, about)| match about {
@@ -192,14 +192,14 @@ impl ImageDiff {
     }
 
     /// What it says changed between the two images, once they've been compared.
-    #[cfg(feature = "testing")]
+    #[cfg(any(test, feature = "testing"))]
     pub fn difference(&self) -> Option<String> {
         let compared = self.compared.as_ref()?;
         Some(compared.difference.as_ref().map_or_default(|difference| difference.describe()))
     }
 
     /// The pictures it has to draw: each side's image, and what changed, once that's known.
-    #[cfg(feature = "testing")]
+    #[cfg(any(test, feature = "testing"))]
     pub fn pictures(&self) -> Vec<std::sync::Arc<gpui_kit::RenderImage>> {
         let sides = [&self.before, &self.after].into_iter().filter_map(|side| match side {
             Side::Image(image) => Some(image.picture()),
@@ -252,7 +252,7 @@ impl ImageDiff {
 
     /// What each side shows, before and after: an image's kind and size, `none` for a side the change hasn't got,
     /// `loading`, or why it can't be drawn.
-    #[cfg(feature = "testing")]
+    #[cfg(any(test, feature = "testing"))]
     pub fn described(&self) -> (String, String) {
         let describe = |side: &Side| match side {
             Side::Loading => "loading".to_string(),

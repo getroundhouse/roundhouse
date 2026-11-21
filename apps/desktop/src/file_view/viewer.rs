@@ -84,27 +84,27 @@ impl FileView {
     }
 
     /// Why the file couldn't be read, if that's what shows.
-    #[cfg(feature = "testing")]
+    #[cfg(any(test, feature = "testing"))]
     pub fn failure(&self) -> Option<String> {
         let Contents::Instead(Unshown::Failed(message)) = &self.contents else { return None };
         Some(message.clone())
     }
 
     /// The lines it shows, joined, or `None` while it shows something in their place.
-    #[cfg(feature = "testing")]
+    #[cfg(any(test, feature = "testing"))]
     pub fn shown_text(&self) -> Option<String> {
         let Contents::Lines(lines) = &self.contents else { return None };
         Some(lines.lines.iter().map(|line| line.text.as_ref()).collect::<Vec<_>>().join("\n"))
     }
 
     /// What a copy of the whole of a Markdown file has, while it shows it rendered, or `None` while it doesn't.
-    #[cfg(feature = "testing")]
+    #[cfg(any(test, feature = "testing"))]
     pub fn rendered(&self, cx: &App) -> Option<String> {
         self.shows_rendered(cx).then(|| self.document.read(cx).copied_whole())
     }
 
     /// What it says of the image it shows, or `None` while it shows something in its place.
-    #[cfg(feature = "testing")]
+    #[cfg(any(test, feature = "testing"))]
     pub fn shown_image(&self) -> Option<String> {
         let Contents::Image(image) = &self.contents else { return None };
         Some(image.describe())

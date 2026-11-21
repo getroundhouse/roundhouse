@@ -51,7 +51,7 @@ pub(crate) fn copy_to(path: &Path) {
 /// a data directory made as the hub, and a client that starts one, make it. The hub then opens it with its real
 /// [`Store::open`], which finds nothing to migrate. For a test that starts a hub from outside and isn't about what the
 /// migrations make, before the hub starts. Every hub given one has the same ID, which a migration chose at random for the database.
-#[cfg(feature = "testing")]
+#[cfg(any(test, feature = "testing"))]
 pub fn give_a_migrated_database(paths: &protocol::paths::Paths) {
     let dir = &paths.data_dir;
     private_files::create_dir_all(dir).unwrap_or_else(|e| panic!("couldn't make {}: {e}", dir.display()));

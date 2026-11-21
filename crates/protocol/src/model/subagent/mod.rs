@@ -3,7 +3,7 @@
 
 mod lately;
 mod record;
-#[cfg(feature = "testing")]
+#[cfg(any(test, feature = "testing"))]
 mod recorded;
 #[cfg(test)]
 mod tests;

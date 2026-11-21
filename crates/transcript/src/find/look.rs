@@ -186,7 +186,7 @@ impl FindLook {
     }
 
     /// How many matches each text drawn since this was made has, for a test.
-    #[cfg(feature = "testing")]
+    #[cfg(any(test, feature = "testing"))]
     pub(crate) fn drawn(&self) -> Vec<(TextId, usize)> {
         self.found.borrow().iter().map(|(id, (_, ranges))| (id.clone(), ranges.len())).collect()
     }

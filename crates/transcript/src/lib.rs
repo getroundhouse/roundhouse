@@ -52,5 +52,5 @@ pub use transcript::{Transcript, TranscriptEvent};
 type DictationHints = Box<dyn Fn(&mut client_core::hints::HintCollector, &gpui_kit::App)>;
 
 /// How long what's just been asked in the composer's place ignores keys, which a test can wait out.
-#[cfg(feature = "testing")]
+#[cfg(any(test, feature = "testing"))]
 pub const QUESTION_SETTLES: std::time::Duration = questions::SETTLE;

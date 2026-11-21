@@ -1,7 +1,7 @@
 //! Where the hub calls GitHub, and the OAuth App it signs people in with GitHub through: GitHub's own, or for a test's
 //! hub, a stand-in.
 
-#[cfg(feature = "testing")]
+#[cfg(any(test, feature = "testing"))]
 use protocol::paths::ENV_TEST_GITHUB_API;
 
 /// GitHub's own API.
@@ -51,14 +51,14 @@ impl GithubClientId {
 impl GithubConfig {
     /// GitHub's own, through Roundhouse's app, whatever `var` says, since only a build with the `testing` feature takes
     /// another, and the product is never built with it.
-    #[cfg(not(feature = "testing"))]
+    #[cfg(not(any(test, feature = "testing")))]
     pub fn from_env(_var: impl Fn(&str) -> Option<String>) -> Self {
         Self::of(GITHUB_API.to_string(), GITHUB_LOGIN.to_string(), GITHUB_GIT.to_string())
     }
 
     /// GitHub's API, its device flow and its repositories all at what `var` gives for [`ENV_TEST_GITHUB_API`], such as
     /// a stand-in's address, which serves them all, and otherwise GitHub's own, through Roundhouse's app.
-    #[cfg(feature = "testing")]
+    #[cfg(any(test, feature = "testing"))]
     pub fn from_env(var: impl Fn(&str) -> Option<String>) -> Self {
         match var(ENV_TEST_GITHUB_API) {
             Some(address) => Self::of(address.clone(), address.clone(), address),

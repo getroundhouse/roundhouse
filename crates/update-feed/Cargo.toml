@@ -18,7 +18,6 @@ thiserror.workspace = true
 
 [dev-dependencies]
 serde_json.workspace = true
-update-feed = { workspace = true, features = ["testing"] }
 
 [lints]
 workspace = true

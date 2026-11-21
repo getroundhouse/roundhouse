@@ -35,7 +35,7 @@ pub fn pair(link: &PairingLink, device_name: &str) -> Result<RemoteHub> {
 }
 
 /// Shortens network operation budgets for controlled-peer tests without making them wait the production timeout.
-#[cfg(feature = "testing")]
+#[cfg(any(test, feature = "testing"))]
 pub fn pair_with_timeout(link: &PairingLink, device_name: &str, timeout: Duration) -> Result<RemoteHub> {
     pair_with(link, device_name, timeout)
 }
@@ -73,19 +73,19 @@ impl Client {
     }
 
     /// A connection over the network that hasn't authenticated, so a test can see what a hub does with one.
-    #[cfg(feature = "testing")]
+    #[cfg(any(test, feature = "testing"))]
     pub fn open_remote(hosts: &[String], fingerprint: &Fingerprint) -> Result<Client> {
         open(hosts, fingerprint, OPERATION_TIMEOUT)
     }
 
     /// The same connection path with short operation budgets for controlled-peer tests.
-    #[cfg(feature = "testing")]
+    #[cfg(any(test, feature = "testing"))]
     pub fn connect_remote_with_timeout(hub: &RemoteHub, client_name: &str, timeout: Duration) -> Result<Client> {
         Self::connect_remote_with(hub, client_name.into(), timeout)
     }
 
     /// An unauthenticated test connection whose outgoing frames have the supplied budget.
-    #[cfg(feature = "testing")]
+    #[cfg(any(test, feature = "testing"))]
     pub fn open_remote_with_timeout(hosts: &[String], fingerprint: &Fingerprint, timeout: Duration) -> Result<Client> {
         open(hosts, fingerprint, timeout)
     }

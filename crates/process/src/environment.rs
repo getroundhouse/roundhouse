@@ -10,7 +10,7 @@ pub struct Environment {
     taken_out: Vec<OsString>,
     /// Whether a process keeps nothing of what it inherits, but what its command was told to set, as a test gives the
     /// code under it, through [`crate::testing::WholeEnvironment::given`]. Never in the product.
-    #[cfg(feature = "testing")]
+    #[cfg(any(test, feature = "testing"))]
     inherits_nothing: bool,
 }
 
@@ -19,13 +19,13 @@ impl Environment {
     pub const NONE: Self = Self {
         set: Vec::new(),
         taken_out: Vec::new(),
-        #[cfg(feature = "testing")]
+        #[cfg(any(test, feature = "testing"))]
         inherits_nothing: false,
     };
 
     /// Nothing of what a process inherits, but what its command was told to set, such as a setting of the code that
     /// starts it, which stays as the code set it.
-    #[cfg(feature = "testing")]
+    #[cfg(any(test, feature = "testing"))]
     pub(crate) const INHERITING_NOTHING: Self = Self { set: Vec::new(), taken_out: Vec::new(), inherits_nothing: true };
 
     /// Gives `name` as `value`.
@@ -47,7 +47,7 @@ impl Environment {
 
     /// Puts it on `command`.
     pub fn apply(&self, command: &mut impl TakesEnvironment) {
-        #[cfg(feature = "testing")]
+        #[cfg(any(test, feature = "testing"))]
         if self.inherits_nothing {
             command.inherit_nothing();
         }

@@ -88,7 +88,7 @@ impl WorkspacePane {
     }
 
     /// The subagent tab's transcript, while it's open.
-    #[cfg(feature = "testing")]
+    #[cfg(any(test, feature = "testing"))]
     pub fn subagent_transcript(&self) -> Option<Entity<Transcript>> {
         self.subagents.tab.as_ref().map(|tab| tab.transcript.clone())
     }

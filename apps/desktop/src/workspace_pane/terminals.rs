@@ -149,7 +149,7 @@ impl WorkspacePane {
     }
 
     /// The view of the terminal in front.
-    #[cfg(feature = "testing")]
+    #[cfg(any(test, feature = "testing"))]
     pub fn terminal(&self) -> Option<Entity<TerminalView>> {
         self.view_in_front().cloned()
     }

@@ -19,7 +19,7 @@ pub(super) fn hello(build: Build, newest: u32, oldest: Option<u32>) -> Result<Wo
 /// Which build this worker is, as its hello says. A test can have it say another, with [`TEST_BUILD`], as a worker an
 /// earlier hub left would.
 fn said(build: Build) -> String {
-    #[cfg(feature = "testing")]
+    #[cfg(any(test, feature = "testing"))]
     if let Ok(build) = std::env::var(TEST_BUILD) {
         return build;
     }
@@ -27,5 +27,5 @@ fn said(build: Build) -> String {
 }
 
 /// The variable that names the build a worker says it is, in tests.
-#[cfg(feature = "testing")]
+#[cfg(any(test, feature = "testing"))]
 pub const TEST_BUILD: &str = "ROUNDHOUSE_TEST_WORKER_BUILD";

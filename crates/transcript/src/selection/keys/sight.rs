@@ -14,7 +14,7 @@
 //! chat can be scrolled away from what's selected, and a key pressed after. Then the `Reveal` brings the end into view
 //! first, as a text box goes back to its caret, going to the row its text is in, and the move goes on once it's drawn.
 
-#[cfg(feature = "testing")]
+#[cfg(any(test, feature = "testing"))]
 use gpui_kit::Bounds;
 use gpui_kit::Pixels;
 
@@ -148,7 +148,7 @@ impl Selection {
 
     /// Whether the end of what's selected that moved last was drawn in the last frame within `bounds`, and within what
     /// shows of its text, if it was drawn, for a test of what's kept in view.
-    #[cfg(feature = "testing")]
+    #[cfg(any(test, feature = "testing"))]
     pub(crate) fn end_in(&self, bounds: Bounds<Pixels>) -> Option<bool> {
         let within = |caret: Bounds<Pixels>, bounds: Bounds<Pixels>| {
             caret.top() >= bounds.top() && caret.bottom() <= bounds.bottom()

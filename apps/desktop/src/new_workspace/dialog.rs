@@ -311,7 +311,7 @@ impl Focusable for NewWorkspaceDialog {
 }
 
 /// What a test reads, and the one choice a test makes that no menu offers.
-#[cfg(feature = "testing")]
+#[cfg(any(test, feature = "testing"))]
 impl NewWorkspaceDialog {
     pub fn repo(&self) -> &RepoId {
         &self.repo

@@ -4,17 +4,17 @@
 
 use std::sync::Arc;
 
-#[cfg(feature = "testing")]
+#[cfg(any(test, feature = "testing"))]
 use gpui_kit::App;
 use gpui_kit::{AnyElement, Context, IntoElement as _};
 
 use super::FileDiff;
-#[cfg(feature = "testing")]
+#[cfg(any(test, feature = "testing"))]
 use super::view::DiffView;
 
 impl FileDiff {
     /// What a copy of the whole of a Markdown file's diff has, while it shows it rendered, or `None` while it doesn't.
-    #[cfg(feature = "testing")]
+    #[cfg(any(test, feature = "testing"))]
     pub fn rendered(&self, cx: &App) -> Option<String> {
         (self.view(cx) == DiffView::Rendered && self.rendered.is_some()).then(|| self.document.read(cx).copied_whole())
     }

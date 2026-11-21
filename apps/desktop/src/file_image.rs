@@ -67,7 +67,7 @@ impl FileImage {
     }
 
     /// What's drawn of it, for a test to find on the GPU.
-    #[cfg(feature = "testing")]
+    #[cfg(any(test, feature = "testing"))]
     pub(crate) fn picture(&self) -> Arc<RenderImage> {
         self.picture.clone()
     }

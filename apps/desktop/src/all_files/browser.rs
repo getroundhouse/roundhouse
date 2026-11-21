@@ -88,13 +88,13 @@ impl AllFiles {
     }
 
     /// Whether the folder at `path` is open.
-    #[cfg(feature = "testing")]
+    #[cfg(any(test, feature = "testing"))]
     pub fn is_open(&self, path: &str) -> bool {
         self.open.contains(path)
     }
 
     /// Whether the hub has listed the files, so they show.
-    #[cfg(feature = "testing")]
+    #[cfg(any(test, feature = "testing"))]
     pub fn is_listed(&self) -> bool {
         matches!(self.listing, Listing::Listed(_))
     }

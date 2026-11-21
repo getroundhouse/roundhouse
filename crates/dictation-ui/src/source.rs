@@ -80,7 +80,7 @@ pub fn unavailable(cx: &mut App) {
 
 /// Gives what's being dictated synthetic audio, including a recording listening towards held Space, wherever it is,
 /// since one field dictates at a time.
-#[cfg(feature = "testing")]
+#[cfg(any(test, feature = "testing"))]
 pub fn hear(audio: &[f32], cx: &App) {
     if let Some(field) = active(cx).and_then(|field| field.upgrade()) {
         field.read(cx).hear(audio);
@@ -88,7 +88,7 @@ pub fn hear(audio: &[f32], cx: &App) {
 }
 
 /// Whether what's being dictated quiets what's playing `how` says, or a recording listening towards held Space does.
-#[cfg(feature = "testing")]
+#[cfg(any(test, feature = "testing"))]
 pub fn quiets_while_dictating(how: Quieting, cx: &App) -> bool {
     active(cx).and_then(|field| field.upgrade()).is_some_and(|field| field.read(cx).quiets(how))
 }

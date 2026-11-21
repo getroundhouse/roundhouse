@@ -197,19 +197,19 @@ impl MobileApp {
     }
 
     /// Whether it's connected to the hub, and caught up.
-    #[cfg(feature = "testing")]
+    #[cfg(any(test, feature = "testing"))]
     pub fn is_connected(&self, cx: &App) -> bool {
         self.link().is_some_and(|link| link.read(cx).client().is_some())
     }
 
     /// What the open chat's header names it.
-    #[cfg(feature = "testing")]
+    #[cfg(any(test, feature = "testing"))]
     pub fn chat_title(&self, cx: &App) -> Option<String> {
         self.open.chat.as_ref().map(|open| open.chat.read(cx).title().to_string())
     }
 
     /// The chat that's open, once it has one showing.
-    #[cfg(feature = "testing")]
+    #[cfg(any(test, feature = "testing"))]
     pub fn transcript(&self, cx: &App) -> Option<Entity<transcript::Transcript>> {
         self.open.chat.as_ref().and_then(|open| open.chat.read(cx).transcript())
     }

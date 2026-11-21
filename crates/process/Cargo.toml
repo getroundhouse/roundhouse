@@ -24,7 +24,8 @@ windows-sys = { workspace = true, features = [
 ] }
 
 [dev-dependencies]
-process = { workspace = true, features = ["testing"] }
+# What the `testing` feature brings in, which the tests have without it.
+serde_json.workspace = true
 tempfile.workspace = true
 waiting.workspace = true
 

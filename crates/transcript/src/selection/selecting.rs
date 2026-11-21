@@ -233,19 +233,19 @@ impl Selection {
 
     /// What a copy holds with everything selected, by the ends [`Selection::select_all`] selects and the copy
     /// [`Selection::text`] makes, for a test of the order the chat's texts are in.
-    #[cfg(feature = "testing")]
+    #[cfg(any(test, feature = "testing"))]
     pub(crate) fn all_as_copied(&self) -> String {
         self.whole().and_then(|ends| self.spots(&ends)).map_or_default(|(start, end)| self.between(start, end))
     }
 
     /// What a copy would hold now, for a test of what a drag selects as it goes.
-    #[cfg(feature = "testing")]
+    #[cfg(any(test, feature = "testing"))]
     pub(crate) fn as_copied(&self) -> String {
         self.text()
     }
 
     /// Where each leaf drawn in the last frame was laid out, in the order they were drawn.
-    #[cfg(feature = "testing")]
+    #[cfg(any(test, feature = "testing"))]
     pub(crate) fn drawn_leaf_bounds(&self) -> Vec<Bounds<Pixels>> {
         self.inner.borrow().drawn.iter().flat_map(|drawn| drawn.leaves.iter().map(|(_, leaf)| leaf.bounds())).collect()
     }

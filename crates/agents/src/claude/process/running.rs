@@ -38,7 +38,7 @@ const DRAIN_GRACE: Duration = Duration::from_secs(5);
 
 /// [`DRAIN_GRACE`], unless a test has set `ENV_DRAIN_GRACE_MS`, which only a `testing` build reads.
 pub(super) fn drain_grace() -> Duration {
-    #[cfg(feature = "testing")]
+    #[cfg(any(test, feature = "testing"))]
     if let Some(ms) = std::env::var(crate::ENV_DRAIN_GRACE_MS).ok().and_then(|ms| ms.parse().ok()) {
         return Duration::from_millis(ms);
     }
@@ -370,7 +370,7 @@ impl AgentProcess for ClaudeProcess {
 
 /// As [`spawn_at`], telling `tap` each launch and exit of the CLI, and each line written to it and read from it, in
 /// order, for [`crate::conformance`] to capture a trial with.
-#[cfg(feature = "testing")]
+#[cfg(any(test, feature = "testing"))]
 pub async fn spawn_tapped(
     bin: PathBuf,
     spec: AgentSpec,

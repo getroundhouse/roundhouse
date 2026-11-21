@@ -142,13 +142,13 @@ impl FileDiff {
     }
 
     /// How far its code is scrolled sideways.
-    #[cfg(feature = "testing")]
+    #[cfg(any(test, feature = "testing"))]
     pub fn scrolled_across(&self) -> gpui_kit::Pixels {
         self.list.across()
     }
 
     /// The text of line `new` of the new side, if a row shows it.
-    #[cfg(feature = "testing")]
+    #[cfg(any(test, feature = "testing"))]
     pub fn shows_line(&self, new: u32) -> Option<SharedString> {
         let shows = self
             .rows
@@ -159,7 +159,7 @@ impl FileDiff {
     }
 
     /// How it shows a diff, as chosen last in any workspace.
-    #[cfg(feature = "testing")]
+    #[cfg(any(test, feature = "testing"))]
     pub fn shown_as(&self, cx: &App) -> DiffView {
         chosen::<DiffView>(cx)
     }

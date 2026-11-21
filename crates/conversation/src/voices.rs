@@ -53,7 +53,7 @@ impl Voices {
     }
 
     /// A voice that's ready once it's on, with nothing to fetch, and reads nothing, for a test of what uses it.
-    #[cfg(feature = "testing")]
+    #[cfg(any(test, feature = "testing"))]
     pub fn silent() -> Self {
         Self::made(PathBuf::new(), "this device", String::new(), true)
     }

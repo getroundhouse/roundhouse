@@ -33,7 +33,7 @@ pub use claim::{ClaimError, InstanceClaim, claim_instance};
 pub use claim::{claim_to_serve, instance_claimed};
 pub use deleting::{Deleter, delete_trees};
 pub use git_credential::{CredentialHelper, answer_credential_request};
-#[cfg(feature = "testing")]
+#[cfg(any(test, feature = "testing"))]
 pub use serve::TEST_BUILD;
 #[cfg(unix)]
 pub use serve::listen;

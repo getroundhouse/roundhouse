@@ -15,6 +15,6 @@ pub use app::{MobileApp, open_window};
 pub use assets::Assets;
 #[cfg(target_os = "ios")]
 pub use vault::DeviceVault;
-#[cfg(feature = "testing")]
+#[cfg(any(test, feature = "testing"))]
 pub use vault::MemoryVault;
 pub use vault::{Vault, VaultError};

@@ -149,7 +149,7 @@ impl SessionLog {
     }
 }
 
-#[cfg(feature = "testing")]
+#[cfg(any(test, feature = "testing"))]
 impl SessionLog {
     /// What's loaded of the log and what's on its way, for a test whose wait for a row timed out to say.
     pub fn loading(&self) -> String {

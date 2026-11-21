@@ -120,7 +120,7 @@ impl WorkspacePane {
         }
     }
 
-    #[cfg(feature = "testing")]
+    #[cfg(any(test, feature = "testing"))]
     pub fn dictating(&self, cx: &gpui_kit::App) -> bool {
         self.dictation.read(cx).is_dictating()
     }

@@ -15,7 +15,7 @@ pub(crate) use downloading::observe_progress;
 pub(crate) use microphone::microphone;
 pub use microphone::{HIDE, MICROPHONE, TURN_ON};
 pub(crate) use readiness::{for_conversation, observe, observe_in, ready, retry, runs_here, source, start};
-#[cfg(feature = "testing")]
+#[cfg(any(test, feature = "testing"))]
 pub use readiness::{is_ready, set_on, use_engine, use_model};
 #[cfg(test)]
 pub(crate) use words::gigabytes;

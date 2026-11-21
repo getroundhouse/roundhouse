@@ -56,10 +56,10 @@ struct Slot {
     /// How many more frames to go on trying.
     frames: u32,
     /// What of the view was in view as the last frame started, for a test to see whether the match ended up in it.
-    #[cfg(feature = "testing")]
+    #[cfg(any(test, feature = "testing"))]
     visible: Option<Bounds<Pixels>>,
     /// Where the match was last drawn, wanted or not, for a test to see where it ended up.
-    #[cfg(feature = "testing")]
+    #[cfg(any(test, feature = "testing"))]
     painted: Option<Bounds<Pixels>>,
 }
 
@@ -95,7 +95,7 @@ impl Reveal {
         slot.wanted = Some(what);
         (slot.at, slot.drawn, slot.moved) = (Some(at), None, false);
         slot.frames = FRAMES;
-        #[cfg(feature = "testing")]
+        #[cfg(any(test, feature = "testing"))]
         if what == Wanted::Match {
             slot.painted = None;
         }
@@ -128,7 +128,7 @@ impl Reveal {
     /// Says `what` was drawn at `bounds`, in `area` if it's in an area that scrolls, which counts while it's wanted.
     pub(crate) fn drawn_at(&self, what: Wanted, bounds: Bounds<Pixels>, area: Option<ElementId>) {
         let mut slot = self.0.borrow_mut();
-        #[cfg(feature = "testing")]
+        #[cfg(any(test, feature = "testing"))]
         if what == Wanted::Match {
             slot.painted = Some(bounds);
         }
@@ -143,7 +143,7 @@ impl Reveal {
     /// isn't drawn though its text has been gone to, and gives up once it has no frames left.
     pub(crate) fn as_frame_starts(&self, visible: Bounds<Pixels>) -> Option<Scroll> {
         let mut slot = self.0.borrow_mut();
-        #[cfg(feature = "testing")]
+        #[cfg(any(test, feature = "testing"))]
         {
             slot.visible = Some(visible);
         }
@@ -187,7 +187,7 @@ impl Reveal {
     }
 
     /// Whether the match was last drawn in view below the bar, once it has been drawn since it was wanted.
-    #[cfg(feature = "testing")]
+    #[cfg(any(test, feature = "testing"))]
     pub(crate) fn shows_in_view(&self) -> Option<bool> {
         let slot = self.0.borrow();
         let (painted, visible) = (slot.painted?, slot.visible?);

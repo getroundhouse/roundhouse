@@ -154,7 +154,7 @@ pub(crate) fn observe_needs<V: 'static>(
 
 /// Has this Mac's voice keep its files in `model_dir`, fetched from `from`, such as a test's server, rather than
 /// Hugging Face, and turns speech on, which starts getting it ready.
-#[cfg(feature = "testing")]
+#[cfg(any(test, feature = "testing"))]
 pub fn fetch_the_voice_from(model_dir: &Path, from: String, cx: &mut App) {
     use_voices(Voices::fetched_from(model_dir.to_path_buf(), "this Mac", from), cx);
     crate::settings::change(cx, |settings| settings.speech = Choice::On);
@@ -162,26 +162,26 @@ pub fn fetch_the_voice_from(model_dir: &Path, from: String, cx: &mut App) {
 
 /// Has this Mac read with a voice that has nothing to fetch, so it's ready as soon as speech is on, and reads nothing,
 /// for a test of conversation mode that has no use for what's read out.
-#[cfg(feature = "testing")]
+#[cfg(any(test, feature = "testing"))]
 pub fn use_a_silent_voice(cx: &mut App) {
     use_voices(Voices::silent(), cx);
 }
 
 /// Turns speech on, or off, as the person can in Settings.
-#[cfg(feature = "testing")]
+#[cfg(any(test, feature = "testing"))]
 pub fn set_speech_on(on: bool, cx: &mut App) {
     let choice = if on { Choice::On } else { Choice::Off };
     crate::settings::change(cx, |settings| settings.speech = choice);
 }
 
 /// Whether dictation and speech are both ready, so conversation mode can start.
-#[cfg(feature = "testing")]
+#[cfg(any(test, feature = "testing"))]
 pub fn is_ready(cx: &App) -> bool {
     needs(cx).ready()
 }
 
 /// How speech stands on this Mac.
-#[cfg(feature = "testing")]
+#[cfg(any(test, feature = "testing"))]
 pub fn speech(cx: &App) -> Option<Readiness> {
     voices(cx).map(Voices::ready)
 }

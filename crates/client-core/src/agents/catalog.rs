@@ -26,7 +26,7 @@ impl Agents {
     }
 
     /// `described`, as a hub would say them, for a test of what shows them.
-    #[cfg(feature = "testing")]
+    #[cfg(any(test, feature = "testing"))]
     pub fn new(described: Vec<AgentDescription>) -> Agents {
         Agents { described }
     }
