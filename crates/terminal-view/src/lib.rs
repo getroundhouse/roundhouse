@@ -5,8 +5,10 @@
 //! says of every view.
 #![warn(clippy::wildcard_enum_match_arm)]
 
+mod fitting;
 mod grid;
 mod keys;
 mod view;
 
+pub use fitting::Room;
 pub use view::{KEY_CONTEXT, SHOWN_ID, TerminalView, bind_keys};

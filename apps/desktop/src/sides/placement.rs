@@ -64,6 +64,8 @@ pub(super) struct Placed {
     pub(super) shown: (Pixels, Pixels),
     /// What the strip along the window's top keeps clear of.
     pub(super) clearance: Clearance,
+    /// Whether either is still sliding, so what's beside them is laid out again on the next frame.
+    pub(super) sliding: bool,
 }
 
 /// What's chosen for both, which every workspace shares until the app quits.
@@ -130,13 +132,21 @@ pub(crate) fn place(beside: Beside, buttons: WindowButtons, menus: MenusButton, 
     // The one on the right slides only where it's drawn.
     let right = if beside.changes { sides.right.open.draw(window, cx) } else { 0. };
     let open = (sides.left.open.draw(window, cx), right);
+    // Read after `draw`, which asks for the next frame while a slide is on its way, so a frame that finds one still
+    // sliding has asked for the next, which finds it at rest.
+    let sliding = sides.left.open.moving(cx) || (beside.changes && sides.right.open.moving(cx));
     let widths = sides.fitted(window.viewport_size().width, open);
     // How far open each is, rather than how wide, so a drag moves its edge at once. In whole pixels, so what's beside
     // it stays on them as it moves.
     let shown = ((widths.0 * open.0).round(), (widths.1 * open.1).round());
     let clearance = Clearance::new(buttons, menus, shown, beside.above_the_header);
-    sides.placed = Placed { beside, widths, shown, clearance };
+    sides.placed = Placed { beside, widths, shown, clearance, sliding };
     cx.set_global(sides);
+}
+
+/// Whether either sidebar is sliding in the frame being drawn, so the room beside them is still changing.
+pub(crate) fn sliding(cx: &App) -> bool {
+    Sides::of(cx).placed.sliding
 }
 
 /// How narrow and how wide a sidebar's edge drags.
