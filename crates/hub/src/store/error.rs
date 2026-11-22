@@ -23,6 +23,9 @@ pub enum StoreError {
     Database(#[from] rusqlite::Error),
     #[error("a stored value couldn't be encoded")]
     Encoding(#[from] serde_json::Error),
+    /// A change to a chat's draft typed before the one the hub has, which stays, as `SessionDraft` says.
+    #[error("the chat's draft was changed after this was typed, and that change is kept")]
+    TypedEarlier,
 }
 
 /// Why a copy of the database couldn't be saved.
@@ -48,6 +51,7 @@ impl From<StoreError> for ApiError {
         let message = error_chain(&failure);
         match failure {
             StoreError::NotFound { .. } => ApiError::new(ErrorCode::NotFound, message),
+            StoreError::TypedEarlier => ApiError::new(ErrorCode::Conflict, message),
             StoreError::TooNew { .. }
             | StoreError::TooOld { .. }
             | StoreError::Backup { .. }
@@ -79,6 +83,14 @@ mod tests {
         let (api_error, logged) = convert(StoreError::NotFound { kind: "session", id: "s1".to_string() });
 
         assert_eq!(api_error.code, ErrorCode::NotFound);
+        assert_eq!(logged, "");
+    }
+
+    #[test]
+    fn a_draft_typed_earlier_is_a_conflict_and_isnt_logged() {
+        let (api_error, logged) = convert(StoreError::TypedEarlier);
+
+        assert_eq!(api_error.code, ErrorCode::Conflict, "a client takes the hub's draft in place of its own");
         assert_eq!(logged, "");
     }
 

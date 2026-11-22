@@ -97,9 +97,10 @@ impl NewWorkspaceDialog {
     }
 
     /// Shows what the hub keeps of the dialog in place of what's here, when it was changed elsewhere since, or before
-    /// the app last started, as [`Drafts::from_elsewhere`] says. What's on its way to the hub from here
-    /// goes on and replaces it, so what's typed here is never undone as it's typed. Whatever comes in its place is the
-    /// hub's already, so none of it is kept again, and this client says it shows it, as taking a chat's draft does.
+    /// the app last started, as [`Drafts::from_elsewhere`] says. None is shown while something from here is on its way
+    /// to the hub, so what's typed here is never undone as it's typed, and then that replaces it, since the hub keeps
+    /// the dialog as each change reaches it. Whatever comes in its place is the hub's already, so none of it is kept
+    /// again, and this client says it shows it, as taking a chat's draft does.
     pub(crate) fn take_kept(&mut self, kept: NewWorkspaceDraft, window: &mut Window, cx: &mut Context<Self>) {
         let keeper = self.keeping.keeper.as_ref();
         let elsewhere = keeper.is_some_and(|keeper| keeper.from_elsewhere(&KeptDraft::new_workspace(&kept)));

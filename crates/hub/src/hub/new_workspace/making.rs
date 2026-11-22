@@ -151,7 +151,8 @@ impl Hub {
         };
         let Err(error) = sent else { return (session, None, true) };
         let draft = DraftToKeep { text: made_of.text.clone(), files: made_of.files.clone() };
-        match self.session_draft(session.id.clone(), draft).await {
+        // Typed as it's kept, since nothing else has been typed in a chat that's only now made.
+        match self.session_draft(session.id.clone(), draft, None).await {
             Ok(kept) => (kept, Some(UnsentPrompt { error, in_composer: true }), true),
             Err(e) => {
                 warn!(session = %session.id, "couldn't keep a new workspace's first prompt in its composer: {e}");

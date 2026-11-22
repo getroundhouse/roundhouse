@@ -394,4 +394,6 @@ pub(in super::super) const MIGRATIONS: &[Migration] = &[
     Sql(super::conversations::SETTLED_BY),
     // Each workspace's record keeping only which pull request is its own, in `workspaces`.
     Rust(workspaces::pull_request_links),
+    // When what's in each session's composer was typed, in `drafts`.
+    Sql(drafts::DRAFT_TYPED_AT),
 ];

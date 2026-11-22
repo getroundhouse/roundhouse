@@ -14,11 +14,18 @@ use crate::model::{
 };
 
 /// Keeps `draft` as what's typed and attached in the session's composer and not sent, in place of what was kept. An
-/// empty one clears it.
+/// empty one clears it. Of two changes, the hub keeps the one typed last, so a change typed before the draft it has is
+/// refused with `Conflict`, unless it says what's kept already, and the client shows the hub's draft in its place.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct SessionDraft {
     pub id: SessionId,
     pub draft: DraftToKeep,
+    /// When the change was typed, in milliseconds since the Unix epoch by the device's clock, so one typed while the
+    /// hub couldn't be reached keeps its time. The hub takes one later than its own clock as typed now, so a device
+    /// whose clock runs ahead can't keep every other client's change out. A change without it, from a client older
+    /// than this, counts as typed when it arrives, and is never refused.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub typed_at_ms: Option<i64>,
 }
 
 impl Request for SessionDraft {

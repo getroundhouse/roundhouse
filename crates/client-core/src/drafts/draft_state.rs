@@ -5,9 +5,9 @@ use protocol::model::{
     AttachmentId, CommentDraft, DecisionDraft, Draft, DraftToKeep, NewWorkspaceDraft, NewWorkspaceDraftToKeep, Rev,
     Session, SessionId, Workspace, WorkspaceId,
 };
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 /// The longest a change waits to be kept while typing goes on, so typing a word isn't a call for each letter, and an
 /// app that stops without quitting loses at most this much of it.
@@ -118,6 +118,10 @@ pub(super) struct Counted {
     /// The newest copy of each draft that this client and the hub agree on: the one the hub gave back as it
     /// kept one of this client's changes there, or one this client took from the record.
     pub(super) agreed: HashMap<DraftKey, Agreed>,
+    /// The composers whose last change from here the hub refused, since it has one typed after it, as `SessionDraft`
+    /// says. So this client shows what the record says in place of its own, whatever that is, even what it agreed on
+    /// already, until it takes a record or the hub keeps a later change from here.
+    pub(super) overruled: HashSet<DraftKey>,
 }
 
 /// A copy of a draft, and the revision of the record it was on.
@@ -156,9 +160,20 @@ impl Said {
 pub(super) type Counts = Arc<Mutex<Counted>>;
 
 pub(super) enum Request {
-    Changed { change: DraftChange, now: bool },
-    Attach { to: FilesFor, file: FileToSend },
-    Detach { from: FilesFor, file: AttachmentId },
+    /// With when it was handed over, which is when it was typed, by this device's clock.
+    Changed {
+        change: DraftChange,
+        now: bool,
+        typed_at_ms: i64,
+    },
+    Attach {
+        to: FilesFor,
+        file: FileToSend,
+    },
+    Detach {
+        from: FilesFor,
+        file: AttachmentId,
+    },
     Reconnect(Client),
     Flush(flume::Sender<()>),
 }
@@ -223,12 +238,17 @@ impl Drafts {
     /// place of its own. Nothing handed over for the draft is still on its way, and the record is newer than the last
     /// copy of the draft that this client kept or took from it, as [`Drafts::took`] says, and says something else. So a
     /// record that's newer for something else, such as a chat's status, isn't, and nor is an older one that arrives
-    /// late. While one of this client's is on its way, that one goes on and replaces whatever was made elsewhere
-    /// meanwhile, and [`Drafts::caught_up`] says once it has arrived.
+    /// late. While one of this client's is on its way, nothing is, and [`Drafts::caught_up`] says once that one has
+    /// reached the hub. The hub keeps a composer's change typed after the draft it has, so one typed before it, such as
+    /// on a phone that couldn't reach the hub, is refused, and then the record's draft is from elsewhere whatever it
+    /// says, empty or not, until this client takes one.
     pub fn from_elsewhere(&self, kept: &KeptDraft) -> bool {
         let counts = self.counts.lock();
         if counts.unkept.contains_key(&kept.key) {
             return false;
+        }
+        if counts.overruled.contains(&kept.key) {
+            return true;
         }
         match counts.agreed.get(&kept.key) {
             Some(agreed) => kept.copy.rev > agreed.rev && kept.copy.said != agreed.said,
@@ -239,7 +259,9 @@ impl Drafts {
     /// Says that this client shows the draft a record says, such as one it started with, or one made elsewhere that it
     /// took, so a newer record saying the same isn't from elsewhere.
     pub fn took(&self, kept: KeptDraft) {
-        agree(&mut self.counts.lock(), kept.key, kept.copy);
+        let mut counts = self.counts.lock();
+        counts.overruled.remove(&kept.key);
+        agree(&mut counts, kept.key, kept.copy);
     }
 
     /// Takes what `session`'s composer says to show it: the text this client last handed over for it, while that
@@ -253,6 +275,7 @@ impl Drafts {
         if let Some(text) = counts.on_its_way.get(&kept.key) {
             return text.clone();
         }
+        counts.overruled.remove(&kept.key);
         agree(&mut counts, kept.key, kept.copy);
         session.draft.text.clone()
     }
@@ -273,12 +296,19 @@ impl Drafts {
                 counts.on_its_way.insert(key, draft.text.clone());
             }
         }
-        let _ = self.requests.send(Request::Changed { change, now });
+        let _ = self.requests.send(Request::Changed { change, now, typed_at_ms: typed_now() });
     }
 
     pub(super) fn handed(&self, key: &DraftKey) {
         count_handed(&mut self.counts.lock(), key);
     }
+}
+
+/// Now, by this device's clock, in milliseconds since the Unix epoch. A change is stamped as it's handed over, rather
+/// than as it's sent, so one that waits for a connection, such as on a phone away from the hub, keeps when it was
+/// typed.
+fn typed_now() -> i64 {
+    SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |since| i64::try_from(since.as_millis()).unwrap_or(i64::MAX))
 }
 
 /// Counts one more of `key`'s changes or files on its way, before it's sent, so the thread can't take it, and count it

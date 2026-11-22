@@ -47,6 +47,11 @@ impl ClientError {
         matches!(self, ClientError::Api(e) if e.code == ErrorCode::NotFound)
     }
 
+    /// The hub's record allows no such change as it stands, such as a chat's draft changed after this change was typed.
+    pub fn is_conflict(&self) -> bool {
+        matches!(self, ClientError::Api(e) if e.code == ErrorCode::Conflict)
+    }
+
     /// There's a real break between this client and the hub, so only [`HubAdmin`](super::HubAdmin) can reach it.
     pub fn is_version_mismatch(&self) -> bool {
         matches!(self, ClientError::Api(e) if e.code == ErrorCode::VersionMismatch)

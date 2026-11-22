@@ -2,30 +2,59 @@ use super::super::attachments::named_on;
 use super::super::reading::session_on;
 use super::super::sessions::draft_column;
 use super::super::workspaces::workspace_on;
-use super::super::{OneValue, Reading, Store, StoreError, lock};
+use super::super::{OneValue, Reading, Store, StoreError, lock, now_ms};
 use crate::attachment_files::FileFor;
 use protocol::model::{
     AttachmentId, CommentDraft, DecisionDraft, Draft, DraftToKeep, SessionId, Workspace, WorkspaceId,
 };
-use rusqlite::{Connection, params};
+use rusqlite::{Connection, OptionalExtension as _, params};
 
 impl Store {
-    /// Keeps `draft` as what's in the session's composer, in place of what was. Each file is named as the session
-    /// has it, and one it hasn't been given is left out, as are any past what a prompt can carry. A closed session
-    /// keeps none, since its composer went with it. Keeping what's kept already changes nothing, so the session's
-    /// revision only moves when the draft does.
+    /// Keeps `draft` as what's in the session's composer, in place of what was, unless what was is from a change typed
+    /// after it, as `SessionDraft` says of `typed_at_ms`, when it's refused. Each file is named as the session has it,
+    /// and one it hasn't been given is left out, as are any past what a prompt can carry. A closed session keeps none,
+    /// since its composer went with it. Keeping what's kept already changes nothing, so the session's revision only
+    /// moves when the draft does, and nor is it refused, however long ago it was typed.
     ///
     /// It lets go of no file, even one the draft stops naming. A client empties the draft as it sends a prompt, and
     /// the prompt that carries the draft's files may not be recorded yet. So a client asks for each file to be let go
     /// of, with `AttachmentRemove`, and one it never asks about, such as when it stops first, stays with the session.
-    pub fn set_draft(&self, id: &SessionId, draft: &DraftToKeep) -> Result<Reading, StoreError> {
+    pub fn set_draft(
+        &self,
+        id: &SessionId,
+        draft: &DraftToKeep,
+        typed_at_ms: Option<i64>,
+    ) -> Result<Reading, StoreError> {
         let conn = lock(&self.writer);
         let files = named_on(&conn, &FileFor::Session(id.clone()), &draft.files)?;
-        let kept = Draft { text: draft.text.clone(), files };
+        let kept = draft_column(&Draft { text: draft.text.clone(), files })?;
+        let now = now_ms();
+        let typed = typed_at_ms.map_or(now, |at| at.min(now));
+        // Only a change that says when it was typed can be typed earlier. One from an older client is typed as it comes.
+        if typed_at_ms.is_some() {
+            let typed_later = conn.query_row(
+                "SELECT draft_typed_at_ms > ?3 AND draft IS NOT ?1 FROM sessions WHERE id = ?2 AND closed_at_ms IS NULL",
+                params![kept, id.as_str(), typed],
+                OneValue::read::<Option<bool>>,
+            );
+            if typed_later.optional()?.flatten() == Some(true) {
+                return Err(StoreError::TypedEarlier);
+            }
+        }
         let changed = conn.execute(
-            "UPDATE sessions SET draft = ?1 WHERE id = ?2 AND closed_at_ms IS NULL AND draft IS NOT ?1",
-            params![draft_column(&kept)?, id.as_str()],
+            "UPDATE sessions SET draft = ?1, draft_typed_at_ms = ?3
+                 WHERE id = ?2 AND closed_at_ms IS NULL AND draft IS NOT ?1",
+            params![kept, id.as_str(), typed],
         )? > 0;
+        if !changed {
+            // The same again, typed later, such as on another device. Only when it was typed moves, which no record
+            // shows, so the revision stays.
+            conn.execute(
+                "UPDATE sessions SET draft_typed_at_ms = ?2 WHERE id = ?1 AND closed_at_ms IS NULL
+                     AND (draft_typed_at_ms IS NULL OR draft_typed_at_ms < ?2)",
+                params![id.as_str(), typed],
+            )?;
+        }
         Ok(Reading { session: session_on(&conn, id)?, changed })
     }
 

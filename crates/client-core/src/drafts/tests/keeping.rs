@@ -25,6 +25,9 @@ pub(super) enum Answer {
     KnowsNoKindOfFile,
     /// It goes away instead, as a hub that's stopped does.
     HangsUp,
+    /// As `Answered`, but as a hub whose chats' drafts were each changed after what's sent was typed, it refuses every
+    /// chat's draft with `Conflict`, as `SessionDraft` says.
+    TypedLaterElsewhere,
 }
 
 /// What a fake hub was asked to keep, chat by chat, in the order it was asked: each draft's text, followed by the files
@@ -37,6 +40,7 @@ pub(super) fn hub(socket: &Path, answer: Answer) -> (Client, Heard) {
     let (said, heard) = flume::unbounded();
     let client = stand_in_hub::connect(socket, move |request| {
         let added = added(&request);
+        let a_chats_draft = matches!(request, ClientRequest::SessionDraft(_));
         let not_a_chats = !matches!(
             request,
             ClientRequest::SessionDraft(_) | ClientRequest::AttachmentAdd(_) | ClientRequest::AttachmentRemove(_)
@@ -47,7 +51,11 @@ pub(super) fn hub(socket: &Path, answer: Answer) -> (Client, Heard) {
             Answer::KnowsNoKindOfFile if added.as_ref().is_some_and(|file| file.media_type != MediaType::Other) => {
                 ErrorCode::Unsupported
             }
-            Answer::Answered | Answer::KeepsOnlyChatsDrafts | Answer::KnowsNoKindOfFile => ErrorCode::NotFound,
+            Answer::TypedLaterElsewhere if a_chats_draft => ErrorCode::Conflict,
+            Answer::Answered
+            | Answer::KeepsOnlyChatsDrafts
+            | Answer::KnowsNoKindOfFile
+            | Answer::TypedLaterElsewhere => ErrorCode::NotFound,
             Answer::Refused => ErrorCode::Unsupported,
             Answer::HangsUp => return Does::HangsUp,
         };
@@ -76,7 +84,7 @@ fn added(request: &ClientRequest) -> Option<Attachment> {
 
 /// What a fake hub says it heard of a request, for one the keeper makes.
 fn heard_of(request: ClientRequest) -> Option<(String, String)> {
-    if let ClientRequest::SessionDraft(drafts::SessionDraft { id, draft }) = request {
+    if let ClientRequest::SessionDraft(drafts::SessionDraft { id, draft, .. }) = request {
         let named = draft.files.iter().map(|file| format!(" {file}"));
         return Some((id.to_string(), named.fold(draft.text, |text, file| text + &file)));
     }
@@ -316,7 +324,7 @@ fn a_file_this_connection_has_given_the_hub_isnt_added_again() {
 pub(super) fn keeping_hub(socket: &Path, first: u64) -> Client {
     let mut next = first;
     stand_in_hub::connect(socket, move |request| {
-        let kept = if let ClientRequest::SessionDraft(drafts::SessionDraft { id, draft }) = request {
+        let kept = if let ClientRequest::SessionDraft(drafts::SessionDraft { id, draft, .. }) = request {
             ClientResponse::Session(told(id.as_str(), next, &draft.text))
         } else if let ClientRequest::SessionDecisionDraft(drafts::SessionDecisionDraft { id, draft }) = request {
             ClientResponse::Session(Session { decision_draft: draft, ..told(id.as_str(), next, "") })

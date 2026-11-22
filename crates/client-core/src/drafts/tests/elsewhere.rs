@@ -48,9 +48,9 @@ fn a_draft_taken_from_a_record_isnt_from_elsewhere_until_another_is_made_there()
     assert!(drafts.from_elsewhere(&KeptDraft::composer(&told("a", 5, "typed elsewhere again"))));
 }
 
-/// What's typed here goes on and replaces a draft made elsewhere while it's on its way, and the composer shows the
-/// newest of it until the hub has it, as when the chat is shown again first. Once nothing is on its way, a newer record
-/// is taken, and the composer shows it.
+/// A draft made elsewhere isn't shown while what's typed here is on its way, and the composer shows the newest of that
+/// until the hub has it, as when the chat is shown again first. Once nothing is on its way, a newer record is taken,
+/// and the composer shows it. Which of the two the hub keeps is `typed_last.rs`'s.
 #[test]
 fn nothing_from_elsewhere_is_taken_while_a_draft_from_here_is_on_its_way() {
     let dir = tempfile::tempdir().unwrap();
@@ -63,7 +63,7 @@ fn nothing_from_elsewhere_is_taken_while_a_draft_from_here_is_on_its_way() {
 
     assert!(
         !drafts.from_elsewhere(&KeptDraft::composer(&told("a", 100, "typed elsewhere"))),
-        "what's typed here goes on and replaces it"
+        "held back while what's typed here is on its way"
     );
     let shown = drafts.take_composer(&told("a", 3, "typed before"));
     assert_eq!(shown, "typed as the hub went", "the newest handed over, while there's no hub");
