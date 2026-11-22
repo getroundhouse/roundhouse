@@ -66,7 +66,7 @@ fn a_revision_has_a_line_of_its_own_and_the_tab_shows_it(cx: &mut TestAppContext
     let chat = ui.active_chat();
     let id = ui.view().records().proposals(&chat)[0].id.clone();
 
-    ui.input(&format!("{}; say:revised", revise(&id)));
+    ui.paste_text(&format!("{}; say:revised", revise(&id)));
     ui.press("enter");
 
     ui.wait_idle_with("the turn to finish", |text| text.contains("revised"));
@@ -101,7 +101,7 @@ fn a_revision_written_while_the_person_answers_waits_to_be_shown(cx: &mut TestAp
     ui.wait("the chat", |ui| showing(ui) == Showing::Chat);
 
     ui.click("composer");
-    ui.input(&format!("{}; say:revised", revise(&id)));
+    ui.paste_text(&format!("{}; say:revised", revise(&id)));
     ui.press("enter");
     ui.wait_idle_with("the turn to finish", |text| text.contains("revised"));
     ui.click("show-proposal-tab");
@@ -135,7 +135,7 @@ fn a_withdrawn_proposal_says_why_and_takes_no_answer(cx: &mut TestAppContext) {
     let withdraw =
         format!(r#"mcp:withdraw_proposal {{"proposal":"{id}","why":"Dispatch decides where holds live now."}}"#);
 
-    ui.input(&format!("{withdraw}; say:withdrawn"));
+    ui.paste_text(&format!("{withdraw}; say:withdrawn"));
     ui.press("enter");
 
     ui.wait_idle_with("the turn to finish", |text| text.contains("withdrawn"));

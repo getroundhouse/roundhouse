@@ -27,7 +27,7 @@ pub(crate) fn a_proposal(ui: &mut Ui<'_>) -> SharedString {
 /// Has the agent make the proposal `propose` says, as [`a_proposal`] does.
 fn proposing(ui: &mut Ui<'_>, propose: &str) -> SharedString {
     let chat = ui.active_chat();
-    ui.input(&format!("{propose}; say:done"));
+    ui.paste_text(&format!("{propose}; say:done"));
     ui.press("enter");
     ui.wait_idle_with("the turn to finish", |text| text.contains("done"));
     // It's there once the app has the proposal's record, which comes on the feed.
