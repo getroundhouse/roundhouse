@@ -38,7 +38,7 @@ fn runtime_closure(metadata: &Value, package: &str) -> HashSet<String> {
 #[test]
 fn protocol_stays_free_of_io_and_ui() {
     let metadata = metadata();
-    let closure = runtime_closure(&metadata, "protocol");
+    let closure = runtime_closure(metadata, "protocol");
     for banned in ["tokio", "rusqlite", "gpui", "libc"] {
         assert!(!closure.contains(banned), "protocol depends on {banned}");
     }
@@ -60,7 +60,7 @@ fn nothing_outside_the_ui_depends_on_gpui() {
         "daemon",
         "cli",
     ] {
-        let gpui: Vec<_> = runtime_closure(&metadata, package)
+        let gpui: Vec<_> = runtime_closure(metadata, package)
             .into_iter()
             .filter(|name| name.starts_with("gpui") || name == "zed")
             .collect();
@@ -72,7 +72,7 @@ fn nothing_outside_the_ui_depends_on_gpui() {
 fn clients_only_reach_the_hub_through_the_protocol() {
     let metadata = metadata();
     for package in ["client-core", "local-hub", "cli", "mobile-ios"] {
-        let closure = runtime_closure(&metadata, package);
+        let closure = runtime_closure(metadata, package);
         for banned in ["hub", "github", "worker", "agents", "providers"] {
             assert!(!closure.contains(banned), "{package} depends on {banned}");
         }
@@ -85,10 +85,14 @@ fn clients_only_reach_the_hub_through_the_protocol() {
 /// what ships, and this asks `cargo tree`, which resolves them as a build of each client does.
 #[test]
 fn no_client_builds_ghostty() {
-    for package in
-        ["client-core", "terminal-view", "transcript", "client-ui", "local-hub", "cli", "desktop", "mobile-ios"]
-    {
-        let built = built_by(package);
+    let clients =
+        ["client-core", "terminal-view", "transcript", "client-ui", "local-hub", "cli", "desktop", "mobile-ios"];
+    // Asked for at once, since Cargo does part of each outside its lock, as the licenses' graphs are.
+    let builds: Vec<Vec<String>> = std::thread::scope(|scope| {
+        let building: Vec<_> = clients.map(|package| scope.spawn(move || built_by(package))).into();
+        building.into_iter().map(|built| built.join().unwrap()).collect()
+    });
+    for (package, built) in clients.into_iter().zip(builds) {
         assert!(built.contains(&"client-core".to_string()), "{package} builds client-core, as every client does");
         for banned in ["terminal-state", "libghostty-vt"] {
             assert!(!built.contains(&banned.to_string()), "{package} builds {banned}");
@@ -102,7 +106,7 @@ fn no_client_builds_ghostty() {
 fn client_core_and_the_phone_start_no_processes() {
     let metadata = metadata();
     for package in ["client-core", "mobile-ios"] {
-        let closure = runtime_closure(&metadata, package);
+        let closure = runtime_closure(metadata, package);
         for banned in ["local-hub", "process", "private-files"] {
             assert!(!closure.contains(banned), "{package} depends on {banned}");
         }
@@ -113,7 +117,7 @@ fn client_core_and_the_phone_start_no_processes() {
 /// on any device can use it.
 fn needs_none_of_ours_no_async_runtime_and_no_ui(package: &str, but: &[&str]) {
     let metadata = metadata();
-    let closure = runtime_closure(&metadata, package);
+    let closure = runtime_closure(metadata, package);
     let packages = metadata["packages"].as_array().unwrap();
     let ours: Vec<&str> =
         packages.iter().filter(|p| p["source"].is_null()).filter_map(|p| p["name"].as_str()).collect();
@@ -172,7 +176,7 @@ fn conversation_needs_none_of_our_other_crates_but_client_core_and_speaking_no_a
 /// `client-core` reads replies out without a voice of its own, so the CLI never builds one.
 #[test]
 fn client_core_has_no_voice() {
-    let closure = runtime_closure(&metadata(), "client-core");
+    let closure = runtime_closure(metadata(), "client-core");
     for banned in ["speaking", "phonon", "sound", "dictation"] {
         assert!(!closure.contains(banned), "client-core depends on {banned}");
     }
@@ -209,9 +213,9 @@ fn now_playing_needs_none_of_our_other_crates_no_async_runtime_and_no_ui() {
 #[test]
 fn the_hub_and_the_worker_stay_apart() {
     let metadata = metadata();
-    assert!(!runtime_closure(&metadata, "hub").contains("worker"));
-    assert!(!runtime_closure(&metadata, "hub").contains("agents"));
-    assert!(!runtime_closure(&metadata, "worker").contains("hub"));
+    assert!(!runtime_closure(metadata, "hub").contains("worker"));
+    assert!(!runtime_closure(metadata, "hub").contains("agents"));
+    assert!(!runtime_closure(metadata, "worker").contains("hub"));
 }
 
 /// The app builds gpui-kit's crates from its copy, so a change to the copy is what the app gets, and no dependency
