@@ -11,11 +11,13 @@ use super::Tap;
 use crate::starting::Launched;
 use crate::{AgentError, AgentOptions, BinaryLookup};
 
-/// Set by a parent Claude session. If the hub was started from inside one, these would make a new
-/// agent think it's part of that session. Login and provider settings such as `ANTHROPIC_API_KEY`
-/// are the user's own choice, so they pass through, unless the agent's hub hands it a login to run under, as
-/// `claude::login` says.
-pub const SCRUBBED_ENV: &[&str] = &[
+/// What a Claude session sets in the environment of what it starts. A CLI that inherits them takes itself for part of
+/// that session. So a program that starts the CLI, and can itself be started from inside a session, removes them from
+/// its own environment in its `main`, before it starts a thread, and nothing it starts has them: the daemon, for every
+/// role it runs as, and the conformance example. This launch doesn't remove them again. Login and provider settings
+/// such as `ANTHROPIC_API_KEY` are the user's own choice, so they pass through, unless the agent's hub hands it a login
+/// to run under, as `claude::login` says.
+pub const PARENT_SESSION_ENV: &[&str] = &[
     "CLAUDECODE",
     "CLAUDE_AGENT_SDK_VERSION",
     "CLAUDE_CODE_CHILD_SESSION",
@@ -86,7 +88,7 @@ pub(super) fn launch(
     tap: Option<&Tap>,
 ) -> Result<Launched, AgentError> {
     let cwd = Path::new(&spec.cwd);
-    let mut command = command(bin, cwd);
+    let mut command = crate::starting::piped(bin, cwd);
     let args = build_args(spec, resume)?;
     if let Some(tap) = tap {
         tap.launched(resume, Some(conversation(spec)?), &args);
@@ -105,15 +107,6 @@ pub(super) fn launch(
     }
     let child = start(&mut command, bin, cwd, options.login.as_ref(), &options.environment)?;
     Launched::new("Claude", bin, child, options.pid_file.as_deref())
-}
-
-/// The CLI at `bin`, run in `cwd` as [`crate::starting::piped`] says, without what a parent Claude session set.
-pub(in crate::claude) fn command(bin: &Path, cwd: &Path) -> Command {
-    let mut command = crate::starting::piped(bin, cwd);
-    for name in SCRUBBED_ENV {
-        command.env_remove(name);
-    }
-    command
 }
 
 /// Starts `command`, which runs `bin` in `cwd`, under `login` if its hub sent one, with what its worker gives every

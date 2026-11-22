@@ -30,8 +30,8 @@ mod tools;
 mod usage;
 mod verified_launch;
 
-pub use launch::{SCRUBBED_ENV, build_args};
-pub(super) use launch::{command, resolve_binary, start};
+pub use launch::{PARENT_SESSION_ENV, build_args};
+pub(super) use launch::{resolve_binary, start};
 pub(super) use prompt::{image_block, user_line_saying};
 use supervise::supervise;
 use verified_launch::launch;

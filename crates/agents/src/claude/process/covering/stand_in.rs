@@ -15,7 +15,7 @@ use tokio::process::{Child, ChildStdin};
 use tokio::sync::oneshot;
 use tracing::debug;
 
-use super::super::{command, start};
+use super::super::start;
 use crate::AgentError;
 use crate::claude::login_check::{self, Output};
 use crate::stdio::GroupGuard;
@@ -86,7 +86,7 @@ struct Spare {
 impl Spare {
     async fn start(starting: &Starting) -> Result<Self, AgentError> {
         let room = tempfile::Builder::new().prefix("roundhouse-cover-").tempdir().map_err(crate::CallFailed::Io)?;
-        let mut command = command(&starting.bin, room.path());
+        let mut command = crate::starting::piped(&starting.bin, room.path());
         command.args(args());
         let mut child =
             start(&mut command, &starting.bin, room.path(), starting.login.as_ref(), &starting.environment)?;
