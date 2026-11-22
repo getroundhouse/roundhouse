@@ -64,6 +64,10 @@
 		<key>UIColorName</key>
 		<string>LaunchBackground</string>
 	</dict>
+	<!-- Its only encryption is TLS to the hub, which the owner declares exempt, so App Store Connect asks nothing of each
+	     upload and TestFlight offers it as soon as it's processed. -->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>UIUserInterfaceStyle</key>
 	<string>Dark</string>
 	<key>UIRequiresFullScreen</key>

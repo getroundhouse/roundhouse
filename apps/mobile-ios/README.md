@@ -27,6 +27,18 @@ TEAM_ID=<team> BUNDLE_ID=<id> DEVICE=<udid> apps/mobile-ios/scripts/build.sh
 
 It builds in release because the first layout of a debug build overflows the 1 MB stack iOS gives the main thread. `--debug` builds one anyway, and `--no-install` stops once it's signed.
 
+## Uploading it to TestFlight
+
+CI uploads the app from `main` to TestFlight every four hours, when what it's built from has changed, and whenever `.github/workflows/testflight.yml` is run by hand, as `docs/decisions/testflight-every-four-hours.md` says. The workflow's header lists the secrets it signs with. It goes to the team's own testers only.
+
+From this Mac, `--testflight` does the same, to the app's record in App Store Connect, which has to exist first:
+
+```sh
+TEAM_ID=<team> BUNDLE_ID=<id> apps/mobile-ios/scripts/build.sh --testflight
+```
+
+It archives the app for any iPhone, unsigned, then has Xcode sign it for the App Store and upload it. Xcode reaches the team's account through its own sign-in, or through an App Store Connect key with the Admin role, given as `ASC_KEY_PATH`, `ASC_KEY_ID` and `ASC_ISSUER_ID`, which is how CI does it. The version is the desktop's for the same commit, so it needs the whole history, and the build number is the minute it was made, so two uploads need a minute between them.
+
 ## Running it in the Simulator
 
 The Simulator runs a build for `aarch64-apple-ios-sim` (`rustup target add aarch64-apple-ios-sim`), which needs no team or phone. `build.sh` builds for a phone, so a Simulator build is by hand: the binary in a folder named `Roundhouse.app`, beside `ios/Info.plist` with its `$(…)` values filled in, signed with `codesign -s -`, then `xcrun simctl install` and `xcrun simctl launch --console-pty`, which shows what the app prints, such as a panic. Keep it in `.context/`.
@@ -46,9 +58,9 @@ From a checkout, `cargo run -p cli -- phone pair` pairs with the checkout's own 
 ## How it's put together
 
 - **The Rust binary is the app.** `ios/project.yml` describes an app whose only source is a stub, so that Xcode signs it, and its last build phase puts the Rust binary in the stub's place. XcodeGen makes the Xcode project from it on each build, and the project isn't kept.
-- **`ios/Info.plist` says what iOS should know before the app runs:** the `roundhouse` link scheme for pairing, why it reaches the local network, GPUI's scene delegate, the 120 Hz opt-in, and the launch colour. Each has a comment.
+- **`ios/Info.plist` says what iOS should know before the app runs:** the `roundhouse` link scheme for pairing, why it reaches the local network, GPUI's scene delegate, the 120 Hz opt-in, the launch colour, and that it uses no encryption App Store Connect needs documents for. Each has a comment.
 - **`ios/PrivacyInfo.xcprivacy` declares what App Store Connect asks of every app:** nothing collected, no tracking, and why it calls the file APIs Apple asks a reason for. A new dependency can call others, which `nm -u` on the binary shows.
 - **GPUI's iOS backend and its Apple text system are copies,** in `third_party/`, with Zed's font-kit, as `third_party/README.md` lists, through `[patch.crates-io]` in the root `Cargo.toml`. Each change is marked `Changed for Roundhouse`: asking the display for 120 Hz, giving the keyboard a document range from an input that reports none, without which it never appears for the kit's inputs, and loading a font whose traits iOS gives as booleans, as it does every face of Menlo, the code font.
 - **The icon is drawn in code, like the desktop's.** `look::phone_icon` draws it, and the gallery checks it against `ios/Assets.xcassets/AppIcon.appiconset/icon-1024.png`, kept without an alpha channel, since App Store Connect refuses one with it.
 
-*Not built:* archiving for TestFlight and the App Store.
+*Not built:* testers outside the team, and the App Store, which both need Apple's review.

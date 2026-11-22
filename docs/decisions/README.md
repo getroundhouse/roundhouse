@@ -25,6 +25,7 @@ A decision record holds one large, one-off choice among real alternatives, such 
 | [velopack.md](velopack.md) | Velopack packages, installs and updates the app |
 | [linux-appimage.md](linux-appimage.md) | The Linux app is an AppImage |
 | [publish-every-merge.md](publish-every-merge.md) | Every merge to `main` is published, as version `0.1.<commits on main>` |
+| [testflight-every-four-hours.md](testflight-every-four-hours.md) | The iPhone app goes to TestFlight every four hours, when it's changed |
 | [hub-runs-from-its-own-copy.md](hub-runs-from-its-own-copy.md) | A hub that a client starts runs from a copy of the daemon outside the app's install directory |
 | [hub-package.md](hub-package.md) | A hub on a machine of its own is installed from an archive as a service, and a client updates it. Partly built |
 | [no-strong-copyleft.md](no-strong-copyleft.md) | Nothing that ships is under GPL, AGPL or LGPL |
