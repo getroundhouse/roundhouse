@@ -444,26 +444,18 @@ jobs:
       # protocol, as publish.py says.
       KEEP: "10"
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
       # If a newer merge replaced this processor's build, that merge releases it. This job starts anyway, since needs
-      # covers the whole matrix, so check the jobs API: a replaced build never got a runner.
+      # covers the whole matrix.
       - name: See whether a newer merge's build replaced this one's
         id: own-build
         env:
           GH_TOKEN: ${{ github.token }}
           JOB: build-windows (${{ matrix.arch }})
-        run: |
-          build="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs?per_page=100" \
-            --jq '[.jobs[] | select(.name == env.JOB)] | select(length == 1) | .[0] | "\(.conclusion) \(.runner_id)"')"
-          [ -n "$build" ] || { echo "::error::This run has no one job named $JOB"; exit 1; }
-          if [ "$build" = "cancelled 0" ]; then
-            echo "::notice::A newer merge's build replaced $JOB, so that merge's run releases it"
-            echo "replaced=true" >> "$GITHUB_OUTPUT"
-          fi
-      - if: steps.own-build.outputs.replaced != 'true'
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-          persist-credentials: false
+        run: .github/replaced-build.sh
       - if: steps.own-build.outputs.replaced != 'true'
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
@@ -717,25 +709,17 @@ jobs:
       KEEP: "10"
       LINUX_PACKAGES: squashfs-tools
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
       # As for Windows.
       - name: See whether a newer merge's build replaced this one's
         id: own-build
         env:
           GH_TOKEN: ${{ github.token }}
           JOB: build-linux (${{ matrix.arch }})
-        run: |
-          build="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs?per_page=100" \
-            --jq '[.jobs[] | select(.name == env.JOB)] | select(length == 1) | .[0] | "\(.conclusion) \(.runner_id)"')"
-          [ -n "$build" ] || { echo "::error::This run has no one job named $JOB"; exit 1; }
-          if [ "$build" = "cancelled 0" ]; then
-            echo "::notice::A newer merge's build replaced $JOB, so that merge's run releases it"
-            echo "replaced=true" >> "$GITHUB_OUTPUT"
-          fi
-      - if: steps.own-build.outputs.replaced != 'true'
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-          persist-credentials: false
+        run: .github/replaced-build.sh
       - if: steps.own-build.outputs.replaced != 'true'
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
