@@ -5,6 +5,7 @@
 //! says of every view.
 #![warn(clippy::wildcard_enum_match_arm)]
 
+mod color;
 mod fitting;
 mod grid;
 mod keys;
