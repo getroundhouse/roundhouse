@@ -2,7 +2,11 @@
 //! takes a value by come from the same declaration. Removing or renaming a column there fails to compile where it's
 //! read, and an error from reading one names it. Every name is a place in the row, fixed as the crate compiles, so
 //! nothing looks a column up by its name as the hub runs. A statement that writes the row gives each value by its
-//! column's name too, so the order of the declaration's columns changes nothing that's stored.
+//! column's name too, so the order of the declaration's columns changes nothing that's stored. `clippy.toml` refuses
+//! rusqlite's reads of a column by its number. [`ByColumn`] makes the only ones of a query the hub writes itself, so a
+//! query of several values has a declaration, and a query of one value is read with [`OneValue::read`]. A reply whose
+//! columns SQLite fixes, such as a `PRAGMA`'s, or a test's read of a table in its own order, is read by number where
+//! it's made, with an `#[expect]` that says which it is.
 
 use rusqlite::Row;
 use rusqlite::types::{FromSql, Type, ValueRef};
@@ -85,6 +89,10 @@ pub(crate) trait ByColumn {
     fn borrowed_at(&self, column: Column) -> rusqlite::Result<ValueRef<'_>>;
 }
 
+#[expect(
+    clippy::disallowed_methods,
+    reason = "this is where a reader reads a declared column or a query's one value, at the place its declaration gives"
+)]
 impl ByColumn for Row<'_> {
     fn at<T: FromSql>(&self, column: impl At) -> rusqlite::Result<T> {
         self.get(column.index())
@@ -275,6 +283,7 @@ mod tests {
         assert_eq!(read, ("a".to_owned(), 21, 42, Status::Idle, "IDLE".to_owned()));
 
         // Each value a write gave by name is in its column, in the table's own order.
+        #[expect(clippy::disallowed_methods, reason = "it reads the table in its own order on purpose")]
         let stored: (String, String, String, i64) = conn
             .query_row("SELECT * FROM samples WHERE id = 'a'", [], |row| {
                 Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))

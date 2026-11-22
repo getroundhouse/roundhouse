@@ -3,7 +3,7 @@
 use rusqlite::{Transaction, params};
 use serde_json::Value;
 
-use crate::store::StoreError;
+use crate::store::{ByColumn, Columns, OneValue, StoreError, columns};
 
 /// The repository source and worker environment settled when each workspace was created, as JSON. Kept in the hub's
 /// store (not on the client-facing record) so later operations never query the provider's adapter or flip a workspace
@@ -28,6 +28,11 @@ pub(super) const PLACEMENT: &str = r#"
         WHERE repo_source IS NULL;
 "#;
 
+columns! {
+    /// The columns [`pull_request_links`] reads of each workspace, as the table was before it.
+    struct FoundColumns { id, pull_request }
+}
+
 /// Each workspace's record keeps only which pull request is its own, as JSON, in `pull_request_link` in place of
 /// `pull_request`, since what GitHub says of it is kept in the hub's cache of what it reads from GitHub. JSON's `null`
 /// where the hub found none, and NULL until it has looked, as before. One whose address isn't a pull request's on
@@ -35,15 +40,16 @@ pub(super) const PLACEMENT: &str = r#"
 /// keeps records hears it, and the workspaces' trigger takes the new column in the old one's place.
 pub(super) fn pull_request_links(tx: &Transaction<'_>) -> Result<(), StoreError> {
     let named = "SELECT sql FROM sqlite_master WHERE type = 'trigger' AND name = 'workspaces_rev_on_update'";
-    let revisions: String = tx.query_row(named, [], |row| row.get(0))?;
+    let revisions: String = tx.query_row(named, [], OneValue::read)?;
     tx.execute_batch(
         "DROP TRIGGER workspaces_rev_on_update;
          ALTER TABLE workspaces ADD COLUMN pull_request_link TEXT;",
     )?;
     tx.execute_batch(&revisions.replace(", pull_request,", ", pull_request_link,"))?;
+    let c = FoundColumns::at(0);
     let rows = tx
-        .prepare("SELECT id, pull_request FROM workspaces WHERE pull_request IS NOT NULL")?
-        .query_map([], |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)))?
+        .prepare(&format!("SELECT {} FROM workspaces WHERE pull_request IS NOT NULL", FoundColumns::LIST))?
+        .query_map([], |row| Ok((row.at::<String>(c.id)?, row.at::<String>(c.pull_request)?)))?
         .collect::<Result<Vec<_>, _>>()?;
     let mut write = tx.prepare("UPDATE workspaces SET pull_request_link = ?2 WHERE id = ?1")?;
     for (id, found) in rows {

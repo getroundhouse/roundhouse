@@ -10,6 +10,10 @@ use rusqlite::params_from_iter;
 use rusqlite::types::Null;
 
 /// What SQLite plans for `sql`, a step to a line.
+#[expect(
+    clippy::disallowed_methods,
+    reason = "SQLite fixes the reply's columns, and a step's text is its fourth, `detail`"
+)]
 fn plan(conn: &Connection, sql: &str) -> Vec<String> {
     let mut statement = conn.prepare(&format!("EXPLAIN QUERY PLAN {sql}")).unwrap();
     let nulls = params_from_iter(std::iter::repeat_n(Null, statement.parameter_count()));
