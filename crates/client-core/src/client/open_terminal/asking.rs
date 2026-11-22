@@ -4,7 +4,7 @@
 
 use protocol::client::terminals::{TerminalBounds, TerminalFit, TerminalRows};
 use protocol::model::TerminalId;
-use protocol::terminal::{Numbering, TerminalPoint, TerminalRange, TerminalSize};
+use protocol::terminal::{Numbering, RowNumber, TerminalPoint, TerminalRange, TerminalSize};
 
 use super::following::{Given, Held};
 use super::window::{Ask, Replied, Step};
@@ -14,7 +14,11 @@ use crate::client::{Client, Result};
 
 /// A reply to wait for, or calls for the thread to make itself.
 pub(super) enum Waiting {
-    Rows(SentCall<TerminalRows>),
+    Rows {
+        numbering: Numbering,
+        from: RowNumber,
+        sent: SentCall<TerminalRows>,
+    },
     Fit {
         size: TerminalSize,
         asked: Vec<TerminalPoint>,
@@ -43,7 +47,7 @@ pub(super) fn send(client: &Client, id: &TerminalId, ask: Ask) -> Result<Option<
             return Ok(None);
         }
         Ask::Rows { numbering, from, count } => {
-            Waiting::Rows(client.send_call(TerminalRows { id, numbering, from, count })?)
+            Waiting::Rows { numbering, from, sent: client.send_call(TerminalRows { id, numbering, from, count })? }
         }
         Ask::Fit { size, numbering, keep } => {
             let sent = client.send_call(TerminalFit { id, size, numbering, keep: keep.clone() })?;
@@ -61,7 +65,9 @@ pub(super) fn start(id: TerminalId, waiting: flume::Receiver<Waiting>, giver: Gi
     let wait = move || {
         while let Ok(next) = waiting.recv() {
             let replied = match next {
-                Waiting::Rows(sent) => sent.reply().map(Replied::Rows),
+                Waiting::Rows { numbering, from, sent } => {
+                    sent.reply().map(|reply| Replied::Rows { numbering, from, reply })
+                }
                 Waiting::Fit { size, asked, sent } => sent.reply().map(|reply| Replied::Fit { size, asked, reply }),
                 Waiting::Bounds { step, sent } => sent.reply().map(|reply| Replied::Bounds { step, reply }),
                 Waiting::Copy { client, numbering, range, reply } => {

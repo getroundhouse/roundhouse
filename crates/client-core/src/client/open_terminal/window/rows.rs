@@ -2,6 +2,7 @@
 //! view is, by number, as `protocol::terminal::TerminalPicture` says a receiver keeps them.
 
 use std::collections::{BTreeMap, HashMap};
+use std::ops::Range;
 use std::sync::Arc;
 
 use protocol::terminal::{
@@ -11,8 +12,8 @@ use protocol::terminal::{
 use super::painting::Colors;
 use crate::drawn::Row;
 
-/// The most rows of history a client holds, and the most bytes of them, letting go of those furthest from its view
-/// first.
+/// The most rows of history a client holds, and the most bytes of them, letting go first of those furthest from the
+/// rows its view wants.
 pub(super) const MOST_HELD_ROWS: usize = 2_000;
 pub(super) const MOST_HELD_BYTES: usize = 8 * 1024 * 1024;
 
@@ -208,21 +209,43 @@ impl Rows {
         self.row(number).is_some()
     }
 
-    /// Lets go of the rows of history furthest from `near` until no more than the most are held.
-    pub(super) fn let_go_far_from(&mut self, near: RowNumber) {
+    /// About how many rows of history it has room for: the most it holds, or fewer, where rows the size of those held
+    /// would take more than the most bytes before that.
+    pub(super) fn room(&self) -> u64 {
+        let room = match self.history.len() {
+            0 => MOST_HELD_ROWS,
+            held => MOST_HELD_ROWS.min(MOST_HELD_BYTES / (self.bytes / held).max(1)),
+        };
+        u64::try_from(room).unwrap_or(u64::MAX)
+    }
+
+    /// Lets go of rows of history until no more than the most are held: those furthest outside `wanted` first, and if
+    /// what's wanted is more than that, those at the end of it furthest from `near`, the view's top. Returns what of
+    /// `wanted` it still has room for, which is all of it unless it let go of rows in it, so those aren't asked for
+    /// again at once.
+    pub(super) fn let_go_outside(&mut self, mut wanted: Range<RowNumber>, near: RowNumber) -> Range<RowNumber> {
         while self.history.len() > MOST_HELD_ROWS || self.bytes > MOST_HELD_BYTES {
-            let (Some(oldest), Some(newest)) = (self.history.first_key_value(), self.history.last_key_value()) else {
-                return;
+            let (Some((&oldest, _)), Some((&newest, _))) =
+                (self.history.first_key_value(), self.history.last_key_value())
+            else {
+                break;
             };
-            let far = if near.get().abs_diff(oldest.0.get()) >= near.get().abs_diff(newest.0.get()) {
-                *oldest.0
+            let before = wanted.start.get().saturating_sub(oldest.get());
+            let after = newest.plus(1).get().saturating_sub(wanted.end.get());
+            let far = if before > 0 || after > 0 {
+                if before >= after { oldest } else { newest }
+            } else if near.get().abs_diff(oldest.get()) >= near.get().abs_diff(newest.get()) {
+                wanted.start = oldest.plus(1);
+                oldest
             } else {
-                *newest.0
+                wanted.end = newest;
+                newest
             };
             if let Some(gone) = self.history.remove(&far) {
                 self.bytes -= gone.bytes;
             }
         }
+        wanted
     }
 
     /// Draws every row again in `colors`, as after the view's own change.

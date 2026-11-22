@@ -4,20 +4,16 @@
 use std::sync::Arc;
 
 use protocol::terminal::{
-    Bounds, MOST_ROWS, Numbering, RowNumber, TerminalBoundsReply, TerminalFitReply, TerminalPicture, TerminalPoint,
+    Bounds, Numbering, RowNumber, TerminalBoundsReply, TerminalFitReply, TerminalPicture, TerminalPoint,
     TerminalRowsReply, TerminalSize, Typed, Wheel,
 };
 
+use super::fetching::{Fetching, Heading};
 use super::fitting::Fitting;
 use super::painting::{Colors, GHOSTTYS_COLORS};
 use super::rows::{Incomplete, Rows, Taken};
 use super::selecting::{Selecting, Step};
 use crate::drawn::{Frame, Rgb, Row, Selected};
-
-/// How many screens of history a view holds on each side of it while it's scrolled back, and how many screens it
-/// holds above the screen at the bottom, which are the rows that last scrolled off, so they come free.
-const SCREENS_AROUND: u64 = 2;
-const SCREENS_AT_THE_BOTTOM: u64 = 3;
 
 /// What the window asks of the hub. Each but what's typed waits for a reply, which comes back as a [`Replied`].
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -31,7 +27,12 @@ pub(in crate::client::open_terminal) enum Ask {
 /// A reply to an [`Ask`].
 #[derive(Debug)]
 pub(in crate::client::open_terminal) enum Replied {
-    Rows(TerminalRowsReply),
+    /// To an ask for rows in `numbering` from `from`, as asked, which the reply's own `from` can be later than.
+    Rows {
+        numbering: Numbering,
+        from: RowNumber,
+        reply: TerminalRowsReply,
+    },
     /// To a fit for `size`, which kept the cells `asked` for.
     Fit {
         size: TerminalSize,
@@ -54,7 +55,9 @@ pub(in crate::client::open_terminal) struct Window {
     pub(super) scrolled: Option<RowNumber>,
     pub(super) selecting: Selecting,
     /// The rows asked for, until they come.
-    pub(super) fetching: bool,
+    pub(super) fetching: Fetching,
+    /// Which way the view last moved through the history, which it asks ahead in.
+    pub(super) heading: Heading,
     /// The size the view has room for, once it's laid out.
     pub(super) room: Option<TerminalSize>,
     pub(super) fitting: Option<Fitting>,
@@ -76,7 +79,8 @@ impl Window {
             view_colors: GHOSTTYS_COLORS,
             scrolled: None,
             selecting: Selecting::default(),
-            fetching: false,
+            fetching: Fetching::default(),
+            heading: Heading::default(),
             room: None,
             fitting: None,
             connecting: true,
@@ -106,14 +110,14 @@ impl Window {
         match taken {
             Taken::Gathered | Taken::Same => {}
             Taken::Fresh => {
-                self.fetching = false;
+                self.fetching.clear();
                 if connected {
                     asks.extend(self.fit_to_room(false));
                 }
                 asks.extend(self.fetch_above());
             }
             Taken::Anew => {
-                self.fetching = false;
+                self.fetching.clear();
                 self.anew(numbering, size);
                 if connected {
                     asks.extend(self.fit_to_room(false));
@@ -131,15 +135,15 @@ impl Window {
     pub(in crate::client::open_terminal) fn disconnected(&mut self) {
         self.connecting = true;
         self.rows.forget();
-        self.fetching = false;
+        self.fetching.clear();
         self.fitting = None;
         self.selecting.not_coming();
     }
 
     pub(in crate::client::open_terminal) fn replied(&mut self, replied: Replied) -> Vec<Ask> {
         match replied {
-            Replied::Rows(reply) => {
-                self.fetching = false;
+            Replied::Rows { numbering, from, reply } => {
+                self.fetching.replied(numbering, from);
                 self.rows.came(reply, &self.colors);
                 self.changed = true;
                 self.fetch()
@@ -152,8 +156,9 @@ impl Window {
                 }
                 Vec::new()
             }
+            // Which ask failed isn't said, so none is waited for any more, and what's still lacking is asked for again.
             Replied::Failed => {
-                self.fetching = false;
+                self.fetching.clear();
                 self.fitting = None;
                 self.selecting.not_coming();
                 Vec::new()
@@ -201,6 +206,9 @@ impl Window {
         let top = self.scrolled.unwrap_or(screen.top).get();
         let by = u64::try_from(lines.unsigned_abs()).unwrap_or(u64::MAX);
         let moved = if lines < 0 { top.saturating_sub(by) } else { top.saturating_add(by) };
+        if lines != 0 {
+            self.heading = if lines < 0 { Heading::Up } else { Heading::Down };
+        }
         let bottom = screen.top;
         self.unkept(true, false);
         self.scrolled = Some(self.clamped(RowNumber::new(moved))).filter(|top| *top < bottom);
@@ -217,53 +225,6 @@ impl Window {
     pub(super) fn top(&self) -> Option<RowNumber> {
         let screen = self.rows.screen.as_ref()?;
         Some(self.scrolled.unwrap_or(screen.top))
-    }
-
-    /// The two screens of history above the screen, once, as the view first shows it, so a small scroll has them.
-    fn fetch_above(&mut self) -> Vec<Ask> {
-        let Some(screen) = self.rows.screen.as_ref().filter(|_| self.scrolled.is_none() && !self.fetching) else {
-            return Vec::new();
-        };
-        let height = u64::from(screen.size.rows);
-        let from = RowNumber::new(screen.top.get().saturating_sub(SCREENS_AROUND * height)).max(screen.first);
-        if from >= screen.top {
-            return Vec::new();
-        }
-        self.fetching = true;
-        let count = u32::try_from(screen.top.get() - from.get()).unwrap_or(MOST_ROWS).min(MOST_ROWS);
-        vec![Ask::Rows { numbering: screen.numbering, from, count }]
-    }
-
-    /// Rows of history the view lacks near it, nearest first, unless some are being fetched already. It holds the rows
-    /// from two screens above its top to two below its end, and at the bottom, the three screens above it.
-    pub(super) fn fetch(&mut self) -> Vec<Ask> {
-        let (Some(top), Some(screen)) = (self.top(), &self.rows.screen) else { return Vec::new() };
-        let (height, numbering, first, screen_top) =
-            (u64::from(screen.size.rows), screen.numbering, screen.first, screen.top);
-        if self.scrolled.is_none() {
-            self.rows.let_go_before(RowNumber::new(top.get().saturating_sub(SCREENS_AT_THE_BOTTOM * height)));
-            return Vec::new();
-        }
-        self.rows.let_go_far_from(top);
-        if self.fetching {
-            return Vec::new();
-        }
-        let from = RowNumber::new(top.get().saturating_sub(SCREENS_AROUND * height)).max(first);
-        let to = top.plus((1 + SCREENS_AROUND) * height).min(screen_top);
-        // The rows in sight first, then those above and below, by how far they are from the view, a reply's worth
-        // at a time, going away from it.
-        let lacking = (from.get()..to.get()).map(RowNumber::new).filter(|number| !self.rows.has(*number));
-        let Some(nearest) = lacking.min_by_key(|number| distance(*number, top, height)) else { return Vec::new() };
-        let most = u64::from(MOST_ROWS);
-        let (start, count) = if nearest < top {
-            let start = RowNumber::new(nearest.get().saturating_sub(most - 1)).max(from);
-            (start, nearest.get() - start.get() + 1)
-        } else {
-            (nearest, (to.get() - nearest.get()).min(most))
-        };
-        self.fetching = true;
-        let count = u32::try_from(count).unwrap_or(MOST_ROWS);
-        vec![Ask::Rows { numbering, from: start, count }]
     }
 
     /// What the view shows, if that has changed since the last frame. A row it lacks is blank, in the terminal's own
@@ -309,17 +270,5 @@ impl Window {
         });
         let (foreground, background) = (self.colors.foreground, self.colors.background);
         Some(Arc::new(Frame { size, rows, cursor, foreground, background }))
-    }
-}
-
-/// How far row `number` is from a view of `height` rows from `top`, none for a row in sight.
-fn distance(number: RowNumber, top: RowNumber, height: u64) -> u64 {
-    let end = top.plus(height);
-    if number < top {
-        top.get() - number.get()
-    } else if number >= end {
-        number.get() - end.get() + 1
-    } else {
-        0
     }
 }

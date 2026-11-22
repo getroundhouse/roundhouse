@@ -2,6 +2,7 @@
 //! where the view is scrolled to and what's selected, by row number, and what it asks the hub for. It holds nothing
 //! of Ghostty's, which only the worker has.
 
+mod fetching;
 mod fitting;
 mod painting;
 mod pointing;
