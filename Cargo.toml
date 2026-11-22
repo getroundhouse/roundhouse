@@ -169,7 +169,7 @@ hyper = { version = "1.12.0", features = ["http1", "server"] }
 # Already under GPUI. Runs hyper's connections on tokio.
 hyper-util = { version = "0.1.21", features = ["tokio"] }
 # Says when something happened in the local time zone, and reads the times services write.
-jiff = "1.0.0"
+jiff = "1.0.1"
 libc = "0.2.191"
 # Ghostty's terminal core, through bindings pinned to the commit that builds its 1.0.1, which isn't on crates.io yet.
 # Its build script builds Ghostty with Zig 0.17, which has to be on the PATH, and fetches Ghostty's source as it builds.
