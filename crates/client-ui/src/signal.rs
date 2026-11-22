@@ -6,7 +6,7 @@ use client_core::marking::Mark;
 use gpui_kit::assets::IconName;
 use look::{Signal, Work};
 use protocol::event::TaskKind;
-use protocol::model::{PullRequestFound, Session, SessionStatus, SetupStatus, Standing, Workspace};
+use protocol::model::{Phase, PullRequest, PullRequestFound, Session, SessionStatus, SetupStatus, Standing, Workspace};
 
 /// A workspace's mark, of its record and its chats: being set up, until it is, and then the open chat with the most
 /// going on speaks for it. A reply nobody has read isn't on the mark,
@@ -46,34 +46,25 @@ pub fn chat_signal(session: &Session) -> Signal {
     }
 }
 
-/// Where a workspace's work stands, as what the hub `found` of its pull request says, for its mark. `None` until the
+/// The colour of a workspace's work, as what the hub `found` of its pull request says, for its mark. `None` until the
 /// hub has looked.
 pub fn recorded_work(found: Option<&PullRequestFound>) -> Option<Work> {
-    found.map(|found| work(Standing::of(found.pull_request.as_ref())))
+    found.map(|found| work(found.pull_request.as_ref()))
 }
 
-/// The colour a pull request that stands so is shown in, on a workspace's mark and the desktop's pull request bar.
-pub fn work(standing: Standing) -> Work {
-    match standing {
-        Standing::NoPullRequest => Work::NoPr,
-        Standing::Merged => Work::Merged,
-        Standing::Closed => Work::Closed,
-        Standing::Queued(_) => Work::Queued,
-        Standing::Draft => Work::Draft,
-        Standing::Ready => Work::Ready,
+/// The colour `pull_request` is shown in, on a workspace's mark and the desktop's pull request bar: what it is, as
+/// GitHub colours it, whatever's in the way of merging it, which the bar says in words. So a draft with conflicts is a
+/// draft's grey. Only an open one with nothing in the way is ready.
+pub fn work(pull_request: Option<&PullRequest>) -> Work {
+    let Some(pr) = pull_request else { return Work::NoPr };
+    match pr.phase() {
+        Phase::Merged => Work::Merged,
+        Phase::Closed => Work::Closed,
+        Phase::Queued(_) => Work::Queued,
+        Phase::Draft => Work::Draft,
+        Phase::Open if Standing::of(Some(pr)) == Standing::Ready => Work::Ready,
         // What can't be told is neither good nor bad news, as far as anyone here knows.
-        Standing::Unknown
-        | Standing::Uncommitted(_)
-        | Standing::Diverged
-        | Standing::Behind(_)
-        | Standing::Unpushed(_)
-        | Standing::Conflicts
-        | Standing::ChangesRequested
-        | Standing::ChecksFailed(_)
-        | Standing::ChecksRunning(_)
-        | Standing::ReviewRequired
-        | Standing::Blocked
-        | Standing::Checking => Work::Open,
+        Phase::Open | Phase::Unknown => Work::Open,
     }
 }
 
@@ -91,7 +82,9 @@ pub fn mark_row(mark: Mark) -> look::MenuRow {
 mod tests {
     use look::{Signal, Work};
     use protocol::event::{AgentTask, TaskKind, TurnOutcome};
-    use protocol::model::{Checks, QueueState, Seq, Session, SessionStatus, SetupStatus, Standing, Workspace};
+    use protocol::model::{
+        MergeState, PrState, PullRequest, QueueState, Seq, Session, SessionStatus, SetupStatus, Workspace,
+    };
 
     use super::{chat_signal as chat, work};
 
@@ -184,11 +177,26 @@ mod tests {
     }
 
     #[test]
-    fn only_a_pull_request_that_can_merge_now_is_shown_as_ready() {
-        assert_eq!(work(Standing::Ready), Work::Ready);
-        assert_eq!(work(Standing::ChecksRunning(Checks::default())), Work::Open);
-        assert_eq!(work(Standing::Queued(QueueState::Mergeable)), Work::Queued);
-        assert_eq!(work(Standing::Draft), Work::Draft);
-        assert_eq!(work(Standing::Unknown), Work::Open);
+    fn a_pull_request_is_coloured_by_what_it_is_and_shown_ready_only_with_nothing_in_the_way() {
+        let open = protocol::fixtures::observed_pull_request(7).pull_request;
+        let with = |change: fn(&mut PullRequest)| {
+            let mut pr = open.clone();
+            change(&mut pr);
+            pr
+        };
+        let cases = [
+            (with(|_| {}), Work::Open),
+            (with(|pr| pr.checks.pending = 0), Work::Ready),
+            (with(|pr| (pr.is_draft, pr.merge_state) = (true, MergeState::Dirty)), Work::Draft),
+            (with(|pr| pr.queue = Some(QueueState::Mergeable)), Work::Queued),
+            (with(|pr| pr.state = PrState::Merged), Work::Merged),
+            (with(|pr| pr.state = PrState::Closed), Work::Closed),
+            (with(|pr| pr.state = PrState::Unknown), Work::Open),
+        ];
+
+        let worked: Vec<Work> = cases.iter().map(|(pr, _)| work(Some(pr))).collect();
+
+        assert_eq!(worked, cases.map(|(_, work)| work));
+        assert_eq!(work(None), Work::NoPr);
     }
 }

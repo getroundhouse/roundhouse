@@ -5,8 +5,10 @@
 mod tests;
 
 mod link;
+mod phase;
 mod status;
 pub use link::{PullRequestLink, PullRequestLinked};
+pub use phase::Phase;
 pub(crate) use status::deserialize_looked;
 pub use status::{
     Checks, LeftQueue, Local, MergeState, PrState, PullRequest, PullRequestFound, QueueState, Review, Standing,
