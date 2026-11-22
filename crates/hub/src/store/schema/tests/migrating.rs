@@ -6,7 +6,7 @@ use super::super::*;
 use super::older::older_database;
 use crate::store::backup::files_in;
 use crate::store::tests::store_with_session;
-use crate::store::{Store, WorkspacePlacement};
+use crate::store::{ByColumn, Columns, OneValue, Store, WorkspacePlacement, columns};
 
 #[test]
 fn an_older_database_is_copied_with_what_its_wal_holds_before_it_migrates() {
@@ -21,7 +21,7 @@ fn an_older_database_is_copied_with_what_its_wal_holds_before_it_migrates() {
     assert_eq!(saved.len(), 1, "got {saved:?}");
     let copy = Connection::open(backups.join(&saved[0])).unwrap();
     assert_eq!(schema_version(&copy).unwrap(), STARTS_AT.migrations);
-    let repo: String = copy.query_row("SELECT name FROM repos", [], |row| row.get(0)).unwrap();
+    let repo: String = copy.query_row("SELECT name FROM repos", [], OneValue::read).unwrap();
     assert_eq!(repo, "repo");
     assert_eq!(schema_version(&open_connection(&path).unwrap()).unwrap(), KNOWN);
 }
@@ -106,11 +106,17 @@ fn writing_whats_running_in_the_background_gives_the_session_a_newer_revision() 
     assert_eq!(after.background_tasks, [task]);
 }
 
+columns! {
+    /// The columns [`renaming`] reads of each repo.
+    struct NameColumns { id, name }
+}
+
 /// Rewrites every repo's name, as a migration in Rust can, where SQL couldn't say how.
 fn renaming(tx: &rusqlite::Transaction<'_>) -> Result<(), StoreError> {
+    let c = NameColumns::at(0);
     let names: Vec<(String, String)> = tx
-        .prepare("SELECT id, name FROM repos")?
-        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
+        .prepare(&format!("SELECT {} FROM repos", NameColumns::LIST))?
+        .query_map([], |row| Ok((row.at(c.id)?, row.at(c.name)?)))?
         .collect::<Result<_, _>>()?;
     for (id, name) in names {
         tx.execute("UPDATE repos SET name = ?1 WHERE id = ?2", (name.to_uppercase(), id))?;
@@ -132,7 +138,7 @@ fn a_migration_in_rust_runs_in_its_place_and_one_that_fails_changes_nothing() {
     let path = dir.path().join("hub.db");
     let backups = dir.path().join("backups");
     let _current = older_database(&path, &backups, KNOWN);
-    let name = |conn: &Connection| conn.query_row("SELECT name FROM repos", [], |row| row.get::<_, String>(0)).unwrap();
+    let name = |conn: &Connection| conn.query_row("SELECT name FROM repos", [], OneValue::read::<String>).unwrap();
 
     let failed = [MIGRATIONS, &[Migration::Rust(failing)]].concat();
     let result = migrate_through(&mut open_connection(&path).unwrap(), &backups, &failed);
@@ -160,7 +166,7 @@ fn workspaces_from_before_placement_migrate_to_their_repos_checkout_without_movi
             [],
         )
         .unwrap();
-        conn.query_row("SELECT rev FROM workspaces WHERE id = 'w'", [], |row| row.get(0)).unwrap()
+        conn.query_row("SELECT rev FROM workspaces WHERE id = 'w'", [], OneValue::read).unwrap()
     };
 
     let store = Store::open(&path, &backups).unwrap();
@@ -201,7 +207,7 @@ fn a_github_account_disconnected_before_removal_is_removed_with_its_profile_and_
     let profiles: Vec<String> = {
         let conn = open_connection(&path).unwrap();
         let mut statement = conn.prepare("SELECT account_id FROM github_profiles ORDER BY account_id").unwrap();
-        statement.query_map([], |row| row.get(0)).unwrap().collect::<Result<_, _>>().unwrap()
+        statement.query_map([], OneValue::read).unwrap().collect::<Result<_, _>>().unwrap()
     };
     assert_eq!(profiles, ["held"]);
 }

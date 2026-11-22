@@ -78,6 +78,10 @@ fn whole_file(conn: &Connection) -> Result<Option<&Path>, BackupError> {
     // A passive checkpoint never waits, where the others wait out the connection's busy timeout for a reader holding
     // the WAL back, before the copy could go through SQLite. Blocked, as by another checkpoint, both counts are -1,
     // and they're -1 for a database not in WAL mode, whose file is the whole of it.
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "SQLite fixes the reply's columns, and a pragma that writes has no table-valued form to select them by"
+    )]
     let (blocked, in_wal, moved): (bool, i64, i64) = conn
         .query_row("PRAGMA wal_checkpoint(PASSIVE)", [], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))
         .map_err(BackupError::Checkpoint)?;

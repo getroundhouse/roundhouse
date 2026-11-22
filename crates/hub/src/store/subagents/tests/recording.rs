@@ -1,7 +1,7 @@
 use super::super::*;
-use crate::store::lock;
 use crate::store::now_ms;
 use crate::store::tests::store_with_session;
+use crate::store::{ByColumn, Columns, columns, lock};
 use protocol::capability::calls::call::Read;
 use protocol::capability::calls::{Call, CallOutput};
 use protocol::event::{ExitReason, TaskOutcome};
@@ -253,9 +253,13 @@ fn a_record_keeps_what_a_newer_build_stored_in_it_when_another_field_of_it_chang
     let store = store_with_session(dir.path());
     record(&store, &started("newer"));
     record(&store, &started("working"));
+    columns! {
+        struct Stored { status, lately }
+    }
+    let c = Stored::at(0);
     let stored = |id: &str| -> (String, Option<String>) {
-        let sql = "SELECT status, lately FROM subagents WHERE id = ?";
-        lock(&store.writer).query_row(sql, [id], |row| Ok((row.get(0)?, row.get(1)?))).unwrap()
+        let sql = format!("SELECT {} FROM subagents WHERE id = ?", Stored::LIST);
+        lock(&store.writer).query_row(&sql, [id], |row| Ok((row.at(c.status)?, row.at(c.lately)?))).unwrap()
     };
     let newer_form = r#""a newer form""#;
     lock(&store.writer)

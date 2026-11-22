@@ -13,6 +13,10 @@ use crate::store::{Store, WorkspacePlacement};
 const LEFT_BY_THE_FLOOR: &str = include_str!("left_by_0.1.870.sql");
 
 /// What `sql` reads, with `name` as its parameter if it has one, each row as its values say it.
+#[expect(
+    clippy::disallowed_methods,
+    reason = "it reads every column of SQLite's own tables of a schema and its pragmas, whose columns SQLite fixes"
+)]
 fn read(conn: &Connection, sql: &str, name: Option<&str>) -> Vec<String> {
     let mut statement = conn.prepare(sql).unwrap();
     let columns = statement.column_count();

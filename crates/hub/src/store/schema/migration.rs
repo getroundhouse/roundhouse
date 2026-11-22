@@ -1,5 +1,5 @@
-use super::super::StoreError;
 use super::super::backup::back_up;
+use super::super::{OneValue, StoreError};
 use super::migrations;
 use migrations::{AT_FLOOR, MIGRATIONS};
 use rusqlite::Connection;
@@ -103,7 +103,7 @@ pub(super) fn migrate_through(
 
 /// How many migrations have run on this database.
 pub(super) fn schema_version(conn: &Connection) -> rusqlite::Result<usize> {
-    let version: i64 = conn.pragma_query_value(None, "user_version", |row| row.get(0))?;
+    let version: i64 = conn.pragma_query_value(None, "user_version", OneValue::read)?;
     // Negative isn't something this code ever writes, so it counts as newer.
     Ok(usize::try_from(version).unwrap_or(usize::MAX))
 }

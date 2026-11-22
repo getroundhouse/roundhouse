@@ -6,20 +6,27 @@ use super::launch_rows::Recorded;
 use super::*;
 use crate::login_files::LoginFile;
 use crate::store::tests::{idle_session, store_with_session};
-use crate::store::{Connecting, Placed, SessionLogin, now_ms};
+use crate::store::{ByColumn, Columns, Connecting, Placed, SessionLogin, columns, now_ms};
 
 /// The account the session `s` names.
 fn account_of_s(store: &Store) -> Option<AccountId> {
     store.get_session(&"s".into()).unwrap().session.account
 }
 
+columns! {
+    /// The columns [`runs_given_logins`] reads of each run.
+    struct RunColumns { session_id, run, account_id }
+}
+
 /// Every run the hub's record says it gave a login, in any chat, by chat and account.
 fn runs_given_logins(store: &Store) -> Vec<(String, u64, String)> {
     let conn = lock(&store.reader);
-    let mut statement =
-        conn.prepare("SELECT session_id, run, account_id FROM runs_under_logins ORDER BY session_id, run").unwrap();
-    let rows =
-        statement.query_map([], |row| Ok((row.get(0)?, row.get::<_, i64>(1)?.cast_unsigned(), row.get(2)?))).unwrap();
+    let sql = format!("SELECT {} FROM runs_under_logins ORDER BY session_id, run", RunColumns::LIST);
+    let mut statement = conn.prepare(&sql).unwrap();
+    let c = RunColumns::at(0);
+    let rows = statement
+        .query_map([], |row| Ok((row.at(c.session_id)?, row.at::<i64>(c.run)?.cast_unsigned(), row.at(c.account_id)?)))
+        .unwrap();
     rows.collect::<rusqlite::Result<_>>().unwrap()
 }
 
