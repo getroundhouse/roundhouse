@@ -295,7 +295,7 @@ impl ChatView {
         if let Some(question) = self.shown.as_ref().and_then(|shown| shown.transcript.read(cx).question().cloned()) {
             return row.child(question);
         }
-        let send = self.main_action(cx);
+        let actions = self.actions(cx);
         let settings = self.settings_row(cx);
         let typed = h_flex()
             .items_end()
@@ -308,7 +308,7 @@ impl ChatView {
                     .child(Textarea::new(&self.composer).aria_label("Message"))
                     .test_support(),
             )
-            .child(send);
+            .children(actions);
         // What the chat runs with goes under what's typed, as on the desktop.
         let settings = (!settings.is_empty()).then(|| h_flex().items_center().gap(Space::XSmall).children(settings));
         row.line_over(cx).child(v_flex().gap(Space::XSmall).child(typed).children(settings))
@@ -316,17 +316,25 @@ impl ChatView {
 }
 
 impl ChatView {
-    /// Send, or Stop while the agent is in a turn and nothing's typed. A phone's Return only types a new line, so Send
-    /// stays once something is, which steers the agent with it, as the desktop's Enter does.
-    fn main_action(&self, cx: &mut Context<Self>) -> look::Button {
+    /// Send, and while the agent is in a turn, Stop at the end for the whole of it, as on the desktop, with Send before
+    /// it only once something's typed, which steers the agent with it, as the desktop's Enter does, since a phone's
+    /// Return only types a new line. So Stop doesn't move during a turn: once Send has sent, what's typed takes its
+    /// room, and a second tap lands there rather than on Stop, as the owner decided. Once the turn ends, Send takes the
+    /// end again.
+    fn actions(&self, cx: &mut Context<Self>) -> Vec<look::Button> {
         let working = self.shown.as_ref().is_some_and(|shown| shown.session.status.in_turn());
-        if working && self.composer.read(cx).value().trim().is_empty() {
-            return look::stop_button("stop", TAPPED, cx).on_click(cx.listener(|chat, _, _, cx| chat.stop(cx)));
+        let send = || {
+            look::icon_button("send", ButtonKind::Main, TAPPED, IconName::ArrowUp)
+                .accessibility_label("Send")
+                .off(self.shown.is_none())
+                .on_click(cx.listener(|chat, _, window, cx| chat.send(window, cx)))
+        };
+        if !working {
+            return vec![send()];
         }
-        look::icon_button("send", ButtonKind::Main, TAPPED, IconName::ArrowUp)
-            .accessibility_label("Send")
-            .off(self.shown.is_none())
-            .on_click(cx.listener(|chat, _, window, cx| chat.send(window, cx)))
+        let typed = !self.composer.read(cx).value().trim().is_empty();
+        let stop = look::stop_button("stop", TAPPED, cx).on_click(cx.listener(|chat, _, _, cx| chat.stop(cx)));
+        if typed { vec![send(), stop] } else { vec![stop] }
     }
 
     fn stop(&mut self, cx: &mut Context<Self>) {

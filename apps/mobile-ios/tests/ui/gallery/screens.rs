@@ -95,6 +95,16 @@ pub(super) const SCREENS: &[Screen] = &[
         steps: &[Step::OpenChat(worlds::FOCUS_ROW)],
     },
     Screen {
+        name: "chat-steering",
+        spec: SPEC,
+        hub: Hub::Holds(worlds::working),
+        steps: &[
+            Step::OpenChat(worlds::FOCUS_ROW),
+            Step::Tap("composer"),
+            Step::Type("Keep the old colours for the dark theme."),
+        ],
+    },
+    Screen {
         name: "question",
         spec: SPEC,
         hub: Hub::Holds(worlds::asking),
