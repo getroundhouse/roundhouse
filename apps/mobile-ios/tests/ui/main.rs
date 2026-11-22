@@ -2,6 +2,8 @@
 //! someone would tap, and checks what the app shows and what the hub then holds.
 
 mod chat;
+#[cfg(target_os = "macos")]
+mod designs;
 mod flows;
 #[cfg(target_os = "macos")]
 mod gallery;
