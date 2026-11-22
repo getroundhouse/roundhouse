@@ -23,9 +23,10 @@ Building needs Zig 0.17 on the PATH: `brew install zig` on a Mac.
 
 ```sh
 cargo test                        # The backend, with a fake agent
-cargo test --workspace            # Also the transcript and the desktop app's UI tests
+cargo test --workspace            # Also the transcript and both apps' UI tests
 cargo run -p desktop --bin roundhouse-desktop -- --note "What to try"   # The app
-cargo test -p desktop --test ui gallery   # Every screen, against its image in docs/spec/screens
+cargo test -p desktop --test ui gallery      # Every screen, against its image in docs/spec/screens
+cargo test -p mobile-ios --test ui gallery   # Every screen of the iPhone app, against docs/spec/screens/phone
 cargo run -p guide -- OUT         # Builds docs/guide, and refuses a link or a picture that isn't there
 ```
 
