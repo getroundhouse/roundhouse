@@ -1,0 +1,158 @@
+# Uploads the iPhone app from main to TestFlight, for the team's own testers: every four hours if what the app is built
+# from changed since the last run that passed, and whenever it's run by hand, as
+# docs/decisions/testflight-every-four-hours.md says. The app compiles in a job with no keys, as release.yml's builds
+# do, and the job that signs and uploads it is in the `release` environment, which only main can use.
+#
+# The `release` environment's secrets for it, from the Apple Developer account the iPhone app is published under.
+# Secrets rather than variables, so the public logs never show them:
+#   IOS_TEAM_ID, IOS_BUNDLE_ID    The team, and the app's identifier, whose record in App Store Connect gets the build
+#   IOS_TEAM_NAME                 The team's name, which a certificate's name holds, only so a log never shows it
+#   IOS_API_KEY_P8, IOS_API_KEY_ID, IOS_API_ISSUER_ID
+#                                 An App Store Connect key with the Admin role, the .p8 file's text, and its IDs, which
+#                                 Xcode signs with, making the profile and the distribution certificate it needs
+name: TestFlight
+
+on:
+  schedule:
+    # Off the hour, when GitHub's scheduled runs crowd.
+    - cron: "23 */4 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One at a time, since a build's number is the minute it's made, and an upload can't reuse one.
+concurrency:
+  group: testflight
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  # What makes the Xcode project: a release of XcodeGen, and its zip's SHA-256. Not raised by Renovate, which would
+  # leave the checksum behind, and no PR runs this workflow to notice.
+  XCODEGEN_VERSION: 2.48.0
+  XCODEGEN_SHA256: 620c9f0dc10849f94728ab5df52d225ebab8187439dd6fee1925e59e80dff892
+
+jobs:
+  # Compiles the app's Rust binary, where no key is.
+  build:
+    runs-on: macos-26
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      # To find the last run that passed.
+      actions: read
+    outputs:
+      changed: ${{ steps.changes.outputs.changed }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The version counts the commits, and the last run's commit is compared with this one.
+          fetch-depth: 0
+          persist-credentials: false
+      - run: rustup target add aarch64-apple-ios
+      - id: cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          # Named as ci.yml's are. With no restore-keys, since it runs only on main, which rebuilds from nothing when
+          # the key changes, as in ci.yml.
+          key: testflight-ios-arm64-macos-26-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock', '**/Cargo.toml') }}
+      # A run by hand always uploads. A scheduled one uploads only if what the app is built from changed since the last
+      # run that passed, which either uploaded it or found it unchanged too.
+      - id: changes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          changed=true
+          if [ "$GITHUB_EVENT_NAME" = schedule ]; then
+            last="$(gh run list --workflow testflight.yml --branch main --status success --limit 1 \
+              --json headSha --jq '.[0].headSha // empty')"
+            if [ -n "$last" ]; then
+              status=0
+              apps/mobile-ios/scripts/changed-since.sh "$last" || status=$?
+              case "$status" in
+                0) ;;
+                1) changed=false ;;
+                *) exit "$status" ;;
+              esac
+            fi
+          fi
+          echo "changed=$changed" >> "$GITHUB_OUTPUT"
+      - if: steps.changes.outputs.changed == 'true'
+        run: apps/mobile-ios/scripts/build.sh --compile "$RUNNER_TEMP/roundhouse-ios"
+      - if: steps.changes.outputs.changed == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: roundhouse-ios
+          path: ${{ runner.temp }}/roundhouse-ios
+          if-no-files-found: error
+          retention-days: 1
+      # Only the dependencies are worth keeping, as in ci.yml, and these are release builds for the phone. Only after
+      # a build, since a target/ saved without one would hold nothing for its key, and the key is never saved twice.
+      - if: >-
+          steps.changes.outputs.changed == 'true' && github.ref == 'refs/heads/main' &&
+          steps.cache.outputs.cache-hit != 'true'
+        run: cargo clean --workspace --release --target aarch64-apple-ios
+      - if: >-
+          steps.changes.outputs.changed == 'true' && github.ref == 'refs/heads/main' &&
+          steps.cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ steps.cache.outputs.cache-primary-key }}
+
+  # Packages the binary as the app, signs it for the App Store and uploads it. The key is only in the step that uses it,
+  # which removes it.
+  upload:
+    needs: build
+    if: needs.build.outputs.changed == 'true'
+    environment: release
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      # Checked, since it runs beside the key.
+      - name: Install XcodeGen
+        run: |
+          curl -sSfL -o "$RUNNER_TEMP/xcodegen.zip" \
+            "https://github.com/yonaskolb/XcodeGen/releases/download/$XCODEGEN_VERSION/xcodegen.zip"
+          echo "$XCODEGEN_SHA256  $RUNNER_TEMP/xcodegen.zip" | shasum -a 256 -c -
+          unzip -q "$RUNNER_TEMP/xcodegen.zip" -d "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/xcodegen/bin" >> "$GITHUB_PATH"
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: roundhouse-ios
+          path: ${{ runner.temp }}/rust
+      - name: Package, sign and upload
+        env:
+          TEAM_ID: ${{ secrets.IOS_TEAM_ID }}
+          BUNDLE_ID: ${{ secrets.IOS_BUNDLE_ID }}
+          TEAM_NAME: ${{ secrets.IOS_TEAM_NAME }}
+          KEY: ${{ secrets.IOS_API_KEY_P8 }}
+          ASC_KEY_ID: ${{ secrets.IOS_API_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.IOS_API_ISSUER_ID }}
+        run: |
+          [ -n "$TEAM_NAME" ] \
+            || { echo "::error::IOS_TEAM_NAME isn't set, so a log could show the team's name"; exit 1; }
+          echo "::add-mask::$TEAM_NAME"
+          export ASC_KEY_PATH="$RUNNER_TEMP/testflight.p8"
+          trap 'rm -f "$ASC_KEY_PATH"' EXIT
+          # The .p8 file's text, ending in one newline either way.
+          key="${KEY%$'\n'}"
+          [[ "$key" == "-----BEGIN PRIVATE KEY-----"$'\n'* ]] \
+            || { echo "::error::IOS_API_KEY_P8 isn't the text of a .p8 file"; exit 1; }
+          (umask 077 && printf '%s\n' "$key" > "$ASC_KEY_PATH")
+          chmod +x "$RUNNER_TEMP/rust/roundhouse-ios"
+          apps/mobile-ios/scripts/build.sh --testflight --binary "$RUNNER_TEMP/rust/roundhouse-ios"
