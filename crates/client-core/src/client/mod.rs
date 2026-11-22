@@ -40,18 +40,7 @@ pub use live_log::{LiveItem, LiveLog};
 pub use open_file::{OpenFile, Opening};
 pub use open_session::{OpenSession, Search, Searched, Stretch, View};
 pub use open_terminal::{OpenTerminal, Pointer, SelectBy};
-#[cfg(test)]
-use protocol::client::{
-    CLIENT_PROTOCOL_VERSION, ClientFrame, ClientRequest, ClientResponse, ErrorCode, HelloReply, HubFrame, HubNotice,
-    ReplyOutcome, subscriptions,
-};
-#[cfg(test)]
-use protocol::frame;
 pub(crate) use queueing::Shown;
-#[cfg(test)]
-use std::io::{BufRead, BufReader, Write};
-#[cfg(test)]
-use std::path::Path;
 
 #[cfg(test)]
 mod tests;

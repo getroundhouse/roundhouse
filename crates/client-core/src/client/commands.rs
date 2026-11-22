@@ -134,30 +134,17 @@ impl Client {
 
 #[cfg(test)]
 mod tests {
-    use std::io::{BufRead as _, BufReader, Write as _};
     use std::path::Path;
     use std::time::Duration;
 
-    use protocol::client::{HubFrame, ReplyOutcome};
-    use protocol::frame;
-
     use super::*;
+    use crate::stand_in_hub::{self, Does};
 
     const TIMEOUT: Duration = Duration::from_secs(10);
 
     /// A client of a hub that only says hello, which is all these calls need.
     fn connected(socket: &Path) -> Client {
-        let listener = std::os::unix::net::UnixListener::bind(socket).unwrap();
-        std::thread::spawn(move || {
-            let (mut stream, _) = listener.accept().unwrap();
-            let mut requests = BufReader::new(stream.try_clone().unwrap()).lines();
-            requests.next();
-            let outcome = ReplyOutcome::Response(crate::stand_in_hub::hello_reply("a"));
-            stream.write_all(&frame::encode(&HubFrame::Reply { id: 1, outcome }).unwrap()).unwrap();
-            // Stays connected for as long as the client is.
-            requests.next();
-        });
-        Client::connect(socket, "test").unwrap()
+        stand_in_hub::connect(socket, |_| Does::Nothing)
     }
 
     #[test]

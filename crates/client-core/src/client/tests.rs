@@ -1,34 +1,26 @@
 // Against a stand-in hub on a Unix socket.
 #![cfg(unix)]
 
+use std::path::Path;
 use std::time::Duration;
 
+use protocol::client::{
+    CLIENT_PROTOCOL_VERSION, ClientRequest, ClientResponse, ErrorCode, HelloReply, HubFrame, HubNotice, ReplyOutcome,
+    subscriptions,
+};
 use protocol::terminal::Typed;
 
 use super::*;
-use crate::stand_in_hub::{self, Does};
+use crate::stand_in_hub::{self, Does, StandIn};
 
-/// Answers a hello, then answers the next request with a reply no build of this client can read.
-fn start_hub_with_an_unreadable_reply(socket: &Path) {
-    let listener = std::os::unix::net::UnixListener::bind(socket).unwrap();
-    std::thread::spawn(move || {
-        let (mut stream, _) = listener.accept().unwrap();
-        let mut requests = BufReader::new(stream.try_clone().unwrap()).lines();
-        requests.next();
-        let outcome = ReplyOutcome::Response(stand_in_hub::hello_reply("older"));
-        stream.write_all(&frame::encode(&HubFrame::Reply { id: 1, outcome }).unwrap()).unwrap();
-        requests.next();
-        stream.write_all(b"{\"frame\":\"reply\",\"id\":2,\"response\":{\"result\":\"from_a_newer_hub\"}}\n").unwrap();
-        // Stays connected, so that only the reply can end the call.
-        requests.next();
-    });
-}
-
+/// The hub answers the first request after its hello, the second this client sends, with a reply no build of this
+/// client can read, and stays connected, so only the reply can end the call.
 #[test]
 fn a_reply_this_client_cannot_read_fails_the_call_rather_than_hanging() {
     let dir = tempfile::tempdir().unwrap();
     let socket = dir.path().join("hub.sock");
-    start_hub_with_an_unreadable_reply(&socket);
+    let unreadable = r#"{"frame":"reply","id":2,"response":{"result":"from_a_newer_hub"}}"#;
+    StandIn::of_build("older").listen(&socket, |_| Does::Writes(unreadable.to_string()));
     let client = Client::connect(&socket, "test").unwrap();
 
     let (finished, outcome) = flume::bounded(1);
@@ -52,33 +44,16 @@ fn a_reply_of_another_kind_than_its_request_names_fails_the_call() {
     client.session_cancel(&"s".into()).unwrap();
 }
 
-/// Answers a hello and a feed subscription, then sends more notices than a subscription holds before
-/// anyone reads them, and reports what the client asks next.
+/// Answers a feed subscription, then sends more notices than a subscription holds before anyone reads them.
 fn start_hub_that_floods_a_subscription(socket: &Path) -> flume::Receiver<ClientRequest> {
-    let listener = std::os::unix::net::UnixListener::bind(socket).unwrap();
-    let (asked, next) = flume::unbounded();
-    std::thread::spawn(move || {
-        let (mut stream, _) = listener.accept().unwrap();
-        let mut requests = BufReader::new(stream.try_clone().unwrap()).lines();
-        let mut reply = |id, response| {
-            let outcome = ReplyOutcome::Response(response);
-            stream.write_all(&frame::encode(&HubFrame::Reply { id, outcome }).unwrap()).unwrap();
+    stand_in_hub::listen(socket, |request| {
+        let ClientRequest::FeedSubscribe(subscriptions::FeedSubscribe { subscription_id }) = request else {
+            return Does::Nothing;
         };
-        let mut read = || frame::decode::<ClientFrame>(requests.next().unwrap().unwrap().as_bytes()).unwrap();
-        let hello = read();
-        reply(hello.id, stand_in_hub::hello_reply("a"));
-        let subscribe = read();
-        let ClientRequest::FeedSubscribe(subscriptions::FeedSubscribe { subscription_id }) = subscribe.request else {
-            panic!()
-        };
-        reply(subscribe.id, ClientResponse::Ok);
-        for _ in 0..SUBSCRIPTION_CAPACITY + 10 {
-            let notice = HubFrame::Notice { subscription_id, notice: HubNotice::Resync };
-            stream.write_all(&frame::encode(&notice).unwrap()).unwrap();
-        }
-        asked.send(read().request).unwrap();
-    });
-    next
+        let notice = HubFrame::Notice { subscription_id, notice: HubNotice::Resync };
+        let ok = Box::new(ReplyOutcome::Response(ClientResponse::Ok));
+        Does::AnswersThen(ok, vec![notice; SUBSCRIPTION_CAPACITY + 10])
+    })
 }
 
 #[test]
@@ -89,7 +64,10 @@ fn a_subscription_whose_reader_falls_behind_ends_rather_than_queueing_without_li
     let client = Client::connect(&socket, "test").unwrap();
     let subscription = client.feed_subscribe().unwrap();
 
-    let next = asked.recv_timeout(Duration::from_secs(10)).unwrap();
+    let next = std::iter::from_fn(|| asked.recv_timeout(Duration::from_secs(10)).ok())
+        .skip_while(|request| !matches!(request, ClientRequest::FeedSubscribe(_)))
+        .nth(1)
+        .expect("nothing was asked after subscribing");
 
     assert_eq!(
         next,
@@ -105,19 +83,8 @@ fn a_subscription_whose_reader_falls_behind_ends_rather_than_queueing_without_li
 fn a_hub_that_chose_another_version_is_refused() {
     let dir = tempfile::tempdir().unwrap();
     let socket = dir.path().join("hub.sock");
-    let listener = std::os::unix::net::UnixListener::bind(&socket).unwrap();
-    std::thread::spawn(move || {
-        let (mut stream, _) = listener.accept().unwrap();
-        let mut requests = BufReader::new(stream.try_clone().unwrap()).lines();
-        requests.next();
-        let newer = ClientResponse::Hello(HelloReply {
-            protocol_version: CLIENT_PROTOCOL_VERSION + 1,
-            hub_version: "a".into(),
-        });
-        let outcome = ReplyOutcome::Response(newer);
-        stream.write_all(&frame::encode(&HubFrame::Reply { id: 1, outcome }).unwrap()).unwrap();
-        requests.next();
-    });
+    let newer = HelloReply { protocol_version: CLIENT_PROTOCOL_VERSION + 1, hub_version: "a".into() };
+    StandIn::greeting(ClientResponse::Hello(newer)).listen(&socket, |_| Does::Nothing);
 
     let connected = Client::connect(&socket, "test");
 
@@ -134,16 +101,12 @@ fn a_hub_that_chose_another_version_is_refused() {
 fn a_hub_that_goes_before_its_reply_to_stop_gets_out_has_stopped() {
     let dir = tempfile::tempdir().unwrap();
     let socket = dir.path().join("hub.sock");
-    let listener = std::os::unix::net::UnixListener::bind(&socket).unwrap();
-    let hub = std::thread::spawn(move || {
-        let (stream, _) = listener.accept().unwrap();
-        let asked = std::io::BufRead::lines(std::io::BufReader::new(&stream)).next().unwrap().unwrap();
-        serde_json::from_str::<protocol::client::ClientFrame>(&asked).unwrap().request
-    });
+    let asked = stand_in_hub::listen(&socket, |_| Does::HangsUp);
 
     stop_hub(&socket).unwrap();
 
-    assert!(matches!(hub.join().unwrap(), ClientRequest::HubShutdown), "it was asked to stop");
+    let first = asked.recv_timeout(Duration::from_secs(10)).unwrap();
+    assert!(matches!(first, ClientRequest::HubShutdown), "it was asked to stop: {first:?}");
 }
 
 /// What a client writes with once its hub has gone, as a socket's writer is.
