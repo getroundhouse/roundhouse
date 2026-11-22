@@ -41,7 +41,10 @@ impl Lookup {
     }
 
     pub fn work(&self) -> Work {
-        self.standing().map_or(Work::NoPr, client_ui::work)
+        match self {
+            Lookup::Looking => Work::NoPr,
+            Lookup::Found(pr) => client_ui::work(pr.as_ref()),
+        }
     }
 }
 

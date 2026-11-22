@@ -1,4 +1,5 @@
 use super::super::BranchName;
+use super::phase::Phase;
 use serde::{Deserialize, Deserializer, Serialize};
 
 /// What the hub found the last time it looked for a branch's pull request. Written as the pull request, or `null`.
@@ -209,13 +210,13 @@ impl Standing {
     }
 
     fn done_or_queued(pr: &PullRequest) -> Option<Self> {
-        match pr.state {
-            PrState::Merged => return Some(Standing::Merged),
-            PrState::Closed => return Some(Standing::Closed),
-            PrState::Unknown => return Some(Standing::Unknown),
-            PrState::Open => {}
+        match pr.phase() {
+            Phase::Merged => Some(Standing::Merged),
+            Phase::Closed => Some(Standing::Closed),
+            Phase::Queued(queue) => Some(Standing::Queued(queue)),
+            Phase::Unknown => Some(Standing::Unknown),
+            Phase::Open | Phase::Draft => None,
         }
-        pr.queue.map(Standing::Queued)
     }
 
     pub(super) fn on_github(pr: &PullRequest) -> Self {

@@ -50,9 +50,9 @@ Where the bar offers nothing, it's waiting on GitHub or on someone else.
 | Yellow | In the merge queue |
 | Purple | Merged |
 | Muted red | Closed |
-| Grey | A draft |
+| Grey | A draft, whatever's in the way, such as conflicts |
 
-The workspace's mark in the sidebar takes the same colours, with every open pull request green, since the mark is too small to say what's in the way.
+The colour says what the pull request is, and the words say what's in the way, so a draft that conflicts is grey and says `Conflicts with main`. The workspace's mark in the sidebar takes the same colours, with every open pull request green, since the mark is too small to say what's in the way.
 
 ## While the sidebar is hidden
 
