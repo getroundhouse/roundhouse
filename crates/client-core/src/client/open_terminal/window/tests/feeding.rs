@@ -41,7 +41,11 @@ pub(super) fn watched(worker: &mut Mirror, sending: &mut PictureSending) -> Wind
     }
     while let Some(ask) = asks.pop() {
         let Ask::Rows { numbering, from, count } = ask else { panic!("asked for {ask:?}") };
-        asks.extend(window.replied(Replied::Rows(worker.history_rows(numbering, from, count).unwrap())));
+        asks.extend(window.replied(Replied::Rows {
+            numbering,
+            from,
+            reply: worker.history_rows(numbering, from, count).unwrap(),
+        }));
     }
     window
 }

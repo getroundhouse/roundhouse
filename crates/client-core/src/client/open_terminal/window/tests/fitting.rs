@@ -19,7 +19,11 @@ fn fetched(window: &mut Window, worker: &mut Mirror, asks: Vec<Ask>) -> Vec<Ask>
     while let Some(ask) = asks.pop() {
         match ask {
             Ask::Rows { numbering, from, count } => {
-                asks.extend(window.replied(Replied::Rows(worker.history_rows(numbering, from, count).unwrap())));
+                asks.extend(window.replied(Replied::Rows {
+                    numbering,
+                    from,
+                    reply: worker.history_rows(numbering, from, count).unwrap(),
+                }));
             }
             ask @ (Ask::Typed(_) | Ask::Fit { .. } | Ask::Bounds { .. }) => others.push(ask),
         }
