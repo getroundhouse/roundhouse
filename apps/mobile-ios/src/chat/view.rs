@@ -318,8 +318,9 @@ impl ChatView {
 impl ChatView {
     /// Send, and while the agent is in a turn, Stop at the end for the whole of it, as on the desktop, with Send before
     /// it only once something's typed, which steers the agent with it, as the desktop's Enter does, since a phone's
-    /// Return only types a new line. So no button turns into another under the finger: once Send has sent, what's typed
-    /// takes its room, and a second tap lands there rather than on Stop, as the owner decided.
+    /// Return only types a new line. So Stop doesn't move during a turn: once Send has sent, what's typed takes its
+    /// room, and a second tap lands there rather than on Stop, as the owner decided. Once the turn ends, Send takes the
+    /// end again.
     fn actions(&self, cx: &mut Context<Self>) -> Vec<look::Button> {
         let working = self.shown.as_ref().is_some_and(|shown| shown.session.status.in_turn());
         let send = || {
