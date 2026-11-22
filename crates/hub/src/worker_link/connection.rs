@@ -1,3 +1,4 @@
+use super::WorkerLinkId;
 use super::credential::Following;
 use super::{acks, reaching, reading};
 use crate::calls::{Calls, NotSent};
@@ -15,21 +16,19 @@ use providers::Provider;
 use reaching::{Opening, reach};
 use std::collections::HashMap;
 use std::fmt;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 use tokio::sync::{Mutex as AsyncMutex, watch};
 use tokio::time::Instant;
 use tracing::warn;
 
-pub(super) static NEXT_LINK_ID: AtomicU64 = AtomicU64::new(1);
-
 /// How long a worker gets to stop its agents after its stdin closes. Agents get 3 s each.
 pub(crate) const STOP_GRACE: Duration = Duration::from_secs(10);
 
 pub(crate) struct WorkerLink {
     /// Distinguishes this connection from an earlier one to the same workspace.
-    pub id: u64,
+    pub id: WorkerLinkId,
     /// Closing these closes the worker's stdin, which is how it's told to stop.
     pub(super) calls: Calls<Result<WorkerResponse, ApiError>>,
     pub(super) closed: watch::Sender<bool>,
@@ -78,7 +77,7 @@ impl WorkerLink {
         let Spawned { process, reader, writer } =
             reach(provider.as_ref(), &instance_id, log, opening, hub.timers.before_serving).await?;
         let link = Arc::new(WorkerLink {
-            id: NEXT_LINK_ID.fetch_add(1, Ordering::Relaxed),
+            id: WorkerLinkId::next(),
             calls: Calls::new(writer),
             closed: watch::channel(false).0,
             kept: AtomicBool::new(false),
@@ -167,7 +166,7 @@ impl WorkerLink {
         let calls = Calls::new(Box::new(tokio::io::sink()));
         calls.end();
         Arc::new(WorkerLink {
-            id: NEXT_LINK_ID.fetch_add(1, Ordering::Relaxed),
+            id: WorkerLinkId::next(),
             calls,
             closed: watch::channel(true).0,
             kept: AtomicBool::new(false),

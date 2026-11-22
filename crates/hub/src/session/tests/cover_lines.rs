@@ -13,6 +13,7 @@ use tokio::sync::broadcast;
 use super::super::{Item, Live, LiveItem, LiveSession};
 use crate::hub::Hub;
 use crate::hub::tests::{carried_on, flushed, hub_in, taking_worker};
+use crate::worker_link::WorkerLinkId;
 
 const RUN: RunId = RunId::new(2);
 
@@ -25,7 +26,7 @@ fn line(wait: u32, number: u32) -> CoverLine {
 }
 
 /// The session `s`, whose agent of [`RUN`] claims to say lines, with its hub and the worker its agent is on.
-fn claiming_cover_lines(dir: &std::path::Path) -> (Arc<Hub>, Arc<LiveSession>, u64) {
+fn claiming_cover_lines(dir: &std::path::Path) -> (Arc<Hub>, Arc<LiveSession>, WorkerLinkId) {
     let hub = hub_in(dir);
     let (link, _) = taking_worker(&hub);
     let live = carried_on(&hub, &link, RUN);

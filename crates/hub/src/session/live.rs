@@ -6,6 +6,7 @@ use crate::error::internal;
 use crate::hub::Hub;
 use crate::store;
 use crate::store::SessionLogin;
+use crate::worker_link::WorkerLinkId;
 use commands::{Sendable, run_commands};
 use ingest::run_ingest;
 use messages::{Command, Item};
@@ -61,7 +62,7 @@ pub(crate) struct Snapshot {
 /// One launch of an agent, on one connection to a worker.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(super) struct AgentRun {
-    pub(super) link: u64,
+    pub(super) link: WorkerLinkId,
     pub(super) run: RunId,
 }
 
@@ -69,7 +70,7 @@ pub(super) struct AgentRun {
 /// connected to again.
 pub(crate) struct CarriedOver {
     /// The connection this hub reached the agent's worker on.
-    pub link: u64,
+    pub link: WorkerLinkId,
     pub run: RunId,
     /// The last of what the agent's worker numbered that the session recorded, with the run it's from.
     pub recorded: Option<(RunId, u64)>,

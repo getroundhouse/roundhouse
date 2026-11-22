@@ -13,6 +13,7 @@ use tracing::{error, warn};
 
 use super::{Item, LiveItem, LiveSession, Origin, publish};
 use crate::store::cancelled_approval;
+use crate::worker_link::WorkerLinkId;
 
 pub(crate) async fn run_ingest(session: Arc<LiveSession>, mut items: mpsc::Receiver<Item>) {
     while let Some(item) = items.recv().await {
@@ -247,7 +248,7 @@ impl LiveSession {
     }
 
     /// Reports that the agent is gone, unless a newer one has already replaced it.
-    pub(crate) async fn agent_lost(&self, link: u64, reason: ExitReason) {
+    pub(crate) async fn agent_lost(&self, link: WorkerLinkId, reason: ExitReason) {
         let lost = {
             let mut state = self.state.lock();
             let lost = state.agent.filter(|agent| agent.link == link);
@@ -272,7 +273,7 @@ impl LiveSession {
     /// replace it. The agent's exit is then of one the session has moved on from, so it changes nothing, even if a
     /// prompt is recorded first, and the next prompt starts an agent on the next worker, which resumes the
     /// conversation.
-    pub(crate) fn let_go_of_agent_on(&self, link: u64) {
+    pub(crate) fn let_go_of_agent_on(&self, link: WorkerLinkId) {
         let mut state = self.state.lock();
         if state.agent.is_some_and(|agent| agent.link == link) {
             state.agent = None;

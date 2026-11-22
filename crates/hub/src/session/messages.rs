@@ -10,6 +10,8 @@ use protocol::prompt::Prompt;
 use protocol::tail::{Retrying, StreamDelta, Tail};
 use tokio::sync::oneshot;
 
+use crate::worker_link::WorkerLinkId;
+
 /// What arrives from a worker.
 pub(crate) enum Item {
     Event {
@@ -49,7 +51,7 @@ pub(crate) enum Item {
     /// The agent on the worker connection `link` has gone, unless a newer one has replaced it, as when the connection
     /// ends. Everything it sent has been queued ahead of this.
     AgentLost {
-        link: u64,
+        link: WorkerLinkId,
         reason: ExitReason,
     },
     /// The agent has had long enough to pick up again after its work in the background, as [`super::pickup`] says, in
