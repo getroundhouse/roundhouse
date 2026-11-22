@@ -30,9 +30,9 @@ fn proposing(ui: &mut Ui<'_>, propose: &str) -> SharedString {
     ui.input(&format!("{propose}; say:done"));
     ui.press("enter");
     ui.wait_idle_with("the turn to finish", |text| text.contains("done"));
-    // It's there once the proposal's record is, which comes on the feed.
-    ui.wait("the proposal's record", |ui| !ui.view().feed().unwrap().snapshot().proposals(&chat).is_empty());
-    let id = ui.view().feed().unwrap().snapshot().proposals(&chat)[0].id.clone();
+    // It's there once the app has the proposal's record, which comes on the feed.
+    ui.wait("the proposal's record", |ui| !ui.view().records().proposals(&chat).is_empty());
+    let id = ui.view().records().proposals(&chat)[0].id.clone();
     let open = SharedString::from(format!("open-proposal/{id}"));
     ui.wait("the line's Open", |ui| ui.has(open.clone()));
     open
@@ -134,14 +134,14 @@ fn an_answer_chosen_in_the_tab_is_sent_and_drawn_in_the_chat_as_the_proposals_li
     ui.click("choose-0-1");
     ui.click("send-proposal-answer");
 
-    let answered = |ui: &mut Ui<'_>| ui.view().feed().unwrap().snapshot().proposals(&chat)[0].current.choice().cloned();
+    let answered = |ui: &mut Ui<'_>| ui.view().records().proposals(&chat)[0].current.choice().cloned();
     ui.wait("the answer's record", |ui| answered(ui).is_some());
     let answered = answered(&mut ui).unwrap();
     assert_eq!(answered.chosen, [OptionPlace(1)]);
     assert!(!ui.has("choose-0-0"), "once it's answered, only what was chosen says so");
     ui.click("proposal-band-chat");
     ui.wait("the chat", |ui| showing(ui) == Showing::Chat);
-    let id = ui.view().feed().unwrap().snapshot().proposals(&chat)[0].id.clone();
+    let id = ui.view().records().proposals(&chat)[0].id.clone();
     let told = |ui: &mut Ui<'_>| {
         ui.events().into_iter().find_map(|event| match event.body {
             EventBody::UserPrompt { client_msg_id: Some(message), from, .. } if from.responds_to() == Some(&id) => {
@@ -154,7 +154,7 @@ fn an_answer_chosen_in_the_tab_is_sent_and_drawn_in_the_chat_as_the_proposals_li
     let (seq, message) = told(&mut ui).unwrap();
     ui.wait("its line", |ui| ui.has(SharedString::from(format!("answered-proposal/{seq}"))));
     assert!(!ui.has(SharedString::from(format!("bubble/prompt/{message}"))), "not as the person's prompt");
-    let proposal = ui.view().feed().unwrap().snapshot().proposals(&chat)[0].clone();
+    let proposal = ui.view().records().proposals(&chat)[0].clone();
     let line = transcript::proposal_response_line(Some(&proposal), proposal.current.number);
     let said = format!("Answered {}: {}", line.title.unwrap_or_default(), line.said);
     ui.wait("it says what was chosen", |ui| !ui.labelled(&said).is_empty());
@@ -165,7 +165,7 @@ fn an_answer_chosen_in_the_tab_is_sent_and_drawn_in_the_chat_as_the_proposals_li
 /// Has the agent propose `title`, from outside the app, so the composer needn't show, and waits for its record. Its ID.
 fn another(ui: &mut Ui<'_>, stack: &Stack, title: &str) -> protocol::model::ProposalId {
     let chat = ui.active_chat();
-    let proposals = |ui: &mut Ui<'_>| ui.view().feed().unwrap().snapshot().proposals(&chat).to_vec();
+    let proposals = |ui: &mut Ui<'_>| ui.view().records().proposals(&chat).to_vec();
     let before = proposals(ui).len();
     let propose = PROPOSE.replace("Holding a train", title);
     stack.client().session_prompt(&chat, &propose, None).unwrap();
@@ -282,7 +282,7 @@ fn an_answer_the_agent_never_got_says_so(cx: &mut TestAppContext) {
     ui.wait("its line to say the agent never got it", |ui| {
         ui.has(SharedString::from(format!("answer-never-got/{seq}")))
     });
-    let answered = ui.view().feed().unwrap().snapshot().proposals(&chat)[0].current.response.is_some();
+    let answered = ui.view().records().proposals(&chat)[0].current.response.is_some();
     assert!(answered, "the proposal keeps the answer, for the agent to read");
     done.open();
 }
@@ -311,8 +311,7 @@ fn an_answer_given_while_the_queue_is_held_waits_there_and_can_be_taken_back(cx:
     assert!(!ui.has(SharedString::from(format!("edit-queued-{message}"))), "not edited, since the hub wrote it");
     ui.hover(SharedString::from(format!("queued-{message}")));
     ui.click(SharedString::from(format!("remove-queued-{message}")));
-    let answered =
-        |ui: &mut Ui<'_>| ui.view().feed().unwrap().snapshot().proposals(&chat)[0].current.response.is_some();
+    let answered = |ui: &mut Ui<'_>| ui.view().records().proposals(&chat)[0].current.response.is_some();
     ui.wait("the answer taken back with it", |ui| queued(ui).is_empty() && !answered(ui));
     ui.click(open);
     ui.wait("the proposal tab", |ui| showing(ui) == Showing::Proposal);

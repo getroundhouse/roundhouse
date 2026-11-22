@@ -57,7 +57,7 @@ pub(crate) fn a_subagent_for(ui: &mut Ui<'_>, what: &str) -> SharedString {
     ui.wait_idle_with("the turn to finish", |text| text.contains("done"));
     let call = agent_call(ui).expect("the agent's call that started the subagent");
     let open = SharedString::from(format!("open-subagent/{call}"));
-    // It's there once the subagent's record is, which comes on the feed.
+    // It's there once the app has the subagent's record, which comes on the feed.
     ui.wait("the button that opens the subagent tab", |ui| ui.has(open.clone()));
     open
 }
@@ -252,8 +252,8 @@ fn a_subagent_tab_opened_by_its_call_names_it_as_its_record_does_and_draws_what_
     ui.cx.update(|cx| pane.update(cx, |p, cx| p.open_subagent_tab(chat.clone(), by_call.clone(), "?".into(), cx)));
 
     let recorded = |ui: &Ui<'_>| {
-        let records = ui.view().feed().unwrap().snapshot();
-        records.subagents(&chat).iter().find(|subagent| subagent.call == call).map(|subagent| subagent.id())
+        let view = ui.view();
+        view.records().subagents(&chat).iter().find(|subagent| subagent.call == call).map(|subagent| subagent.id())
     };
     ui.wait("the subagent's record", |ui| recorded(ui).is_some());
     let id = recorded(&ui).unwrap();

@@ -38,7 +38,7 @@ fn a_dictated_note_goes_with_the_answer_once_its_last_words_are_in(cx: &mut Test
     assert!(engine.last_hints().words().contains(&workspace), "the workspace's words, from the pane");
     ui.press("enter");
 
-    let answered = |ui: &mut Ui<'_>| ui.view().feed().unwrap().snapshot().proposals(&chat)[0].current.choice().cloned();
+    let answered = |ui: &mut Ui<'_>| ui.view().records().proposals(&chat)[0].current.choice().cloned();
     ui.wait("the answer's record", |ui| answered(ui).is_some());
     assert_eq!(answered(&mut ui).unwrap().note, "Please Fix the test. In hub.", "with its last words");
     let_go(&mut ui);
