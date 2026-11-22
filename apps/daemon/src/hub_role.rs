@@ -25,8 +25,8 @@ pub(crate) fn run(start: HubStart) -> anyhow::Result<ExitCode> {
     let running =
         std::env::current_exe().and_then(std::fs::canonicalize).context("finding this binary to run workers")?;
     let (worker_exe, _marked) = workers_from(&paths, BUILD.stamped(), running);
-    let shell = std::env::var("SHELL").ok().filter(|shell| !shell.is_empty());
-    let path = std::env::var("PATH").ok();
+    // The hub keeps only a few of these for what it starts, and the profile gives the rest.
+    let environment = std::env::vars_os().collect();
     // The hub doesn't depend on the adapters, so it's told what each kind of agent offers from here.
     let agents = agents::descriptions();
     // A build without `testing`, as the product's is, takes the defaults whatever the environment says.
@@ -42,8 +42,7 @@ pub(crate) fn run(start: HubStart) -> anyhow::Result<ExitCode> {
         build: BUILD,
         paths,
         worker_exe,
-        shell,
-        path,
+        environment,
         start,
         agents,
         timers,

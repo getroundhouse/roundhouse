@@ -1,9 +1,11 @@
 use crate::calls::{Calls, NotSent};
 use crate::child_process::{ChildProcess, Spawned, Stderr};
 use crate::frames::FrameReader;
+use crate::machine_environment::MachineEnvironment;
 use crate::{child_process, versions};
 use async_trait::async_trait;
 use parking_lot::Mutex;
+use process::Environment;
 use protocol::client::{ApiError, ErrorCode, error_chain};
 use protocol::model::{HubId, InstanceId};
 use protocol::provider::{
@@ -39,8 +41,8 @@ pub(crate) struct Opened {
     pub process: Option<ChildProcess>,
 }
 
-/// Starts the adapter. A process for real, and something in-process in tests.
-pub(crate) type Open = Box<dyn Fn() -> io::Result<Opened> + Send + Sync>;
+/// Starts the adapter, in the environment it's given. A process for real, and something in-process in tests.
+pub(crate) type Open = Box<dyn Fn(Environment) -> io::Result<Opened> + Send + Sync>;
 
 pub(crate) struct AdapterProvider {
     pub(super) name: String,
@@ -49,6 +51,8 @@ pub(crate) struct AdapterProvider {
     pub(super) build: Build,
     /// How long the adapter has to answer each hello.
     pub(super) hello_within: Duration,
+    /// What its adapter runs in.
+    pub(super) machine: MachineEnvironment,
     pub(super) open: Open,
     /// As the newest hello declared them.
     pub(super) capabilities: Mutex<Capabilities>,
@@ -61,12 +65,20 @@ pub(crate) struct AdapterProvider {
 
 impl AdapterProvider {
     /// Its adapter starts when it's first asked something, or told to say hello.
-    pub(crate) fn new(name: String, hub_id: HubId, build: Build, hello_within: Duration, open: Open) -> Self {
+    pub(crate) fn new(
+        name: String,
+        hub_id: HubId,
+        build: Build,
+        hello_within: Duration,
+        machine: MachineEnvironment,
+        open: Open,
+    ) -> Self {
         Self {
             name,
             hub_id,
             build,
             hello_within,
+            machine,
             open,
             capabilities: Mutex::new(Capabilities::default()),
             environment: Mutex::new(WorkerEnvironment::default()),
@@ -101,8 +113,9 @@ impl AdapterProvider {
         if *shut.borrow() {
             return Err(shutting_down());
         }
-        let opened =
-            (self.open)().map_err(|e| ProviderError::io(format!("starting provider {}'s adapter", self.name), e))?;
+        let given = self.machine.given(&[]).await;
+        let opened = (self.open)(given)
+            .map_err(|e| ProviderError::io(format!("starting provider {}'s adapter", self.name), e))?;
         let connection = Connection::start(opened);
         let hello = Hello {
             protocol_version: versions::PROVIDERS.newest,
@@ -178,9 +191,9 @@ fn unexpected(response: &ProviderResponse) -> ProviderError {
 
 /// Runs `command` as the adapter. What it writes to stderr goes to the hub's.
 pub(crate) fn process(command: AdapterCommand) -> Open {
-    Box::new(move || {
+    Box::new(move |given| {
         let Spawned { process, reader, writer } =
-            child_process::spawn(&command.program, &command.args, &[], Stderr::Hubs)?;
+            child_process::spawn(&command.program, &command.args, &given, Stderr::Hubs)?;
         Ok(Opened { reader, writer, process: Some(process) })
     })
 }

@@ -1,39 +1,6 @@
 use super::*;
 use std::os::unix::process::ExitStatusExt;
 
-#[test]
-fn the_path_survives_whatever_rc_files_print_around_it() {
-    let output = format!("Welcome!\n{PATH_MARKER}/a:/b\n{PATH_MARKER}\nbye\n");
-    assert_eq!(parse_marked_path(&output).as_deref(), Some("/a:/b"));
-    assert_eq!(parse_marked_path("no markers"), None);
-    assert_eq!(parse_marked_path(&format!("{PATH_MARKER}{PATH_MARKER}")), None);
-}
-
-#[test]
-fn merging_keeps_login_entries_first_and_drops_duplicates() {
-    assert_eq!(merge_paths(Some("/a:/b"), Some("/b:/c")).as_deref(), Some("/a:/b:/c"));
-    assert_eq!(merge_paths(None, Some("/c")).as_deref(), Some("/c"));
-    assert_eq!(merge_paths(None, None), None);
-}
-
-#[tokio::test]
-async fn the_login_shell_really_reports_a_path() {
-    // Runs the real shell, so this also covers rc files that print to stdout.
-    let path = read_login_path(None).await;
-    assert!(path.as_deref().is_some_and(|p| p.contains('/')), "got {path:?}");
-}
-
-#[tokio::test]
-async fn reading_the_path_does_not_wait_for_a_stream_something_else_is_holding_open() {
-    use tokio::io::AsyncWriteExt;
-
-    let (mut writer, reader) = tokio::io::duplex(1024);
-    writer.write_all(format!("noise {PATH_MARKER}/a:/b{PATH_MARKER}").as_bytes()).await.unwrap();
-    // `writer` stays open, as it would with a background process started by an rc file.
-    let out = tokio::time::timeout(Duration::from_secs(1), read_until_second_marker(reader)).await.unwrap();
-    assert_eq!(out.as_deref().and_then(parse_marked_path).as_deref(), Some("/a:/b"));
-}
-
 /// What a killed worker left gets to stop by itself here: long enough for a test's own processes, which stop as soon
 /// as they're asked, and short enough that a test of one that won't doesn't wait out the product's.
 const GRACE: Duration = Duration::from_millis(500);
@@ -170,7 +137,6 @@ fn provider(dir: &Path) -> LocalProvider {
         instances_dir: dir.join("instances"),
         workspaces_root: dir.join("workspaces"),
         clones_dir: dir.join("clones"),
-        path: MachinePath::new(Some("/bin/sh".into()), Some("/opt/tools".into())),
     })
 }
 
@@ -218,8 +184,7 @@ async fn connect_answers_with_the_hubs_own_worker_for_the_instance() {
     let transport = if cfg!(unix) { "--attach" } else { "--stdio" };
     let given = ["--workspaces-root", &workspaces, "--state-dir", &state_dir, "--clones-dir", &clones];
     assert_eq!(command.args, [&["worker", transport][..], &given].concat());
-    let path = command.env.iter().find(|(name, _)| name == "PATH").map(|(_, value)| value.as_str());
-    assert!(path.is_some_and(|path| path.split(':').any(|entry| entry == "/opt/tools")), "{path:?}");
+    assert!(command.env.is_empty(), "the hub runs it in its machine's environment");
 }
 
 /// A directory is never asleep, so every instance is running, and a worker is on the one it's recorded in.

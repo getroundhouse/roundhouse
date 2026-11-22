@@ -168,7 +168,8 @@ impl Stack {
 
 /// What every hub of a stack in `dir` runs in: what [`WholeEnvironment::for_a_test`] gives, with a home of its own, so
 /// a real ~/.conductor/settings.toml or `gh` login can't change what these tests do, a `gh` that's logged in to
-/// nothing, the fake agent, and the timers that only make a test wait shortened.
+/// nothing, the fake agent, and the timers that only make a test wait shortened. A hub passes on only its own
+/// `ROUNDHOUSE_…` variables of these, and a stand-in's `FAKE_…`, so one meant for what it starts is named so.
 fn hub_environment(dir: &Path) -> WholeEnvironment {
     let (timers, short) = Timers::FOR_TESTS.env();
     let (worker_timers, worker_short) = worker::Timers::FOR_TESTS.env();

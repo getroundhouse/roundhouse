@@ -2,6 +2,7 @@ use crate::error::HubError;
 use crate::hub::{Hub, HubDirs, LeftAtWork, UpdateFeed};
 use crate::listener;
 use crate::listener::Listener;
+use crate::machine_environment::MachineEnvironment;
 use crate::provider_set::ProviderSet;
 use crate::store::{Move, RecordedInstance, Store, StoreError};
 use crate::terminate::Terminate;
@@ -12,7 +13,8 @@ use protocol::client::HubStart;
 use protocol::model::{AgentDescription, WorkspaceId};
 use protocol::paths::Paths;
 use providers::Provider;
-use providers::local::{LocalConfig, LocalProvider, MachinePath};
+use providers::local::{LocalConfig, LocalProvider};
+use std::ffi::OsString;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::task::JoinSet;
@@ -24,12 +26,12 @@ pub struct HubConfig {
     /// Where paired devices can reach this hub, once pairing is enabled.
     pub network_address: std::net::SocketAddr,
     pub paths: Paths,
-    /// The binary that runs a worker, which the local provider starts.
+    /// The binary that runs a worker, which the local provider starts, and which the login shell runs to print the
+    /// environment the profile gives, as [`PRINTS_ENVIRONMENT`](crate::PRINTS_ENVIRONMENT) says.
     pub worker_exe: PathBuf,
-    /// The user's shell, for finding the real `PATH`.
-    pub shell: Option<String>,
-    /// This process's own `PATH`.
-    pub path: Option<String>,
+    /// The environment this hub was started with, of which it keeps only the few variables
+    /// `MachineEnvironment` says for what it starts.
+    pub environment: Vec<(OsString, OsString)>,
     /// What started this hub, which its status says, so a client knows whether it may restart it.
     pub start: HubStart,
     /// What each kind of agent this hub runs is called and offers, as its adapter describes it. A kind with none is one
@@ -96,13 +98,13 @@ fn take_lock(paths: &Paths) -> Result<std::fs::File, HubError> {
     }
 }
 
-/// The local provider, and the others this hub's data directory names, whose adapters have as long to say hello as
-/// `timers` says.
+/// The local provider, and the others this hub's data directory names, whose adapters run in `machine` and have as long
+/// to say hello as `timers` says.
 fn load_providers(
     build: Build,
     paths: &Paths,
     worker_exe: PathBuf,
-    path: MachinePath,
+    machine: &MachineEnvironment,
     store: &Store,
     timers: &Timers,
 ) -> Result<ProviderSet, HubError> {
@@ -111,10 +113,10 @@ fn load_providers(
         instances_dir: paths.instances_dir.clone(),
         workspaces_root: paths.workspaces_root.clone(),
         clones_dir: paths.clones_dir.clone(),
-        path,
     }));
     let hub_id = store.hub_id().map_err(HubError::OpenDatabase)?;
-    let providers = ProviderSet::load(local, &paths.providers, &hub_id, build, timers.adapter_hello_within);
+    let hello_within = timers.adapter_hello_within;
+    let providers = ProviderSet::load(local, &paths.providers, &hub_id, build, hello_within, machine);
     // Before any client reads the settings, so none is told of the providers an earlier run had.
     let (left, set_up) = (providers.left_to_machine(), providers.set_up_github());
     store.record_github_providers(&left, &set_up).map_err(HubError::OpenDatabase)?;
@@ -135,7 +137,7 @@ pub enum Ended {
 /// is using these paths.
 pub async fn run(config: HubConfig) -> Result<Ended, HubError> {
     let update_feed = config.update_feed;
-    let HubConfig { network_address, build, paths, worker_exe, shell, path, start, agents, timers, github, .. } =
+    let HubConfig { network_address, build, paths, worker_exe, environment, start, agents, timers, github, .. } =
         config;
     private_files::create_dir_all(&paths.data_dir)
         .map_err(|e| HubError::io(format!("creating {}", paths.data_dir.display()), e))?;
@@ -147,8 +149,9 @@ pub async fn run(config: HubConfig) -> Result<Ended, HubError> {
     let left_at_work = LeftAtWork::read(&store).map_err(HubError::Recover)?;
     let settings = store.hub_settings().map_err(HubError::OpenDatabase)?;
 
-    let machine = MachinePath::new(shell, path);
-    let providers = load_providers(build, &paths, worker_exe, machine.clone(), &store, &timers)?;
+    let machine = MachineEnvironment::new(environment, worker_exe.clone());
+
+    let providers = load_providers(build, &paths, worker_exe, &machine, &store, &timers)?;
     let github = Github::new(github);
     let dirs = HubDirs { network_address, ..HubDirs::of(&paths) };
     let hub = Arc::new(Hub::new(build, store, dirs, providers, github, machine, agents, start, timers));

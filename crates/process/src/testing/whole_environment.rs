@@ -17,8 +17,8 @@ const KEPT: &[&str] =
 /// Where a process finds its user's home.
 const HOME: &str = if cfg!(windows) { "USERPROFILE" } else { "HOME" };
 
-/// A login shell that prints nothing and fails, so a hub that asks the login shell for the `PATH` its workers get, as
-/// the local provider does, gives them its own, and none of the person's shell setup runs.
+/// A login shell that prints nothing and fails, so a hub, which asks the login shell for the environment of everything
+/// it starts, gives them only what it keeps of its own, and none of the person's shell setup runs.
 const SAYS_NOTHING: &str = "/usr/bin/false";
 
 /// The whole environment of a process a test starts, in place of the test's own, as against a
@@ -91,7 +91,7 @@ impl WholeEnvironment {
     /// what it inherits, and each of this one's variables. What the code told the command to set before it applies
     /// this, such as a setting of its own or a script's variables, stays, unless this gives it too.
     pub fn given(&self) -> Environment {
-        self.vars().fold(Environment::INHERITING_NOTHING, |given, (name, value)| given.with(name, value))
+        Environment::whole(self.vars())
     }
 }
 

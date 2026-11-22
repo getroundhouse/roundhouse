@@ -19,6 +19,7 @@ use tokio::sync::oneshot;
 
 use super::{Hub, HubDirs};
 use crate::github_logins::Connect;
+use crate::machine_environment::MachineEnvironment;
 use crate::provider_set::ProviderSet;
 use crate::session::{CarriedOver, Item, LiveSession, Starting};
 use crate::store::Store;
@@ -117,7 +118,6 @@ fn local(dir: &Path) -> Arc<dyn Provider> {
         instances_dir: dir.join("instances"),
         workspaces_root: dir.join("workspaces"),
         clones_dir: dir.join("clones"),
-        path: providers::local::MachinePath::new(Some("/bin/sh".to_string()), None),
     };
     Arc::new(LocalProvider::new(config))
 }
@@ -132,7 +132,7 @@ fn hub_on(
 ) -> Hub {
     let (store, providers) = (Arc::new(store), ProviderSet::only(provider));
     // Only `bin` in the test's directory, where a test about `gh` puts a stand-in for it, so no test runs the real one.
-    let machine = providers::local::MachinePath::only(Some(dir.join("bin").display().to_string()));
+    let machine = MachineEnvironment::only(&[("PATH", dir.join("bin").to_str().unwrap())]);
     Hub::new(
         Build::UNSTAMPED,
         store,

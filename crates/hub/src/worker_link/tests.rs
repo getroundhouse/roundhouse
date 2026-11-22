@@ -33,7 +33,6 @@ fn provider_running(dir: &Path, script: &str) -> Arc<dyn Provider> {
         instances_dir: dir.join("instances"),
         workspaces_root: dir.join("workspaces"),
         clones_dir: dir.join("clones"),
-        path: providers::local::MachinePath::new(Some("/bin/sh".to_string()), None),
     }))
 }
 
@@ -62,7 +61,7 @@ fn hub_reading(dir: &Path, provider: &Arc<dyn Provider>, api: String) -> Arc<Hub
         dirs,
         providers,
         github,
-        providers::local::MachinePath::only(None),
+        crate::machine_environment::MachineEnvironment::of_this_test(),
         Vec::new(),
         HubStart::ByHand,
         timers,
@@ -84,7 +83,7 @@ fn hub_timed(dir: &Path, provider: &Arc<dyn Provider>, timers: Timers) -> Arc<Hu
         HubDirs::in_dir(dir),
         providers,
         github,
-        providers::local::MachinePath::only(None),
+        crate::machine_environment::MachineEnvironment::of_this_test(),
         Vec::new(),
         HubStart::ByHand,
         timers,

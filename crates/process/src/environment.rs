@@ -1,32 +1,31 @@
 use std::ffi::{OsStr, OsString};
 use std::process::Command;
 
-/// What a process is given beyond the environment it inherits: variables set, and variables taken out. It goes on a
-/// command last, just before it starts, so nothing set on the command before can undo it. A `tokio` command takes it
-/// through `as_std_mut`.
+/// What a process is given beyond the environment it inherits: variables set, and variables taken out, or else a whole
+/// environment in place of the one it inherits. It goes on a command last, just before it starts, so nothing set on the
+/// command before can undo it. A `tokio` command takes it through `as_std_mut`.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Environment {
     set: Vec<(OsString, OsString)>,
     taken_out: Vec<OsString>,
-    /// Whether a process keeps nothing of what it inherits, but what its command was told to set, as a test gives the
-    /// code under it, through [`crate::testing::WholeEnvironment::given`]. Never in the product.
-    #[cfg(any(test, feature = "testing"))]
+    /// Whether a process keeps nothing of what it inherits, but what its command was told to set, as the hub gives what
+    /// it starts its machine's environment, and a test the code under it, through `testing::WholeEnvironment::given`.
     inherits_nothing: bool,
 }
 
 impl Environment {
     /// Nothing beyond what a process inherits.
-    pub const NONE: Self = Self {
-        set: Vec::new(),
-        taken_out: Vec::new(),
-        #[cfg(any(test, feature = "testing"))]
-        inherits_nothing: false,
-    };
+    pub const NONE: Self = Self { set: Vec::new(), taken_out: Vec::new(), inherits_nothing: false };
 
     /// Nothing of what a process inherits, but what its command was told to set, such as a setting of the code that
-    /// starts it, which stays as the code set it.
-    #[cfg(any(test, feature = "testing"))]
-    pub(crate) const INHERITING_NOTHING: Self = Self { set: Vec::new(), taken_out: Vec::new(), inherits_nothing: true };
+    /// starts it, which stays as the code set it, and what this gives it after.
+    pub const INHERITING_NOTHING: Self = Self { set: Vec::new(), taken_out: Vec::new(), inherits_nothing: true };
+
+    /// `vars` alone, in place of what a process inherits, as [`Environment::INHERITING_NOTHING`] says.
+    #[must_use]
+    pub fn whole<N: Into<OsString>, V: Into<OsString>>(vars: impl IntoIterator<Item = (N, V)>) -> Self {
+        vars.into_iter().fold(Self::INHERITING_NOTHING, |whole, (name, value)| whole.with(name, value))
+    }
 
     /// Gives `name` as `value`.
     #[must_use]
@@ -47,7 +46,6 @@ impl Environment {
 
     /// Puts it on `command`.
     pub fn apply(&self, command: &mut impl TakesEnvironment) {
-        #[cfg(any(test, feature = "testing"))]
         if self.inherits_nothing {
             command.inherit_nothing();
         }
@@ -60,16 +58,19 @@ impl Environment {
     }
 }
 
+/// Whether `a` and `b` name the same variable, which on Windows doesn't depend on their case, so taking out one a
+/// command inherits doesn't take out one it was told to set.
+fn same(a: &OsStr, b: &OsStr) -> bool {
+    if cfg!(windows) { a.eq_ignore_ascii_case(b) } else { a == b }
+}
+
 /// A command an [`Environment`] goes on, which starts its process with what it inherits and these changes to it: a
 /// standard library's, or another, such as the one a PTY's program is started with.
 pub trait TakesEnvironment {
     fn take_out(&mut self, name: &OsStr);
     fn give(&mut self, name: &OsStr, value: &OsStr);
 
-    /// Takes out everything the process would inherit, but what the command was told to set. Only a test asks it, to
-    /// give the code under it a whole environment of its own, through `testing::WholeEnvironment::given`, which only
-    /// the `testing` feature builds. It's a part of the trait in every build, since a crate that implements the trait
-    /// can't tell whether another crate in the same build turned that feature on.
+    /// Takes out everything the process would inherit, but what the command was told to set.
     fn inherit_nothing(&mut self);
 }
 
@@ -82,10 +83,12 @@ impl TakesEnvironment for Command {
         self.env(name, value);
     }
 
-    /// What it inherits is this process's environment, as it is when it starts.
+    /// What it inherits is this process's environment, as it is when it starts. Each is taken out by name, so the
+    /// command lists what it doesn't have, as code that checks a command for a variable it mustn't pass on reads it.
     fn inherit_nothing(&mut self) {
         let told: Vec<OsString> = self.get_envs().map(|(name, _)| name.to_os_string()).collect();
-        let inherited = std::env::vars_os().map(|(name, _)| name).filter(|name| !told.contains(name));
+        let inherited =
+            std::env::vars_os().map(|(name, _)| name).filter(|name| !told.iter().any(|told| same(told, name)));
         for name in inherited.collect::<Vec<_>>() {
             self.env_remove(name);
         }

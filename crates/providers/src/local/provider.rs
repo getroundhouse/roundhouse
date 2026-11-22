@@ -9,8 +9,6 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 use tracing::warn;
 
-use super::MachinePath;
-
 /// How long what a killed worker left running, such as an agent, or a worker still running when the hub asks for it
 /// to be ended, gets to stop by itself, with all it started. An agent stops its own tools if given this.
 const ORPHAN_GRACE: Duration = Duration::from_secs(3);
@@ -20,11 +18,8 @@ const TRANSPORT: &str = if cfg!(unix) { "--attach" } else { "--stdio" };
 /// How long a process sent SIGKILL gets to be gone.
 const KILLED_GRACE: Duration = Duration::from_secs(2);
 /// How long starting an instance, or ending its worker, takes at most. Either stops each process left there within its
-/// [`ORPHAN_GRACE`] and then [`KILLED_GRACE`], and the first start reads the login shell's `PATH` within
-/// [`LOGIN_SHELL_TIMEOUT`](super::machine_path::LOGIN_SHELL_TIMEOUT). So this is that, with three processes left there.
-const STARTS_OR_STOPS_WITHIN: Duration = Duration::from_secs(
-    3 * (ORPHAN_GRACE.as_secs() + KILLED_GRACE.as_secs()) + super::machine_path::LOGIN_SHELL_TIMEOUT.as_secs(),
-);
+/// [`ORPHAN_GRACE`] and then [`KILLED_GRACE`]. So this is that, with three processes left there.
+const STARTS_OR_STOPS_WITHIN: Duration = Duration::from_secs(3 * (ORPHAN_GRACE.as_secs() + KILLED_GRACE.as_secs()));
 
 pub struct LocalConfig {
     /// The binary that runs a worker, as `worker --attach` or `worker --stdio`.
@@ -34,8 +29,6 @@ pub struct LocalConfig {
     pub workspaces_root: PathBuf,
     /// Where every worker keeps its clones, which they share.
     pub clones_dir: PathBuf,
-    /// The machine's `PATH`, which workers are given.
-    pub path: MachinePath,
 }
 
 pub struct LocalProvider {
@@ -43,10 +36,6 @@ pub struct LocalProvider {
 }
 
 impl LocalProvider {
-    async fn worker_env(&self) -> Vec<(String, String)> {
-        self.config.path.path().await.map(|path| ("PATH".to_string(), path)).into_iter().collect()
-    }
-
     pub fn new(config: LocalConfig) -> Self {
         Self { config }
     }
@@ -236,12 +225,13 @@ impl Provider for LocalProvider {
         Ok(instances)
     }
 
+    /// A command with no variables of its own, since the hub runs it in its machine's environment, which is all a worker
+    /// on the hub's machine needs.
     async fn connect(&self, instance_id: &InstanceId) -> Result<WorkerCommand, ProviderError> {
         let dir = self.instance_dir(instance_id);
         if !dir.is_dir() {
             return Err(ProviderError::NotFound(instance_id.clone()));
         }
-        let env = self.worker_env().await;
         let text = |path: &Path| path.to_string_lossy().into_owned();
         Ok(WorkerCommand {
             program: text(&self.config.worker_exe),
@@ -255,7 +245,7 @@ impl Provider for LocalProvider {
                 "--clones-dir".into(),
                 text(&self.config.clones_dir),
             ],
-            env,
+            env: Vec::new(),
         })
     }
 
@@ -268,7 +258,7 @@ impl Provider for LocalProvider {
         Ok(protocol::provider::Command {
             program: self.config.worker_exe.to_string_lossy().into_owned(),
             args: vec!["preflight".into(), agent.as_str().into(), "--".into(), checkout.into()],
-            env: self.worker_env().await,
+            env: Vec::new(),
         })
     }
 

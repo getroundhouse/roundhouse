@@ -18,12 +18,8 @@ use std::time::Duration;
 #[cfg(test)]
 mod tests;
 
-mod machine_path;
 mod provider;
 
-pub use machine_path::MachinePath;
-#[cfg(test)]
-use machine_path::{PATH_MARKER, merge_paths, parse_marked_path, read_login_path, read_until_second_marker};
 #[cfg(test)]
 use provider::stop_orphans;
 pub use provider::{LocalConfig, LocalProvider};

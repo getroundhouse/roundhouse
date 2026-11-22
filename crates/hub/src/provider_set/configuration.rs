@@ -1,3 +1,4 @@
+use crate::machine_environment::MachineEnvironment;
 use crate::provider_link;
 use crate::provider_link::{ADAPTER_GRACE, AdapterCommand, AdapterProvider};
 use protocol::Build;
@@ -95,7 +96,7 @@ impl ProviderSet {
         Ok((name, provider))
     }
 
-    /// `local`, and each provider `file` names, whose adapters start when they're first needed and have
+    /// `local`, and each provider `file` names, whose adapters start in `machine` when they're first needed and have
     /// `adapter_hello_within` to answer each hello. One that can't be read or doesn't parse leaves only `local`, and
     /// no provider for new workspaces, so they fail with why rather than quietly go somewhere else. Neither keeps the
     /// hub from starting.
@@ -105,6 +106,7 @@ impl ProviderSet {
         hub_id: &HubId,
         build: Build,
         adapter_hello_within: Duration,
+        machine: &MachineEnvironment,
     ) -> Self {
         let local_name = ProviderName::from(local.name());
         let mut set = Self::only(local);
@@ -132,7 +134,8 @@ impl ProviderSet {
             }
             let open = provider_link::process(AdapterCommand { program: entry.program, args: entry.args });
             let (name, hub_id) = (entry.name.to_string(), hub_id.clone());
-            let adapter = Arc::new(AdapterProvider::new(name, hub_id, build, adapter_hello_within, open));
+            let (within, machine) = (adapter_hello_within, machine.clone());
+            let adapter = Arc::new(AdapterProvider::new(name, hub_id, build, within, machine, open));
             set.by_name.insert(entry.name, adapter.clone());
             set.adapters.push(adapter);
         }

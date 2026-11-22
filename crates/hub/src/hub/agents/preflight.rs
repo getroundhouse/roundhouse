@@ -27,7 +27,8 @@ impl Hub {
     ) -> Result<ModelCatalog, ApiError> {
         let command =
             provider.open_preflight(&OpenPreflight { project, agent }).await.map_err(|e| provider_failed(&e))?;
-        let mut child = child_process::spawn(&command.program, &command.args, &command.env, Stderr::Hubs)
+        let given = self.machine.given(&command.env).await;
+        let mut child = child_process::spawn(&command.program, &command.args, &given, Stderr::Hubs)
             .map_err(|e| failed(e.to_string()))?;
         let exchange = async {
             let asked = Asked { version: protocol::preflight::VERSION, question: Question::Models { login } };

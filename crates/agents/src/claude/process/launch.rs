@@ -12,11 +12,11 @@ use crate::starting::Launched;
 use crate::{AgentError, AgentOptions, BinaryLookup};
 
 /// What a Claude session sets in the environment of what it starts. A CLI that inherits them takes itself for part of
-/// that session. So a program that starts the CLI, and can itself be started from inside a session, removes them from
-/// its own environment in its `main`, before it starts a thread, and nothing it starts has them: the daemon, for every
-/// role it runs as, and the conformance example. This launch doesn't remove them again. Login and provider settings
-/// such as `ANTHROPIC_API_KEY` are the user's own choice, so they pass through, unless the agent's hub hands it a login
-/// to run under, as `claude::login` says.
+/// that session. A hub started from inside a session passes none of them on, since what it starts gets the user's
+/// profile's environment rather than the hub's. The conformance example, which starts the CLI itself, removes them from
+/// its own environment in its `main`, before it starts a thread. This launch doesn't remove them. Login and provider
+/// settings such as `ANTHROPIC_API_KEY` are the user's own choice, so they pass through from the profile, unless the
+/// agent's hub hands it a login to run under, as `claude::login` says.
 pub const PARENT_SESSION_ENV: &[&str] = &[
     "CLAUDECODE",
     "CLAUDE_AGENT_SDK_VERSION",

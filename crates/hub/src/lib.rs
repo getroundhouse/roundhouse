@@ -19,6 +19,7 @@ mod listener;
 mod logged;
 mod login_files;
 mod logins;
+mod machine_environment;
 mod names;
 mod pasted_token;
 mod provider_link;
@@ -35,6 +36,7 @@ mod worker_link;
 
 pub use crate::error::HubError;
 pub use crate::hub::UpdateFeed;
+pub use crate::machine_environment::{PRINTS_ENVIRONMENT, print_environment};
 pub use crate::run::{Ended, HubConfig, run};
 pub use crate::timers::Timers;
 pub use github::GithubConfig;

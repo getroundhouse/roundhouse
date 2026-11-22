@@ -10,6 +10,7 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, DuplexStream};
 
 use super::*;
 use crate::Timers;
+use crate::machine_environment::MachineEnvironment;
 
 /// The product's limit for a hello, for the tests that aren't about it.
 const HELLO_WITHIN: Duration = Timers::DEFAULT.adapter_hello_within;
@@ -20,7 +21,7 @@ where
     F: Fn(usize, DuplexStream) -> Fut + Send + Sync + 'static,
     Fut: Future<Output = ()> + Send + 'static,
 {
-    Box::new(move || {
+    Box::new(move |_| {
         let (hub_end, adapter_end) = tokio::io::duplex(64 * 1024);
         tokio::spawn(adapter(opens.fetch_add(1, Ordering::SeqCst), adapter_end));
         let (reader, writer) = tokio::io::split(hub_end);
@@ -34,7 +35,6 @@ fn local(dir: &Path) -> Arc<dyn Provider> {
         instances_dir: dir.join("instances"),
         workspaces_root: dir.join("workspaces"),
         clones_dir: dir.join("clones"),
-        path: providers::local::MachinePath::new(Some("/bin/sh".to_string()), None),
     }))
 }
 
@@ -83,7 +83,14 @@ fn ok() -> ProviderOutcome {
 
 /// One that's said hello.
 async fn started(open: Open) -> AdapterProvider {
-    let provider = AdapterProvider::new("elsewhere".into(), "h".into(), Build::UNSTAMPED, HELLO_WITHIN, open);
+    let provider = AdapterProvider::new(
+        "elsewhere".into(),
+        "h".into(),
+        Build::UNSTAMPED,
+        HELLO_WITHIN,
+        MachineEnvironment::of_this_test(),
+        open,
+    );
     provider.say_hello().await.unwrap();
     provider
 }
@@ -91,8 +98,14 @@ async fn started(open: Open) -> AdapterProvider {
 #[tokio::test]
 async fn it_answers_what_the_adapters_provider_answers() {
     let dir = tempfile::tempdir().unwrap();
-    let provider =
-        AdapterProvider::new("elsewhere".into(), "h".into(), Build::UNSTAMPED, HELLO_WITHIN, serving_local(dir.path()));
+    let provider = AdapterProvider::new(
+        "elsewhere".into(),
+        "h".into(),
+        Build::UNSTAMPED,
+        HELLO_WITHIN,
+        MachineEnvironment::of_this_test(),
+        serving_local(dir.path()),
+    );
     let id = InstanceId::from("i");
     assert_eq!(provider.name(), "elsewhere");
     assert_eq!(
@@ -175,7 +188,14 @@ async fn an_adapter_that_doesnt_say_hello_within_its_limit_isnt_used() {
         std::future::pending::<()>().await;
     });
     let within = Duration::from_secs(3);
-    let provider = AdapterProvider::new("silent".into(), "h".into(), Build::UNSTAMPED, within, open);
+    let provider = AdapterProvider::new(
+        "silent".into(),
+        "h".into(),
+        Build::UNSTAMPED,
+        within,
+        MachineEnvironment::of_this_test(),
+        open,
+    );
     let asked = tokio::time::Instant::now();
 
     let said = tokio::time::timeout(Duration::from_secs(60), provider.say_hello()).await.expect("no time limit");
@@ -189,7 +209,14 @@ async fn an_adapter_that_doesnt_say_hello_within_its_limit_isnt_used() {
 async fn a_hello_that_the_adapter_refuses_fails_whatever_needed_it_as_io() {
     let refused = ProviderOutcome::Error(ApiError::new(ErrorCode::Conflict, "serving hub g"));
     let open = opening(Arc::default(), move |_, stdio| scripted(stdio, vec![Some(refused.clone())], Arc::default()));
-    let provider = AdapterProvider::new("taken".into(), "h".into(), Build::UNSTAMPED, HELLO_WITHIN, open);
+    let provider = AdapterProvider::new(
+        "taken".into(),
+        "h".into(),
+        Build::UNSTAMPED,
+        HELLO_WITHIN,
+        MachineEnvironment::of_this_test(),
+        open,
+    );
 
     let stopped = provider.end_worker(&"i".into()).await;
 
@@ -209,7 +236,14 @@ async fn an_adapter_that_chose_another_version_is_not_used() {
     }));
     let open =
         opening(Arc::default(), move |_, stdio| scripted(stdio, vec![Some(chose_another.clone())], Arc::default()));
-    let provider = AdapterProvider::new("elsewhere".into(), "h".into(), Build::UNSTAMPED, HELLO_WITHIN, open);
+    let provider = AdapterProvider::new(
+        "elsewhere".into(),
+        "h".into(),
+        Build::UNSTAMPED,
+        HELLO_WITHIN,
+        MachineEnvironment::of_this_test(),
+        open,
+    );
 
     let said = provider.say_hello().await;
 
@@ -222,7 +256,14 @@ async fn a_reply_of_another_kind_than_its_request_names_fails_it() {
     let open = opening(Arc::default(), move |_, stdio| scripted(stdio, answers.clone(), Arc::default()));
     let provider = started(open).await;
     let greeted = opening(Arc::default(), |_, stdio| scripted(stdio, vec![Some(ok())], Arc::default()));
-    let greeted = AdapterProvider::new("elsewhere".into(), "h".into(), Build::UNSTAMPED, HELLO_WITHIN, greeted);
+    let greeted = AdapterProvider::new(
+        "elsewhere".into(),
+        "h".into(),
+        Build::UNSTAMPED,
+        HELLO_WITHIN,
+        MachineEnvironment::of_this_test(),
+        greeted,
+    );
 
     let listed = provider.list().await;
     let stopped = provider.end_worker(&"i".into()).await;
@@ -307,7 +348,14 @@ async fn an_adapter_that_exits_leaving_its_stdout_open_isnt_waited_for() {
 async fn shutting_down_gives_up_on_a_hello_in_flight_and_starts_no_more_adapters() {
     let opens = Arc::new(AtomicUsize::new(0));
     let open = opening(opens.clone(), |_, stdio| scripted(stdio, vec![], Arc::default()));
-    let provider = Arc::new(AdapterProvider::new("slow".into(), "h".into(), Build::UNSTAMPED, HELLO_WITHIN, open));
+    let provider = Arc::new(AdapterProvider::new(
+        "slow".into(),
+        "h".into(),
+        Build::UNSTAMPED,
+        HELLO_WITHIN,
+        MachineEnvironment::of_this_test(),
+        open,
+    ));
     let hello = tokio::spawn({
         let provider = provider.clone();
         async move { provider.say_hello().await }

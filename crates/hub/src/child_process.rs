@@ -8,6 +8,7 @@ use std::process::Stdio;
 use std::sync::Arc;
 use std::time::Duration;
 
+use process::Environment;
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::process::{Child, Command};
 use tokio::sync::{Notify, watch};
@@ -35,14 +36,9 @@ pub(crate) enum Stderr<'a> {
     Hubs,
 }
 
-/// Starts `program` as the leader of a process group of its own, so Ctrl-C on a foreground hub goes through the hub's
-/// clean shutdown, and ending it ends whatever it started.
-pub(crate) fn spawn(
-    program: &str,
-    args: &[String],
-    env: &[(String, String)],
-    stderr: Stderr<'_>,
-) -> io::Result<Spawned> {
+/// Starts `program` in `env`, as the leader of a process group of its own, so Ctrl-C on a foreground hub goes through
+/// the hub's clean shutdown, and ending it ends whatever it started.
+pub(crate) fn spawn(program: &str, args: &[String], env: &Environment, stderr: Stderr<'_>) -> io::Result<Spawned> {
     let context = |what: String| move |e: io::Error| io::Error::new(e.kind(), format!("{what}: {e}"));
     let stderr = match stderr {
         Stderr::Log(log) => {
@@ -55,13 +51,8 @@ pub(crate) fn spawn(
         Stderr::Hubs => Stdio::inherit(),
     };
     let mut child = Command::new(program);
-    child
-        .args(args)
-        .envs(env.iter().map(|(name, value)| (name, value)))
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(stderr)
-        .kill_on_drop(true);
+    child.args(args).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(stderr).kill_on_drop(true);
+    env.apply(child.as_std_mut());
     process::own_group(child.as_std_mut());
     let mut child = child.spawn().map_err(context(format!("starting {program}")))?;
     let (Some(writer), Some(reader)) = (child.stdin.take(), child.stdout.take()) else {
@@ -144,7 +135,8 @@ mod tests {
     use super::*;
 
     fn sh(dir: &Path, script: &str) -> Spawned {
-        spawn("sh", &["-c".into(), script.into()], &[], Stderr::Log(&dir.join("logs/worker.log"))).unwrap()
+        spawn("sh", &["-c".into(), script.into()], &Environment::NONE, Stderr::Log(&dir.join("logs/worker.log")))
+            .unwrap()
     }
 
     #[tokio::test]

@@ -5,12 +5,12 @@ use std::time::Duration;
 
 use process::Environment;
 use protocol::model::{GithubToken, GithubUsername};
-use providers::local::MachinePath;
 use serde::Deserialize;
 use tokio::time::Instant;
 
 use super::running::{Unran, run_gh};
 use super::token::token;
+use crate::machine_environment::MachineEnvironment;
 
 /// How long the hub lets each read of `gh` take, every run of `gh` for it together, before it stops it, so a `gh` that
 /// hangs holds up only the read.
@@ -44,16 +44,16 @@ pub(crate) enum GhRead {
 #[error("couldn't tell who gh is logged in to github.com as: {0}")]
 pub(crate) struct GhUnread(String);
 
-/// `gh` on the hub's machine: the machine's `PATH`, which it's found on, and where it's run.
+/// `gh` on the hub's machine: the machine's environment, whose `PATH` it's found on, and where it's run.
 pub(crate) struct Gh {
-    path: MachinePath,
+    machine: MachineEnvironment,
     dir: PathBuf,
 }
 
 impl Gh {
-    /// `gh` on the `PATH` `path` says, run in `dir`, which is the hub's data directory, so it's in no repository.
-    pub(crate) fn new(path: MachinePath, dir: PathBuf) -> Self {
-        Self { path, dir }
+    /// `gh` run in `machine`, and in `dir`, which is the hub's data directory, so it's in no repository.
+    pub(crate) fn new(machine: MachineEnvironment, dir: PathBuf) -> Self {
+        Self { machine, dir }
     }
 
     /// Who `gh` is logged in to github.com as, and the token it uses for that login. Every run of `gh` for it shares
@@ -79,15 +79,12 @@ impl Gh {
         token(READ_WITHIN, &self.given().await, &self.dir, true).await
     }
 
-    /// What `gh` is given: the machine's `PATH`, as the login shell has it, so a `gh` installed with Homebrew is found
-    /// by a hub an app started. And none of [`TOKENS`], which `gh` would use over its own login, so what's read is the
-    /// login `gh auth login` and `gh auth switch` change, as a block says to run, whatever the hub was started with.
+    /// What `gh` is given: the machine's environment, which is the profile's, so a `gh` installed with Homebrew is
+    /// found by a hub an app started. And none of [`TOKENS`], which `gh` would use over its own login, so what's read
+    /// is the login `gh auth login` and `gh auth switch` change, as a block says to run, even when the profile exports
+    /// one.
     pub(super) async fn given(&self) -> Environment {
-        let given = TOKENS.into_iter().fold(Environment::NONE, Environment::without);
-        match self.path.path().await {
-            Some(path) => given.with("PATH", path),
-            None => given,
-        }
+        TOKENS.into_iter().fold(self.machine.given(&[]).await, Environment::without)
     }
 }
 
