@@ -150,17 +150,24 @@ fn only_allowed_licenses_ship() {
     const MAC: [&str; 2] = ["aarch64-apple-darwin", "x86_64-apple-darwin"];
     const LINUX: [&str; 2] = ["x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu"];
     const WINDOWS: [&str; 2] = ["x86_64-pc-windows-msvc", "aarch64-pc-windows-msvc"];
-    let mut read = HashMap::new();
-    for (root, targets) in [
+    const IOS: &str = "aarch64-apple-ios";
+    let roots = [
         ("desktop", &[MAC[0], MAC[1], LINUX[0], LINUX[1], WINDOWS[0], WINDOWS[1]][..]),
         ("daemon", &[MAC[0], MAC[1], LINUX[0], LINUX[1], WINDOWS[0], WINDOWS[1]][..]),
         ("cli", &[MAC[0], MAC[1], LINUX[0], LINUX[1], WINDOWS[0], WINDOWS[1]][..]),
-        ("mobile-ios", &["aarch64-apple-ios"][..]),
-    ] {
+        ("mobile-ios", &[IOS][..]),
+    ];
+    // Each platform's graph is the same for every root, so it's read once. They're read at once, since Cargo does part
+    // of each outside its lock.
+    let read: HashMap<&str, Value> = std::thread::scope(|scope| {
+        let reading: Vec<_> = (MAC.into_iter().chain(LINUX).chain(WINDOWS).chain([IOS]))
+            .map(|target| (target, scope.spawn(move || metadata_for(target))))
+            .collect();
+        reading.into_iter().map(|(target, read)| (target, read.join().unwrap())).collect()
+    });
+    for (root, targets) in roots {
         for target in targets {
-            // Each platform's graph is the same for every root, so it's read once.
-            let metadata = read.entry(*target).or_insert_with(|| metadata_for(target));
-            let shipped = shipped_packages(metadata, root);
+            let shipped = shipped_packages(&read[target], root);
             assert!(shipped.len() > 1, "{root} on {target} should have dependencies");
             let bad: BTreeMap<_, _> =
                 shipped.into_iter().filter(|(_, (license, source))| !may_ship(license, source.as_deref())).collect();
