@@ -124,11 +124,16 @@ impl<'a> Phone<'a> {
         self.frame();
     }
 
-    /// Holds a finger on `id` until it's a long press, then lets go, as opens its menu.
-    pub(crate) fn press_long(&mut self, id: impl Into<ElementId>) {
+    /// Where the last frame drew `id`.
+    pub(crate) fn bounds(&mut self, id: impl Into<ElementId>) -> Bounds<Pixels> {
         let id = id.into();
         self.frame();
-        let at = self.cx.update_window(self.handle, |_, window, _| window.find(id).bounds().center()).unwrap();
+        self.cx.update_window(self.handle, |_, window, _| window.find(id).bounds()).unwrap()
+    }
+
+    /// Holds a finger on `id` until it's a long press, then lets go, as opens its menu.
+    pub(crate) fn press_long(&mut self, id: impl Into<ElementId>) {
+        let at = self.bounds(id).center();
         self.touch(TouchPhase::Started, at);
         self.cx.executor().advance_clock(GestureTuning::default().long_press_duration + Duration::from_millis(1));
         self.frame();

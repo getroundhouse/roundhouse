@@ -121,8 +121,8 @@ fn a_chat_carries_on_after_the_hub_restarts(cx: &mut TestAppContext) {
     assert!(phone.has("composer"), "still in the chat");
 }
 
-/// While the agent works, Stop takes Send's place until something's typed, when Send comes back to steer with it, and
-/// Stop ends the turn.
+/// While the agent works, Stop takes Send's place for the whole turn, and Send shows before it once something's typed,
+/// to steer with it, so Stop stays where it is as Send comes and goes, and Stop ends the turn.
 #[gpui_kit::test]
 fn stops_the_agent_and_steers_once_something_is_typed(cx: &mut TestAppContext) {
     let stack = Stack::new();
@@ -133,12 +133,16 @@ fn stops_the_agent_and_steers_once_something_is_typed(cx: &mut TestAppContext) {
     phone.send(&format!("hang-until:{}; say:never", never.display()));
     phone.wait("Stop", |phone| phone.has("stop") && !phone.has("send"));
 
+    let stop = phone.bounds("stop");
+
     phone.type_into("composer", "say:steered");
-    assert!(phone.has("send") && !phone.has("stop"), "something typed can be sent");
+    assert!(phone.has("send"), "something typed can be sent");
+    assert_eq!(phone.bounds("stop"), stop, "Stop stays where it was");
     phone.tap("send");
     phone.wait("the steer, in the chat while the agent works", |phone| {
-        phone.prompts().iter().any(|prompt| prompt.ends_with("say:steered")) && phone.has("stop")
+        phone.prompts().iter().any(|prompt| prompt.ends_with("say:steered")) && !phone.has("send")
     });
+    assert_eq!(phone.bounds("stop"), stop, "so what's under a finger that sent isn't Stop");
 
     phone.tap("stop");
     phone.wait("the turn to end", |phone| !phone.has("working-line") && phone.has("send"));

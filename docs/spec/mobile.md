@@ -93,11 +93,15 @@ One hub's workspaces and chats, on a phone, for keeping work moving away from th
   ![A chat with its agent working](screens/phone/chat-working.png)
 
 - **Return makes a new line, and the arrow sends.** The on-screen keyboard's Return only ever types a new line, so sending is a button. The composer grows to six lines. *Unconfirmed.*
-- **While the agent works, Stop takes the arrow's place until something's typed,** and ends the turn, as the desktop's Stop does. Once something's typed the arrow comes back, and sends it to steer the agent, as the desktop's Enter does, since Return can't. *Unconfirmed.*
+- **While the agent works, Stop takes the arrow's place for the whole turn,** and ends the turn, as the desktop's Stop does. Once something's typed the arrow shows before it, and sends it to steer the agent, as the desktop's Enter does, since Return can't. So no button turns into another under a finger: once the arrow has sent, what's typed takes its room, and a second tap lands there rather than on Stop, as the owner decided. *Unconfirmed:* the arrow and Stop's order.
 
   **Something typed, with the arrow ready to send it.** *Unconfirmed.*
 
   ![A chat with something typed](screens/phone/chat-typing.png)
+
+  **Something typed while the agent works, with the arrow to steer it before Stop.** *Unconfirmed.*
+
+  ![A chat with something typed while its agent works](screens/phone/chat-steering.png)
 
 - **What the agent asks, a question or leave to use a tool, takes the composer's place,** in the panel the desktop asks it in, with the answers to tap and a line to type one's own, and the arrow sends it. The composer comes back once it's answered. A plan is approved on its card in the transcript. *Unconfirmed.*
 
