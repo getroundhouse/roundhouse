@@ -28,6 +28,9 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
+  # The Xcode both jobs build with, whose iOS SDK App Store Connect checks. Pinned, so the image's default changing
+  # doesn't change it. GitHub's `xcode-27` image is the one with Xcode 27, and it's a preview.
+  DEVELOPER_DIR: /Applications/Xcode_27.2.app
   # What makes the Xcode project: a release of XcodeGen, and its zip's SHA-256. Not raised by Renovate, which would
   # leave the checksum behind, and no PR runs this workflow to notice.
   XCODEGEN_VERSION: 2.48.0
@@ -36,7 +39,7 @@ env:
 jobs:
   # Compiles the app's Rust binary, where no key is.
   build:
-    runs-on: macos-26
+    runs-on: xcode-27
     timeout-minutes: 60
     permissions:
       contents: read
@@ -61,7 +64,7 @@ jobs:
             target/
           # Named as ci.yml's are. With no restore-keys, since it runs only on main, which rebuilds from nothing when
           # the key changes, as in ci.yml.
-          key: testflight-ios-arm64-macos-26-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock', '**/Cargo.toml') }}
+          key: testflight-ios-arm64-xcode-27-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock', '**/Cargo.toml') }}
       # A run by hand always uploads. A scheduled one uploads only if what the app is built from changed since the last
       # run that passed, which either uploaded it or found it unchanged too.
       - id: changes
@@ -116,7 +119,7 @@ jobs:
     needs: build
     if: needs.build.outputs.changed == 'true'
     environment: release
-    runs-on: macos-26
+    runs-on: xcode-27
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
