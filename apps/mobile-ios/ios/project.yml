@@ -1,4 +1,4 @@
-# Packaging and signing only. The app is the Rust binary `roundhouse-ios`, which scripts/build.sh builds and this
+# Packaging and signing only. The app is the Rust binary `roundhouse-ios`, which `cargo run -p iphone` builds and this
 # project's last build phase puts in place of the stub, before Xcode signs it. xcodegen makes the Xcode project
 # from this file on each build, and the project isn't kept.
 name: Roundhouse
@@ -33,4 +33,4 @@ targets:
         basedOnDependencyAnalysis: false
         script: |
           set -euo pipefail
-          cp "${RUST_BINARY:?scripts/build.sh sets this}" "${TARGET_BUILD_DIR}/${EXECUTABLE_PATH}"
+          cp "${RUST_BINARY:?tools/iphone sets this}" "${TARGET_BUILD_DIR}/${EXECUTABLE_PATH}"

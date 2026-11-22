@@ -21,6 +21,7 @@ tools/package/package.sh          # Packages this commit as Roundhouse.app, unsi
 tools/package/package-windows.sh --prebuilt DIR   # Packages Windows binaries, built on Windows by tools/build.sh, as the installer and its updates, unsigned. On a Mac or Linux, with the .NET SDK. `--arch arm64` for ARM64 ones
 tools/package/package-linux.sh --prebuilt DIR     # Packages Linux binaries, built in Ubuntu 22.04 by tools/build.sh, as the AppImage and its updates. On Linux, with the .NET SDK and squashfs-tools. `--arch arm64` for ARM64 ones
 python3 -m unittest discover -s tools/package   # The scripts that publish releases, against a directory for the bucket, and the one that makes the Windows icon
+cargo run -p iphone -- install    # Builds the iPhone app, signs it for development, and installs and opens it on a phone. `-- upload` uploads it to TestFlight and waits for Apple to process it, as `apps/mobile-ios/README.md` says
 cargo run -p kit-sync             # Brings third_party/gpui-kit/vendor and its patches in third_party/gpui-kit/patches to the release it pins. `-- patch <name>` records a change, and `-- drop <name>` takes one out, as `third_party/README.md` says
 tools/smoke/real-claude.sh        # The backend against the real CLI. About $0.42, mostly a plan and one reply on Sonnet, so run it by hand
 tools/smoke/capture_claude_fixture.py   # After a CLI upgrade: re-capture its output, then run `cargo test -p agents`

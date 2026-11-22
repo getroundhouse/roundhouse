@@ -4729,6 +4729,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "iphone"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "base64 0.23.1",
+ "clap",
+ "jiff",
+ "ring",
+ "serde_json",
+ "tempfile",
+ "ureq",
+]
+
+[[package]]
 name = "ipnet"
 version = "2.12.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"

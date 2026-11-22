@@ -1,7 +1,8 @@
 # Uploads the iPhone app from main to TestFlight, for the team's own testers: every four hours if what the app is built
 # from changed since the last run that passed, and whenever it's run by hand, as
-# docs/decisions/testflight-every-four-hours.md says. The app compiles in a job with no keys, as release.yml's builds
-# do, and the job that signs and uploads it is in the `release` environment, which only main can use.
+# docs/decisions/testflight-every-four-hours.md says. The app, and `tools/iphone`, which uploads it, compile in a job
+# with no keys, as release.yml's builds do, and the job that runs the tool to sign and upload it is in the `release`
+# environment, which only main can use.
 #
 # The `release` environment's secrets for it, from the Apple Developer account the iPhone app is published under.
 # Secrets rather than variables, so the public logs never show them:
@@ -31,13 +32,14 @@ env:
   # The Xcode both jobs build with, whose iOS SDK App Store Connect checks. Pinned, so the image's default changing
   # doesn't change it. GitHub's `xcode-27` image is the one with Xcode 27, and it's a preview.
   DEVELOPER_DIR: /Applications/Xcode_27.2.app
-  # What makes the Xcode project: a release of XcodeGen, and its zip's SHA-256. Not raised by Renovate, which would
-  # leave the checksum behind, and no PR runs this workflow to notice.
+  # What makes the Xcode project: a release of XcodeGen, and its zip's SHA-256, which Renovate's PR for a new release
+  # says to change by hand, as .github/renovate.json5 has it.
+  # renovate: datasource=github-releases depName=yonaskolb/XcodeGen
   XCODEGEN_VERSION: 2.48.0
   XCODEGEN_SHA256: 620c9f0dc10849f94728ab5df52d225ebab8187439dd6fee1925e59e80dff892
 
 jobs:
-  # Compiles the app's Rust binary, where no key is.
+  # Builds the app's Rust binary and the tool that uploads it, where no key is.
   build:
     runs-on: xcode-27
     timeout-minutes: 60
@@ -72,27 +74,34 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           changed=true
-          if [ "$GITHUB_EVENT_NAME" = schedule ]; then
-            last="$(gh run list --workflow testflight.yml --branch main --status success --limit 1 \
-              --json headSha --jq '.[0].headSha // empty')"
-            if [ -n "$last" ]; then
-              status=0
-              apps/mobile-ios/scripts/changed-since.sh "$last" || status=$?
-              case "$status" in
-                0) ;;
-                1) changed=false ;;
-                *) exit "$status" ;;
-              esac
-            fi
+          last="$(gh run list --workflow testflight.yml --branch main --status success --limit 1 \
+            --json headSha --jq '.[0].headSha // empty')"
+          if [ "$GITHUB_EVENT_NAME" = schedule ] && [ -n "$last" ]; then
+            status=0
+            cargo run --locked -q -p iphone -- changed-since "$last" || status=$?
+            case "$status" in
+              0) ;;
+              1) changed=false ;;
+              *) exit "$status" ;;
+            esac
           fi
-          echo "changed=$changed" >> "$GITHUB_OUTPUT"
+          { echo "changed=$changed"; echo "last=$last"; } >> "$GITHUB_OUTPUT"
+      # The app, the tool the upload job runs, and what TestFlight tells testers to try, which needs the crates fetched,
+      # as they are here.
       - if: steps.changes.outputs.changed == 'true'
-        run: apps/mobile-ios/scripts/build.sh --compile "$RUNNER_TEMP/roundhouse-ios"
+        env:
+          LAST: ${{ steps.changes.outputs.last }}
+        run: |
+          mkdir "$RUNNER_TEMP/app"
+          cargo build --locked -p iphone
+          cp target/debug/iphone "$RUNNER_TEMP/app/iphone"
+          target/debug/iphone compile "$RUNNER_TEMP/app/roundhouse-ios"
+          target/debug/iphone what-to-test ${LAST:+--since "$LAST"} | tee "$RUNNER_TEMP/app/what-to-test.txt"
       - if: steps.changes.outputs.changed == 'true'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: roundhouse-ios
-          path: ${{ runner.temp }}/roundhouse-ios
+          name: app
+          path: ${{ runner.temp }}/app/
           if-no-files-found: error
           retention-days: 1
       # Only the dependencies are worth keeping, as in ci.yml, and these are release builds for the phone. Only after
@@ -100,7 +109,9 @@ jobs:
       - if: >-
           steps.changes.outputs.changed == 'true' && github.ref == 'refs/heads/main' &&
           steps.cache.outputs.cache-hit != 'true'
-        run: cargo clean --workspace --release --target aarch64-apple-ios
+        run: |
+          cargo clean --workspace --release --target aarch64-apple-ios
+          cargo clean --workspace
       - if: >-
           steps.changes.outputs.changed == 'true' && github.ref == 'refs/heads/main' &&
           steps.cache.outputs.cache-hit != 'true'
@@ -113,14 +124,15 @@ jobs:
             target/
           key: ${{ steps.cache.outputs.cache-primary-key }}
 
-  # Packages the binary as the app, signs it for the App Store and uploads it. The key is only in the step that uses it,
-  # which removes it.
+  # Packages the binary as the app, signs it for the App Store, uploads it, and waits for App Store Connect to process
+  # it. The key is only in the step that uses it, which removes it.
   upload:
     needs: build
     if: needs.build.outputs.changed == 'true'
     environment: release
     runs-on: xcode-27
-    timeout-minutes: 30
+    # Processing has taken about five minutes, and the tool waits up to 30.
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -136,8 +148,8 @@ jobs:
           echo "$RUNNER_TEMP/xcodegen/bin" >> "$GITHUB_PATH"
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: roundhouse-ios
-          path: ${{ runner.temp }}/rust
+          name: app
+          path: ${{ runner.temp }}/app
       - name: Package, sign and upload
         env:
           TEAM_ID: ${{ secrets.IOS_TEAM_ID }}
@@ -157,5 +169,6 @@ jobs:
           [[ "$key" == "-----BEGIN PRIVATE KEY-----"$'\n'* ]] \
             || { echo "::error::IOS_API_KEY_P8 isn't the text of a .p8 file"; exit 1; }
           (umask 077 && printf '%s\n' "$key" > "$ASC_KEY_PATH")
-          chmod +x "$RUNNER_TEMP/rust/roundhouse-ios"
-          apps/mobile-ios/scripts/build.sh --testflight --binary "$RUNNER_TEMP/rust/roundhouse-ios"
+          chmod +x "$RUNNER_TEMP/app/iphone" "$RUNNER_TEMP/app/roundhouse-ios"
+          "$RUNNER_TEMP/app/iphone" upload --binary "$RUNNER_TEMP/app/roundhouse-ios" \
+            --notes "$RUNNER_TEMP/app/what-to-test.txt"

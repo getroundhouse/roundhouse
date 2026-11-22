@@ -189,6 +189,18 @@
     },
     {
       description: [
+        "The TestFlight workflow checks XcodeGen's zip against its SHA-256, which Renovate can't work out, and no PR",
+        'runs that workflow, so a checksum left behind would fail only the next upload from main.',
+      ],
+      matchDepNames: [
+        'yonaskolb/XcodeGen',
+      ],
+      prBodyNotes: [
+        "> [!WARNING]\n> Set `XCODEGEN_SHA256` in `.github/workflows/testflight.yml` to the SHA-256 of this release's `xcodegen.zip`, which its release page lists, before merging.",
+      ],
+    },
+    {
+      description: [
         'libghostty-vt is pinned to the commit of its bindings that builds the Ghostty it needs, which Cargo.toml',
         'names, so a newer commit waits for approval.',
       ],

@@ -17,13 +17,13 @@ The gallery draws each screen on a fake hub that answers from fixed data, in a w
 
 ## Running it on a phone
 
-It needs Xcode, [XcodeGen](https://github.com/yonaskolb/XcodeGen), `jq`, the iOS target (`rustup target add aarch64-apple-ios`), and a phone with Developer Mode on, connected to this Mac by cable or on its network.
+It needs Xcode, [XcodeGen](https://github.com/yonaskolb/XcodeGen), the iOS target (`rustup target add aarch64-apple-ios`), and a phone with Developer Mode on, connected to this Mac by cable or on its network. `tools/iphone` builds, signs, installs and uploads the app, and `--help` lists what each of its commands takes.
 
 ```sh
-TEAM_ID=<team> BUNDLE_ID=<id> DEVICE=<udid> apps/mobile-ios/scripts/build.sh
+TEAM_ID=<team> BUNDLE_ID=<id> DEVICE=<udid> cargo run -p iphone -- install
 ```
 
-`TEAM_ID` is the Apple Developer team that signs it, `BUNDLE_ID` the app's identifier in that team, and `DEVICE` the phone's identifier from `xcrun devicectl list devices`. None of them are kept in the repo, since the product's name, domains and accounts are kept privately. The script builds the binary in release, has Xcode sign it, and installs and opens it. Xcode manages the signing, so the first build can register the phone and the identifier in that team's account. A locked phone gets the app but doesn't open it.
+`TEAM_ID` is the Apple Developer team that signs it, `BUNDLE_ID` the app's identifier in that team, and `DEVICE` the phone's identifier from `xcrun devicectl list devices`. Each can be an option instead, such as `--team-id`. None of them are kept in the repo, since the product's name, domains and accounts are kept privately. It builds the binary in release, has Xcode sign it, and installs and opens it. Xcode manages the signing, so the first build can register the phone and the identifier in that team's account. A locked phone gets the app but doesn't open it.
 
 It builds in release because the first layout of a debug build overflows the 1 MB stack iOS gives the main thread. `--debug` builds one anyway, and `--no-install` stops once it's signed.
 
@@ -31,17 +31,19 @@ It builds in release because the first layout of a debug build overflows the 1 M
 
 CI uploads the app from `main` to TestFlight every four hours, when what it's built from has changed, and whenever `.github/workflows/testflight.yml` is run by hand, as `docs/decisions/testflight-every-four-hours.md` says. The workflow's header lists the secrets it signs with. It goes to the team's own testers only.
 
-From this Mac, `--testflight` does the same, to the app's record in App Store Connect, which has to exist first:
+From this Mac, `upload` does the same, to the app's record in App Store Connect, which has to exist first, with an App Store Connect key with the Admin role:
 
 ```sh
-TEAM_ID=<team> BUNDLE_ID=<id> apps/mobile-ios/scripts/build.sh --testflight
+TEAM_ID=<team> BUNDLE_ID=<id> ASC_KEY_PATH=<.p8> ASC_KEY_ID=<id> ASC_ISSUER_ID=<id> cargo run -p iphone -- upload
 ```
 
-It archives the app for any iPhone, unsigned, then has Xcode sign it for the App Store and upload it. Xcode reaches the team's account through its own sign-in, or through an App Store Connect key with the Admin role, given as `ASC_KEY_PATH`, `ASC_KEY_ID` and `ASC_ISSUER_ID`, which is how CI does it. The version is the desktop's for the same commit, so it needs the whole history, and the build number is the minute it was made, so two uploads need a minute between them.
+It archives the app for any iPhone, unsigned, then has Xcode sign it for the App Store with the key and upload it. Then it waits for App Store Connect to process the build, which can reject it after the upload, and fails if it does. `--notes` gives testers a file's text as what to try, which `what-to-test --since <commit>` writes from the titles of the commits since then that changed the app. The version is the desktop's for the same commit, so it needs the whole history, and the build number is the minute it was made, so two uploads need a minute between them.
+
+CI runs the tool in two halves. The job with no keys runs `changed-since` against the last run that passed, then `compile` and `what-to-test`. The job with the keys runs the tool it built with `upload --binary`, so no dependency compiles beside the keys.
 
 ## Running it in the Simulator
 
-The Simulator runs a build for `aarch64-apple-ios-sim` (`rustup target add aarch64-apple-ios-sim`), which needs no team or phone. `build.sh` builds for a phone, so a Simulator build is by hand: the binary in a folder named `Roundhouse.app`, beside `ios/Info.plist` with its `$(…)` values filled in, signed with `codesign -s -`, then `xcrun simctl install` and `xcrun simctl launch --console-pty`, which shows what the app prints, such as a panic. Keep it in `.context/`.
+The Simulator runs a build for `aarch64-apple-ios-sim` (`rustup target add aarch64-apple-ios-sim`), which needs no team or phone. `tools/iphone` builds for a phone, so a Simulator build is by hand: the binary in a folder named `Roundhouse.app`, beside `ios/Info.plist` with its `$(…)` values filled in, signed with `codesign -s -`, then `xcrun simctl install` and `xcrun simctl launch --console-pty`, which shows what the app prints, such as a panic. Keep it in `.context/`.
 
 What differs there:
 
