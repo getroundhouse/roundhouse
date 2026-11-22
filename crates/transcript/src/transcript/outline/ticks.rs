@@ -1,11 +1,12 @@
 use super::super::Transcript;
+use super::steps::Step;
 use super::{hover, list};
-use crate::list::{Reading, TranscriptList};
+use crate::list::Reading;
 use client_core::session_log::SessionLog;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyElement, App, ClickEvent, Context, DispatchPhase, Div, ElementId, Entity, EntityId, InteractiveElement,
-    IntoElement, ParentElement, Pixels, Role, ScrollEvent, StatefulInteractiveElement, Styled, TestSupportExt as _,
+    AnyElement, App, ClickEvent, Context, DispatchPhase, Div, ElementId, Entity, InteractiveElement, IntoElement,
+    ParentElement, Pixels, Role, ScrollEvent, StatefulInteractiveElement, Styled, TestSupportExt as _, WeakEntity,
     Window, canvas, deferred, div, px,
 };
 use hover::{Hover, Part, Showing};
@@ -149,24 +150,22 @@ pub(super) enum Tick {
     Plain,
 }
 
-/// What a click on a prompt in the list needs: the outline's state, to close the list, and the chat's list, to scroll,
-/// and the transcript, to draw it there.
+/// What a click on a prompt in the list needs: the outline's state, to close the list, and the transcript, to take the
+/// chat there.
 #[derive(Clone)]
 pub(super) struct Jumps {
     pub(super) hover: Entity<Hover>,
-    pub(super) chat_list: TranscriptList,
-    pub(super) transcript: EntityId,
+    pub(super) transcript: WeakEntity<Transcript>,
 }
 
 impl Jumps {
-    /// Shows the prompt or compaction in `row` at the bottom of the chat, with what came before it above it, and
-    /// closes the list, so it isn't over where it jumped to.
+    /// Shows the prompt or compaction in `row` at the bottom of the chat, with what came before it above it, as a step
+    /// does, and closes the list, so it isn't over where it jumped to.
     pub(super) fn to(&self, row: usize) -> impl Fn(&ClickEvent, &mut Window, &mut App) + 'static {
-        let Jumps { hover, chat_list, transcript } = self.clone();
+        let Jumps { hover, transcript } = self.clone();
         move |_, _, cx| {
             hover.update(cx, Hover::jumped);
-            chat_list.go_to_row_at_bottom(row);
-            cx.notify(transcript);
+            let _ = transcript.update(cx, |transcript, cx| transcript.jump(Step::To(row), cx));
         }
     }
 }
@@ -198,7 +197,7 @@ impl Transcript {
             let on_hover = window.listener_for(&hover, |h: &mut Hover, hovered: &bool, _, cx| {
                 h.hovered(Part::List, *hovered, cx);
             });
-            let jumps = Jumps { hover: hover.clone(), chat_list: self.list.clone(), transcript: cx.entity_id() };
+            let jumps = Jumps { hover: hover.clone(), transcript: cx.weak_entity() };
             let list = list::draw(lines, at, &self.outline.rows, jumps, on_hover, line_text, cx);
             // Over the ticks, which it hides while it's open, with its right edge on theirs.
             let over = div().absolute().top(-LIST_ABOVE).right_0().child(list);

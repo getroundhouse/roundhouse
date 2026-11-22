@@ -23,7 +23,7 @@ use crate::support::{FakeHub, Ui};
 /// Longer than the bar waits for typing to pause.
 const PAUSE: Duration = Duration::from_secs(1);
 /// A display's frame, at 60 a second.
-const FRAME: Duration = Duration::from_millis(16);
+pub(crate) const FRAME: Duration = Duration::from_millis(16);
 /// A command with no description, whose line says it runs something.
 const COMMAND_LINE: &str = "Run";
 /// What the subagent is for, which its call's line says.
@@ -65,7 +65,7 @@ fn open(cx: &mut TestAppContext, world: World) -> (FakeHub, Ui<'_>) {
 }
 
 /// Opens the bar and types `query` into it, then lets the pause the bar waits for go by.
-fn find(ui: &mut Ui<'_>, query: &str) {
+pub(crate) fn find(ui: &mut Ui<'_>, query: &str) {
     ui.press("secondary-f");
     assert!(ui.has("find-bar"));
     ui.input(query);
@@ -76,7 +76,7 @@ fn find(ui: &mut Ui<'_>, query: &str) {
 /// below the bar. The transcript scrolls toward it as it draws, a step a frame, so it asks for each next frame itself
 /// until it's there, and then for none, so the window goes idle.
 #[track_caller]
-fn settle_with_the_match_in_view(ui: &mut Ui<'_>) {
+pub(crate) fn settle_with_the_match_in_view(ui: &mut Ui<'_>) {
     let transcript = ui.transcript().unwrap();
     ui.settle(FRAME);
     assert_eq!(

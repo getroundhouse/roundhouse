@@ -47,7 +47,7 @@ pub struct ProposalView {
     references: References<()>,
     /// What answers are sent to the hub through.
     pub(super) client: Client,
-    selection: Selection,
+    pub(super) selection: Selection,
     /// The selection's, which a press on the page's text takes, so a copy and a select all come to it.
     focus: FocusHandle,
     scroll: ScrollHandle,
@@ -125,6 +125,14 @@ impl ProposalView {
         self.scroll.set_offset(point(px(0.), px(0.)));
     }
 
+    /// Scrolls the page to the top of its `part`, as pressing it in the outline and a step do. What was being brought
+    /// into view gives way, as it does to the keys that scroll a page, rather than scroll back to it after.
+    fn go_to_part(&self, part: usize, cx: &mut Context<Self>) {
+        self.selection.reveal().done();
+        self.scroll.scroll_to_top_of_item(part);
+        cx.notify();
+    }
+
     /// The outline: each part, set in under its question when there are several, and the one at the top of the page
     /// marked. Pressing one scrolls the page to it.
     fn outline(&self, parts: &[Part], cx: &mut Context<Self>) -> AnyElement {
@@ -149,10 +157,7 @@ impl ProposalView {
                 .when(here, |row| row.bg(colors.menu_hover))
                 .hover(|row| row.bg(colors.menu_hover))
                 .hand()
-                .on_click(cx.listener(move |this, _, _, cx| {
-                    this.scroll.scroll_to_top_of_item(ix);
-                    cx.notify();
-                }))
+                .on_click(cx.listener(move |this, _, _, cx| this.go_to_part(ix, cx)))
                 .child(part.label.clone())
                 .test_support()
         });
@@ -208,8 +213,7 @@ impl Steps for ProposalView {
         // Where the top part's top is, from the page's, which is above it once the page is scrolled into it.
         let (top, starts) = self.scroll.logical_scroll_top();
         if let Some(part) = stop_beside(0..self.scroll.children_count(), top, Within::scrolled(-starts), way) {
-            self.scroll.scroll_to_top_of_item(part);
-            cx.notify();
+            self.go_to_part(part, cx);
         }
     }
 

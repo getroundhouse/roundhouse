@@ -12,8 +12,8 @@ use crate::gallery::steps::{Clip, Frames, Shot, Step};
 use crate::gallery::worlds::chat_world;
 
 /// Find goes on to a match far down a long reply, and `Option-Up` is pressed in the next frame, while the chat is
-/// still on its way there. The chat goes to the match rather than where `Option-Up` sends it, since what brings the
-/// match into view goes on after the jump.
+/// still on its way there. The chat goes where `Option-Up` sends it, since the step takes over from bringing the
+/// match into view.
 const A_STEP_AS_FIND_GOES_TO_A_MATCH: Clip = Clip {
     name: "a-step-as-find-goes-to-a-match",
     world: a_reply_with_a_match_at_each_end,

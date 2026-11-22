@@ -23,7 +23,7 @@ const OVERDRAW: f32 = 400.;
 /// Drawn a block at a time, the 228 KB one took about 1.3 ms.
 pub struct Document {
     texts: Texts,
-    selection: Selection,
+    pub(super) selection: Selection,
     focus: FocusHandle,
     pub(super) list: ListState,
     shown: Option<Shown>,
@@ -134,10 +134,12 @@ impl Document {
 }
 
 impl Steps for Document {
-    /// Steps it `way` to the heading before the top or after it, with that at the top.
+    /// Steps it `way` to the heading before the top or after it, with that at the top. What was being brought into
+    /// view gives way, as it does to the keys that scroll a page, rather than scroll back to it after.
     fn step(&mut self, way: Way, cx: &mut Context<Self>) {
         let top = self.list.logical_scroll_top();
         if let Some(heading) = stop_beside(self.headings(), top.item_ix, Within::scrolled(top.offset_in_item), way) {
+            self.selection.reveal().done();
             self.list.scroll_to(ListOffset { item_ix: heading, offset_in_item: px(0.) });
             cx.notify();
         }
