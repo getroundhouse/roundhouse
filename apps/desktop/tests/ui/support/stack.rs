@@ -118,6 +118,10 @@ impl<'a> Ui<'a> {
     pub(super) fn open_window(cx: &'a mut TestAppContext, hub: HubSource, checkout: Option<Checkout>) -> Self {
         // A hub answers on real threads, which the scheduler otherwise reports as nondeterminism.
         cx.executor().allow_parking();
+        // Shutting down waits on those threads, such as for a prompt's call to the hub, for as long by the system's
+        // clock as GPUI gives the app. Left as it is, the scheduler gives up after however many of its steps it picks
+        // at random, which can be one.
+        cx.executor().set_block_on_ticks(usize::MAX..=usize::MAX);
         cx.update(gpui_kit::init);
         // A test's clock stands still, so anything that moves would stay where it starts: a sliding sidebar, a mark,
         // the kit's own animations. `motion.rs` has how a test of something that moves plays it.
