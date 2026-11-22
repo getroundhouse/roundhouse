@@ -105,6 +105,8 @@ fn a_default_signed_in_whose_token_has_ended_says_its_being_renewed_in_amber(cx:
     ui.click("git-sign-in");
     ui.wait("Done", |ui| ui.has("git-close"));
     ui.click("git-close");
+    // The records have it once the hub has said so, which can come after the panel closes.
+    ui.wait("the account", |ui| !ui.view().records().github_accounts().is_empty());
     let account = ui.view().records().github_accounts()[0].id.clone();
 
     ui.wait("agents blocked", |ui| {
