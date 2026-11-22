@@ -26,7 +26,7 @@ const ROW: f32 = 40.;
 const MARGIN: f32 = 16.;
 
 const SIGNALS: [Signal; 5] = [Signal::Idle, Signal::Working, Signal::SettingUp, Signal::Background, Signal::Failed];
-const WORKS: [Work; 7] = [Work::NoPr, Work::Draft, Work::Open, Work::Ready, Work::Queued, Work::Merged, Work::Closed];
+const WORKS: [Work; 6] = [Work::NoPr, Work::Draft, Work::Open, Work::Queued, Work::Merged, Work::Closed];
 const RINGS: [TaskRing; 2] = [TaskRing::Running, TaskRing::Watching];
 
 /// Matched in full, so a new signal doesn't compile until it has a name here, beside the list that draws it.
@@ -45,7 +45,6 @@ fn work_name(work: Work) -> &'static str {
         Work::NoPr => "None",
         Work::Draft => "Draft",
         Work::Open => "Open",
-        Work::Ready => "Ready",
         Work::Queued => "In the queue",
         Work::Merged => "Merged",
         Work::Closed => "Closed",

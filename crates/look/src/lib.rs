@@ -134,4 +134,4 @@ pub use top_bars::{TopBar, top_bar};
 pub use traits::{Input, Reach};
 pub use typography::{CodeLines, STRONG, Type, Typeset};
 pub use word_changes::{LineChange, word_changes};
-pub use work::Work;
+pub use work::{Sign, Work};

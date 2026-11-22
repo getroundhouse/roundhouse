@@ -12,5 +12,5 @@ mod workspace_menu;
 
 pub use model_lookup::FollowedModels;
 pub use model_picker::{Picked, model_label, model_picker};
-pub use signal::{chat_signal, mark_row, recorded_work, work, workspace_signal};
+pub use signal::{chat_signal, mark_row, recorded_work, sign, work, workspace_signal};
 pub use workspace_menu::{Choose, WorkspaceMenu, marking_and_renaming};

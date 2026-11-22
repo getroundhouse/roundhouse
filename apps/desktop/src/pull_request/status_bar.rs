@@ -7,7 +7,7 @@ use gpui_kit::component::{Icon, h_flex};
 use gpui_kit::{
     AnyElement, App, Div, InteractiveElement as _, IntoElement, ParentElement as _, Styled as _, Window, div,
 };
-use look::{IconSizing as _, Typeset as _, Work};
+use look::{IconSizing as _, Sign, Typeset as _, Work};
 use protocol::model::{OwnPullRequest, PullRequest, PullRequestFound, Standing};
 use words::Action;
 
@@ -73,17 +73,18 @@ pub fn bar(
     };
     let pr = lookup.pull_request();
     let title = client_core::standing::title(standing, pr.map(|pr| pr.said().base_branch.as_str()));
-    let text = if pr.is_some() { work.text(colors) } else { colors.text_muted };
-    let title = div()
+    let sign = client_ui::sign(standing);
+    let text = if pr.is_some() { Sign::words(sign, work, colors) } else { colors.text_muted };
+    let words = div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().child(title);
+    let title = h_flex()
         .flex_1()
         .min_w_0()
-        .overflow_hidden()
-        .whitespace_nowrap()
-        .text_ellipsis()
+        .gap(look::Space::XSmall)
         .typeset(look::Type::Body)
         .emphasis()
         .text_color(text)
-        .child(title);
+        .children(sign.map(|sign| signed(sign, work, cx)))
+        .child(words);
     row.child(giving_way(pr.map(|pr| number(pr, work)), title))
         .children(words::action(standing).map(|action| action_button(action, work, (busy, doing), on_action)))
         .into_any_element()
@@ -111,22 +112,32 @@ fn giving_way(number: Option<AnyElement>, title: Div) -> impl IntoElement {
 }
 
 /// The same, for the header while the sidebar is hidden: the number and the action, without the words, which the
-/// sidebar has room for and the header doesn't.
+/// sidebar has room for and the header doesn't. What's in the way shows by its sign beside the number, so a problem
+/// shows there too.
 pub fn controls(
     lookup: &Lookup,
     busy: &Busy,
     doing: Option<&'static str>,
     on_action: impl Fn(&Action, &mut Window, &mut App) + 'static,
+    cx: &App,
 ) -> Option<AnyElement> {
     let standing = lookup.standing()?;
     let work = lookup.work();
     let pr = lookup.pull_request();
+    let sign = pr.and(client_ui::sign(standing));
     let controls = h_flex()
         .id("pull-request-controls")
         .gap(look::Space::Small)
+        .children(sign.map(|sign| signed(sign, work, cx)))
         .children(pr.map(|pr| number(pr, work)))
         .children(words::action(standing).map(|action| action_button(action, work, (busy, doing), on_action)));
     Some(controls.into_any_element())
+}
+
+/// The icon of what's in the way, `sign`, on a bar of `work`'s colour.
+fn signed(sign: Sign, work: Work, cx: &App) -> Icon {
+    let size = look::ControlSize::Regular;
+    Icon::new(sign.icon()).text_color(sign.color(work, look::colors(cx))).sized(size.icon_with_words()).flex_none()
 }
 
 /// The pull request's number, outlined as a button that opens something is, which opens it on GitHub.

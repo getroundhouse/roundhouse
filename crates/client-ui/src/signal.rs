@@ -4,7 +4,7 @@
 
 use client_core::marking::Mark;
 use gpui_kit::assets::IconName;
-use look::{Signal, Work};
+use look::{Sign, Signal, Work};
 use protocol::event::TaskKind;
 use protocol::model::{
     OwnPullRequest, Phase, PullRequestFound, Session, SessionStatus, SetupStatus, Standing, Workspace,
@@ -55,8 +55,8 @@ pub fn recorded_work(found: Option<&PullRequestFound>) -> Option<Work> {
 }
 
 /// The colour `pull_request` is shown in, on a workspace's mark and the desktop's pull request bar: what it is, as
-/// GitHub colours it, whatever's in the way of merging it, which the bar says in words. So a draft with conflicts is a
-/// draft's grey. Only an open one with nothing in the way is ready.
+/// GitHub colours it, whatever's in the way of merging it, which the bar's [`sign`] and words say. So a draft with
+/// conflicts is a draft's grey, and an open one with failed checks is green.
 pub fn work(pull_request: Option<&OwnPullRequest>) -> Work {
     let Some(own) = pull_request else { return Work::NoPr };
     match own.pull_request.phase() {
@@ -64,9 +64,32 @@ pub fn work(pull_request: Option<&OwnPullRequest>) -> Work {
         Phase::Closed => Work::Closed,
         Phase::Queued(_) => Work::Queued,
         Phase::Draft => Work::Draft,
-        Phase::Open if Standing::of(Some(own)) == Standing::Ready => Work::Ready,
-        // What can't be told is neither good nor bad news, as far as anyone here knows.
+        // A state this version doesn't know is still a pull request on GitHub, as far as anyone here knows.
         Phase::Open | Phase::Unknown => Work::Open,
+    }
+}
+
+/// What kind of thing `standing` is in the way of merging, which the bar shows before its words. None for work in the
+/// worktree, whose button says what to do, and for what's done, queued or can't be told, whose words say it all.
+pub fn sign(standing: Standing) -> Option<Sign> {
+    match standing {
+        Standing::Conflicts | Standing::ChangesRequested | Standing::ChecksFailed(_) => Some(Sign::Problem),
+        Standing::ChecksRunning(_)
+        | Standing::Reading
+        | Standing::ReviewRequired
+        | Standing::Blocked
+        | Standing::Checking => Some(Sign::Waiting),
+        Standing::Ready => Some(Sign::Ready),
+        Standing::NoPullRequest
+        | Standing::Merged
+        | Standing::Closed
+        | Standing::Queued(_)
+        | Standing::Uncommitted(_)
+        | Standing::Diverged
+        | Standing::Behind(_)
+        | Standing::Unpushed(_)
+        | Standing::Draft
+        | Standing::Unknown => None,
     }
 }
 
@@ -82,14 +105,14 @@ pub fn mark_row(mark: Mark) -> look::MenuRow {
 
 #[cfg(test)]
 mod tests {
-    use look::{Signal, Work};
+    use look::{Sign, Signal, Work};
     use protocol::event::{AgentTask, TaskKind, TurnOutcome};
     use protocol::model::{
         CheckState, Local, MergeState, OwnPullRequest, PrState, PullRequest, QueueState, Seq, Session, SessionStatus,
-        SetupStatus, Workspace,
+        SetupStatus, Standing, Workspace,
     };
 
-    use super::{chat_signal as chat, work};
+    use super::{chat_signal as chat, sign, work};
 
     fn workspace(chats: &[Session]) -> Signal {
         super::workspace_signal(&protocol::fixtures::workspace("w"), chats)
@@ -180,7 +203,7 @@ mod tests {
     }
 
     #[test]
-    fn a_pull_request_is_coloured_by_what_it_is_and_shown_ready_only_with_nothing_in_the_way() {
+    fn a_pull_request_is_coloured_by_what_it_is_whatever_is_in_its_way() {
         let open = protocol::fixtures::pull_request(7);
         let with = |change: fn(&mut PullRequest)| {
             let mut pull_request = open.clone();
@@ -190,7 +213,7 @@ mod tests {
         let passed = |pr: &mut PullRequest| pr.checks.as_mut().unwrap().said.checks[0].state = CheckState::Passed;
         let cases = [
             (with(|_| {}), Work::Open),
-            (with(passed), Work::Ready),
+            (with(passed), Work::Open),
             (with(|pr| pr.checks = None), Work::Open),
             (
                 with(|pr| (pr.summary.said.is_draft, pr.summary.said.merge_state) = (true, MergeState::Dirty)),
@@ -206,5 +229,29 @@ mod tests {
 
         assert_eq!(worked, cases.map(|(_, work)| work));
         assert_eq!(work(None), Work::NoPr);
+    }
+
+    /// What has to be fixed is a problem, what waits on GitHub or someone else is waiting, and what the worktree has
+    /// to do, or what's done or queued, has no sign, since its button or its words say it.
+    #[test]
+    fn whats_in_the_way_is_a_problem_something_waited_on_or_nothing() {
+        let counts = protocol::model::CheckCounts::default();
+        let cases = [
+            (Standing::Conflicts, Some(Sign::Problem)),
+            (Standing::ChangesRequested, Some(Sign::Problem)),
+            (Standing::ChecksFailed(counts), Some(Sign::Problem)),
+            (Standing::ChecksRunning(counts), Some(Sign::Waiting)),
+            (Standing::Reading, Some(Sign::Waiting)),
+            (Standing::ReviewRequired, Some(Sign::Waiting)),
+            (Standing::Ready, Some(Sign::Ready)),
+            (Standing::Uncommitted(1), None),
+            (Standing::Draft, None),
+            (Standing::Queued(QueueState::Mergeable), None),
+            (Standing::Merged, None),
+        ];
+
+        let signed = cases.map(|(standing, _)| sign(standing));
+
+        assert_eq!(signed, cases.map(|(_, sign)| sign));
     }
 }
