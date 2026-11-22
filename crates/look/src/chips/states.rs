@@ -26,6 +26,8 @@ named! {
         Open,
         /// A draft: a dotted branch, in grey.
         Draft,
+        /// In the merge queue: its branch's mark, as it's still open, in the queue's yellow, as the bar is.
+        Queued,
         /// Merged: the merge's mark, in purple.
         Merged,
         /// Closed without merging: a struck branch, in red.
@@ -76,7 +78,7 @@ impl PullRequestState {
     /// The icon its chip's mark is, which a card's heading about it starts with too.
     pub const fn icon(self) -> IconName {
         match self {
-            PullRequestState::Open => IconName::GitPullRequest,
+            PullRequestState::Open | PullRequestState::Queued => IconName::GitPullRequest,
             PullRequestState::Draft => IconName::GitPullRequestDraft,
             PullRequestState::Merged => IconName::GitMerge,
             PullRequestState::Closed => IconName::GitPullRequestClosed,
@@ -88,6 +90,7 @@ impl PullRequestState {
         match self {
             PullRequestState::Open => Work::Open,
             PullRequestState::Draft => Work::Draft,
+            PullRequestState::Queued => Work::Queued,
             PullRequestState::Merged => Work::Merged,
             PullRequestState::Closed => Work::Closed,
         }

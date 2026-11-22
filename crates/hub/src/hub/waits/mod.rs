@@ -8,7 +8,7 @@ use crate::worker_link::WorkerLink;
 #[cfg(test)]
 use protocol::client::{ApiError, ErrorCode, HubNotice};
 #[cfg(test)]
-use protocol::model::{PullRequestFound, Wait, WaitEnd, WaitEnded, WaitId};
+use protocol::model::{Wait, WaitEnd, WaitEnded, WaitId};
 #[cfg(test)]
 use std::sync::Arc;
 

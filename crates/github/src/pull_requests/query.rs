@@ -5,9 +5,9 @@
 use protocol::model::{GithubRepositoryName, PullRequestNumber};
 use serde_json::Value;
 
-/// A pull request's own fields: what it is, where it stands, and what the merge queue and reviews last recorded.
-pub(super) const FIELDS: &str = "number url title state isDraft baseRefName baseRefOid headRefOid headRefName \
-    mergeStateStatus mergeable reviewDecision potentialMergeCommit { oid } mergeQueueEntry { state } \
+/// What the bar and waits read of a pull request past its summary: its head's branch, the merge queue's test merge of
+/// it, and when changes were last requested and it last left the merge queue.
+pub(super) const FIELDS: &str = "headRefName potentialMergeCommit { oid } \
     reviews(states:[CHANGES_REQUESTED],last:1) { nodes { submittedAt } } \
     timelineItems(itemTypes:[REMOVED_FROM_MERGE_QUEUE_EVENT],last:1) { nodes { \
     ... on RemovedFromMergeQueueEvent { createdAt reason } } }";
@@ -24,8 +24,8 @@ pub(super) enum Part {
     Checks { number: PullRequestNumber, after: String },
     /// A branch's rules for checks, the `index`th the ask has, from the page `after`.
     Branch { index: usize, branch: String, after: Option<String> },
-    /// A pull request's fields and the first page of its stack again, to confirm none moved while it was read, and
-    /// for one with lower pull requests, how far its head is behind its base's.
+    /// A pull request's fields, its summary and the first page of its stack again, to confirm none moved while it was
+    /// read, and for one with lower pull requests, how far its head is behind its base's.
     Confirm { number: PullRequestNumber, head: Option<String> },
 }
 
@@ -82,7 +82,12 @@ impl Part {
                         quote(head)
                     )
                 });
-                format!("{alias}: pullRequest(number:{}) {{ {FIELDS} {} {compare} }}", number.get(), stack(None))
+                let summary = crate::references::pull_request_summary();
+                format!(
+                    "{alias}: pullRequest(number:{}) {{ {FIELDS} {summary} {} {compare} }}",
+                    number.get(),
+                    stack(None)
+                )
             }
         }
     }

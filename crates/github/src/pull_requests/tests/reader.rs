@@ -129,7 +129,7 @@ pub(super) async fn read(
     (read, queries)
 }
 
-fn number(n: u64) -> PullRequestNumber {
+pub(super) fn number(n: u64) -> PullRequestNumber {
     PullRequestNumber::try_from(n).unwrap()
 }
 
@@ -139,18 +139,35 @@ async fn a_read_takes_in_what_is_under_it_reads_every_page_and_confirms_nothing_
 
     let snapshot = read.answers.into_iter().next().unwrap().unwrap();
     assert_eq!(snapshot.repository.name_with_owner, "example/project");
-    assert_eq!(snapshot.pull_requests.iter().map(|row| row.pull_request.number).collect::<Vec<_>>(), [3, 7]);
+    assert_eq!(snapshot.pull_requests.iter().map(|row| row.number).collect::<Vec<_>>(), [number(3), number(7)]);
     let upper = snapshot.get(number(7)).unwrap();
-    assert_eq!(upper.dependencies, [number(3)]);
-    assert_eq!(upper.checks.len(), 2);
-    assert_eq!(upper.linear, Some(true));
-    assert!(upper.checks.iter().any(|check| check.required && check.state == CheckState::Pending));
+    let (stack, checks) = (upper.stack_said().unwrap(), upper.checks_said().unwrap());
+    assert_eq!(stack.dependencies, [number(3)]);
+    assert_eq!(checks.checks.len(), 2);
+    assert_eq!(stack.linear, Some(true));
+    assert!(checks.checks.iter().any(|check| check.required && check.state == CheckState::Pending));
     let asked = ["p7: pullRequest", "s7: pullRequest", "p3: pullRequest", "v7: pullRequest"];
     for (query, asked) in queries.iter().zip(asked) {
         assert!(query.contains(asked), "{asked} in {query}");
     }
     assert!(queries[1].contains("c7: pullRequest") && queries[3].contains("b0: ref("), "{queries:?}");
     assert!(queries[3].contains("compare(headRef:") && queries.len() == 4, "{queries:?}");
+}
+
+/// A pull request retitled between the first look at it and the last, which moves nothing the read checks, is kept as
+/// it was last, in its summary as in its facets, so a read gives one summary of it.
+#[tokio::test]
+async fn the_summary_kept_is_the_one_confirmed() {
+    let mut retitled = unmoved();
+    retitled["title"] = json!("Retitled");
+
+    let (read, _) = read(rounds(retitled), vec![ask("project", &[7])]).await;
+
+    let summary = read.summaries.iter().find(|read| read.number == number(7)).unwrap();
+    let title = summary.summary.as_ref().unwrap().about().map(|about| about.title.clone());
+    assert_eq!(title.as_deref(), Some("Retitled"));
+    let facets = read.facets.iter().find(|read| read.number == number(7)).unwrap();
+    assert_eq!(facets.facets.summary.about.title, "Retitled");
 }
 
 /// A read returns the rules of the branch it read them of, `main`, and an ask that knows them, as the hub does once
@@ -168,7 +185,8 @@ async fn rules_an_ask_knows_arent_read_again() {
     assert!(queries.iter().all(|query| !query.contains("b0: ref(")), "{queries:?}");
     let snapshot = again.answers.into_iter().next().unwrap().unwrap();
     let upper = snapshot.get(number(7)).unwrap();
-    assert!(upper.checks.iter().any(|check| check.required && check.state == CheckState::Pending), "{upper:?}");
+    let checks = &upper.checks_said().unwrap().checks;
+    assert!(checks.iter().any(|check| check.required && check.state == CheckState::Pending), "{upper:?}");
 }
 
 /// Its branch pushed between the first look and the last, so the read starts again, and once that has moved too, and
@@ -182,7 +200,7 @@ async fn a_read_whose_pull_requests_moved_under_it_reads_again_and_fails_once_th
     let (read_always, asked_always) = read(always, vec![ask("project", &[7])]).await;
 
     let snapshot = read_once.answers.into_iter().next().unwrap().unwrap();
-    assert_eq!(snapshot.get(number(7)).unwrap().head.as_str(), "head-7");
+    assert_eq!(snapshot.get(number(7)).unwrap().said().head.as_str(), "head-7");
     assert_eq!(asked_once.len(), 8);
     let unread = read_always.answers.into_iter().next().unwrap().unwrap_err();
     assert_eq!((unread.error.code, unread.affected), (ErrorCode::Conflict, vec![number(7)]));

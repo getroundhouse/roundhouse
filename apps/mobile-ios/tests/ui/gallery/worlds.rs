@@ -5,8 +5,7 @@
 
 use client_core::fake_hub::World;
 use protocol::model::{
-    Checks, Local, MergeState, PrState, PullRequest, PullRequestFound, Review, SessionStatus, Title, WorkspaceId,
-    WorkspaceStatus,
+    CheckState, Local, OwnPullRequest, PrState, SessionStatus, Summary, Title, WorkspaceId, WorkspaceStatus,
 };
 use protocol::pairing::{Fingerprint, PairingLink};
 use spec_screens::{chats, proposal_chats, question_chats, subagent_chats};
@@ -48,14 +47,14 @@ fn workspaces() -> (World, WorkspaceId) {
     world.workspace_mut(&archived).status = WorkspaceStatus::Archived;
 
     world.workspace_mut(&focus).branch = "sidebar-pr-state".into();
-    let found = |change: fn(&mut PullRequest)| {
-        let mut pull_request = open();
-        change(&mut pull_request);
-        Some(PullRequestFound { pull_request: Some(pull_request) })
+    let found = |change: fn(&mut Summary)| {
+        let mut own = open();
+        change(&mut own.pull_request.summary.said);
+        own
     };
-    world.workspace_mut(&alder).pull_request = found(|pr| pr.state = PrState::Merged);
-    world.workspace_mut(&cedar).pull_request = found(|pr| pr.is_draft = true);
-    world.workspace_mut(&focus).pull_request = found(|_| {});
+    world.pull_requests.insert(alder, found(|pr| pr.state = PrState::Merged));
+    world.pull_requests.insert(cedar, found(|pr| pr.is_draft = true));
+    world.pull_requests.insert(focus.clone(), found(|_| {}));
     (world, focus)
 }
 
@@ -140,20 +139,13 @@ pub(super) fn link_to_another_hub() -> String {
 }
 
 /// An open pull request with nothing in the way of merging it.
-fn open() -> PullRequest {
-    PullRequest {
-        number: 182,
-        url: "https://example.com/pull/182".to_string(),
-        title: "Show PR state in the sidebar".to_string(),
-        state: PrState::Open,
-        is_draft: false,
-        base: Some("main".into()),
-        merge_state: MergeState::Clean,
-        review: Review::NotRequired,
-        checks: Checks { passed: 5, failed: 0, pending: 0 },
-        queue: None,
-        left_queue: None,
-        changes_requested_at_ms: None,
-        local: Local::default(),
+fn open() -> OwnPullRequest {
+    let mut pull_request = protocol::fixtures::pull_request(182);
+    let about = &mut pull_request.summary.said.about;
+    about.url = "https://example.com/pull/182".to_string();
+    about.title = "Show PR state in the sidebar".to_string();
+    for check in &mut pull_request.checks.as_mut().unwrap().said.checks {
+        check.state = CheckState::Passed;
     }
+    OwnPullRequest { pull_request, local: Local::default() }
 }

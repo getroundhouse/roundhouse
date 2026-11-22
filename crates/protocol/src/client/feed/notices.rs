@@ -9,6 +9,11 @@ use serde::{Deserialize, Serialize};
 /// copy with a newer one.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(tag = "notice", rename_all = "snake_case")]
+#[expect(
+    clippy::large_enum_variant,
+    reason = "a notice is taken apart as it's read, and a chat's, the largest, is the commonest, so boxing it would only \
+              add an allocation to most notices"
+)]
 pub enum HubNotice {
     Repo(Repo),
     Workspace(Workspace),

@@ -41,6 +41,7 @@ impl AskId {
 /// A line from a hub to its worker: a call for the worker to answer, or the answer to something it asked. A call's
 /// request is unread when this build can't read it, for the worker to refuse, as [`frame::read_call`] says.
 #[derive(Debug)]
+#[expect(clippy::large_enum_variant, reason = "a line is taken apart as it's read, so its size costs nothing")]
 pub enum ToWorker {
     Call(Call<WorkerRequest>),
     Answer(AskAnswer),

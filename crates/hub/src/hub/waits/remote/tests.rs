@@ -29,7 +29,7 @@ async fn explicit_waits_follow_remote_reads_and_failed_starts_leave_existing_wai
     assert_eq!(again, started);
     let watch = started.wait.watch.as_ref().unwrap();
     assert_eq!(watch.snapshot.repository.name_with_owner, "example/project");
-    assert_eq!(watch.snapshot.pull_requests[0].checks[0].state, CheckState::Pending);
+    assert_eq!(watch.snapshot.pull_requests[0].checks_said().unwrap().checks[0].state, CheckState::Pending);
     assert_eq!(failed.unwrap_err().code, ErrorCode::Worker);
     assert_eq!(hub.store.remote_waits().unwrap(), [started.wait]);
     assert_eq!(hub.store.get_session(&"s".into()).unwrap().session.open_waits().len(), 1);
@@ -89,7 +89,7 @@ async fn a_shared_reads_pr_access_failure_does_not_end_an_unrelated_wait() {
     let watch = b.watch.as_mut().unwrap();
     watch.requested =
         protocol::model::PullRequestSelection::try_from(vec![PullRequestNumber::try_from(9).unwrap()]).unwrap();
-    watch.snapshot.pull_requests = vec![protocol::fixtures::observed_pull_request(9)];
+    watch.snapshot.pull_requests = vec![protocol::fixtures::pull_request(9)];
     let repository = a.watch.as_ref().unwrap().snapshot.repository.clone();
     hub.store.start_wait(&a).unwrap();
     hub.store.start_wait(&b).unwrap();

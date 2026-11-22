@@ -89,8 +89,9 @@ impl Github {
                         let repository = &asks[index].repository;
                         let answer = answer.map(|(snapshot, read)| {
                             let read_at_ms = snapshot.observed_at_ms;
-                            facets.extend(read.into_iter().map(|read| FacetsRead {
+                            facets.extend(read.into_iter().map(|(number, read)| FacetsRead {
                                 repository: repository.clone(),
+                                number,
                                 facets: read,
                                 read_at_ms,
                             }));

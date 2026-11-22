@@ -3,45 +3,88 @@
 
 use protocol::client::ApiError;
 use protocol::model::{
-    ChecksRollup, GithubRepositoryName, IssueNumber, IssueState, PullRequestState, REFERENCE_BODY_CHARS, Reference,
-    ReferenceKind, ReferenceLabel, ReferencedPullRequest,
+    About, ChecksRollup, GithubRepositoryName, Issue, IssueNumber, IssueState, IssueSummary, Mergeability, PullRequest,
+    PullRequestNumber, REFERENCE_BODY_CHARS, Read, Reference, ReferenceLabel, Summary,
 };
 use serde_json::Value;
 
-use crate::pull_requests::{array, incomplete, review, string, time};
+use crate::pull_requests::{array, incomplete, queue, review, string, time};
 
-/// The issue or pull request `node` is, in `repository`, as GitHub answered for them.
-pub(super) fn reference(repository: &Value, node: &Value) -> Result<Reference, ApiError> {
-    let kind = match node["__typename"].as_str() {
-        Some("Issue") => ReferenceKind::Issue { state: issue_state(node)? },
-        Some("PullRequest") => ReferenceKind::PullRequest(pull_request(node)?),
-        _ => return Err(incomplete()),
-    };
+/// The issue or pull request `node` is, in `repository`, as GitHub answered for them in a read that began at
+/// `read_at_ms`.
+pub(super) fn reference(repository: &Value, node: &Value, read_at_ms: i64) -> Result<Reference, ApiError> {
     let repository = GithubRepositoryName::try_from(string(repository, "nameWithOwner")?).map_err(|_| incomplete())?;
-    reference_of(repository, kind, node)
+    match node["__typename"].as_str() {
+        Some("Issue") => {
+            let number = number(node).and_then(|number| IssueNumber::try_from(number).ok()).ok_or_else(incomplete)?;
+            let said = IssueSummary { about: about(node)?, state: issue_state(node)? };
+            Ok(Reference::Issue(Issue { repository, number, summary: Read { said, read_at_ms } }))
+        }
+        Some("PullRequest") => pull_request_reference(repository, node, read_at_ms),
+        _ => Err(incomplete()),
+    }
 }
 
-/// The summary of the pull request `node` is, in `repository`, as GitHub answered for its
-/// [`pull_request_summary`](super::query::pull_request_summary).
-pub(crate) fn pull_request_reference(repository: GithubRepositoryName, node: &Value) -> Result<Reference, ApiError> {
-    reference_of(repository, ReferenceKind::PullRequest(pull_request(node)?), node)
-}
-
-/// The issue or pull request `node` is, in `repository`, which is `kind`.
-fn reference_of(repository: GithubRepositoryName, kind: ReferenceKind, node: &Value) -> Result<Reference, ApiError> {
-    let labels = array(&node["labels"], "nodes")?.iter().map(label).collect::<Result<_, _>>()?;
-    Ok(Reference {
+/// The pull request `node` is, in `repository`, with the summary GitHub answered for in a read that began at
+/// `read_at_ms`, as its [`pull_request_summary`](super::query::pull_request_summary) asks for it.
+pub(crate) fn pull_request_reference(
+    repository: GithubRepositoryName,
+    node: &Value,
+    read_at_ms: i64,
+) -> Result<Reference, ApiError> {
+    let number = number(node).and_then(|number| PullRequestNumber::try_from(number).ok()).ok_or_else(incomplete)?;
+    Ok(Reference::PullRequest(PullRequest {
         repository,
-        number: node["number"].as_u64().and_then(|n| IssueNumber::try_from(n).ok()).ok_or_else(incomplete)?,
-        kind,
+        number,
+        summary: Read { said: summary(node)?, read_at_ms },
+        history: None,
+        stack: None,
+        checks: None,
+    }))
+}
+
+/// What a pull request says, where it stands, the commits it's at, what it changes, and where its newest commit's
+/// checks stand together.
+pub(crate) fn summary(node: &Value) -> Result<Summary, ApiError> {
+    let newest = array(&node["commits"], "nodes")?.last();
+    let rollup = newest.and_then(|newest| newest["commit"]["statusCheckRollup"]["state"].as_str());
+    let parse = |key: &str| node.get(key).cloned().ok_or_else(incomplete);
+    Ok(Summary {
+        about: about(node)?,
+        state: serde_json::from_value(parse("state")?).map_err(|_| incomplete())?,
+        is_draft: node["isDraft"].as_bool().ok_or_else(incomplete)?,
+        review: review(node)?,
+        queue: queue(node)?,
+        merge_state: serde_json::from_value(parse("mergeStateStatus")?).map_err(|_| incomplete())?,
+        mergeable: match node["mergeable"].as_str() {
+            Some("MERGEABLE") => Mergeability::Mergeable,
+            Some("CONFLICTING") => Mergeability::Conflicting,
+            _ => Mergeability::Unknown,
+        },
+        base_branch: string(node, "baseRefName")?.into(),
+        head: string(node, "headRefOid")?.as_str().into(),
+        base: string(node, "baseRefOid")?.as_str().into(),
+        added: count(&node["additions"])?,
+        removed: count(&node["deletions"])?,
+        rollup: rollup.map(checks),
+    })
+}
+
+/// What an issue or a pull request says of itself.
+fn about(node: &Value) -> Result<About, ApiError> {
+    Ok(About {
         url: string(node, "url")?,
         title: string(node, "title")?,
         author: node["author"]["login"].as_str().map(str::to_owned),
         opened_at_ms: time(&node["createdAt"])?,
         comments: count(&node["comments"]["totalCount"])?,
-        labels,
+        labels: array(&node["labels"], "nodes")?.iter().map(label).collect::<Result<_, _>>()?,
         body: string(node, "bodyText")?.chars().take(REFERENCE_BODY_CHARS).collect(),
     })
+}
+
+fn number(node: &Value) -> Option<u64> {
+    node["number"].as_u64()
 }
 
 /// Where an issue stands: closed as done, which is how GitHub closes one unless it's told why, or as not planned,
@@ -55,30 +98,6 @@ fn issue_state(node: &Value) -> Result<IssueState, ApiError> {
             Some(_) => IssueState::Unknown,
         },
         _ => IssueState::Unknown,
-    })
-}
-
-/// Where a pull request stands: open, as a draft or not, merged, or closed without merging.
-fn pull_request_state(node: &Value) -> Result<PullRequestState, ApiError> {
-    Ok(match string(node, "state")?.as_str() {
-        "OPEN" if node["isDraft"].as_bool().ok_or_else(incomplete)? => PullRequestState::Draft,
-        "OPEN" => PullRequestState::Open,
-        "MERGED" => PullRequestState::Merged,
-        "CLOSED" => PullRequestState::Closed,
-        _ => PullRequestState::Unknown,
-    })
-}
-
-/// Where a pull request stands, what it changes, and where its checks, on its newest commit, and its review stand.
-fn pull_request(node: &Value) -> Result<ReferencedPullRequest, ApiError> {
-    let newest = array(&node["commits"], "nodes")?.last();
-    let rollup = newest.and_then(|newest| newest["commit"]["statusCheckRollup"]["state"].as_str());
-    Ok(ReferencedPullRequest {
-        state: pull_request_state(node)?,
-        added: count(&node["additions"])?,
-        removed: count(&node["deletions"])?,
-        checks: rollup.map(checks),
-        review: review(node)?,
     })
 }
 

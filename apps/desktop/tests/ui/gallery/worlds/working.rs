@@ -2,8 +2,7 @@
 
 use protocol::attachment::{Attachment, MediaType};
 use protocol::model::{
-    Checks, ObservedCheck, PullRequest, PullRequestFound, PullRequestNumber, PullRequestSelection, QueueState,
-    QueuedPrompt, SessionStatus, Wait, WaitUntil,
+    CheckState, PullRequestNumber, PullRequestSelection, QueueState, QueuedPrompt, SessionStatus, Wait, WaitUntil,
 };
 use protocol::prompt::Prompt;
 
@@ -47,9 +46,9 @@ pub(in crate::gallery) fn waiting_on_checks() -> World {
     let mut world = World::default();
     let focus = sidebar(&mut world);
     let chat = world.chat(&focus, SessionStatus::Background, chats::waiting());
-    let checks = Checks { passed: 7, failed: 0, pending: 2 };
-    let opened =
-        PullRequest { number: 182, title: "Show PR state in the sidebar".to_string(), checks, ..pull_requests::open() };
+    let mut opened = pull_requests::checked(pull_requests::open(), 7, 0, 2);
+    opened.pull_request.number = PullRequestNumber::try_from(182).unwrap();
+    opened.pull_request.summary.said.about.title = "Show PR state in the sidebar".to_string();
     let mut wait = protocol::fixtures::pull_request_wait("w1");
     wait.session_id = chat.clone();
     wait.workspace_id = focus.clone();
@@ -57,15 +56,11 @@ pub(in crate::gallery) fn waiting_on_checks() -> World {
     wait.number = 182;
     let watch = wait.watch.as_mut().unwrap();
     watch.requested = PullRequestSelection::try_from(vec![PullRequestNumber::try_from(182).unwrap()]).unwrap();
-    let mut observed = protocol::fixtures::observed_pull_request(182);
-    observed.pull_request = opened.clone();
-    let running = observed.checks[0].clone();
-    observed.checks.push(ObservedCheck { name: "lint".into(), ..running });
-    watch.snapshot.pull_requests = vec![observed];
+    watch.snapshot.pull_requests = vec![opened.pull_request.clone()];
     world.sessions.iter_mut().filter(|session| session.id == chat).for_each(|session| {
         session.waits = Some(vec![wait.clone()]);
     });
-    world.workspace_mut(&focus).pull_request = Some(PullRequestFound { pull_request: Some(opened) });
+    world.pull_requests.insert(focus, opened);
     world
 }
 
@@ -86,17 +81,18 @@ pub(in crate::gallery) fn waiting_on_stacks() -> World {
     wait.session_id = chat.clone();
     wait.workspace_id = focus.clone();
     let watch = wait.watch.as_mut().unwrap();
-    watch.snapshot.pull_requests[0].dependencies = vec![protocol::model::PullRequestNumber::try_from(6).unwrap()];
-    watch.snapshot.pull_requests.insert(0, protocol::fixtures::observed_pull_request(6));
+    let stack = &mut watch.snapshot.pull_requests[0].stack.as_mut().unwrap().said;
+    stack.dependencies = vec![PullRequestNumber::try_from(6).unwrap()];
+    watch.snapshot.pull_requests.insert(0, protocol::fixtures::pull_request(6));
     let mut second = Wait { id: "merge".into(), until: WaitUntil::Merged, ..wait.clone() };
     second.number = 9;
     let watch = second.watch.as_mut().unwrap();
     watch.requested =
         protocol::model::PullRequestSelection::try_from(vec![protocol::model::PullRequestNumber::try_from(9).unwrap()])
             .unwrap();
-    let mut queued = protocol::fixtures::observed_pull_request(9);
-    queued.pull_request.checks = Checks { passed: 1, failed: 0, pending: 0 };
-    queued.pull_request.queue = Some(QueueState::AwaitingChecks);
+    let mut queued = protocol::fixtures::pull_request(9);
+    queued.checks.as_mut().unwrap().said.checks[0].state = CheckState::Passed;
+    queued.summary.said.queue = Some(QueueState::AwaitingChecks);
     watch.snapshot.pull_requests = vec![queued];
     world.sessions.iter_mut().filter(|session| session.id == chat).for_each(|session| {
         session.waits = Some(vec![wait.clone(), second.clone()]);

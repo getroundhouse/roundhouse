@@ -6,9 +6,9 @@
 use client_core::fake_hub::{NOW_MS, World};
 use look::Region;
 use protocol::model::{
-    ChecksRollup, GithubRepositoryName, IssueNumber, IssueState, PullRequestFound, PullRequestLink, PullRequestLinked,
-    PullRequestState, Reference, ReferenceKind, ReferenceLabel, ReferencedPullRequest, RepoOrigin, RepoUrl, Review,
-    SessionStatus,
+    About, ChecksRollup, GithubRepositoryName, Issue, IssueNumber, IssueState, IssueSummary, PrState, PullRequest,
+    PullRequestLink, PullRequestLinked, Read, Reference, ReferenceLabel, RepoOrigin, RepoUrl, Review, SessionStatus,
+    Summary,
 };
 
 use super::frame::{Frame, PROPOSAL, Part};
@@ -41,13 +41,10 @@ fn repository(name: &str) -> GithubRepositoryName {
     GithubRepositoryName::new("example", name).unwrap()
 }
 
-/// An issue or a pull request, as `kind` says, in `example/{name}`, opened by ana-p `days` ago, with nothing more to it.
-fn reference(name: &str, number: u64, kind: ReferenceKind, title: &str, days: i64) -> Reference {
-    let kind_in_url = if matches!(kind, ReferenceKind::PullRequest(_)) { "pull" } else { "issues" };
-    Reference {
-        repository: repository(name),
-        number: IssueNumber::try_from(number).unwrap(),
-        kind,
+/// What an issue or a pull request in `example/{name}`, at `kind_in_url`, says of itself: opened by ana-p `days` ago,
+/// with nothing more to it.
+fn about(name: &str, kind_in_url: &str, number: u64, title: &str, days: i64) -> About {
+    About {
         url: format!("https://github.com/example/{name}/{kind_in_url}/{number}"),
         title: title.to_string(),
         author: Some("ana-p".to_string()),
@@ -60,43 +57,73 @@ fn reference(name: &str, number: u64, kind: ReferenceKind, title: &str, days: i6
 
 /// An issue in `example/{name}`.
 fn issue(name: &str, number: u64, title: &str, state: IssueState, days: i64) -> Reference {
-    reference(name, number, ReferenceKind::Issue { state }, title, days)
+    Reference::Issue(Issue {
+        repository: repository(name),
+        number: IssueNumber::try_from(number).unwrap(),
+        summary: Read {
+            said: IssueSummary { about: about(name, "issues", number, title, days), state },
+            read_at_ms: NOW_MS,
+        },
+    })
 }
 
-/// A pull request in this repository, standing as `pull_request` says.
-fn pull(number: u64, title: &str, days: i64, pull_request: ReferencedPullRequest) -> Reference {
-    reference("roundhouse", number, ReferenceKind::PullRequest(pull_request), title, days)
+/// A pull request in this repository, standing as `change` leaves its summary, found by a chip, so with its summary
+/// alone.
+fn pull(number: u64, title: &str, days: i64, change: impl FnOnce(&mut Summary)) -> Reference {
+    let fixture = protocol::fixtures::pull_request(number);
+    let mut said = fixture.summary.said;
+    said.about = about("roundhouse", "pull", number, title, days);
+    change(&mut said);
+    Reference::PullRequest(PullRequest {
+        repository: repository("roundhouse"),
+        number: fixture.number,
+        summary: Read { said, read_at_ms: NOW_MS },
+        history: None,
+        stack: None,
+        checks: None,
+    })
+}
+
+/// `reference`, saying more of itself as `change` has it.
+fn saying(mut reference: Reference, change: impl FnOnce(&mut About)) -> Reference {
+    match &mut reference {
+        Reference::Issue(issue) => change(&mut issue.summary.said.about),
+        Reference::PullRequest(pull_request) => change(&mut pull_request.summary.said.about),
+        Reference::Unknown => {}
+    }
+    reference
 }
 
 /// What the hub found of each issue and pull request the reply links to.
 fn references() -> Vec<Reference> {
     let label = |name: &str, color: &str| ReferenceLabel { name: name.to_string(), color: color.to_string() };
-    let changes = |state, (added, removed), checks, review| ReferencedPullRequest {
-        state,
-        added,
-        removed,
-        checks: Some(checks),
-        review,
+    let changes = |state, (added, removed), rollup, review| {
+        move |said: &mut Summary| {
+            (said.state, said.added, said.removed, said.rollup, said.review) =
+                (state, added, removed, Some(rollup), review);
+        }
     };
-    let merged = changes(PullRequestState::Merged, (412, 96), ChecksRollup::Passed, Review::Approved);
-    let open = changes(PullRequestState::Open, (188, 241), ChecksRollup::Running, Review::Required);
+    let merged = changes(PrState::Merged, (412, 96), ChecksRollup::Passed, Review::Approved);
+    let open = changes(PrState::Open, (188, 241), ChecksRollup::Running, Review::Required);
     vec![
         pull(1158, "Read every workspace's pull request in the hub", 6, merged),
-        Reference {
-            comments: 2,
-            body: "The sidebar asked GitHub for each workspace's pull request on its own. It now shows what the hub \
-                   keeps, so every client agrees and GitHub is asked once."
-                .to_string(),
-            ..pull(1162, "Take the sidebar's last read of GitHub out of the client", 1, open)
-        },
-        Reference {
-            comments: 6,
-            labels: vec![label("design", "d876e3"), label("sidebar", "0e8a16"), label("needs decision", "fbca04")],
-            body: "A badge says where a workspace's pull request stands. Which states it shows, in what colours, and \
-                   what a click on it does are still open."
-                .to_string(),
-            ..issue("roundhouse", 1021, "Decide how the sidebar's badges show a pull request", IssueState::Open, 12)
-        },
+        saying(pull(1162, "Take the sidebar's last read of GitHub out of the client", 1, open), |about| {
+            about.comments = 2;
+            about.body = "The sidebar asked GitHub for each workspace's pull request on its own. It now shows what \
+                          the hub keeps, so every client agrees and GitHub is asked once."
+                .to_string();
+        }),
+        saying(
+            issue("roundhouse", 1021, "Decide how the sidebar's badges show a pull request", IssueState::Open, 12),
+            |about| {
+                about.comments = 6;
+                about.labels =
+                    vec![label("design", "d876e3"), label("sidebar", "0e8a16"), label("needs decision", "fbca04")];
+                about.body = "A badge says where a workspace's pull request stands. Which states it shows, in what \
+                          colours, and what a click on it does are still open."
+                    .to_string();
+            },
+        ),
         issue("roundhouse", 743, "Record which pull request states the sidebar shows", IssueState::Done, 40),
         issue("signal-box", 88, "Name the badge colours", IssueState::Open, 3),
     ]
@@ -120,13 +147,12 @@ fn named() -> World {
     let birch = world.workspaces.iter().find(|workspace| workspace.name == "birch").unwrap().id.clone();
     let url = "https://github.com/example/roundhouse/pull/1162".to_string();
     let mut pull_request = pull_requests::open();
-    pull_request.url.clone_from(&url);
+    pull_request.pull_request.summary.said.about.url.clone_from(&url);
     // Which pull request it's on is what ties a chip to it, as the hub keeps it.
     let (repository, number) = (repository("roundhouse"), IssueNumber::try_from(1162).unwrap());
     let link = PullRequestLink { repository, number, url, uncommitted: 0 };
-    let birch = world.workspace_mut(&birch);
-    birch.pull_request = Some(PullRequestFound { pull_request: Some(pull_request) });
-    birch.pull_request_link = Some(PullRequestLinked { link: Some(link) });
+    world.pull_requests.insert(birch.clone(), pull_request);
+    world.workspace_mut(&birch).pull_request_link = Some(PullRequestLinked { link: Some(link) });
     world
 }
 

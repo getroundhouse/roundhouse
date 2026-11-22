@@ -154,7 +154,7 @@ impl HintCollector {
 
     /// The workspace's pull request, by its title.
     pub fn add_pull_request(&mut self, pull_request: &PullRequest) {
-        self.add_prose(&pull_request.title);
+        self.add_prose(&pull_request.said().about.title);
     }
 
     /// Walks `log` newest-first with separate budgets for conversation messages and tool calls, so a turn with dozens

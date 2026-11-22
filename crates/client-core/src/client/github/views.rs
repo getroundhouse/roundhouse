@@ -44,19 +44,16 @@ impl GithubFeed {
         self.follow.read(|held| held.reference(ask))
     }
 
-    /// `workspace`'s pull request, as the hub said while a view shows it. From a hub too old to say, it's what the
-    /// workspace's record has. `None` until the hub has looked.
+    /// `workspace`'s pull request, as the hub said while a view shows it. `None` until the hub has looked.
     pub fn pull_request(&self, workspace: &Workspace) -> Option<PullRequestFound> {
-        self.follow.read(|held| {
-            if held.unsupported { workspace.pull_request.clone() } else { held.pull_request(&workspace.id) }
-        })
+        self.follow.read(|held| held.pull_request(&workspace.id))
     }
 
     /// Whether the hub has said what it knows of `workspace`'s pull request while a view shows it, even that it hasn't
-    /// looked, as it does once the cache it reads from has forgotten it. A hub too old to say has said it on the
-    /// workspace's record.
+    /// looked, as it does once the cache it reads from has forgotten it. A hub too old to say never has, since what it
+    /// keeps on the workspace's record is in a form this build doesn't read.
     pub fn said_pull_request(&self, workspace: &Workspace) -> bool {
-        self.follow.read(|held| held.unsupported || held.said_pull_request(&workspace.id))
+        self.follow.read(|held| held.said_pull_request(&workspace.id))
     }
 
     /// Whether the hub is too old to say what GitHub says of what's shown, until a new connection.

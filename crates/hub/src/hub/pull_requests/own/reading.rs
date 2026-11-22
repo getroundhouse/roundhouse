@@ -8,8 +8,8 @@ use std::time::Duration;
 
 use protocol::client::{ApiError, ErrorCode};
 use protocol::model::{
-    Branch, BranchName, GithubRepositoryName, GithubToken, PullRequestNumber, PullRequestsSnapshot, Workspace,
-    WorkspaceId,
+    Branch, BranchName, GithubRepositoryName, GithubToken, Local, OwnPullRequest, PullRequestNumber,
+    PullRequestsSnapshot, Workspace, WorkspaceId,
 };
 use protocol::worker::GitStatus;
 
@@ -173,15 +173,16 @@ impl Reading {
         uncommitted: &HashMap<WorkspaceId, u32>,
     ) -> Result<Found, ApiError> {
         let snapshot = answer.as_ref().map_err(|unread| unread.error.clone())?;
-        let observed = snapshot.get(number).ok_or_else(|| ApiError::new(ErrorCode::Worker, "GitHub left it out"))?;
-        let mut pull_request = observed.pull_request.clone();
+        let pull_request =
+            snapshot.get(number).ok_or_else(|| ApiError::new(ErrorCode::Worker, "GitHub left it out"))?.clone();
         let workspace = &self.workspace;
-        let known = workspace.pull_request_linked().filter(|known| known.url == pull_request.url);
+        let known = workspace.pull_request_linked().filter(|known| known.url == pull_request.said().about.url);
         let files = uncommitted.get(&workspace.id).copied().or(known.map(|known| known.uncommitted));
-        if let Some(branch) = checked_out(workspace) {
-            pull_request.local = local(&observed.head, branch, files.unwrap_or_default());
-        }
-        Ok(Found::of(pull_request, into, Some(on)))
+        let local = match checked_out(workspace) {
+            Some(branch) => local(&pull_request.said().head, branch, files.unwrap_or_default()),
+            None => Local::default(),
+        };
+        Ok(Found::of(OwnPullRequest { pull_request, local }, into, Some(on)))
     }
 }
 

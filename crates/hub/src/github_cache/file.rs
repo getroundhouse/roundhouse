@@ -11,7 +11,7 @@ use crate::store::columns::{ByColumn, Columns, OneValue, columns};
 /// The form of what the file keeps. Another, as a build that kept another form left it, is emptied, and the cache is
 /// read from GitHub again, rather than migrated. Raise it with any change to the table, or to the form of what's
 /// written in `said`.
-pub(super) const VERSION: i64 = 3;
+pub(super) const VERSION: i64 = 4;
 
 /// The file the cache is kept in, so a hub that starts again has it. Writes wait for no sync, since a power cut that
 /// takes the last of them back loses only what GitHub can say again.

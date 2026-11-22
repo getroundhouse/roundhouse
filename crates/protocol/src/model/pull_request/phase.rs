@@ -1,4 +1,5 @@
-use super::status::{MergeState, PrState, PullRequest, QueueState};
+use super::facets::{PullRequest, Summary};
+use super::status::{MergeState, PrState, QueueState};
 
 /// What a pull request is, whatever's in the way of merging it, which its colour says wherever it's shown, as GitHub
 /// colours it: a draft is a draft whether or not it conflicts, and one in the merge queue is queued.
@@ -13,7 +14,7 @@ pub enum Phase {
     Unknown,
 }
 
-impl PullRequest {
+impl Summary {
     /// What it is. Done comes first, then the merge queue, which merges it whatever else is true, then whether it's a
     /// draft.
     pub fn phase(&self) -> Phase {
@@ -27,5 +28,12 @@ impl PullRequest {
                 None => Phase::Open,
             },
         }
+    }
+}
+
+impl PullRequest {
+    /// What it is, as its summary says.
+    pub fn phase(&self) -> Phase {
+        self.said().phase()
     }
 }

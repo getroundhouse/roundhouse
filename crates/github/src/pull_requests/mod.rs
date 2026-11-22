@@ -5,13 +5,13 @@
 mod asked;
 mod facets;
 pub use asked::{FacetsRead, PullRequestsAsk, PullRequestsRead, RulesRead, SummaryRead, Unread};
-pub use facets::{Checks, PullFacets, Reviews, Rules, Stack, Status, observe};
+pub use facets::{Checks, PullFacets, Rules, judged, observe};
 mod graphql;
 mod heads;
 pub use heads::{BRANCHES_A_QUERY, Headed, HeadsAsk, HeadsRead};
 mod parse;
 pub use parse::ReportedCheck;
-pub(crate) use parse::{review, time};
+pub(crate) use parse::{queue, review, time};
 mod query;
 pub(crate) use query::named;
 mod reading;

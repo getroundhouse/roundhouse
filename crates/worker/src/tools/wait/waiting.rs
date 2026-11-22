@@ -3,7 +3,7 @@ use super::super::pull_request;
 use crate::asks::Asks;
 use jiff::Timestamp;
 use protocol::client::{ApiError, ErrorCode};
-use protocol::model::{PullRequest, SessionId, Standing, Wait, WaitEnd};
+use protocol::model::{OwnPullRequest, SessionId, Standing, Wait, WaitEnd};
 use protocol::worker::{CancelWait, ReadWait, WaitAnswer};
 use serde_json::{Value, json};
 use std::time::Duration;
@@ -37,7 +37,7 @@ fn not_said(e: &ApiError) -> RpcError {
 }
 
 /// The wait as an MCP task, as `tasks/get` reads it, which the CLI is to ask after every `wait_poll`.
-pub(in crate::tools) fn task(wait: &Wait, pull_request: Option<&PullRequest>, wait_poll: Duration) -> Value {
+pub(in crate::tools) fn task(wait: &Wait, pull_request: Option<&OwnPullRequest>, wait_poll: Duration) -> Value {
     let updated_at_ms = wait.ended.map_or_else(
         || wait.watch.as_ref().map_or(wait.started_at_ms, |watch| watch.last_attempt_at_ms),
         |ended| ended.at_ms,
@@ -89,7 +89,7 @@ pub(in crate::tools) fn task(wait: &Wait, pull_request: Option<&PullRequest>, wa
 
 /// What the agent hears as a wait ends: why, then where the pull request stands, as `get_pull_request` says it. That's
 /// as last read, which for a task asked after once more has been read can be later than the read that ended it.
-fn ended_text(wait: &Wait, how_it_ended: WaitEnd, pull_request: Option<&PullRequest>) -> String {
+fn ended_text(wait: &Wait, how_it_ended: WaitEnd, pull_request: Option<&OwnPullRequest>) -> String {
     format!(
         "The wait on pull request #{} has ended: {}\n\nAs Roundhouse last read it:\n{}",
         wait.number,

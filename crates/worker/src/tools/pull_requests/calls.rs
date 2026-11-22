@@ -1,6 +1,6 @@
 use super::{
-    Asks, Called, CheckState, Map, PullRequestSelection, PullRequestWatch, PullRequestsSnapshot, ReadPullRequests,
-    SessionId, StartPullRequestWait, Value, Wait, WaitEnd, WaitUntil, json,
+    Asks, Called, CheckState, Map, PullRequest, PullRequestSelection, PullRequestWatch, PullRequestsSnapshot,
+    ReadPullRequests, SessionId, StartPullRequestWait, Value, Wait, WaitEnd, WaitUntil, json,
 };
 use std::time::Duration;
 
@@ -122,13 +122,7 @@ pub(super) fn arguments(params: &Map<String, Value>) -> Result<StartPullRequestW
 }
 
 pub(in crate::tools) fn progress(watch: &PullRequestWatch) -> String {
-    let numbers = watch
-        .snapshot
-        .pull_requests
-        .iter()
-        .map(|pr| format!("#{}", pr.pull_request.number))
-        .collect::<Vec<_>>()
-        .join(", ");
+    let numbers = watch.numbers().iter().map(|number| format!("#{}", number.get())).collect::<Vec<_>>().join(", ");
     match &watch.read_error {
         Some(error) => {
             format!(
@@ -136,6 +130,8 @@ pub(in crate::tools) fn progress(watch: &PullRequestWatch) -> String {
                 super::super::wait::iso(watch.snapshot.observed_at_ms)
             )
         }
+        // Not read since an update emptied what an older hub kept of it, so there's nothing to count yet.
+        None if watch.snapshot.pull_requests.is_empty() => format!("Waiting on {numbers}."),
         None => format!("Waiting on {numbers}. {}", counts(&watch.snapshot)),
     }
 }
@@ -178,10 +174,23 @@ fn describe(snapshot: &PullRequestsSnapshot) -> String {
         counts(snapshot)
     )];
     for row in &snapshot.pull_requests {
-        let pr = &row.pull_request;
-        lines.push(format!("#{}: {} — {}\nHead: {}. Destination: {}. State: {:?}. Mergeability: {:?}. Linear: {:?}. Queue: {:?}. Review: {:?}.",
-            pr.number,pr.title,pr.url,row.head,row.destination,pr.state,row.mergeability,row.linear,pr.queue,pr.review));
-        for check in &row.checks {
+        let pr = row.said();
+        let stack = row.stack_said();
+        lines.push(format!(
+            "#{}: {} — {}\nHead: {}. Destination: {}. State: {:?}. Mergeability: {:?}. Linear: {:?}. Queue: {:?}. \
+             Review: {:?}.",
+            row.number.get(),
+            pr.about.title,
+            pr.about.url,
+            pr.head,
+            stack.map_or(pr.base_branch.as_str(), |stack| stack.destination.as_str()),
+            pr.state,
+            pr.mergeable,
+            stack.and_then(|stack| stack.linear),
+            pr.queue,
+            pr.review
+        ));
+        for check in row.checks_said().iter().flat_map(|checks| &checks.checks) {
             lines.push(format!(
                 "  {}: {:?}{}{}",
                 check.name,
@@ -196,7 +205,8 @@ fn describe(snapshot: &PullRequestsSnapshot) -> String {
 
 fn counts(snapshot: &PullRequestsSnapshot) -> String {
     let (mut passed, mut pending, mut failed) = (0, 0, 0);
-    for check in snapshot.pull_requests.iter().flat_map(|pr| &pr.checks) {
+    let checks = snapshot.pull_requests.iter().filter_map(PullRequest::checks_said);
+    for check in checks.flat_map(|checks| &checks.checks) {
         match check.state {
             CheckState::Passed => passed += 1,
             CheckState::Failed => failed += 1,

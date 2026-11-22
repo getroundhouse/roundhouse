@@ -6,7 +6,7 @@ use std::time::Duration;
 use github::PullRequestState;
 use protocol::model::PrState;
 
-use super::reading::{CLIENTS_TAKE_A_READ, known, queries};
+use super::reading::{CLIENTS_TAKE_A_READ, known, numbered, queries};
 use crate::hub::Hub;
 use crate::hub::tests::{forget_github, hub_on_github, hub_on_github_timed, pushed};
 use crate::timers::Timers;
@@ -67,7 +67,7 @@ async fn reads_of_three_asks_while_one_is_held(timers: Timers) -> usize {
     pull_requests.release();
     let answers = [first.await.unwrap(), second.await.unwrap(), third.await.unwrap()];
 
-    assert!(answers.iter().all(|pr| pr.as_ref().map(|pr| pr.number) == Some(7)), "{answers:?}");
+    assert!(answers.iter().all(|pr| pr.as_ref().map(|pr| numbered(pr).0) == Some(7)), "{answers:?}");
     assert_eq!(queries(&github).len() % a_read, 0, "whole reads");
     queries(&github).len() / a_read - 1
 }
@@ -87,7 +87,7 @@ async fn a_pull_request_the_cache_forgot_is_not_known_until_its_read_again() {
         hub.pull_requests.schedules.lock().clear();
         async move { hub.to_read_in_turn().await.into_iter().map(|w| w.id.to_string()).collect::<Vec<_>>() }
     };
-    assert_eq!(known(&hub).map(|pr| pr.state), Some(PrState::Merged));
+    assert_eq!(known(&hub).map(|pr| numbered(&pr).1), Some(PrState::Merged));
     assert_eq!(due(&hub).await, Vec::<String>::new(), "merged, so done");
 
     forget_github(&hub);

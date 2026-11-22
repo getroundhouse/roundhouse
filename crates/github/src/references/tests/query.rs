@@ -17,7 +17,8 @@ fn a_query_asks_for_an_issue_or_a_pull_request_by_its_number_and_whats_left_of_g
         [format!(
             "query {{ r0: repository(owner:\"example\",name:\"project\") {{ nameWithOwner \
              n1021: issueOrPullRequest(number:1021) {{ __typename ... on Issue {{ {shared} stateReason }} \
-             ... on PullRequest {{ {shared} isDraft additions deletions reviewDecision \
+             ... on PullRequest {{ {shared} isDraft additions deletions reviewDecision mergeQueueEntry {{ state }} \
+             mergeStateStatus mergeable baseRefName baseRefOid headRefOid \
              commits(last:1) {{ nodes {{ commit {{ statusCheckRollup {{ state }} }} }} }} }} }} }} \
              rateLimit {{ limit remaining resetAt }} }}"
         )]

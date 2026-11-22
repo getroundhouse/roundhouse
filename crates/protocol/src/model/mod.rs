@@ -70,14 +70,15 @@ pub use proposal::{
 };
 pub(crate) use pull_request::deserialize_looked;
 pub use pull_request::{
-    Checks, LeftQueue, Local, MergeState, Phase, PrState, PullRequest, PullRequestFound, PullRequestLink,
-    PullRequestLinked, QueueState, Review, Standing,
+    CheckCounts, CheckState, Checks, ChecksRollup, History, LeftQueue, Local, MergeState, Mergeability, ObservedCheck,
+    OwnPullRequest, Phase, PrState, PullRequest, PullRequestFound, PullRequestLink, PullRequestLinked, QueueState,
+    Read, Review, Stack, Standing, Summary,
 };
 pub use queue::QueuedPrompt;
 pub use record::{Record, RecordKey, Records};
 pub use references::{
-    ChecksRollup, IssueNumber, IssueNumberError, IssueState, PullRequestState, REFERENCE_BODY_CHARS, Reference,
-    ReferenceAsk, ReferenceKind, ReferenceLabel, ReferenceRead, ReferencedPullRequest,
+    About, Issue, IssueNumber, IssueNumberError, IssueState, IssueSummary, REFERENCE_BODY_CHARS, Reference,
+    ReferenceAsk, ReferenceLabel, ReferenceRead,
 };
 pub use reply_heard::{Ending, ReplyHeard, ReplyPlace, SettledBy, SpokenThrough};
 pub use session::{AgentKind, OpenApproval, Session, SessionStatus};
@@ -104,7 +105,6 @@ mod workspace;
 pub use workspace::{PORTS_PER_WORKSPACE, SetupStatus, Workspace, WorkspaceStatus};
 
 pub use pr_watch::{
-    CheckState, GitHubRepository, Mergeability, ObservedCheck, ObservedPullRequest, PullRequestNumber,
-    PullRequestSelection, PullRequestWaitResult, PullRequestWatch, PullRequestsSnapshot, SelectionError, WaitBaseline,
-    WaitOutcome,
+    GitHubRepository, PullRequestNumber, PullRequestSelection, PullRequestWaitResult, PullRequestWatch,
+    PullRequestsSnapshot, SelectionError, WaitBaseline, WaitOutcome,
 };

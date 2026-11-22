@@ -1,6 +1,6 @@
 use super::{
-    BranchName, Branches, CommentDraft, Head, InstanceId, ProviderName, PullRequestFound, PullRequestLink,
-    PullRequestLinked, RepoId, Rev, Title, TitleSource, WorkspaceId, pull_request,
+    BranchName, Branches, CommentDraft, Head, InstanceId, ProviderName, PullRequestLink, PullRequestLinked, RepoId,
+    Rev, Title, TitleSource, WorkspaceId, pull_request,
 };
 use serde::{Deserialize, Serialize};
 
@@ -60,10 +60,6 @@ pub struct Workspace {
     pub title: Option<Title>,
     #[serde(default)]
     pub title_source: TitleSource,
-    /// Its branch's pull request, as a hub from before records kept only [`Workspace::pull_request_link`] last found it.
-    /// A newer hub never says, and sends what GitHub says of it to a client that shows it instead.
-    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "pull_request::deserialize_looked")]
-    pub pull_request: Option<PullRequestFound>,
     /// Which pull request its branch has, as the hub last found, kept across restarts, or that it has none. `None` until
     /// the hub has looked, and from a hub too old to keep it.
     #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "pull_request::deserialize_looked")]

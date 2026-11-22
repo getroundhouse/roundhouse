@@ -9,12 +9,21 @@ use crate::{
     Answer, Github, GithubConfig, Leaving, PullRequestState, PullRequests, PullRequestsAsk, References, Script, StandIn,
 };
 
-/// Issue #1021 of example/project, closed as done, and pull request #3 of ada/tools, a draft whose checks are running.
+/// `reference` as read at `read_at_ms`, to compare with what a read found whenever it was.
+fn read_at(reference: Reference, read_at_ms: i64) -> Reference {
+    match reference {
+        Reference::Issue(issue) => Reference::Issue(Issue { summary: Read { read_at_ms, ..issue.summary }, ..issue }),
+        Reference::PullRequest(pull_request) => {
+            Reference::PullRequest(PullRequest { summary: Read { read_at_ms, ..pull_request.summary }, ..pull_request })
+        }
+        Reference::Unknown => Reference::Unknown,
+    }
+}
+
+/// Issue #1021 of example/project, closed as done, and pull request #3 of ada/tools, open in the merge queue with its
+/// checks running, each as read at 0.
 fn set() -> (Reference, Reference) {
-    let issue = Reference {
-        repository: named("example/project"),
-        number: number(1021),
-        kind: ReferenceKind::Issue { state: IssueState::Done },
+    let about = About {
         url: "https://github.com/example/project/issues/1021".to_string(),
         title: "Draw references as chips".to_string(),
         author: Some("ada".to_string()),
@@ -23,24 +32,34 @@ fn set() -> (Reference, Reference) {
         labels: vec![ReferenceLabel { name: "enhancement".to_string(), color: "a2eeef".to_string() }],
         body: "A reply names issues by number.".to_string(),
     };
-    let pull_request = Reference {
-        repository: named("ada/tools"),
-        number: number(3),
-        kind: ReferenceKind::PullRequest(ReferencedPullRequest {
-            state: protocol::model::PullRequestState::Draft,
+    let issue = Issue {
+        repository: named("example/project"),
+        number: number(1021),
+        summary: Read { said: IssueSummary { about: about.clone(), state: IssueState::Done }, read_at_ms: 0 },
+    };
+    let mut pull_request = protocol::fixtures::pull_request(3);
+    pull_request.repository = named("ada/tools");
+    pull_request.summary = Read {
+        said: Summary {
+            about: About {
+                url: "https://github.com/ada/tools/pull/3".to_string(),
+                title: "Read references".to_string(),
+                author: None,
+                labels: Vec::new(),
+                body: String::new(),
+                ..about
+            },
             added: 40,
             removed: 2,
-            checks: Some(ChecksRollup::Running),
+            rollup: Some(ChecksRollup::Running),
             review: Review::Required,
-        }),
-        url: "https://github.com/ada/tools/pull/3".to_string(),
-        title: "Read references".to_string(),
-        author: None,
-        labels: Vec::new(),
-        body: String::new(),
-        ..issue.clone()
+            queue: Some(protocol::model::QueueState::AwaitingChecks),
+            ..pull_request.summary.said
+        },
+        read_at_ms: 0,
     };
-    (issue, pull_request)
+    let pull_request = PullRequest { history: None, stack: None, checks: None, ..pull_request };
+    (Reference::Issue(issue), Reference::PullRequest(pull_request))
 }
 
 /// Both read back as they were set, the issue twice for being asked twice, in one query, beside #5, which was set and
@@ -52,7 +71,8 @@ async fn a_read_finds_what_github_has_in_one_query_and_says_what_it_hasnt() {
     let references = References::default();
     references.set(issue.clone());
     references.set(pull_request.clone());
-    references.set(Reference { number: number(5), ..issue.clone() });
+    let Reference::Issue(five) = issue.clone() else { unreachable!() };
+    references.set(Reference::Issue(Issue { number: number(5), ..five }));
     references.remove(&named("example/project"), number(5));
     let pull_requests = PullRequests::default();
     pull_requests.set(7, PullRequestState::Passed);
@@ -71,7 +91,8 @@ async fn a_read_finds_what_github_has_in_one_query_and_says_what_it_hasnt() {
 
     let read = calls.read_references(&token, &asks, Leaving::ForOthers).await;
 
-    let answers: Vec<Option<Reference>> = read.answers.into_iter().map(Result::unwrap).collect();
+    let answers: Vec<Option<Reference>> =
+        read.answers.into_iter().map(|answer| answer.unwrap().map(|reference| read_at(reference, 0))).collect();
     assert_eq!(answers, [Some(issue.clone()), Some(pull_request), None, None, Some(issue)]);
     assert_eq!((references.queries(), read.rate_limit.unwrap().remaining, read.refused), (1, 4900, false));
     let selection = PullRequestSelection::try_from(vec![PullRequestNumber::try_from(7).unwrap()]).unwrap();

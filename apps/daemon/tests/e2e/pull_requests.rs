@@ -32,7 +32,8 @@ fn one_client_asking_records_the_pull_request_for_every_client_and_for_after_a_r
     let client = stack.client();
 
     let url = "https://github.com/example/project/pull/7";
-    assert_eq!((asked.number, asked.state, asked.url.as_str()), (7, PrState::Open, url));
+    let said = asked.pull_request.said();
+    assert_eq!((asked.pull_request.number.get(), said.state, said.about.url.as_str()), (7, PrState::Open, url));
     // GitHub is out of reach, so this is what the last hub found.
     assert_eq!(recorded(&client, &workspace.id), Some(7), "kept through the restart");
 }
@@ -76,9 +77,17 @@ fn which_pull_request_is_the_workspaces_goes_by_the_branch_its_pushed_to() {
     assert_eq!(unpushed, (None, 0), "pushed nowhere");
     assert_eq!(earlier, (None, looked_and_found_none.clone()), "an earlier branch's: looked, and found none");
     let opened = opened.expect("opened from the branch");
-    assert_eq!((opened.number, opened.local.ahead, opened.local.behind), (8, 0, 1), "with a commit to pull");
-    assert_eq!(out_of_reach.map(|pr| pr.number), Some(8), "kept while GitHub is out of reach");
-    assert_eq!(newer.map(|pr| (pr.number, pr.state)), Some((9, PrState::Open)), "the newer one");
+    assert_eq!(
+        (opened.pull_request.number.get(), opened.local.ahead, opened.local.behind),
+        (8, 0, 1),
+        "with a commit to pull"
+    );
+    assert_eq!(out_of_reach.map(|pr| pr.pull_request.number.get()), Some(8), "kept while GitHub is out of reach");
+    assert_eq!(
+        newer.map(|pr| (pr.pull_request.number.get(), pr.pull_request.said().state)),
+        Some((9, PrState::Open)),
+        "the newer one"
+    );
     assert_eq!(gone, (None, looked_and_found_none), "gone from the branch: looked, and found none");
 }
 
@@ -146,7 +155,7 @@ fn checking_out_another_branch_reads_the_pull_request_again_though_it_was_merged
     github.say_from(7, Open, workspace.branch.as_str());
     client.workspace_pull_request(&workspace.id).unwrap();
     github.say_from(7, Merged, workspace.branch.as_str());
-    let merged = client.workspace_pull_request(&workspace.id).unwrap().map(|pr| pr.state);
+    let merged = client.workspace_pull_request(&workspace.id).unwrap().map(|pr| pr.pull_request.said().state);
     let head = |client: &Client| support::workspace(client, &workspace.id).branches.map(|branches| branches.head);
     let started_on = Head::Branch { name: workspace.branch.clone() };
     assert_eq!((head(&client), merged), (Some(started_on), Some(PrState::Merged)), "known before it moves");
@@ -226,7 +235,11 @@ fn reads_nobody_asked_for_leave_the_last_of_githubs_limit_to_the_rest() {
     assert_eq!(github.queries(), asked + 1, "it asked only which pull requests the branch has");
     assert_eq!(recorded(&client, &workspace.id), None, "it wasn't read");
     let read = client.workspace_pull_request(&workspace.id).unwrap();
-    assert_eq!(read.map(|pr| pr.number), Some(7), "what's left is there for a read someone waits on");
+    assert_eq!(
+        read.map(|pr| pr.pull_request.number.get()),
+        Some(7),
+        "what's left is there for a read someone waits on"
+    );
 }
 
 /// GitHub would refuse it anyway, and each refused call is one more against the agents sharing the limit. With
@@ -279,6 +292,6 @@ fn a_read_asked_for_while_another_waits_shares_its_answer() {
     github.release();
     let answers: Vec<_> = [first, second, third].into_iter().map(|asked| asked.join().unwrap()).collect();
 
-    assert!(answers.iter().all(|pr| pr.as_ref().map(|pr| pr.number) == Some(7)), "{answers:?}");
+    assert!(answers.iter().all(|pr| pr.as_ref().map(|pr| pr.pull_request.number.get()) == Some(7)), "{answers:?}");
     assert_eq!(github.queries(), asked + 2 * a_read, "the third shared the second's read");
 }

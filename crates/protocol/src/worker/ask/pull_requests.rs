@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 use super::{Answer, Ask, AskReply, WorkerAsk};
-use crate::model::{PullRequest, Wait, WaitId};
+use crate::model::{OwnPullRequest, Wait, WaitId};
 
 /// The workspace's pull request, as the hub reads it for an agent.
 #[derive(Clone, Copy, Debug)]
@@ -19,8 +19,8 @@ impl Ask for ReadPullRequest {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct PullRequestAnswer {
-    /// What the hub knows of it. `None` when the branch has none.
-    pub pull_request: Option<PullRequest>,
+    /// What the hub knows of it, with how the worktree stands against it. `None` when the branch has none.
+    pub pull_request: Option<OwnPullRequest>,
 }
 
 impl Answer for PullRequestAnswer {
@@ -62,7 +62,9 @@ impl Ask for CancelWait {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct WaitAnswer {
     pub wait: Wait,
-    pub pull_request: Option<PullRequest>,
+    /// The workspace's own pull request, with how the worktree stands against it, for a wait on that. A wait on pull
+    /// requests it watches has none, since its watch carries what it read of them.
+    pub pull_request: Option<OwnPullRequest>,
 }
 
 impl Answer for WaitAnswer {

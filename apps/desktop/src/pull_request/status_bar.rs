@@ -8,7 +8,7 @@ use gpui_kit::{
     AnyElement, App, Div, InteractiveElement as _, IntoElement, ParentElement as _, Styled as _, Window, div,
 };
 use look::{IconSizing as _, Typeset as _, Work};
-use protocol::model::{BranchName, PullRequest, PullRequestFound, Standing};
+use protocol::model::{OwnPullRequest, PullRequest, PullRequestFound, Standing};
 use words::Action;
 
 /// What the app knows of a workspace's pull request.
@@ -16,19 +16,20 @@ use words::Action;
 pub enum Lookup {
     /// Not asked yet. Saying so, rather than offering to create one, keeps a workspace that has one from offering it.
     Looking,
-    Found(Option<PullRequest>),
+    /// Boxed, as a pull request is many times the size of the rest.
+    Found(Option<Box<OwnPullRequest>>),
 }
 
 impl Lookup {
     /// What the hub `found`, which is `None` until it has looked.
     pub fn of(found: Option<PullRequestFound>) -> Self {
-        found.map_or(Lookup::Looking, |found| Lookup::Found(found.pull_request))
+        found.map_or(Lookup::Looking, |found| Lookup::Found(found.pull_request.map(Box::new)))
     }
 
     pub fn pull_request(&self) -> Option<&PullRequest> {
         match self {
             Lookup::Looking => None,
-            Lookup::Found(pr) => pr.as_ref(),
+            Lookup::Found(own) => own.as_ref().map(|own| &own.pull_request),
         }
     }
 
@@ -36,14 +37,14 @@ impl Lookup {
     pub fn standing(&self) -> Option<Standing> {
         match self {
             Lookup::Looking => None,
-            Lookup::Found(pr) => Some(Standing::of(pr.as_ref())),
+            Lookup::Found(pr) => Some(Standing::of(pr.as_deref())),
         }
     }
 
     pub fn work(&self) -> Work {
         match self {
             Lookup::Looking => Work::NoPr,
-            Lookup::Found(pr) => client_ui::work(pr.as_ref()),
+            Lookup::Found(pr) => client_ui::work(pr.as_deref()),
         }
     }
 }
@@ -71,7 +72,7 @@ pub fn bar(
             .into_any_element();
     };
     let pr = lookup.pull_request();
-    let title = client_core::standing::title(standing, pr.and_then(|pr| pr.base.as_ref()).map(BranchName::as_str));
+    let title = client_core::standing::title(standing, pr.map(|pr| pr.said().base_branch.as_str()));
     let text = if pr.is_some() { work.text(colors) } else { colors.text_muted };
     let title = div()
         .flex_1()
@@ -130,11 +131,12 @@ pub fn controls(
 
 /// The pull request's number, outlined as a button that opens something is, which opens it on GitHub.
 fn number(pr: &PullRequest, work: Work) -> AnyElement {
-    let url = pr.url.clone();
+    let about = &pr.said().about;
+    let url = about.url.clone();
     let size = look::ControlSize::Regular;
-    look::button("pull-request", look::ButtonKind::Outlined, size, format!("#{}", pr.number))
+    look::button("pull-request", look::ButtonKind::Outlined, size, format!("#{}", pr.number.get()))
         .of_work(work)
-        .tooltip(pr.title.clone())
+        .tooltip(about.title.clone())
         .after(Icon::new(Lucide::ArrowUpRight).sized(size.icon_with_words()))
         .on_click(move |_, _, cx| cx.open_url(&url))
         .into_any_element()

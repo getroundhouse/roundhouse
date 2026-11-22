@@ -77,10 +77,12 @@ fn asked(number: IssueNumber) -> String {
     )
 }
 
-/// What's read of a pull request's summary, as a chip and its card show it, which every read of a pull request takes.
+/// What's read of a pull request's summary, as a chip and its card show it and the bar starts from, which every read
+/// of a pull request takes: its plain fields, its labels, and its newest commit's checks together.
 pub(crate) fn pull_request_summary() -> String {
     format!(
-        "{SHARED} {} isDraft additions deletions reviewDecision \
+        "{SHARED} {} isDraft additions deletions reviewDecision mergeQueueEntry {{ state }} mergeStateStatus \
+         mergeable baseRefName baseRefOid headRefOid \
          commits(last:1) {{ nodes {{ commit {{ statusCheckRollup {{ state }} }} }} }}",
         labels()
     )

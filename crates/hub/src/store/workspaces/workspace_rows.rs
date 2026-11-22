@@ -103,8 +103,6 @@ pub(in super::super) fn workspace_from_row(row: &Row) -> rusqlite::Result<Worksp
         port_base: row.at(c.port_base)?,
         title: row.at::<Option<String>>(c.title)?.as_deref().and_then(Title::tidied),
         title_source: text_at(row, c.title_source)?,
-        // What GitHub says of it is the hub's cache's, which it sends to a client that shows it.
-        pull_request: None,
         // One that no longer reads, from a build whose idea of a link this one doesn't share, is looked for again.
         pull_request_link: json_at(row, c.pull_request_link)?,
         // Written only by this hub, as JSON. One it can't read is as good as none.

@@ -222,7 +222,7 @@ async fn a_worker_asking_for_its_pull_request_is_answered_once_it_has_answered_t
     else {
         panic!("not the pull request: {answer:?}")
     };
-    assert_eq!((answer.answer, pr.number, pr.local.uncommitted), (AskId::new(9), 7, 1));
+    assert_eq!((answer.answer, pr.pull_request.number.get(), pr.local.uncommitted), (AskId::new(9), 7, 1));
     link.kill();
 }
 

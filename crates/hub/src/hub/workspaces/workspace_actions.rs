@@ -114,7 +114,6 @@ impl Hub {
             rev: Rev::default(),
             title: None,
             title_source: TitleSource::FirstLine,
-            pull_request: None,
             pull_request_link: None,
             comment_draft: None,
             branches: None,

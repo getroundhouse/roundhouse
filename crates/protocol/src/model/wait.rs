@@ -22,8 +22,10 @@ pub struct Wait {
     /// `None` while it waits.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ended: Option<WaitEnded>,
-    /// Explicit remote targets; absent for a legacy wait on the checked-out branch.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    /// Explicit remote targets; absent for a legacy wait on the checked-out branch. Sent as `watching`, since its pull
+    /// requests changed form under `watch`, and a client from before reads a field it doesn't know as none, where a
+    /// `watch` it couldn't read would fail its chat's record, and with it every list of records it's in.
+    #[serde(default, rename = "watching", skip_serializing_if = "Option::is_none")]
     pub watch: Option<Box<super::PullRequestWatch>>,
 }
 
@@ -143,7 +145,7 @@ impl Wait {
     pub fn watching(&self) -> Watching {
         match &self.watch {
             Some(watch) => Watching::PullRequests {
-                numbers: watch.snapshot.pull_requests.iter().map(|row| row.pull_request.number).collect(),
+                numbers: watch.numbers().iter().map(|number| number.get()).collect(),
                 until: self.until,
             },
             None => Watching::Branch { number: self.number, until: self.until },

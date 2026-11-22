@@ -47,10 +47,15 @@ pub struct GithubShown {
 /// What the hub knows now of one of what a [`GithubSubscribe`] shows, sent as it changes.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(tag = "of", rename_all = "snake_case")]
+#[expect(clippy::large_enum_variant, reason = "an update is sent as it's made, and taken apart as it's read")]
 pub enum GithubUpdate {
-    /// What GitHub says of an issue or a pull request a chip shows.
+    /// What GitHub says of an issue or a pull request a chip shows. Sent as `referenced`, since what it says changed
+    /// form, and a client from before skips a kind it doesn't know.
+    #[serde(rename = "referenced")]
     Reference { reference: ReferenceAsk, read: ReferenceRead },
-    /// A workspace's own pull request, with how its worktree stands against it, or that its branch has none.
+    /// A workspace's own pull request, with how its worktree stands against it, or that its branch has none. Sent as
+    /// `own_pull_request`, as `Reference` is sent apart.
+    #[serde(rename = "own_pull_request")]
     PullRequest {
         workspace: WorkspaceId,
         #[serde(

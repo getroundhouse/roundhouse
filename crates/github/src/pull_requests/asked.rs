@@ -64,6 +64,7 @@ pub struct SummaryRead {
 pub struct FacetsRead {
     /// The repository it was asked of, as it was asked.
     pub repository: GithubRepositoryName,
+    pub number: PullRequestNumber,
     pub facets: PullFacets,
     /// When the read of them began, by the wall clock, since none of what it found is older.
     pub read_at_ms: i64,

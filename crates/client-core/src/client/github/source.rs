@@ -38,7 +38,7 @@ impl Source for GithubSource {
 
     fn apply(&mut self, _: &Client, held: &Mutex<GithubHeld>, item: SubscriptionItem) -> Result<bool> {
         let SubscriptionItem::Github(update) = item else { return Ok(false) };
-        Ok(held.lock().apply(update))
+        Ok(held.lock().apply(*update))
     }
 
     /// Tells the hub what's shown, if it has changed since it last said, and lets go of what no view shows now.

@@ -52,8 +52,9 @@ impl Github {
                 .iter()
                 .flat_map(|(repository, numbers)| numbers.iter().map(|number| (*repository, *number)))
                 .collect();
+            let began_ms = jiff::Timestamp::now().as_millisecond();
             match self.spend(token, &query(&batch), &mut spent).await {
-                Ok(answer) => found.extend(asked.into_iter().zip(taken(&answer, &batch))),
+                Ok(answer) => found.extend(asked.into_iter().zip(taken(&answer, &batch, began_ms))),
                 Err(error) => found.extend(asked.into_iter().map(|ask| (ask, Err(error.clone())))),
             }
         }
@@ -69,8 +70,8 @@ impl Github {
 /// the errors GitHub gave about each by the aliases their paths start with. GitHub answers one that isn't there, or
 /// that the token can't see, with `null` and an error of type `NOT_FOUND` whose path is its alias, a repository's or a
 /// number's. Any other error about one fails it alone, and one whose path names none of them, such as one about the
-/// query itself, fails them all.
-pub(super) fn taken(answer: &Value, batch: &Grouped<'_>) -> Vec<Result<Option<Reference>, ApiError>> {
+/// query itself, fails them all. What's found was read by a read that began at `read_at_ms`.
+pub(super) fn taken(answer: &Value, batch: &Grouped<'_>, read_at_ms: i64) -> Vec<Result<Option<Reference>, ApiError>> {
     let mut said: HashMap<(usize, Option<IssueNumber>), Said> = HashMap::new();
     for error in answer["errors"].as_array().into_iter().flatten() {
         let path: Vec<&str> = error["path"].as_array().into_iter().flatten().filter_map(Value::as_str).collect();
@@ -95,7 +96,7 @@ pub(super) fn taken(answer: &Value, batch: &Grouped<'_>) -> Vec<Result<Option<Re
                 Some(Said::Failed(error)) => Err(error.clone()),
                 None => {
                     let node = &repository[number_alias(*number)];
-                    if node.is_null() { Err(incomplete()) } else { reference(repository, node).map(Some) }
+                    if node.is_null() { Err(incomplete()) } else { reference(repository, node, read_at_ms).map(Some) }
                 }
             };
             answers.push(answered);

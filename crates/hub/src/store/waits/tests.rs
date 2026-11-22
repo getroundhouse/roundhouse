@@ -1,6 +1,7 @@
 use protocol::model::WaitUntil;
 
 use super::*;
+use crate::store::columns::OneValue;
 use crate::store::tests::{idle_session, store_with_session};
 use crate::store::{Ended, Move};
 
@@ -226,4 +227,35 @@ fn a_chats_record_shows_its_open_wait_and_moves_as_one_starts_or_ends() {
     let shown = wait("e");
     store.start_wait(&shown).unwrap();
     assert_eq!(read().wait, Some(shown), "as it was asked for");
+}
+
+/// A wait an older hub kept keeps what it asked for, what it saw as it started and its deadline, but none of the pull
+/// requests it saw, which were kept in a form that isn't their facets, so the hub's next read finds them again. One
+/// that's open moves its chat's revision, so a client hears it. A watch that isn't one is left as it was.
+#[test]
+fn a_wait_from_before_facets_keeps_its_watch_but_the_pull_requests_it_saw() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut watch = serde_json::to_value(protocol::fixtures::pull_request_wait("a").watch.unwrap()).unwrap();
+    watch["snapshot"]["pull_requests"] = serde_json::json!([{"pull_request": {"number": 7, "url": "u"}, "head": "h"}]);
+    let mode = serde_json::to_string(&idle_session(1).session.mode).unwrap();
+    let rows = format!(
+        "INSERT INTO sessions (id, workspace_id, agent, model, mode, effort, status, created_at_ms, updated_at_ms)
+             VALUES ('s', 'w', 'claude', 'sonnet', '{mode}', 'high', 'idle', 0, 0),
+                 ('t', 'w', 'claude', 'sonnet', '{mode}', 'high', 'idle', 0, 0),
+                 ('u', 'w', 'claude', 'sonnet', '{mode}', 'high', 'idle', 0, 0);
+         INSERT INTO waits (id, session_id, workspace_id, number, call, until, started_at_ms, watch)
+             VALUES ('a', 's', 'w', 7, NULL, 'checks', 1, '{watch}'),
+                 ('b', 'u', 'w', 8, NULL, 'checks', 1, 'not a watch');"
+    );
+
+    let store = crate::store::older::store_from_before(dir.path(), crate::store::schema::BEFORE_WAITS_AS_FACETS, &rows);
+
+    watch["snapshot"]["pull_requests"] = serde_json::json!([]);
+    let expected: protocol::model::PullRequestWatch = serde_json::from_value(watch).unwrap();
+    assert_eq!(store.wait(&"a".into()).unwrap().watch, Some(Box::new(expected)));
+    let rev = |id: &str| store.get_session(&id.into()).unwrap().session.rev;
+    assert!(rev("s") > rev("t"), "its chat's revision moved");
+    let conn = rusqlite::Connection::open(dir.path().join("hub.db")).unwrap();
+    let left: Option<String> = conn.query_row("SELECT watch FROM waits WHERE id = 'b'", [], OneValue::read).unwrap();
+    assert_eq!(left.as_deref(), Some("not a watch"));
 }

@@ -53,11 +53,18 @@ impl Forgotten {
 }
 
 impl Hub {
-    /// The link to `workspace`'s pull request where only this reads it: where it's archived, and the cache has nothing
-    /// of it.
+    /// The link to `workspace`'s pull request where only this reads it: where it's archived, and the cache is missing
+    /// any of its facets, as it is of one only a chip's read has found, which has only its summary.
     pub(crate) fn forgotten_link(&self, workspace: &Workspace) -> Option<PullRequestLink> {
-        let archived = workspace.status == WorkspaceStatus::Archived;
-        (archived && self.known_of(workspace).is_none()).then(|| workspace.pull_request_linked().cloned()).flatten()
+        if workspace.status != WorkspaceStatus::Archived {
+            return None;
+        }
+        let known = self.known_of(workspace).and_then(|found| found.pull_request);
+        let whole = known.is_some_and(|own| {
+            let pull_request = own.pull_request;
+            pull_request.history.is_some() && pull_request.stack.is_some() && pull_request.checks.is_some()
+        });
+        workspace.pull_request_linked().filter(|_| !whole).cloned()
     }
 
     /// Reads each pull request of `links` that's due, as [`Forgotten`] says, as a read nobody waits on, in the

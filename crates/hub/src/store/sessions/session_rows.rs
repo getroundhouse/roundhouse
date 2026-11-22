@@ -36,7 +36,7 @@ columns! {
         needs_an_account, conversation,
     } then {
         waits = "(SELECT json_group_array(json_object('id', id, 'session_id', session_id, 'workspace_id', workspace_id,
-            'number', number, 'call', call, 'until', until, 'started_at_ms', started_at_ms, 'watch', json(watch)))
+            'number', number, 'call', call, 'until', until, 'started_at_ms', started_at_ms, 'watching', json(watch)))
             FROM (SELECT * FROM waits WHERE waits.session_id = sessions.id AND ended_at_ms IS NULL
                 ORDER BY started_at_ms, id))",
         rev,

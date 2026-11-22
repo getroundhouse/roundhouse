@@ -1,6 +1,6 @@
 //! Where a pull request stands, as the bar says it, so a chat's line for a wait on one says it in the same words.
 
-use protocol::model::{Checks, QueueState, Standing};
+use protocol::model::{CheckCounts, QueueState, Standing};
 
 /// What the bar says. `base` is the branch it merges into, if the hub says.
 pub fn title(standing: Standing, base: Option<&str>) -> String {
@@ -18,6 +18,7 @@ pub fn title(standing: Standing, base: Option<&str>) -> String {
         Standing::Draft => "Draft".to_string(),
         Standing::ChecksFailed(checks) => failed(checks),
         Standing::ChecksRunning(checks) => format!("{} running", count(checks.pending, "check")),
+        Standing::Reading => "Reading its checks".to_string(),
         Standing::ReviewRequired => "Review required".to_string(),
         Standing::Blocked => "Blocked from merging".to_string(),
         Standing::Checking => "Checking whether it can merge".to_string(),
@@ -27,7 +28,8 @@ pub fn title(standing: Standing, base: Option<&str>) -> String {
     }
 }
 
-fn queued(queue: QueueState) -> &'static str {
+/// What the bar says of one in the merge queue at `queue`, which a chip's card says too.
+pub fn queued(queue: QueueState) -> &'static str {
     match queue {
         QueueState::AwaitingChecks => "Running checks in the queue",
         QueueState::Locked => "Merge queue locked",
@@ -37,7 +39,7 @@ fn queued(queue: QueueState) -> &'static str {
 }
 
 /// Only how many failed, which is what there is to do, so it fits beside the action.
-fn failed(checks: Checks) -> String {
+fn failed(checks: CheckCounts) -> String {
     format!("{} failed", count(checks.failed, "check"))
 }
 
@@ -47,17 +49,17 @@ fn count(n: u32, thing: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use protocol::model::{Checks, Standing};
+    use protocol::model::{CheckCounts, Standing};
 
     use super::title;
 
     #[test]
     fn the_bar_says_how_many_and_of_what() {
-        let failing = Checks { passed: 6, failed: 2, pending: 1 };
+        let failing = CheckCounts { passed: 6, failed: 2, pending: 1 };
 
         assert_eq!(title(Standing::ChecksFailed(failing), Some("main")), "2 checks failed");
         assert_eq!(
-            title(Standing::ChecksRunning(Checks { pending: 1, ..Checks::default() }), Some("main")),
+            title(Standing::ChecksRunning(CheckCounts { pending: 1, ..CheckCounts::default() }), Some("main")),
             "1 check running"
         );
         assert_eq!(title(Standing::Unpushed(3), Some("main")), "3 commits to push");

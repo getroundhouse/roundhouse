@@ -50,8 +50,8 @@ fn terminal_tasks_include_the_frozen_structured_result_and_human_stop_instructio
 fn required_check_success_does_not_claim_optional_checks_passed() {
     let mut wait = Wait { ended: Some(WaitEnded { at_ms: 9, how: WaitEnd::ChecksPassed }), ..pull_request_wait("a") };
     let row = &mut wait.watch.as_mut().unwrap().snapshot.pull_requests[0];
-    row.checks[0].required = false;
-    row.checks[0].state = CheckState::Failed;
+    let check = &mut row.checks.as_mut().unwrap().said.checks[0];
+    (check.required, check.state) = (false, CheckState::Failed);
 
     let task = super::super::wait::task(&wait, None, crate::Timers::DEFAULT.wait_poll);
 

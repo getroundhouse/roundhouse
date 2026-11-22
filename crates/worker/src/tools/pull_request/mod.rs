@@ -3,7 +3,7 @@
 //! says the things an agent gets wrong, such as a queued pull request not being merged yet.
 
 #[cfg(test)]
-use protocol::model::{Checks, PullRequest, QueueState, Review};
+use protocol::model::{OwnPullRequest, QueueState};
 
 #[cfg(test)]
 pub(super) mod tests;

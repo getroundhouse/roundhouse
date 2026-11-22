@@ -4,7 +4,7 @@
 use serde::{Deserialize, Serialize};
 
 use super::{ClientRequest, ClientResponse, Reply, Request};
-use crate::model::{ClientRequestId, GitDiff, GitStatus, PullRequest, RepoId, Workspace, WorkspaceId};
+use crate::model::{ClientRequestId, GitDiff, GitStatus, OwnPullRequest, RepoId, Workspace, WorkspaceId};
 
 /// Generates a name if none is given. Uses the repository's default branch if no base is given. Sending the same
 /// `client_request_id` again returns the workspace it made, in whatever state it has reached, rather than making
@@ -227,7 +227,7 @@ impl Request for WorkspacePullRequest {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct PullRequestReply {
-    pub pull_request: Option<PullRequest>,
+    pub pull_request: Option<OwnPullRequest>,
 }
 
 impl Reply for PullRequestReply {

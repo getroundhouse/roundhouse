@@ -1,8 +1,9 @@
 use std::collections::HashMap;
 use std::time::Duration;
 
-use github::{Checks, PullFacets, Reviews, Stack, Status};
+use github::Checks;
 use parking_lot::Mutex;
+use protocol::model::{CommitId, History, Read, Stack};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use tracing::warn;
@@ -18,23 +19,23 @@ pub(super) struct KeptPulls(Mutex<HashMap<Item, Pull>>);
 
 #[derive(Default)]
 struct Pull {
-    status: Option<Read<Status>>,
-    reviews: Option<Read<Reviews>>,
+    history: Option<Read<History>>,
     stack: Option<Read<Stack>>,
-    /// The checks of the commit they were last read on, which are another commit's than those its next head has.
+    /// The checks of the head they were last read at, which are another commit's than those its next head has.
     checks: Option<Read<Checks>>,
     asked_at_ms: i64,
 }
 
-struct Read<T> {
-    said: T,
-    read_at_ms: i64,
+/// A pull request's facets past its summary, as the cache has them.
+pub(super) struct PastSummary {
+    pub(super) history: Option<Read<History>>,
+    pub(super) stack: Option<Read<Stack>>,
+    pub(super) checks: Option<Read<Checks>>,
 }
 
-impl<T> Read<T> {
-    fn fresh(&self, fresh_for: Duration, now_ms: i64) -> bool {
-        now_ms - self.read_at_ms < millis(fresh_for)
-    }
+/// Whether `read` was read within `fresh_for` by `now_ms`.
+fn fresh<T>(read: &Read<T>, fresh_for: Duration, now_ms: i64) -> bool {
+    now_ms - read.read_at_ms < millis(fresh_for)
 }
 
 /// `facet` of `item`, `said`, read at `read_at_ms`, as the file keeps it.
@@ -59,55 +60,61 @@ impl KeptPulls {
         pull.asked_at_ms = pull.asked_at_ms.max(row.read_at_ms);
         let (said, at) = (row.said.as_str(), row.read_at_ms);
         match row.facet {
-            Facet::Status => pull.status = read(said, at),
-            Facet::Reviews => pull.reviews = read(said, at),
+            Facet::History => pull.history = read(said, at),
             Facet::Stack => pull.stack = read(said, at),
             Facet::Checks => pull.checks = read(said, at),
             Facet::Summary | Facet::Rules => {}
         }
-        if pull.status.is_none() && pull.reviews.is_none() && pull.stack.is_none() && pull.checks.is_none() {
+        if pull.history.is_none() && pull.stack.is_none() && pull.checks.is_none() {
             kept.remove(item);
         }
     }
 
-    /// `item`'s facets, where every one was read within `fresh_for` by `now_ms`, which counts as its being asked about.
-    /// They're kept from one read, so its checks are of the commit its status was read at.
-    pub(super) fn fresh(&self, item: &Item, fresh_for: Duration, now_ms: i64) -> Option<PullFacets> {
+    /// `item`'s facets past its summary, where every one was read within `fresh_for` by `now_ms`, and its checks are of
+    /// `head`, which counts as its being asked about. They're kept from one read, so they're of one moment.
+    pub(super) fn fresh(&self, item: &Item, head: &CommitId, fresh_for: Duration, now_ms: i64) -> Option<PastSummary> {
         let mut kept = self.0.lock();
         let pull = kept.get_mut(item)?;
         pull.asked_at_ms = now_ms;
-        let (status, reviews, stack) = (pull.status.as_ref()?, pull.reviews.as_ref()?, pull.stack.as_ref()?);
-        let checks = pull.checks.as_ref()?;
-        let fresh = status.fresh(fresh_for, now_ms)
-            && reviews.fresh(fresh_for, now_ms)
-            && stack.fresh(fresh_for, now_ms)
-            && checks.fresh(fresh_for, now_ms);
-        fresh.then(|| PullFacets {
-            status: status.said.clone(),
-            reviews: reviews.said,
-            stack: stack.said.clone(),
-            checks: checks.said.clone(),
+        let (history, stack, checks) = (pull.history.as_ref()?, pull.stack.as_ref()?, pull.checks.as_ref()?);
+        let fresh =
+            fresh(history, fresh_for, now_ms) && fresh(stack, fresh_for, now_ms) && fresh(checks, fresh_for, now_ms);
+        (fresh && checks.said.head == *head).then(|| PastSummary {
+            history: Some(history.clone()),
+            stack: Some(stack.clone()),
+            checks: Some(checks.clone()),
         })
     }
 
-    /// Keeps `read`, each pull request's facets as a read that began at the time beside them found them, but for those
-    /// a read begun since has kept, and returns the rows the file keeps them as.
-    pub(super) fn keep(&self, read: Vec<(Item, PullFacets, i64)>) -> Vec<Row> {
+    /// `item`'s facets past its summary, however old, but for checks of another head than `head`, which counts as its
+    /// being asked about.
+    pub(super) fn known(&self, item: &Item, head: &CommitId, now_ms: i64) -> PastSummary {
+        let mut kept = self.0.lock();
+        let Some(pull) = kept.get_mut(item) else { return PastSummary { history: None, stack: None, checks: None } };
+        pull.asked_at_ms = now_ms;
+        PastSummary {
+            history: pull.history.clone(),
+            stack: pull.stack.clone(),
+            checks: pull.checks.clone().filter(|checks| checks.said.head == *head),
+        }
+    }
+
+    /// Keeps `read`, each pull request's facets past its summary as a read that began at the time beside them found
+    /// them, but for those a read begun since has kept, and returns the rows the file keeps them as.
+    pub(super) fn keep(&self, read: Vec<(Item, History, Stack, Checks, i64)>) -> Vec<Row> {
         let mut kept = self.0.lock();
         let mut rows = Vec::new();
-        for (item, PullFacets { status, reviews, stack, checks }, now_ms) in read {
+        for (item, history, stack, checks, now_ms) in read {
             let newer =
-                kept.get(&item).and_then(|pull| pull.status.as_ref()).is_some_and(|kept| kept.read_at_ms > now_ms);
+                kept.get(&item).and_then(|pull| pull.history.as_ref()).is_some_and(|kept| kept.read_at_ms > now_ms);
             if newer {
                 continue;
             }
-            rows.extend(row(&item, Facet::Status, &status, now_ms));
-            rows.extend(row(&item, Facet::Reviews, &reviews, now_ms));
+            rows.extend(row(&item, Facet::History, &history, now_ms));
             rows.extend(row(&item, Facet::Stack, &stack, now_ms));
             rows.extend(row(&item, Facet::Checks, &checks, now_ms));
             let pull = Pull {
-                status: Some(Read { said: status, read_at_ms: now_ms }),
-                reviews: Some(Read { said: reviews, read_at_ms: now_ms }),
+                history: Some(Read { said: history, read_at_ms: now_ms }),
                 stack: Some(Read { said: stack, read_at_ms: now_ms }),
                 checks: Some(Read { said: checks, read_at_ms: now_ms }),
                 asked_at_ms: now_ms,
@@ -123,7 +130,7 @@ impl KeptPulls {
         self.0.lock().retain(|item, pull| {
             let keep = now_ms - pull.asked_at_ms < millis(KEPT_FOR);
             if !keep {
-                let facets = [Facet::Status, Facet::Reviews, Facet::Stack, Facet::Checks];
+                let facets = [Facet::History, Facet::Stack, Facet::Checks];
                 forgotten.extend(facets.map(|facet| (Subject::Item(item.clone()), facet)));
             }
             keep
@@ -136,8 +143,7 @@ impl KeptPulls {
     pub(super) fn age(&self, by: Duration) {
         for pull in self.0.lock().values_mut() {
             for read_at_ms in [
-                pull.status.as_mut().map(|read| &mut read.read_at_ms),
-                pull.reviews.as_mut().map(|read| &mut read.read_at_ms),
+                pull.history.as_mut().map(|read| &mut read.read_at_ms),
                 pull.stack.as_mut().map(|read| &mut read.read_at_ms),
                 pull.checks.as_mut().map(|read| &mut read.read_at_ms),
             ]

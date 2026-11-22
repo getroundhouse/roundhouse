@@ -16,7 +16,7 @@ fn lookup(ui: &Ui<'_>) -> Lookup {
 }
 
 fn state(ui: &Ui<'_>) -> Option<PrState> {
-    lookup(ui).pull_request().map(|pr| pr.state)
+    lookup(ui).pull_request().map(|pr| pr.said().state)
 }
 
 /// The hub reads the pull request showing as often as the app shows it, so the app asks nothing itself, and shows

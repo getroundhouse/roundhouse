@@ -7,7 +7,7 @@ use std::time::Duration;
 use parking_lot::Mutex;
 use protocol::client::github::{GithubShown, GithubSubscribe, GithubUpdate};
 use protocol::client::{ApiError, ClientRequest, ClientResponse, ErrorCode, HubFrame, ReplyOutcome};
-use protocol::model::{GithubRepositoryName, IssueNumber, PullRequestFound, ReferenceAsk, ReferenceRead, Workspace};
+use protocol::model::{GithubRepositoryName, IssueNumber, PullRequestFound, ReferenceAsk, ReferenceRead};
 
 use super::GithubFeed;
 use crate::stand_in_hub::{self, Does};
@@ -65,9 +65,10 @@ fn what_views_show_is_said_together_and_what_the_hub_sends_reaches_them() {
     assert_eq!(feed.reference(&ask(2)), Some(ReferenceRead::Missing));
 }
 
-/// A hub too old to say what GitHub says leaves a workspace's pull request as its record has it.
+/// A hub too old to say what GitHub says never says a workspace's pull request, since it keeps it on the workspace's
+/// record in a form this build doesn't read.
 #[test]
-fn a_hub_too_old_to_say_leaves_the_pull_request_its_record_has() {
+fn a_hub_too_old_to_say_never_says_a_pull_request() {
     let dir = tempfile::tempdir().unwrap();
     let client = stand_in_hub::connect(&dir.path().join("hub.sock"), |request| {
         let ClientRequest::GithubSubscribe(_) = request else { return Does::Nothing };
@@ -76,13 +77,13 @@ fn a_hub_too_old_to_say_leaves_the_pull_request_its_record_has() {
     });
     let feed = GithubFeed::start(&client);
     let view = feed.view();
-    let recorded =
-        Workspace { pull_request: Some(PullRequestFound { pull_request: None }), ..protocol::fixtures::workspace("w") };
+    let workspace = protocol::fixtures::workspace("w");
 
     view.changed().recv_timeout(TIMEOUT).expect("told the hub is too old");
 
     assert!(feed.unsupported());
-    assert_eq!(feed.pull_request(&recorded), recorded.pull_request);
+    assert!(!feed.said_pull_request(&workspace));
+    assert_eq!(feed.pull_request(&workspace), None);
 }
 
 /// That the hub hasn't looked at a workspace's pull request is held as said, apart from the hub not having said

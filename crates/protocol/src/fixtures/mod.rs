@@ -5,8 +5,11 @@
 
 mod pr_wait;
 mod proposal;
-pub use pr_wait::{observed_pull_request, pull_request_wait};
+pub use pr_wait::{checked, pull_request, pull_request_wait};
 pub use proposal::proposal;
+
+mod references;
+pub use references::issue;
 
 mod repo;
 pub use repo::repo;

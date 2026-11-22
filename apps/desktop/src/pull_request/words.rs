@@ -34,6 +34,7 @@ pub(crate) fn action(standing: Standing) -> Option<Action> {
         Standing::Merged | Standing::Closed => return Some(Action::Archive),
         Standing::Queued(_)
         | Standing::ChecksRunning(_)
+        | Standing::Reading
         | Standing::ReviewRequired
         | Standing::Blocked
         | Standing::Checking

@@ -94,7 +94,7 @@ impl<W: Waiter> Book<W> {
 
 #[cfg(test)]
 mod tests {
-    use protocol::model::{GithubRepositoryName, IssueNumber, IssueState, Reference, ReferenceKind};
+    use protocol::model::{GithubRepositoryName, IssueNumber};
 
     use super::*;
 
@@ -103,21 +103,7 @@ mod tests {
     }
 
     fn found(title: &str) -> ReferenceRead {
-        let repository = GithubRepositoryName::new("o", "r").unwrap();
-        ReferenceRead::Found {
-            reference: Box::new(Reference {
-                repository,
-                number: IssueNumber::try_from(12).unwrap(),
-                kind: ReferenceKind::Issue { state: IssueState::Open },
-                url: "https://github.com/o/r/issues/12".into(),
-                title: title.into(),
-                author: None,
-                opened_at_ms: 0,
-                comments: 0,
-                labels: Vec::new(),
-                body: String::new(),
-            }),
-        }
+        ReferenceRead::Found { reference: Box::new(protocol::fixtures::issue("o/r", 12, title)) }
     }
 
     /// What a frame draws is what's shown once it's drawn, and only when that changes is it said again.

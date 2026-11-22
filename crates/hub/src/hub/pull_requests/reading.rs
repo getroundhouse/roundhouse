@@ -8,8 +8,8 @@ use github::{Leaving, Unread};
 use parking_lot::Mutex;
 use protocol::client::{ApiError, ErrorCode, HubNotice};
 use protocol::model::{
-    BranchName, GithubRepositoryName, IssueNumber, PullRequest, PullRequestFound, PullRequestLink, PullRequestLinked,
-    Workspace, WorkspaceId,
+    BranchName, GithubRepositoryName, IssueNumber, OwnPullRequest, PullRequestFound, PullRequestLink,
+    PullRequestLinked, Workspace, WorkspaceId,
 };
 use schedule::{Schedule, Went};
 use std::collections::HashMap;
@@ -64,14 +64,14 @@ pub(in super::super) enum When {
 #[derive(Debug)]
 pub(super) enum Answer {
     /// What it found, read since it was asked for.
-    Read(Option<PullRequest>),
+    Read(Option<OwnPullRequest>),
     /// That it couldn't be read now, and why, with what was known before, if anything was.
     Known(Option<PullRequestFound>, ApiError),
 }
 
 impl Answer {
     /// For a client, which shows what was known when it can't be read now, and fails only when nothing was.
-    pub(super) fn or_known(self) -> Result<Option<PullRequest>, ApiError> {
+    pub(super) fn or_known(self) -> Result<Option<OwnPullRequest>, ApiError> {
         match self {
             Self::Read(pull_request) | Self::Known(Some(PullRequestFound { pull_request }), _) => Ok(pull_request),
             Self::Known(None, e) => Err(e),
@@ -79,7 +79,7 @@ impl Answer {
     }
 
     /// For an agent, which hears only what was read since it asked.
-    pub(super) fn read(self) -> Result<Option<PullRequest>, ApiError> {
+    pub(super) fn read(self) -> Result<Option<OwnPullRequest>, ApiError> {
         match self {
             Self::Read(pull_request) => Ok(pull_request),
             Self::Known(_, e) => Err(e),
@@ -148,7 +148,7 @@ impl Hub {
     pub(crate) async fn workspace_pull_request(
         self: &Arc<Self>,
         id: WorkspaceId,
-    ) -> Result<Option<PullRequest>, ApiError> {
+    ) -> Result<Option<OwnPullRequest>, ApiError> {
         self.read_pull_request(&id, Asked::Waiting, When::UnlessFresh).await?.or_known()
     }
 
@@ -156,7 +156,7 @@ impl Hub {
     pub(crate) async fn pull_request_for_agent(
         self: &Arc<Self>,
         id: &WorkspaceId,
-    ) -> Result<Option<PullRequest>, ApiError> {
+    ) -> Result<Option<OwnPullRequest>, ApiError> {
         self.read_pull_request(id, Asked::Agent, When::Always).await?.read()
     }
 
@@ -249,7 +249,8 @@ impl Hub {
         let waits_failed = waits.iter().any(|w| w.read.as_ref().is_err_and(|u| u.error.code != ErrorCode::Conflict));
         let went = match &read {
             Ok(_) if waits_failed => Went::Failed,
-            Ok(Found { read, .. }) if known.as_ref() != Some(read) => Went::Changed,
+            // Every read is newer than the last, so it's what it says that's compared.
+            Ok(Found { read, .. }) if !known.as_ref().is_some_and(|known| known.says_the_same(read)) => Went::Changed,
             Ok(Found { read, .. }) => Went::Same(read.pull_request.as_ref()),
             Err(e) => {
                 debug!(%id, code = ?e.code, "the pull request couldn't be read: {}", e.message);
@@ -349,7 +350,7 @@ pub(super) struct Found {
 
 impl Found {
     /// `pull_request`, into `into`, found on `on`.
-    pub(super) fn of(pull_request: PullRequest, into: GithubRepositoryName, on: Option<BranchName>) -> Self {
+    pub(super) fn of(pull_request: OwnPullRequest, into: GithubRepositoryName, on: Option<BranchName>) -> Self {
         Self { read: PullRequestFound { pull_request: Some(pull_request) }, into: Some(into), on }
     }
 
@@ -361,12 +362,12 @@ impl Found {
     /// Which pull request it found, as the workspace's record keeps it. `None` for one whose number no pull request
     /// can have, which GitHub doesn't give.
     fn linked(&self) -> Option<PullRequestLinked> {
-        let Some(pull_request) = &self.read.pull_request else { return Some(PullRequestLinked { link: None }) };
+        let Some(own) = &self.read.pull_request else { return Some(PullRequestLinked { link: None }) };
         let link = PullRequestLink {
             repository: self.into.clone()?,
-            number: IssueNumber::try_from(pull_request.number).ok()?,
-            url: pull_request.url.clone(),
-            uncommitted: pull_request.local.uncommitted,
+            number: IssueNumber::try_from(own.pull_request.number.get()).ok()?,
+            url: own.pull_request.said().about.url.clone(),
+            uncommitted: own.local.uncommitted,
         };
         Some(PullRequestLinked { link: Some(link) })
     }

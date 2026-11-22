@@ -3,7 +3,7 @@
 //! each repository's numbers together, in as few queries as GitHub allows.
 
 mod parse;
-pub(crate) use parse::pull_request_reference;
+pub(crate) use parse::{pull_request_reference, summary};
 mod query;
 pub(crate) use query::pull_request_summary;
 mod read;

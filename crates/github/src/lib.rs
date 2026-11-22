@@ -28,7 +28,7 @@ pub use profile::GithubProfile;
 mod pull_requests;
 pub use pull_requests::{
     BRANCHES_A_QUERY, Checks, FacetsRead, Headed, HeadsAsk, HeadsRead, Leaving, PullFacets, PullRequestsAsk,
-    PullRequestsRead, RateLimit, ReportedCheck, Reviews, Rules, RulesRead, Stack, Status, SummaryRead, Unread, observe,
+    PullRequestsRead, RateLimit, ReportedCheck, Rules, RulesRead, SummaryRead, Unread, judged, observe,
 };
 mod reach;
 mod references;

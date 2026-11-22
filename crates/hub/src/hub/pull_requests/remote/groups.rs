@@ -18,13 +18,7 @@ pub(in crate::hub::pull_requests) fn waited(waits: Vec<Wait>) -> HashMap<Workspa
     for wait in waits {
         let Some(watch) = wait.watch else { continue };
         let mut numbers: BTreeSet<_> = watch.requested.numbers().iter().copied().collect();
-        numbers.extend(
-            watch
-                .snapshot
-                .pull_requests
-                .iter()
-                .filter_map(|pr| PullRequestNumber::try_from(pr.pull_request.number).ok()),
-        );
+        numbers.extend(watch.snapshot.pull_requests.iter().map(|pr| pr.number));
         let theirs = groups.entry(wait.workspace_id).or_default();
         // Revisit after each union: a wait can join two formerly independent groups through a shared dependency.
         let mut index = 0;

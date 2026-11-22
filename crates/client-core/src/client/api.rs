@@ -11,7 +11,7 @@ use protocol::event::SessionEvent;
 use protocol::find::Found;
 use protocol::model::{
     AgentKind, ApprovalId, AttachmentId, ClientMessageId, ClientRequestId, CommentId, DeviceId, DiffComment, DiffSide,
-    Ending, GitDiff, GitStatus, HubSettings, HubSettingsChange, MessageId, Proposal, PullRequest, Records,
+    Ending, GitDiff, GitStatus, HubSettings, HubSettingsChange, MessageId, OwnPullRequest, Proposal, Records,
     ReferenceAsk, ReferenceRead, ReplyHeard, Repo, RepoId, Rev, Seq, Session, SessionId, SpokenThrough, Subagent,
     SubagentId, TerminalId, WaitId, Workspace, WorkspaceId,
 };
@@ -111,7 +111,7 @@ impl Client {
         self.call(workspaces::WorkspaceRerunSetup { id: id.clone() })
     }
 
-    pub fn workspace_pull_request(&self, id: &WorkspaceId) -> Result<Option<PullRequest>> {
+    pub fn workspace_pull_request(&self, id: &WorkspaceId) -> Result<Option<OwnPullRequest>> {
         Ok(self.call(workspaces::WorkspacePullRequest { id: id.clone() })?.pull_request)
     }
 

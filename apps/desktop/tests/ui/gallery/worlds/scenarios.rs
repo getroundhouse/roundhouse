@@ -6,9 +6,9 @@ use super::accounts;
 use client_core::fake_hub::{HOUR_MS, HubBuild, NOW_MS, World};
 use protocol::attachment::{Attachment, MediaType};
 use protocol::model::{
-    AttachmentId, Checks, CommentId, CommitId, ContextPart, ContextPartKind, ContextUsage, DiffComment, DiffSide,
-    FileContents, GitDiff, LimitWindow, MaxSetBy, MergeState, ModelLabel, PullRequest, Rev, SessionStatus, SetupStatus,
-    Title, UsageLimit, WorkspaceId, WorkspaceStatus,
+    AttachmentId, CommentId, CommitId, ContextPart, ContextPartKind, ContextUsage, DiffComment, DiffSide, FileContents,
+    GitDiff, LimitWindow, MaxSetBy, ModelLabel, PullRequestNumber, Rev, SessionStatus, SetupStatus, Title, UsageLimit,
+    WorkspaceId, WorkspaceStatus,
 };
 use spec_screens::chats;
 
@@ -167,18 +167,12 @@ pub(in super::super) fn in_plan_mode(mut world: World) -> World {
 pub(in super::super) fn converse(world: &mut World, focus: &WorkspaceId) {
     world.workspace_mut(focus).branch = "sidebar-pr-state".into();
     finished_chat(world, focus);
-    world.pull_requests.insert(
-        focus.clone(),
-        PullRequest {
-            number: 182,
-            url: "https://example.com/pull/182".to_string(),
-            title: "Show PR state in the sidebar".to_string(),
-            base: Some("main".into()),
-            merge_state: MergeState::Clean,
-            checks: Checks { passed: 5, failed: 0, pending: 0 },
-            ..pull_requests::open()
-        },
-    );
+    let mut open = pull_requests::checked(pull_requests::open(), 5, 0, 0);
+    open.pull_request.number = PullRequestNumber::try_from(182).unwrap();
+    let about = &mut open.pull_request.summary.said.about;
+    about.url = "https://example.com/pull/182".to_string();
+    about.title = "Show PR state in the sidebar".to_string();
+    world.pull_requests.insert(focus.clone(), open);
 }
 
 /// Replies nobody has read: in a workspace that isn't showing, and in the chat that isn't showing in this one. The chat

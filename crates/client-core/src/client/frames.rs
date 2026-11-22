@@ -49,7 +49,7 @@ pub(super) fn read_frames(inner: &Arc<Inner>, stream: impl std::io::Read) {
                 deliver(inner, subscription_id, SubscriptionItem::Terminal(update));
             }
             HubFrame::Github { subscription_id, update } => {
-                deliver(inner, subscription_id, SubscriptionItem::Github(update));
+                deliver(inner, subscription_id, SubscriptionItem::Github(Box::new(update)));
             }
             HubFrame::TerminalPicture { subscription_id, picture } => {
                 deliver(inner, subscription_id, SubscriptionItem::TerminalPicture(Box::new(picture)));

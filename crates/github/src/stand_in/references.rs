@@ -5,9 +5,7 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use parking_lot::Mutex;
-use protocol::model::{
-    ChecksRollup, GithubRepositoryName, IssueNumber, IssueState, PullRequestState, Reference, ReferenceKind,
-};
+use protocol::model::{ChecksRollup, GithubRepositoryName, IssueNumber, IssueState, Mergeability, Reference};
 use serde_json::{Value, json};
 
 use super::pull_requests::{aliased, answered};
@@ -34,7 +32,8 @@ impl References {
     /// `reference` is there from now on, in place of whatever was at its repository and number, and GitHub answers
     /// for it as it says, its repository named as it has it.
     pub fn set(&self, reference: Reference) {
-        let key = (reference.repository.as_str().to_lowercase(), reference.number);
+        let Some(asked) = reference.asked() else { return };
+        let key = (asked.repository.as_str().to_lowercase(), asked.number);
         self.0.lock().references.insert(key, reference);
     }
 
@@ -90,7 +89,7 @@ impl Set {
         for (alias, asks) in aliased(query, ": repository(") {
             let named = repository(asks);
             let mut there = self.references.iter().filter(|((repository, _), _)| *repository == named);
-            let Some((_, first)) = there.next() else {
+            let Some(first) = there.next().and_then(|(_, first)| first.asked()) else {
                 data[alias] = Value::Null;
                 let message = format!("Could not resolve to a Repository with the name '{named}'.");
                 errors.push(json!({"type": "NOT_FOUND", "path": [alias], "message": message}));
@@ -129,16 +128,20 @@ fn repository(asks: &str) -> String {
 
 /// `reference` as GitHub's `issueOrPullRequest` answers for it.
 fn node(reference: &Reference) -> Value {
+    let Some((asked, about)) = reference.asked().zip(reference.about()) else {
+        // What GitHub might one day answer that this stand-in can't say.
+        return json!({"__typename": "Discussion"});
+    };
     let labels: Vec<Value> =
-        reference.labels.iter().map(|label| json!({"name": label.name, "color": label.color})).collect();
-    let opened = jiff::Timestamp::from_millisecond(reference.opened_at_ms).unwrap();
-    let author = reference.author.as_ref().map(|login| json!({ "login": login }));
-    let mut node = json!({"number": reference.number.get(), "url": reference.url, "title": reference.title,
+        about.labels.iter().map(|label| json!({"name": label.name, "color": label.color})).collect();
+    let opened = jiff::Timestamp::from_millisecond(about.opened_at_ms).unwrap();
+    let author = about.author.as_ref().map(|login| json!({ "login": login }));
+    let mut node = json!({"number": asked.number.get(), "url": about.url, "title": about.title,
         "createdAt": opened.to_string(), "author": author,
-        "comments": {"totalCount": reference.comments}, "bodyText": reference.body, "labels": {"nodes": labels}});
-    match reference.kind {
-        ReferenceKind::Issue { state } => {
-            let (state, reason) = match state {
+        "comments": {"totalCount": about.comments}, "bodyText": about.body, "labels": {"nodes": labels}});
+    match reference {
+        Reference::Issue(issue) => {
+            let (state, reason) = match issue.summary.said.state {
                 IssueState::Open => ("OPEN", None),
                 IssueState::Done => ("CLOSED", Some("COMPLETED")),
                 IssueState::NotPlanned => ("CLOSED", Some("NOT_PLANNED")),
@@ -146,26 +149,29 @@ fn node(reference: &Reference) -> Value {
             };
             (node["__typename"], node["state"], node["stateReason"]) = (json!("Issue"), json!(state), json!(reason));
         }
-        ReferenceKind::PullRequest(pull_request) => {
-            let (state, draft) = match pull_request.state {
-                PullRequestState::Open => ("OPEN", false),
-                PullRequestState::Draft => ("OPEN", true),
-                PullRequestState::Merged => ("MERGED", false),
-                PullRequestState::Closed => ("CLOSED", false),
-                PullRequestState::Unknown => ("UNKNOWN", false),
-            };
-            let review = serde_json::to_value(pull_request.review).unwrap();
-            let rollup = pull_request.checks.map(|checks| json!({ "state": state_of(checks) }));
+        Reference::PullRequest(pull_request) => {
+            let said = pull_request.said();
+            let review = serde_json::to_value(said.review).unwrap();
+            let rollup = said.rollup.map(|checks| json!({ "state": state_of(checks) }));
             node["__typename"] = json!("PullRequest");
-            node["state"] = json!(state);
-            node["isDraft"] = json!(draft);
-            node["additions"] = json!(pull_request.added);
-            node["deletions"] = json!(pull_request.removed);
+            node["state"] = serde_json::to_value(said.state).unwrap();
+            node["isDraft"] = json!(said.is_draft);
+            node["additions"] = json!(said.added);
+            node["deletions"] = json!(said.removed);
             node["reviewDecision"] = if review == "" { Value::Null } else { review };
+            node["mergeQueueEntry"] = said.queue.map_or(Value::Null, |queue| json!({ "state": queue }));
+            node["mergeStateStatus"] = serde_json::to_value(said.merge_state).unwrap();
+            node["mergeable"] = json!(match said.mergeable {
+                Mergeability::Mergeable => "MERGEABLE",
+                Mergeability::Conflicting => "CONFLICTING",
+                Mergeability::Unknown => "UNKNOWN",
+            });
+            node["baseRefName"] = json!(said.base_branch.as_str());
+            node["baseRefOid"] = json!(said.base.as_str());
+            node["headRefOid"] = json!(said.head.as_str());
             node["commits"] = json!({"nodes": [{"commit": {"statusCheckRollup": rollup}}]});
         }
-        // What GitHub might one day answer that this stand-in can't say.
-        ReferenceKind::Unknown => node["__typename"] = json!("Discussion"),
+        Reference::Unknown => node["__typename"] = json!("Discussion"),
     }
     node
 }

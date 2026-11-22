@@ -9,8 +9,8 @@ use protocol::capability::settings::Effort;
 use protocol::client::github_accounts::GithubAccountConnect;
 use protocol::client::{ApiError, ErrorCode, HubStart};
 use protocol::model::{
-    AgentDescription, AgentKind, Apart, Branch, BranchName, Branches, Checks, CommitId, Head, Local, LoginDescription,
-    MergeState, PrState, PullRequest, RemoteName, RepoUrl, Review, RunId, SessionId, Upstream,
+    AgentDescription, AgentKind, Apart, Branch, BranchName, Branches, CommitId, Head, LoginDescription, RemoteName,
+    RepoUrl, RunId, SessionId, Upstream,
 };
 use protocol::tail::{DeltaChange, StreamDelta, Tail};
 use providers::Provider;
@@ -261,25 +261,6 @@ pub(crate) fn reading_as_ada(hub: &Hub) {
     hub.github_logins.connect(&connect, &owner).unwrap();
 }
 
-/// An open pull request whose checks are running.
-pub(crate) fn open() -> PullRequest {
-    PullRequest {
-        number: 7,
-        url: "https://example.com/7".into(),
-        title: "T".into(),
-        state: PrState::Open,
-        is_draft: false,
-        base: None,
-        merge_state: MergeState::Blocked,
-        review: Review::NotRequired,
-        checks: Checks { passed: 0, failed: 0, pending: 1 },
-        queue: None,
-        left_queue: None,
-        changes_requested_at_ms: None,
-        local: Local::default(),
-    }
-}
-
 /// A stand-in for GitHub answering from the pull requests a test sets, and a hub reading it as [`hub_reading_github`]
 /// makes one, with `w` on `branch` at `head-7`, pushed to origin's `branch` at the same commit, as the stand-in's
 /// pull requests are from, and #7 is at.
@@ -336,4 +317,16 @@ pub(crate) fn archived(hub: &Hub) {
 pub(crate) fn forget_github(hub: &Hub) {
     hub.github_cache.age(std::time::Duration::from_hours(24 * 8));
     hub.github_cache.keep(Vec::new(), crate::store::now_ms());
+}
+
+/// The same, but for the summary of `w`'s pull request, which the hub has read, as a chip's read of it keeps it then.
+pub(crate) fn forget_github_but_a_summary(hub: &Hub) {
+    let workspace = hub.store.get_workspace(&"w".into()).unwrap();
+    let own = hub.known_of(&workspace).and_then(|found| found.pull_request).expect("w's pull request, read");
+    forget_github(hub);
+    let summary = protocol::model::PullRequest { history: None, stack: None, checks: None, ..own.pull_request };
+    let number = protocol::model::IssueNumber::try_from(summary.number.get()).unwrap();
+    let item = crate::github_cache::Item::new(&summary.repository, number);
+    let kept = protocol::model::Reference::PullRequest(summary);
+    hub.github_cache.keep(vec![(item, Ok(Some(kept)))], crate::store::now_ms());
 }
