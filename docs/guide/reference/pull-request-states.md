@@ -32,7 +32,7 @@ What's in the worktree comes before what GitHub says, because GitHub's answers a
 
 A workspace with no pull request says `No pull request`, and offers `Create PR`.
 
-Wherever GitHub says something this version doesn't know, the bar says `See it on GitHub`, in the window's own colours, and offers nothing, rather than guess.
+Wherever GitHub says something this version doesn't know, the bar says `See it on GitHub` and offers nothing, rather than guess.
 
 ## What a button does
 
@@ -46,18 +46,27 @@ Where the bar offers nothing, it's waiting on GitHub or on someone else.
 
 | Colour | Where it stands |
 |---|---|
-| The window's own | Open, with something to do first |
-| Green | Open, and ready to merge |
+| Green | Open, whatever's in the way |
 | Yellow | In the merge queue |
 | Purple | Merged |
 | Muted red | Closed |
 | Grey | A draft, whatever's in the way, such as conflicts |
 
-The colour says what the pull request is, and the words say what's in the way, so a draft that conflicts is grey and says `Conflicts with main`. The workspace's mark in the sidebar takes the same colours, with every open pull request green, since the mark is too small to say what's in the way. A pull request's chip in a chat takes them too, yellow in the merge queue.
+The colour says what the pull request is, and the words say what's in the way, so a draft that conflicts is grey and says `Conflicts with main`. The workspace's mark in the sidebar takes the same colours, and so does a pull request's chip in a chat.
+
+Before the words, a sign says what kind of thing is in the way:
+
+| Sign | What it means |
+|---|---|
+| A red ✕, with the words in red | Something has to be fixed before it can merge: conflicts, changes requested or failed checks |
+| A spinner | It's waiting on GitHub or someone else, such as checks running or a review |
+| A check | Nothing is in the way |
+
+Work in the worktree, such as uncommitted files, has no sign, since its button says what to do.
 
 ## While the sidebar is hidden
 
-With the sidebar of changes hidden, the workspace's header shows the pull request's number and the button.
+With the sidebar of changes hidden, the workspace's header shows the pull request's number and the button, with the sign beside the number.
 
 ## When it's read
 

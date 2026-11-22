@@ -20,7 +20,7 @@ From then on, the top of the sidebar of changes is the pull request's bar. It ha
 
 ![Every state of the pull request's bar](../../spec/screens/pull-request-states.png)
 
-The bar is green only once nothing is in the way, so green always means go. While there's something to do first, it's in the window's own colours. A place in the merge queue is yellow, a draft grey, merged purple and closed red.
+An open pull request's bar is green, whatever's in the way. A red ✕ and red words say something has to be fixed first, a spinner that it's waiting on GitHub or someone else, and a check that it's ready to merge. A place in the merge queue is yellow, a draft grey, merged purple and closed red.
 
 ## Do the one thing
 

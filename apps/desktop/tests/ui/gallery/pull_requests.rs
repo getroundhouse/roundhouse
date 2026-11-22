@@ -153,7 +153,7 @@ impl Render for Sheet {
         let rows = self.states.iter().enumerate().map(|(index, (lookup, busy, status))| {
             let doing = client_core::moving::doing(*status);
             let bar = pull_request::bar(lookup, busy, doing, |_, _, _| {}, cx);
-            let controls = pull_request::controls(lookup, busy, doing, |_, _, _| {});
+            let controls = pull_request::controls(lookup, busy, doing, |_, _, _| {}, cx);
             h_flex()
                 .id(ElementId::NamedInteger("state".into(), index as u64))
                 .gap(px(MARGIN))

@@ -132,7 +132,7 @@ impl WorkspacePane {
             Sidebar::Hidden => {
                 let on_action = cx.listener(|t, action, _, cx| t.act(*action, cx));
                 let doing = client_core::moving::doing(self.workspace().status);
-                crate::pull_request::controls(&self.pull_request, &self.busy, doing, on_action)
+                crate::pull_request::controls(&self.pull_request, &self.busy, doing, on_action, cx)
             }
         };
         look::bar(look::BarKind::Words, look::BarSize::Regular)
