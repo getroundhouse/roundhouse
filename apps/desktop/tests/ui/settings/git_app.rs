@@ -120,10 +120,10 @@ fn an_app_is_made_on_github_and_connected_as_the_window_comes_back_once_its_inst
 
     ui.wait("the install step", |ui| ui.has("git-install"));
     assert_eq!(ui.view().records().github_apps().len(), 1);
-    assert_eq!(
-        says(&mut ui),
-        "Agents act as its bot, ada-roundhouse[bot], rather than as you. Only the hub holds its key."
-    );
+    // The hub tells of the app as it's made, then asks GitHub for its bot, so the bot's name comes in a change of its
+    // own, and can reach the app after the install step shows.
+    let named = "Agents act as its bot, ada-roundhouse[bot], rather than as you. Only the hub holds its key.";
+    ui.wait("the bot's name", |ui| says(ui) == named);
     assert_eq!(steps(&mut ui)[1], "Done: Made ada-roundhouse on GitHub");
     assert!(installation(&ui).is_none(), "GitHub listed it nowhere as it was made");
     ui.click("git-install");
