@@ -57,6 +57,8 @@ fn a_sign_in_shows_its_code_while_it_waits_and_ends_signed_in_as_the_default(cx:
     assert!(ui.has("git-open-address") && ui.has("git-cancel"));
     assert!(ui.off("git-connect"), "while a panel is open there");
     ui.wait("Done", |ui| ui.has("git-close"));
+    // The records have it once the hub has said so, which can come after the panel says it's done.
+    ui.wait("the account", |ui| !ui.view().records().github_accounts().is_empty());
     let account = ui.view().records().github_accounts()[0].clone();
     assert_eq!(account.user.name.as_str(), "ada");
     assert_eq!(account.held_login.map(|held| held.how), Some(GithubLoginKind::SignIn));
