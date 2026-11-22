@@ -15,7 +15,7 @@ pub struct Menu {
     open: WeakEntity<PopupMenu>,
     keys: Keys,
     input: Input,
-    entries: Vec<Entry>,
+    pub(super) entries: Vec<Entry>,
 }
 
 /// Whether a menu's rows show their keys: every menu's do but a right-click menu's, which is a shortcut of its own, and

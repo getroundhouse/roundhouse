@@ -1,7 +1,16 @@
+use std::cell::RefCell;
+use std::rc::Rc;
+
+use gpui_kit::component::menu::PopupMenu;
+use gpui_kit::{
+    App, Context, IntoElement, MouseButton, ParentElement as _, Render, Styled as _, TestAppContext, Window, actions,
+    div, point, px,
+};
+
 use super::menu::{Entry, in_order};
-use super::menu_row;
 use super::row::Does;
 use super::style::{AROUND, CORNER, ROW, ROW_CORNER};
+use super::{Menu, RightClickMenu as _, menu, menu_row};
 use crate::Input;
 use crate::control_sizes::ControlSize;
 
@@ -62,4 +71,53 @@ fn a_copy_button_shown_under_the_pointer_isnt_drawn_under_touch(cx: &mut gpui_ki
     assert!(cx.update(shown), "With a pointer, the button shows under it");
     cx.update(|cx| Input::Touch.choose(cx));
     assert!(!cx.update(shown), "Under touch, nothing rests on it, so there's no button");
+}
+
+actions!(menus_tests, [Archive]);
+
+/// Whether each row of the menus `build` fills shows its key, in the order they're filled.
+type Shown = Rc<RefCell<Vec<bool>>>;
+
+/// Fills a menu with a row that has a key, and notes whether it kept it.
+fn archiving(shown: &Shown) -> impl Fn(Menu, &mut Window, &mut App) -> Menu + 'static {
+    let shown = shown.clone();
+    move |menu, _, _| {
+        let menu = menu.row(menu_row("Archive").key(Box::new(Archive)));
+        let rows = menu.entries.iter().filter_map(|entry| match entry {
+            Entry::Row(row) => Some(row.key.is_some()),
+            Entry::Separator | Entry::Label(_) => None,
+        });
+        shown.borrow_mut().extend(rows);
+        menu
+    }
+}
+
+/// Something to right-click, whose menu has a row with a key.
+struct Archivable(Shown);
+
+impl Render for Archivable {
+    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+        div().size_full().child(div().size(px(100.)).right_click_menu(archiving(&self.0)))
+    }
+}
+
+/// A right-click menu is a shortcut of its own, so its rows show no keys, as `docs/spec/components.md` says. A menu
+/// that drops from a button shows a row's key, but only with a pointer, as every key shows.
+#[gpui_kit::test]
+fn a_right_click_menus_rows_show_no_keys_and_a_buttons_show_them_with_a_pointer(cx: &mut TestAppContext) {
+    cx.update(gpui_kit::init);
+    cx.update(crate::theme::apply);
+    let shown = Shown::default();
+    let (_, cx) = cx.add_window_view(|_, _| Archivable(shown.clone()));
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+    let press = point(px(10.), px(10.));
+
+    cx.simulate_mouse_down(press, MouseButton::Right, gpui_kit::Modifiers::default());
+    cx.simulate_mouse_up(press, MouseButton::Right, gpui_kit::Modifiers::default());
+    cx.run_until_parked();
+    cx.update(|window, cx| drop(PopupMenu::build(window, cx, menu(archiving(&shown)))));
+    cx.update(|_, cx| Input::Touch.choose(cx));
+    cx.update(|window, cx| drop(PopupMenu::build(window, cx, menu(archiving(&shown)))));
+
+    assert_eq!(*shown.borrow(), [false, true, false], "right-clicked, from a button, and from a button under touch");
 }

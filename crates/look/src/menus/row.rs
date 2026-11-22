@@ -48,7 +48,7 @@ pub(super) enum Does {
 pub struct MenuRow {
     words: SharedString,
     icon: Option<Icon>,
-    key: Option<Box<dyn Action>>,
+    pub(super) key: Option<Box<dyn Action>>,
     note: Option<(SharedString, NoteKind)>,
     chosen: bool,
     off: bool,
