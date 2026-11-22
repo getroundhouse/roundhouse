@@ -6,7 +6,6 @@ use protocol::capability::calls::output::{CommandOutput, Ended, FileOutcome, Lin
 use protocol::capability::calls::{Call, CallOutput};
 use protocol::event::{ContentBlock, FileChange};
 use protocol::model::{Lately, LatelyCall, LatelyResult, Said};
-use protocol::worker::WorkerFrame;
 use serde_json::{Value, json};
 
 use super::super::{Typing, lately};
@@ -179,42 +178,6 @@ fn what_an_edit_changed_and_what_a_subagent_sent_back_are_their_outputs() {
 
     let encrypted = json!({"type":"tool_result","tool_use_id":"c","is_error":false,"text":"","encrypted":true});
     assert_eq!(output("advisor", &json!({}), encrypted), CallOutput::Encrypted);
-}
-
-/// The adapter said what kind of call a request to use a tool asked to make, and before that, nothing of what one
-/// asked, which its tool and input said.
-/// A worker of a build from before the adapter typed its calls sends them untyped, and one of a build since sends what
-/// reads as it did.
-#[test]
-fn a_worker_s_frame_reads_with_its_agent_s_calls_typed() {
-    let frame = |body: Value| {
-        json!({"frame":"agent_event","session_id":"s","run":1,"body":body,"raw":r#"{"type":"tool_use"}"#}).to_string()
-    };
-    let mut typing = Typing::default();
-    let read = |typing: &mut Typing, body: Value| {
-        let WorkerFrame::AgentEvent { body, .. } =
-            typing.frame(frame(body).as_bytes(), protocol::model::AgentKind::Claude).unwrap()
-        else {
-            panic!()
-        };
-        serde_json::to_value(body).unwrap()["blocks"].take()
-    };
-
-    let made = read(&mut typing, message("assistant", &[tool_use("c", "Bash", &json!({"command":"ls"}))]));
-    let came = read(&mut typing, message("agent_user", &[tool_result("c", "command", "a.rs")]));
-    let since = message("assistant", &[json!({"type":"text","text":r#""type":"tool_use""#})]);
-
-    let typed = |block: ContentBlock| serde_json::to_value([block]).unwrap();
-    assert_eq!(made, typed(ContentBlock::Call { id: "c".into(), call: bash("ls") }));
-    let result = ContentBlock::CallResult {
-        tool_use_id: "c".into(),
-        output: printed("a.rs", None),
-        is_error: false,
-        denied: None,
-        images: Vec::new(),
-    };
-    assert_eq!(came, typed(result), "read against its call, from an earlier frame");
-    assert_eq!(read(&mut typing, since.clone()), since["blocks"]);
 }
 
 #[test]

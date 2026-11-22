@@ -3,7 +3,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::repo_source::{RepoSource, beside_repo_path};
+use super::repo_source::RepoSource;
 use super::{Reply, Request, WorkerRequest, WorkerResponse};
 use crate::model::{BranchName, CommitId};
 
@@ -20,7 +20,6 @@ crate::base64_bytes::base64_bytes!(
 /// its instance is destroyed.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct CaptureArchive {
-    #[serde(flatten, with = "beside_repo_path")]
     pub source: RepoSource,
     /// When true, a bundle exceeding [`MAX_ARCHIVED_BUNDLE_BYTES`] is omitted (`bundle_omitted: true`) instead of
     /// refusing with `ErrorCode::NeedsForce`.

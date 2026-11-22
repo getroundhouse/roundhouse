@@ -4,7 +4,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::repo_source::{RepoSource, beside_repo_path};
+use super::repo_source::RepoSource;
 use super::{Reply, Request, WorkerRequest, WorkerResponse};
 use crate::model::{BranchName, Branches, CommitId};
 
@@ -15,7 +15,6 @@ use crate::model::{BranchName, Branches, CommitId};
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct AddChildWorktree {
     /// The workspace's repository, whose checkout's ignored files are copied in. A clone has none.
-    #[serde(flatten, with = "beside_repo_path")]
     pub source: RepoSource,
     /// The workspace's own worktree, which git runs in, so a base of `HEAD` is the commit it has checked out.
     pub own: String,

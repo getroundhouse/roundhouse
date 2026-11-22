@@ -204,6 +204,6 @@ pub(in super::super) fn logged_in_as(email: &str, plan: &str) -> AgentAccount {
 async fn the_agent_asks_its_model(hub: &Arc<Hub>, asked: &Asked, session: &SessionId, request: CacheRequest) {
     let run = last_started(asked, session).expect("only an agent that was started asks its model anything");
     let report = Report::Cache { request };
-    hub.route(session, Item::Report { run, report, seq: None, held_to_claims: true }).await;
+    hub.route(session, Item::Report { run, report, seq: None }).await;
     flushed(&hub.live_session(session).await.expect("a chat that's there")).await;
 }

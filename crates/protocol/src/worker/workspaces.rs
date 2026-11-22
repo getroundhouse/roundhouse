@@ -4,7 +4,7 @@
 use serde::{Deserialize, Serialize};
 
 use super::archived::ArchivedGit;
-use super::repo_source::{RepoSource, beside_repo_path};
+use super::repo_source::RepoSource;
 use super::{Reply, Request, WorkerRequest, WorkerResponse};
 use crate::model::{BranchName, Branches};
 
@@ -17,7 +17,6 @@ use crate::model::{BranchName, Branches};
 pub struct NamesGitHas {
     pub repo_name: String,
     /// The repository, which a clone of is made first if the worker has none.
-    #[serde(flatten, with = "beside_repo_path")]
     pub source: RepoSource,
 }
 
@@ -47,7 +46,6 @@ impl Reply for NamesGitHasReply {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct PrepareWorkspace {
     pub repo_name: String,
-    #[serde(flatten, with = "beside_repo_path")]
     pub source: RepoSource,
     pub workspace_name: String,
     pub branch: BranchName,
@@ -87,7 +85,6 @@ impl Reply for WorkspaceReady {
 /// before recreating the worktree.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct RestoreWorkspace {
-    #[serde(flatten, with = "beside_repo_path")]
     pub source: RepoSource,
     pub path: String,
     pub branch: BranchName,
@@ -108,7 +105,6 @@ impl Request for RestoreWorkspace {
 /// `NeedsForce` if that would lose work, unless `force`. Stops watching the branches of another made for it.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct RemoveWorkspace {
-    #[serde(flatten, with = "beside_repo_path")]
     pub source: RepoSource,
     pub path: String,
     pub force: bool,
@@ -159,7 +155,6 @@ impl Reply for WorktreeThereReply {
 /// a clone has no local files to copy, nor local settings.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct SetupWorkspace {
-    #[serde(flatten, with = "beside_repo_path")]
     pub source: RepoSource,
     pub path: String,
     pub env: Vec<(String, String)>,
@@ -202,7 +197,9 @@ impl Request for CancelSetup {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct SetupLog {
     /// The workspace's worktree, which a worker doesn't read, since it keeps one setup log, in its state directory.
-    /// Kept for workers from before, which can't read the request without it, until the worker protocol next breaks.
+    /// Sent for a worker of protocol 5, which can't read the request without it. A worker of this protocol reads the
+    /// request without it, so it goes at the next break, when the hub no longer speaks protocol 5.
+    #[serde(default)]
     pub path: String,
 }
 
@@ -229,7 +226,6 @@ impl Reply for SetupLogReply {
 /// Runs the archive script, if there is one. Fails if the script does.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct ArchiveScript {
-    #[serde(flatten, with = "beside_repo_path")]
     pub source: RepoSource,
     pub path: String,
     pub env: Vec<(String, String)>,

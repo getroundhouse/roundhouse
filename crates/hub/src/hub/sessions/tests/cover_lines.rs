@@ -56,7 +56,7 @@ async fn the_line_goes_with_the_mode_and_stays_when_the_conversation_moves() {
         let run = asked.launches(&chat.id).pop().unwrap().run;
         let line = CoverLine { wait: CoverWait(1), number: 1, text: "Hold on.".into() };
         let report = Report::Covering(line.clone());
-        hub.route(&chat.id, Item::Report { run, report, seq: None, held_to_claims: true }).await;
+        hub.route(&chat.id, Item::Report { run, report, seq: None }).await;
         assert_eq!(said(&hub, &chat.id).await, Some(line.clone()));
 
         let left = match leaving {

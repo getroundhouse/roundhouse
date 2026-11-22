@@ -32,7 +32,6 @@ use tokio::sync::{Mutex as AsyncMutex, watch};
 mod acks;
 mod credential;
 mod greeting;
-mod previous;
 mod reaching;
 mod reading;
 

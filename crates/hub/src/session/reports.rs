@@ -13,11 +13,11 @@ use super::live::LiveState;
 use crate::store::{Store, StoreError};
 
 impl LiveSession {
-    /// Keeps what the agent of `run` reported, unless it's `held_to_claims` and the run doesn't claim what it needs.
-    /// Only the run going speaks for the session, as each report's own handling checks. One this hub has nowhere to
-    /// keep yet is dropped, as one it doesn't know is.
-    pub(super) async fn take_report(self: &Arc<Self>, run: RunId, report: Report, held_to_claims: bool) {
-        if held_to_claims && !self.state.lock().run_claims().is_some_and(|claims| report.allowed(claims)) {
+    /// Keeps what the agent of `run` reported, unless the run doesn't claim what it needs. Only the run going speaks
+    /// for the session, as each report's own handling checks. One this hub has nowhere to keep yet is dropped, as one
+    /// it doesn't know is.
+    pub(super) async fn take_report(self: &Arc<Self>, run: RunId, report: Report) {
+        if !self.state.lock().run_claims().is_some_and(|claims| report.allowed(claims)) {
             debug!(session = %self.id, %run, "dropping a report its run doesn't claim: {report:?}");
             return;
         }
