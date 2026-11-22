@@ -1,6 +1,5 @@
 use super::super::*;
 use crate::store::tests::{notice, store_with_session};
-use crate::store::{older, schema};
 use proptest::prelude::*;
 use proptest::test_runner::{Config, RngSeed};
 use protocol::attachment::{Attachment, MediaType};
@@ -173,28 +172,6 @@ impl Sent {
             Sent::Progress => EventBody::AgentOther { kind: "tool_progress".into(), subagent: None },
         }
     }
-
-    /// The event as a build from before subagents were recorded wrote it: an `AgentOther` named its subagent only in
-    /// the agent's own line.
-    pub(super) fn before_subagents(self, session: &str, seq: usize) -> String {
-        let (body, raw) = match self {
-            Sent::Other(_) => {
-                let raw =
-                    serde_json::json!({"type": "user", "isSynthetic": true, "parent_tool_use_id": self.subagent()});
-                (EventBody::AgentOther { kind: "user/synthetic".into(), subagent: None }, raw.to_string())
-            }
-            Sent::Progress => {
-                let raw = serde_json::json!({"type": "tool_progress", "parent_tool_use_id": "call-0"});
-                (self.body(), raw.to_string())
-            }
-            Sent::Hub | Sent::Message(_) | Sent::Result(_) => (self.body(), "{}".into()),
-        };
-        let (kind, body) = (body.kind(), serde_json::to_string(&body).unwrap());
-        format!(
-            "INSERT INTO events (session_id, seq, ts_ms, kind, body, raw) \
-             VALUES ('{session}', {seq}, 0, '{kind}', '{body}', '{raw}');"
-        )
-    }
 }
 
 fn sent() -> impl Strategy<Value = Sent> {
@@ -244,103 +221,6 @@ proptest! {
         prop_assert_eq!(store.read_events(&"s".into(), Seq::new(1), u32::MAX, u64::MAX, false).unwrap(), appended);
     }
 
-    #[test]
-    fn a_migrated_log_names_each_events_subagent_and_counts_its_places(
-        sent in prop::collection::vec((any::<bool>(), sent()), 0..40),
-        next in sent(),
-    ) {
-        let dir = tempfile::tempdir().unwrap();
-        let sessions = [("s", true), ("t", false)].map(|(id, first)| {
-            let sent: Vec<Sent> =
-                sent.iter().filter(|(of_first, _)| *of_first == first).map(|(_, sent)| *sent).collect();
-            (id, sent)
-        });
-        let rows: String = sessions
-            .iter()
-            .flat_map(|(id, sent)| {
-                let session = format!(
-                    "INSERT INTO sessions \
-                     (id, workspace_id, agent, agent_session_id, status, last_seq, created_at_ms, updated_at_ms) \
-                     VALUES ('{id}', 'w', 'claude', '{id}', 'idle', {}, 0, 0);",
-                    sent.len()
-                );
-                std::iter::once(session).chain((1..).zip(sent).map(|(seq, sent)| sent.before_subagents(id, seq)))
-            })
-            .collect();
-
-        let store = older::store_from_before(dir.path(), schema::BEFORE_SUBAGENTS, &rows);
-
-        for (id, sent) in &sessions {
-            assert_placed(&store.read_events(&(*id).into(), Seq::new(1), u32::MAX, u64::MAX, false).unwrap(), sent)?;
-        }
-        let (_, mut sent) = sessions.into_iter().next().unwrap();
-        store.append(&"s".into(), None, &next.body(), None, None, None).unwrap();
-        sent.push(next);
-        assert_placed(&store.read_events(&"s".into(), Seq::new(1), u32::MAX, u64::MAX, false).unwrap(), &sent)?;
-    }
-}
-
-#[test]
-fn only_a_user_line_that_names_a_call_is_a_subagents_once_migrated() {
-    let dir = tempfile::tempdir().unwrap();
-    let other = r#"'{"type":"agent_other","kind":"x"}'"#;
-    let rows = format!(
-        r#"
-        INSERT INTO sessions (id, workspace_id, agent, agent_session_id, status, last_seq, created_at_ms, updated_at_ms)
-            VALUES ('s', 'w', 'claude', 's', 'idle', 5, 0, 0);
-        INSERT INTO events (session_id, seq, ts_ms, kind, body, raw) VALUES
-            ('s', 1, 0, 'agent_other', {other}, 'Warning: not JSON'),
-            ('s', 2, 0, 'agent_other', {other}, NULL),
-            ('s', 3, 0, 'agent_other', {other}, '{{"type":"user","parent_tool_use_id":7}}'),
-            ('s', 4, 0, 'agent_other', {other}, '{{"type":"tool_progress","parent_tool_use_id":"bash"}}'),
-            ('s', 5, 0, 'agent_other', {other}, '{{"type":"user","parent_tool_use_id":"call"}}');
-        "#
-    );
-
-    let store = older::store_from_before(dir.path(), schema::BEFORE_SUBAGENTS, &rows);
-
-    let events = store.read_events(&"s".into(), Seq::new(1), 10, u64::MAX, false).unwrap();
-    let placed: Vec<_> =
-        events.iter().map(|event| (event.subagent.as_ref().map(SubagentId::as_str), event.place.get())).collect();
-    assert_eq!(placed, [(None, 1), (None, 2), (None, 3), (None, 4), (Some("call"), 1)]);
-}
-
-/// Rebuilding the log keeps what the migration doesn't work out: each event's time, the client's id for it, its run
-/// and its line, and every index the log had.
-#[test]
-fn a_migrated_log_keeps_each_events_time_id_run_and_line_and_its_indexes() {
-    let indexes = |conn: &Connection| {
-        let mut indexes =
-            conn.prepare("SELECT name, sql FROM sqlite_master WHERE type = 'index' AND tbl_name = 'events'").unwrap();
-        let read = indexes.query_map([], |row| Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?)));
-        read.unwrap().collect::<rusqlite::Result<Vec<_>>>().unwrap()
-    };
-    let before = tempfile::tempdir().unwrap();
-    let mut conn = schema::open_connection(&before.path().join("hub.db")).unwrap();
-    schema::migrate_to(&mut conn, &before.path().join("backups"), schema::BEFORE_SUBAGENTS).unwrap();
-    let had = indexes(&conn);
-    let dir = tempfile::tempdir().unwrap();
-    let rows = r#"
-        INSERT INTO sessions (id, workspace_id, agent, agent_session_id, status, last_seq, created_at_ms, updated_at_ms)
-            VALUES ('s', 'w', 'claude', 's', 'idle', 2, 0, 0);
-        INSERT INTO events (session_id, seq, ts_ms, kind, client_msg_id, run, body, raw) VALUES
-            ('s', 1, 1700, 'notice', 'msg-1', 3, '{"type":"notice","level":"info","message":"a"}', 'line a'),
-            ('s', 2, 1800, 'notice', NULL, NULL, '{"type":"notice","level":"info","message":"b"}', NULL);
-    "#;
-
-    let store = older::store_from_before(dir.path(), schema::BEFORE_SUBAGENTS, rows);
-
-    let events = store.read_events(&"s".into(), Seq::new(1), 10, u64::MAX, true).unwrap();
-    let kept: Vec<_> = events.iter().map(|event| (event.ts_ms, event.run, event.raw.as_deref())).collect();
-    assert_eq!(kept, [(1700, Some(RunId::new(3)), Some("line a")), (1800, None, None)]);
-    let again = store.append(&"s".into(), None, &notice("c"), None, Some(&"msg-1".into()), None).unwrap();
-    assert!(again.duplicate, "sending again what was sent before the migration adds nothing");
-    assert_eq!(again.event, SessionEvent { raw: None, ..events[0].clone() });
-    let has = indexes(&schema::open_connection(&dir.path().join("hub.db")).unwrap());
-    // By name, since a later migration can define one again, as `event_kinds` did the index of kinds.
-    let lost: Vec<_> = had.iter().filter(|(name, _)| !has.iter().any(|(kept, _)| kept == name)).collect();
-    assert!(lost.is_empty(), "lost {lost:?}, and has {has:?}");
-    assert!(has.iter().any(|(name, _)| name == "events_by_subagent"), "{has:?}");
 }
 
 #[test]

@@ -1,7 +1,7 @@
 use super::super::StoreError;
 use super::super::backup::back_up;
 use super::migrations;
-use migrations::MIGRATIONS;
+use migrations::{AT_FLOOR, MIGRATIONS};
 use rusqlite::Connection;
 use std::path::Path;
 use tracing::info;
@@ -32,46 +32,64 @@ pub(crate) fn open_connection(path: &Path) -> rusqlite::Result<Connection> {
     Ok(conn)
 }
 
+/// The floor this build's schema starts at, the database [`AT_FLOOR`] makes. A build that updates from any release
+/// would need every migration from the first, which this one doesn't have, so it doesn't build without a floor.
+pub(super) const STARTS_AT: Floor = match FLOOR {
+    Some(floor) => floor,
+    None => panic!("the hub's schema starts at its floor"),
+};
+
+/// How many migrations a database this build migrates has run once it's done, counting the floor's.
+#[cfg(test)]
+pub(super) const KNOWN: usize = STARTS_AT.migrations + MIGRATIONS.len();
+
 /// Brings the database up to this build's schema. One that an older build wrote is copied into
 /// `backups_dir` first, since a build from before a migration can't open what it leaves.
 pub(crate) fn migrate(conn: &mut Connection, backups_dir: &Path) -> Result<(), StoreError> {
-    migrate_through(conn, backups_dir, MIGRATIONS, FLOOR)
+    migrate_through(conn, backups_dir, MIGRATIONS)
 }
 
-/// Applies migrations until `target` have run, so a test can make an older database.
+/// Applies migrations until `target` have run, counting the floor's, so a test can make an older database. There's
+/// none older than the floor's to make.
 #[cfg(test)]
 pub(crate) fn migrate_to(conn: &mut Connection, backups_dir: &Path, target: usize) -> Result<(), StoreError> {
-    migrate_through(conn, backups_dir, &MIGRATIONS[..target], FLOOR)
+    let since = target.checked_sub(STARTS_AT.migrations).expect("a database at the floor or newer");
+    migrate_through(conn, backups_dir, &MIGRATIONS[..since])
 }
 
-/// [`migrate`], with the list of migrations and the floor given, so a test can stop short of this build's, add one
-/// that fails, or set a floor.
+/// [`migrate`], with the migrations since the floor given, so a test can stop short of this build's, or add one that
+/// fails. A new database starts from the floor's schema, and counts the floor's migrations as run.
 pub(super) fn migrate_through(
     conn: &mut Connection,
     backups_dir: &Path,
-    migrations: &[Migration],
-    floor: Option<Floor>,
+    since: &[Migration],
 ) -> Result<(), StoreError> {
+    let Floor { release, migrations: at_floor } = STARTS_AT;
+    let known = at_floor + since.len();
     let version = schema_version(conn)?;
-    if version > migrations.len() {
-        return Err(StoreError::TooNew { found: version, known: migrations.len() });
+    if version > known {
+        return Err(StoreError::TooNew { found: version, known });
     }
-    // A new database holds nothing, so it migrates from the start.
-    if let Some(Floor { release, migrations: at_floor }) = floor
-        && (1..at_floor).contains(&version)
-    {
+    // A new database holds nothing, so it isn't older than the floor.
+    if (1..at_floor).contains(&version) {
         return Err(StoreError::TooOld { found: version, release, migrations: at_floor });
     }
     // Only a database that holds something and is about to change gets a copy. If the copy fails, such as
     // on a full disk, the hub doesn't start rather than migrate without one: any update can bring a
     // migration, and nothing would say the way back had gone. The database is untouched at that point, so
     // the build before still opens it.
-    if (1..migrations.len()).contains(&version) {
+    if (1..known).contains(&version) {
         let backup = back_up(conn, version, backups_dir)
             .map_err(|source| StoreError::Backup { dir: backups_dir.to_path_buf(), source })?;
         info!(backup = %backup.display(), version, "saved a copy of the database before migrating it");
     }
-    for (reached, migration) in (1_i64..).zip(migrations).skip(version) {
+    if version == 0 {
+        let tx = conn.transaction()?;
+        tx.execute_batch(AT_FLOOR)?;
+        tx.pragma_update(None, "user_version", at_floor)?;
+        tx.commit()?;
+    }
+    for (reached, migration) in (at_floor + 1..).zip(since).skip(version.saturating_sub(at_floor)) {
         let tx = conn.transaction()?;
         match migration {
             Migration::Sql(sql) => tx.execute_batch(sql)?,

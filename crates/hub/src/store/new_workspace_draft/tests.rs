@@ -6,8 +6,6 @@ const OPUS: ModelName = ModelName::named("opus");
 
 use super::*;
 use crate::store::Store;
-use crate::store::older::store_from_before;
-use crate::store::schema::BEFORE_NEW_WORKSPACE_DRAFT_NAMES;
 use crate::store::tests::store_with_session;
 
 fn log_file(id: &str) -> Attachment {
@@ -127,30 +125,6 @@ fn a_file_renewed_waits_as_long_again_to_be_named() {
     let let_go_of = store.let_go_of_unnamed_new_workspace_draft_files(now_ms() - 60_000).unwrap();
     assert_eq!(let_go_of, [AttachmentId::from("not")]);
     assert_eq!(store.new_workspace_draft_file_ids().unwrap(), [AttachmentId::from("renewed")].into());
-}
-
-/// Renaming the tables keeps what's in them, and the record's revision still moves under its new name.
-#[test]
-fn whats_kept_of_the_dialog_before_its_tables_were_named_for_it_is_still_kept() {
-    let dir = tempfile::tempdir().unwrap();
-    let file = log_file("f1");
-    let kept = NewWorkspaceDraft { text: "fix the login".to_string(), files: vec![file.clone()], ..Default::default() };
-    let rows = format!(
-        "UPDATE workspace_draft SET draft = '{}';
-         INSERT INTO workspace_draft_files (id, name, media_type, size_bytes, created_at_ms)
-             VALUES ('f1', 'f1.log', '{}', 3, 0);",
-        serde_json::to_string(&kept).unwrap(),
-        text_of(&file.media_type),
-    );
-
-    let store = store_from_before(dir.path(), BEFORE_NEW_WORKSPACE_DRAFT_NAMES, &rows);
-
-    let before = store.new_workspace_draft().unwrap();
-    assert_eq!(before, NewWorkspaceDraft { rev: before.rev, ..kept });
-    let (after, changed) = store.set_new_workspace_draft(&typed("fix the logout", &["f1"])).unwrap();
-    assert!(changed);
-    assert_eq!(after.files, vec![file], "its file is still the hub's");
-    assert!(after.rev > before.rev, "clients follow records by revision, so the feed would miss it otherwise");
 }
 
 /// So the hub empties the dialog once a workspace is made from it, without losing what's typed in it since.

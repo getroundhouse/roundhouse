@@ -56,15 +56,6 @@ fn a_pull_request_found_is_kept_through_reopening() {
     assert_eq!(listed[0].pull_request, None, "what GitHub says of it is the cache's");
 }
 
-#[test]
-fn a_workspace_from_before_pull_requests_were_kept_has_not_been_looked_at() {
-    let dir = tempfile::tempdir().unwrap();
-
-    let store = older::store_from_before(dir.path(), schema::BEFORE_PULL_REQUESTS, "");
-
-    assert_eq!(store.get_workspace(&"w".into()).unwrap().pull_request_link, None);
-}
-
 /// What an older hub kept of each workspace's pull request comes to its link: none where it found none, the pull
 /// request's where it found one, and not looked for where it hadn't, or where what it kept isn't one on github.com, so
 /// that one is looked for again. Each that changed moves its revision.

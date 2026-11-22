@@ -1,8 +1,6 @@
 use protocol::model::{GithubRepositoryName, Reach};
 
 use crate::store::Store;
-use crate::store::older::store_from_before;
-use crate::store::schema::BEFORE_GITHUB_REACH;
 use crate::store::tests::open_in;
 
 const CLI: GithubRepositoryName = GithubRepositoryName::named("cli/cli");
@@ -15,18 +13,6 @@ fn with_repos(store: &Store, ids: &[&str]) {
     for id in ids {
         store.add_repo(&(*id).into(), id, &format!("/{id}"), 0).unwrap();
     }
-}
-
-#[test]
-fn a_hub_from_before_reach_has_none_and_records_one_once_migrated() {
-    let dir = tempfile::tempdir().unwrap();
-
-    let store = store_from_before(dir.path(), BEFORE_GITHUB_REACH, "");
-
-    assert_eq!(store.list_records().unwrap().github_reach, []);
-    let reach = store.record_github_reach(&"r".into(), &pushes(), Some(5)).unwrap();
-    assert_eq!(store.list_records().unwrap().github_reach, [reach]);
-    assert_eq!(store.github_reach_of(&"r".into()).unwrap().map(|r| r.answered_at_ms), Some(Some(5)));
 }
 
 /// So a client takes each in with the rest. One checked again with the same answer at the same time moves nothing, as
@@ -73,15 +59,4 @@ fn what_the_last_run_left_is_stale_until_its_recorded_again() {
     let checked = store.record_github_reach(&"a".into(), &pushes(), Some(5)).unwrap();
     assert!(!checked.stale && checked.rev > left[0].rev);
     assert!(store.github_reach_of(&"b".into()).unwrap().unwrap().stale, "until it's checked too");
-}
-
-/// As a newer build might have left it, which this one checks again rather than reading as another reach.
-#[test]
-fn a_reach_this_build_cant_read_reads_as_unknown() {
-    let dir = tempfile::tempdir().unwrap();
-    let rows = r#"INSERT INTO github_reach (repo_id, reach) VALUES ('r', '{"state":"pushes_on_tuesdays"}');"#;
-
-    let store = store_from_before(dir.path(), BEFORE_GITHUB_REACH + 1, rows);
-
-    assert_eq!(store.github_reaches().unwrap()[0].reach, Reach::Unknown);
 }

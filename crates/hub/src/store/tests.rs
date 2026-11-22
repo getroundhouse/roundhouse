@@ -173,32 +173,6 @@ fn an_event_keeps_its_run_and_no_run_is_handed_out_twice() {
     assert_eq!(events.iter().map(|e| e.run).collect::<Vec<_>>(), vec![Some(first), None]);
 }
 
-#[test]
-fn a_database_from_before_runs_and_revisions_keeps_everything_in_it() {
-    let dir = tempfile::tempdir().unwrap();
-    let rows = r#"
-        INSERT INTO sessions (id, workspace_id, agent, agent_session_id, status, last_seq, created_at_ms, updated_at_ms)
-            VALUES ('s', 'w', 'claude', 's', 'idle', 1, 0, 0);
-        INSERT INTO events (session_id, seq, ts_ms, kind, body, raw)
-            VALUES ('s', 1, 0, 'notice', '{"type":"notice","level":"info","message":"old"}', 'line');
-    "#;
-
-    let store = older::store_from_before(dir.path(), schema::BEFORE_RUNS, rows);
-
-    let events = store.read_events(&"s".into(), Seq::new(1), 10, u64::MAX, true).unwrap();
-    assert_eq!((events[0].run, &events[0].body, events[0].raw.as_deref()), (None, &notice("old"), Some("line")));
-    assert_eq!(store.append(&"s".into(), None, &notice("new"), None, None, None).unwrap().event.seq, Seq::new(2));
-    // Records from before revisions are at the first one, and anything after moves past it, as later migrations
-    // naming the session's model and effort, and filling in when the person last did something in the workspace, do.
-    let records = store.list_records().unwrap();
-    assert_eq!(records.repos[0].rev, Rev::new(1));
-    assert!(records.workspaces[0].rev > Rev::new(1));
-    let migrated = records.sessions[0].rev;
-    assert!(migrated > Rev::new(1));
-    store.retitle_session(&"s".into(), &Title::typed("t").unwrap(), Retitle::ByHand).unwrap();
-    assert!(store.get_session(&"s".into()).unwrap().session.rev > migrated);
-}
-
 /// Every way a record changes moves its revision past everything before it, and a list says how far
 /// it reaches, so a client can always tell which of two copies is newer.
 #[test]

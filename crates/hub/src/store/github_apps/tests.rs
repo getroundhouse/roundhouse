@@ -1,31 +1,14 @@
 use protocol::client::github_apps::GithubManifestCode;
-use protocol::model::{GithubAppId, GithubLoginKind, GithubUser, GithubUserId};
+use protocol::model::{GithubAppId, GithubUser, GithubUserId};
 
 use super::*;
 use crate::login_files::LoginFile;
-use crate::store::older::store_from_before;
-use crate::store::schema::BEFORE_GITHUB_APPS;
 use crate::store::tests::open_in;
 
 const APP: GithubAppId = GithubAppId::new(9);
 
 fn user(id: u64, name: &str) -> GithubUser {
     GithubUser { id: GithubUserId::new(id), name: name.into() }
-}
-
-#[test]
-fn a_hub_from_before_apps_has_none_and_the_accounts_it_held_are_no_apps_installations() {
-    let dir = tempfile::tempdir().unwrap();
-    let held = "INSERT INTO github_accounts
-                    (id, user_id, username, login_kind, login_file, login_connected_at_ms, login_ends_at_ms)
-                    VALUES ('g', 7, 'ada', 'token', '6f1c2a9e-0000-4000-8000-000000000000', 1, NULL);";
-
-    let store = store_from_before(dir.path(), BEFORE_GITHUB_APPS, held);
-
-    let listed = store.list_records().unwrap();
-    assert_eq!(listed.github_apps, []);
-    let [account] = listed.github_accounts.as_slice() else { panic!("{:?}", listed.github_accounts) };
-    assert_eq!((account.installation.as_ref(), account.held_login.unwrap().how), (None, GithubLoginKind::Token));
 }
 
 /// Each is a change to the record a client follows, so each has a revision of its own. Learning the same bot again

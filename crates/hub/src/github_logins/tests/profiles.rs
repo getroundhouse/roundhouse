@@ -11,8 +11,6 @@ use protocol::worker::{GitCredential, GitIdentity, GithubCredential};
 use super::credential::sent;
 use super::sign_ins::{ada_signed_in, login_ending, sign_in_kept};
 use super::*;
-use crate::login_files::LoginFile;
-use crate::store::older::{BEFORE_GITHUB_PROFILES, store_from_before};
 use github::GithubProfile;
 
 /// [`PROFILE_READ_EVERY`], in milliseconds.
@@ -117,36 +115,6 @@ fn a_name_git_wont_commit_as_falls_back_to_the_username_and_git_commits_as_every
             assert!(!commits_through_git(repo.path(), name, &sent.email), "git took {name:?}, which fell back");
         }
     }
-}
-
-/// As a hub from before profiles left it: ada's token in its file, the default, and never asked who she is.
-#[test]
-fn an_account_an_older_hub_connected_commits_as_the_machines_git_says_until_a_check_has_github_asked_who_it_is() {
-    let dir = tempfile::tempdir().unwrap();
-    let file = LoginFile::new();
-    std::fs::create_dir(dir.path().join("github-logins")).unwrap();
-    std::fs::write(dir.path().join("github-logins").join(file.as_str()), "a-token").unwrap();
-    let held = format!(
-        "INSERT INTO github_accounts (id, user_id, username, login_kind, login_file, login_connected_at_ms)
-             VALUES ('g', 7, 'ada', 'token', '{}', 1);
-         UPDATE hub_settings SET github_account_id = 'g';",
-        file.as_str()
-    );
-    let logins =
-        GithubLogins::new(Arc::new(store_from_before(dir.path(), BEFORE_GITHUB_PROFILES, &held)), dir.path(), 1000);
-    let as_the_hub_started = sent(&logins);
-
-    let mut first = logins.check(1000).unwrap().profiles;
-    let due = first.pop().unwrap();
-    logins.profile_read(&due, Ok(owner_with(7, "ada", Some("Ada Lovelace"), None)), 1000).unwrap();
-    let once_asked = sent(&logins);
-    let next = logins.check(1001).unwrap().profiles;
-
-    let GithubCredential::Account(credential) = &as_the_hub_started else { panic!("{as_the_hub_started:?}") };
-    assert_eq!((credential.token.as_str(), &credential.identity), ("a-token", &None));
-    assert_eq!((first.len(), due.token.as_str()), (0, "a-token"), "only ada was due, with her token");
-    assert_eq!(commits_as(&once_asked).as_deref(), Some("Ada Lovelace <7+ada@users.noreply.github.com>"));
-    assert!(next.is_empty(), "it isn't asked about again until a day on");
 }
 
 /// Her name, her email and her username changed on GitHub. The username is on the account's record, which every client

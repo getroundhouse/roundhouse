@@ -51,10 +51,6 @@ pub(super) fn model(store: &Store, call: &str) -> Option<String> {
     subagent(store, call).model.map(String::from)
 }
 
-pub(super) fn other(kind: &str) -> EventBody {
-    EventBody::AgentOther { kind: kind.into(), subagent: None }
-}
-
 pub(super) fn exited() -> EventBody {
     EventBody::AgentExited { reason: ExitReason::HubRestart, code: None, signal: None, stderr_tail: vec![] }
 }
