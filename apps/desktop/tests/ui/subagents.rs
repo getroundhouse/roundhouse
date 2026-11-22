@@ -35,7 +35,7 @@ pub(crate) fn showing(ui: &Ui<'_>) -> Showing {
 
 /// How many of the chat's subagents' records client-core holds.
 fn records_held(ui: &Ui<'_>, chat: &SessionId) -> usize {
-    ui.view().records().subagents(chat).len()
+    ui.view().feed().unwrap().snapshot().subagents(chat).len()
 }
 
 /// The agent's call that started the subagent, once the chat has it.
