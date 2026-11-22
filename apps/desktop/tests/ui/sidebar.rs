@@ -230,6 +230,10 @@ fn a_rows_pencil_goes_once_whats_typed_in_it_is_sent(cx: &mut TestAppContext) {
     ui.press("enter");
 
     ui.wait("the prompt to be taken", |ui| ui.composer_text().is_empty());
+    // The composer empties as the prompt goes, and a prompt on its way is still unsent, so the pencil stays until the
+    // hub has it.
+    let (chat, client) = (ui.active_chat(), ui.view().client().unwrap());
+    ui.wait("the hub to have the prompt", |_| !client.is_sending(&chat));
     show_home(&mut ui);
     assert!(!ui.has(pencil(&typed_in)), "sending it leaves nothing unsent");
 }
