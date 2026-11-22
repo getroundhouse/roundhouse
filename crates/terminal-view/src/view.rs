@@ -239,6 +239,9 @@ impl Render for TerminalView {
         if let Some(frame) = self.open.take_frame() {
             self.frame = Some(frame);
         }
+        if let Some(metrics) = self.metrics.for_window(window) {
+            self.metrics = metrics;
+        }
         let (open, fitting, room) = (self.open.clone(), self.fitting.clone(), (self.room)(cx));
         let grid = Grid {
             frame: self.frame.clone(),
